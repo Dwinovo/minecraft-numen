@@ -44,7 +44,7 @@ import java.util.UUID;
  * stuck.
  *
  * <h2>Query fast path</h2>
- * Read-only perception tools ({@link NumenTool#isQuery()}) never touch the
+ * Read-only perception tools never touch the
  * {@code TaskQueue} — they execute synchronously right here on the tick
  * thread and the result ships back in the same tick. Queueing them behind a
  * running {@code move_to} would turn "what's my HP" into a minute-long wait.

@@ -1,6 +1,5 @@
 package com.dwinovo.numen;
 
-import com.dwinovo.numen.agent.skill.BuiltinSkillBootstrap;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
@@ -34,10 +33,8 @@ public class NumenFabricClient implements ClientModInitializer {
 
                     @Override
                     public void onResourceManagerReload(ResourceManager rm) {
-                        // First-run only: extract built-in SKILL.md files from the jar
-                        // into skillsDir. Subsequent /reload calls see the sentinel and
-                        // skip — the directory becomes the player's after that.
-                        BuiltinSkillBootstrap.bootstrap(numenConfigRoot, skillsDir);
+                        // The engine ships no built-in skills; pick up any SKILL.md the
+                        // player (or a tool pack) has placed under config/numen/skills.
                         SkillRegistry.instance().scan(skillsDir);
                     }
                 });

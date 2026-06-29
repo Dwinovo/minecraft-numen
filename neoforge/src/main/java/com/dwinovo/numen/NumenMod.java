@@ -38,9 +38,6 @@ public class NumenMod {
         // When an owner logs in, bring their dormant companions back.
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerChangedDimension);
-        // Release pathfinding chunk-ref snapshots when the server stops (don't pin an old world).
-        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppedEvent e) ->
-                com.dwinovo.numen.pathing.cache.PathCaches.dropAll());
 
         CommonClass.init();
         Constants.LOG.info("Numen mod initialised on NeoForge.");
@@ -53,10 +50,7 @@ public class NumenMod {
     }
 
     private static void onServerTickPost(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
-        com.dwinovo.numen.task.tasks.ScanBlocksJob.tick(event.getServer());
         com.dwinovo.numen.task.CompanionTickDispatcher.tick(event.getServer());
-        // Snapshot loaded chunks near companions each tick, for the off-thread planner to read live.
-        com.dwinovo.numen.pathing.cache.PathCaches.serverTick(event.getServer());
     }
 
     private static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {

@@ -31,8 +31,8 @@ public final class InitTag {
 
     /**
      * Throwaway building blocks the Numen may consume as scaffolding while
-     * pathfinding — bridging gaps, stepping up, and pillaring. The pathfinder
-     * ({@link com.dwinovo.numen.pathing}) only ever places a block in this tag,
+     * pathfinding — bridging gaps, stepping up, and pillaring. A pathfinding tool
+     * pack only ever places a block in this tag,
      * so it never burns the player's valuables. Datapack-driven so packs can add
      * their own cheap blocks — see {@code data/numen/tags/item/scaffolds.json}.
      */
@@ -40,7 +40,7 @@ public final class InitTag {
 
     /**
      * Blocks the pathfinder must never break while travelling — the player's
-     * functional/valuable furniture. {@link com.dwinovo.numen.pathing.util.BlockHelper#shouldAvoidBreaking}
+     * functional/valuable furniture. A pathfinding tool pack
      * gives any block in this tag {@code COST_INF}, so it's routed around (and a
      * {@code move_to} onto one relaxes to "stand adjacent" rather than digging it).
      * This tag carries the no-BlockEntity work stations (crafting table, stonecutter,

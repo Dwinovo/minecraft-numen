@@ -1,6 +1,5 @@
 package com.dwinovo.numen;
 
-import com.dwinovo.numen.agent.skill.BuiltinSkillBootstrap;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
@@ -77,7 +76,6 @@ public class NumenNeoForgeClient {
         Path skillsDir = numenConfigRoot.resolve("skills");
 
         event.registerReloadListener((ResourceManagerReloadListener) rm -> {
-            BuiltinSkillBootstrap.bootstrap(numenConfigRoot, skillsDir);
             SkillRegistry.instance().scan(skillsDir);
         });
     }

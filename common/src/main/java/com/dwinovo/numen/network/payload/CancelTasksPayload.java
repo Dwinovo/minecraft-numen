@@ -57,9 +57,6 @@ public record CancelTasksPayload(UUID entityUuid) implements CustomPacketPayload
             return;
         }
         numen.cancelAllTasks("interrupted by owner");
-        // Drop in-flight async scans too — the client interrupt already
-        // synthesized cancelled results; a late reply would be an orphan.
-        com.dwinovo.numen.task.tasks.ScanBlocksJob.cancelFor(p.entityUuid());
         Constants.LOG.info("[numen-net] ✓ cancel_tasks on entity {} for {}",
                 p.entityUuid(), player.getName().getString());
     }

@@ -111,13 +111,17 @@ processResources {
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
-            artifactId base.archivesName.get()
+            // Distinct coordinates from numen-core (which keeps "numen-…"), so core can
+            // depend on the published api as a separate artifact.
+            artifactId = "numen-api-${project.name}-${minecraft_version}"
             from components.java
         }
     }
     repositories {
         maven {
-            url System.getenv('local_maven_url')
+            name = 'localNumen'
+            // Local file repo by default; override with -Plocal_maven_url=... if needed.
+            url = uri(findProperty('local_maven_url') ?: 'file:///D:/01_Projects/numen-maven')
         }
     }
 }

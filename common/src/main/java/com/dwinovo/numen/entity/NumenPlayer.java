@@ -1,6 +1,6 @@
 package com.dwinovo.numen.entity;
 
-import com.dwinovo.numen.pathing.exec.PathTally;
+import com.dwinovo.numen.task.PathTally;
 import com.dwinovo.numen.task.TaskQueue;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskState;

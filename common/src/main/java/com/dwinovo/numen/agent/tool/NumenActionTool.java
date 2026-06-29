@@ -29,7 +29,7 @@ import java.util.function.Consumer;
  * The author never tags a category. The adapter infers it from the signature:
  * <ul>
  *   <li>returns a {@link TaskRecord} → a body <em>world-action</em>: shipped to
- *       the server, where {@link #toTaskRecord} reflectively builds the record
+ *       the server, where the adapter reflectively builds the record
  *       and the task queue runs it (the method takes a {@link ToolContext} for
  *       the call id / deadline);</li>
  *   <li>takes the live {@link NumenPlayer} body and returns a value → a

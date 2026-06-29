@@ -1,4 +1,4 @@
-package com.dwinovo.numen.pathing.exec;
+package com.dwinovo.numen.task;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
@@ -7,17 +7,17 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Per-task tally of the terrain the pathfinder modified <em>while travelling</em>
- * — obstruction blocks dug through and scaffolding blocks placed by
- * {@link PlayerPathExecutor}. Lives on the entity (not the executor) so it survives
- * the executor churn of mid-path replans; {@code CompanionTickDispatcher} resets it at task
- * start and folds it into the task result so the model learns the real side
- * effects of a move ("reached the target, but dug 4 dirt and spent 6 cobblestone
- * bridging") rather than treating navigation as free.
+ * Per-task tally of terrain a task modified <em>while travelling</em> —
+ * obstruction blocks dug through and scaffolding blocks placed incidentally by a
+ * navigating task. Lives on the entity (not on any one task) so it survives the
+ * task churn of mid-path replans; {@code CompanionTickDispatcher} resets it at
+ * task start and a task may fold it into its result so the model learns the real
+ * side effects of a move ("reached the target, but dug 4 dirt and spent 6
+ * cobblestone bridging") rather than treating navigation as free.
  *
- * <p>This is the {@code auto_mine} target harvest's counterpart for travel:
- * intentional harvests/placements go through other code paths and are reported
- * by their own tasks; this only counts what pathing incidentally consumed.
+ * <p>Engine-level bookkeeping with no behaviour of its own: a task that does no
+ * incidental terrain work simply leaves it empty. The pathfinding tools that
+ * actually populate it ship in {@code numen-core}, not here.
  */
 public final class PathTally {
 
