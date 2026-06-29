@@ -1,0 +1,129 @@
+plugins {
+    id 'multiloader-common'
+    id 'net.neoforged.moddev'
+}
+
+neoForge {
+    neoFormVersion = neo_form_version
+    // Automatically enable AccessTransformers if the file exists
+    def at = file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformers.from(at.absolutePath)
+    }
+}
+
+dependencies {
+    compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
+    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+configurations {
+    commonJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonResources {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+}
+
+artifacts {
+    commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonResources sourceSets.main.resources.sourceDirectories.singleFile
+}
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'common')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'common')
+            }
+        }
+    }
+}
+
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+
+test {
+    // Normal unit tests only — the network-hitting tool-call benchmark is tagged
+    // 'bench' and excluded here so `./gradlew test` (and CI) never makes an LLM call.
+    useJUnitPlatform {
+        excludeTags 'bench'
+    }
+}
+
+// Offline tool-call benchmark. Run with credentials in the environment:
+//   NUMEN_BENCH_API_KEY=sk-... NUMEN_BENCH_MODEL=deepseek-chat \
+//   NUMEN_BENCH_PROVIDER=deepseek ./gradlew :common:toolBench
+// Skips cleanly (does not fail) when NUMEN_BENCH_API_KEY is unset.
+tasks.register('toolBench', Test) {
+    description = 'Run the offline tool-call benchmark against the configured LLM.'
+    group = 'verification'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform {
+        includeTags 'bench'
+    }
+    // Config precedence (low → high): benchmark/.env  <  .env  <  shell env var  <  -Dnumen.bench.*
+    // The .env files are git-ignored, so credentials never touch the command line or VCS.
+    def loadDotEnv = { File f ->
+        def m = [:]
+        if (f.exists()) {
+            f.eachLine('UTF-8') { String line ->
+                line = line.trim()
+                if (line.isEmpty() || line.startsWith('#')) return
+                int i = line.indexOf('=')
+                if (i <= 0) return
+                def key = line.substring(0, i).trim()
+                def val = line.substring(i + 1).trim()
+                if (val.length() >= 2 && ((val.startsWith('"') && val.endsWith('"'))
+                        || (val.startsWith("'") && val.endsWith("'")))) {
+                    val = val.substring(1, val.length() - 1)
+                }
+                if (key.startsWith('NUMEN_BENCH_')) m[key] = val
+            }
+        }
+        return m
+    }
+    def fromEnvFiles = [:]
+    fromEnvFiles.putAll(loadDotEnv(rootProject.file('benchmark/.env')))
+    fromEnvFiles.putAll(loadDotEnv(rootProject.file('.env')))     // repo-root .env overrides benchmark/.env
+    fromEnvFiles.each { k, v -> environment(k.toString(), v) }
+
+    // Shell env vars override .env; -D system properties (read first by the bench) win overall.
+    ['NUMEN_BENCH_API_KEY', 'NUMEN_BENCH_PROVIDER', 'NUMEN_BENCH_MODEL', 'NUMEN_BENCH_BASE_URL',
+     'NUMEN_BENCH_SAMPLES', 'NUMEN_BENCH_TEMPERATURE', 'NUMEN_BENCH_PROXY'].each { k ->
+        def val = System.getenv(k)
+        if (val != null) environment(k, val)
+    }
+    System.properties.each { k, v ->
+        if (k.toString().startsWith('numen.bench.')) systemProperty(k.toString(), v)
+    }
+    outputs.upToDateWhen { false }   // always re-run; it's a measurement, not a cache
+    testLogging {
+        showStandardStreams = true
+        events 'passed', 'failed', 'skipped'
+        exceptionFormat = 'full'
+    }
+}

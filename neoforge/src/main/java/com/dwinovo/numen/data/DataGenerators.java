@@ -1,0 +1,32 @@
+package com.dwinovo.numen.data;
+
+import com.dwinovo.numen.Constants;
+import net.minecraft.data.PackOutput;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.data.event.GatherDataEvent;
+
+/**
+ * NeoForge data-generation entry point. Auto-registered via
+ * {@link EventBusSubscriber}; runs through
+ * {@code ./gradlew :neoforge:runData}. Outputs land in
+ * {@code neoforge/src/generated/resources/}, already wired into the main
+ * resource source set by the subproject's {@code build.gradle}.
+ */
+// 1.21.1 has separate buses (1.21.5 merged them); GatherDataEvent is a mod-bus event. It also
+// predates the 1.21.4 Client/Server split, and NeoForge tag providers still want an ExistingFileHelper.
+@EventBusSubscriber(modid = Constants.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
+public final class DataGenerators {
+
+    private DataGenerators() {}
+
+    @SubscribeEvent
+    public static void gatherData(GatherDataEvent event) {
+        PackOutput output = event.getGenerator().getPackOutput();
+        event.getGenerator().addProvider(true, new ModLanguageProvider(output, "en_us"));
+        event.getGenerator().addProvider(true, new ModLanguageProvider(output, "zh_cn"));
+        event.getGenerator().addProvider(true, new ModItemTagsProvider(output, event.getLookupProvider()));
+        event.getGenerator().addProvider(true,
+                new ModBlockTagsProvider(output, event.getLookupProvider(), event.getExistingFileHelper()));
+    }
+}

@@ -1,0 +1,107 @@
+{
+  "_comment": "Numen LLM sites (OpenAI-compatible). Per site: base URL + optional custom headers + known models with their context window (tokens, fed into auto-compaction). Model lists refreshed from each provider's own docs (2026-06); ids/context windows are best-effort and may drift — USER-EDITABLE: this is copied to config/numen/models.json on first run; edit that file to add your own sites/models or override URLs. Every model field also accepts a custom id via the settings 'custom' escape hatch.",
+  "providers": [
+    {
+      "id": "openai", "name": "OpenAI", "baseUrl": "https://api.openai.com/v1",
+      "models": [
+        { "id": "gpt-5.5", "ctx": 1000000 },
+        { "id": "gpt-5.4", "ctx": 1050000 },
+        { "id": "gpt-5.4-mini", "ctx": 272000 },
+        { "id": "gpt-5.2", "ctx": 272000 }
+      ]
+    },
+    {
+      "id": "deepseek", "name": "DeepSeek", "baseUrl": "https://api.deepseek.com/beta",
+      "models": [
+        { "id": "deepseek-v4-pro", "ctx": 1000000 },
+        { "id": "deepseek-v4-flash", "ctx": 1000000 },
+        { "id": "deepseek-reasoner", "ctx": 1000000, "reasoning": true },
+        { "id": "deepseek-chat", "ctx": 1000000 }
+      ]
+    },
+    {
+      "id": "moonshot", "name": "Kimi", "baseUrl": "https://api.moonshot.ai/v1",
+      "models": [
+        { "id": "kimi-k2.6", "ctx": 256000 },
+        { "id": "kimi-k2.5", "ctx": 256000 },
+        { "id": "kimi-k2-thinking", "ctx": 256000, "reasoning": true },
+        { "id": "kimi-latest", "ctx": 128000 }
+      ]
+    },
+    {
+      "id": "zhipu", "name": "智谱 GLM", "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+      "models": [
+        { "id": "glm-5.2", "ctx": 1000000 },
+        { "id": "glm-5", "ctx": 256000 },
+        { "id": "glm-4.7", "ctx": 200000 },
+        { "id": "glm-4.6", "ctx": 200000 }
+      ]
+    },
+    {
+      "id": "siliconflow", "name": "硅基流动", "baseUrl": "https://api.siliconflow.cn/v1",
+      "models": [
+        { "id": "deepseek-ai/DeepSeek-V4-Pro", "ctx": 1000000 },
+        { "id": "zai-org/GLM-5", "ctx": 200000 },
+        { "id": "moonshotai/Kimi-K2.6", "ctx": 256000 },
+        { "id": "Qwen/Qwen3.6-35B-A3B", "ctx": 256000 }
+      ]
+    },
+    {
+      "id": "minimax", "name": "MiniMax", "baseUrl": "https://api.minimax.io/v1",
+      "models": [
+        { "id": "MiniMax-M3", "ctx": 1048576 },
+        { "id": "MiniMax-M2.5", "ctx": 204800 },
+        { "id": "MiniMax-M2.1", "ctx": 204800 }
+      ]
+    },
+    {
+      "id": "volcengine", "name": "Doubao", "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+      "models": [
+        { "id": "doubao-seed-2-0-pro-260215", "ctx": 256000 },
+        { "id": "doubao-seed-2-0-mini-260215", "ctx": 256000 },
+        { "id": "doubao-seed-2-0-code-preview-260215", "ctx": 256000 }
+      ]
+    },
+    {
+      "id": "dashscope", "name": "Qwen", "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      "models": [
+        { "id": "qwen3.6-plus", "ctx": 1000000 },
+        { "id": "qwen3.5-plus", "ctx": 1000000 },
+        { "id": "qwen3-max", "ctx": 256000 },
+        { "id": "qwen-flash", "ctx": 1000000 }
+      ]
+    },
+    {
+      "id": "openrouter", "name": "OpenRouter", "baseUrl": "https://openrouter.ai/api/v1",
+      "headers": {
+        "HTTP-Referer": "https://github.com/Dwinovo/Numen",
+        "X-Title": "Numen (Minecraft)"
+      },
+      "models": [
+        { "id": "deepseek/deepseek-v4-pro", "ctx": 1000000 },
+        { "id": "openai/gpt-5.5", "ctx": 1000000 },
+        { "id": "z-ai/glm-5.2", "ctx": 1000000 },
+        { "id": "x-ai/grok-4.3", "ctx": 1000000 },
+        { "id": "moonshotai/kimi-k2.6", "ctx": 256000 }
+      ]
+    },
+    {
+      "id": "gemini", "name": "Gemini", "baseUrl": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "models": [
+        { "id": "gemini-3.5-flash", "ctx": 1000000 },
+        { "id": "gemini-3.1-pro-preview", "ctx": 1000000 },
+        { "id": "gemini-3-flash", "ctx": 1000000 },
+        { "id": "gemini-2.5-pro", "ctx": 1000000 }
+      ]
+    },
+    {
+      "id": "grok", "name": "Grok", "baseUrl": "https://api.x.ai/v1",
+      "models": [
+        { "id": "grok-4.3", "ctx": 1000000 },
+        { "id": "grok-4-1-fast", "ctx": 2000000 },
+        { "id": "grok-4", "ctx": 256000 },
+        { "id": "grok-code-fast-1", "ctx": 256000 }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.dwinovo.numen.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "MenuDataSlotsAccessor",
+    "MixinServerCommonPacketListener"
+  ],
+  "client": [
+    "MixinMinecraft"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
