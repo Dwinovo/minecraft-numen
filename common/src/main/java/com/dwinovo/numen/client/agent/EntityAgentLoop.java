@@ -45,8 +45,9 @@ import java.util.UUID;
  * All mutations run on the client main thread:
  * <ul>
  *   <li>{@link #submitPrompt} — from {@code EntityChatScreen} (UI thread)</li>
- *   <li>{@link #onToolResult} — from {@code TaskResultPayload.handle}
- *       (already bounced onto main thread by the network channel)</li>
+ *   <li>tool results — routed to this loop's {@link ToolDispatcher.Sink#onResult},
+ *       fed by {@link com.dwinovo.numen.agent.tool.ToolCall#complete} (e.g. from
+ *       {@code TaskResultPayload.handle}, already bounced onto the main thread)</li>
  *   <li>LLM response — {@link NumenLlmClient#chatStreaming} resolves on the
  *       HTTP executor thread; {@link #bounceBackToMain} hops via
  *       {@code Minecraft.getInstance().execute} before any mutation</li>

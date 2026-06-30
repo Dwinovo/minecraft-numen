@@ -23,12 +23,12 @@ import net.minecraft.world.level.Level;
  * the {@code null} context and on every face (some machines only expose
  * per-side), de-duplicate handlers by identity, and format what they find.
  *
- * @return a multi-line, LLM-facing summary of the items/fluids/energy found, or
- *         {@code null} when the block exposes no standard storage/energy
- *         capability on any side (a decorative/menu-only block, or a loader with
- *         no implementation yet). A storage-network terminal (AE2/RS) will show
- *         only its local buffer here, never the whole network — that needs the
- *         dedicated network reader (T3).
+ * <p>{@link #describe} returns a multi-line, LLM-facing summary of the
+ * items/fluids/energy found, or {@code null} when the block exposes no standard
+ * storage/energy capability on any side (a decorative/menu-only block, or a
+ * loader with no implementation yet). A storage-network terminal (AE2/RS) will
+ * show only its local buffer here, never the whole network — that needs the
+ * dedicated network reader (T3).
  */
 public interface IBlockCapabilityReader {
 

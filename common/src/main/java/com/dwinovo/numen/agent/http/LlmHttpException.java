@@ -6,9 +6,8 @@ package com.dwinovo.numen.agent.http;
  * specific provider error message — DeepSeek 400s in particular contain
  * the actual problem in plain prose).
  *
- * <p>{@link IOException}-level failures (DNS, connection refused, TLS) are
- * surfaced via the wrapped {@link java.io.IOException} on the future, not
- * this class.
+ * <p>{@link java.io.IOException}-level failures (DNS, connection refused, TLS)
+ * are surfaced via the wrapped {@code IOException} on the future, not this class.
  */
 public final class LlmHttpException extends RuntimeException {
 

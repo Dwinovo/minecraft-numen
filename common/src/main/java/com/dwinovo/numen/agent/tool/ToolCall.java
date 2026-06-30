@@ -12,11 +12,11 @@ import java.util.function.Consumer;
  * reports its result through exactly one of two verbs:
  *
  * <ul>
- *   <li>{@link #complete(String)} — "I finished, here is the result." For a
- *       tool that did its work synchronously on the agent (client) thread.</li>
- *   <li>{@link #shipToServer()} — "hand this to the body." The call returns
- *       immediately; the result arrives later (via {@code TaskResultPayload})
- *       and the loop completes it then.</li>
+ *   <li>{@link #complete(String)} — "here is the result." The one verb: a tool
+ *       calls it whenever and from wherever its result is ready — synchronously
+ *       on the agent (client) thread, or later after handing the work to the
+ *       server body (the result then arrives via {@code TaskResultPayload} and
+ *       the loop completes the call).</li>
  * </ul>
  *
  * The agent loop neither knows nor cares <em>how</em> a tool finishes — that

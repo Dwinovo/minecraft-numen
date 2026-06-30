@@ -21,9 +21,9 @@ public class CommonClass {
     /**
      * Populate the global {@link ToolRegistry}. The {@code numen-api} engine is a
      * chat-only companion and registers <em>no</em> tools of its own — the
-     * registry starts empty. {@code numen-core} and third-party tool packs add
-     * their {@code @NumenAction} holders via
-     * {@link com.dwinovo.numen.agent.tool.NumenTools}, in their own init.
+     * registry starts empty. {@code numen-core} and third-party tool packs
+     * register their own {@link com.dwinovo.numen.agent.tool.NumenTool}s via
+     * {@link ToolRegistry#register}, in their own init.
      *
      * <p>Kept as an explicit (empty) hook so the engine's init flow and logging
      * read the same whether or not any tools are present.
