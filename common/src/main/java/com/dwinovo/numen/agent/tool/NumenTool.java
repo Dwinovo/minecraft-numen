@@ -16,10 +16,10 @@ import java.util.Map;
  * whatever it likes — completing immediately, going async, sending its own
  * packets — then reports the result through the {@link ToolCall}.
  *
- * <p>In practice tools are authored as {@code @NumenAction} methods and realised
- * by {@link NumenActionTool}, which is also where Numen's own Minecraft
- * execution (server reads, body tasks) lives — as an implementation detail of
- * that adapter, not part of this contract.
+ * <p>Tools implement these four methods directly — there is no annotation layer
+ * to learn. numen-core ships small optional helpers for its own tools (a
+ * {@code Schema} builder for {@link #parameterSchema}, a server-task base for
+ * body-bound tools), but they are conveniences, not part of this contract.
  */
 public interface NumenTool {
 
