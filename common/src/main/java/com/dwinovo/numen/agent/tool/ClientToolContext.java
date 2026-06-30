@@ -14,6 +14,7 @@ import java.util.UUID;
  * <p>The body may be {@code null} when it's unloaded out of view distance;
  * perception tools must check and surface a clean failure rather than NPE.
  */
+@com.dwinovo.numen.api.Internal
 public record ClientToolContext(AbstractClientPlayer entity, UUID entityUuid) {
 
     /** The body's own perspective is the scan centre / inventory anchor. */

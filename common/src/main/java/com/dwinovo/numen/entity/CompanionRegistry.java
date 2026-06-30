@@ -31,6 +31,7 @@ import java.util.UUID;
  * The {@code dimension}/{@code pos} are a respawn hint (which level to construct
  * the body in); the {@code .dat} carries the authoritative restored state.
  */
+@com.dwinovo.numen.api.Internal
 public final class CompanionRegistry extends SavedData {
 
     /** One companion's catalog entry. {@code diedAt > 0} = dead, awaiting a respawn-at-owner (the death

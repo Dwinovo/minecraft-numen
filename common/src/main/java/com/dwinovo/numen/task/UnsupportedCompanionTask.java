@@ -5,6 +5,7 @@ package com.dwinovo.numen.task;
  * yet. Fails with a clear message so the LLM gets a real answer instead of a
  * hang while the migration is in progress.
  */
+@com.dwinovo.numen.api.Internal
 public final class UnsupportedCompanionTask implements CompanionTask {
 
     private final String toolName;

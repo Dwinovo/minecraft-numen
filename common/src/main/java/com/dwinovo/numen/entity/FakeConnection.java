@@ -37,6 +37,7 @@ import java.util.function.Consumer;
  * player never answers keep-alive). Lifecycle is governed by
  * {@code CompanionLifecycle}, not by connection state.
  */
+@com.dwinovo.numen.api.Internal
 public final class FakeConnection extends Connection {
 
     public FakeConnection() {

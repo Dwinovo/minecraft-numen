@@ -27,6 +27,7 @@ import java.util.List;
  * Plain non-thread-safe collections are deliberate — adding {@code synchronized}
  * or {@code ConcurrentLinkedDeque} would only mask a missed thread hop.
  */
+@com.dwinovo.numen.api.Internal
 public final class TaskQueue {
 
     private final Deque<TaskRecord> pending = new ArrayDeque<>();

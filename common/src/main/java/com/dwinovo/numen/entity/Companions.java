@@ -22,6 +22,7 @@ import java.util.UUID;
  * persists as a player {@code .dat}; the registry remembers it exists so it can
  * be recreated when its owner returns or a tool call arrives.
  */
+@com.dwinovo.numen.api.Internal
 public final class Companions {
 
     /** Ticks a dead companion stays down before respawning at its owner (~30 s). */

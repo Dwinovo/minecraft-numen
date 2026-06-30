@@ -19,6 +19,7 @@ import java.util.UUID;
  * results back to the owner as {@link TaskResultPayload}. Registered from both
  * loaders' end-of-tick hooks.
  */
+@com.dwinovo.numen.api.Internal
 public final class CompanionTickDispatcher {
 
     private record Running(CompanionTask task, TaskRecord record) {}

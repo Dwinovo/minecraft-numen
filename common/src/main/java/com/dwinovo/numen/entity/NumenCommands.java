@@ -26,6 +26,7 @@ import net.minecraft.server.level.ServerPlayer;
  *   /numen reset                     clear the caller's conversation loops
  * </pre>
  */
+@com.dwinovo.numen.api.Internal
 public final class NumenCommands {
 
     private NumenCommands() {}

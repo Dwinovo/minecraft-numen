@@ -10,4 +10,5 @@ package com.dwinovo.numen.agent.tool;
  * @param name    the tool name the model chose
  * @param argsJson the raw JSON arguments the model emitted
  */
+@com.dwinovo.numen.api.Internal
 public record ToolInvocation(String id, String name, String argsJson) {}

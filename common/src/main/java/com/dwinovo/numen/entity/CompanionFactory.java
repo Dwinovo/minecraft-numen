@@ -24,6 +24,7 @@ import java.util.UUID;
  * {@link net.minecraft.server.players.PlayerList#remove} saves that data back and
  * removes the body — so despawn is a clean, persisted dormancy.
  */
+@com.dwinovo.numen.api.Internal
 public final class CompanionFactory {
 
     private CompanionFactory() {}
