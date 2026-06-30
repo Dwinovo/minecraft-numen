@@ -108,6 +108,28 @@ processResources {
     inputs.properties(expandProps)
 }
 
+// Slim "api" jar (classifier 'api'): only the public-API packages — the surface
+// tool packs build against — with the @Internal stragglers that live inside them
+// excluded. Addon devs compileOnly this small, stable jar; the full jar runs at
+// runtime. Mirrors Flywheel's flywheel-…-api, Create's :slim, and JEI's …-api.
+tasks.register('apiJar', Jar) {
+    archiveClassifier = 'api'
+    from sourceSets.main.output
+    // public API surface (see the package-info of each)
+    include 'com/dwinovo/numen/api/**'             // @Internal marker + api meta
+    include 'com/dwinovo/numen/agent/tool/api/**'  // @NumenAction authoring surface
+    include 'com/dwinovo/numen/agent/tool/**'      // tool contract + registration
+    include 'com/dwinovo/numen/task/**'            // world-action task contract
+    include 'com/dwinovo/numen/entity/NumenPlayer*.class'   // the body a tool acts on
+    include 'com/dwinovo/numen/entity/package-info.class'
+    // drop the @Internal stragglers sitting inside those API packages
+    exclude 'com/dwinovo/numen/agent/tool/ToolInvocation*.class'
+    exclude 'com/dwinovo/numen/agent/tool/ClientToolContext*.class'
+    exclude 'com/dwinovo/numen/task/TaskQueue*.class'
+    exclude 'com/dwinovo/numen/task/CompanionTickDispatcher*.class'
+    exclude 'com/dwinovo/numen/task/UnsupportedCompanionTask*.class'
+}
+
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
@@ -115,6 +137,7 @@ publishing {
             // depend on the published api as a separate artifact.
             artifactId = "numen-api-${project.name}-${minecraft_version}"
             from components.java
+            artifact apiJar   // the slim :api classifier — addon devs compileOnly this
         }
     }
     repositories {
