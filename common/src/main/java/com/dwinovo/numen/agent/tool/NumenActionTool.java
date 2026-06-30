@@ -1,5 +1,6 @@
 package com.dwinovo.numen.agent.tool;
 
+import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.tool.api.Arg;
 import com.dwinovo.numen.agent.tool.api.NumenAction;
 import com.dwinovo.numen.agent.tool.api.ToolContext;
@@ -20,29 +21,42 @@ import java.util.function.Consumer;
 
 /**
  * A {@link NumenTool} backed by a reflected {@link NumenAction} method — the
- * runtime bridge from the annotation authoring surface to the existing tool
- * machinery. Name / description / schema come from {@link ToolSchema}; calling
- * the tool binds the model's JSON arguments to the method's typed parameters,
- * injects engine context by type, and invokes the method.
+ * runtime bridge from the annotation authoring surface to the tool machinery.
+ * Name / description / schema come from {@link ToolSchema}; calling the tool binds
+ * the model's JSON arguments to the {@link Arg}-annotated parameters, injects
+ * whatever context the engine can provide for the rest, and invokes the method.
  *
- * <h2>Where it runs — inferred, not declared</h2>
- * The author never tags a category. The adapter infers it from the signature:
+ * <h2>One contract, no categories</h2>
+ * There is no "kind" of tool. A method does <em>whatever it wants</em> and the
+ * adapter never rejects a signature. Everything below is just convenience over
+ * the open {@link ToolCall} contract — pick what fits, ignore the rest:
+ *
  * <ul>
- *   <li>returns a {@link TaskRecord} → a body <em>world-action</em>: shipped to
- *       the server, where the adapter reflectively builds the record
- *       and the task queue runs it (the method takes a {@link ToolContext} for
- *       the call id / deadline);</li>
- *   <li>takes the live {@link NumenPlayer} body and returns a value → a
- *       server-side <em>query</em>: runs on the tick thread, replies in place.</li>
+ *   <li><b>Inject by type</b> (any non-{@code @Arg} parameter): a
+ *       {@link ToolCall} (the raw handle — complete whenever, from any thread,
+ *       ship your own packets, proxy elsewhere), a {@code Consumer<String>}
+ *       reply (sugar for {@link ToolCall#complete}), a {@link ToolContext}
+ *       (call id / deadline), or the live {@link NumenPlayer} body. Ask for none,
+ *       some, or all. An unrecognised type is injected as {@code null} (a warning
+ *       is logged) — never a registration failure.</li>
+ *   <li><b>Finish however you like</b>: return a value and the adapter completes
+ *       the call with it; return {@code void} and complete it yourself through the
+ *       injected reply / {@link ToolCall}; or return a {@link TaskRecord} to hand
+ *       the work to the body's task queue (a convenience some packs use — not a
+ *       requirement).</li>
  * </ul>
- * Pure-client tools are added as more tools migrate; an unrecognised shape
- * raises a clear error at registration.
+ *
+ * <p>The only thing inferred is <em>where</em> the method has to run, and that is
+ * mechanical, not a taxonomy: a method that asks for the {@link NumenPlayer} body
+ * or returns a {@link TaskRecord} must run on the server (that is where the body
+ * and its task queue live), so the call ships there; otherwise it runs on the
+ * agent (client) thread. A tool that wants server work on its own terms simply
+ * takes a {@link ToolCall} and calls {@link ToolCall#shipToServer} (or sends its
+ * own packets) — the adapter does not get in the way.
  */
 public final class NumenActionTool implements NumenTool {
 
-    private enum Kind { QUERY, WORLD, ASYNC, LOCAL }
-
-    private enum SlotType { ARG, ENTITY, CONTEXT, CLIENT, REPLY }
+    private enum SlotType { ARG, ENTITY, CONTEXT, REPLY, CALL, CLIENT, IGNORED }
 
     /** One method parameter: either a model argument or an injected context value. */
     private static final class Slot {
@@ -62,6 +76,10 @@ public final class NumenActionTool implements NumenTool {
             this.required = required;
             this.nullable = nullable;
         }
+
+        static Slot inject(SlotType type) {
+            return new Slot(type, null, null, null, false, false);
+        }
     }
 
     private final Object holder;
@@ -70,7 +88,11 @@ public final class NumenActionTool implements NumenTool {
     private final String description;
     private final Map<String, Object> schema;
     private final Slot[] slots;
-    private final Kind kind;
+
+    /** Mechanical routing (not a category): must this run where the body lives? */
+    private final boolean needsServer;
+    private final boolean returnsTaskRecord;
+    private final boolean returnsValue;
 
     public NumenActionTool(Object holder, Method method) {
         NumenAction action = method.getAnnotation(NumenAction.class);
@@ -85,8 +107,6 @@ public final class NumenActionTool implements NumenTool {
         this.schema = ToolSchema.schemaFor(method);
 
         boolean injectsEntity = false;
-        boolean injectsContext = false;
-        boolean injectsReply = false;
         List<Slot> plan = new ArrayList<>();
         for (Parameter p : method.getParameters()) {
             Arg arg = p.getAnnotation(Arg.class);
@@ -96,42 +116,29 @@ public final class NumenActionTool implements NumenTool {
                         arg.required(), arg.nullable()));
             } else if (NumenPlayer.class.isAssignableFrom(p.getType())) {
                 injectsEntity = true;
-                plan.add(new Slot(SlotType.ENTITY, null, null, null, false, false));
+                plan.add(Slot.inject(SlotType.ENTITY));
             } else if (p.getType() == ToolContext.class) {
-                injectsContext = true;
-                plan.add(new Slot(SlotType.CONTEXT, null, null, null, false, false));
-            } else if (p.getType() == java.util.function.Consumer.class) {
-                injectsReply = true;
-                plan.add(new Slot(SlotType.REPLY, null, null, null, false, false));
+                plan.add(Slot.inject(SlotType.CONTEXT));
+            } else if (p.getType() == Consumer.class) {
+                plan.add(Slot.inject(SlotType.REPLY));
+            } else if (p.getType() == ToolCall.class) {
+                plan.add(Slot.inject(SlotType.CALL));
             } else if (p.getType() == ClientToolContext.class) {
-                plan.add(new Slot(SlotType.CLIENT, null, null, null, false, false));
+                plan.add(Slot.inject(SlotType.CLIENT));
             } else {
-                throw new IllegalArgumentException("@NumenAction " + name
-                        + ": parameter " + p.getName() + " of type " + p.getType().getName()
-                        + " is neither an @Arg nor an injectable context type");
+                // Never block registration over a shape we don't recognise — bind null
+                // and let the author do what they want (they have the ToolCall handle).
+                Constants.LOG.warn("@NumenAction {}: parameter '{}' of type {} is not an "
+                        + "injectable context type — binding null", name, p.getName(), p.getType().getName());
+                plan.add(Slot.inject(SlotType.IGNORED));
             }
         }
         this.slots = plan.toArray(new Slot[0]);
-
-        boolean returnsTaskRecord = TaskRecord.class.isAssignableFrom(method.getReturnType());
-        boolean returnsValue = method.getReturnType() != void.class;
-        // Where a tool runs is inferred from what it reaches for, not declared:
-        if (injectsReply) {
-            this.kind = Kind.ASYNC;          // budget-sliced server job; replies via the callback
-        } else if (returnsTaskRecord) {
-            this.kind = Kind.WORLD;          // body task, queued on the server
-        } else if (injectsEntity && returnsValue) {
-            this.kind = Kind.QUERY;          // synchronous read against the server body
-        } else if (returnsValue) {
-            this.kind = Kind.LOCAL;          // client-side bookkeeping; no server body
-        } else {
-            throw new IllegalArgumentException("@NumenAction " + name
-                    + ": unsupported tool shape (a void method must take a reply Consumer)");
-        }
-        if (kind == Kind.QUERY && injectsContext) {
-            throw new IllegalArgumentException("@NumenAction " + name
-                    + ": a query tool cannot take a ToolContext (no body task)");
-        }
+        this.returnsTaskRecord = TaskRecord.class.isAssignableFrom(method.getReturnType());
+        this.returnsValue = method.getReturnType() != void.class && !returnsTaskRecord;
+        // The body and its task queue live on the server: a tool that reaches for
+        // the body or hands back a TaskRecord must run there. Nothing else to infer.
+        this.needsServer = injectsEntity || returnsTaskRecord;
     }
 
     @Override public String name() { return name; }
@@ -140,49 +147,44 @@ public final class NumenActionTool implements NumenTool {
 
     @Override
     public void invoke(ToolCall call) {
-        // Client-side: a LOCAL tool runs here and completes; everything else is the
-        // server body's job and ships over the network.
-        if (kind == Kind.LOCAL) {
-            String resultJson;
-            try {
-                resultJson = resultToString(reflectInvoke(
-                        buildArgs(call.args(), null, null, call.ctx(), null)));
-            } catch (RuntimeException ex) {
-                resultJson = TaskResult.fail(ex.getMessage()).toJson();
-            }
-            call.complete(resultJson);
-        } else {
+        if (needsServer) {
             call.shipToServer();
+            return;
+        }
+        // Runs on the agent (client) thread. The method finishes the call: by
+        // returning a value (we complete with it) or by completing it itself via
+        // the injected ToolCall / reply.
+        try {
+            Object result = reflectInvoke(buildArgs(call.args(), null,
+                    new ToolContext(call.id(), 0L), call::complete, call));
+            if (returnsValue) call.complete(resultToString(result));
+        } catch (RuntimeException ex) {
+            call.complete(TaskResult.fail(ex.getMessage()).toJson());
         }
     }
 
     /**
-     * Numen's own Minecraft server-side execution — called by the core network
-     * transport ({@code ExecuteToolPayload}), NOT part of the {@link NumenTool}
-     * contract. A read replies immediately, a sliced job replies later, a body
-     * action enqueues a task whose result returns via the task lifecycle.
+     * Server-side execution — called by the core network transport
+     * ({@code ExecuteToolPayload}) when a call ships to the body; NOT part of the
+     * {@link NumenTool} contract. Same open shape as {@link #invoke}: the method
+     * returns a value (replied here), returns a {@link TaskRecord} (enqueued, its
+     * result returning via the task lifecycle), or completes itself via the
+     * injected {@code reply}.
      */
     public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
-        switch (kind) {
-            case QUERY ->
-                reply.accept(resultToString(reflectInvoke(buildArgs(args, companion, null, null, null))));
-            case ASYNC ->
-                reflectInvoke(buildArgs(args, companion, null, null, reply));   // void; replies via `reply`
-            case WORLD -> {
-                long gameTime = companion.level().getGameTime();
-                TaskRecord record = (TaskRecord) reflectInvoke(
-                        buildArgs(args, null, new ToolContext(toolCallId, gameTime), null, null));
-                companion.getTaskQueue().enqueue(record);   // result returns via the task lifecycle
-            }
-            case LOCAL -> throw new IllegalStateException(
-                    "local tool " + name + " was shipped to the server");
+        long gameTime = companion.level().getGameTime();
+        Object result = reflectInvoke(
+                buildArgs(args, companion, new ToolContext(toolCallId, gameTime), reply, null));
+        if (returnsTaskRecord) {
+            companion.getTaskQueue().enqueue((TaskRecord) result);   // result returns via the task lifecycle
+        } else if (returnsValue) {
+            reply.accept(resultToString(result));
         }
+        // void → the method already replied (or shipped its own work).
     }
 
     /** Offline arg validation (coerce + discard) for the benchmark; not part of the contract. */
     public void checkArgs(JsonObject args) {
-        // Coerce every model argument and discard — throws IllegalArgumentException
-        // on a missing/ill-typed arg, without executing the tool.
         for (Slot s : slots) {
             if (s.type == SlotType.ARG) {
                 coerce(args, s.argName, s.argType, s.elemType, s.required, s.nullable);
@@ -191,7 +193,7 @@ public final class NumenActionTool implements NumenTool {
     }
 
     private Object[] buildArgs(JsonObject args, NumenPlayer entity, ToolContext ctx,
-                               ClientToolContext clientCtx, Consumer<String> reply) {
+                               Consumer<String> reply, ToolCall call) {
         Object[] argv = new Object[slots.length];
         for (int i = 0; i < slots.length; i++) {
             Slot s = slots[i];
@@ -199,8 +201,10 @@ public final class NumenActionTool implements NumenTool {
                 case ARG -> coerce(args, s.argName, s.argType, s.elemType, s.required, s.nullable);
                 case ENTITY -> entity;
                 case CONTEXT -> ctx;
-                case CLIENT -> clientCtx;
                 case REPLY -> reply;
+                case CALL -> call;
+                case CLIENT -> call != null ? call.ctx() : null;
+                case IGNORED -> null;
             };
         }
         return argv;
@@ -211,8 +215,6 @@ public final class NumenActionTool implements NumenTool {
             return method.invoke(holder, argv);
         } catch (InvocationTargetException ex) {
             Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
-            // Argument-validation failures surface as a failed tool result; the
-            // caller (payload handler / agent loop) converts IllegalArgumentException.
             if (cause instanceof RuntimeException re) throw re;
             throw new RuntimeException(cause);
         } catch (IllegalAccessException ex) {
