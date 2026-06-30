@@ -2,7 +2,6 @@ package com.dwinovo.numen;
 
 import com.dwinovo.numen.network.NumenNetwork;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.server.level.ServerPlayer;
 
 public class NumenMod implements ModInitializer {
@@ -32,11 +31,6 @@ public class NumenMod implements ModInitializer {
                         com.dwinovo.numen.entity.Companions.onDimensionChanged(ap);
                     }
                 });
-
-        // Drive companion player-body tasks each tick (the engine ships no task
-        // types of its own — tool packs add them via CompanionTaskFactory).
-        ServerTickEvents.END_SERVER_TICK.register(
-                com.dwinovo.numen.task.CompanionTickDispatcher::tick);
 
         CommonClass.init();
         Constants.LOG.info("Numen mod initialised on Fabric.");

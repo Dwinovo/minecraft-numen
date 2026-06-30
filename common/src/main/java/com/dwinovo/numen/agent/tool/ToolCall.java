@@ -19,15 +19,18 @@ import java.util.function.Consumer;
  *       and the loop completes it then.</li>
  * </ul>
  *
- * The agent loop neither knows nor cares which verb a tool uses — that choice
- * belongs entirely to the tool. This is the seam that makes tool execution
- * transparent to {@code EntityAgentLoop}: it dispatches a call and is notified
- * of the result, with no branch on tool category.
+ * The agent loop neither knows nor cares <em>how</em> a tool finishes — that
+ * choice belongs entirely to the tool. This is the seam that makes tool execution
+ * transparent to {@code EntityAgentLoop}: it dispatches a call and is notified of
+ * the result, with no branch on tool category.
  *
- * <p>A future MCP-bridge tool can ignore both built-in verbs' transports and,
- * inside {@link NumenTool#invoke}, do whatever it likes (proxy to an external
- * server, hook a chat app, read a file) on any thread, then call
- * {@link #complete} when done.
+ * <p>The engine is a scheduler, not an executor: there is exactly one verb,
+ * {@link #complete(String)}. A tool does whatever it likes inside
+ * {@link NumenTool#invoke} — return immediately, hop a thread, send its own
+ * packets to the server body, proxy to an external service, hook a chat app — on
+ * any thread, then calls {@link #complete} when the result is ready (the
+ * scheduler waits, with only a backstop timeout). How and where the work happens
+ * is none of the engine's business.
  */
 public final class ToolCall {
 
@@ -35,17 +38,15 @@ public final class ToolCall {
     private final String toolName;
     private final String rawArgs;
     private final ClientToolContext ctx;
-    private final Consumer<String> completion;   // result sink for synchronous (client-side) tools
-    private final Runnable serverDispatch;        // ship-to-body behaviour, supplied by the loop
+    private final Consumer<String> completion;   // the single "done" sink
 
     public ToolCall(String id, String toolName, String rawArgs, ClientToolContext ctx,
-                    Consumer<String> completion, Runnable serverDispatch) {
+                    Consumer<String> completion) {
         this.id = id;
         this.toolName = toolName;
         this.rawArgs = rawArgs;
         this.ctx = ctx;
         this.completion = completion;
-        this.serverDispatch = serverDispatch;
     }
 
     /** The LLM's {@code tool_call} id — carried through to the matching result message. */
@@ -73,13 +74,8 @@ public final class ToolCall {
         }
     }
 
-    /** Deliver the result for a tool that finished synchronously on the client. */
+    /** The one verb: deliver the result, whenever and from wherever the tool is ready. */
     public void complete(String resultJson) {
         completion.accept(resultJson);
-    }
-
-    /** Hand the call to the server body; the loop completes it when the result returns. */
-    public void shipToServer() {
-        serverDispatch.run();
     }
 }

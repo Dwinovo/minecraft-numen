@@ -30,8 +30,6 @@ public class NumenMod {
         // flushes when RegisterPayloadHandlersEvent fires (see below).
         NumenNetwork.register();
 
-        // Per-tick server work: long-range scans + companion task dispatch.
-        NeoForge.EVENT_BUS.addListener(NumenMod::onServerTickPost);
         // Dev: /numen_summon — create a companion fake player at the caller.
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
                 com.dwinovo.numen.entity.NumenCommands.register(e.getDispatcher()));
@@ -47,10 +45,6 @@ public class NumenMod {
         if (Services.NETWORK instanceof NeoForgeNetworkChannel ch) {
             ch.flushPending(event);
         }
-    }
-
-    private static void onServerTickPost(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
-        com.dwinovo.numen.task.CompanionTickDispatcher.tick(event.getServer());
     }
 
     private static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {

@@ -6,8 +6,7 @@ import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.agent.tool.ToolInvocation;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
-import com.dwinovo.numen.network.payload.ExecuteToolPayload;
-import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.entity.CompanionLifecycle;
 import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.client.player.AbstractClientPlayer;
 
@@ -27,9 +26,8 @@ import java.util.UUID;
  * <h2>One synchronous serial queue</h2>
  * Calls run strictly one at a time: the next is dispatched only when the current
  * one's result lands (one body, one brain, one thing at a time — no async, no
- * concurrency). A tool either completes immediately on the client
- * ({@link ToolCall#complete}) or ships itself to the server body and completes
- * later when {@link #deliver} is called; the dispatcher is blind to which.
+ * concurrency). A tool reports its result through {@link ToolCall#complete},
+ * synchronously or much later from any thread; the dispatcher is blind to how.
  *
  * <p>It reports back to its owner through the {@link Sink}: each landed result
  * via {@link Sink#onResult}, and {@link Sink#onAllSettled} once the turn's calls
@@ -81,16 +79,6 @@ public final class ToolDispatcher {
         drainNext();
     }
 
-    /** A server-body result came back (from {@code TaskResultPayload}). */
-    public void deliver(String invocationId, String resultJson) {
-        ToolInvocation inv = inFlight.get(invocationId);
-        if (inv == null) {
-            Constants.LOG.debug("[numen-dispatch#{}] late tool_result id={} ignored", entityUuid, invocationId);
-            return;
-        }
-        complete(inv, resultJson);
-    }
-
     /** Per-tick backstop: fail a never-replying in-flight call so the loop can't wedge. */
     public void tick() {
         if (deadlineMillis == 0 || inFlight.isEmpty()) return;
@@ -112,6 +100,7 @@ public final class ToolDispatcher {
         queue.clear();
         deadlineMillis = 0;
         advancing = false;
+        CompanionLifecycle.fireAbort(entityUuid);   // tool packs stop their own server-side work
         return ids;
     }
 
@@ -143,9 +132,7 @@ public final class ToolDispatcher {
                 deadlineMillis = System.currentTimeMillis() + TOOL_BACKSTOP_MILLIS;
                 ToolCall call = new ToolCall(inv.id(), inv.name(), inv.argsJson(),
                         new ClientToolContext(sink.entity(), entityUuid),
-                        json -> complete(inv, json),
-                        () -> Services.NETWORK.sendToServer(
-                                new ExecuteToolPayload(entityUuid, inv.id(), inv.name(), inv.argsJson())));
+                        json -> complete(inv, json));
                 Constants.LOG.info("[numen-dispatch#{}] dispatch tool={} id={} args={}",
                         entityUuid, inv.name(), inv.id(), truncate(inv.argsJson()));
                 try {

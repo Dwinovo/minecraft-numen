@@ -27,8 +27,8 @@ import java.util.Map;
  * @param message      short human-readable summary. Visible in agent logs and
  *                     useful for the LLM to reason about what happened
  *                     ("path ended before reaching target").
- * @param timedOut     whether the terminal state was {@link TaskState#TIMEOUT}.
- * @param interrupted  whether the terminal state was {@link TaskState#CANCELLED}.
+ * @param timedOut     whether the work ran out of time.
+ * @param interrupted  whether the work was cancelled (e.g. owner interrupt).
  * @param data         task-specific structured payload. Empty map for no extras.
  */
 public record TaskResult(boolean success,

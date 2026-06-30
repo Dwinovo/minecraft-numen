@@ -8,7 +8,6 @@ import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.agent.tool.ToolInvocation;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
-import com.dwinovo.numen.network.payload.CancelTasksPayload;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.platform.services.INumenConfig;
 import com.dwinovo.numen.task.TaskResult;
@@ -249,11 +248,6 @@ public final class EntityAgentLoop {
         tryStartTurn();
     }
 
-    /** Server body reported a result for one of our outstanding calls (async path). */
-    public void onToolResult(String toolCallId, String resultJson) {
-        dispatcher.deliver(toolCallId, resultJson);
-    }
-
     /** Driven once per client tick (see {@code AgentLoopRegistry.tickAll}) — backstop timeout. */
     public void clientTick() {
         dispatcher.tick();
@@ -366,10 +360,9 @@ public final class EntityAgentLoop {
                         "{\"success\":false,\"message\":\"interrupted by owner\"}");
             }
 
-            // Stop the BODY, not just the conversation: tell the server to cancel
-            // the running task and the queue. Harmless no-op when only an LLM
-            // call (no world action) was in flight.
-            Services.NETWORK.sendToServer(new CancelTasksPayload(entityUuid));
+            // Stop the BODY too, not just the conversation: cancelAndDrain fires
+            // CompanionLifecycle.onAbort, which tool packs subscribe to so they can
+            // halt their own server-side work. The engine sends no packet itself.
 
             // If we cut off an in-flight LLM call before its assistant turn was
             // recorded, the conversation now ends on a user message. Cap it with a

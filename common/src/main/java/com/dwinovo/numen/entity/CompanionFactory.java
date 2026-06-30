@@ -78,10 +78,10 @@ public final class CompanionFactory {
 
     /** Save the companion's data and remove it from the world (dormancy). */
     public static void despawn(MinecraftServer server, NumenPlayer player) {
-        // Finalize any running task first, so its teardown (e.g. clearing a mining
-        // crack overlay) runs instead of being orphaned once the body leaves the
-        // tick loop's player list.
-        com.dwinovo.numen.task.CompanionTickDispatcher.onCompanionRemoved(player);
+        // Tell tool packs the body is leaving so they can finalize their own
+        // per-companion work (e.g. clear a mining crack overlay) instead of leaving
+        // it orphaned once the body drops out of the tick loop's player list.
+        CompanionLifecycle.fireRemove(player);
         server.getPlayerList().remove(player);
     }
 }

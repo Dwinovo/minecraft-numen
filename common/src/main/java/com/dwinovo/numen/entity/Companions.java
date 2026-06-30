@@ -5,7 +5,6 @@ import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.network.payload.NumenRespawnPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.platform.Services;
-import com.dwinovo.numen.task.CompanionTickDispatcher;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -103,7 +102,7 @@ public final class Companions {
         UUID uuid = body.getUUID();
         String cause = body.getCombatTracker().getDeathMessage().getString();
         if (cause == null || cause.isBlank()) cause = "未知原因";
-        CompanionTickDispatcher.clearActiveTask(body);   // no result shipped — the death payload drives the client
+        CompanionLifecycle.fireDeath(body);   // no result shipped — the death payload drives the client
         ServerPlayer owner = body.resolveOwnerPlayer();
         if (owner != null) {   // immediate, same-session (carries the respawn delay for the client countdown)
             Services.NETWORK.sendToPlayer(owner, new NumenDeathPayload(uuid, cause, RESPAWN_DELAY_TICKS * 50L));

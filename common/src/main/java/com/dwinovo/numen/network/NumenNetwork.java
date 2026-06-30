@@ -3,12 +3,9 @@ package com.dwinovo.numen.network;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.network.payload.LocateNumenPayload;
-import com.dwinovo.numen.network.payload.CancelTasksPayload;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
-import com.dwinovo.numen.network.payload.ExecuteToolPayload;
 import com.dwinovo.numen.network.payload.PathVizPayload;
-import com.dwinovo.numen.network.payload.TaskResultPayload;
 import com.dwinovo.numen.platform.Services;
 
 /**
@@ -32,18 +29,6 @@ public final class NumenNetwork {
     private NumenNetwork() {}
 
     public static void register() {
-        // C→S: the client-side LLM emitted a tool_call; execute on the owner's Numen.
-        Services.NETWORK.registerClientToServer(
-                ExecuteToolPayload.TYPE, ExecuteToolPayload.STREAM_CODEC, ExecuteToolPayload::handle);
-
-        // C→S: owner pressed Stop — cancel the running + queued tasks (body stop).
-        Services.NETWORK.registerClientToServer(
-                CancelTasksPayload.TYPE, CancelTasksPayload.STREAM_CODEC, CancelTasksPayload::handle);
-
-        // S→C: tool execution finished; ship the result back to the owner.
-        Services.NETWORK.registerServerToClient(
-                TaskResultPayload.TYPE, TaskResultPayload.STREAM_CODEC, TaskResultPayload::handle);
-
         // S→C: an Numen body died; suspend the owner's agent loop (resolves the in-flight
         // tool call with the death cause). Recoverable — see NumenRespawnPayload.
         Services.NETWORK.registerServerToClient(

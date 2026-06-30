@@ -1,9 +1,5 @@
 package com.dwinovo.numen.entity;
 
-import com.dwinovo.numen.task.PathTally;
-import com.dwinovo.numen.task.TaskQueue;
-import com.dwinovo.numen.task.TaskRecord;
-import com.dwinovo.numen.task.TaskState;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
@@ -44,12 +40,6 @@ public final class NumenPlayer extends ServerPlayer {
     /** Latched once we've handled this body's death, so the post-death routine runs exactly once. */
     private boolean deathHandled;
 
-    // ---- task hosting (lifted from the old NumenEntity Mob) ----
-    private TaskQueue taskQueue;
-    private final PathTally pathTally = new PathTally();
-    private TaskRecord activeTask;
-    private String debugTask;
-
     public NumenPlayer(MinecraftServer server, ServerLevel level, GameProfile profile,
                         ClientInformation clientInformation) {
         super(server, level, profile, clientInformation);
@@ -78,41 +68,6 @@ public final class NumenPlayer extends ServerPlayer {
         return ownerUuid == null ? null : level().getServer().getPlayerList().getPlayer(ownerUuid);
     }
 
-    // ---- task hosting ----
-
-    public TaskQueue getTaskQueue() {
-        if (taskQueue == null) taskQueue = new TaskQueue();
-        return taskQueue;
-    }
-
-    /** The record currently executing (polled out of the queue), for owner-interrupt. */
-    public TaskRecord getActiveTask() {
-        return activeTask;
-    }
-
-    public void setActiveTask(TaskRecord record) {
-        this.activeTask = record;
-    }
-
-    /** Cancel queued records AND the running one (its state flips off RUNNING). */
-    public void cancelAllTasks(String reason) {
-        getTaskQueue().cancelAll(reason);
-        if (activeTask != null && activeTask.getState() == TaskState.RUNNING) {
-            activeTask.setState(TaskState.CANCELLED);
-        }
-    }
-
-    public PathTally pathTally() {
-        return pathTally;
-    }
-
-    public void setDebugTask(String description) {
-        this.debugTask = description;
-    }
-
-    public String getDebugTask() {
-        return debugTask;
-    }
 
     /** True if {@code item} sits anywhere in the inventory (hotbar/main/offhand all count). */
     public boolean ensureInInventory(Item item) {
