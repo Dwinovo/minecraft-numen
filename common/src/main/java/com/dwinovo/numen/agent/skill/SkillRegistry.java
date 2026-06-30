@@ -5,17 +5,19 @@ import com.dwinovo.numen.Constants;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 
 /**
- * Client-side registry of skills loaded from disk. Skills are markdown files
- * the LLM can load on demand via the {@code load_skill} tool, deferring long
- * "how to do X" instructions out of the system prompt and into the tool-call
- * conversation only when relevant.
+ * Client-side registry of skills. Skills are markdown directories the LLM can
+ * load on demand via the {@code load_skill} tool, deferring long "how to do X"
+ * instructions out of the system prompt and into the tool-call conversation
+ * only when relevant.
  *
  * <h2>Why client-side only</h2>
  * Skills feed the LLM, and the LLM runs on the player's client (each player
@@ -23,15 +25,37 @@ import java.util.stream.Stream;
  * registry — {@code load_skill} is an {@code isLocal} tool so its execute
  * path never crosses the network.
  *
+ * <h2>Two sources, scanned in place and merged</h2>
+ * Following the same model as Claude Code and opencode, skills are read from
+ * multiple roots and merged by name — nothing is ever copied between them:
+ * <ul>
+ *   <li><b>Bundled (mod) skills</b> — a mod {@linkplain #declareBundled declares}
+ *       a skills root inside its own jar; it is read <em>in place</em> from the
+ *       jar every {@link #scan}, so it is never stale and vanishes when the mod
+ *       is removed.</li>
+ *   <li><b>Player skills</b> — {@code config/numen/skills} on disk, the
+ *       {@code userRoot} passed to {@link #scan}. Plain files the player owns.</li>
+ * </ul>
+ * On a name clash the <b>player skill wins</b> (it is scanned last, on top of
+ * the bundled set) — so a player re-tunes a mod's skill by dropping a same-named
+ * directory in their config, exactly the Claude Code "any level overrides a
+ * bundled skill" rule.
+ *
  * <h2>Layout — one directory per skill</h2>
+ * A skill is a whole <em>directory</em>, not a lone file: {@code SKILL.md} is
+ * required (its {@code name:}/{@code description:} frontmatter is what the model
+ * sees), and the directory may carry any supporting material the body points at.
  * <pre>
- * &lt;gameDir&gt;/config/numen/skills/
+ * &lt;root&gt;/
  *   &lt;name&gt;/
  *     SKILL.md       (required — YAML frontmatter + markdown body)
+ *     references/    (optional — extra docs the SKILL.md points at)
+ *     scripts/       (optional — anything else the skill ships)
  * </pre>
  * The directory name is informational; the canonical skill id is the
- * {@code name:} frontmatter key. Directory + frontmatter name don't have to
- * match (but conventionally do).
+ * {@code name:} frontmatter key. {@link SkillInfo#location()} is the path to the
+ * skill's {@code SKILL.md} (a jar path for a bundled skill, a real file for a
+ * player skill); {@code location.getParent()} reaches its supporting files.
  *
  * <h2>Wire format injected into the system prompt</h2>
  * {@link #formatXml()} produces, every turn, a block of the form
@@ -50,10 +74,10 @@ import java.util.stream.Stream;
  * skills are intentionally hidden so the model doesn't pick them blindly.
  *
  * <h2>Thread safety</h2>
- * All access from the client main thread. The {@link #skills} map is
- * non-thread-safe; {@link #scan} runs synchronously on whatever thread the
- * caller chooses (currently the client init thread, which is the main
- * thread before the game loop starts).
+ * All access from the client main thread. The backing collections are
+ * non-thread-safe; {@link #declareBundled} and {@link #scan} run synchronously
+ * on whatever thread the caller chooses (currently the client init thread,
+ * which is the main thread before the game loop starts).
  */
 public final class SkillRegistry {
 
@@ -62,11 +86,21 @@ public final class SkillRegistry {
 
     private static final SkillRegistry INSTANCE = new SkillRegistry();
 
-    /** Insertion-ordered for stable XML output across scans. */
+    /** The live merged set, keyed by skill name. Insertion-ordered for stable XML output. */
     private final Map<String, SkillInfo> skills = new LinkedHashMap<>();
 
-    /** Last scanned root, kept so a UI refresh button can re-scan without re-passing the path. */
-    private Path lastScannedRoot;
+    /**
+     * Bundled skill roots a mod has declared, in declaration order. Each is a
+     * directory (typically a path inside a mod jar) holding {@code <name>/SKILL.md}
+     * subdirectories. Read in place on every {@link #scan}; never copied.
+     */
+    private final List<Path> bundledRoots = new ArrayList<>();
+
+    /** The player skills root ({@code config/numen/skills}); kept so {@link #rescan} can re-run. */
+    private Path userRoot;
+
+    /** Whether {@link #scan} has run at least once (so {@link #declareBundled} knows to re-merge). */
+    private boolean scanned;
 
     private SkillRegistry() {}
 
@@ -75,28 +109,82 @@ public final class SkillRegistry {
     }
 
     /**
-     * Walk one level deep under {@code skillsRoot}, parse every {@code SKILL.md}
-     * found, replace the in-memory map atomically.
+     * Declare a skills root a mod ships inside its jar, so players don't have to
+     * copy any files by hand. The root is a directory holding one subdirectory
+     * per skill ({@code <name>/SKILL.md} plus optional supporting files); it is
+     * read in place from the jar on every {@link #scan} — never copied to disk —
+     * so it is always current and disappears when the mod is removed.
      *
-     * <p>If {@code skillsRoot} is {@code null} or doesn't exist, the registry
-     * is reset to empty — this is intentional so a misconfigured install
-     * doesn't keep stale skills around.
+     * <p>Call once at mod init. Resolving the jar path is loader-specific and so
+     * lives in the mod, not here:
+     * <pre>{@code
+     * // Fabric
+     * FabricLoader.getInstance().getModContainer("mymod")
+     *     .flatMap(c -> c.findPath("skills"))
+     *     .ifPresent(root -> SkillRegistry.instance().declareBundled(root));
+     * // NeoForge
+     * SkillRegistry.instance().declareBundled(
+     *     ModList.get().getModFileById("mymod").getFile().findResource("skills"));
+     * }</pre>
      *
-     * @return number of skills successfully loaded
+     * <p>If a {@link #scan} has already happened, this re-scans so a late
+     * declaration (mod init order across loaders is not guaranteed) still takes
+     * effect — cheap, since skills are few.
      */
-    public int scan(Path skillsRoot) {
-        this.lastScannedRoot = skillsRoot;
-        Map<String, SkillInfo> next = new LinkedHashMap<>();
-
-        if (skillsRoot == null || !Files.isDirectory(skillsRoot)) {
-            this.skills.clear();
-            Constants.LOG.info("[numen-skill] root {} does not exist; 0 skills loaded",
-                    skillsRoot);
-            return 0;
+    public void declareBundled(Path skillsRoot) {
+        if (skillsRoot == null) {
+            Constants.LOG.warn("[numen-skill] declareBundled: null root ignored");
+            return;
         }
+        bundledRoots.add(skillsRoot);
+        Constants.LOG.info("[numen-skill] declared bundled skills root {}", skillsRoot);
+        if (scanned) rescan();
+    }
 
-        int errors = 0;
-        try (Stream<Path> dirs = Files.list(skillsRoot)) {
+    /**
+     * Rebuild the live set: scan every declared bundled root (low precedence, in
+     * declaration order), then the player {@code userRoot} on top (high
+     * precedence, so a same-named player skill overrides a bundled one).
+     *
+     * @param userRoot the player skills directory ({@code config/numen/skills});
+     *                 may be {@code null} or absent — then only bundled skills load
+     * @return number of skills in the merged live set
+     */
+    public int scan(Path userRoot) {
+        this.userRoot = userRoot;
+        this.scanned = true;
+
+        Map<String, SkillInfo> next = new LinkedHashMap<>();
+        int bundledCount = 0;
+        for (Path root : bundledRoots) {
+            bundledCount += scanInto(root, next);
+        }
+        scanInto(userRoot, next);
+
+        this.skills.clear();
+        this.skills.putAll(next);
+        Constants.LOG.info("[numen-skill] loaded {} skill(s) ({} bundled root(s), userRoot={})",
+                this.skills.size(), bundledRoots.size(), userRoot);
+        return this.skills.size();
+    }
+
+    /** Re-run {@link #scan} on the last {@code userRoot}. */
+    public int rescan() {
+        return scan(this.userRoot);
+    }
+
+    /**
+     * Walk one level deep under {@code root}, parse each {@code <sub>/SKILL.md},
+     * and put it into {@code dest}. Entries already present are overridden — this
+     * is how a later root (the player config) wins over an earlier one (a bundled
+     * mod). A no-op when {@code root} is {@code null} or not a directory.
+     *
+     * @return number of skills loaded from this root
+     */
+    private static int scanInto(Path root, Map<String, SkillInfo> dest) {
+        if (root == null || !Files.isDirectory(root)) return 0;
+        int loaded = 0;
+        try (Stream<Path> dirs = Files.list(root)) {
             for (Path dir : (Iterable<Path>) dirs.sorted()::iterator) {
                 if (!Files.isDirectory(dir)) continue;
                 Path skillFile = dir.resolve(SKILL_FILENAME);
@@ -104,31 +192,20 @@ public final class SkillRegistry {
                 try {
                     SkillInfo info = loadFile(skillFile);
                     if (info == null) continue;
-                    SkillInfo prev = next.put(info.name(), info);
+                    SkillInfo prev = dest.put(info.name(), info);
                     if (prev != null) {
-                        Constants.LOG.warn("[numen-skill] duplicate name '{}' at {} (replacing {})",
+                        Constants.LOG.debug("[numen-skill] '{}' from {} overrides {}",
                                 info.name(), info.location(), prev.location());
                     }
+                    loaded++;
                 } catch (IOException | RuntimeException ex) {
-                    errors++;
-                    Constants.LOG.warn("[numen-skill] failed to parse {}: {}",
-                            skillFile, ex.toString());
+                    Constants.LOG.warn("[numen-skill] failed to parse {}: {}", skillFile, ex.toString());
                 }
             }
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-skill] failed to list {}: {}", skillsRoot, ex.toString());
+            Constants.LOG.warn("[numen-skill] failed to list {}: {}", root, ex.toString());
         }
-
-        this.skills.clear();
-        this.skills.putAll(next);
-        Constants.LOG.info("[numen-skill] scanned {}: {} skill(s) loaded, {} error(s)",
-                skillsRoot, this.skills.size(), errors);
-        return this.skills.size();
-    }
-
-    /** Re-scan the previously scanned root. No-op if {@link #scan} was never called. */
-    public int rescan() {
-        return scan(this.lastScannedRoot);
+        return loaded;
     }
 
     public Optional<SkillInfo> get(String name) {
@@ -175,17 +252,25 @@ public final class SkillRegistry {
     }
 
     private static SkillInfo loadFile(Path skillFile) throws IOException {
-        String raw = Files.readString(skillFile);
-        SkillMarkdown.Parsed parsed = SkillMarkdown.parse(raw);
-        String name = parsed.frontmatter().get("name");
-        if (name == null || name.isBlank()) {
+        SkillInfo info = parse(Files.readString(skillFile), skillFile.toAbsolutePath());
+        if (info == null) {
             Constants.LOG.warn("[numen-skill] {} missing required 'name:' frontmatter; skipping",
                     skillFile);
-            return null;
         }
+        return info;
+    }
+
+    /**
+     * Parse {@code SKILL.md} text into a {@link SkillInfo}, or {@code null} if it
+     * lacks a {@code name:} frontmatter key.
+     */
+    private static SkillInfo parse(String raw, Path location) {
+        SkillMarkdown.Parsed parsed = SkillMarkdown.parse(raw);
+        String name = parsed.frontmatter().get("name");
+        if (name == null || name.isBlank()) return null;
         String description = parsed.frontmatter().get("description");
         if (description != null && description.isBlank()) description = null;
-        return new SkillInfo(name.trim(), description, parsed.content(), skillFile.toAbsolutePath());
+        return new SkillInfo(name.trim(), description, parsed.content(), location);
     }
 
     private static String escapeXml(String s) {
