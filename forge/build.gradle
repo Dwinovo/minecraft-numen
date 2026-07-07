@@ -37,7 +37,12 @@ minecraft {
     }
 }
 
-sourceSets.main.resources.srcDir 'src/generated/resources'
+// Package the Fabric module's datagen output: both loaders' tag providers wrap the same
+// common ModBlockTagData/ModItemTagData, so the JSON is identical. Booting :forge:Data would
+// drag the whole mod set (incl. numen_api) into the FG6 dev runtime, which fg.deobf cannot
+// resolve from our raw maven - one :fabric:runDatagen feeds both jars instead.
+sourceSets.main.resources.srcDir '../fabric/src/generated/resources'
+sourceSets.main.resources.exclude '.cache/**'
 
 // Bundle numen-api into core's Forge jar (Jar-in-Jar).
 jarJar.enable()
@@ -45,9 +50,9 @@ jarJar.enable()
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     // The numen-api engine (matching-loader artifact, so the mcgradleconventions
-    // loader attribute resolves). fg.deobf puts it on the dev-run mod classpath too -
-    // the Data run loads core's mods.toml, whose mandatory numen_api dep must resolve.
-    implementation fg.deobf("com.dwinovo.numen:numen-api-forge-1.20.2:0.0.1-SNAPSHOT")
+    // loader attribute resolves). compileOnly: the api classes are provided at
+    // runtime by the bundled numen-api mod, not by core's own jar.
+    compileOnly "com.dwinovo.numen:numen-api-forge-1.20.2:0.0.1-SNAPSHOT"
     // Bundle the Forge build of the api into META-INF/jarjar/ so one file ships both mods.
     // transitive=false: only the api jar is nested — its Forge/Minecraft deps are provided
     // by the loader at runtime and must NOT be embedded (that would bloat the jar to ~94MB).
