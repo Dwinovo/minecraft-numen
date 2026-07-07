@@ -5,6 +5,7 @@ import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
+import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.agent.tool.ToolInvocation;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
@@ -96,7 +97,13 @@ public final class EntityAgentLoop {
             请将以上整段对话压缩成一份详细摘要。这份摘要将完全替代之前的对话历史，\
             成为你后续行动的唯一记忆——任何没写进摘要的信息都会永久丢失，所以请把还会用到的信息全部保留。
 
-            按以下结构输出：
+            分两步完成：
+
+            第一步，在 <analysis> 标签内梳理整段对话：逐条核对有哪些指令、坐标、物品数量、\
+            失败教训和未完成的任务必须保留，检查是否有容易遗漏的细节（数字、名称、约束条件）。\
+            这一步是你的草稿，之后会被丢弃。
+
+            第二步，在 <summary> 标签内输出正式摘要，按以下结构：
             1. 主人的指令与意图：所有明确的请求，以及当前正在执行哪一个。
             2. 世界知识：所有提到过的重要坐标（基地、传送门、熔炉、工作台、矿点、要塞等）、维度和地标。坐标数字必须逐字保留。
             3. 自身状态：最近已知的 HP、装备、背包中的关键物品及数量。
@@ -105,7 +112,7 @@ public final class EntityAgentLoop {
             6. 待办任务：计划中尚未完成的事项及其状态。
             7. 当前工作与下一步：摘要请求前正在做什么，接下来的第一步是什么。
 
-            只输出摘要本身。不要调用工具，不要添加摘要以外的评论。""";
+            不要调用工具，不要在两个标签之外输出任何内容。""";
 
     /** Wrapper that turns the raw summary into the new history's first user message. */
     private static final String SUMMARY_HEADER =
@@ -541,15 +548,21 @@ public final class EntityAgentLoop {
         // Auto-compaction gate: the last request's true context size (as the
         // API counted it) is within the buffer of the window — summarize FIRST,
         // then this method re-runs and dispatches the turn on the compacted
-        // history. Mirrors Claude Code's autoCompactIfNeeded.
+        // history. Mirrors Claude Code's autoCompactIfNeeded. Backends that
+        // never send a usage frame leave lastPromptTokens at 0 — fall back to
+        // a local estimate so the gate still fires instead of never.
         int window = com.dwinovo.numen.agent.model.ModelRegistry.contextWindow(
                 com.dwinovo.numen.client.screen.LlmProviders.normalize(com.dwinovo.numen.platform.Services.CONFIG.getProvider()),
                 com.dwinovo.numen.platform.Services.CONFIG.getModel());
-        if (lastPromptTokens >= window - AUTO_COMPACT_BUFFER_TOKENS
+        int contextTokens = lastPromptTokens > 0
+                ? lastPromptTokens
+                : estimateContextTokens(convo.snapshot());
+        if (contextTokens >= window - AUTO_COMPACT_BUFFER_TOKENS
                 && convo.snapshot().size() >= MIN_COMPACT_MESSAGES
                 && compactFailures < MAX_COMPACT_FAILURES) {
-            Constants.LOG.info("[numen-entity#{}] auto-compacting: last prompt {} tokens >= {} - {}",
-                    entityUuid, lastPromptTokens, window, AUTO_COMPACT_BUFFER_TOKENS);
+            Constants.LOG.info("[numen-entity#{}] auto-compacting: {} context {} tokens >= {} - {}",
+                    entityUuid, lastPromptTokens > 0 ? "measured" : "estimated",
+                    contextTokens, window, AUTO_COMPACT_BUFFER_TOKENS);
             startCompaction(true);
             return;
         }
@@ -601,12 +614,13 @@ public final class EntityAgentLoop {
         Constants.LOG.info("[numen-entity#{}] compaction started ({}, {} msgs)",
                 entityUuid, auto ? "auto" : "manual", request.size() - 1);
         final int gen = turnGeneration;
+        final long startMs = System.currentTimeMillis();
         NumenLlmClient.instance().chatStreaming(request, List.of(), COMPACT_SYSTEM_PROMPT, null)
                 .whenComplete((res, err) -> Minecraft.getInstance().execute(
-                        () -> finishCompaction(gen, auto, res, err)));
+                        () -> finishCompaction(gen, auto, startMs, res, err)));
     }
 
-    private void finishCompaction(int gen, boolean auto,
+    private void finishCompaction(int gen, boolean auto, long startMs,
                                   NumenLlmClient.ChatResult res, Throwable err) {
         if (gen != turnGeneration) {
             Constants.LOG.info("[numen-entity#{}] discarding interrupted compaction (gen {} != {})",
@@ -615,7 +629,8 @@ public final class EntityAgentLoop {
         }
         compacting = false;
 
-        String summary = (err == null && res != null) ? res.turn().content() : null;
+        String summary = (err == null && res != null)
+                ? extractSummary(res.turn().content()) : null;
         if (summary == null || summary.isBlank()) {
             compactFailures++;
             Constants.LOG.warn("[numen-entity#{}] compaction failed ({}/{}): {}",
@@ -632,11 +647,24 @@ public final class EntityAgentLoop {
         // the boundary VERBATIM, not summarized. Same as Claude Code's
         // preservedMessages whitelist: far history lossy, last output lossless.
         List<ConvoState.Msg> preserved = preservedTail();
+        // Accounting for the boundary line (Claude Code's compactMetadata):
+        // the summarization call's own prompt_tokens IS the exact size of the
+        // history being compacted — more precise than the previous turn's count.
+        JsonObject meta = new JsonObject();
+        meta.addProperty("trigger", auto ? "auto" : "manual");
+        meta.addProperty("droppedMessages", convo.snapshot().size() - preserved.size());
+        meta.addProperty("durationMs", System.currentTimeMillis() - startMs);
+        if (res.promptTokens() > 0) {
+            meta.addProperty("preTokens", res.promptTokens());
+            if (res.totalTokens() > res.promptTokens()) {
+                meta.addProperty("summaryTokens", res.totalTokens() - res.promptTokens());
+            }
+        }
         // Boundary into the JSONL first (relaunches replay the compacted view;
         // the raw pre-compaction history stays in the file as an archive), then
         // swap the in-memory history without re-notifying the sink. The visible
         // transcript only gains a divider — the owner's chat never vanishes.
-        log.appendCompactSummary(wrapped, preserved);
+        log.appendCompactSummary(wrapped, preserved, meta);
         List<ConvoState.Msg> next = new ArrayList<>();
         next.add(new ConvoState.Msg.User(wrapped));
         next.addAll(preserved);
@@ -645,8 +673,10 @@ public final class EntityAgentLoop {
         lastPromptTokens = 0;   // unknown until the next request reports usage
         compactFailures = 0;
         Constants.LOG.info(
-                "[numen-entity#{}] compaction done ({}): history → summary ({} chars) + {} preserved msg(s)",
-                entityUuid, auto ? "auto" : "manual", wrapped.length(), preserved.size());
+                "[numen-entity#{}] compaction done ({}): {} tokens → summary ({} chars) + {} preserved msg(s) in {} ms",
+                entityUuid, auto ? "auto" : "manual",
+                res.promptTokens() > 0 ? String.valueOf(res.promptTokens()) : "?",
+                wrapped.length(), preserved.size(), System.currentTimeMillis() - startMs);
 
         // Auto-compaction interrupted a turn that was about to dispatch —
         // resume it so the task chain continues on the compacted history. After
@@ -669,6 +699,63 @@ public final class EntityAgentLoop {
             return List.of(a);
         }
         return List.of();
+    }
+
+    /**
+     * Tokens the history estimate can't see: system prompt (persona + skills
+     * XML) and tool schemas. Deliberately generous — over-estimating fires
+     * compaction a little early, under-estimating blows the context window.
+     */
+    private static final int ESTIMATED_FIXED_OVERHEAD_TOKENS = 8_000;
+
+    /**
+     * Rough token count of the history for backends that report no usage.
+     * CJK sits near 1 token/char on modern tokenizers; ASCII (tool-result
+     * JSON, coordinates) near 3.5–4 chars/token. Precision is not the goal —
+     * the 13k {@link #AUTO_COMPACT_BUFFER_TOKENS} absorbs the error; what
+     * matters is that the auto gate fires AT ALL without a usage frame.
+     */
+    private static int estimateContextTokens(List<ConvoState.Msg> history) {
+        long cjk = 0, ascii = 0;
+        for (ConvoState.Msg msg : history) {
+            String text = switch (msg) {
+                case ConvoState.Msg.User u -> u.content();
+                case ConvoState.Msg.Tool t -> t.content();
+                case ConvoState.Msg.Assistant a -> {
+                    StringBuilder sb = new StringBuilder(
+                            a.turn().content() == null ? "" : a.turn().content());
+                    for (LlmToolCall tc : a.turn().toolCalls()) {
+                        sb.append(tc.name()).append(tc.arguments());
+                    }
+                    yield sb.toString();
+                }
+            };
+            if (text == null) continue;
+            for (int i = 0; i < text.length(); i++) {
+                if (text.charAt(i) > 0x2E7F) cjk++; else ascii++;
+            }
+        }
+        return (int) (cjk + ascii / 4 + history.size() * 8L) + ESTIMATED_FIXED_OVERHEAD_TOKENS;
+    }
+
+    /**
+     * The compact prompt asks for a two-stage response: a private
+     * {@code <analysis>} scratchpad, then the real {@code <summary>}. Only the
+     * summary is kept — persisting the analysis would waste the very tokens
+     * compaction reclaims. Tolerant of models that skip or mangle the tags:
+     * an unclosed {@code <summary>} reads to the end, no tags at all falls
+     * back to the whole text minus any analysis block.
+     */
+    private static String extractSummary(String raw) {
+        if (raw == null) return null;
+        int open = raw.indexOf("<summary>");
+        if (open >= 0) {
+            int bodyStart = open + "<summary>".length();
+            int close = raw.indexOf("</summary>", bodyStart);
+            String body = close >= 0 ? raw.substring(bodyStart, close) : raw.substring(bodyStart);
+            if (!body.isBlank()) return body.strip();
+        }
+        return raw.replaceFirst("(?s)<analysis>.*?(</analysis>|$)", "").strip();
     }
 
     private String composeSystemPrompt(String basePrompt) {

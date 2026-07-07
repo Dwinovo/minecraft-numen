@@ -96,7 +96,8 @@ public final class ConvoLog {
      * from the latest boundary, so relaunches replay the compacted view
      * (summary + preserved tail), not the raw past.
      */
-    public void appendCompactSummary(String wrappedSummary, List<ConvoState.Msg> preserved) {
+    public void appendCompactSummary(String wrappedSummary, List<ConvoState.Msg> preserved,
+                                     JsonObject meta) {
         JsonObject o = new JsonObject();
         o.addProperty("role", "compact");
         o.addProperty("content", wrappedSummary);
@@ -104,6 +105,12 @@ public final class ConvoLog {
             JsonArray kept = new JsonArray();
             for (ConvoState.Msg m : preserved) kept.add(encode(m));
             o.add("preserved", kept);
+        }
+        // Accounting only (trigger, preTokens, summaryTokens, droppedMessages,
+        // durationMs) — replay ignores it; it exists for humans and debugging,
+        // like Claude Code's compactMetadata.
+        if (meta != null && !meta.entrySet().isEmpty()) {
+            o.add("meta", meta);
         }
         try {
             Files.createDirectories(file.getParent());
