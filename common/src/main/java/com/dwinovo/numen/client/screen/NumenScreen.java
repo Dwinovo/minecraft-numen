@@ -2,6 +2,7 @@ package com.dwinovo.numen.client.screen;
 
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.agent.model.ModelRegistry;
+import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
@@ -1039,10 +1040,17 @@ public final class NumenScreen extends Screen {
         Set<String> done = doneIds();
         Set<String> failed = failedIds();
         List<LlmToolCall> group = new ArrayList<>();        // a run of consecutive tool calls
-        for (ConvoState.Msg msg : loop().convo().snapshot()) {
+        // The PHYSICAL transcript, not the LLM context: compaction rewires what
+        // the model sees but must never eat the owner's visible history.
+        for (ConvoState.Msg msg : loop().display()) {
             switch (msg) {
                 case ConvoState.Msg.User u -> {
                     flushTools(out, group, done, failed, width);
+                    if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
+                        wrapPlain(out, "─── 更早的对话已压缩为摘要（原文保留在磁盘） ───",
+                                TXT_FAINT, width);
+                        continue;
+                    }
                     wrapPlain(out, u.content(), YOU, width);     // user = teal body, no label
                 }
                 case ConvoState.Msg.Assistant a -> {
@@ -1134,7 +1142,7 @@ public final class NumenScreen extends Screen {
 
     private Set<String> doneIds() {
         Set<String> s = new HashSet<>();
-        for (ConvoState.Msg m : loop().convo().snapshot()) {
+        for (ConvoState.Msg m : loop().display()) {
             if (m instanceof ConvoState.Msg.Tool t) s.add(t.toolCallId());
         }
         return s;
@@ -1142,7 +1150,7 @@ public final class NumenScreen extends Screen {
 
     private Set<String> failedIds() {
         Set<String> s = new HashSet<>();
-        for (ConvoState.Msg m : loop().convo().snapshot()) {
+        for (ConvoState.Msg m : loop().display()) {
             if (m instanceof ConvoState.Msg.Tool t && looksFailed(t.content())) s.add(t.toolCallId());
         }
         return s;
@@ -1189,10 +1197,11 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    /** Parse the most recent todowrite call's todos array, or null. */
+    /** Parse the most recent todowrite call's todos array, or null. Reads the
+     *  physical transcript so the plan survives a context compaction. */
     private JsonArray latestPlan() {
         JsonArray latest = null;
-        for (ConvoState.Msg m : loop().convo().snapshot()) {
+        for (ConvoState.Msg m : loop().display()) {
             if (m instanceof ConvoState.Msg.Assistant a) {
                 for (LlmToolCall tc : a.turn().toolCalls()) {
                     if (!"todowrite".equals(tc.name())) continue;

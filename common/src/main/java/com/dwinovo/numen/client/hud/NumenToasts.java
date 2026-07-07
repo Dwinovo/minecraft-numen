@@ -84,7 +84,10 @@ public final class NumenToasts {
         for (NumenRoster.Entry entry : NumenRoster.instance().entries()) {
             UUID uuid = entry.uuid();
             AgentLoopRegistry.get(uuid).ifPresent(loop -> {
-                List<ConvoState.Msg> snap = loop.convo().snapshot();
+                // Physical transcript: append-only even across compaction, so the
+                // seen-index below can never go backwards (the logical context
+                // shrinks when compaction swaps it for a summary).
+                List<ConvoState.Msg> snap = loop.display();
                 int prev = SEEN.getOrDefault(uuid, -1);
                 if (prev >= 0) {
                     for (int i = prev; i < snap.size(); i++) {

@@ -168,12 +168,25 @@ public final class EntityAgentLoop {
      */
     private int turnGeneration = 0;
 
+    /**
+     * The PHYSICAL transcript for the chat GUI: every message ever exchanged
+     * this session (plus the persisted tail), in order, with compaction
+     * boundaries as {@link ConvoLog#COMPACT_DIVIDER} sentinels. Compaction
+     * rewires {@link #convo} (what the LLM sees) but only appends a divider
+     * here — the owner's visible history never vanishes. Same split as the
+     * append-only session log vs. the logical context in Claude Code.
+     */
+    private final List<ConvoState.Msg> display = new ArrayList<>();
+
     EntityAgentLoop(UUID entityUuid) {
         this.entityUuid = entityUuid;
         Path numenRoot = Minecraft.getInstance().gameDirectory.toPath()
                 .resolve("config").resolve("numen");
         this.log = ConvoLog.forEntity(numenRoot.resolve("conversations"), entityUuid);
-        this.convo = new ConvoState(log::append);
+        this.convo = new ConvoState(msg -> {
+            log.append(msg);
+            display.add(msg);
+        });
         this.workBlocks = WorkBlockMemory.forEntity(numenRoot.resolve("memory"), entityUuid);
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
@@ -208,6 +221,10 @@ public final class EntityAgentLoop {
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
         convo.preload(history);
+        // The visible transcript replays the raw file order (dividers included),
+        // NOT the compacted view — preload before healing so the synthetic
+        // messages below land after it via the sink.
+        display.addAll(log.loadDisplay(ConvoLog.DEFAULT_LOAD_LIMIT));
 
         List<String> dangling = ConvoLog.unansweredToolCallIds(history);
         for (String id : dangling) {
@@ -224,6 +241,11 @@ public final class EntityAgentLoop {
 
     public UUID entityUuid() { return entityUuid; }
     public ConvoState convo() { return convo; }
+
+    /** Read-only physical transcript for the GUI (see {@link #display}). */
+    public List<ConvoState.Msg> display() {
+        return java.util.Collections.unmodifiableList(display);
+    }
 
     /** Owner typed a prompt in the chat GUI. */
     public void submitPrompt(String text) {
@@ -605,20 +627,48 @@ public final class EntityAgentLoop {
         }
 
         String wrapped = SUMMARY_HEADER + summary.strip();
+        // The summary is lossy, but the very next prompt is usually a follow-up
+        // to the model's LAST reply ("那第三点展开讲讲") — so that reply crosses
+        // the boundary VERBATIM, not summarized. Same as Claude Code's
+        // preservedMessages whitelist: far history lossy, last output lossless.
+        List<ConvoState.Msg> preserved = preservedTail();
         // Boundary into the JSONL first (relaunches replay the compacted view;
         // the raw pre-compaction history stays in the file as an archive), then
-        // swap the in-memory history without re-notifying the sink.
-        log.appendCompactSummary(wrapped);
-        convo.replaceAll(List.of(new ConvoState.Msg.User(wrapped)));
+        // swap the in-memory history without re-notifying the sink. The visible
+        // transcript only gains a divider — the owner's chat never vanishes.
+        log.appendCompactSummary(wrapped, preserved);
+        List<ConvoState.Msg> next = new ArrayList<>();
+        next.add(new ConvoState.Msg.User(wrapped));
+        next.addAll(preserved);
+        convo.replaceAll(next);
+        display.add(new ConvoState.Msg.User(ConvoLog.COMPACT_DIVIDER));
         lastPromptTokens = 0;   // unknown until the next request reports usage
         compactFailures = 0;
-        Constants.LOG.info("[numen-entity#{}] compaction done ({}): history → 1 summary msg ({} chars)",
-                entityUuid, auto ? "auto" : "manual", wrapped.length());
+        Constants.LOG.info(
+                "[numen-entity#{}] compaction done ({}): history → summary ({} chars) + {} preserved msg(s)",
+                entityUuid, auto ? "auto" : "manual", wrapped.length(), preserved.size());
 
         // Auto-compaction interrupted a turn that was about to dispatch —
         // resume it so the task chain continues on the compacted history. After
         // a MANUAL compact we stay idle unless prompts queued up meanwhile.
         if (auto || !bufferedPrompts.isEmpty()) tryStartTurn();
+    }
+
+    /**
+     * Messages carried verbatim across a compaction boundary: the trailing
+     * final assistant reply (no tool calls), when that is how the history
+     * ends. Compaction only fires when the loop is idle, so a settled chain
+     * ending in a spoken reply is the normal case; anything else (defensive)
+     * preserves nothing and the summary stands alone. The slice must stay
+     * protocol-valid on its own — a tool-calling assistant without its
+     * results, or an orphan tool result, would 400 the next request.
+     */
+    private List<ConvoState.Msg> preservedTail() {
+        if (convo.lastMessage() instanceof ConvoState.Msg.Assistant a
+                && !a.turn().hasToolCalls()) {
+            return List.of(a);
+        }
+        return List.of();
     }
 
     private String composeSystemPrompt(String basePrompt) {

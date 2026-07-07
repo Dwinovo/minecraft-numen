@@ -50,6 +50,13 @@ public final class ConvoLog {
     /** Soft cap on messages replayed into context (the file itself is unbounded). */
     public static final int DEFAULT_LOAD_LIMIT = 200;
 
+    /**
+     * Sentinel user-message content marking a compaction boundary in the
+     * DISPLAY view ({@link #loadDisplay}): the GUI renders it as a thin
+     * divider instead of chat text. Never sent to the LLM.
+     */
+    public static final String COMPACT_DIVIDER = "[numen:compact-divider]";
+
     private final Path file;
 
     private ConvoLog(Path file) {
@@ -80,15 +87,24 @@ public final class ConvoLog {
 
     /**
      * Append a compaction boundary: a {@code role:"compact"} line whose content
-     * is the (already wrapped) summary that replaces everything before it. The
-     * file stays append-only — the full pre-compaction history remains on disk
-     * as an archive, but {@link #load} starts fresh from the latest boundary,
-     * so relaunches replay the compacted view, not the raw past.
+     * is the (already wrapped) summary that replaces everything before it, plus
+     * a {@code preserved} whitelist — messages (typically the model's final
+     * output) carried across the boundary VERBATIM, because the summary is
+     * lossy and the very next owner prompt is usually a follow-up to exactly
+     * that last reply. The file stays append-only — the full pre-compaction
+     * history remains on disk as an archive, but {@link #load} starts fresh
+     * from the latest boundary, so relaunches replay the compacted view
+     * (summary + preserved tail), not the raw past.
      */
-    public void appendCompactSummary(String wrappedSummary) {
+    public void appendCompactSummary(String wrappedSummary, List<ConvoState.Msg> preserved) {
         JsonObject o = new JsonObject();
         o.addProperty("role", "compact");
         o.addProperty("content", wrappedSummary);
+        if (!preserved.isEmpty()) {
+            JsonArray kept = new JsonArray();
+            for (ConvoState.Msg m : preserved) kept.add(encode(m));
+            o.add("preserved", kept);
+        }
         try {
             Files.createDirectories(file.getParent());
             Files.writeString(file, o + "\n", StandardCharsets.UTF_8,
@@ -128,9 +144,15 @@ public final class ConvoLog {
                     JsonObject o = JsonParser.parseString(line).getAsJsonObject();
                     if ("compact".equals(str(o.get("role")))) {
                         // Compaction boundary: everything before it was replaced
-                        // by this summary. Restart the replay from here.
+                        // by this summary. Restart the replay from here, then
+                        // splice back the verbatim-preserved tail (if any).
                         all.clear();
                         all.add(new ConvoState.Msg.User(str(o.get("content"))));
+                        if (o.has("preserved") && o.get("preserved").isJsonArray()) {
+                            for (JsonElement el : o.getAsJsonArray("preserved")) {
+                                all.add(decode(el.getAsJsonObject()));
+                            }
+                        }
                         continue;
                     }
                     all.add(decode(o));
@@ -160,6 +182,41 @@ public final class ConvoLog {
         Constants.LOG.info("[numen-convo] loaded {}/{} msgs from {}",
                 tail.size(), all.size(), file.getFileName());
         return new ArrayList<>(tail);
+    }
+
+    /**
+     * Load the PHYSICAL tail of the log for the chat GUI: messages in file
+     * order, compaction boundaries rendered as {@link #COMPACT_DIVIDER}
+     * sentinels instead of restarting the replay. This is the "what actually
+     * happened" view — compaction rewires what the LLM sees ({@link #load}),
+     * but the owner's visible transcript must never lose history over it.
+     */
+    public List<ConvoState.Msg> loadDisplay(int limit) {
+        if (!Files.isRegularFile(file)) return List.of();
+
+        List<ConvoState.Msg> all = new ArrayList<>();
+        try {
+            List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
+            for (String line : lines) {
+                if (line.isBlank()) continue;
+                try {
+                    JsonObject o = JsonParser.parseString(line).getAsJsonObject();
+                    if ("compact".equals(str(o.get("role")))) {
+                        all.add(new ConvoState.Msg.User(COMPACT_DIVIDER));
+                        continue;
+                    }
+                    all.add(decode(o));
+                } catch (RuntimeException ex) {
+                    Constants.LOG.warn("[numen-convo] skipping unparsable line in {}: {}",
+                            file.getFileName(), ex.toString());
+                }
+            }
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-convo] failed to read {}: {}", file, ex.toString());
+            return List.of();
+        }
+        if (all.size() <= limit) return all;
+        return new ArrayList<>(all.subList(all.size() - limit, all.size()));
     }
 
     /**
