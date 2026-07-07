@@ -1066,6 +1066,12 @@ public final class NumenScreen extends Screen {
             }
         }
         flushTools(out, group, done, failed, width);
+        // Prompts still waiting for a protocol-valid splice point (typed
+        // mid-task, or pushed in by an external bridge via NumenGateway) —
+        // visible immediately so a queued message never feels swallowed.
+        for (String queued : loop().queuedPrompts()) {
+            wrapPlain(out, "⌛ " + queued, TXT_FAINT, width);
+        }
         if (loop().isCompacting()) {
             wrapPlain(out, "compacting history…", TXT_MUTED, width);
         }

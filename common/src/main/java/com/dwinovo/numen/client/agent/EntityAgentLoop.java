@@ -254,6 +254,12 @@ public final class EntityAgentLoop {
         return java.util.Collections.unmodifiableList(display);
     }
 
+    /** Snapshot of prompts (GUI or {@code NumenGateway}) still waiting for the
+     *  next protocol-valid splice point — the GUI renders these as pending. */
+    public List<String> queuedPrompts() {
+        return List.copyOf(bufferedPrompts);
+    }
+
     /** Owner typed a prompt in the chat GUI. */
     public void submitPrompt(String text) {
         if (dead) {
