@@ -2,33 +2,31 @@
 
 # Numen · 言出法随
 
-### An AI harness that lets large models truly live inside Minecraft
+### An AI companion that lives inside Minecraft — summon it, talk to it, watch it work.
 
-*言出法随 (yán chū fǎ suí) — speak it, and it comes true.*
+*言出法随 (yán chū fǎ suí) — speak, and it is done.*
 
-[**English**](README.md) · [简体中文](README_CN.md)
+[**English**](README.md) · [简体中文](README_ZH.md)
 
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.1.2-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
-![License](https://img.shields.io/badge/code-LGPL--3.0-4B6BFB?style=flat-square)
-![Status](https://img.shields.io/badge/status-Beta-A8731E?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.0.4-4B6BFB?style=flat-square)
+![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
 
-[**Vision**](#vision) · [**How it works**](#how-it-works) · [**Reach**](#reach) · [**Quick start**](#quick-start) · [**What it can do**](#what-it-can-do) · [**For developers**](#for-developers) · [**Roadmap**](#roadmap)
+[**What it is**](#what-it-is) · [**Features**](#features) · [**Install**](#install) · [**Quick start**](#quick-start) · [**Skills--memory**](#skills--memory) · [**Ecosystem**](#ecosystem) · [**For developers**](#for-developers) · [**License**](#license)
 
 </div>
 
-<!-- Tip: drop a gameplay GIF/screenshot here once you have one — it sells the project faster than any paragraph. -->
+<!-- Tip: drop a gameplay GIF/screenshot here once you have one — it sells the mod faster than any paragraph. -->
 
 ---
 
-We already have AI that can chat, write code, and reason. But it all lives in a text box — no body, no world; it finishes a task and forgets it ever happened.
+## What it is
 
-**Numen wants to let large models out of the chat box, and into a world they actually live in.** And Minecraft is about as close to "a whole world" as you can get.
+Numen puts an **AI companion** inside your world. You summon it, you talk to it in plain language, and it plans its own steps and does the work — mining, building, farming, fighting, crafting.
 
-Give it a body that mines, fights, and wires redstone; give it eyes that trace an ore vein and see straight through a machine's shell; and give it one promise — **言出法随**.
-
-Say *"go grab me a stack of iron,"* and it really heads underground, paths through the dark, swings the pickaxe, and comes back loaded — then asks if you want it smelted. Say *"build a hut where I'm standing,"* and the foundation rises block by block. **Every word you say turns into something that actually happens in the world.** In any language your model speaks.
+Say *"go grab me a stack of iron,"* and it heads underground, paths through the dark, swings the pickaxe, and comes back loaded — then asks if you want it smelted. Say *"build a hut where I'm standing,"* and the foundation rises block by block. Every word you say turns into something that actually happens in the world — in any language your model speaks.
 
 ```
 You:    go grab me a stack of iron
@@ -37,118 +35,93 @@ Numen:  On it. Heading underground to find iron.
 Numen:  Got 64 raw iron — want me to smelt it?
 ```
 
-## Vision
+**It's a real agent.** Give it a goal and it decomposes it, plans it, picks the right tool, judges distance, improvises, and corrects itself from failure — no hand-holding. It already handles about 80% of what a player does in vanilla survival, from punching the first tree all the way to the End and the dragon fight.
 
-Numen is already a real **agent**: give it a goal, and it decomposes it, plans it, does the work, and corrects itself from failure. **It can already do about 80% of what a player does in vanilla survival** — from punching the first tree, through mining, building, fighting, smelting, and stockpiling, all the way into the End and through the dragon fight.
+**It natively understands modded content.** The companion is a genuine server-side player, so it interacts with the world through native player code — the same paths vanilla, redstone, mob AI, and other people's mods run on. It mines modded blocks, right-clicks modded machines, pulls items from their slots, and opens modded GUIs with **no per-mod adapter**. It can even read what a machine *holds* — items, fluid, energy — without opening its interface. That's the line a protocol-level bot can't cross: packet-driven bots don't know a Mechanical Press from a Casing. Numen does, because it plays by the same rules the mod does. Create, AE2, Mekanism — it can reach into all of them.
 
-And that's the starting point.
+## Features
 
-Minecraft's real universe is in the mods: Create's gear trains, Applied Energistics' storage networks, Mekanism's factory lines — players pour countless hours into these systems. **Numen's next goal is to let AI play this entire universe with its own hands**: say *"build me an automated iron factory,"* and it stands one up for real, across Create and AE2.
+Give it an intent; it breaks it into dozens of actions and runs them end to end.
 
-Beyond the modded universe lies the **real world**. To the AI, "mine a block of iron" and "post a tweet" are the same kind of thing — each is just a hand ([Reach](#reach) explains why). A creeper blows a hole in your base at 3 a.m., and it pings you on **Discord**: *"Trouble at home — I've already patched the wall."* It finishes a castle, screenshots it, writes a caption, and **posts it** to show off. Put it on stream and pipe the chat in — viewers command it one message at a time. And through MCP, the AI outside the game — say, Claude on your desktop — reaches back *into* Minecraft and treats the world as its sandbox. The bridge runs both ways. **Minecraft is the closest thing we have to a whole world, and Numen is wiring that world to reality.**
+| | |
+|---|---|
+| ⛏️ **Real work** | Mine, chop, gather, build, place and break with precision, craft by recipe, smelt in furnaces, sort loot into chests. |
+| 🧭 **Real movement** | A pathfinder that takes design cues from Baritone, rewritten for the companion: it bridges gaps, pillars up, tunnels through, staircases down, and swims. *"Go to that coordinate"* is meant literally — even if it has to dig to diamond level. |
+| ⚔️ **Real combat** | Native player melee and bow — real cooldowns, real crits. It eats when hurt and swims to shore before it drowns. Death is recoverable: vanilla drops as usual, then it respawns by your side. |
+| 🔭 **Real perception** | Scan blocks and entities, check status, look up recipes, locate any structure or biome, and x-ray what's inside a machine without opening its GUI. |
+| 🧠 **Real memory** | Conversations persist across saves and auto-compact when they grow long (Claude-Code-style compaction). It remembers the crafting tables, furnaces, and chests it has used, and walks back to them instead of building new ones. |
+| 🧩 **Modded-native** | A real `ServerPlayer` body means modded blocks, items, and GUIs work out of the box — no per-mod adapter. |
 
-The engine holding all of this up now lives as its own project: [**numen-api**](https://github.com/Dwinovo/numen-api) — the agent loop, LLM transport, tool scheduling, skill system, and fake-player body, packaged as a foundation any mod can stand on. The mod you're installing is the **first agent** running on that engine; the same foundation can grow haggling NPCs, villagers with daily routines, server stewards that read player chat, embodied-AI benchmarks that use the whole world as an exam hall… **What we're building is Minecraft's AI layer**: every mod, every playstyle, able to grow intelligence of its own.
+Nearly thirty tools make up its hands and eyes today, and the set keeps growing through **skills** and **addons** (below).
 
-It's a long road, and we've only just set out. But the direction couldn't be clearer.
+## Install
 
-> **言出法随 / Reach** — your intent reaches the world; the AI's ability reaches every mod.
+Numen is published on **[CurseForge](https://www.curseforge.com/) · [Modrinth](https://modrinth.com/) · [GitHub](https://github.com/Dwinovo/minecraft-numen)**. Whatever version you play, it's there — **11 Minecraft versions, one git branch per version**.
 
-## How it works
+| Minecraft | Loaders |
+|---|---|
+| 1.20.1 · 1.20.2 · 1.20.4 | Fabric · Forge |
+| 1.20.6 · 1.21.1 · 1.21.4 · 1.21.5 · 1.21.8 · 1.21.10 · 1.21.11 · 26.1.2 | Fabric · NeoForge |
 
-That companion you talk to is just a body this system puts on. What makes *"言出法随"* real is the engineering underneath — we call it the **Harness**.
+1. **Install** the mod (plus [Fabric API](https://modrinth.com/mod/fabric-api) if you're on Fabric) and launch once.
+2. **Bring your own LLM key.** Numen ships no AI service of its own — you supply an **OpenAI-compatible API key**. OpenAI, DeepSeek, Kimi, Qwen, Doubao… any OpenAI-compatible backend works.
 
-In AI engineering, a harness is the scaffolding around a model: it wires the model into a world it can perceive, act in, and learn from. **Numen is that scaffolding, built for Minecraft.** Four parts:
-
-- 🧍 **A body — a real player.** The companion is a server-side *fake player* (`ServerPlayer`); every action runs through native player code paths. Which means it plays by the same rules as redstone, mob AI, containers, and other people's mods — by birth.
-- 👁️ **Eyes — a perception API.** Its own and the world's status, ranged block and entity scans, recipe lookups, single-block inspection — down to an **x-ray** that reads what a machine **holds** (items, fluid, energy) **without opening its GUI**.
-- ✋ **Hands — an action API.** Move, mine, place, fight (native melee + bow), drive any container/machine GUI, manage inventory, locate structures and biomes.
-- 🔁 **A teaching feedback loop.** Every tool result — success or failure — is written as a line that **teaches the model how Minecraft works**. *"Can't mine iron ore bare-handed — equip at least a stone pickaxe"* is this loop doing its job. This is the essence of an agent: use tools to pull **ground truth** from the environment, then decide the next move. That's how the model learns to play.
-
-Above all this, **the brain runs on your own machine**: the agent loop calls the LLM from the owner's client, with the owner's API key — each player pays their own way, the server owner doesn't foot everyone's bill, and you never hand over your key. And it ships with **zero third-party runtime dependencies** — LLM transport is just the JDK's `HttpClient` + Gson (Java's AI ecosystem being what it is — you know how it goes — I had to hand-roll it).
-
-The scaffolding now comes in two genuine layers: the engine ([**numen-api**](https://github.com/Dwinovo/numen-api)) does scheduling only — it shows the tools to the model, delivers the calls, and writes results back into the conversation, staying fully blind to what a tool actually does — while the mod you install (**numen-core**) is the content pack running on top: nearly thirty tools and ten bundled skills, assembled into a complete agent. The layering means one thing: **every ounce of capability Numen has, third-party developers get too.**
-
-## Reach
-
-Beating vanilla is just the appetizer. What we really want to chew through is the mods — that's the deep end of Minecraft.
-
-Lucky for us, Numen's body is a real player, so *physically* it gets along with mods out of the box: a mod's machines, chests, and contraptions — it can mine them, place them, right-click them, pull items from their slots, **no per-mod adapter required**. It can even see through the shell and read how many items, how much fluid, and how much energy most machines, tanks, and batteries are holding.
-
-But "able to reach out" isn't "able to understand." Does the AI know what a Mechanical Press is for? How an AE2 network should be wired? Delivering that understanding to the model takes two instruments — the very same two Claude itself uses to reach the real world:
-
-- 🔌 **MCP — connect.** A compatibility module that wires a mod's inner world, structured, into the AI's senses and hands. In Anthropic's own words: this is **handing it a hammer**.
-- 📖 **Skill — coach.** A plain-text [workflow](#what-it-can-do) — zero code, anyone can write one — that teaches the AI how to put a capability to good use. This is **showing it how to swing that hammer to drive a nail**.
-
-One grants the capability, the other the craft — and better yet, **they stack**:
-
-> Some mods need only a Skill: the vanilla hands already reach far enough; all it's missing is the manual.
-> For the self-contained universes — Create, AE2, Mekanism — wire it in with an MCP first, then teach it to play with a Skill. **Connect + coach: together, that's 通达 (reach).**
-
-Better still, these two instruments are **in everyone's hands now**. With the engine split out, any mod author can register tools and bundle skills right inside their own jar — the way you'd write a JEI recipe page today, you write the AI a *"here's how my mod plays."* Compat waits on nobody's schedule; the ecosystem grows itself (see [For developers](#for-developers)).
-
-And that hand reaches further than mods. Every one of the AI's "hands" (tools) follows one contract, and the contract deliberately contains **not a single Minecraft concept**: a hand can reach into an ore vein, or out onto the internet — Discord, Twitter/X, live-stream chat, smart-home gear. Every scene in the [Vision](#vision) starts as one ordinary tool.
-
-Every mod you can name, every service with a network cable — the AI can play it. It's a big promise, but every brick is going up.
+The brain runs on your own machine: the agent loop calls the LLM from your client, with your key. Each player pays their own way, the server owner never handles anyone's key, and you never hand yours over. Numen carries **zero third-party runtime dependencies** — LLM transport is just the JDK's `HttpClient` plus Gson.
 
 ## Quick start
 
-Whatever version you play, Numen is already there: **Minecraft 1.20.1 through 26.1.2 — 11 versions, across Fabric / Forge / NeoForge** — from the servers still holding the line on 1.20.1 to the freshly baked 26.1.2.
+1. **Add your key.** Press **`G`** → **Settings**, pick a provider, paste your key, choose a model.
+2. **Summon a companion.** Click the **`+`** in the panel's left rail, give it a name, hit Enter.
+3. **Click its avatar to chat**, and tell it what to do. The rest is on it.
 
-1. **Install** the mod (plus [Fabric API](https://modrinth.com/mod/fabric-api) if you're on Fabric) and launch once.
-2. **Add your API key.** Press **`G`** → **Settings**, pick a provider, and paste your own key (OpenAI, DeepSeek, Kimi, Qwen, Doubao… any OpenAI-compatible backend works).
-3. **Summon a companion.** Click the **`+`** in the panel's left rail, give it a name, hit Enter.
-4. **Click its avatar to chat**, and tell it what to do. The rest is on it.
+> The panel (press `G`) has three tabs: **Chat** (conversation + a live plan board), **Items** (a read-only character sheet styled like the vanilla inventory), and **Settings** (key and model). The left rail is your companion roster — click an avatar to switch, **`+`** to summon, **`✕`** to dismiss. A small avatar HUD hugs the left screen edge; when a companion speaks, its avatar and a speech bubble slide out together.
 
-> The panel (press `G`) has three tabs: **Chat** (conversation + a live plan board), **Items** (a read-only character sheet styled like the vanilla inventory), and **Settings** (key and model). The left rail *is* your companion roster — click an avatar to switch, **`+`** to summon, **`✕`** to dismiss; you barely need commands at all. A small avatar HUD hugs the left screen edge, too — when a companion speaks, its avatar and a speech bubble slide out together.
+## Skills & memory
 
-## What it can do
+Numen's abilities grow two ways beyond its built-in tools:
 
-Give it an intent and it breaks it into dozens of actions and runs them end to end — planning the route, picking the right tool, judging distance, improvising as it goes — all without you watching over its shoulder. **That's what an agent is supposed to look like: you name the goal, it owns the process.**
+- 📖 **Skills — coach it.** A skill is a plain-text Markdown workflow (zero code, anyone can write one) under `config/numen/skills/`, loaded only when it's relevant so the prompt stays lean. Numen ships with a full set of built-in guides for the vanilla end-game — the Nether, blaze rods, ender pearls, the stronghold, the dragon fight. Edit one, or write your own, to teach it your base's rules or a whole new mod's playbook. A same-named skill in your config folder always wins.
+- 🧠 **Memory that lasts.** Conversations persist across saves and auto-compact when they run long, so a companion stays coherent over a long play session instead of forgetting what it just did.
 
-- ⛏️ **Real work** — mine, chop, gather, build, place and break with precision, hand-craft by recipe, smelt in furnaces, sort loot into chests.
-- 🧭 **Real movement** — a pathfinder that takes its cues from Baritone, rewritten for the companion: it bridges gaps, pillars up, tunnels through, staircases down, and swims. *"Go to that coordinate"* is meant literally — even if that means digging all the way to diamond level.
-- ⚔️ **Real combat** — native player melee and bow: real cooldowns, real crits; it eats when hurt and swims to shore before it drowns.
-- 🔭 **Real perception** — scan blocks, scan entities, check status, look up recipes, locate any structure or biome, even x-ray what's inside a machine without opening its GUI.
-- 🧠 **Real memory** — conversations persist across saves and auto-compact when they grow long; it remembers the crafting tables, furnaces, and chests it has used, and walks back to them instead of building new ones. Death is recoverable: vanilla death drops as usual, then it respawns by your side after a moment.
+Its capabilities also extend through the **addon ecosystem** below — every ounce of capability Numen itself has is written against the same public API that addons use.
 
-Nearly thirty tools like these make up its hands and eyes *right now*. And its abilities keep growing — through the very two instruments of [Reach](#reach):
+## Ecosystem
 
-- 📖 **Write a Skill to coach it.** Markdown workflows under `config/numen/skills/`, loaded only when relevant to keep the prompt lean. It ships with a full set of guides for the whole vanilla end-game (the Nether, blaze rods, ender pearls, the stronghold, the dragon fight…). Edit one, or write your own, to teach it your base's rules — or a whole new mod's playbook.
-- 🔌 **Plug in an MCP to extend it.** A compatibility module wires a mod's inner world, structured, into its senses and hands — so the boundary of what it *can do* grows together with the entire modded ecosystem.
+Numen is built on the **numen-api** engine, bundled inside the mod. The engine and its companions are separate open projects you can build on:
 
-Stack the two, and it goes from mastering vanilla all the way to mastering the entire modded universe.
+| Project | What it is |
+|---|---|
+| [**numen-api**](https://github.com/Dwinovo/numen-api) | The engine under Numen — agent loop, tool scheduling, LLM providers, and the public API for addons (`NumenGateway` + `NumenActuator`). Register your own tools and bundle skills right inside your jar. |
+| [**numen-maven**](https://github.com/Dwinovo/numen-maven) | The Maven repository hosting numen-api artifacts, so you can depend on the engine from your own build. |
+| [**numen-qq-mcp**](https://github.com/Dwinovo/numen-qq-mcp) | **Numen QQ Bridge** — command your companion straight from QQ chat, without being at the keyboard. |
+| [**numen-mcp**](https://github.com/Dwinovo/numen-mcp) | **Numen MCP** — drive your companions from an external agent, like Claude on your desktop, over the Model Context Protocol. The bridge runs both ways: the world becomes the outside agent's sandbox. |
 
 ## For developers
 
-Numen's engine is a standalone project you can depend on: [**numen-api**](https://github.com/Dwinovo/numen-api). What it opens to you is the very foundation numen-core stands on — our 28 tools and 10 skills are written entirely against the public API, **with no private backdoor**:
+Every tool and skill Numen ships is written entirely against the public API — there's no private backdoor. Because the engine ([numen-api](https://github.com/Dwinovo/numen-api)) is split out, any mod author gets the same power:
 
-- 🔧 **Register a tool.** Implement `NumenTool`'s four methods (`name` / `description` / `parameterSchema` / `invoke`), drop it into the `ToolRegistry`, and your mod's capability grows onto the AI's hands. The contract deliberately contains **no Minecraft concepts** — how a call gets done (sync, async, your own packets, an external service) is entirely the tool's own business.
-- 📖 **Bundle skills in your jar.** One call — `SkillRegistry.instance().declareBundled(root)` — turns your jar's `/skills` directory into built-in skills: players install your mod and the AI already knows how to play it. A same-named skill under the player's `config/numen/skills/` always wins, so the final say stays with the player.
-- 🏗️ **Or build a different AI entirely.** The fake-player body, agent loop, LLM transport, and full UI are all public foundation — AI NPCs, story characters, server stewards, whatever you can imagine.
+- 🔧 **Register a tool** through `NumenGateway` and your mod's capability grows onto the AI's hands. The tool contract deliberately contains **no Minecraft concepts** — how a call gets done (sync, async, your own packets, an external web service) is entirely the tool's own business, which is exactly why the same API reaches Discord, QQ, and MCP as easily as it reaches an ore vein.
+- 📖 **Bundle skills in your jar** — one call turns your jar's `/skills` directory into built-in skills, so players install your mod and the AI already knows how to play it.
+- 🏗️ **Or build a different AI entirely** on the same foundation — AI NPCs, story characters, server stewards.
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.1-SNAPSHOT" }
+dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>" }
 ```
 
-The public integration API is **MIT**-licensed — write tools, skills, and compat without LGPL strings attached. Getting-started guide, full examples, and the version matrix live in [numen-api's README](https://github.com/Dwinovo/numen-api).
+The public integration API is **MIT**-licensed — write tools, skills, and compat without LGPL strings attached. The getting-started guide, full examples, and version matrix live in [numen-api's README](https://github.com/Dwinovo/numen-api).
 
-## Roadmap
+## License
 
-Numen is young, but two big slabs of the foundation are already poured:
+Licensing follows the AE2 model — different layers, different terms:
 
-- ✅ **Every version, every loader.** Minecraft 1.20.1 through 26.1.2 — 11 versions across Fabric / Forge / NeoForge. Done.
-- ✅ **The engine, split out (numen-api).** The tool contract and skill registration are open to every developer.
+| Layer | License |
+|---|---|
+| Source code | [**LGPL-3.0**](LICENSE) — forks you distribute must stay open under the same license. |
+| Public integration API (what addons / MCP bridges code against, shipped with [numen-api](https://github.com/Dwinovo/numen-api)) | [**MIT**](LICENSE-API) — build mod-compat freely, including in proprietary projects. |
+| Art & assets | [**All Rights Reserved**](LICENSE-ASSETS) — the names "Numen" / "言出法随" and the branding are reserved. |
 
-Where we're headed next:
-
-- **Connect the big mods (MCP).** For the self-contained tech universes — Create, AE2, Mekanism — dedicated MCP compatibility modules will wire their inner structure into the AI's senses and hands. The capability-based `inspect_block_storage` x-ray is the first brick.
-- **Grow a library of Skills.** Make "teach the AI a new mod" as simple as writing one Markdown file, built and shared by the community — and stacked with MCP, it carries the AI from *connected* all the way to *fluent*.
-- **Wire in the real world.** Discord reports, its own social account, live-chat command, the two-way MCP bridge — its hands, reaching outside the game.
-- **Take the public API to 1.0.** As the first third-party integrations land, harden the tool and skill contracts to where we can promise stability.
-- **Play more like a veteran.** Deeper memory of the world, and longer-horizon planning.
-
-Contributions, skill submissions, and compat experiments are all welcome. This is an open blueprint — **and an invitation being cashed in, one commit at a time.**
+Built on the [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template). The pathfinder draws on [Baritone](https://github.com/cabaletta/baritone) for design ideas only and is a fully independent rewrite for a server-side (fake-player) setting — no source was copied, ported, or adapted from it.
 
 ---
 
@@ -156,8 +129,6 @@ Contributions, skill submissions, and compat experiments are all welcome. This i
 
 <sub>Want to build it yourself, see the full tool list, or read the architecture? It's all in the source — start under <code>common/src/main/java/com/dwinovo/numen/</code>.</sub>
 
-<sub><b>Licensing</b> (modeled on AE2): the source code is <a href="LICENSE">LGPL-3.0</a> — forks you distribute must stay open under the same license. The public integration API (what compatibility modules / MCP bridges code against, shipped with <a href="https://github.com/Dwinovo/numen-api">numen-api</a>) is <a href="LICENSE-API">MIT</a>, so anyone can build mod-compat freely. The art &amp; assets are <a href="LICENSE-ASSETS">All Rights Reserved</a>, and the names "Numen" / "言出法随" are reserved. Built on the <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a>.</sub>
-
-<sub>The pathfinder draws on <a href="https://github.com/cabaletta/baritone">Baritone</a> for design ideas only, and is a fully independent rewrite for a <b>server-side (fake-player)</b> setting — <b>no source was copied, ported, or adapted from it</b>. Numen's code is licensed LGPL-3.0 of its own accord; that choice is not a consequence of Baritone (which is also LGPL-3.0).</sub>
+<br><sub><b>言出法随</b> — your intent reaches the world; the AI's ability reaches every mod.</sub>
 
 </div>
