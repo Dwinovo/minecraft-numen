@@ -164,12 +164,14 @@ Standard MultiLoader-Template layout (`common` + per-loader subprojects).
 
 ## Ecosystem
 
-| Project | What it is |
-|---|---|
-| [**Numen**](https://github.com/Dwinovo/minecraft-numen) | The mod players install — the AI companion, built on this engine. |
-| [**numen-maven**](https://github.com/Dwinovo/numen-maven) | The Maven repository hosting these artifacts. |
-| [**numen-qq-mcp**](https://github.com/Dwinovo/numen-qq-mcp) | QQ bridge — turns QQ messages into `NumenGateway.enqueue` calls (Door 1). |
-| [**numen-mcp**](https://github.com/Dwinovo/numen-mcp) | MCP server — drives companion bodies through `NumenActuator` (Door 2). |
+**Numen** ([minecraft-numen](https://github.com/Dwinovo/minecraft-numen)) is the mod — the AI companion. It runs on the **[numen-api](https://github.com/Dwinovo/numen-api)** engine (published through **[numen-maven](https://github.com/Dwinovo/numen-maven)**), which exposes a small public API. Two things build on it: *(this repo)*
+
+**Extend a companion** — its own brain stays in charge:
+- **Bridges** carry an outside channel into a companion: a message arrives, and the companion decides what to do. Built on `NumenGateway`. → **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)** (QQ), with more to come.
+- **Skills** teach a companion how to behave — markdown loaded into its context. Bundled with Numen, or community-written.
+
+**Expose Numen** — hand the controls to an outside brain:
+- **[numen-mcp](https://github.com/Dwinovo/numen-mcp)** is a Model Context Protocol server: any external agent (like Claude) drives companions directly. Built on `NumenActuator`.
 
 ---
 
