@@ -87,14 +87,14 @@ Numen 已上架 **[CurseForge](https://www.curseforge.com/) · [Modrinth](https:
 
 ## 生态
 
-Numen 建在 **numen-api** 引擎之上，引擎随模组一起打包在内。引擎和它的配套项目都是独立、开放、可依赖的：
+**Numen**（[minecraft-numen](https://github.com/Dwinovo/minecraft-numen)）是那个 mod——AI 同伴本体，跑在 **[numen-api](https://github.com/Dwinovo/numen-api)** 引擎上(经 **[numen-maven](https://github.com/Dwinovo/numen-maven)** 发布)，引擎对外开放一套小巧的公共 API。两类东西建在它之上： *(本仓库)*
 
-| 项目 | 是什么 |
-|---|---|
-| [**numen-api**](https://github.com/Dwinovo/numen-api) | Numen 底下的引擎——agent loop、工具调度、LLM provider，以及给扩展用的公共 API（`NumenGateway` + `NumenActuator`）。你可以注册自己的工具、把技能随 jar 打包进去。 |
-| [**numen-maven**](https://github.com/Dwinovo/numen-maven) | 托管 numen-api 制品的 Maven 仓库，让你在自己的构建里依赖引擎。 |
-| [**numen-qq-mcp**](https://github.com/Dwinovo/numen-qq-mcp) | **Numen QQ Bridge**——直接在 QQ 聊天里指挥你的同伴，人不在键盘前也能派活。 |
-| [**numen-mcp**](https://github.com/Dwinovo/numen-mcp) | **Numen MCP**——通过 Model Context Protocol，让电脑上的外部 AI（比如 Claude）反向操作你的同伴。桥是双向的：整个世界成了外部 agent 的沙盘。 |
+**扩展一个同伴**——同伴自己的大脑仍然做主:
+- **桥(Bridge)** 把一个外部渠道接进同伴:消息进来,同伴自己决定怎么做。基于 `NumenGateway`。→ **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)**(QQ),后续还有更多。
+- **技能(Skill)** 教同伴怎么做事——markdown 注入它的上下文。随 Numen 内置,或社区编写。
+
+**把 Numen 暴露出去**——把操控权交给外部大脑:
+- **[numen-mcp](https://github.com/Dwinovo/numen-mcp)** 是一个 Model Context Protocol 服务器:任意外部智能体(比如 Claude)直接驱动同伴。基于 `NumenActuator`。
 
 ## 给开发者
 
