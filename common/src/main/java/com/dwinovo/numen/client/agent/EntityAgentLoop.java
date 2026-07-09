@@ -139,6 +139,15 @@ public final class EntityAgentLoop {
     private boolean aborted = false;
 
     /**
+     * Set while an external driver (an MCP client / Claude) holds this body via
+     * {@link com.dwinovo.numen.api.NumenActuator}. The internal brain is paused —
+     * no LLM turn starts — until {@link #releaseExternal}. Distinct from
+     * {@link #dead} (body gone) and {@link #aborted} (owner stopped one turn):
+     * this is a deliberate hand-off of the whole body to an outside brain.
+     */
+    private boolean externallyDriven = false;
+
+    /**
      * Runs this turn's tool calls one at a time and reports each result back
      * through a {@link ToolDispatcher.Sink} into the conversation. All the
      * tool-execution plumbing (serial queue, ship-to-server, completion,
@@ -422,6 +431,39 @@ public final class EntityAgentLoop {
         }
     }
 
+    // ---- external control (an MCP client / Claude drives the body directly) ----
+
+    /**
+     * An external driver takes control of this body. The internal brain stops
+     * starting turns and any in-flight turn/task is aborted (via {@link #abort},
+     * which also fires {@code CompanionLifecycle.onAbort} so the body itself
+     * stops), leaving the body free for the external driver. Reverse with
+     * {@link #releaseExternal}. Idempotent.
+     */
+    public void acquireExternal() {
+        if (externallyDriven) return;
+        externallyDriven = true;
+        abort();   // stop any running internal turn + free the body
+        Constants.LOG.info("[numen-entity#{}] external control acquired — internal brain paused", entityUuid);
+    }
+
+    /**
+     * The external driver released control — the internal brain may act again.
+     * Does not auto-start a turn; waits for the next owner prompt or event.
+     * Idempotent.
+     */
+    public void releaseExternal() {
+        if (!externallyDriven) return;
+        externallyDriven = false;
+        aborted = false;   // clear the abort latch acquireExternal set, so the brain can resume
+        Constants.LOG.info("[numen-entity#{}] external control released — internal brain resumed", entityUuid);
+    }
+
+    /** True while an external driver (MCP / Claude) holds this body. */
+    public boolean isExternallyDriven() {
+        return externallyDriven;
+    }
+
     /**
      * The body died — the server tells us via {@code NumenDeathPayload} with the death cause. SUSPEND
      * (not dispose): the companion respawns at its owner shortly and {@link #onRespawned} resumes us.
@@ -521,6 +563,10 @@ public final class EntityAgentLoop {
         }
         if (aborted) {
             Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: aborted", entityUuid);
+            return;
+        }
+        if (externallyDriven) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: externally driven", entityUuid);
             return;
         }
         if (awaitingLlmResponse) {
