@@ -19,7 +19,9 @@
 
 </div>
 
-<!-- 提示：有了实机演示后，在这里放一张 GIF/截图，比任何文字都更能说明这个项目。 -->
+<p align="center">
+  <img src="docs/numen-demo.gif" alt="Numen 实机演示：砍树 · 挖矿 · 合成 · 战斗 · 联动 Mekanism" width="760">
+</p>
 
 ---
 
