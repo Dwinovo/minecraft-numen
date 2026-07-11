@@ -6,7 +6,7 @@
 
 *The heart of [Numen · 言出法随](https://github.com/Dwinovo/minecraft-numen): the AI companion is one cartridge; this is the console.*
 
-[**English**](README.md) · [简体中文](README_ZH.md)
+[**English**](README_EN.md) · [简体中文](README.md)
 
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)

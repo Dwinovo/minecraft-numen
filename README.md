@@ -6,7 +6,7 @@
 
 *[Numen · 言出法随](https://github.com/Dwinovo/minecraft-numen) 的心脏：AI 同伴只是第一盘卡带，这里是那台游戏机。*
 
-[English](README.md) · [**简体中文**](README_ZH.md)
+[English](README_EN.md) · [**简体中文**](README.md)
 
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
