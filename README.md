@@ -15,12 +15,16 @@
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
 ![Status](https://img.shields.io/badge/status-早期%20%2F%20愿景-A8731E?style=flat-square)
 
-[**愿景**](#愿景) · [**它是怎么做到的**](#它是怎么做到的) · [**通达**](#通达) · [**快速开始**](#快速开始) · [**能做什么**](#能做什么) · [**生态**](#生态) · [**给开发者**](#给开发者) · [**路线图**](#路线图)
+[**愿景**](#愿景) · [**它是怎么做到的**](#它是怎么做到的) · [**通达**](#通达) · [**快速开始**](#快速开始) · [**常见问题**](#常见问题) · [**能做什么**](#能做什么) · [**生态**](#生态) · [**给开发者**](#给开发者) · [**路线图**](#路线图)
 
 </div>
 
 <p align="center">
   <img src="docs/numen-demo.gif" alt="Numen 实机演示：砍树 · 挖矿 · 合成 · 战斗 · 联动 Mekanism" width="760">
+</p>
+
+<p align="center">
+  <a href="https://github.com/Dwinovo/minecraft-numen/releases"><img src="https://img.shields.io/badge/⬇_下载-GitHub_Releases-4B6BFB?style=for-the-badge" alt="下载"></a>
 </p>
 
 ---
@@ -63,6 +67,11 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 
 在这一切之上，**大脑跑在你自己的机器上**：agent loop 在 owner 的客户端、用 owner 的 API key 调 LLM，每个玩家各付各的用量，服主不必替所有人买单，你也不必上交 key。而且它**零第三方运行时依赖**——LLM 传输只用 JDK 的 `HttpClient` + Gson（毕竟 Java 的 AI 生态，你懂的，我只能手搓）。
 
+## 和常被拿来比的东西有什么不同
+
+- **对比寻路机器人（如 Baritone）。** 寻路机器人只做一件事——把你自己这个玩家走到某个坐标。Numen 是一整套 agent：一个独立的同伴角色，自己感知、规划、选工具、从失败里纠错，会挖矿、战斗、合成、开 GUI，近三十个工具随手用；而且它是服务端的真玩家，联机服照常能开。
+- **对比 computer use（截屏 + 模拟鼠标）。** computer use 让 AI 盯着屏幕像素、去模拟鼠标键盘。Numen 走结构化 tool-call——模型直接调 `auto_mine`、`move_to` 这类带参数的工具，不看画面、不碰鼠标。这也是它能跑在 DeepSeek 这类模型上、而不锁定某一家的原因。
+
 ## 通达
 
 让 AI 玩通原版只是开胃菜。我们真正想啃下的，是模组——这才是 Minecraft 的深水区。
@@ -89,6 +98,20 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 4. **点它的头像开聊**，把要做的事告诉它。剩下的，交给它。
 
 > 按 `G` 的面板有三页：**Chat**（聊天 + 实时计划面板）、**Items**（一张仿原版背包的只读角色卡）、**Settings**（填 key 和模型）。左栏就是同伴名册——点头像切换、点 **`+`** 召唤、点 **`✕`** 注销，基本不用敲指令。左边缘还有个小头像 HUD——它说话时，头像和气泡会一起滑出来。
+
+## 常见问题
+
+**要花钱吗？** Numen 开源免费。它调用大模型用的是你自己的 API key，各付各的用量；用便宜的模型（如 DeepSeek）一次典型任务通常只花几分钱。
+
+**用哪个模型好？** 任意 OpenAI 兼容后端都行。想省钱：DeepSeek、Qwen、Kimi；想要最聪明：Claude、GPT。模型越快越聪明，同伴表现越好。
+
+**我的 API key 安全吗？** 大脑跑在你自己的客户端，key 只存在本地、只用于直连你选的模型后端，不经过任何第三方服务器，也不会上传给作者。
+
+**联机服能用吗？** 能。同伴是服务端的真玩家，动作走原生玩家代码、由服务端逐一校验，你只能驱动自己的同伴。服务端只需装 Numen，客户端各自填各自的 key。
+
+**它会拆我家、乱来吗？** 它只做生存里一个真玩家能做的事，且每个动作都归属校验到它的主人——不会凭空造物，也不碰不属于你的东西。
+
+**响应有点慢？** 每走一步都要过一次大模型推理，模型越快体验越顺；这块仍在持续优化。
 
 ## 能做什么
 
@@ -132,6 +155,15 @@ dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:<ve
 ```
 
 面向集成的公共对接 API 采用 **MIT** 授权——写工具、写技能、写兼容，不必被 LGPL 牵着走。上手指南、完整示例与版本矩阵，见 [numen-api 的 README](https://github.com/Dwinovo/numen-api)。
+
+## 参与共建
+
+这是一张敞开的蓝图，欢迎一起垒砖：
+
+- 🐛 **提 issue / PR。** Bug、点子、兼容实验都欢迎——在 [issues](https://github.com/Dwinovo/minecraft-numen/issues) 开个帖子。
+- 📖 **写一篇技能（Skill）。** 一篇 Markdown 工作流就能教 AI 玩一套新东西，零代码、人人能写。写好提 PR，就能进社区技能库。
+- 🔧 **写工具 / 桥 / MCP。** 对着公共 API（[numen-api](https://github.com/Dwinovo/numen-api)）写，任何 mod 作者都能把自己的能力接上 AI 的手。
+- 🏗️ **自己构建。** 克隆仓库，`./gradlew :fabric:build`（或 `:neoforge:build`）；架构与完整工具清单都在 `common/src/main/java/com/dwinovo/numen/` 里。
 
 ## 路线图
 

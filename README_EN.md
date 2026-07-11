@@ -15,12 +15,16 @@
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
 ![Status](https://img.shields.io/badge/status-early%20%2F%20vision-A8731E?style=flat-square)
 
-[**Vision**](#vision) · [**How it works**](#how-it-works) · [**Reach**](#reach) · [**Quick start**](#quick-start) · [**What it can do**](#what-it-can-do) · [**Ecosystem**](#ecosystem) · [**For developers**](#for-developers) · [**Roadmap**](#roadmap)
+[**Vision**](#vision) · [**How it works**](#how-it-works) · [**Reach**](#reach) · [**Quick start**](#quick-start) · [**FAQ**](#faq) · [**What it can do**](#what-it-can-do) · [**Ecosystem**](#ecosystem) · [**For developers**](#for-developers) · [**Roadmap**](#roadmap)
 
 </div>
 
 <p align="center">
   <img src="docs/numen-demo.gif" alt="Numen in action: chopping · mining · crafting · combat · Mekanism" width="760">
+</p>
+
+<p align="center">
+  <a href="https://github.com/Dwinovo/minecraft-numen/releases"><img src="https://img.shields.io/badge/⬇_Download-GitHub_Releases-4B6BFB?style=for-the-badge" alt="Download"></a>
 </p>
 
 ---
@@ -63,6 +67,11 @@ In AI engineering, a harness is the scaffolding around a model: it wires the mod
 
 Above all this, **the brain runs on your own machine**: the agent loop calls the LLM from the owner's client, with the owner's API key — each player pays their own way, the server owner doesn't foot everyone's bill, and you never hand over your key. And it ships with **zero third-party runtime dependencies** — LLM transport is just the JDK's `HttpClient` + Gson (Java's AI ecosystem being what it is — you know how it goes — I had to hand-roll it).
 
+## How it compares
+
+- **vs a pathing bot (e.g. Baritone).** A pathing bot does one thing — walk *you*, the player, to a coordinate. Numen is a full agent: a separate companion character that perceives, plans, picks the right tool, and self-corrects — mining, fighting, crafting, driving GUIs, nearly thirty tools on hand — and it's a real server-side player, so it works on multiplayer servers.
+- **vs computer use (screenshots + simulated mouse).** Computer use has the AI stare at screen pixels and simulate mouse and keyboard. Numen speaks structured tool-calls — the model calls parameterized tools like `auto_mine` and `move_to` directly, no screen, no mouse. That's why it runs on models like DeepSeek instead of being locked to one vendor.
+
 ## Reach
 
 Beating vanilla is just the appetizer. What we really want to chew through is the mods — that's the deep end of Minecraft.
@@ -89,6 +98,20 @@ Every mod you can name, the AI can play. It's a big promise — but every brick 
 4. **Click its avatar to chat**, and tell it what to do. The rest is on it.
 
 > The panel (press `G`) has three tabs: **Chat** (conversation + a live plan board), **Items** (a read-only character sheet styled like the vanilla inventory), and **Settings** (key and model). The left rail *is* your companion roster — click an avatar to switch, **`+`** to summon, **`✕`** to dismiss; you barely need commands at all. A small avatar HUD hugs the left screen edge, too — when a companion speaks, its avatar and a speech bubble slide out together.
+
+## FAQ
+
+**Does it cost money?** Numen is free and open-source. It calls the LLM with *your own* API key, so everyone pays their own usage; on a cheap model (like DeepSeek) a typical task is usually a fraction of a cent.
+
+**Which model should I use?** Any OpenAI-compatible backend. For cheap: DeepSeek, Qwen, Kimi. For the smartest: Claude, GPT. The faster and smarter the model, the better the companion plays.
+
+**Is my API key safe?** The brain runs on your own client. The key is stored locally and used only to reach the model backend you chose — it never passes through any third-party server and is never sent to the author.
+
+**Does it work in multiplayer?** Yes. The companion is a real server-side player; its actions run through native player code and are validated by the server, and you can only drive companions you own. The server just needs Numen installed; each client brings its own key.
+
+**Will it grief my base?** It only does what a real survival player can, and every action is owner-checked — it never conjures items from nothing and never touches what isn't yours.
+
+**Feels a bit slow?** Every step goes through one LLM inference, so a faster model means a snappier companion — and this is an area we keep optimizing.
 
 ## What it can do
 
@@ -132,6 +155,15 @@ dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:<ve
 ```
 
 The public integration API is **MIT**-licensed — write tools, skills, and compat without LGPL strings attached. The getting-started guide, full examples, and version matrix live in [numen-api's README](https://github.com/Dwinovo/numen-api).
+
+## Contributing
+
+It's an open blueprint — bricks welcome:
+
+- 🐛 **Open an issue or PR.** Bugs, ideas, compat experiments — start a thread in [issues](https://github.com/Dwinovo/minecraft-numen/issues).
+- 📖 **Write a Skill.** One Markdown workflow teaches the AI a whole new playbook — zero code, anyone can write one. PR it to grow the community skill library.
+- 🔧 **Write a tool, bridge, or MCP.** Code against the public API ([numen-api](https://github.com/Dwinovo/numen-api)) and any mod author can graft their capability onto the AI's hands.
+- 🏗️ **Build it yourself.** Clone the repo and run `./gradlew :fabric:build` (or `:neoforge:build`); the architecture and full tool list live under `common/src/main/java/com/dwinovo/numen/`.
 
 ## Roadmap
 
