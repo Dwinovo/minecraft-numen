@@ -110,6 +110,17 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 
 ## 能做什么
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/showcase/plan.png" width="100%"><br><b>🧠 详细规划</b> · 逐步拆解任务</td>
+    <td width="50%"><img src="docs/showcase/pathfinding.png" width="100%"><br><b>🔭 感知与寻路</b> · 路径 + 矿脉透视</td>
+  </tr>
+  <tr>
+    <td><img src="docs/showcase/combat.png" width="100%"><br><b>⚔️ 原生战斗</b></td>
+    <td><img src="docs/showcase/interact.png" width="100%"><br><b>🧩 原生交互</b> · 图中为 Mekanism</td>
+  </tr>
+</table>
+
 给它一个意图，它会自己拆成几十步动作、一口气干完——规划路线、选对工具、判断距离、随机应变，全程不用你盯着。
 
 - ⛏️ **干真活**——挖矿、伐木、采集、建造、精确放置与破坏、照配方手搓合成、用熔炉熔炼、把战利品分门别类塞进箱子。

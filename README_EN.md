@@ -110,6 +110,17 @@ Every mod you can name, the AI can play. It's a big promise — but every brick 
 
 ## What it can do
 
+<table>
+  <tr>
+    <td width="50%"><img src="docs/showcase/plan.png" width="100%"><br><b>🧠 Step-by-step planning</b></td>
+    <td width="50%"><img src="docs/showcase/pathfinding.png" width="100%"><br><b>🔭 Perception & pathfinding</b> · path + ore x-ray</td>
+  </tr>
+  <tr>
+    <td><img src="docs/showcase/combat.png" width="100%"><br><b>⚔️ Native combat</b></td>
+    <td><img src="docs/showcase/interact.png" width="100%"><br><b>🧩 Native interaction</b> · Mekanism shown here</td>
+  </tr>
+</table>
+
 Give it an intent and it breaks it into dozens of actions and runs them end to end — planning the route, picking the right tool, judging distance, improvising as it goes — all without you watching over its shoulder.
 
 - ⛏️ **Real work** — mine, chop, gather, build, place and break with precision, hand-craft by recipe, smelt in furnaces, sort loot into chests.
