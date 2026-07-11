@@ -11,9 +11,7 @@
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.1.2-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.0.4-4B6BFB?style=flat-square)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
-![Status](https://img.shields.io/badge/status-early%20%2F%20vision-A8731E?style=flat-square)
 
 [**Vision**](#vision) · [**How it works**](#how-it-works) · [**Reach**](#reach) · [**Quick start**](#quick-start) · [**FAQ**](#faq) · [**What it can do**](#what-it-can-do) · [**Ecosystem**](#ecosystem) · [**For developers**](#for-developers) · [**Roadmap**](#roadmap)
 

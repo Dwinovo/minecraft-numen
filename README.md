@@ -11,9 +11,7 @@
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.1.2-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
-![Version](https://img.shields.io/badge/version-0.0.4-4B6BFB?style=flat-square)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
-![Status](https://img.shields.io/badge/status-早期%20%2F%20愿景-A8731E?style=flat-square)
 
 [**愿景**](#愿景) · [**它是怎么做到的**](#它是怎么做到的) · [**通达**](#通达) · [**快速开始**](#快速开始) · [**常见问题**](#常见问题) · [**能做什么**](#能做什么) · [**生态**](#生态) · [**给开发者**](#给开发者) · [**路线图**](#路线图)
 
