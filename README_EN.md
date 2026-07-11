@@ -18,7 +18,7 @@
 </div>
 
 <p align="center">
-  <img src="docs/numen-demo.gif" alt="Numen in action: chopping · mining · crafting · combat · Mekanism" width="760">
+  <img src="docs/numen-demo.gif" alt="Numen in action: chopping · mining · crafting · combat · Mekanism" width="640">
 </p>
 
 <p align="center">
