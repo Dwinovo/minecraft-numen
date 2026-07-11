@@ -48,6 +48,34 @@ It's a long road, and we've only just set out. But the direction couldn't be cle
 
 > **言出法随 / Reach** — your intent reaches the world; the AI's ability reaches every mod.
 
+## What it can do
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/showcase/plan.png" width="100%"><br><b>🧠 Step-by-step planning</b></td>
+    <td width="50%"><img src="docs/showcase/pathfinding.png" width="100%"><br><b>🔭 Perception & pathfinding</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/showcase/combat.png" width="100%"><br><b>⚔️ Native combat</b></td>
+    <td><img src="docs/showcase/interact.png" width="100%"><br><b>🧩 Mod compatibility</b> · Mekanism shown here</td>
+  </tr>
+</table>
+
+Give it an intent and it breaks it into dozens of actions and runs them end to end — planning the route, picking the right tool, judging distance, improvising as it goes — all without you watching over its shoulder.
+
+- ⛏️ **Real work** — mine, chop, gather, build, place and break with precision, hand-craft by recipe, smelt in furnaces, sort loot into chests.
+- 🧭 **Real movement** — a pathfinder that takes its cues from Baritone, rewritten for the companion: it bridges gaps, pillars up, tunnels through, staircases down, and swims. *"Go to that coordinate"* is meant literally — even if that means digging all the way to diamond level.
+- ⚔️ **Real combat** — native player melee and bow: real cooldowns, real crits; it eats when hurt and swims to shore before it drowns.
+- 🔭 **Real perception** — scan blocks, scan entities, check status, look up recipes, locate any structure or biome, even x-ray what's inside a machine without opening its GUI.
+- 🧠 **Real memory** — conversations persist across saves and auto-compact when they grow long; it remembers the crafting tables, furnaces, and chests it has used, and walks back to them instead of building new ones. Death is recoverable: vanilla death drops as usual, then it respawns by your side after a moment.
+
+Nearly thirty tools like these make up its hands and eyes *right now*. And its abilities keep growing — through the very two instruments of [Reach](#reach):
+
+- 📖 **Write a Skill to coach it.** Markdown workflows under `config/numen/skills/`, loaded only when relevant to keep the prompt lean. It ships with a full set of guides for the whole vanilla end-game (the Nether, blaze rods, ender pearls, the stronghold, the dragon fight…). Edit one, or write your own, to teach it your base's rules — or a whole new mod's playbook.
+- 🔌 **Plug in an MCP to extend it.** A compatibility module wires a mod's inner world, structured, into its senses and hands — so the boundary of what it *can do* grows together with the entire modded ecosystem.
+
+Stack the two, and it goes from mastering vanilla all the way to mastering the entire modded universe.
+
 ## How it works
 
 That companion you talk to is just a body this system puts on. What makes *"言出法随"* real is the engineering underneath — we call it the **Harness**.
@@ -101,34 +129,6 @@ Every mod you can name, the AI can play. It's a big promise — but every brick 
 **Will it grief my base?** It only does what a real survival player can, and every action is owner-checked — it never conjures items from nothing and never touches what isn't yours.
 
 **Feels a bit slow?** Every step goes through one LLM inference, so a faster model means a snappier companion — and this is an area we keep optimizing.
-
-## What it can do
-
-<table>
-  <tr>
-    <td width="50%"><img src="docs/showcase/plan.png" width="100%"><br><b>🧠 Step-by-step planning</b></td>
-    <td width="50%"><img src="docs/showcase/pathfinding.png" width="100%"><br><b>🔭 Perception & pathfinding</b> · path + ore x-ray</td>
-  </tr>
-  <tr>
-    <td><img src="docs/showcase/combat.png" width="100%"><br><b>⚔️ Native combat</b></td>
-    <td><img src="docs/showcase/interact.png" width="100%"><br><b>🧩 Native interaction</b> · Mekanism shown here</td>
-  </tr>
-</table>
-
-Give it an intent and it breaks it into dozens of actions and runs them end to end — planning the route, picking the right tool, judging distance, improvising as it goes — all without you watching over its shoulder.
-
-- ⛏️ **Real work** — mine, chop, gather, build, place and break with precision, hand-craft by recipe, smelt in furnaces, sort loot into chests.
-- 🧭 **Real movement** — a pathfinder that takes its cues from Baritone, rewritten for the companion: it bridges gaps, pillars up, tunnels through, staircases down, and swims. *"Go to that coordinate"* is meant literally — even if that means digging all the way to diamond level.
-- ⚔️ **Real combat** — native player melee and bow: real cooldowns, real crits; it eats when hurt and swims to shore before it drowns.
-- 🔭 **Real perception** — scan blocks, scan entities, check status, look up recipes, locate any structure or biome, even x-ray what's inside a machine without opening its GUI.
-- 🧠 **Real memory** — conversations persist across saves and auto-compact when they grow long; it remembers the crafting tables, furnaces, and chests it has used, and walks back to them instead of building new ones. Death is recoverable: vanilla death drops as usual, then it respawns by your side after a moment.
-
-Nearly thirty tools like these make up its hands and eyes *right now*. And its abilities keep growing — through the very two instruments of [Reach](#reach):
-
-- 📖 **Write a Skill to coach it.** Markdown workflows under `config/numen/skills/`, loaded only when relevant to keep the prompt lean. It ships with a full set of guides for the whole vanilla end-game (the Nether, blaze rods, ender pearls, the stronghold, the dragon fight…). Edit one, or write your own, to teach it your base's rules — or a whole new mod's playbook.
-- 🔌 **Plug in an MCP to extend it.** A compatibility module wires a mod's inner world, structured, into its senses and hands — so the boundary of what it *can do* grows together with the entire modded ecosystem.
-
-Stack the two, and it goes from mastering vanilla all the way to mastering the entire modded universe.
 
 ## Ecosystem
 
