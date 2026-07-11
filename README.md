@@ -21,10 +21,6 @@
   <img src="docs/numen-demo.gif" alt="Numen 实机演示：砍树 · 挖矿 · 合成 · 战斗 · 联动 Mekanism" width="640">
 </p>
 
-<p align="center">
-  <a href="https://github.com/Dwinovo/minecraft-numen/releases"><img src="https://img.shields.io/badge/⬇_下载-GitHub_Releases-4B6BFB?style=for-the-badge" alt="下载"></a>
-</p>
-
 ---
 
 我们已经有了会聊天、会写代码、会推理的 AI。但它们都活在一个对话框里——没有身体，没有世界，做完一件事，转头就忘了自己干过什么。

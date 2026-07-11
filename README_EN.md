@@ -21,10 +21,6 @@
   <img src="docs/numen-demo.gif" alt="Numen in action: chopping · mining · crafting · combat · Mekanism" width="640">
 </p>
 
-<p align="center">
-  <a href="https://github.com/Dwinovo/minecraft-numen/releases"><img src="https://img.shields.io/badge/⬇_Download-GitHub_Releases-4B6BFB?style=for-the-badge" alt="Download"></a>
-</p>
-
 ---
 
 We already have AI that can chat, write code, and reason. But it all lives in a text box — no body, no world; it finishes a task and forgets it ever happened.
