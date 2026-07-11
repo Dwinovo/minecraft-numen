@@ -67,11 +67,6 @@ In AI engineering, a harness is the scaffolding around a model: it wires the mod
 
 Above all this, **the brain runs on your own machine**: the agent loop calls the LLM from the owner's client, with the owner's API key — each player pays their own way, the server owner doesn't foot everyone's bill, and you never hand over your key. And it ships with **zero third-party runtime dependencies** — LLM transport is just the JDK's `HttpClient` + Gson (Java's AI ecosystem being what it is — you know how it goes — I had to hand-roll it).
 
-## How it compares
-
-- **vs a pathing bot (e.g. Baritone).** A pathing bot does one thing — walk *you*, the player, to a coordinate. Numen is a full agent: a separate companion character that perceives, plans, picks the right tool, and self-corrects — mining, fighting, crafting, driving GUIs, nearly thirty tools on hand — and it's a real server-side player, so it works on multiplayer servers.
-- **vs computer use (screenshots + simulated mouse).** Computer use has the AI stare at screen pixels and simulate mouse and keyboard. Numen speaks structured tool-calls — the model calls parameterized tools like `auto_mine` and `move_to` directly, no screen, no mouse. That's why it runs on models like DeepSeek instead of being locked to one vendor.
-
 ## Reach
 
 Beating vanilla is just the appetizer. What we really want to chew through is the mods — that's the deep end of Minecraft.
