@@ -1,5 +1,6 @@
 package com.dwinovo.numen.mcp.client;
 
+import com.dwinovo.numen.Constants;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -9,8 +10,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 /**
  * HTTP transport for MCP's streamable-HTTP servers: POST each JSON-RPC frame to
@@ -33,6 +37,9 @@ public final class HttpMcpTransport implements McpTransport {
     private volatile String sessionId;
     /** Negotiated protocol version, set after initialize; null until then (no header on the initialize POST). */
     private volatile String protocolVersion;
+    private volatile Consumer<JsonObject> notificationHandler;
+    private volatile boolean closed;
+    private volatile Thread streamThread;
 
     public HttpMcpTransport(String url, Map<String, String> headers, int connectTimeoutSeconds) {
         this.url = URI.create(url);
@@ -65,8 +72,64 @@ public final class HttpMcpTransport implements McpTransport {
     }
 
     @Override
+    public void setNotificationHandler(Consumer<JsonObject> handler) {
+        this.notificationHandler = handler;
+    }
+
+    @Override
+    public void openServerStream() {
+        if (streamThread != null || notificationHandler == null) return;
+        Thread t = new Thread(this::streamLoop, "numen-mcp-sse");
+        t.setDaemon(true);
+        streamThread = t;
+        t.start();
+    }
+
+    @Override
     public void close() {
-        // Nothing to tear down — HttpClient owns no persistent connection here.
+        closed = true;
+        Thread t = streamThread;
+        if (t != null) t.interrupt();   // best-effort; the blocking GET ends when the server closes it
+    }
+
+    /**
+     * Long-lived GET SSE stream for server→client messages. A 405/non-2xx means the server offers
+     * no stream — return quietly. Note: the blocking GET may linger until the server closes it even
+     * after {@link #close()} (HttpClient's line stream isn't force-cancellable); acceptable since it's
+     * a daemon thread and the tools are already unregistered on disable.
+     */
+    private void streamLoop() {
+        try {
+            HttpRequest.Builder b = HttpRequest.newBuilder(url)
+                    .timeout(Duration.ofHours(1))
+                    .header("Accept", "text/event-stream")
+                    .GET();
+            headers.forEach(b::header);
+            String ver = protocolVersion;
+            if (ver != null) b.header("MCP-Protocol-Version", ver);
+            String sid = sessionId;
+            if (sid != null) b.header("Mcp-Session-Id", sid);
+
+            HttpResponse<Stream<String>> resp = http.send(b.build(), HttpResponse.BodyHandlers.ofLines());
+            if (resp.statusCode() / 100 != 2) return;   // 405 = no stream; nothing to do
+            StringBuilder data = new StringBuilder();
+            Iterator<String> it = resp.body().iterator();
+            while (!closed && it.hasNext()) {
+                String line = it.next().replace("\r", "");
+                if (line.startsWith("data:")) {
+                    data.append(line.substring(5).trim());
+                } else if (line.isEmpty() && data.length() > 0) {
+                    JsonObject o = tryParse(data.toString());
+                    data.setLength(0);
+                    Consumer<JsonObject> h = notificationHandler;
+                    if (o != null && h != null) h.accept(o);
+                }
+            }
+        } catch (RuntimeException ex) {
+            if (!closed) Constants.LOG.debug("[numen-mcp-client] SSE stream ended: {}", ex.toString());
+        } catch (Exception ex) {
+            if (!closed) Constants.LOG.debug("[numen-mcp-client] SSE stream error: {}", ex.toString());
+        }
     }
 
     private HttpRequest build(JsonObject frame, long timeoutMs) {

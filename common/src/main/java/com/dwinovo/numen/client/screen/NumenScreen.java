@@ -475,8 +475,8 @@ public final class NumenScreen extends Screen {
                 Component.translatable(mcpStdio ? "numen.mcp.type_stdio" : "numen.mcp.type_http"),
                 b -> { preserveMcpForm(); mcpStdio = !mcpStdio; rebuild(); }));
         mcpTargetInput = field(x, fy + 67, w, 512, wMcpTarget);
-        // HTTP-only: one optional request header (Authorization: Bearer …). stdio uses env instead.
-        if (!mcpStdio) mcpHeaderInput = field(x, fy + 100, w, 1024, wMcpHeader);
+        // 4th field: HTTP → request header(s) "Name: Value"; stdio → env "KEY=value" (';'-separated).
+        mcpHeaderInput = field(x, fy + 100, w, 1024, wMcpHeader);
         // Save + Cancel
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveMcp()));
@@ -496,16 +496,16 @@ public final class NumenScreen extends Screen {
         String target = mcpTargetInput.getValue().trim();
         if (name.isEmpty() || target.isEmpty()) { warnUntil = System.currentTimeMillis() + 4000; return; }
         com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec spec;
+        String extra = mcpHeaderInput == null ? "" : mcpHeaderInput.getValue();
         if (mcpStdio) {
             String[] parts = target.split("\\s+");
             String command = parts[0];
             List<String> args = new ArrayList<>();
             for (int i = 1; i < parts.length; i++) args.add(parts[i]);
             spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "stdio", "", java.util.Map.of(),
-                    command, List.copyOf(args), java.util.Map.of(), true, 20, 120);
+                    command, List.copyOf(args), parseEnv(extra), true, 20, 120);
         } else {
-            java.util.Map<String, String> headers = parseHeader(mcpHeaderInput == null ? "" : mcpHeaderInput.getValue());
-            spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "http", target, headers,
+            spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "http", target, parseHeader(extra),
                     "", List.of(), java.util.Map.of(), true, 20, 120);
         }
         com.dwinovo.numen.mcp.client.McpClientManager.upsertServer(spec);
@@ -514,14 +514,29 @@ public final class NumenScreen extends Screen {
         rebuild();
     }
 
-    /** Parse one "Name: Value" header line into a map (empty → no headers). Multiple headers → edit the json. */
+    /** Parse "Name: Value" header lines (multiple separated by ';' or newline) into a map. */
     private static java.util.Map<String, String> parseHeader(String line) {
+        return parsePairs(line, ':');
+    }
+
+    /** Parse "KEY=value" env lines (multiple separated by ';' or newline) into a map. */
+    private static java.util.Map<String, String> parseEnv(String line) {
+        return parsePairs(line, '=');
+    }
+
+    private static java.util.Map<String, String> parsePairs(String line, char sep) {
         String s = line == null ? "" : line.trim();
-        int colon = s.indexOf(':');
-        if (colon <= 0) return java.util.Map.of();
-        String k = s.substring(0, colon).trim();
-        String v = s.substring(colon + 1).trim();
-        return k.isEmpty() || v.isEmpty() ? java.util.Map.of() : java.util.Map.of(k, v);
+        if (s.isEmpty()) return java.util.Map.of();
+        java.util.Map<String, String> out = new java.util.LinkedHashMap<>();
+        for (String part : s.split("[;\\n]")) {
+            String p = part.trim();
+            int i = p.indexOf(sep);
+            if (i <= 0) continue;
+            String k = p.substring(0, i).trim();
+            String v = p.substring(i + 1).trim();
+            if (!k.isEmpty() && !v.isEmpty()) out.put(k, v);
+        }
+        return java.util.Map.copyOf(out);
     }
 
     private void buildSkillsWidgets() {
@@ -765,7 +780,7 @@ public final class NumenScreen extends Screen {
         // the type row is the self-labelled toggle button (no separate label)
         txt(g, Component.translatable(mcpStdio ? "numen.mcp.form_command" : "numen.mcp.form_url"),
                 x, fy + 56, TXT_MUTED);
-        if (!mcpStdio) txt(g, Component.translatable("numen.mcp.form_header"), x, fy + 89, TXT_MUTED);
+        txt(g, Component.translatable(mcpStdio ? "numen.mcp.form_env" : "numen.mcp.form_header"), x, fy + 89, TXT_MUTED);
         // field placeholders are drawn in the post-widget pass (see render), so they sit above the frames
     }
 
@@ -1181,7 +1196,7 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.MCP && addingMcp) {
             placeholder(g, mcpNameInput, "kfc");
             placeholder(g, mcpTargetInput, mcpStdio ? "cmd /c npx -y <server>" : "https://mcp.mcd.cn");
-            placeholder(g, mcpHeaderInput, "Authorization: Bearer <token>");
+            placeholder(g, mcpHeaderInput, mcpStdio ? "KEY=value; KEY2=value2" : "Authorization: Bearer <token>");
         }
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
         // caret in the widget pass, so it can't paint over the caret like a screen-side draw did.)

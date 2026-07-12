@@ -25,6 +25,20 @@ public interface McpTransport extends AutoCloseable {
     void notify(JsonObject frame);
 
     /**
+     * Register a sink for server→client messages (JSON-RPC notifications/requests the server
+     * pushes, e.g. {@code notifications/tools/list_changed}). stdio delivers these on its stdout
+     * reader; HTTP needs {@link #openServerStream()} to receive them.
+     */
+    default void setNotificationHandler(java.util.function.Consumer<JsonObject> handler) {}
+
+    /**
+     * Open the server→client channel if the transport has one. HTTP issues a GET SSE stream to the
+     * MCP endpoint (spec 2025-06-18 "Listening for Messages from the Server"); a 405 means the
+     * server offers no stream and this is a graceful no-op. stdio already listens, so it's a no-op.
+     */
+    default void openServerStream() {}
+
+    /**
      * Tell the transport the protocol version negotiated during {@code initialize}
      * (the value the <em>server</em> returned). HTTP transports MUST send it as the
      * {@code MCP-Protocol-Version} header on every later request (spec 2025-06-18).

@@ -241,11 +241,64 @@ public final class McpClientManager {
             }
             if (handle != null) handle.transport = transport;
             registerOnMainThread(spec.name(), wrapped, names, handle);
+            // Listen for server-pushed notifications and open the server→client stream (HTTP GET SSE).
+            client.setNotificationListener((method, params) -> onServerNotification(spec, client, handle, method));
+            client.startServerStream();
             Constants.LOG.info("[numen-mcp-client] '{}' connected — {} tool(s)", spec.name(), wrapped.size());
         } catch (Exception ex) {
             closeQuietly(transport);
             throw ex;
         }
+    }
+
+    /** Handle a server→client notification. Chiefly {@code tools/list_changed} → re-list & re-register. */
+    private static void onServerNotification(ServerSpec spec, McpClient client, ServerHandle handle, String method) {
+        switch (method) {
+            case "notifications/tools/list_changed" -> {
+                Constants.LOG.info("[numen-mcp-client] '{}' tools/list_changed — refreshing", spec.name());
+                refreshTools(spec, client, handle);
+            }
+            case "notifications/message", "notifications/progress" ->
+                    Constants.LOG.debug("[numen-mcp-client] '{}' {}", spec.name(), method);
+            default -> Constants.LOG.debug("[numen-mcp-client] '{}' notification {}", spec.name(), method);
+        }
+    }
+
+    /** Re-list a server's tools and swap them in the registry (on a background thread, mutate on main). */
+    private static void refreshTools(ServerSpec spec, McpClient client, ServerHandle handle) {
+        Thread t = new Thread(() -> {
+            try {
+                long listMs = spec.connectTimeoutSeconds() * 1000L;
+                long callMs = spec.callTimeoutSeconds() * 1000L;
+                List<JsonObject> tools = client.listTools(listMs);
+                List<RemoteMcpTool> wrapped = new ArrayList<>();
+                List<String> names = new ArrayList<>();
+                for (JsonObject def : tools) {
+                    if (def.has("name") && !def.get("name").isJsonNull()) {
+                        RemoteMcpTool tool = new RemoteMcpTool(spec.name(), client, def, callMs);
+                        wrapped.add(tool);
+                        names.add(tool.name());
+                    }
+                }
+                runOnMain(() -> {
+                    if (handle == null || handle.status != Status.CONNECTED) return;   // disabled meanwhile
+                    for (String old : handle.toolNames) ToolRegistry.remove(old);
+                    for (RemoteMcpTool tool : wrapped) {
+                        try {
+                            ToolRegistry.register(tool);
+                        } catch (RuntimeException ignored) {
+                            // duplicate name across a refresh race — skip
+                        }
+                    }
+                    handle.toolNames = List.copyOf(names);
+                    Constants.LOG.info("[numen-mcp-client] '{}' now {} tool(s)", spec.name(), names.size());
+                });
+            } catch (Exception ex) {
+                Constants.LOG.warn("[numen-mcp-client] '{}' tools refresh failed: {}", spec.name(), ex.toString());
+            }
+        }, "numen-mcp-refresh-" + spec.name());
+        t.setDaemon(true);
+        t.start();
     }
 
     private static void sleepQuiet(long ms) {

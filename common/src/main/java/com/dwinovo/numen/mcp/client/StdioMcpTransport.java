@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * Stdio transport: spawn the MCP server as a subprocess and speak
@@ -33,6 +34,7 @@ public final class StdioMcpTransport implements McpTransport {
     private final BufferedWriter writer;
     private final Map<Long, CompletableFuture<JsonObject>> pending = new ConcurrentHashMap<>();
     private volatile boolean closed;
+    private volatile Consumer<JsonObject> notificationHandler;
 
     public StdioMcpTransport(String name, List<String> command, Map<String, String> env) throws IOException {
         this.name = name;
@@ -63,6 +65,11 @@ public final class StdioMcpTransport implements McpTransport {
             return f;
         }
         return f.orTimeout(Math.max(1000, timeoutMs), TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public void setNotificationHandler(Consumer<JsonObject> handler) {
+        this.notificationHandler = handler;
     }
 
     @Override
@@ -102,7 +109,12 @@ public final class StdioMcpTransport implements McpTransport {
                     continue;   // not a JSON-RPC line (stray stdout) — ignore
                 }
                 JsonElement idEl = msg.get("id");
-                if (idEl == null || idEl.isJsonNull()) continue;   // server notification/request — ignored in v1
+                if (idEl == null || idEl.isJsonNull()) {
+                    // server → client notification (no id): hand to the sink (e.g. tools/list_changed)
+                    Consumer<JsonObject> h = notificationHandler;
+                    if (h != null && msg.has("method")) h.accept(msg);
+                    continue;
+                }
                 CompletableFuture<JsonObject> f = pending.remove(idEl.getAsLong());
                 if (f != null) f.complete(msg);
             }

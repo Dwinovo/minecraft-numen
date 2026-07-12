@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiConsumer;
 
 /**
  * One connected external MCP server, speaking JSON-RPC 2.0 over a
@@ -30,6 +31,7 @@ public final class McpClient {
     private final String name;
     private final McpTransport transport;
     private final AtomicLong seq = new AtomicLong();
+    private volatile BiConsumer<String, JsonObject> notificationListener;
 
     public McpClient(String name, McpTransport transport) {
         this.name = name;
@@ -38,6 +40,38 @@ public final class McpClient {
 
     public String name() {
         return name;
+    }
+
+    /**
+     * Route server→client notifications (method, params) to {@code listener} — e.g.
+     * {@code notifications/tools/list_changed}. Wires the transport's message sink; call
+     * {@link #startServerStream()} afterward so HTTP opens its GET SSE channel.
+     */
+    public void setNotificationListener(BiConsumer<String, JsonObject> listener) {
+        this.notificationListener = listener;
+        transport.setNotificationHandler(this::onTransportMessage);
+    }
+
+    /** Open the server→client channel (HTTP GET SSE; stdio already listening). */
+    public void startServerStream() {
+        transport.openServerStream();
+    }
+
+    private void onTransportMessage(JsonObject msg) {
+        // Route notifications only (method present, no id). Server→client requests
+        // (sampling/roots) are not supported in v1 and are ignored.
+        if (!msg.has("method")) return;
+        if (msg.has("id") && !msg.get("id").isJsonNull()) return;
+        BiConsumer<String, JsonObject> l = notificationListener;
+        if (l == null) return;
+        String method = msg.get("method").getAsString();
+        JsonObject params = msg.has("params") && msg.get("params").isJsonObject()
+                ? msg.getAsJsonObject("params") : new JsonObject();
+        try {
+            l.accept(method, params);
+        } catch (RuntimeException ex) {
+            // never let a bad notification kill the reader thread
+        }
     }
 
     /** {@code initialize} handshake, then the {@code notifications/initialized} nudge. Throws on failure. */
@@ -164,9 +198,15 @@ public final class McpClient {
                 String type = block.has("type") ? block.get("type").getAsString() : "";
                 switch (type) {
                     case "text" -> sb.append(block.has("text") ? block.get("text").getAsString() : "");
-                    case "image" -> sb.append("[image]");
-                    case "audio" -> sb.append("[audio]");
-                    case "resource", "resource_link" -> sb.append("[resource]");
+                    // Embedded resources often carry text (a file's contents) — surface it to the model
+                    // rather than a bare placeholder; binary blobs fall back to a uri/mime note.
+                    case "resource" -> sb.append(describeResource(block));
+                    case "resource_link" -> sb.append("[resource ")
+                            .append(block.has("uri") ? block.get("uri").getAsString() : "").append(']');
+                    case "image" -> sb.append("[image ")
+                            .append(block.has("mimeType") ? block.get("mimeType").getAsString() : "binary").append(']');
+                    case "audio" -> sb.append("[audio ")
+                            .append(block.has("mimeType") ? block.get("mimeType").getAsString() : "binary").append(']');
                     default -> sb.append(block);
                 }
                 sb.append('\n');
@@ -177,6 +217,17 @@ public final class McpClient {
         // No content array (some servers only return structuredContent) — hand that back verbatim.
         if (result.has("structuredContent")) return result.get("structuredContent").toString();
         return "(no content)";
+    }
+
+    /** An embedded-resource block → its inline text if present, else a uri/mime note. */
+    private static String describeResource(JsonObject block) {
+        JsonObject res = block.has("resource") && block.get("resource").isJsonObject()
+                ? block.getAsJsonObject("resource") : null;
+        if (res == null) return "[resource]";
+        if (res.has("text") && res.get("text").isJsonPrimitive()) return res.get("text").getAsString();
+        String uri = res.has("uri") ? res.get("uri").getAsString() : "";
+        String mime = res.has("mimeType") ? " " + res.get("mimeType").getAsString() : "";
+        return "[resource " + uri + mime + "]";
     }
 
     private static JsonObject frame(Long id, String method, JsonObject params) {
