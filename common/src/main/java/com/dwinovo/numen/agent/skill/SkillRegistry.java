@@ -1,16 +1,25 @@
 package com.dwinovo.numen.agent.skill;
 
 import com.dwinovo.numen.Constants;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -84,10 +93,27 @@ public final class SkillRegistry {
     /** Required filename inside each skill directory. Matches opencode's convention. */
     public static final String SKILL_FILENAME = "SKILL.md";
 
+    /** Sidecar file (next to the skills dir) holding the player's disabled-skill names. */
+    public static final String STATE_FILENAME = "skills_state.json";
+
     private static final SkillRegistry INSTANCE = new SkillRegistry();
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     /** The live merged set, keyed by skill name. Insertion-ordered for stable XML output. */
     private final Map<String, SkillInfo> skills = new LinkedHashMap<>();
+
+    /**
+     * Names the player has switched off from the panel. Filtered out of both the
+     * {@code <available_skills>} listing and {@link #get} (so {@code load_skill}
+     * refuses a disabled skill even if the model guesses its name). Persisted to a
+     * sidecar {@code skills_state.json} — a bundled skill lives inside the mod jar
+     * and can't carry an {@code enabled:false} flag in its own {@code SKILL.md}, so
+     * the disabled set has to live outside the skill.
+     */
+    private final Set<String> disabled = new LinkedHashSet<>();
+
+    /** {@code config/numen/skills_state.json}; derived from {@code userRoot} in {@link #scan}. */
+    private Path stateFile;
 
     /**
      * Bundled skill roots a mod has declared, in declaration order. Each is a
@@ -153,6 +179,9 @@ public final class SkillRegistry {
     public int scan(Path userRoot) {
         this.userRoot = userRoot;
         this.scanned = true;
+        // Sidecar disabled-state lives next to the skills dir (config/numen/skills_state.json).
+        this.stateFile = userRoot == null ? null : userRoot.resolveSibling(STATE_FILENAME);
+        loadDisabled();
 
         Map<String, SkillInfo> next = new LinkedHashMap<>();
         int bundledCount = 0;
@@ -209,6 +238,8 @@ public final class SkillRegistry {
     }
 
     public Optional<SkillInfo> get(String name) {
+        // A disabled skill is invisible to load_skill too, not just the listing.
+        if (name != null && disabled.contains(name)) return Optional.empty();
         return Optional.ofNullable(skills.get(name));
     }
 
@@ -218,6 +249,50 @@ public final class SkillRegistry {
 
     public int size() {
         return skills.size();
+    }
+
+    // ---- enable/disable (panel-facing; all on the client main thread) ----
+
+    /** Whether {@code name} is currently switched off. */
+    public boolean isDisabled(String name) {
+        return disabled.contains(name);
+    }
+
+    /** Enable ({@code enabled=true}) or disable a skill by name; persists the change. */
+    public void setEnabled(String name, boolean enabled) {
+        if (name == null) return;
+        boolean changed = enabled ? disabled.remove(name) : disabled.add(name);
+        if (changed) saveDisabled();
+    }
+
+    private void loadDisabled() {
+        disabled.clear();
+        if (stateFile == null || !Files.isRegularFile(stateFile)) return;
+        try {
+            JsonObject o = JsonParser.parseString(Files.readString(stateFile, StandardCharsets.UTF_8))
+                    .getAsJsonObject();
+            if (o.has("disabled") && o.get("disabled").isJsonArray()) {
+                for (JsonElement el : o.getAsJsonArray("disabled")) {
+                    if (!el.isJsonNull()) disabled.add(el.getAsString());
+                }
+            }
+        } catch (IOException | RuntimeException ex) {
+            Constants.LOG.warn("[numen-skill] unreadable {}: {}", stateFile, ex.toString());
+        }
+    }
+
+    private void saveDisabled() {
+        if (stateFile == null) return;
+        JsonObject o = new JsonObject();
+        JsonArray arr = new JsonArray();
+        disabled.forEach(arr::add);
+        o.add("disabled", arr);
+        try {
+            Files.createDirectories(stateFile.getParent());
+            Files.writeString(stateFile, GSON.toJson(o), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-skill] failed to write {}: {}", stateFile, ex.toString());
+        }
     }
 
     /**
@@ -231,9 +306,11 @@ public final class SkillRegistry {
      */
     public String formatXml() {
         // Mirror opencode: only show skills with a description (the LLM can't
-        // pick something it knows nothing about).
+        // pick something it knows nothing about). Skills the player switched off
+        // in the panel are hidden here too, so the brain stops loading them.
         var described = skills.values().stream()
                 .filter(s -> s.description() != null && !s.description().isBlank())
+                .filter(s -> !disabled.contains(s.name()))
                 .toList();
         if (described.isEmpty()) return "";
 

@@ -117,19 +117,35 @@ public record McpClientConfig(boolean enabled, List<ServerSpec> servers) {
         return new McpClientConfig(true, List.of(http, stdio));
     }
 
-    private static void writeDefault(Path file, McpClientConfig def) {
+    /**
+     * Write the config back to disk (pretty-printed). Used both for the first-launch
+     * default and to persist live enable/disable toggles from the panel. The record
+     * is immutable, so callers rebuild it with the changed {@link ServerSpec} before
+     * saving. Best-effort — a write failure is logged, not thrown.
+     */
+    public static void save(Path file, McpClientConfig cfg) {
         JsonObject root = new JsonObject();
-        root.addProperty("enabled", def.enabled());
+        root.addProperty("enabled", cfg.enabled());
         JsonArray servers = new JsonArray();
-        for (ServerSpec s : def.servers()) servers.add(serverToJson(s));
+        for (ServerSpec s : cfg.servers()) servers.add(serverToJson(s));
         root.add("servers", servers);
         try {
             Files.createDirectories(file.getParent());
             Files.writeString(file, PRETTY.toJson(root), StandardCharsets.UTF_8);
-            Constants.LOG.info("[numen-mcp-client] wrote default config {}", file);
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-mcp-client] failed to write default config {}: {}", file, ex.toString());
+            Constants.LOG.warn("[numen-mcp-client] failed to write config {}: {}", file, ex.toString());
         }
+    }
+
+    private static void writeDefault(Path file, McpClientConfig def) {
+        save(file, def);
+        Constants.LOG.info("[numen-mcp-client] wrote default config {}", file);
+    }
+
+    /** A copy of {@code s} with its {@code enabled} flag set to {@code enabled}. */
+    public static ServerSpec withEnabled(ServerSpec s, boolean enabled) {
+        return new ServerSpec(s.name(), s.type(), s.url(), s.headers(), s.command(),
+                s.args(), s.env(), enabled, s.connectTimeoutSeconds(), s.callTimeoutSeconds());
     }
 
     private static JsonObject serverToJson(ServerSpec s) {
