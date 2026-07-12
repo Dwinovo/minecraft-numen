@@ -1,7 +1,9 @@
 package com.dwinovo.numen;
 
 import com.dwinovo.numen.agent.skill.SkillRegistry;
+import com.dwinovo.numen.mcp.client.McpClientManager;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
@@ -19,6 +21,11 @@ public class NumenFabricClient implements ClientModInitializer {
         Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()
                 .resolve("config").resolve(Constants.MOD_ID);
         Path skillsDir = numenConfigRoot.resolve("skills");
+
+        // MCP client: connect to any external MCP servers listed in
+        // config/numen/mcp_clients.json and register their tools so the built-in
+        // brain can call them. Config dir from the loader (avoids Minecraft timing).
+        McpClientManager.initClient(FabricLoader.getInstance().getConfigDir().resolve(Constants.MOD_ID));
 
         // Skills live under config/numen/skills. Hook the resource reload
         // pipeline so /reload picks up newly added SKILL.md files without a

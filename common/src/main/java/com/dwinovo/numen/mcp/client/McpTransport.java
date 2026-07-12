@@ -1,0 +1,29 @@
+package com.dwinovo.numen.mcp.client;
+
+import com.google.gson.JsonObject;
+
+import java.util.concurrent.CompletableFuture;
+
+/**
+ * Moves JSON-RPC frames to one external MCP server and back. Two impls:
+ * {@link HttpMcpTransport} (POST per frame) and {@link StdioMcpTransport}
+ * (newline-delimited over a subprocess's stdin/stdout). The client
+ * ({@link McpClient}) owns id generation and request/response semantics;
+ * a transport only ships a frame and returns the matching response.
+ */
+public interface McpTransport extends AutoCloseable {
+
+    /**
+     * Send a request frame (it already carries an {@code id}) and complete with
+     * the response envelope ({@code {jsonrpc, id, result|error}}). The future
+     * completes exceptionally on transport failure (network error, non-2xx HTTP,
+     * broken pipe) or after {@code timeoutMs}.
+     */
+    CompletableFuture<JsonObject> request(JsonObject frame, long timeoutMs);
+
+    /** Fire a notification frame (no {@code id}); no response is expected. */
+    void notify(JsonObject frame);
+
+    @Override
+    void close();
+}

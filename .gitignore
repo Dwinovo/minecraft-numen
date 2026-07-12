@@ -34,6 +34,9 @@ logs
 # Claude local tooling (skills, settings, etc.) — not mod source
 .claude/
 
+# local dev scratch (mock MCP servers used for manual testing, etc.)
+dev/
+
 # benchmark credentials — API keys live in an untracked .env (see benchmark/.env.example)
 .env
 **/.env

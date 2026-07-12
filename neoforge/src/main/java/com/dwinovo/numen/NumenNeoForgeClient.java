@@ -1,6 +1,7 @@
 package com.dwinovo.numen;
 
 import com.dwinovo.numen.agent.skill.SkillRegistry;
+import com.dwinovo.numen.mcp.client.McpClientManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
@@ -23,6 +24,12 @@ import java.nio.file.Path;
 public class NumenNeoForgeClient {
 
     public NumenNeoForgeClient(IEventBus modBus) {
+        // MCP client: connect to external MCP servers in config/numen/mcp_clients.json
+        // and register their tools for the built-in brain. Config dir from FML (no
+        // Minecraft instance needed this early).
+        McpClientManager.initClient(
+                net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve(Constants.MOD_ID));
+
         // Mod bus — registration events.
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
