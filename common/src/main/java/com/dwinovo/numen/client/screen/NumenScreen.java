@@ -13,6 +13,7 @@ import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.data.ClientNumenInventory;
 import com.dwinovo.numen.network.payload.RequestInventoryPayload;
+import com.dwinovo.numen.persona.PersonaLibrary;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.platform.services.INumenConfig;
 import com.google.gson.JsonArray;
@@ -119,8 +120,15 @@ public final class NumenScreen extends Screen {
     private Tab tab = Tab.CHAT;
 
     /** The Settings tab is a config hub: a left sub-nav picks one of these sections. */
-    private enum SettingsSection { LLM, MCP, SKILLS }
+    private enum SettingsSection { LLM, MCP, SKILLS, PERSONA }
     private SettingsSection settingsSection = SettingsSection.LLM;
+
+    // Persona library form state (mirrors the MCP add/edit/delete flow).
+    private boolean addingPersona;
+    private String personaEditId;          // non-null = editing this persona; null = creating
+    private String personaDeletePending;   // id awaiting delete confirm
+    private String wPersonaName = "", wPersonaText = "";
+    private net.minecraft.client.gui.components.EditBox personaNameInput, personaTextInput;
     private int settingsScroll;   // first visible row of the MCP / skill list (wheel-scroll when long)
 
     // MCP "add server" form (mirrors the LLM add-site flow)
@@ -258,6 +266,7 @@ public final class NumenScreen extends Screen {
         sendButton = stopButton = compactButton = null;
         apiKeyInput = modelInput = baseUrlInput = proxyInput = siteNameInput = null;
         mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
+        personaNameInput = personaTextInput = null;
         modelDropdown = null;
         summonInput = null;
         if (summoning) { buildSummonField(); return; }
@@ -434,6 +443,9 @@ public final class NumenScreen extends Screen {
         addingMcp = false;
         mcpDeletePending = null;
         mcpEditOriginal = null;
+        addingPersona = false;
+        personaEditId = null;
+        personaDeletePending = null;
         rebuild();
     }
 
@@ -447,7 +459,61 @@ public final class NumenScreen extends Screen {
                 else if (addingMcp) buildMcpForm();
                 else buildMcpListWidgets();
             }
+            case PERSONA -> {
+                if (personaDeletePending != null) buildPersonaDeleteConfirm();
+                else if (addingPersona) buildPersonaForm();
+                else buildPersonaListWidgets();
+            }
         }
+    }
+
+    // ---- Persona section: a library of reusable personas; apply one to the active companion ----
+
+    private void buildPersonaListWidgets() {
+        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+                Component.translatable("numen.persona.add"), b -> {
+                    addingPersona = true; personaEditId = null;
+                    wPersonaName = ""; wPersonaText = "";
+                    rebuild();
+                }));
+    }
+
+    private void buildPersonaForm() {
+        int x = secX(), w = secW();
+        int fy = secY0() + 14;
+        personaNameInput = field(x, fy + 11, w, 48, wPersonaName);
+        personaTextInput = field(x, fy + 44, w, 2048, wPersonaText);   // single-line (long text scrolls); multi-para → edit json
+        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+                Component.translatable("numen.gui.settings.save"), b -> onSavePersona()));
+        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
+                Component.literal("✕"), b -> { addingPersona = false; personaEditId = null; rebuild(); }));
+        setInitialFocus(personaNameInput);
+    }
+
+    private void buildPersonaDeleteConfirm() {
+        int x = secX();
+        int by = secY0() + 24;
+        int bw = 64, gap = 8;
+        add(new SimpleButton(x, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
+            com.dwinovo.numen.persona.PersonaLibrary.instance().remove(personaDeletePending);
+            personaDeletePending = null;
+            rebuild();
+        }));
+        add(new SimpleButton(x + bw + gap, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
+                b -> { personaDeletePending = null; rebuild(); }));
+    }
+
+    private void onSavePersona() {
+        String name = personaNameInput.getValue().trim();
+        String text = personaTextInput.getValue().trim();
+        if (name.isEmpty() || text.isEmpty()) { warnUntil = System.currentTimeMillis() + 4000; return; }
+        var lib = com.dwinovo.numen.persona.PersonaLibrary.instance();
+        if (personaEditId != null) lib.update(personaEditId, name, text);
+        else lib.create(name, text);
+        addingPersona = false;
+        personaEditId = null;
+        wPersonaName = ""; wPersonaText = "";
+        rebuild();
     }
 
     private void buildMcpDeleteConfirm() {
@@ -743,6 +809,7 @@ public final class NumenScreen extends Screen {
             case LLM -> renderLlmSettings(g);
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
+            case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
         }
     }
 
@@ -750,7 +817,7 @@ public final class NumenScreen extends Screen {
     private void renderSettingsNav(GuiGraphics g) {
         String[] labels = {
                 I18n.get("numen.settings.nav.llm"), I18n.get("numen.settings.nav.mcp"),
-                I18n.get("numen.settings.nav.skills")};
+                I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona")};
         int navX = left + PAD;
         int y = secY0();
         for (int i = 0; i < labels.length; i++) {
@@ -948,7 +1015,7 @@ public final class NumenScreen extends Screen {
         int mx = (int) mxd, my = (int) myd;
         int navX = left + PAD, y = secY0();
         if (mx >= navX && mx < navX + NAV_W) {
-            for (int i = 0; i < 3; i++) {
+            for (int i = 0; i < SettingsSection.values().length; i++) {
                 int ry = y + i * NAV_SP;
                 if (my >= ry - 3 && my < ry + NAV_SP - 5) {
                     selectSection(SettingsSection.values()[i]);
@@ -958,6 +1025,7 @@ public final class NumenScreen extends Screen {
         }
         if (settingsSection == SettingsSection.MCP) return mcpToggleClick(mx, my);
         if (settingsSection == SettingsSection.SKILLS) return skillToggleClick(mx, my);
+        if (settingsSection == SettingsSection.PERSONA) return personaClick(mx, my);
         return false;
     }
 
@@ -1026,6 +1094,106 @@ public final class NumenScreen extends Screen {
             b.append(e.getKey()).append(sep == ':' ? ": " : "=").append(e.getValue());
         }
         return b.toString();
+    }
+
+    // ---- Persona section render + hit-test ----
+
+    private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
+        int x = secX(), w = secW();
+        txt(g, Component.translatable("numen.persona.title"), x, secY0() - 2, TXT);
+        if (personaDeletePending != null) {
+            PersonaLibrary.Persona p = PersonaLibrary.instance().get(personaDeletePending);
+            txt(g, Component.translatable("numen.persona.delete_confirm", p != null ? p.name() : ""),
+                    x, secY0() + 10, TXT);
+            return;
+        }
+        if (addingPersona) { renderPersonaForm(g); return; }
+        var list = PersonaLibrary.instance().list();
+        if (list.isEmpty()) {
+            txt(g, Component.translatable("numen.persona.empty"), x, secY0() + 16, TXT_FAINT);
+            return;
+        }
+        String current = activePersonaName();
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
+        for (int i = settingsScroll; i < list.size(); i++) {
+            int ry = listY0 + (i - settingsScroll) * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            PersonaLibrary.Persona p = list.get(i);
+            boolean isCurrent = current != null && current.equals(p.name());
+            int delX = x + w - 12, editX = x + w - 26;
+            txt(g, Component.literal(p.name()), x, ry + 1, isCurrent ? OK : TXT);
+            String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
+            txt(g, Component.literal(clip(badge + p.text(), w - 30)), x, ry + 11, TXT_FAINT);
+            if (p.preset()) {
+                txt(g, Component.literal("⧉"), delX, ry + 6,
+                        overDelete(mouseX, mouseY, delX, ry) ? CTA : TXT_FAINT);
+            } else {
+                txt(g, Component.literal("✎"), editX, ry + 6,
+                        overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
+                txt(g, Component.literal("✕"), delX, ry + 6,
+                        overDelete(mouseX, mouseY, delX, ry) ? FAIL : TXT_FAINT);
+            }
+            if (overRow(mouseX, mouseY, x, w, ry)
+                    && !overDelete(mouseX, mouseY, delX, ry) && !overDelete(mouseX, mouseY, editX, ry)) {
+                pendingTip = List.of(Component.translatable(
+                        uuid != null ? "numen.persona.apply_hint" : "numen.persona.no_companion"));
+                pendingTipX = mouseX;
+                pendingTipY = mouseY;
+            }
+        }
+    }
+
+    private void renderPersonaForm(GuiGraphics g) {
+        int x = secX();
+        int fy = secY0() + 14;
+        txt(g, Component.translatable("numen.persona.form_name"), x, fy, TXT_MUTED);
+        txt(g, Component.translatable("numen.persona.form_text"), x, fy + 33, TXT_MUTED);
+    }
+
+    /** The active companion's current persona name (green marker in the list), or null. */
+    private String activePersonaName() {
+        if (uuid == null) return null;
+        return AgentLoopRegistry.get(uuid).map(EntityAgentLoop::personaName).orElse(null);
+    }
+
+    private boolean personaClick(int mx, int my) {
+        if (addingPersona || personaDeletePending != null) return false;
+        int x = secX(), w = secW();
+        var lib = PersonaLibrary.instance();
+        var list = lib.list();
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
+        for (int i = scroll; i < list.size(); i++) {
+            int ry = listY0 + (i - scroll) * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            PersonaLibrary.Persona p = list.get(i);
+            int delX = x + w - 12, editX = x + w - 26;
+            if (p.preset()) {
+                if (overDelete(mx, my, delX, ry)) { lib.clonePersona(p.id()); rebuild(); return true; }
+            } else {
+                if (overDelete(mx, my, editX, ry)) { beginEditPersona(p); return true; }
+                if (overDelete(mx, my, delX, ry)) { personaDeletePending = p.id(); rebuild(); return true; }
+            }
+            if (overRow(mx, my, x, w, ry)) { applyPersona(p); return true; }   // body → apply to current companion
+        }
+        return false;
+    }
+
+    private void beginEditPersona(PersonaLibrary.Persona p) {
+        addingPersona = true;
+        personaEditId = p.id();
+        wPersonaName = p.name();
+        wPersonaText = p.text();
+        rebuild();
+    }
+
+    private void applyPersona(PersonaLibrary.Persona p) {
+        if (uuid == null) { warnUntil = System.currentTimeMillis() + 4000; return; }   // no active companion
+        loop().setPersona(p.text(), p.name());
+        savedFlashUntil = System.currentTimeMillis() + 1500;   // "applied" feedback (reuses the saved flash)
     }
 
     private boolean skillToggleClick(int mx, int my) {
@@ -1205,11 +1373,13 @@ public final class NumenScreen extends Screen {
             pinBottom = scroll >= lastMaxScroll;
             return true;
         }
-        if (tab == Tab.SETTINGS && sy != 0
-                && (settingsSection == SettingsSection.MCP || settingsSection == SettingsSection.SKILLS)) {
-            int count = settingsSection == SettingsSection.MCP
-                    ? com.dwinovo.numen.mcp.client.McpClientManager.servers().size()
-                    : com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
+        if (tab == Tab.SETTINGS && sy != 0 && settingsSection != SettingsSection.LLM) {
+            int count = switch (settingsSection) {
+                case MCP -> com.dwinovo.numen.mcp.client.McpClientManager.servers().size();
+                case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
+                case PERSONA -> PersonaLibrary.instance().list().size();
+                default -> 0;
+            };
             int listY0 = secY0() + 14;
             int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
             settingsScroll = Math.clamp((long) (settingsScroll - sy), 0, Math.max(0, count - visible));
@@ -1292,6 +1462,10 @@ public final class NumenScreen extends Screen {
             placeholder(g, mcpNameInput, "kfc");
             placeholder(g, mcpTargetInput, mcpStdio ? "cmd /c npx -y <server>" : "https://mcp.mcd.cn");
             placeholder(g, mcpHeaderInput, mcpStdio ? "KEY=value; KEY2=value2" : "Authorization: Bearer <token>");
+        }
+        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.PERSONA && addingPersona) {
+            placeholder(g, personaNameInput, "雷");
+            placeholder(g, personaTextInput, "一句话描述这个同伴的性格…");
         }
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
         // caret in the widget pass, so it can't paint over the caret like a screen-side draw did.)
