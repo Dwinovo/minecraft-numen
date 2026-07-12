@@ -36,6 +36,7 @@
   "numen.chat.empty": "对 %s 说点什么。",
   "numen.chat.compacting": "正在压缩历史…",
   "numen.chat.compacted": "─── 更早的对话已压缩为摘要（原文保留在磁盘） ───",
+  "numen.chat.persona_changed": "─── 人设已切换 ───",
   "numen.chat.steps": "%s 步",
   "numen.chat.plan": "计划",
   "numen.chat.no_plan": "暂无计划",

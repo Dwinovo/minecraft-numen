@@ -135,6 +135,14 @@ public final class EntityAgentLoop {
      */
     private final List<String> bufferedPrompts = new ArrayList<>();
 
+    /**
+     * This companion's persona (per-companion, dynamic). Sourced from the last {@code persona-change}
+     * event in the log on restore, mutated live by {@link #setPersona}. Null/blank → falls back to the
+     * global {@code getSystemPrompt} default. Read fresh every turn in {@link #composeSystemPrompt}.
+     */
+    private String personaText;
+    private String personaName;
+
     private boolean awaitingLlmResponse = false;
     private boolean aborted = false;
 
@@ -235,6 +243,11 @@ public final class EntityAgentLoop {
      */
     private void restoreFromDisk() {
         log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
+        ConvoLog.PersonaState p = log.loadCurrentPersona();   // independent of history — a persona may be set before any chat
+        if (p != null && p.text() != null && !p.text().isBlank()) {
+            personaText = p.text();
+            personaName = p.name();
+        }
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
         convo.preload(history);
@@ -537,6 +550,30 @@ public final class EntityAgentLoop {
         }
     }
 
+    /** This companion's current persona name (for the panel), or null. */
+    public String personaName() {
+        return personaName;
+    }
+
+    /**
+     * Switch this companion's persona at runtime. Three things happen:
+     * (1) the persona text/name update, so the next turn's system prompt recomposes with the new
+     *     identity (read fresh in {@link #composeSystemPrompt} — no in-flight interruption);
+     * (2) a {@code persona-change} event is logged, so a relaunch recovers the current persona
+     *     ({@link #restoreFromDisk} via {@code loadCurrentPersona});
+     * (3) a reconciliation user message is queued so the model is TOLD its identity was rewritten —
+     *     otherwise it sees its own prior self-descriptions in history and contradicts itself.
+     */
+    public void setPersona(String text, String name) {
+        this.personaText = text;
+        this.personaName = name;
+        log.appendPersonaChange(text, name);
+        display.add(new ConvoState.Msg.User(ConvoLog.PERSONA_DIVIDER));   // physical transcript gains a divider now
+        String who = (name != null && !name.isBlank()) ? name : "一个新的身份";
+        injectEvent("<persona-change>从现在起你是「" + who
+                + "」。以上对话确实发生过，但不必解释过去，直接以新的身份继续。</persona-change>", false);
+    }
+
     // ---- internals ----
 
     /**
@@ -625,8 +662,7 @@ public final class EntityAgentLoop {
 
         var tools = ToolRegistry.all();
         var snapshot = convo.snapshot();
-        INumenConfig config = Services.CONFIG;
-        String systemPrompt = composeSystemPrompt(config.getSystemPrompt());
+        String systemPrompt = composeSystemPrompt();
 
         Constants.LOG.info("[numen-entity#{}] turn {}: convo={} msgs, tools={}",
                 entityUuid, convo.turnCount(), snapshot.size(), tools.size());
@@ -811,15 +847,21 @@ public final class EntityAgentLoop {
         return raw.replaceFirst("(?s)<analysis>.*?(</analysis>|$)", "").strip();
     }
 
-    private String composeSystemPrompt(String basePrompt) {
-        String base = basePrompt == null ? "" : basePrompt;
+    private String composeSystemPrompt() {
+        // Per-companion persona wins; fall back to the global default. Read fresh each turn so a live
+        // persona switch takes effect next turn with no in-flight interruption.
+        String base = (personaText != null && !personaText.isBlank())
+                ? personaText : Services.CONFIG.getSystemPrompt();
+        if (base == null) base = "";
         String envBlock = buildEnvBlock();
         AbstractClientPlayer body = resolveEntity();
         String knownBlocks = workBlocks.formatXml(body != null ? body.level() : null);
         String skillsXml = SkillRegistry.instance().formatXml();
 
         StringBuilder sb = new StringBuilder();
-        if (!base.isBlank()) sb.append(base);
+        // Persona = the mutable "who you are" layer, wrapped so it's clearly delimited from the
+        // immutable operating core (ENTITY_PROMPT) that follows.
+        if (!base.isBlank()) sb.append("<persona>\n").append(base.strip()).append("\n</persona>");
         sb.append(ENTITY_PROMPT);
         if (envBlock != null) {
             sb.append("\n\n").append(envBlock);
@@ -839,7 +881,9 @@ public final class EntityAgentLoop {
         // The brain runs on the owner's client, so the local player IS the owner.
         var localOwner = Minecraft.getInstance().player;
         String ownerName = localOwner != null ? localOwner.getName().getString() : "unknown";
+        String myName = NumenRoster.instance().name(entityUuid);   // the in-game name the owner gave this companion
         return "<env>\n"
+                + (myName != null ? "  companion_name: " + myName + "\n" : "")
                 + "  entity_uuid: " + entityUuid + "\n"
                 + "  owner_name: " + ownerName + "\n"
                 + "  dimension: " + entity.level().dimension().location() + "\n"

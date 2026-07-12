@@ -36,6 +36,7 @@
   "numen.chat.empty": "Say something to %s.",
   "numen.chat.compacting": "compacting history…",
   "numen.chat.compacted": "─── earlier conversation compacted to a summary (originals kept on disk) ───",
+  "numen.chat.persona_changed": "─── persona switched ───",
   "numen.chat.steps": "%s steps",
   "numen.chat.plan": "PLAN",
   "numen.chat.no_plan": "no plan yet",

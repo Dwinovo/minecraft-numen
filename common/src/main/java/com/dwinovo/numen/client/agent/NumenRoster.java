@@ -60,4 +60,10 @@ public final class NumenRoster {
     public int size() {
         return entries.size();
     }
+
+    /** The display name of the live companion with this UUID, or {@code null} if not currently in the roster. */
+    public String name(UUID uuid) {
+        Entry e = entries.get(uuid);
+        return e == null ? null : e.name();
+    }
 }

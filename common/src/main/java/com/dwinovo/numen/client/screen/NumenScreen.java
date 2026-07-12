@@ -1585,6 +1585,10 @@ public final class NumenScreen extends Screen {
             switch (msg) {
                 case ConvoState.Msg.User u -> {
                     flushTools(out, group, done, failed, width);
+                    if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
+                        wrapPlain(out, I18n.get("numen.chat.persona_changed"), TXT_FAINT, width);
+                        continue;
+                    }
                     if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
                         wrapPlain(out, I18n.get("numen.chat.compacted"), TXT_FAINT, width);
                         continue;
