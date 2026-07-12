@@ -86,6 +86,8 @@ public final class NumenScreen extends Screen {
     private static final int TXT_MUTED = TH.textDim();
     private static final int TXT_FAINT = 0xFF8C7C62;
     private static final int ON_BAND = TH.onBand();
+    /** Faint on-band text (persona name after the companion name): cream blended toward the green band. */
+    private static final int ON_BAND_FAINT = 0xFFB2BF9F;
     private static final int CTA = TH.cta();
     private static final int ON_CTA = TH.onCta();
     private static final int FIELD = TH.field();
@@ -131,6 +133,8 @@ public final class NumenScreen extends Screen {
     private net.minecraft.client.gui.components.EditBox personaNameInput, personaTextInput;
     /** Persona chosen for the companion currently being summoned (null = default / none). */
     private String summonPersonaId;
+    private Dropdown summonPersonaDropdown;
+    private static final String PERSONA_DEFAULT = "__default__";
     private int settingsScroll;   // first visible row of the MCP / skill list (wheel-scroll when long)
 
     // MCP "add server" form (mirrors the LLM add-site flow)
@@ -271,6 +275,7 @@ public final class NumenScreen extends Screen {
         personaNameInput = personaTextInput = null;
         modelDropdown = null;
         summonInput = null;
+        summonPersonaDropdown = null;
         if (summoning) { buildSummonField(); return; }
         if (dismissPending != null) { buildDismissConfirm(); return; }
         switch (tab) {
@@ -289,31 +294,16 @@ public final class NumenScreen extends Screen {
         summonInput.setTextColor(TXT);
         summonInput.setHint(Component.translatable("numen.summon.name_hint"));
         add(summonInput);
-        // Optional persona for the new companion — a cycle button through the library (+ 默认).
-        add(new SimpleButton(left + PAD, y + 26, PANEL_W - PAD * 2, 18,
-                Component.translatable("numen.summon.persona", summonPersonaLabel()),
-                b -> { cycleSummonPersona(); rebuild(); }));
-        setInitialFocus(summonInput);
-    }
-
-    private String summonPersonaLabel() {
-        if (summonPersonaId == null) return I18n.get("numen.persona.default");
-        var p = PersonaLibrary.instance().get(summonPersonaId);
-        return p != null ? p.name() : I18n.get("numen.persona.default");
-    }
-
-    /** Cycle the summon persona: 默认 → persona1 → … → last → 默认. */
-    private void cycleSummonPersona() {
-        var list = PersonaLibrary.instance().list();
-        if (list.isEmpty()) { summonPersonaId = null; return; }
-        if (summonPersonaId == null) { summonPersonaId = list.get(0).id(); return; }
-        for (int i = 0; i < list.size(); i++) {
-            if (list.get(i).id().equals(summonPersonaId)) {
-                summonPersonaId = (i + 1 < list.size()) ? list.get(i + 1).id() : null;   // last → default
-                return;
-            }
+        // Optional persona for the new companion — a dropdown of the library (+ 默认). Rendered/routed
+        // manually (see render / mouseClicked), like the Settings model dropdown.
+        List<Dropdown.Item> items = new ArrayList<>();
+        items.add(new Dropdown.Item(PERSONA_DEFAULT, I18n.get("numen.persona.default")));
+        for (PersonaLibrary.Persona p : PersonaLibrary.instance().list()) {
+            items.add(new Dropdown.Item(p.id(), p.name()));
         }
-        summonPersonaId = null;
+        summonPersonaDropdown = new Dropdown(items, summonPersonaId == null ? PERSONA_DEFAULT : summonPersonaId);
+        summonPersonaDropdown.setBounds(left + PAD, y + 26, PANEL_W - PAD * 2, 18);
+        setInitialFocus(summonInput);
     }
 
     /** Two buttons for the "delete companion?" confirm bar — Cancel and the destructive Delete. */
@@ -1294,6 +1284,12 @@ public final class NumenScreen extends Screen {
             return super.mouseClicked(mouseX, mouseY, button);   // modal confirm — let its Cancel/Delete buttons handle it
         }
         if (button == 0) {
+            // Summon persona dropdown gets first pick (its open list overlays the panel).
+            if (summoning && summonPersonaDropdown != null && summonPersonaDropdown.mouseClicked(mouseX, mouseY)) {
+                String sel = summonPersonaDropdown.selectedId();
+                summonPersonaId = PERSONA_DEFAULT.equals(sel) ? null : sel;
+                return true;
+            }
             UUID close = railCloseAt((int) mouseX, (int) mouseY);
             if (close != null) { dismissPending = close; rebuild(); return true; }   // ✕ → confirm bar
             if (railPlusAt((int) mouseX, (int) mouseY)) {   // + → start the summon name prompt
@@ -1416,10 +1412,13 @@ public final class NumenScreen extends Screen {
         renderRail(g, mouseX, mouseY);   // avatars + status + summon tile on the rail column
 
         txt(g, Component.literal(name == null ? "Numen" : name), left + PAD, top + 7, ON_BAND);
+        int afterName = left + PAD + font.width(name == null ? "Numen" : name) + 6;
         if (uuid != null && ClientDeaths.isDead(uuid)) {        // active companion dead — respawn countdown
             long rem = ClientDeaths.remainingMs(uuid);
-            txt(g, Component.translatable("numen.respawn", (int) Math.ceil(rem / 1000.0)),
-                    left + PAD + font.width(name == null ? "Numen" : name) + 6, top + 7, ON_BAND);
+            txt(g, Component.translatable("numen.respawn", (int) Math.ceil(rem / 1000.0)), afterName, top + 7, ON_BAND);
+        } else {
+            String pn = activePersonaName();                   // current persona, faint, right after the name
+            if (pn != null) txt(g, Component.literal(pn), afterName, top + 7, ON_BAND_FAINT);
         }
         renderTabs(g, mouseX, mouseY);
 
@@ -1494,6 +1493,11 @@ public final class NumenScreen extends Screen {
                 if (providerDropdown != null) providerDropdown.render(g, font, mouseX, mouseY);
                 if (modelDropdown != null) modelDropdown.render(g, font, mouseX, mouseY);
             }
+        }
+
+        // Summon persona dropdown — drawn late so its open list sits above the summon field.
+        if (summoning && summonPersonaDropdown != null) {
+            summonPersonaDropdown.render(g, font, mouseX, mouseY);
         }
 
         // Hovered MCP / skill row tooltip — drawn last so nothing paints over it.
@@ -1963,10 +1967,6 @@ public final class NumenScreen extends Screen {
      *  and the read-only checkerboard 3×9 storage + hotbar. Body data is fetched on demand via
      *  RequestInventoryPayload (backpack + craft + food); HP + equipment come off the live client entity. */
     private void renderItems(GuiGraphics g, int mouseX, int mouseY) {
-        // Current persona of this companion (top of the status view). Null = the default persona.
-        String pn = activePersonaName();
-        txt(g, Component.translatable("numen.status.persona", pn != null ? pn : I18n.get("numen.persona.default")),
-                left + PAD, top + HEADER_H + 3, TXT_MUTED);
         var snap = ClientNumenInventory.get(uuid).orElse(null);
         AbstractClientPlayer e = ClientNumenLookup.resolve(uuid);
         List<ItemStack> craft = snap != null ? snap.craft() : List.of();
