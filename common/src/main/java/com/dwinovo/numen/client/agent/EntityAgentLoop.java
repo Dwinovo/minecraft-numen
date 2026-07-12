@@ -142,6 +142,7 @@ public final class EntityAgentLoop {
      */
     private String personaText;
     private String personaName;
+    private String personaId;   // library id this persona came from (so a library edit can propagate here)
 
     private boolean awaitingLlmResponse = false;
     private boolean aborted = false;
@@ -245,6 +246,7 @@ public final class EntityAgentLoop {
         log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
         ConvoLog.PersonaState p = log.loadCurrentPersona();   // independent of history — a persona may be set before any chat
         if (p != null && p.text() != null && !p.text().isBlank()) {
+            personaId = p.id() == null || p.id().isBlank() ? null : p.id();
             personaText = p.text();
             personaName = p.name();
         }
@@ -555,6 +557,11 @@ public final class EntityAgentLoop {
         return personaName;
     }
 
+    /** The library id this companion's persona came from, or null (legacy / default). */
+    public String personaId() {
+        return personaId;
+    }
+
     /**
      * Switch this companion's persona at runtime. Three things happen:
      * (1) the persona text/name update, so the next turn's system prompt recomposes with the new
@@ -564,14 +571,15 @@ public final class EntityAgentLoop {
      * (3) a reconciliation user message is queued so the model is TOLD its identity was rewritten —
      *     otherwise it sees its own prior self-descriptions in history and contradicts itself.
      */
-    public void setPersona(String text, String name) {
+    public void setPersona(String id, String text, String name) {
+        this.personaId = id;
         this.personaText = text;
         this.personaName = name;
-        log.appendPersonaChange(text, name);
+        log.appendPersonaChange(id, text, name);
         display.add(new ConvoState.Msg.User(ConvoLog.PERSONA_DIVIDER));   // physical transcript gains a divider now
-        String who = (name != null && !name.isBlank()) ? name : "一个新的身份";
-        injectEvent("<persona-change>从现在起你是「" + who
-                + "」。以上对话确实发生过，但不必解释过去，直接以新的身份继续。</persona-change>", false);
+        String who = (name != null && !name.isBlank()) ? "「" + name + "」" : "新的设定";
+        injectEvent("<persona-change>你的人设已更新为" + who
+                + "。以上对话确实发生过，但从现在起请完全按新的人设继续，不必解释过去、不要延续旧的说话风格。</persona-change>", false);
     }
 
     /**
@@ -579,11 +587,12 @@ public final class EntityAgentLoop {
      * reconciliation or divider, since a brand-new companion has no prior history/identity to reconcile.
      * No-op if a persona is already set (avoids stomping a resumed companion).
      */
-    public void setInitialPersona(String text, String name) {
+    public void setInitialPersona(String id, String text, String name) {
         if (personaText != null && !personaText.isBlank()) return;   // already has one
+        this.personaId = id;
         this.personaText = text;
         this.personaName = name;
-        log.appendPersonaChange(text, name);
+        log.appendPersonaChange(id, text, name);
     }
 
     // ---- internals ----

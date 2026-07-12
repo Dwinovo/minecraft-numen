@@ -68,7 +68,7 @@ public record CompanionListPayload(List<Entry> companions) implements CustomPack
             var persona = com.dwinovo.numen.persona.PersonaLibrary.takePendingSummon(e.name());
             if (persona != null) {
                 com.dwinovo.numen.client.agent.AgentLoopRegistry.getOrCreate(e.uuid())
-                        .setInitialPersona(persona.text(), persona.name());
+                        .setInitialPersona(persona.id(), persona.text(), persona.name());
             }
         }
     }

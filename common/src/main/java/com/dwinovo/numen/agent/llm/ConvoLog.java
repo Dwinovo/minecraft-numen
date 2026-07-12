@@ -93,7 +93,7 @@ public final class ConvoLog {
     }
 
     /** A companion's current persona, recovered from the last {@code persona-change} event. */
-    public record PersonaState(String text, String name) {}
+    public record PersonaState(String id, String text, String name) {}
 
     // ---- write ----
 
@@ -134,9 +134,10 @@ public final class ConvoLog {
      * {@link #loadDisplay} renders it as a {@link #PERSONA_DIVIDER}. The LLM-facing reconciliation ("从现在起
      * 你是…") is a separate ordinary user message injected by the loop, not this event.
      */
-    public void appendPersonaChange(String text, String name) {
+    public void appendPersonaChange(String id, String text, String name) {
         JsonObject o = new JsonObject();
         o.addProperty("type", EV_PERSONA);
+        if (id != null && !id.isBlank()) o.addProperty("id", id);
         o.addProperty("content", text == null ? "" : text);
         if (name != null && !name.isBlank()) o.addProperty("name", name);
         o.addProperty("ts", System.currentTimeMillis());
@@ -346,7 +347,7 @@ public final class ConvoLog {
                 if (line.isBlank()) continue;
                 JsonObject o = tryParse(line);
                 if (o != null && EV_PERSONA.equals(eventType(o))) {
-                    current = new PersonaState(str(o.get("content")), str(o.get("name")));
+                    current = new PersonaState(str(o.get("id")), str(o.get("content")), str(o.get("name")));
                 }
             }
         } catch (IOException ex) {

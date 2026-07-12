@@ -535,8 +535,22 @@ public final class NumenScreen extends Screen {
         String text = personaTextArea == null ? "" : personaTextArea.getValue().trim();
         if (name.isEmpty() || text.isEmpty()) { warnUntil = System.currentTimeMillis() + 4000; return; }
         var lib = com.dwinovo.numen.persona.PersonaLibrary.instance();
-        if (personaEditId != null) lib.update(personaEditId, name, text);
-        else lib.create(name, text);
+        if (personaEditId != null) {
+            PersonaLibrary.Persona old = lib.get(personaEditId);
+            String oldName = old != null ? old.name() : null;
+            lib.update(personaEditId, name, text);
+            // Propagate the edit to any loaded companion currently using this persona: a live switch with
+            // a reconciliation message (match by library id, or by the old name for pre-id companions).
+            for (UUID cu : AgentLoopRegistry.activeEntityUuids()) {
+                EntityAgentLoop l = AgentLoopRegistry.get(cu).orElse(null);
+                if (l == null) continue;
+                boolean uses = personaEditId.equals(l.personaId())
+                        || (l.personaId() == null && oldName != null && oldName.equals(l.personaName()));
+                if (uses) l.setPersona(personaEditId, text, name);
+            }
+        } else {
+            lib.create(name, text);
+        }
         addingPersona = false;
         personaEditId = null;
         wPersonaName = ""; wPersonaText = "";
