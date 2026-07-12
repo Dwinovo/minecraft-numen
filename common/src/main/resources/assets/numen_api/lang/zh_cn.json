@@ -44,6 +44,7 @@
   "numen.mcp.form_type": "类型",
   "numen.mcp.form_url": "URL",
   "numen.mcp.form_command": "命令（空格分隔）",
+  "numen.mcp.form_header": "请求头（可选，如 Authorization: Bearer …）",
   "numen.mcp.delete_confirm": "删除 %s？",
   "numen.mcp.connected": "%1$s · %2$s 工具",
   "numen.mcp.connecting": "%s · 连接中…",

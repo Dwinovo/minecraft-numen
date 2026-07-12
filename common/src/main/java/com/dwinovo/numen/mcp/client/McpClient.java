@@ -25,7 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class McpClient {
 
     /** MCP protocol revision we speak — matches numen-mcp's server default. */
-    private static final String PROTOCOL_VERSION = "2025-06-18";
+    public static final String PROTOCOL_VERSION = "2025-06-18";
 
     private final String name;
     private final McpTransport transport;

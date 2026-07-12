@@ -62,6 +62,9 @@ public final class HttpMcpTransport implements McpTransport {
                 .timeout(Duration.ofMillis(Math.max(1000, timeoutMs)))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json, text/event-stream")
+                // Spec (2025-06-18): the client MUST send MCP-Protocol-Version on every request
+                // after initialization, or the server may reject with 400.
+                .header("MCP-Protocol-Version", McpClient.PROTOCOL_VERSION)
                 .POST(HttpRequest.BodyPublishers.ofString(frame.toString(), StandardCharsets.UTF_8));
         headers.forEach(b::header);
         String sid = sessionId;
