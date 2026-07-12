@@ -468,18 +468,19 @@ public final class NumenScreen extends Screen {
     /** The add-MCP-server form: name, type (http/stdio) toggle, and URL / command. */
     private void buildMcpForm() {
         int x = secX(), w = secW();
-        int y0 = secY0();
-        mcpNameInput = field(x, y0 + 11, w, 48, wMcpName);
+        int fy = secY0() + 14;     // start below the "MCP 工具" title so nothing overlaps
+        mcpNameInput = field(x, fy + 11, w, 48, wMcpName);
         // type toggle button (cycles http ↔ stdio; rebuild swaps the URL/command row)
-        add(new SimpleButton(x, y0 + SET_SP + 11, w, 18,
+        add(new SimpleButton(x, fy + 34, w, 18,
                 Component.translatable(mcpStdio ? "numen.mcp.type_stdio" : "numen.mcp.type_http"),
                 b -> { preserveMcpForm(); mcpStdio = !mcpStdio; rebuild(); }));
-        mcpTargetInput = field(x, y0 + 2 * SET_SP + 11, w, 512, wMcpTarget);
+        mcpTargetInput = field(x, fy + 67, w, 512, wMcpTarget);
         // Save + Cancel
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveMcp()));
         add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> { addingMcp = false; rebuild(); }));
+        setInitialFocus(mcpNameInput);   // ready to type the name immediately
     }
 
     private void preserveMcpForm() {
@@ -745,11 +746,11 @@ public final class NumenScreen extends Screen {
     /** Add-server form labels + placeholders (fields/buttons are widgets, drawn in the overlay pass). */
     private void renderMcpForm(GuiGraphics g) {
         int x = secX();
-        int y0 = secY0();
-        txt(g, Component.translatable("numen.mcp.form_name"), x, y0, TXT_MUTED);
-        // row 1 is the self-labelled type-toggle button (no separate label)
+        int fy = secY0() + 14;   // matches buildMcpForm
+        txt(g, Component.translatable("numen.mcp.form_name"), x, fy, TXT_MUTED);
+        // the type row is the self-labelled toggle button (no separate label)
         txt(g, Component.translatable(mcpStdio ? "numen.mcp.form_command" : "numen.mcp.form_url"),
-                x, y0 + 2 * SET_SP, TXT_MUTED);
+                x, fy + 56, TXT_MUTED);
         // field placeholders are drawn in the post-widget pass (see render), so they sit above the frames
     }
 
