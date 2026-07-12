@@ -541,7 +541,7 @@ public final class NumenScreen extends Screen {
             lib.update(personaEditId, name, text);
             // Propagate the edit to any loaded companion currently using this persona: a live switch with
             // a reconciliation message (match by library id, or by the old name for pre-id companions).
-            for (UUID cu : AgentLoopRegistry.activeEntityUuids()) {
+            for (UUID cu : AgentLoopRegistry.loadedEntityUuids()) {
                 EntityAgentLoop l = AgentLoopRegistry.get(cu).orElse(null);
                 if (l == null) continue;
                 boolean uses = personaEditId.equals(l.personaId())

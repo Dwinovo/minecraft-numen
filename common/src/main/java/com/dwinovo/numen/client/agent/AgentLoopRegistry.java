@@ -59,6 +59,15 @@ public final class AgentLoopRegistry {
     }
 
     /**
+     * UUIDs of EVERY loaded loop, regardless of turn state (idle included). A live persona-library
+     * edit propagates to companions currently sitting idle, so this — not the mid-turn-only
+     * {@link #activeEntityUuids()} — is what {@code onSavePersona} must iterate.
+     */
+    public static List<UUID> loadedEntityUuids() {
+        return new ArrayList<>(ENTITY_LOOPS.keySet());
+    }
+
+    /**
      * Drive every loop once per client tick — currently just the in-flight
      * tool backstop timeout. Wired from each loader's client-tick hook. Safe to
      * iterate directly: no path reached from {@code clientTick} adds or removes
