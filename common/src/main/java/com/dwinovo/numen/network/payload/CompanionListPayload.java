@@ -51,10 +51,25 @@ public record CompanionListPayload(List<Entry> companions) implements CustomPack
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */
     public static void handle(CompanionListPayload p) {
+        // Which companions were already known — so we can spot the ones this snapshot just added.
+        java.util.Set<UUID> before = new java.util.HashSet<>();
+        for (NumenRoster.Entry e : NumenRoster.instance().entries()) before.add(e.uuid());
+
         java.util.List<NumenRoster.Entry> snapshot = new java.util.ArrayList<>();
         for (Entry e : p.companions()) {
             snapshot.add(new NumenRoster.Entry(e.uuid(), e.name()));
         }
         NumenRoster.instance().replaceAll(snapshot);
+
+        // A newly-arrived companion may have a persona the owner picked at summon (resolved by name here,
+        // since the UUID wasn't known client-side until now). Apply it as the starting persona.
+        for (Entry e : p.companions()) {
+            if (before.contains(e.uuid())) continue;   // not new
+            var persona = com.dwinovo.numen.persona.PersonaLibrary.takePendingSummon(e.name());
+            if (persona != null) {
+                com.dwinovo.numen.client.agent.AgentLoopRegistry.getOrCreate(e.uuid())
+                        .setInitialPersona(persona.text(), persona.name());
+            }
+        }
     }
 }

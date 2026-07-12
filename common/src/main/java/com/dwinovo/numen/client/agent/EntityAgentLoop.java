@@ -574,6 +574,18 @@ public final class EntityAgentLoop {
                 + "」。以上对话确实发生过，但不必解释过去，直接以新的身份继续。</persona-change>", false);
     }
 
+    /**
+     * Set the companion's STARTING persona at summon — records it (event-sourced) but does NOT inject a
+     * reconciliation or divider, since a brand-new companion has no prior history/identity to reconcile.
+     * No-op if a persona is already set (avoids stomping a resumed companion).
+     */
+    public void setInitialPersona(String text, String name) {
+        if (personaText != null && !personaText.isBlank()) return;   // already has one
+        this.personaText = text;
+        this.personaName = name;
+        log.appendPersonaChange(text, name);
+    }
+
     // ---- internals ----
 
     /**

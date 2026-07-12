@@ -95,6 +95,24 @@ public final class PersonaLibrary {
         return create(src.name() + " 副本", src.text());
     }
 
+    // ---- pending summon assignment ----
+    // The persona picked at summon time, keyed by the companion name — the client doesn't know the new
+    // companion's UUID until the roster snapshot arrives, so it's resolved there (CompanionListPayload).
+
+    private static final Map<String, String> PENDING_SUMMON = new LinkedHashMap<>();
+
+    /** Remember the persona chosen for a companion being summoned (by name). {@code personaId} null = default. */
+    public static void pendSummon(String name, String personaId) {
+        if (name == null || personaId == null) return;
+        PENDING_SUMMON.put(name, personaId);
+    }
+
+    /** Take (and clear) the persona pending for a just-arrived companion name, or null if none/unknown. */
+    public static Persona takePendingSummon(String name) {
+        String id = PENDING_SUMMON.remove(name);
+        return id == null ? null : instance().get(id);
+    }
+
     // ---- persistence ----
 
     private void load() {

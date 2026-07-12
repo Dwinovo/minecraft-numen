@@ -129,6 +129,8 @@ public final class NumenScreen extends Screen {
     private String personaDeletePending;   // id awaiting delete confirm
     private String wPersonaName = "", wPersonaText = "";
     private net.minecraft.client.gui.components.EditBox personaNameInput, personaTextInput;
+    /** Persona chosen for the companion currently being summoned (null = default / none). */
+    private String summonPersonaId;
     private int settingsScroll;   // first visible row of the MCP / skill list (wheel-scroll when long)
 
     // MCP "add server" form (mirrors the LLM add-site flow)
@@ -287,7 +289,31 @@ public final class NumenScreen extends Screen {
         summonInput.setTextColor(TXT);
         summonInput.setHint(Component.translatable("numen.summon.name_hint"));
         add(summonInput);
+        // Optional persona for the new companion — a cycle button through the library (+ 默认).
+        add(new SimpleButton(left + PAD, y + 26, PANEL_W - PAD * 2, 18,
+                Component.translatable("numen.summon.persona", summonPersonaLabel()),
+                b -> { cycleSummonPersona(); rebuild(); }));
         setInitialFocus(summonInput);
+    }
+
+    private String summonPersonaLabel() {
+        if (summonPersonaId == null) return I18n.get("numen.persona.default");
+        var p = PersonaLibrary.instance().get(summonPersonaId);
+        return p != null ? p.name() : I18n.get("numen.persona.default");
+    }
+
+    /** Cycle the summon persona: 默认 → persona1 → … → last → 默认. */
+    private void cycleSummonPersona() {
+        var list = PersonaLibrary.instance().list();
+        if (list.isEmpty()) { summonPersonaId = null; return; }
+        if (summonPersonaId == null) { summonPersonaId = list.get(0).id(); return; }
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).id().equals(summonPersonaId)) {
+                summonPersonaId = (i + 1 < list.size()) ? list.get(i + 1).id() : null;   // last → default
+                return;
+            }
+        }
+        summonPersonaId = null;
     }
 
     /** Two buttons for the "delete companion?" confirm bar — Cancel and the destructive Delete. */
@@ -1113,7 +1139,6 @@ public final class NumenScreen extends Screen {
             txt(g, Component.translatable("numen.persona.empty"), x, secY0() + 16, TXT_FAINT);
             return;
         }
-        String current = activePersonaName();
         int listY0 = secY0() + 14;
         int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
         settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
@@ -1121,9 +1146,8 @@ public final class NumenScreen extends Screen {
             int ry = listY0 + (i - settingsScroll) * LIST_ROW;
             if (ry + LIST_ROW > secBottom()) break;
             PersonaLibrary.Persona p = list.get(i);
-            boolean isCurrent = current != null && current.equals(p.name());
             int delX = x + w - 12, editX = x + w - 26;
-            txt(g, Component.literal(p.name()), x, ry + 1, isCurrent ? OK : TXT);
+            txt(g, Component.literal(p.name()), x, ry + 1, TXT);
             String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
             txt(g, Component.literal(clip(badge + p.text(), w - 30)), x, ry + 11, TXT_FAINT);
             if (p.preset()) {
@@ -1134,13 +1158,6 @@ public final class NumenScreen extends Screen {
                         overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
                 txt(g, Component.literal("✕"), delX, ry + 6,
                         overDelete(mouseX, mouseY, delX, ry) ? FAIL : TXT_FAINT);
-            }
-            if (overRow(mouseX, mouseY, x, w, ry)
-                    && !overDelete(mouseX, mouseY, delX, ry) && !overDelete(mouseX, mouseY, editX, ry)) {
-                pendingTip = List.of(Component.translatable(
-                        uuid != null ? "numen.persona.apply_hint" : "numen.persona.no_companion"));
-                pendingTipX = mouseX;
-                pendingTipY = mouseY;
             }
         }
     }
@@ -1176,8 +1193,8 @@ public final class NumenScreen extends Screen {
             } else {
                 if (overDelete(mx, my, editX, ry)) { beginEditPersona(p); return true; }
                 if (overDelete(mx, my, delX, ry)) { personaDeletePending = p.id(); rebuild(); return true; }
+                if (overRow(mx, my, x, w, ry)) { beginEditPersona(p); return true; }   // body → edit a custom persona
             }
-            if (overRow(mx, my, x, w, ry)) { applyPersona(p); return true; }   // body → apply to current companion
         }
         return false;
     }
@@ -1188,12 +1205,6 @@ public final class NumenScreen extends Screen {
         wPersonaName = p.name();
         wPersonaText = p.text();
         rebuild();
-    }
-
-    private void applyPersona(PersonaLibrary.Persona p) {
-        if (uuid == null) { warnUntil = System.currentTimeMillis() + 4000; return; }   // no active companion
-        loop().setPersona(p.text(), p.name());
-        savedFlashUntil = System.currentTimeMillis() + 1500;   // "applied" feedback (reuses the saved flash)
     }
 
     private boolean skillToggleClick(int mx, int my) {
@@ -1269,8 +1280,11 @@ public final class NumenScreen extends Screen {
     private void doSummon() {
         String n = summonInput == null ? "" : summonInput.getValue().trim();
         if (n.isEmpty()) return;
+        // Remember the picked persona by name; CompanionListPayload applies it when the new companion arrives.
+        if (summonPersonaId != null) com.dwinovo.numen.persona.PersonaLibrary.pendSummon(n, summonPersonaId);
         Services.NETWORK.sendToServer(new com.dwinovo.numen.network.payload.SummonRequestPayload(n));
         summoning = false;
+        summonPersonaId = null;
         rebuild();   // the new companion arrives via CompanionListPayload — click its avatar to open
     }
 
@@ -1284,6 +1298,7 @@ public final class NumenScreen extends Screen {
             if (close != null) { dismissPending = close; rebuild(); return true; }   // ✕ → confirm bar
             if (railPlusAt((int) mouseX, (int) mouseY)) {   // + → start the summon name prompt
                 summoning = !summoning;
+                if (summoning) summonPersonaId = null;   // fresh summon starts at "默认"
                 rebuild();
                 return true;
             }
@@ -1416,7 +1431,7 @@ public final class NumenScreen extends Screen {
         } else if (summoning) {
             txt(g, Component.translatable("numen.summon.title"), left + PAD, top + HEADER_H + 8, TXT);
             txt(g, Component.translatable("numen.summon.hint"),
-                    left + PAD, top + HEADER_H + 48, TXT_FAINT);
+                    left + PAD, top + HEADER_H + 74, TXT_FAINT);
         } else {
             if (uuid != null) {
                 if (compactButton != null) compactButton.active = loop().canCompact();
@@ -1948,6 +1963,10 @@ public final class NumenScreen extends Screen {
      *  and the read-only checkerboard 3×9 storage + hotbar. Body data is fetched on demand via
      *  RequestInventoryPayload (backpack + craft + food); HP + equipment come off the live client entity. */
     private void renderItems(GuiGraphics g, int mouseX, int mouseY) {
+        // Current persona of this companion (top of the status view). Null = the default persona.
+        String pn = activePersonaName();
+        txt(g, Component.translatable("numen.status.persona", pn != null ? pn : I18n.get("numen.persona.default")),
+                left + PAD, top + HEADER_H + 3, TXT_MUTED);
         var snap = ClientNumenInventory.get(uuid).orElse(null);
         AbstractClientPlayer e = ClientNumenLookup.resolve(uuid);
         List<ItemStack> craft = snap != null ? snap.craft() : List.of();
