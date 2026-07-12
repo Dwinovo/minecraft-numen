@@ -1021,6 +1021,19 @@ public final class NumenScreen extends Screen {
         }
     }
 
+    /**
+     * Strip numen-injected directive blocks ({@code <persona-change>…</persona-change>},
+     * {@code <event …>…</event>}) from a user message so only the owner's own words show in chat.
+     * The full message (directives included) is still what the LLM receives — this is display-only.
+     */
+    private static String stripInjectedDirectives(String s) {
+        if (s == null) return "";
+        String out = s.replaceAll("(?s)<persona-change>.*?</persona-change>", "")
+                .replaceAll("(?s)<event\\b[^>]*>.*?</event>", "")
+                .replaceAll("(?s)<event\\b[^>]*/>", "");
+        return out.strip();
+    }
+
     /** Truncate {@code s} with an ellipsis so it fits in {@code maxW} px. */
     private String clip(String s, int maxW) {
         if (font.width(s) <= maxW) return s;
@@ -1810,7 +1823,9 @@ public final class NumenScreen extends Screen {
                         wrapPlain(out, I18n.get("numen.chat.compacted"), TXT_FAINT, width);
                         continue;
                     }
-                    wrapPlain(out, u.content(), YOU, width);     // user = teal body, no label
+                    String shown = stripInjectedDirectives(u.content());   // hide <persona-change>/<event> from chat
+                    if (shown.isEmpty()) continue;                          // a pure directive message → not shown
+                    wrapPlain(out, shown, YOU, width);           // user = teal body, no label
                 }
                 case ConvoState.Msg.Assistant a -> {
                     AssistantTurn turn = a.turn();
