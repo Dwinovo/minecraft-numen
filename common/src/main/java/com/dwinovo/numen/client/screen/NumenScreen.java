@@ -130,7 +130,8 @@ public final class NumenScreen extends Screen {
     private String personaEditId;          // non-null = editing this persona; null = creating
     private String personaDeletePending;   // id awaiting delete confirm
     private String wPersonaName = "", wPersonaText = "";
-    private net.minecraft.client.gui.components.EditBox personaNameInput, personaTextInput;
+    private net.minecraft.client.gui.components.EditBox personaNameInput;
+    private net.minecraft.client.gui.components.MultiLineEditBox personaTextArea;   // roomy multi-line persona editor
     /** Persona chosen for the companion currently being summoned (null = default / none). */
     private String summonPersonaId;
     private Dropdown summonPersonaDropdown;
@@ -272,7 +273,8 @@ public final class NumenScreen extends Screen {
         sendButton = stopButton = compactButton = null;
         apiKeyInput = modelInput = baseUrlInput = proxyInput = siteNameInput = null;
         mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
-        personaNameInput = personaTextInput = null;
+        personaNameInput = null;
+        personaTextArea = null;
         modelDropdown = null;
         summonInput = null;
         summonPersonaDropdown = null;
@@ -498,7 +500,16 @@ public final class NumenScreen extends Screen {
         int x = secX(), w = secW();
         int fy = secY0() + 14;
         personaNameInput = field(x, fy + 11, w, 48, wPersonaName);
-        personaTextInput = field(x, fy + 44, w, 2048, wPersonaText);   // single-line (long text scrolls); multi-para → edit json
+        // Roomy multi-line editor for the persona description (a paragraph, not one line): from below the
+        // name field down to just above the Save row.
+        int ty = fy + 44;
+        int th = (top + PANEL_H - PAD - 22) - ty;
+        personaTextArea = new net.minecraft.client.gui.components.MultiLineEditBox(
+                font, x, ty, w, th,
+                Component.translatable("numen.persona.text_placeholder"), Component.empty());
+        personaTextArea.setValue(wPersonaText);
+        personaTextArea.setCharacterLimit(4096);
+        add(personaTextArea);
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSavePersona()));
         add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
@@ -521,7 +532,7 @@ public final class NumenScreen extends Screen {
 
     private void onSavePersona() {
         String name = personaNameInput.getValue().trim();
-        String text = personaTextInput.getValue().trim();
+        String text = personaTextArea == null ? "" : personaTextArea.getValue().trim();
         if (name.isEmpty() || text.isEmpty()) { warnUntil = System.currentTimeMillis() + 4000; return; }
         var lib = com.dwinovo.numen.persona.PersonaLibrary.instance();
         if (personaEditId != null) lib.update(personaEditId, name, text);
@@ -1384,7 +1395,7 @@ public final class NumenScreen extends Screen {
             pinBottom = scroll >= lastMaxScroll;
             return true;
         }
-        if (tab == Tab.SETTINGS && sy != 0 && settingsSection != SettingsSection.LLM) {
+        if (tab == Tab.SETTINGS && sy != 0 && settingsSection != SettingsSection.LLM && !addingPersona) {
             int count = switch (settingsSection) {
                 case MCP -> com.dwinovo.numen.mcp.client.McpClientManager.servers().size();
                 case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
@@ -1478,8 +1489,7 @@ public final class NumenScreen extends Screen {
             placeholder(g, mcpHeaderInput, mcpStdio ? "KEY=value; KEY2=value2" : "Authorization: Bearer <token>");
         }
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.PERSONA && addingPersona) {
-            placeholder(g, personaNameInput, "雷");
-            placeholder(g, personaTextInput, "一句话描述这个同伴的性格…");
+            placeholder(g, personaNameInput, "雷");   // the text area has its own built-in placeholder
         }
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
         // caret in the widget pass, so it can't paint over the caret like a screen-side draw did.)
