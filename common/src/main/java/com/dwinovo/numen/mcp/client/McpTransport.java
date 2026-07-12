@@ -24,6 +24,14 @@ public interface McpTransport extends AutoCloseable {
     /** Fire a notification frame (no {@code id}); no response is expected. */
     void notify(JsonObject frame);
 
+    /**
+     * Tell the transport the protocol version negotiated during {@code initialize}
+     * (the value the <em>server</em> returned). HTTP transports MUST send it as the
+     * {@code MCP-Protocol-Version} header on every later request (spec 2025-06-18).
+     * No-op for stdio. Called by {@link McpClient} right after the handshake.
+     */
+    default void setProtocolVersion(String version) {}
+
     @Override
     void close();
 }

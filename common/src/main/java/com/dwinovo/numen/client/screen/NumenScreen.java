@@ -899,8 +899,14 @@ public final class NumenScreen extends Screen {
             int togX = x + w - 34, delX = x + w - 12;
             var h = servers.get(i);
             if (overToggle(mx, my, togX, ry + 5)) {
-                if (h.toggledOn()) com.dwinovo.numen.mcp.client.McpClientManager.disableServer(h.name());
-                else com.dwinovo.numen.mcp.client.McpClientManager.enableServer(h.name());
+                var st = h.status();
+                // CONNECTED / CONNECTING → turn off; DISABLED / FAILED → (re)connect (retry a failed one)
+                if (st == com.dwinovo.numen.mcp.client.McpClientManager.Status.CONNECTED
+                        || st == com.dwinovo.numen.mcp.client.McpClientManager.Status.CONNECTING) {
+                    com.dwinovo.numen.mcp.client.McpClientManager.disableServer(h.name());
+                } else {
+                    com.dwinovo.numen.mcp.client.McpClientManager.enableServer(h.name());
+                }
                 return true;
             }
             if (overDelete(mx, my, delX, ry)) {

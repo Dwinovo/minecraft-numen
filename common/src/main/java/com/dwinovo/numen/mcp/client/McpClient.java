@@ -50,30 +50,69 @@ public final class McpClient {
         info.addProperty("version", "0.0.2");
         params.add("clientInfo", info);
 
-        resultOrThrow(blockingRequest("initialize", params, connectTimeoutMs));
+        JsonObject result = resultOrThrow(blockingRequest("initialize", params, connectTimeoutMs));
+        // Negotiate: honour the version the SERVER chose (spec) — it becomes the
+        // MCP-Protocol-Version header the transport sends on every later request.
+        String negotiated = result.has("protocolVersion") && result.get("protocolVersion").isJsonPrimitive()
+                ? result.get("protocolVersion").getAsString() : PROTOCOL_VERSION;
+        transport.setProtocolVersion(negotiated);
         transport.notify(frame(null, "notifications/initialized", new JsonObject()));
     }
 
-    /** Fetch the server's tool definitions ({@code name}/{@code description}/{@code inputSchema}/{@code annotations}). */
+    /**
+     * Fetch the server's tool definitions ({@code name}/{@code description}/{@code inputSchema}/
+     * {@code annotations}), following {@code nextCursor} pagination so a server with many tools
+     * doesn't get silently truncated to its first page.
+     */
     public List<JsonObject> listTools(long timeoutMs) {
-        JsonObject result = resultOrThrow(blockingRequest("tools/list", new JsonObject(), timeoutMs));
         List<JsonObject> out = new ArrayList<>();
-        if (result.has("tools") && result.get("tools").isJsonArray()) {
-            for (JsonElement el : result.getAsJsonArray("tools")) {
-                if (el.isJsonObject()) out.add(el.getAsJsonObject());
+        String cursor = null;
+        int pages = 0;
+        do {
+            JsonObject params = new JsonObject();
+            if (cursor != null) params.addProperty("cursor", cursor);
+            JsonObject result = resultOrThrow(blockingRequest("tools/list", params, timeoutMs));
+            if (result.has("tools") && result.get("tools").isJsonArray()) {
+                for (JsonElement el : result.getAsJsonArray("tools")) {
+                    if (el.isJsonObject()) out.add(el.getAsJsonObject());
+                }
             }
-        }
+            cursor = result.has("nextCursor") && result.get("nextCursor").isJsonPrimitive()
+                    ? result.get("nextCursor").getAsString() : null;
+        } while (cursor != null && ++pages < 50);   // backstop against a server that never ends
         return out;
     }
 
-    /** Call one tool; the future resolves to a model-facing result string (or a {@code TaskResult.fail} JSON). */
+    /**
+     * Call one tool; the future resolves to a model-facing result string (or a {@code TaskResult.fail}
+     * JSON). If the server reports the session expired (HTTP 404), reconnect once and retry (spec).
+     */
     public CompletableFuture<String> callTool(String toolName, JsonObject args, long timeoutMs) {
+        return doCallTool(toolName, args, timeoutMs).exceptionallyCompose(err -> {
+            if (!isSessionExpired(err)) return CompletableFuture.failedFuture(err);
+            try {
+                connect(timeoutMs);   // session gone → re-initialize (gets a fresh Mcp-Session-Id)
+            } catch (RuntimeException re) {
+                return CompletableFuture.failedFuture(re);
+            }
+            return doCallTool(toolName, args, timeoutMs);
+        });
+    }
+
+    private CompletableFuture<String> doCallTool(String toolName, JsonObject args, long timeoutMs) {
         JsonObject params = new JsonObject();
         params.addProperty("name", toolName);
         params.add("arguments", args == null ? new JsonObject() : args);
         long id = seq.incrementAndGet();
         return transport.request(frame(id, "tools/call", params), timeoutMs)
                 .thenApply(McpClient::toResultString);
+    }
+
+    private static boolean isSessionExpired(Throwable err) {
+        for (Throwable t = err; t != null; t = t.getCause()) {
+            if (t instanceof McpSessionExpired) return true;
+        }
+        return false;
     }
 
     // ---- internals ----

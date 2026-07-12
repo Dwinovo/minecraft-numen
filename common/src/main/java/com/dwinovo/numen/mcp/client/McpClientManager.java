@@ -191,8 +191,33 @@ public final class McpClientManager {
         t.start();
     }
 
+    private static final int MAX_CONNECT_ATTEMPTS = 3;
+
+    /** Connect with a few retries for transient failures before marking the server FAILED. */
     private static void connectServer(ServerSpec spec) {
         ServerHandle handle = HANDLES.get(spec.name());
+        Exception last = null;
+        for (int attempt = 1; attempt <= MAX_CONNECT_ATTEMPTS; attempt++) {
+            if (handle != null && handle.status == Status.DISABLED) return;   // toggled off mid-connect
+            try {
+                connectOnce(spec, handle);
+                return;
+            } catch (Exception ex) {
+                last = ex;
+                Constants.LOG.warn("[numen-mcp-client] '{}' connect attempt {}/{} failed: {}",
+                        spec.name(), attempt, MAX_CONNECT_ATTEMPTS, ex.toString());
+                if (attempt < MAX_CONNECT_ATTEMPTS) sleepQuiet(1500);
+            }
+        }
+        if (handle != null && handle.status != Status.DISABLED) {
+            handle.transport = null;
+            handle.status = Status.FAILED;
+            handle.error = rootMessage(last);
+        }
+    }
+
+    /** One connect attempt: build transport, initialize, list tools, register. Throws on any failure. */
+    private static void connectOnce(ServerSpec spec, ServerHandle handle) throws Exception {
         long connectMs = spec.connectTimeoutSeconds() * 1000L;
         long callMs = spec.callTimeoutSeconds() * 1000L;
         McpTransport transport = null;
@@ -218,13 +243,16 @@ public final class McpClientManager {
             registerOnMainThread(spec.name(), wrapped, names, handle);
             Constants.LOG.info("[numen-mcp-client] '{}' connected — {} tool(s)", spec.name(), wrapped.size());
         } catch (Exception ex) {
-            Constants.LOG.warn("[numen-mcp-client] server '{}' failed — skipped: {}", spec.name(), ex.toString());
             closeQuietly(transport);
-            if (handle != null) {
-                handle.transport = null;
-                handle.status = Status.FAILED;
-                handle.error = rootMessage(ex);
-            }
+            throw ex;
+        }
+    }
+
+    private static void sleepQuiet(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
         }
     }
 
@@ -308,7 +336,32 @@ public final class McpClientManager {
         List<String> cmd = new ArrayList<>();
         cmd.add(spec.command());
         cmd.addAll(spec.args());
+        // On Windows npx/uvx/npm/… are .cmd scripts, not .exe — ProcessBuilder can't launch them
+        // directly (CreateProcess needs an executable), so wrap the whole line in `cmd /c`. Skip
+        // when the user already wrapped it, or is launching a real executable / interpreter path.
+        if (isWindows() && needsCmdWrap(spec.command())) {
+            List<String> wrapped = new ArrayList<>(cmd.size() + 2);
+            wrapped.add("cmd");
+            wrapped.add("/c");
+            wrapped.addAll(cmd);
+            return wrapped;
+        }
         return cmd;
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    /** True for the common Node/Python launchers that ship as .cmd shims on Windows. */
+    private static boolean needsCmdWrap(String command) {
+        if (command == null) return false;
+        String c = command.toLowerCase();
+        if (c.equals("cmd") || c.endsWith(".exe") || c.contains("\\") || c.contains("/")) return false;
+        return switch (c) {
+            case "npx", "npm", "node", "uvx", "uv", "pnpm", "yarn", "bunx", "bun", "deno", "python", "python3" -> true;
+            default -> false;
+        };
     }
 
     private static String rootMessage(Throwable t) {

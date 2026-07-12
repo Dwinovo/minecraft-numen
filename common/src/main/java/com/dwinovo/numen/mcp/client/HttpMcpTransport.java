@@ -31,6 +31,8 @@ public final class HttpMcpTransport implements McpTransport {
     private final Map<String, String> headers;
     private final HttpClient http;
     private volatile String sessionId;
+    /** Negotiated protocol version, set after initialize; null until then (no header on the initialize POST). */
+    private volatile String protocolVersion;
 
     public HttpMcpTransport(String url, Map<String, String> headers, int connectTimeoutSeconds) {
         this.url = URI.create(url);
@@ -38,6 +40,16 @@ public final class HttpMcpTransport implements McpTransport {
         this.http = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(Math.max(1, connectTimeoutSeconds)))
                 .build();
+    }
+
+    @Override
+    public void setProtocolVersion(String version) {
+        this.protocolVersion = version;
+    }
+
+    /** Clear the session so the next {@code initialize} starts fresh (used after a 404). */
+    void clearSession() {
+        this.sessionId = null;
     }
 
     @Override
@@ -62,17 +74,25 @@ public final class HttpMcpTransport implements McpTransport {
                 .timeout(Duration.ofMillis(Math.max(1000, timeoutMs)))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json, text/event-stream")
-                // Spec (2025-06-18): the client MUST send MCP-Protocol-Version on every request
-                // after initialization, or the server may reject with 400.
-                .header("MCP-Protocol-Version", McpClient.PROTOCOL_VERSION)
                 .POST(HttpRequest.BodyPublishers.ofString(frame.toString(), StandardCharsets.UTF_8));
         headers.forEach(b::header);
+        // Spec (2025-06-18): after initialization the client MUST send the NEGOTIATED protocol
+        // version (the one the server returned) on every request; omitted on the initialize POST
+        // itself (protocolVersion still null then).
+        String ver = protocolVersion;
+        if (ver != null) b.header("MCP-Protocol-Version", ver);
         String sid = sessionId;
         if (sid != null) b.header("Mcp-Session-Id", sid);
         return b.build();
     }
 
     private JsonObject parseResponse(HttpResponse<String> resp) {
+        // Session expired (spec: 404 on a request carrying Mcp-Session-Id) → drop it and signal
+        // a re-initialize; McpClient reconnects and retries.
+        if (resp.statusCode() == 404 && sessionId != null) {
+            clearSession();
+            throw new McpSessionExpired("MCP session expired (HTTP 404)");
+        }
         resp.headers().firstValue("Mcp-Session-Id").ifPresent(v -> sessionId = v);
         if (resp.statusCode() / 100 != 2) {
             throw new RuntimeException("HTTP " + resp.statusCode() + ": " + truncate(resp.body()));
