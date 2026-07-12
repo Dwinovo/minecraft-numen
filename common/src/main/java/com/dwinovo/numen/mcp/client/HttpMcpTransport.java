@@ -157,6 +157,11 @@ public final class HttpMcpTransport implements McpTransport {
             throw new McpSessionExpired("MCP session expired (HTTP 404)");
         }
         resp.headers().firstValue("Mcp-Session-Id").ifPresent(v -> sessionId = v);
+        // 401 → the endpoint is OAuth-protected and we have no valid token; surface WWW-Authenticate
+        // (RFC 9728) so the manager can run the OAuth 2.1 flow and retry with a bearer token.
+        if (resp.statusCode() == 401) {
+            throw new McpAuthRequired(resp.headers().firstValue("WWW-Authenticate").orElse(""));
+        }
         if (resp.statusCode() / 100 != 2) {
             throw new RuntimeException("HTTP " + resp.statusCode() + ": " + truncate(resp.body()));
         }

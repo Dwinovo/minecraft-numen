@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,6 +69,7 @@ public final class McpClientManager {
     private static final Map<String, ServerHandle> HANDLES = new ConcurrentHashMap<>();
     private static volatile McpClientConfig config;
     private static volatile Path configFile;
+    private static volatile Path configDir;
     private static volatile boolean initialized;
 
     private McpClientManager() {}
@@ -80,6 +82,7 @@ public final class McpClientManager {
         if (initialized) return;
         initialized = true;
 
+        configDir = numenConfigDir;
         configFile = numenConfigDir.resolve("mcp_clients.json");
         config = McpClientConfig.load(configFile);
 
@@ -193,15 +196,32 @@ public final class McpClientManager {
 
     private static final int MAX_CONNECT_ATTEMPTS = 3;
 
-    /** Connect with a few retries for transient failures before marking the server FAILED. */
+    /** Connect with retries for transient failures, running the OAuth flow once on a 401. */
     private static void connectServer(ServerSpec spec) {
         ServerHandle handle = HANDLES.get(spec.name());
         Exception last = null;
+        boolean authTried = false;
         for (int attempt = 1; attempt <= MAX_CONNECT_ATTEMPTS; attempt++) {
             if (handle != null && handle.status == Status.DISABLED) return;   // toggled off mid-connect
             try {
                 connectOnce(spec, handle);
                 return;
+            } catch (McpAuthRequired auth) {
+                if (authTried || configDir == null) { last = auth; break; }   // token still rejected — stop
+                authTried = true;
+                if (handle != null) {
+                    handle.status = Status.CONNECTING;
+                    handle.error = "等待浏览器授权…";
+                }
+                Constants.LOG.info("[numen-mcp-client] '{}' requires OAuth — launching browser flow", spec.name());
+                try {
+                    McpOAuth.authorize(spec, auth.resourceMetadataUrl(), configDir);
+                    // token stored — the next connectOnce merges it in (see withOAuth); no extra delay
+                } catch (Exception oe) {
+                    last = oe;
+                    Constants.LOG.warn("[numen-mcp-client] '{}' OAuth failed: {}", spec.name(), oe.toString());
+                    break;
+                }
             } catch (Exception ex) {
                 last = ex;
                 Constants.LOG.warn("[numen-mcp-client] '{}' connect attempt {}/{} failed: {}",
@@ -224,7 +244,7 @@ public final class McpClientManager {
         try {
             transport = spec.isStdio()
                     ? new StdioMcpTransport(spec.name(), stdioCommand(spec), spec.env())
-                    : new HttpMcpTransport(spec.url(), spec.headers(), spec.connectTimeoutSeconds());
+                    : new HttpMcpTransport(spec.url(), withOAuth(spec), spec.connectTimeoutSeconds());
 
             McpClient client = new McpClient(spec.name(), transport);
             client.connect(connectMs);
@@ -383,6 +403,15 @@ public final class McpClientManager {
 
     private static String badge(ServerSpec spec) {
         return spec.isStdio() ? "stdio" : "http";
+    }
+
+    /** Merge a stored OAuth bearer token into the HTTP headers (an explicit Authorization header wins). */
+    private static Map<String, String> withOAuth(ServerSpec spec) {
+        String token = configDir == null ? null : McpOAuth.tokenFor(spec.name(), configDir);
+        if (token == null || token.isBlank()) return spec.headers();
+        Map<String, String> merged = new LinkedHashMap<>(spec.headers());
+        merged.putIfAbsent("Authorization", "Bearer " + token);
+        return merged;
     }
 
     private static List<String> stdioCommand(ServerSpec spec) {

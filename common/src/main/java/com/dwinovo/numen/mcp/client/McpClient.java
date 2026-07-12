@@ -157,6 +157,9 @@ public final class McpClient {
             return transport.request(frame(id, method, params), timeoutMs).join();
         } catch (CompletionException ce) {
             Throwable cause = ce.getCause() == null ? ce : ce.getCause();
+            // Let the auth / session-expiry signals through unwrapped so the manager can act on them.
+            if (cause instanceof McpAuthRequired ar) throw ar;
+            if (cause instanceof McpSessionExpired se) throw se;
             throw new RuntimeException(name + " " + method + " failed: " + cause.getMessage(), cause);
         }
     }
