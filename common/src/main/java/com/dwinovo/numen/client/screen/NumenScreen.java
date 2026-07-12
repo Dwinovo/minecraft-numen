@@ -611,7 +611,10 @@ public final class NumenScreen extends Screen {
     private void buildApiKeyRow(int x, int y, int w) {
         int eyeW = 22;
         apiKeyInput = field(x, y, w - eyeW - 2, 512, wApiKey);
-        apiKeyInput.setFormatter((text, idx) -> showKey
+        // Show the real key while editing (focused) or when revealed via the eye — masking with a
+        // fixed "•" mis-sizes against the variable-width font, so a long key drifts the caret and
+        // leaves gaps while typing. When unfocused + hidden, mask it for shoulder-surfing.
+        apiKeyInput.setFormatter((text, idx) -> (showKey || (apiKeyInput != null && apiKeyInput.isFocused()))
                 ? FormattedCharSequence.forward(text, net.minecraft.network.chat.Style.EMPTY)
                 : FormattedCharSequence.forward("•".repeat(text.length()), net.minecraft.network.chat.Style.EMPTY));
         // Eye icon instead of a 见/隐 glyph: open eye when masked (click to show), slashed when shown.
