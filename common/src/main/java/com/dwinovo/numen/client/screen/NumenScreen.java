@@ -117,6 +117,11 @@ public final class NumenScreen extends Screen {
     private String name;
     private Tab tab = Tab.CHAT;
 
+    /** The Settings tab is a config hub: a left sub-nav picks one of these sections. */
+    private enum SettingsSection { LLM, MCP, SKILLS }
+    private SettingsSection settingsSection = SettingsSection.LLM;
+    private int settingsScroll;   // first visible row of the MCP / skill list (wheel-scroll when long)
+
     private EditBox input;
     private SimpleButton sendButton;
     private SimpleButton stopButton;
@@ -144,6 +149,11 @@ public final class NumenScreen extends Screen {
     private EditBox baseUrlInput;
     private long savedFlashUntil;
     private long warnUntil;        // transient "no API key" hint on the chat tab
+
+    // A hovered-row tooltip (MCP / skill list) collected during section render, drawn last so
+    // it sits above every later draw. Cleared each frame.
+    private List<Component> pendingTip;
+    private int pendingTipX, pendingTipY;
 
     // Widgets are registered for EVENTS only (addWidget) and rendered MANUALLY at the end of the
     // frame, so they sit ON TOP of the panel background instead of being painted over by it (the
@@ -384,13 +394,58 @@ public final class NumenScreen extends Screen {
         if (proxyInput != null) wProxy = proxyInput.getValue();
     }
 
-    // ---- settings tab ----
+    // ---- settings tab (config hub: sub-nav + section) ----
 
-    private static final int SET_SP = 33;     // settings row pitch (5 rows + Save must fit)
+    private static final int SET_SP = 33;     // LLM-section row pitch (5 rows + Save must fit)
+    private static final int NAV_W = 74;      // left sub-nav column width
+    private static final int NAV_SP = 20;     // sub-nav row pitch
+    private static final int LIST_ROW = 22;   // MCP / skill list row height
 
+    /** Left x of the section content area (right of the sub-nav column + divider). */
+    private int secX() { return left + PAD + NAV_W + 8; }
+    /** Width of the section content area. */
+    private int secW() { return PANEL_W - PAD - NAV_W - 8 - PAD; }
+    /** Top y of section content (below the header). */
+    private int secY0() { return top + HEADER_H + 8; }
+    /** Bottom y a list row may reach. */
+    private int secBottom() { return top + PANEL_H - PAD; }
+
+    private void selectSection(SettingsSection s) {
+        if (s == settingsSection) return;
+        settingsSection = s;
+        settingsScroll = 0;
+        rebuild();
+    }
+
+    /** Dispatch widget building by the active section (MCP / skills render manually, no widgets). */
     private void buildSettingsWidgets() {
-        int x = left + PAD, w = PANEL_W - PAD * 2;
-        int y0 = top + HEADER_H + 8;
+        switch (settingsSection) {
+            case LLM -> buildLlmWidgets();
+            case SKILLS -> buildSkillsWidgets();
+            case MCP -> { /* manual list — no widgets */ }
+        }
+    }
+
+    private void buildSkillsWidgets() {
+        // "open skills folder" affordance, top-right of the section.
+        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+                Component.literal("＋ 目录"), b -> openSkillsFolder()));
+    }
+
+    private static void openSkillsFolder() {
+        try {
+            java.nio.file.Path dir = Minecraft.getInstance().gameDirectory.toPath()
+                    .resolve("config").resolve(com.dwinovo.numen.Constants.MOD_ID).resolve("skills");
+            java.nio.file.Files.createDirectories(dir);
+            net.minecraft.Util.getPlatform().openUri(dir.toUri());
+        } catch (Exception ex) {
+            com.dwinovo.numen.Constants.LOG.warn("[numen] open skills folder failed: {}", ex.toString());
+        }
+    }
+
+    private void buildLlmWidgets() {
+        int x = secX(), w = secW();
+        int y0 = secY0();
 
         if (addingSite) {
             // row0: site name + cancel
@@ -510,8 +565,36 @@ public final class NumenScreen extends Screen {
     }
 
     private void renderSettings(GuiGraphics g, int mouseX, int mouseY) {
-        int x = left + PAD;
-        int y0 = top + HEADER_H + 8;
+        renderSettingsNav(g);
+        switch (settingsSection) {
+            case LLM -> renderLlmSettings(g);
+            case MCP -> renderMcpSection(g, mouseX, mouseY);
+            case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
+        }
+    }
+
+    /** The config-hub left sub-nav: 模型接入 / MCP / 技能, plus the divider. */
+    private void renderSettingsNav(GuiGraphics g) {
+        String[] labels = {"模型接入", "MCP", "技能"};
+        int navX = left + PAD;
+        int y = secY0();
+        for (int i = 0; i < labels.length; i++) {
+            boolean active = settingsSection == SettingsSection.values()[i];
+            int ry = y + i * NAV_SP;
+            if (active) {
+                g.fill(navX - 2, ry - 3, navX - 1, ry + NAV_SP - 5, ACCENT);   // gold left bar
+                txt(g, Component.literal(labels[i]), navX + 3, ry, TXT);
+            } else {
+                txt(g, Component.literal(labels[i]), navX + 3, ry, TXT_MUTED);
+            }
+        }
+        int dx = left + PAD + NAV_W + 3;
+        g.fill(dx, secY0() - 2, dx + 1, secBottom(), BORDER);   // vertical divider
+    }
+
+    private void renderLlmSettings(GuiGraphics g) {
+        int x = secX();
+        int y0 = secY0();
         if (addingSite) {
             txt(g, Component.literal("Site name"), x, y0, TXT_MUTED);
             txt(g, Component.literal("API Key"), x, y0 + SET_SP, TXT_MUTED);
@@ -528,6 +611,193 @@ public final class NumenScreen extends Screen {
             txt(g, Component.literal("✔ saved"), x, top + PANEL_H - PAD - 14, OK);
         }
         // the dropdowns themselves render in render, AFTER the widgets (open list on top)
+    }
+
+    // ---- MCP section: external server list with a live on/off switch per row ----
+
+    private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
+        int x = secX(), w = secW();
+        txt(g, Component.literal("MCP 工具"), x, secY0() - 2, TXT);
+        var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
+        if (servers.isEmpty()) {
+            txt(g, Component.literal("无 · 编辑 config/numen/mcp_clients.json"), x, secY0() + 16, TXT_FAINT);
+            return;
+        }
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, servers.size() - visible));
+        for (int i = settingsScroll; i < servers.size(); i++) {
+            int row = i - settingsScroll;
+            int ry = listY0 + row * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            var h = servers.get(i);
+            // status dot
+            int dy = ry + 3;
+            g.fill(x, dy, x + 5, dy + 5, mcpDotColor(h.status()));
+            Nb.border(g, x, dy, 5, 5, 1, BORDER);
+            // name + meta line
+            txt(g, Component.literal(h.name()), x + 10, ry + 1, TXT);
+            txt(g, Component.literal(mcpMeta(h)), x + 10, ry + 11, TXT_FAINT);
+            // toggle, right-aligned, vertically centred
+            drawToggle(g, x + w - 20, ry + 5, h.toggledOn());
+            // hover tooltip: tool names + url/command + any error
+            if (overRow(mouseX, mouseY, x, w, ry) && !overToggle(mouseX, mouseY, x + w - 20, ry + 5)) {
+                pendingTip = mcpTooltip(h);
+                pendingTipX = mouseX;
+                pendingTipY = mouseY;
+            }
+        }
+    }
+
+    private int mcpDotColor(com.dwinovo.numen.mcp.client.McpClientManager.Status s) {
+        return switch (s) {
+            case CONNECTED -> OK;
+            case CONNECTING -> RUN;
+            case FAILED -> FAIL;
+            case DISABLED -> TXT_FAINT;
+        };
+    }
+
+    private String mcpMeta(com.dwinovo.numen.mcp.client.McpClientManager.ServerHandle h) {
+        return switch (h.status()) {
+            case CONNECTED -> h.type() + " · " + h.toolCount() + " 工具";
+            case CONNECTING -> h.type() + " · 连接中…";
+            case FAILED -> h.type() + " · 连接失败";
+            case DISABLED -> h.type() + " · 已停用";
+        };
+    }
+
+    private List<Component> mcpTooltip(com.dwinovo.numen.mcp.client.McpClientManager.ServerHandle h) {
+        List<Component> lines = new ArrayList<>();
+        lines.add(Component.literal(h.name()));
+        var spec = com.dwinovo.numen.mcp.client.McpClientManager.spec(h.name());
+        if (spec != null) {
+            lines.add(Nb.colored(spec.isStdio() ? spec.command() : spec.url(), TXT_FAINT));
+        }
+        if (h.status() == com.dwinovo.numen.mcp.client.McpClientManager.Status.FAILED && !h.error().isBlank()) {
+            lines.add(Nb.colored(h.error(), FAIL));
+        } else if (!h.toolNames().isEmpty()) {
+            lines.add(Nb.colored(String.join(", ", h.toolNames()), TXT_MUTED));
+        }
+        return lines;
+    }
+
+    // ---- Skills section: skill list with a live on/off switch per row ----
+
+    private void renderSkillsSection(GuiGraphics g, int mouseX, int mouseY) {
+        int x = secX(), w = secW();
+        txt(g, Component.literal("技能"), x, secY0() - 2, TXT);
+        var skills = new ArrayList<>(com.dwinovo.numen.agent.skill.SkillRegistry.instance().all());
+        if (skills.isEmpty()) {
+            txt(g, Component.literal("无 · 放入 config/numen/skills"), x, secY0() + 16, TXT_FAINT);
+            return;
+        }
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, skills.size() - visible));
+        for (int i = settingsScroll; i < skills.size(); i++) {
+            int row = i - settingsScroll;
+            int ry = listY0 + row * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            var s = skills.get(i);
+            boolean on = !com.dwinovo.numen.agent.skill.SkillRegistry.instance().isDisabled(s.name());
+            txt(g, Component.literal(s.name()), x, ry + 1, on ? TXT : TXT_FAINT);
+            String desc = s.description() == null ? "(无描述)" : s.description();
+            txt(g, Component.literal(clip(desc, w - 26)), x, ry + 11, TXT_FAINT);
+            drawToggle(g, x + w - 20, ry + 5, on);
+            if (overRow(mouseX, mouseY, x, w, ry) && !overToggle(mouseX, mouseY, x + w - 20, ry + 5)
+                    && s.description() != null) {
+                pendingTip = List.of(Component.literal(s.name()), Nb.colored(s.description(), TXT_MUTED));
+                pendingTipX = mouseX;
+                pendingTipY = mouseY;
+            }
+        }
+    }
+
+    /** Truncate {@code s} with an ellipsis so it fits in {@code maxW} px. */
+    private String clip(String s, int maxW) {
+        if (font.width(s) <= maxW) return s;
+        StringBuilder b = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            if (font.width(b.toString() + s.charAt(i) + "…") > maxW) break;
+            b.append(s.charAt(i));
+        }
+        return b + "…";
+    }
+
+    // ---- shared toggle switch (no vanilla widget for this) ----
+
+    private static final int TOG_W = 18, TOG_H = 10;
+
+    private void drawToggle(GuiGraphics g, int x, int y, boolean on) {
+        g.fill(x, y, x + TOG_W, y + TOG_H, on ? CTA : FIELD);
+        Nb.border(g, x, y, TOG_W, TOG_H, 1, BORDER);
+        int knobX = on ? x + TOG_W - 8 : x + 1;
+        g.fill(knobX, y + 1, knobX + 7, y + TOG_H - 1, ON_CTA);
+    }
+
+    private boolean overToggle(int mx, int my, int x, int y) {
+        return mx >= x && mx < x + TOG_W && my >= y && my < y + TOG_H;
+    }
+
+    private boolean overRow(int mx, int my, int x, int w, int ry) {
+        return mx >= x && mx < x + w && my >= ry && my < ry + LIST_ROW;
+    }
+
+    /** Settings-tab clicks: the sub-nav column, then per-row toggles in the MCP / skill lists. */
+    private boolean settingsClickedAt(double mxd, double myd) {
+        int mx = (int) mxd, my = (int) myd;
+        int navX = left + PAD, y = secY0();
+        if (mx >= navX && mx < navX + NAV_W) {
+            for (int i = 0; i < 3; i++) {
+                int ry = y + i * NAV_SP;
+                if (my >= ry - 3 && my < ry + NAV_SP - 5) {
+                    selectSection(SettingsSection.values()[i]);
+                    return true;
+                }
+            }
+        }
+        if (settingsSection == SettingsSection.MCP) return mcpToggleClick(mx, my);
+        if (settingsSection == SettingsSection.SKILLS) return skillToggleClick(mx, my);
+        return false;
+    }
+
+    private boolean mcpToggleClick(int mx, int my) {
+        int x = secX(), w = secW();
+        var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, servers.size() - visible));
+        for (int i = scroll; i < servers.size(); i++) {
+            int ry = listY0 + (i - scroll) * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            if (overToggle(mx, my, x + w - 20, ry + 5)) {
+                var h = servers.get(i);
+                if (h.toggledOn()) com.dwinovo.numen.mcp.client.McpClientManager.disableServer(h.name());
+                else com.dwinovo.numen.mcp.client.McpClientManager.enableServer(h.name());
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean skillToggleClick(int mx, int my) {
+        int x = secX(), w = secW();
+        var reg = com.dwinovo.numen.agent.skill.SkillRegistry.instance();
+        var skills = new ArrayList<>(reg.all());
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, skills.size() - visible));
+        for (int i = scroll; i < skills.size(); i++) {
+            int ry = listY0 + (i - scroll) * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            if (overToggle(mx, my, x + w - 20, ry + 5)) {
+                String n = skills.get(i).name();
+                reg.setEnabled(n, reg.isDisabled(n));   // flip
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -645,6 +915,7 @@ public final class NumenScreen extends Screen {
                 }
                 return true;
             }
+            if (tab == Tab.SETTINGS && settingsClickedAt(mouseX, mouseY)) return true;
             int my = (int) mouseY;
             if (my >= top && my < top + HEADER_H) {
                 for (int i = 0; i < 3; i++) {
@@ -687,6 +958,16 @@ public final class NumenScreen extends Screen {
             pinBottom = scroll >= lastMaxScroll;
             return true;
         }
+        if (tab == Tab.SETTINGS && sy != 0
+                && (settingsSection == SettingsSection.MCP || settingsSection == SettingsSection.SKILLS)) {
+            int count = settingsSection == SettingsSection.MCP
+                    ? com.dwinovo.numen.mcp.client.McpClientManager.servers().size()
+                    : com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
+            int listY0 = secY0() + 14;
+            int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+            settingsScroll = Math.clamp((long) (settingsScroll - sy), 0, Math.max(0, count - visible));
+            return true;
+        }
         return super.mouseScrolled(mx, my, sx, sy);
     }
 
@@ -695,6 +976,7 @@ public final class NumenScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
         super.render(g, mouseX, mouseY, partial);
+        pendingTip = null;   // recollected each frame by the section renderers
 
         // ONE merged Cottage sprite: left rail column + panel, continuous header, no gap.
         g.blitSprite(
@@ -748,7 +1030,7 @@ public final class NumenScreen extends Screen {
             w.render(g, mouseX, mouseY, partial);
         }
         // Base URL / Proxy placeholders, drawn shadowless by us (the EditBox hint renders with a shadow).
-        if (tab == Tab.SETTINGS) {
+        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.LLM) {
             String urlPh = addingSite ? "https://… (OpenAI-compatible)"
                     : LlmProviders.byId(providerDropdown.selectedId()).defaultBaseUrl();
             placeholder(g, baseUrlInput, urlPh);
@@ -762,7 +1044,7 @@ public final class NumenScreen extends Screen {
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
         // caret in the widget pass, so it can't paint over the caret like a screen-side draw did.)
         // The provider dropdown's open list must sit above even the fields.
-        if (tab == Tab.SETTINGS) {
+        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.LLM) {
             // render the non-open one first so the open list draws on top
             if (modelDropdown != null && providerDropdown != null && providerDropdown.isOpen()) {
                 modelDropdown.render(g, font, mouseX, mouseY);
@@ -771,6 +1053,11 @@ public final class NumenScreen extends Screen {
                 if (providerDropdown != null) providerDropdown.render(g, font, mouseX, mouseY);
                 if (modelDropdown != null) modelDropdown.render(g, font, mouseX, mouseY);
             }
+        }
+
+        // Hovered MCP / skill row tooltip — drawn last so nothing paints over it.
+        if (pendingTip != null) {
+            g.renderComponentTooltip(font, pendingTip, pendingTipX, pendingTipY);
         }
     }
 
