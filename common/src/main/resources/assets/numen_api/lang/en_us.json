@@ -44,6 +44,7 @@
   "numen.mcp.form_type": "Type",
   "numen.mcp.form_url": "URL",
   "numen.mcp.form_command": "Command (space-separated)",
+  "numen.mcp.delete_confirm": "Delete %s?",
   "numen.mcp.connected": "%1$s · %2$s tools",
   "numen.mcp.connecting": "%s · connecting…",
   "numen.mcp.failed": "%s · failed",

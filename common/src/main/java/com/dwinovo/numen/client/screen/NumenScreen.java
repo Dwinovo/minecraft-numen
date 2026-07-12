@@ -128,6 +128,7 @@ public final class NumenScreen extends Screen {
     private boolean mcpStdio;                 // form type: false = http, true = stdio
     private String wMcpName = "", wMcpTarget = "";
     private EditBox mcpNameInput, mcpTargetInput;
+    private String mcpDeletePending;          // non-null = showing the delete-confirm bar for this server
 
     private EditBox input;
     private SimpleButton sendButton;
@@ -428,6 +429,7 @@ public final class NumenScreen extends Screen {
         settingsSection = s;
         settingsScroll = 0;
         addingMcp = false;
+        mcpDeletePending = null;
         rebuild();
     }
 
@@ -436,8 +438,25 @@ public final class NumenScreen extends Screen {
         switch (settingsSection) {
             case LLM -> buildLlmWidgets();
             case SKILLS -> buildSkillsWidgets();
-            case MCP -> { if (addingMcp) buildMcpForm(); else buildMcpListWidgets(); }
+            case MCP -> {
+                if (mcpDeletePending != null) buildMcpDeleteConfirm();
+                else if (addingMcp) buildMcpForm();
+                else buildMcpListWidgets();
+            }
         }
+    }
+
+    private void buildMcpDeleteConfirm() {
+        int x = secX();
+        int by = secY0() + 24;
+        int bw = 64, gap = 8;
+        add(new SimpleButton(x, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
+            com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(mcpDeletePending);
+            mcpDeletePending = null;
+            rebuild();
+        }));
+        add(new SimpleButton(x + bw + gap, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
+                b -> { mcpDeletePending = null; rebuild(); }));
     }
 
     private void buildMcpListWidgets() {
@@ -684,6 +703,10 @@ public final class NumenScreen extends Screen {
     private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
         txt(g, Component.translatable("numen.mcp.title"), x, secY0() - 2, TXT);
+        if (mcpDeletePending != null) {
+            txt(g, Component.translatable("numen.mcp.delete_confirm", mcpDeletePending), x, secY0() + 10, TXT);
+            return;
+        }
         if (addingMcp) { renderMcpForm(g); return; }
         var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
         if (servers.isEmpty()) {
@@ -848,7 +871,7 @@ public final class NumenScreen extends Screen {
     }
 
     private boolean mcpToggleClick(int mx, int my) {
-        if (addingMcp) return false;   // the form's own widgets handle clicks
+        if (addingMcp || mcpDeletePending != null) return false;   // form / confirm widgets handle clicks
         int x = secX(), w = secW();
         var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
         int listY0 = secY0() + 14;
@@ -865,7 +888,8 @@ public final class NumenScreen extends Screen {
                 return true;
             }
             if (overDelete(mx, my, delX, ry)) {
-                com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(h.name());
+                mcpDeletePending = h.name();   // ask first — deletion is confirmed via the bar
+                rebuild();
                 return true;
             }
         }
