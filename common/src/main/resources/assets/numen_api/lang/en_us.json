@@ -28,7 +28,7 @@
   "numen.persona.delete_confirm": "Delete persona \"%s\"?",
   "numen.persona.default": "Default",
   "numen.summon.persona": "Persona: %s (click to change)",
-  "numen.status.persona": "Persona: %s",
+  "numen.status.persona": "%s",
   "numen.settings.base_url": "Base URL",
   "numen.settings.proxy": "Proxy",
   "numen.settings.site_name": "Site name",
