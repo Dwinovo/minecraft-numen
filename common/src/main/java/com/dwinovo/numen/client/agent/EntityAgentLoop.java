@@ -234,6 +234,7 @@ public final class EntityAgentLoop {
      * </ul>
      */
     private void restoreFromDisk() {
+        log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
         convo.preload(history);
