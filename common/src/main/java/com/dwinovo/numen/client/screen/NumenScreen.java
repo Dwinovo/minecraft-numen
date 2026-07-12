@@ -1021,6 +1021,27 @@ public final class NumenScreen extends Screen {
         }
     }
 
+    private static final java.util.regex.Pattern QUERY_PAT =
+            java.util.regex.Pattern.compile("(?s)<query>(.*?)</query>");
+
+    /**
+     * The owner's own words from a user message, for display. New messages wrap the owner's text in
+     * {@code <query>…</query>} (see {@code EntityAgentLoop.submitPrompt}), so we show only that; legacy
+     * untagged messages fall back to the raw text with injected directives stripped. Display-only — the
+     * LLM still receives the full user message.
+     */
+    private static String ownerText(String s) {
+        if (s == null) return "";
+        java.util.regex.Matcher m = QUERY_PAT.matcher(s);
+        StringBuilder b = new StringBuilder();
+        while (m.find()) {
+            if (b.length() > 0) b.append('\n');
+            b.append(m.group(1));
+        }
+        if (b.length() > 0) return b.toString().strip();
+        return stripInjectedDirectives(s);   // legacy / untagged owner message
+    }
+
     /**
      * Strip numen-injected directive blocks ({@code <persona-change>…</persona-change>},
      * {@code <event …>…</event>}) from a user message so only the owner's own words show in chat.
@@ -1823,8 +1844,8 @@ public final class NumenScreen extends Screen {
                         wrapPlain(out, I18n.get("numen.chat.compacted"), TXT_FAINT, width);
                         continue;
                     }
-                    String shown = stripInjectedDirectives(u.content());   // hide <persona-change>/<event> from chat
-                    if (shown.isEmpty()) continue;                          // a pure directive message → not shown
+                    String shown = ownerText(u.content());       // show only the owner's words, not injected content
+                    if (shown.isEmpty()) continue;               // a pure directive/injected message → not shown
                     wrapPlain(out, shown, YOU, width);           // user = teal body, no label
                 }
                 case ConvoState.Msg.Assistant a -> {

@@ -300,7 +300,9 @@ public final class EntityAgentLoop {
         // this avoids inserting a user message between assistant(tool_calls)
         // and its tool results (which the API rejects with HTTP 400).
         boolean deferred = awaitingLlmResponse || dispatcher.busy();
-        bufferedPrompts.add(text);
+        // Wrap the owner's words in <query> so the model can always tell real user input apart from
+        // anything else numen injects into the same user turn (events, and future world-state/reminders).
+        bufferedPrompts.add("<query>" + text + "</query>");
         Constants.LOG.info("[numen-entity#{}] user prompt ({} chars){}{}: {}",
                 entityUuid, text.length(),
                 wasAborted ? " — reset previous abort" : "",
