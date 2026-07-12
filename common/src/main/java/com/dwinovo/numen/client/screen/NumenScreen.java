@@ -1865,7 +1865,9 @@ public final class NumenScreen extends Screen {
         // mid-task, or pushed in by an external bridge via NumenGateway) —
         // visible immediately so a queued message never feels swallowed.
         for (String queued : loop().queuedPrompts()) {
-            wrapPlain(out, "⌛ " + queued, TXT_FAINT, width);
+            String shown = ownerText(queued);       // injected events (persona-change / <event>) → empty → not shown
+            if (shown.isEmpty()) continue;
+            wrapPlain(out, "⌛ " + shown, TXT_FAINT, width);
         }
         if (loop().isCompacting()) {
             wrapPlain(out, I18n.get("numen.chat.compacting"), TXT_MUTED, width);
