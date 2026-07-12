@@ -123,6 +123,12 @@ public final class NumenScreen extends Screen {
     private SettingsSection settingsSection = SettingsSection.LLM;
     private int settingsScroll;   // first visible row of the MCP / skill list (wheel-scroll when long)
 
+    // MCP "add server" form (mirrors the LLM add-site flow)
+    private boolean addingMcp;
+    private boolean mcpStdio;                 // form type: false = http, true = stdio
+    private String wMcpName = "", wMcpTarget = "";
+    private EditBox mcpNameInput, mcpTargetInput;
+
     private EditBox input;
     private SimpleButton sendButton;
     private SimpleButton stopButton;
@@ -248,6 +254,7 @@ public final class NumenScreen extends Screen {
         input = null;
         sendButton = stopButton = compactButton = null;
         apiKeyInput = modelInput = baseUrlInput = proxyInput = siteNameInput = null;
+        mcpNameInput = mcpTargetInput = null;
         modelDropdown = null;
         summonInput = null;
         if (summoning) { buildSummonField(); return; }
@@ -420,16 +427,67 @@ public final class NumenScreen extends Screen {
         if (s == settingsSection) return;
         settingsSection = s;
         settingsScroll = 0;
+        addingMcp = false;
         rebuild();
     }
 
-    /** Dispatch widget building by the active section (MCP / skills render manually, no widgets). */
+    /** Dispatch widget building by the active section (skill/MCP lists render manually). */
     private void buildSettingsWidgets() {
         switch (settingsSection) {
             case LLM -> buildLlmWidgets();
             case SKILLS -> buildSkillsWidgets();
-            case MCP -> { /* manual list — no widgets */ }
+            case MCP -> { if (addingMcp) buildMcpForm(); else buildMcpListWidgets(); }
         }
+    }
+
+    private void buildMcpListWidgets() {
+        // "add server" affordance, top-right of the section.
+        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+                Component.translatable("numen.mcp.add"), b -> { addingMcp = true; rebuild(); }));
+    }
+
+    /** The add-MCP-server form: name, type (http/stdio) toggle, and URL / command. */
+    private void buildMcpForm() {
+        int x = secX(), w = secW();
+        int y0 = secY0();
+        mcpNameInput = field(x, y0 + 11, w, 48, wMcpName);
+        // type toggle button (cycles http ↔ stdio; rebuild swaps the URL/command row)
+        add(new SimpleButton(x, y0 + SET_SP + 11, w, 18,
+                Component.translatable(mcpStdio ? "numen.mcp.type_stdio" : "numen.mcp.type_http"),
+                b -> { preserveMcpForm(); mcpStdio = !mcpStdio; rebuild(); }));
+        mcpTargetInput = field(x, y0 + 2 * SET_SP + 11, w, 512, wMcpTarget);
+        // Save + Cancel
+        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+                Component.translatable("numen.gui.settings.save"), b -> onSaveMcp()));
+        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
+                Component.literal("✕"), b -> { addingMcp = false; rebuild(); }));
+    }
+
+    private void preserveMcpForm() {
+        if (mcpNameInput != null) wMcpName = mcpNameInput.getValue();
+        if (mcpTargetInput != null) wMcpTarget = mcpTargetInput.getValue();
+    }
+
+    private void onSaveMcp() {
+        String name = mcpNameInput.getValue().trim();
+        String target = mcpTargetInput.getValue().trim();
+        if (name.isEmpty() || target.isEmpty()) { warnUntil = System.currentTimeMillis() + 4000; return; }
+        com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec spec;
+        if (mcpStdio) {
+            String[] parts = target.split("\\s+");
+            String command = parts[0];
+            List<String> args = new ArrayList<>();
+            for (int i = 1; i < parts.length; i++) args.add(parts[i]);
+            spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "stdio", "", java.util.Map.of(),
+                    command, List.copyOf(args), java.util.Map.of(), true, 20, 120);
+        } else {
+            spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "http", target, java.util.Map.of(),
+                    "", List.of(), java.util.Map.of(), true, 20, 120);
+        }
+        com.dwinovo.numen.mcp.client.McpClientManager.upsertServer(spec);
+        addingMcp = false;
+        wMcpName = ""; wMcpTarget = ""; mcpStdio = false;
+        rebuild();
     }
 
     private void buildSkillsWidgets() {
@@ -626,6 +684,7 @@ public final class NumenScreen extends Screen {
     private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
         txt(g, Component.translatable("numen.mcp.title"), x, secY0() - 2, TXT);
+        if (addingMcp) { renderMcpForm(g); return; }
         var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
         if (servers.isEmpty()) {
             txt(g, Component.translatable("numen.mcp.empty"), x, secY0() + 16, TXT_FAINT);
@@ -639,6 +698,7 @@ public final class NumenScreen extends Screen {
             int ry = listY0 + row * LIST_ROW;
             if (ry + LIST_ROW > secBottom()) break;
             var h = servers.get(i);
+            int togX = x + w - 34, delX = x + w - 12;
             // status dot
             int dy = ry + 3;
             g.fill(x, dy, x + 5, dy + 5, mcpDotColor(h.status()));
@@ -646,15 +706,32 @@ public final class NumenScreen extends Screen {
             // name + meta line
             txt(g, Component.literal(h.name()), x + 10, ry + 1, TXT);
             txt(g, Component.literal(mcpMeta(h)), x + 10, ry + 11, TXT_FAINT);
-            // toggle, right-aligned, vertically centred
-            drawToggle(g, x + w - 20, ry + 5, h.toggledOn());
-            // hover tooltip: tool names + url/command + any error
-            if (overRow(mouseX, mouseY, x, w, ry) && !overToggle(mouseX, mouseY, x + w - 20, ry + 5)) {
+            // toggle + delete, right-aligned
+            drawToggle(g, togX, ry + 5, h.toggledOn());
+            boolean overDel = overDelete(mouseX, mouseY, delX, ry);
+            txt(g, Component.literal("✕"), delX, ry + 6, overDel ? FAIL : TXT_FAINT);
+            // hover tooltip: tool names + url/command + any error (not over a control)
+            if (overRow(mouseX, mouseY, x, w, ry) && !overToggle(mouseX, mouseY, togX, ry + 5) && !overDel) {
                 pendingTip = mcpTooltip(h);
                 pendingTipX = mouseX;
                 pendingTipY = mouseY;
             }
         }
+    }
+
+    /** Add-server form labels + placeholders (fields/buttons are widgets, drawn in the overlay pass). */
+    private void renderMcpForm(GuiGraphics g) {
+        int x = secX();
+        int y0 = secY0();
+        txt(g, Component.translatable("numen.mcp.form_name"), x, y0, TXT_MUTED);
+        // row 1 is the self-labelled type-toggle button (no separate label)
+        txt(g, Component.translatable(mcpStdio ? "numen.mcp.form_command" : "numen.mcp.form_url"),
+                x, y0 + 2 * SET_SP, TXT_MUTED);
+        // field placeholders are drawn in the post-widget pass (see render), so they sit above the frames
+    }
+
+    private boolean overDelete(int mx, int my, int delX, int ry) {
+        return mx >= delX - 2 && mx < delX + 9 && my >= ry + 2 && my < ry + LIST_ROW - 2;
     }
 
     private int mcpDotColor(com.dwinovo.numen.mcp.client.McpClientManager.Status s) {
@@ -771,6 +848,7 @@ public final class NumenScreen extends Screen {
     }
 
     private boolean mcpToggleClick(int mx, int my) {
+        if (addingMcp) return false;   // the form's own widgets handle clicks
         int x = secX(), w = secW();
         var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
         int listY0 = secY0() + 14;
@@ -779,10 +857,15 @@ public final class NumenScreen extends Screen {
         for (int i = scroll; i < servers.size(); i++) {
             int ry = listY0 + (i - scroll) * LIST_ROW;
             if (ry + LIST_ROW > secBottom()) break;
-            if (overToggle(mx, my, x + w - 20, ry + 5)) {
-                var h = servers.get(i);
+            int togX = x + w - 34, delX = x + w - 12;
+            var h = servers.get(i);
+            if (overToggle(mx, my, togX, ry + 5)) {
                 if (h.toggledOn()) com.dwinovo.numen.mcp.client.McpClientManager.disableServer(h.name());
                 else com.dwinovo.numen.mcp.client.McpClientManager.enableServer(h.name());
+                return true;
+            }
+            if (overDelete(mx, my, delX, ry)) {
+                com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(h.name());
                 return true;
             }
         }
@@ -1048,6 +1131,10 @@ public final class NumenScreen extends Screen {
             placeholder(g, modelInput, addingSite ? "model id"
                     : LlmProviders.byId(providerDropdown.selectedId()).defaultModel());
             if (addingSite) placeholder(g, siteNameInput, "e.g. My Proxy");
+        }
+        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.MCP && addingMcp) {
+            placeholder(g, mcpNameInput, "kfc");
+            placeholder(g, mcpTargetInput, mcpStdio ? "cmd /c npx -y <server>" : "http://127.0.0.1:9123/mcp");
         }
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
         // caret in the widget pass, so it can't paint over the caret like a screen-side draw did.)

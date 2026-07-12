@@ -147,6 +147,42 @@ public final class McpClientManager {
         });
     }
 
+    /** Add (or replace) a server from the panel: persist it to config and connect if enabled. */
+    public static void upsertServer(ServerSpec spec) {
+        if (HANDLES.containsKey(spec.name())) disableServer(spec.name());   // tear down any prior with this name
+        McpClientConfig cfg = config;
+        Path file = configFile;
+        if (cfg == null || file == null) return;
+        List<ServerSpec> updated = new ArrayList<>(cfg.servers().size() + 1);
+        boolean replaced = false;
+        for (ServerSpec s : cfg.servers()) {
+            if (s.name().equals(spec.name())) { updated.add(spec); replaced = true; }
+            else updated.add(s);
+        }
+        if (!replaced) updated.add(spec);
+        config = new McpClientConfig(cfg.enabled(), List.copyOf(updated));
+        McpClientConfig.save(file, config);
+        HANDLES.put(spec.name(),
+                new ServerHandle(spec.name(), badge(spec), spec.enabled() ? Status.CONNECTING : Status.DISABLED));
+        if (spec.enabled()) spawnConnect(spec);
+    }
+
+    /** Remove a server entirely: tear it down, drop it from config + handles, persist. */
+    public static void deleteServer(String name) {
+        disableServer(name);   // removes tools, closes transport (runs on main → synchronous from the panel)
+        McpClientConfig cfg = config;
+        Path file = configFile;
+        if (cfg != null && file != null) {
+            List<ServerSpec> updated = new ArrayList<>(cfg.servers().size());
+            for (ServerSpec s : cfg.servers()) {
+                if (!s.name().equals(name)) updated.add(s);
+            }
+            config = new McpClientConfig(cfg.enabled(), List.copyOf(updated));
+            McpClientConfig.save(file, config);
+        }
+        HANDLES.remove(name);
+    }
+
     // ---- connect / teardown ----
 
     private static void spawnConnect(ServerSpec spec) {
