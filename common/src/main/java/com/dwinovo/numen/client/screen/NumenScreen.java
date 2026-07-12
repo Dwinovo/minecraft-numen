@@ -19,6 +19,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -222,8 +223,13 @@ public final class NumenScreen extends Screen {
         rebuild();
     }
 
+    private static String[] tabLabels() {
+        return new String[]{
+                I18n.get("numen.tab.chat"), I18n.get("numen.tab.status"), I18n.get("numen.tab.settings")};
+    }
+
     private void layoutTabs() {
-        String[] labels = {"Chat", "Items", "Settings"};
+        String[] labels = tabLabels();
         int x = left + PANEL_W - PAD;
         for (int i = labels.length - 1; i >= 0; i--) {
             int w = font.width(labels[i]) + 10;
@@ -260,7 +266,7 @@ public final class NumenScreen extends Screen {
         summonInput.setMaxLength(com.dwinovo.numen.network.payload.SummonRequestPayload.MAX_NAME);
         summonInput.setBordered(false);
         summonInput.setTextColor(TXT);
-        summonInput.setHint(Component.literal("New companion name…"));
+        summonInput.setHint(Component.translatable("numen.summon.name_hint"));
         add(summonInput);
         setInitialFocus(summonInput);
     }
@@ -271,9 +277,9 @@ public final class NumenScreen extends Screen {
         int bw = 64, gap = 8, totalW = bw * 2 + gap;
         int bx = left + (PANEL_W - totalW) / 2;
         int by = top + HEADER_H + 52;
-        add(new SimpleButton(bx, by, bw, 18, Component.literal("取消"),
+        add(new SimpleButton(bx, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
                 b -> { dismissPending = null; rebuild(); }));
-        add(new SimpleButton(bx + bw + gap, by, bw, 18, Component.literal("删除"), b -> {
+        add(new SimpleButton(bx + bw + gap, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
             Services.NETWORK.sendToServer(
                     new com.dwinovo.numen.network.payload.DismissRequestPayload(target));
             dismissPending = null;
@@ -349,13 +355,13 @@ public final class NumenScreen extends Screen {
         // FlatEditBox draws the hint shadowless and UNDER the caret (same widget pass), so use it
         // directly — no separate screen-side placeholder that would paint over the blinking caret.
         // Faint colour is baked into the Component's Style.
-        input.setHint(Nb.colored("Talk to " + (name == null ? "" : name) + "…", TXT_FAINT));
+        input.setHint(Nb.colored(I18n.get("numen.chat.hint", name == null ? "" : name), TXT_FAINT));
         if (!savedInput.isEmpty()) { input.setValue(savedInput); savedInput = ""; }
         add(input);
         setInitialFocus(input);
 
         sendButton = add(new SimpleButton(inX + inW + 4, inputY, sendW, INPUT_H,
-                Component.literal("Send"), b -> onSend()));
+                Component.translatable("numen.chat.send"), b -> onSend()));
 
         stopButton = add(new SimpleButton(inX + inW + 4 + sendW + 4, inputY, stopW, INPUT_H,
                 Component.literal("■"), b -> loop().abort()));
@@ -429,7 +435,7 @@ public final class NumenScreen extends Screen {
     private void buildSkillsWidgets() {
         // "open skills folder" affordance, top-right of the section.
         add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
-                Component.literal("＋ 目录"), b -> openSkillsFolder()));
+                Component.translatable("numen.skill.open_dir"), b -> openSkillsFolder()));
     }
 
     private static void openSkillsFolder() {
@@ -465,7 +471,7 @@ public final class NumenScreen extends Screen {
         }
 
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18,
-                64, 18, Component.literal("Save"), b -> onSaveSettings()));
+                64, 18, Component.translatable("numen.gui.settings.save"), b -> onSaveSettings()));
     }
 
     private void buildApiKeyRow(int x, int y, int w) {
@@ -506,7 +512,7 @@ public final class NumenScreen extends Screen {
     private List<Dropdown.Item> modelItems(ModelRegistry.Provider mp) {
         List<Dropdown.Item> items = new ArrayList<>();
         if (mp != null) for (ModelRegistry.Model m : mp.models()) items.add(new Dropdown.Item(m.id(), m.id()));
-        items.add(new Dropdown.Item(CUSTOM_MODEL, "自定义…"));
+        items.add(new Dropdown.Item(CUSTOM_MODEL, I18n.get("numen.settings.custom_model")));
         return items;
     }
 
@@ -575,7 +581,9 @@ public final class NumenScreen extends Screen {
 
     /** The config-hub left sub-nav: 模型接入 / MCP / 技能, plus the divider. */
     private void renderSettingsNav(GuiGraphics g) {
-        String[] labels = {"模型接入", "MCP", "技能"};
+        String[] labels = {
+                I18n.get("numen.settings.nav.llm"), I18n.get("numen.settings.nav.mcp"),
+                I18n.get("numen.settings.nav.skills")};
         int navX = left + PAD;
         int y = secY0();
         for (int i = 0; i < labels.length; i++) {
@@ -596,19 +604,19 @@ public final class NumenScreen extends Screen {
         int x = secX();
         int y0 = secY0();
         if (addingSite) {
-            txt(g, Component.literal("Site name"), x, y0, TXT_MUTED);
-            txt(g, Component.literal("API Key"), x, y0 + SET_SP, TXT_MUTED);
-            txt(g, Component.literal("Model"), x, y0 + 2 * SET_SP, TXT_MUTED);
-            txt(g, Component.literal("Base URL"), x, y0 + 3 * SET_SP, TXT_MUTED);
+            txt(g, Component.translatable("numen.settings.site_name"), x, y0, TXT_MUTED);
+            txt(g, Component.translatable("numen.gui.settings.api_key"), x, y0 + SET_SP, TXT_MUTED);
+            txt(g, Component.translatable("numen.gui.settings.model"), x, y0 + 2 * SET_SP, TXT_MUTED);
+            txt(g, Component.translatable("numen.settings.base_url"), x, y0 + 3 * SET_SP, TXT_MUTED);
         } else {
-            txt(g, Component.literal("Provider"), x, y0, TXT_MUTED);
-            txt(g, Component.literal("API Key"), x, y0 + SET_SP, TXT_MUTED);
-            txt(g, Component.literal("Model"), x, y0 + 2 * SET_SP, TXT_MUTED);
-            txt(g, Component.literal("Base URL"), x, y0 + 3 * SET_SP, TXT_MUTED);
-            txt(g, Component.literal("Proxy"), x, y0 + 4 * SET_SP, TXT_MUTED);
+            txt(g, Component.translatable("numen.gui.settings.provider"), x, y0, TXT_MUTED);
+            txt(g, Component.translatable("numen.gui.settings.api_key"), x, y0 + SET_SP, TXT_MUTED);
+            txt(g, Component.translatable("numen.gui.settings.model"), x, y0 + 2 * SET_SP, TXT_MUTED);
+            txt(g, Component.translatable("numen.settings.base_url"), x, y0 + 3 * SET_SP, TXT_MUTED);
+            txt(g, Component.translatable("numen.settings.proxy"), x, y0 + 4 * SET_SP, TXT_MUTED);
         }
         if (savedFlashUntil > System.currentTimeMillis()) {
-            txt(g, Component.literal("✔ saved"), x, top + PANEL_H - PAD - 14, OK);
+            txt(g, Component.translatable("numen.settings.saved"), x, top + PANEL_H - PAD - 14, OK);
         }
         // the dropdowns themselves render in render, AFTER the widgets (open list on top)
     }
@@ -617,10 +625,10 @@ public final class NumenScreen extends Screen {
 
     private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
-        txt(g, Component.literal("MCP 工具"), x, secY0() - 2, TXT);
+        txt(g, Component.translatable("numen.mcp.title"), x, secY0() - 2, TXT);
         var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
         if (servers.isEmpty()) {
-            txt(g, Component.literal("无 · 编辑 config/numen/mcp_clients.json"), x, secY0() + 16, TXT_FAINT);
+            txt(g, Component.translatable("numen.mcp.empty"), x, secY0() + 16, TXT_FAINT);
             return;
         }
         int listY0 = secY0() + 14;
@@ -660,10 +668,10 @@ public final class NumenScreen extends Screen {
 
     private String mcpMeta(com.dwinovo.numen.mcp.client.McpClientManager.ServerHandle h) {
         return switch (h.status()) {
-            case CONNECTED -> h.type() + " · " + h.toolCount() + " 工具";
-            case CONNECTING -> h.type() + " · 连接中…";
-            case FAILED -> h.type() + " · 连接失败";
-            case DISABLED -> h.type() + " · 已停用";
+            case CONNECTED -> I18n.get("numen.mcp.connected", h.type(), h.toolCount());
+            case CONNECTING -> I18n.get("numen.mcp.connecting", h.type());
+            case FAILED -> I18n.get("numen.mcp.failed", h.type());
+            case DISABLED -> I18n.get("numen.mcp.disabled", h.type());
         };
     }
 
@@ -686,10 +694,10 @@ public final class NumenScreen extends Screen {
 
     private void renderSkillsSection(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
-        txt(g, Component.literal("技能"), x, secY0() - 2, TXT);
+        txt(g, Component.translatable("numen.skill.title"), x, secY0() - 2, TXT);
         var skills = new ArrayList<>(com.dwinovo.numen.agent.skill.SkillRegistry.instance().all());
         if (skills.isEmpty()) {
-            txt(g, Component.literal("无 · 放入 config/numen/skills"), x, secY0() + 16, TXT_FAINT);
+            txt(g, Component.translatable("numen.skill.empty"), x, secY0() + 16, TXT_FAINT);
             return;
         }
         int listY0 = secY0() + 14;
@@ -702,7 +710,7 @@ public final class NumenScreen extends Screen {
             var s = skills.get(i);
             boolean on = !com.dwinovo.numen.agent.skill.SkillRegistry.instance().isDisabled(s.name());
             txt(g, Component.literal(s.name()), x, ry + 1, on ? TXT : TXT_FAINT);
-            String desc = s.description() == null ? "(无描述)" : s.description();
+            String desc = s.description() == null ? I18n.get("numen.skill.no_desc") : s.description();
             txt(g, Component.literal(clip(desc, w - 26)), x, ry + 11, TXT_FAINT);
             drawToggle(g, x + w - 20, ry + 5, on);
             if (overRow(mouseX, mouseY, x, w, ry) && !overToggle(mouseX, mouseY, x + w - 20, ry + 5)
@@ -986,19 +994,19 @@ public final class NumenScreen extends Screen {
         txt(g, Component.literal(name == null ? "Numen" : name), left + PAD, top + 7, ON_BAND);
         if (uuid != null && ClientDeaths.isDead(uuid)) {        // active companion dead — respawn countdown
             long rem = ClientDeaths.remainingMs(uuid);
-            txt(g, Component.literal("· 复活中 " + (int) Math.ceil(rem / 1000.0) + "s"),
+            txt(g, Component.translatable("numen.respawn", (int) Math.ceil(rem / 1000.0)),
                     left + PAD + font.width(name == null ? "Numen" : name) + 6, top + 7, ON_BAND);
         }
         renderTabs(g, mouseX, mouseY);
 
         if (dismissPending != null) {
-            txt(g, Component.literal("删除同伴 \"" + nameFor(dismissPending) + "\"？"),
+            txt(g, Component.translatable("numen.dismiss.title", nameFor(dismissPending)),
                     left + PAD, top + HEADER_H + 12, TXT);
-            txt(g, Component.literal("永久删除 · 背包会掉落在原地 · 无法撤销"),
+            txt(g, Component.translatable("numen.dismiss.warning"),
                     left + PAD, top + HEADER_H + 30, FAIL);
         } else if (summoning) {
-            txt(g, Component.literal("Summon a companion"), left + PAD, top + HEADER_H + 8, TXT);
-            txt(g, Component.literal("type a name · Enter to confirm · Esc to cancel"),
+            txt(g, Component.translatable("numen.summon.title"), left + PAD, top + HEADER_H + 8, TXT);
+            txt(g, Component.translatable("numen.summon.hint"),
                     left + PAD, top + HEADER_H + 48, TXT_FAINT);
         } else {
             if (uuid != null) {
@@ -1011,7 +1019,7 @@ public final class NumenScreen extends Screen {
                 case ITEMS -> { if (uuid != null) renderItems(g, mouseX, mouseY); else emptyHint(g); }
             }
             if (tab == Tab.CHAT && warnUntil > System.currentTimeMillis()) {   // no-API-key hint above the input
-                txt(g, Component.literal("⚠ No API key — open Settings to add one"),
+                txt(g, Component.translatable("numen.chat.no_key"),
                         left + PAD, top + PANEL_H - INPUT_H - PAD - 11, FAIL);
             }
         }
@@ -1196,12 +1204,12 @@ public final class NumenScreen extends Screen {
     }
 
     private void emptyHint(GuiGraphics g) {
-        txt(g, Component.literal("No companions. Click + to summon one."),
+        txt(g, Component.translatable("numen.empty.no_companions"),
                 left + PAD, top + HEADER_H + 10, TXT_FAINT);
     }
 
     private void renderTabs(GuiGraphics g, int mouseX, int mouseY) {
-        String[] labels = {"Chat", "Items", "Settings"};
+        String[] labels = tabLabels();
         for (int i = 0; i < 3; i++) {
             boolean active = tab == Tab.values()[i];
             boolean hover = mouseX >= tabX[i] && mouseX < tabX[i] + tabW[i]
@@ -1334,8 +1342,7 @@ public final class NumenScreen extends Screen {
                 case ConvoState.Msg.User u -> {
                     flushTools(out, group, done, failed, width);
                     if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
-                        wrapPlain(out, "─── 更早的对话已压缩为摘要（原文保留在磁盘） ───",
-                                TXT_FAINT, width);
+                        wrapPlain(out, I18n.get("numen.chat.compacted"), TXT_FAINT, width);
                         continue;
                     }
                     wrapPlain(out, u.content(), YOU, width);     // user = teal body, no label
@@ -1360,10 +1367,10 @@ public final class NumenScreen extends Screen {
             wrapPlain(out, "⌛ " + queued, TXT_FAINT, width);
         }
         if (loop().isCompacting()) {
-            wrapPlain(out, "compacting history…", TXT_MUTED, width);
+            wrapPlain(out, I18n.get("numen.chat.compacting"), TXT_MUTED, width);
         }
         if (out.isEmpty()) {
-            wrapPlain(out, "Say something to " + name + ".", TXT_FAINT, width);
+            wrapPlain(out, I18n.get("numen.chat.empty", name), TXT_FAINT, width);
         }
         return out;
     }
@@ -1386,12 +1393,12 @@ public final class NumenScreen extends Screen {
             List<String> names = new ArrayList<>();
             for (LlmToolCall tc : group) if (!names.contains(tc.name())) names.add(tc.name());
             boolean anyFail = group.stream().anyMatch(tc -> failed.contains(tc.id()));
-            String summary = "▸ " + group.size() + " steps · " + String.join(" · ", names);
+            String summary = "▸ " + I18n.get("numen.chat.steps", group.size()) + " · " + String.join(" · ", names);
             out.add(new Row(colored(fitOneLine(summary, width - 2), anyFail ? FAIL : TOOL).getVisualOrderText(),
                     anyFail ? FAIL : TOOL, null, key));
         } else {
             if (!running) {                                       // manually expanded → collapsible header
-                String hdr = "▾ " + group.size() + " steps";
+                String hdr = "▾ " + I18n.get("numen.chat.steps", group.size());
                 out.add(new Row(colored(hdr, TXT_MUTED).getVisualOrderText(), TXT_MUTED, null, key));
             }
             for (LlmToolCall tc : group) addToolRow(out, tc, width);
@@ -1457,11 +1464,11 @@ public final class NumenScreen extends Screen {
 
     /** Right-side PLAN panel: the companion's latest {@code todowrite}, with status glyphs. */
     private void renderPlan(GuiGraphics g, int x, int y, int bottom) {
-        txt(g, Component.literal("PLAN"), x, y, TXT_MUTED);
+        txt(g, Component.translatable("numen.chat.plan"), x, y, TXT_MUTED);
         int ly = y + 13;
         JsonArray todos = latestPlan();
         if (todos == null || todos.isEmpty()) {
-            txt(g, Component.literal("no plan yet"), x, ly, TXT_FAINT);
+            txt(g, Component.translatable("numen.chat.no_plan"), x, ly, TXT_FAINT);
             return;
         }
         for (int i = 0; i < todos.size() && ly + LINE_H < bottom; i++) {
@@ -1560,11 +1567,11 @@ public final class NumenScreen extends Screen {
         // -- RIGHT bottom: checkerboard 3×9 storage + hotbar --
         int storeY = cTop + 74;
         if (snap == null) {
-            txt(g, Component.literal("loading…"), rightX, storeY + 4, TXT_FAINT);
+            txt(g, Component.translatable("numen.status.loading"), rightX, storeY + 4, TXT_FAINT);
             return;
         }
         if (!snap.loaded() || snap.items().isEmpty()) {
-            txt(g, Component.literal("asleep — chat to wake it."), rightX, storeY + 4, TXT_FAINT);
+            txt(g, Component.translatable("numen.status.asleep"), rightX, storeY + 4, TXT_FAINT);
             return;
         }
         List<ItemStack> items = snap.items();

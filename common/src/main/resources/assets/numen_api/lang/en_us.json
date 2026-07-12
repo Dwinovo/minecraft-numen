@@ -1,0 +1,63 @@
+{
+  "key.numen.open_roster": "Open Companion Roster",
+
+  "numen.gui.settings.title": "Numen Settings",
+  "numen.gui.settings.provider": "Provider",
+  "numen.gui.settings.api_key": "API Key",
+  "numen.gui.settings.model": "Model",
+  "numen.gui.settings.base_url": "Base URL (optional)",
+  "numen.gui.settings.base_url_hint": "Leave empty to use provider default",
+  "numen.gui.settings.save": "Save",
+  "numen.gui.settings.cancel": "Cancel",
+  "numen.gui.settings.saved": "Saved",
+
+  "numen.tab.chat": "Chat",
+  "numen.tab.status": "Status",
+  "numen.tab.settings": "Settings",
+
+  "numen.settings.nav.llm": "Models",
+  "numen.settings.nav.mcp": "MCP",
+  "numen.settings.nav.skills": "Skills",
+  "numen.settings.base_url": "Base URL",
+  "numen.settings.proxy": "Proxy",
+  "numen.settings.site_name": "Site name",
+  "numen.settings.saved": "✔ Saved",
+  "numen.settings.custom_model": "Custom…",
+  "numen.settings.add_site": "＋ Add site",
+
+  "numen.chat.send": "Send",
+  "numen.chat.hint": "Talk to %s…",
+  "numen.chat.no_key": "⚠ No API key — open Settings to add one",
+  "numen.chat.empty": "Say something to %s.",
+  "numen.chat.compacting": "compacting history…",
+  "numen.chat.compacted": "─── earlier conversation compacted to a summary (originals kept on disk) ───",
+  "numen.chat.steps": "%s steps",
+  "numen.chat.plan": "PLAN",
+  "numen.chat.no_plan": "no plan yet",
+
+  "numen.mcp.title": "MCP Tools",
+  "numen.mcp.empty": "None · edit config/numen/mcp_clients.json",
+  "numen.mcp.connected": "%1$s · %2$s tools",
+  "numen.mcp.connecting": "%s · connecting…",
+  "numen.mcp.failed": "%s · failed",
+  "numen.mcp.disabled": "%s · off",
+
+  "numen.skill.title": "Skills",
+  "numen.skill.empty": "None · drop into config/numen/skills",
+  "numen.skill.open_dir": "＋ Folder",
+  "numen.skill.no_desc": "(no description)",
+
+  "numen.summon.title": "Summon a companion",
+  "numen.summon.hint": "type a name · Enter to confirm · Esc to cancel",
+  "numen.summon.name_hint": "New companion name…",
+
+  "numen.dismiss.delete": "Delete",
+  "numen.dismiss.title": "Delete companion \"%s\"?",
+  "numen.dismiss.warning": "Permanent · backpack drops in place · cannot be undone",
+
+  "numen.empty.no_companions": "No companions. Click + to summon one.",
+  "numen.respawn": "· reviving %ss",
+
+  "numen.status.loading": "loading…",
+  "numen.status.asleep": "asleep — chat to wake it."
+}

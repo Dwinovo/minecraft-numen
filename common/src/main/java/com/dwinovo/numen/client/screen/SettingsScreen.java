@@ -97,7 +97,7 @@ public final class SettingsScreen extends Screen {
         g.drawString(font, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_BASE_URL), left, y + FIELD_GAP * 3, TXT_MUTED);
 
         if (savedFlashUntil > System.currentTimeMillis()) {
-            g.drawString(font, Component.literal("✔ saved"), left, top + CONTENT_HEIGHT - 14, OK);
+            g.drawString(font, Component.translatable("numen.settings.saved"), left, top + CONTENT_HEIGHT - 14, OK);
         }
         provider.render(g, font, mouseX, mouseY);   // last → open list overlays the fields
     }

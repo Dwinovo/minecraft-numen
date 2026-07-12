@@ -79,6 +79,6 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_SETTINGS_CANCEL,        "取消");
         adder.add(Keys.GUI_SETTINGS_SAVED,         "已保存");
 
-        adder.add(Keys.KEY_OPEN_ROSTER, "打开伙伴名册");
+        adder.add(Keys.KEY_OPEN_ROSTER, "打开同伴名册");
     }
 }
