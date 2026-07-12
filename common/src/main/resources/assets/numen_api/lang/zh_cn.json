@@ -24,6 +24,11 @@
   "numen.settings.saved": "✔ 已保存",
   "numen.settings.custom_model": "自定义…",
   "numen.settings.add_site": "＋ 添加站点",
+  "numen.settings.reasoning": "深度思考：%s",
+  "numen.settings.reasoning.auto": "自动",
+  "numen.settings.reasoning.low": "低",
+  "numen.settings.reasoning.medium": "中",
+  "numen.settings.reasoning.high": "高",
 
   "numen.chat.send": "发送",
   "numen.chat.hint": "对 %s 说…",

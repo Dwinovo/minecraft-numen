@@ -59,6 +59,16 @@ public interface INumenConfig {
     String getProxy();
 
     /**
+     * Reasoning / "deep thinking" effort for reasoning-capable models. One of
+     * {@code "auto"} (default — send nothing, let the backend decide),
+     * {@code "low"}, {@code "medium"}, {@code "high"}. When not {@code "auto"},
+     * the client sends the OpenAI-dialect {@code reasoning_effort} request
+     * parameter (providers may override the mapping). Unknown values are
+     * treated as {@code "auto"}.
+     */
+    String getReasoningEffort();
+
+    /**
      * System prompt prepended to every conversation. Empty string for none.
      * The agent layer adds tool-use guidance automatically on top of this.
      */
@@ -81,6 +91,9 @@ public interface INumenConfig {
     void setProxy(String value);
 
     void setSystemPrompt(String value);
+
+    /** Set the reasoning effort ({@code auto}/{@code low}/{@code medium}/{@code high}). Caller must {@link #save()}. */
+    void setReasoningEffort(String value);
 
     /**
      * Flush in-memory changes to the loader-native config file. Best-effort:

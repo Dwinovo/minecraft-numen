@@ -157,6 +157,9 @@ public final class FabricNumenConfig implements INumenConfig {
     @Override
     public String getProxy() { return data.proxy == null ? "" : data.proxy; }
 
+    @Override
+    public String getReasoningEffort() { return data.reasoningEffort == null ? "auto" : data.reasoningEffort; }
+
     // ---- mutations ----
 
     @Override
@@ -173,6 +176,9 @@ public final class FabricNumenConfig implements INumenConfig {
 
     @Override
     public void setProxy(String value) { data.proxy = value == null ? "" : value; }
+
+    @Override
+    public void setReasoningEffort(String value) { data.reasoningEffort = value == null ? "auto" : value; }
 
     @Override
     public void setSystemPrompt(String value) { data.systemPrompt = value == null ? "" : value; }
@@ -209,6 +215,7 @@ public final class FabricNumenConfig implements INumenConfig {
         public String model = "gpt-5-2-mini";
         public String provider = "openai";
         public String proxy = "";   // optional host:port HTTP proxy for LLM calls
+        public String reasoningEffort = "auto";   // auto | low | medium | high (reasoning-capable models)
         // Deliberately short. The planning behaviour (use todowrite for
         // multi-step tasks, load_skill to fetch detailed workflows) emerges
         // entirely from those tools' own descriptions plus the runtime-injected
@@ -228,6 +235,7 @@ public final class FabricNumenConfig implements INumenConfig {
             if (model == null || model.isBlank()) model = d.model;
             if (provider == null || provider.isBlank()) provider = d.provider;
             if (proxy == null) proxy = d.proxy;
+            if (reasoningEffort == null || reasoningEffort.isBlank()) reasoningEffort = d.reasoningEffort;
             if (systemPrompt == null) systemPrompt = d.systemPrompt;
             return this;
         }

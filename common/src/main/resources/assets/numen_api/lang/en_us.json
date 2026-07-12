@@ -24,6 +24,11 @@
   "numen.settings.saved": "✔ Saved",
   "numen.settings.custom_model": "Custom…",
   "numen.settings.add_site": "＋ Add site",
+  "numen.settings.reasoning": "Thinking: %s",
+  "numen.settings.reasoning.auto": "Auto",
+  "numen.settings.reasoning.low": "Low",
+  "numen.settings.reasoning.medium": "Medium",
+  "numen.settings.reasoning.high": "High",
 
   "numen.chat.send": "Send",
   "numen.chat.hint": "Talk to %s…",

@@ -92,6 +92,26 @@ public interface LlmProvider {
     /** Decode the response body into our internal {@link AssistantTurn}. */
     AssistantTurn parseResponseBody(JsonObject body);
 
+    /**
+     * Apply the user's reasoning / "deep thinking" preference to an already-built
+     * request body. Only called when the user picked a concrete effort — the
+     * client skips this call for the {@code "auto"} default, so a body is never
+     * touched unless the user opted in (protecting non-reasoning models that
+     * would 400 on an unexpected parameter).
+     *
+     * <p>Default maps to the OpenAI-dialect {@code reasoning_effort} field
+     * ({@code low}/{@code medium}/{@code high}), which OpenAI's o-series / GPT-5
+     * and a growing set of OpenAI-compatible backends honour. Providers whose
+     * backend uses a different knob (e.g. a {@code thinking} / {@code enable_thinking}
+     * object) can override this to translate.
+     *
+     * @param body   the request body to mutate in place
+     * @param effort one of {@code "low"}, {@code "medium"}, {@code "high"}
+     */
+    default void applyReasoning(JsonObject body, String effort) {
+        body.addProperty("reasoning_effort", effort);
+    }
+
     // ---- streaming ----
 
     /**

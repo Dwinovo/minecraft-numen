@@ -129,6 +129,7 @@ public final class NumenScreen extends Screen {
     private String wMcpName = "", wMcpTarget = "", wMcpHeader = "";
     private EditBox mcpNameInput, mcpTargetInput, mcpHeaderInput;
     private String mcpDeletePending;          // non-null = showing the delete-confirm bar for this server
+    private String mcpEditOriginal;           // non-null = the add-form is EDITING this server (replace on save)
 
     private EditBox input;
     private SimpleButton sendButton;
@@ -149,6 +150,7 @@ public final class NumenScreen extends Screen {
     // unsaved working state — settings widgets are (re)built from these, NOT from config, so a rebuild
     // (provider change / custom toggle) doesn't revert what you just picked or typed.
     private String wProvider = "", wApiKey = "", wModel = "", wBaseUrl = "", wProxy = "", wSiteName = "";
+    private String wReasoning = "auto";      // reasoning/thinking effort: auto | low | medium | high
     private boolean addingSite;              // "+ 添加站点" mode: name + base URL + model → writes a site
     private EditBox proxyInput;
     private EditBox siteNameInput;
@@ -395,6 +397,7 @@ public final class NumenScreen extends Screen {
         wModel = cfg.getModel() == null ? "" : cfg.getModel();
         wBaseUrl = cfg.getBaseUrl() == null ? "" : cfg.getBaseUrl();
         wProxy = cfg.getProxy() == null ? "" : cfg.getProxy();
+        wReasoning = normalizeReasoning(cfg.getReasoningEffort());
         addingSite = false;
         ModelRegistry.Provider mp = ModelRegistry.provider(LlmProviders.normalize(wProvider));
         boolean known = mp != null && mp.models().stream().anyMatch(m -> m.id().equals(wModel));
@@ -430,6 +433,7 @@ public final class NumenScreen extends Screen {
         settingsScroll = 0;
         addingMcp = false;
         mcpDeletePending = null;
+        mcpEditOriginal = null;
         rebuild();
     }
 
@@ -462,7 +466,11 @@ public final class NumenScreen extends Screen {
     private void buildMcpListWidgets() {
         // "add server" affordance, top-right of the section.
         add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
-                Component.translatable("numen.mcp.add"), b -> { addingMcp = true; rebuild(); }));
+                Component.translatable("numen.mcp.add"), b -> {
+                    addingMcp = true; mcpEditOriginal = null;                 // fresh add — not editing
+                    wMcpName = ""; wMcpTarget = ""; wMcpHeader = ""; mcpStdio = false;
+                    rebuild();
+                }));
     }
 
     /** The add-MCP-server form: name, type (http/stdio) toggle, and URL / command. */
@@ -481,7 +489,7 @@ public final class NumenScreen extends Screen {
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveMcp()));
         add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
-                Component.literal("✕"), b -> { addingMcp = false; rebuild(); }));
+                Component.literal("✕"), b -> { addingMcp = false; mcpEditOriginal = null; rebuild(); }));
         setInitialFocus(mcpNameInput);   // ready to type the name immediately
     }
 
@@ -495,6 +503,12 @@ public final class NumenScreen extends Screen {
         String name = mcpNameInput.getValue().trim();
         String target = mcpTargetInput.getValue().trim();
         if (name.isEmpty() || target.isEmpty()) { warnUntil = System.currentTimeMillis() + 4000; return; }
+        // When editing, preserve the server's on/off state (a plain edit shouldn't flip its toggle).
+        boolean enabled = true;
+        if (mcpEditOriginal != null) {
+            var orig = com.dwinovo.numen.mcp.client.McpClientManager.spec(mcpEditOriginal);
+            if (orig != null) enabled = orig.enabled();
+        }
         com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec spec;
         String extra = mcpHeaderInput == null ? "" : mcpHeaderInput.getValue();
         if (mcpStdio) {
@@ -503,12 +517,17 @@ public final class NumenScreen extends Screen {
             List<String> args = new ArrayList<>();
             for (int i = 1; i < parts.length; i++) args.add(parts[i]);
             spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "stdio", "", java.util.Map.of(),
-                    command, List.copyOf(args), parseEnv(extra), true, 20, 120);
+                    command, List.copyOf(args), parseEnv(extra), enabled, 20, 120);
         } else {
             spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "http", target, parseHeader(extra),
-                    "", List.of(), java.util.Map.of(), true, 20, 120);
+                    "", List.of(), java.util.Map.of(), enabled, 20, 120);
         }
         com.dwinovo.numen.mcp.client.McpClientManager.upsertServer(spec);
+        // Renamed while editing → upsert wrote the new-named entry; drop the old one.
+        if (mcpEditOriginal != null && !mcpEditOriginal.equals(name)) {
+            com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(mcpEditOriginal);
+        }
+        mcpEditOriginal = null;
         addingMcp = false;
         wMcpName = ""; wMcpTarget = ""; wMcpHeader = ""; mcpStdio = false;
         rebuild();
@@ -561,6 +580,10 @@ public final class NumenScreen extends Screen {
         int y0 = secY0();
 
         if (addingSite) {
+            // The provider picker is stale in add-site mode (it still holds the "+ 添加站点" sentinel and
+            // its bounds overlap the site-name field, stealing that field's clicks so the name can never be
+            // typed → Save early-returns). Drop it entirely while the add-site form is up.
+            providerDropdown = null;
             // row0: site name + cancel
             siteNameInput = field(x, y0 + 11, w - 20, 64, wSiteName);
             add(new SimpleButton(x + w - 18, y0 + 11, 18, 18, Component.literal("✕"),
@@ -568,6 +591,7 @@ public final class NumenScreen extends Screen {
             buildApiKeyRow(x, y0 + SET_SP + 11, w);
             modelInput = field(x, y0 + 2 * SET_SP + 11, w, 128, wModel);
             baseUrlInput = field(x, y0 + 3 * SET_SP + 11, w, 256, wBaseUrl);
+            setInitialFocus(siteNameInput);   // ready to type the name immediately (no click needed)
         } else {
             providerDropdown = new ProviderDropdown(wProvider, true);   // live + "+ 添加站点"
             providerDropdown.setBounds(x, y0 + 11, w, 18);
@@ -575,6 +599,9 @@ public final class NumenScreen extends Screen {
             buildModelRow(x, y0 + 2 * SET_SP + 11, w);
             baseUrlInput = field(x, y0 + 3 * SET_SP + 11, w, 256, wBaseUrl);
             proxyInput = field(x, y0 + 4 * SET_SP + 11, w, 128, wProxy);
+            // Reasoning/thinking effort cycle — a compact button in the bottom band, left of Save.
+            add(new SimpleButton(x, top + PANEL_H - PAD - 18, 118, 18, reasoningLabel(),
+                    b -> { cycleReasoning(); b.setMessage(reasoningLabel()); }));
         }
 
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18,
@@ -672,9 +699,39 @@ public final class NumenScreen extends Screen {
         cfg.setModel(model);
         cfg.setBaseUrl(baseUrlInput.getValue());
         cfg.setProxy(proxyInput == null ? wProxy : proxyInput.getValue());
+        cfg.setReasoningEffort(wReasoning);
         cfg.save();
         NumenLlmClient.reset();
         savedFlashUntil = System.currentTimeMillis() + 1500;
+    }
+
+    // ---- reasoning / thinking effort control ----
+
+    private static final String[] REASONING_LEVELS = {"auto", "low", "medium", "high"};
+
+    /** Coerce any stored value to one of {@link #REASONING_LEVELS} ("auto" = leave to backend default). */
+    private static String normalizeReasoning(String v) {
+        if (v == null) return "auto";
+        String s = v.trim().toLowerCase();
+        for (String lvl : REASONING_LEVELS) if (lvl.equals(s)) return lvl;
+        return "auto";
+    }
+
+    /** Advance the working reasoning level auto → low → medium → high → auto. Saved with the rest on Save. */
+    private void cycleReasoning() {
+        String cur = normalizeReasoning(wReasoning);
+        for (int i = 0; i < REASONING_LEVELS.length; i++) {
+            if (REASONING_LEVELS[i].equals(cur)) {
+                wReasoning = REASONING_LEVELS[(i + 1) % REASONING_LEVELS.length];
+                return;
+            }
+        }
+        wReasoning = "auto";
+    }
+
+    private Component reasoningLabel() {
+        return Component.translatable("numen.settings.reasoning",
+                I18n.get("numen.settings.reasoning." + normalizeReasoning(wReasoning)));
     }
 
     private void renderSettings(GuiGraphics g, int mouseX, int mouseY) {
@@ -929,8 +986,43 @@ public final class NumenScreen extends Screen {
                 rebuild();
                 return true;
             }
+            if (overRow(mx, my, x, w, ry)) {   // body (name/meta) click → edit this server
+                beginEditMcp(h.name());
+                return true;
+            }
         }
         return false;
+    }
+
+    /** Open the add-form PRE-FILLED with {@code name}'s current spec — saving REPLACES the entry. */
+    private void beginEditMcp(String name) {
+        var spec = com.dwinovo.numen.mcp.client.McpClientManager.spec(name);
+        if (spec == null) return;
+        mcpEditOriginal = name;
+        addingMcp = true;
+        mcpStdio = spec.isStdio();
+        wMcpName = spec.name();
+        if (mcpStdio) {
+            StringBuilder cmd = new StringBuilder(spec.command() == null ? "" : spec.command());
+            for (String a : spec.args()) cmd.append(' ').append(a);
+            wMcpTarget = cmd.toString().trim();
+            wMcpHeader = joinPairs(spec.env(), '=');       // stdio → env "KEY=value"
+        } else {
+            wMcpTarget = spec.url() == null ? "" : spec.url();
+            wMcpHeader = joinPairs(spec.headers(), ':');    // http → header "Name: Value"
+        }
+        rebuild();
+    }
+
+    /** Reconstruct the header/env editor line from a spec map ("K: V; K2: V2" or "K=V; K2=V2"). */
+    private static String joinPairs(java.util.Map<String, String> m, char sep) {
+        if (m == null || m.isEmpty()) return "";
+        StringBuilder b = new StringBuilder();
+        for (var e : m.entrySet()) {
+            if (b.length() > 0) b.append("; ");
+            b.append(e.getKey()).append(sep == ':' ? ": " : "=").append(e.getValue());
+        }
+        return b.toString();
     }
 
     private boolean skillToggleClick(int mx, int my) {
