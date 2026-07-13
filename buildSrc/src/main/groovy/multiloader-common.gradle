@@ -34,13 +34,8 @@ tasks.withType(JavaCompile).configureEach {
 
 repositories {
     mavenCentral()
-    // Published numen-api engine. Local file repo first (fast iteration on this
-    // machine after `gradlew publish`); the public raw maven is the fallback so
-    // fresh clones / other people resolve it too.
-    maven {
-        name = 'localNumen'
-        url = uri(findProperty('local_maven_url') ?: 'file:///D:/01_Projects/numen-maven')
-    }
+    // Published numen-api engine — always resolved from the public raw maven so
+    // this build (and CI) uses exactly what's been pushed, never a stale local copy.
     maven {
         name = 'numenRemote'
         url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main'

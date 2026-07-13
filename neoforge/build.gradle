@@ -4,11 +4,11 @@ plugins {
 }
 
 dependencies {
-    // The numen-api engine, loaded as a mod dependency (resolved from local maven).
+    // The numen-api engine, loaded as a mod dependency (resolved from the remote maven).
     // NeoForge is Mojang-mapped natively, so no remap step is needed.
-    implementation "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.0.2-SNAPSHOT"
+    implementation "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.0.3-SNAPSHOT"
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
-    jarJar(implementation("com.dwinovo.numen:numen-api-neoforge-1.21.1:0.0.2-SNAPSHOT"))
+    jarJar(implementation("com.dwinovo.numen:numen-api-neoforge-1.21.1:0.0.3-SNAPSHOT"))
 }
 
 neoForge {
