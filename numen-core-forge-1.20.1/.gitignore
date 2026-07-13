@@ -1,0 +1,14 @@
+.gradle/
+build/
+run/
+run-gametest/
+logs/
+crash-reports/
+.idea/
+.vscode/
+*.class
+*.jar
+*.tmp
+*.bak
+*.aifailure
+*.log

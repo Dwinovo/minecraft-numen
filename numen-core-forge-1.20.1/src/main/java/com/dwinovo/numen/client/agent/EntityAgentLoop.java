@@ -1,0 +1,928 @@
+package com.dwinovo.numen.client.agent;
+
+import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.llm.NumenLlmClient;
+import com.dwinovo.numen.agent.llm.ConversationContextOptimizer;
+import com.dwinovo.numen.agent.llm.ConvoLog;
+import com.dwinovo.numen.agent.llm.ConvoState;
+import com.dwinovo.numen.agent.provider.AssistantTurn;
+import com.dwinovo.numen.agent.provider.LlmToolCall;
+import com.dwinovo.numen.agent.skill.SkillRegistry;
+import com.dwinovo.numen.agent.tool.ToolInvocation;
+import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.platform.services.INumenConfig;
+import com.dwinovo.numen.task.TaskResult;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.AbstractClientPlayer;
+
+import java.nio.file.Path;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Per-entity agent loop running on the <strong>client</strong>. One instance
+ * per Numen the player talks to, keyed by the stable {@code entity.getUUID()}
+ * in {@link AgentLoopRegistry} and resolved to the current body via
+ * {@link ClientNumenLookup} (so it survives the int-id churn of dimension
+ * travel). The agent is bound to that one entity for its
+ * whole lifetime — it talks directly to the owner, runs world-action tools on
+ * its own body, and survives across many prompts (it is NOT a one-shot
+ * sub-agent that self-destructs after a single task).
+ *
+ * <h2>Single-layer architecture</h2>
+ * This is the deliberate roll-back from the short-lived PlayerAgent +
+ * EntityAgent split. Each entity owns one conversation; the owner chats with
+ * it directly (right-click → {@code EntityChatScreen}, or the Units tab Chat
+ * button). The earlier two-tier design made debugging a single entity's AI
+ * painful — interleaved logs, reports bouncing between agents, lifecycles
+ * tearing down mid-task. Re-introduce the brain-on-the-entity model now; a
+ * higher-level dispatcher can come back later once each body is solid.
+ *
+ * <h2>Threading rules</h2>
+ * All mutations run on the client main thread:
+ * <ul>
+ *   <li>{@link #submitPrompt} — from {@code EntityChatScreen} (UI thread)</li>
+ *   <li>tool results — routed to this loop's {@link ToolDispatcher.Sink#onResult},
+ *       fed by {@link com.dwinovo.numen.agent.tool.ToolCall#complete} (e.g. from
+ *       {@code TaskResultPayload.handle}, already bounced onto the main thread)</li>
+ *   <li>LLM response — {@link NumenLlmClient#chatStreaming} resolves on the
+ *       HTTP executor thread; {@link #bounceBackToMain} hops via
+ *       {@code Minecraft.getInstance().execute} before any mutation</li>
+ * </ul>
+ */
+public final class EntityAgentLoop {
+
+    /**
+     * Persona prompt for a single Numen body. Deliberately does NOT enumerate
+     * tools — the live tool list (with full descriptions) rides along on every
+     * request, and a prose copy here rotted badly once already. This prompt
+     * carries only what the tool schemas can't: identity, working discipline,
+     * and the voice toward the owner.
+     */
+    private static final String ENTITY_PROMPT = com.dwinovo.numen.agent.prompt.NumenPrompts.ENTITY_PROMPT;
+
+    // ---- context compaction (mirrors Claude Code's /compact machinery) ----
+
+    /**
+     * The model context window now comes per-model from {@code ModelRegistry} (numen_models.json),
+     * looked up from the configured provider+model at the auto-compaction gate; unknown/custom models
+     * fall back to {@code ModelRegistry.DEFAULT_CTX} (64k).
+     */
+    /**
+     * Headroom under the window at which auto-compaction fires (Claude Code's
+     * {@code AUTOCOMPACT_BUFFER_TOKENS}): the next turn adds tool results and
+     * a fresh system prompt on top of the last measured request, and the
+     * summarization call itself must still fit.
+     */
+    private static final String COMPACT_SYSTEM_PROMPT =
+            "You are a helpful AI assistant tasked with summarizing conversations "
+            + "between a Minecraft companion entity (the Numen) and its owner.";
+
+    /**
+     * The summarization request, appended as the final user message over the
+     * full history. Adapted from Claude Code's compact prompt to what a
+     * Minecraft body must never forget: coordinates, inventory, lessons.
+     */
+    private static final String COMPACT_PROMPT = """
+            请将以上整段对话压缩成一份详细摘要。这份摘要将完全替代之前的对话历史，\
+            成为你后续行动的唯一记忆——任何没写进摘要的信息都会永久丢失，所以请把还会用到的信息全部保留。
+
+            分两步完成：
+
+            第一步，在 <analysis> 标签内梳理整段对话：逐条核对有哪些指令、坐标、物品数量、\
+            失败教训和未完成的任务必须保留，检查是否有容易遗漏的细节（数字、名称、约束条件）。\
+            这一步是你的草稿，之后会被丢弃。
+
+            第二步，在 <summary> 标签内输出正式摘要，按以下结构：
+            1. 主人的指令与意图：所有明确的请求，以及当前正在执行哪一个。
+            2. 世界知识：所有提到过的重要坐标（基地、传送门、熔炉、工作台、矿点、要塞等）、维度和地标。坐标数字必须逐字保留。
+            3. 自身状态：最近已知的 HP、装备、背包中的关键物品及数量。
+            4. 已完成的事项：按时间顺序简述。
+            5. 失败与教训：失败过的操作、原因、以及学到的约束（例如某处有岩浆、某条路线不可达、某方块需要特定工具）。
+            6. 待办任务：计划中尚未完成的事项及其状态。
+            7. 当前工作与下一步：摘要请求前正在做什么，接下来的第一步是什么。
+
+            不要调用工具，不要在两个标签之外输出任何内容。""";
+
+    /** Wrapper that turns the raw summary into the new history's first user message. */
+    private static final String SUMMARY_HEADER =
+            "[对话历史已压缩] 以下是此前全部对话的摘要，请将其作为既成事实继续工作：\n\n";
+
+    private final UUID entityUuid;
+    /** JSONL persistence under {@code config/numen/conversations/<uuid>.jsonl}. */
+    private final ConvoLog log;
+    private final ConvoState convo;
+    /** Functional-block coordinate memory, injected as {@code <known_blocks>}. */
+    private final WorkBlockMemory workBlocks;
+    /** Durable owner preferences, named places and storage notes, injected each turn. */
+    private final LongTermMemory longTermMemory;
+    /** Persistent goals, checkpoints, locations and resource reservations. */
+    private final AutonomyMemory autonomyMemory;
+    private final RiskController riskController;
+    private final CompanionMonitor monitor;
+    /**
+     * Prompts the owner typed while a turn was still in flight (waiting on the
+     * LLM, or on outstanding tool results). They must NOT be spliced into the
+     * conversation immediately: the OpenAI/DeepSeek protocol requires an
+     * {@code assistant} message carrying {@code tool_calls} to be followed
+     * <em>directly</em> by the matching {@code tool} results, with no
+     * {@code user} message in between. So we hold them here and flush them in
+     * at the next protocol-valid point (see {@link #flushBufferedPrompts}).
+     */
+    private final List<String> bufferedPrompts = new ArrayList<>();
+
+    private boolean awaitingLlmResponse = false;
+    private boolean aborted = false;
+
+    /**
+     * Runs this turn's tool calls one at a time and reports each result back
+     * through a {@link ToolDispatcher.Sink} into the conversation. All the
+     * tool-execution plumbing (serial queue, ship-to-server, completion,
+     * timeout) lives in here, not in the loop.
+     */
+    private final ToolDispatcher dispatcher;
+
+    /** A summarization call is in flight; blocks normal turns until it lands. */
+    private boolean compacting = false;
+    /** Consecutive compaction failure level used for bounded cooldown backoff. */
+    private int compactFailures = 0;
+    /** Auto-compaction is skipped until this wall-clock time after a failure. */
+    private long compactCooldownUntilMs;
+    private long lastCompactionDurationMs;
+    private String lastCompactionStatus = "尚未压缩";
+    /** Results already included in at least one LLM request may be compacted on later requests. */
+    private final Set<String> sentToolResultIds = new HashSet<>();
+
+    /**
+     * Set while the body is DEAD and awaiting its timed respawn (see {@link #onEntityDied} /
+     * {@link #onRespawned}). The loop is frozen — no LLM turn starts — until the body comes back.
+     */
+    private boolean dead = false;
+
+    /** Death cause recorded at death, replayed in the respawn event (null while alive). */
+    private String deathCause;
+    /** Tool calls that were in flight when the body died — resolved on respawn, not before. */
+    private List<String> deathInterruptedCalls = List.of();
+
+    /**
+     * Bumped every time the owner interrupts a turn ({@link #abort}). Each LLM
+     * dispatch captures the value at send time; when the streamed response
+     * lands {@link #handleResponse} discards it if the generation no longer
+     * matches — i.e. the turn it belongs to was cancelled. This is the
+     * equivalent of Claude Code spinning up a fresh {@code AbortController} per
+     * turn: an in-flight HTTP response from an interrupted turn must never be
+     * spliced back into the conversation or dispatch its tool calls.
+     */
+    private int turnGeneration = 0;
+
+    /**
+     * The PHYSICAL transcript for the chat GUI: every message ever exchanged
+     * this session (plus the persisted tail), in order, with compaction
+     * boundaries as {@link ConvoLog#COMPACT_DIVIDER} sentinels. Compaction
+     * rewires {@link #convo} (what the LLM sees) but only appends a divider
+     * here — the owner's visible history never vanishes. Same split as the
+     * append-only session log vs. the logical context in Claude Code.
+     */
+    private final List<ConvoState.Msg> display = new ArrayList<>();
+
+    EntityAgentLoop(UUID entityUuid) {
+        this.entityUuid = entityUuid;
+        Path numenRoot = Minecraft.getInstance().gameDirectory.toPath()
+                .resolve("config").resolve("numen");
+        this.log = ConvoLog.forEntity(numenRoot.resolve("conversations"), entityUuid);
+        this.convo = new ConvoState(msg -> {
+            log.append(msg);
+            display.add(msg);
+        });
+        this.workBlocks = WorkBlockMemory.forEntity(numenRoot.resolve("memory"), entityUuid);
+        this.longTermMemory = LongTermMemory.forEntity(numenRoot.resolve("memory"), entityUuid);
+        this.autonomyMemory = AutonomyMemory.forEntity(numenRoot.resolve("memory"), entityUuid);
+        this.monitor = new CompanionMonitor(autonomyMemory);
+        this.riskController = new RiskController(autonomyMemory);
+        this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
+            @Override public void onResult(ToolInvocation inv, String resultJson) {
+                harvestWorkBlocks(inv.name(), resultJson);
+                autonomyMemory.recordToolResult(inv.name(), resultJson);
+                convo.addToolResult(inv.id(), resultJson);
+            }
+            @Override public void onAllSettled() {
+                tryStartTurn();
+            }
+            @Override public AbstractClientPlayer entity() {
+                return resolveEntity();
+            }
+        }, riskController);
+        restoreFromDisk();
+    }
+
+    /**
+     * Replay the persisted conversation tail and recover whatever a dead
+     * session left dangling, so the first request after relaunch is valid:
+     * <ul>
+     *   <li>restart-safe assistant tool_calls are reattached with their original
+     *       id/name/arguments; unsafe calls receive one interrupted result;</li>
+     *   <li>a trailing user message (closed while waiting on the LLM) is
+     *       capped with a short assistant note, mirroring {@link #abort}, so
+     *       the next prompt doesn't create back-to-back user messages.</li>
+     * </ul>
+     */
+    private void restoreFromDisk() {
+        List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
+        if (history.isEmpty()) return;
+        convo.preload(history);
+        // A trailing result may have reached disk immediately before shutdown and
+        // never reached the model. Only results followed by an assistant turn are known consumed.
+        sentToolResultIds.addAll(ConversationContextOptimizer.consumedToolResultIds(history));
+        // The visible transcript replays the raw file order (dividers included),
+        // NOT the compacted view — preload before healing so the synthetic
+        // messages below land after it via the sink.
+        display.addAll(log.loadDisplay(ConvoLog.DEFAULT_LOAD_LIMIT));
+
+        List<LlmToolCall> dangling = ConvoLog.unansweredToolCalls(history);
+        if (!dangling.isEmpty()) {
+            dispatcher.restore(dangling.stream()
+                    .map(tc -> new ToolInvocation(tc.id(), tc.name(), tc.arguments()))
+                    .toList());
+        }
+        if (dangling.isEmpty() && convo.lastMessage() instanceof ConvoState.Msg.User) {
+            convo.addAssistant(new AssistantTurn("(已中断)", List.of(), null));
+        }
+        Constants.LOG.info("[numen-entity#{}] restored {} msg(s) from disk{}",
+                entityUuid, history.size(),
+                dangling.isEmpty() ? "" : " (reattached " + dangling.size() + " dangling tool call(s))");
+    }
+
+    public UUID entityUuid() { return entityUuid; }
+    public ConvoState convo() { return convo; }
+
+    public LongTermMemory longTermMemory() { return longTermMemory; }
+    public AutonomyMemory autonomyMemory() { return autonomyMemory; }
+
+    /** Read-only physical transcript for the GUI (see {@link #display}). */
+    public List<ConvoState.Msg> display() {
+        return java.util.Collections.unmodifiableList(display);
+    }
+
+    /** Snapshot of prompts (GUI or {@code NumenGateway}) still waiting for the
+     *  next protocol-valid splice point — the GUI renders these as pending. */
+    public List<String> queuedPrompts() {
+        return List.copyOf(bufferedPrompts);
+    }
+
+    /** Owner typed a prompt in the chat GUI. */
+    public void submitPrompt(String text) {
+        if (dead) {
+            Constants.LOG.info("[numen-entity#{}] prompt ignored — body is dead", entityUuid);
+            return;
+        }
+        String trimmed = text == null ? "" : text.trim();
+        riskController.noteOwnerPrompt(trimmed);
+        if (trimmed.regionMatches(true, 0, "确认 ", 0, 3)) {
+            String result = riskController.approve(trimmed.substring(3));
+            aborted = false;
+            bufferedPrompts.add("<event kind=\"owner_confirmation\">" + ConversationRecovery.escapeXml(result) + "</event>");
+            tryStartTurn();
+            return;
+        }
+        boolean wasAborted = aborted;
+        aborted = false;
+        dispatcher.resetRecoveryBudgets();
+        // Always buffer first; tryStartTurn() splices buffered prompts into the
+        // conversation only at a protocol-valid point. If we're mid-turn (the
+        // guards in tryStartTurn fire), the prompt stays buffered and gets
+        // flushed once the outstanding assistant/tool round-trip completes —
+        // this avoids inserting a user message between assistant(tool_calls)
+        // and its tool results (which the API rejects with HTTP 400).
+        boolean deferred = awaitingLlmResponse || dispatcher.busy();
+        bufferedPrompts.add(text);
+        Constants.LOG.info("[numen-entity#{}] user prompt ({} chars){}{}: {}",
+                entityUuid, text.length(),
+                wasAborted ? " — reset previous abort" : "",
+                deferred ? " — buffered (mid-turn)" : "",
+                truncate(text, 200));
+        tryStartTurn();
+    }
+
+    /** Driven once per client tick (see {@code AgentLoopRegistry.tickAll}) — backstop timeout. */
+    public void clientTick() {
+        dispatcher.tick();
+        CompanionMonitor.Alert alert = monitor.tick(resolveEntity());
+        if (alert != null) {
+            autonomyMemory.recordMonitorEvent(alert.xml());
+            injectEvent(alert.xml(), alert.urgent());
+        }
+    }
+
+    /**
+     * Pull functional-block coordinates out of successful tool results into
+     * {@link WorkBlockMemory}. The results already carry them — place_block
+     * reports the block it placed, interact_at reports the station it activated
+     * (a chest/furnace/table it opened) — this just stops the loop from
+     * forgetting them once the result scrolls out of context. Both tools report
+     * the same {@code block} + {@code x/y/z} shape; {@code workBlocks.record}
+     * filters to tracked station types, so non-station interactions fall away.
+     */
+    private void harvestWorkBlocks(String toolName, String resultJson) {
+        try {
+            JsonObject root = JsonParser.parseString(resultJson).getAsJsonObject();
+            if (!root.has("success") || !root.get("success").getAsBoolean()) return;
+            JsonObject data = root.has("data") && root.get("data").isJsonObject()
+                    ? root.getAsJsonObject("data") : null;
+            if (data == null) return;
+
+            switch (toolName) {
+                case "place_block", "interact_at" -> {
+                    if (data.has("block") && data.has("x")) {
+                        String path = data.get("block").getAsString();
+                        int colon = path.indexOf(':');
+                        if (colon >= 0) path = path.substring(colon + 1);
+                        workBlocks.record(path, new net.minecraft.core.BlockPos(
+                                data.get("x").getAsInt(),
+                                data.get("y").getAsInt(),
+                                data.get("z").getAsInt()));
+                    }
+                }
+                default -> { /* nothing to harvest */ }
+            }
+        } catch (RuntimeException ex) {
+            Constants.LOG.debug("[numen-entity#{}] work-block harvest skipped: {}",
+                    entityUuid, ex.toString());
+        }
+    }
+
+    // ---- interrupt (owner-triggered, from the chat GUI "Stop" button) ----
+
+    /** A turn is actively running: waiting on the LLM, on tool results, or compacting. */
+    public boolean isBusy() {
+        return awaitingLlmResponse || compacting || dispatcher.busy();
+    }
+
+    /** A summarization call is currently in flight (drives the GUI status line). */
+    public boolean isCompacting() {
+        return compacting;
+    }
+
+    public long compactCooldownRemainingMs() {
+        return Math.max(0L, compactCooldownUntilMs - System.currentTimeMillis());
+    }
+
+    public long lastCompactionDurationMs() {
+        return lastCompactionDurationMs;
+    }
+
+    public String lastCompactionStatus() {
+        return lastCompactionStatus;
+    }
+
+    /** Manual compaction is actionable right now (drives the Compact button). */
+    public boolean canCompact() {
+        return !dead && !isBusy()
+                && convo.snapshot().size() >= AgentContextPolicy.MIN_COMPACT_MESSAGES;
+    }
+
+    /** Owner prompts are queued, waiting to flush into the conversation. */
+    public boolean hasQueuedPrompts() {
+        return !bufferedPrompts.isEmpty();
+    }
+
+    /** There is something an interrupt would act on — drives the Stop button's enabled state. */
+    public boolean canInterrupt() {
+        return isBusy() || hasQueuedPrompts();
+    }
+
+    /**
+     * Owner-triggered interrupt — the chat GUI's "Stop" button. Mirrors Claude
+     * Code's {@code handleCancel} (useCancelRequest.ts) two-priority rule:
+     *
+     * <ol>
+     *   <li><b>A turn is in flight</b> → stop it. The in-flight LLM response is
+     *       invalidated via {@link #turnGeneration} (discarded when it lands, so
+     *       it can't dispatch tools after the fact); any world-action tool calls
+     *       still awaiting a server result get a synthetic "interrupted" result
+     *       so every {@code assistant(tool_calls)} keeps matching {@code tool}
+     *       results and the next request stays protocol-valid. A
+     *       {@code CancelTasksPayload} also ships to the server so the
+     *       <em>body</em> stops too — without it the entity keeps walking/mining
+     *       to its task deadline while only the conversation halts. Queued
+     *       prompts are <em>preserved</em> — they flush on the next submit,
+     *       exactly like Claude Code keeps its message queue across an
+     *       interrupt.</li>
+     *   <li><b>Idle but prompts are queued</b> (e.g. typed during a turn that was
+     *       just interrupted and is now held) → drop the queue. Mirrors
+     *       {@code popCommandFromQueue} when there's no running task to cancel.</li>
+     * </ol>
+     *
+     * No-op when nothing is running and nothing is queued.
+     */
+    public void abort() {
+        if (isBusy()) {
+            // Priority 1: stop the running turn (or the in-flight compaction —
+            // its response is generation-stamped too, so it gets discarded).
+            turnGeneration++; // any in-flight LLM response is now stale → discarded on arrival
+            boolean wasAwaitingLlm = awaitingLlmResponse;
+            boolean wasCompacting = compacting;
+            awaitingLlmResponse = false;
+            compacting = false;
+            if (wasCompacting) lastCompactionStatus = "已中断";
+
+            // Synthesize cancelled results for EVERY outstanding call (in flight AND
+            // still-queued) so the assistant(tool_calls) message keeps matching tool
+            // results — otherwise the next request is protocol-invalid (HTTP 400). Real
+            // results arriving later are dropped as "late" by the dispatcher.
+            List<String> cancelled = dispatcher.cancelAndDrain();
+            for (String id : cancelled) {
+                convo.addToolResult(id,
+                        "{\"success\":false,\"message\":\"interrupted by owner\"}");
+            }
+
+            // Stop the BODY too, not just the conversation: cancelAndDrain fires
+            // CompanionLifecycle.onAbort, which tool packs subscribe to so they can
+            // halt their own server-side work. The engine sends no packet itself.
+
+            // If we cut off an in-flight LLM call before its assistant turn was
+            // recorded, the conversation now ends on a user message. Cap it with a
+            // short assistant note so the next prompt doesn't create back-to-back
+            // user messages (some backends reject those — see flushBufferedPrompts).
+            if (wasAwaitingLlm && cancelled.isEmpty()
+                    && convo.lastMessage() instanceof ConvoState.Msg.User) {
+                convo.addAssistant(new AssistantTurn("(已中断)", List.of(), null));
+            }
+
+            convo.resetTurnCount();
+            aborted = true;
+            Constants.LOG.info("[numen-entity#{}] interrupted by owner (awaitingLlm={}, cancelledTools={}, queued={})",
+                    entityUuid, wasAwaitingLlm, cancelled.size(), bufferedPrompts.size());
+        } else if (!bufferedPrompts.isEmpty()) {
+            // Priority 2: idle — drop the held queue.
+            int dropped = bufferedPrompts.size();
+            bufferedPrompts.clear();
+            Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued prompt(s)",
+                    entityUuid, dropped);
+        }
+    }
+
+    /**
+     * The body died — the server tells us via {@code NumenDeathPayload} with the death cause. SUSPEND
+     * (not dispose): the companion respawns at its owner shortly and {@link #onRespawned} resumes us.
+     * Discard any in-flight LLM turn (bump {@link #turnGeneration}), then heal the conversation so it
+     * stays protocol-valid AND the brain learns why it stopped — resolve every in-flight tool call with
+     * the death cause, and cap a trailing user message (mirrors {@link #restoreFromDisk}). Latch
+     * {@link #dead} so no turn starts until respawn.
+     */
+    public void onEntityDied(String cause) {
+        // FREEZE hard: stop all LLM output/work and feed the model NOTHING now (adding a tool result
+        // here would let the loop continue). Just record what was in flight + the cause; everything is
+        // restored on respawn. The body is gone, so its tool results will never arrive — we'll synth
+        // them at respawn instead.
+        deathCause = cause;
+        // Resolve at respawn: every outstanding call (in flight + still queued) — all
+        // are listed in the assistant message, so all need results.
+        deathInterruptedCalls = dispatcher.cancelAndDrain();
+        turnGeneration++;          // discard any in-flight LLM response (halt output)
+        boolean wasCompacting = compacting;
+        awaitingLlmResponse = false;
+        compacting = false;
+        if (wasCompacting) lastCompactionStatus = "因死亡中断";
+        bufferedPrompts.clear();
+        dead = true;
+        Constants.LOG.info("[numen-entity#{}] body died ({}) — loop frozen ({} call(s) in flight)",
+                entityUuid, cause, deathInterruptedCalls.size());
+    }
+
+    /**
+     * The body respawned at its owner after dying — thaw the frozen loop and ONLY NOW restore context:
+     * resolve any tool call that was interrupted by the death (so the conversation is valid and the
+     * brain learns its task was cut short), then inject a {@code <event>} detailing the death cause.
+     * Nothing was fed to the model while dead, so it stayed fully stopped for the whole timer.
+     */
+    public void onRespawned(String payloadCause) {
+        boolean wasFrozen = dead;                 // same-session death (mid-task) vs a fresh loop after relog
+        dead = false;
+        if (wasFrozen) {
+            for (String id : deathInterruptedCalls) {
+                convo.addToolResult(id, TaskResult.fail("任务因你死亡而中断").toJson());
+            }
+            deathInterruptedCalls = List.of();
+            if (convo.lastMessage() instanceof ConvoState.Msg.User) {
+                convo.addAssistant(new AssistantTurn("(已中断)", List.of(), null));
+            }
+        }
+        // Prefer the cause carried by the respawn payload (survives a logout that cleared deathCause).
+        String raw = (payloadCause != null && !payloadCause.isBlank()) ? payloadCause
+                : (deathCause != null ? deathCause : "未知原因");
+        String cause = raw.replace('<', '(').replace('>', ')');
+        deathCause = null;
+        Constants.LOG.info("[numen-entity#{}] respawned ({}) — loop thawed", entityUuid, cause);
+        // urgent only when it died mid-task (react now); a fresh post-login revival waits for the owner.
+        injectEvent("<event kind=\"death\">你刚才死了(" + cause
+                + "),物品掉落在死亡地点,手头的任务中断了;现已在主人身边复活。先看看状况,继续或重新规划。</event>", wasFrozen);
+    }
+
+    /**
+     * Inject an asynchronous world event into the conversation (dimension change, hazard, …) — the
+     * generic version of the Claude-Code "channel notification": the event rides the same buffered
+     * queue as owner prompts, so it splices in only at a protocol-valid boundary. {@code urgent} wakes
+     * an idle brain to react now; otherwise it sits in the queue and the brain sees it on the next
+     * owner-driven turn (no extra LLM call, no unprompted chatter). Dropped while frozen by death.
+     */
+    public void injectEvent(String xml, boolean urgent) {
+        if (dead) return;
+        bufferedPrompts.add(xml);
+        Constants.LOG.info("[numen-entity#{}] event queued{}: {}",
+                entityUuid, urgent ? " (urgent)" : "", truncate(xml, 120));
+        if (urgent) {
+            tryStartTurn();
+        }
+    }
+
+    // ---- internals ----
+
+    /**
+     * Splice any buffered owner prompts into the conversation as a single
+     * {@code user} message. Only call this at a protocol-valid point (no
+     * assistant reply in flight, no tool results pending) — the callers
+     * ({@link #tryStartTurn}) guarantee that. Multiple buffered prompts are
+     * joined with newlines into one message to avoid back-to-back {@code user}
+     * messages that some backends reject.
+     */
+    private void flushBufferedPrompts() {
+        if (bufferedPrompts.isEmpty()) return;
+        String merged = String.join("\n", bufferedPrompts);
+        bufferedPrompts.clear();
+        convo.addUser(merged);
+        // A fresh owner directive starts a new tool-chain: restart the turn
+        // counter (just log numbering now that the hard cap is gone).
+        convo.resetTurnCount();
+    }
+
+    private void tryStartTurn() {
+        if (dead) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: body dead", entityUuid);
+            return;
+        }
+        if (aborted) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: aborted", entityUuid);
+            return;
+        }
+        if (awaitingLlmResponse) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: awaitingLlmResponse", entityUuid);
+            return;
+        }
+        if (compacting) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: compacting", entityUuid);
+            return;
+        }
+        if (dispatcher.busy()) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: tool call(s) outstanding", entityUuid);
+            return;
+        }
+        // Safe point: no assistant reply in flight and no tool results
+        // outstanding, so the conversation ends with either a tool result or a
+        // final assistant message — a user message can now be appended legally.
+        flushBufferedPrompts();
+        if (convo.snapshot().isEmpty()) return;
+        // No hard cap on tool-call turns and no loop guard — a capable agent
+        // legitimately chains many tasks, and resuming a timed-out move_to
+        // repeats the exact same call. Runaways are stopped by the owner's
+        // interrupt.
+        if (!NumenLlmClient.isConfigured(entityUuid)) {
+            Constants.LOG.warn("[numen-entity#{}] API key not set; open the Numen GUI (X) → Settings",
+                    entityUuid);
+            aborted = true;
+            return;
+        }
+
+        // Auto-compaction gate: when the locally estimated context reaches the
+        // per-companion threshold, summarize FIRST, then re-run this method on
+        // the compacted history. The threshold is still capped below the model
+        // window so one slow backend cannot trade fewer compactions for overflow.
+        CompanionAiConfigStore.Profile config = CompanionAiConfigStore.get(entityUuid);
+        int window = com.dwinovo.numen.agent.model.ModelRegistry.contextWindow(
+                com.dwinovo.numen.client.screen.LlmProviders.normalize(config.provider()), config.model());
+        var fullSnapshot = convo.snapshot();
+        var snapshot = ConversationContextOptimizer.optimize(fullSnapshot, sentToolResultIds);
+        int contextTokens = ConversationRecovery.estimateContextTokens(snapshot);
+        int compactThreshold = AgentContextPolicy.compactThreshold(window, config.autoCompactTokens());
+        // A trailing tool result has not been consumed by the model yet. Send it once
+        // before allowing lossy conversation summarization.
+        boolean hasUnreadToolResult = convo.lastMessage() instanceof ConvoState.Msg.Tool tool
+                && !sentToolResultIds.contains(tool.toolCallId());
+        long nowMs = System.currentTimeMillis();
+        if (AgentContextPolicy.shouldCompact(window, config.autoCompactTokens(), contextTokens, convo.snapshot().size(),
+                hasUnreadToolResult, nowMs, compactCooldownUntilMs)) {
+            Constants.LOG.info("[numen-entity#{}] auto-compacting: context {} tokens >= threshold {} "
+                            + "(configured={}, window={})",
+                    entityUuid, contextTokens, compactThreshold, config.autoCompactTokens(), window);
+            startCompaction(true);
+            return;
+        }
+
+        convo.incrementTurn();
+        awaitingLlmResponse = true;
+
+        String routingContext = latestDirectiveContext() + " " + autonomyMemory.retrievalContext();
+        var tools = ToolRouter.select(entityUuid, routingContext, config.lowQualityAi(), ToolRegistry.all());
+        String systemPrompt = composeSystemPrompt(config.systemPrompt());
+
+        Constants.LOG.info("[numen-entity#{}] turn {}: convo={} msgs, tools={}",
+                entityUuid, convo.turnCount(), snapshot.size(), tools.size());
+
+        // Capture the current generation; if the owner interrupts before this
+        // call resolves, handleResponse sees the mismatch and discards it.
+        final int gen = turnGeneration;
+        final Set<String> requestToolResultIds = ConversationContextOptimizer.toolResultIds(fullSnapshot);
+        NumenLlmClient.instance(entityUuid).chatStreaming(snapshot, tools, systemPrompt, null)
+                .whenComplete((res, err) -> bounceBackToMain(gen, requestToolResultIds, res, err));
+    }
+
+    // ---- compaction ----
+
+    /**
+     * Owner pressed the GUI's Compact button. Runs the same machinery as the
+     * automatic path; silently ignored when a turn is in flight or there is
+     * too little history to be worth a summarization call.
+     */
+    public void requestCompact() {
+        if (!canCompact()) {
+            Constants.LOG.info("[numen-entity#{}] manual compact ignored (busy={}, msgs={})",
+                    entityUuid, isBusy(), convo.snapshot().size());
+            return;
+        }
+        if (!NumenLlmClient.isConfigured(entityUuid)) return;
+        startCompaction(false);
+    }
+
+    /**
+     * Fire the summarization call: full history + the compact prompt as the
+     * final user message, NO tools, a minimal system prompt (skills XML and the
+     * persona would only waste the very tokens we're trying to reclaim).
+     */
+    private void startCompaction(boolean auto) {
+        compacting = true;
+        lastCompactionDurationMs = 0L;
+        lastCompactionStatus = auto ? "自动压缩中" : "手动压缩中";
+        List<ConvoState.Msg> request = new ArrayList<>(ConversationContextOptimizer.optimize(
+                convo.snapshot(), sentToolResultIds));
+        request.add(new ConvoState.Msg.User(COMPACT_PROMPT));
+        Constants.LOG.info("[numen-entity#{}] compaction started ({}, {} msgs)",
+                entityUuid, auto ? "auto" : "manual", request.size() - 1);
+        final int gen = turnGeneration;
+        final long startMs = System.currentTimeMillis();
+        NumenLlmClient.instance(entityUuid).chatStreaming(request, List.of(), COMPACT_SYSTEM_PROMPT, null,
+                        AgentContextPolicy.COMPACTION_TIMEOUT)
+                .whenComplete((res, err) -> Minecraft.getInstance().execute(
+                        () -> finishCompaction(gen, auto, startMs, res, err)));
+    }
+
+    private void finishCompaction(int gen, boolean auto, long startMs,
+                                  NumenLlmClient.ChatResult res, Throwable err) {
+        if (gen != turnGeneration) {
+            Constants.LOG.info("[numen-entity#{}] discarding interrupted compaction (gen {} != {})",
+                    entityUuid, gen, turnGeneration);
+            return;   // abort() already reset the compacting flag
+        }
+        compacting = false;
+        lastCompactionDurationMs = Math.max(0L, System.currentTimeMillis() - startMs);
+
+        String summary = (err == null && res != null)
+                ? ConversationRecovery.extractSummary(res.turn().content()) : null;
+        if (summary == null || summary.isBlank()) {
+            compactFailures = Math.min(AgentContextPolicy.MAX_COMPACT_FAILURE_LEVEL,
+                    compactFailures + 1);
+            long cooldownMs = AgentContextPolicy.failureCooldownMillis(compactFailures);
+            compactCooldownUntilMs = System.currentTimeMillis() + cooldownMs;
+            lastCompactionStatus = auto ? "自动压缩失败" : "手动压缩失败";
+            Constants.LOG.warn("[numen-entity#{}] compaction failed ({}/{}): {}",
+                    entityUuid, compactFailures, AgentContextPolicy.MAX_COMPACT_FAILURE_LEVEL,
+                    err != null ? ConversationRecovery.rootMessage(err) : "empty summary");
+            // The conversation is untouched — the next turn just runs uncompacted.
+            if (auto || !bufferedPrompts.isEmpty()) tryStartTurn();
+            return;
+        }
+
+        String wrapped = SUMMARY_HEADER + summary.strip();
+        // The summary is lossy, but the very next prompt is usually a follow-up
+        // to the model's LAST reply ("那第三点展开讲讲") — so that reply crosses
+        // the boundary VERBATIM, not summarized. Same as Claude Code's
+        // preservedMessages whitelist: far history lossy, last output lossless.
+        List<ConvoState.Msg> preserved = preservedTail();
+        // Accounting for the boundary line (Claude Code's compactMetadata):
+        // the summarization call's own prompt_tokens IS the exact size of the
+        // history being compacted — more precise than the previous turn's count.
+        JsonObject meta = new JsonObject();
+        meta.addProperty("trigger", auto ? "auto" : "manual");
+        meta.addProperty("droppedMessages", convo.snapshot().size() - preserved.size());
+        meta.addProperty("durationMs", System.currentTimeMillis() - startMs);
+        if (res.promptTokens() > 0) {
+            meta.addProperty("preTokens", res.promptTokens());
+            if (res.totalTokens() > res.promptTokens()) {
+                meta.addProperty("summaryTokens", res.totalTokens() - res.promptTokens());
+            }
+        }
+        // Boundary into the JSONL first (relaunches replay the compacted view;
+        // the raw pre-compaction history stays in the file as an archive), then
+        // swap the in-memory history without re-notifying the sink. The visible
+        // transcript only gains a divider — the owner's chat never vanishes.
+        log.appendCompactSummary(wrapped, preserved, meta);
+        List<ConvoState.Msg> next = new ArrayList<>();
+        next.add(new ConvoState.Msg.User(wrapped));
+        next.addAll(preserved);
+        convo.replaceAll(next);
+        display.add(new ConvoState.Msg.User(ConvoLog.COMPACT_DIVIDER));
+        compactFailures = 0;
+        compactCooldownUntilMs = 0L;
+        lastCompactionStatus = auto ? "自动压缩成功" : "手动压缩成功";
+        Constants.LOG.info(
+                "[numen-entity#{}] compaction done ({}): {} tokens → summary ({} chars) + {} preserved msg(s) in {} ms",
+                entityUuid, auto ? "auto" : "manual",
+                res.promptTokens() > 0 ? String.valueOf(res.promptTokens()) : "?",
+                wrapped.length(), preserved.size(), System.currentTimeMillis() - startMs);
+
+        // Auto-compaction interrupted a turn that was about to dispatch —
+        // resume it so the task chain continues on the compacted history. After
+        // a MANUAL compact we stay idle unless prompts queued up meanwhile.
+        if (auto || !bufferedPrompts.isEmpty()) tryStartTurn();
+    }
+
+    /**
+     * Messages carried verbatim across a compaction boundary: the trailing
+     * final assistant reply (no tool calls), when that is how the history
+     * ends. Compaction only fires when the loop is idle, so a settled chain
+     * ending in a spoken reply is the normal case; anything else (defensive)
+     * preserves nothing and the summary stands alone. The slice must stay
+     * protocol-valid on its own — a tool-calling assistant without its
+     * results, or an orphan tool result, would 400 the next request.
+     */
+    private List<ConvoState.Msg> preservedTail() {
+        if (convo.lastMessage() instanceof ConvoState.Msg.Assistant a
+                && !a.turn().hasToolCalls()) {
+            return List.of(a);
+        }
+        return List.of();
+    }
+
+    /**
+     * Tokens the history estimate can't see: system prompt (persona + skills
+     * XML) and tool schemas. Deliberately generous — over-estimating fires
+     * compaction a little early, under-estimating blows the context window.
+     */
+    /**
+     * Rough token count of the history for backends that report no usage.
+     * CJK sits near 1 token/char on modern tokenizers; ASCII (tool-result
+     * JSON, coordinates) near 3.5–4 chars/token. Precision is not the goal —
+     * the 13k {@link AgentContextPolicy#AUTO_COMPACT_BUFFER_TOKENS} absorbs the error; what
+     * matters is that the auto gate fires AT ALL without a usage frame.
+     */
+    /**
+     * The compact prompt asks for a two-stage response: a private
+     * {@code <analysis>} scratchpad, then the real {@code <summary>}. Only the
+     * summary is kept — persisting the analysis would waste the very tokens
+     * compaction reclaims. Tolerant of models that skip or mangle the tags:
+     * an unclosed {@code <summary>} reads to the end, no tags at all falls
+     * back to the whole text minus any analysis block.
+     */
+    private String composeSystemPrompt(String basePrompt) {
+        String base = basePrompt == null ? "" : basePrompt;
+        String envBlock = buildEnvBlock();
+        AbstractClientPlayer body = resolveEntity();
+        String knownBlocks = workBlocks.formatXml(body != null ? body.level : null);
+        String durableMemory = longTermMemory.formatXml();
+        String autonomyState = autonomyMemory.formatXml();
+        boolean detailedSkills = CompanionAiConfigStore.get(entityUuid).lowQualityAi();
+        String skillsXml = SkillRegistry.instance().formatRelevantXml(
+                latestDirectiveContext() + " " + autonomyMemory.retrievalContext(),
+                detailedSkills ? 4_000 : 1_600, detailedSkills);
+
+        StringBuilder sb = new StringBuilder();
+        if (!base.isBlank()) sb.append(base);
+        sb.append(ENTITY_PROMPT);
+        if (envBlock != null) {
+            sb.append("\n\n").append(envBlock);
+        }
+        if (!knownBlocks.isEmpty()) {
+            sb.append("\n\n").append(knownBlocks);
+        }
+        if (!durableMemory.isEmpty()) {
+            sb.append("\n\n").append(durableMemory);
+        }
+        if (!autonomyState.isEmpty()) {
+            sb.append("\n\n").append(autonomyState);
+        }
+        if (!skillsXml.isEmpty()) {
+            sb.append("\n\n").append(skillsXml);
+        }
+        return sb.toString();
+    }
+
+    private String latestDirectiveContext() {
+        StringBuilder out = new StringBuilder(
+                AgentContextPolicy.recentUserDirectives(convo.snapshot(), 3));
+        AbstractClientPlayer body = resolveEntity();
+        if (body != null) {
+            for (var stack : body.getInventory().items) {
+                if (stack.isEmpty()) continue;
+                var id = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem());
+                if (!"minecraft".equals(id.getNamespace())) out.append(' ').append(id);
+            }
+            if (body.isCreative()) out.append(" creative 创造模式");
+        }
+        return out.toString();
+    }
+
+    private String buildEnvBlock() {
+        AbstractClientPlayer entity = resolveEntity();
+        if (entity == null) return null;
+        // The brain runs on the owner's client, so the local player IS the owner.
+        var localOwner = Minecraft.getInstance().player;
+        String ownerName = localOwner != null ? localOwner.getName().getString() : "unknown";
+        return "<env>\n"
+                + "  entity_uuid: " + entityUuid + "\n"
+                + "  owner_name: " + ownerName + "\n"
+                + "  dimension: " + entity.level.dimension().location() + "\n"
+                + "  today: " + LocalDate.now() + "\n"
+                + "</env>";
+    }
+
+    private AbstractClientPlayer resolveEntity() {
+        return ClientNumenLookup.resolve(entityUuid);
+    }
+
+    private void bounceBackToMain(int gen, Set<String> requestToolResultIds,
+                                  NumenLlmClient.ChatResult res, Throwable err) {
+        Minecraft mc = Minecraft.getInstance();
+        mc.execute(() -> handleResponse(gen, requestToolResultIds, res, err));
+    }
+
+    private void handleResponse(int gen, Set<String> requestToolResultIds,
+                                NumenLlmClient.ChatResult res, Throwable err) {
+        // Owner interrupted this turn while the call was in flight: abort()
+        // already settled the conversation (and, if a newer turn has since
+        // started, awaitingLlmResponse belongs to *that* call). Discard wholesale
+        // — do NOT touch awaitingLlmResponse here, or we'd clear the newer turn's.
+        if (gen != turnGeneration) {
+            Constants.LOG.info("[numen-entity#{}] discarding interrupted LLM response (gen {} != {})",
+                    entityUuid, gen, turnGeneration);
+            return;
+        }
+        awaitingLlmResponse = false;
+
+        // World is unloading (owner quit / disconnected): the client→server channel is gone, so a
+        // dispatched ExecuteToolPayload would NPE in the platform sender. Drop this turn quietly.
+        if (Minecraft.getInstance().getConnection() == null) {
+            Constants.LOG.info("[numen-entity#{}] client disconnected — dropping LLM turn", entityUuid);
+            aborted = true;
+            return;
+        }
+
+        if (err != null) {
+            Constants.LOG.warn("[numen-entity#{}] LLM call failed: {}",
+                    entityUuid, ConversationRecovery.rootMessage(err));
+            aborted = true;
+            return;
+        }
+        if (res == null || res.turn() == null) {
+            Constants.LOG.warn("[numen-entity#{}] LLM returned null turn", entityUuid);
+            aborted = true;
+            return;
+        }
+        sentToolResultIds.addAll(requestToolResultIds);
+        AssistantTurn turn = res.turn();
+        convo.addAssistant(turn);
+
+        if (!turn.hasToolCalls()) {
+            // Final text reply — spoken to the owner. Chain settles; the next
+            // prompt resumes the same conversation with a fresh turn count.
+            if (!turn.content().isEmpty()) {
+                Constants.LOG.info("[numen-entity#{}] assistant (final): {}",
+                        entityUuid, turn.content());
+            } else {
+                Constants.LOG.info("[numen-entity#{}] assistant (final, empty content)", entityUuid);
+            }
+            convo.resetTurnCount();
+            // A prompt that arrived during this final turn was buffered; now that
+            // the chain has settled, start a fresh turn to answer it.
+            if (!bufferedPrompts.isEmpty()) tryStartTurn();
+            return;
+        }
+
+        // Hand this turn's calls to the dispatcher — it runs them serially and
+        // reports each result back through the sink (into the conversation), then
+        // calls onAllSettled so the loop starts the next turn.
+        dispatcher.dispatch(turn.toolCalls().stream()
+                .map(tc -> new ToolInvocation(tc.id(), tc.name(), tc.arguments()))
+                .toList());
+    }
+
+    private static String truncate(String s, int max) {
+        if (s == null) return "";
+        return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
+}

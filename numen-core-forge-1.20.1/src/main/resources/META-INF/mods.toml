@@ -1,0 +1,55 @@
+modLoader = "javafml"
+loaderVersion = "[47,)"
+license = "MIT"
+[[mods]]
+modId = "numen_api"
+version = "${numen_api_version}"
+displayName = "Numen API (Bundled)"
+logoFile = "numen_api.png"
+authors = "dwinovo, laodafeijibei"
+description = "Bundled compatibility engine for Numen."
+[[mods]]
+modId = "numen"
+version = "${numen_version}"
+displayName = "Numen"
+logoFile = "numen.png"
+credits = ""
+authors = "dwinovo, laodafeijibei"
+description = "LLM-powered AI companions. Summon a companion and just talk to it."
+[[dependencies.numen]]
+    modId = "forge"
+    mandatory = true
+    versionRange = "[47,)"
+    ordering = "NONE"
+    side = "BOTH"
+[[dependencies.numen]]
+    modId = "minecraft"
+    mandatory = true
+    versionRange = "[1.20.1,1.21)"
+    ordering = "NONE"
+    side = "BOTH"
+[[dependencies.numen]]
+    modId = "numen_api"
+    mandatory = true
+    versionRange = "[0.0,)"
+    ordering = "AFTER"
+    side = "BOTH"
+
+[[dependencies.numen_api]]
+    modId = "forge"
+    mandatory = true
+    versionRange = "[47,)"
+    ordering = "NONE"
+    side = "BOTH"
+[[dependencies.numen_api]]
+    modId = "minecraft"
+    mandatory = true
+    versionRange = "[1.20.1,1.21)"
+    ordering = "NONE"
+    side = "BOTH"
+
+[[mixins]]
+config = "numen_api.mixins.json"
+
+[[mixins]]
+config = "numen_api.forge.mixins.json"

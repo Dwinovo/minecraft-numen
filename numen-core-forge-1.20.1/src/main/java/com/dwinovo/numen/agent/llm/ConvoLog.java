@@ -1,0 +1,300 @@
+package com.dwinovo.numen.agent.llm;
+
+import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.provider.AssistantTurn;
+import com.dwinovo.numen.agent.provider.LlmToolCall;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Append-only JSONL persistence for one entity's conversation —
+ * {@code <gameDir>/config/numen/conversations/<entity-uuid>.jsonl}, one
+ * message per line. The entity UUID is globally unique and dimension-stable,
+ * so no per-world scoping is needed; the same file follows the companion for
+ * its whole life.
+ *
+ * <h2>Why JSONL, not a database</h2>
+ * The access pattern is: single writer (client main thread), append per
+ * message, read-once on load, no queries. Append-only text is crash-safe
+ * (a hard kill loses at most the final line — {@link #load} skips a torn
+ * tail), the file is player-readable/editable like the rest of
+ * {@code config/numen}, and Gson ships with Minecraft — zero dependencies.
+ *
+ * <h2>Tail loading</h2>
+ * History on disk is unbounded, but what gets replayed into the LLM context
+ * is not: {@link #load} returns roughly the last {@link #DEFAULT_LOAD_LIMIT}
+ * messages, extended backwards to the nearest {@code user} message so the
+ * slice never opens with an orphan tool result or a mid-chain assistant turn
+ * (backends 400 on those). Full history stays on disk for a future
+ * summarising memory layer.
+ *
+ * <h2>Best-effort by design</h2>
+ * IO failures log a warning and the chat carries on in memory — persistence
+ * must never take the companion offline.
+ */
+public final class ConvoLog {
+
+    /** Soft cap on messages replayed into context (the file itself is unbounded). */
+    public static final int DEFAULT_LOAD_LIMIT = 200;
+
+    /**
+     * Sentinel user-message content marking a compaction boundary in the
+     * DISPLAY view ({@link #loadDisplay}): the GUI renders it as a thin
+     * divider instead of chat text. Never sent to the LLM.
+     */
+    public static final String COMPACT_DIVIDER = "[numen:compact-divider]";
+
+    private final Path file;
+    private final ConversationJournal journal;
+
+    private ConvoLog(Path file) {
+        this.file = file;
+        this.journal = new ConversationJournal(file, ConvoLog::validateRecord);
+    }
+
+    /** The log for one entity under {@code conversationsDir}. Creates nothing until the first append. */
+    public static ConvoLog forEntity(Path conversationsDir, UUID entityUuid) {
+        return new ConvoLog(conversationsDir.resolve(entityUuid + ".jsonl"));
+    }
+
+    public Path file() {
+        return file;
+    }
+
+    // ---- write ----
+
+    /** Append one message as a single JSONL line. Best-effort: failures only warn. */
+    public void append(ConvoState.Msg msg) {
+        try {
+            journal.append(encode(msg), false);
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-convo] failed to append to {}: {}", file, ex.toString());
+        }
+    }
+
+    /**
+     * Append a compaction boundary: a {@code role:"compact"} line whose content
+     * is the (already wrapped) summary that replaces everything before it, plus
+     * a {@code preserved} whitelist — messages (typically the model's final
+     * output) carried across the boundary VERBATIM, because the summary is
+     * lossy and the very next owner prompt is usually a follow-up to exactly
+     * that last reply. The file stays append-only — the full pre-compaction
+     * history remains on disk as an archive, but {@link #load} starts fresh
+     * from the latest boundary, so relaunches replay the compacted view
+     * (summary + preserved tail), not the raw past.
+     */
+    public void appendCompactSummary(String wrappedSummary, List<ConvoState.Msg> preserved,
+                                     JsonObject meta) {
+        JsonObject o = new JsonObject();
+        o.addProperty("role", "compact");
+        o.addProperty("content", wrappedSummary);
+        if (!preserved.isEmpty()) {
+            JsonArray kept = new JsonArray();
+            for (ConvoState.Msg m : preserved) kept.add(encode(m));
+            o.add("preserved", kept);
+        }
+        // Accounting only (trigger, preTokens, summaryTokens, droppedMessages,
+        // durationMs) — replay ignores it; it exists for humans and debugging,
+        // like Claude Code's compactMetadata.
+        if (meta != null && !meta.entrySet().isEmpty()) {
+            o.add("meta", meta);
+        }
+        try {
+            journal.append(o, true);
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-convo] failed to append compact boundary to {}: {}",
+                    file, ex.toString());
+        }
+    }
+
+    /** Remove the file (conversation reset). */
+    public void delete() {
+        try {
+            journal.delete();
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-convo] failed to delete {}: {}", file, ex.toString());
+        }
+    }
+
+    // ---- read ----
+
+    /**
+     * Load the protocol-valid tail of the conversation: parse every line
+     * (skipping torn/corrupt ones with a warning), take the last
+     * {@code limit} messages, then extend backwards to the nearest
+     * {@code user} message so the slice starts at a turn boundary.
+     */
+    public List<ConvoState.Msg> load(int limit) {
+        List<ConvoState.Msg> all = new ArrayList<>();
+        try {
+            for (JsonObject o : journal.read()) {
+                if ("compact".equals(str(o.get("role")))) {
+                    // Compaction boundary: everything before it was replaced
+                    // by this summary. Restart the replay from here, then
+                    // splice back the verbatim-preserved tail (if any).
+                    all.clear();
+                    all.add(new ConvoState.Msg.User(str(o.get("content"))));
+                    if (o.has("preserved") && o.get("preserved").isJsonArray()) {
+                        for (JsonElement el : o.getAsJsonArray("preserved")) {
+                            all.add(decode(el.getAsJsonObject()));
+                        }
+                    }
+                    continue;
+                }
+                all.add(decode(o));
+            }
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-convo] failed to read {}: {}", file, ex.toString());
+            return List.of();
+        }
+        if (all.size() <= limit) return all;
+
+        // Tail-trim, then walk back to the nearest user message: a slice that
+        // opens with a tool result (orphan id) or mid-chain assistant turn is
+        // rejected by the API. A conversation always begins with a user
+        // message, so this terminates.
+        int start = all.size() - limit;
+        while (start > 0 && !(all.get(start) instanceof ConvoState.Msg.User)) {
+            start--;
+        }
+        List<ConvoState.Msg> tail = all.subList(start, all.size());
+        Constants.LOG.info("[numen-convo] loaded {}/{} msgs from {}",
+                tail.size(), all.size(), file.getFileName());
+        return new ArrayList<>(tail);
+    }
+
+    /**
+     * Load the PHYSICAL tail of the log for the chat GUI: messages in file
+     * order, compaction boundaries rendered as {@link #COMPACT_DIVIDER}
+     * sentinels instead of restarting the replay. This is the "what actually
+     * happened" view — compaction rewires what the LLM sees ({@link #load}),
+     * but the owner's visible transcript must never lose history over it.
+     */
+    public List<ConvoState.Msg> loadDisplay(int limit) {
+        List<ConvoState.Msg> all = new ArrayList<>();
+        try {
+            for (JsonObject o : journal.read()) {
+                if ("compact".equals(str(o.get("role")))) {
+                    all.add(new ConvoState.Msg.User(COMPACT_DIVIDER));
+                    continue;
+                }
+                all.add(decode(o));
+            }
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-convo] failed to read {}: {}", file, ex.toString());
+            return List.of();
+        }
+        if (all.size() <= limit) return all;
+        return new ArrayList<>(all.subList(all.size() - limit, all.size()));
+    }
+
+    /**
+     * Tool-call ids in {@code history} that have no matching tool result —
+     * the signature of a session killed mid-task. Returning the complete call
+     * preserves the original name and arguments for restart reattachment.
+     */
+    public static List<LlmToolCall> unansweredToolCalls(List<ConvoState.Msg> history) {
+        Set<String> answered = new HashSet<>();
+        for (ConvoState.Msg msg : history) {
+            if (msg instanceof ConvoState.Msg.Tool t) answered.add(t.toolCallId());
+        }
+        List<LlmToolCall> unanswered = new ArrayList<>();
+        for (ConvoState.Msg msg : history) {
+            if (msg instanceof ConvoState.Msg.Assistant a) {
+                for (LlmToolCall tc : a.turn().toolCalls()) {
+                    if (!answered.contains(tc.id())) unanswered.add(tc);
+                }
+            }
+        }
+        return unanswered;
+    }
+
+    /** Backwards-compatible id view for callers that do not need recovery metadata. */
+    public static List<String> unansweredToolCallIds(List<ConvoState.Msg> history) {
+        return unansweredToolCalls(history).stream().map(LlmToolCall::id).toList();
+    }
+
+    // ---- codec (one JSONL line per Msg, OpenAI-flavoured field names) ----
+
+    private static JsonObject encode(ConvoState.Msg msg) {
+        JsonObject o = new JsonObject();
+        if (msg instanceof ConvoState.Msg.User u) {
+            o.addProperty("role", "user");
+            o.addProperty("content", u.content());
+        } else if (msg instanceof ConvoState.Msg.Assistant a) {
+            o.addProperty("role", "assistant");
+            o.addProperty("content", a.turn().content());
+            if (a.turn().hasToolCalls()) {
+                JsonArray calls = new JsonArray();
+                for (LlmToolCall tc : a.turn().toolCalls()) {
+                    JsonObject c = new JsonObject();
+                    c.addProperty("id", tc.id());
+                    c.addProperty("name", tc.name());
+                    c.addProperty("arguments", tc.arguments());
+                    calls.add(c);
+                }
+                o.add("tool_calls", calls);
+            }
+            // Provider extras (e.g. DeepSeek reasoning_content) must survive
+            // the round-trip — they are required on the next request.
+            if (!a.turn().extras().entrySet().isEmpty()) {
+                o.add("extras", a.turn().extras());
+            }
+        } else if (msg instanceof ConvoState.Msg.Tool t) {
+            o.addProperty("role", "tool");
+            o.addProperty("tool_call_id", t.toolCallId());
+            o.addProperty("content", t.content());
+        } else {
+            throw new IllegalStateException("Unexpected value: " + msg);
+        }
+        return o;
+    }
+
+    private static ConvoState.Msg decode(JsonObject o) {
+        String role = str(o.get("role"));
+        return switch (role) {
+            case "user" -> new ConvoState.Msg.User(str(o.get("content")));
+            case "tool" -> new ConvoState.Msg.Tool(str(o.get("tool_call_id")), str(o.get("content")));
+            case "assistant" -> {
+                List<LlmToolCall> calls = new ArrayList<>();
+                if (o.has("tool_calls") && o.get("tool_calls").isJsonArray()) {
+                    for (JsonElement el : o.getAsJsonArray("tool_calls")) {
+                        JsonObject c = el.getAsJsonObject();
+                        calls.add(new LlmToolCall(
+                                str(c.get("id")), str(c.get("name")), str(c.get("arguments"))));
+                    }
+                }
+                JsonObject extras = o.has("extras") && o.get("extras").isJsonObject()
+                        ? o.getAsJsonObject("extras") : null;
+                yield new ConvoState.Msg.Assistant(new AssistantTurn(str(o.get("content")), calls, extras));
+            }
+            default -> throw new IllegalArgumentException("unknown role: " + role);
+        };
+    }
+
+    private static void validateRecord(JsonObject object) {
+        String role = str(object.get("role"));
+        if ("compact".equals(role)) {
+            if (!object.has("content")) throw new IllegalArgumentException("compact record has no content");
+            if (object.has("preserved")) {
+                if (!object.get("preserved").isJsonArray()) throw new IllegalArgumentException("preserved is not an array");
+                for (JsonElement entry : object.getAsJsonArray("preserved")) decode(entry.getAsJsonObject());
+            }
+            return;
+        }
+        decode(object);
+    }
+
+    private static String str(JsonElement el) {
+        return el == null || el.isJsonNull() ? "" : el.getAsString();
+    }
+}
