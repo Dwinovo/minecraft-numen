@@ -50,6 +50,7 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
         }
         doneMessage = "dropped " + dropped + "x " + r.label
                 + (dropped < r.count ? " (only had " + dropped + ")" : "");
+        succeed();   // work is done — finalize this same tick, before a Stop can mislabel it
     }
 
     @Override

@@ -58,12 +58,14 @@ public final class CompanionTickDispatcher {
      * second result here would be a duplicate the client ignores).
      */
     public static void clearActiveTask(NumenPlayer player) {
-        brainFor(player.getUUID()).llm.dropActiveNoResult();
+        CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late death
+        if (brain != null) brain.llm.dropActiveNoResult();     // event must not leak a brain
     }
 
     /** Owner pressed Stop: cancel the pending queue and the running task (finalized next tick). */
     public static void cancelFor(NumenPlayer player) {
-        CompanionBrain brain = brainFor(player.getUUID());
+        CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late cancel
+        if (brain == null) return;                             // packet must not leak a brain
         brain.queue.cancelAll("interrupted by owner");
         brain.llm.cancelActive();
     }

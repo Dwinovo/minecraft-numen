@@ -78,6 +78,7 @@ public final class MLGChain implements TaskChain {
         if (companion.isUsingItem()) {
             companion.releaseUsingItem();
         }
+        companion.setXRot(0.0f);   // stop staring straight down; the resumed task re-aims as needed
     }
 
     @Override

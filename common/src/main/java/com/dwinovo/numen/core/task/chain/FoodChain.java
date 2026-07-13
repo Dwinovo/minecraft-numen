@@ -37,6 +37,11 @@ public final class FoodChain implements TaskChain {
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+        // Never preempt a body already using an item UNLESS it's our own in-flight
+        // eat: the LLM may be mid-eat (whose before/after item accounting a hand
+        // swap would corrupt) or drawing a bow. Our own chew must keep priority,
+        // or the spike would drop mid-bite and the eat could never finish.
+        if (eat == null && companion.isUsingItem()) return Float.NEGATIVE_INFINITY;
         int foodLevel = companion.getFoodData().getFoodLevel();
         float health = companion.getHealth();
         boolean hasEdible = bestEdibleSlot(companion) >= 0;

@@ -42,11 +42,13 @@ final class CompanionBrain {
         TaskChain best = ChainScheduler.select(chains, companion);
 
         if (best == null) {
-            // Everything dormant (idle body). Release whoever held control, then drain.
+            // Everything dormant (idle body). Release whoever held control, then
+            // finalize + drain — a record cancelled out-of-band must still ship.
             if (running != null) {
                 running.onInterrupt(companion);
                 running = null;
             }
+            llm.finalizeTerminal();
             llm.drainResults(companion);
             return;
         }
@@ -63,6 +65,12 @@ final class CompanionBrain {
         }
 
         best.tick(companion);
+
+        // Finalize EVERY tick, not just when llm wins: an owner Stop (cancelFor)
+        // marks the record terminal out-of-band, and the client's serial
+        // ToolDispatcher is wedged until that single result ships — even while a
+        // survival chain holds the body. (A no-op when llm.tick already finalized.)
+        llm.finalizeTerminal();
         llm.drainResults(companion);
     }
 }

@@ -71,6 +71,18 @@ public final class TaskQueue {
         return !pending.isEmpty();
     }
 
+    /**
+     * Push every pending record's deadline one tick later — called for each tick
+     * the LLM lane is preempted by a survival chain, so a queued-but-unstarted
+     * task doesn't burn its whole budget (stamped at enqueue time) while the body
+     * is busy staying alive.
+     */
+    public void freezePendingDeadlines() {
+        for (TaskRecord r : pending) {
+            r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
+        }
+    }
+
     public int pendingCount() {
         return pending.size();
     }

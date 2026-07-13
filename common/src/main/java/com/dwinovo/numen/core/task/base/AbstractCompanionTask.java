@@ -100,10 +100,20 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
             Precondition.Failure f = p.check();
             if (f != null) {
                 fail(f.message(), f.type());
+                r.setState(TaskState.FAILED);   // same-tick finalization (old dispatcher semantics)
                 return;
             }
         }
         onStart();
+        // A terminal parked DURING start (a fail(...) or succeed() from onStart — the
+        // one-shot tasks do their whole job there) is stamped on the record NOW, so
+        // the dispatcher finalizes it in the same tick it started. Without this, the
+        // record sits RUNNING for one tick with the work already done, and an owner
+        // Stop in that window would ship "interrupted" for work that actually
+        // happened — diverging the model's world-view from the inventory.
+        if (pendingTerminal != null) {
+            r.setState(pendingTerminal);
+        }
     }
 
     @Override
@@ -175,6 +185,15 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
         this.doneReason = why;
         this.failType = t;
         this.pendingTerminal = TaskState.FAILED;
+    }
+
+    /**
+     * Park a terminal SUCCESS — the mirror of {@link #fail} for one-shot tasks whose
+     * whole job happens in {@link #onStart()} (drop, equip): {@link #tick()} surfaces
+     * it, and {@link #start()} stamps it on the record for same-tick finalization.
+     */
+    protected void succeed() {
+        this.pendingTerminal = TaskState.SUCCESS;
     }
 
     /** The structured cause of the most recent failure (or {@link FailureType#UNKNOWN}). */

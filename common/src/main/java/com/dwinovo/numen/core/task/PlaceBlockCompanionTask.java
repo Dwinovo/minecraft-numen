@@ -88,6 +88,10 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
     private boolean digTried;
     /** Blocks the dig-out rung has removed (≤ {@link #MAX_OCCLUDERS_DUG}). */
     private int occludersDug;
+    /** Ticks spent in the dig rung — a hard cap so an effectively-unbreakable occluder
+     *  (obsidian, no pick) exhausts the rung instead of grinding until the deadline. */
+    private int digTicks;
+    private static final int DIG_TICK_CAP = 100;
     /** Feet cells a maneuver already failed from — excluded from later stance goals. */
     private final Set<BlockPos> badStances = new HashSet<>();
     /** Lazily-created digger for the dig-out rung. */
@@ -226,8 +230,13 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
             return exhaust(FailureType.OCCLUDED, "no single safe occluder is identifiable to"
                     + " clear — the view to a support face is boxed in by terrain");
         }
+        if (++digTicks > DIG_TICK_CAP) {
+            if (digger != null) digger.cancel();
+            return exhaust(FailureType.OCCLUDED, "the occluding block is too hard to break"
+                    + " through with what I'm carrying");
+        }
         if (digger == null) digger = new BlockDigger(player);
-        return switch (digger.digStep(occ)) {
+        TaskState out = switch (digger.digStep(occ)) {
             // BROKE_OCCLUDER = the digger's own fallback removed a block in front of OUR
             // occluder — still one block gone, so it counts toward the same bound.
             case BROKE_TARGET, BROKE_OCCLUDER -> {
@@ -238,6 +247,32 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
             case NO_SHOT -> exhaust(FailureType.OCCLUDED,
                     "couldn't get a clear shot at the occluding block");
         };
+        // digStep re-verifies line of sight from the STANDING eye and may fall back to
+        // "break the incorrect block" on whatever its own ray hits — which findOccluder's
+        // CROUCHING-eye vetting never saw. If it latched onto a block we must not break
+        // (our footing, the support, the target), abort the rung instead of letting the
+        // fallback dig the ground out from under us. (Multi-tick survival digs are caught
+        // here on their first PROGRESSING tick, before any break completes; the only
+        // insta-broken blocks are soft plants, which are never footing or support.)
+        BlockPos latched = digger.current();
+        if (latched != null && !latched.equals(occ) && !digSafe(latched)) {
+            digger.cancel();
+            return exhaust(FailureType.OCCLUDED, "clearing the view would mean breaking"
+                    + " a block I must not (my footing or the support itself)");
+        }
+        return out;
+    }
+
+    /** May the digger's fallback legitimately break {@code p} while clearing the view?
+     *  Refuses the target cell, our footing, any usable support block, and protected blocks. */
+    private boolean digSafe(BlockPos p) {
+        BlockPos feet = player.blockPosition();
+        if (p.equals(r.pos) || p.equals(feet) || p.equals(feet.below())) return false;
+        for (Direction dir : SUPPORT_FACES) {
+            BlockPos against = r.pos.relative(dir);
+            if (p.equals(against) && Placement.canPlaceAgainst(player.level(), against)) return false;
+        }
+        return !BlockHelper.shouldAvoidBreaking(player.level(), p);
     }
 
     /**

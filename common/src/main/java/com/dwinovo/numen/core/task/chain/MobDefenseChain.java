@@ -50,15 +50,31 @@ public final class MobDefenseChain implements TaskChain {
 
     private enum Mode { NONE, CHASE, FLEE }
 
+    /** Consecutive nav failures on the current engagement before the leash fires. */
+    private static final int MAX_ENGAGE_FAILS = 3;
+    /** How long an unreachable target is ignored / how long the whole chain cools down (ticks). */
+    private static final long UNREACHABLE_COOLDOWN = 200;
+    private static final long CHAIN_COOLDOWN = 100;
+
     private Mode mode = Mode.NONE;
     private LivingEntity target;
     private PlayerNav nav;
     /** Last known threat position, for the flee goal supplier (survives the mob despawning mid-flee). */
     private BlockPos lastThreatPos;
+    /** Engagement leash: consecutive nav FAILEDs on the current fight/flee attempt. */
+    private int consecutiveNavFails;
+    /** Targets we provably can't path to, ignored until the stored gameTime (entity id → until). */
+    private final java.util.Map<Integer, Long> unreachable = new java.util.HashMap<>();
+    /** Whole-chain cooldown after a failed (boxed-in) flee — hands the body back to the LLM. */
+    private long cooldownUntilGameTime;
 
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+        // Leash cooldown: we recently proved we can neither reach nor escape the
+        // threat — stop spiking so the LLM task resumes (and its deadline can run)
+        // instead of holding the body forever while freezeTick pushes the deadline.
+        if (companion.level().getGameTime() < cooldownUntilGameTime) return Float.NEGATIVE_INFINITY;
         return SurvivalDecisions.mobDefensePriority(nearestThreat(companion) != null);
     }
 
@@ -71,12 +87,13 @@ public final class MobDefenseChain implements TaskChain {
         }
         if (threat != target) {
             target = threat;
+            consecutiveNavFails = 0;
             stopNav();   // re-plan for the new target
         }
         lastThreatPos = threat.blockPosition();
 
         ThreatResponse resp = SurvivalDecisions.decideThreatResponse(
-                true, companion.getHealth(), hasWeapon(companion));
+                true, companion.getHealth(), hasWeapon(companion));   // pure carry-check; fight() arms
         if (resp == ThreatResponse.FIGHT) {
             fight(companion, threat);
         } else {
@@ -104,6 +121,7 @@ public final class MobDefenseChain implements TaskChain {
         ToolSelect.holdBestWeapon(companion);   // pathfinder may have swapped a block into the hand
         if (inReach(companion, threat)) {
             stopNav();
+            consecutiveNavFails = 0;
             // A fresh once() per tick: it aims, then attacks iff the native attack
             // cooldown has recovered (else soft-waits). The cooldown lives on the
             // player, so recreating the interaction each tick is stateless and safe.
@@ -116,7 +134,18 @@ public final class MobDefenseChain implements TaskChain {
         }
         switch (nav.tick()) {
             case RUNNING, ARRIVED -> { /* closing distance */ }
-            case FAILED -> stopNav();   // unreachable this tick; re-plan next (bounded by re-scan)
+            case FAILED -> {
+                stopNav();
+                // Leash: a skeleton on an unreachable ledge would otherwise hold this
+                // chain (and freeze the LLM task's deadline) FOREVER. After a few
+                // provably-failed plans, ignore that target for a while.
+                if (++consecutiveNavFails >= MAX_ENGAGE_FAILS) {
+                    unreachable.put(threat.getId(),
+                            companion.level().getGameTime() + UNREACHABLE_COOLDOWN);
+                    consecutiveNavFails = 0;
+                    target = null;   // re-scan picks another threat, or none → dormant
+                }
+            }
         }
     }
 
@@ -135,7 +164,15 @@ public final class MobDefenseChain implements TaskChain {
                     () -> false);   // never "arrived" — keep running until the threat clears
         }
         if (nav.tick() == PlayerNav.Status.FAILED) {
-            stopNav();   // boxed in; re-plan next tick
+            stopNav();
+            // Boxed in with no escape plan: after a few failed attempts, stop
+            // spiking for a while — holding the body helps nobody, and the LLM
+            // (whose deadline resumes) may know a better way out.
+            if (++consecutiveNavFails >= MAX_ENGAGE_FAILS) {
+                cooldownUntilGameTime = companion.level().getGameTime() + CHAIN_COOLDOWN;
+                consecutiveNavFails = 0;
+                release(companion);
+            }
         }
     }
 
@@ -149,10 +186,17 @@ public final class MobDefenseChain implements TaskChain {
     private LivingEntity nearestThreat(NumenPlayer companion) {
         AABB box = companion.getBoundingBox().inflate(SCAN_RADIUS);
         LivingEntity attacker = companion.getLastHurtByMob();
+        long now = companion.level().getGameTime();
         LivingEntity best = null;
         double bestDistSqr = Double.MAX_VALUE;
         for (Monster m : companion.level().getEntitiesOfClass(Monster.class, box)) {
             if (m.isRemoved() || m.isDeadOrDying()) continue;
+            // DEFENSE, not aggression: only a mob that is actually engaging us — it hurt
+            // us, or its AI has targeted us — counts. A neutral Monster (a calm zombified
+            // piglin drifting by) must not be attacked and provoked by a "defense" chain.
+            if (m != attacker && m.getTarget() != companion) continue;
+            // Skip targets we recently proved unreachable (the engagement leash).
+            if (unreachable.getOrDefault(m.getId(), 0L) > now) continue;
             double d = companion.distanceToSqr(m);
             if (d > SCAN_RADIUS * SCAN_RADIUS) continue;
             // Bias toward the mob that hurt us: pretend it is closer so it wins ties.
@@ -165,17 +209,19 @@ public final class MobDefenseChain implements TaskChain {
         return best;
     }
 
-    private boolean hasWeapon(NumenPlayer companion) {
-        // holdBestWeapon ranks the whole inventory by melee attack damage and swaps it
-        // into the hand; the body is "armed" iff that best item actually grants a
-        // main-hand ATTACK_DAMAGE bonus (an empty hand / block / food scores nothing).
-        ToolSelect.holdBestWeapon(companion);
-        return mainHandAttackBonus(companion) > 0.0;
+    /** Does the body CARRY a melee weapon anywhere in inventory? Pure check — no hand
+     *  mutation; the swap happens only once FIGHT is actually chosen (a fleeing body
+     *  must not have its held tool silently replaced by a probe). */
+    private static boolean hasWeapon(NumenPlayer companion) {
+        var inv = companion.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            if (stackAttackBonus(inv.getItem(i)) > 0.0) return true;
+        }
+        return false;
     }
 
-    /** Flat main-hand attack-damage the held item grants (mirrors {@code ToolSelect.weaponDamage}). */
-    private static double mainHandAttackBonus(NumenPlayer companion) {
-        ItemStack stack = companion.getMainHandItem();
+    /** Flat main-hand attack-damage a stack grants (mirrors {@code ToolSelect.weaponDamage}). */
+    private static double stackAttackBonus(ItemStack stack) {
         if (stack.isEmpty()) return 0.0;
         ItemAttributeModifiers mods = stack.getOrDefault(
                 DataComponents.ATTRIBUTE_MODIFIERS, ItemAttributeModifiers.EMPTY);

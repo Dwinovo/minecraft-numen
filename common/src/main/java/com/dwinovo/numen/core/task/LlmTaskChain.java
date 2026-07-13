@@ -64,6 +64,18 @@ public final class LlmTaskChain implements TaskChain {
         }
 
         // 3) terminal (from start(), tick(), deadline, or an external cancel) → finalize.
+        finalizeTerminal();
+    }
+
+    /**
+     * Finalize the running record if it has reached a terminal state — build its
+     * result, move it to the outbox, release the slot. Split out of {@link #tick}
+     * because {@link CompanionBrain} must call it EVERY tick, even while a survival
+     * chain holds the body: an owner Stop marks the record CANCELLED out-of-band,
+     * and the client's strictly-serial ToolDispatcher is wedged until that one
+     * result ships — finalization must not wait for this chain to win again.
+     */
+    void finalizeTerminal() {
         if (record != null && record.getState().isTerminal()) {
             record.setResult(task.buildResult(record.getState()));
             queue.complete(record);
@@ -81,15 +93,19 @@ public final class LlmTaskChain implements TaskChain {
     }
 
     /**
-     * The running task was preempted this tick: push its deadline one tick later so
-     * the ticks it spends paused don't count against its budget (no false TIMEOUT
-     * while a survival chain holds the body). Uses the existing freeze-aware
+     * The LLM lane was preempted this tick: push the running task's deadline one
+     * tick later so the ticks it spends paused don't count against its budget (no
+     * false TIMEOUT while a survival chain holds the body), and do the same for
+     * every PENDING record still queued — their deadlines were stamped at enqueue
+     * time by the tool layer, and a long survival hold must not burn an unstarted
+     * task's whole budget before it even runs. Uses the existing freeze-aware
      * {@code extendDeadlineTo}, which only ever moves the deadline later.
      */
     void freezeTick(NumenPlayer companion) {
         if (record != null && record.getState() == TaskState.RUNNING) {
             record.extendDeadlineTo(record.getDeadlineGameTime() + 1);
         }
+        queue.freezePendingDeadlines();
     }
 
     /**

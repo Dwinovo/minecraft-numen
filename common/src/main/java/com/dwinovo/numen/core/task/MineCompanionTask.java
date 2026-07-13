@@ -106,7 +106,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private int branchY;
     private int rescanTimer;
     private int branchTicks;
-    private String doneReason = "done";
+    private String progressNote = "done";
     /** The ore currently returning {@code NO_SHOT}, and for how many consecutive ticks. */
     private BlockPos noShotPos;
     private int noShotTicks;
@@ -157,7 +157,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         int gathered = Math.max(0, inventoryMatch() - baseline);   // matching items gained so far
         r.setMined(gathered);
         if (gathered >= r.count) {
-            doneReason = "gathered all requested";
+            progressNote = "gathered all requested";
             return TaskState.SUCCESS;
         }
 
@@ -229,7 +229,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         //    in range still succeeds"), rather than running off across the world.
         if (!EXPLORE_FOR_BLOCKS) {
             if (r.getMined() > 0) {
-                doneReason = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
+                progressNote = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
                 return TaskState.SUCCESS;
             }
             return noOreFailure();
@@ -242,7 +242,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         }
         if (++branchTicks > MAX_BRANCH_TICKS) {
             if (r.getMined() > 0) {
-                doneReason = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
+                progressNote = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
                 return TaskState.SUCCESS;
             }
             return noOreFailure();
@@ -600,7 +600,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     @Override
     protected String successMessage() {
-        return "gathered " + r.getMined() + "/" + r.count + " " + r.label + " (" + doneReason + ")";
+        return "gathered " + r.getMined() + "/" + r.count + " " + r.label + " (" + progressNote + ")";
     }
 
     @Override

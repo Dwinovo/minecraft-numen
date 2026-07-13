@@ -151,6 +151,7 @@ public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRec
         slotName = slot == null ? "" : slot;
         equipped = true;
         result = TaskState.SUCCESS;
+        succeed();   // base: park + stamp SUCCESS so the equip finalizes this same tick
     }
 
     @Override

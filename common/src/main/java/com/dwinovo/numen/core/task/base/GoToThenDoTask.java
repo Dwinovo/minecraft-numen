@@ -53,7 +53,10 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
     @Override
     protected final TaskState onTick() {
         if (reached()) return act();
-        if (nav == null) return TaskState.FAILED;
+        if (nav == null) {
+            fail("navigation unavailable", FailureType.NO_PATH);   // defensive; unreachable today
+            return TaskState.FAILED;
+        }
         return switch (nav.tick()) {
             case RUNNING, ARRIVED -> TaskState.RUNNING;
             case FAILED -> handleNavFailure(nav.failType(), nav.failReason());
