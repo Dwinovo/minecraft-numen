@@ -49,6 +49,18 @@ public final class AStar {
     }
 
     /**
+     * As above but with an explicit per-search node budget. A far or vertical goal
+     * (tunnelling through solid rock explodes the branching factor) needs far more
+     * than the near-goal default — Baritone budgets by TIME (~500ms-6s ≈ millions
+     * of nodes); we approximate by scaling with distance. The search runs on the
+     * planner pool, never the tick thread, so a big budget costs latency, not TPS.
+     */
+    public AStarSearch newSearch(NavContext ctx, BlockPos start, NavGoal goal,
+                                 it.unimi.dsi.fastutil.longs.LongSet favored, int nodeBudget) {
+        return new AStarSearch(ctx, start, goal, Math.max(nodeBudget, 1), favored);
+    }
+
+    /**
      * Convenience for "get to this cell": exact when the cell is enterable;
      * when it can never be a feet position — solid and break-vetoed (a
      * furnace/chest the bot won't grief, bedrock) or a fluid cell — relaxes to

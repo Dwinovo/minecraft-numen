@@ -719,16 +719,41 @@ public final class PlayerPathExecutor {
      *  — the pillar apex place, performed natively (look down + useItemOn on the up-face). */
     private void placeUnderfoot(BlockPos cell) {
         int slot = scaffoldSlot();
-        if (slot < 0) return;
-        if (!Placement.canPlaceAgainst(player.level(), cell.below())) return;
+        if (slot < 0) {
+            underfootBlocked("no scaffold block in inventory", cell);
+            return;
+        }
+        if (!Placement.canPlaceAgainst(player.level(), cell.below())) {
+            underfootBlocked("support below is gone", cell);
+            return;
+        }
         InputDriver.lookAt(player, Vec3.atBottomCenterOf(cell));   // look straight down at the support's top
-        // Baritone crouch-confirm: only place once actually crouching — the sneak takes
-        // effect the tick AFTER we request it, and isCrouching() is that "took effect" signal.
-        if (!player.isCrouching()) return;
+        // Crouch-confirm, relaxed for mid-air: the sneak INPUT is held every pillar tick
+        // (drivePillar sets shift), but the CROUCHING pose doesn't reliably register while
+        // AIRBORNE — and the jump apex is exactly where this place must fire. Accept the
+        // held input as the confirm; the pose check still covers the grounded case.
+        if (!player.isCrouching() && !player.isShiftKeyDown()) {
+            underfootBlocked("sneak not registered", cell);
+            return;
+        }
         BlockHitResult hit = Placement.resolve(player, cell, true);  // honest raycast only — no fabricated hit
-        if (hit == null) return;
+        if (hit == null) {
+            underfootBlocked("no clear line to own feet cell", cell);
+            return;
+        }
         player.holdInHand(slot);   // real hotbar-select / swap-to-hand, not an aliasing overwrite
         Interaction.useBlock(player, hit, InteractionHand.MAIN_HAND).tick();
+        underfootBlockedTicks = 0;
+    }
+
+    /** Persistent pillar-place blockage diagnostics — names the failing gate once a second. */
+    private int underfootBlockedTicks;
+
+    private void underfootBlocked(String gate, BlockPos cell) {
+        if (++underfootBlockedTicks % 20 == 0) {
+            Constants.LOG.info("[numen-path] pillar place blocked {} ticks ({}) at {}",
+                    underfootBlockedTicks, gate, cell.toShortString());
+        }
     }
 
     /**

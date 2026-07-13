@@ -62,6 +62,19 @@ public final class AStarSearch {
     // concave terrain.
     private final double[] bestHeuristicSoFar = new double[PathSettings.COEFFICIENTS.length];
     private final PathNode[] bestSoFar = new PathNode[PathSettings.COEFFICIENTS.length];
+    /**
+     * Distance-only best candidate: the node that got CLOSEST to the goal by raw
+     * heuristic, no matter what it cost to reach. The coefficient candidates above
+     * divide cost by at most {@code 10}, so on expensive terrain (tunnelling solid
+     * rock: an upward step costs ~46-300 ticks but improves the heuristic by only a
+     * few) NO candidate ever registers and a physically real escape route reports
+     * "no progress". This candidate is the escape-hatch of the escape-hatch: when
+     * every coefficient came up empty, walk toward wherever we truly got nearest —
+     * the next segment replans from there (Baritone reaches the goal outright via
+     * a ~100× bigger budget and rarely needs this; with bounded budgets we do).
+     */
+    private double bestHOnlyHeuristic;
+    private PathNode bestHOnlyNode;
     private int expansions = 0;
 
     private State state = State.COMPUTING;
@@ -90,6 +103,8 @@ public final class AStarSearch {
             bestHeuristicSoFar[i] = startNode.estimatedCostToGoal;
             bestSoFar[i] = startNode;
         }
+        bestHOnlyHeuristic = startNode.estimatedCostToGoal;
+        bestHOnlyNode = startNode;
     }
 
     /** Abandon this search (thread-safe). The next loop check bails; {@link #result()} may be null. */
@@ -132,6 +147,9 @@ public final class AStarSearch {
             if (candidate != null) {
                 best = Math.max(best, distFromStartSq(candidate));
             }
+        }
+        if (bestHOnlyNode != null) {
+            best = Math.max(best, distFromStartSq(bestHOnlyNode));
         }
         return best;
     }
@@ -196,6 +214,12 @@ public final class AStarSearch {
                         bestSoFar[i] = neighbor;
                     }
                 }
+                // Distance-only candidate: genuinely nearer to the goal, cost ignored
+                // (expensive tunnelling progress must still count — see field javadoc).
+                if (bestHOnlyHeuristic - neighbor.estimatedCostToGoal > PathSettings.MIN_IMPROVEMENT) {
+                    bestHOnlyHeuristic = neighbor.estimatedCostToGoal;
+                    bestHOnlyNode = neighbor;
+                }
 
                 if (neighbor.isOpen()) {
                     open.update(neighbor);
@@ -228,6 +252,14 @@ public final class AStarSearch {
                     && distFromStartSq(candidate) > minDistSq) {
                 return reconstruct(candidate, true);
             }
+        }
+        // Every cost-weighted candidate came up empty (expensive terrain: tunnelling
+        // progress never beats h + g/10) — fall back to wherever we got genuinely
+        // NEAREST the goal, however costly the route. The next segment replans from
+        // there, so "slow but real" progress chains instead of reporting "no path".
+        if (bestHOnlyNode != null && bestHOnlyNode.via != null
+                && distFromStartSq(bestHOnlyNode) > minDistSq) {
+            return reconstruct(bestHOnlyNode, true);
         }
         return new Path(start, start, Collections.emptyList(), true);
     }

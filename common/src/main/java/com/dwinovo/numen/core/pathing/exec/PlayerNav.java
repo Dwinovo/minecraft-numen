@@ -32,7 +32,12 @@ public final class PlayerNav {
 
     public enum Status { RUNNING, ARRIVED, FAILED }
 
-    private static final int MAX_REPLANS = 40;
+    /** Absolute replan backstop — a sanity fuse, not the real give-up condition. */
+    private static final int MAX_REPLANS = 200;
+    /** Real give-up: this many CONSECUTIVE replans without genuinely nearing the goal. */
+    private static final int MAX_STALLED_REPLANS = 6;
+    /** Blocks of goal-distance gain that count as "genuinely nearing". */
+    private static final double REPLAN_PROGRESS_EPS = 1.5;
     private static final double GOAL_MOVED_SQR = 4.0;
 
     private final NumenPlayer player;
@@ -77,6 +82,9 @@ public final class PlayerNav {
     }
 
     private int replans = 0;
+    private int stalledReplans = 0;
+    /** Nearest we have EVER been to the goal — the yardstick for stalled-replan detection. */
+    private double bestGoalDist = Double.MAX_VALUE;
     private String failReason = "target unreachable";
     private FailureType failType = FailureType.NO_PATH;
 
@@ -224,11 +232,24 @@ public final class PlayerNav {
         NavContext ctx = searchContext();
         BlockPos startFeet = BlockHelper.playerFeet(
                 player.level(), player.getX(), player.getY(), player.getZ());
-        AStarSearch s = astar.newSearch(ctx, startFeet, g, previousPathHashes);
+        AStarSearch s = astar.newSearch(ctx, startFeet, g, previousPathHashes,
+                nodeBudget(startFeet, g));
         lastCtx = ctx;
         lastStart = startFeet;
         searchObj = s;
         searchFuture = dispatch(ctx, s);
+    }
+
+    /**
+     * Per-search node budget scaled to the straight-line distance: near goals stay
+     * at the cheap default (10k), a far/deep goal earns up to 200k — tunnelling
+     * through uniform rock branches enormously, and a 112-block climb starves at
+     * 10k. Off-thread on the planner pool, so the cost is planning latency only.
+     */
+    private static int nodeBudget(BlockPos start, NavGoal goal) {
+        double dist = Math.sqrt(start.distSqr(goal.center()));
+        return (int) Math.min(200_000, com.dwinovo.numen.core.pathing.calc.AStar.DEFAULT_MAX_NODES
+                + 1_700 * dist);
     }
 
     /** Cancel and forget the in-flight main search (so a stale worker stops and its result is ignored). */
@@ -281,10 +302,29 @@ public final class PlayerNav {
             current = null;
         }
         cancelSearch();   // abandon any in-flight main search before dispatching a new one
-        if (budgeted && replans++ >= MAX_REPLANS) {
-            failReason = "gave up after " + MAX_REPLANS + " replans";
-            failType = FailureType.BOXED_IN;
-            return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
+        if (!budgeted) {
+            bestGoalDist = Double.MAX_VALUE;   // goal moved / re-rooted → fresh accounting
+        } else {
+            // Baritone semantics: give up on STALLED effort, never on segment count —
+            // a 60-block dig-up legitimately takes dozens of segments, each one a real
+            // gain. Only consecutive segments that get us no nearer end the attempt.
+            double d = plannedCenter == null ? Double.MAX_VALUE
+                    : Math.sqrt(player.blockPosition().distSqr(plannedCenter));
+            if (bestGoalDist - d >= REPLAN_PROGRESS_EPS) {
+                bestGoalDist = d;
+                stalledReplans = 0;
+            } else if (++stalledReplans >= MAX_STALLED_REPLANS) {
+                failReason = "gave up: no closer to the target after " + MAX_STALLED_REPLANS
+                        + " consecutive attempts (nearest approach "
+                        + String.format("%.0f", Math.min(bestGoalDist, d)) + " blocks away)";
+                failType = FailureType.BOXED_IN;
+                return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
+            }
+            if (replans++ >= MAX_REPLANS) {
+                failReason = "gave up after " + MAX_REPLANS + " replans";
+                failType = FailureType.BOXED_IN;
+                return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
+            }
         }
         startFreshSearch();
         return Status.RUNNING;
@@ -300,7 +340,8 @@ public final class PlayerNav {
         if (g == null) return;
         plannedCenter = g.center();
         NavContext ctx = searchContext();
-        AStarSearch s = astar.newSearch(ctx, current.pathEnd(), g, previousPathHashes);
+        AStarSearch s = astar.newSearch(ctx, current.pathEnd(), g, previousPathHashes,
+                nodeBudget(current.pathEnd(), g));
         nextObj = s;
         nextFuture = dispatch(ctx, s);
     }
