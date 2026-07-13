@@ -66,6 +66,9 @@ public final class ShootCompanionTask extends AbstractCompanionTask<ShootTaskRec
     private static final int MAX_MISFIRES = 2;
 
     private final TargetSet<Entity> skipped = new TargetSet<>(Entity::getId);
+    /** How many of those skips happened ({@code TargetSet} keeps no count) — so the final
+     *  "nothing left to shoot" message can tell the LLM "N targets were there but unreachable". */
+    private int unreachableSkips;
 
     private CountedProgress progress;
     private Phase phase = Phase.SCAN;
@@ -126,7 +129,16 @@ public final class ShootCompanionTask extends AbstractCompanionTask<ShootTaskRec
                 note = "only destroyed " + r.getDestroyed() + "/" + r.count + " within " + r.maxRadius + " blocks";
                 return TaskState.SUCCESS;
             }
-            fail("no " + r.label + " found within " + r.maxRadius + " blocks", FailureType.TARGET_LOST);
+            // Structured give-up for the LLM: what was scanned (the task's full radius) and
+            // how many candidates existed but no firing position could be reached. Same
+            // condition as before — only the message content is richer.
+            String scanned = "no " + r.label + " found within " + r.maxRadius + " blocks";
+            if (unreachableSkips > 0) {
+                scanned += " (" + unreachableSkips + " candidate"
+                        + (unreachableSkips == 1 ? " was" : "s were")
+                        + " skipped as unreachable)";
+            }
+            fail(scanned, FailureType.TARGET_LOST);
             return TaskState.FAILED;
         }
         target = best;
@@ -172,6 +184,7 @@ public final class ShootCompanionTask extends AbstractCompanionTask<ShootTaskRec
             case FAILED -> {
                 abortShot();
                 skipped.skip(target);
+                unreachableSkips++;
                 target = null;
                 stopNav();
                 phase = Phase.SCAN;
@@ -203,7 +216,13 @@ public final class ShootCompanionTask extends AbstractCompanionTask<ShootTaskRec
                     note = why;
                     return TaskState.SUCCESS;
                 }
-                fail(why, FailureType.WRONG_TOOL);
+                // Same condition as before; the terminal WRONG_TOOL message additionally names
+                // the item that misfired so the LLM knows exactly what was in hand.
+                String weapon = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                        .getKey(player.getMainHandItem().getItem()).getPath();
+                fail("the weapon in hand (" + weapon + ") fired no projectile in " + MAX_MISFIRES
+                        + " attempts — it may need a special action this tool can't drive "
+                        + "(it handles bows and crossbows)", FailureType.WRONG_TOOL);
                 return TaskState.FAILED;
             }
         }

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.exec.InputDriver;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
@@ -29,8 +30,19 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     private static final double REACH = 3.0;            // vanilla entity interaction range
     private static final double REACH_SQR = REACH * REACH;
     private static final double WALK_SPEED = 1.0;
+    /** Reposition-rung stance radius: any feet cell this close to the entity's cell
+     *  (< {@link #REACH}, so an accepted stance is still within interact reach). */
+    private static final double REPOSITION_RADIUS = 2.5;
+    /** The reposition rung runs at most once. */
+    private static final int MAX_REPOSITIONS = 1;
 
     private Entity entity;
+    // ---- bounded recovery state (fields, so a Suspendable mid-rung suspend/resume
+    //      picks straight back up: the counter and the rebuilt nav both survive) ----
+    /** Executions of the reposition rung so far (capped at {@link #MAX_REPOSITIONS}). */
+    private int repositionAttempts;
+    /** The FIRST nav failure's reason, preserved so the final give-up keeps the original wording. */
+    private String firstNavFailReason;
     private Interaction interaction;
     private long holdUntil = -1;
     private boolean acted = false;     // landed at least one press (death then = success, not failure)
@@ -130,11 +142,46 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         };
     }
 
-    /** Preserve the original "can't reach {name}: {reason}" wording; still a plain give-up (no recovery). */
+    /**
+     * Bounded recovery — ONE reposition rung, as an inline attempt counter (a single
+     * rung doesn't warrant {@code RecoveryLadder}'s child-task plumbing). On an
+     * in-ladder nav cause ({@code NO_PATH} / {@code BOXED_IN} / {@code OUT_OF_REACH})
+     * retry the SAME bounded goal once with a looser stance goal — {@link NavGoal#near}
+     * within {@link #REPOSITION_RADIUS} (&lt; {@link #REACH}) of the entity's LIVE cell,
+     * so "can't stand exactly next to it" becomes "stand anywhere within interact reach".
+     * The goal supplier re-reads the entity each tick, so a target that merely MOVED
+     * while we repositioned is tracked (the nav replans), not failed; a genuinely gone
+     * entity never reaches this seam — {@link #reached()} routes it to {@link #act()},
+     * which reports {@code TARGET_LOST} immediately (no ladder). Never widens the
+     * search, never acquires anything. Exhausted (or a cause no rung handles), give up
+     * preserving the original "can't reach {name}: {reason}" wording plus a note of
+     * what was tried, carrying the nav's failType.
+     */
     @Override
     protected TaskState handleNavFailure(FailureType type, String reason) {
-        fail("can't reach " + name() + ": " + reason, type);
+        if (repositionable(type) && repositionAttempts < MAX_REPOSITIONS) {
+            repositionAttempts++;
+            firstNavFailReason = reason;
+            stopNav();
+            nav = PlayerNav.toGoal(player,
+                    () -> (entity == null || !entity.isAlive()) ? null
+                            : NavGoal.near(entity.blockPosition(), REPOSITION_RADIUS),
+                    WALK_SPEED, this::inReachAndLos);
+            return TaskState.RUNNING;
+        }
+        String original = firstNavFailReason != null ? firstNavFailReason : reason;
+        String tried = repositionAttempts > 0
+                ? " (also tried a looser stance anywhere within " + REPOSITION_RADIUS
+                        + " blocks of it: " + reason + ")"
+                : "";
+        fail("can't reach " + name() + ": " + original + tried, type);
         return TaskState.FAILED;
+    }
+
+    /** In-ladder nav causes the reposition rung handles; anything else kicks straight back to the LLM. */
+    private static boolean repositionable(FailureType type) {
+        return type == FailureType.NO_PATH || type == FailureType.BOXED_IN
+                || type == FailureType.OUT_OF_REACH;
     }
 
     private Interaction.Button button() {
