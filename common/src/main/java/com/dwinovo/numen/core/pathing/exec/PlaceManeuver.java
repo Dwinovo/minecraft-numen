@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.pathing.exec;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.task.FailureType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
@@ -68,6 +69,7 @@ public final class PlaceManeuver {
     private Direction faceDir;               // from `against` back to the target
     private int ticks;
     private String failReason = "couldn't place";
+    private FailureType failType = FailureType.OCCLUDED;
 
     /** Pathfinder / orientation-agnostic placement. */
     public PlaceManeuver(NumenPlayer player, BlockPos placeAt,
@@ -91,16 +93,23 @@ public final class PlaceManeuver {
         return failReason;
     }
 
+    /** Structured cause of a {@link Status#FAILED}, for the reactive task layer to branch on. */
+    public FailureType failType() {
+        return failType;
+    }
+
     public Status tick() {
         if (placed.getAsBoolean()) return Status.DONE;
         if (slotFinder.getAsInt() < 0) {
             failReason = "out of blocks to place";
+            failType = FailureType.NO_MATERIAL;
             return Status.FAILED;
         }
         if (against == null && !resolveSupport()) {
             failReason = "can't place at " + placeAt.toShortString() + " — nothing solid beside or below "
                     + "it to place against (it's over air or a non-solid block like leaf_litter / grass). "
                     + "Pick a cell that touches solid ground.";
+            failType = FailureType.NO_SUPPORT;
             return Status.FAILED;
         }
 
@@ -144,6 +153,7 @@ public final class PlaceManeuver {
             failReason = "couldn't get a clear line to a support face at " + placeAt.toShortString()
                     + " — the view to it is blocked (a wall between, or the body is boxed in). Try a more "
                     + "open spot next to solid ground.";
+            failType = FailureType.OCCLUDED;
             return Status.FAILED;
         }
         return Status.RUNNING;

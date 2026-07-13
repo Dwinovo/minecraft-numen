@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.pathing.exec;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.task.FailureType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -106,6 +107,7 @@ public final class Interaction {
     private int held;                 // USE+air: ticks held so far
     private boolean hardFail;         // a fire hit an unrecoverable error
     private String failReason = "interaction failed";
+    private FailureType failType = FailureType.UNKNOWN;
 
     private Interaction(NumenPlayer player, Button button, BlockPos block, Entity entity,
                         InteractionHand hand, Timing timing) {
@@ -234,6 +236,11 @@ public final class Interaction {
         return failReason;
     }
 
+    /** Structured cause of a {@link Status#FAILED}, for the reactive task layer to branch on. */
+    public FailureType failType() {
+        return failType;
+    }
+
     public Status tick() {
         if (button == Button.ATTACK && block != null) {
             return breakBlock();                       // inherently continuous
@@ -310,6 +317,7 @@ public final class Interaction {
             hit = raycastBlock();
             if (hit == null) {
                 failReason = "can't see the block to use (out of reach or line of sight blocked)";
+                failType = FailureType.OCCLUDED;
                 hardFail = true;
                 return false;
             }
@@ -329,6 +337,7 @@ public final class Interaction {
     private boolean fireUseEntity() {
         if (entity == null || !entity.isAlive()) {
             failReason = "the entity is gone";
+            failType = FailureType.TARGET_LOST;
             hardFail = true;
             return false;
         }

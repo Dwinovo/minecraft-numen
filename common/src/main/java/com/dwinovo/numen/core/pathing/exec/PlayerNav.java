@@ -9,6 +9,7 @@ import com.dwinovo.numen.core.pathing.calc.Path;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
+import com.dwinovo.numen.core.task.FailureType;
 import net.minecraft.core.BlockPos;
 
 import java.util.function.BooleanSupplier;
@@ -77,6 +78,7 @@ public final class PlayerNav {
 
     private int replans = 0;
     private String failReason = "target unreachable";
+    private FailureType failType = FailureType.NO_PATH;
 
     /** Walk to a single cell. */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
@@ -124,6 +126,7 @@ public final class PlayerNav {
         NavGoal liveGoal = goalSupplier.get();
         if (liveGoal == null) {
             failReason = "target lost";
+            failType = FailureType.TARGET_LOST;
             return Status.FAILED;
         }
         if (plannedCenter != null && liveGoal.center().distSqr(plannedCenter) > GOAL_MOVED_SQR) {
@@ -244,6 +247,7 @@ public final class PlayerNav {
     private Status advanceFreshSearch() {
         if (searchFuture == null) {
             failReason = "target lost";
+            failType = FailureType.TARGET_LOST;
             return Status.FAILED;
         }
         if (!searchFuture.isDone()) {
@@ -254,6 +258,7 @@ public final class PlayerNav {
         searchObj = null;
         if (path == null || path.isEmpty()) {
             failReason = "no path to target (obstructed or out of bridging blocks)";
+            failType = FailureType.NO_PATH;
             return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
         }
         Path cut = path.staticCutoff();
@@ -271,6 +276,7 @@ public final class PlayerNav {
         cancelSearch();   // abandon any in-flight main search before dispatching a new one
         if (budgeted && replans++ >= MAX_REPLANS) {
             failReason = "gave up after " + MAX_REPLANS + " replans";
+            failType = FailureType.BOXED_IN;
             return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
         }
         startFreshSearch();
@@ -321,6 +327,11 @@ public final class PlayerNav {
 
     public String failReason() {
         return failReason;
+    }
+
+    /** Structured cause of a {@link Status#FAILED}, for the reactive task layer to branch on. */
+    public FailureType failType() {
+        return failType;
     }
 
     public void stop() {

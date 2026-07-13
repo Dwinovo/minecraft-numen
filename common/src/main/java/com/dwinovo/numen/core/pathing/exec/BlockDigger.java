@@ -61,18 +61,38 @@ public final class BlockDigger {
         return pos;
     }
 
+    /** Outcome of one {@link #digStep} tick — lets callers distinguish "still working"
+     *  from "physically can't get at it", which the old boolean folded together. */
+    public enum DigResult {
+        /** Break in progress, cooling down, or begun this tick — keep calling. */
+        PROGRESSING,
+        /** The TARGET block's break committed this tick. */
+        BROKE_TARGET,
+        /** An OCCLUDER in the way broke this tick (not the target) — a step toward it. */
+        BROKE_OCCLUDER,
+        /** No face of the target is reachable and nothing safe occludes it — stuck (maps to OCCLUDED). */
+        NO_SHOT
+    }
+
+    /** Legacy boolean shim: {@code true} only on the tick the TARGET breaks. Kept so
+     *  pre-migration callers ({@link Interaction}) compile unchanged; delete once every
+     *  caller consumes {@link #digStep}. */
+    public boolean dig(BlockPos target) {
+        return digStep(target) == DigResult.BROKE_TARGET;
+    }
+
     /**
      * Advance the dig of {@code target} by one tick (restarting cleanly if the
      * target changed): face it, drive the native break action, swing.
      *
-     * @return {@code true} on the tick the block's break is committed (STOP sent).
+     * @return the {@link DigResult} for this tick.
      */
-    public boolean dig(BlockPos target) {
+    public DigResult digStep(BlockPos target) {
         Level level = player.level();
         if (blockHitDelay > 0) {                    // let the previous break land first
             blockHitDelay--;
             InputDriver.halt(player);
-            return false;
+            return DigResult.PROGRESSING;
         }
         // Resolve what to actually swing at this tick. First try a raycast-VERIFIED face on the
         // target (Baritone RotationUtils.reachable). If the target is OCCLUDED — no face in line of
@@ -92,7 +112,7 @@ public final class BlockDigger {
         }
         InputDriver.halt(player);
         if (hit == null) {
-            return false;                            // no clear shot, nothing safe in the way — hold
+            return DigResult.NO_SHOT;                // no clear shot, nothing safe in the way — stuck
         }
         if (pos == null || !pos.equals(effective)) {
             start(effective);
@@ -113,16 +133,16 @@ public final class BlockDigger {
             if (player.getAbilities().instabuild) {
                 blockHitDelay = BLOCK_HIT_DELAY;
                 reset();
-                return targetBreak;                  // creative: START broke it
+                return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;                  // creative: START broke it
             }
             if (!state.isAir()) {
                 state.attack(level, pos, player);    // left-click punch
                 if (state.getDestroyProgress(player, level, pos) >= 1.0f) {
                     reset();                         // instamine: START broke it (no STOP — Carpet)
-                    return targetBreak;
+                    return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
                 }
             }
-            return false;                            // begin accumulating next tick
+            return DigResult.PROGRESSING;            // begin accumulating next tick
         }
 
         // Survival: accumulate the real per-tick destroy fraction; broadcast the crack.
@@ -137,9 +157,9 @@ public final class BlockDigger {
                     ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, side, level.getMaxBuildHeight(), -1);
             blockHitDelay = BLOCK_HIT_DELAY;
             reset();
-            return targetBreak;
+            return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
         }
-        return false;
+        return DigResult.PROGRESSING;
     }
 
     private void start(BlockPos target) {
