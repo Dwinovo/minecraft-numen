@@ -4,13 +4,14 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
-import com.dwinovo.numen.core.task.CompanionTask;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.core.task.base.GoToThenDoTask;
+import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -19,82 +20,100 @@ import java.util.Map;
  * timed break the pathfinder/auto-mine use (creative insta, survival by real
  * hardness, best tool auto-selected). Player-body twin of BreakBlockTaskGoal
  * (construction surgery — clear a frame cell, undo a misplace).
+ *
+ * <p>A "navigate to a target then do one bounded thing" task, so it grows on
+ * {@link GoToThenDoTask}: {@link #buildNav()} walks to the cell, {@link #reached()}
+ * gates the break, {@link #act()} runs the timed attack.
  */
-public final class BreakBlockCompanionTask implements CompanionTask {
+public final class BreakBlockCompanionTask extends GoToThenDoTask<BreakBlockTaskRecord> {
 
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double WALK_SPEED = 1.0;
 
-    private final NumenPlayer player;
-    private final BreakBlockTaskRecord r;
-    private PlayerNav nav;
     private Interaction breaking;
     private String brokenBlock = "?";
-    private String doneReason = "done";
+    /** Success copy captured at the break — recorded here so the "already gone" and
+     *  "broke X" branches keep their exact message through the base's templated result. */
+    private String successMsg = "done";
 
     public BreakBlockCompanionTask(NumenPlayer player, BreakBlockTaskRecord record) {
-        this.player = player;
-        this.r = record;
+        super(player, record);
     }
 
     @Override
-    public void start() {
-        var state = player.level().getBlockState(r.target);
-        brokenBlock = BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
-        if (state.isAir()) {
-            doneReason = "nothing to break at " + posLabel() + " — it's already air";
-            r.setState(TaskState.FAILED);
-            return;
-        }
-        String hazard = BlockMiningProgress.fluidBreakHazard(player.level(), r.target);
-        if (hazard != null) {
-            doneReason = hazard;
-            r.setState(TaskState.FAILED);
-            return;
-        }
-        // Fail fast instead of grinding a block the current tools can't HARVEST: breaking a
-        // requiresCorrectToolForDrops block (stone, ore, …) bare-handed destroys it for no drop
-        // (or, for hard blocks, just times out). Same gate the pathfinder/auto-mine cost model
-        // uses (COST_INF) — teach the model to equip a tool rather than waste the block.
-        if (!BlockHelper.canHarvest(player.getInventory(), state)) {
-            doneReason = "can't usefully break " + brokenBlock + " at " + posLabel()
-                    + " — the hotbar has no tool that harvests it, so breaking it would destroy it"
-                    + " without any drop. Equip the right tool (e.g. a pickaxe) to the hotbar first.";
-            r.setState(TaskState.FAILED);
-            return;
-        }
-        nav = new PlayerNav(player, r.target, WALK_SPEED, this::withinReach);
+    protected List<Precondition> preconditions() {
+        return List.of(
+                // First gate also captures the block's name (as the old start() did at its top),
+                // so the later gates and the result data can report it.
+                () -> {
+                    BlockState state = player.level().getBlockState(r.target);
+                    brokenBlock = BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
+                    if (state.isAir()) {
+                        return new Precondition.Failure(
+                                "nothing to break at " + posLabel() + " — it's already air",
+                                FailureType.TARGET_LOST);
+                    }
+                    return null;
+                },
+                () -> {
+                    String hazard = BlockMiningProgress.fluidBreakHazard(player.level(), r.target);
+                    return hazard != null ? new Precondition.Failure(hazard, FailureType.HAZARD) : null;
+                },
+                // Fail fast instead of grinding a block the current tools can't HARVEST: breaking a
+                // requiresCorrectToolForDrops block (stone, ore, …) bare-handed destroys it for no drop
+                // (or, for hard blocks, just times out). Same gate the pathfinder/auto-mine cost model
+                // uses (COST_INF) — teach the model to equip a tool rather than waste the block.
+                () -> {
+                    BlockState state = player.level().getBlockState(r.target);
+                    if (!BlockHelper.canHarvest(player.getInventory(), state)) {
+                        return new Precondition.Failure("can't usefully break " + brokenBlock + " at " + posLabel()
+                                + " — the hotbar has no tool that harvests it, so breaking it would destroy it"
+                                + " without any drop. Equip the right tool (e.g. a pickaxe) to the hotbar first.",
+                                FailureType.WRONG_TOOL);
+                    }
+                    return null;
+                });
     }
 
     @Override
-    public TaskState tick() {
-        if (withinReach()) {
-            if (player.level().getBlockState(r.target).isAir()) {
-                doneReason = "the block at " + posLabel() + " is already gone";
-                return TaskState.SUCCESS;
+    protected PlayerNav buildNav() {
+        return new PlayerNav(player, r.target, WALK_SPEED, this::withinReach);
+    }
+
+    @Override
+    protected boolean reached() {
+        return withinReach();
+    }
+
+    @Override
+    protected TaskState act() {
+        if (player.level().getBlockState(r.target).isAir()) {
+            successMsg = "the block at " + posLabel() + " is already gone";
+            return TaskState.SUCCESS;
+        }
+        if (breaking == null) breaking = Interaction.attackBlock(player, r.target);
+        return switch (breaking.tick()) {
+            case DONE -> {
+                successMsg = "broke " + brokenBlock + " at " + posLabel();
+                yield TaskState.SUCCESS;
             }
-            if (breaking == null) breaking = Interaction.attackBlock(player, r.target);
-            return switch (breaking.tick()) {
-                case DONE -> {
-                    doneReason = "broke " + brokenBlock + " at " + posLabel();
-                    yield TaskState.SUCCESS;
-                }
-                case FAILED -> {
-                    doneReason = "couldn't break " + posLabel() + ": " + breaking.failReason();
-                    yield TaskState.FAILED;
-                }
-                case RUNNING -> TaskState.RUNNING;   // mid-break (survival hardness timing)
-            };
-        }
-        if (nav == null) return TaskState.FAILED;
-        return switch (nav.tick()) {
-            case RUNNING -> TaskState.RUNNING;
-            case ARRIVED -> TaskState.RUNNING;   // mine next tick
             case FAILED -> {
-                doneReason = "can't reach " + posLabel() + ": " + nav.failReason();
+                fail("couldn't break " + posLabel() + ": " + breaking.failReason(), breaking.failType());
                 yield TaskState.FAILED;
             }
+            case RUNNING -> TaskState.RUNNING;   // mid-break (survival hardness timing)
         };
+    }
+
+    /**
+     * Reproduce the old nav-failure copy exactly (wrap the nav's own reason), still a plain
+     * give-up — no recovery ladder is attached this stage. Overridden only because the base
+     * default reports the bare {@code reason}, which would change the model-facing string.
+     */
+    @Override
+    protected TaskState handleNavFailure(FailureType type, String reason) {
+        fail("can't reach " + posLabel() + ": " + reason, type);
+        return TaskState.FAILED;
     }
 
     private boolean withinReach() {
@@ -107,19 +126,33 @@ public final class BreakBlockCompanionTask implements CompanionTask {
     }
 
     @Override
-    public TaskResult buildResult(TaskState finalState) {
-        if (nav != null) nav.stop();
+    protected void cleanup() {
+        super.cleanup();   // stopNav + clear the path overlay
         if (breaking != null) breaking.stop();
+    }
+
+    @Override
+    protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("x", r.target.getX());
         data.put("y", r.target.getY());
         data.put("z", r.target.getZ());
         data.put("block", brokenBlock);
-        return switch (finalState) {
-            case SUCCESS -> TaskResult.ok(doneReason, data);
-            case TIMEOUT -> TaskResult.timeout("timed out before breaking " + posLabel());
-            case CANCELLED -> TaskResult.cancelled("break_block interrupted");
-            default -> TaskResult.fail(doneReason, data);
-        };
+        return data;
+    }
+
+    @Override
+    protected String successMessage() {
+        return successMsg;
+    }
+
+    @Override
+    protected String timeoutMessage() {
+        return "timed out before breaking " + posLabel();
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "break_block interrupted";
     }
 }

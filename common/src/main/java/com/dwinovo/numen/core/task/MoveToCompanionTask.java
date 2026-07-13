@@ -3,9 +3,7 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
-import com.dwinovo.numen.core.task.CompanionTask;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import net.minecraft.core.BlockPos;
 
 import java.util.HashMap;
@@ -27,8 +25,12 @@ import java.util.Map;
  * The planner is untouched; only the goal/arrival/result semantics differ per kind.
  * Results always echo the ACTUAL position reached (and the real ground height) so
  * the model learns the terrain and which intent to use next time.
+ *
+ * <p>Nav-only reactive task: it drives {@link PlayerNav} with a custom settle loop
+ * (no "act" step), so it grows on {@link AbstractCompanionTask} directly rather than
+ * {@code GoToThenDoTask}.
  */
-public final class MoveToCompanionTask implements CompanionTask {
+public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskRecord> {
 
     private static final long TICKS_PER_BLOCK = 20;
     private static final long MAX_EXTRA_TICKS = 5 * 60 * 20;
@@ -42,33 +44,28 @@ public final class MoveToCompanionTask implements CompanionTask {
      *  short enough to bail under an out-of-reach above-water one. */
     private static final int MAX_SETTLE_TICKS = 60;
 
-    private final NumenPlayer player;
-    private final MoveToTaskRecord r;
-
     private final int bx;
     private final int by;
     private final int bz;
     private final BlockPos blockTarget;   // only meaningful for BLOCK kind
 
-    private PlayerNav nav;
     private double bestDist = Double.MAX_VALUE;   // closest we've gotten to the goal
     private int settleTicks = 0;                  // ticks of no progress after the planner gave up
 
     public MoveToCompanionTask(NumenPlayer player, MoveToTaskRecord record) {
-        this.player = player;
-        this.r = record;
-        this.bx = r.x != null ? (int) Math.floor(r.x) : 0;
-        this.by = r.y != null ? (int) Math.floor(r.y) : 0;
-        this.bz = r.z != null ? (int) Math.floor(r.z) : 0;
+        super(player, record);
+        this.bx = record.x != null ? (int) Math.floor(record.x) : 0;
+        this.by = record.y != null ? (int) Math.floor(record.y) : 0;
+        this.bz = record.z != null ? (int) Math.floor(record.z) : 0;
         this.blockTarget = new BlockPos(bx, by, bz);
     }
 
     @Override
-    public void start() {
-        if (reached()) {
-            r.setState(TaskState.SUCCESS);
-            return;
-        }
+    protected void onStart() {
+        // Already there: don't build a nav (and don't extend the deadline). The first
+        // onTick observes reached() and returns SUCCESS — same outcome as the old
+        // start-time short-circuit, one tick later per the base's lifecycle.
+        if (reached()) return;
         long extra = Math.min(MAX_EXTRA_TICKS, 600 + (long) (repDistance() * TICKS_PER_BLOCK));
         r.extendDeadlineTo(player.level().getGameTime() + extra);
         nav = PlayerNav.toGoal(player, this::goal, r.speed, this::reached);
@@ -111,9 +108,14 @@ public final class MoveToCompanionTask implements CompanionTask {
     }
 
     @Override
-    public TaskState tick() {
-        if (nav == null) return TaskState.FAILED;
+    protected TaskState onTick() {
+        // reached() is checked BEFORE the nav==null guard so an already-at-target start
+        // (which never builds a nav) lands on SUCCESS rather than the defensive FAILED.
         if (reached()) return TaskState.SUCCESS;
+        if (nav == null) {
+            fail(blockedMessage("no path"), FailureType.NO_PATH);
+            return TaskState.FAILED;
+        }
         // Track passive progress toward the goal: the planner stops at the water surface
         // above an underwater target, but the body keeps drifting toward it on its own (it
         // sinks). Reset the settle timer whenever we get closer.
@@ -137,7 +139,9 @@ public final class MoveToCompanionTask implements CompanionTask {
                     yield TaskState.RUNNING;
                 }
                 // Otherwise: as close as the terrain allows → (teaching) success or fail.
-                yield closeEnoughToSucceed() ? TaskState.SUCCESS : TaskState.FAILED;
+                if (closeEnoughToSucceed()) yield TaskState.SUCCESS;
+                fail(blockedMessage(nav.failReason()), nav.failType());
+                yield TaskState.FAILED;
             }
         };
     }
@@ -166,28 +170,20 @@ public final class MoveToCompanionTask implements CompanionTask {
     }
 
     @Override
-    public TaskResult buildResult(TaskState finalState) {
-        String failReason = nav != null ? nav.failReason() : "no path";
-        if (nav != null) nav.stop();
-
+    protected Map<String, Object> resultData() {
         int gy = player.blockPosition().getY();
         Map<String, Object> data = new HashMap<>();
         data.put("final_x", player.getX());
         data.put("final_y", player.getY());
         data.put("final_z", player.getZ());
         data.put("ground_y", gy);
-
-        return switch (finalState) {
-            case SUCCESS -> TaskResult.ok(arrivedMessage(gy), data);
-            case TIMEOUT -> new TaskResult(false, timeoutMessage(gy), true, false, data);
-            case CANCELLED -> new TaskResult(false, "cancelled before reaching target", false, true, data);
-            case FAILED -> blockedResult(gy, failReason, data);
-            default -> TaskResult.fail("unexpected state: " + finalState, data);
-        };
+        return data;
     }
 
     /** Success copy — always names the real position so the model learns the terrain. */
-    private String arrivedMessage(int gy) {
+    @Override
+    protected String successMessage() {
+        int gy = player.blockPosition().getY();
         return switch (r.kind) {
             case BLOCK -> {
                 if (feet().equals(blockTarget)) {
@@ -208,26 +204,35 @@ public final class MoveToCompanionTask implements CompanionTask {
         };
     }
 
-    private String timeoutMessage(int gy) {
+    @Override
+    protected String timeoutMessage() {
+        int gy = player.blockPosition().getY();
         double remaining = repDistance();
         return "timed out " + String.format("%.1f", remaining) + " blocks from target (now at "
                 + bx(gy) + "); call move_to again with the same target to resume.";
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "cancelled before reaching target";
     }
 
     private String bx(int gy) {
         return String.format("%.0f,%d,%.0f", player.getX(), gy, player.getZ());
     }
 
-    /** A planner failure that wasn't close enough to count as arrival. */
-    private TaskResult blockedResult(int gy, String failReason, Map<String, Object> data) {
+    /** The give-up message for a planner failure that wasn't close enough to count as arrival.
+     *  Captured at the fail site (nav still alive) so its {@code failReason} is readable before
+     *  the base's {@code cleanup()} releases the nav. */
+    private String blockedMessage(String failReason) {
+        int gy = player.blockPosition().getY();
         double remaining = repDistance();
         String where = switch (r.kind) {
             case BLOCK, COLUMN -> "location x=" + bx + " z=" + bz;
             case YLEVEL -> "elevation y=" + by;
         };
-        String msg = "blocked: got within " + String.format("%.1f", remaining) + " blocks of " + where
+        return "blocked: got within " + String.format("%.1f", remaining) + " blocks of " + where
                 + " (now on the ground at y=" + gy + "). " + failReason
                 + ". Try a nearer waypoint, scan_blocks for a way through, or equip a pickaxe to tunnel.";
-        return TaskResult.fail(msg, data);
     }
 }

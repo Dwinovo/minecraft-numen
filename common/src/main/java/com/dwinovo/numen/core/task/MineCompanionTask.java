@@ -3,15 +3,13 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.exec.BlockDigger;
-import com.dwinovo.numen.core.pathing.exec.InputDriver;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.BlockScanner;
 import com.dwinovo.numen.core.pathing.util.ScanExecutor;
 import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
-import com.dwinovo.numen.core.task.CompanionTask;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -61,8 +59,12 @@ import java.util.concurrent.CompletableFuture;
  *       y-level ({@link NavGoal#runAway}) to dig fresh tunnel and expose more,
  *       bounded by {@link #MAX_BRANCH_TICKS}.</li>
  * </ol>
+ *
+ * <p>A custom reactive task: it owns its own phase machine, so it grows on
+ * {@link AbstractCompanionTask} directly (the shared lifecycle / failure plumbing /
+ * result envelope) while keeping the whole scan-path-mine loop in {@link #onTick()}.
  */
-public final class MineCompanionTask implements CompanionTask {
+public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTaskRecord> {
 
     private static final int RESCAN_INTERVAL = 10;     // Baritone mineGoalUpdateInterval
     private static final int MAX_ORES = 64;            // Baritone mineMaxOreLocationsCount
@@ -83,8 +85,6 @@ public final class MineCompanionTask implements CompanionTask {
      *  something is truly stuck). */
     private static final int SCAN_TIMEOUT_TICKS = 200;
 
-    private final NumenPlayer player;
-    private final MineBlockTaskRecord r;
     private final List<BlockPos> knownOres = new ArrayList<>();
     private final Set<BlockPos> blacklist = new HashSet<>();
     /** Items the target blocks drop (loot-table simulated, Baritone BlockOptionalMeta.drops). The
@@ -96,7 +96,6 @@ public final class MineCompanionTask implements CompanionTask {
     /** Nearby dropped items to collect (Baritone droppedItemsScan), refreshed per tick. */
     private List<BlockPos> drops = List.of();
 
-    private PlayerNav nav;
     private boolean navIsBranch;
     private BlockPos branchPoint;
     private int branchY;
@@ -113,25 +112,31 @@ public final class MineCompanionTask implements CompanionTask {
     private final BlockDigger digger;
 
     public MineCompanionTask(NumenPlayer player, MineBlockTaskRecord record) {
-        this.player = player;
-        this.r = record;
+        super(player, record);
         this.digger = new BlockDigger(player);
     }
 
     @Override
-    public void start() {
+    protected List<Precondition> preconditions() {
         // Fail fast if NO requested target is harvestable with the current inventory — mining it
         // would destroy the block for no drop. Same gate as break_block / the cost model
         // (BlockHelper.canHarvest, whole-inventory). prune() then drops any individual unharvestable
         // cell, so a mixed request (e.g. coal we can mine + diamond we can't) still works.
-        boolean anyHarvestable = r.targets.stream().anyMatch(
-                b -> BlockHelper.canHarvest(player.getInventory(), b.defaultBlockState()));
-        if (!anyHarvestable) {
-            doneReason = "can't harvest " + r.label + " with the current tools — mining it would"
-                    + " destroy it without any drop. Equip a suitable tool (e.g. a pickaxe) first.";
-            r.setState(TaskState.FAILED);
-            return;
-        }
+        return List.of(() -> {
+            boolean anyHarvestable = r.targets.stream().anyMatch(
+                    b -> BlockHelper.canHarvest(player.getInventory(), b.defaultBlockState()));
+            if (!anyHarvestable) {
+                return new Precondition.Failure(
+                        "can't harvest " + r.label + " with the current tools — mining it would"
+                        + " destroy it without any drop. Equip a suitable tool (e.g. a pickaxe) first.",
+                        FailureType.WRONG_TOOL);
+            }
+            return null;
+        });
+    }
+
+    @Override
+    protected void onStart() {
         // Count toward `count` by ITEMS gathered (Baritone), not blocks broken: resolve what these
         // blocks drop, and snapshot how many we already hold so the tally is the delta above it.
         dropItems = computeDropItems();
@@ -140,7 +145,7 @@ public final class MineCompanionTask implements CompanionTask {
     }
 
     @Override
-    public TaskState tick() {
+    protected TaskState onTick() {
         int gathered = Math.max(0, inventoryMatch() - baseline);   // matching items gained so far
         r.setMined(gathered);
         if (gathered >= r.count) {
@@ -215,10 +220,12 @@ public final class MineCompanionTask implements CompanionTask {
         //    finish with whatever we gathered (the tool's contract: "fewer than count
         //    in range still succeeds"), rather than running off across the world.
         if (!EXPLORE_FOR_BLOCKS) {
-            doneReason = r.getMined() > 0
-                    ? "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range"
-                    : "no reachable " + r.label + " found within " + r.maxRadius + " blocks";
-            return r.getMined() > 0 ? TaskState.SUCCESS : TaskState.FAILED;
+            if (r.getMined() > 0) {
+                doneReason = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
+                return TaskState.SUCCESS;
+            }
+            fail("no reachable " + r.label + " found within " + r.maxRadius + " blocks", FailureType.MINED_OUT);
+            return TaskState.FAILED;
         }
 
         // 3b) Opt-in explore (Baritone exploreForBlocks) — branch-mine outward (bounded).
@@ -227,10 +234,12 @@ public final class MineCompanionTask implements CompanionTask {
             branchY = branchPoint.getY();
         }
         if (++branchTicks > MAX_BRANCH_TICKS) {
-            doneReason = r.getMined() > 0
-                    ? "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range"
-                    : "no reachable " + r.label + " found within " + r.maxRadius + " blocks";
-            return r.getMined() > 0 ? TaskState.SUCCESS : TaskState.FAILED;
+            if (r.getMined() > 0) {
+                doneReason = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
+                return TaskState.SUCCESS;
+            }
+            fail("no reachable " + r.label + " found within " + r.maxRadius + " blocks", FailureType.MINED_OUT);
+            return TaskState.FAILED;
         }
         if (nav == null || !navIsBranch) {
             stopNav();
@@ -356,11 +365,13 @@ public final class MineCompanionTask implements CompanionTask {
 
     // ---- mining (progressive, tick-by-tick like Baritone / a real player) ----
 
-    /** Advance the shared dig one tick (it switches to the best tool itself); on the tick it breaks,
-     *  drop it from the ore list. The progress count is read from the inventory each tick, not here —
-     *  one block can yield several items, and the drops take a moment to be picked up. */
+    /** Advance the shared dig one tick (it switches to the best tool itself); on the tick the TARGET
+     *  breaks, drop it from the ore list. A {@link BlockDigger.DigResult#BROKE_OCCLUDER} (a leaf cleared
+     *  to open the line of sight) is NOT the target, so the ore stays. The progress count is read from
+     *  the inventory each tick, not here — one block can yield several items, and the drops take a
+     *  moment to be picked up. */
     private void mineProgress(BlockPos pos) {
-        if (digger.dig(pos)) {
+        if (digger.digStep(pos) == BlockDigger.DigResult.BROKE_TARGET) {
             knownOres.remove(pos);
         }
     }
@@ -506,39 +517,47 @@ public final class MineCompanionTask implements CompanionTask {
         return player.distanceToSqr(Vec3.atCenterOf(pos)) <= REACH_SQR;
     }
 
-    private void stopNav() {
-        if (nav != null) {
-            nav.stop();
-            nav = null;
-        }
+    /** Stop the nav AND clear the branch-mode flag (extends the base's nav release). */
+    @Override
+    protected void stopNav() {
+        super.stopNav();
         navIsBranch = false;
     }
 
     @Override
-    public TaskResult buildResult(TaskState finalState) {
-        stopNav();
-        // stopNav only clears the overlay when a nav exists; if we finished while
-        // shaft-mining (nav == null) the goal boxes would otherwise linger, so clear
-        // explicitly. Idempotent with stopNav's own clear.
-        PathVizPublisher.clear(player);
+    protected void cleanup() {
+        // super.cleanup() = stopNav() (nav.stop clears the overlay when a nav exists) + an explicit
+        // PathVizPublisher.clear — so a task that finished while shaft-mining (nav == null) still
+        // clears its lingering goal boxes. Then release the dig + any in-flight scan.
+        super.cleanup();
         digger.cancel();
         if (scan != null) {
             scan.cancel(false);
             scan = null;
         }
+    }
+
+    @Override
+    protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("target", r.label);
         data.put("requested", r.count);
         data.put("gathered", r.getMined());
-        return switch (finalState) {
-            case SUCCESS -> TaskResult.ok(
-                    "gathered " + r.getMined() + "/" + r.count + " " + r.label + " (" + doneReason + ")", data);
-            case TIMEOUT -> new TaskResult(false,
-                    "timed out after gathering " + r.getMined() + "/" + r.count + " " + r.label, true, false, data);
-            case CANCELLED -> new TaskResult(false,
-                    "interrupted after gathering " + r.getMined() + "/" + r.count + " " + r.label, false, true, data);
-            case FAILED -> TaskResult.fail(doneReason, data);
-            default -> TaskResult.fail("unexpected state: " + finalState, data);
-        };
+        return data;
+    }
+
+    @Override
+    protected String successMessage() {
+        return "gathered " + r.getMined() + "/" + r.count + " " + r.label + " (" + doneReason + ")";
+    }
+
+    @Override
+    protected String timeoutMessage() {
+        return "timed out after gathering " + r.getMined() + "/" + r.count + " " + r.label;
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "interrupted after gathering " + r.getMined() + "/" + r.count + " " + r.label;
     }
 }
