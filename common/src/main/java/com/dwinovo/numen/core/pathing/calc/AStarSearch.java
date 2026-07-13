@@ -111,6 +111,31 @@ public final class AStarSearch {
         return result;
     }
 
+    // ---- post-mortem stats (read after DONE; feed the "no path" autopsy) ----
+
+    /** Nodes actually expanded by this search. */
+    public int expansionsDone() {
+        return expansions;
+    }
+
+    /** True when the search ended because the frontier EMPTIED — every reachable
+     *  cell was explored (a sealed region) — vs. merely hitting the node budget. */
+    public boolean frontierExhausted() {
+        return open.isEmpty();
+    }
+
+    /** Squared distance from the start to the farthest best-effort candidate —
+     *  how far the search ever really got. */
+    public double bestProgressSq() {
+        double best = 0.0;
+        for (PathNode candidate : bestSoFar) {
+            if (candidate != null) {
+                best = Math.max(best, distFromStartSq(candidate));
+            }
+        }
+        return best;
+    }
+
     /**
      * Expand at most {@code budget} nodes this tick. Returns {@link State#COMPUTING}
      * if more work remains (call again next tick), or {@link State#DONE} once a

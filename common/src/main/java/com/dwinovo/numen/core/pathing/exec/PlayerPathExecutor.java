@@ -1087,6 +1087,16 @@ public final class PlayerPathExecutor {
             stuckWarned = false;
             return null;
         }
+        // An active dig IS progress even though the index hasn't advanced: a bare-hand
+        // stone break runs ~150+ ticks — far past the stall thresholds — and a latched
+        // dig always either completes or is cancelled (NO_SHOT never latches). Without
+        // this, the stall backstop kills every slow legal dig at 60 ticks and the body
+        // grinds the same block forever in replan loops.
+        if (digger.current() != null) {
+            ticksSinceProgress = 0;
+            stuckWarned = false;
+            return null;
+        }
         ticksSinceProgress++;
         if (ticksSinceProgress >= STUCK_WARN_TICKS && !stuckWarned) {
             stuckWarned = true;

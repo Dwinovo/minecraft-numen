@@ -97,6 +97,14 @@ public final class ModItemTagData {
                 .add(Items.DIORITE)
                 .add(Items.GRANITE)
                 .add(Items.TUFF)
-                .add(Items.DEEPSLATE);
+                .add(Items.DEEPSLATE)
+                // Dirt-family variants players actually hand the companion ("here,
+                // 128 dirt") — a stack of coarse dirt must count as scaffolding,
+                // or hasScaffold=false silently disables every pillar/bridge move.
+                .add(Items.COARSE_DIRT)
+                .add(Items.ROOTED_DIRT)
+                .add(Items.PODZOL)
+                .add(Items.MUD)
+                .add(Items.MOSSY_COBBLESTONE);
     }
 }

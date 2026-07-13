@@ -80,6 +80,10 @@ public final class PlayerNav {
     private String failReason = "target unreachable";
     private FailureType failType = FailureType.NO_PATH;
 
+    /** Frozen context + start of the most recent search — kept for the no-path autopsy. */
+    private NavContext lastCtx;
+    private BlockPos lastStart;
+
     /** Walk to a single cell. */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
         this(player, () -> resolveBlockGoal(player, goal), speed, reached, true);
@@ -218,9 +222,11 @@ public final class PlayerNav {
             return;
         }
         NavContext ctx = searchContext();
-        AStarSearch s = astar.newSearch(ctx,
-                BlockHelper.playerFeet(player.level(), player.getX(), player.getY(), player.getZ()),
-                g, previousPathHashes);
+        BlockPos startFeet = BlockHelper.playerFeet(
+                player.level(), player.getX(), player.getY(), player.getZ());
+        AStarSearch s = astar.newSearch(ctx, startFeet, g, previousPathHashes);
+        lastCtx = ctx;
+        lastStart = startFeet;
         searchObj = s;
         searchFuture = dispatch(ctx, s);
     }
@@ -253,11 +259,12 @@ public final class PlayerNav {
         if (!searchFuture.isDone()) {
             return Status.RUNNING;   // worker still planning — body waits (it was idle anyway)
         }
+        AStarSearch finished = searchObj;
         Path path = searchFuture.getNow(null);
         searchFuture = null;
         searchObj = null;
         if (path == null || path.isEmpty()) {
-            failReason = "no path to target (obstructed or out of bridging blocks)";
+            failReason = noPathAutopsy(finished);
             failType = FailureType.NO_PATH;
             return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
         }
@@ -323,6 +330,40 @@ public final class PlayerNav {
             pendingNext.stop();
             pendingNext = null;
         }
+    }
+
+    /**
+     * Rich post-mortem for an EMPTY search result — for the model and the log both:
+     * was the region fully explored (sealed in) or did the budget run out, how far
+     * did the search really get, was scaffolding available, and what is the first
+     * concrete break-veto (water / protected block / bedrock …) on the straight
+     * line to the goal, when there is one.
+     */
+    private String noPathAutopsy(AStarSearch s) {
+        StringBuilder r = new StringBuilder("no path to target");
+        if (s != null) {
+            r.append(" (").append(s.frontierExhausted()
+                            ? "every reachable spot explored — sealed in"
+                            : "search budget exhausted")
+                    .append(String.format("; explored %d positions, farthest progress %.1f blocks",
+                            s.expansionsDone(), Math.sqrt(s.bestProgressSq())));
+            if (lastCtx != null && !lastCtx.hasScaffold) {
+                r.append("; carrying no scaffolding blocks to bridge or pillar with");
+            }
+            r.append(')');
+        } else {
+            r.append(" (obstructed or out of bridging blocks)");
+        }
+        if (lastCtx != null && lastStart != null && plannedCenter != null) {
+            String veto = lastCtx.diagnoseObstruction(lastStart, plannedCenter);
+            if (veto != null) {
+                r.append("; first hard obstruction toward it: ").append(veto);
+            }
+        }
+        String reason = r.toString();
+        com.dwinovo.numen.Constants.LOG.info("[numen-path] NO-PATH start={} goal={} | {}",
+                lastStart, plannedCenter, reason);
+        return reason;
     }
 
     public String failReason() {

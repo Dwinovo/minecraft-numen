@@ -189,12 +189,6 @@ public final class NavContext {
      *       a fluid flow;</li>
      *   <li>{@link BlockHelper#shouldAvoidBreaking} — a player-placed functional
      *       block (chest, furnace, bed, …): don't grief it;</li>
-     *   <li><b>ineffective break</b> — the block needs the correct tool for drops
-     *       and the entity's held tool isn't it. We refuse the slow, drop-less
-     *       bare-hand/wrong-tool grind: the bot only digs through what its current
-     *       tool handles effectively (dirt/wood/sand bare-handed are fine — those
-     *       need no tool). To tunnel through stone/ore it must equip a proper
-     *       pickaxe first, same lesson as {@code auto_mine}.</li>
      * </ul>
      */
     public double costOfBreaking(BlockPos pos) {
@@ -215,10 +209,12 @@ public final class NavContext {
         if (BlockHelper.breakWouldCreateFlow(view, pos)) return ActionCosts.COST_INF;
         if (BlockHelper.shouldAvoidBreaking(view, pos)) return ActionCosts.COST_INF;
 
-        BlockState state = view.getBlockState(pos);
-        if (state.requiresCorrectToolForDrops() && !bestTool(state).canHarvest()) {
-            return ActionCosts.COST_INF;   // no hotbar tool can harvest it — route around / teach
-        }
+        // A break with the wrong (or no) tool is EXPENSIVE, never impossible: traversal
+        // only needs the block GONE, not its drops — a bare hand grinds through stone in
+        // ~seconds-per-block, and {@link #miningTicks} already prices that grind (divisor
+        // 100 when the tool can't harvest). The old COST_INF veto here sealed every
+        // enclosed pocket the moment the pickaxe broke — turning "a slow way out" into
+        // "no path" — which is strictly worse than an honest, costly route.
         double cost = miningTicks(pos) + PathSettings.BLOCK_BREAK_ADDITIONAL_PENALTY;
         if (includeFalling) {
             BlockPos above = pos.above();
@@ -308,10 +304,7 @@ public final class NavContext {
         if (BlockHelper.shouldAvoidBreaking(view, pos)) {
             return blockId(state) + " (a functional block I won't destroy)";
         }
-        if (state.requiresCorrectToolForDrops() && !bestTool(state).canHarvest()) {
-            return blockId(state) + " (needs the correct tool and I have none in my "
-                    + "hotbar — equip_item the right pickaxe first)";
-        }
+        // Wrong-tool breaks are priced, not vetoed (see costOfBreaking) — no branch here.
         return null;
     }
 
