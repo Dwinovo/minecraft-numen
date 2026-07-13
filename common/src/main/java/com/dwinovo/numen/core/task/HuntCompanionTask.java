@@ -5,31 +5,24 @@ import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.exec.InputDriver;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
-import com.dwinovo.numen.core.task.CompanionTask;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.core.task.base.CountedProgress;
+import com.dwinovo.numen.core.task.base.TargetSet;
+import com.dwinovo.numen.core.task.base.ToolSelect;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ai.attributes.AttributeModifier;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.item.ItemEntity;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * {@code hunt} on the player body: find / chase / fight N mobs. The combat twin
@@ -37,7 +30,7 @@ import java.util.Set;
  * ({@code player.attack} with real cooldown / weapon modifiers / sweep / crit)
  * instead of the Mob's MeleeEngine — and the chase is {@link PlayerNav}.
  */
-public final class HuntCompanionTask implements CompanionTask {
+public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecord> {
 
     private enum Phase { SCAN, ENGAGE, COLLECT }
 
@@ -51,95 +44,94 @@ public final class HuntCompanionTask implements CompanionTask {
     private static final int COLLECT_RADIUS = 24;
     private static final int MAX_COLLECT_TICKS = 300;   // ~15 s
 
-    private final NumenPlayer player;
-    private final HuntTaskRecord r;
-    private final Set<Integer> skipped = new HashSet<>();
+    /** Mobs A* couldn't close on — skipped so the scan doesn't retry the same one forever. */
+    private final TargetSet<LivingEntity> skipped = new TargetSet<>(LivingEntity::getId);
     /** Drops A* can't reach — skipped so the sweep doesn't retry the same one forever. */
-    private final Set<BlockPos> dropBlacklist = new HashSet<>();
+    private final TargetSet<BlockPos> dropBlacklist = new TargetSet<>(p -> p);
 
+    private CountedProgress progress;
     private Phase phase = Phase.SCAN;
     private int currentRadius;
     private int collectTicks;
     private LivingEntity target;
-    private PlayerNav nav;
-    private String doneReason = "done";
+    /** The success parenthetical / partial-progress note (drives {@link #successMessage()}). */
+    private String note = "done";
 
     public HuntCompanionTask(NumenPlayer player, HuntTaskRecord record) {
-        this.player = player;
-        this.r = record;
+        super(player, record);
     }
 
     @Override
-    public void start() {
+    protected void onStart() {
         currentRadius = Math.min(INITIAL_RADIUS, r.maxRadius);
         phase = Phase.SCAN;
+        progress = new CountedProgress(r.count, r::getKilled);
     }
 
     @Override
-    public TaskState tick() {
+    protected TaskState onTick() {
         if (player.isDeadOrDying()) {
-            r.setState(TaskState.CANCELLED);
-            return r.getState();
+            return TaskState.CANCELLED;
         }
-        switch (phase) {
+        return switch (phase) {
             case SCAN -> tickScan();
             case ENGAGE -> tickEngage();
             case COLLECT -> tickCollect();
-        }
-        return r.getState();
+        };
     }
 
-    private void tickScan() {
-        if (r.getKilled() >= r.count) {
-            doneReason = "hunted all requested";
+    private TaskState tickScan() {
+        if (progress.done()) {
+            note = "hunted all requested";
             beginCollect();
-            return;
+            return TaskState.RUNNING;
         }
         LivingEntity best = nearestTarget();
         if (best == null) {
             if (currentRadius < r.maxRadius) {
                 currentRadius = Math.min(currentRadius + RADIUS_STEP, r.maxRadius);
-                return;
+                return TaskState.RUNNING;
             }
             if (r.getKilled() > 0) {
-                doneReason = "only killed " + r.getKilled() + "/" + r.count + " within " + r.maxRadius + " blocks";
+                note = "only killed " + r.getKilled() + "/" + r.count + " within " + r.maxRadius + " blocks";
                 beginCollect();   // sweep the battlefield for loot before finishing
-            } else {
-                doneReason = "no " + r.label + " found within " + r.maxRadius + " blocks";
-                r.setState(TaskState.FAILED);
+                return TaskState.RUNNING;
             }
-            return;
+            fail("no " + r.label + " found within " + r.maxRadius + " blocks", FailureType.TARGET_LOST);
+            return TaskState.FAILED;
         }
         target = best;
         // Arrive = in reach AND a clear line of sight, so we close around a wall rather than
         // standing behind it swinging at nothing.
         nav = new PlayerNav(player, this::targetCell, CHASE_SPEED, this::inReachAndLos);
         phase = Phase.ENGAGE;
+        return TaskState.RUNNING;
     }
 
-    private void tickEngage() {
+    private TaskState tickEngage() {
         if (target == null || target.isRemoved()) {
             stopNav();
             phase = Phase.SCAN;
-            return;
+            return TaskState.RUNNING;
         }
         if (target.isDeadOrDying()) {
             r.incrementKilled();
             target = null;
             stopNav();
             phase = Phase.SCAN;
-            return;
+            return TaskState.RUNNING;
         }
         switch (nav.tick()) {
             case RUNNING -> { /* closing distance */ }
             case ARRIVED -> swing();
             case FAILED -> {
-                skipped.add(target.getId());
+                skipped.skip(target);
                 target = null;
                 stopNav();
                 phase = Phase.SCAN;
             }
         }
+        return TaskState.RUNNING;
     }
 
     /** Done fighting — switch to a post-hunt loot sweep. Mirrors auto_mine's drop collection
@@ -151,23 +143,23 @@ public final class HuntCompanionTask implements CompanionTask {
         phase = Phase.COLLECT;
     }
 
-    private void tickCollect() {
+    private TaskState tickCollect() {
         if (nearbyDrops().isEmpty() || ++collectTicks > MAX_COLLECT_TICKS) {
             stopNav();
-            r.setState(TaskState.SUCCESS);
-            return;
+            return TaskState.SUCCESS;
         }
         if (nav == null) {
             nav = PlayerNav.toGoal(player, this::collectGoal, CHASE_SPEED, () -> nearbyDrops().isEmpty());
         }
         switch (nav.tick()) {
             case RUNNING -> { /* walking onto the next drop; native pickup collects it */ }
-            case ARRIVED -> { stopNav(); r.setState(TaskState.SUCCESS); }   // nothing left in range
-            case FAILED -> {                                               // nearest drop unreachable —
-                blacklistNearestDrop();                                    // skip it and retry the rest
+            case ARRIVED -> { stopNav(); return TaskState.SUCCESS; }   // nothing left in range
+            case FAILED -> {                                           // nearest drop unreachable —
+                blacklistNearestDrop();                                // skip it and retry the rest
                 stopNav();
             }
         }
+        return TaskState.RUNNING;
     }
 
     /** Nearby dropped items to sweep up after the fight (auto_mine's droppedItemsScan, with a wider
@@ -178,7 +170,7 @@ public final class HuntCompanionTask implements CompanionTask {
         for (ItemEntity ie : player.level().getEntitiesOfClass(ItemEntity.class, box)) {
             if (ie.isRemoved()) continue;
             BlockPos p = ie.blockPosition();
-            if (dropBlacklist.contains(p)) continue;
+            if (dropBlacklist.isExcluded(p)) continue;
             out.add(p);
         }
         return out;
@@ -196,8 +188,8 @@ public final class HuntCompanionTask implements CompanionTask {
     private void blacklistNearestDrop() {
         BlockPos feet = player.blockPosition();
         nearbyDrops().stream()
-                .min(java.util.Comparator.comparingDouble(feet::distSqr))
-                .ifPresent(dropBlacklist::add);
+                .min(Comparator.comparingDouble(feet::distSqr))
+                .ifPresent(dropBlacklist::blacklist);
     }
 
     /** Native melee swing: aim, fire one crosshair raytrace, and only strike when it actually
@@ -206,7 +198,7 @@ public final class HuntCompanionTask implements CompanionTask {
      *  cooldown has recovered (full-charge damage). */
     private void swing() {
         if (target == null) return;
-        switchToBestWeapon();   // pathfinder may have swapped a scaffold block into the hand while bridging
+        ToolSelect.holdBestWeapon(player);   // pathfinder may have swapped a scaffold block into the hand while bridging
         InputDriver.lookAt(player, target.getEyePosition());
         HitResult hit = Interaction.nativeRaytrace(player, ATTACK_REACH);
         boolean onTarget = hit.getType() == HitResult.Type.ENTITY
@@ -222,42 +214,6 @@ public final class HuntCompanionTask implements CompanionTask {
         }
     }
 
-    /** Hold the highest-attack-damage weapon from the WHOLE inventory in the main hand — the combat
-     *  twin of {@code BlockDigger.switchToBestTool} (whole inventory, not just the hotbar). Mining
-     *  survives the pathfinder's bridging scaffold-swap because it re-picks its tool every dig; this
-     *  gives hunt the same guarantee, so a swing never lands with cobblestone instead of a sword. */
-    private void switchToBestWeapon() {
-        Inventory inv = player.getInventory();
-        int best = inv.selected;
-        double bestDmg = weaponDamage(inv.getItem(best));
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            double d = weaponDamage(inv.getItem(i));
-            if (d > bestDmg) {
-                bestDmg = d;
-                best = i;
-            }
-        }
-        player.holdInHand(best);
-    }
-
-    /** The flat main-hand attack-damage an item grants (ADD_VALUE modifiers on {@code ATTACK_DAMAGE}) —
-     *  the ranking key for {@link #switchToBestWeapon}, the combat analogue of {@code getDestroySpeed}.
-     *  Sword/axe carry the largest; a block or food scores 0 so it's never chosen over a real weapon. */
-    private static double weaponDamage(ItemStack stack) {
-        if (stack.isEmpty()) return 0.0;
-        ItemAttributeModifiers mods = stack.getOrDefault(
-                DataComponents.ATTRIBUTE_MODIFIERS, ItemAttributeModifiers.EMPTY);
-        double sum = 0.0;
-        for (ItemAttributeModifiers.Entry e : mods.modifiers()) {
-            if (e.slot().test(EquipmentSlot.MAINHAND)
-                    && e.attribute().is(Attributes.ATTACK_DAMAGE)
-                    && e.modifier().operation() == AttributeModifier.Operation.ADD_VALUE) {
-                sum += e.modifier().amount();
-            }
-        }
-        return sum;
-    }
-
     private BlockPos targetCell() {
         return (target != null && !target.isRemoved()) ? target.blockPosition() : null;
     }
@@ -270,45 +226,37 @@ public final class HuntCompanionTask implements CompanionTask {
 
     private LivingEntity nearestTarget() {
         AABB box = player.getBoundingBox().inflate(currentRadius);
-        LivingEntity best = null;
-        double bestDistSq = Double.MAX_VALUE;
+        List<LivingEntity> candidates = new ArrayList<>();
         for (Entity e : player.level().getEntities(player, box)) {
             if (e == player || e.isRemoved()) continue;
             if (!(e instanceof LivingEntity le) || le.isDeadOrDying()) continue;
             if (!r.targets.contains(e.getType())) continue;
-            if (skipped.contains(e.getId())) continue;
-            double d = player.distanceToSqr(e);
-            if (d < bestDistSq) {
-                bestDistSq = d;
-                best = le;
-            }
+            candidates.add(le);
         }
-        return best;
-    }
-
-    private void stopNav() {
-        if (nav != null) {
-            nav.stop();
-            nav = null;
-        }
+        return skipped.pick(candidates, Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
     }
 
     @Override
-    public TaskResult buildResult(TaskState finalState) {
-        stopNav();
+    protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("target", r.label);
         data.put("requested", r.count);
         data.put("killed", r.getKilled());
-        return switch (finalState) {
-            case SUCCESS -> TaskResult.ok(
-                    "killed " + r.getKilled() + "/" + r.count + " " + r.label + " (" + doneReason + ")", data);
-            case TIMEOUT -> new TaskResult(false,
-                    "timed out after killing " + r.getKilled() + "/" + r.count + " " + r.label, true, false, data);
-            case CANCELLED -> new TaskResult(false,
-                    "interrupted after killing " + r.getKilled() + "/" + r.count + " " + r.label, false, true, data);
-            case FAILED -> TaskResult.fail(doneReason, data);
-            default -> TaskResult.fail("unexpected state: " + finalState, data);
-        };
+        return data;
+    }
+
+    @Override
+    protected String successMessage() {
+        return "killed " + r.getKilled() + "/" + r.count + " " + r.label + " (" + note + ")";
+    }
+
+    @Override
+    protected String timeoutMessage() {
+        return "timed out after killing " + r.getKilled() + "/" + r.count + " " + r.label;
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "interrupted after killing " + r.getKilled() + "/" + r.count + " " + r.label;
     }
 }
