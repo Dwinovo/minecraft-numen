@@ -51,6 +51,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     private double bestDist = Double.MAX_VALUE;   // closest we've gotten to the goal
     private int settleTicks = 0;                  // ticks of no progress after the planner gave up
+    /** The one near-retry recovery rung has been consumed (ladder state — survives suspend). */
+    private boolean nearRetried;
 
     public MoveToCompanionTask(NumenPlayer player, MoveToTaskRecord record) {
         super(player, record);
@@ -140,8 +142,54 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 }
                 // Otherwise: as close as the terrain allows → (teaching) success or fail.
                 if (closeEnoughToSucceed()) yield TaskState.SUCCESS;
-                fail(blockedMessage(nav.failReason()), nav.failType());
+                // Recovery ladder — ONE retry rung, land nav only: re-plan accepting
+                // anywhere within NEAR_SUCCESS_RADIUS of the destination. Goal-consistent,
+                // not scope creep: a stop within that radius already counts as arrival
+                // (closeEnoughToSucceed above), the retry just lets the SEARCH aim for it.
+                // YLEVEL has no looser near-equivalent (its goal is already any-x/z), and
+                // the water-settle path above is untouched.
+                if (!nearRetried && !player.isInWater()
+                        && r.kind != MoveToTaskRecord.Kind.YLEVEL) {
+                    nearRetried = true;
+                    stopNav();
+                    NavGoal retry = nearRetryGoal();
+                    nav = PlayerNav.toGoal(player, () -> retry, r.speed, this::closeEnoughToSucceed);
+                    if (r.kind == MoveToTaskRecord.Kind.BLOCK) {
+                        nav.setHighlights(() -> java.util.List.of(blockTarget));
+                    }
+                    yield TaskState.RUNNING;
+                }
+                String also = nearRetried
+                        ? " (also retried accepting anywhere within "
+                                + (int) NEAR_SUCCESS_RADIUS + " blocks — no path either)"
+                        : "";
+                fail(blockedMessage(nav.failReason() + also), nav.failType());
                 yield TaskState.FAILED;
+            }
+        };
+    }
+
+    /** The retry rung's loosened goal — the destination widened to the SAME radius that
+     *  already counts as arrival ({@link #NEAR_SUCCESS_RADIUS}), never wider. */
+    private NavGoal nearRetryGoal() {
+        if (r.kind == MoveToTaskRecord.Kind.BLOCK) {
+            return NavGoal.near(blockTarget, NEAR_SUCCESS_RADIUS);
+        }
+        // COLUMN: within the radius HORIZONTALLY at any height (NavGoal.near is 3D and
+        // needs a Y this kind doesn't have; heuristic/center reuse the column's own).
+        NavGoal column = NavGoal.column(bx, bz);
+        double radiusSqr = NEAR_SUCCESS_RADIUS * NEAR_SUCCESS_RADIUS;
+        return new NavGoal() {
+            @Override public boolean isAt(BlockPos feet) {
+                double dx = feet.getX() - bx;
+                double dz = feet.getZ() - bz;
+                return dx * dx + dz * dz <= radiusSqr;
+            }
+            @Override public double heuristic(BlockPos from) {
+                return column.heuristic(from);
+            }
+            @Override public BlockPos center() {
+                return column.center();
             }
         };
     }

@@ -84,6 +84,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  rescanning forever (scans finish in well under a tick; this only fires if
      *  something is truly stuck). */
     private static final int SCAN_TIMEOUT_TICKS = 200;
+    /** Consecutive {@code NO_SHOT} dig ticks on ONE ore before it is blacklisted —
+     *  the reach test said it was workable, but no shot ever materialises (OUTLINE vs
+     *  COLLIDER ray disagreement, a lip over the stance). Without this the dig could
+     *  grind forever waiting for a shot that never comes. */
+    private static final int MAX_NO_SHOT_TICKS = 20;
 
     private final List<BlockPos> knownOres = new ArrayList<>();
     private final Set<BlockPos> blacklist = new HashSet<>();
@@ -102,6 +107,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private int rescanTimer;
     private int branchTicks;
     private String doneReason = "done";
+    /** The ore currently returning {@code NO_SHOT}, and for how many consecutive ticks. */
+    private BlockPos noShotPos;
+    private int noShotTicks;
     /** In-flight background ore scan (Baritone runs its rescan off the tick thread). */
     private CompletableFuture<List<BlockScanner.Hit>> scan;
     /** Game time by which the in-flight scan must finish or be abandoned. */
@@ -224,8 +232,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 doneReason = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
                 return TaskState.SUCCESS;
             }
-            fail("no reachable " + r.label + " found within " + r.maxRadius + " blocks", FailureType.MINED_OUT);
-            return TaskState.FAILED;
+            return noOreFailure();
         }
 
         // 3b) Opt-in explore (Baritone exploreForBlocks) — branch-mine outward (bounded).
@@ -238,8 +245,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 doneReason = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
                 return TaskState.SUCCESS;
             }
-            fail("no reachable " + r.label + " found within " + r.maxRadius + " blocks", FailureType.MINED_OUT);
-            return TaskState.FAILED;
+            return noOreFailure();
         }
         if (nav == null || !navIsBranch) {
             stopNav();
@@ -369,11 +375,39 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  breaks, drop it from the ore list. A {@link BlockDigger.DigResult#BROKE_OCCLUDER} (a leaf cleared
      *  to open the line of sight) is NOT the target, so the ore stays. The progress count is read from
      *  the inventory each tick, not here — one block can yield several items, and the drops take a
-     *  moment to be picked up. */
+     *  moment to be picked up.
+     *
+     *  <p>Recovery: a PERSISTENT {@code NO_SHOT} (the ore passed the reach test but the dig
+     *  can never draw a shot at it) is counted, and after {@link #MAX_NO_SHOT_TICKS} the ore
+     *  is blacklisted and the loop moves on — matching how a failed path already blacklists
+     *  the nearest ore, instead of grinding forever waiting for a shot. */
     private void mineProgress(BlockPos pos) {
-        if (digger.digStep(pos) == BlockDigger.DigResult.BROKE_TARGET) {
-            knownOres.remove(pos);
+        switch (digger.digStep(pos)) {
+            case BROKE_TARGET -> {
+                knownOres.remove(pos);
+                clearNoShot();
+            }
+            case NO_SHOT -> {
+                if (pos.equals(noShotPos)) {
+                    if (++noShotTicks >= MAX_NO_SHOT_TICKS) {
+                        blacklist.add(pos.immutable());
+                        knownOres.remove(pos);
+                        digger.cancel();   // release the in-progress-dig latch on this ore
+                        clearNoShot();
+                    }
+                } else {
+                    noShotPos = pos.immutable();
+                    noShotTicks = 1;
+                }
+            }
+            // PROGRESSING / BROKE_OCCLUDER — real progress; reset the stall counter.
+            default -> clearNoShot();
         }
+    }
+
+    private void clearNoShot() {
+        noShotPos = null;
+        noShotTicks = 0;
     }
 
     // ---- item counting (Baritone MineProcess: count matching items in the inventory) ----
@@ -511,6 +545,24 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     blacklist.add(p);
                     knownOres.remove(p);
                 });
+    }
+
+    /** Terminal "nothing gathered, no ore left to go for" failure, distinguishing a
+     *  genuinely empty field ({@code MINED_OUT} — widening the search or stopping is the
+     *  LLM's call) from a field that WAS found but every target got blacklisted as
+     *  unreachable ({@code NO_PATH} — the terrain, not the scan radius, is the problem),
+     *  with the counts. */
+    private TaskState noOreFailure() {
+        if (!blacklist.isEmpty()) {
+            fail("found " + blacklist.size() + " " + r.label + " within " + r.maxRadius
+                    + " blocks but reached none of them — all " + blacklist.size()
+                    + " were blacklisted as unreachable (no path / no clear shot); gathered 0",
+                    FailureType.NO_PATH);
+        } else {
+            fail("no reachable " + r.label + " found within " + r.maxRadius + " blocks",
+                    FailureType.MINED_OUT);
+        }
+        return TaskState.FAILED;
     }
 
     private boolean withinReach(BlockPos pos) {
