@@ -3,10 +3,8 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.exec.PlaceManeuver;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
-import com.dwinovo.numen.core.task.CompanionTask;
-import com.dwinovo.numen.core.task.PlayerInv;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.core.task.base.GoToThenDoTask;
+import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.state.BlockState;
@@ -25,75 +23,98 @@ import java.util.Map;
  * digs / bridges / climbs to get there), then place like a real player with the
  * shared {@link PlaceManeuver} "edge sneak" — hold sneak, edge to the block's rim
  * so the support face comes into view, look at it, and place natively.
+ *
+ * <p>A "navigate to a target then do one bounded thing" task, so it grows on
+ * {@link GoToThenDoTask}: {@link #buildNav()} walks to the cell, {@link #reached()}
+ * gates the place, {@link #act()} runs the placement maneuver.
  */
-public final class PlaceBlockCompanionTask implements CompanionTask {
+public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTaskRecord> {
 
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double WALK_SPEED = 1.0;
 
-    private final NumenPlayer player;
-    private final PlaceBlockTaskRecord r;
-    private PlayerNav nav;
     private PlaceManeuver maneuver;
-    private String doneReason = "done";
+    /** Success copy captured at the place — recorded here (not recomputed in the base's
+     *  templated result) so both the "already there" and the maneuver-DONE branches keep
+     *  their exact message. */
+    private String successMsg = "done";
 
     public PlaceBlockCompanionTask(NumenPlayer player, PlaceBlockTaskRecord record) {
-        this.player = player;
-        this.r = record;
+        super(player, record);
     }
 
     @Override
-    public void start() {
-        var level = player.level();
-        if (PlayerInv.count(player.getInventory(), r.item) <= 0) {
-            fail("no " + r.label + " in inventory to place");
-            return;
-        }
-        // Occupancy is the one thing worth a fast, clear message; everything else (support faces,
-        // modded placement rules) is left to vanilla's own placement to accept or reject — we don't
-        // second-guess it with our own heuristic. Vanilla's `canBeReplaced` is the same test it uses.
-        BlockState existing = level.getBlockState(r.pos);
-        if (!existing.isAir() && !existing.canBeReplaced()) {
-            fail("target " + coords() + " is already occupied by "
-                    + BuiltInRegistries.BLOCK.getKey(existing.getBlock()).getPath());
-            return;
-        }
-        nav = new PlayerNav(player, r.pos, WALK_SPEED, this::withinReach);
+    protected List<Precondition> preconditions() {
+        return List.of(
+                () -> PlayerInv.count(player.getInventory(), r.item) <= 0
+                        ? new Precondition.Failure("no " + r.label + " in inventory to place",
+                                FailureType.NO_MATERIAL)
+                        : null,
+                // Occupancy is the one thing worth a fast, clear message; everything else (support faces,
+                // modded placement rules) is left to vanilla's own placement to accept or reject — we don't
+                // second-guess it with our own heuristic. Vanilla's `canBeReplaced` is the same test it uses.
+                () -> {
+                    BlockState existing = player.level().getBlockState(r.pos);
+                    if (!existing.isAir() && !existing.canBeReplaced()) {
+                        return new Precondition.Failure("target " + coords() + " is already occupied by "
+                                + BuiltInRegistries.BLOCK.getKey(existing.getBlock()).getPath(),
+                                FailureType.TARGET_LOST);
+                    }
+                    return null;
+                });
     }
 
     @Override
-    public TaskState tick() {
-        if (player.level().getBlockState(r.pos).is(r.block)) {
-            doneReason = "placed " + r.label + " at " + coords() + orientation();
+    protected PlayerNav buildNav() {
+        return new PlayerNav(player, r.pos, WALK_SPEED, this::withinReach);
+    }
+
+    @Override
+    protected boolean reached() {
+        // Fold the old top-of-tick "already placed → success" check in here: if the target
+        // is already the requested block (even before we're within reach) act() short-circuits
+        // to SUCCESS, exactly as the pre-migration tick did.
+        return alreadyPlaced() || withinReach();
+    }
+
+    @Override
+    protected TaskState act() {
+        if (alreadyPlaced()) {
+            successMsg = "placed " + r.label + " at " + coords() + orientation();
             return TaskState.SUCCESS;
         }
-        if (withinReach()) {
-            if (maneuver == null) {
-                maneuver = new PlaceManeuver(player, r.pos,
-                        () -> PlayerInv.findSlot(player.getInventory(), r.item),
-                        () -> player.level().getBlockState(r.pos).is(r.block),
-                        new PlaceManeuver.Hints(r.facing, r.axis, r.topHalf), r.block);
-            }
-            return switch (maneuver.tick()) {
-                case DONE -> {
-                    doneReason = "placed " + r.label + " at " + coords() + orientation();
-                    yield TaskState.SUCCESS;
-                }
-                case FAILED -> {
-                    doneReason = maneuver.failReason();
-                    yield TaskState.FAILED;
-                }
-                case RUNNING -> TaskState.RUNNING;
-            };
+        if (maneuver == null) {
+            maneuver = new PlaceManeuver(player, r.pos,
+                    () -> PlayerInv.findSlot(player.getInventory(), r.item),
+                    () -> player.level().getBlockState(r.pos).is(r.block),
+                    new PlaceManeuver.Hints(r.facing, r.axis, r.topHalf), r.block);
         }
-        if (nav == null) return TaskState.FAILED;
-        return switch (nav.tick()) {
-            case RUNNING, ARRIVED -> TaskState.RUNNING;
+        return switch (maneuver.tick()) {
+            case DONE -> {
+                successMsg = "placed " + r.label + " at " + coords() + orientation();
+                yield TaskState.SUCCESS;
+            }
             case FAILED -> {
-                doneReason = "can't reach a spot to place at " + coords() + " (" + nav.failReason() + ")";
+                fail(maneuver.failReason(), maneuver.failType());
                 yield TaskState.FAILED;
             }
+            case RUNNING -> TaskState.RUNNING;
         };
+    }
+
+    /**
+     * Reproduce the old nav-failure copy exactly (wrap the nav's own reason), still a plain
+     * give-up — no recovery ladder is attached this stage. Overridden only because the base
+     * default reports the bare {@code reason}, which would change the model-facing string.
+     */
+    @Override
+    protected TaskState handleNavFailure(FailureType type, String reason) {
+        fail("can't reach a spot to place at " + coords() + " (" + reason + ")", type);
+        return TaskState.FAILED;
+    }
+
+    private boolean alreadyPlaced() {
+        return player.level().getBlockState(r.pos).is(r.block);
     }
 
     private boolean withinReach() {
@@ -140,25 +161,34 @@ public final class PlaceBlockCompanionTask implements CompanionTask {
         return differs ? " [wanted " + wanted + "]" : "";
     }
 
-    private void fail(String reason) {
-        doneReason = reason;
-        r.setState(TaskState.FAILED);
+    @Override
+    protected void cleanup() {
+        super.cleanup();   // stopNav + clear the path overlay
+        if (maneuver != null) maneuver.stop();
     }
 
     @Override
-    public TaskResult buildResult(TaskState finalState) {
-        if (nav != null) nav.stop();
-        if (maneuver != null) maneuver.stop();
+    protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("block", r.label);
         data.put("x", r.pos.getX());
         data.put("y", r.pos.getY());
         data.put("z", r.pos.getZ());
-        return switch (finalState) {
-            case SUCCESS -> TaskResult.ok(doneReason, data);
-            case TIMEOUT -> TaskResult.timeout("timed out before placing " + r.label + " at " + coords());
-            case CANCELLED -> TaskResult.cancelled("place_block interrupted");
-            default -> TaskResult.fail(doneReason, data);
-        };
+        return data;
+    }
+
+    @Override
+    protected String successMessage() {
+        return successMsg;
+    }
+
+    @Override
+    protected String timeoutMessage() {
+        return "timed out before placing " + r.label + " at " + coords();
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "place_block interrupted";
     }
 }
