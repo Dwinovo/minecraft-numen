@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
@@ -29,6 +30,12 @@ public final class BreakBlockCompanionTask extends GoToThenDoTask<BreakBlockTask
 
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double WALK_SPEED = 1.0;
+    /** Recovery rung: the loosened approach goal — stand ANYWHERE within this of the
+     *  target (well inside swing range) instead of the resolver's tight default. */
+    private static final double LOOSE_APPROACH_RADIUS = 4.0;
+
+    /** The one reposition rung has been consumed (ladder state — survives suspend). */
+    private boolean navRetried;
 
     private Interaction breaking;
     private String brokenBlock = "?";
@@ -106,13 +113,28 @@ public final class BreakBlockCompanionTask extends GoToThenDoTask<BreakBlockTask
     }
 
     /**
-     * Reproduce the old nav-failure copy exactly (wrap the nav's own reason), still a plain
-     * give-up — no recovery ladder is attached this stage. Overridden only because the base
-     * default reports the bare {@code reason}, which would change the model-facing string.
+     * Recovery ladder — ONE reposition rung. A {@code NO_PATH}/{@code BOXED_IN} to the
+     * exact approach becomes one retry with a looser goal ({@code near(target, 4)}, still
+     * within swing range — the SAME bounded break, a different stance), so "stand exactly
+     * here" failures become "stand anywhere I can swing from"; the existing dig via
+     * {@link Interaction#attackBlock} already handles occluders once in reach. A second
+     * failure (or any other cause, e.g. target lost) gives up with the original wrapped
+     * message plus what was tried.
      */
     @Override
     protected TaskState handleNavFailure(FailureType type, String reason) {
-        fail("can't reach " + posLabel() + ": " + reason, type);
+        if (!navRetried && (type == FailureType.NO_PATH || type == FailureType.BOXED_IN)) {
+            navRetried = true;
+            stopNav();
+            NavGoal loose = NavGoal.near(r.target, LOOSE_APPROACH_RADIUS);
+            nav = PlayerNav.toGoal(player, () -> loose, WALK_SPEED, this::withinReach);
+            return TaskState.RUNNING;
+        }
+        String also = navRetried
+                ? " (also tried approaching anywhere within " + (int) LOOSE_APPROACH_RADIUS
+                        + " blocks of it — no path either)"
+                : "";
+        fail("can't reach " + posLabel() + ": " + reason + also, type);
         return TaskState.FAILED;
     }
 

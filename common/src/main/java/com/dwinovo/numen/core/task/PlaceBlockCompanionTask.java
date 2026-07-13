@@ -1,22 +1,34 @@
 package com.dwinovo.numen.core.task;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.pathing.calc.NavGoal;
+import com.dwinovo.numen.core.pathing.exec.BlockDigger;
 import com.dwinovo.numen.core.pathing.exec.PlaceManeuver;
+import com.dwinovo.numen.core.pathing.exec.Placement;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
+import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.task.base.GoToThenDoTask;
 import com.dwinovo.numen.core.task.base.Precondition;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * {@code place_block} on the player body: walk within reach (full pathfinding —
@@ -27,11 +39,59 @@ import java.util.Map;
  * <p>A "navigate to a target then do one bounded thing" task, so it grows on
  * {@link GoToThenDoTask}: {@link #buildNav()} walks to the cell, {@link #reached()}
  * gates the place, {@link #act()} runs the placement maneuver.
+ *
+ * <h2>Recovery ladder (failure path only — the success path is untouched)</h2>
+ * Instead of bouncing the first substrate failure back to the LLM, bounded
+ * alternative EXECUTIONS of the same place are tried in order:
+ * <ol>
+ *   <li>the direct edge-sneak maneuver from wherever nav parked us (today's rung);</li>
+ *   <li>REPOSITION — up to {@value #MAX_ALT_STANCES} alternate stances (adjacent to
+ *       the target, then anywhere within {@value #STANCE_NEAR_RADIUS} blocks of it,
+ *       excluding cells already failed from), each followed by a fresh maneuver;</li>
+ *   <li>DIG-OUT (on {@code OCCLUDED} only) — clear at most {@value #MAX_OCCLUDERS_DUG}
+ *       identifiable, non-protected blocks off the line to a support face, then retry
+ *       the maneuver once; if no clean occluder is identifiable the rung is skipped;</li>
+ *   <li>exhausted — ONE structured failure saying what was tried.</li>
+ * </ol>
+ * Implemented as an inline state machine ({@link Phase} + attempt counters) rather
+ * than a {@code RecoveryLadder} of child tasks: every rung is a parameter variation
+ * (stance goal / dig target) of the SAME two primitives this task already owns
+ * (nav + {@link PlaceManeuver}), and keeping them in fields is what makes
+ * {@code Suspendable} resume trivial — a preempted tick re-drives them in place.
+ * The boundary rule holds: every stance hugs the target (≤{@value #STANCE_NEAR_RADIUS}
+ * blocks), no material is acquired, {@code NO_MATERIAL} is never laddered, and the
+ * dig rung refuses {@code BlockHelper.shouldAvoidBreaking} blocks.
  */
 public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTaskRecord> {
 
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double WALK_SPEED = 1.0;
+    /** Ladder bound: alternate stances to try after an occluded / unreachable place. */
+    private static final int MAX_ALT_STANCES = 2;
+    /** Ladder bound: occluding blocks the dig-out rung may clear in total. */
+    private static final int MAX_OCCLUDERS_DUG = 2;
+    /** Radius of the loosest alternate-stance goal — still hugging the target. */
+    private static final double STANCE_NEAR_RADIUS = 2.5;
+    /** Faces a block can be placed against (same order as PlaceManeuver / Placement). */
+    private static final Direction[] SUPPORT_FACES = {
+            Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN};
+
+    /** Which ladder rung {@link #act()} is currently executing. */
+    private enum Phase { PLACING, REPOSITIONING, DIGGING }
+
+    private Phase phase = Phase.PLACING;
+    /** The direct (first) edge-sneak maneuver actually ran — for the exhausted message. */
+    private boolean directPlaceTried;
+    /** Alternate stances consumed so far (≤ {@link #MAX_ALT_STANCES}). */
+    private int altStancesTried;
+    /** The dig-out rung has been entered (it can never be re-entered). */
+    private boolean digTried;
+    /** Blocks the dig-out rung has removed (≤ {@link #MAX_OCCLUDERS_DUG}). */
+    private int occludersDug;
+    /** Feet cells a maneuver already failed from — excluded from later stance goals. */
+    private final Set<BlockPos> badStances = new HashSet<>();
+    /** Lazily-created digger for the dig-out rung. */
+    private BlockDigger digger;
 
     private PlaceManeuver maneuver;
     /** Success copy captured at the place — recorded here (not recomputed in the base's
@@ -83,7 +143,19 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
             successMsg = "placed " + r.label + " at " + coords() + orientation();
             return TaskState.SUCCESS;
         }
+        return switch (phase) {
+            case PLACING -> tickPlace();
+            case REPOSITIONING -> tickReposition();
+            case DIGGING -> tickDig();
+        };
+    }
+
+    /** Rung "place from here": the edge-sneak maneuver — the pre-ladder success path,
+     *  byte-identical when it works. On failure, prerequisite causes kick straight back
+     *  to the LLM; everything else advances the ladder. */
+    private TaskState tickPlace() {
         if (maneuver == null) {
+            if (altStancesTried == 0 && !digTried) directPlaceTried = true;
             maneuver = new PlaceManeuver(player, r.pos,
                     () -> PlayerInv.findSlot(player.getInventory(), r.item),
                     () -> player.level().getBlockState(r.pos).is(r.block),
@@ -95,22 +167,197 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
                 yield TaskState.SUCCESS;
             }
             case FAILED -> {
-                fail(maneuver.failReason(), maneuver.failType());
-                yield TaskState.FAILED;
+                FailureType cause = maneuver.failType();
+                String why = maneuver.failReason();
+                maneuver.stop();     // release sneak before repositioning / digging
+                maneuver = null;
+                // NO_MATERIAL is a prerequisite gap — NEVER laddered. NO_SUPPORT is
+                // target geometry (no solid neighbour exists at all): no stance change
+                // or dig can create support, so it kicks back immediately too.
+                if (cause == FailureType.NO_MATERIAL || cause == FailureType.NO_SUPPORT) {
+                    fail(why, cause);
+                    yield TaskState.FAILED;
+                }
+                badStances.add(currentFeet());   // don't come back to this stance
+                yield advanceLadder(cause, why);
             }
             case RUNNING -> TaskState.RUNNING;
         };
     }
 
+    /** Rung "reposition": drive the stance nav (while within reach of the target the
+     *  base loop routes every tick through {@link #act()}, so the ladder ticks it here;
+     *  out of reach, the base loop drives the same nav itself). */
+    private TaskState tickReposition() {
+        if (nav == null) {   // defensive: stance nav lost — fall back to a fresh attempt
+            phase = Phase.PLACING;
+            return TaskState.RUNNING;
+        }
+        return switch (nav.tick()) {
+            case RUNNING -> TaskState.RUNNING;
+            case ARRIVED -> {
+                phase = Phase.PLACING;   // fresh maneuver from the new stance next tick
+                yield TaskState.RUNNING;
+            }
+            case FAILED -> advanceLadder(nav.failType(),
+                    "couldn't reach an alternate stance (" + nav.failReason() + ")");
+        };
+    }
+
     /**
-     * Reproduce the old nav-failure copy exactly (wrap the nav's own reason), still a plain
-     * give-up — no recovery ladder is attached this stage. Overridden only because the base
-     * default reports the bare {@code reason}, which would change the model-facing string.
+     * Rung "dig-out" ({@code OCCLUDED} only, entered once): clear at most
+     * {@link #MAX_OCCLUDERS_DUG} identifiable blocks off the line to a support face,
+     * then retry the maneuver once. If no clean, safe occluder is identifiable the
+     * rung is skipped (exhausts) rather than grinding blindly; protected blocks
+     * ({@code shouldAvoidBreaking}) are never dug.
+     */
+    private TaskState tickDig() {
+        // Line clear now? Retry the maneuver (once — the ladder can't re-enter this rung).
+        if (Placement.resolve(player, r.pos, true) != null) {
+            phase = Phase.PLACING;
+            return TaskState.RUNNING;
+        }
+        if (occludersDug >= MAX_OCCLUDERS_DUG) {
+            return exhaust(FailureType.OCCLUDED, "the view to a support face is still blocked"
+                    + " after clearing " + occludersDug + " blocks");
+        }
+        BlockPos occ = findOccluder();
+        if (occ == null) {
+            return exhaust(FailureType.OCCLUDED, "no single safe occluder is identifiable to"
+                    + " clear — the view to a support face is boxed in by terrain");
+        }
+        if (digger == null) digger = new BlockDigger(player);
+        return switch (digger.digStep(occ)) {
+            // BROKE_OCCLUDER = the digger's own fallback removed a block in front of OUR
+            // occluder — still one block gone, so it counts toward the same bound.
+            case BROKE_TARGET, BROKE_OCCLUDER -> {
+                occludersDug++;
+                yield TaskState.RUNNING;   // re-check the line next tick
+            }
+            case PROGRESSING -> TaskState.RUNNING;
+            case NO_SHOT -> exhaust(FailureType.OCCLUDED,
+                    "couldn't get a clear shot at the occluding block");
+        };
+    }
+
+    /**
+     * After a rung failed with {@code cause}: next stance if any remain, else the
+     * dig-out rung (once, {@code OCCLUDED} only), else exhausted — one structured
+     * failure. {@code detail} is the last failure's model-facing reason, carried
+     * into the exhausted message.
+     */
+    private TaskState advanceLadder(FailureType cause, String detail) {
+        if (altStancesTried < MAX_ALT_STANCES) {
+            altStancesTried++;
+            startStanceNav(altStancesTried);
+            phase = Phase.REPOSITIONING;
+            return TaskState.RUNNING;
+        }
+        if (!digTried && cause == FailureType.OCCLUDED) {
+            digTried = true;
+            phase = Phase.DIGGING;
+            return TaskState.RUNNING;
+        }
+        return exhaust(cause, detail);
+    }
+
+    /** The ONE structured give-up: says what was tried, carries the last cause. */
+    private TaskState exhaust(FailureType cause, String detail) {
+        List<String> tried = new ArrayList<>();
+        if (directPlaceTried) tried.add("direct edge-place");
+        if (altStancesTried > 0) {
+            tried.add(altStancesTried + " alternate stance" + (altStancesTried == 1 ? "" : "s"));
+        }
+        if (digTried) {
+            tried.add(occludersDug > 0
+                    ? "clearing " + occludersDug + " occluder" + (occludersDug == 1 ? "" : "s")
+                    : "looking for an occluder to clear");
+        }
+        if (tried.isEmpty()) tried.add("walking within reach");
+        fail("couldn't place " + r.label + " at " + coords() + " — tried "
+                + String.join(", ", tried) + "; " + detail, cause);
+        return TaskState.FAILED;
+    }
+
+    /** Replace the nav with one toward alternate stance #{@code attempt}. */
+    private void startStanceNav(int attempt) {
+        stopNav();
+        NavGoal goal = stanceGoal(attempt);
+        nav = PlayerNav.toGoal(player, () -> goal, WALK_SPEED, () -> goal.isAt(currentFeet()));
+    }
+
+    /** Stance #1: any cell adjacent to the target; stance #2: anywhere within
+     *  {@link #STANCE_NEAR_RADIUS} of it. Both exclude the target cell itself and every
+     *  stance a maneuver already failed from — SAME bounded goal, different feet. */
+    private NavGoal stanceGoal(int attempt) {
+        NavGoal base = attempt == 1 ? NavGoal.adjacent(r.pos) : NavGoal.near(r.pos, STANCE_NEAR_RADIUS);
+        Set<BlockPos> avoid = new HashSet<>(badStances);   // copied — the search reads it off-thread
+        avoid.add(r.pos);                                  // never stand IN the cell being filled
+        return new NavGoal() {
+            @Override public boolean isAt(BlockPos feet) {
+                return base.isAt(feet) && !avoid.contains(feet);
+            }
+            @Override public double heuristic(BlockPos from) {
+                return base.heuristic(from);
+            }
+            @Override public BlockPos center() {
+                return base.center();
+            }
+        };
+    }
+
+    /**
+     * The single block occluding the sneaking eye's line to a support-face aim point
+     * (the same face points the maneuver aims at), or {@code null} when none is cleanly
+     * identifiable. Refuses: the support itself, the target cell, our own footing, and
+     * any {@code shouldAvoidBreaking} (protected) block.
+     */
+    private BlockPos findOccluder() {
+        Level level = player.level();
+        Vec3 eye = new Vec3(player.getX(),
+                player.getY() + player.getEyeHeight(Pose.CROUCHING), player.getZ());
+        double reach = player.blockInteractionRange();
+        BlockPos feet = player.blockPosition();
+        for (Direction dir : SUPPORT_FACES) {
+            BlockPos against = r.pos.relative(dir);
+            if (!Placement.canPlaceAgainst(level, against)) continue;
+            Vec3 facePoint = new Vec3(
+                    (r.pos.getX() + against.getX() + 1.0) * 0.5,
+                    (r.pos.getY() + against.getY() + 0.5) * 0.5,
+                    (r.pos.getZ() + against.getZ() + 1.0) * 0.5);
+            if (facePoint.distanceToSqr(eye) > reach * reach) continue;
+            BlockHitResult hit = level.clip(new ClipContext(
+                    eye, facePoint, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
+            if (hit.getType() != HitResult.Type.BLOCK) continue;
+            BlockPos p = hit.getBlockPos();
+            if (p.equals(against) || p.equals(r.pos)) continue;        // that face isn't occluded
+            if (p.equals(feet) || p.equals(feet.below())) continue;    // never dig out our own footing
+            if (BlockHelper.shouldAvoidBreaking(level, p)) continue;   // protected — not ours to clear
+            return p.immutable();
+        }
+        return null;
+    }
+
+    /** Slab-aware feet cell (the pathing node the stance goals judge). */
+    private BlockPos currentFeet() {
+        return BlockHelper.playerFeet(player.level(), player.getX(), player.getY(), player.getZ());
+    }
+
+    /**
+     * Nav failures feed the same ladder: the reposition stances double as looser
+     * approach goals when the exact-cell approach found no path (rung "reposition"
+     * recovers {@code NO_PATH}/{@code BOXED_IN} too, not just {@code OCCLUDED}).
+     * Mid-dig the body has nowhere further to fall back to — exhaust.
      */
     @Override
     protected TaskState handleNavFailure(FailureType type, String reason) {
-        fail("can't reach a spot to place at " + coords() + " (" + reason + ")", type);
-        return TaskState.FAILED;
+        if (phase == Phase.DIGGING) {
+            return exhaust(type, reason);
+        }
+        String detail = phase == Phase.REPOSITIONING
+                ? "couldn't reach an alternate stance (" + reason + ")"
+                : "can't reach a spot to place at " + coords() + " (" + reason + ")";
+        return advanceLadder(type, detail);
     }
 
     private boolean alreadyPlaced() {
@@ -165,6 +412,7 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
     protected void cleanup() {
         super.cleanup();   // stopNav + clear the path overlay
         if (maneuver != null) maneuver.stop();
+        if (digger != null) digger.cancel();
     }
 
     @Override
