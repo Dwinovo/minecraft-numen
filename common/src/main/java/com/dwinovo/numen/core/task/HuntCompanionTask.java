@@ -46,6 +46,9 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
 
     /** Mobs A* couldn't close on — skipped so the scan doesn't retry the same one forever. */
     private final TargetSet<LivingEntity> skipped = new TargetSet<>(LivingEntity::getId);
+    /** How many of those skips happened ({@code TargetSet} keeps no count) — so the final
+     *  "nothing left to hunt" message can tell the LLM "N targets were there but unreachable". */
+    private int unreachableSkips;
     /** Drops A* can't reach — skipped so the sweep doesn't retry the same one forever. */
     private final TargetSet<BlockPos> dropBlacklist = new TargetSet<>(p -> p);
 
@@ -97,7 +100,16 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
                 beginCollect();   // sweep the battlefield for loot before finishing
                 return TaskState.RUNNING;
             }
-            fail("no " + r.label + " found within " + r.maxRadius + " blocks", FailureType.TARGET_LOST);
+            // Structured give-up for the LLM: what was scanned (the task's full radius) and
+            // how many candidates existed but couldn't be closed on. Same condition as before —
+            // only the message content is richer.
+            String scanned = "no " + r.label + " found within " + r.maxRadius + " blocks";
+            if (unreachableSkips > 0) {
+                scanned += " (" + unreachableSkips + " candidate"
+                        + (unreachableSkips == 1 ? " was" : "s were")
+                        + " skipped as unreachable)";
+            }
+            fail(scanned, FailureType.TARGET_LOST);
             return TaskState.FAILED;
         }
         target = best;
@@ -126,6 +138,7 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
             case ARRIVED -> swing();
             case FAILED -> {
                 skipped.skip(target);
+                unreachableSkips++;
                 target = null;
                 stopNav();
                 phase = Phase.SCAN;
