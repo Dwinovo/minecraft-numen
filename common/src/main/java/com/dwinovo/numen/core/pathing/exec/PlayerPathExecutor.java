@@ -466,7 +466,11 @@ public final class PlayerPathExecutor {
                 return replan("current move now impossible (" + obstruct(fresh, cur) + ")");
             }
             if (liveCur - cur.cost > PathSettings.MAX_COST_INCREASE) {
-                return replan("current move got too expensive");
+                // Planned vs live price in the log: the delta's SIZE says what changed
+                // (≈20+ = a scaffold place appeared; small = dig got harder), which is
+                // the evidence for ever re-tuning MAX_COST_INCREASE.
+                return replan(String.format("current move got too expensive (planned %.1f, live %.1f)",
+                        cur.cost, liveCur));
             }
         }
         if (costCheckIndex != index) {
