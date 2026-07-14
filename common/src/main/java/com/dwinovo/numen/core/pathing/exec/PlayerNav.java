@@ -111,6 +111,9 @@ public final class PlayerNav {
     /** Frozen context + start of the most recent search — kept for the no-path autopsy. */
     private NavContext lastCtx;
     private BlockPos lastStart;
+    /** Whether the body stood on solid ground when the search launched — a search
+     *  started mid-jump/mid-fall has an unstandable start cell and dies at 0 expansions. */
+    private boolean lastStartGrounded = true;
 
     /** Walk to a single cell. */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
@@ -257,6 +260,7 @@ public final class PlayerNav {
                 learning, SearchBudget.scaled(dist));
         lastCtx = ctx;
         lastStart = startFeet;
+        lastStartGrounded = player.onGround();
         searchObj = s;
         searchFuture = dispatch(ctx, s);
     }
@@ -421,6 +425,18 @@ public final class PlayerNav {
             r.append(String.format("; learned-h consults %d", s.stats().learnedConsultHits()));
             if (s.stats().stoppedAtPrimary()) {
                 r.append("; stopped at primary budget");
+            }
+            if (s.expansionsDone() == 0 && lastCtx != null && lastStart != null) {
+                // The search died AT THE START NODE — the "sealed in" verdict above is
+                // meaningless. Name the start cell's real condition so the failure can be
+                // typed: rim standing (feet cell over air), a search launched mid-jump/fall,
+                // or a snapshot hole (chunk not captured).
+                var below = lastCtx.view.getBlockState(lastStart.below());
+                r.append(String.format(
+                        "; ZERO-EXPANSION start diagnosis: feet=%s grounded-at-launch=%b below=%s chunk-captured=%b",
+                        lastStart.toShortString(), lastStartGrounded,
+                        net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(below.getBlock()).getPath(),
+                        lastCtx.isLoadedAt(lastStart)));
             }
             r.append(')');
         } else {

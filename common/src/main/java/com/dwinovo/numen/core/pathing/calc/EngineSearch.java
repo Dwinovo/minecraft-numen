@@ -123,6 +123,27 @@ public final class EngineSearch {
         for (Movement m : r.edges) {
             m.markCalculatedWhileLoaded(ctx.isLoadedAt(m.dest));
         }
+        // Telemetry: intra-path self-interference — a later move standing on a cell an
+        // earlier move digs. A* prices every edge against the same static snapshot, so
+        // this is a legal plan; execution self-heals (the live scaffold check restores
+        // the floor). This line only counts occurrences — the data decides whether
+        // assembly-time truncation would ever be worth its extra replans.
+        int selfInterference = 0;
+        LongOpenHashSet broken = null;
+        for (Movement m : r.edges) {
+            if (broken != null && broken.contains(m.dest.below().asLong())) {
+                selfInterference++;
+            }
+            for (BlockPos b : m.toBreak) {
+                if (broken == null) broken = new LongOpenHashSet();
+                broken.add(b.asLong());
+            }
+        }
+        if (selfInterference > 0) {
+            com.dwinovo.numen.Constants.LOG.info(
+                    "[numen-path] path self-interference: {} later floor(s) sit where an earlier move digs ({} moves total)",
+                    selfInterference, r.edges.size());
+        }
         return switch (r.kind) {
             case COMPLETE -> new Path(start, lastDest(r.edges), r.edges, false);
             case PARTIAL_COMMIT -> new Path(start, lastDest(r.edges), r.edges, true);
