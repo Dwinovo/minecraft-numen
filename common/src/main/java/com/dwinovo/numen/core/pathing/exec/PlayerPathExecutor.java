@@ -217,6 +217,17 @@ public final class PlayerPathExecutor {
             advance();
             return Status.RUNNING;
         }
+        // A land pillar's whole premise is a floor under its own column (jump from it,
+        // place against it). If that floor is missing — typically an earlier scaffold
+        // that never landed left a hole — jumping can only grind the movement timeout:
+        // surrender the move NOW and replan against the world as it really is.
+        if (mv.kind == Movement.Kind.PILLAR
+                && !BlockHelper.isWater(player.level(), mv.src)
+                && !BlockHelper.canWalkOn(player.level(), mv.src.below())
+                && !BlockHelper.canWalkOn(player.level(), mv.src)) {
+            return replan("pillar has no floor under " + mv.src.toShortString()
+                    + " (an earlier scaffold never landed)");
+        }
         drive(mv);
         // Universal liquid float (runs after EVERY movement's per-kind drive):
         // if our feet cell is liquid and we're below dest.y+0.6, press jump

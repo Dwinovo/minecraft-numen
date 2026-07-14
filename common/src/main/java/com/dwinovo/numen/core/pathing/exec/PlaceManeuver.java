@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -127,21 +128,40 @@ public final class PlaceManeuver {
         // tick. Never fabricate a hit: no face in view means keep edging, or time out.
         BlockHitResult hit = Placement.resolve(player, placeAt, true, aimY);
         if (hit != null) {
-            // A face is visible: pin toward it (sneak holds the body at the rim) and press.
-            // The press waits one tick for the crouch to register — the sneak is also the
-            // edge protection, so the click never precedes it. With orientation hints the
-            // press is held back until a dry-run predicts the right state — but never past
-            // a grace window.
-            edgeToward(hit.getLocation());
-            boolean orientationOk = hints.isEmpty()
-                    || ticks > (LIMIT_TICKS * 3) / 5         // grace: take what we can get
-                    || matchesHints(predict(hit));
-            if (orientationOk && player.isCrouching() && doPlace(hit)) {
-                // Ticks-to-commit is THE speed metric for the per-tick multi-face resolution —
-                // one line per successful maneuver, cheap enough to keep on permanently.
-                Constants.LOG.info("[numen-path] place committed at {} on tick {} (face {})",
-                        placeAt.toShortString(), ticks, hit.getDirection());
-                return Status.DONE;
+            InputDriver.lookAt(player, hit.getLocation());
+            if (player.getBoundingBox().intersects(new AABB(placeAt))) {
+                // Our own collision box is (partly) inside the cell being filled — a placed
+                // block may never overlap an entity, so vanilla refuses EVERY such press.
+                // The classic case is a same-level scaffold: sneaking lets the body lean past
+                // the cell boundary, and pressing toward the face pins it there forever.
+                // Back straight off (face still in view); the press fires the tick the box
+                // clears the cell.
+                player.zza = -1.0f;
+                player.xxa = 0.0f;
+                player.setSprinting(false);
+            } else {
+                // A face is visible and the cell is clear of our body: stand still and press.
+                // The press waits one tick for the crouch to register — the sneak is also the
+                // edge protection, so the click never precedes it. With orientation hints the
+                // press is held back until a dry-run predicts the right state — but never
+                // past a grace window; while held back, keep working around the block.
+                boolean orientationOk = hints.isEmpty()
+                        || ticks > (LIMIT_TICKS * 3) / 5         // grace: take what we can get
+                        || matchesHints(predict(hit));
+                if (!orientationOk) {
+                    edgeToward(hit.getLocation());
+                } else {
+                    player.zza = 0.0f;
+                    player.xxa = 0.0f;
+                    player.setSprinting(false);
+                    if (player.isCrouching() && doPlace(hit)) {
+                        // Ticks-to-commit is THE speed metric for the per-tick multi-face
+                        // resolution — one line per successful maneuver, kept on permanently.
+                        Constants.LOG.info("[numen-path] place committed at {} on tick {} (face {})",
+                                placeAt.toShortString(), ticks, hit.getDirection());
+                        return Status.DONE;
+                    }
+                }
             }
         } else {
             // No face in sight yet: edge (sneaking) toward the nearest candidate face so one
