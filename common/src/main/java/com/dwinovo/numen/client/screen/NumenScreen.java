@@ -122,7 +122,7 @@ public final class NumenScreen extends Screen {
     private Tab tab = Tab.CHAT;
 
     /** The Settings tab is a config hub: a left sub-nav picks one of these sections. */
-    private enum SettingsSection { LLM, PROVIDER, MCP, SKILLS, PERSONA }
+    private enum SettingsSection { PROVIDER, MCP, SKILLS, PERSONA }
 
     // ---- provider-library section state (mirrors the persona section) ----
     private boolean addingProvider;
@@ -131,7 +131,7 @@ public final class NumenScreen extends Screen {
     private String wProvName = "", wProvProvider = "", wProvModel = "", wProvKey = "", wProvBaseUrl = "";
     private net.minecraft.client.gui.components.EditBox provNameInput, provProviderInput,
             provModelInput, provKeyInput, provBaseUrlInput;
-    private SettingsSection settingsSection = SettingsSection.LLM;
+    private SettingsSection settingsSection = SettingsSection.PROVIDER;
 
     // Persona library form state (mirrors the MCP add/edit/delete flow).
     private boolean addingPersona;
@@ -511,7 +511,6 @@ public final class NumenScreen extends Screen {
     /** Dispatch widget building by the active section (skill/MCP lists render manually). */
     private void buildSettingsWidgets() {
         switch (settingsSection) {
-            case LLM -> buildLlmWidgets();
             case SKILLS -> buildSkillsWidgets();
             case MCP -> {
                 if (mcpDeletePending != null) buildMcpDeleteConfirm();
@@ -540,18 +539,29 @@ public final class NumenScreen extends Screen {
                     wProvName = ""; wProvProvider = ""; wProvModel = ""; wProvKey = ""; wProvBaseUrl = "";
                     rebuild();
                 }));
+        // Global proxy (a network-environment property, deliberately NOT per-entry) —
+        // relocated here from the removed 模型接入 section: bottom band, field + save.
+        int x = secX(), w = secW();
+        proxyInput = field(x, top + PANEL_H - PAD - 18, w - 70, 128, Services.CONFIG.getProxy());
+        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+                Component.translatable("numen.gui.settings.save"), b -> {
+                    Services.CONFIG.setProxy(proxyInput.getValue().trim());
+                    Services.CONFIG.save();
+                    NumenLlmClient.reset();
+                    savedFlashUntil = System.currentTimeMillis() + 1500;
+                }));
     }
 
     /** Five single-line fields; ONLY the name is required to save (an incomplete
      *  entry errors honestly at first use — the library's whole philosophy). */
     private void buildProviderForm() {
         int x = secX(), w = secW();
-        int fy = secY0() + 14;
+        int fy = secY0();
         provNameInput = field(x, fy + 11, w, 48, wProvName);
-        provProviderInput = field(x, fy + 34, w, 48, wProvProvider);
-        provModelInput = field(x, fy + 57, w, 96, wProvModel);
-        provKeyInput = field(x, fy + 80, w, 256, wProvKey);
-        provBaseUrlInput = field(x, fy + 103, w, 256, wProvBaseUrl);
+        provProviderInput = field(x, fy + 11 + SET_SP, w, 48, wProvProvider);
+        provModelInput = field(x, fy + 11 + 2 * SET_SP, w, 96, wProvModel);
+        provKeyInput = field(x, fy + 11 + 3 * SET_SP, w, 256, wProvKey);
+        provBaseUrlInput = field(x, fy + 11 + 4 * SET_SP, w, 256, wProvBaseUrl);
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveProvider()));
         add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
@@ -791,6 +801,10 @@ public final class NumenScreen extends Screen {
         }
     }
 
+    // ==== DEAD CODE — the legacy 模型接入 section was removed from the nav (2026-07-14;
+    // the 提供商 library replaces it). buildLlmWidgets / onSaveSettings / buildModelRow /
+    // buildApiKeyRow / renderLlmSettings and their dropdown click blocks are unreachable;
+    // delete wholesale in a dedicated cleanup commit. ====
     private void buildLlmWidgets() {
         int x = secX(), w = secW();
         int y0 = secY0();
@@ -956,7 +970,6 @@ public final class NumenScreen extends Screen {
     private void renderSettings(GuiGraphics g, int mouseX, int mouseY) {
         renderSettingsNav(g);
         switch (settingsSection) {
-            case LLM -> renderLlmSettings(g);
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
             case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
@@ -974,6 +987,11 @@ public final class NumenScreen extends Screen {
             return;
         }
         if (addingProvider) { renderProviderForm(g); return; }
+        // Global proxy row lives in the bottom band (built in buildProviderListWidgets).
+        txt(g, Component.literal("代理(全局,host:port,可空)"), x, top + PANEL_H - PAD - 29, TXT_MUTED);
+        if (savedFlashUntil > System.currentTimeMillis()) {
+            txt(g, Component.translatable("numen.settings.saved"), x, top + PANEL_H - PAD - 40, OK);
+        }
         var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
         if (list.isEmpty()) {
             txt(g, Component.literal("还没有提供商配置——点右上「新建」创建一条"), x, secY0() + 16, TXT_FAINT);
@@ -1001,12 +1019,12 @@ public final class NumenScreen extends Screen {
 
     private void renderProviderForm(GuiGraphics g) {
         int x = secX();
-        int fy = secY0() + 14;
+        int fy = secY0();
         txt(g, Component.literal("名称(必填)"), x, fy, TXT_MUTED);
-        txt(g, Component.literal("服务商(如 openai / deepseek,可后补)"), x, fy + 23, TXT_MUTED);
-        txt(g, Component.literal("模型"), x, fy + 46, TXT_MUTED);
-        txt(g, Component.literal("API Key"), x, fy + 69, TXT_MUTED);
-        txt(g, Component.literal("Base URL(可选)"), x, fy + 92, TXT_MUTED);
+        txt(g, Component.literal("服务商(如 openai / deepseek,可后补)"), x, fy + SET_SP, TXT_MUTED);
+        txt(g, Component.literal("模型"), x, fy + 2 * SET_SP, TXT_MUTED);
+        txt(g, Component.literal("API Key"), x, fy + 3 * SET_SP, TXT_MUTED);
+        txt(g, Component.literal("Base URL(可选)"), x, fy + 4 * SET_SP, TXT_MUTED);
     }
 
     private static boolean nb(String s) {
@@ -1046,7 +1064,7 @@ public final class NumenScreen extends Screen {
     /** The config-hub left sub-nav: 模型接入 / MCP / 技能, plus the divider. */
     private void renderSettingsNav(GuiGraphics g) {
         String[] labels = {
-                I18n.get("numen.settings.nav.llm"), "提供商", I18n.get("numen.settings.nav.mcp"),
+                "提供商", I18n.get("numen.settings.nav.mcp"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona")};
         int navX = left + PAD;
         int y = secY0();
@@ -1647,8 +1665,7 @@ public final class NumenScreen extends Screen {
             pinBottom = scroll >= lastMaxScroll;
             return true;
         }
-        if (tab == Tab.SETTINGS && sy != 0 && settingsSection != SettingsSection.LLM
-                && !addingPersona && !addingProvider) {
+        if (tab == Tab.SETTINGS && sy != 0 && !addingPersona && !addingProvider) {
             int count = switch (settingsSection) {
                 case MCP -> com.dwinovo.numen.mcp.client.McpClientManager.servers().size();
                 case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
@@ -1726,17 +1743,11 @@ public final class NumenScreen extends Screen {
         for (AbstractWidget w : overlay) {
             w.render(g, mouseX, mouseY, partial);
         }
-        // Base URL / Proxy placeholders, drawn shadowless by us (the EditBox hint renders with a shadow).
-        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.LLM) {
-            String urlPh = addingSite ? "https://… (OpenAI-compatible)"
-                    : LlmProviders.byId(providerDropdown.selectedId()).defaultBaseUrl();
-            placeholder(g, baseUrlInput, urlPh);
-            placeholder(g, proxyInput, "host:port (optional)");
-            // Model + site-name placeholders, also shadowless (these EditBoxes are null outside
-            // custom-model / add-site mode, and placeholder() no-ops on null/non-empty/focused).
-            placeholder(g, modelInput, addingSite ? "model id"
-                    : LlmProviders.byId(providerDropdown.selectedId()).defaultModel());
-            if (addingSite) placeholder(g, siteNameInput, "e.g. My Proxy");
+        // Field placeholders, drawn shadowless by us (the EditBox hint renders with a shadow).
+        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.PROVIDER && addingProvider) {
+            placeholder(g, provProviderInput, "openai / deepseek / …");
+            placeholder(g, provKeyInput, "sk-…");
+            placeholder(g, provBaseUrlInput, "https://… (OpenAI-compatible)");
         }
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.MCP && addingMcp) {
             placeholder(g, mcpNameInput, "kfc");
@@ -1748,18 +1759,6 @@ public final class NumenScreen extends Screen {
         }
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
         // caret in the widget pass, so it can't paint over the caret like a screen-side draw did.)
-        // The provider dropdown's open list must sit above even the fields.
-        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.LLM) {
-            // render the non-open one first so the open list draws on top
-            if (modelDropdown != null && providerDropdown != null && providerDropdown.isOpen()) {
-                modelDropdown.render(g, font, mouseX, mouseY);
-                providerDropdown.render(g, font, mouseX, mouseY);
-            } else {
-                if (providerDropdown != null) providerDropdown.render(g, font, mouseX, mouseY);
-                if (modelDropdown != null) modelDropdown.render(g, font, mouseX, mouseY);
-            }
-        }
-
         // Summon persona dropdown — drawn late so its open list sits above the summon field.
         if (summoning && summonProviderDropdown == null) {
             // Empty provider library: creation is blocked — paint the pointer instead.
