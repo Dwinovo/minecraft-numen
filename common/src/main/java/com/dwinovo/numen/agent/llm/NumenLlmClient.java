@@ -52,8 +52,6 @@ public final class NumenLlmClient {
     /** Suffix appended to base URLs that don't already end with it. */
     private static final String CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 
-    private static volatile NumenLlmClient instance;
-
     private final HttpLlmTransport transport;
     private final LlmProvider provider;
     private final String fullUrl;
@@ -62,16 +60,16 @@ public final class NumenLlmClient {
     /** Reasoning effort: {@code auto} (send nothing) | {@code low} | {@code medium} | {@code high}. */
     private final String reasoningEffort;
 
-    private NumenLlmClient(INumenConfig config) {
-        this.provider = pickProvider(config.getProvider());
-        String siteBase = com.dwinovo.numen.agent.model.ModelRegistry.baseUrl(config.getProvider());
-        this.fullUrl = composeUrl(config.getBaseUrl(), siteBase, provider);
-        this.apiKey = config.getApiKey();
-        this.transport = new HttpLlmTransport(config.getProxy(),
-                com.dwinovo.numen.agent.model.ModelRegistry.headers(config.getProvider()));
-        String configured = config.getModel();
+    private NumenLlmClient(LlmEndpoint endpoint) {
+        this.provider = pickProvider(endpoint.provider());
+        String siteBase = com.dwinovo.numen.agent.model.ModelRegistry.baseUrl(endpoint.provider());
+        this.fullUrl = composeUrl(endpoint.baseUrl(), siteBase, provider);
+        this.apiKey = endpoint.apiKey();
+        this.transport = new HttpLlmTransport(endpoint.proxy(),
+                com.dwinovo.numen.agent.model.ModelRegistry.headers(endpoint.provider()));
+        String configured = endpoint.model();
         this.model = (configured == null || configured.isBlank()) ? "gpt-5.4-mini" : configured;
-        this.reasoningEffort = normalizeReasoning(config.getReasoningEffort());
+        this.reasoningEffort = normalizeReasoning(endpoint.reasoningEffort());
         Constants.LOG.info("[numen-llm] client initialised: provider={}, model={}, url={}, streaming={}",
                 provider.name(), model, fullUrl, provider.supportsStreaming());
     }
@@ -91,15 +89,28 @@ public final class NumenLlmClient {
         return base + CHAT_COMPLETIONS_SUFFIX;
     }
 
+    /**
+     * One immutable client per distinct endpoint, keyed by VALUE — same connection
+     * parameters reuse the same client (and its HTTP pool); different companions
+     * pointing at different providers each get their own. Bounded by the number of
+     * distinct endpoints a player configures (a handful).
+     */
+    private static final java.util.concurrent.ConcurrentHashMap<LlmEndpoint, NumenLlmClient> CLIENTS =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** The client for an explicit endpoint (a companion's selected provider entry). */
+    public static NumenLlmClient forEndpoint(LlmEndpoint endpoint) {
+        return CLIENTS.computeIfAbsent(endpoint, NumenLlmClient::new);
+    }
+
+    /**
+     * The client for the CURRENT global settings — resolved fresh on every call, so
+     * a settings change simply resolves to a new endpoint (and thus a new cached
+     * client) on the next request. No invalidation ceremony required; {@link #reset()}
+     * survives only as a cache trim for the GUI's existing call site.
+     */
     public static NumenLlmClient instance() {
-        NumenLlmClient local = instance;
-        if (local != null) return local;
-        synchronized (NumenLlmClient.class) {
-            if (instance == null) {
-                instance = new NumenLlmClient(Services.CONFIG);
-            }
-            return instance;
-        }
+        return forEndpoint(LlmEndpoint.fromGlobal(Services.CONFIG));
     }
 
     public static boolean isConfigured() {
@@ -119,12 +130,9 @@ public final class NumenLlmClient {
      * conversations continue with the new backend.
      */
     public static void reset() {
-        synchronized (NumenLlmClient.class) {
-            if (instance != null) {
-                Constants.LOG.info("[numen-llm] resetting client (next call will rebuild from current config)");
-            }
-            instance = null;
-        }
+        Constants.LOG.info("[numen-llm] clearing {} cached client(s) (next calls rebuild from current config)",
+                CLIENTS.size());
+        CLIENTS.clear();
     }
 
     /**

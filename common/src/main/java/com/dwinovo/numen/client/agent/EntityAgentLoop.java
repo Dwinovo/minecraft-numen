@@ -144,6 +144,15 @@ public final class EntityAgentLoop {
     private String personaName;
     private String personaId;   // library id this persona came from (so a library edit can propagate here)
 
+    /**
+     * The {@link com.dwinovo.numen.agent.llm.ProviderLibrary} entry this companion
+     * talks through, or null = the global settings. Resolved to a concrete endpoint
+     * FRESH at every dispatch (entry edits and deletions take effect on the next
+     * request, deletion degrading gracefully to global). Persisted as an assignment
+     * in {@code providers.json}, restored in the constructor.
+     */
+    private String providerEntryId;
+
     private boolean awaitingLlmResponse = false;
     private boolean aborted = false;
     /** One turn-level re-run per failure has been spent (reset when a response lands). */
@@ -215,6 +224,7 @@ public final class EntityAgentLoop {
             display.add(msg);
         });
         this.workBlocks = WorkBlockMemory.forEntity(numenRoot.resolve("memory"), entityUuid);
+        this.providerEntryId = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().assignedEntry(entityUuid);
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
                 harvestWorkBlocks(inv.name(), resultJson);
@@ -566,6 +576,29 @@ public final class EntityAgentLoop {
         return personaId;
     }
 
+    // ---- per-companion LLM provider ----
+
+    /** The client for THIS companion: its provider-library entry resolved fresh
+     *  (blank fields → global), or plain global when nothing is assigned. */
+    private NumenLlmClient client() {
+        return NumenLlmClient.forEndpoint(
+                com.dwinovo.numen.agent.llm.ProviderLibrary.instance().resolve(providerEntryId));
+    }
+
+    /** The provider-library entry id this companion talks through, or null (= global). */
+    public String providerEntryId() {
+        return providerEntryId;
+    }
+
+    /** Point this companion at a provider-library entry (null = back to global settings)
+     *  and persist the assignment. Takes effect on the next request — no restart. */
+    public void setProviderEntry(String entryId) {
+        this.providerEntryId = entryId == null || entryId.isBlank() ? null : entryId;
+        com.dwinovo.numen.agent.llm.ProviderLibrary.instance().assign(entityUuid, this.providerEntryId);
+        Constants.LOG.info("[numen-entity#{}] provider entry set to {}", entityUuid,
+                this.providerEntryId == null ? "(global)" : this.providerEntryId);
+    }
+
     /**
      * Switch this companion's persona at runtime. Three things happen:
      * (1) the persona text/name update, so the next turn's system prompt recomposes with the new
@@ -653,7 +686,9 @@ public final class EntityAgentLoop {
         // legitimately chains many tasks, and resuming a timed-out move_to
         // repeats the exact same call. Runaways are stopped by the owner's
         // interrupt.
-        if (!NumenLlmClient.isConfigured()) {
+        // Key check against THIS companion's resolved endpoint — its own entry's key,
+        // or the global key when the entry leaves it blank / nothing is assigned.
+        if (!com.dwinovo.numen.agent.llm.ProviderLibrary.instance().resolve(providerEntryId).hasApiKey()) {
             Constants.LOG.warn("[numen-entity#{}] API key not set; open the Numen GUI (X) → Settings",
                     entityUuid);
             aborted = true;
@@ -695,7 +730,7 @@ public final class EntityAgentLoop {
         // Capture the current generation; if the owner interrupts before this
         // call resolves, handleResponse sees the mismatch and discards it.
         final int gen = turnGeneration;
-        NumenLlmClient.instance().chatStreaming(snapshot, tools, systemPrompt, null)
+        client().chatStreaming(snapshot, tools, systemPrompt, null)
                 .whenComplete((res, err) -> bounceBackToMain(gen, res, err));
     }
 
@@ -729,7 +764,7 @@ public final class EntityAgentLoop {
                 entityUuid, auto ? "auto" : "manual", request.size() - 1);
         final int gen = turnGeneration;
         final long startMs = System.currentTimeMillis();
-        NumenLlmClient.instance().chatStreaming(request, List.of(), COMPACT_SYSTEM_PROMPT, null)
+        client().chatStreaming(request, List.of(), COMPACT_SYSTEM_PROMPT, null)
                 .whenComplete((res, err) -> Minecraft.getInstance().execute(
                         () -> finishCompaction(gen, auto, startMs, res, err)));
     }
@@ -982,7 +1017,7 @@ public final class EntityAgentLoop {
                 Constants.LOG.info("[numen-entity#{}] re-running failed turn once", entityUuid);
                 awaitingLlmResponse = true;
                 final int gen2 = turnGeneration;
-                NumenLlmClient.instance().chatStreaming(convo.snapshot(), ToolRegistry.all(),
+                client().chatStreaming(convo.snapshot(), ToolRegistry.all(),
                                 composeSystemPrompt(), null)
                         .whenComplete((r2, e2) -> bounceBackToMain(gen2, r2, e2));
                 return;
