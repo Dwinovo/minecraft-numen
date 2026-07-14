@@ -325,16 +325,16 @@ public final class NumenScreen extends Screen {
         summonInput.setBordered(false);
         summonInput.setTextColor(TXT);
         add(summonInput);
-        // Persona for the new companion — the library list, defaulting to the
-        // 活泼助手 preset (regenerated on every load, so it always exists). The
-        // "hint" rendering lives in the render pass as a FAINT placeholder — the
-        // EditBox's own hint drew in full text color and read as typed input.
+        // Persona is OPTIONAL: first item = 不配置 (the persona slot then tells the
+        // model "未配置人设,可以自由发挥"), presets and user personas follow. The name
+        // "hint" renders in the render pass as a FAINT placeholder — the EditBox's
+        // own hint drew in full text color and read as typed input.
         List<Dropdown.Item> items = new ArrayList<>();
+        items.add(new Dropdown.Item(PERSONA_DEFAULT, "不配置(自由发挥)"));
         for (PersonaLibrary.Persona p : PersonaLibrary.instance().list()) {
             items.add(new Dropdown.Item(p.id(), p.name()));
         }
-        if (summonPersonaId == null) summonPersonaId = "preset_lively";
-        summonPersonaDropdown = new Dropdown(items, summonPersonaId);
+        summonPersonaDropdown = new Dropdown(items, summonPersonaId == null ? PERSONA_DEFAULT : summonPersonaId);
         summonPersonaDropdown.setBounds(left + PAD, y0 + 68, PANEL_W - PAD * 2, 18);
         // REQUIRED model config — no default item and no fallback: an empty library
         // shows no dropdown; clicking 创建 then explains (doSummon).
@@ -1665,7 +1665,8 @@ public final class NumenScreen extends Screen {
         if (button == 0) {
             // Summon dropdowns get first pick (their open lists overlay the panel).
             if (summoning && summonPersonaDropdown != null && summonPersonaDropdown.mouseClicked(mouseX, mouseY)) {
-                summonPersonaId = summonPersonaDropdown.selectedId();
+                String sel = summonPersonaDropdown.selectedId();
+                summonPersonaId = PERSONA_DEFAULT.equals(sel) ? null : sel;
                 return true;
             }
             if (summoning && summonProviderDropdown != null && summonProviderDropdown.mouseClicked(mouseX, mouseY)) {

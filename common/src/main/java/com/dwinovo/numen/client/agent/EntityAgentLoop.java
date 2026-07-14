@@ -926,11 +926,13 @@ public final class EntityAgentLoop {
     }
 
     private String composeSystemPrompt() {
-        // Per-companion persona wins; fall back to the global default. Read fresh each turn so a live
-        // persona switch takes effect next turn with no in-flight interruption.
+        // Per-companion persona wins; fall back to the global default; with neither,
+        // the persona slot says so EXPLICITLY — an unconfigured persona is a valid
+        // state (自由发挥), not a missing one. Read fresh each turn so a live persona
+        // switch takes effect next turn with no in-flight interruption.
         String base = (personaText != null && !personaText.isBlank())
                 ? personaText : Services.CONFIG.getSystemPrompt();
-        if (base == null) base = "";
+        if (base == null || base.isBlank()) base = "未配置人设,可以自由发挥。";
         String envBlock = buildEnvBlock();
         AbstractClientPlayer body = resolveEntity();
         String knownBlocks = workBlocks.formatXml(body != null ? body.level() : null);
@@ -939,7 +941,7 @@ public final class EntityAgentLoop {
         StringBuilder sb = new StringBuilder();
         // Persona = the mutable "who you are" layer, wrapped so it's clearly delimited from the
         // immutable operating core (ENTITY_PROMPT) that follows.
-        if (!base.isBlank()) sb.append("<persona>\n").append(base.strip()).append("\n</persona>");
+        sb.append("<persona>\n").append(base.strip()).append("\n</persona>");
         sb.append(ENTITY_PROMPT);
         if (envBlock != null) {
             sb.append("\n\n").append(envBlock);
