@@ -56,9 +56,20 @@ public final class MobDefenseChain implements TaskChain {
     private static final long UNREACHABLE_COOLDOWN = 200;
     private static final long CHAIN_COOLDOWN = 100;
 
+    /** Diary for completed episodes (kill / escape) — may be null (e.g. unit tests). */
+    private final com.dwinovo.numen.core.task.SurvivalJournal journal;
+
     private Mode mode = Mode.NONE;
     private LivingEntity target;
     private PlayerNav nav;
+
+    public MobDefenseChain() {
+        this(null);
+    }
+
+    public MobDefenseChain(com.dwinovo.numen.core.task.SurvivalJournal journal) {
+        this.journal = journal;
+    }
     /** Last known threat position, for the flee goal supplier (survives the mob despawning mid-flee). */
     private BlockPos lastThreatPos;
     /** Engagement leash: consecutive nav FAILEDs on the current fight/flee attempt. */
@@ -86,6 +97,7 @@ public final class MobDefenseChain implements TaskChain {
             return;
         }
         if (threat != target) {
+            noteOutcome(companion);   // the previous engagement just ended (e.g. target died)
             target = threat;
             consecutiveNavFails = 0;
             stopNav();   // re-plan for the new target
@@ -249,10 +261,24 @@ public final class MobDefenseChain implements TaskChain {
     }
 
     private void release(NumenPlayer companion) {
+        noteOutcome(companion);
         stopNav();
         InputDriver.halt(companion);
         companion.setShiftKeyDown(false);
         mode = Mode.NONE;
         target = null;
+    }
+
+    /** Diary the engagement that just ended — a kill (we chased and it died) or a clean
+     *  escape (we fled and nothing hostile remains in range). Anything else (preempted
+     *  mid-fight, leashed unreachable) is not an outcome worth a line. */
+    private void noteOutcome(NumenPlayer companion) {
+        if (journal == null || target == null) return;
+        String mob = target.getType().getDescription().getString();
+        if (mode == Mode.CHASE && (target.isDeadOrDying() || target.isRemoved())) {
+            journal.note("was attacked by a " + mob + " and killed it");
+        } else if (mode == Mode.FLEE && nearestThreat(companion) == null) {
+            journal.note("fled from a " + mob + " to safety");
+        }
     }
 }

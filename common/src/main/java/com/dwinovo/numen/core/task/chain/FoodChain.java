@@ -31,8 +31,22 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class FoodChain implements TaskChain {
 
+    /** Diary for completed episodes — may be null (e.g. unit tests). */
+    private final com.dwinovo.numen.core.task.SurvivalJournal journal;
+
     /** The in-flight native eat (held use), or {@code null} between eats. */
     private Interaction eat;
+    /** What's being chewed + hunger at the first bite, for the diary line. */
+    private String eatingLabel;
+    private int eatingStartFood;
+
+    public FoodChain() {
+        this(null);
+    }
+
+    public FoodChain(com.dwinovo.numen.core.task.SurvivalJournal journal) {
+        this.journal = journal;
+    }
 
     @Override
     public float getPriority(NumenPlayer companion) {
@@ -54,6 +68,8 @@ public final class FoodChain implements TaskChain {
             int slot = bestEdibleSlot(companion);
             if (slot < 0) return;   // priority-gated; belt-and-braces
             companion.holdInHand(slot);
+            eatingLabel = companion.getInventory().getItem(slot).getHoverName().getString();
+            eatingStartFood = companion.getFoodData().getFoodLevel();
             eat = Interaction.useInAir(companion, InteractionHand.MAIN_HAND, Interaction.Timing.hold());
         }
         switch (eat.tick()) {
@@ -61,6 +77,12 @@ public final class FoodChain implements TaskChain {
             case DONE, FAILED -> {
                 // Finished (or declined) one item; release. If still hungry, priority
                 // stays up and the next tick starts a fresh eat; else we go dormant.
+                // Diary only a REAL meal (hunger actually rose — a declined/instant DONE
+                // with no effect isn't an episode).
+                if (journal != null
+                        && companion.getFoodData().getFoodLevel() > eatingStartFood) {
+                    journal.note("got hungry and ate a " + eatingLabel);
+                }
                 eat.stop();
                 eat = null;
             }

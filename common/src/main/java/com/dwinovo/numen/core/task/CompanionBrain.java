@@ -26,13 +26,17 @@ import java.util.List;
 final class CompanionBrain {
 
     final TaskQueue queue = new TaskQueue();
-    final LlmTaskChain llm = new LlmTaskChain(queue);
+    /** Shared survival diary: survival chains write episode lines at their completion
+     *  edges; the LLM chain drains them into the next tool result's message — the model
+     *  is informed of what its body did autonomously, never consulted. */
+    private final SurvivalJournal journal = new SurvivalJournal();
+    final LlmTaskChain llm = new LlmTaskChain(queue, journal);
 
     private final List<TaskChain> chains = List.of(
             new UnstuckChain(),
-            new MobDefenseChain(),
-            new FoodChain(),
-            new MLGChain(),
+            new MobDefenseChain(journal),
+            new FoodChain(journal),
+            new MLGChain(journal),
             llm);
 
     /** Last tick's winner, so we can fire {@code onInterrupt} exactly on the switching edge. */

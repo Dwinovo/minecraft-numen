@@ -40,6 +40,19 @@ public final class MLGChain implements TaskChain {
     /** How far down to probe for ground. */
     private static final double PROBE_DEPTH = 8.0;
 
+    /** Diary for completed episodes — may be null (e.g. unit tests). */
+    private final com.dwinovo.numen.core.task.SurvivalJournal journal;
+    /** One diary line per fall episode (reset when the save ends). */
+    private boolean notedThisFall;
+
+    public MLGChain() {
+        this(null);
+    }
+
+    public MLGChain(com.dwinovo.numen.core.task.SurvivalJournal journal) {
+        this.journal = journal;
+    }
+
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
@@ -60,6 +73,7 @@ public final class MLGChain implements TaskChain {
             companion.holdInHand(bucket);
             // Straight-down useItem: the vanilla water bucket places water on the block below.
             Interaction.useInAir(companion, InteractionHand.MAIN_HAND, Interaction.Timing.once()).tick();
+            noteSave(companion, "a water bucket");
             return;
         }
         int block = softBlockSlot(companion);
@@ -69,8 +83,16 @@ public final class MLGChain implements TaskChain {
             if (hit != null) {
                 // Rough best-effort: click the soft block onto the ground we're about to hit.
                 Interaction.useBlock(companion, hit, InteractionHand.MAIN_HAND).tick();
+                noteSave(companion, "a soft block");
             }
         }
+    }
+
+    /** One diary line per fall episode, stamped with the height it survived. */
+    private void noteSave(NumenPlayer companion, String means) {
+        if (journal == null || notedThisFall) return;
+        notedThisFall = true;
+        journal.note("broke a " + (int) companion.fallDistance + "-block fall with " + means);
     }
 
     @Override
@@ -79,6 +101,7 @@ public final class MLGChain implements TaskChain {
             companion.releaseUsingItem();
         }
         companion.setXRot(0.0f);   // stop staring straight down; the resumed task re-aims as needed
+        notedThisFall = false;     // the fall episode is over — the next fall diaries anew
     }
 
     @Override

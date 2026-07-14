@@ -25,11 +25,18 @@ import java.util.List;
 public final class LlmTaskChain implements TaskChain {
 
     private final TaskQueue queue;
+    /** Survival diary drained into each shipped result's message (may be null in tests). */
+    private final SurvivalJournal journal;
     private CompanionTask task;
     private TaskRecord record;
 
     LlmTaskChain(TaskQueue queue) {
+        this(queue, null);
+    }
+
+    LlmTaskChain(TaskQueue queue, SurvivalJournal journal) {
         this.queue = queue;
+        this.journal = journal;
     }
 
     @Override
@@ -77,11 +84,25 @@ public final class LlmTaskChain implements TaskChain {
      */
     void finalizeTerminal() {
         if (record != null && record.getState().isTerminal()) {
-            record.setResult(task.buildResult(record.getState()));
+            record.setResult(withSurvivalNotes(task.buildResult(record.getState())));
             queue.complete(record);
             task = null;
             record = null;
         }
+    }
+
+    /**
+     * Append the survival diary (episodes the body handled autonomously — fights,
+     * meals, fall saves — during or before this task) to the outgoing result message.
+     * Informational only: the model learns what happened at exactly the moment it
+     * reads the task outcome, with no extra call and no schema change.
+     */
+    private TaskResult withSurvivalNotes(TaskResult result) {
+        if (journal == null || journal.isEmpty() || result == null) return result;
+        String notes = String.join("; ", journal.drain());
+        return new TaskResult(result.success(),
+                result.message() + " [meanwhile, my body handled on its own: " + notes + "]",
+                result.timedOut(), result.interrupted(), result.data());
     }
 
     /** Lost control to a higher-priority chain: pause the running task without tearing it down. */
@@ -155,7 +176,7 @@ public final class LlmTaskChain implements TaskChain {
             st = TaskState.CANCELLED;
             record.setState(st);
         }
-        record.setResult(task.buildResult(st));
+        record.setResult(withSurvivalNotes(task.buildResult(st)));
         queue.complete(record);
         task = null;
         record = null;
