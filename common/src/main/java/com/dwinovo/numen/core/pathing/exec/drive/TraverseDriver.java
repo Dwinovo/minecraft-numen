@@ -58,11 +58,18 @@ final class TraverseDriver extends MoveDriver {
         return false;
     }
 
-    /** A sneak-bridge over air can't be abandoned until its floor exists. */
+    /** Live floor check — bridges the planned gap AND any floor dug since planning
+     *  (walking into an unexpected hole is a multi-block fall). */
+    @Override
+    public BlockPos scaffoldCell() {
+        return floorUnderDest();
+    }
+
+    /** A sneak-bridge over air can't be abandoned until its floor exists — planned
+     *  bridge or a live repair of a floor dug since planning, same rule. */
     @Override
     public boolean safeToCancel(boolean scaffoldCommitted, int ticksOnCurrent) {
-        return mv.toPlace == null
-                || BlockHelper.canWalkOn(player.level(), mv.dest.below());
+        return BlockHelper.canWalkOn(player.level(), mv.dest.below());
     }
 
     /** Walk-while-breaking: keep approaching + sprint while

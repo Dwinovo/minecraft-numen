@@ -27,6 +27,12 @@ final class DiagonalDriver extends MoveDriver {
         return feet().equals(mv.dest);   // no overshoot tolerance on a diagonal
     }
 
+    /** Live floor check — restores a dest floor dug since planning. */
+    @Override
+    public BlockPos scaffoldCell() {
+        return floorUnderDest();
+    }
+
     /** Diagonal cancel-safety: safe at the start cell, or when both cut
      *  corners have a floor; if we're cornering through an unwalkable corner cell, only
      *  safe when a block actually supports us (one of the four 0.25 offsets below). */

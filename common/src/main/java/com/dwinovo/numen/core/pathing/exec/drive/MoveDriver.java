@@ -92,6 +92,31 @@ public abstract class MoveDriver {
         return false;
     }
 
+    /**
+     * The cell the executor's scaffold phase must make solid BEFORE driving this move,
+     * or {@code null} when nothing is needed — derived from the LIVE world each tick,
+     * not from the plan. The plan's {@code toPlace} is a pricing prediction; by
+     * execution time the floor it assumed may have been dug away (the path's own
+     * earlier breaks included), or the hole it predicted may already be filled. The
+     * dig phase has always been live-world-driven (re-digs whatever is still solid);
+     * this is the placing phase's symmetric contract.
+     *
+     * <p>Default: the plan's {@code toPlace}, while it still isn't walkable. Moves
+     * that stand on {@code dest} override with a live floor check.
+     */
+    public BlockPos scaffoldCell() {
+        return mv.toPlace != null && !BlockHelper.canWalkOn(player.level(), mv.toPlace)
+                ? mv.toPlace : null;
+    }
+
+    /** Live floor-under-dest need: the shared {@link #scaffoldCell()} for moves that
+     *  end standing on {@code dest} — cheap, common scaffolding is spent to restore a
+     *  floor the plan assumed, whoever removed it. */
+    protected final BlockPos floorUnderDest() {
+        BlockPos floor = mv.dest.below();
+        return BlockHelper.canWalkOn(player.level(), floor) ? null : floor;
+    }
+
     /** Kind-specific inputs while the executor's dig phase holds the body (e.g. a
      *  traverse keeps approaching the breaking block). Default: none. */
     public void duringBreak() {}

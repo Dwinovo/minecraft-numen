@@ -78,11 +78,18 @@ public final class AscendDriver extends MoveDriver {
         return feet.equals(mv.dest.offset(dx, 0, dz));
     }
 
+    /** Live floor check — restores a step block dug since planning (jumping at a
+     *  missing step grinds in place, or slides the body off a ledge). */
+    @Override
+    public BlockPos scaffoldCell() {
+        return floorUnderDest();
+    }
+
     /** Unsafe once we've STARTED placing the step block —
      *  i.e. once the scaffold phase began or finished. */
     @Override
     public boolean safeToCancel(boolean scaffoldCommitted, int ticksOnCurrent) {
-        return mv.toPlace == null || !scaffoldCommitted;
+        return !scaffoldCommitted;
     }
 
     @Override

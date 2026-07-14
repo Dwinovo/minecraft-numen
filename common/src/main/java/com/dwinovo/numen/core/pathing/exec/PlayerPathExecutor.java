@@ -165,19 +165,18 @@ public final class PlayerPathExecutor {
             return Status.RUNNING;
         }
 
-        // 2) Place the scaffold floor under dest, if this move needs one — the live
-        //    "edge sneak" maneuver: hold sneak, edge to the rim, look at the support
-        //    face, place. Drives the body forward toward the placement itself, so the
-        //    bridge is laid as it leans out, not teleport-popped.
-        //    (A body standing in the very cell it's trying to place into can wedge; a
-        //    known remedy is an in-move nudge — press backward after ~10 ticks without
-        //    placement. We instead let the movement-timeout replan rescue a stalled
-        //    placement — a bounded fallback. Revisit only if ascend-place wedging shows up.)
-        if (mv.toPlace != null && !placedThisMove) {
+        // 2) Make the cell this move needs solid, if any — the driver derives the need
+        //    from the LIVE world each tick (a floor the plan assumed may have been dug
+        //    since, the path's own earlier breaks included; the plan's toPlace is a
+        //    pricing prediction, not the trigger). The live "edge sneak" maneuver:
+        //    hold sneak, edge to the rim, look at the support face, place.
+        BlockPos scaffold = placedThisMove ? null : drv.scaffoldCell();
+        if (scaffold != null) {
             if (placeManeuver == null) {
-                placeManeuver = new PlaceManeuver(player, mv.toPlace,
+                BlockPos cell = scaffold.immutable();
+                placeManeuver = new PlaceManeuver(player, cell,
                         () -> MoveDriver.scaffoldSlot(player),
-                        () -> BlockHelper.canWalkOn(player.level(), mv.toPlace));
+                        () -> BlockHelper.canWalkOn(player.level(), cell));
             }
             switch (placeManeuver.tick()) {
                 case DONE -> {
@@ -193,6 +192,10 @@ public final class PlayerPathExecutor {
                     return Status.RUNNING;
                 }
             }
+        } else if (placeManeuver != null) {
+            // The need vanished (floor restored some other way) — release the maneuver.
+            placeManeuver.stop();
+            placeManeuver = null;
         }
 
         // 3) Drive toward dest — the driver owns all kind-specific input pressing.
