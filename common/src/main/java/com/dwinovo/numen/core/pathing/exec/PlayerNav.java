@@ -463,6 +463,16 @@ public final class PlayerNav {
         return failType;
     }
 
+    /**
+     * Ticks since the navigation last made real progress (plan-step consumption or an
+     * active dig) — the liveness signal for progress-lease task deadlines. Planning
+     * gaps (no executor yet / between segments) read 0: a budgeted search in flight
+     * IS progress, just not the walking kind.
+     */
+    public int stallTicks() {
+        return current == null ? 0 : current.ticksSinceProgress();
+    }
+
     public void stop() {
         if (current != null) {
             current.stop();

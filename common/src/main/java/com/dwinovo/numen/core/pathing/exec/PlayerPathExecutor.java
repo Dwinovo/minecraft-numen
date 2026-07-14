@@ -713,6 +713,12 @@ public final class PlayerPathExecutor {
         }
     }
 
+    /** Ticks since NET forward progress (index advance past the furthest reached, or an
+     *  active dig) — the executor's liveness signal, exposed for progress-lease deadlines. */
+    public int ticksSinceProgress() {
+        return ticksSinceProgress;
+    }
+
     public boolean isPartial() {
         return path.partial;
     }

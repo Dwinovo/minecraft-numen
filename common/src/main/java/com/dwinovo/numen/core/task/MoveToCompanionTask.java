@@ -34,6 +34,18 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     private static final long TICKS_PER_BLOCK = 20;
     private static final long MAX_EXTRA_TICKS = 5 * 60 * 20;
+    /** Progress lease: while the journey is consuming its plan, the deadline is kept
+     *  this far ahead — a healthy multi-minute dig route never times out mid-stride,
+     *  and a stalled one still returns the body within one lease. */
+    private static final long PROGRESS_LEASE_TICKS = 30 * 20;
+    /** How recent "progress" must be to renew the lease. Generous enough to span one
+     *  slow legitimate move (a long bare-hand dig holds the executor's progress clock
+     *  at 0 anyway; this covers place maneuvers and replan gaps). */
+    private static final int PROGRESS_GRACE_TICKS = 100;
+    /** Hard check-in cap: even a healthy marathon yields (with a resumable result) after
+     *  this long, bounding how long the LLM goes without control. Renewals never push
+     *  the deadline past start + this. */
+    private static final long CHECK_IN_CAP_TICKS = 5 * 60 * 20;
     /** When the planner CAN'T reach the exact goal, a stop within this of the
      *  requested column still counts as "got there" (a teaching success, not a
      *  thrash). This is the only tolerance — arrival itself is exact. */
@@ -53,6 +65,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     private int settleTicks = 0;                  // ticks of no progress after the planner gave up
     /** The one near-retry recovery rung has been consumed (ladder state — survives suspend). */
     private boolean nearRetried;
+    /** Absolute ceiling for lease renewals (start + {@link #CHECK_IN_CAP_TICKS}); 0 = unset. */
+    private long leaseCapGameTime;
 
     public MoveToCompanionTask(NumenPlayer player, MoveToTaskRecord record) {
         super(player, record);
@@ -68,8 +82,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // onTick observes reached() and returns SUCCESS — same outcome as the old
         // start-time short-circuit, one tick later per the base's lifecycle.
         if (reached()) return;
+        // Initial budget from straight-line distance (terrain difficulty is unknowable
+        // here — the progress lease below takes over once the journey is under way).
         long extra = Math.min(MAX_EXTRA_TICKS, 600 + (long) (repDistance() * TICKS_PER_BLOCK));
         r.extendDeadlineTo(player.level().getGameTime() + extra);
+        leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
         nav = PlayerNav.toGoal(player, this::goal, r.speed, this::reached);
         // Highlight the ACTUAL requested cell (not the path's best-effort end) so the overlay
         // box sits on the real target — e.g. a BLOCK goal under/over water that the path can
@@ -118,6 +135,15 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         if (nav == null) {
             fail(blockedMessage("no path"), FailureType.NO_PATH);
             return TaskState.FAILED;
+        }
+        // Progress lease: while the nav is consuming its plan (steps advancing / digging),
+        // keep the deadline PROGRESS_LEASE ahead — never past the check-in cap. Plan
+        // consumption, NOT goal distance, is the liveness signal: healthy routes routinely
+        // move away from the goal (skirting a lake, spiraling down), and the flat budget
+        // above can't price terrain (a dig-heavy route once died 1 block short).
+        if (nav.stallTicks() <= PROGRESS_GRACE_TICKS && leaseCapGameTime > 0) {
+            long now = player.level().getGameTime();
+            r.extendDeadlineTo(Math.min(now + PROGRESS_LEASE_TICKS, leaseCapGameTime));
         }
         // Track passive progress toward the goal: the planner stops at the water surface
         // above an underwater target, but the body keeps drifting toward it on its own (it
@@ -257,8 +283,17 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     protected String timeoutMessage() {
         int gy = player.blockPosition().getY();
         double remaining = repDistance();
+        // Two different stories for the model: a stall (progress dried up — something is
+        // wrong, reconsider) vs a check-in (journey healthy but longer than the cap —
+        // resuming is the right move).
+        boolean stalled = nav == null || nav.stallTicks() > PROGRESS_GRACE_TICKS;
         return "timed out " + String.format("%.1f", remaining) + " blocks from target (now at "
-                + bx(gy) + "); call move_to again with the same target to resume.";
+                + bx(gy) + "); "
+                + (stalled
+                        ? "progress had stopped — likely blocked; call move_to again to retry, or"
+                                + " try a nearer waypoint / scan_blocks for a way through."
+                        : "the journey was still progressing and simply exceeded its check-in budget;"
+                                + " call move_to again with the same target to resume.");
     }
 
     @Override
