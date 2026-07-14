@@ -13,10 +13,10 @@ import org.joml.Vector3f;
 import java.util.List;
 
 /**
- * Draws every companion's path overlay in the world — our port of Baritone's
- * {@code PathRenderer}: a coloured poly-line through the path nodes, red boxes
+ * Draws every companion's path overlay in the world: a coloured poly-line
+ * through the path nodes, red boxes
  * on blocks to break, green boxes on blocks to place, and a green box on the
- * goal. Default-on, like Baritone ({@code renderPath = true}).
+ * goal. Default-on — the overlay is how the player reads what the body intends.
  *
  * <p>Loader-neutral: each loader's client init calls {@link #render} from its
  * post-translucent world-render hook with that frame's {@link PoseStack}; the
@@ -29,11 +29,12 @@ public final class PathVizRenderer {
     private static final int BREAK_COLOR = 0xFFFF0000; // red
     private static final int PLACE_COLOR = 0xFF00FF00; // green
     private static final int GOAL_COLOR  = 0xFF00FF00; // green
-    private static final float LINE_WIDTH = 5.0F;   // Baritone pathRenderLineWidthPixels default
-    /** Baritone renderPathAsLine=false: the path is a thin vertical ribbon, the line
-     *  plus a parallel edge 0.03 above it, joined at each segment's ends. */
+    private static final float LINE_WIDTH = 5.0F;   // overlay line width in pixels
+    /** The path is drawn as a thin vertical ribbon, the line
+     *  plus a parallel edge 0.03 above it, joined at each segment's ends —
+     *  reads better at distance than a bare 1-px line. */
     private static final double RIBBON = 0.03;
-    /** Box inset so the wireframe hugs faces without z-fighting (Baritone uses .002). */
+    /** Box inset so the wireframe hugs faces without z-fighting. */
     private static final double BOX_INSET = 0.002;
 
     private PathVizRenderer() {}
@@ -51,14 +52,14 @@ public final class PathVizRenderer {
         PoseStack.Pose pose = poseStack.last();
 
         for (ClientPathViz.Viz v : active) {
-            // Baritone skips paths for bots in another dimension; ours are at world
+            // Skip paths for bodies in another dimension; the nodes are world
             // coords that only make sense in their own dimension.
             if (!here.equals(v.dimension())) continue;
             drawPathLine(vc, pose, v.nodes(), cam, v.companion());
             for (BlockPos b : v.toBreak()) drawBox(vc, pose, b, cam, BREAK_COLOR);
             for (BlockPos p : v.toPlace()) drawBox(vc, pose, p, cam, PLACE_COLOR);
-            // Every target the body will work through — for mining, the whole ore
-            // field (Baritone boxes every GoalComposite member); for a move, the
+            // Every target the body will work through — for mining, a box on each
+            // ore of the whole field; for a move, the
             // single destination. Real cells, never a floating goal-centroid.
             for (BlockPos t : v.targets()) drawBox(vc, pose, t, cam, GOAL_COLOR);
         }
@@ -68,10 +69,10 @@ public final class PathVizRenderer {
     }
 
     /**
-     * Poly-line through block centres (Baritone drawPath), drawn from the body's
-     * CURRENT position onward — Baritone redraws every frame starting at the
-     * executor's path index, so the walked-over portion vanishes and the line
-     * shrinks as the body advances. We approximate that index with the path node
+     * Poly-line through block centres, drawn from the body's
+     * CURRENT position onward — redrawn every frame starting at the body's
+     * progress along the path, so the walked-over portion vanishes and the line
+     * shrinks as the body advances. Progress is approximated as the path node
      * nearest the body's live position; the already-travelled prefix isn't drawn.
      */
     private static void drawPathLine(VertexConsumer vc, PoseStack.Pose pose, List<BlockPos> nodes,
@@ -82,7 +83,7 @@ public final class PathVizRenderer {
             BlockPos b = nodes.get(i);
             double ax = a.getX() + 0.5 - cam.x, ay = a.getY() + 0.5 - cam.y, az = a.getZ() + 0.5 - cam.z;
             double bx = b.getX() + 0.5 - cam.x, by = b.getY() + 0.5 - cam.y, bz = b.getZ() + 0.5 - cam.z;
-            // Baritone emitPathLine (renderPathAsLine=false): the segment plus a 3-sided
+            // Each segment is emitted with a 3-sided
             // ribbon — vertical up at the far end, a parallel edge RIBBON above back to
             // the near end, vertical down — so the path reads as a thin standing band.
             line(vc, pose, ax, ay, az, bx, by, bz, PATH_COLOR);
@@ -92,8 +93,8 @@ public final class PathVizRenderer {
         }
     }
 
-    /** The node nearest the body's live position — our stand-in for Baritone's
-     *  per-frame {@code renderBegin} (the executor's current path index). 0 if the
+    /** The node nearest the body's live position — the client-side stand-in for
+     *  the executor's current path index (which only the server knows). 0 if the
      *  body can't be resolved (just drawn the whole path, as before). */
     private static int renderBegin(List<BlockPos> nodes, java.util.UUID companion) {
         var body = com.dwinovo.numen.client.agent.ClientNumenLookup.resolve(companion);
@@ -115,7 +116,7 @@ public final class PathVizRenderer {
         return best;
     }
 
-    /** The 12 edges of a unit block at {@code pos} (Baritone drawManySelectionBoxes). */
+    /** The 12 edges of a unit block at {@code pos}, as a wireframe selection box. */
     private static void drawBox(VertexConsumer vc, PoseStack.Pose pose, BlockPos pos, Vec3 cam, int color) {
         double x0 = pos.getX() - cam.x + BOX_INSET, y0 = pos.getY() - cam.y + BOX_INSET, z0 = pos.getZ() - cam.z + BOX_INSET;
         double x1 = pos.getX() - cam.x + 1 - BOX_INSET, y1 = pos.getY() - cam.y + 1 - BOX_INSET, z1 = pos.getZ() - cam.z + 1 - BOX_INSET;

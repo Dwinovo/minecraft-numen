@@ -15,9 +15,9 @@ import java.util.UUID;
 
 /**
  * Server → Client: the companion's current pathfinding plan, for the in-world
- * path overlay (Baritone's {@code PathRenderer}, ported to our server-authored
- * model). Baritone renders client-side from its own {@code PathingBehavior};
- * our path lives on the server, so the body pushes it to the owner whenever it
+ * path overlay. The path is computed and owned on the server (the client has
+ * no planner state of its own to render from), so the body pushes the plan to
+ * the owner whenever it
  * (re)plans a segment, and pushes an EMPTY one (all lists empty, no goal) to
  * clear the overlay when the path ends.
  *

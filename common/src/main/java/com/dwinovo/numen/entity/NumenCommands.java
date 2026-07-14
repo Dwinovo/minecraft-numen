@@ -13,8 +13,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
- * The unified server-side {@code /numen} command tree, modelled on Carpet's
- * {@code /player} verbs. Lives entirely on the server so it never collides with
+ * The unified server-side {@code /numen} command tree — one root with
+ * per-companion verbs. Lives entirely on the server so it never collides with
  * the client command dispatcher; the two inherently client-local verbs
  * ({@code settings}, {@code reset}) act on the caller's own client by firing a
  * {@link ClientUiActionPayload} back at them.

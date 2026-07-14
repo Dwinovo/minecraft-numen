@@ -60,8 +60,8 @@ public class NumenFabricClient implements ClientModInitializer {
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(
                 (g, delta) -> com.dwinovo.numen.client.hud.NumenToasts.render(g));
 
-        // In-world path overlay for every companion (Baritone PathRenderer port),
-        // drawn after translucent terrain so it sits over the world.
+        // In-world path overlay for every companion (path line + break/place/goal
+        // boxes), drawn after translucent terrain so it sits over the world.
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_ENTITIES
                 .register(ctx -> com.dwinovo.numen.client.path.PathVizRenderer.render(ctx.matrixStack()));
 

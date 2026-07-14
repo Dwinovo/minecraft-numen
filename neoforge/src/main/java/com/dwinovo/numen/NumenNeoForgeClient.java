@@ -56,7 +56,7 @@ public class NumenNeoForgeClient {
         if (event.getStage() != net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
             return;
         }
-        // In-world path overlay for every companion (Baritone PathRenderer port).
+        // In-world path overlay for every companion (path line + break/place/goal boxes).
         com.dwinovo.numen.client.path.PathVizRenderer.render(event.getPoseStack());
     }
 

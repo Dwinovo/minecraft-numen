@@ -54,7 +54,7 @@ public final class NumenNetwork {
                 CompanionListPayload::handle);
 
         // S→C: the companion's current pathfinding plan, for the in-world path
-        // overlay (Baritone PathRenderer, ported to our server-authored path).
+        // overlay (the path is server-authored, so the client must be fed it).
         Services.NETWORK.registerServerToClient(
                 PathVizPayload.TYPE, PathVizPayload.STREAM_CODEC,
                 PathVizPayload::handle);

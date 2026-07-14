@@ -21,7 +21,7 @@ public final class ClientPathViz {
 
     /** One companion's overlay snapshot. {@code companion} is the body UUID so the
      *  renderer can resolve its live position and draw the path line from where it
-     *  currently is (Baritone's per-frame renderBegin — the line shrinks as it walks). */
+     *  currently is (recomputed per frame — the line shrinks as the body walks). */
     public record Viz(UUID companion, ResourceLocation dimension, List<BlockPos> nodes,
                       List<BlockPos> toBreak, List<BlockPos> toPlace, List<BlockPos> targets) {}
 

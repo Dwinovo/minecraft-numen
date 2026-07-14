@@ -101,7 +101,7 @@ public final class NumenPlayer extends ServerPlayer {
         inv.setItem(slot, held);
     }
 
-    // ---- server tick (Carpet's EntityPlayerMPFake trick) ----
+    // ---- server tick (restore the movement pass a fake connection skips) ----
 
     /**
      * Drive the body's own movement physics. A real {@link ServerPlayer} runs
@@ -111,8 +111,8 @@ public final class NumenPlayer extends ServerPlayer {
      * {@code doTick()} never fires and the body would only ever turn (a direct
      * {@code setYRot} write) without walking. The entity system already calls
      * {@code super.tick()} (menus / container / position sync), so we add the
-     * missing {@code doTick()} movement pass here — exactly as Carpet's
-     * {@code EntityPlayerMPFake.tick()} does. Every 10 ticks we resync the
+     * missing {@code doTick()} movement pass here in our own {@code tick()}
+     * override. Every 10 ticks we resync the
      * connection position and let chunk loading follow the body so it never
      * walks out of its loaded area.
      */
@@ -134,7 +134,8 @@ public final class NumenPlayer extends ServerPlayer {
         try {
             this.doTick();
         } catch (Exception ignored) {
-            // mirrors Carpet — fake-connection internals can NPE on edge cases
+            // fake-connection internals can NPE on edge cases; a swallowed tick
+            // beats crashing the server for a cosmetic pass
         }
     }
 
