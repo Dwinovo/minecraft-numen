@@ -39,16 +39,25 @@ public final class HLearningTable {
     private int capClears;
 
     public HLearningTable() {
-        learned.defaultReturnValue(0.0);
+        // "No entry" must be NEGATIVE_INFINITY, not 0: a zero sentinel would BEAT
+        // every negative base heuristic (run-away goals reward distance with h < 0),
+        // clamping their h_eff to 0 — which degrades the search to Dijkstra and,
+        // worse, makes the commitment rule's "nearer than the start" test
+        // unsatisfiable, so flee/branch-mine navigation would always report NO_PATH.
+        learned.defaultReturnValue(Double.NEGATIVE_INFINITY);
     }
 
-    /** The learned lower bound for {@code pos}, or {@code 0.0} if none. */
+    /** The learned lower bound for {@code pos}, or {@link Double#NEGATIVE_INFINITY} if none. */
     public synchronized double learned(long pos) {
         return learned.get(pos);
     }
 
-    /** Max-merge {@code h} into the table: raises the stored value, never lowers it. */
-    public synchronized void update(long pos, double h) {
+    /**
+     * Max-merge {@code h} into the table: raises the stored value, never lowers it.
+     *
+     * @return true iff the stored value was actually raised (honest telemetry).
+     */
+    public synchronized boolean update(long pos, double h) {
         if (learned.size() >= MAX_ENTRIES) {
             learned.clear();
             capClears++;
@@ -56,7 +65,9 @@ public final class HLearningTable {
         double current = learned.get(pos);
         if (h > current) {
             learned.put(pos, h);
+            return true;
         }
+        return false;
     }
 
     /** Drop everything (goal moved / re-rooted / dig capability improved). Tick thread. */

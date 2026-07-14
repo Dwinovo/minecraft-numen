@@ -35,8 +35,11 @@ class LearningLifecycleTest {
     }
 
     @Test
-    void unknownPositionLearnsZero() {
-        assertEquals(0.0, new HLearningTable().learned(PackedPos.pack(9, 9, 9)));
+    void unknownPositionHasNoLearnedValue() {
+        // NEGATIVE_INFINITY, not 0: a zero sentinel would beat every negative base
+        // heuristic (run-away goals) in max(base, learned) — see NegativeHeuristicTest.
+        assertEquals(Double.NEGATIVE_INFINITY,
+                new HLearningTable().learned(PackedPos.pack(9, 9, 9)));
     }
 
     // ---- clear() restores fresh behavior (engine-level) ----
@@ -102,7 +105,7 @@ class LearningLifecycleTest {
         assertEquals(1, table.capClears());
         assertEquals(1, table.size(), "degraded to no-learning, then re-learns");
         assertEquals(9.5, table.learned(straw));
-        assertEquals(0.0, table.learned(PackedPos.pack(0, -2048, 0)),
+        assertEquals(Double.NEGATIVE_INFINITY, table.learned(PackedPos.pack(0, -2048, 0)),
                 "pre-cap entries are gone");
     }
 }

@@ -269,7 +269,14 @@ public final class PathSearch<E> {
         private int writeBack() {
             double fFrontier = open.peekLowest().f;
             int writes = 0;
+            int scanned = 0;
             for (Node<E> node : nodes.values()) {
+                // The write-back scans up to ~200k nodes — a milliseconds-wide window.
+                // A cancel landing mid-scan (goal moved: the caller is about to swap in
+                // a fresh table) must stop us from pouring stale values into it.
+                if ((++scanned & 1023) == 0 && isCancelled()) {
+                    return writes;
+                }
                 if (!node.closed) {
                     continue;
                 }
@@ -277,8 +284,9 @@ public final class PathSearch<E> {
                 if (learned <= node.hEff) {
                     continue;
                 }
-                learning.update(node.pos, learned);
-                writes++;
+                if (learning.update(node.pos, learned)) {
+                    writes++;   // honest count: only entries actually raised
+                }
             }
             return writes;
         }

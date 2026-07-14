@@ -52,7 +52,7 @@ public final class PlayerNav {
      *  {@link HLearningTable} for semantics). Concurrency invariant: at most one LIVE
      *  search at a time; cancelled workers may linger — safe because the table is
      *  synchronized and cancelled searches never write (engine contract). */
-    private final HLearningTable learning = new HLearningTable();
+    private HLearningTable learning = new HLearningTable();
     /** Dig-capability fingerprint at the last fresh dispatch — a RISE clears the
      *  learned table (better tools → old learned values may over-estimate). */
     private double lastDigFingerprint = -1;
@@ -243,14 +243,7 @@ public final class PlayerNav {
         NavContext ctx = searchContext();
         BlockPos startFeet = BlockHelper.playerFeet(
                 player.level(), player.getX(), player.getY(), player.getZ());
-        // Learned-h lifecycle: an IMPROVED dig capability (better tool picked up,
-        // scaffolding gained) means previously-learned pessimism may now
-        // over-estimate → clear; worse/equal capability keeps still-valid lower bounds.
-        double fp = ctx.digCapabilityFingerprint();
-        if (fp > lastDigFingerprint + 0.01) {
-            learning.clear();
-        }
-        lastDigFingerprint = fp;
+        refreshLearning(ctx);
         double dist = Math.sqrt(startFeet.distSqr(g.center()));
         EngineSearch s = EngineSearch.create(ctx, startFeet, g, previousPathHashes,
                 learning, SearchBudget.scaled(dist));
@@ -299,10 +292,17 @@ public final class PlayerNav {
             current.stop();
             current = null;
         }
-        cancelSearch();   // abandon any in-flight main search before dispatching a new one
+        cancelSearch();       // abandon any in-flight main search before dispatching a new one
+        discardPrecompute();  // and any in-flight NEXT segment — it was rooted at a path end
+                              // that may no longer exist, and letting it run would put a
+                              // second LIVE search on the shared learning table
         if (!budgeted) {
             bestGoalDist = Double.MAX_VALUE;   // goal moved / re-rooted → fresh accounting
-            learning.clear();                  // learned h is goal-relative — invalid for the new goal
+            // Learned h is goal-relative — invalid for the new goal. SWAP the table,
+            // never clear() it: a just-cancelled worker can still be mid-write-back
+            // (a milliseconds-wide scan), and clearing would let its OLD-goal values
+            // land in the table the NEW goal consults. Swapping orphans those writes.
+            learning = new HLearningTable();
         } else {
             // Baritone semantics: give up on STALLED effort, never on segment count —
             // a 60-block dig-up legitimately takes dozens of segments, each one a real
@@ -339,11 +339,28 @@ public final class PlayerNav {
         if (g == null) return;
         plannedCenter = g.center();
         NavContext ctx = searchContext();
+        refreshLearning(ctx);   // precompute-chained segments must see tool upgrades too
         double dist = Math.sqrt(current.pathEnd().distSqr(g.center()));
         EngineSearch s = EngineSearch.create(ctx, current.pathEnd(), g, previousPathHashes,
                 learning, SearchBudget.scaled(dist));
         nextObj = s;
         nextFuture = dispatch(ctx, s);
+    }
+
+    /**
+     * Learned-h lifecycle: an IMPROVED dig capability (better tool picked up,
+     * scaffolding gained) means previously-learned pessimism may now over-estimate
+     * → SWAP in a fresh table (never {@code clear()} the shared one: a stale
+     * cancelled worker could still be mid-write-back, and its writes must land in
+     * the orphaned instance, not the one live searches consult). Worse or equal
+     * capability keeps the still-valid lower bounds.
+     */
+    private void refreshLearning(NavContext ctx) {
+        double fp = ctx.digCapabilityFingerprint();
+        if (fp > lastDigFingerprint + 0.01) {
+            learning = new HLearningTable();
+        }
+        lastDigFingerprint = fp;
     }
 
     private void advancePrecompute() {
@@ -386,7 +403,7 @@ public final class PlayerNav {
             r.append(" (").append(s.frontierExhausted()
                             ? "every reachable spot explored — sealed in"
                             : "search budget exhausted")
-                    .append(String.format("; explored %d positions, farthest progress %.1f blocks",
+                    .append(String.format("; explored %d positions, up to %.1f blocks out",
                             s.expansionsDone(), Math.sqrt(s.bestProgressSq())));
             if (lastCtx != null && !lastCtx.hasScaffold) {
                 r.append("; carrying no scaffolding blocks to bridge or pillar with");
