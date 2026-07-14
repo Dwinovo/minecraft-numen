@@ -117,6 +117,12 @@ public final class EngineSearch {
     public Path run() {
         SearchResult<Movement> r = search.run();
         this.result = r;
+        // Stamp each edge with whether its price was a measurement (chunk captured in the
+        // snapshot) or a guess (optimistic AIR miss) — the executor's cost-drift watchdog
+        // only trusts a "got more expensive" verdict against guessed prices.
+        for (Movement m : r.edges) {
+            m.markCalculatedWhileLoaded(ctx.isLoadedAt(m.dest));
+        }
         return switch (r.kind) {
             case COMPLETE -> new Path(start, lastDest(r.edges), r.edges, false);
             case PARTIAL_COMMIT -> new Path(start, lastDest(r.edges), r.edges, true);

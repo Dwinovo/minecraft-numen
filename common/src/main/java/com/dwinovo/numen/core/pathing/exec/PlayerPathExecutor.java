@@ -465,11 +465,18 @@ public final class PlayerPathExecutor {
             if (liveCur >= ActionCosts.COST_INF) {
                 return replan("current move now impossible (" + obstruct(fresh, cur) + ")");
             }
-            if (liveCur - cur.cost > PathSettings.MAX_COST_INCREASE) {
-                // Planned vs live price in the log: the delta's SIZE says what changed
-                // (≈20+ = a scaffold place appeared; small = dig got harder), which is
-                // the evidence for ever re-tuning MAX_COST_INCREASE.
-                return replan(String.format("current move got too expensive (planned %.1f, live %.1f)",
+            // Cost-drift cancel ONLY for GUESSED prices (the move's chunk wasn't captured in
+            // the planning snapshot, so it was priced off optimistic-AIR misses; now that
+            // we're close and the terrain is real, a big rise means the plan was built on
+            // wrong data → replan). An accurately-priced move that got dearer is the path's
+            // own earlier actions interfering with a later step (scaffolds placed, blocks
+            // dug) — a replan sees the same world and re-emits the same step at the new
+            // price, so cancelling just buys a search and a lost second. Impossibility
+            // (COST_INF, above) still always cancels.
+            if (!cur.calculatedWhileLoaded()
+                    && liveCur - cur.cost > PathSettings.MAX_COST_INCREASE) {
+                return replan(String.format(
+                        "current move got too expensive (guessed %.1f off-snapshot, live %.1f)",
                         cur.cost, liveCur));
             }
         }

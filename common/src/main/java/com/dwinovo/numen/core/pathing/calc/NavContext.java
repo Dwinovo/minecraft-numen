@@ -135,6 +135,16 @@ public final class NavContext {
         return copy;
     }
 
+    /**
+     * Was {@code pos}'s chunk actually captured when this context's world view was built?
+     * {@code false} means reads there were the optimistic AIR miss — a cost computed from
+     * them is a guess. Live read-through views are always exact ({@code true}).
+     */
+    public boolean isLoadedAt(BlockPos pos) {
+        return !(view instanceof com.dwinovo.numen.core.pathing.cache.CachedNavView cached)
+                || cached.isLoaded(pos.getX(), pos.getZ());
+    }
+
     /** Best inventory tool for the block,
      *  memoised per block-type for the search. */
     private BestTool bestTool(BlockState state) {

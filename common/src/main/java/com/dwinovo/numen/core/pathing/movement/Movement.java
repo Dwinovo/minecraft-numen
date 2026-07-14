@@ -37,6 +37,16 @@ public final class Movement {
     /** Lazily-built set of feet cells the entity may legitimately occupy mid-move. */
     private Set<BlockPos> validPositions;
 
+    /**
+     * Whether this movement's cost was computed from a CAPTURED chunk (a measurement)
+     * rather than an optimistic AIR miss on an unloaded one (a guess). Stamped once at
+     * path-assembly time; the executor's cost-drift watchdog only cancels a move whose
+     * plan price was a guess — an accurately-priced move that got dearer is the path's
+     * own earlier actions interfering with a later step, and replanning would just
+     * re-emit the same step at the new price.
+     */
+    private boolean calculatedWhileLoaded = true;
+
     public Movement(Kind kind, BlockPos src, BlockPos dest, double cost,
                     List<BlockPos> toBreak, BlockPos toPlace) {
         this.kind = kind;
@@ -99,6 +109,15 @@ public final class Movement {
         }
         validPositions = set;
         return set;
+    }
+
+    /** Stamp {@link #calculatedWhileLoaded} (path-assembly time only). */
+    public void markCalculatedWhileLoaded(boolean loaded) {
+        this.calculatedWhileLoaded = loaded;
+    }
+
+    public boolean calculatedWhileLoaded() {
+        return calculatedWhileLoaded;
     }
 
     /**

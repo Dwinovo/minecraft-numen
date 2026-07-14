@@ -45,6 +45,13 @@ public final class CachedNavView implements BlockGetter, BlockEntityAware {
         return state;
     }
 
+    /** Was the chunk containing block-column ({@code blockX},{@code blockZ}) captured in the
+     *  snapshot? {@code false} means every read there was the optimistic AIR miss — prices
+     *  computed from it are guesses, not measurements. */
+    public boolean isLoaded(int blockX, int blockZ) {
+        return loaded.at(SectionPos.blockToSectionCoord(blockX), SectionPos.blockToSectionCoord(blockZ)) != null;
+    }
+
     private BlockState read(int x, int y, int z) {
         if (y < level.getMinBuildHeight() || y >= level.getMinBuildHeight() + level.getHeight()) {
             return AIR;
