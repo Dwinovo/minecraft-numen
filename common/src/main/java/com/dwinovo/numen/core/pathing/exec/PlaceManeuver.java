@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.pathing.exec;
 
+import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.task.FailureType;
 import net.minecraft.core.BlockPos;
@@ -136,6 +137,10 @@ public final class PlaceManeuver {
                     || ticks > (LIMIT_TICKS * 3) / 5         // grace: take what we can get
                     || matchesHints(predict(hit));
             if (orientationOk && player.isCrouching() && doPlace(hit)) {
+                // Ticks-to-commit is THE speed metric for the per-tick multi-face resolution —
+                // one line per successful maneuver, cheap enough to keep on permanently.
+                Constants.LOG.info("[numen-path] place committed at {} on tick {} (face {})",
+                        placeAt.toShortString(), ticks, hit.getDirection());
                 return Status.DONE;
             }
         } else {
@@ -158,6 +163,8 @@ public final class PlaceManeuver {
                         + " — the view to it is blocked (a wall between, or the body is boxed in). Try a more "
                         + "open spot next to solid ground.";
             failType = FailureType.OCCLUDED;
+            Constants.LOG.info("[numen-path] place gave up at {} after {} ticks: {}",
+                    placeAt.toShortString(), ticks, failReason);
             return Status.FAILED;
         }
         return Status.RUNNING;

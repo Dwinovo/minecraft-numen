@@ -201,8 +201,9 @@ public final class PlayerPathExecutor {
                     placeManeuver = null;
                 }
                 case FAILED -> {
+                    String why = placeManeuver.failReason();
                     placeManeuver = null;
-                    return replan("scaffold place failed");   // out of blocks / no angle → replan
+                    return replan("scaffold place failed: " + why);   // out of blocks / no angle → replan
                 }
                 case RUNNING -> {
                     return Status.RUNNING;
@@ -742,6 +743,8 @@ public final class PlayerPathExecutor {
         // refusal streak is a real blockage, and then the diagnostic names vanilla's verdict
         // and where the body actually was, so a dead pillar is never silent again.
         if (BlockHelper.canWalkOn(player.level(), cell)) {
+            Constants.LOG.info("[numen-path] pillar place landed at {} (y={}, after {} refused airborne ticks)",
+                    cell.toShortString(), String.format("%.2f", player.getY()), underfootBlockedTicks);
             underfootBlockedTicks = 0;
         } else {
             underfootBlocked(String.format("vanilla refused: %s (y=%.2f, clears cell at >%d.0)",
