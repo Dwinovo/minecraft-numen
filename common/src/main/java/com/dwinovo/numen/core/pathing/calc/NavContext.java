@@ -14,12 +14,13 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Per-search snapshot binding the world, the entity's capabilities, and a
- * frozen view of its inventory (scaffolding gate + best-tool source). Mirrors
- * Baritone's {@code CalculationContext}: every cost-returning helper reads
+ * frozen view of its inventory (scaffolding gate + best-tool source):
+ * every cost-returning helper reads
  * only from this immutable snapshot, so an A* search is deterministic and
  * doesn't see mid-search inventory mutation.
  *
@@ -30,9 +31,9 @@ import net.minecraft.world.level.block.state.BlockState;
  * moves become impossible and A* routes around (or fails with "out of
  * material"). Actual depletion is handled at execution time — when the
  * executor runs the inventory dry mid-path it triggers a replan, and the
- * fresh snapshot then has {@code hasScaffold == false}. This is the
- * validated Baritone/mineflayer model (boolean gate + event-driven replan),
- * avoiding an explosive per-node "remaining blocks" search state.
+ * fresh snapshot then has {@code hasScaffold == false}. The boolean gate +
+ * event-driven replan is a long-proven model in open-source pathfinding
+ * practice, avoiding an explosive per-node "remaining blocks" search state.
  */
 public final class NavContext {
 
@@ -53,11 +54,11 @@ public final class NavContext {
     /** Max blocks the entity may fall without taking dangerous damage. */
     public final int maxFallHeight;
 
-    /** Whether sprinting is allowed (Baritone {@code canSprint}); drives the sprint cost discount. */
+    /** Whether sprinting is allowed; drives the sprint cost discount. */
     public final boolean canSprint;
 
     /**
-     * Whether this context may be handed to a worker thread (Baritone's {@code safeForThreadedUse}).
+     * Whether this context may be handed to a worker thread.
      * A search context ({@link #forSearch}) is frozen — snapshot inventory + (from P-B) an immutable
      * world view — so the async planner can read it off the tick thread; an execution context
      * ({@link #forExecution}) reads the live world/inventory and is main-thread only.
@@ -65,8 +66,8 @@ public final class NavContext {
     public final boolean safeForThreadedUse;
 
     /**
-     * Frozen view of the body's hotbar, for best-tool-aware mining duration —
-     * Baritone's {@code ToolSet}: a break is costed with the BEST tool the body
+     * Frozen view of the body's inventory, for best-tool-aware mining duration:
+     * a break is costed with the BEST tool the body
      * has, not just the one currently held, because the body auto-switches to it
      * before mining ({@code MineCompanionTask.switchToBestTool}). Costing with the
      * held item instead made A* price an oak log at bare-hand speed when no axe
@@ -77,7 +78,7 @@ public final class NavContext {
     private final java.util.Map<net.minecraft.world.level.block.Block, BestTool> toolCache =
             new java.util.HashMap<>();
 
-    /** Best hotbar tool for a block: its destroy speed and whether it harvests drops. */
+    /** Best inventory tool for a block: its destroy speed and whether it harvests drops. */
     private record BestTool(float speed, boolean canHarvest) {}
 
     private NavContext(Level level, BlockGetter view, Container inventory, boolean safeForThreadedUse) {
@@ -87,7 +88,7 @@ public final class NavContext {
         this.safeForThreadedUse = safeForThreadedUse;
         this.hasScaffold = hasAnyScaffold(inventory);
 
-        // Survivable fall: Baritone's maxFallHeightNoWater (3) — vanilla fall
+        // Survivable fall: 3 blocks — vanilla fall
         // damage starts at 3.5 blocks; cap conservatively so the bot never hurts itself.
         this.maxFallHeight = PathSettings.MAX_FALL_HEIGHT_NO_WATER;
         this.canSprint = PathSettings.ALLOW_SPRINT;
@@ -110,7 +111,7 @@ public final class NavContext {
      * swaps in the {@code CompactSection}-backed off-thread view so the search can move to a worker.
      */
     public static NavContext forSearch(Level level, Container liveInventory) {
-        // Read loaded chunks LIVE through the per-tick snapshot (Baritone useTheRealWorld); before the
+        // Read loaded chunks LIVE through the per-tick snapshot; before the
         // snapshot exists (a level's first companion tick) fall back to the live read-through so the
         // first search is still correct.
         com.dwinovo.numen.core.pathing.cache.LoadedChunks loaded =
@@ -134,7 +135,17 @@ public final class NavContext {
         return copy;
     }
 
-    /** Best hotbar tool for the block (Baritone {@code ToolSet.getBestSlot}),
+    /**
+     * Was {@code pos}'s chunk actually captured when this context's world view was built?
+     * {@code false} means reads there were the optimistic AIR miss — a cost computed from
+     * them is a guess. Live read-through views are always exact ({@code true}).
+     */
+    public boolean isLoadedAt(BlockPos pos) {
+        return !(view instanceof com.dwinovo.numen.core.pathing.cache.CachedNavView cached)
+                || cached.isLoaded(pos.getX(), pos.getZ());
+    }
+
+    /** Best inventory tool for the block,
      *  memoised per block-type for the search. */
     private BestTool bestTool(BlockState state) {
         return toolCache.computeIfAbsent(state.getBlock(), b -> scanBestTool(state));
@@ -143,8 +154,8 @@ public final class NavContext {
     private BestTool scanBestTool(BlockState state) {
         float bestSpeed = 1.0f;                                   // bare hand baseline
         // Whole inventory, NOT just the hotbar: execution (switchToBestTool) can swap a
-        // backpack tool into the hand, so the cost model prices breaks with that same tool —
-        // a deliberate divergence from Baritone's hotbar-only ToolSet, kept consistent here.
+        // backpack tool into the hand, so the cost model prices breaks with that same
+        // tool — deliberately kept consistent with execution.
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack s = inventory.getItem(i);
             if (s.isEmpty()) continue;
@@ -152,6 +163,22 @@ public final class NavContext {
             if (spd > bestSpeed) bestSpeed = spd;
         }
         return new BestTool(bestSpeed, BlockHelper.canHarvest(inventory, state));
+    }
+
+    /** Coarse fingerprint of dig capability for h-learning lifecycle: best inventory
+     *  destroy-speed vs plain stone (hand 1.0 &lt; wood &lt; ... &lt; netherite, ×efficiency),
+     *  plus 0.5 when scaffolding is carried. Monotone-comparable: a HIGHER value
+     *  means previously-learned pessimism may now over-estimate → clear the table. */
+    public double digCapabilityFingerprint() {
+        BlockState stone = Blocks.STONE.defaultBlockState();
+        float best = 1.0f;                                    // bare hand baseline
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack s = inventory.getItem(i);
+            if (s.isEmpty()) continue;
+            float spd = s.getDestroySpeed(stone);
+            if (spd > best) best = spd;
+        }
+        return best + (hasScaffold ? 0.5 : 0.0);
     }
 
     private static boolean hasAnyScaffold(Container inv) {
@@ -171,8 +198,7 @@ public final class NavContext {
     public double costOfPlacing(BlockPos pos) {
         if (!hasScaffold) return ActionCosts.COST_INF;
         if (!BlockHelper.isReplaceableForPlacement(view, pos)) return ActionCosts.COST_INF;
-        // Baritone costOfPlacingAt: never place INTO a fluid (source or flowing) at default
-        // settings (allowPlaceInFluidsSource/Flow both false) — so a bridge can't be planned
+        // Never place INTO a fluid (source or flowing) — a bridge can't be planned
         // straight into a water source.
         if (!view.getBlockState(pos).getFluidState().isEmpty()) return ActionCosts.COST_INF;
         if (BlockHelper.isHazard(view, pos)) return ActionCosts.COST_INF;
@@ -189,12 +215,6 @@ public final class NavContext {
      *       a fluid flow;</li>
      *   <li>{@link BlockHelper#shouldAvoidBreaking} — a player-placed functional
      *       block (chest, furnace, bed, …): don't grief it;</li>
-     *   <li><b>ineffective break</b> — the block needs the correct tool for drops
-     *       and the entity's held tool isn't it. We refuse the slow, drop-less
-     *       bare-hand/wrong-tool grind: the bot only digs through what its current
-     *       tool handles effectively (dirt/wood/sand bare-handed are fine — those
-     *       need no tool). To tunnel through stone/ore it must equip a proper
-     *       pickaxe first, same lesson as {@code auto_mine}.</li>
      * </ul>
      */
     public double costOfBreaking(BlockPos pos) {
@@ -203,11 +223,11 @@ public final class NavContext {
 
     /**
      * As {@link #costOfBreaking(BlockPos)} but, when {@code includeFalling}, folds in
-     * the cost of the FallingBlock (sand/gravel) stack directly above {@code pos} —
-     * Baritone's {@code getMiningDurationTicks(includeFalling=true)}. Passed for the
+     * the cost of the FallingBlock (sand/gravel) stack directly above {@code pos}.
+     * Passed for the
      * TOP cell a move breaks: breaking under sand makes it cascade down and we break
-     * each one as it lands. We no longer VETO breaking under sand (Baritone never did);
-     * we pay for the cascade, so paths through sand/gravel terrain match Baritone.
+     * each one as it lands. Breaking under sand is PRICED, not vetoed — we pay for
+     * the cascade, so sand/gravel terrain stays routable instead of walling off.
      */
     public double costOfBreaking(BlockPos pos, boolean includeFalling) {
         if (!BlockHelper.isBreakable(view, pos)) return ActionCosts.COST_INF;
@@ -215,10 +235,12 @@ public final class NavContext {
         if (BlockHelper.breakWouldCreateFlow(view, pos)) return ActionCosts.COST_INF;
         if (BlockHelper.shouldAvoidBreaking(view, pos)) return ActionCosts.COST_INF;
 
-        BlockState state = view.getBlockState(pos);
-        if (state.requiresCorrectToolForDrops() && !bestTool(state).canHarvest()) {
-            return ActionCosts.COST_INF;   // no hotbar tool can harvest it — route around / teach
-        }
+        // A break with the wrong (or no) tool is EXPENSIVE, never impossible: traversal
+        // only needs the block GONE, not its drops — a bare hand grinds through stone in
+        // ~seconds-per-block, and {@link #miningTicks} already prices that grind (divisor
+        // 100 when the tool can't harvest). The old COST_INF veto here sealed every
+        // enclosed pocket the moment the pickaxe broke — turning "a slow way out" into
+        // "no path" — which is strictly worse than an honest, costly route.
         double cost = miningTicks(pos) + PathSettings.BLOCK_BREAK_ADDITIONAL_PENALTY;
         if (includeFalling) {
             BlockPos above = pos.above();
@@ -239,16 +261,16 @@ public final class NavContext {
     public double miningTicks(BlockPos pos) {
         BlockState state = view.getBlockState(pos);
         float hardness = state.getDestroySpeed(view, pos);
-        if (hardness <= 0.0f) return 0.0;   // instabreak — Baritone charges ~0 (the +penalty is added by the caller)
+        if (hardness <= 0.0f) return 0.0;   // instabreak costs ~0 (the +penalty is added by the caller)
         BestTool best = bestTool(state);
         boolean correct = !state.requiresCorrectToolForDrops() || best.canHarvest();
         float toolSpeed = best.speed();
         if (toolSpeed <= 0.0f) toolSpeed = 1.0f;
         float divisor = correct ? 30.0f : 100.0f;
-        // Baritone: ticks = 1/strVsBlock = hardness*divisor/speed — a continuous
-        // value (no ceil). NOTE intentional Baritone parity: no underwater/airborne
-        // ÷5 penalty (it assumes best-case mining). Efficiency enchant (+eff²+1) is
-        // folded into vanilla getDestroySpeed where present.
+        // ticks = hardness*divisor/speed (the inverse of vanilla's per-tick destroy
+        // fraction) — a continuous value (no ceil). NOTE deliberately no underwater/
+        // airborne ÷5 penalty (assume best-case mining). Efficiency enchant (+eff²+1)
+        // is folded into vanilla getDestroySpeed where present.
         return hardness * divisor / toolSpeed;
     }
 
@@ -308,10 +330,7 @@ public final class NavContext {
         if (BlockHelper.shouldAvoidBreaking(view, pos)) {
             return blockId(state) + " (a functional block I won't destroy)";
         }
-        if (state.requiresCorrectToolForDrops() && !bestTool(state).canHarvest()) {
-            return blockId(state) + " (needs the correct tool and I have none in my "
-                    + "hotbar — equip_item the right pickaxe first)";
-        }
+        // Wrong-tool breaks are priced, not vetoed (see costOfBreaking) — no branch here.
         return null;
     }
 

@@ -98,7 +98,7 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 给它一个意图，它会自己拆成几十步动作、一口气干完——规划路线、选对工具、判断距离、随机应变，全程不用你盯着。**这就是 agent 该有的样子：你说目标，它管过程。**
 
 - ⛏️ **干真活**——挖矿、伐木、采集、建造、精确放置与破坏、照配方手搓合成、用熔炉熔炼、把战利品分门别类塞进箱子。
-- 🧭 **真走位**——一套参考 Baritone 思路、为同伴重写的寻路器：会搭桥、垫脚、搭柱上升、挖隧道、下挖楼梯、游泳。"去那个坐标"就是字面意思，哪怕一路挖到钻石层。
+- 🧭 **真走位**——服务端寻路引擎：会搭桥、垫脚、搭柱上升、挖隧道、下挖楼梯、游泳。"去那个坐标"就是字面意思——哪怕一路挖到钻石层，或者从深井底自己凿一条路回地面。
 - ⚔️ **真战斗**——原生玩家近战与弓箭，真冷却、真暴击；受伤会自己吃东西，快淹死会自己游上岸。
 - 🔭 **真感知**——扫方块、扫实体、查状态、查配方、定位任意结构与群系，甚至不开 GUI 就透视一台机器的内部。
 - 🧠 **真记性**——对话跨存档持久化、太长会自动压缩；它记得用过的工作台、熔炉、箱子，下次直接走回去，而不是重造一个。死了也能恢复：原版死亡照常掉落，缓一会儿在你身边重生。
@@ -148,4 +148,4 @@ Numen 还很年轻，但地基已经浇好了两大块：
 
 **授权**（参照 AE2 拆分）：源代码采用 [LGPL-3.0](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE)——你分发的修改版必须以同协议继续开源。面向兼容模块 / MCP 桥接的**公共对接 API**（已随 [numen-api](https://github.com/Dwinovo/numen-api) 提供）采用 [MIT](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE-API)，让任何人都能自由地写 mod 兼容。美术与资源为 [保留所有权利](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE-ASSETS)，"Numen" / "言出法随" 名称亦予保留。基于 [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template) 构建。
 
-寻路器在设计思路上借鉴了 [Baritone](https://github.com/cabaletta/baritone)，并针对**服务端（假玩家）**场景完全独立重写——**未复制、移植或改写其任何源码**。本项目代码采用 LGPL-3.0 属自主选择，与 Baritone（同为 LGPL-3.0）无衍生关系。
+寻路的**规划层**基于启发式搜索文献实现：加权 A*、预算化的部分路径提交、以及 RTAA* 式跨段启发学习（Koenig & Likhachev, *Real-Time Adaptive A\**, AAMAS 2006），附独立于游戏的单元测试。**执行层**与 [Baritone](https://github.com/cabaletta/baritone) 的根本区别在于运行位置：Baritone 是纯客户端模组、操控本机玩家；Numen 驱动的是**服务端假玩家**，移动/挖掘/放置全部经服务端 API 实现——设计思路上借鉴了其公开机制，**未复制、移植或改写其任何源码**。本项目代码采用 LGPL-3.0 属自主选择，与 Baritone（同为 LGPL-3.0）无衍生关系。

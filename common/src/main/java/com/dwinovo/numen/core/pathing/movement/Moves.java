@@ -18,7 +18,7 @@ import java.util.List;
  * movements (no scaffolding to bridge, unbreakable obstruction, hazard,
  * fall too deep) are simply not emitted.
  *
- * <h2>Primitive set (mineflayer-parity)</h2>
+ * <h2>Primitive set</h2>
  * <ul>
  *   <li><b>Traverse</b> — same-Y step; bridges gaps by placing a floor block
  *       and mines head/feet obstructions.</li>
@@ -26,16 +26,15 @@ import java.util.List;
  *       step block to climb a ledge that isn't there.</li>
  *   <li><b>Descend / Fall</b> — step out and drop to the first safe floor
  *       within {@link NavContext#maxFallHeight}.</li>
- *   <li><b>Diagonal</b> — same-Y step to a corner cell; emitted only when both
- *       orthogonal corner cells are open (no corner-clipping), mirrors
- *       Baritone {@code MovementDiagonal} / mineflayer diagonal moves.</li>
+ *   <li><b>Diagonal</b> — same-Y step to a corner cell; emitted only when at
+ *       least one orthogonal corner cell is open (no corner-clipping).</li>
  *   <li><b>Pillar</b> — jump straight up one block, placing a scaffolding block
- *       beneath as you rise (mineflayer "move up" / jump-place). Needs a
+ *       beneath as you rise (jump-place towering). Needs a
  *       scaffold block and head-room.</li>
- *   <li><b>DigDown</b> — mine the floor block underfoot and drop one (mineflayer
- *       "dig down"). Only when a solid floor exists one block lower to land on.</li>
+ *   <li><b>DigDown</b> — mine the floor block underfoot and drop one.
+ *       Only when a solid floor exists one block lower to land on.</li>
  *   <li><b>Parkour</b> — a committed running jump across a 2-4 block gap at the
- *       same level (Baritone {@code MovementParkour}); the executor supplies
+ *       same level; the executor supplies
  *       the impulse, the planner only asserts the corridor is jumpable.</li>
  * </ul>
  */
@@ -101,7 +100,7 @@ public final class Moves {
 
         BlockPos floor = dest.below();
         if (BlockHelper.canWalkOn(level, floor)) {
-            // WALK branch (Baritone MovementTraverse walk case). Water dominates: if
+            // WALK branch. Water dominates: if
             // either body cell at the destination is water we float through it at
             // waterWalkSpeed (no sprint, no soul-sand term — we're not touching the
             // floor). Otherwise base WALK + half soul-sand penalty per soul-sand floor
@@ -117,7 +116,7 @@ public final class Moves {
                 if (level.getBlockState(floor).is(Blocks.SOUL_SAND)) {
                     walk += soulSandHalf;
                 } else if (level.getBlockState(floor).is(Blocks.WATER)) {
-                    // Standing ON a water surface (Baritone: WC += walkOnWaterOnePenalty).
+                    // Standing ON a water surface adds a flat per-block penalty.
                     walk += PathSettings.WALK_ON_WATER_ONE_PENALTY;
                 }
                 if (level.getBlockState(from.below()).is(Blocks.SOUL_SAND)) walk += soulSandHalf;
@@ -128,11 +127,11 @@ public final class Moves {
             return new Movement(Movement.Kind.TRAVERSE, from, dest, cost, toBreak, null);
         }
 
-        // BRIDGE branch (Baritone MovementTraverse): the dest floor is missing, so place
+        // BRIDGE branch: the dest floor is missing, so place
         // one. Needs a face to place against — a side face lets us walk-place; if only
         // the block we're standing on backs it, we must sneak-backplace (× SNEAK/WALK);
         // with no support at all (or off a ladder/vine / soul sand) it's impossible.
-        // Baritone uses a plain WALK here (no soul-sand term in the bridge branch).
+        // The bridge branch uses a plain WALK base (no soul-sand term).
         if (isLadderOrVine(level.getBlockState(from.below()))) return null;
         double placeCost = ctx.costOfPlacing(floor);   // INF if non-replaceable / no scaffold / hazard
         if (placeCost >= ActionCosts.COST_INF) return null;
@@ -142,13 +141,13 @@ public final class Moves {
         return new Movement(Movement.Kind.TRAVERSE, from, dest, cost, toBreak, floor);
     }
 
-    /** The 5 faces of the dest floor a bridge can place against (Baritone's
-     *  HORIZONTALS_BUT_ALSO_DOWN_____SO_EVERY_DIRECTION_EXCEPT_UP). */
+    /** The 5 faces of the dest floor a bridge can place against
+     *  (every direction except up). */
     private static final Direction[] SUPPORT_DIRS = {
             Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN};
 
     /**
-     * Baritone MovementTraverse bridge support scan: walk-cost MULTIPLIER for placing
+     * Bridge support scan: walk-cost MULTIPLIER for placing
      * the floor block. A side face (any of the 5 except the block we stand on) that we
      * can place against → 1.0 (normal walk-place). Otherwise we must backplace against
      * the block under our feet → {@code SNEAK/WALK} (≈3.3, a slow sneak place), vetoed
@@ -162,7 +161,7 @@ public final class Moves {
             if (against.equals(sourceBelow)) continue;   // that's the backplace face, handled below
             if (canPlaceAgainst(level, against)) return 1.0;
         }
-        // Sneak-backplace against the block under our feet. Baritone gates this on
+        // Sneak-backplace against the block under our feet. Gated on
         // mustBeSolidToWalkOn(srcDown), NOT on a real solid cube — and that is TRUE for
         // air, so a void bridge CHAINS (the block below us was placed by the previous
         // bridge step, even though the static world snapshot still shows air here).
@@ -171,13 +170,13 @@ public final class Moves {
         return ActionCosts.SNEAK_ONE_BLOCK / ActionCosts.WALK_ONE_BLOCK;
     }
 
-    /** Baritone canPlaceAgainst: a normal cube / glass presents a face to place against
+    /** A normal cube / glass presents a face to place against
      *  (NOT every full-collision block — see {@link BlockHelper#canPlaceAgainst}). */
     private static boolean canPlaceAgainst(BlockGetter level, BlockPos pos) {
         return BlockHelper.canPlaceAgainst(level, pos);
     }
 
-    /** Baritone MovementAscend place support: a face to place the step block against,
+    /** Ascend place support: a face to place the step block against,
      *  excluding our own source column (no backplace mid-jump). */
     private static boolean ascendPlaceSupported(NavContext ctx, BlockPos from, BlockPos step) {
         BlockGetter level = ctx.view;
@@ -198,7 +197,7 @@ public final class Moves {
         BlockPos jumpRoom = from.above(2);          // room to jump at the source column
         BlockPos step = dest.below();               // == from.relative(dir): floor we stand on after the step
 
-        // Baritone MovementAscend suffocation veto: a FallingBlock at y+3 (above the
+        // Suffocation veto: a FallingBlock (sand/gravel) at y+3 (above the
         // jump apex) would fall onto us once we clear the stack over our head. Refuse,
         // unless y+1 is already solid AND y+2 is itself falling (then we'd have had to
         // clear the whole stack to even stand here, so nothing is left to fall).
@@ -209,10 +208,10 @@ public final class Moves {
                             instanceof net.minecraft.world.level.block.FallingBlock))) {
             return null;
         }
-        // Can't jump-ascend off a ladder/vine (Baritone srcDown check).
+        // Can't jump-ascend off a ladder/vine.
         if (isLadderOrVine(level.getBlockState(from.below()))) return null;
 
-        // Baritone MovementAscend cost: max(JUMP, WALK) + jumpPenalty (the jump and the
+        // Ascend cost: max(JUMP, WALK) + jump penalty (the jump and the
         // forward block overlap, so it's the larger of the two), with soul-sand / magma /
         // bottom-slab special cases. You can jump FROM soul sand but NOT from a bottom slab
         // (the only thing you can ascend onto from a bottom slab is another bottom slab —
@@ -254,7 +253,7 @@ public final class Moves {
         if (!BlockHelper.canWalkOn(level, step)) {
             double placeCost = ctx.costOfPlacing(step);
             if (placeCost >= ActionCosts.COST_INF) return null;
-            // Baritone MovementAscend: the step block needs SOME face to place against
+            // The step block needs SOME face to place against
             // other than our own source column — we can't backplace mid-jump.
             if (!ascendPlaceSupported(ctx, from, step)) return null;
             cost += placeCost;
@@ -272,7 +271,7 @@ public final class Moves {
         BlockPos col = from.relative(dir);          // (destX, y, destZ)
         BlockPos landing = col.below();             // (destX, y-1): single-descend feet
 
-        // Baritone MovementDescend breaks THREE cells of the dest column — the
+        // A descend breaks THREE cells of the dest column — the
         // landing-foot cell (y-1) plus the two body cells at source height (y, y+1)
         // — and that "frontBreak" applies to a single step-down AND to a longer fall.
         List<BlockPos> toBreak = new ArrayList<>(3);
@@ -283,7 +282,7 @@ public final class Moves {
             if (b >= ActionCosts.COST_INF) return null;
             frontBreak += b;
         }
-        // Can't descend off a ladder/vine — you'd climb it instead (Baritone fromDown check).
+        // Can't descend off a ladder/vine — you'd climb it instead.
         if (isLadderOrVine(level.getBlockState(from.below()))) return null;
 
         BlockPos belowLanding = col.below(2);       // (destX, y-2)
@@ -291,7 +290,7 @@ public final class Moves {
             // Single-block descend: solid floor right below the landing. Walk off the
             // edge (soul-sand-scaled) + max(fall(1), center-after-fall).
             if (isLadderOrVine(level.getBlockState(landing))) return null;
-            // (Baritone only vetoes a half-slab landing in the MULTI-block dynamicFall, not
+            // (A half-slab landing is only vetoed on the MULTI-block fall below, not
             // here — a single 1-block step-down onto a bottom slab is safe, so it's allowed.)
             if (BlockHelper.isHazard(level, landing) || BlockHelper.isHazard(level, belowLanding)) return null;
             double walk = ActionCosts.WALK_OFF_BLOCK;
@@ -303,9 +302,9 @@ public final class Moves {
             return new Movement(Movement.Kind.DESCEND, from, landing, total, toBreak, null);
         }
 
-        // Longer fall (Baritone dynamicFallCost). The landing cell must be air to fall
-        // through; scan down for the first non-air cell. Two landing kinds, mirroring
-        // Baritone's loop order (water checked BEFORE the air-continue):
+        // Longer fall. The landing cell must be air to fall
+        // through; scan down for the first non-air cell. Two landing kinds
+        // (water is checked BEFORE the air-continue):
         //   • WATER — negates fall damage, so any height is safe; feet land floating in
         //     the surface water cell (res.y = the water cell, not one above it).
         //   • DRY floor — feet land one above it (y-fallHeight+1), bounded by
@@ -314,7 +313,7 @@ public final class Moves {
         // NOT blocks-dropped). Bucket-MLG remains out of scope; vine/ladder resets ARE
         // modelled (see the loop below).
         if (!BlockHelper.canWalkThrough(level, belowLanding)) return null;
-        // Baritone dynamicFallCost guard: if we're breaking the front column AND a
+        // Falling-block guard: if we're breaking the front column AND a
         // FallingBlock sits just above it (y+2), breaking would drop that block into
         // the fall path — veto. (frontBreak==0 means we slip through without disturbing it.)
         if (frontBreak != 0
@@ -322,7 +321,7 @@ public final class Moves {
                         instanceof net.minecraft.world.level.block.FallingBlock) {
             return null;
         }
-        // Baritone charges FALL by unprotectedFallHeight (height since the last fall-speed
+        // FALL is charged by the UNPROTECTED fall height (height since the last fall-speed
         // reset), NOT the raw drop: grabbing a vine/ladder mid-fall resets the speed (and
         // adds a ladder-down cost), so a long fall broken by a vine is cheap.
         double costSoFar = 0.0;
@@ -331,14 +330,14 @@ public final class Moves {
             BlockPos onto = col.below(fallHeight);   // (destX, y-fallHeight): landing candidate
             int unprotected = fallHeight - (col.getY() - effectiveStartHeight);
             if (BlockHelper.isWater(level, onto)) {
-                // Fall into water (Baritone dynamicFallCost water branch).
+                // Fall into water.
                 if (!BlockHelper.canWalkThrough(level, onto)) return null;     // submerged, not a surface cell
                 if (BlockHelper.isFlowingWater(level, onto)) return null;
                 if (!BlockHelper.canWalkOn(level, onto.below())) return null;  // don't punch through into a void
                 double totalW = ActionCosts.WALK_OFF_BLOCK + ActionCosts.fallCost(unprotected) + frontBreak + costSoFar;
                 return new Movement(Movement.Kind.FALL, from, onto, totalW, toBreak, null);
             }
-            // Vine/ladder mid-fall (Baritone): grab on, reset the fall speed, keep falling.
+            // Vine/ladder mid-fall: grab on, reset the fall speed, keep falling.
             if (unprotected <= 11 && isLadderOrVine(level.getBlockState(onto))) {
                 costSoFar += ActionCosts.fallCost(unprotected - 1) + ActionCosts.LADDER_DOWN_ONE;
                 effectiveStartHeight = onto.getY();
@@ -364,9 +363,8 @@ public final class Moves {
     // ---- Diagonal: same-Y corner step over EXISTING ground only ----
 
     /**
-     * Same-Y corner step — a 1:1 port of Baritone {@code MovementDiagonal.cost}'s
-     * flat case (diagonal ascend/descend stay disabled, matching
-     * {@code allowDiagonalAscend/Descend=false}). It neither breaks nor places:
+     * Same-Y corner step — the flat case only
+     * (diagonal ascend/descend stay disabled). It neither breaks nor places:
      * instead it requires at least ONE of the two cut corners be passable and
      * "edges around" that side. Both corners clear → it may sprint; exactly one
      * clear → it hugs that corner at {@code ×(SQRT_2−0.001)} (no sprint); both
@@ -386,7 +384,7 @@ public final class Moves {
         // Flat requires a floor under dest (or floating on water); no diagonal descend.
         if (!water && !BlockHelper.canWalkOn(level, destFloor)) return null;
 
-        // Can't diagonal off a ladder/vine (Baritone fromDown ladder/vine veto).
+        // Can't diagonal off a ladder/vine.
         if (isLadderOrVine(level.getBlockState(from.below()))) return null;
 
         if (BlockHelper.isHazard(level, dest) || BlockHelper.isHazard(level, dest.above())) return null;
@@ -402,14 +400,14 @@ public final class Moves {
             if (level.getBlockState(destFloor).is(Blocks.SOUL_SAND)) {
                 multiplier += soulSandHalf;
             } else if (level.getBlockState(destFloor).is(Blocks.WATER)) {
-                // Standing ON a water surface (Baritone: multiplier += walkOnWaterOnePenalty * SQRT_2,
-                // which the final × SQRT_2 turns into a penalty of 2 per block).
+                // Standing ON a water surface: += penalty × SQRT_2,
+                // which the final × SQRT_2 turns into a penalty of 2 per block.
                 multiplier += PathSettings.WALK_ON_WATER_ONE_PENALTY * ActionCosts.SQRT_2;
             }
             if (level.getBlockState(from.below()).is(Blocks.SOUL_SAND)) multiplier += soulSandHalf;
         }
 
-        // The two corners we cut between (Baritone optionA / optionB). A corner is
+        // The two corners we cut between. A corner is
         // "clear" when both its body cells are passable (we never break to diagonal,
         // so a breakable corner counts as blocked). Both blocked → impossible.
         BlockPos cornerA = from.relative(a);
@@ -424,8 +422,8 @@ public final class Moves {
             // Not edging around anything → sprint, unless in water.
             if (ctx.canSprint && !water) multiplier *= ActionCosts.SPRINT_MULTIPLIER;
         } else {
-            // Edge around the one clear corner — costs slightly more than a clean
-            // diagonal and can't sprint (Baritone ×(SQRT_2 − 0.001)).
+            // Edge around the one clear corner — ×(SQRT_2 − 0.001): slightly more
+            // than a clean diagonal, and can't sprint.
             multiplier *= ActionCosts.SQRT_2 - 0.001;
         }
 
@@ -437,10 +435,10 @@ public final class Moves {
 
     private static Movement pillar(NavContext ctx, BlockPos from) {
         BlockGetter level = ctx.view;
-        // Baritone MovementPillar water branch (verbatim): swim straight up a water
+        // Water-column swim-up: swim straight up a water
         // column we're ALREADY in — the feet cell (y), the head (y+1) and the cell above
         // the head (y+2) are all water — at ladder cost, no scaffold, no break. The final
-        // block to the surface is left to buoyancy, exactly as Baritone does it.
+        // block to the surface is left to buoyancy.
         if (BlockHelper.isWater(level, from.above(2)) && BlockHelper.isWater(level, from)
                 && BlockHelper.isWater(level, from.above())) {
             return new Movement(Movement.Kind.PILLAR, from, from.above(),
@@ -450,7 +448,7 @@ public final class Moves {
         // floating body never has — the move would just stall and churn replans. Rising
         // from the water SURFACE is "swim to shore first" by design.
         if (BlockHelper.isWater(level, from)) return null;
-        // Baritone MovementPillar: can't pillar up from a bottom slab onto a non-ladder.
+        // Can't pillar up from a bottom slab onto a non-ladder.
         if (BlockHelper.isBottomSlab(level, from.below())) return null;
         BlockPos dest = from.above();      // feet end one block up
         BlockPos newHead = from.above(2);  // head room while standing on the new block
@@ -458,13 +456,13 @@ public final class Moves {
         // Need a scaffold block to drop under our feet (the current feet cell).
         double placeCost = ctx.costOfPlacing(from);
         if (placeCost >= ActionCosts.COST_INF) return null;
-        // Baritone MovementPillar: +0.1 tick when what's below our feet is currently
+        // +0.1 tick when what's below our feet is currently
         // air — slightly penalise pillaring on air vs on solid ground.
         if (level.getBlockState(from.below()).isAir()) {
             placeCost += 0.1;
         }
 
-        // Baritone MovementPillar (block tower): jump + place-underfoot + jumpPenalty.
+        // Block tower: jump + place-underfoot + jump penalty.
         double cost = ActionCosts.JUMP_ONE_BLOCK + placeCost + PathSettings.JUMP_PENALTY;
         List<BlockPos> toBreak = new ArrayList<>(1);
         double headBreak = clearCost(ctx, newHead, toBreak, true);   // top cell: fold falling stack
@@ -503,7 +501,7 @@ public final class Moves {
 
     /**
      * A single atomic edge that clears a gap by jumping, rather than bridging it
-     * with scaffolding (Baritone {@code MovementParkour}). Emitted only when
+     * with scaffolding. Emitted only when
      * there's a genuine gap straight ahead (no floor immediately in front) and a
      * clear air corridor at body height across to the nearest landing within
      * {@link #MAX_PARKOUR}. The momentum + jump timing are supplied by the
@@ -513,7 +511,7 @@ public final class Moves {
      * and parkour-place are deferred. Neither breaks nor places anything.
      */
     private static Movement parkour(NavContext ctx, BlockPos from, Direction dir) {
-        if (!PathSettings.ALLOW_PARKOUR) return null;   // Baritone default: parkour off
+        if (!PathSettings.ALLOW_PARKOUR) return null;   // parkour is off by default
         BlockGetter level = ctx.view;
         // Only a real gap warrants a jump: a floor immediately ahead means a
         // plain traverse/descend already covers it.

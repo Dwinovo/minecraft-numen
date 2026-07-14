@@ -18,15 +18,14 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * Progressive block breaking that drives the SAME native server entry point a
- * real client's packets hit — a faithful port of Carpet's
- * {@code EntityPlayerActionPack} ATTACK-on-block. A fake player has no client to
- * run the mining loop, so we BE the client:
+ * real client's packets hit. A fake player has no client to
+ * run the mining loop, so this class stands in for the client:
  * <ul>
  *   <li>begin: {@code handleBlockBreakAction(START_DESTROY_BLOCK)} + the block's
  *       left-click {@code attack} (note blocks, redstone-ore glow, …); creative
  *       breaks instantly on START; an insta-mineable block breaks on START too;</li>
  *   <li>each tick: accumulate the block's real {@link BlockState#getDestroyProgress}
- *       and broadcast the crack overlay (breaker id {@code -1}, like Carpet — the
+ *       and broadcast the crack overlay (breaker id {@code -1} — the
  *       server does NOT self-complete a survival break for a fake player);</li>
  *   <li>finish: {@code handleBlockBreakAction(STOP_DESTROY_BLOCK)} → the SERVER
  *       destroys the block (drops / durability / events). We do NOT clear the
@@ -40,15 +39,16 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  */
 public final class BlockDigger {
 
-    /** Carpet broadcasts the crack under breaker id -1 (not the player's entity id),
+    /** The crack is broadcast under breaker id -1 (not the player's entity id),
      *  so the server's own per-player crack clearing on STOP can't wipe it early. */
     private static final int CRACK_ID = -1;
-    /** Ticks to wait after a break before starting another (Carpet blockHitDelay). */
+    /** Ticks to wait after a break before starting another — the vanilla client's
+     *  own post-break hit delay is the same 5 ticks. */
     private static final int BLOCK_HIT_DELAY = 5;
 
     private final NumenPlayer player;
     private BlockPos pos;
-    private float progress;       // accumulated 0..1 (Carpet curBlockDamageMP)
+    private float progress;       // accumulated 0..1 destroy fraction
     private boolean started;      // START_DESTROY_BLOCK has been sent for `pos`
     private int blockHitDelay;    // post-break cooldown (survives reset())
 
@@ -61,25 +61,45 @@ public final class BlockDigger {
         return pos;
     }
 
+    /** Outcome of one {@link #digStep} tick — lets callers distinguish "still working"
+     *  from "physically can't get at it", which the old boolean folded together. */
+    public enum DigResult {
+        /** Break in progress, cooling down, or begun this tick — keep calling. */
+        PROGRESSING,
+        /** The TARGET block's break committed this tick. */
+        BROKE_TARGET,
+        /** An OCCLUDER in the way broke this tick (not the target) — a step toward it. */
+        BROKE_OCCLUDER,
+        /** No face of the target is reachable and nothing safe occludes it — stuck (maps to OCCLUDED). */
+        NO_SHOT
+    }
+
+    /** Legacy boolean shim: {@code true} only on the tick the TARGET breaks. Kept so
+     *  pre-migration callers ({@link Interaction}) compile unchanged; delete once every
+     *  caller consumes {@link #digStep}. */
+    public boolean dig(BlockPos target) {
+        return digStep(target) == DigResult.BROKE_TARGET;
+    }
+
     /**
      * Advance the dig of {@code target} by one tick (restarting cleanly if the
      * target changed): face it, drive the native break action, swing.
      *
-     * @return {@code true} on the tick the block's break is committed (STOP sent).
+     * @return the {@link DigResult} for this tick.
      */
-    public boolean dig(BlockPos target) {
+    public DigResult digStep(BlockPos target) {
         Level level = player.level();
         if (blockHitDelay > 0) {                    // let the previous break land first
             blockHitDelay--;
             InputDriver.halt(player);
-            return false;
+            return DigResult.PROGRESSING;
         }
         // Resolve what to actually swing at this tick. First try a raycast-VERIFIED face on the
-        // target (Baritone RotationUtils.reachable). If the target is OCCLUDED — no face in line of
-        // sight (leaves in front, a tight column overhead) — fall back to Baritone's "break the
-        // incorrect block" (Movement.prepared): aim at the target's centre and break whatever the
+        // target. If the target is OCCLUDED — no face in line of
+        // sight (leaves in front, a tight column overhead) — fall back to breaking the
+        // occluder: aim at the target's centre and break whatever the
         // crosshair actually hits, opening the way, instead of holding forever for a clear angle.
-        // Our one guard over Baritone: never grind a do_not_break / container block as the occluder.
+        // One guard: never grind a do_not_break / container block as the occluder.
         BlockHitResult hit = reachableHit(target);
         BlockPos effective = target;
         if (hit == null) {
@@ -92,7 +112,7 @@ public final class BlockDigger {
         }
         InputDriver.halt(player);
         if (hit == null) {
-            return false;                            // no clear shot, nothing safe in the way — hold
+            return DigResult.NO_SHOT;                // no clear shot, nothing safe in the way — stuck
         }
         if (pos == null || !pos.equals(effective)) {
             start(effective);
@@ -113,16 +133,16 @@ public final class BlockDigger {
             if (player.getAbilities().instabuild) {
                 blockHitDelay = BLOCK_HIT_DELAY;
                 reset();
-                return targetBreak;                  // creative: START broke it
+                return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;                  // creative: START broke it
             }
             if (!state.isAir()) {
                 state.attack(level, pos, player);    // left-click punch
                 if (state.getDestroyProgress(player, level, pos) >= 1.0f) {
-                    reset();                         // instamine: START broke it (no STOP — Carpet)
-                    return targetBreak;
+                    reset();                         // instamine: START broke it (no STOP is sent)
+                    return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
                 }
             }
-            return false;                            // begin accumulating next tick
+            return DigResult.PROGRESSING;            // begin accumulating next tick
         }
 
         // Survival: accumulate the real per-tick destroy fraction; broadcast the crack.
@@ -132,14 +152,14 @@ public final class BlockDigger {
         player.swing(InteractionHand.MAIN_HAND);
         if (progress >= 1.0f) {
             // STOP → server destroys. Do NOT clear the crack: the block vanishing
-            // removes it (no intact-for-a-frame flicker). Carpet-exact.
+            // removes it (no intact-for-a-frame flicker).
             player.gameMode.handleBlockBreakAction(pos,
                     ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, side, level.getMaxBuildHeight(), -1);
             blockHitDelay = BLOCK_HIT_DELAY;
             reset();
-            return targetBreak;
+            return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
         }
-        return false;
+        return DigResult.PROGRESSING;
     }
 
     private void start(BlockPos target) {
@@ -148,15 +168,15 @@ public final class BlockDigger {
         progress = 0.0f;
         started = false;
         // Hold the best tool BEFORE timing the dig — getDestroyProgress reads the held
-        // item, and the pathing cost model prices every break with the best hotbar tool
-        // (Baritone switchToBestToolFor).
+        // item, and the pathing cost model prices every break with the best
+        // available tool.
         switchToBestTool(player.level().getBlockState(pos));
     }
 
     /** Hold the item that mines {@code state} fastest in the main hand. Scans the WHOLE
      *  inventory (not just the hotbar) and swaps a backpack tool into the hand via
-     *  {@link NumenPlayer#holdInHand} — a deliberate divergence from Baritone's hotbar-only
-     *  ToolSet, kept consistent with the cost model (NavContext.scanBestTool) so the planned
+     *  {@link NumenPlayer#holdInHand} — deliberately whole-inventory,
+     *  kept consistent with the cost model (NavContext.scanBestTool) so the planned
      *  break cost still matches the tool actually used. */
     private void switchToBestTool(BlockState state) {
         Inventory inv = player.getInventory();
@@ -172,8 +192,8 @@ public final class BlockDigger {
         player.holdInHand(best);
     }
 
-    /** Abandon an IN-PROGRESS dig: ABORT it server-side and clear the crack (Carpet
-     *  inactiveTick). A completed break never comes through here — its crack is left
+    /** Abandon an IN-PROGRESS dig: ABORT it server-side and clear the crack.
+     *  A completed break never comes through here — its crack is left
      *  for the block-break to remove. */
     public void cancel() {
         if (pos != null) {
@@ -196,7 +216,7 @@ public final class BlockDigger {
     }
 
     /**
-     * Baritone {@code RotationUtils.reachable}: the first point ON {@code pos} the eye can
+     * The first point ON {@code pos} the eye can
      * actually raycast to — the block's shape centre first, then its six face centres. The
      * returned {@link BlockHitResult} carries the exact aim point ({@code getLocation}) AND
      * the face the ray hits ({@code getDirection}), so the dig looks at the real interaction
@@ -210,7 +230,7 @@ public final class BlockDigger {
         if (shape.isEmpty()) {
             shape = Shapes.block();
         }
-        // Shape centre, then Baritone's BLOCK_SIDE_MULTIPLIERS (the six face centres).
+        // Shape centre first, then the six face centres.
         Vec3[] aims = {
                 offsetOn(pos, shape, 0.5, 0.5, 0.5),
                 offsetOn(pos, shape, 0.5, 0.0, 0.5),
@@ -234,8 +254,8 @@ public final class BlockDigger {
     }
 
     /**
-     * A single ray from the eye to {@code target}'s shape centre — used as Baritone's "break the
-     * incorrect block" fallback when {@link #reachableHit} finds no clear face: the ray lands on the
+     * A single ray from the eye to {@code target}'s shape centre — the break-the-occluder
+     * fallback when {@link #reachableHit} finds no clear face: the ray lands on the
      * occluder (a leaf / a tight overhead), and we break THAT to open the way. Null on a miss / out
      * of reach. ({@link #reachableHit} already tries the centre first, so if that hit the target it
      * would have returned it; reaching here means the centre ray hits something else.)
@@ -258,7 +278,7 @@ public final class BlockDigger {
         return res.getType() == HitResult.Type.BLOCK ? res : null;
     }
 
-    /** A point on the block's shape per Baritone's offset formula:
+    /** A point on the block's shape:
      *  {@code min*m + max*(1-m)} on each axis. */
     private static Vec3 offsetOn(BlockPos pos, VoxelShape shape, double mx, double my, double mz) {
         double x = shape.min(Direction.Axis.X) * mx + shape.max(Direction.Axis.X) * (1 - mx);

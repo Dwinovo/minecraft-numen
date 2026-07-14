@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.pathing.exec;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.task.FailureType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
@@ -16,14 +17,14 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * The most-native interaction primitive for a fake-player body — modelled on
- * Carpet's {@code EntityPlayerActionPack}: aim the eyes at a target, then "press"
+ * The most-native interaction primitive for a fake-player body:
+ * aim the eyes at a target, then "press"
  * one mouse button (left = ATTACK, right = USE) with a {@link Timing}. Every
  * higher-level action is a thin layer on top: {@code break_block} = ATTACK a
  * block (hold), {@code place_block} = USE a block (once), {@code hunt} = ATTACK an
  * entity, eat/bow = hold USE in the air.
  *
- * <h2>Native dispatch (same calls Carpet's action pack makes)</h2>
+ * <h2>Native dispatch (the same server entry points a real client's packets reach)</h2>
  * <ul>
  *   <li>ATTACK + block  → {@link BlockDigger} (creative insta / survival timed) → {@code handleBlockBreakAction} START/STOP (server destroys)</li>
  *   <li>ATTACK + entity → {@code player.attack} (cooldown-scaled damage / sweep / knockback)</li>
@@ -32,7 +33,7 @@ import net.minecraft.world.phys.Vec3;
  *   <li>USE + air       → {@code gameMode.useItem} (+ a hold for food / bow)</li>
  * </ul>
  *
- * <h2>Timing (Carpet's {@code Action} model, first-class)</h2>
+ * <h2>Timing</h2>
  * {@link Timing#once()} taps once; {@link Timing#repeat} taps N times spaced by an
  * interval (auto-click a button, grind a mob); {@link Timing#hold()} holds the
  * button until the action self-completes (a block breaks, food finishes);
@@ -48,11 +49,11 @@ public final class Interaction {
 
     /** Vanilla block-interaction reach (survival); creative is 5. */
     private static final double REACH = 4.5;
-    /** The two hands USE tries, main first (Carpet tries both). */
+    /** The two hands USE tries, main first (vanilla interaction tries both). */
     private static final InteractionHand[] HANDS = {InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND};
 
     /**
-     * When and how often the button fires — a port of Carpet's {@code Action}
+     * When and how often the button fires
      * (once / continuous / interval). {@code hold} actions press-and-hold until
      * the action finishes on its own (breaking, eating) or {@code maxHold} elapses
      * (bow); discrete actions fire {@code limit} times spaced by {@code interval}.
@@ -106,6 +107,8 @@ public final class Interaction {
     private int held;                 // USE+air: ticks held so far
     private boolean hardFail;         // a fire hit an unrecoverable error
     private String failReason = "interaction failed";
+    private FailureType failType = FailureType.UNKNOWN;
+    private String lastUseOutcome = "not fired";
 
     private Interaction(NumenPlayer player, Button button, BlockPos block, Entity entity,
                         InteractionHand hand, Timing timing) {
@@ -164,7 +167,7 @@ public final class Interaction {
     private static final int CONTINUOUS = 1_000_000;
 
     /**
-     * Carpet's {@code Tracer} / vanilla crosshair pick: one ray from the eyes along the CURRENT
+     * The vanilla crosshair pick: one ray from the eyes along the CURRENT
      * look, resolving the CLOSER of a block or an entity (else MISS). A wall occludes a mob behind
      * it (entities are searched only as near as the block hit). {@code reach} 4.5 = survival.
      */
@@ -185,7 +188,7 @@ public final class Interaction {
 
     /**
      * Build the native action for a resolved crosshair {@code hit} + {@code button}, mapping
-     * {@code holdTicks} to the cell's natural cadence — Carpet's 6-cell dispatch:
+     * {@code holdTicks} to the cell's natural cadence — a 6-cell (button × target) dispatch:
      * <ul>
      *   <li>ATTACK·BLOCK → break (BlockDigger holds till the block is gone);</li>
      *   <li>ATTACK·ENTITY → hit (tap = one cooldown-gated hit; hold = keep hitting);</li>
@@ -194,7 +197,7 @@ public final class Interaction {
      *   <li>USE·AIR → useItem (tap = throw; hold = charge/eat up to ticks, or self-complete);</li>
      *   <li>ATTACK·AIR → {@code null} (left-click air does nothing).</li>
      * </ul>
-     * {@code holdTicks}: 0 = tap, &gt;0 / -1 = hold. The block/entity hit is used verbatim (the
+     * {@code holdTicks}: 0 = tap, &gt;0 / -1 = hold. The block/entity hit is used as-is (the
      * native raytrace already resolved the exact face/point — no re-raycast). The caller drives
      * the returned object to completion and enforces the hold duration.
      */
@@ -232,6 +235,11 @@ public final class Interaction {
 
     public String failReason() {
         return failReason;
+    }
+
+    /** Structured cause of a {@link Status#FAILED}, for the reactive task layer to branch on. */
+    public FailureType failType() {
+        return failType;
     }
 
     public Status tick() {
@@ -310,25 +318,44 @@ public final class Interaction {
             hit = raycastBlock();
             if (hit == null) {
                 failReason = "can't see the block to use (out of reach or line of sight blocked)";
+                failType = FailureType.OCCLUDED;
                 hardFail = true;
                 return false;
             }
         }
+        StringBuilder outcome = new StringBuilder();
         for (InteractionHand h : HANDS) {
             InteractionResult res = player.gameMode.useItemOn(
                     player, player.level(), player.getItemInHand(h), h, hit);
+            String handName = h == InteractionHand.MAIN_HAND ? "main_hand" : "off_hand";
             if (res.consumesAction()) {
                 player.swing(h);
+                lastUseOutcome = "consumed (" + handName + "=" + res + ")";
                 return true;
             }
+            if (outcome.length() > 0) outcome.append(", ");
+            outcome.append(handName).append('=').append(res);
         }
         // Nothing consumed (e.g. empty hand on a non-interactive block) — still a press.
+        lastUseOutcome = outcome.toString();
         return true;
+    }
+
+    /**
+     * The vanilla verdict of the most recent USE-on-block press: {@code "consumed (...)"}
+     * or the per-hand results (e.g. {@code "main_hand=FAIL, off_hand=PASS"}). A press that
+     * consumes can STILL have placed nothing (the item's own rules refused) — placement
+     * callers must verify the world afterwards, and this string is what they log when a
+     * press quietly did nothing.
+     */
+    public String lastUseOutcome() {
+        return lastUseOutcome;
     }
 
     private boolean fireUseEntity() {
         if (entity == null || !entity.isAlive()) {
             failReason = "the entity is gone";
+            failType = FailureType.TARGET_LOST;
             hardFail = true;
             return false;
         }
