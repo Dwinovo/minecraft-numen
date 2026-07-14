@@ -63,14 +63,24 @@ public final class Placement {
      * angle reaches a support face nor the (replaceable) target itself from where the body stands.
      */
     public static BlockHitResult resolve(NumenPlayer player, BlockPos placeAt, boolean wouldSneak) {
+        return resolve(player, placeAt, wouldSneak, null);
+    }
+
+    /**
+     * As {@link #resolve(NumenPlayer, BlockPos, boolean)}, with an optional absolute {@code aimY}
+     * overriding the default support-face aim height — the click height on a face is what selects
+     * a slab/stair half, so a caller with a half preference biases it (e.g. {@code y+0.72} for top).
+     */
+    public static BlockHitResult resolve(NumenPlayer player, BlockPos placeAt, boolean wouldSneak, Double aimY) {
         double reach = player.blockInteractionRange();
-        BlockHitResult support = reachSupport(player, placeAt, reach, wouldSneak);   // preferred
+        BlockHitResult support = reachSupport(player, placeAt, reach, wouldSneak, aimY);   // preferred
         if (support != null) return support;
         return reachBlock(player, placeAt, reach, wouldSneak);                       // fallback: replace the target
     }
 
     /** Stage 1 — a reachable solid neighbour to place against. */
-    private static BlockHitResult reachSupport(NumenPlayer player, BlockPos placeAt, double reach, boolean wouldSneak) {
+    private static BlockHitResult reachSupport(NumenPlayer player, BlockPos placeAt, double reach,
+                                               boolean wouldSneak, Double aimY) {
         Level level = player.level();
         for (Direction dir : FACES) {
             BlockPos against = placeAt.relative(dir);
@@ -79,7 +89,7 @@ public final class Placement {
             // block's own top and reach a side face when leaning over an edge.
             Vec3 facePoint = new Vec3(
                     (placeAt.getX() + against.getX() + 1.0) * 0.5,
-                    (placeAt.getY() + against.getY() + 0.5) * 0.5,
+                    aimY != null ? aimY : (placeAt.getY() + against.getY() + 0.5) * 0.5,
                     (placeAt.getZ() + against.getZ() + 1.0) * 0.5);
             BlockHitResult hit = castFromEye(player, facePoint, reach, wouldSneak,
                     res -> res.getBlockPos().equals(against)

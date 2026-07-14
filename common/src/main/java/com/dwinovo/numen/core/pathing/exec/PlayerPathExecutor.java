@@ -672,8 +672,8 @@ public final class PlayerPathExecutor {
 
     /**
      * Block-tower pillar: sneak so we never step off the
-     * column, stay centred, jump from the ground, and at the apex place a block in
-     * the cell we just left so we land one higher.
+     * column, stay centred, jump from the ground, and while airborne keep attempting
+     * to place a block in the cell we just left so we land one higher.
      */
     private void drivePillar(Movement mv) {
         // Swim straight up a water column:
@@ -705,16 +705,19 @@ public final class PlayerPathExecutor {
                 InputDriver.jump(player);
             }
         }
-        // Once risen above the target foot height (the apex), place the block under
-        // our feet against the block below — looking down at it, like a real player
-        // (right-click fires only while crouching, looking at the support, and y > dest.y+0.1).
-        if (player.getY() > mv.dest.getY() + 0.1) {
+        // While airborne, attempt the underfoot place EVERY tick and let vanilla's own
+        // placement rules judge legality: the ticks where our collision box still occupies
+        // the cell are rejected by the placement's obstruction check, and the first tick
+        // the hop lifts the box clear (feet above cell top) succeeds. No apex timing, no
+        // Y-window guess — the judge is the same code that must accept the block anyway.
+        if (!player.onGround()) {
             placeUnderfoot(mv.src);
         }
     }
 
-    /** Place a scaffold block at {@code cell} against the solid block directly below it
-     *  — the pillar apex place, performed natively (look down + useItemOn on the up-face). */
+    /** Attempt a scaffold place at {@code cell} against the solid block directly below it,
+     *  performed natively (look down + useItemOn on the up-face). Called every airborne
+     *  pillar tick; vanilla accepts on whichever tick the hop has cleared the cell. */
     private void placeUnderfoot(BlockPos cell) {
         int slot = scaffoldSlot();
         if (slot < 0) {
@@ -726,22 +729,24 @@ public final class PlayerPathExecutor {
             return;
         }
         InputDriver.lookAt(player, Vec3.atBottomCenterOf(cell));   // look straight down at the support's top
-        // Crouch-confirm, relaxed for mid-air: the sneak INPUT is held every pillar tick
-        // (drivePillar sets shift), but the CROUCHING pose doesn't reliably register while
-        // AIRBORNE — and the jump apex is exactly where this place must fire. Accept the
-        // held input as the confirm; the pose check still covers the grounded case.
-        if (!player.isCrouching() && !player.isShiftKeyDown()) {
-            underfootBlocked("sneak not registered", cell);
-            return;
-        }
         BlockHitResult hit = Placement.resolve(player, cell, true);  // honest raycast only — no fabricated hit
         if (hit == null) {
             underfootBlocked("no clear line to own feet cell", cell);
             return;
         }
         player.holdInHand(slot);   // real hotbar-select / swap-to-hand, not an aliasing overwrite
-        Interaction.useBlock(player, hit, InteractionHand.MAIN_HAND).tick();
-        underfootBlockedTicks = 0;
+        Interaction use = Interaction.useBlock(player, hit, InteractionHand.MAIN_HAND);
+        use.tick();
+        // The press is NOT trusted as the outcome — the world is. Refusals early in the hop
+        // (box still occupies the cell) are expected and retried next tick; only a persistent
+        // refusal streak is a real blockage, and then the diagnostic names vanilla's verdict
+        // and where the body actually was, so a dead pillar is never silent again.
+        if (BlockHelper.canWalkOn(player.level(), cell)) {
+            underfootBlockedTicks = 0;
+        } else {
+            underfootBlocked(String.format("vanilla refused: %s (y=%.2f, clears cell at >%d.0)",
+                    use.lastUseOutcome(), player.getY(), cell.getY() + 1), cell);
+        }
     }
 
     /** Persistent pillar-place blockage diagnostics — names the failing gate once a second. */

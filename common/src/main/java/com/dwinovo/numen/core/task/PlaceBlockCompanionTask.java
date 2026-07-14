@@ -46,8 +46,10 @@ import java.util.Set;
  * <ol>
  *   <li>the direct edge-sneak maneuver from wherever nav parked us (today's rung);</li>
  *   <li>REPOSITION — up to {@value #MAX_ALT_STANCES} alternate stances (adjacent to
- *       the target, then anywhere within {@value #STANCE_NEAR_RADIUS} blocks of it,
- *       excluding cells already failed from), each followed by a fresh maneuver;</li>
+ *       the target; anywhere within {@value #STANCE_NEAR_RADIUS} blocks of it; then
+ *       on the rim ABOVE it, so the down-face comes into view — the one stance that
+ *       works when all four sides are walled in — always excluding cells already
+ *       failed from), each followed by a fresh maneuver;</li>
  *   <li>DIG-OUT (on {@code OCCLUDED} only) — clear at most {@value #MAX_OCCLUDERS_DUG}
  *       identifiable, non-protected blocks off the line to a support face, then retry
  *       the maneuver once; if no clean occluder is identifiable the rung is skipped;</li>
@@ -67,7 +69,7 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double WALK_SPEED = 1.0;
     /** Ladder bound: alternate stances to try after an occluded / unreachable place. */
-    private static final int MAX_ALT_STANCES = 2;
+    private static final int MAX_ALT_STANCES = 3;
     /** Ladder bound: occluding blocks the dig-out rung may clear in total. */
     private static final int MAX_OCCLUDERS_DUG = 2;
     /** Radius of the loosest alternate-stance goal — still hugging the target. */
@@ -322,14 +324,24 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
     }
 
     /** Stance #1: any cell adjacent to the target; stance #2: anywhere within
-     *  {@link #STANCE_NEAR_RADIUS} of it. Both exclude the target cell itself and every
-     *  stance a maneuver already failed from — SAME bounded goal, different feet. */
+     *  {@link #STANCE_NEAR_RADIUS} of it; stance #3: on the rim ABOVE the target
+     *  (adjacent to the cell above it, feet higher than it), leaning over so the
+     *  down-face comes into view — the placement that still works when all four
+     *  sides are walled in. All exclude the target cell itself and every stance a
+     *  maneuver already failed from — SAME bounded goal, different feet. */
     private NavGoal stanceGoal(int attempt) {
-        NavGoal base = attempt == 1 ? NavGoal.adjacent(r.pos) : NavGoal.near(r.pos, STANCE_NEAR_RADIUS);
+        NavGoal base = switch (attempt) {
+            case 1 -> NavGoal.adjacent(r.pos);
+            case 2 -> NavGoal.near(r.pos, STANCE_NEAR_RADIUS);
+            default -> NavGoal.adjacent(r.pos.above());
+        };
+        boolean fromAbove = attempt >= 3;
         Set<BlockPos> avoid = new HashSet<>(badStances);   // copied — the search reads it off-thread
         avoid.add(r.pos);                                  // never stand IN the cell being filled
+        avoid.add(r.pos.above());                          // ... nor in the column right above it
         return new NavGoal() {
             @Override public boolean isAt(BlockPos feet) {
+                if (fromAbove && feet.getY() <= r.pos.getY()) return false;   // rim stance must be above
                 return base.isAt(feet) && !avoid.contains(feet);
             }
             @Override public double heuristic(BlockPos from) {

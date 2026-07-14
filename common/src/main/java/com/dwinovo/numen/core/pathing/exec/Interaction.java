@@ -108,6 +108,7 @@ public final class Interaction {
     private boolean hardFail;         // a fire hit an unrecoverable error
     private String failReason = "interaction failed";
     private FailureType failType = FailureType.UNKNOWN;
+    private String lastUseOutcome = "not fired";
 
     private Interaction(NumenPlayer player, Button button, BlockPos block, Entity entity,
                         InteractionHand hand, Timing timing) {
@@ -322,16 +323,33 @@ public final class Interaction {
                 return false;
             }
         }
+        StringBuilder outcome = new StringBuilder();
         for (InteractionHand h : HANDS) {
             InteractionResult res = player.gameMode.useItemOn(
                     player, player.level(), player.getItemInHand(h), h, hit);
+            String handName = h == InteractionHand.MAIN_HAND ? "main_hand" : "off_hand";
             if (res.consumesAction()) {
                 player.swing(h);
+                lastUseOutcome = "consumed (" + handName + "=" + res + ")";
                 return true;
             }
+            if (outcome.length() > 0) outcome.append(", ");
+            outcome.append(handName).append('=').append(res);
         }
         // Nothing consumed (e.g. empty hand on a non-interactive block) — still a press.
+        lastUseOutcome = outcome.toString();
         return true;
+    }
+
+    /**
+     * The vanilla verdict of the most recent USE-on-block press: {@code "consumed (...)"}
+     * or the per-hand results (e.g. {@code "main_hand=FAIL, off_hand=PASS"}). A press that
+     * consumes can STILL have placed nothing (the item's own rules refused) — placement
+     * callers must verify the world afterwards, and this string is what they log when a
+     * press quietly did nothing.
+     */
+    public String lastUseOutcome() {
+        return lastUseOutcome;
     }
 
     private boolean fireUseEntity() {
