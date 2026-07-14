@@ -4,35 +4,37 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavContext;
 import com.dwinovo.numen.core.pathing.calc.Path;
+import com.dwinovo.numen.core.pathing.exec.drive.AscendDriver;
+import com.dwinovo.numen.core.pathing.exec.drive.DescendDriver;
+import com.dwinovo.numen.core.pathing.exec.drive.FallDriver;
+import com.dwinovo.numen.core.pathing.exec.drive.MoveDriver;
 import com.dwinovo.numen.core.pathing.movement.Movement;
 import com.dwinovo.numen.core.pathing.movement.Moves;
 import com.dwinovo.numen.core.pathing.util.ActionCosts;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Walks a computed {@link Path} on a companion {@link NumenPlayer} body. The
- * cross-movement spine: re-localization (match real feet against nearby
- * movements' {@code validPositions} and resync the index instead of replanning
- * on every push/overshoot), a per-movement stall budget, and advancement.
- * Per-movement EXECUTION is input-driving ({@link InputDriver}) + the player's
- * own survival break/place — the body is steered by pressed inputs, not by
- * direct velocity writes.
+ * Walks a computed {@link Path} on a companion {@link NumenPlayer} body. This class
+ * is the KIND-BLIND spine: re-localization (match real feet against nearby
+ * movements' {@code validPositions} and resync the index instead of replanning on
+ * every push/overshoot), the watchdog pipeline (off-path bands, net-progress stall,
+ * cost re-verification, per-movement timeout, premise checks), the uniform
+ * break/place phases, and advancement. Everything kind-SPECIFIC — per-tick input
+ * pressing, arrival detection, cancel safety, world premises, per-move state —
+ * lives in the current movement's {@link MoveDriver}; the executor never branches
+ * on {@link Movement.Kind} except in the cross-move sprint/splice optimizer, which
+ * is the one sanctioned puncture (it may downcast the current driver to poke sprint
+ * carry flags — an optimization channel, never a correctness dependency).
  *
  * <p>Each movement runs as: clear its {@code toBreak} obstructions (the native
  * {@link BlockDigger} — {@code handleBlockBreakAction} START/STOP, survival
  * timed, drops fall and the player picks them up natively), place its
- * {@code toPlace} scaffold, then step toward
- * {@code dest} (face it, push forward; hop for ascend/pillar/parkour) until the
- * feet reach it. This is a first cut tuned for compilation + wiring; movement
- * feel gets refined against in-game runs.
+ * {@code toPlace} scaffold ({@link PlaceManeuver}), then let the driver step the
+ * body toward {@code dest} until it reports arrival.
  */
 public final class PlayerPathExecutor {
 
@@ -54,20 +56,12 @@ public final class PlayerPathExecutor {
     private int ticksOnCurrent = 0;
     private int ticksAway = 0;
     private boolean placedThisMove = false;
-    /** Set when we sprint-skipped a traverse straight into an ascend (see
-     *  {@code sprintableAscend}) — the ascend then sprints up instead of jumping from a standstill. */
-    private boolean sprintAscend = false;
-    /** Set when we sprint-carried into this descend (see {@code canSprintFromDescendInto}) —
-     *  the descend drives at sprint speed instead of a controlled walk-down. */
-    private boolean sprintDescend = false;
-    /** When a fall can overshoot forward over the same-direction traverses below it
-     *  (see {@code overrideFall}), this is the extended aim point: driveFall sprints at it
-     *  instead of braking straight down. Recomputed each tick; null = no override. */
-    private Vec3 fallOverrideAim = null;
-    /** How many ticks we've actually DRIVEN this descend
-     *  (incremented only inside the drive branch, NOT on break/idle ticks) — gates the 20-tick
-     *  fakeDest momentum window so a descend that breaks first doesn't burn it before moving. */
-    private int descendDriveTicks = 0;
+    /** The current movement's driver — owns all kind-specific behavior and per-move
+     *  mutable state (sprint carry, tick counters). Recreated whenever {@link #index}
+     *  moves; state dies with it. */
+    private MoveDriver driver;
+    /** The index {@link #driver} was built for (a driver never outlives its move). */
+    private int driverIndex = -1;
     /** The live edge-sneak scaffold placement for the current move (null when idle). */
     private PlaceManeuver placeManeuver;
     /** Progressive break of path obstructions (shared model with auto-mine). */
@@ -128,17 +122,15 @@ public final class PlayerPathExecutor {
         }
 
         Movement mv = path.movements.get(index);
+        MoveDriver drv = currentDriver();
         Status progress = trackProgress(mv);
         if (progress != null) return progress;
 
-        // Submerged = off-plan, EXCEPT when the current move is a swim-up: the surface
-        // plane is where traverse/ascend live, so being underwater on one of those means
-        // we were knocked under → replan from a valid surface cell. But a water-column
-        // swim-up (PILLAR out of a water cell) is *meant* to run submerged — exempt it,
-        // or the replan would pre-empt the only move that climbs back to the surface.
-        boolean swimmingUp = mv.kind == Movement.Kind.PILLAR
-                && BlockHelper.isWater(player.level(), mv.src);
-        if (player.isUnderWater() && !swimmingUp) {
+        // Submerged = off-plan, EXCEPT when the current driver claims submersion (a
+        // water-column swim-up is *meant* to run submerged): the surface plane is where
+        // traverse/ascend live, so being underwater on one of those means we were
+        // knocked under → replan from a valid surface cell.
+        if (player.isUnderWater() && !drv.allowsSubmersion()) {
             // Don't replan the instant we touch water — let the per-kind drive + buoyancy try to
             // surface first; only a SUSTAINED dunk is genuinely off-plan. Otherwise a fall that
             // clips water replans every tick, each new path again starting underwater.
@@ -164,21 +156,12 @@ public final class PlayerPathExecutor {
 
         // 1) Clear obstructions for this move (one at a time), breaking each
         //    progressively over its real hardness time — the dig is held across
-        //    ticks, the block doesn't pop instantly.
+        //    ticks, the block doesn't pop instantly. The driver may add kind-specific
+        //    inputs (e.g. a traverse keeps approaching the breaking block).
         BlockPos obstruction = nextObstruction(mv);
         if (obstruction != null) {
             digger.dig(obstruction);   // faces + breaks the block (halts the body)
-            // Walk-while-breaking (TRAVERSE only): keep approaching + sprint while
-            // the front block breaks — but only if neither break cell (dest feet + head) is
-            // something to avoid walking into, and we aren't already pressed against the
-            // block (Chebyshev dist >= 0.83).
-            if (mv.kind == Movement.Kind.TRAVERSE
-                    && !BlockHelper.avoidWalkingInto(player.level(), mv.dest)
-                    && !BlockHelper.avoidWalkingInto(player.level(), mv.dest.above())
-                    && chebyshevDistTo(mv.dest) >= 0.83) {
-                player.zza = 1.0f;
-                player.setSprinting(speed >= 1.0);
-            }
+            drv.duringBreak();
             return Status.RUNNING;
         }
 
@@ -192,7 +175,8 @@ public final class PlayerPathExecutor {
         //    placement — a bounded fallback. Revisit only if ascend-place wedging shows up.)
         if (mv.toPlace != null && !placedThisMove) {
             if (placeManeuver == null) {
-                placeManeuver = new PlaceManeuver(player, mv.toPlace, this::scaffoldSlot,
+                placeManeuver = new PlaceManeuver(player, mv.toPlace,
+                        () -> MoveDriver.scaffoldSlot(player),
                         () -> BlockHelper.canWalkOn(player.level(), mv.toPlace));
             }
             switch (placeManeuver.tick()) {
@@ -211,24 +195,21 @@ public final class PlayerPathExecutor {
             }
         }
 
-        // 3) Drive toward dest by movement kind — per-kind input forcing with
-        //    tuned per-tick timing.
-        if (arrived(mv)) {
+        // 3) Drive toward dest — the driver owns all kind-specific input pressing.
+        if (drv.arrived()) {
             advance();
             return Status.RUNNING;
         }
-        // A land pillar's whole premise is a floor under its own column (jump from it,
-        // place against it). If that floor is missing — typically an earlier scaffold
-        // that never landed left a hole — jumping can only grind the movement timeout:
-        // surrender the move NOW and replan against the world as it really is.
-        if (mv.kind == Movement.Kind.PILLAR
-                && !BlockHelper.isWater(player.level(), mv.src)
-                && !BlockHelper.canWalkOn(player.level(), mv.src.below())
-                && !BlockHelper.canWalkOn(player.level(), mv.src)) {
-            return replan("pillar has no floor under " + mv.src.toShortString()
-                    + " (an earlier scaffold never landed)");
+        // Premise check: the world no longer satisfies what this move's plan assumed
+        // (e.g. a pillar column whose floor never got placed). Driving can only grind
+        // the movement timeout — surrender NOW and replan against the world as it is.
+        String broken = drv.premiseBroken();
+        if (broken != null) {
+            return replan(broken);
         }
-        drive(mv);
+        player.setShiftKeyDown(false);   // default; drivers re-enable per tick
+        openDoorsForMove(mv);            // a shut wooden door/gate ahead → open it, don't break it
+        drv.drive();
         // Universal liquid float (runs after EVERY movement's per-kind drive):
         // if our feet cell is liquid and we're below dest.y+0.6, press jump
         // (→ jumpInLiquid buoyancy). This is the single framework-level mechanism that
@@ -241,26 +222,6 @@ public final class PlayerPathExecutor {
         return Status.RUNNING;
     }
 
-    /** Horizontal speed² this tick — used to gate jump timing on measured motion. */
-    private double horizontalSpeedSqr() {
-        var v = player.getDeltaMovement();
-        return v.x * v.x + v.z * v.z;
-    }
-
-    /** Horizontal distance from the body to a cell's centre. */
-    private double horizontalDistTo(BlockPos cell) {
-        double dx = (cell.getX() + 0.5) - player.getX();
-        double dz = (cell.getZ() + 0.5) - player.getZ();
-        return Math.sqrt(dx * dx + dz * dz);
-    }
-
-    /** Chebyshev (max-axis) horizontal distance to a cell centre — the
-     *  walk-while-breaking "pressed against the block" gate uses this, not Euclidean. */
-    private double chebyshevDistTo(BlockPos cell) {
-        return Math.max(Math.abs((cell.getX() + 0.5) - player.getX()),
-                        Math.abs((cell.getZ() + 0.5) - player.getZ()));
-    }
-
     /** The feet cell, nudged up 0.1251 (so soul-sand /
      *  farmland sink doesn't read us a block low), and — when that cell is a SLAB — taken
      *  as the cell ABOVE it. That slab adjustment is what lets standing on a bottom slab
@@ -269,199 +230,15 @@ public final class PlayerPathExecutor {
         return BlockHelper.playerFeet(player.level(), player.getX(), player.getY(), player.getZ());
     }
 
-    /**
-     * Per-movement execution. Each kind forces the player inputs it needs:
-     * walk/diagonal aim + forward (+sprint); ascend
-     * waits for forward motion before jumping; parkour holds the jump until clear
-     * of the takeoff block; pillar sneaks, jumps and places underfoot at the apex;
-     * descend/fall let gravity do the work; dig-down lets phase 1 break the floor.
-     */
-    private void drive(Movement mv) {
-        player.setShiftKeyDown(false);   // default; pillar re-enables per tick
-        openDoorsForMove(mv);            // a shut wooden door/gate ahead → open it, don't break it
-        Vec3 dest = Vec3.atBottomCenterOf(mv.dest);
-        // Never sprint in water, nor when about to run into a hazard just
-        // past the destination (momentum could carry us into lava/cactus/etc).
-        boolean sprintBase = speed >= 1.0 && !player.isInWater() && !hazardJustPast(mv);
-        switch (mv.kind) {
-            case TRAVERSE -> {
-                // Correct DEPTH before advancing. If our feet
-                // aren't on the destination's Y level (bobbing while swimming across water,
-                // or sunk into a dip), do NOT move forward this tick — only rise (JUMP) if
-                // we're below it; if we've popped ABOVE it, do nothing and let it settle.
-                // Moving forward only happens once we're actually on the lane, which is
-                // what keeps a water-surface crossing stable instead of porpoising.
-                int feetY = feet().getY();
-                if (feetY != mv.dest.getY()) {
-                    InputDriver.halt(player);
-                    // Below the lane → rise. On LAND that's a step-up hop; in LIQUID the
-                    // universal liquid-float jump (in tick()) already does the rising, so
-                    // don't add a second impulse here (our jump() isn't an idempotent flag).
-                    if (feetY < mv.dest.getY()
-                            && player.level().getBlockState(feet()).getFluidState().isEmpty()) {
-                        InputDriver.jump(player);
-                    }
-                } else {
-                    // On the lane: advance. Don't sprint across a floor we just placed
-                    // (sprint momentum on a fresh bridge risks carrying past its edge).
-                    InputDriver.stepToward(player, dest, sprintBase && mv.toPlace == null);
-                }
-            }
-            // Only sprint a diagonal when both cut corners are clear.
-            case DIAGONAL -> InputDriver.stepToward(player, dest, sprintBase && diagonalCornersClear(mv));
-            case ASCEND -> driveAscend(mv);
-            case PARKOUR -> {
-                int gap = Math.max(Math.abs(mv.dest.getX() - mv.src.getX()),
-                        Math.abs(mv.dest.getZ() - mv.src.getZ()));
-                InputDriver.stepToward(player, dest, gap >= 4);   // a 4-gap needs sprint physics
-                // Hold the jump until clear of the takeoff block,
-                // so the arc starts from the edge, not the centre.
-                if (player.onGround() && horizontalDistTo(mv.src) > 0.7) {
-                    InputDriver.jump(player);
-                }
-            }
-            case PILLAR -> drivePillar(mv);
-            case DESCEND -> driveDescend(mv);
-            case FALL -> driveFall(mv);
-            case DIG_DOWN -> {
-                // Phase 1 breaks the floor; here we just keep centred over the column so
-                // gravity drops us straight onto the dug cell (recentre over the break
-                // cell rather than free-drifting).
-                if (horizontalDistTo(mv.dest) > 0.2) {
-                    InputDriver.stepToward(player, Vec3.atBottomCenterOf(mv.dest), false);
-                } else {
-                    InputDriver.halt(player);
-                }
-            }
+    /** The driver for the current index, created on demand and discarded whenever the
+     *  index moves — per-move state lives and dies with it. */
+    private MoveDriver currentDriver() {
+        if (driver == null || driverIndex != index) {
+            if (driver != null) driver.stop();
+            driver = MoveDriver.of(player, path.movements.get(index), speed);
+            driverIndex = index;
         }
-    }
-
-    /**
-     * Step down one block: aim one block past
-     * dest (fakeDest) for the first ~20 ticks WHILE still near the start
-     * (fromStart&lt;1.25), to carry momentum off the ledge; then aim at dest. Stop
-     * pushing once horizontally on dest so gravity settles us cleanly.
-     */
-    private void driveDescend(Movement mv) {
-        if (descendSafeMode(mv)) {
-            // Safe mode: a slowed, straight-in approach to a 0.17/0.83 weighted
-            // point with NO fakeDest momentum — avoids overshooting into a wall / hazard
-            // and the skip-to-ascend glitch.
-            double dx = (mv.src.getX() + 0.5) * 0.17 + (mv.dest.getX() + 0.5) * 0.83;
-            double dz = (mv.src.getZ() + 0.5) * 0.17 + (mv.dest.getZ() + 0.5) * 0.83;
-            InputDriver.stepToward(player, new Vec3(dx, mv.dest.getY(), dz), false);
-            return;
-        }
-        double ab = horizontalDistTo(mv.dest);
-        if (!feet().equals(mv.dest) || ab > 0.25) {
-            // descendDriveTicks++ < 20: post-increment inside the drive branch (counts only
-            // ticks we actually drive), gating the fakeDest momentum carry.
-            boolean earlyWindow = descendDriveTicks++ < 20 && horizontalDistTo(mv.src) < 1.25;
-            // Hold the forward (fakeDest) aim through the airborne phase to avoid the jarring ~180°
-            // yaw snap (we hard-set yaw rather than rotating smoothly) — but ONLY on a controlled,
-            // non-sprint descend, where overshoot is ≤1 cell (dest/fakeDest, both count as arrived).
-            // A sprint-carried descend (a stair chain, 2+ in a row) keeps the exact-aim rule —
-            // switch to dest once past the early window — so its momentum is steered back onto the
-            // planned line instead of drifting off it.
-            boolean commitForward = (!player.onGround() && !sprintDescend) || earlyWindow;
-            Vec3 aim = commitForward
-                    ? Vec3.atBottomCenterOf(new BlockPos(
-                            2 * mv.dest.getX() - mv.src.getX(),
-                            mv.dest.getY(),
-                            2 * mv.dest.getZ() - mv.src.getZ()))
-                    : Vec3.atBottomCenterOf(mv.dest);
-            InputDriver.stepToward(player, aim, sprintDescend);
-        } else {
-            InputDriver.halt(player);
-        }
-    }
-
-    /** Descend safe mode: a hazard just past dest (sprint-overshoot risk)
-     *  OR the skip-to-ascend overshoot-glitch geometry (a wall at foot level with air above). */
-    private boolean descendSafeMode(Movement mv) {
-        if (hazardJustPast(mv)) return true;
-        int dx = mv.dest.getX() - mv.src.getX();
-        int dz = mv.dest.getZ() - mv.src.getZ();
-        if (dx == 0 && dz == 0) return false;
-        BlockPos into = mv.dest.offset(dx, 0, dz);
-        return !BlockHelper.canWalkThrough(player.level(), into)
-                && BlockHelper.canWalkThrough(player.level(), into.above())
-                && BlockHelper.canWalkThrough(player.level(), into.above(2));
-    }
-
-    /** Something to avoid in the cell(s) one step PAST the destination — the block we'd
-     *  carry into if we over-committed. The descend safe mode + sprint suppression both
-     *  gate on {@code avoidWalkingInto} (any fluid + the hazard block set) for exactly this. */
-    private boolean hazardJustPast(Movement mv) {
-        int dx = Integer.signum(mv.dest.getX() - mv.src.getX());
-        int dz = Integer.signum(mv.dest.getZ() - mv.src.getZ());
-        if (dx == 0 && dz == 0) return false;
-        BlockPos into = mv.dest.offset(dx, 0, dz);
-        for (int y = 0; y <= 2; y++) {
-            if (BlockHelper.avoidWalkingInto(player.level(), into.above(y))) return true;
-        }
-        return false;
-    }
-
-    /** Both diagonal cut-corners clear — the gate for sprinting a diagonal. */
-    private boolean diagonalCornersClear(Movement mv) {
-        BlockPos cornerA = new BlockPos(mv.src.getX(), mv.src.getY(), mv.dest.getZ());
-        BlockPos cornerB = new BlockPos(mv.dest.getX(), mv.src.getY(), mv.src.getZ());
-        return BlockHelper.canWalkThrough(player.level(), cornerA)
-                && BlockHelper.canWalkThrough(player.level(), cornerA.above())
-                && BlockHelper.canWalkThrough(player.level(), cornerB)
-                && BlockHelper.canWalkThrough(player.level(), cornerB.above());
-    }
-
-    /**
-     * Multi-block fall (no water-bucket clutch — that would need a bucket
-     * in hand): unlike a descend it does NOT carry momentum
-     * — it RECENTRES on the landing cell so it doesn't clip a wall, sneaking while
-     * fast-falling ({@code |Δy|>0.4}) to kill horizontal drift and land cleanly.
-     */
-    private void driveFall(Movement mv) {
-        if (fallOverrideAim != null) {
-            // Overshoot: sprint forward at the extended aim so we clear the ledge and ride the
-            // fall over the corridor below, instead of braking straight down.
-            player.setShiftKeyDown(false);
-            InputDriver.lookAt(player, fallOverrideAim);
-            player.zza = 1.0f;
-            player.xxa = 0.0f;
-            player.setSprinting(true);
-            return;
-        }
-        var v = player.getDeltaMovement();
-        double cx = mv.dest.getX() + 0.5;
-        double cz = mv.dest.getZ() + 0.5;
-        // Look ahead by one tick of velocity to anticipate the drift.
-        boolean offCentre = Math.abs(player.getX() + v.x - cx) > 0.1
-                || Math.abs(player.getZ() + v.z - cz) > 0.1;
-        if (offCentre) {
-            // Sneak while fast-falling to brake the horizontal drift toward centre.
-            player.setShiftKeyDown(!player.onGround() && Math.abs(v.y) > 0.4);
-            InputDriver.lookAt(player, fallAim(mv));   // landing cell, biased off an adjacent ladder
-            player.zza = 1.0f;
-            player.xxa = 0.0f;
-            player.setSprinting(false);
-        } else {
-            player.setShiftKeyDown(false);
-            InputDriver.halt(player);
-        }
-    }
-
-    /** Aim at the landing cell, nudged 0.125 away from an adjacent ladder/vine so the
-     *  fall doesn't grab it mid-drop. */
-    private Vec3 fallAim(Movement mv) {
-        Vec3 c = Vec3.atCenterOf(mv.dest);
-        for (Direction d : new Direction[]{
-                Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-            var s = player.level().getBlockState(mv.dest.relative(d));
-            if (s.is(net.minecraft.world.level.block.Blocks.LADDER)
-                    || s.is(net.minecraft.world.level.block.Blocks.VINE)) {
-                return c.add(-d.getStepX() * 0.125, 0.0, -d.getStepZ() * 0.125);
-            }
-        }
-        return c;
+        return driver;
     }
 
     /** Carry/aim of an overshooting fall. */
@@ -471,17 +248,18 @@ public final class PlayerPathExecutor {
      *  corridor below it, either splice past it (once we've landed at the extended dest) or
      *  set the forward aim so driveFall sprints off the ledge. Recomputed each tick. */
     private void tryFallOverride() {
-        fallOverrideAim = null;
         if (index >= path.movements.size()) return;
         Movement cur = path.movements.get(index);
         if (cur.kind != Movement.Kind.FALL) return;
+        FallDriver fall = (FallDriver) currentDriver();   // optimizer channel
+        fall.setOverrideAim(null);                        // recomputed each tick
         FallOverride fo = overrideFall(cur);
         if (fo == null) return;
         if (feet().equals(fo.fallDest)) {
             jumpToIndex(fo.spliceIndex);   // landed at the overshoot dest — continue past the spliced traverses
             return;
         }
-        fallOverrideAim = fo.aim;
+        fall.setOverrideAim(fo.aim);
     }
 
     /** A fall of ≤3 that isn't breaking and is followed by
@@ -518,69 +296,16 @@ public final class PlayerPathExecutor {
         return new FallOverride(aim, fallDest, i + 1);
     }
 
-    /**
-     * Step up one block. Drive forward toward
-     * dest, then JUMP when the body is ALIGNED to the move axis (small lateral
-     * drift) and either the head is clear or we're close enough — critically NOT
-     * gated on forward speed, so hitting the step (which zeroes forward speed) still
-     * triggers the jump instead of stalling against the wall.
-     */
-    private void driveAscend(Movement mv) {
-        // Sprint up only when we sprint-skipped into this ascend (sprintableAscend);
-        // a normal ascend jumps from a standstill.
-        InputDriver.stepToward(player, Vec3.atBottomCenterOf(mv.dest), sprintAscend);
-        // Stepping onto a bottom slab from a non-slab is a 0.5 walk-up, NOT a jump
-        // — vanilla auto-step handles the half block, so don't press jump here.
-        if (BlockHelper.isBottomSlab(player.level(), mv.dest.below())
-                && !BlockHelper.isBottomSlab(player.level(), mv.src.below())) {
-            return;
-        }
-        if (feet().equals(mv.src.above())) {
-            return;   // already airborne off the step
-        }
-        int xAxis = Math.abs(mv.src.getX() - mv.dest.getX()); // 0 or 1
-        int zAxis = Math.abs(mv.src.getZ() - mv.dest.getZ()); // 0 or 1
-        double px = player.getX();
-        double pz = player.getZ();
-        double flatDistToNext = xAxis * Math.abs((mv.dest.getX() + 0.5) - px)
-                + zAxis * Math.abs((mv.dest.getZ() + 0.5) - pz);
-        double sideDist = zAxis * Math.abs((mv.dest.getX() + 0.5) - px)
-                + xAxis * Math.abs((mv.dest.getZ() + 0.5) - pz);
-        var dm = player.getDeltaMovement();
-        double lateralMotion = xAxis * dm.z + zAxis * dm.x;   // drift perpendicular to the move axis
-        if (Math.abs(lateralMotion) > 0.1) {
-            return;   // still drifting sideways — wait until aligned
-        }
-        if (headBonkClear(mv.src)) {
-            InputDriver.jump(player);   // head's clear above — jump now (InputDriver gates onGround)
-            return;
-        }
-        if (flatDistToNext > 1.2 || sideDist > 0.2) {
-            return;   // too far / off-axis — would bonk an adjacent block
-        }
-        InputDriver.jump(player);
-    }
-
-    /** Head-bonk check: the four horizontals above src+2 are passable, so a
-     *  jump won't smack the body's head into a ceiling block. */
-    private boolean headBonkClear(BlockPos src) {
-        BlockPos up2 = src.above(2);
-        for (Direction d : new Direction[]{
-                Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST}) {
-            if (!BlockHelper.canWalkThrough(player.level(), up2.relative(d))) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     /** Sprint-skip: if the current
      *  traverse leads straight into a sprintable ascend and we're centred enough to commit
      *  (skipNow), skip the traverse's arrival and sprint up the step. Advances the index. */
     private boolean trySprintSkip() {
         // Descend-sprint is re-decided every tick (sprint is re-asserted per tick, never
-        // latched), so clear it up front; the descend branch below re-asserts it when still applicable.
-        sprintDescend = false;
+        // latched), so clear it up front; the descend branch below re-asserts it when still
+        // applicable. (Optimizer channel: the downcast pokes are sanctioned — see class doc.)
+        if (driver instanceof DescendDriver d && driverIndex == index) {
+            d.setSprint(false);
+        }
         if (index >= path.movements.size() - 1) return false;   // need at least cur + next
         Movement cur = path.movements.get(index);
         Movement next = path.movements.get(index + 1);
@@ -592,17 +317,19 @@ public final class PlayerPathExecutor {
                 && index < path.movements.size() - 2
                 && sprintableAscend(cur, next, path.movements.get(index + 2)) && skipNow(cur)) {
             advance();              // skip straight into the ascend
-            sprintAscend = true;    // (advance() reset it; set after)
+            ((AscendDriver) currentDriver()).setSprint(true);
             return true;
         }
         // Descend → sprintable continuation (canSprintFromDescendInto): carry sprint
         // down the descend into a same-direction descend chain or a traverse/diagonal, and
         // hand off the moment we reach the descend's landing cell.
-        //   safeMode gate: we gate on plain `!descendSafeMode` — intentionally NOT sprinting
+        //   safeMode gate: we gate on plain `!safeMode` — intentionally NOT sprinting
         //   into the skip-to-ascend clip-glitch (a laxer gate could still sprint to clip
         //   through it); consistent with the stricter-safety stance taken elsewhere in
         //   this executor.
-        if (cur.kind == Movement.Kind.DESCEND && !descendSafeMode(cur)
+        if (cur.kind == Movement.Kind.DESCEND
+                && currentDriver() instanceof DescendDriver descend
+                && !descend.safeMode()
                 && canSprintFromDescendInto(cur, next)) {
             // Next-next veto: if this descend feeds a descend chain whose THIRD link
             // can't itself be sprinted into, don't build momentum we can't safely shed.
@@ -617,7 +344,7 @@ public final class PlayerPathExecutor {
                 advance();
                 return trySprintSkip();   // re-decide sprint for the NEW current (recurse on handoff)
             }
-            sprintDescend = true;   // sprint this descend this tick
+            descend.setSprint(true);   // sprint this descend this tick
             return true;
         }
         return false;
@@ -683,97 +410,6 @@ public final class PlayerPathExecutor {
     }
 
     /**
-     * Block-tower pillar: sneak so we never step off the
-     * column, stay centred, jump from the ground, and while airborne keep attempting
-     * to place a block in the cell we just left so we land one higher.
-     */
-    private void drivePillar(Movement mv) {
-        // Swim straight up a water column:
-        // aim at the destination cell's centre and press forward ONLY when off-centre by
-        // >0.2 (just to recentre) — buoyancy does the actual rising. No sneak, no place.
-        if (BlockHelper.isWater(player.level(), mv.src)) {
-            player.setShiftKeyDown(false);
-            InputDriver.lookAt(player, Vec3.atCenterOf(mv.dest));
-            double cx = mv.dest.getX() + 0.5;
-            double cz = mv.dest.getZ() + 0.5;
-            player.zza = (Math.abs(player.getX() - cx) > 0.2 || Math.abs(player.getZ() - cz) > 0.2)
-                    ? 1.0f : 0.0f;
-            player.xxa = 0.0f;
-            player.setSprinting(false);
-            // The rise itself comes from the universal liquid-float jump in tick() —
-            // this branch deliberately presses no jump of its own.
-            return;
-        }
-        player.setShiftKeyDown(true);   // sneak: never step off the column
-        // Recentre on the column rather than walking off it.
-        if (horizontalDistTo(mv.src) > 0.17) {
-            InputDriver.stepToward(player, Vec3.atBottomCenterOf(mv.src), false);
-        } else {
-            InputDriver.halt(player);
-            // Jump only when nearly still AND still BELOW the
-            // destination — stop jumping once we've reached the top (`y < dest.y`).
-            if (player.onGround() && horizontalSpeedSqr() < 0.0025
-                    && player.getY() < mv.dest.getY()) {
-                InputDriver.jump(player);
-            }
-        }
-        // While airborne, attempt the underfoot place EVERY tick and let vanilla's own
-        // placement rules judge legality: the ticks where our collision box still occupies
-        // the cell are rejected by the placement's obstruction check, and the first tick
-        // the hop lifts the box clear (feet above cell top) succeeds. No apex timing, no
-        // Y-window guess — the judge is the same code that must accept the block anyway.
-        if (!player.onGround()) {
-            placeUnderfoot(mv.src);
-        }
-    }
-
-    /** Attempt a scaffold place at {@code cell} against the solid block directly below it,
-     *  performed natively (look down + useItemOn on the up-face). Called every airborne
-     *  pillar tick; vanilla accepts on whichever tick the hop has cleared the cell. */
-    private void placeUnderfoot(BlockPos cell) {
-        int slot = scaffoldSlot();
-        if (slot < 0) {
-            underfootBlocked("no scaffold block in inventory", cell);
-            return;
-        }
-        if (!Placement.canPlaceAgainst(player.level(), cell.below())) {
-            underfootBlocked("support below is gone", cell);
-            return;
-        }
-        InputDriver.lookAt(player, Vec3.atBottomCenterOf(cell));   // look straight down at the support's top
-        BlockHitResult hit = Placement.resolve(player, cell, true);  // honest raycast only — no fabricated hit
-        if (hit == null) {
-            underfootBlocked("no clear line to own feet cell", cell);
-            return;
-        }
-        player.holdInHand(slot);   // real hotbar-select / swap-to-hand, not an aliasing overwrite
-        Interaction use = Interaction.useBlock(player, hit, InteractionHand.MAIN_HAND);
-        use.tick();
-        // The press is NOT trusted as the outcome — the world is. Refusals early in the hop
-        // (box still occupies the cell) are expected and retried next tick; only a persistent
-        // refusal streak is a real blockage, and then the diagnostic names vanilla's verdict
-        // and where the body actually was, so a dead pillar is never silent again.
-        if (BlockHelper.canWalkOn(player.level(), cell)) {
-            Constants.LOG.info("[numen-path] pillar place landed at {} (y={}, after {} refused airborne ticks)",
-                    cell.toShortString(), String.format("%.2f", player.getY()), underfootBlockedTicks);
-            underfootBlockedTicks = 0;
-        } else {
-            underfootBlocked(String.format("vanilla refused: %s (y=%.2f, clears cell at >%d.0)",
-                    use.lastUseOutcome(), player.getY(), cell.getY() + 1), cell);
-        }
-    }
-
-    /** Persistent pillar-place blockage diagnostics — names the failing gate once a second. */
-    private int underfootBlockedTicks;
-
-    private void underfootBlocked(String gate, BlockPos cell) {
-        if (++underfootBlockedTicks % 20 == 0) {
-            Constants.LOG.info("[numen-path] pillar place blocked {} ticks ({}) at {}",
-                    underfootBlockedTicks, gate, cell.toShortString());
-        }
-    }
-
-    /**
      * Toggle any wooden door / fence gate that blocks THIS movement (the dest cell + the head
      * cell above it, each judged from the cell we approach it from) —
      * the alternative to breaking it. The planner already treats openable
@@ -811,11 +447,11 @@ public final class PlayerPathExecutor {
     private Status verifyCosts() {
         NavContext fresh = ctxSupplier.get();
         Movement cur = path.movements.get(index);
-        // EVERY cost-based cancel is gated on safeToCancel():
+        // EVERY cost-based cancel is gated on the driver's safeToCancel():
         // a movement mid-commit (airborne, mid-jump, mid-place, bridging over air) must
         // not be abandoned to a replan, or the body is dropped into a bad state. While
         // not cancellable, let the move finish; the movement timeout still bounds a stall.
-        if (!safeToCancel(cur)) {
+        if (!currentDriver().safeToCancel(placeManeuver != null || placedThisMove, ticksOnCurrent)) {
             return null;
         }
         // Movements whose OWN execution mutates the world — pillar places a block
@@ -824,7 +460,7 @@ public final class PlayerPathExecutor {
         // for those; the movement timeout still guards a genuine stall. Movements
         // that only consume the world (break an obstruction) get cheaper, never
         // INF, so they're safe to verify.
-        if (!selfMutating(cur.kind)) {
+        if (!MoveDriver.selfMutating(cur.kind)) {
             double liveCur = recost(fresh, cur);
             if (liveCur >= ActionCosts.COST_INF) {
                 return replan("current move now impossible (" + obstruct(fresh, cur) + ")");
@@ -840,7 +476,7 @@ public final class PlayerPathExecutor {
             // (index+1 .. index+4), bounded by the last movement.
             for (int i = index + 1; i < index + PathSettings.COST_VERIFICATION_LOOKAHEAD && i <= last; i++) {
                 Movement ahead = path.movements.get(i);
-                if (!selfMutating(ahead.kind)
+                if (!MoveDriver.selfMutating(ahead.kind)
                         && recost(fresh, ahead) >= ActionCosts.COST_INF) {
                     return replan("lookahead +" + (i - index) + " impossible: " + ahead.kind + " "
                             + ahead.src.toShortString() + "->" + ahead.dest.toShortString()
@@ -849,71 +485,6 @@ public final class PlayerPathExecutor {
             }
         }
         return null;
-    }
-
-    /**
-     * Cancel-safety gate, judged per movement kind + live body state. A movement
-     * that is mid-commit must not
-     * be cancelled (replanned) — doing so drops the body off a fall, fails a jump, or
-     * strands it mid-bridge. Per kind:
-     * <ul>
-     *   <li>FALL — safe only before stepping off the edge (still at {@code src});</li>
-     *   <li>PARKOUR — only on the takeoff (0th) tick, no momentum knowledge after;</li>
-     *   <li>ASCEND — not while a step block was just placed;</li>
-     *   <li>TRAVERSE — a sneak-bridge over air can't be abandoned until its floor exists;</li>
-     *   <li>others (DIAGONAL/DESCEND/PILLAR/DIG_DOWN) — base {@code true}.</li>
-     * </ul>
-     */
-    private boolean safeToCancel(Movement mv) {
-        switch (mv.kind) {
-            case FALL:
-                return feet().equals(mv.src);
-            case PARKOUR:
-                return ticksOnCurrent == 0;
-            case ASCEND:
-                // Unsafe once we've STARTED placing the step block —
-                // i.e. once the place maneuver began or finished.
-                return mv.toPlace == null || (placeManeuver == null && !placedThisMove);
-            case TRAVERSE:
-                return mv.toPlace == null
-                        || BlockHelper.canWalkOn(player.level(), mv.dest.below());
-            case DIAGONAL:
-                return diagonalSafeToCancel(mv);
-            default:
-                return true;
-        }
-    }
-
-    /** Diagonal cancel-safety: safe at the start cell, or when both cut
-     *  corners have a floor; if we're cornering through an unwalkable corner cell, only
-     *  safe when a block actually supports us (one of the four 0.25 offsets below). */
-    private boolean diagonalSafeToCancel(Movement mv) {
-        net.minecraft.world.level.Level level = player.level();
-        BlockPos feet = feet();
-        if (feet.equals(mv.src)) return true;
-        BlockPos floorA = new BlockPos(mv.src.getX(), mv.src.getY() - 1, mv.dest.getZ());
-        BlockPos floorB = new BlockPos(mv.dest.getX(), mv.src.getY() - 1, mv.src.getZ());
-        if (BlockHelper.canWalkOn(level, floorA) && BlockHelper.canWalkOn(level, floorB)) {
-            return true;
-        }
-        BlockPos cornerA = new BlockPos(mv.src.getX(), mv.src.getY(), mv.dest.getZ());
-        BlockPos cornerB = new BlockPos(mv.dest.getX(), mv.src.getY(), mv.src.getZ());
-        if (feet.equals(cornerA) || feet.equals(cornerB)) {
-            double off = 0.25;
-            double x = player.getX(), y = player.getY() - 1, z = player.getZ();
-            return BlockHelper.canWalkOn(level, BlockPos.containing(x + off, y, z + off))
-                    || BlockHelper.canWalkOn(level, BlockPos.containing(x + off, y, z - off))
-                    || BlockHelper.canWalkOn(level, BlockPos.containing(x - off, y, z + off))
-                    || BlockHelper.canWalkOn(level, BlockPos.containing(x - off, y, z - off));
-        }
-        return true;
-    }
-
-    /** Kinds whose execution changes the world such that regenerating them mid-move
-     *  would spuriously report them gone (place-under / break-floor). */
-    private static boolean selfMutating(Movement.Kind kind) {
-        return kind == Movement.Kind.PILLAR
-                || kind == Movement.Kind.DIG_DOWN;
     }
 
     /**
@@ -931,73 +502,6 @@ public final class PlayerPathExecutor {
         return ActionCosts.COST_INF;
     }
 
-    /**
-     * Has the move completed? Feet at dest, or — for a walk — overshot 1–2 cells past
-     * it at the same height (a sprint can carry the
-     * body a cell or two beyond the target, which still counts as arrived).
-     */
-    private boolean arrived(Movement mv) {
-        BlockPos feet = feet();
-        if (mv.kind == Movement.Kind.PILLAR) {
-            // Water swim-up succeeds on feet==dest with NO
-            // block check (you're swimming, nothing is placed).
-            if (BlockHelper.isWater(player.level(), mv.src)) {
-                return feet.equals(mv.dest);
-            }
-            // Dry tower: success = feet at dest AND the placed block
-            // exists (canWalkOn(src)). WITHOUT the block check, the jump APEX — feet
-            // momentarily at dest.y mid-air, before placeUnderfoot has placed anything —
-            // false-arrives, advances the index, then the body falls back with nothing
-            // placed and churns forever. The block check holds arrival until we've placed.
-            return feet.equals(mv.dest) && BlockHelper.canWalkOn(player.level(), mv.src);
-        }
-        if (mv.kind == Movement.Kind.DESCEND) {
-            // Descend success: feet at dest OR the overshoot fakeDest, AND
-            // settled within 0.5 of dest.y (or dest is liquid) — don't advance while still
-            // falling through the destination cell.
-            BlockPos fakeDest = new BlockPos(
-                    2 * mv.dest.getX() - mv.src.getX(), mv.dest.getY(), 2 * mv.dest.getZ() - mv.src.getZ());
-            if (!feet.equals(mv.dest) && !feet.equals(fakeDest)) return false;
-            return !player.level().getBlockState(mv.dest).getFluidState().isEmpty()
-                    || player.getY() - mv.dest.getY() < 0.5;
-        }
-        if (mv.kind == Movement.Kind.FALL) {
-            // Fall success: feet at dest AND settled within 0.094 of dest.y
-            // (lilypad tolerance); or landed in water and no longer sinking (no water-bucket
-            // clutch here).
-            if (!feet.equals(mv.dest)) return false;
-            if (!player.level().getBlockState(mv.dest).getFluidState().isEmpty()) {
-                return player.getDeltaMovement().y >= 0.0;
-            }
-            return player.getY() - mv.dest.getY() < 0.094;
-        }
-        if (mv.kind == Movement.Kind.TRAVERSE) {
-            // Traverse SUCCESS only once the floor under dest exists
-            // (canWalkOn(dest.below)) — don't declare a bridge traverse done before the
-            // placed floor is there. Then feet==dest, or a 1-2 cell sprint overshoot in the
-            // move direction.
-            if (!BlockHelper.canWalkOn(player.level(), mv.dest.below())) return false;
-            if (feet.equals(mv.dest)) return true;
-            int dx = Integer.signum(mv.dest.getX() - mv.src.getX());
-            int dz = Integer.signum(mv.dest.getZ() - mv.src.getZ());
-            if (dx != 0 || dz != 0) {
-                BlockPos one = mv.dest.offset(dx, 0, dz);
-                if (feet.equals(one) || feet.equals(one.offset(dx, 0, dz))) return true;
-            }
-            return false;
-        }
-        if (mv.kind == Movement.Kind.ASCEND) {
-            // Ascend success: feet==dest OR one cell further horizontally
-            // (the jump can carry us a cell past dest).
-            if (feet.equals(mv.dest)) return true;
-            int dx = mv.dest.getX() - mv.src.getX();
-            int dz = mv.dest.getZ() - mv.src.getZ();
-            return feet.equals(mv.dest.offset(dx, 0, dz));
-        }
-        // DIAGONAL (feet==dest only, no overshoot), DIG_DOWN, PARKOUR.
-        return feet.equals(mv.dest);
-    }
-
     /** The next still-solid block this move must break, or null when its path is clear. */
     private BlockPos nextObstruction(Movement mv) {
         for (BlockPos pos : mv.toBreak) {
@@ -1006,15 +510,6 @@ public final class PlayerPathExecutor {
             }
         }
         return null;
-    }
-
-    /** The inventory slot of a scaffold block (cobble/dirt/…), or -1 if none. */
-    private int scaffoldSlot() {
-        var inv = player.getInventory();
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            if (NavContext.isScaffold(inv.getItem(i))) return i;
-        }
-        return -1;
     }
 
     // ---- re-localization ----
@@ -1097,10 +592,11 @@ public final class PlayerPathExecutor {
 
     /** One-line snapshot of the current move + body state for diagnostics. */
     private String desc(Movement mv) {
+        String flags = (driver != null && driverIndex == index) ? driver.debugFlags() : "";
         return String.format(
-                "%s %s->%s feet=%s y=%.2f grnd=%b sprintDesc=%b t=%d/%.0f away=%d d2path=%.2f idx=%d/%d",
+                "%s %s->%s feet=%s y=%.2f grnd=%b%s t=%d/%.0f away=%d d2path=%.2f idx=%d/%d",
                 mv.kind, mv.src.toShortString(), mv.dest.toShortString(), feet().toShortString(),
-                player.getY(), player.onGround(), sprintDescend,
+                player.getY(), player.onGround(), flags.isEmpty() ? "" : " " + flags,
                 ticksOnCurrent, mv.cost + PathSettings.MOVEMENT_TIMEOUT_TICKS,
                 ticksAway, Math.sqrt(distToPathSq()), index, path.movements.size());
     }
@@ -1164,14 +660,17 @@ public final class PlayerPathExecutor {
     private void resetMoveState() {
         ticksAway = 0;
         ticksOnCurrent = 0;
-        sprintAscend = false;
-        sprintDescend = false;
-        descendDriveTicks = 0;
         digger.cancel();          // a partial dig belongs to the move we just left
         placedThisMove = false;
         if (placeManeuver != null) {
             placeManeuver.stop();
             placeManeuver = null;
+        }
+        // Per-move driver state (sprint carry, tick counters) dies with its driver.
+        if (driver != null) {
+            driver.stop();
+            driver = null;
+            driverIndex = -1;
         }
     }
 
@@ -1201,6 +700,11 @@ public final class PlayerPathExecutor {
         if (placeManeuver != null) {
             placeManeuver.stop();
             placeManeuver = null;
+        }
+        if (driver != null) {
+            driver.stop();
+            driver = null;
+            driverIndex = -1;
         }
         InputDriver.halt(player);
         // Release sneak too — pillar/place hold it every tick; without this it lingers
