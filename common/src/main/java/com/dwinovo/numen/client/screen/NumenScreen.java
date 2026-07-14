@@ -313,9 +313,13 @@ public final class NumenScreen extends Screen {
         }
     }
 
+    /** Row layout (offsets from top+HEADER_H) — each control gets its own label row,
+     *  drawn in the render pass at these SAME offsets (keep the two in lockstep):
+     *  8 title · 24 名字 label · 34 name field · 58 人设 label · 68 persona dropdown ·
+     *  92 模型配置 label · 102 provider dropdown · 128 buttons · 152 hint/warn. */
     private void buildSummonField() {
-        int y = top + HEADER_H + 24;
-        summonInput = new FlatEditBox(font, left + PAD + FIELD_INSET_X, y + FIELD_INSET_Y,
+        int y0 = top + HEADER_H;
+        summonInput = new FlatEditBox(font, left + PAD + FIELD_INSET_X, y0 + 34 + FIELD_INSET_Y,
                 PANEL_W - PAD * 2 - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
         summonInput.setMaxLength(com.dwinovo.numen.network.payload.SummonRequestPayload.MAX_NAME);
         summonInput.setBordered(false);
@@ -330,10 +334,9 @@ public final class NumenScreen extends Screen {
             items.add(new Dropdown.Item(p.id(), p.name()));
         }
         summonPersonaDropdown = new Dropdown(items, summonPersonaId == null ? PERSONA_DEFAULT : summonPersonaId);
-        summonPersonaDropdown.setBounds(left + PAD, y + 26, PANEL_W - PAD * 2, 18);
-        // REQUIRED provider entry for the new companion — no default item and no fallback:
-        // an empty library means creation is blocked (the render paints the pointer to
-        // 设置 → 提供商 instead of a dropdown).
+        summonPersonaDropdown.setBounds(left + PAD, y0 + 68, PANEL_W - PAD * 2, 18);
+        // REQUIRED model config — no default item and no fallback: an empty library
+        // shows no dropdown; clicking 创建 then explains (doSummon).
         var provEntries = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
         if (!provEntries.isEmpty()) {
             List<Dropdown.Item> provItems = new ArrayList<>();
@@ -342,16 +345,15 @@ public final class NumenScreen extends Screen {
             }
             if (summonProviderId == null) summonProviderId = provEntries.get(0).id();
             summonProviderDropdown = new Dropdown(provItems, summonProviderId);
-            summonProviderDropdown.setBounds(left + PAD, y + 48, PANEL_W - PAD * 2, 18);
+            summonProviderDropdown.setBounds(left + PAD, y0 + 102, PANEL_W - PAD * 2, 18);
         }
         // Explicit actions — Enter stays as the fallback confirm (keyPressed), the
         // buttons are the primary path.
         int bw = 64, gap = 8, totalW = bw * 2 + gap;
         int bx = left + (PANEL_W - totalW) / 2;
-        int by = y + 74;
-        add(new SimpleButton(bx, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
+        add(new SimpleButton(bx, y0 + 128, bw, 18, Component.translatable("numen.gui.settings.cancel"),
                 b -> { summoning = false; rebuild(); }));
-        add(new SimpleButton(bx + bw + gap, by, bw, 18, Component.literal("创建"),
+        add(new SimpleButton(bx + bw + gap, y0 + 128, bw, 18, Component.literal("创建"),
                 b -> doSummon()));
         setInitialFocus(summonInput);
     }
@@ -551,8 +553,9 @@ public final class NumenScreen extends Screen {
         int colon = cur.lastIndexOf(':');
         if (colon > 0) { ip = cur.substring(0, colon); port = cur.substring(colon + 1); }
         else ip = cur;
-        proxyIpInput = field(x, fy + 11, w, 64, ip);
-        proxyPortInput = field(x, fy + 11 + SET_SP, w, 8, port);
+        // One row below the section title (only two rows here — space is plentiful).
+        proxyIpInput = field(x, fy + 25, w, 64, ip);
+        proxyPortInput = field(x, fy + 25 + SET_SP, w, 8, port);
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> {
                     String i = proxyIpInput.getValue().trim();
@@ -568,8 +571,8 @@ public final class NumenScreen extends Screen {
         int x = secX();
         int fy = secY0();
         txt(g, Component.literal("代理"), x, fy - 2, TXT);
-        txt(g, Component.literal("IP(留空 = 直连)"), x, fy, TXT_MUTED);
-        txt(g, Component.literal("端口"), x, fy + SET_SP, TXT_MUTED);
+        txt(g, Component.literal("IP(留空 = 直连)"), x, fy + 14, TXT_MUTED);
+        txt(g, Component.literal("端口"), x, fy + 14 + SET_SP, TXT_MUTED);
         if (savedFlashUntil > System.currentTimeMillis()) {
             txt(g, Component.translatable("numen.settings.saved"), x, top + PANEL_H - PAD - 14, OK);
         }
@@ -1065,7 +1068,12 @@ public final class NumenScreen extends Screen {
 
     private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
-        txt(g, Component.literal("模型配置"), x, secY0() - 2, TXT);
+        // The form fills the section from the very top (5 rows + Save is a tight fit),
+        // so the section title only draws in list/confirm states — the form's own
+        // "名称(必填)" first label takes the top line.
+        if (!addingProvider) {
+            txt(g, Component.literal("模型配置"), x, secY0() - 2, TXT);
+        }
         if (providerDeletePending != null) {
             var e = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerDeletePending);
             txt(g, Component.literal("删除「" + (e != null ? e.name() : "") + "」?正在使用它的同伴将无法对话,直到重新绑定。"),
@@ -1828,11 +1836,15 @@ public final class NumenScreen extends Screen {
             txt(g, Component.translatable("numen.dismiss.warning"),
                     left + PAD, top + HEADER_H + 30, FAIL);
         } else if (summoning) {
-            txt(g, Component.translatable("numen.summon.title"), left + PAD, top + HEADER_H + 8, TXT);
-            // Below the Cancel/Create button row (the summon panel grew a provider
-            // dropdown + buttons; the old position now collides with both).
+            int y0 = top + HEADER_H;   // offsets in lockstep with buildSummonField
+            txt(g, Component.translatable("numen.summon.title"), left + PAD, y0 + 8, TXT);
+            txt(g, Component.literal("名字"), left + PAD, y0 + 24, TXT_MUTED);
+            txt(g, Component.literal("人设"), left + PAD, y0 + 58, TXT_MUTED);
+            txt(g, Component.literal("模型配置"
+                    + (summonProviderDropdown == null ? "(空——到 设置 → 模型配置 新建)" : "")),
+                    left + PAD, y0 + 92, TXT_MUTED);
             txt(g, Component.translatable("numen.summon.hint"),
-                    left + PAD, top + HEADER_H + 122, TXT_FAINT);
+                    left + PAD, y0 + 152, TXT_FAINT);
         } else {
             if (uuid != null) {
                 if (compactButton != null) compactButton.active = loop().canCompact();
@@ -1896,7 +1908,7 @@ public final class NumenScreen extends Screen {
         // Summon warn — shown only when 创建 was clicked and something is missing
         // (error at the action, never ambient text). Takes the hint line's spot.
         if (summoning && warnUntil > System.currentTimeMillis() && warnText != null) {
-            g.drawString(font, warnText, left + PAD, top + HEADER_H + 122, 0xFFCC6666, false);
+            g.drawString(font, warnText, left + PAD, top + HEADER_H + 152, 0xFFCC6666, false);
         }
         if (summoning && summonProviderDropdown != null) {
             summonProviderDropdown.render(g, font, mouseX, mouseY);
