@@ -36,6 +36,10 @@ public final class SurvivalJournal {
         return entries.isEmpty();
     }
 
+    public int size() {
+        return entries.size();
+    }
+
     /** All entries in order, clearing the journal. */
     public List<String> drain() {
         List<String> out = new ArrayList<>(entries);

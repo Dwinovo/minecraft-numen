@@ -42,6 +42,40 @@ final class CompanionBrain {
     /** Last tick's winner, so we can fire {@code onInterrupt} exactly on the switching edge. */
     private TaskChain running;
 
+    /** Quiet ticks before an IDLE body's journal is flushed as a non-urgent {@code <event>}
+     *  (rides the owner's next message — no extra LLM call). ~5s aggregates back-to-back
+     *  episodes (two zombies = one event, not two). */
+    private static final int JOURNAL_IDLE_FLUSH_TICKS = 100;
+    private int journalQuietTicks;
+    private int lastJournalSize;
+
+    /**
+     * Idle-path outlet for the survival diary: with no task running or queued, there is
+     * no tool result to ride, so after a quiet spell the accumulated episodes ship as a
+     * non-urgent {@code <event>} — queued client-side and spliced into the owner's NEXT
+     * message, exactly like a dimension-change event. The model is informed, not woken.
+     */
+    private void flushIdleJournal(NumenPlayer companion) {
+        if (journal.isEmpty()) {
+            journalQuietTicks = 0;
+            lastJournalSize = 0;
+            return;
+        }
+        int size = journal.size();
+        if (size != lastJournalSize) {   // a new episode just landed — restart the quiet clock
+            lastJournalSize = size;
+            journalQuietTicks = 0;
+            return;
+        }
+        if (++journalQuietTicks < JOURNAL_IDLE_FLUSH_TICKS) return;
+        if (companion.resolveOwnerPlayer() == null) return;   // no client to queue on — keep holding
+        String xml = "<event kind=\"survival\">While idle you handled on your own: "
+                + String.join("; ", journal.drain()) + ".</event>";
+        com.dwinovo.numen.entity.Companions.emitEvent(companion, xml, false);
+        journalQuietTicks = 0;
+        lastJournalSize = 0;
+    }
+
     void tick(NumenPlayer companion) {
         TaskChain best = ChainScheduler.select(chains, companion);
 
@@ -52,6 +86,7 @@ final class CompanionBrain {
                 running.onInterrupt(companion);
                 running = null;
             }
+            flushIdleJournal(companion);
             llm.finalizeTerminal();
             llm.drainResults(companion);
             return;
@@ -67,6 +102,10 @@ final class CompanionBrain {
         if (best != llm) {
             llm.freezeTick(companion);
         }
+
+        // A chain holds the body (fighting / eating / working) — the idle-flush quiet
+        // clock restarts; episodes written mid-activity ride the next channel that opens.
+        journalQuietTicks = 0;
 
         best.tick(companion);
 
