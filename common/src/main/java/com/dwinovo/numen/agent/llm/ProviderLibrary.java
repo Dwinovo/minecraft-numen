@@ -108,13 +108,15 @@ public final class ProviderLibrary {
 
     private final Map<String, String> assignments = new LinkedHashMap<>();
 
-    /** The entry id assigned to a companion, or null (= global settings). */
+    /** The entry id assigned to a companion, or null (= none / null companion — the
+     *  blank hotkey-opened panel constructs a loop with no UUID). */
     public String assignedEntry(java.util.UUID companion) {
-        return assignments.get(companion.toString());
+        return companion == null ? null : assignments.get(companion.toString());
     }
 
     /** Assign an entry to a companion ({@code entryId} null = back to global) and persist. */
     public void assign(java.util.UUID companion, String entryId) {
+        if (companion == null) return;
         if (entryId == null || entryId.isBlank()) {
             assignments.remove(companion.toString());
         } else {

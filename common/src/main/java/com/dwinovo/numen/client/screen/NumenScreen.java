@@ -122,15 +122,22 @@ public final class NumenScreen extends Screen {
     private Tab tab = Tab.CHAT;
 
     /** The Settings tab is a config hub: a left sub-nav picks one of these sections. */
-    private enum SettingsSection { PROVIDER, MCP, SKILLS, PERSONA }
+    private enum SettingsSection { PROVIDER, PROXY, MCP, SKILLS, PERSONA }
 
-    // ---- provider-library section state (mirrors the persona section) ----
+    // ---- model-config section state (mirrors the persona section) ----
     private boolean addingProvider;
     private String providerEditId;
     private String providerDeletePending;
     private String wProvName = "", wProvProvider = "", wProvModel = "", wProvKey = "", wProvBaseUrl = "";
-    private net.minecraft.client.gui.components.EditBox provNameInput, provProviderInput,
+    private net.minecraft.client.gui.components.EditBox provNameInput,
             provModelInput, provKeyInput, provBaseUrlInput;
+    /** Form pickers: the provider catalog + the picked provider's model list. */
+    private ProviderDropdown provProviderDropdown;
+    private Dropdown provModelDropdown;
+    private boolean provCustomModel;
+
+    // ---- proxy section state (a dedicated tab: IP + port) ----
+    private net.minecraft.client.gui.components.EditBox proxyIpInput, proxyPortInput;
     private SettingsSection settingsSection = SettingsSection.PROVIDER;
 
     // Persona library form state (mirrors the MCP add/edit/delete flow).
@@ -289,7 +296,10 @@ public final class NumenScreen extends Screen {
         mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
         personaNameInput = null;
         personaTextArea = null;
-        provNameInput = provProviderInput = provModelInput = provKeyInput = provBaseUrlInput = null;
+        provNameInput = provModelInput = provKeyInput = provBaseUrlInput = null;
+        provProviderDropdown = null;
+        provModelDropdown = null;
+        proxyIpInput = proxyPortInput = null;
         modelDropdown = null;
         summonInput = null;
         summonPersonaDropdown = null;
@@ -527,6 +537,41 @@ public final class NumenScreen extends Screen {
                 else if (addingProvider) buildProviderForm();
                 else buildProviderListWidgets();
             }
+            case PROXY -> buildProxyWidgets();
+        }
+    }
+
+    // ---- Proxy section: the global network proxy, its own tab (IP + port) ----
+
+    private void buildProxyWidgets() {
+        int x = secX(), w = secW();
+        int fy = secY0();
+        String cur = Services.CONFIG.getProxy() == null ? "" : Services.CONFIG.getProxy().trim();
+        String ip = "", port = "";
+        int colon = cur.lastIndexOf(':');
+        if (colon > 0) { ip = cur.substring(0, colon); port = cur.substring(colon + 1); }
+        else ip = cur;
+        proxyIpInput = field(x, fy + 11, w, 64, ip);
+        proxyPortInput = field(x, fy + 11 + SET_SP, w, 8, port);
+        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+                Component.translatable("numen.gui.settings.save"), b -> {
+                    String i = proxyIpInput.getValue().trim();
+                    String p = proxyPortInput.getValue().trim();
+                    Services.CONFIG.setProxy(i.isEmpty() ? "" : (p.isEmpty() ? i : i + ":" + p));
+                    Services.CONFIG.save();
+                    NumenLlmClient.reset();
+                    savedFlashUntil = System.currentTimeMillis() + 1500;
+                }));
+    }
+
+    private void renderProxySection(GuiGraphics g) {
+        int x = secX();
+        int fy = secY0();
+        txt(g, Component.literal("代理"), x, fy - 2, TXT);
+        txt(g, Component.literal("IP(留空 = 直连)"), x, fy, TXT_MUTED);
+        txt(g, Component.literal("端口"), x, fy + SET_SP, TXT_MUTED);
+        if (savedFlashUntil > System.currentTimeMillis()) {
+            txt(g, Component.translatable("numen.settings.saved"), x, top + PANEL_H - PAD - 14, OK);
         }
     }
 
@@ -539,27 +584,43 @@ public final class NumenScreen extends Screen {
                     wProvName = ""; wProvProvider = ""; wProvModel = ""; wProvKey = ""; wProvBaseUrl = "";
                     rebuild();
                 }));
-        // Global proxy (a network-environment property, deliberately NOT per-entry) —
-        // relocated here from the removed 模型接入 section: bottom band, field + save.
-        int x = secX(), w = secW();
-        proxyInput = field(x, top + PANEL_H - PAD - 18, w - 70, 128, Services.CONFIG.getProxy());
-        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> {
-                    Services.CONFIG.setProxy(proxyInput.getValue().trim());
-                    Services.CONFIG.save();
-                    NumenLlmClient.reset();
-                    savedFlashUntil = System.currentTimeMillis() + 1500;
-                }));
     }
 
-    /** Five single-line fields; ONLY the name is required to save (an incomplete
-     *  entry errors honestly at first use — the library's whole philosophy). */
+    /**
+     * The model-config form: 名称 → 提供商 (the live provider catalog, reused) →
+     * 模型 + Base URL, both ADAPTIVE to the picked provider (its model list / site
+     * default URL, editable) → API Key. Saving yields a complete config.
+     */
     private void buildProviderForm() {
         int x = secX(), w = secW();
         int fy = secY0();
         provNameInput = field(x, fy + 11, w, 48, wProvName);
-        provProviderInput = field(x, fy + 11 + SET_SP, w, 48, wProvProvider);
-        provModelInput = field(x, fy + 11 + 2 * SET_SP, w, 96, wProvModel);
+        // Provider picker — same catalog as everywhere else (built-ins + user sites),
+        // no "+add site" row here. Blank state (fresh form) starts on the first entry
+        // and adapts model/baseUrl to it.
+        if (wProvProvider == null || wProvProvider.isBlank()) {
+            adaptToProvider(LlmProviders.all().isEmpty() ? "" : LlmProviders.all().get(0).id());
+        }
+        provProviderDropdown = new ProviderDropdown(wProvProvider, false);
+        provProviderDropdown.setBounds(x, fy + 11 + SET_SP, w, 18);
+        // Model row: the provider's known models as a dropdown (+ 自定义 → free text),
+        // free text only for custom providers.
+        ModelRegistry.Provider mp = ModelRegistry.provider(LlmProviders.normalize(wProvProvider));
+        boolean providerCustom = mp != null && mp.custom();
+        if (provCustomModel || providerCustom || mp == null || mp.models().isEmpty()) {
+            provModelDropdown = null;
+            provModelInput = field(x, fy + 11 + 2 * SET_SP, providerCustom || mp == null ? w : w - 20, 128, wProvModel);
+            if (!providerCustom && mp != null && !mp.models().isEmpty()) {
+                add(new SimpleButton(x + w - 18, fy + 11 + 2 * SET_SP, 18, 18, Component.literal("▾"),
+                        b -> { preserveProviderForm(); provCustomModel = false; rebuild(); }));
+            }
+        } else {
+            provModelInput = null;
+            boolean known = mp.models().stream().anyMatch(m -> m.id().equals(wProvModel));
+            String sel = known ? wProvModel : mp.models().get(0).id();
+            provModelDropdown = new Dropdown(modelItems(mp), sel);
+            provModelDropdown.setBounds(x, fy + 11 + 2 * SET_SP, w, 18);
+        }
         provKeyInput = field(x, fy + 11 + 3 * SET_SP, w, 256, wProvKey);
         provBaseUrlInput = field(x, fy + 11 + 4 * SET_SP, w, 256, wProvBaseUrl);
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
@@ -567,6 +628,27 @@ public final class NumenScreen extends Screen {
         add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> { addingProvider = false; providerEditId = null; rebuild(); }));
         setInitialFocus(provNameInput);
+    }
+
+    /** Provider changed (or fresh form): adapt model + Base URL to the pick —
+     *  the site's default URL and its first model, both still editable. */
+    private void adaptToProvider(String providerId) {
+        wProvProvider = providerId;
+        ModelRegistry.Provider mp = ModelRegistry.provider(LlmProviders.normalize(providerId));
+        provCustomModel = mp != null && mp.custom();
+        wProvModel = (mp != null && !mp.models().isEmpty()) ? mp.models().get(0).id() : "";
+        wProvBaseUrl = LlmProviders.byId(providerId).defaultBaseUrl();
+    }
+
+    /** Keep typed values across a rebuild (mirror of the persona/MCP form preserves). */
+    private void preserveProviderForm() {
+        if (provNameInput != null) wProvName = provNameInput.getValue();
+        if (provKeyInput != null) wProvKey = provKeyInput.getValue();
+        if (provBaseUrlInput != null) wProvBaseUrl = provBaseUrlInput.getValue();
+        if (provModelInput != null) wProvModel = provModelInput.getValue();
+        else if (provModelDropdown != null && !CUSTOM_MODEL.equals(provModelDropdown.selectedId())) {
+            wProvModel = provModelDropdown.selectedId();
+        }
     }
 
     private void buildProviderDeleteConfirm() {
@@ -586,8 +668,10 @@ public final class NumenScreen extends Screen {
         String name = provNameInput.getValue().trim();
         if (name.isEmpty()) { warnUntil = System.currentTimeMillis() + 4000; return; }
         var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
-        String provider = provProviderInput.getValue().trim();
-        String model = provModelInput.getValue().trim();
+        String provider = provProviderDropdown != null ? provProviderDropdown.selectedId() : wProvProvider;
+        String model = provModelInput != null ? provModelInput.getValue().trim()
+                : (provModelDropdown != null && !CUSTOM_MODEL.equals(provModelDropdown.selectedId())
+                        ? provModelDropdown.selectedId() : "");
         String key = provKeyInput.getValue().trim();
         String baseUrl = provBaseUrlInput.getValue().trim();
         if (providerEditId != null) {
@@ -600,6 +684,7 @@ public final class NumenScreen extends Screen {
         }
         addingProvider = false;
         providerEditId = null;
+        provCustomModel = false;
         wProvName = ""; wProvProvider = ""; wProvModel = ""; wProvKey = ""; wProvBaseUrl = "";
         rebuild();
     }
@@ -974,6 +1059,7 @@ public final class NumenScreen extends Screen {
             case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
             case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
             case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
+            case PROXY -> renderProxySection(g);
         }
     }
 
@@ -987,11 +1073,6 @@ public final class NumenScreen extends Screen {
             return;
         }
         if (addingProvider) { renderProviderForm(g); return; }
-        // Global proxy row lives in the bottom band (built in buildProviderListWidgets).
-        txt(g, Component.literal("代理(全局,host:port,可空)"), x, top + PANEL_H - PAD - 29, TXT_MUTED);
-        if (savedFlashUntil > System.currentTimeMillis()) {
-            txt(g, Component.translatable("numen.settings.saved"), x, top + PANEL_H - PAD - 40, OK);
-        }
         var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
         if (list.isEmpty()) {
             txt(g, Component.literal("还没有模型配置——点右上「新建」创建一条"), x, secY0() + 16, TXT_FAINT);
@@ -1021,10 +1102,10 @@ public final class NumenScreen extends Screen {
         int x = secX();
         int fy = secY0();
         txt(g, Component.literal("名称(必填)"), x, fy, TXT_MUTED);
-        txt(g, Component.literal("服务商(如 openai / deepseek,可后补)"), x, fy + SET_SP, TXT_MUTED);
+        txt(g, Component.literal("提供商"), x, fy + SET_SP, TXT_MUTED);
         txt(g, Component.literal("模型"), x, fy + 2 * SET_SP, TXT_MUTED);
         txt(g, Component.literal("API Key"), x, fy + 3 * SET_SP, TXT_MUTED);
-        txt(g, Component.literal("Base URL(可选)"), x, fy + 4 * SET_SP, TXT_MUTED);
+        txt(g, Component.literal("Base URL(随提供商自适应,可改)"), x, fy + 4 * SET_SP, TXT_MUTED);
     }
 
     private static boolean nb(String s) {
@@ -1058,13 +1139,17 @@ public final class NumenScreen extends Screen {
         wProvModel = e.model() == null ? "" : e.model();
         wProvKey = e.apiKey() == null ? "" : e.apiKey();
         wProvBaseUrl = e.baseUrl() == null ? "" : e.baseUrl();
+        // The stored model may not be in the provider's known list — open in free-text then.
+        ModelRegistry.Provider mp = ModelRegistry.provider(LlmProviders.normalize(wProvProvider));
+        provCustomModel = mp == null || mp.custom()
+                || mp.models().stream().noneMatch(m -> m.id().equals(wProvModel));
         rebuild();
     }
 
     /** The config-hub left sub-nav: 模型接入 / MCP / 技能, plus the divider. */
     private void renderSettingsNav(GuiGraphics g) {
         String[] labels = {
-                "模型配置", I18n.get("numen.settings.nav.mcp"),
+                "模型配置", "代理", I18n.get("numen.settings.nav.mcp"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona")};
         int navX = left + PAD;
         int y = secY0();
@@ -1541,10 +1626,18 @@ public final class NumenScreen extends Screen {
 
     private void doSummon() {
         String n = summonInput == null ? "" : summonInput.getValue().trim();
-        if (n.isEmpty()) return;
-        // A provider entry is REQUIRED — with an empty library there is nothing to
-        // select and creation stays blocked (the panel points at 设置 → 提供商).
-        if (summonProviderId == null) return;
+        if (n.isEmpty()) {
+            warnText = "先给同伴起个名字";
+            warnUntil = System.currentTimeMillis() + 4000;
+            return;
+        }
+        // A model config is REQUIRED. Empty library → error AT THE CLICK, pointing
+        // the way (no ambient red text before the player acts).
+        if (summonProviderId == null) {
+            warnText = "模型配置为空,请先到 设置 → 模型配置 新建一条";
+            warnUntil = System.currentTimeMillis() + 4000;
+            return;
+        }
         // Remember the picks by name; CompanionListPayload applies them when the new companion arrives.
         if (summonPersonaId != null) com.dwinovo.numen.persona.PersonaLibrary.pendSummon(n, summonPersonaId);
         com.dwinovo.numen.agent.llm.ProviderLibrary.pendSummon(n, summonProviderId);
@@ -1618,6 +1711,31 @@ public final class NumenScreen extends Screen {
                     preserveKeyUrl();
                     customModel = true;
                     wModel = "";
+                    rebuild();
+                }
+                return true;
+            }
+            // Model-config form pickers get first pick (their open lists overlay the form).
+            if (tab == Tab.SETTINGS && addingProvider && provProviderDropdown != null) {
+                String before = provProviderDropdown.selectedId();
+                if (provProviderDropdown.mouseClicked(mouseX, mouseY)) {
+                    if (provModelDropdown != null) provModelDropdown.close();
+                    String sel = provProviderDropdown.selectedId();
+                    if (!sel.equals(before)) {         // provider changed → adapt model + Base URL
+                        preserveProviderForm();
+                        adaptToProvider(sel);
+                        rebuild();
+                    }
+                    return true;
+                }
+            }
+            if (tab == Tab.SETTINGS && addingProvider && provModelDropdown != null
+                    && provModelDropdown.mouseClicked(mouseX, mouseY)) {
+                if (provProviderDropdown != null) provProviderDropdown.close();
+                if (CUSTOM_MODEL.equals(provModelDropdown.selectedId())) {   // 自定义… → free text
+                    preserveProviderForm();
+                    provCustomModel = true;
+                    wProvModel = "";
                     rebuild();
                 }
                 return true;
@@ -1711,8 +1829,10 @@ public final class NumenScreen extends Screen {
                     left + PAD, top + HEADER_H + 30, FAIL);
         } else if (summoning) {
             txt(g, Component.translatable("numen.summon.title"), left + PAD, top + HEADER_H + 8, TXT);
+            // Below the Cancel/Create button row (the summon panel grew a provider
+            // dropdown + buttons; the old position now collides with both).
             txt(g, Component.translatable("numen.summon.hint"),
-                    left + PAD, top + HEADER_H + 74, TXT_FAINT);
+                    left + PAD, top + HEADER_H + 122, TXT_FAINT);
         } else {
             if (uuid != null) {
                 if (compactButton != null) compactButton.active = loop().canCompact();
@@ -1745,9 +1865,23 @@ public final class NumenScreen extends Screen {
         }
         // Field placeholders, drawn shadowless by us (the EditBox hint renders with a shadow).
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.PROVIDER && addingProvider) {
-            placeholder(g, provProviderInput, "openai / deepseek / …");
             placeholder(g, provKeyInput, "sk-…");
             placeholder(g, provBaseUrlInput, "https://… (OpenAI-compatible)");
+            placeholder(g, provModelInput, "model id");
+        }
+        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.PROXY) {
+            placeholder(g, proxyIpInput, "127.0.0.1");
+            placeholder(g, proxyPortInput, "7890");
+        }
+        // The model-config form's open dropdown lists must sit above the fields.
+        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.PROVIDER && addingProvider) {
+            if (provModelDropdown != null && provProviderDropdown != null && provProviderDropdown.isOpen()) {
+                provModelDropdown.render(g, font, mouseX, mouseY);
+                provProviderDropdown.render(g, font, mouseX, mouseY);
+            } else {
+                if (provProviderDropdown != null) provProviderDropdown.render(g, font, mouseX, mouseY);
+                if (provModelDropdown != null) provModelDropdown.render(g, font, mouseX, mouseY);
+            }
         }
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.MCP && addingMcp) {
             placeholder(g, mcpNameInput, "kfc");
@@ -1759,10 +1893,10 @@ public final class NumenScreen extends Screen {
         }
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
         // caret in the widget pass, so it can't paint over the caret like a screen-side draw did.)
-        // Summon persona dropdown — drawn late so its open list sits above the summon field.
-        if (summoning && summonProviderDropdown == null) {
-            // Empty provider library: creation is blocked — paint the pointer instead.
-            g.drawString(font, "先到 设置 → 模型配置 新建一条", left + PAD, top + HEADER_H + 74, 0xFFCC6666, false);
+        // Summon warn — shown only when 创建 was clicked and something is missing
+        // (error at the action, never ambient text). Takes the hint line's spot.
+        if (summoning && warnUntil > System.currentTimeMillis() && warnText != null) {
+            g.drawString(font, warnText, left + PAD, top + HEADER_H + 122, 0xFFCC6666, false);
         }
         if (summoning && summonProviderDropdown != null) {
             summonProviderDropdown.render(g, font, mouseX, mouseY);
