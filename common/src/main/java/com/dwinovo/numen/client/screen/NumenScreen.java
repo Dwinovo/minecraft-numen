@@ -177,6 +177,9 @@ public final class NumenScreen extends Screen {
     private EditBox baseUrlInput;
     private long savedFlashUntil;
     private long warnUntil;        // transient "no API key" hint on the chat tab
+    /** The current warn hint's text (endpoint problems vary: unbound provider vs keyless
+     *  entry); null falls back to the generic no-key translation. */
+    private String warnText;
 
     // A hovered-row tooltip (MCP / skill list) collected during section render, drawn last so
     // it sits above every later draw. Cleared each frame.
@@ -1321,9 +1324,14 @@ public final class NumenScreen extends Screen {
         if (input == null) return;
         String text = input.getValue() == null ? "" : input.getValue().trim();
         if (text.isEmpty()) return;
-        if (!NumenLlmClient.isConfigured()) {
-            com.dwinovo.numen.Constants.LOG.warn("[numen-chat] no apiKey; open Settings.");
-            warnUntil = System.currentTimeMillis() + 4000;   // visible hint instead of a silent no-op
+        // Endpoint check for THIS companion (its provider entry, not the legacy global
+        // key): unbound / keyless surfaces as a visible hint, never a crash or a
+        // silent no-op — the no-provider safety net.
+        String problem = loop().endpointProblem();
+        if (problem != null) {
+            com.dwinovo.numen.Constants.LOG.warn("[numen-chat] {}", problem);
+            warnText = problem;
+            warnUntil = System.currentTimeMillis() + 4000;
             return;
         }
         loop().submitPrompt(text);
@@ -1535,8 +1543,9 @@ public final class NumenScreen extends Screen {
                 case CHAT -> { if (uuid != null) renderChat(g); else emptyHint(g); }
                 case ITEMS -> { if (uuid != null) renderItems(g, mouseX, mouseY); else emptyHint(g); }
             }
-            if (tab == Tab.CHAT && warnUntil > System.currentTimeMillis()) {   // no-API-key hint above the input
-                txt(g, Component.translatable("numen.chat.no_key"),
+            if (tab == Tab.CHAT && warnUntil > System.currentTimeMillis()) {   // endpoint-problem hint above the input
+                txt(g, warnText != null ? Component.literal(warnText)
+                                : Component.translatable("numen.chat.no_key"),
                         left + PAD, top + PANEL_H - INPUT_H - PAD - 11, FAIL);
             }
         }

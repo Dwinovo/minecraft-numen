@@ -590,6 +590,23 @@ public final class EntityAgentLoop {
         return providerEntryId;
     }
 
+    /**
+     * Why this companion CAN'T talk right now, in player-facing words — or null when
+     * its endpoint is usable. The no-crash safety net for a companion that somehow
+     * exists without a provider binding (legacy, bugs): sending a message surfaces
+     * this instead of a silent stall.
+     */
+    public String endpointProblem() {
+        var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
+        if (providerEntryId == null || lib.get(providerEntryId) == null) {
+            return "这个同伴还没有绑定提供商——到 设置 → 提供商 新建/选择一条配置";
+        }
+        if (!lib.resolve(providerEntryId).hasApiKey()) {
+            return "提供商「" + lib.get(providerEntryId).name() + "」还没填 API Key——到 设置 → 提供商 补上";
+        }
+        return null;
+    }
+
     /** Point this companion at a provider-library entry (null = back to global settings)
      *  and persist the assignment. Takes effect on the next request — no restart. */
     public void setProviderEntry(String entryId) {
@@ -686,12 +703,12 @@ public final class EntityAgentLoop {
         // legitimately chains many tasks, and resuming a timed-out move_to
         // repeats the exact same call. Runaways are stopped by the owner's
         // interrupt.
-        // Key check against THIS companion's selected provider entry — error-driven
-        // guidance, no fallback: a keyless or missing entry says exactly what to do.
-        if (!com.dwinovo.numen.agent.llm.ProviderLibrary.instance().resolve(providerEntryId).hasApiKey()) {
-            Constants.LOG.warn("[numen-entity#{}] provider entry {} has no API key; open the Numen GUI (X)"
-                            + " → 提供商, fill in the entry (or pick another for this companion)",
-                    entityUuid, providerEntryId == null ? "(none selected)" : providerEntryId);
+        // Endpoint check against THIS companion's selected provider entry — error-driven
+        // guidance, no fallback, no crash: a missing binding or keyless entry says
+        // exactly what to do (same words the chat screen shows via endpointProblem()).
+        String problem = endpointProblem();
+        if (problem != null) {
+            Constants.LOG.warn("[numen-entity#{}] can't start turn: {}", entityUuid, problem);
             aborted = true;
             return;
         }
