@@ -69,9 +69,14 @@ final class CompanionBrain {
         }
         if (++journalQuietTicks < JOURNAL_IDLE_FLUSH_TICKS) return;
         if (companion.resolveOwnerPlayer() == null) return;   // no client to queue on — keep holding
-        String xml = "<event kind=\"survival\">While idle you handled on your own: "
-                + String.join("; ", journal.drain()) + ".</event>";
-        com.dwinovo.numen.entity.Companions.emitEvent(companion, xml, false);
+        // One <event> PER episode, as siblings (the protocol's existing grammar — queued
+        // events of any kind already splice in side by side, unwrapped; the UI's tag
+        // stripper matches exactly this shape).
+        StringBuilder xml = new StringBuilder();
+        for (String line : journal.drain()) {
+            xml.append("<event kind=\"survival\">while idle, you ").append(line).append("</event>");
+        }
+        com.dwinovo.numen.entity.Companions.emitEvent(companion, xml.toString(), false);
         journalQuietTicks = 0;
         lastJournalSize = 0;
     }
