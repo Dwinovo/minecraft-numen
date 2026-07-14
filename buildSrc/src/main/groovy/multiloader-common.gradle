@@ -34,6 +34,23 @@ tasks.withType(JavaCompile).configureEach {
 
 repositories {
     mavenCentral()
+    // DEV MACHINES: resolve numen-api from the LOCAL numen-maven working tree when it
+    // exists as a sibling checkout — `./gradlew publish` in numen-api lands there
+    // directly, so the debug loop (publish → build → deploy) needs no push and no
+    // network. Declared FIRST so it wins; SNAPSHOT re-resolution is forced so every
+    // iteration picks the fresh jar. CI checkouts have no sibling numen-maven, so CI
+    // still resolves exclusively from the pushed remote. Formal releases: push
+    // numen-maven as before — the local tree and the remote are the same git repo.
+    def localNumenMaven = rootProject.projectDir.parentFile.toPath().resolve('numen-maven')
+    if (java.nio.file.Files.isDirectory(localNumenMaven)) {
+        maven {
+            name = 'numenLocalDebug'
+            url = "file:///${localNumenMaven.toString().replace('\\', '/')}"
+        }
+        configurations.configureEach {
+            resolutionStrategy.cacheChangingModulesFor(0, 'seconds')
+        }
+    }
     // Published numen-api engine — always resolved from the public raw maven so
     // this build (and CI) uses exactly what's been pushed, never a stale local copy.
     maven {
