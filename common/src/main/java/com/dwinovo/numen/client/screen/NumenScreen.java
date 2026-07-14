@@ -122,7 +122,15 @@ public final class NumenScreen extends Screen {
     private Tab tab = Tab.CHAT;
 
     /** The Settings tab is a config hub: a left sub-nav picks one of these sections. */
-    private enum SettingsSection { LLM, MCP, SKILLS, PERSONA }
+    private enum SettingsSection { LLM, PROVIDER, MCP, SKILLS, PERSONA }
+
+    // ---- provider-library section state (mirrors the persona section) ----
+    private boolean addingProvider;
+    private String providerEditId;
+    private String providerDeletePending;
+    private String wProvName = "", wProvProvider = "", wProvModel = "", wProvKey = "", wProvBaseUrl = "";
+    private net.minecraft.client.gui.components.EditBox provNameInput, provProviderInput,
+            provModelInput, provKeyInput, provBaseUrlInput;
     private SettingsSection settingsSection = SettingsSection.LLM;
 
     // Persona library form state (mirrors the MCP add/edit/delete flow).
@@ -281,6 +289,7 @@ public final class NumenScreen extends Screen {
         mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
         personaNameInput = null;
         personaTextArea = null;
+        provNameInput = provProviderInput = provModelInput = provKeyInput = provBaseUrlInput = null;
         modelDropdown = null;
         summonInput = null;
         summonPersonaDropdown = null;
@@ -493,6 +502,9 @@ public final class NumenScreen extends Screen {
         addingPersona = false;
         personaEditId = null;
         personaDeletePending = null;
+        addingProvider = false;
+        providerEditId = null;
+        providerDeletePending = null;
         rebuild();
     }
 
@@ -511,7 +523,75 @@ public final class NumenScreen extends Screen {
                 else if (addingPersona) buildPersonaForm();
                 else buildPersonaListWidgets();
             }
+            case PROVIDER -> {
+                if (providerDeletePending != null) buildProviderDeleteConfirm();
+                else if (addingProvider) buildProviderForm();
+                else buildProviderListWidgets();
+            }
         }
+    }
+
+    // ---- Provider section: the library of named LLM provider configs companions select from ----
+
+    private void buildProviderListWidgets() {
+        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+                Component.literal("新建"), b -> {
+                    addingProvider = true; providerEditId = null;
+                    wProvName = ""; wProvProvider = ""; wProvModel = ""; wProvKey = ""; wProvBaseUrl = "";
+                    rebuild();
+                }));
+    }
+
+    /** Five single-line fields; ONLY the name is required to save (an incomplete
+     *  entry errors honestly at first use — the library's whole philosophy). */
+    private void buildProviderForm() {
+        int x = secX(), w = secW();
+        int fy = secY0() + 14;
+        provNameInput = field(x, fy + 11, w, 48, wProvName);
+        provProviderInput = field(x, fy + 34, w, 48, wProvProvider);
+        provModelInput = field(x, fy + 57, w, 96, wProvModel);
+        provKeyInput = field(x, fy + 80, w, 256, wProvKey);
+        provBaseUrlInput = field(x, fy + 103, w, 256, wProvBaseUrl);
+        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+                Component.translatable("numen.gui.settings.save"), b -> onSaveProvider()));
+        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
+                Component.literal("✕"), b -> { addingProvider = false; providerEditId = null; rebuild(); }));
+        setInitialFocus(provNameInput);
+    }
+
+    private void buildProviderDeleteConfirm() {
+        int x = secX();
+        int by = secY0() + 24;
+        int bw = 64, gap = 8;
+        add(new SimpleButton(x, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
+            com.dwinovo.numen.agent.llm.ProviderLibrary.instance().remove(providerDeletePending);
+            providerDeletePending = null;
+            rebuild();
+        }));
+        add(new SimpleButton(x + bw + gap, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
+                b -> { providerDeletePending = null; rebuild(); }));
+    }
+
+    private void onSaveProvider() {
+        String name = provNameInput.getValue().trim();
+        if (name.isEmpty()) { warnUntil = System.currentTimeMillis() + 4000; return; }
+        var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
+        String provider = provProviderInput.getValue().trim();
+        String model = provModelInput.getValue().trim();
+        String key = provKeyInput.getValue().trim();
+        String baseUrl = provBaseUrlInput.getValue().trim();
+        if (providerEditId != null) {
+            var old = lib.get(providerEditId);
+            lib.update(new com.dwinovo.numen.agent.llm.ProviderLibrary.Entry(
+                    providerEditId, name, provider, model, key, baseUrl,
+                    old != null ? old.reasoningEffort() : ""));
+        } else {
+            lib.create(name, provider, model, key, baseUrl, "");
+        }
+        addingProvider = false;
+        providerEditId = null;
+        wProvName = ""; wProvProvider = ""; wProvModel = ""; wProvKey = ""; wProvBaseUrl = "";
+        rebuild();
     }
 
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
@@ -880,13 +960,93 @@ public final class NumenScreen extends Screen {
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
             case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
+            case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
         }
+    }
+
+    private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
+        int x = secX(), w = secW();
+        txt(g, Component.literal("提供商配置"), x, secY0() - 2, TXT);
+        if (providerDeletePending != null) {
+            var e = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerDeletePending);
+            txt(g, Component.literal("删除「" + (e != null ? e.name() : "") + "」?正在使用它的同伴将无法对话,直到重新绑定。"),
+                    x, secY0() + 10, TXT);
+            return;
+        }
+        if (addingProvider) { renderProviderForm(g); return; }
+        var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
+        if (list.isEmpty()) {
+            txt(g, Component.literal("还没有提供商配置——点右上「新建」创建一条"), x, secY0() + 16, TXT_FAINT);
+            return;
+        }
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
+        for (int i = settingsScroll; i < list.size(); i++) {
+            int ry = listY0 + (i - settingsScroll) * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            var e = list.get(i);
+            int delX = x + w - 12, editX = x + w - 26;
+            txt(g, Component.literal(e.name()), x, ry + 1, TXT);
+            String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
+                    + (nb(e.model()) ? e.model() : "?")
+                    + (nb(e.apiKey()) ? "" : " · 未填Key");
+            txt(g, Component.literal(clip(meta, w - 30)), x, ry + 11, nb(e.apiKey()) ? TXT_FAINT : FAIL);
+            txt(g, Component.literal("✎"), editX, ry + 6,
+                    overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
+            txt(g, Component.literal("✕"), delX, ry + 6,
+                    overDelete(mouseX, mouseY, delX, ry) ? FAIL : TXT_FAINT);
+        }
+    }
+
+    private void renderProviderForm(GuiGraphics g) {
+        int x = secX();
+        int fy = secY0() + 14;
+        txt(g, Component.literal("名称(必填)"), x, fy, TXT_MUTED);
+        txt(g, Component.literal("服务商(如 openai / deepseek,可后补)"), x, fy + 23, TXT_MUTED);
+        txt(g, Component.literal("模型"), x, fy + 46, TXT_MUTED);
+        txt(g, Component.literal("API Key"), x, fy + 69, TXT_MUTED);
+        txt(g, Component.literal("Base URL(可选)"), x, fy + 92, TXT_MUTED);
+    }
+
+    private static boolean nb(String s) {
+        return s != null && !s.isBlank();
+    }
+
+    private boolean providerClick(int mx, int my) {
+        if (addingProvider || providerDeletePending != null) return false;
+        int x = secX(), w = secW();
+        var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
+        for (int i = scroll; i < list.size(); i++) {
+            int ry = listY0 + (i - scroll) * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            var e = list.get(i);
+            int delX = x + w - 12, editX = x + w - 26;
+            if (overDelete(mx, my, editX, ry)) { beginEditProvider(e); return true; }
+            if (overDelete(mx, my, delX, ry)) { providerDeletePending = e.id(); rebuild(); return true; }
+            if (overRow(mx, my, x, w, ry)) { beginEditProvider(e); return true; }
+        }
+        return false;
+    }
+
+    private void beginEditProvider(com.dwinovo.numen.agent.llm.ProviderLibrary.Entry e) {
+        addingProvider = true;
+        providerEditId = e.id();
+        wProvName = e.name() == null ? "" : e.name();
+        wProvProvider = e.provider() == null ? "" : e.provider();
+        wProvModel = e.model() == null ? "" : e.model();
+        wProvKey = e.apiKey() == null ? "" : e.apiKey();
+        wProvBaseUrl = e.baseUrl() == null ? "" : e.baseUrl();
+        rebuild();
     }
 
     /** The config-hub left sub-nav: 模型接入 / MCP / 技能, plus the divider. */
     private void renderSettingsNav(GuiGraphics g) {
         String[] labels = {
-                I18n.get("numen.settings.nav.llm"), I18n.get("numen.settings.nav.mcp"),
+                I18n.get("numen.settings.nav.llm"), "提供商", I18n.get("numen.settings.nav.mcp"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona")};
         int navX = left + PAD;
         int y = secY0();
@@ -1130,6 +1290,7 @@ public final class NumenScreen extends Screen {
         if (settingsSection == SettingsSection.MCP) return mcpToggleClick(mx, my);
         if (settingsSection == SettingsSection.SKILLS) return skillToggleClick(mx, my);
         if (settingsSection == SettingsSection.PERSONA) return personaClick(mx, my);
+        if (settingsSection == SettingsSection.PROVIDER) return providerClick(mx, my);
         return false;
     }
 
@@ -1486,11 +1647,13 @@ public final class NumenScreen extends Screen {
             pinBottom = scroll >= lastMaxScroll;
             return true;
         }
-        if (tab == Tab.SETTINGS && sy != 0 && settingsSection != SettingsSection.LLM && !addingPersona) {
+        if (tab == Tab.SETTINGS && sy != 0 && settingsSection != SettingsSection.LLM
+                && !addingPersona && !addingProvider) {
             int count = switch (settingsSection) {
                 case MCP -> com.dwinovo.numen.mcp.client.McpClientManager.servers().size();
                 case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
                 case PERSONA -> PersonaLibrary.instance().list().size();
+                case PROVIDER -> com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list().size();
                 default -> 0;
             };
             int listY0 = secY0() + 14;
