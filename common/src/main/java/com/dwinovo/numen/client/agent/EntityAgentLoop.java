@@ -146,6 +146,8 @@ public final class EntityAgentLoop {
 
     private boolean awaitingLlmResponse = false;
     private boolean aborted = false;
+    /** One turn-level re-run per failure has been spent (reset when a response lands). */
+    private boolean turnRetried = false;
 
     /**
      * Set while an external driver (an MCP client / Claude) holds this body via
@@ -970,9 +972,25 @@ public final class EntityAgentLoop {
         if (err != null) {
             Constants.LOG.warn("[numen-entity#{}] LLM call failed: {}",
                     entityUuid, unwrap(err));
+            // MID-STREAM deaths (idle watchdog, connection reset after first tokens) are
+            // outside the transport's retry scope — the SDKs surface them to the caller,
+            // and the caller's standard answer is: discard the partial (never entered the
+            // conversation) and re-run the whole turn. One turn-level retry, immediate;
+            // the transport already backed off its own classes.
+            if (!turnRetried) {
+                turnRetried = true;
+                Constants.LOG.info("[numen-entity#{}] re-running failed turn once", entityUuid);
+                awaitingLlmResponse = true;
+                final int gen2 = turnGeneration;
+                NumenLlmClient.instance().chatStreaming(convo.snapshot(), ToolRegistry.all(),
+                                composeSystemPrompt(), null)
+                        .whenComplete((r2, e2) -> bounceBackToMain(gen2, r2, e2));
+                return;
+            }
             failTurnKeepQueue();
             return;
         }
+        turnRetried = false;   // a response landed — the next failure gets a fresh retry
         if (res == null || res.turn() == null) {
             Constants.LOG.warn("[numen-entity#{}] LLM returned null turn", entityUuid);
             failTurnKeepQueue();
