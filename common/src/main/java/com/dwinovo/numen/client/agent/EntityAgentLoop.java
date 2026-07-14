@@ -686,11 +686,12 @@ public final class EntityAgentLoop {
         // legitimately chains many tasks, and resuming a timed-out move_to
         // repeats the exact same call. Runaways are stopped by the owner's
         // interrupt.
-        // Key check against THIS companion's resolved endpoint — its own entry's key,
-        // or the global key when the entry leaves it blank / nothing is assigned.
+        // Key check against THIS companion's selected provider entry — error-driven
+        // guidance, no fallback: a keyless or missing entry says exactly what to do.
         if (!com.dwinovo.numen.agent.llm.ProviderLibrary.instance().resolve(providerEntryId).hasApiKey()) {
-            Constants.LOG.warn("[numen-entity#{}] API key not set; open the Numen GUI (X) → Settings",
-                    entityUuid);
+            Constants.LOG.warn("[numen-entity#{}] provider entry {} has no API key; open the Numen GUI (X)"
+                            + " → 提供商, fill in the entry (or pick another for this companion)",
+                    entityUuid, providerEntryId == null ? "(none selected)" : providerEntryId);
             aborted = true;
             return;
         }
