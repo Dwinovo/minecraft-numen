@@ -71,6 +71,10 @@ public final class PlaceManeuver {
     private FailureType failType = FailureType.OCCLUDED;
     /** Vanilla's verdict on the last press that left the world unchanged (null = never pressed). */
     private String lastRefusal;
+    /** Consecutive ticks spent backing off with our own box still inside the target cell —
+     *  a body that can't clear the cell it must fill (boxed in) is a distinct, fast failure. */
+    private int selfBlockedTicks;
+    private static final int SELF_CLEAR_TICKS = 30;
 
     /** Pathfinder / orientation-agnostic placement. */
     public PlaceManeuver(NumenPlayer player, BlockPos placeAt,
@@ -139,7 +143,21 @@ public final class PlaceManeuver {
                 player.zza = -1.0f;
                 player.xxa = 0.0f;
                 player.setSprinting(false);
+                // Backing off isn't working (boxed in — e.g. asked to fill the very cell the
+                // body stands in inside a 1×1 shaft): fail FAST with the true story instead
+                // of grinding the timeout and reporting a misleading "view is blocked".
+                if (++selfBlockedTicks >= SELF_CLEAR_TICKS) {
+                    failReason = "I'm standing in the very cell to fill at " + placeAt.toShortString()
+                            + " and can't step out of it (boxed in). Move me a block away first,"
+                            + " or use move_to with a higher y — pillaring up places beneath my"
+                            + " own feet properly.";
+                    failType = FailureType.OCCLUDED;
+                    Constants.LOG.info("[numen-path] place gave up at {} after {} ticks: {}",
+                            placeAt.toShortString(), ticks, failReason);
+                    return Status.FAILED;
+                }
             } else {
+                selfBlockedTicks = 0;
                 // A face is visible and the cell is clear of our body: stand still and press.
                 // The press waits one tick for the crouch to register — the sneak is also the
                 // edge protection, so the click never precedes it. With orientation hints the
