@@ -183,6 +183,6 @@ Numen 还很年轻。原版玩法已经跑得很顺；而"让 AI 通达整个模
 
 <sub><b>授权</b>：源代码采用 <a href="LICENSE">LGPL-3.0</a>——你分发的修改版必须以同协议继续开源。面向兼容模块 / MCP 桥接的<b>公共对接 API</b>采用 <a href="LICENSE-API">MIT</a>，让任何人都能自由地写 mod 兼容。美术与资源为 <a href="LICENSE-ASSETS">保留所有权利</a>，"Numen" / "言出法随" 名称亦予保留。基于 <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a> 构建。</sub>
 
-<sub>寻路的<b>规划层</b>基于启发式搜索文献实现：加权 A*、预算化的部分路径提交、以及 RTAA* 式跨段启发学习（Koenig &amp; Likhachev, <i>Real-Time Adaptive A*</i>, AAMAS 2006），附独立于游戏的单元测试。<b>执行层</b>与 <a href="https://github.com/cabaletta/baritone">Baritone</a> 的根本区别在于运行位置：Baritone 是纯客户端模组、操控本机玩家；Numen 驱动的是<b>服务端假玩家</b>，移动/挖掘/放置全部经服务端 API 实现——设计思路上借鉴了其公开机制，<b>未复制、移植或改写其任何源码</b>。本项目代码采用 LGPL-3.0 属自主选择，与 Baritone（同为 LGPL-3.0）无衍生关系。</sub>
+<sub>寻路的<b>规划层</b>基于启发式搜索文献实现：加权 A*、预算化的部分路径提交、以及 RTAA* 式跨段启发学习（Koenig &amp; Likhachev, <i>Real-Time Adaptive A*</i>, AAMAS 2006），附独立于游戏的单元测试。<b>路径跟随层</b>（沿计划路径的进度追踪与偏差恢复）参考机器人学与游戏 AI 的路径跟随文献：Pure Pursuit 前瞻点跟随（Coulter, <i>Implementation of the Pure Pursuit Path Tracking Algorithm</i>, CMU-RI-TR-92-01, 1992）、参数连贯（coherence）定位（Millington, <i>AI for Games</i>），以及 Recast/Detour 走廊跟随与 ROS 2 Nav2 进度检查的工业实践。<b>执行层</b>与 <a href="https://github.com/cabaletta/baritone">Baritone</a> 的根本区别在于运行位置：Baritone 是纯客户端模组、操控本机玩家；Numen 驱动的是<b>服务端假玩家</b>，移动/挖掘/放置全部经服务端 API 实现——设计思路上借鉴了其公开机制，<b>未复制、移植或改写其任何源码</b>。本项目代码采用 LGPL-3.0 属自主选择，与 Baritone（同为 LGPL-3.0）无衍生关系。</sub>
 
 </div>

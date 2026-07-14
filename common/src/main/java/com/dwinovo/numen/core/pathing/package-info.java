@@ -19,7 +19,12 @@
  *   <li>{@code exec/} — physical execution on the live server: walking a planned
  *       path tick by tick, native block breaking/placing through the same server
  *       entry points a real client's packets reach, with per-move re-costing,
- *       stall detection, and replanning.</li>
+ *       stall detection, and replanning. Its path-following (progress tracking
+ *       along the plan, deviation recovery) follows the path-tracking literature:
+ *       pure-pursuit lookahead following (Coulter, CMU-RI-TR-92-01, 1992),
+ *       coherence-windowed localization (Millington, <i>AI for Games</i>), and the
+ *       corridor-following / progress-checking practice of Recast/Detour and
+ *       ROS&nbsp;2 Nav2.</li>
  * </ul>
  *
  * <h2>Provenance</h2>
