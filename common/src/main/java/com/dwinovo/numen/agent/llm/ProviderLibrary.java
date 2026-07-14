@@ -33,10 +33,12 @@ import java.util.Map;
  */
 public final class ProviderLibrary {
 
-    /** One named provider configuration. Blank fields resolve to the global
-     *  settings value at use time ({@link #resolve}). */
+    /** One named, SELF-CONTAINED provider configuration (no field-level fallback —
+     *  the editor requires the essentials). Exactly one entry is the library default:
+     *  companions with no explicit assignment use it. */
     public record Entry(String id, String name, String provider, String model,
-                        String apiKey, String baseUrl, String reasoningEffort) {}
+                        String apiKey, String baseUrl, String reasoningEffort,
+                        boolean isDefault) {}
 
     private static final Gson PRETTY = new GsonBuilder().setPrettyPrinting().create();
     private static ProviderLibrary instance;
@@ -66,29 +68,34 @@ public final class ProviderLibrary {
         return id == null ? null : entries.get(id);
     }
 
+    /** The library default: the marked entry, else the first entry, else null (empty library). */
+    public Entry defaultEntry() {
+        for (Entry e : entries.values()) {
+            if (e.isDefault()) return e;
+        }
+        return entries.isEmpty() ? null : entries.values().iterator().next();
+    }
+
     /**
-     * Resolve an entry to connection parameters: blank fields fall back to the
-     * global settings (proxy is always global — it's a network-environment
-     * property, not a provider property). {@code id} null/unknown → the global
-     * endpoint, so a companion whose entry was deleted degrades gracefully.
+     * Resolve an entry id to connection parameters. {@code id} null/unknown (never
+     * assigned, or the entry was deleted) → the library DEFAULT entry. Entries are
+     * self-contained; only the proxy comes from the global settings (a
+     * network-environment property, not a provider property). An empty library
+     * falls back to the legacy global fields so pre-migration installs still work.
      */
     public LlmEndpoint resolve(String id) {
         Entry e = get(id);
-        LlmEndpoint global = LlmEndpoint.fromGlobal(Services.CONFIG);
-        if (e == null) return global;
-        return new LlmEndpoint(
-                or(e.provider(), global.provider()),
-                or(e.model(), global.model()),
-                or(e.apiKey(), global.apiKey()),
-                or(e.baseUrl(), global.baseUrl()),
-                global.proxy(),
-                or(e.reasoningEffort(), global.reasoningEffort()));
+        if (e == null) e = defaultEntry();
+        if (e == null) return LlmEndpoint.fromGlobal(Services.CONFIG);
+        return new LlmEndpoint(e.provider(), e.model(), e.apiKey(),
+                e.baseUrl(), Services.CONFIG.getProxy(), e.reasoningEffort());
     }
 
     public Entry create(String name, String provider, String model,
                         String apiKey, String baseUrl, String reasoningEffort) {
         String id = "prov_" + Long.toHexString(System.currentTimeMillis()) + "_" + entries.size();
-        Entry e = new Entry(id, name, provider, model, apiKey, baseUrl, reasoningEffort);
+        Entry e = new Entry(id, name, provider, model, apiKey, baseUrl, reasoningEffort,
+                entries.isEmpty());   // first entry ever = default by construction
         entries.put(id, e);
         save();
         return e;
@@ -100,8 +107,24 @@ public final class ProviderLibrary {
         save();
     }
 
+    /** Mark {@code id} as the library default (unmarks the rest). */
+    public void setDefault(String id) {
+        Entry target = entries.get(id);
+        if (target == null) return;
+        entries.replaceAll((k, v) -> new Entry(v.id(), v.name(), v.provider(), v.model(),
+                v.apiKey(), v.baseUrl(), v.reasoningEffort(), k.equals(id)));
+        save();
+    }
+
+    /** Delete an entry; if it was the default, the first remaining entry inherits the crown. */
     public void remove(String id) {
-        if (entries.remove(id) != null) save();
+        Entry gone = entries.remove(id);
+        if (gone == null) return;
+        if (gone.isDefault() && !entries.isEmpty()) {
+            setDefault(entries.values().iterator().next().id());   // also saves
+        } else {
+            save();
+        }
     }
 
     // ---- per-companion assignment (uuid → entry id), persisted alongside entries ----
@@ -144,6 +167,15 @@ public final class ProviderLibrary {
     private void load() {
         entries.clear();
         if (!Files.exists(file)) {
+            // First run. If the legacy global settings already carry a working config,
+            // it becomes the library's DEFAULT entry — the player opens the new tab and
+            // sees their own configuration as entry #1, nothing to redo. Seeds follow.
+            String globalKey = Services.CONFIG.getApiKey();
+            if (globalKey != null && !globalKey.isBlank()) {
+                entries.put("prov_migrated", new Entry("prov_migrated", "我的配置",
+                        Services.CONFIG.getProvider(), Services.CONFIG.getModel(), globalKey,
+                        Services.CONFIG.getBaseUrl(), Services.CONFIG.getReasoningEffort(), true));
+            }
             for (Entry e : seeds()) entries.put(e.id(), e);
             save();   // first run: write the seeded library
             return;
@@ -154,7 +186,8 @@ public final class ProviderLibrary {
                 JsonObject o = el.getAsJsonObject();
                 Entry e = new Entry(str(o, "id"), str(o, "name"), str(o, "provider"),
                         str(o, "model"), str(o, "api_key"), str(o, "base_url"),
-                        str(o, "reasoning_effort"));
+                        str(o, "reasoning_effort"),
+                        o.has("default") && o.get("default").getAsBoolean());
                 if (e.id() != null && !e.id().isBlank()) entries.put(e.id(), e);
             }
             JsonObject rootObj = root.getAsJsonObject();
@@ -184,6 +217,7 @@ public final class ProviderLibrary {
             if (nb(e.apiKey())) o.addProperty("api_key", e.apiKey());
             if (nb(e.baseUrl())) o.addProperty("base_url", e.baseUrl());
             if (nb(e.reasoningEffort())) o.addProperty("reasoning_effort", e.reasoningEffort());
+            if (e.isDefault()) o.addProperty("default", true);
             arr.add(o);
         }
         JsonObject root = new JsonObject();
@@ -202,15 +236,10 @@ public final class ProviderLibrary {
     /** First-run seeds: the popular sites, keys blank and waiting to be filled. */
     private static List<Entry> seeds() {
         return List.of(
-                new Entry("prov_seed_deepseek", "DeepSeek", "deepseek", "deepseek-chat", "", "", ""),
-                new Entry("prov_seed_openai", "OpenAI", "openai", "gpt-5.4-mini", "", "", ""),
-                new Entry("prov_seed_glm", "智谱 GLM", "zhipu", "glm-4.7", "", "", ""),
-                new Entry("prov_seed_openrouter", "OpenRouter", "openrouter", "", "", "", ""));
-    }
-
-    /** Field-level fallback: the entry's value if set, else the global one. */
-    private static String or(String override, String global) {
-        return override == null || override.isBlank() ? global : override;
+                new Entry("prov_seed_deepseek", "DeepSeek", "deepseek", "deepseek-chat", "", "", "", false),
+                new Entry("prov_seed_openai", "OpenAI", "openai", "gpt-5.4-mini", "", "", "", false),
+                new Entry("prov_seed_glm", "智谱 GLM", "zhipu", "glm-4.7", "", "", "", false),
+                new Entry("prov_seed_openrouter", "OpenRouter", "openrouter", "", "", "", "", false));
     }
 
     private static String str(JsonObject o, String key) {
