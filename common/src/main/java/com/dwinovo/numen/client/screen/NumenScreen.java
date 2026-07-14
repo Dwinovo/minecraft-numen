@@ -979,7 +979,7 @@ public final class NumenScreen extends Screen {
 
     private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
-        txt(g, Component.literal("提供商配置"), x, secY0() - 2, TXT);
+        txt(g, Component.literal("模型配置"), x, secY0() - 2, TXT);
         if (providerDeletePending != null) {
             var e = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerDeletePending);
             txt(g, Component.literal("删除「" + (e != null ? e.name() : "") + "」?正在使用它的同伴将无法对话,直到重新绑定。"),
@@ -994,7 +994,7 @@ public final class NumenScreen extends Screen {
         }
         var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
         if (list.isEmpty()) {
-            txt(g, Component.literal("还没有提供商配置——点右上「新建」创建一条"), x, secY0() + 16, TXT_FAINT);
+            txt(g, Component.literal("还没有模型配置——点右上「新建」创建一条"), x, secY0() + 16, TXT_FAINT);
             return;
         }
         int listY0 = secY0() + 14;
@@ -1064,7 +1064,7 @@ public final class NumenScreen extends Screen {
     /** The config-hub left sub-nav: 模型接入 / MCP / 技能, plus the divider. */
     private void renderSettingsNav(GuiGraphics g) {
         String[] labels = {
-                "提供商", I18n.get("numen.settings.nav.mcp"),
+                "模型配置", I18n.get("numen.settings.nav.mcp"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona")};
         int navX = left + PAD;
         int y = secY0();
@@ -1762,7 +1762,7 @@ public final class NumenScreen extends Screen {
         // Summon persona dropdown — drawn late so its open list sits above the summon field.
         if (summoning && summonProviderDropdown == null) {
             // Empty provider library: creation is blocked — paint the pointer instead.
-            g.drawString(font, "先到 设置 → 提供商 新建一条配置", left + PAD, top + HEADER_H + 74, 0xFFCC6666, false);
+            g.drawString(font, "先到 设置 → 模型配置 新建一条", left + PAD, top + HEADER_H + 74, 0xFFCC6666, false);
         }
         if (summoning && summonProviderDropdown != null) {
             summonProviderDropdown.render(g, font, mouseX, mouseY);

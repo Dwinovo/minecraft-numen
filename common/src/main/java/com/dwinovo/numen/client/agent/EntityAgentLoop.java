@@ -599,10 +599,10 @@ public final class EntityAgentLoop {
     public String endpointProblem() {
         var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
         if (providerEntryId == null || lib.get(providerEntryId) == null) {
-            return "这个同伴还没有绑定提供商——到 设置 → 提供商 新建/选择一条配置";
+            return "这个同伴还没有绑定模型配置——到 设置 → 模型配置 新建/选择一条";
         }
         if (!lib.resolve(providerEntryId).hasApiKey()) {
-            return "提供商「" + lib.get(providerEntryId).name() + "」还没填 API Key——到 设置 → 提供商 补上";
+            return "模型配置「" + lib.get(providerEntryId).name() + "」还没填 API Key——到 设置 → 模型配置 补上";
         }
         return null;
     }
