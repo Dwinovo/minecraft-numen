@@ -16,21 +16,23 @@ final class TraverseDriver extends MoveDriver {
 
     @Override
     public void drive() {
-        // Correct DEPTH before advancing. If our feet
-        // aren't on the destination's Y level (bobbing while swimming across water,
-        // or sunk into a dip), do NOT move forward this tick — only rise (JUMP) if
-        // we're below it; if we've popped ABOVE it, do nothing and let it settle.
-        // Moving forward only happens once we're actually on the lane, which is
-        // what keeps a water-surface crossing stable instead of porpoising.
+        // Correct DEPTH before advancing — but "wait for it to settle" is only ever
+        // meaningful in LIQUID (bobbing across a water surface, where buoyancy will
+        // genuinely pull the body back to the lane; holding forward there porpoises).
+        // On LAND the drive is a precondition-free seek: below the lane → hop up;
+        // ABOVE the lane → walk toward dest and let vanilla's step-down take the
+        // one-block drop. Waiting on solid ground can never settle — it froze the
+        // body for the whole movement timeout.
         int feetY = feet().getY();
         if (feetY != mv.dest.getY()) {
-            InputDriver.halt(player);
-            // Below the lane → rise. On LAND that's a step-up hop; in LIQUID the
-            // universal liquid-float jump (in the executor) already does the rising, so
-            // don't add a second impulse here (our jump() isn't an idempotent flag).
-            if (feetY < mv.dest.getY()
-                    && player.level().getBlockState(feet()).getFluidState().isEmpty()) {
-                InputDriver.jump(player);
+            boolean inLiquid = !player.level().getBlockState(feet()).getFluidState().isEmpty();
+            if (inLiquid) {
+                InputDriver.halt(player);   // let buoyancy re-seat us on the lane
+            } else if (feetY < mv.dest.getY()) {
+                InputDriver.halt(player);
+                InputDriver.jump(player);   // step-up hop
+            } else {
+                InputDriver.stepToward(player, Vec3.atBottomCenterOf(mv.dest), false);
             }
         } else {
             // On the lane: advance. Don't sprint across a floor we just placed

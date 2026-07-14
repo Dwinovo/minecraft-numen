@@ -528,25 +528,38 @@ public final class PlayerPathExecutor {
 
     // ---- re-localization ----
 
+    /** Forward coherence window: matches are considered only up to this many moves
+     *  ahead — a match from a later portion of a self-crossing path (spiral stair,
+     *  switchback) is more likely a lie than a skip. Out-of-window displacement
+     *  escalates (off-path bands → replan) instead of teleporting the index. */
+    private static final int FORWARD_MATCH_WINDOW = 6;
+
     private Status relocalize() {
         BlockPos feet = feet();
         Movement cur = path.movements.get(index);
+        // Stay-put hysteresis: while the CURRENT move still explains the feet, never
+        // re-decide. Adjacent moves' valid sets overlap (diagonal corners, fall
+        // columns); re-classifying every tick on overlapping sets is what ping-pongs.
         if (cur.validPositions().contains(feet)) {
             ticksAway = 0;
             return null;
         }
-        // Backward: lagged / pushed back — scan earlier
-        // movements FROM THE START and take the FIRST (earliest) whose valid cells hold us.
-        for (int i = 0; i < index; i++) {
-            if (path.movements.get(i).validPositions().contains(feet)) {
-                jumpToIndex(i);
-                return null;
-            }
+        // Rewind at most ONE step (a shove back over the seam). Anything further back
+        // needs no re-index at all: driving seeks the current move's target and works
+        // from behind (the terrain we just traversed is passable); a genuine stall is
+        // caught by the net-progress watchdog and escalates to a replan.
+        if (index > 0 && path.movements.get(index - 1).validPositions().contains(feet)) {
+            jumpToIndex(index - 1);
+            return null;
         }
-        // Forward skip +3: a movement signals its own completion (e.g. sneak-place),
-        // so +1/+2 are deliberately skipped.
+        // Forward skip: from +3 (a movement signals its own completion, e.g. a
+        // sneak-place — +1/+2 must not be preempted), bounded by the coherence window,
+        // and never across an unexecuted world edit — "matching" past a pending dig
+        // or place would declare edits done that never happened.
         int last = path.movements.size() - 1;
-        for (int i = index + 3; i <= last; i++) {
+        int limit = Math.min(last, index + FORWARD_MATCH_WINDOW);
+        for (int i = index + 3; i <= limit; i++) {
+            if (!noPendingEditsBetween(index, i - 2)) break;
             if (path.movements.get(i).validPositions().contains(feet)) {
                 jumpToIndex(i - 1);
                 return null;
@@ -575,6 +588,18 @@ public final class PlayerPathExecutor {
             return replan("off-path hard band (>3 blocks)");
         }
         return null;
+    }
+
+    /** No move in {@code [from, to]} still has world edits to perform (a solid block in
+     *  its {@code toBreak}, or an unbuilt {@code toPlace} floor) — the gate for skipping
+     *  those moves during forward matching. */
+    private boolean noPendingEditsBetween(int from, int to) {
+        for (int i = from; i <= to && i < path.movements.size(); i++) {
+            Movement m = path.movements.get(i);
+            if (nextObstruction(m) != null) return false;
+            if (m.toPlace != null && !BlockHelper.canWalkOn(player.level(), m.toPlace)) return false;
+        }
+        return true;
     }
 
     /** Are we further than {@code leniencySq} from the
