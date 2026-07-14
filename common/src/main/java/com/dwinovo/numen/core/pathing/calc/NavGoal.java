@@ -35,6 +35,17 @@ public interface NavGoal {
      * must cost &gt; 0 (see {@link ActionCosts#DESCEND_ONE_BLOCK}): with a free
      * down-direction every node straight above a deep target scored h == 0
      * and partial paths collapsed to the start node.
+     *
+     * <p>Known weight inconsistency (deliberate legacy parity): the weighted-A*
+     * factor {@code COST_HEURISTIC} (3.563) is folded into the XZ term only,
+     * while the vertical terms ({@code JUMP_ONE_BLOCK} / {@code DESCEND_ONE_BLOCK})
+     * are unweighted — exactly Baritone's GoalXZ/GoalYLevel split. Normalizing
+     * the weights is a flagged follow-up, not something to "fix" in passing.
+     *
+     * <p>Engine-adapter contract: {@code heuristic()} / {@code isAt()}
+     * implementations must not retain the {@code BlockPos} argument (the engine
+     * adapter — {@link EngineSearch} — reuses a mutable cursor across calls);
+     * read x/y/z (or compare/measure) and return.
      */
     static double pointBound(BlockPos goal, BlockPos from) {
         double dx = Math.abs(goal.getX() - from.getX());
