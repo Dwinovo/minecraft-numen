@@ -12,6 +12,7 @@ import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.data.ClientNumenInventory;
+import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.network.payload.RequestInventoryPayload;
 import com.dwinovo.numen.persona.PersonaLibrary;
 import com.dwinovo.numen.platform.Services;
@@ -330,7 +331,7 @@ public final class NumenScreen extends Screen {
         // "hint" renders in the render pass as a FAINT placeholder — the EditBox's
         // own hint drew in full text color and read as typed input.
         List<Dropdown.Item> items = new ArrayList<>();
-        items.add(new Dropdown.Item(PERSONA_DEFAULT, "无"));
+        items.add(new Dropdown.Item(PERSONA_DEFAULT, I18n.get(ModLanguageData.Keys.SUMMON_PERSONA_NONE)));
         for (PersonaLibrary.Persona p : PersonaLibrary.instance().list()) {
             items.add(new Dropdown.Item(p.id(), p.name()));
         }
@@ -354,7 +355,8 @@ public final class NumenScreen extends Screen {
         int bx = left + (PANEL_W - totalW) / 2;
         add(new SimpleButton(bx, y0 + 128, bw, 18, Component.translatable("numen.gui.settings.cancel"),
                 b -> { summoning = false; rebuild(); }));
-        add(new SimpleButton(bx + bw + gap, y0 + 128, bw, 18, Component.literal("创建"),
+        add(new SimpleButton(bx + bw + gap, y0 + 128, bw, 18,
+                Component.translatable(ModLanguageData.Keys.SUMMON_CREATE),
                 b -> doSummon()));
         setInitialFocus(summonInput);
     }
@@ -571,9 +573,9 @@ public final class NumenScreen extends Screen {
     private void renderProxySection(GuiGraphics g) {
         int x = secX();
         int fy = secY0();
-        txt(g, Component.literal("代理"), x, fy - 2, TXT);
-        txt(g, Component.literal("IP(留空 = 直连)"), x, fy + 14, TXT_MUTED);
-        txt(g, Component.literal("端口"), x, fy + 14 + SET_SP, TXT_MUTED);
+        txt(g, Component.translatable("numen.settings.proxy"), x, fy - 2, TXT);
+        txt(g, Component.translatable(ModLanguageData.Keys.SETTINGS_PROXY_IP), x, fy + 14, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.SETTINGS_PROXY_PORT), x, fy + 14 + SET_SP, TXT_MUTED);
         if (savedFlashUntil > System.currentTimeMillis()) {
             txt(g, Component.translatable("numen.settings.saved"), x, top + PANEL_H - PAD - 14, OK);
         }
@@ -583,7 +585,7 @@ public final class NumenScreen extends Screen {
 
     private void buildProviderListWidgets() {
         add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
-                Component.literal("新建"), b -> {
+                Component.translatable(ModLanguageData.Keys.PROVIDER_ADD), b -> {
                     addingProvider = true; providerEditId = null;
                     wProvName = ""; wProvProvider = ""; wProvModel = ""; wProvKey = ""; wProvBaseUrl = "";
                     rebuild();
@@ -1073,18 +1075,18 @@ public final class NumenScreen extends Screen {
         // so the section title only draws in list/confirm states — the form's own
         // "名称(必填)" first label takes the top line.
         if (!addingProvider) {
-            txt(g, Component.literal("模型配置"), x, secY0() - 2, TXT);
+            txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE), x, secY0() - 2, TXT);
         }
         if (providerDeletePending != null) {
             var e = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerDeletePending);
-            txt(g, Component.literal("删除「" + (e != null ? e.name() : "") + "」?正在使用它的同伴将无法对话,直到重新绑定。"),
+            txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM, e != null ? e.name() : ""),
                     x, secY0() + 10, TXT);
             return;
         }
         if (addingProvider) { renderProviderForm(g); return; }
         var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
         if (list.isEmpty()) {
-            txt(g, Component.literal("还没有模型配置——点右上「新建」创建一条"), x, secY0() + 16, TXT_FAINT);
+            txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_EMPTY), x, secY0() + 16, TXT_FAINT);
             return;
         }
         int listY0 = secY0() + 14;
@@ -1098,7 +1100,7 @@ public final class NumenScreen extends Screen {
             txt(g, Component.literal(e.name()), x, ry + 1, TXT);
             String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
                     + (nb(e.model()) ? e.model() : "?")
-                    + (nb(e.apiKey()) ? "" : " · 未填Key");
+                    + (nb(e.apiKey()) ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
             txt(g, Component.literal(clip(meta, w - 30)), x, ry + 11, nb(e.apiKey()) ? TXT_FAINT : FAIL);
             txt(g, Component.literal("✎"), editX, ry + 6,
                     overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
@@ -1110,11 +1112,11 @@ public final class NumenScreen extends Screen {
     private void renderProviderForm(GuiGraphics g) {
         int x = secX();
         int fy = secY0();
-        txt(g, Component.literal("名称(必填)"), x, fy, TXT_MUTED);
-        txt(g, Component.literal("提供商"), x, fy + SET_SP, TXT_MUTED);
-        txt(g, Component.literal("模型"), x, fy + 2 * SET_SP, TXT_MUTED);
-        txt(g, Component.literal("API Key"), x, fy + 3 * SET_SP, TXT_MUTED);
-        txt(g, Component.literal("Base URL(随提供商自适应,可改)"), x, fy + 4 * SET_SP, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_FORM_NAME), x, fy, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_FORM_PROVIDER), x, fy + SET_SP, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_MODEL), x, fy + 2 * SET_SP, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_API_KEY), x, fy + 3 * SET_SP, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_FORM_BASE_URL), x, fy + 4 * SET_SP, TXT_MUTED);
     }
 
     private static boolean nb(String s) {
@@ -1158,7 +1160,8 @@ public final class NumenScreen extends Screen {
     /** The config-hub left sub-nav: 模型接入 / MCP / 技能, plus the divider. */
     private void renderSettingsNav(GuiGraphics g) {
         String[] labels = {
-                "模型配置", "代理", I18n.get("numen.settings.nav.mcp"),
+                I18n.get(ModLanguageData.Keys.PROVIDER_TITLE), I18n.get("numen.settings.proxy"),
+                I18n.get("numen.settings.nav.mcp"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona")};
         int navX = left + PAD;
         int y = secY0();
@@ -1636,14 +1639,14 @@ public final class NumenScreen extends Screen {
     private void doSummon() {
         String n = summonInput == null ? "" : summonInput.getValue().trim();
         if (n.isEmpty()) {
-            warnText = "先给同伴起个名字";
+            warnText = I18n.get(ModLanguageData.Keys.SUMMON_WARN_NAME);
             warnUntil = System.currentTimeMillis() + 4000;
             return;
         }
         // A model config is REQUIRED. Empty library → error AT THE CLICK, pointing
         // the way (no ambient red text before the player acts).
         if (summonProviderId == null) {
-            warnText = "模型配置为空,请先到 设置 → 模型配置 新建一条";
+            warnText = I18n.get(ModLanguageData.Keys.SUMMON_WARN_PROVIDER);
             warnUntil = System.currentTimeMillis() + 4000;
             return;
         }
@@ -1839,11 +1842,11 @@ public final class NumenScreen extends Screen {
         } else if (summoning) {
             int y0 = top + HEADER_H;   // offsets in lockstep with buildSummonField
             txt(g, Component.translatable("numen.summon.title"), left + PAD, y0 + 8, TXT);
-            txt(g, Component.literal("名字"), left + PAD, y0 + 24, TXT_MUTED);
-            placeholder(g, summonInput, "给它起个名字,如:小玖");
-            txt(g, Component.literal("人设"), left + PAD, y0 + 58, TXT_MUTED);
-            txt(g, Component.literal("模型配置"
-                    + (summonProviderDropdown == null ? "(空——到 设置 → 模型配置 新建)" : "")),
+            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_NAME), left + PAD, y0 + 24, TXT_MUTED);
+            placeholder(g, summonInput, I18n.get(ModLanguageData.Keys.SUMMON_NAME_PLACEHOLDER));
+            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_PERSONA_LABEL), left + PAD, y0 + 58, TXT_MUTED);
+            txt(g, Component.literal(I18n.get(ModLanguageData.Keys.PROVIDER_TITLE)
+                    + (summonProviderDropdown == null ? I18n.get(ModLanguageData.Keys.SUMMON_PROVIDER_EMPTY) : "")),
                     left + PAD, y0 + 92, TXT_MUTED);
             txt(g, Component.translatable("numen.summon.hint"),
                     left + PAD, y0 + 152, TXT_FAINT);

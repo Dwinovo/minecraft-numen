@@ -9,6 +9,7 @@ import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.agent.tool.ToolInvocation;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.platform.services.INumenConfig;
 import com.dwinovo.numen.task.TaskResult;
@@ -16,6 +17,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.resources.language.I18n;
 
 import java.nio.file.Path;
 import java.time.LocalDate;
@@ -599,10 +601,10 @@ public final class EntityAgentLoop {
     public String endpointProblem() {
         var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
         if (providerEntryId == null || lib.get(providerEntryId) == null) {
-            return "这个同伴还没有绑定模型配置——到 设置 → 模型配置 新建/选择一条";
+            return I18n.get(ModLanguageData.Keys.ENDPOINT_UNBOUND);
         }
         if (!lib.resolve(providerEntryId).hasApiKey()) {
-            return "模型配置「" + lib.get(providerEntryId).name() + "」还没填 API Key——到 设置 → 模型配置 补上";
+            return I18n.get(ModLanguageData.Keys.ENDPOINT_NO_KEY, lib.get(providerEntryId).name());
         }
         return null;
     }

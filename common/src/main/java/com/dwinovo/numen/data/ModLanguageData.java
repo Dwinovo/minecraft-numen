@@ -43,6 +43,34 @@ public final class ModLanguageData {
 
         /** Hotkey: open the companion roster panel (shown in Controls settings). */
         public static final String KEY_OPEN_ROSTER = "key.numen.open_roster";
+
+        // Model-config (provider library) section: nav label, list, form.
+        public static final String PROVIDER_TITLE          = "numen.provider.title";
+        public static final String PROVIDER_EMPTY          = "numen.provider.empty";
+        public static final String PROVIDER_ADD            = "numen.provider.add";
+        public static final String PROVIDER_DELETE_CONFIRM = "numen.provider.delete_confirm";
+        public static final String PROVIDER_NO_KEY         = "numen.provider.no_key";
+        public static final String PROVIDER_FORM_NAME      = "numen.provider.form_name";
+        public static final String PROVIDER_FORM_PROVIDER  = "numen.provider.form_provider";
+        public static final String PROVIDER_FORM_BASE_URL  = "numen.provider.form_base_url";
+
+        // Proxy section (IP + port rows; the section/nav title reuses numen.settings.proxy).
+        public static final String SETTINGS_PROXY_IP   = "numen.settings.proxy_ip";
+        public static final String SETTINGS_PROXY_PORT = "numen.settings.proxy_port";
+
+        // Summon page: field labels, placeholder, actions, click-time warnings.
+        public static final String SUMMON_NAME             = "numen.summon.name";
+        public static final String SUMMON_NAME_PLACEHOLDER = "numen.summon.name_placeholder";
+        public static final String SUMMON_PERSONA_LABEL    = "numen.summon.persona_label";
+        public static final String SUMMON_PERSONA_NONE     = "numen.summon.persona_none";
+        public static final String SUMMON_PROVIDER_EMPTY   = "numen.summon.provider_empty";
+        public static final String SUMMON_CREATE           = "numen.summon.create";
+        public static final String SUMMON_WARN_NAME        = "numen.summon.warn_name";
+        public static final String SUMMON_WARN_PROVIDER    = "numen.summon.warn_provider";
+
+        // Endpoint problems surfaced in chat (EntityAgentLoop#endpointProblem).
+        public static final String ENDPOINT_UNBOUND = "numen.endpoint.unbound";
+        public static final String ENDPOINT_NO_KEY  = "numen.endpoint.no_key";
     }
 
     /** Loader-side providers funnel both English and Simplified Chinese through here. */
@@ -137,6 +165,34 @@ public final class ModLanguageData {
         adder.add("numen.respawn", "· reviving %ss");
         adder.add("numen.status.loading", "loading…");
         adder.add("numen.status.asleep", "asleep — chat to wake it.");
+
+        // Model-config section
+        adder.add(Keys.PROVIDER_TITLE,          "Model Configs");
+        adder.add(Keys.PROVIDER_EMPTY,          "No model config yet — click New (top-right) to create one");
+        adder.add(Keys.PROVIDER_ADD,            "New");
+        adder.add(Keys.PROVIDER_DELETE_CONFIRM, "Delete \"%s\"? Companions using it can't chat until rebound.");
+        adder.add(Keys.PROVIDER_NO_KEY,         "no key");
+        adder.add(Keys.PROVIDER_FORM_NAME,      "Name (required)");
+        adder.add(Keys.PROVIDER_FORM_PROVIDER,  "Provider");
+        adder.add(Keys.PROVIDER_FORM_BASE_URL,  "Base URL (adapts to provider, editable)");
+
+        // Proxy section
+        adder.add(Keys.SETTINGS_PROXY_IP,   "IP (empty = direct)");
+        adder.add(Keys.SETTINGS_PROXY_PORT, "Port");
+
+        // Summon page
+        adder.add(Keys.SUMMON_NAME,             "Name");
+        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "Give it a name, e.g. Kyu");
+        adder.add(Keys.SUMMON_PERSONA_LABEL,    "Persona");
+        adder.add(Keys.SUMMON_PERSONA_NONE,     "None");
+        adder.add(Keys.SUMMON_PROVIDER_EMPTY,   " (empty — create one in Settings → Model Configs)");
+        adder.add(Keys.SUMMON_CREATE,           "Create");
+        adder.add(Keys.SUMMON_WARN_NAME,        "Give your companion a name first");
+        adder.add(Keys.SUMMON_WARN_PROVIDER,    "No model configs — create one in Settings → Model Configs first");
+
+        // Endpoint problems (chat warn line)
+        adder.add(Keys.ENDPOINT_UNBOUND, "This companion has no model config bound — pick or create one in Settings → Model Configs");
+        adder.add(Keys.ENDPOINT_NO_KEY,  "Model config \"%s\" has no API Key yet — add it in Settings → Model Configs");
     }
 
     private static void addZh(Adder adder) {
@@ -222,5 +278,33 @@ public final class ModLanguageData {
         adder.add("numen.respawn", "· 复活中 %ss");
         adder.add("numen.status.loading", "加载中…");
         adder.add("numen.status.asleep", "休眠中 —— 对它说话唤醒。");
+
+        // Model-config section
+        adder.add(Keys.PROVIDER_TITLE,          "模型配置");
+        adder.add(Keys.PROVIDER_EMPTY,          "还没有模型配置——点右上「新建」创建一条");
+        adder.add(Keys.PROVIDER_ADD,            "新建");
+        adder.add(Keys.PROVIDER_DELETE_CONFIRM, "删除「%s」?正在使用它的同伴将无法对话,直到重新绑定。");
+        adder.add(Keys.PROVIDER_NO_KEY,         "未填Key");
+        adder.add(Keys.PROVIDER_FORM_NAME,      "名称(必填)");
+        adder.add(Keys.PROVIDER_FORM_PROVIDER,  "提供商");
+        adder.add(Keys.PROVIDER_FORM_BASE_URL,  "Base URL(随提供商自适应,可改)");
+
+        // Proxy section
+        adder.add(Keys.SETTINGS_PROXY_IP,   "IP(留空 = 直连)");
+        adder.add(Keys.SETTINGS_PROXY_PORT, "端口");
+
+        // Summon page
+        adder.add(Keys.SUMMON_NAME,             "名字");
+        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "给它起个名字,如:小玖");
+        adder.add(Keys.SUMMON_PERSONA_LABEL,    "人设");
+        adder.add(Keys.SUMMON_PERSONA_NONE,     "无");
+        adder.add(Keys.SUMMON_PROVIDER_EMPTY,   "(空——到 设置 → 模型配置 新建)");
+        adder.add(Keys.SUMMON_CREATE,           "创建");
+        adder.add(Keys.SUMMON_WARN_NAME,        "先给同伴起个名字");
+        adder.add(Keys.SUMMON_WARN_PROVIDER,    "模型配置为空,请先到 设置 → 模型配置 新建一条");
+
+        // Endpoint problems (chat warn line)
+        adder.add(Keys.ENDPOINT_UNBOUND, "这个同伴还没有绑定模型配置——到 设置 → 模型配置 新建/选择一条");
+        adder.add(Keys.ENDPOINT_NO_KEY,  "模型配置「%s」还没填 API Key——到 设置 → 模型配置 补上");
     }
 }
