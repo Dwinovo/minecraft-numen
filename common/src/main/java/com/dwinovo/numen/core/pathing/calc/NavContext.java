@@ -14,6 +14,7 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
@@ -152,6 +153,22 @@ public final class NavContext {
             if (spd > bestSpeed) bestSpeed = spd;
         }
         return new BestTool(bestSpeed, BlockHelper.canHarvest(inventory, state));
+    }
+
+    /** Coarse fingerprint of dig capability for h-learning lifecycle: best inventory
+     *  destroy-speed vs plain stone (hand 1.0 &lt; wood &lt; ... &lt; netherite, ×efficiency),
+     *  plus 0.5 when scaffolding is carried. Monotone-comparable: a HIGHER value
+     *  means previously-learned pessimism may now over-estimate → clear the table. */
+    public double digCapabilityFingerprint() {
+        BlockState stone = Blocks.STONE.defaultBlockState();
+        float best = 1.0f;                                    // bare hand baseline
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack s = inventory.getItem(i);
+            if (s.isEmpty()) continue;
+            float spd = s.getDestroySpeed(stone);
+            if (spd > best) best = spd;
+        }
+        return best + (hasScaffold ? 0.5 : 0.0);
     }
 
     private static boolean hasAnyScaffold(Container inv) {

@@ -1,11 +1,12 @@
 package com.dwinovo.numen.core.pathing.exec;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.calc.AStar;
-import com.dwinovo.numen.core.pathing.calc.AStarSearch;
+import com.dwinovo.numen.core.pathing.calc.EngineSearch;
 import com.dwinovo.numen.core.pathing.calc.NavContext;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.calc.Path;
+import com.dwinovo.numen.core.pathing.engine.HLearningTable;
+import com.dwinovo.numen.core.pathing.engine.SearchBudget;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
@@ -20,8 +21,10 @@ import java.util.function.Supplier;
  * The player-body twin of {@code Navigator}: same path-while-moving loop (walk
  * the current path; precompute the continuation of a partial path so there's no
  * planning pause at a segment boundary; re-root on a moving goal or after an
- * off-path replan) but executing through {@link PlayerPathExecutor}. The A*
- * planner ({@link NavContext}/{@link AStar}) is body-neutral and reused as-is.
+ * off-path replan) but executing through {@link PlayerPathExecutor}. Planning
+ * runs on the v2 engine via the {@link EngineSearch} adapter (body-neutral,
+ * Minecraft-free at its core) with an {@link HLearningTable} shared across
+ * this navigation's segments.
  *
  * <p>Internally the goal is a {@link NavGoal} so callers can target a single
  * cell ({@link #PlayerNav(NumenPlayer, BlockPos, double, BooleanSupplier)}) or
@@ -44,18 +47,27 @@ public final class PlayerNav {
     private final Supplier<NavGoal> goalSupplier;
     private final double speed;
     private final BooleanSupplier reached;
-    private final AStar astar = new AStar();
+
+    /** Learned-heuristic table shared across this navigation's search segments (see
+     *  {@link HLearningTable} for semantics). Concurrency invariant: at most one LIVE
+     *  search at a time; cancelled workers may linger — safe because the table is
+     *  synchronized and cancelled searches never write (engine contract). */
+    private final HLearningTable learning = new HLearningTable();
+    /** Dig-capability fingerprint at the last fresh dispatch — a RISE clears the
+     *  learned table (better tools → old learned values may over-estimate). */
+    private double lastDigFingerprint = -1;
 
     private BlockPos plannedCenter;
     private PlayerPathExecutor current;
 
-    // A* now runs on the planner pool, not stepped on the tick thread. We hold the future (polled each
-    // tick) plus the search object itself (to cancel it on replan/stop so a stale worker stops wasting
-    // CPU). One in-flight search at a time for the main path, one for the precomputed next segment.
+    // The search runs on the planner pool, not stepped on the tick thread. We hold the future (polled
+    // each tick) plus the search object itself (to cancel it on replan/stop so a stale worker stops
+    // wasting CPU). One in-flight search at a time for the main path, one for the precomputed next
+    // segment.
     private java.util.concurrent.CompletableFuture<Path> searchFuture;
-    private AStarSearch searchObj;
+    private EngineSearch searchObj;
     private java.util.concurrent.CompletableFuture<Path> nextFuture;
-    private AStarSearch nextObj;
+    private EngineSearch nextObj;
     private PlayerPathExecutor pendingNext;
     private Path pendingPathForViz;
 
@@ -194,22 +206,21 @@ public final class PlayerNav {
      *  context whose view is the live read-through ({@code safeForThreadedUse == false}) must NOT run
      *  on a worker. The latter is a rare safety net (e.g. no chunk snapshot yet); it returns an
      *  already-completed future so the polling code is identical. */
-    private java.util.concurrent.CompletableFuture<Path> dispatch(NavContext ctx, AStarSearch s) {
+    private java.util.concurrent.CompletableFuture<Path> dispatch(NavContext ctx, EngineSearch s) {
         return ctx.safeForThreadedUse ? runAsync(s) : java.util.concurrent.CompletableFuture.completedFuture(runToCompletion(s));
     }
 
-    /** Run a search to completion on the planner pool (off the tick thread). The node cap inside the
-     *  search bounds it, so one {@code step} call runs the whole thing. */
-    private static java.util.concurrent.CompletableFuture<Path> runAsync(AStarSearch s) {
+    /** Run a search to completion on the planner pool (off the tick thread). The engine's budget
+     *  bounds it, so one {@code run} call runs the whole thing. */
+    private static java.util.concurrent.CompletableFuture<Path> runAsync(EngineSearch s) {
         return com.dwinovo.numen.core.pathing.calc.PathPlannerPool.submit(() -> runToCompletion(s));
     }
 
-    /** One {@code step} to the node cap; a thrown planner bug yields no path rather than wedging the
+    /** One budget-bounded {@code run}; a thrown planner bug yields no path rather than wedging the
      *  companion (or, off-thread, completing the future exceptionally). */
-    private static Path runToCompletion(AStarSearch s) {
+    private static Path runToCompletion(EngineSearch s) {
         try {
-            s.step(Integer.MAX_VALUE);
-            return s.result();
+            return s.run();
         } catch (Throwable t) {
             com.dwinovo.numen.Constants.LOG.error("path search failed", t);
             return null;
@@ -232,24 +243,21 @@ public final class PlayerNav {
         NavContext ctx = searchContext();
         BlockPos startFeet = BlockHelper.playerFeet(
                 player.level(), player.getX(), player.getY(), player.getZ());
-        AStarSearch s = astar.newSearch(ctx, startFeet, g, previousPathHashes,
-                nodeBudget(startFeet, g));
+        // Learned-h lifecycle: an IMPROVED dig capability (better tool picked up,
+        // scaffolding gained) means previously-learned pessimism may now
+        // over-estimate → clear; worse/equal capability keeps still-valid lower bounds.
+        double fp = ctx.digCapabilityFingerprint();
+        if (fp > lastDigFingerprint + 0.01) {
+            learning.clear();
+        }
+        lastDigFingerprint = fp;
+        double dist = Math.sqrt(startFeet.distSqr(g.center()));
+        EngineSearch s = EngineSearch.create(ctx, startFeet, g, previousPathHashes,
+                learning, SearchBudget.scaled(dist));
         lastCtx = ctx;
         lastStart = startFeet;
         searchObj = s;
         searchFuture = dispatch(ctx, s);
-    }
-
-    /**
-     * Per-search node budget scaled to the straight-line distance: near goals stay
-     * at the cheap default (10k), a far/deep goal earns up to 200k — tunnelling
-     * through uniform rock branches enormously, and a 112-block climb starves at
-     * 10k. Off-thread on the planner pool, so the cost is planning latency only.
-     */
-    private static int nodeBudget(BlockPos start, NavGoal goal) {
-        double dist = Math.sqrt(start.distSqr(goal.center()));
-        return (int) Math.min(200_000, com.dwinovo.numen.core.pathing.calc.AStar.DEFAULT_MAX_NODES
-                + 1_700 * dist);
     }
 
     /** Cancel and forget the in-flight main search (so a stale worker stops and its result is ignored). */
@@ -261,16 +269,6 @@ public final class PlayerNav {
         searchFuture = null;
     }
 
-    /** Packed positions (start + every movement dest) of a path — its Favoring set. */
-    private static it.unimi.dsi.fastutil.longs.LongSet pathHashes(Path p) {
-        var set = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(p.movements.size() + 1);
-        set.add(p.start.asLong());
-        for (com.dwinovo.numen.core.pathing.movement.Movement m : p.movements) {
-            set.add(m.dest.asLong());
-        }
-        return set;
-    }
-
     private Status advanceFreshSearch() {
         if (searchFuture == null) {
             failReason = "target lost";
@@ -280,7 +278,7 @@ public final class PlayerNav {
         if (!searchFuture.isDone()) {
             return Status.RUNNING;   // worker still planning — body waits (it was idle anyway)
         }
-        AStarSearch finished = searchObj;
+        EngineSearch finished = searchObj;
         Path path = searchFuture.getNow(null);
         searchFuture = null;
         searchObj = null;
@@ -291,7 +289,7 @@ public final class PlayerNav {
         }
         Path cut = path.staticCutoff();
         current = new PlayerPathExecutor(player, cut, speed, this::executionContext);
-        previousPathHashes = pathHashes(cut);   // favor this route on the next replan
+        previousPathHashes = EngineSearch.favoring(cut);   // favor this route on the next replan
         publishViz(cut);
         return Status.RUNNING;
     }
@@ -304,6 +302,7 @@ public final class PlayerNav {
         cancelSearch();   // abandon any in-flight main search before dispatching a new one
         if (!budgeted) {
             bestGoalDist = Double.MAX_VALUE;   // goal moved / re-rooted → fresh accounting
+            learning.clear();                  // learned h is goal-relative — invalid for the new goal
         } else {
             // Baritone semantics: give up on STALLED effort, never on segment count —
             // a 60-block dig-up legitimately takes dozens of segments, each one a real
@@ -340,8 +339,9 @@ public final class PlayerNav {
         if (g == null) return;
         plannedCenter = g.center();
         NavContext ctx = searchContext();
-        AStarSearch s = astar.newSearch(ctx, current.pathEnd(), g, previousPathHashes,
-                nodeBudget(current.pathEnd(), g));
+        double dist = Math.sqrt(current.pathEnd().distSqr(g.center()));
+        EngineSearch s = EngineSearch.create(ctx, current.pathEnd(), g, previousPathHashes,
+                learning, SearchBudget.scaled(dist));
         nextObj = s;
         nextFuture = dispatch(ctx, s);
     }
@@ -356,7 +356,7 @@ public final class PlayerNav {
             Path cut = np.staticCutoff();
             pendingNext = new PlayerPathExecutor(player, cut, speed, this::executionContext);
             pendingPathForViz = cut;
-            previousPathHashes = pathHashes(cut);   // the next segment becomes the favored route
+            previousPathHashes = EngineSearch.favoring(cut);   // the next segment becomes the favored route
         }
     }
 
@@ -380,7 +380,7 @@ public final class PlayerNav {
      * concrete break-veto (water / protected block / bedrock …) on the straight
      * line to the goal, when there is one.
      */
-    private String noPathAutopsy(AStarSearch s) {
+    private String noPathAutopsy(EngineSearch s) {
         StringBuilder r = new StringBuilder("no path to target");
         if (s != null) {
             r.append(" (").append(s.frontierExhausted()
@@ -390,6 +390,10 @@ public final class PlayerNav {
                             s.expansionsDone(), Math.sqrt(s.bestProgressSq())));
             if (lastCtx != null && !lastCtx.hasScaffold) {
                 r.append("; carrying no scaffolding blocks to bridge or pillar with");
+            }
+            r.append(String.format("; learned-h consults %d", s.stats().learnedConsultHits()));
+            if (s.stats().stoppedAtPrimary()) {
+                r.append("; stopped at primary budget");
             }
             r.append(')');
         } else {
