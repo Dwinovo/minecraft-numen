@@ -70,6 +70,13 @@ public record CompanionListPayload(List<Entry> companions) implements CustomPack
                 com.dwinovo.numen.client.agent.AgentLoopRegistry.getOrCreate(e.uuid())
                         .setInitialPersona(persona.id(), persona.text(), persona.name());
             }
+            // Same resolution for the provider entry picked at summon (selection is
+            // mandatory in the summon panel, so a new companion always carries one).
+            String providerEntry = com.dwinovo.numen.agent.llm.ProviderLibrary.takePendingSummon(e.name());
+            if (providerEntry != null) {
+                com.dwinovo.numen.client.agent.AgentLoopRegistry.getOrCreate(e.uuid())
+                        .setProviderEntry(providerEntry);
+            }
         }
     }
 }

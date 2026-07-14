@@ -135,6 +135,9 @@ public final class NumenScreen extends Screen {
     /** Persona chosen for the companion currently being summoned (null = default / none). */
     private String summonPersonaId;
     private Dropdown summonPersonaDropdown;
+    /** Provider entry for the new companion — REQUIRED (no default, no fallback). */
+    private Dropdown summonProviderDropdown;
+    private String summonProviderId;
     private static final String PERSONA_DEFAULT = "__default__";
     private int settingsScroll;   // first visible row of the MCP / skill list (wheel-scroll when long)
 
@@ -278,6 +281,7 @@ public final class NumenScreen extends Screen {
         modelDropdown = null;
         summonInput = null;
         summonPersonaDropdown = null;
+        summonProviderDropdown = null;
         if (summoning) { buildSummonField(); return; }
         if (dismissPending != null) { buildDismissConfirm(); return; }
         switch (tab) {
@@ -305,6 +309,28 @@ public final class NumenScreen extends Screen {
         }
         summonPersonaDropdown = new Dropdown(items, summonPersonaId == null ? PERSONA_DEFAULT : summonPersonaId);
         summonPersonaDropdown.setBounds(left + PAD, y + 26, PANEL_W - PAD * 2, 18);
+        // REQUIRED provider entry for the new companion — no default item and no fallback:
+        // an empty library means creation is blocked (the render paints the pointer to
+        // 设置 → 提供商 instead of a dropdown).
+        var provEntries = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
+        if (!provEntries.isEmpty()) {
+            List<Dropdown.Item> provItems = new ArrayList<>();
+            for (var e : provEntries) {
+                provItems.add(new Dropdown.Item(e.id(), e.name()));
+            }
+            if (summonProviderId == null) summonProviderId = provEntries.get(0).id();
+            summonProviderDropdown = new Dropdown(provItems, summonProviderId);
+            summonProviderDropdown.setBounds(left + PAD, y + 48, PANEL_W - PAD * 2, 18);
+        }
+        // Explicit actions — Enter stays as the fallback confirm (keyPressed), the
+        // buttons are the primary path.
+        int bw = 64, gap = 8, totalW = bw * 2 + gap;
+        int bx = left + (PANEL_W - totalW) / 2;
+        int by = y + 74;
+        add(new SimpleButton(bx, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
+                b -> { summoning = false; rebuild(); }));
+        add(new SimpleButton(bx + bw + gap, by, bw, 18, Component.literal("创建"),
+                b -> doSummon()));
         setInitialFocus(summonInput);
     }
 
@@ -1329,11 +1355,16 @@ public final class NumenScreen extends Screen {
     private void doSummon() {
         String n = summonInput == null ? "" : summonInput.getValue().trim();
         if (n.isEmpty()) return;
-        // Remember the picked persona by name; CompanionListPayload applies it when the new companion arrives.
+        // A provider entry is REQUIRED — with an empty library there is nothing to
+        // select and creation stays blocked (the panel points at 设置 → 提供商).
+        if (summonProviderId == null) return;
+        // Remember the picks by name; CompanionListPayload applies them when the new companion arrives.
         if (summonPersonaId != null) com.dwinovo.numen.persona.PersonaLibrary.pendSummon(n, summonPersonaId);
+        com.dwinovo.numen.agent.llm.ProviderLibrary.pendSummon(n, summonProviderId);
         Services.NETWORK.sendToServer(new com.dwinovo.numen.network.payload.SummonRequestPayload(n));
         summoning = false;
         summonPersonaId = null;
+        summonProviderId = null;
         rebuild();   // the new companion arrives via CompanionListPayload — click its avatar to open
     }
 
@@ -1343,10 +1374,14 @@ public final class NumenScreen extends Screen {
             return super.mouseClicked(mouseX, mouseY, button);   // modal confirm — let its Cancel/Delete buttons handle it
         }
         if (button == 0) {
-            // Summon persona dropdown gets first pick (its open list overlays the panel).
+            // Summon dropdowns get first pick (their open lists overlay the panel).
             if (summoning && summonPersonaDropdown != null && summonPersonaDropdown.mouseClicked(mouseX, mouseY)) {
                 String sel = summonPersonaDropdown.selectedId();
                 summonPersonaId = PERSONA_DEFAULT.equals(sel) ? null : sel;
+                return true;
+            }
+            if (summoning && summonProviderDropdown != null && summonProviderDropdown.mouseClicked(mouseX, mouseY)) {
+                summonProviderId = summonProviderDropdown.selectedId();
                 return true;
             }
             UUID close = railCloseAt((int) mouseX, (int) mouseY);
@@ -1554,6 +1589,13 @@ public final class NumenScreen extends Screen {
         }
 
         // Summon persona dropdown — drawn late so its open list sits above the summon field.
+        if (summoning && summonProviderDropdown == null) {
+            // Empty provider library: creation is blocked — paint the pointer instead.
+            g.drawString(font, "先到 设置 → 提供商 新建一条配置", left + PAD, top + HEADER_H + 74, 0xFFCC6666, false);
+        }
+        if (summoning && summonProviderDropdown != null) {
+            summonProviderDropdown.render(g, font, mouseX, mouseY);
+        }
         if (summoning && summonPersonaDropdown != null) {
             summonPersonaDropdown.render(g, font, mouseX, mouseY);
         }
