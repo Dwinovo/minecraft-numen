@@ -39,8 +39,16 @@ public final class PlayerNav {
     private static final int MAX_REPLANS = 200;
     /** Real give-up: this many CONSECUTIVE replans without genuinely nearing the goal. */
     private static final int MAX_STALLED_REPLANS = 6;
-    /** Blocks of goal-distance gain that count as "genuinely nearing". */
-    private static final double REPLAN_PROGRESS_EPS = 1.5;
+    /**
+     * Heuristic-units drop that counts as "genuinely nearing" — ≈ one block of
+     * real progress in ANY goal's own terms (walking ≈3.56 weighted, climbing
+     * ≈3.16, descending ≈3.89). Progress is measured by the GOAL'S HEURISTIC at
+     * the feet, not euclidean distance to {@code center()}: a yLevel goal's
+     * center is (0, level, 0), so euclidean distance is dominated by meaningless
+     * horizontal offset — a 51-block climb once read as "5 blocks of progress"
+     * and got the attempt spuriously stalled-out.
+     */
+    private static final double REPLAN_PROGRESS_EPS_H = 4.0;
     private static final double GOAL_MOVED_SQR = 4.0;
 
     private final NumenPlayer player;
@@ -95,8 +103,8 @@ public final class PlayerNav {
 
     private int replans = 0;
     private int stalledReplans = 0;
-    /** Nearest we have EVER been to the goal — the yardstick for stalled-replan detection. */
-    private double bestGoalDist = Double.MAX_VALUE;
+    /** Best (lowest) goal-heuristic the feet have EVER reached — the stalled-replan yardstick. */
+    private double bestGoalH = Double.MAX_VALUE;
     private String failReason = "target unreachable";
     private FailureType failType = FailureType.NO_PATH;
 
@@ -297,7 +305,7 @@ public final class PlayerNav {
                               // that may no longer exist, and letting it run would put a
                               // second LIVE search on the shared learning table
         if (!budgeted) {
-            bestGoalDist = Double.MAX_VALUE;   // goal moved / re-rooted → fresh accounting
+            bestGoalH = Double.MAX_VALUE;      // goal moved / re-rooted → fresh accounting
             // Learned h is goal-relative — invalid for the new goal. SWAP the table,
             // never clear() it: a just-cancelled worker can still be mid-write-back
             // (a milliseconds-wide scan), and clearing would let its OLD-goal values
@@ -306,16 +314,18 @@ public final class PlayerNav {
         } else {
             // Baritone semantics: give up on STALLED effort, never on segment count —
             // a 60-block dig-up legitimately takes dozens of segments, each one a real
-            // gain. Only consecutive segments that get us no nearer end the attempt.
-            double d = plannedCenter == null ? Double.MAX_VALUE
-                    : Math.sqrt(player.blockPosition().distSqr(plannedCenter));
-            if (bestGoalDist - d >= REPLAN_PROGRESS_EPS) {
-                bestGoalDist = d;
+            // gain. Progress is judged in the GOAL'S OWN terms (its heuristic at the
+            // feet): correct for yLevel (vertical only), column (horizontal only),
+            // composite (nearest member) and runAway (negative, drops as we flee) alike.
+            NavGoal liveGoal = goalSupplier.get();
+            double h = liveGoal == null ? Double.MAX_VALUE
+                    : liveGoal.heuristic(player.blockPosition());
+            if (bestGoalH - h >= REPLAN_PROGRESS_EPS_H) {
+                bestGoalH = h;
                 stalledReplans = 0;
             } else if (++stalledReplans >= MAX_STALLED_REPLANS) {
-                failReason = "gave up: no closer to the target after " + MAX_STALLED_REPLANS
-                        + " consecutive attempts (nearest approach "
-                        + String.format("%.0f", Math.min(bestGoalDist, d)) + " blocks away)";
+                failReason = "gave up: no real progress toward the target over "
+                        + MAX_STALLED_REPLANS + " consecutive attempts";
                 failType = FailureType.BOXED_IN;
                 return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
             }

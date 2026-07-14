@@ -31,10 +31,10 @@ public final class PathSettings {
     /** Skip re-propagating cost improvements smaller than this (FP-noise guard). */
     public static final double MIN_IMPROVEMENT = 0.01;
 
-    // The search terminates on a NODE BUDGET ({@link com.dwinovo.numen.core.pathing.calc.AStar}
-    // DEFAULT_MAX_NODES, time-sliced per tick), NOT Baritone's wall-clock primary/failure
-    // timeouts: it runs on the server tick thread, so a deterministic node cap is the right
-    // bound (the timeout model needs a background search thread we deliberately don't use).
+    // The search terminates on a NODE BUDGET (engine.SearchBudget: two-phase
+    // primary/failure expansion counts, distance-scaled), NOT Baritone's wall-clock
+    // timeouts — deterministic counts keep the engine reproducible in unit tests,
+    // and the search runs on the planner pool so frame pacing is irrelevant.
 
     // ---- cost penalties ----
 
