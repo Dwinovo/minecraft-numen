@@ -13,8 +13,8 @@ import java.util.List;
 
 /**
  * Server side of the path overlay: turns a computed {@link Path} into a {@link
- * PathVizPayload} and pushes it to the companion's owner. Baritone renders its
- * path client-side from its own state; our path is computed server-side, so the
+ * PathVizPayload} and pushes it to the companion's owner. The path is computed
+ * server-side (there is no client-side pathfinder state to render from), so the
  * body publishes whenever it (re)plans a segment and clears when the path ends.
  * No-op when the owner is offline.
  */
@@ -24,8 +24,8 @@ public final class PathVizPublisher {
 
     /**
      * Push the current path plus the {@code targets} to highlight — for mining,
-     * EVERY known ore/log cell (Baritone boxes every {@code GoalComposite}
-     * member, so the owner sees the whole field it will work through); for a
+     * EVERY known ore/log cell (each composite-goal member gets a box,
+     * so the owner sees the whole field the body will work through); for a
      * plain move, just the destination cell.
      */
     public static void publish(NumenPlayer player, Path path, List<BlockPos> targets) {
@@ -49,12 +49,10 @@ public final class PathVizPublisher {
     }
 
     /**
-     * Publish ONLY the goal boxes, with no path line — Baritone keeps the goal
-     * box rendered while the path executor is paused (e.g. mining a block in
-     * place / shaft-mining), and only the path LINE comes and goes. During
-     * shaft mining we hold no path but must keep the ore field boxed, exactly
-     * like Baritone's {@code drawGoal(behavior.getGoal())} surviving a
-     * {@code REQUEST_PAUSE}.
+     * Publish ONLY the goal boxes, with no path line — the goal
+     * box stays rendered while the path executor is paused (e.g. mining a block
+     * in place / shaft-mining), and only the path LINE comes and goes. During
+     * shaft mining we hold no path but must keep the ore field boxed.
      */
     public static void publishTargets(NumenPlayer player, List<BlockPos> targets) {
         ServerPlayer owner = player.resolveOwnerPlayer();

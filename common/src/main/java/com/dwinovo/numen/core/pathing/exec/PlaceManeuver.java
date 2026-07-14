@@ -20,8 +20,8 @@ import java.util.function.IntSupplier;
 
 /**
  * The live "edge sneak" block placement, shared by {@code place_block} and the
- * pathfinder's bridge / step scaffolding — a port of how Baritone physically
- * places a block (it never teleport-pops one in): HOLD SNEAK (so it can't walk
+ * pathfinder's bridge / step scaffolding — placing physically, the way a careful
+ * player does (a block is never teleport-popped in): HOLD SNEAK (so it can't walk
  * off the ledge), edge toward the target so the support face comes into view,
  * look at that face, and place. We commit either when the raycast genuinely
  * reaches the face (honest line of sight) or, having physically settled at the
@@ -53,8 +53,8 @@ public final class PlaceManeuver {
 
     private static final Direction[] FACES = {
             Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN};
-    /** After this many ticks without placing, back off a step to re-find the angle
-     *  (Baritone MovementAscend MOVE_BACK), then edge in again — alternating windows. */
+    /** After this many ticks without placing, back off a step to re-find the angle,
+     *  then edge in again — alternating windows. */
     private static final int BACK_OFF_TICKS = 12;
     private static final int LIMIT_TICKS = 60;
 
@@ -113,7 +113,7 @@ public final class PlaceManeuver {
             return Status.FAILED;
         }
 
-        // Baritone aim point on the support face (0.25 low) — for the look. For a slab/stair `half`
+        // Aim point on the support face (biased 0.25 low) — for the look. For a slab/stair `half`
         // hint, bias the click height up (top) or down (bottom) so the placement lands on that half.
         double aimY = (hints.topHalf() != null)
                 ? placeAt.getY() + (hints.topHalf() ? 0.72 : 0.28)
@@ -124,8 +124,8 @@ public final class PlaceManeuver {
                 (placeAt.getZ() + against.getZ() + 1.0) * 0.5);
 
         // Hold sneak (won't walk off the ledge) and edge toward the support face. If
-        // we've ground forward without success, back off a step to re-find the angle
-        // (Baritone MOVE_BACK), alternating in BACK_OFF_TICKS windows.
+        // we've ground forward without success, back off a step to re-find the angle,
+        // alternating in BACK_OFF_TICKS windows.
         player.setShiftKeyDown(true);
         InputDriver.lookAt(player, facePoint);
         boolean backing = ticks >= BACK_OFF_TICKS && (ticks / BACK_OFF_TICKS) % 2 == 1;
@@ -133,7 +133,7 @@ public final class PlaceManeuver {
         player.xxa = 0.0f;
         player.setSprinting(false);
 
-        // Place ONLY once actually crouching (Baritone crouch-confirm — the sneak takes
+        // Place ONLY once actually crouching (crouch-confirm — the sneak takes
         // a tick to register) AND the raycast genuinely reaches a support face. Never
         // fabricate a hit: if line of sight never lands, we just keep trying / time out.
         // With orientation hints we hold back until a dry-run predicts the right state, so the

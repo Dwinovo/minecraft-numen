@@ -5,7 +5,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import java.util.List;
 
 /**
- * The AltoClef {@code TaskRunner} selection rule, extracted as a pure function so
+ * The chain-selection rule, extracted as a pure function so
  * it can be unit-tested without a running Minecraft: from a list of chains, pick
  * the highest-priority one whose priority beats {@link Float#NEGATIVE_INFINITY}
  * (dormant), or {@code null} if every chain is dormant. Earlier chains win ties

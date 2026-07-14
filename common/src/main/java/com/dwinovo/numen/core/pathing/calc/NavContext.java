@@ -19,8 +19,8 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Per-search snapshot binding the world, the entity's capabilities, and a
- * frozen view of its inventory (scaffolding gate + best-tool source). Mirrors
- * Baritone's {@code CalculationContext}: every cost-returning helper reads
+ * frozen view of its inventory (scaffolding gate + best-tool source):
+ * every cost-returning helper reads
  * only from this immutable snapshot, so an A* search is deterministic and
  * doesn't see mid-search inventory mutation.
  *
@@ -31,9 +31,9 @@ import net.minecraft.world.level.block.state.BlockState;
  * moves become impossible and A* routes around (or fails with "out of
  * material"). Actual depletion is handled at execution time — when the
  * executor runs the inventory dry mid-path it triggers a replan, and the
- * fresh snapshot then has {@code hasScaffold == false}. This is the
- * validated Baritone/mineflayer model (boolean gate + event-driven replan),
- * avoiding an explosive per-node "remaining blocks" search state.
+ * fresh snapshot then has {@code hasScaffold == false}. The boolean gate +
+ * event-driven replan is a long-proven model in open-source pathfinding
+ * practice, avoiding an explosive per-node "remaining blocks" search state.
  */
 public final class NavContext {
 
@@ -54,11 +54,11 @@ public final class NavContext {
     /** Max blocks the entity may fall without taking dangerous damage. */
     public final int maxFallHeight;
 
-    /** Whether sprinting is allowed (Baritone {@code canSprint}); drives the sprint cost discount. */
+    /** Whether sprinting is allowed; drives the sprint cost discount. */
     public final boolean canSprint;
 
     /**
-     * Whether this context may be handed to a worker thread (Baritone's {@code safeForThreadedUse}).
+     * Whether this context may be handed to a worker thread.
      * A search context ({@link #forSearch}) is frozen — snapshot inventory + (from P-B) an immutable
      * world view — so the async planner can read it off the tick thread; an execution context
      * ({@link #forExecution}) reads the live world/inventory and is main-thread only.
@@ -66,8 +66,8 @@ public final class NavContext {
     public final boolean safeForThreadedUse;
 
     /**
-     * Frozen view of the body's hotbar, for best-tool-aware mining duration —
-     * Baritone's {@code ToolSet}: a break is costed with the BEST tool the body
+     * Frozen view of the body's inventory, for best-tool-aware mining duration:
+     * a break is costed with the BEST tool the body
      * has, not just the one currently held, because the body auto-switches to it
      * before mining ({@code MineCompanionTask.switchToBestTool}). Costing with the
      * held item instead made A* price an oak log at bare-hand speed when no axe
@@ -78,7 +78,7 @@ public final class NavContext {
     private final java.util.Map<net.minecraft.world.level.block.Block, BestTool> toolCache =
             new java.util.HashMap<>();
 
-    /** Best hotbar tool for a block: its destroy speed and whether it harvests drops. */
+    /** Best inventory tool for a block: its destroy speed and whether it harvests drops. */
     private record BestTool(float speed, boolean canHarvest) {}
 
     private NavContext(Level level, BlockGetter view, Container inventory, boolean safeForThreadedUse) {
@@ -88,7 +88,7 @@ public final class NavContext {
         this.safeForThreadedUse = safeForThreadedUse;
         this.hasScaffold = hasAnyScaffold(inventory);
 
-        // Survivable fall: Baritone's maxFallHeightNoWater (3) — vanilla fall
+        // Survivable fall: 3 blocks — vanilla fall
         // damage starts at 3.5 blocks; cap conservatively so the bot never hurts itself.
         this.maxFallHeight = PathSettings.MAX_FALL_HEIGHT_NO_WATER;
         this.canSprint = PathSettings.ALLOW_SPRINT;
@@ -111,7 +111,7 @@ public final class NavContext {
      * swaps in the {@code CompactSection}-backed off-thread view so the search can move to a worker.
      */
     public static NavContext forSearch(Level level, Container liveInventory) {
-        // Read loaded chunks LIVE through the per-tick snapshot (Baritone useTheRealWorld); before the
+        // Read loaded chunks LIVE through the per-tick snapshot; before the
         // snapshot exists (a level's first companion tick) fall back to the live read-through so the
         // first search is still correct.
         com.dwinovo.numen.core.pathing.cache.LoadedChunks loaded =
@@ -135,7 +135,7 @@ public final class NavContext {
         return copy;
     }
 
-    /** Best hotbar tool for the block (Baritone {@code ToolSet.getBestSlot}),
+    /** Best inventory tool for the block,
      *  memoised per block-type for the search. */
     private BestTool bestTool(BlockState state) {
         return toolCache.computeIfAbsent(state.getBlock(), b -> scanBestTool(state));
@@ -144,8 +144,8 @@ public final class NavContext {
     private BestTool scanBestTool(BlockState state) {
         float bestSpeed = 1.0f;                                   // bare hand baseline
         // Whole inventory, NOT just the hotbar: execution (switchToBestTool) can swap a
-        // backpack tool into the hand, so the cost model prices breaks with that same tool —
-        // a deliberate divergence from Baritone's hotbar-only ToolSet, kept consistent here.
+        // backpack tool into the hand, so the cost model prices breaks with that same
+        // tool — deliberately kept consistent with execution.
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack s = inventory.getItem(i);
             if (s.isEmpty()) continue;
@@ -188,8 +188,7 @@ public final class NavContext {
     public double costOfPlacing(BlockPos pos) {
         if (!hasScaffold) return ActionCosts.COST_INF;
         if (!BlockHelper.isReplaceableForPlacement(view, pos)) return ActionCosts.COST_INF;
-        // Baritone costOfPlacingAt: never place INTO a fluid (source or flowing) at default
-        // settings (allowPlaceInFluidsSource/Flow both false) — so a bridge can't be planned
+        // Never place INTO a fluid (source or flowing) — a bridge can't be planned
         // straight into a water source.
         if (!view.getBlockState(pos).getFluidState().isEmpty()) return ActionCosts.COST_INF;
         if (BlockHelper.isHazard(view, pos)) return ActionCosts.COST_INF;
@@ -214,11 +213,11 @@ public final class NavContext {
 
     /**
      * As {@link #costOfBreaking(BlockPos)} but, when {@code includeFalling}, folds in
-     * the cost of the FallingBlock (sand/gravel) stack directly above {@code pos} —
-     * Baritone's {@code getMiningDurationTicks(includeFalling=true)}. Passed for the
+     * the cost of the FallingBlock (sand/gravel) stack directly above {@code pos}.
+     * Passed for the
      * TOP cell a move breaks: breaking under sand makes it cascade down and we break
-     * each one as it lands. We no longer VETO breaking under sand (Baritone never did);
-     * we pay for the cascade, so paths through sand/gravel terrain match Baritone.
+     * each one as it lands. Breaking under sand is PRICED, not vetoed — we pay for
+     * the cascade, so sand/gravel terrain stays routable instead of walling off.
      */
     public double costOfBreaking(BlockPos pos, boolean includeFalling) {
         if (!BlockHelper.isBreakable(view, pos)) return ActionCosts.COST_INF;
@@ -252,16 +251,16 @@ public final class NavContext {
     public double miningTicks(BlockPos pos) {
         BlockState state = view.getBlockState(pos);
         float hardness = state.getDestroySpeed(view, pos);
-        if (hardness <= 0.0f) return 0.0;   // instabreak — Baritone charges ~0 (the +penalty is added by the caller)
+        if (hardness <= 0.0f) return 0.0;   // instabreak costs ~0 (the +penalty is added by the caller)
         BestTool best = bestTool(state);
         boolean correct = !state.requiresCorrectToolForDrops() || best.canHarvest();
         float toolSpeed = best.speed();
         if (toolSpeed <= 0.0f) toolSpeed = 1.0f;
         float divisor = correct ? 30.0f : 100.0f;
-        // Baritone: ticks = 1/strVsBlock = hardness*divisor/speed — a continuous
-        // value (no ceil). NOTE intentional Baritone parity: no underwater/airborne
-        // ÷5 penalty (it assumes best-case mining). Efficiency enchant (+eff²+1) is
-        // folded into vanilla getDestroySpeed where present.
+        // ticks = hardness*divisor/speed (the inverse of vanilla's per-tick destroy
+        // fraction) — a continuous value (no ceil). NOTE deliberately no underwater/
+        // airborne ÷5 penalty (assume best-case mining). Efficiency enchant (+eff²+1)
+        // is folded into vanilla getDestroySpeed where present.
         return hardness * divisor / toolSpeed;
     }
 

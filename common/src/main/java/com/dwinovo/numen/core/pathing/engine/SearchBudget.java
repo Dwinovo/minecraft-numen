@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.pathing.engine;
 
 /**
- * Two-phase node budget — Baritone's primary/failure TIME semantics translated
+ * Two-phase node budget — primary/failure wall-clock semantics translated
  * into deterministic expansion counts (deterministic → reproducible unit tests;
  * the search runs off-thread, so frame pacing is irrelevant):
  *
@@ -32,8 +32,8 @@ public record SearchBudget(int primaryExpansions, int failureExpansions) {
      * The caller policy PlayerNav uses: failure budget scales with the straight-
      * line distance to the goal (tunnelling through uniform rock branches
      * enormously — a 112-block climb starves at the near-goal default), primary
-     * is a quarter of it (mirrors Baritone's 500ms:2000ms ratio).
-     * Values carried over verbatim from the previously-verified policy.
+     * is a quarter of it (the same 1:4 ratio as a 500ms:2000ms time split).
+     * Values carried over unchanged from the previously-verified policy.
      */
     public static SearchBudget scaled(double straightLineDist) {
         int failure = (int) Math.min(200_000, 10_000 + 1_700 * straightLineDist);

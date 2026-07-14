@@ -36,11 +36,11 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * {@code auto_mine} — a faithful port of Baritone's {@code MineProcess} to the
- * companion player body (functionally aligned; not a code copy, since Baritone
- * drives a client LocalPlayer and we drive a server fake player).
+ * {@code auto_mine} — the scan → path → dig gathering loop, run on the
+ * companion player body (a server-side fake player, so every break goes
+ * through real server-side interaction rules, not client input).
  *
- * <h2>The loop (Baritone MineProcess)</h2>
+ * <h2>The loop</h2>
  * <ol>
  *   <li><b>knownOreLocations</b> — periodically rescan the world for target
  *       blocks ({@link BlockScanner}), and {@link #prune} every tick (drop ones
@@ -48,13 +48,14 @@ import java.util.concurrent.CompletableFuture;
  *       distance, capped at {@link #MAX_ORES}.</li>
  *   <li><b>shaft</b> — if a target sits in our own column within reach, break it
  *       straight up immediately (no pathing), auto-switching to the best tool —
- *       Baritone's vertical-shaft mining.</li>
- *   <li><b>GoalComposite</b> — otherwise head for the whole ore field at once:
+ *       classic vertical-shaft mining.</li>
+ *   <li><b>composite goal</b> — otherwise head for the whole ore field at once:
  *       one A* search over {@link NavGoal#composite} of {@link NavGoal#mine}
  *       stances, so it walks to the CLOSEST reachable ore (not greedy-nearest,
  *       which is often the walled-in one).</li>
  *   <li><b>blacklist</b> — when the path search fails, blacklist the nearest ore
- *       (presumed unreachable) and retry — Baritone's blacklistClosestOnFailure.</li>
+ *       (presumed unreachable) and retry, so one walled-in ore can't stall the
+ *       whole task.</li>
  *   <li><b>branch mine</b> — when no ore is known, head outward holding the
  *       y-level ({@link NavGoal#runAway}) to dig fresh tunnel and expose more,
  *       bounded by {@link #MAX_BRANCH_TICKS}.</li>
@@ -66,19 +67,18 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTaskRecord> {
 
-    private static final int RESCAN_INTERVAL = 10;     // Baritone mineGoalUpdateInterval
-    private static final int MAX_ORES = 64;            // Baritone mineMaxOreLocationsCount
+    private static final int RESCAN_INTERVAL = 10;     // ticks between world rescans for targets
+    private static final int MAX_ORES = 64;            // cap on tracked target locations
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double MINE_SPEED = 1.0;
     /** Give up branch-mining after this many ticks with no ore found (~30 s). */
     private static final int MAX_BRANCH_TICKS = 600;
     /**
-     * Baritone {@code MineProcess.updateGoal}: with {@code exploreForBlocks} (default
-     * FALSE) and {@code legitMine} (default FALSE) both off, "no ore known" returns
-     * null → the process CANCELS — it does NOT wander off hunting for more. Only with
-     * {@code exploreForBlocks} does it branch-mine outward. We mirror the default:
-     * stop. Flip this to re-enable Baritone's opt-in explore mode (the branch-mine
-     * below). */
+     * Whether to keep hunting when no target is known. OFF (the default): "no ore
+     * known" ends the task with whatever was gathered — the body does NOT wander
+     * off across the world looking for more, which is the safer contract for a
+     * companion the player expects to stay nearby. Flip this to enable the opt-in
+     * explore mode (the bounded branch-mine below). */
     private static final boolean EXPLORE_FOR_BLOCKS = false;
     /** Abandon an in-flight scan after this long so a wedged future can't stop
      *  rescanning forever (scans finish in well under a tick; this only fires if
@@ -92,13 +92,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     private final List<BlockPos> knownOres = new ArrayList<>();
     private final Set<BlockPos> blacklist = new HashSet<>();
-    /** Items the target blocks drop (loot-table simulated, Baritone BlockOptionalMeta.drops). The
+    /** Items the target blocks drop (simulated via the server loot tables). The
      *  count is over THESE in the inventory, not blocks broken — redstone_ore yields ~4 redstone. */
     private Set<Item> dropItems = Set.of();
     /** Matching items already in the inventory when the task began — the count is the DELTA above this
-     *  (companion semantics: "gather N more", not Baritone's absolute "have N"). */
+     *  (companion semantics: "gather N more", not an absolute "have N in the inventory"). */
     private int baseline;
-    /** Nearby dropped items to collect (Baritone droppedItemsScan), refreshed per tick. */
+    /** Nearby dropped items to collect (walked over for native pickup), refreshed per tick. */
     private List<BlockPos> drops = List.of();
 
     private boolean navIsBranch;
@@ -110,13 +110,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** The ore currently returning {@code NO_SHOT}, and for how many consecutive ticks. */
     private BlockPos noShotPos;
     private int noShotTicks;
-    /** In-flight background ore scan (Baritone runs its rescan off the tick thread). */
+    /** In-flight background ore scan (rescans run off the tick thread so a large radius never stalls the server tick). */
     private CompletableFuture<List<BlockScanner.Hit>> scan;
     /** Game time by which the in-flight scan must finish or be abandoned. */
     private long scanDeadline;
 
-    // Progressive dig (Baritone mines tick-by-tick, not instabreak) — shared with
-    // the path executor so all breaking reads the same.
+    // Progressive dig (blocks break tick-by-tick at legitimate player speed, not
+    // instabreak) — shared with the path executor so all breaking reads the same.
     private final BlockDigger digger;
 
     public MineCompanionTask(NumenPlayer player, MineBlockTaskRecord record) {
@@ -145,7 +145,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     @Override
     protected void onStart() {
-        // Count toward `count` by ITEMS gathered (Baritone), not blocks broken: resolve what these
+        // Count toward `count` by ITEMS gathered, not blocks broken: resolve what these
         // blocks drop, and snapshot how many we already hold so the tally is the delta above it.
         dropItems = computeDropItems();
         baseline = inventoryMatch();
@@ -191,8 +191,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         BlockPos reachable = reachableTarget();
         if (reachable != null) {
             stopNav();
-            // Baritone keeps the goal box rendered while it mines in place (the path
-            // executor is paused, but drawGoal(behavior.getGoal()) still runs). stopNav
+            // Keep the goal boxes visible while mining in place: the path executor is
+            // paused, but the target overlay should persist. stopNav just
             // cleared the overlay, so re-publish the ore field boxes — otherwise the
             // boxes vanish the instant shaft-mining starts (the "boxes disappear after
             // two logs" bug). No path line while shaft-mining, just the goal.
@@ -223,8 +223,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             }
         }
 
-        // 3) No ore known and nothing dropped nearby. Baritone's default stops here
-        //    (cancel); only its opt-in explore mode branch-mines. Match the default:
+        // 3) No ore known and nothing dropped nearby. Default: stop here — only the
+        //    opt-in explore mode branch-mines outward for more. So
         //    finish with whatever we gathered (the tool's contract: "fewer than count
         //    in range still succeeds"), rather than running off across the world.
         if (!EXPLORE_FOR_BLOCKS) {
@@ -235,7 +235,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             return noOreFailure();
         }
 
-        // 3b) Opt-in explore (Baritone exploreForBlocks) — branch-mine outward (bounded).
+        // 3b) Opt-in explore — branch-mine outward (bounded) to dig fresh tunnel and expose more.
         if (branchPoint == null) {
             branchPoint = player.blockPosition();
             branchY = branchPoint.getY();
@@ -263,7 +263,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     // ---- goals ----
 
-    /** GoalComposite over a mining stance per ore, plus a walk-over goal per nearby
+    /** One composite goal: a mining stance per ore, plus a walk-over goal per nearby
      *  drop — one A* search heads for the closest of either. */
     private NavGoal oreFieldGoal() {
         List<NavGoal> goals = new ArrayList<>(knownOres.size() + drops.size());
@@ -277,15 +277,14 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     }
 
     /**
-     * Baritone {@code MineProcess.coalesce} with {@code forceInternalMining=true}
-     * (its DEFAULT) — pick the mining-stance goal for one ore so the body never
-     * stands BELOW the bottom of a vein/trunk. The blind {@code GoalThreeBlocks}
-     * (feet up to two below every ore) was our divergence: it made a tree's
-     * bottom log's −2 cell a valid stance, and bare-handed (logs dear, dirt
-     * cheap) A* dug under to it. Baritone instead asks "is the block above / below
-     * this one ALSO something I'm mining?": the bottom of a vertical run (target
-     * above, plain ground below) gets {@code GoalBlock} — feet EXACTLY at the ore,
-     * mined where you stand, never dug under.
+     * Pick the mining-stance goal for one ore so the body never stands BELOW the
+     * bottom of a vein/trunk. A blind stance rule ("feet anywhere up to two below
+     * every ore") was the earlier bug: it made a tree's bottom log's −2 cell a
+     * valid stance, and bare-handed (logs dear, dirt cheap) A* dug under to it.
+     * The fix reads the vertical run: ask "is the block above / below this one
+     * ALSO something I'm mining?" — the bottom of a run (target above, plain
+     * ground below) gets an exact-feet goal, so the ore is mined from where you
+     * stand, never dug under.
      */
     private NavGoal coalesce(BlockPos loc) {
         boolean assumeVerticalShaftMine =
@@ -296,31 +295,30 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         boolean doubleDownwardGoal = internalMiningGoal(loc.below(2));
         if (upwardGoal == downwardGoal) {                       // symmetric vertically
             return (doubleDownwardGoal && assumeVerticalShaftMine)
-                    ? NavGoal.mineColumn(loc, 2)                // GoalThreeBlocks
-                    : NavGoal.mineColumn(loc, 1);              // GoalTwoBlocks
+                    ? NavGoal.mineColumn(loc, 2)                // feet up to 2 below the ore
+                    : NavGoal.mineColumn(loc, 1);              // feet at the ore or 1 below
         }
         if (upwardGoal) {                                       // bottom of a run: stand in it
-            return NavGoal.mineColumn(loc, 0);                 // GoalBlock — feet exactly here
+            return NavGoal.mineColumn(loc, 0);                 // feet EXACTLY at the ore
         }
         return (doubleDownwardGoal && assumeVerticalShaftMine) // top of a run, more below
-                ? NavGoal.mineColumn(loc.below(), 1)           // GoalTwoBlocks(below)
-                : NavGoal.mineColumn(loc.below(), 0);          // GoalBlock(below)
+                ? NavGoal.mineColumn(loc.below(), 1)           // feet at/1-below the block under it
+                : NavGoal.mineColumn(loc.below(), 0);          // feet exactly at the block under it
     }
 
     /**
-     * Baritone {@code MineProcess.internalMiningGoal}: is {@code pos} also part of
-     * what we're mining — a known target, a filter match, or (the air exception,
-     * default on) already-broken air continuing the shaft? Used by {@link #coalesce}
-     * to read the run a block sits in.
+     * Is {@code pos} also part of what we're mining — a known target, a filter
+     * match, or already-broken air continuing the shaft? Used by {@link #coalesce}
+     * to read the vertical run a block sits in.
      */
     private boolean internalMiningGoal(BlockPos pos) {
         if (knownOres.contains(pos)) return true;
         net.minecraft.world.level.block.state.BlockState state = player.level().getBlockState(pos);
-        if (state.isAir()) return true;                         // internalMiningAirException
+        if (state.isAir()) return true;                         // broken-out air still continues the run
         return r.targets.contains(state.getBlock());
     }
 
-    /** Nearby dropped items (Baritone droppedItemsScan). Tight radius — mining drops
+    /** Nearby dropped items worth collecting. Tight radius — mining drops
      *  land next to the body; walking over them lets native pickup collect them, and
      *  a small radius keeps the body from detouring across the cave for stray items. */
     private List<BlockPos> droppedItems() {
@@ -333,11 +331,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     }
 
     /**
-     * Baritone's MineProcess "shaft" — EXACT port: a known target in the body's
-     * OWN feet column (x/z match), at or above feet, still solid, and reachable
-     * (within reach + clear sight = {@code RotationUtils.reachable}). Mined in
-     * place, no pathing. The A* (GoalThreeBlocks) is what gets the body INTO the
-     * column; this only fires once it's there. No reach-from-the-side shortcut.
+     * The "shaft" test: a known target in the body's OWN feet column (x/z match),
+     * at or above feet, still solid, and reachable (within reach distance AND with
+     * a clear sight line). Mined in place, no pathing. The A* stance goal is what
+     * gets the body INTO the column; this only fires once it's there. No
+     * reach-from-the-side shortcut.
      */
     private BlockPos reachableTarget() {
         if (!player.onGround()) return null;
@@ -369,7 +367,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(target);
     }
 
-    // ---- mining (progressive, tick-by-tick like Baritone / a real player) ----
+    // ---- mining (progressive, tick-by-tick like a real player) ----
 
     /** Advance the shared dig one tick (it switches to the best tool itself); on the tick the TARGET
      *  breaks, drop it from the ore list. A {@link BlockDigger.DigResult#BROKE_OCCLUDER} (a leaf cleared
@@ -410,7 +408,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         noShotTicks = 0;
     }
 
-    // ---- item counting (Baritone MineProcess: count matching items in the inventory) ----
+    // ---- item counting (progress = matching items held in the inventory) ----
 
     /** Matching items currently in the inventory (sum of stack counts whose item the targets drop). */
     private int inventoryMatch() {
@@ -424,8 +422,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return sum;
     }
 
-    /** The item set the target blocks drop — Baritone {@code BlockOptionalMeta.drops}, via the server
-     *  loot table rolled once per target with the best harvesting tool we carry (so an ore yields its
+    /** The item set the target blocks drop — the server loot table rolled once per
+     *  target with the best harvesting tool we carry (so an ore yields its
      *  ingot/gem, stone yields cobblestone, etc.). Falls back to the block's own item if it has no loot. */
     private Set<Item> computeDropItems() {
         Set<Item> items = new HashSet<>();
@@ -477,7 +475,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     }
 
     /** Kick an off-thread scan: capture the loaded chunks on this (main) thread,
-     *  read their section palettes on the scan thread (Baritone's WorldScanner model). */
+     *  read their section palettes on the scan thread (chunk refs are captured
+     *  synchronously; only the read-only palette walk runs off-thread). */
     private void kickScan() {
         Level level = player.level();
         BlockPos center = player.blockPosition().immutable();

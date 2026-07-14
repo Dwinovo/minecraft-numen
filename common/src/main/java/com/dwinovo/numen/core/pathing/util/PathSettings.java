@@ -1,13 +1,14 @@
 package com.dwinovo.numen.core.pathing.util;
 
 /**
- * Tunable pathfinding parameters — a 1:1 port of the relevant defaults from
- * Baritone's {@code Settings} (cabaletta/baritone). Centralised here so every
- * cost / search / executor knob matches Baritone and can be debugged against
- * its known-good behaviour.
+ * Tunable pathfinding parameters, centralised so every
+ * cost / search / executor knob lives in one place. The default values are
+ * long-proven in open-source Minecraft pathfinding practice (see the package
+ * javadoc for provenance), so behaviour can be debugged against field-tested
+ * expectations.
  *
  * <p>Physics constants (walk/jump/fall costs) live in {@link ActionCosts}; this
- * class holds only the values Baritone exposes as user settings.
+ * class holds only the tunable knobs.
  */
 public final class PathSettings {
 
@@ -16,7 +17,7 @@ public final class PathSettings {
     // ---- A* search ----
 
     /**
-     * Heuristic inflation (weighted, inadmissible A*). Baritone default 3.563 —
+     * Heuristic inflation (weighted, inadmissible A*). 3.563 sits
      * just under {@link ActionCosts#SPRINT_ONE_BLOCK} so the search races to the
      * goal and accepts mild suboptimality for far fewer node expansions.
      */
@@ -32,7 +33,7 @@ public final class PathSettings {
     public static final double MIN_IMPROVEMENT = 0.01;
 
     // The search terminates on a NODE BUDGET (engine.SearchBudget: two-phase
-    // primary/failure expansion counts, distance-scaled), NOT Baritone's wall-clock
+    // primary/failure expansion counts, distance-scaled), NOT wall-clock
     // timeouts — deterministic counts keep the engine reproducible in unit tests,
     // and the search runs on the planner pool so frame pacing is irrelevant.
 

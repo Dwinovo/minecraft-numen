@@ -20,10 +20,10 @@ import java.util.Map;
 /**
  * {@code interact_entity} on the player body — the entity-aimed native interaction. Auto-paths
  * and FOLLOWS the live entity (the only moving interaction target), then aims at it and presses
- * the requested mouse button — but only when the native raytrace actually REACHES the entity
- * (a wall in between blocks it, and we re-position instead of hitting through it, which diverges
- * from Carpet's "hit whatever the ray returns" — deliberate: this tool means "act on THIS
- * entity", not "grief the wall it hid behind"). attack+hold = keep hitting until dead (= hunt).
+ * the requested mouse button — but only when the native raytrace actually REACHES the entity.
+ * A wall in between blocks it, and we re-position instead of blindly acting on whatever the
+ * ray returns — deliberate: this tool means "act on THIS
+ * entity", not "grief the wall it hid behind". attack+hold = keep hitting until dead (= hunt).
  */
 public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEntityTaskRecord> {
 

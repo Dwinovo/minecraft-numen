@@ -9,8 +9,8 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 
 /**
- * A read-through, memoizing world view for one A* search — Baritone's
- * {@code BlockStateInterface} role. A search re-queries the same cells many
+ * A read-through, memoizing world view for one A* search.
+ * A search re-queries the same cells many
  * times across overlapping neighbour generations; caching {@link #getBlockState}
  * turns those repeated chunk lookups (and the collision-shape work they feed)
  * into one fetch per cell.

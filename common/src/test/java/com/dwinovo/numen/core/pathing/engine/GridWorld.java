@@ -153,7 +153,7 @@ final class GridWorld implements SuccessorFunction<GridWorld.Step> {
 
     /**
      * Horizontal octile distance × weight, plus per-block vertical constants —
-     * the same shape as the MC adapter's Baritone-weighted base heuristic.
+     * the same shape as the MC adapter's XZ-weighted base heuristic.
      */
     static Heuristic weightedOctileHeuristic(int gx, int gy, int gz,
                                              double wHoriz, double upCost, double downCost) {

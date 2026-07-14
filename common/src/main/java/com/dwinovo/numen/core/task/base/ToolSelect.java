@@ -16,8 +16,8 @@ import net.minecraft.world.level.block.state.BlockState;
  * and {@code HuntCompanionTask.switchToBestWeapon}.
  *
  * <p>Both scan the WHOLE inventory (not just the hotbar) and swap via
- * {@link NumenPlayer#holdInHand(int)} — a deliberate divergence from Baritone's
- * hotbar-only {@code ToolSet}, kept consistent with the pathing cost model
+ * {@link NumenPlayer#holdInHand(int)} — deliberately wider than a
+ * hotbar-only scan, and kept consistent with the pathing cost model
  * ({@code NavContext.scanBestTool}) so the planned break cost matches the tool
  * actually used. Behaviour is preserved exactly so the Stage-2 migration onto these
  * helpers is a no-op semantically.

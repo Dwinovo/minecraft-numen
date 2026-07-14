@@ -12,8 +12,8 @@ import java.util.List;
  * One companion body's scheduler — the per-UUID value {@code CompanionTickDispatcher}
  * keeps. Replaces the old two static maps (a {@code TaskQueue} + a single
  * {@code Running} task) with an ordered chain list; each server tick it ticks ONLY
- * the highest-priority active chain (AltoClef {@code TaskRunner}), then always
- * drains completed LLM results.
+ * the highest-priority active chain (priority arbitration: every chain bids, one
+ * winner drives the body), then always drains completed LLM results.
  *
  * <p>Chain order (priority tie-break, highest-intent first): unstuck → mob-defense
  * → food → mlg → {@link LlmTaskChain}. In Stage 1 the four survival chains are

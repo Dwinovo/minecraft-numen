@@ -35,7 +35,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * Stateless terrain predicates used by the movement primitives and the A*
- * search. Mirrors the role of Baritone's {@code MovementHelper}: decide
+ * search: decide
  * whether a block can be stood on, passed through, broken, or is a hazard —
  * without any entity instance, just a {@link BlockGetter} + {@link BlockPos}.
  *
@@ -58,13 +58,13 @@ public final class BlockHelper {
      * Can the entity's body occupy this cell (no collision, not a fluid we
      * refuse to enter)? True for air, grass, flowers, etc.
      *
-     * <p>Water is Baritone's, not a bolt-on swim move: a port of
-     * {@code MovementHelper.canWalkThrough}'s fluid branch (jesus off). Flowing
+     * <p>Water is handled here, in the passability predicate itself, rather than
+     * as a bolt-on swim move. Flowing
      * water is refused (the current shoves us off-path); still water is passable
      * ONLY as the SURFACE cell — i.e. nothing fluid directly above it — so the
      * move graph contains the water surface plane but never a submerged corridor.
      * Lava is never passable. This is what lets the generic traverse/ascend/
-     * descend route across water exactly as Baritone does, with no swim edge.
+     * descend route across water with no dedicated swim edge.
      */
     public static boolean canWalkThrough(BlockGetter level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
@@ -74,12 +74,12 @@ public final class BlockHelper {
             if (!fluid.is(FluidTags.WATER)) return false;       // lava etc. — never
             if (isFlowingWater(level, pos)) return false;        // current shoves us
             // Surface only: a fluid (or a lily pad) directly above means we'd be
-            // submerged / capped here, not at a free surface (Baritone).
+            // submerged / capped here, not at a free surface.
             BlockState up = level.getBlockState(pos.above());
             if (!up.getFluidState().isEmpty()) return false;
             return !up.is(Blocks.LILY_PAD);
         }
-        // Baritone canWalkThroughBlockState NO list: blocks we must never path through.
+        // Explicit deny-list: blocks we must never path through.
         // Many have an EMPTY/partial collision shape (fire, cobweb, sweet-berry, powder
         // snow, open trapdoor, big dripleaf…) so the raw shape test below would wrongly
         // pass them; the explicit list is what stops the body walking into them.
@@ -95,13 +95,13 @@ public final class BlockHelper {
             return false;
         }
         // Wooden doors / fence gates are passable even when shut — the path
-        // executor opens them by hand (Baritone's model). Iron doors stay a hard
+        // executor opens them by hand. Iron doors stay a hard
         // obstruction: no redstone, can't open. So they fall through to the
         // collision test below and read as solid.
         if (isOpenableDoor(state)) {
             return true;
         }
-        // Carpet: a thin floor cover, always walkable over (Baritone MAYBE → shallow).
+        // A thin carpet floor cover is always walkable over.
         if (block instanceof CarpetBlock) {
             return true;
         }
@@ -129,10 +129,10 @@ public final class BlockHelper {
     }
 
     /**
-     * Baritone {@code isDoorPassable}/{@code isGatePassable}: can a body approaching the
+     * Can a body approaching the
      * door/gate at {@code doorPos} from the adjacent cell {@code fromPos} pass through it
-     * AS IT CURRENTLY STANDS? A fence gate is passable iff open. A door is orientation-aware
-     * ({@code isHorizontalBlockPassable}): passable iff {@code (facingAxis == approachAxis) == open}
+     * AS IT CURRENTLY STANDS? A fence gate is passable iff open. A door is
+     * orientation-aware: passable iff {@code (facingAxis == approachAxis) == open}
      * — so an open door perpendicular to the approach still BLOCKS (its panel swung across the
      * gap), and a closed door flush with the approach does not. The executor toggles (right-clicks)
      * any door/gate this reports as NOT passable, which both opens a blocking-closed one and
@@ -170,7 +170,7 @@ public final class BlockHelper {
     }
 
     /**
-     * Baritone {@code MovementHelper.mustBeSolidToWalkOn}: "if a move makes us stand
+     * "If a move makes us stand
      * on this cell, will it have a top to walk on?" Returns {@code true} for AIR and
      * solid blocks alike — crucially OPTIMISTIC about air, because when bridging the
      * block you stand on was placed by the bridge itself and isn't in the static world
@@ -182,17 +182,17 @@ public final class BlockHelper {
         BlockState state = level.getBlockState(pos);
         if (state.is(Blocks.LADDER) || state.is(Blocks.VINE)) return false;
         if (!state.getFluidState().isEmpty()) {
-            // standing on water counts only at the surface (nothing fluid above), jesus off
+            // standing on water counts only at the surface (nothing fluid above)
             return level.getBlockState(pos.above()).getFluidState().isEmpty();
         }
         return true;   // air or solid → optimistically a valid floor to backplace from
     }
 
     /**
-     * Is this a FLOWING water cell — Baritone {@code MovementHelper.isFlowing}?
+     * Is this a FLOWING water cell?
      * A non-source level is flowing; a source block is "flowing" too when it
-     * feeds a horizontal neighbour (edge of a pool), which Baritone treats as
-     * unsafe to walk because the current there pushes you. Used to keep the
+     * feeds a horizontal non-source neighbour (edge of a pool) — unsafe to
+     * walk because the current there pushes you. Used to keep the
      * route on still water only.
      */
     public static boolean isFlowingWater(BlockGetter level, BlockPos pos) {
@@ -209,22 +209,22 @@ public final class BlockHelper {
     /**
      * Can the entity stand on TOP of this block (i.e. is it a solid floor)?
      *
-     * <p>Water mirrors Baritone {@code canWalkOnPosition} (jesus off): a water
+     * <p>Water: a water
      * cell is "walkable on" iff there is water directly ABOVE it — i.e. you
      * float at the surface, treading on the submerged column, never on the very
      * top (air-headed) cell. Combined with {@link #canWalkThrough}'s surface
-     * rule, this pins the body to the water surface plane just like Baritone.
+     * rule, this pins the body to the water surface plane.
      */
     public static boolean canWalkOn(BlockGetter level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         FluidState fluid = state.getFluidState();
         if (!fluid.isEmpty()) {
-            if (!fluid.is(FluidTags.WATER)) return false;   // lava (assumeWalkOnLava off)
+            if (!fluid.is(FluidTags.WATER)) return false;   // lava is never a floor
             // Walk on water only where water is above (submerged → float here).
             return isWater(level, pos.above());
         }
         if (state.isAir()) return false;
-        // Baritone canWalkOnBlockState allow-list: blocks that are NOT full collision
+        // Explicit allow-list: blocks that are NOT full collision
         // cubes but are still safe to stand on. The generic full-cube test below would
         // miss these (farmland/path are 15/16 tall, chests/ladders/azalea aren't cubes).
         if (state.is(Blocks.FARMLAND) || state.is(Blocks.DIRT_PATH) || state.is(Blocks.SOUL_SAND)) return true;
@@ -234,18 +234,18 @@ public final class BlockHelper {
         if (state.getBlock() instanceof AzaleaBlock) return true;
         if (state.getBlock() instanceof StairBlock) return true;
         if (state.getBlock() instanceof SlabBlock) {
-            // Baritone default allowWalkOnBottomSlab=true → ALL slabs are a floor. Standing
+            // ALL slabs are a floor. Standing
             // on a bottom slab is reconciled by playerFeet() returning the cell ABOVE it.
             return true;
         }
-        // Magma / honey are full cubes but Baritone refuses them (damage / stickiness).
+        // Magma / honey are full cubes but refused as floors (damage / stickiness).
         if (state.is(Blocks.MAGMA_BLOCK) || state.is(Blocks.HONEY_BLOCK)) return false;
-        // Everything else: a normal full collision cube (Baritone isBlockNormalCube).
+        // Everything else: a normal full collision cube.
         return state.isCollisionShapeFullBlock(level, pos);
     }
 
     /**
-     * Baritone {@code IPlayerContext.playerFeet}: the body's feet cell for pathing — the
+     * The body's feet cell for pathing — the
      * position nudged up 0.1251 (so sinking on soul sand / farmland doesn't read a block
      * low) and, when that cell is a SLAB, taken as the cell ABOVE it. The slab adjustment
      * is what reconciles standing on a bottom slab (feet at slab.y+0.5) with the move graph,
@@ -259,7 +259,7 @@ public final class BlockHelper {
         return f;
     }
 
-    /** Baritone MovementHelper.isBottomSlab. */
+    /** A slab occupying the bottom half of its cell. */
     public static boolean isBottomSlab(BlockState state) {
         return state.getBlock() instanceof SlabBlock
                 && state.getValue(SlabBlock.TYPE) == SlabType.BOTTOM;
@@ -291,8 +291,8 @@ public final class BlockHelper {
             // but it isn't a damage hazard.
             return fluid.getType().getBucket() == net.minecraft.world.item.Items.LAVA_BUCKET;
         }
-        // The non-fluid members of Baritone's avoidWalkingInto — blocks we must never
-        // path into (magma is avoided at default allowWalkOnMagmaBlocks=false).
+        // The non-fluid hazard set — blocks we must never
+        // path into (magma included: it damages on contact).
         return state.is(Blocks.MAGMA_BLOCK)
                 || state.is(Blocks.CACTUS)
                 || state.is(Blocks.SWEET_BERRY_BUSH)
@@ -303,7 +303,7 @@ public final class BlockHelper {
     }
 
     /**
-     * Baritone {@code MovementHelper.avoidWalkingInto}: a cell we shouldn't walk/sprint
+     * A cell we shouldn't walk/sprint
      * INTO — ANY fluid (incl. water, unlike {@link #isHazard}) plus the same block set.
      * Used for "is it safe to keep moving into the cell ahead" checks (walk-while-break
      * suppressor, descend safeMode), where even water counts (the current shoves us).
@@ -321,7 +321,7 @@ public final class BlockHelper {
     }
 
     /**
-     * Baritone {@code isBlockNormalCube}: a full-collision cube, EXCLUDING the handful of
+     * A full-collision cube, EXCLUDING the handful of
      * full-shape blocks you can't reliably look-at-and-place-against (bamboo, a moving
      * piston, scaffolding, shulker boxes, pointed dripstone, amethyst clusters).
      */
@@ -336,7 +336,7 @@ public final class BlockHelper {
     }
 
     /**
-     * Baritone {@code canPlaceAgainst}: can we look at the centre of a side face of this
+     * Can we look at the centre of a side face of this
      * block and likely place against it — a normal cube, plain glass, or stained glass
      * (NOT every full-collision block: carpets, shulkers, scaffolding etc. are refused).
      */
@@ -358,7 +358,6 @@ public final class BlockHelper {
      * shared by the A* break cost ({@link #breakWouldCreateFlow}) and the
      * miner's teach gate ({@code BlockMiningProgress.fluidBreakHazard}) so
      * "safe to route through" and "safe to mine on purpose" never disagree.
-     * Mirrors mineflayer's {@code dontCreateFlow} neighbour set.
      */
     public static Direction fluidReleasedByBreaking(BlockGetter level, BlockPos pos) {
         Direction water = null;
@@ -408,8 +407,8 @@ public final class BlockHelper {
      * holds the correct tool. Mining a {@code requiresCorrectToolForDrops} block with the wrong
      * tool removes it for nothing, so the cost model vetoes it and the break/mine tools refuse it.
      * Single source of truth — paired with {@code switchToBestTool}, which can swap a backpack
-     * tool into the hand. DELIBERATE DIVERGENCE from Baritone, whose ToolSet only scans the
-     * hotbar (a real player's quick-switch set); a companion can dig into its own pack, so the
+     * tool into the hand. DELIBERATELY scans the WHOLE inventory, not just the
+     * hotbar (a real player's quick-switch set): a companion can dig into its own pack, so the
      * gate + cost + execution all scan the whole inventory together.
      */
     public static boolean canHarvest(Container inv, BlockState state) {
@@ -434,8 +433,7 @@ public final class BlockHelper {
      * A block the bot must never destroy while pathing: any block-entity
      * (chests, furnaces, hoppers, barrels, shulker boxes, spawners, beacons,
      * lecterns, …) or a bed. These are player-placed functional/valuable blocks —
-     * route around them, don't grief. Mirrors Baritone's
-     * {@code blocksToAvoidBreaking}; the {@code BlockEntity != null} test is a
+     * route around them, don't grief. The {@code BlockEntity != null} test is a
      * cheap, broad proxy that catches essentially every griefable block.
      */
     public static boolean shouldAvoidBreaking(BlockGetter level, BlockPos pos) {
@@ -457,8 +455,7 @@ public final class BlockHelper {
     /**
      * Would breaking {@code pos} drop a {@link FallingBlock} (sand / gravel /
      * anvil / concrete powder) sitting directly above it onto the bot? Refuse so
-     * we never bury or suffocate ourselves. Mirrors mineflayer's
-     * {@code dontMineUnderFallingBlock}.
+     * we never bury or suffocate ourselves.
      */
     public static boolean breakReleasesFallingBlock(BlockGetter level, BlockPos pos) {
         return level.getBlockState(pos.above()).getBlock() instanceof FallingBlock;

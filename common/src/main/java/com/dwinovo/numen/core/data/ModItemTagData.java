@@ -84,9 +84,8 @@ public final class ModItemTagData {
                 .add(Items.RABBIT_STEW)
                 .add(Items.SWEET_BERRIES);
 
-        // Cheap, common blocks the pathfinder may throw away as scaffolding.
-        // Mirrors Baritone's acceptableThrowawayItems — never the player's
-        // valuables. Packs can extend this tag freely.
+        // Cheap, common blocks the pathfinder may expend as scaffolding —
+        // never the player's valuables. Packs can extend this tag freely.
         tags.tag(InitTag.SCAFFOLDS)
                 .add(Items.COBBLESTONE)
                 .add(Items.DIRT)

@@ -19,12 +19,12 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Walks a computed {@link Path} on a companion {@link NumenPlayer} body. The
- * player-body twin of {@code PathExecutor}: it keeps the same cross-movement
- * spine — re-localization (match real feet against nearby movements'
- * {@code validPositions} and resync the index instead of replanning on every
- * push/overshoot), a per-movement stall budget, and advancement — but the
- * per-movement EXECUTION is input-driving ({@link InputDriver}) + the player's
- * own survival break/place, not the Mob's velocity drives.
+ * cross-movement spine: re-localization (match real feet against nearby
+ * movements' {@code validPositions} and resync the index instead of replanning
+ * on every push/overshoot), a per-movement stall budget, and advancement.
+ * Per-movement EXECUTION is input-driving ({@link InputDriver}) + the player's
+ * own survival break/place — the body is steered by pressed inputs, not by
+ * direct velocity writes.
  *
  * <p>Each movement runs as: clear its {@code toBreak} obstructions (the native
  * {@link BlockDigger} — {@code handleBlockBreakAction} START/STOP, survival
@@ -38,7 +38,7 @@ public final class PlayerPathExecutor {
 
     public enum Status { RUNNING, ARRIVED, NEEDS_REPLAN, FAILED }
 
-    /** Off-path bands (Baritone MAX_DIST_FROM_PATH 2 / MAX_MAX 3), squared. */
+    /** Off-path bands (soft 2 / hard 3 blocks, from {@link PathSettings}), squared. */
     private static final double SOFT_DIST_SQR =
             PathSettings.MAX_DIST_FROM_PATH * PathSettings.MAX_DIST_FROM_PATH;
     private static final double HARD_DIST_SQR =
@@ -54,17 +54,17 @@ public final class PlayerPathExecutor {
     private int ticksOnCurrent = 0;
     private int ticksAway = 0;
     private boolean placedThisMove = false;
-    /** Set when we sprint-skipped a traverse straight into an ascend (Baritone
-     *  sprintableAscend) — the ascend then sprints up instead of jumping from a standstill. */
+    /** Set when we sprint-skipped a traverse straight into an ascend (see
+     *  {@code sprintableAscend}) — the ascend then sprints up instead of jumping from a standstill. */
     private boolean sprintAscend = false;
-    /** Set when we sprint-carried into this descend (Baritone canSprintFromDescendInto) —
+    /** Set when we sprint-carried into this descend (see {@code canSprintFromDescendInto}) —
      *  the descend drives at sprint speed instead of a controlled walk-down. */
     private boolean sprintDescend = false;
     /** When a fall can overshoot forward over the same-direction traverses below it
-     *  (Baritone overrideFall), this is the extended aim point: driveFall sprints at it
+     *  (see {@code overrideFall}), this is the extended aim point: driveFall sprints at it
      *  instead of braking straight down. Recomputed each tick; null = no override. */
     private Vec3 fallOverrideAim = null;
-    /** Baritone MovementDescend.numTicks: how many ticks we've actually DRIVEN this descend
+    /** How many ticks we've actually DRIVEN this descend
      *  (incremented only inside the drive branch, NOT on break/idle ticks) — gates the 20-tick
      *  fakeDest momentum window so a descend that breaks first doesn't burn it before moving. */
     private int descendDriveTicks = 0;
@@ -72,7 +72,7 @@ public final class PlayerPathExecutor {
     private PlaceManeuver placeManeuver;
     /** Progressive break of path obstructions (shared model with auto-mine). */
     private final BlockDigger digger;
-    /** The index whose original cost estimate we cached (Baritone costEstimateIndex). */
+    /** The index whose lookahead we already cost-verified (one verification per new movement). */
     private int costCheckIndex = -1;
 
     // --- stuck diagnostics (independent of ticksOnCurrent, so index oscillation can't hide a stall) ---
@@ -114,11 +114,11 @@ public final class PlayerPathExecutor {
             return path.partial ? Status.NEEDS_REPLAN : Status.ARRIVED;
         }
 
-        // Baritone sprint-to-next: flow straight through a traverse→sprintable-ascend
+        // Sprint-to-next: flow straight through a traverse→sprintable-ascend
         // junction (sprint up the stairs) instead of arriving at the traverse first. May
         // advance the index BEFORE we resolve the move to drive.
         trySprintSkip();
-        // Baritone overrideFall: a fall that lines up with the corridor below it overshoots
+        // Fall override: a fall that lines up with the corridor below it overshoots
         // forward (sprint off the ledge) and splices those traverses. May advance the index.
         tryFallOverride();
         // A splice/skip can land us at the path end (the overshoot ran to the last move) —
@@ -149,7 +149,7 @@ public final class PlayerPathExecutor {
             ticksUnderwater = 0;
         }
 
-        // Baritone cost re-verification: the world may have changed under a planned
+        // Cost re-verification: the world may have changed under a planned
         // path (someone broke/placed a block). Re-cost the current + the next few
         // movements against a fresh snapshot; bail if any became impossible, or if
         // the current one got materially more expensive than planned.
@@ -157,18 +157,18 @@ public final class PlayerPathExecutor {
         if (reverify != null) return reverify;
 
         ticksOnCurrent++;
-        // Baritone: cancel a movement that overshoots its estimate by movementTimeoutTicks.
+        // Cancel a movement that overshoots its cost estimate by MOVEMENT_TIMEOUT_TICKS.
         if (ticksOnCurrent > mv.cost + PathSettings.MOVEMENT_TIMEOUT_TICKS) {
             return replan("movement timeout");
         }
 
         // 1) Clear obstructions for this move (one at a time), breaking each
-        //    progressively over its real hardness time — Baritone holds the dig,
-        //    it doesn't pop the block instantly.
+        //    progressively over its real hardness time — the dig is held across
+        //    ticks, the block doesn't pop instantly.
         BlockPos obstruction = nextObstruction(mv);
         if (obstruction != null) {
             digger.dig(obstruction);   // faces + breaks the block (halts the body)
-            // Baritone walkWhileBreaking (TRAVERSE only): keep approaching + sprint while
+            // Walk-while-breaking (TRAVERSE only): keep approaching + sprint while
             // the front block breaks — but only if neither break cell (dest feet + head) is
             // something to avoid walking into, and we aren't already pressed against the
             // block (Chebyshev dist >= 0.83).
@@ -183,13 +183,13 @@ public final class PlayerPathExecutor {
         }
 
         // 2) Place the scaffold floor under dest, if this move needs one — the live
-        //    "edge sneak" maneuver (Baritone bridge feel): hold sneak, edge to the
-        //    rim, look at the support face, place. Drives the body forward toward the
-        //    placement itself, so the bridge is laid as it leans out, not teleport-popped.
-        //    (Baritone MovementAscend presses MOVE_BACK after ticksWithoutPlacement>10 to
-        //    un-wedge a body standing in the cell it's trying to place into; we instead let
-        //    the movement-timeout replan rescue a stalled placement — a bounded fallback,
-        //    not the in-move nudge-back. Revisit only if ascend-place wedging shows up.)
+        //    "edge sneak" maneuver: hold sneak, edge to the rim, look at the support
+        //    face, place. Drives the body forward toward the placement itself, so the
+        //    bridge is laid as it leans out, not teleport-popped.
+        //    (A body standing in the very cell it's trying to place into can wedge; a
+        //    known remedy is an in-move nudge — press backward after ~10 ticks without
+        //    placement. We instead let the movement-timeout replan rescue a stalled
+        //    placement — a bounded fallback. Revisit only if ascend-place wedging shows up.)
         if (mv.toPlace != null && !placedThisMove) {
             if (placeManeuver == null) {
                 placeManeuver = new PlaceManeuver(player, mv.toPlace, this::scaffoldSlot,
@@ -210,15 +210,15 @@ public final class PlayerPathExecutor {
             }
         }
 
-        // 3) Drive toward dest by movement kind — per-Movement updateState,
-        //    mirroring Baritone's input-forcing timing.
+        // 3) Drive toward dest by movement kind — per-kind input forcing with
+        //    tuned per-tick timing.
         if (arrived(mv)) {
             advance();
             return Status.RUNNING;
         }
         drive(mv);
-        // Baritone Movement.update universal liquid float (runs after EVERY movement's
-        // updateState): if our feet cell is liquid and we're below dest.y+0.6, press jump
+        // Universal liquid float (runs after EVERY movement's per-kind drive):
+        // if our feet cell is liquid and we're below dest.y+0.6, press jump
         // (→ jumpInLiquid buoyancy). This is the single framework-level mechanism that
         // keeps the body riding the water surface across ALL kinds — without it the body
         // sinks between per-move depth-corrections and porpoises.
@@ -229,7 +229,7 @@ public final class PlayerPathExecutor {
         return Status.RUNNING;
     }
 
-    /** Horizontal speed² this tick — used to gate jump timing (Baritone waits for motion). */
+    /** Horizontal speed² this tick — used to gate jump timing on measured motion. */
     private double horizontalSpeedSqr() {
         var v = player.getDeltaMovement();
         return v.x * v.x + v.z * v.z;
@@ -242,14 +242,14 @@ public final class PlayerPathExecutor {
         return Math.sqrt(dx * dx + dz * dz);
     }
 
-    /** Chebyshev (max-axis) horizontal distance to a cell centre — Baritone's
-     *  walk-while-break "pressed against the block" gate uses this, not Euclidean. */
+    /** Chebyshev (max-axis) horizontal distance to a cell centre — the
+     *  walk-while-breaking "pressed against the block" gate uses this, not Euclidean. */
     private double chebyshevDistTo(BlockPos cell) {
         return Math.max(Math.abs((cell.getX() + 0.5) - player.getX()),
                         Math.abs((cell.getZ() + 0.5) - player.getZ()));
     }
 
-    /** Baritone IPlayerContext.playerFeet: the feet cell, nudged up 0.1251 (so soul-sand /
+    /** The feet cell, nudged up 0.1251 (so soul-sand /
      *  farmland sink doesn't read us a block low), and — when that cell is a SLAB — taken
      *  as the cell ABOVE it. That slab adjustment is what lets standing on a bottom slab
      *  read as the move's dest (moves onto a slab target the cell above the slab). */
@@ -258,8 +258,8 @@ public final class PlayerPathExecutor {
     }
 
     /**
-     * Per-movement execution. Each kind forces the inputs Baritone's
-     * {@code updateState} would: walk/diagonal aim + forward (+sprint); ascend
+     * Per-movement execution. Each kind forces the player inputs it needs:
+     * walk/diagonal aim + forward (+sprint); ascend
      * waits for forward motion before jumping; parkour holds the jump until clear
      * of the takeoff block; pillar sneaks, jumps and places underfoot at the apex;
      * descend/fall let gravity do the work; dig-down lets phase 1 break the floor.
@@ -268,12 +268,12 @@ public final class PlayerPathExecutor {
         player.setShiftKeyDown(false);   // default; pillar re-enables per tick
         openDoorsForMove(mv);            // a shut wooden door/gate ahead → open it, don't break it
         Vec3 dest = Vec3.atBottomCenterOf(mv.dest);
-        // Baritone never sprints in water, nor when about to run into a hazard just
-        // past the destination (it could carry us into lava/cactus/etc).
+        // Never sprint in water, nor when about to run into a hazard just
+        // past the destination (momentum could carry us into lava/cactus/etc).
         boolean sprintBase = speed >= 1.0 && !player.isInWater() && !hazardJustPast(mv);
         switch (mv.kind) {
             case TRAVERSE -> {
-                // Baritone MovementTraverse: correct DEPTH before advancing. If our feet
+                // Correct DEPTH before advancing. If our feet
                 // aren't on the destination's Y level (bobbing while swimming across water,
                 // or sunk into a dip), do NOT move forward this tick — only rise (JUMP) if
                 // we're below it; if we've popped ABOVE it, do nothing and let it settle.
@@ -291,18 +291,18 @@ public final class PlayerPathExecutor {
                     }
                 } else {
                     // On the lane: advance. Don't sprint across a floor we just placed
-                    // (Baritone wasTheBridgeBlockAlwaysThere).
+                    // (sprint momentum on a fresh bridge risks carrying past its edge).
                     InputDriver.stepToward(player, dest, sprintBase && mv.toPlace == null);
                 }
             }
-            // Only sprint a diagonal when both cut corners are clear (Baritone sprint() corner check).
+            // Only sprint a diagonal when both cut corners are clear.
             case DIAGONAL -> InputDriver.stepToward(player, dest, sprintBase && diagonalCornersClear(mv));
             case ASCEND -> driveAscend(mv);
             case PARKOUR -> {
                 int gap = Math.max(Math.abs(mv.dest.getX() - mv.src.getX()),
                         Math.abs(mv.dest.getZ() - mv.src.getZ()));
                 InputDriver.stepToward(player, dest, gap >= 4);   // a 4-gap needs sprint physics
-                // Hold the jump until clear of the takeoff block (Baritone dist==3 rule),
+                // Hold the jump until clear of the takeoff block,
                 // so the arc starts from the edge, not the centre.
                 if (player.onGround() && horizontalDistTo(mv.src) > 0.7) {
                     InputDriver.jump(player);
@@ -313,8 +313,8 @@ public final class PlayerPathExecutor {
             case FALL -> driveFall(mv);
             case DIG_DOWN -> {
                 // Phase 1 breaks the floor; here we just keep centred over the column so
-                // gravity drops us straight onto the dug cell (Baritone MovementDownward
-                // recentres / moveTowards the break cell rather than free-drifting).
+                // gravity drops us straight onto the dug cell (recentre over the break
+                // cell rather than free-drifting).
                 if (horizontalDistTo(mv.dest) > 0.2) {
                     InputDriver.stepToward(player, Vec3.atBottomCenterOf(mv.dest), false);
                 } else {
@@ -325,14 +325,14 @@ public final class PlayerPathExecutor {
     }
 
     /**
-     * Step down one block (Baritone MovementDescend.updateState): aim one block past
+     * Step down one block: aim one block past
      * dest (fakeDest) for the first ~20 ticks WHILE still near the start
      * (fromStart&lt;1.25), to carry momentum off the ledge; then aim at dest. Stop
      * pushing once horizontally on dest so gravity settles us cleanly.
      */
     private void driveDescend(Movement mv) {
         if (descendSafeMode(mv)) {
-            // Baritone safeMode: a slowed, straight-in approach to a 0.17/0.83 weighted
+            // Safe mode: a slowed, straight-in approach to a 0.17/0.83 weighted
             // point with NO fakeDest momentum — avoids overshooting into a wall / hazard
             // and the skip-to-ascend glitch.
             double dx = (mv.src.getX() + 0.5) * 0.17 + (mv.dest.getX() + 0.5) * 0.83;
@@ -342,13 +342,13 @@ public final class PlayerPathExecutor {
         }
         double ab = horizontalDistTo(mv.dest);
         if (!feet().equals(mv.dest) || ab > 0.25) {
-            // Baritone numTicks++ < 20: post-increment inside the drive branch (counts only
+            // descendDriveTicks++ < 20: post-increment inside the drive branch (counts only
             // ticks we actually drive), gating the fakeDest momentum carry.
             boolean earlyWindow = descendDriveTicks++ < 20 && horizontalDistTo(mv.src) < 1.25;
             // Hold the forward (fakeDest) aim through the airborne phase to avoid the jarring ~180°
-            // yaw snap (we hard-set yaw; Baritone rotates gently) — but ONLY on a controlled,
+            // yaw snap (we hard-set yaw rather than rotating smoothly) — but ONLY on a controlled,
             // non-sprint descend, where overshoot is ≤1 cell (dest/fakeDest, both count as arrived).
-            // A sprint-carried descend (a stair chain, 2+ in a row) keeps Baritone's EXACT aim —
+            // A sprint-carried descend (a stair chain, 2+ in a row) keeps the exact-aim rule —
             // switch to dest once past the early window — so its momentum is steered back onto the
             // planned line instead of drifting off it.
             boolean commitForward = (!player.onGround() && !sprintDescend) || earlyWindow;
@@ -364,7 +364,7 @@ public final class PlayerPathExecutor {
         }
     }
 
-    /** Baritone MovementDescend.safeMode: a hazard just past dest (sprint-overshoot risk)
+    /** Descend safe mode: a hazard just past dest (sprint-overshoot risk)
      *  OR the skip-to-ascend overshoot-glitch geometry (a wall at foot level with air above). */
     private boolean descendSafeMode(Movement mv) {
         if (hazardJustPast(mv)) return true;
@@ -378,8 +378,8 @@ public final class PlayerPathExecutor {
     }
 
     /** Something to avoid in the cell(s) one step PAST the destination — the block we'd
-     *  carry into if we over-committed. Baritone's descend safeMode + sprint-suppression
-     *  use {@code avoidWalkingInto} (any fluid + the hazard block set) for exactly this. */
+     *  carry into if we over-committed. The descend safe mode + sprint suppression both
+     *  gate on {@code avoidWalkingInto} (any fluid + the hazard block set) for exactly this. */
     private boolean hazardJustPast(Movement mv) {
         int dx = Integer.signum(mv.dest.getX() - mv.src.getX());
         int dz = Integer.signum(mv.dest.getZ() - mv.src.getZ());
@@ -391,7 +391,7 @@ public final class PlayerPathExecutor {
         return false;
     }
 
-    /** Both diagonal cut-corners clear (Baritone MovementDiagonal.sprint corner check). */
+    /** Both diagonal cut-corners clear — the gate for sprinting a diagonal. */
     private boolean diagonalCornersClear(Movement mv) {
         BlockPos cornerA = new BlockPos(mv.src.getX(), mv.src.getY(), mv.dest.getZ());
         BlockPos cornerB = new BlockPos(mv.dest.getX(), mv.src.getY(), mv.src.getZ());
@@ -402,15 +402,15 @@ public final class PlayerPathExecutor {
     }
 
     /**
-     * Multi-block fall (Baritone MovementFall.updateState, minus the water-bucket
-     * MLG which needs a bucket in hand): unlike a descend it does NOT carry momentum
+     * Multi-block fall (no water-bucket clutch — that would need a bucket
+     * in hand): unlike a descend it does NOT carry momentum
      * — it RECENTRES on the landing cell so it doesn't clip a wall, sneaking while
      * fast-falling ({@code |Δy|>0.4}) to kill horizontal drift and land cleanly.
      */
     private void driveFall(Movement mv) {
         if (fallOverrideAim != null) {
             // Overshoot: sprint forward at the extended aim so we clear the ledge and ride the
-            // fall over the corridor below, instead of braking straight down (Baritone overrideFall).
+            // fall over the corridor below, instead of braking straight down.
             player.setShiftKeyDown(false);
             InputDriver.lookAt(player, fallOverrideAim);
             player.zza = 1.0f;
@@ -421,7 +421,7 @@ public final class PlayerPathExecutor {
         var v = player.getDeltaMovement();
         double cx = mv.dest.getX() + 0.5;
         double cz = mv.dest.getZ() + 0.5;
-        // Look ahead by one tick of velocity, like Baritone, to anticipate the drift.
+        // Look ahead by one tick of velocity to anticipate the drift.
         boolean offCentre = Math.abs(player.getX() + v.x - cx) > 0.1
                 || Math.abs(player.getZ() + v.z - cz) > 0.1;
         if (offCentre) {
@@ -438,7 +438,7 @@ public final class PlayerPathExecutor {
     }
 
     /** Aim at the landing cell, nudged 0.125 away from an adjacent ladder/vine so the
-     *  fall doesn't grab it mid-drop (Baritone MovementFall.avoid). */
+     *  fall doesn't grab it mid-drop. */
     private Vec3 fallAim(Movement mv) {
         Vec3 c = Vec3.atCenterOf(mv.dest);
         for (Direction d : new Direction[]{
@@ -455,7 +455,7 @@ public final class PlayerPathExecutor {
     /** Carry/aim of an overshooting fall. */
     private record FallOverride(Vec3 aim, BlockPos fallDest, int spliceIndex) {}
 
-    /** Baritone PathExecutor overrideFall handling: if the current FALL lines up with the
+    /** Fall-override handling: if the current FALL lines up with the
      *  corridor below it, either splice past it (once we've landed at the extended dest) or
      *  set the forward aim so driveFall sprints off the ledge. Recomputed each tick. */
     private void tryFallOverride() {
@@ -472,7 +472,7 @@ public final class PlayerPathExecutor {
         fallOverrideAim = fo.aim;
     }
 
-    /** Baritone PathExecutor.overrideFall: a fall of ≤3 that isn't breaking and is followed by
+    /** A fall of ≤3 that isn't breaking and is followed by
      *  up to two same-flat-direction traverses, each with a clear column up to the fall's head
      *  and a solid floor, can overshoot forward — the body rides the fall out over the corridor
      *  and lands at the last such traverse's dest. Returns null when no extension is valid. */
@@ -482,7 +482,7 @@ public final class PlayerPathExecutor {
         if (!mv.toBreak.isEmpty()) return null;    // it's breaking
         BlockPos flatDir = new BlockPos(dir.getX(), 0, dir.getZ());
         int i;
-        // Baritone bound is i < path.length()-1; length()==movements+1, so == movements.size().
+        // Bound in node terms: a path of N movements has N+1 nodes; "< nodes-1" == movements.size().
         for (i = index + 1; i < path.movements.size() && i < index + 3; i++) {
             Movement next = path.movements.get(i);
             if (next.kind != Movement.Kind.TRAVERSE) break;
@@ -507,18 +507,18 @@ public final class PlayerPathExecutor {
     }
 
     /**
-     * Step up one block (Baritone MovementAscend.updateState). Drive forward toward
+     * Step up one block. Drive forward toward
      * dest, then JUMP when the body is ALIGNED to the move axis (small lateral
      * drift) and either the head is clear or we're close enough — critically NOT
      * gated on forward speed, so hitting the step (which zeroes forward speed) still
      * triggers the jump instead of stalling against the wall.
      */
     private void driveAscend(Movement mv) {
-        // Sprint up only when we sprint-skipped into this ascend (Baritone sprintableAscend);
+        // Sprint up only when we sprint-skipped into this ascend (sprintableAscend);
         // a normal ascend jumps from a standstill.
         InputDriver.stepToward(player, Vec3.atBottomCenterOf(mv.dest), sprintAscend);
-        // Baritone: stepping onto a bottom slab from a non-slab is a 0.5 walk-up, NOT a jump
-        // — auto-step handles the half block, so don't press jump here.
+        // Stepping onto a bottom slab from a non-slab is a 0.5 walk-up, NOT a jump
+        // — vanilla auto-step handles the half block, so don't press jump here.
         if (BlockHelper.isBottomSlab(player.level(), mv.dest.below())
                 && !BlockHelper.isBottomSlab(player.level(), mv.src.below())) {
             return;
@@ -549,7 +549,7 @@ public final class PlayerPathExecutor {
         InputDriver.jump(player);
     }
 
-    /** Baritone headBonkClear: the four horizontals above src+2 are passable, so a
+    /** Head-bonk check: the four horizontals above src+2 are passable, so a
      *  jump won't smack the body's head into a ceiling block. */
     private boolean headBonkClear(BlockPos src) {
         BlockPos up2 = src.above(2);
@@ -562,19 +562,18 @@ public final class PlayerPathExecutor {
         return true;
     }
 
-    /** Baritone PathExecutor.shouldSprintNextTick (traverse→ascend case): if the current
+    /** Sprint-skip: if the current
      *  traverse leads straight into a sprintable ascend and we're centred enough to commit
      *  (skipNow), skip the traverse's arrival and sprint up the step. Advances the index. */
     private boolean trySprintSkip() {
-        // Descend-sprint is re-decided every tick (Baritone re-forces SPRINT per tick), so
-        // clear it up front; the descend branch below re-asserts it when still applicable.
+        // Descend-sprint is re-decided every tick (sprint is re-asserted per tick, never
+        // latched), so clear it up front; the descend branch below re-asserts it when still applicable.
         sprintDescend = false;
         if (index >= path.movements.size() - 1) return false;   // need at least cur + next
         Movement cur = path.movements.get(index);
         Movement next = path.movements.get(index + 1);
-        // Baritone decides the skip AFTER the current move's own update() has handled its
-        // break that tick; we run before the phases, so don't skip past a move whose own
-        // obstruction is still pending (it would cancel that dig).
+        // This runs BEFORE the per-move phases (break/place/drive), so don't skip past a
+        // move whose own obstruction is still pending — skipping would cancel that dig.
         if (nextObstruction(cur) != null) return false;
         // Traverse → sprintable ascend: skip the traverse's arrival and sprint up the step.
         if (cur.kind == Movement.Kind.TRAVERSE && next.kind == Movement.Kind.ASCEND
@@ -584,16 +583,16 @@ public final class PlayerPathExecutor {
             sprintAscend = true;    // (advance() reset it; set after)
             return true;
         }
-        // Descend → sprintable continuation (Baritone canSprintFromDescendInto): carry sprint
+        // Descend → sprintable continuation (canSprintFromDescendInto): carry sprint
         // down the descend into a same-direction descend chain or a traverse/diagonal, and
         // hand off the moment we reach the descend's landing cell.
-        //   safeMode gate: Baritone is `safeMode() && !skipToAscend()` (it still sprints to
-        //   clip through the skip-to-ascend glitch); we gate on plain `!descendSafeMode` —
-        //   intentionally NOT sprinting into that clip-glitch, consistent with our stricter-
-        //   safety stance. Same conservative direction the rest of the port takes.
+        //   safeMode gate: we gate on plain `!descendSafeMode` — intentionally NOT sprinting
+        //   into the skip-to-ascend clip-glitch (a laxer gate could still sprint to clip
+        //   through it); consistent with the stricter-safety stance taken elsewhere in
+        //   this executor.
         if (cur.kind == Movement.Kind.DESCEND && !descendSafeMode(cur)
                 && canSprintFromDescendInto(cur, next)) {
-            // Baritone next_next veto: if this descend feeds a descend chain whose THIRD link
+            // Next-next veto: if this descend feeds a descend chain whose THIRD link
             // can't itself be sprinted into, don't build momentum we can't safely shed.
             if (next.kind == Movement.Kind.DESCEND && index + 2 < path.movements.size()) {
                 Movement nextNext = path.movements.get(index + 2);
@@ -604,7 +603,7 @@ public final class PlayerPathExecutor {
             }
             if (feet().equals(cur.dest)) {
                 advance();
-                return trySprintSkip();   // re-decide sprint for the NEW current (Baritone onTick recursion)
+                return trySprintSkip();   // re-decide sprint for the NEW current (recurse on handoff)
             }
             sprintDescend = true;   // sprint this descend this tick
             return true;
@@ -612,13 +611,12 @@ public final class PlayerPathExecutor {
         return false;
     }
 
-    /** Baritone PathExecutor.canSprintFromDescendInto: a descend keeps sprint into the next
+    /** A descend keeps sprint into the next
      *  move only when it's a same-direction descend chain, or — with a solid floor one block
-     *  below-and-forward of the landing — a diagonal (allowOvershootDiagonalDescend, on by
-     *  default). NB Baritone's traverse branch compares next.getDirection() (y=0) to the
-     *  descend's getDirection() (y=-1) and so can NEVER match: a descend never sprint-flows
-     *  into a traverse. We mirror that real output (the body settles at the landing, then the
-     *  traverse drives itself), not the branch's apparent intent. */
+     *  below-and-forward of the landing — a diagonal. Deliberately NOT a traverse: a
+     *  descend's move vector (dx,−1,dz) can never equal a traverse's (dx,0,dz), so a
+     *  descend never sprint-flows into a traverse — the body settles at the landing, then
+     *  the traverse drives itself. */
     private boolean canSprintFromDescendInto(Movement cur, Movement next) {
         if (next.kind == Movement.Kind.DESCEND && dirOf(cur).equals(dirOf(next))) {
             return true;
@@ -628,7 +626,7 @@ public final class PlayerPathExecutor {
         return next.kind == Movement.Kind.DIAGONAL;
     }
 
-    /** Baritone PathExecutor.sprintableAscend (default sprintAscends=true): the traverse and
+    /** Sprintable ascend: the traverse and
      *  the following ascend share a horizontal direction (as does the move after), both have
      *  a solid floor, the ascend breaks nothing, the 2x3 column over the source is clear, and
      *  neither the block above the head nor above the ascend's head is something to avoid. */
@@ -653,7 +651,7 @@ public final class PlayerPathExecutor {
         return !BlockHelper.avoidWalkingInto(level, next.dest.above(2));
     }
 
-    /** Baritone PathExecutor.skipNow: centred on the move axis (off-axis < 0.1) AND either
+    /** Commit gate for the sprint-skip: centred on the move axis (off-axis < 0.1) AND either
      *  the cell we'd head-bonk on is clear, or we've travelled far enough (flat dist > 0.8). */
     private boolean skipNow(Movement cur) {
         BlockPos dir = dirOf(cur);
@@ -667,18 +665,18 @@ public final class PlayerPathExecutor {
         return flatDist > 0.8;
     }
 
-    /** The net move vector (dest − src) — Baritone Movement.getDirection. */
+    /** The net move vector (dest − src). */
     private static BlockPos dirOf(Movement mv) {
         return mv.dest.subtract(mv.src);
     }
 
     /**
-     * Block-tower pillar (Baritone MovementPillar): sneak so we never step off the
+     * Block-tower pillar: sneak so we never step off the
      * column, stay centred, jump from the ground, and at the apex place a block in
      * the cell we just left so we land one higher.
      */
     private void drivePillar(Movement mv) {
-        // Swim straight up a water column (Baritone MovementPillar water branch, verbatim):
+        // Swim straight up a water column:
         // aim at the destination cell's centre and press forward ONLY when off-centre by
         // >0.2 (just to recentre) — buoyancy does the actual rising. No sneak, no place.
         if (BlockHelper.isWater(player.level(), mv.src)) {
@@ -690,8 +688,8 @@ public final class PlayerPathExecutor {
                     ? 1.0f : 0.0f;
             player.xxa = 0.0f;
             player.setSprinting(false);
-            // The rise itself comes from the universal liquid-float jump in tick() — Baritone's
-            // pillar water branch likewise presses no jump here, it relies on Movement.update.
+            // The rise itself comes from the universal liquid-float jump in tick() —
+            // this branch deliberately presses no jump of its own.
             return;
         }
         player.setShiftKeyDown(true);   // sneak: never step off the column
@@ -700,7 +698,7 @@ public final class PlayerPathExecutor {
             InputDriver.stepToward(player, Vec3.atBottomCenterOf(mv.src), false);
         } else {
             InputDriver.halt(player);
-            // Baritone MovementPillar: jump only when nearly still AND still BELOW the
+            // Jump only when nearly still AND still BELOW the
             // destination — stop jumping once we've reached the top (`y < dest.y`).
             if (player.onGround() && horizontalSpeedSqr() < 0.0025
                     && player.getY() < mv.dest.getY()) {
@@ -709,7 +707,7 @@ public final class PlayerPathExecutor {
         }
         // Once risen above the target foot height (the apex), place the block under
         // our feet against the block below — looking down at it, like a real player
-        // (Baritone: CLICK_RIGHT when crouching + looking at the block below + y > dest.y+0.1).
+        // (right-click fires only while crouching, looking at the support, and y > dest.y+0.1).
         if (player.getY() > mv.dest.getY() + 0.1) {
             placeUnderfoot(mv.src);
         }
@@ -758,8 +756,8 @@ public final class PlayerPathExecutor {
 
     /**
      * Toggle any wooden door / fence gate that blocks THIS movement (the dest cell + the head
-     * cell above it, each judged from the cell we approach it from) — Baritone's MovementTraverse
-     * door/gate handling, the alternative to breaking it. The planner already treats openable
+     * cell above it, each judged from the cell we approach it from) —
+     * the alternative to breaking it. The planner already treats openable
      * doors as passable (so they never enter {@code toBreak}); here we right-click via the shared
      * {@link Interaction#useBlock} primitive, which does a REAL eye-raycast (no fabricated hit) and
      * only fires when the door is actually in line of sight — exactly like a player, and the same
@@ -779,22 +777,22 @@ public final class PlayerPathExecutor {
             return;   // already passable for this approach — nothing to toggle
         }
         // Real line-of-sight right-click (raycast-verified); a blocked sightline just retries
-        // next tick as the body lines up, matching Baritone's "no reachable rotation → no click".
+        // next tick as the body lines up — no reachable rotation means no click.
         Interaction.useBlock(player, cell, InteractionHand.MAIN_HAND).tick();
     }
 
     /**
-     * Baritone PathExecutor cost re-verification. The current movement is re-costed
+     * Cost re-verification. The current movement is re-costed
      * every tick (catches a block change directly in front of us); the lookahead
-     * window is re-verified only when we just advanced to a new movement (Baritone's
-     * {@code costEstimateIndex} guard). Cancels — triggering a replan — if any
+     * window is re-verified only when we just advanced to a new movement (the
+     * {@code costCheckIndex} guard). Cancels — triggering a replan — if any
      * movement became impossible ({@code COST_INF}) or the current one's live cost
-     * rose by more than {@code maxCostIncrease} over its planned estimate.
+     * rose by more than {@code MAX_COST_INCREASE} over its planned estimate.
      */
     private Status verifyCosts() {
         NavContext fresh = ctxSupplier.get();
         Movement cur = path.movements.get(index);
-        // Baritone gates EVERY cost-based cancel on canCancel = movement.safeToCancel():
+        // EVERY cost-based cancel is gated on safeToCancel():
         // a movement mid-commit (airborne, mid-jump, mid-place, bridging over air) must
         // not be abandoned to a replan, or the body is dropped into a bad state. While
         // not cancellable, let the move finish; the movement timeout still bounds a stall.
@@ -819,8 +817,8 @@ public final class PlayerPathExecutor {
         if (costCheckIndex != index) {
             costCheckIndex = index;
             int last = path.movements.size() - 1;
-            // Baritone: `i = 1; i < costVerificationLookahead(5)` → 4 movements ahead
-            // (index+1 .. index+4), bounded by `pathPosition+i < length-1` (== <= last).
+            // Window: COST_VERIFICATION_LOOKAHEAD(5) → 4 movements ahead
+            // (index+1 .. index+4), bounded by the last movement.
             for (int i = index + 1; i < index + PathSettings.COST_VERIFICATION_LOOKAHEAD && i <= last; i++) {
                 Movement ahead = path.movements.get(i);
                 if (!selfMutating(ahead.kind)
@@ -835,10 +833,10 @@ public final class PlayerPathExecutor {
     }
 
     /**
-     * Baritone PathExecutor's {@code canCancel = movement.safeToCancel()} gate, mapped
-     * to our movement kinds + live body state. A movement that is mid-commit must not
+     * Cancel-safety gate, judged per movement kind + live body state. A movement
+     * that is mid-commit must not
      * be cancelled (replanned) — doing so drops the body off a fall, fails a jump, or
-     * strands it mid-bridge. Mirrors each Baritone Movement.safeToCancel override:
+     * strands it mid-bridge. Per kind:
      * <ul>
      *   <li>FALL — safe only before stepping off the edge (still at {@code src});</li>
      *   <li>PARKOUR — only on the takeoff (0th) tick, no momentum knowledge after;</li>
@@ -854,8 +852,8 @@ public final class PlayerPathExecutor {
             case PARKOUR:
                 return ticksOnCurrent == 0;
             case ASCEND:
-                // Baritone: unsafe once we've STARTED placing the step block
-                // (ticksWithoutPlacement>0) — for us, once the place maneuver began or finished.
+                // Unsafe once we've STARTED placing the step block —
+                // i.e. once the place maneuver began or finished.
                 return mv.toPlace == null || (placeManeuver == null && !placedThisMove);
             case TRAVERSE:
                 return mv.toPlace == null
@@ -867,7 +865,7 @@ public final class PlayerPathExecutor {
         }
     }
 
-    /** Baritone MovementDiagonal.safeToCancel: safe at the start cell, or when both cut
+    /** Diagonal cancel-safety: safe at the start cell, or when both cut
      *  corners have a floor; if we're cornering through an unwalkable corner cell, only
      *  safe when a block actually supports us (one of the four 0.25 offsets below). */
     private boolean diagonalSafeToCancel(Movement mv) {
@@ -916,26 +914,26 @@ public final class PlayerPathExecutor {
 
     /**
      * Has the move completed? Feet at dest, or — for a walk — overshot 1–2 cells past
-     * it at the same height (Baritone {@code overshootTraverse}: a sprint can carry the
+     * it at the same height (a sprint can carry the
      * body a cell or two beyond the target, which still counts as arrived).
      */
     private boolean arrived(Movement mv) {
         BlockPos feet = feet();
         if (mv.kind == Movement.Kind.PILLAR) {
-            // Water swim-up: Baritone's pillar water branch succeeds on feet==dest with NO
+            // Water swim-up succeeds on feet==dest with NO
             // block check (you're swimming, nothing is placed).
             if (BlockHelper.isWater(player.level(), mv.src)) {
                 return feet.equals(mv.dest);
             }
-            // Dry tower: Baritone success = feet at dest AND blockIsThere (the placed block
-            // exists, canWalkOn(src)). WITHOUT the block check, the jump APEX — feet
+            // Dry tower: success = feet at dest AND the placed block
+            // exists (canWalkOn(src)). WITHOUT the block check, the jump APEX — feet
             // momentarily at dest.y mid-air, before placeUnderfoot has placed anything —
             // false-arrives, advances the index, then the body falls back with nothing
             // placed and churns forever. The block check holds arrival until we've placed.
             return feet.equals(mv.dest) && BlockHelper.canWalkOn(player.level(), mv.src);
         }
         if (mv.kind == Movement.Kind.DESCEND) {
-            // Baritone MovementDescend success: feet at dest OR the overshoot fakeDest, AND
+            // Descend success: feet at dest OR the overshoot fakeDest, AND
             // settled within 0.5 of dest.y (or dest is liquid) — don't advance while still
             // falling through the destination cell.
             BlockPos fakeDest = new BlockPos(
@@ -945,9 +943,9 @@ public final class PlayerPathExecutor {
                     || player.getY() - mv.dest.getY() < 0.5;
         }
         if (mv.kind == Movement.Kind.FALL) {
-            // Baritone MovementFall success: feet at dest AND settled within 0.094 of dest.y
+            // Fall success: feet at dest AND settled within 0.094 of dest.y
             // (lilypad tolerance); or landed in water and no longer sinking (no water-bucket
-            // clutch at default settings).
+            // clutch here).
             if (!feet.equals(mv.dest)) return false;
             if (!player.level().getBlockState(mv.dest).getFluidState().isEmpty()) {
                 return player.getDeltaMovement().y >= 0.0;
@@ -955,10 +953,10 @@ public final class PlayerPathExecutor {
             return player.getY() - mv.dest.getY() < 0.094;
         }
         if (mv.kind == Movement.Kind.TRAVERSE) {
-            // Baritone: SUCCESS only once the floor under dest exists (isTheBridgeBlockThere
-            // = canWalkOn(dest.below)) — don't declare a bridge traverse done before the
+            // Traverse SUCCESS only once the floor under dest exists
+            // (canWalkOn(dest.below)) — don't declare a bridge traverse done before the
             // placed floor is there. Then feet==dest, or a 1-2 cell sprint overshoot in the
-            // move direction (Baritone overshootTraverse).
+            // move direction.
             if (!BlockHelper.canWalkOn(player.level(), mv.dest.below())) return false;
             if (feet.equals(mv.dest)) return true;
             int dx = Integer.signum(mv.dest.getX() - mv.src.getX());
@@ -970,14 +968,14 @@ public final class PlayerPathExecutor {
             return false;
         }
         if (mv.kind == Movement.Kind.ASCEND) {
-            // Baritone MovementAscend success: feet==dest OR one cell further horizontally
+            // Ascend success: feet==dest OR one cell further horizontally
             // (the jump can carry us a cell past dest).
             if (feet.equals(mv.dest)) return true;
             int dx = mv.dest.getX() - mv.src.getX();
             int dz = mv.dest.getZ() - mv.src.getZ();
             return feet.equals(mv.dest.offset(dx, 0, dz));
         }
-        // DIAGONAL (Baritone: feet==dest only, no overshoot), DIG_DOWN, PARKOUR.
+        // DIAGONAL (feet==dest only, no overshoot), DIG_DOWN, PARKOUR.
         return feet.equals(mv.dest);
     }
 
@@ -1000,7 +998,7 @@ public final class PlayerPathExecutor {
         return -1;
     }
 
-    // ---- re-localization (mirrors PathExecutor) ----
+    // ---- re-localization ----
 
     private Status relocalize() {
         BlockPos feet = feet();
@@ -1009,7 +1007,7 @@ public final class PlayerPathExecutor {
             ticksAway = 0;
             return null;
         }
-        // Backward (Baritone PathExecutor.onTick): lagged / pushed back — scan earlier
+        // Backward: lagged / pushed back — scan earlier
         // movements FROM THE START and take the FIRST (earliest) whose valid cells hold us.
         for (int i = 0; i < index; i++) {
             if (path.movements.get(i).validPositions().contains(feet)) {
@@ -1018,7 +1016,7 @@ public final class PlayerPathExecutor {
             }
         }
         // Forward skip +3: a movement signals its own completion (e.g. sneak-place),
-        // so +1/+2 are deliberately skipped (Baritone PathExecutor).
+        // so +1/+2 are deliberately skipped.
         int last = path.movements.size() - 1;
         for (int i = index + 3; i <= last; i++) {
             if (path.movements.get(i).validPositions().contains(feet)) {
@@ -1026,7 +1024,7 @@ public final class PlayerPathExecutor {
                 return null;
             }
         }
-        // Off-path watchdog (Baritone PathExecutor.onTick + closestPathPos): distance to the
+        // Off-path watchdog: distance to the
         // closest valid cell of the WHOLE path — not just the current movement — so the body
         // being near any part of the route doesn't read as off-path. Two bands: >2 blocks
         // counts toward MAX_TICKS_AWAY before giving up, >3 cancels immediately.
@@ -1037,7 +1035,7 @@ public final class PlayerPathExecutor {
                 if (d < bestSq) bestSq = d;
             }
         }
-        // Soft band first (matches Baritone's order), then the immediate hard band.
+        // Soft band first, then the immediate hard band.
         if (possiblyOffPath(cur, bestSq, SOFT_DIST_SQR)) {
             if (++ticksAway > PathSettings.MAX_TICKS_AWAY) {
                 return replan("off-path soft band " + PathSettings.MAX_TICKS_AWAY + " ticks");
@@ -1051,7 +1049,7 @@ public final class PlayerPathExecutor {
         return null;
     }
 
-    /** Baritone PathExecutor.possiblyOffPath: are we further than {@code leniencySq} from the
+    /** Are we further than {@code leniencySq} from the
      *  path? With a mid-FALL carve-out — falling you're far in Y from both ends but not off
      *  path, so judge a fall by the FLAT (XZ) distance to its landing cell instead. */
     private boolean possiblyOffPath(Movement cur, double bestSq, double leniencySq) {

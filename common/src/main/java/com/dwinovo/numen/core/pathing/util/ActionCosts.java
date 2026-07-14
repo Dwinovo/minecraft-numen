@@ -1,8 +1,7 @@
 package com.dwinovo.numen.core.pathing.util;
 
 /**
- * Physics-derived movement cost constants, in game ticks — a 1:1 port of
- * Baritone's {@code ActionCosts} (cabaletta/baritone).
+ * Physics-derived movement cost constants, in game ticks.
  *
  * <p>Every base cost is {@code 20 / speedInBlocksPerSecond}. Fall and jump costs
  * are NOT magic numbers: they come from Minecraft's gravity/drag model
@@ -24,9 +23,9 @@ public final class ActionCosts {
 
     /** Walk one block: 20 / 4.317. ≈ 4.633 */
     public static final double WALK_ONE_BLOCK = 20.0 / 4.317;
-    /** Walk one block in water: 20 / 2.2. ≈ 9.091 (Baritone WALK_ONE_IN_WATER_COST).
-     *  Baritone's {@code waterWalkSpeed} interpolates this toward WALK by Depth
-     *  Strider level; we don't model the enchant, so it's the plain no-strider value. */
+    /** Walk one block in water: 20 / 2.2. ≈ 9.091.
+     *  Depth Strider would interpolate this toward WALK per enchant
+     *  level; we don't model the enchant, so it's the plain no-strider value. */
     public static final double WALK_ONE_IN_WATER = 20.0 / 2.2;
     /** Walk one block over soul sand: 2× walk. ≈ 9.266 */
     public static final double WALK_ONE_OVER_SOUL_SAND = WALK_ONE_BLOCK * 2;
@@ -52,8 +51,8 @@ public final class ActionCosts {
 
     /**
      * Per-block fall-time table, {@code FALL_N_BLOCKS_COST[i] = distanceToTicks(i)}
-     * for i in 0..256 — the exact Baritone table (it sizes its own at 4097; the
-     * heights we ever allow are tiny, so 257 entries is ample).
+     * for i in 0..256 — the
+     * heights we ever allow are tiny, so 257 entries is ample.
      */
     public static final double[] FALL_N_BLOCKS_COST = generateFallNBlocksCost();
 
@@ -65,8 +64,8 @@ public final class ActionCosts {
     public static final double JUMP_ONE_BLOCK = FALL_1_25_BLOCKS - FALL_0_25_BLOCKS;
 
     /**
-     * Per-block descent cost used by the A* y-heuristic — Baritone's
-     * {@code GoalYLevel} descends at {@code FALL_N_BLOCKS_COST[2] / 2} per block.
+     * Per-block descent cost used by the A* y-heuristic:
+     * {@code FALL_N_BLOCKS_COST[2] / 2} per block.
      * ≈ 3.89
      */
     public static final double DESCEND_ONE_BLOCK = FALL_N_BLOCKS_COST[2] / 2.0;
@@ -79,8 +78,7 @@ public final class ActionCosts {
     }
 
     /**
-     * Cost of a parkour jump across {@code blocks} of gap (Baritone
-     * {@code MovementParkour.costFromJumpDistance}): 2→walk×2, 3→walk×3,
+     * Cost of a parkour jump across {@code blocks} of gap: 2→walk×2, 3→walk×3,
      * 4→sprint×4, plus the flat jump penalty.
      */
     public static double costFromJumpDistance(int blocks) {
@@ -92,7 +90,7 @@ public final class ActionCosts {
         return base + PathSettings.JUMP_PENALTY;
     }
 
-    // ---- gravity model (Baritone-exact) ----
+    // ---- gravity model (vanilla-derived) ----
 
     /** Downward fall velocity after {@code ticks} ticks: (0.98^t − 1) × −3.92. */
     private static double velocity(int ticks) {

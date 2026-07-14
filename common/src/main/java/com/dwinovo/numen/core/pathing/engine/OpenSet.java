@@ -4,8 +4,8 @@ import java.util.Arrays;
 
 /**
  * A binary min-heap open set ordered by {@link Node#f}, with an O(log n)
- * decrease-key — adapted from the verified legacy {@code calc.BinaryHeapOpenSet}
- * (itself a port of Baritone's), plus {@link #peekLowest()} for the learning
+ * decrease-key (each node caches its heap index),
+ * plus {@link #peekLowest()} for the learning
  * write-back's frontier read.
  *
  * <p>Hand-rolled rather than {@link java.util.PriorityQueue} because A* relaxes

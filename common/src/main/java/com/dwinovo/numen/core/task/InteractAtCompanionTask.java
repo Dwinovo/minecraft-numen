@@ -112,7 +112,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             }
         }
 
-        // A fixed-duration hold ends when its window elapses (Carpet: release the button).
+        // A fixed-duration hold ends when its window elapses: release the button.
         if (holdUntil >= 0 && player.level().getGameTime() >= holdUntil) {
             interaction.stop();
             successMsg = describeDone();

@@ -17,11 +17,11 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
 /**
- * Plan → execute → replan driver for a companion {@link NumenPlayer} body.
- * The player-body twin of {@code Navigator}: same path-while-moving loop (walk
+ * Plan → execute → replan driver for a companion {@link NumenPlayer} body:
+ * a path-while-moving loop — walk
  * the current path; precompute the continuation of a partial path so there's no
  * planning pause at a segment boundary; re-root on a moving goal or after an
- * off-path replan) but executing through {@link PlayerPathExecutor}. Planning
+ * off-path replan — executing through {@link PlayerPathExecutor}. Planning
  * runs on the v2 engine via the {@link EngineSearch} adapter (body-neutral,
  * Minecraft-free at its core) with an {@link HLearningTable} shared across
  * this navigation's segments.
@@ -80,14 +80,14 @@ public final class PlayerNav {
     private Path pendingPathForViz;
 
     /** Packed positions of the path we're currently executing — fed to the next
-     *  search as Baritone's {@code Favoring} so a replan reuses this route (damps
+     *  search as a cost favoring so a replan reuses this route (damps
      *  the flip-flopping a from-scratch replan would otherwise cause). */
     private it.unimi.dsi.fastutil.longs.LongSet previousPathHashes =
             it.unimi.dsi.fastutil.longs.LongSets.emptySet();
 
     /** Cells to highlight in the overlay; null → just the path's destination.
-     *  The mining task sets this to its whole known-ore field (Baritone boxes
-     *  every GoalComposite member). */
+     *  The mining task sets this to its whole known-ore field (every
+     *  composite-goal member gets a box). */
     private Supplier<java.util.List<BlockPos>> highlights;
 
     /** Highlight these cells in the path overlay (e.g. the full ore field). */
@@ -312,7 +312,7 @@ public final class PlayerNav {
             // land in the table the NEW goal consults. Swapping orphans those writes.
             learning = new HLearningTable();
         } else {
-            // Baritone semantics: give up on STALLED effort, never on segment count —
+            // Give up on STALLED effort, never on segment count —
             // a 60-block dig-up legitimately takes dozens of segments, each one a real
             // gain. Progress is judged in the GOAL'S OWN terms (its heuristic at the
             // feet): correct for yLevel (vertical only), column (horizontal only),
@@ -342,8 +342,8 @@ public final class PlayerNav {
     private void maybePrecompute() {
         if (nextFuture != null || pendingNext != null) return;
         if (current == null || !current.isPartial()) return;
-        // Baritone planAhead: start the next segment once the current one has
-        // fewer than planningTickLookahead (150) ticks of travel left.
+        // Plan ahead: start the next segment once the current one has
+        // fewer than PLANNING_TICK_LOOKAHEAD (150) ticks of travel left.
         if (current.remainingCost() > PathSettings.PLANNING_TICK_LOOKAHEAD) return;
         NavGoal g = goalSupplier.get();
         if (g == null) return;
@@ -455,8 +455,8 @@ public final class PlayerNav {
         discardPrecompute();
         cancelSearch();
         InputDriver.halt(player);
-        // Release sneak too — a pillar holds it every tick, and unlike Baritone (which
-        // resets all inputs per tick) nothing clears it when the path ends, so the body
+        // Release sneak too — a pillar holds it every tick, and nothing else clears it
+        // when the path ends (inputs aren't auto-reset per tick), so the body
         // would stay crouched after arriving.
         player.setShiftKeyDown(false);
         PathVizPublisher.clear(player);

@@ -3,16 +3,16 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.core.task.TaskRecord;
 
 /**
- * Typed task descriptor for the {@code move_to} tool. Mirrors Baritone's
- * {@code goto}, whose goal type is chosen by WHICH coordinates are supplied
- * (arg arity): the LLM picks its intent by filling only the fields it means.
+ * Typed task descriptor for the {@code move_to} tool. The goal type is chosen
+ * by WHICH coordinates are supplied (arg arity): the LLM picks its intent by
+ * filling only the fields it means.
  * <ul>
- *   <li>{@code x} + {@code z} (no {@code y}) → {@link Kind#COLUMN} (Baritone
- *       {@code GoalXZ}): walk to that location, Y auto-resolved to the surface.
+ *   <li>{@code x} + {@code z} (no {@code y}) → {@link Kind#COLUMN}:
+ *       walk to that location, Y auto-resolved to the surface.
  *       The default "go there" — a guessed Y can never make it unreachable.</li>
- *   <li>{@code x} + {@code y} + {@code z} → {@link Kind#BLOCK} (Baritone
- *       {@code GoalBlock}): one exact cell (a verified-reachable spot).</li>
- *   <li>{@code y} only → {@link Kind#YLEVEL} (Baritone {@code GoalYLevel}):
+ *   <li>{@code x} + {@code y} + {@code z} → {@link Kind#BLOCK}:
+ *       one exact cell (a verified-reachable spot).</li>
+ *   <li>{@code y} only → {@link Kind#YLEVEL}:
  *       change elevation to that height.</li>
  * </ul>
  * Coordinates are nullable ({@code null} = "not supplied"); the deadline-based
@@ -43,8 +43,8 @@ public final class MoveToTaskRecord extends TaskRecord {
     }
 
     /**
-     * Map supplied-axes → goal kind (Baritone {@code RelativeGoal} arity rules,
-     * adapted to named nullable fields). Throws a teaching error for ambiguous
+     * Map supplied-axes → goal kind (arity decides intent, expressed here as
+     * named nullable fields). Throws a teaching error for ambiguous
      * combos so the LLM learns the valid shapes.
      */
     private static Kind resolveKind(Double x, Double y, Double z) {

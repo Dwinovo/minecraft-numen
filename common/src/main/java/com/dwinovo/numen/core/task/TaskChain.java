@@ -3,7 +3,7 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 /**
- * One competing behavior for a companion body, in the AltoClef sense: the
+ * One competing behavior for a companion body: the
  * scheduler ({@link CompanionBrain}) holds an ordered list of chains and, each
  * server tick, ticks ONLY the highest-priority active one. A chain that is
  * dormant returns {@link Float#NEGATIVE_INFINITY} from {@link #getPriority}; a

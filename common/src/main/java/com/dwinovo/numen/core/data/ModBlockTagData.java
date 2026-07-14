@@ -26,8 +26,8 @@ public final class ModBlockTagData {
      * vanilla work stations that have NO block entity (so the
      * {@code shouldAvoidBreaking} BlockEntity proxy can't catch them); container
      * blocks (chests, furnaces, barrels, …) and modded machines stay covered by that
-     * proxy. Mirrors the intent of Baritone's default {@code blocksToAvoidBreaking},
-     * which likewise protects the crafting table. Packs can extend this tag freely.
+     * proxy. The rule protects the player's built infrastructure — a crafting table
+     * is never worth a shortcut. Packs can extend this tag freely.
      */
     public static void addBlockTags(TagAppenderProvider<Block> tags) {
         tags.tag(InitTag.DO_NOT_BREAK)

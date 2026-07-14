@@ -17,14 +17,14 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * The most-native interaction primitive for a fake-player body — modelled on
- * Carpet's {@code EntityPlayerActionPack}: aim the eyes at a target, then "press"
+ * The most-native interaction primitive for a fake-player body:
+ * aim the eyes at a target, then "press"
  * one mouse button (left = ATTACK, right = USE) with a {@link Timing}. Every
  * higher-level action is a thin layer on top: {@code break_block} = ATTACK a
  * block (hold), {@code place_block} = USE a block (once), {@code hunt} = ATTACK an
  * entity, eat/bow = hold USE in the air.
  *
- * <h2>Native dispatch (same calls Carpet's action pack makes)</h2>
+ * <h2>Native dispatch (the same server entry points a real client's packets reach)</h2>
  * <ul>
  *   <li>ATTACK + block  → {@link BlockDigger} (creative insta / survival timed) → {@code handleBlockBreakAction} START/STOP (server destroys)</li>
  *   <li>ATTACK + entity → {@code player.attack} (cooldown-scaled damage / sweep / knockback)</li>
@@ -33,7 +33,7 @@ import net.minecraft.world.phys.Vec3;
  *   <li>USE + air       → {@code gameMode.useItem} (+ a hold for food / bow)</li>
  * </ul>
  *
- * <h2>Timing (Carpet's {@code Action} model, first-class)</h2>
+ * <h2>Timing</h2>
  * {@link Timing#once()} taps once; {@link Timing#repeat} taps N times spaced by an
  * interval (auto-click a button, grind a mob); {@link Timing#hold()} holds the
  * button until the action self-completes (a block breaks, food finishes);
@@ -49,11 +49,11 @@ public final class Interaction {
 
     /** Vanilla block-interaction reach (survival); creative is 5. */
     private static final double REACH = 4.5;
-    /** The two hands USE tries, main first (Carpet tries both). */
+    /** The two hands USE tries, main first (vanilla interaction tries both). */
     private static final InteractionHand[] HANDS = {InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND};
 
     /**
-     * When and how often the button fires — a port of Carpet's {@code Action}
+     * When and how often the button fires
      * (once / continuous / interval). {@code hold} actions press-and-hold until
      * the action finishes on its own (breaking, eating) or {@code maxHold} elapses
      * (bow); discrete actions fire {@code limit} times spaced by {@code interval}.
@@ -166,7 +166,7 @@ public final class Interaction {
     private static final int CONTINUOUS = 1_000_000;
 
     /**
-     * Carpet's {@code Tracer} / vanilla crosshair pick: one ray from the eyes along the CURRENT
+     * The vanilla crosshair pick: one ray from the eyes along the CURRENT
      * look, resolving the CLOSER of a block or an entity (else MISS). A wall occludes a mob behind
      * it (entities are searched only as near as the block hit). {@code reach} 4.5 = survival.
      */
@@ -187,7 +187,7 @@ public final class Interaction {
 
     /**
      * Build the native action for a resolved crosshair {@code hit} + {@code button}, mapping
-     * {@code holdTicks} to the cell's natural cadence — Carpet's 6-cell dispatch:
+     * {@code holdTicks} to the cell's natural cadence — a 6-cell (button × target) dispatch:
      * <ul>
      *   <li>ATTACK·BLOCK → break (BlockDigger holds till the block is gone);</li>
      *   <li>ATTACK·ENTITY → hit (tap = one cooldown-gated hit; hold = keep hitting);</li>
@@ -196,7 +196,7 @@ public final class Interaction {
      *   <li>USE·AIR → useItem (tap = throw; hold = charge/eat up to ticks, or self-complete);</li>
      *   <li>ATTACK·AIR → {@code null} (left-click air does nothing).</li>
      * </ul>
-     * {@code holdTicks}: 0 = tap, &gt;0 / -1 = hold. The block/entity hit is used verbatim (the
+     * {@code holdTicks}: 0 = tap, &gt;0 / -1 = hold. The block/entity hit is used as-is (the
      * native raytrace already resolved the exact face/point — no re-raycast). The caller drives
      * the returned object to completion and enforces the hold duration.
      */

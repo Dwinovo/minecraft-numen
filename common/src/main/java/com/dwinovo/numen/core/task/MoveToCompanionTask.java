@@ -10,16 +10,16 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * {@code move_to} on the companion player body — a 1:1 port of Baritone's
- * {@code goto}, whose goal type is chosen by which coordinates were supplied
+ * {@code move_to} on the companion player body — a coordinate walk whose goal
+ * type is chosen by which coordinates were supplied
  * ({@link MoveToTaskRecord.Kind}):
  * <ul>
- *   <li>{@link MoveToTaskRecord.Kind#COLUMN} → {@link NavGoal#column} ({@code GoalXZ}):
+ *   <li>{@link MoveToTaskRecord.Kind#COLUMN} → {@link NavGoal#column}:
  *       reach the (x,z) location at any height — the default "go there", a wrong/
  *       absent Y can never make it unreachable;</li>
- *   <li>{@link MoveToTaskRecord.Kind#BLOCK} → {@link NavGoal#exact} ({@code GoalBlock}):
+ *   <li>{@link MoveToTaskRecord.Kind#BLOCK} → {@link NavGoal#exact}:
  *       one exact cell;</li>
- *   <li>{@link MoveToTaskRecord.Kind#YLEVEL} → {@link NavGoal#yLevel} ({@code GoalYLevel}):
+ *   <li>{@link MoveToTaskRecord.Kind#YLEVEL} → {@link NavGoal#yLevel}:
  *       reach a target elevation.</li>
  * </ul>
  * The planner is untouched; only the goal/arrival/result semantics differ per kind.
@@ -73,13 +73,13 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         nav = PlayerNav.toGoal(player, this::goal, r.speed, this::reached);
         // Highlight the ACTUAL requested cell (not the path's best-effort end) so the overlay
         // box sits on the real target — e.g. a BLOCK goal under/over water that the path can
-        // only approach to the surface. Mirrors how Baritone always renders the goal itself.
+        // only approach to the surface. The goal itself is always rendered, not the plan's end.
         if (r.kind == MoveToTaskRecord.Kind.BLOCK) {
             nav.setHighlights(() -> java.util.List.of(blockTarget));
         }
     }
 
-    /** The Baritone goal for this move's kind. */
+    /** The navigation goal for this move's kind. */
     private NavGoal goal() {
         return switch (r.kind) {
             case BLOCK -> NavGoal.exact(blockTarget);
@@ -88,13 +88,14 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         };
     }
 
-    /** Live arrival — exact, 1:1 with the Baritone goal's {@code isInGoal}:
-     *  GoalBlock (feet == cell), GoalXZ (feet x/z == target), GoalYLevel (feet y == level).
+    /** Live arrival — exact, matching each goal's own membership test:
+     *  BLOCK (feet == cell), COLUMN (feet x/z == target), YLEVEL (feet y == level).
      *  YLEVEL additionally requires being ON THE GROUND: a pillar reaches the target y at
      *  the jump APEX a tick before its support block is placed, so without the onGround
      *  gate we'd declare success mid-air, pre-empt the place, and fall back (the stray
      *  extra hop). onGround makes the body actually settle on the placed block. */
-    /** Slab-aware feet cell (Baritone playerFeet) — the pathing node, not raw blockPosition. */
+    /** Slab-aware feet cell — the pathing node, not raw blockPosition (standing on a
+     *  bottom slab counts as the cell above it, like the planner sees it). */
     private BlockPos feet() {
         return com.dwinovo.numen.core.pathing.util.BlockHelper.playerFeet(
                 player.level(), player.getX(), player.getY(), player.getZ());
@@ -135,8 +136,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 // The planner can't get closer. In water, keep waiting while the body is
                 // still drifting toward the goal (sinking onto an underwater target); give
                 // up only once it's stopped making progress (bobbing at the surface below an
-                // out-of-reach above-water target). Mirrors how Baritone settles onto an
-                // underwater goal but stalls under an air one. On land a failure is final.
+                // out-of-reach above-water target). So the body settles onto an underwater
+                // goal but bails under an unreachable air one. On land a failure is final.
                 if (player.isInWater() && settleTicks < MAX_SETTLE_TICKS) {
                     yield TaskState.RUNNING;
                 }

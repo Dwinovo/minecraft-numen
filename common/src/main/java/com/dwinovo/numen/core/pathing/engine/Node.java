@@ -1,9 +1,9 @@
 package com.dwinovo.numen.core.pathing.engine;
 
 /**
- * One search node, keyed by a packed position. Mirrors the legacy
- * {@code calc.PathNode} shape (cached heap index for O(log n) decrease-key)
- * with the v2 change that the effective heuristic
+ * One search node, keyed by a packed position. Carries a cached heap index
+ * for the open set's O(log n) decrease-key,
+ * with the v2 property that the effective heuristic
  * {@code h_eff = max(h_base, learned)} is fixed at CREATION — the learning
  * table is only written between searches from this search's perspective, so
  * heap order is never invalidated mid-run.

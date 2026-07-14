@@ -5,8 +5,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Drives a companion {@link ServerPlayer} body the way Carpet's
- * {@code EntityPlayerActionPack} drives a fake player: by setting the player's
+ * Drives a companion {@link ServerPlayer} body the way a client's key presses
+ * would: by setting the player's
  * movement INPUTS ({@code zza}/{@code xxa}, sprint, sneak, jump) and aim, then
  * letting vanilla player physics ({@code LivingEntity.travel}) do the actual
  * stepping, collision and 0.6-block step-up. Replaces the old {@code BodyMotor}
@@ -38,8 +38,8 @@ public final class InputDriver {
     /**
      * Upward impulse, routed the way vanilla routes pressing the jump key: a ground hop
      * on land ({@code jumpFromGround}), or a swim-up stroke in water/lava (vanilla
-     * {@code jumpInLiquid} = +0.04/tick). This is why Baritone stays at the water surface
-     * (it presses Input.JUMP when its feet sink below the lane) — a fake player has no
+     * {@code jumpInLiquid} = +0.04/tick). Holding jump whenever the feet sink below the
+     * lane is what keeps a body riding the water surface — a fake player has no
      * client to translate a key into the liquid case, so we do it here. Call every tick
      * you want to keep rising; in water it's the per-tick stroke, not a one-shot.
      */
