@@ -324,16 +324,17 @@ public final class NumenScreen extends Screen {
         summonInput.setMaxLength(com.dwinovo.numen.network.payload.SummonRequestPayload.MAX_NAME);
         summonInput.setBordered(false);
         summonInput.setTextColor(TXT);
-        summonInput.setHint(Component.translatable("numen.summon.name_hint"));
         add(summonInput);
-        // Optional persona for the new companion — a dropdown of the library (+ 默认). Rendered/routed
-        // manually (see render / mouseClicked), like the Settings model dropdown.
+        // Persona for the new companion — the library list, defaulting to the
+        // 活泼助手 preset (regenerated on every load, so it always exists). The
+        // "hint" rendering lives in the render pass as a FAINT placeholder — the
+        // EditBox's own hint drew in full text color and read as typed input.
         List<Dropdown.Item> items = new ArrayList<>();
-        items.add(new Dropdown.Item(PERSONA_DEFAULT, I18n.get("numen.persona.default")));
         for (PersonaLibrary.Persona p : PersonaLibrary.instance().list()) {
             items.add(new Dropdown.Item(p.id(), p.name()));
         }
-        summonPersonaDropdown = new Dropdown(items, summonPersonaId == null ? PERSONA_DEFAULT : summonPersonaId);
+        if (summonPersonaId == null) summonPersonaId = "preset_lively";
+        summonPersonaDropdown = new Dropdown(items, summonPersonaId);
         summonPersonaDropdown.setBounds(left + PAD, y0 + 68, PANEL_W - PAD * 2, 18);
         // REQUIRED model config — no default item and no fallback: an empty library
         // shows no dropdown; clicking 创建 then explains (doSummon).
@@ -1664,8 +1665,7 @@ public final class NumenScreen extends Screen {
         if (button == 0) {
             // Summon dropdowns get first pick (their open lists overlay the panel).
             if (summoning && summonPersonaDropdown != null && summonPersonaDropdown.mouseClicked(mouseX, mouseY)) {
-                String sel = summonPersonaDropdown.selectedId();
-                summonPersonaId = PERSONA_DEFAULT.equals(sel) ? null : sel;
+                summonPersonaId = summonPersonaDropdown.selectedId();
                 return true;
             }
             if (summoning && summonProviderDropdown != null && summonProviderDropdown.mouseClicked(mouseX, mouseY)) {
@@ -1839,6 +1839,7 @@ public final class NumenScreen extends Screen {
             int y0 = top + HEADER_H;   // offsets in lockstep with buildSummonField
             txt(g, Component.translatable("numen.summon.title"), left + PAD, y0 + 8, TXT);
             txt(g, Component.literal("名字"), left + PAD, y0 + 24, TXT_MUTED);
+            placeholder(g, summonInput, "给它起个名字,如:小玖");
             txt(g, Component.literal("人设"), left + PAD, y0 + 58, TXT_MUTED);
             txt(g, Component.literal("模型配置"
                     + (summonProviderDropdown == null ? "(空——到 设置 → 模型配置 新建)" : "")),
