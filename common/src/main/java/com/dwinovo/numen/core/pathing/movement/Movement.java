@@ -9,8 +9,7 @@ import java.util.Set;
 /**
  * One edge in the pathfinding graph: a single step from a feet-position to an
  * adjacent feet-position, possibly requiring some blocks to be broken and/or
- * one scaffolding block to be placed. Mirrors a Baritone {@code Movement} /
- * mineflayer {@code Move} node.
+ * one scaffolding block to be placed.
  *
  * <p>Immutable value object produced by {@link Moves} during A* expansion and
  * consumed by the {@code PlayerPathExecutor} at runtime. The {@link #cost} already
@@ -38,6 +37,16 @@ public final class Movement {
     /** Lazily-built set of feet cells the entity may legitimately occupy mid-move. */
     private Set<BlockPos> validPositions;
 
+    /**
+     * Whether this movement's cost was computed from a CAPTURED chunk (a measurement)
+     * rather than an optimistic AIR miss on an unloaded one (a guess). Stamped once at
+     * path-assembly time; the executor's cost-drift watchdog only cancels a move whose
+     * plan price was a guess — an accurately-priced move that got dearer is the path's
+     * own earlier actions interfering with a later step, and replanning would just
+     * re-emit the same step at the new price.
+     */
+    private boolean calculatedWhileLoaded = true;
+
     public Movement(Kind kind, BlockPos src, BlockPos dest, double cost,
                     List<BlockPos> toBreak, BlockPos toPlace) {
         this.kind = kind;
@@ -53,7 +62,7 @@ public final class Movement {
      * this movement — the executor's re-localization anchor. If the entity is
      * pushed/falls/overshoots, the executor matches its real feet against the
      * valid sets of nearby movements to resync the path index <em>without</em>
-     * throwing the whole path away (Baritone {@code Movement.getValidPositions}).
+     * throwing the whole path away.
      *
      * <p>Derived purely from {@link #src}/{@link #dest}/{@link #kind}:
      * <ul>
@@ -89,7 +98,7 @@ public final class Movement {
                 // momentum routinely lands a multi-block drop one cell off the
                 // planned column, and without these cells the relocalizer sees
                 // "off path" and burns the whole AWAY_BUDGET before replanning
-                // (Baritone judges fall landings by flat distance, same idea).
+                // (same idea as judging a fall landing by flat distance only).
                 for (int dx = -1; dx <= 1; dx++) {
                     for (int dz = -1; dz <= 1; dz++) {
                         set.add(new BlockPos(dest.getX() + dx, dest.getY(), dest.getZ() + dz));
@@ -100,6 +109,15 @@ public final class Movement {
         }
         validPositions = set;
         return set;
+    }
+
+    /** Stamp {@link #calculatedWhileLoaded} (path-assembly time only). */
+    public void markCalculatedWhileLoaded(boolean loaded) {
+        this.calculatedWhileLoaded = loaded;
+    }
+
+    public boolean calculatedWhileLoaded() {
+        return calculatedWhileLoaded;
     }
 
     /**

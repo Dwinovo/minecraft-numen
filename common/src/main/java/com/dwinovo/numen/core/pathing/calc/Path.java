@@ -32,15 +32,15 @@ public final class Path {
     }
 
     /**
-     * Baritone's {@code staticCutoff}: trim the last {@code pathCutoffFactor}
-     * (10%) of a <em>partial</em> path beyond a {@code pathCutoffMinimumLength}
+     * Static cutoff: trim the last {@code PATH_CUTOFF_FACTOR}
+     * (10%) of a <em>partial</em> path beyond a {@code PATH_CUTOFF_MINIMUM_LENGTH}
      * floor, so the next segment is re-planned with fresher chunk data and the
      * segments overlap cleanly. A full path that reaches the goal is never
      * trimmed; short paths are kept whole.
      */
     public Path staticCutoff() {
         if (!partial) return this;
-        // Baritone counts path LENGTH in positions (= movements + 1); newLength is
+        // Path LENGTH counts positions (= movements + 1); newLength is
         // the last position to include == the movement count to keep.
         int positions = movements.size() + 1;
         if (positions < PathSettings.PATH_CUTOFF_MINIMUM_LENGTH) return this;

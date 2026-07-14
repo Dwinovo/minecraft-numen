@@ -5,7 +5,7 @@ import com.dwinovo.numen.core.pathing.util.PathSettings;
 import net.minecraft.core.BlockPos;
 
 /**
- * What the search is trying to reach — Baritone's {@code Goal} shape. Until
+ * What the search is trying to reach. Until
  * now arrival semantics were written five times in five places (the search's
  * tolerance hack, move_to's radius, three hand-rolled "stand next to X"
  * pickers); a goal object makes the search terminate, the heuristic aim and
@@ -35,16 +35,27 @@ public interface NavGoal {
      * must cost &gt; 0 (see {@link ActionCosts#DESCEND_ONE_BLOCK}): with a free
      * down-direction every node straight above a deep target scored h == 0
      * and partial paths collapsed to the start node.
+     *
+     * <p>Known weight inconsistency (deliberate legacy parity): the weighted-A*
+     * factor {@code COST_HEURISTIC} (3.563) is folded into the XZ term only,
+     * while the vertical terms ({@code JUMP_ONE_BLOCK} / {@code DESCEND_ONE_BLOCK})
+     * are unweighted — the split the verified behaviour was tuned on. Normalizing
+     * the weights is a flagged follow-up, not something to "fix" in passing.
+     *
+     * <p>Engine-adapter contract: {@code heuristic()} / {@code isAt()}
+     * implementations must not retain the {@code BlockPos} argument (the engine
+     * adapter — {@link EngineSearch} — reuses a mutable cursor across calls);
+     * read x/y/z (or compare/measure) and return.
      */
     static double pointBound(BlockPos goal, BlockPos from) {
         double dx = Math.abs(goal.getX() - from.getX());
         double dz = Math.abs(goal.getZ() - from.getZ());
-        // Baritone GoalXZ: (diagonal·√2 + straight) × costHeuristic. costHeuristic
+        // Horizontal: (diagonal·√2 + straight) × COST_HEURISTIC. COST_HEURISTIC
         // (≈ sprint cost) IS the per-block weight here — the heap key adds no
-        // further multiplier (Baritone folds the weight into the heuristic itself).
+        // further multiplier (the weight is folded into the heuristic itself).
         double horizontal = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
                 * PathSettings.COST_HEURISTIC;
-        // Baritone GoalYLevel: up costs JUMP per block, down costs DESCEND (fall[2]/2).
+        // Vertical: up costs JUMP per block, down costs DESCEND (fall[2]/2).
         int dy = goal.getY() - from.getY();
         double vertical = dy > 0
                 ? dy * ActionCosts.JUMP_ONE_BLOCK
@@ -71,8 +82,8 @@ public interface NavGoal {
     }
 
     /**
-     * Reach the {@code (x, z)} column at ANY height — a 1:1 port of Baritone
-     * {@code GoalXZ} ({@code goto x z}). The heuristic is the pure horizontal
+     * Reach the {@code (x, z)} column at ANY height.
+     * The heuristic is the pure horizontal
      * octile term (no vertical), so the search heads for the column and stops at
      * whatever ground exists there. This is the "go to a location" goal: the
      * caller's Y is irrelevant, so a wrong/guessed Y can never make it unreachable.
@@ -95,8 +106,7 @@ public interface NavGoal {
     }
 
     /**
-     * Reach a Y level at ANY X/Z — a 1:1 port of Baritone {@code GoalYLevel}
-     * ({@code goto y}): "change elevation to this height" (climb to the surface,
+     * Reach a Y level at ANY X/Z: "change elevation to this height" (climb to the surface,
      * descend to a mining depth). Heuristic is the pure vertical term — up costs
      * {@link ActionCosts#JUMP_ONE_BLOCK} per block, down {@link ActionCosts#DESCEND_ONE_BLOCK}.
      */
@@ -126,10 +136,10 @@ public interface NavGoal {
                 return feet.distSqr(goal) <= radiusSqr;
             }
             @Override public double heuristic(BlockPos from) {
-                // Baritone GoalNear.heuristic IS the full GoalBlock.calculate — the radius
-                // only relaxes isInGoal, it is NOT subtracted from the aim. (Slightly
-                // inadmissible, but that's exactly what Baritone does, so node ordering and
-                // the best-so-far partial match.)
+                // The heuristic IS the full point bound — the radius
+                // only relaxes isAt, it is NOT subtracted from the aim. (Slightly
+                // inadmissible, deliberately: aiming at the centre keeps node ordering
+                // and the best-so-far partial stable.)
                 return pointBound(goal, from);
             }
             @Override public BlockPos center() {
@@ -165,7 +175,7 @@ public interface NavGoal {
     }
 
     /**
-     * Any of several goals — Baritone {@code GoalComposite}. Satisfied by reaching
+     * Any of several goals. Satisfied by reaching
      * ANY member; the heuristic is the minimum over members, so a single A* search
      * naturally heads for the CLOSEST reachable one. This is how mining targets a
      * whole field of ore at once instead of greedily picking the nearest (which is
@@ -211,18 +221,19 @@ public interface NavGoal {
     }
 
     /**
-     * Stand in the ore's own column to mine it — the family of Baritone mining
-     * stance goals, parameterised by how far BELOW the ore the feet may be:
+     * Stand in the ore's own column to mine it — a family of mining stance
+     * goals, parameterised by how far BELOW the ore the feet may be:
      * <ul>
-     *   <li>{@code maxBelow == 0} → {@code GoalBlock}: feet exactly at the ore;</li>
-     *   <li>{@code maxBelow == 1} → {@code GoalTwoBlocks}: feet at the ore or one below;</li>
-     *   <li>{@code maxBelow == 2} → {@code GoalThreeBlocks}: feet at the ore, one, or two below.</li>
+     *   <li>{@code maxBelow == 0} → feet exactly at the ore;</li>
+     *   <li>{@code maxBelow == 1} → feet at the ore or one below;</li>
+     *   <li>{@code maxBelow == 2} → feet at the ore, one, or two below.</li>
      * </ul>
-     * Which one a given ore gets is decided by {@code MineCompanionTask.coalesce}
-     * (Baritone {@code MineProcess.coalesce}, forceInternalMining=true): the bottom
-     * of a vertical run gets {@code GoalBlock} so the body mines it in place rather
+     * Which one a given ore gets is decided by {@code MineCompanionTask.coalesce}:
+     * the bottom
+     * of a vertical run gets the exact ({@code maxBelow == 0}) stance so the body
+     * mines it in place rather
      * than tunnelling under it. The vertical term in the heuristic folds the whole
-     * accepted band to zero cost (matching {@code GoalBlock.calculate}'s y-fold).
+     * accepted band to zero cost.
      */
     static NavGoal mineColumn(BlockPos ore, int maxBelow) {
         BlockPos o = ore.immutable();
@@ -237,10 +248,10 @@ public interface NavGoal {
                 double horizontal = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
                         * PathSettings.COST_HEURISTIC;
                 // Feet anywhere in {o.y .. o.y-maxBelow} count as arrived: fold that
-                // band to zero, mirroring Goal{Block,Two,Three}Blocks.heuristic.
+                // band to zero.
                 int yDiff = from.getY() - o.getY();
                 int adj = yDiff >= 0 ? yDiff : Math.min(0, yDiff + maxBelow);
-                // GoalYLevel.calculate(0, adj): above the goal (adj>0) we DESCEND to it,
+                // Above the goal (adj>0) we DESCEND to it,
                 // below it (adj<0) we ASCEND. (The old mine() had these two swapped,
                 // overestimating descents — an inadmissible heuristic.)
                 double vertical = adj > 0
@@ -254,14 +265,14 @@ public interface NavGoal {
         };
     }
 
-    /** GoalThreeBlocks shorthand (feet at the ore, one, or two below). */
+    /** Loosest-stance shorthand (feet at the ore, one, or two below). */
     static NavGoal mine(BlockPos ore) {
         return mineColumn(ore, 2);
     }
 
     /**
-     * Get as FAR as possible from {@code from} while holding a y-level — Baritone
-     * {@code GoalRunAway} with a maintainY, used for branch mining: when no ore is
+     * Get as FAR as possible from {@code from} while holding a y-level —
+     * used for branch mining: when no ore is
      * known, head out along the level to dig fresh tunnel and expose more. Never
      * "arrived" (isAt always false) so the search returns a best-effort partial that
      * walks outward; the next replan continues exploring.
@@ -273,9 +284,9 @@ public interface NavGoal {
                 return false;   // never done — keep exploring outward
             }
             @Override public double heuristic(BlockPos fromPos) {
-                // Baritone GoalRunAway.heuristic: −GoalXZ.calculate(dx,dz) (octile×weight,
-                // negated so farther = lower h = preferred), then, with a maintainY,
-                // min*0.6 + GoalYLevel.calculate(maintainY, y)*1.5.
+                // Run-away heuristic: −(octile×weight) — negated so farther = lower h
+                // = preferred — then blended with the y-hold term:
+                // min*0.6 + yLevelTerm*1.5.
                 double dx = Math.abs(f0.getX() - fromPos.getX());
                 double dz = Math.abs(f0.getZ() - fromPos.getZ());
                 double xz = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))

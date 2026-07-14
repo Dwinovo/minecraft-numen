@@ -28,7 +28,7 @@ import java.util.function.Predicate;
  * {@link LevelChunkSection#maybeHas(Predicate)} — which checks only the
  * section's palette (2-10 entries) before scanning its 4096 inner blocks.
  * Sections without any target block are skipped instantly (50-200× speedup for
- * sparse targets like ore). Mirrors Mineflayer's {@code bot.findBlocks}.
+ * sparse targets like ore).
  */
 public final class BlockScanner {
 
@@ -115,8 +115,8 @@ public final class BlockScanner {
     }
 
     /**
-     * Off-thread: read the captured chunks' section palettes (Baritone's
-     * {@code WorldScanner} does the same — palette reads of already-loaded
+     * Off-thread: read the captured chunks' section palettes (palette reads of
+     * already-loaded
      * chunks). Reads can race with main-thread block writes, so each chunk is
      * guarded: a torn palette read skips that chunk this pass rather than
      * throwing. The result is advisory — callers re-validate every hit on the

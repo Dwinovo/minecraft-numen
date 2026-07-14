@@ -4,9 +4,10 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.exec.Ballistics;
 import com.dwinovo.numen.core.pathing.exec.InputDriver;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
-import com.dwinovo.numen.core.task.CompanionTask;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.core.task.base.CountedProgress;
+import com.dwinovo.numen.core.task.base.Precondition;
+import com.dwinovo.numen.core.task.base.TargetSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -20,8 +21,11 @@ import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -39,7 +43,7 @@ import java.util.Set;
  * silently looped. The aim arc is calibrated from the real launch speed of the previous shot, so it
  * tracks any projectile/ammo without a hard-coded velocity.
  */
-public final class ShootCompanionTask implements CompanionTask {
+public final class ShootCompanionTask extends AbstractCompanionTask<ShootTaskRecord> {
 
     private enum Phase { SCAN, ENGAGE }
 
@@ -61,81 +65,93 @@ public final class ShootCompanionTask implements CompanionTask {
     /** Give up on the weapon after this many shots that produced no projectile. */
     private static final int MAX_MISFIRES = 2;
 
-    private final NumenPlayer player;
-    private final ShootTaskRecord r;
-    private final Set<Integer> skipped = new HashSet<>();
+    private final TargetSet<Entity> skipped = new TargetSet<>(Entity::getId);
+    /** How many of those skips happened ({@code TargetSet} keeps no count) — so the final
+     *  "nothing left to shoot" message can tell the LLM "N targets were there but unreachable". */
+    private int unreachableSkips;
 
+    private CountedProgress progress;
     private Phase phase = Phase.SCAN;
     private int currentRadius;
     private Entity target;
-    private PlayerNav nav;
     private Shot shot;            // the in-progress firing sequence (null between shots)
     private double launchV = DEFAULT_V;   // calibrated from the last projectile's real speed
     private int misfires;
-    private String doneReason = "done";
+    /** The success parenthetical / partial-progress note (drives {@link #successMessage()}). */
+    private String note = "done";
 
     public ShootCompanionTask(NumenPlayer player, ShootTaskRecord record) {
-        this.player = player;
-        this.r = record;
+        super(player, record);
     }
 
     @Override
-    public void start() {
-        if (!(player.getMainHandItem().getItem() instanceof ProjectileWeaponItem)) {
-            doneReason = "equip a ranged weapon (bow / crossbow) in your main hand first (equip_item)";
-            r.setState(TaskState.FAILED);
-            return;
-        }
-        if (player.getProjectile(player.getMainHandItem()).isEmpty()) {
-            doneReason = "you have no ammo — craft or obtain arrows first";
-            r.setState(TaskState.FAILED);
-            return;
-        }
+    protected List<Precondition> preconditions() {
+        return List.of(
+                () -> player.getMainHandItem().getItem() instanceof ProjectileWeaponItem ? null
+                        : new Precondition.Failure(
+                                "equip a ranged weapon (bow / crossbow) in your main hand first (equip_item)",
+                                FailureType.WRONG_TOOL),
+                () -> !player.getProjectile(player.getMainHandItem()).isEmpty() ? null
+                        : new Precondition.Failure("you have no ammo — craft or obtain arrows first",
+                                FailureType.NO_MATERIAL));
+    }
+
+    @Override
+    protected void onStart() {
         currentRadius = Math.min(INITIAL_RADIUS, r.maxRadius);
         phase = Phase.SCAN;
+        progress = new CountedProgress(r.count, r::getDestroyed);
     }
 
     @Override
-    public TaskState tick() {
+    protected TaskState onTick() {
         if (player.isDeadOrDying()) {
-            r.setState(TaskState.CANCELLED);
-            return r.getState();
+            return TaskState.CANCELLED;
         }
-        switch (phase) {
+        return switch (phase) {
             case SCAN -> tickScan();
             case ENGAGE -> tickEngage();
-        }
-        return r.getState();
+        };
     }
 
-    private void tickScan() {
-        if (r.getDestroyed() >= r.count) {
-            doneReason = "destroyed all requested";
-            r.setState(TaskState.SUCCESS);
-            return;
+    private TaskState tickScan() {
+        if (progress.done()) {
+            note = "destroyed all requested";
+            return TaskState.SUCCESS;
         }
         Entity best = nearestTarget();
         if (best == null) {
             if (currentRadius < r.maxRadius) {
                 currentRadius = Math.min(currentRadius + RADIUS_STEP, r.maxRadius);
-                return;
+                return TaskState.RUNNING;
             }
-            doneReason = r.getDestroyed() > 0
-                    ? "only destroyed " + r.getDestroyed() + "/" + r.count + " within " + r.maxRadius + " blocks"
-                    : "no " + r.label + " found within " + r.maxRadius + " blocks";
-            r.setState(r.getDestroyed() > 0 ? TaskState.SUCCESS : TaskState.FAILED);
-            return;
+            if (r.getDestroyed() > 0) {
+                note = "only destroyed " + r.getDestroyed() + "/" + r.count + " within " + r.maxRadius + " blocks";
+                return TaskState.SUCCESS;
+            }
+            // Structured give-up for the LLM: what was scanned (the task's full radius) and
+            // how many candidates existed but no firing position could be reached. Same
+            // condition as before — only the message content is richer.
+            String scanned = "no " + r.label + " found within " + r.maxRadius + " blocks";
+            if (unreachableSkips > 0) {
+                scanned += " (" + unreachableSkips + " candidate"
+                        + (unreachableSkips == 1 ? " was" : "s were")
+                        + " skipped as unreachable)";
+            }
+            fail(scanned, FailureType.TARGET_LOST);
+            return TaskState.FAILED;
         }
         target = best;
         abortShot();
         nav = new PlayerNav(player, this::targetCell, APPROACH_SPEED, this::inFiringPosition);
         phase = Phase.ENGAGE;
+        return TaskState.RUNNING;
     }
 
-    private void tickEngage() {
+    private TaskState tickEngage() {
         if (target == null) {
             phase = Phase.SCAN;
-            return;
+            return TaskState.RUNNING;
         }
         if (target.isRemoved() || (target instanceof LivingEntity le && le.isDeadOrDying())) {
             r.incrementDestroyed();
@@ -143,34 +159,45 @@ public final class ShootCompanionTask implements CompanionTask {
             target = null;
             stopNav();
             phase = Phase.SCAN;
-            return;
+            return TaskState.RUNNING;
         }
         if (player.getProjectile(player.getMainHandItem()).isEmpty()) {
-            doneReason = "ran out of ammo after " + r.getDestroyed() + "/" + r.count;
             abortShot();
             stopNav();
-            r.setState(r.getDestroyed() > 0 ? TaskState.SUCCESS : TaskState.FAILED);
-            return;
+            if (r.getDestroyed() > 0) {
+                note = "ran out of ammo after " + r.getDestroyed() + "/" + r.count;
+                return TaskState.SUCCESS;
+            }
+            fail("ran out of ammo after " + r.getDestroyed() + "/" + r.count, FailureType.NO_MATERIAL);
+            return TaskState.FAILED;
         }
         switch (nav.tick()) {
             // Closing (or the target left the firing window mid-draw): abandon any half-draw so the
             // weapon isn't carried around held, and re-draw fresh once back in position.
-            case RUNNING -> abortShot();
-            case ARRIVED -> fireAtTarget();
+            case RUNNING -> {
+                abortShot();
+                return TaskState.RUNNING;
+            }
+            case ARRIVED -> {
+                return fireAtTarget();
+            }
             case FAILED -> {
                 abortShot();
-                skipped.add(target.getId());
+                skipped.skip(target);
+                unreachableSkips++;
                 target = null;
                 stopNav();
                 phase = Phase.SCAN;
+                return TaskState.RUNNING;
             }
         }
+        return TaskState.RUNNING;
     }
 
     /** Aim the calibrated arc at the target (re-aimed every tick, tracking movement) and advance the
      *  native firing sequence. A resolved shot that launched nothing counts as a misfire; too many
      *  means the weapon's firing mechanic isn't one we can drive. */
-    private void fireAtTarget() {
+    private TaskState fireAtTarget() {
         InputDriver.halt(player);   // stand still through the draw/charge instead of drifting
         InputDriver.lookAt(player, Ballistics.aimPoint(player.getEyePosition(), centerOf(target), launchV, ARROW_G));
         holdRangedWeapon();   // the pathfinder may have swapped a scaffold block into the hand while closing in
@@ -181,13 +208,25 @@ public final class ShootCompanionTask implements CompanionTask {
             boolean fired = shot.fired();
             shot = null;
             if (!fired && ++misfires >= MAX_MISFIRES) {
-                doneReason = "the weapon in hand didn't fire a projectile — it may need a special action "
-                        + "this tool can't drive (it handles bows and crossbows)";
                 abortShot();
                 stopNav();
-                r.setState(r.getDestroyed() > 0 ? TaskState.SUCCESS : TaskState.FAILED);
+                String why = "the weapon in hand didn't fire a projectile — it may need a special action "
+                        + "this tool can't drive (it handles bows and crossbows)";
+                if (r.getDestroyed() > 0) {
+                    note = why;
+                    return TaskState.SUCCESS;
+                }
+                // Same condition as before; the terminal WRONG_TOOL message additionally names
+                // the item that misfired so the LLM knows exactly what was in hand.
+                String weapon = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                        .getKey(player.getMainHandItem().getItem()).getPath();
+                fail("the weapon in hand (" + weapon + ") fired no projectile in " + MAX_MISFIRES
+                        + " attempts — it may need a special action this tool can't drive "
+                        + "(it handles bows and crossbows)", FailureType.WRONG_TOOL);
+                return TaskState.FAILED;
             }
         }
+        return TaskState.RUNNING;
     }
 
     /** One native firing sequence for a single shot: start the use, then either release (draw-style)
@@ -333,46 +372,44 @@ public final class ShootCompanionTask implements CompanionTask {
 
     private Entity nearestTarget() {
         AABB box = player.getBoundingBox().inflate(currentRadius);
-        Entity best = null;
-        double bestDistSq = Double.MAX_VALUE;
+        List<Entity> candidates = new ArrayList<>();
         for (Entity e : player.level().getEntities(player, box)) {
             if (e == player || e.isRemoved()) continue;
             if (!r.targets.contains(e.getType())) continue;
-            if (skipped.contains(e.getId())) continue;
             if (e instanceof LivingEntity le && le.isDeadOrDying()) continue;
-            double d = player.distanceToSqr(e);
-            if (d < bestDistSq) {
-                bestDistSq = d;
-                best = e;
-            }
+            candidates.add(e);
         }
-        return best;
+        return skipped.pick(candidates, Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
     }
 
-    private void stopNav() {
-        if (nav != null) {
-            nav.stop();
-            nav = null;
-        }
+    /** Release the firing sequence, then the nav + overlay (base default). */
+    @Override
+    protected void cleanup() {
+        abortShot();
+        super.cleanup();
     }
 
     @Override
-    public TaskResult buildResult(TaskState finalState) {
-        stopNav();
-        abortShot();
+    protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("target", r.label);
         data.put("requested", r.count);
         data.put("destroyed", r.getDestroyed());
-        return switch (finalState) {
-            case SUCCESS -> TaskResult.ok(
-                    "destroyed " + r.getDestroyed() + "/" + r.count + " " + r.label + " (" + doneReason + ")", data);
-            case TIMEOUT -> new TaskResult(false,
-                    "timed out after destroying " + r.getDestroyed() + "/" + r.count + " " + r.label, true, false, data);
-            case CANCELLED -> new TaskResult(false,
-                    "interrupted after destroying " + r.getDestroyed() + "/" + r.count + " " + r.label, false, true, data);
-            case FAILED -> TaskResult.fail(doneReason, data);
-            default -> TaskResult.fail("unexpected state: " + finalState, data);
-        };
+        return data;
+    }
+
+    @Override
+    protected String successMessage() {
+        return "destroyed " + r.getDestroyed() + "/" + r.count + " " + r.label + " (" + note + ")";
+    }
+
+    @Override
+    protected String timeoutMessage() {
+        return "timed out after destroying " + r.getDestroyed() + "/" + r.count + " " + r.label;
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "interrupted after destroying " + r.getDestroyed() + "/" + r.count + " " + r.label;
     }
 }

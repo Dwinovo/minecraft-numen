@@ -1,6 +1,8 @@
 package com.dwinovo.numen.core.pathing.exec;
 
+import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.task.FailureType;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
@@ -11,6 +13,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -19,24 +22,26 @@ import java.util.function.IntSupplier;
 
 /**
  * The live "edge sneak" block placement, shared by {@code place_block} and the
- * pathfinder's bridge / step scaffolding — a port of how Baritone physically
- * places a block (it never teleport-pops one in): HOLD SNEAK (so it can't walk
- * off the ledge), edge toward the target so the support face comes into view,
- * look at that face, and place. We commit either when the raycast genuinely
- * reaches the face (honest line of sight) or, having physically settled at the
- * rim after a real shuffle, against that same face — the body has actually done
- * the maneuver, it isn't placing from dead-centre.
+ * pathfinder's bridge / step scaffolding — placing physically, the way a careful
+ * player does (a block is never teleport-popped in): HOLD SNEAK (so it can't walk
+ * off the ledge), and every tick re-resolve ALL candidate support faces (four
+ * sides, below, and the replaceable target itself) by real raycast from wherever
+ * the body stands right now. The instant ANY face is in honest line of sight, the
+ * eyes lock onto it and the press fires — the eyes do the searching, tick by tick;
+ * the body only edges toward a face when none is visible yet. The press is never
+ * trusted as the outcome: the world state is checked after every click, and a
+ * vanilla refusal is recorded rather than swallowed.
  *
  * <p>The block source ({@code slotFinder}) and the done-check ({@code placed})
  * are injected so the same maneuver serves a specific block ({@code place_block})
  * or any scaffold block (the pathfinder).
  *
- * <p>Optional {@link Hints} steer orientation: the support face is ordered by the
- * requested {@code axis}, the aim point is biased high/low for the {@code half},
- * and a placement is held back (keep shuffling) until a dry-run
- * {@code getStateForPlacement} predicts the requested {@code facing}/half — the
- * body keeps repositioning until it can place the block the right way round, just
- * like a player walking to the correct side. Hints are inert for the pathfinder.
+ * <p>Optional {@link Hints} steer orientation: the shuffle target is ordered by the
+ * requested {@code axis}, the aim height is biased high/low for the {@code half},
+ * and a placement is held back until a dry-run {@code getStateForPlacement}
+ * predicts the requested {@code facing}/half — the body keeps working around the
+ * block until it can place it the right way round, just like a player walking to
+ * the correct side. Hints are inert for the pathfinder.
  */
 public final class PlaceManeuver {
 
@@ -52,9 +57,6 @@ public final class PlaceManeuver {
 
     private static final Direction[] FACES = {
             Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN};
-    /** After this many ticks without placing, back off a step to re-find the angle
-     *  (Baritone MovementAscend MOVE_BACK), then edge in again — alternating windows. */
-    private static final int BACK_OFF_TICKS = 12;
     private static final int LIMIT_TICKS = 60;
 
     private final NumenPlayer player;
@@ -64,10 +66,15 @@ public final class PlaceManeuver {
     private final Hints hints;
     private final Block block;               // for the dry-run; null for the pathfinder (no hints)
 
-    private BlockPos against;
-    private Direction faceDir;               // from `against` back to the target
     private int ticks;
     private String failReason = "couldn't place";
+    private FailureType failType = FailureType.OCCLUDED;
+    /** Vanilla's verdict on the last press that left the world unchanged (null = never pressed). */
+    private String lastRefusal;
+    /** Consecutive ticks spent backing off with our own box still inside the target cell —
+     *  a body that can't clear the cell it must fill (boxed in) is a distinct, fast failure. */
+    private int selfBlockedTicks;
+    private static final int SELF_CLEAR_TICKS = 30;
 
     /** Pathfinder / orientation-agnostic placement. */
     public PlaceManeuver(NumenPlayer player, BlockPos placeAt,
@@ -91,74 +98,138 @@ public final class PlaceManeuver {
         return failReason;
     }
 
+    /** Structured cause of a {@link Status#FAILED}, for the reactive task layer to branch on. */
+    public FailureType failType() {
+        return failType;
+    }
+
     public Status tick() {
         if (placed.getAsBoolean()) return Status.DONE;
         if (slotFinder.getAsInt() < 0) {
             failReason = "out of blocks to place";
+            failType = FailureType.NO_MATERIAL;
             return Status.FAILED;
         }
-        if (against == null && !resolveSupport()) {
+        // Physical impossibility check: no solid neighbour to place against AND nothing in
+        // the cell to click-replace — no stance change can create support, so fail structured.
+        if (!Placement.hasAnySupport(player.level(), placeAt)
+                && player.level().getBlockState(placeAt).isAir()) {
             failReason = "can't place at " + placeAt.toShortString() + " — nothing solid beside or below "
-                    + "it to place against (it's over air or a non-solid block like leaf_litter / grass). "
-                    + "Pick a cell that touches solid ground.";
+                    + "it to place against (it's over air). Pick a cell that touches solid ground.";
+            failType = FailureType.NO_SUPPORT;
             return Status.FAILED;
         }
 
-        // Baritone aim point on the support face (0.25 low) — for the look. For a slab/stair `half`
-        // hint, bias the click height up (top) or down (bottom) so the placement lands on that half.
-        double aimY = (hints.topHalf() != null)
+        player.setShiftKeyDown(true);   // sneak: never walk off the ledge while working
+        // For a slab/stair `half` hint, bias the click height up (top) or down (bottom)
+        // so the placement lands on that half.
+        Double aimY = (hints.topHalf() != null)
                 ? placeAt.getY() + (hints.topHalf() ? 0.72 : 0.28)
-                : (placeAt.getY() + against.getY() + 0.5) * 0.5;
-        Vec3 facePoint = new Vec3(
-                (placeAt.getX() + against.getX() + 1.0) * 0.5,
-                aimY,
-                (placeAt.getZ() + against.getZ() + 1.0) * 0.5);
+                : null;
 
-        // Hold sneak (won't walk off the ledge) and edge toward the support face. If
-        // we've ground forward without success, back off a step to re-find the angle
-        // (Baritone MOVE_BACK), alternating in BACK_OFF_TICKS windows.
-        player.setShiftKeyDown(true);
-        InputDriver.lookAt(player, facePoint);
-        boolean backing = ticks >= BACK_OFF_TICKS && (ticks / BACK_OFF_TICKS) % 2 == 1;
-        player.zza = backing ? -1.0f : 1.0f;
-        player.xxa = 0.0f;
-        player.setSprinting(false);
-
-        // Place ONLY once actually crouching (Baritone crouch-confirm — the sneak takes
-        // a tick to register) AND the raycast genuinely reaches a support face. Never
-        // fabricate a hit: if line of sight never lands, we just keep trying / time out.
-        // With orientation hints we hold back until a dry-run predicts the right state, so the
-        // body keeps repositioning to place it the right way — but never past a grace window.
-        if (player.isCrouching()) {
-            BlockHitResult hit = Placement.resolve(player, placeAt, true);
-            if (hit != null) {
+        // Re-resolve EVERY candidate face fresh each tick, by real raycast from where the
+        // body stands right now — whichever face is genuinely in line of sight wins this
+        // tick. Never fabricate a hit: no face in view means keep edging, or time out.
+        BlockHitResult hit = Placement.resolve(player, placeAt, true, aimY);
+        if (hit != null) {
+            InputDriver.lookAt(player, hit.getLocation());
+            if (player.getBoundingBox().intersects(new AABB(placeAt))) {
+                // Our own collision box is (partly) inside the cell being filled — a placed
+                // block may never overlap an entity, so vanilla refuses EVERY such press.
+                // The classic case is a same-level scaffold: sneaking lets the body lean past
+                // the cell boundary, and pressing toward the face pins it there forever.
+                // Back straight off (face still in view); the press fires the tick the box
+                // clears the cell.
+                player.zza = -1.0f;
+                player.xxa = 0.0f;
+                player.setSprinting(false);
+                // Backing off isn't working (boxed in — e.g. asked to fill the very cell the
+                // body stands in inside a 1×1 shaft): fail FAST with the true story instead
+                // of grinding the timeout and reporting a misleading "view is blocked".
+                if (++selfBlockedTicks >= SELF_CLEAR_TICKS) {
+                    failReason = "I'm standing in the very cell to fill at " + placeAt.toShortString()
+                            + " and can't step out of it (boxed in). Move me a block away first,"
+                            + " or use move_to with a higher y — pillaring up places beneath my"
+                            + " own feet properly.";
+                    failType = FailureType.OCCLUDED;
+                    Constants.LOG.info("[numen-path] place gave up at {} after {} ticks: {}",
+                            placeAt.toShortString(), ticks, failReason);
+                    return Status.FAILED;
+                }
+            } else {
+                selfBlockedTicks = 0;
+                // A face is visible and the cell is clear of our body: stand still and press.
+                // The press waits one tick for the crouch to register — the sneak is also the
+                // edge protection, so the click never precedes it. With orientation hints the
+                // press is held back until a dry-run predicts the right state — but never
+                // past a grace window; while held back, keep working around the block.
                 boolean orientationOk = hints.isEmpty()
                         || ticks > (LIMIT_TICKS * 3) / 5         // grace: take what we can get
                         || matchesHints(predict(hit));
-                if (orientationOk && doPlace(hit)) {
-                    return Status.DONE;
+                if (!orientationOk) {
+                    edgeToward(hit.getLocation());
+                } else {
+                    player.zza = 0.0f;
+                    player.xxa = 0.0f;
+                    player.setSprinting(false);
+                    if (player.isCrouching() && doPlace(hit)) {
+                        // Ticks-to-commit is THE speed metric for the per-tick multi-face
+                        // resolution — one line per successful maneuver, kept on permanently.
+                        Constants.LOG.info("[numen-path] place committed at {} on tick {} (face {})",
+                                placeAt.toShortString(), ticks, hit.getDirection());
+                        return Status.DONE;
+                    }
                 }
+            }
+        } else {
+            // No face in sight yet: edge (sneaking) toward the nearest candidate face so one
+            // comes into view. The stance ladder above this maneuver is the real "different
+            // angle" mechanism — the body never oscillates here.
+            Vec3 aim = shuffleAimPoint(aimY);
+            if (aim != null) {
+                edgeToward(aim);
+            } else {
+                InputDriver.halt(player);
             }
         }
         if (++ticks > LIMIT_TICKS) {
-            failReason = "couldn't get a clear line to a support face at " + placeAt.toShortString()
-                    + " — the view to it is blocked (a wall between, or the body is boxed in). Try a more "
-                    + "open spot next to solid ground.";
+            failReason = lastRefusal != null
+                    ? "a support face at " + placeAt.toShortString() + " was in view but every press was "
+                        + "refused (" + lastRefusal + ") — the cell itself may be obstructed (an entity, "
+                        + "or my own body standing in it)"
+                    : "couldn't get a clear line to a support face at " + placeAt.toShortString()
+                        + " — the view to it is blocked (a wall between, or the body is boxed in). Try a more "
+                        + "open spot next to solid ground.";
+            failType = FailureType.OCCLUDED;
+            Constants.LOG.info("[numen-path] place gave up at {} after {} ticks: {}",
+                    placeAt.toShortString(), ticks, failReason);
             return Status.FAILED;
         }
         return Status.RUNNING;
     }
 
-    private boolean resolveSupport() {
+    /** Look at {@code p} and push toward it; sneak (held by the caller every tick) pins
+     *  the body at the rim instead of letting it walk off. */
+    private void edgeToward(Vec3 p) {
+        InputDriver.lookAt(player, p);
+        player.zza = 1.0f;
+        player.xxa = 0.0f;
+        player.setSprinting(false);
+    }
+
+    /** The aim point to edge toward while no face is in line of sight: the first
+     *  hint-ordered neighbour that can be placed against (face centre, half-biased),
+     *  else the (replaceable) target block itself, else nothing. */
+    private Vec3 shuffleAimPoint(Double aimY) {
         for (Direction dir : orderedFaces()) {
-            BlockPos neighbour = placeAt.relative(dir);
-            if (Placement.canPlaceAgainst(player.level(), neighbour)) {
-                against = neighbour;
-                faceDir = dir.getOpposite();
-                return true;
-            }
+            BlockPos against = placeAt.relative(dir);
+            if (!Placement.canPlaceAgainst(player.level(), against)) continue;
+            return new Vec3(
+                    (placeAt.getX() + against.getX() + 1.0) * 0.5,
+                    aimY != null ? aimY : (placeAt.getY() + against.getY() + 0.5) * 0.5,
+                    (placeAt.getZ() + against.getZ() + 1.0) * 0.5);
         }
-        return false;
+        return player.level().getBlockState(placeAt).isAir() ? null : Vec3.atCenterOf(placeAt);
     }
 
     /** Try support faces in an order that tends to yield the requested pillar axis first; the clicked
@@ -228,8 +299,11 @@ public final class PlaceManeuver {
         int slot = slotFinder.getAsInt();
         if (slot < 0) return false;
         player.holdInHand(slot);   // real hotbar-select / swap-to-hand, not an aliasing overwrite
-        Interaction.useBlock(player, hit, InteractionHand.MAIN_HAND).tick();
-        return placed.getAsBoolean();
+        Interaction use = Interaction.useBlock(player, hit, InteractionHand.MAIN_HAND);
+        use.tick();
+        if (placed.getAsBoolean()) return true;
+        lastRefusal = use.lastUseOutcome();   // the world is the verdict; keep vanilla's word for the autopsy
+        return false;
     }
 
     /** Release sneak / halt — call when the owning task or move ends. */
