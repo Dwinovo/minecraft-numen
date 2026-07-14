@@ -330,7 +330,7 @@ public final class NumenScreen extends Screen {
         // "hint" renders in the render pass as a FAINT placeholder — the EditBox's
         // own hint drew in full text color and read as typed input.
         List<Dropdown.Item> items = new ArrayList<>();
-        items.add(new Dropdown.Item(PERSONA_DEFAULT, "不配置(自由发挥)"));
+        items.add(new Dropdown.Item(PERSONA_DEFAULT, "无"));
         for (PersonaLibrary.Persona p : PersonaLibrary.instance().list()) {
             items.add(new Dropdown.Item(p.id(), p.name()));
         }
