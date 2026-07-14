@@ -918,6 +918,30 @@ public final class EntityAgentLoop {
         return ClientNumenLookup.resolve(entityUuid);
     }
 
+    /**
+     * A turn died on a SYSTEM failure (network error / null response). Queued owner
+     * prompts are pending intent and must not be held hostage by the dead turn — a
+     * REPL that errors returns to idle and drains its command queue; same here: if
+     * prompts are waiting, start a fresh turn carrying them. Only an OWNER interrupt
+     * holds the queue (Stop means stop). With no prompts queued, latch {@code aborted}
+     * as before (the next prompt or event resumes).
+     */
+    private void failTurnKeepQueue() {
+        if (bufferedPrompts.isEmpty()) {
+            aborted = true;
+            return;
+        }
+        // The failed turn may have left the conversation ending on a user message
+        // (its prompts were flushed before dispatch). Cap it so the fresh turn's
+        // flush doesn't create back-to-back user messages (some backends 400 those).
+        if (convo.lastMessage() instanceof ConvoState.Msg.User) {
+            convo.addAssistant(new AssistantTurn("(连接中断)", List.of(), null));
+        }
+        Constants.LOG.info("[numen-entity#{}] turn failed with {} queued prompt(s) — starting a fresh turn with them",
+                entityUuid, bufferedPrompts.size());
+        tryStartTurn();
+    }
+
     private void bounceBackToMain(int gen, NumenLlmClient.ChatResult res, Throwable err) {
         Minecraft mc = Minecraft.getInstance();
         mc.execute(() -> handleResponse(gen, res, err));
@@ -946,12 +970,12 @@ public final class EntityAgentLoop {
         if (err != null) {
             Constants.LOG.warn("[numen-entity#{}] LLM call failed: {}",
                     entityUuid, unwrap(err));
-            aborted = true;
+            failTurnKeepQueue();
             return;
         }
         if (res == null || res.turn() == null) {
             Constants.LOG.warn("[numen-entity#{}] LLM returned null turn", entityUuid);
-            aborted = true;
+            failTurnKeepQueue();
             return;
         }
         AssistantTurn turn = res.turn();
