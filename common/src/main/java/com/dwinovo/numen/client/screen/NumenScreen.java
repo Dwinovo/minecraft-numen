@@ -150,8 +150,6 @@ public final class NumenScreen extends Screen {
             wVoiceVoice = "", wVoiceRef = "", wVoicePrompt = "", wVoiceLang = "", wVoiceVolume = "5";
     private EditBox voiceNameInput, voiceUrlInput, voiceKeyInput, voiceGroupInput, voiceModelInput,
             voiceVoiceInput, voiceRefInput, voicePromptInput, voiceLangInput, voiceVolumeInput;
-    /** 当前同伴的声线绑定下拉(列表视图顶部);"__none__" = 静音。 */
-    private Dropdown voiceBindDropdown;
     private static final String VOICE_NONE = "__none__";
     /** 试听/保存的状态行(表单底部;fail = 红色),照 summon 页 warnText 的即时反馈做法。 */
     private String voiceMsg;
@@ -329,7 +327,6 @@ public final class NumenScreen extends Screen {
         provModelDropdown = null;
         voiceNameInput = voiceUrlInput = voiceKeyInput = voiceGroupInput = voiceModelInput = null;
         voiceVoiceInput = voiceRefInput = voicePromptInput = voiceLangInput = voiceVolumeInput = null;
-        voiceBindDropdown = null;
         voiceBackendDropdown = null;
         proxyIpInput = proxyPortInput = null;
         modelDropdown = null;
@@ -770,18 +767,8 @@ public final class NumenScreen extends Screen {
                 }));
         // 当前同伴的声线绑定下拉(有同伴且库非空时;首项 = 无(静音))。
         var lib = com.dwinovo.numen.client.voice.VoiceLibrary.instance();
-        if (uuid != null && !lib.list().isEmpty()) {
-            List<Dropdown.Item> items = new ArrayList<>();
-            items.add(new Dropdown.Item(VOICE_NONE, I18n.get(ModLanguageData.Keys.VOICE_BIND_NONE)));
-            for (var e : lib.list()) items.add(new Dropdown.Item(e.id(), e.name()));
-            String bound = lib.assignedEntry(uuid);
-            voiceBindDropdown = new Dropdown(items,
-                    bound != null && lib.get(bound) != null ? bound : VOICE_NONE);
-            int x = secX(), w = secW();
-            int labelW = font.width(I18n.get(ModLanguageData.Keys.VOICE_BIND_LABEL)) + 6;
-            voiceBindDropdown.setBounds(x + labelW, secY0() + 12, w - labelW, 18);
-            voiceBindDropdown.setDropBottom(top + PANEL_H - 2);
-        }
+        // 绑定不再是单独一行下拉:声线在召唤时选定、新建时自动绑定,列表行内的
+        // ●/○ 标记负责事后换绑(点 ○ 换用,点 ● 解绑静音)。
     }
 
     /**
@@ -1073,17 +1060,24 @@ public final class NumenScreen extends Screen {
             return;
         }
         int listY0 = voiceListY0();
-        if (voiceBindDropdown != null) {
-            txt(g, Component.translatable(ModLanguageData.Keys.VOICE_BIND_LABEL), x, secY0() + 17, TXT_MUTED);
-        }
         int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
         settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
+        String bound = uuid != null ? lib.assignedEntry(uuid) : null;
         for (int i = settingsScroll; i < list.size(); i++) {
             int ry = listY0 + (i - settingsScroll) * LIST_ROW;
             if (ry + LIST_ROW > secBottom()) break;
             var e = list.get(i);
             int delX = x + w - 12, editX = x + w - 26;
-            txt(g, Component.literal(e.name()), x, ry + 1, TXT);
+            int tx = x;
+            if (uuid != null) {
+                // 行首 ● = 本同伴正在用的声线(召唤时选定/新建时自动绑定)。只读标记,
+                // 用户裁决:声线在开始时选好即可,不提供事后换绑。
+                if (e.id().equals(bound)) {
+                    txt(g, Component.literal("●"), x, ry + 6, CTA);
+                }
+                tx = x + 12;
+            }
+            txt(g, Component.literal(e.name()), tx, ry + 1, TXT);
             String detail;
             if (e.isSovits()) detail = nb(e.refAudio()) ? e.refAudio() : "?";
             else if (e.isMiniMax()) detail = nb(e.voice()) ? e.voice() : "?";
@@ -1091,7 +1085,7 @@ public final class NumenScreen extends Screen {
             else detail = nb(e.model()) ? e.model() : "?";
             String meta = (nb(e.backend()) ? e.backend() : "openai") + " · " + detail
                     + " · vol " + Math.round(e.volume() * 5.0f);
-            txt(g, Component.literal(clip(meta, w - 30)), x, ry + 11, TXT_FAINT);
+            txt(g, Component.literal(clip(meta, w - 30 - (tx - x))), tx, ry + 11, TXT_FAINT);
             txt(g, Component.literal("✎"), editX, ry + 6,
                     overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
             txt(g, Component.literal("✕"), delX, ry + 6,
@@ -1099,9 +1093,9 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    /** 声线列表首行的 y:绑定下拉占一行时整体下移。 */
+    /** 声线列表首行的 y。 */
     private int voiceListY0() {
-        return secY0() + 14 + (voiceBindDropdown != null ? 22 : 0);
+        return secY0() + 14;
     }
 
     private boolean voiceClick(int mx, int my) {
@@ -2241,14 +2235,6 @@ public final class NumenScreen extends Screen {
                 }
                 return true;
             }
-            // 声线绑定下拉先于行命中(展开的列表覆盖在条目行上)。选择即持久化绑定。
-            if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
-                    && voiceBindDropdown != null && voiceBindDropdown.mouseClicked(mouseX, mouseY)) {
-                String sel = voiceBindDropdown.selectedId();
-                com.dwinovo.numen.client.voice.VoiceLibrary.instance()
-                        .assign(uuid, VOICE_NONE.equals(sel) ? null : sel);
-                return true;
-            }
             // 声线表单的后端下拉:选型变了就随之刷新字段区(typed 值经 preserve 存活)。
             // 行滚出视口时不接点击(控件仍在,只是被表单滚动藏起来了)。
             if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
@@ -2464,11 +2450,7 @@ public final class NumenScreen extends Screen {
             voiceLabel(g, row, I18n.get(ModLanguageData.Keys.VOICE_FORM_VOLUME));
             placeholder(g, voiceVolumeInput, "5");
         }
-        // 声线的下拉最后画(展开的列表要压在条目行/字段上面)。
-        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
-                && voiceBindDropdown != null) {
-            voiceBindDropdown.render(g, font, mouseX, mouseY);
-        }
+        // 声线表单的后端下拉最后画(展开的列表要压在字段上面)。
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
                 && addingVoice && voiceBackendDropdown != null && voiceRowVisible(1)) {
             voiceBackendDropdown.render(g, font, mouseX, mouseY);
