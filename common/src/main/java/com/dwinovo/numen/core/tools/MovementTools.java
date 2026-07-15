@@ -29,8 +29,9 @@ double speed,
         if (speed > MAX_SPEED) speed = MAX_SPEED;
         // MoveToTaskRecord validates the x/y/z combination and throws a teaching
         // error for an ambiguous one (e.g. only x given).
-        // modify_terrain is optional; absent means the documented default (true).
+        // modify_terrain is optional; absent means the documented default (false —
+        // normal breaking only: no forced no-drop grinds).
         return new MoveToTaskRecord(ctx.toolCallId(), ctx.deadline(DEFAULT_TIMEOUT_TICKS), x, y, z, speed,
-                !Boolean.FALSE.equals(modifyTerrain));
+                Boolean.TRUE.equals(modifyTerrain));
     }
 }

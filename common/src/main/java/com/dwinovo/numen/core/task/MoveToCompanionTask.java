@@ -316,14 +316,16 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case BLOCK, COLUMN -> "location x=" + bx + " z=" + bz;
             case YLEVEL -> "elevation y=" + by;
         };
-        // Two different next steps for the model: with terrain mods allowed the fix is
-        // tooling/waypoints; with them forbidden the fix is the flag itself.
+        // Two different next steps for the model: under force-break everything breakable
+        // was already on the table, so the fix is geometry (waypoints/scanning); under
+        // normal breaking the failReason may name a block nothing we carry harvests —
+        // then the fix is the right tool, or the flag.
         String advice = r.modifyTerrain
-                ? ". Try a nearer waypoint, scan_blocks for a way through, or equip a pickaxe to tunnel."
-                : ". The target is blocked off by terrain and terrain modification is currently disabled"
-                        + " (modify_terrain:false) — I only used existing openings. Re-run with"
-                        + " modify_terrain:true if digging/bridging through is acceptable,"
-                        + " or pick a target with a walkable route.";
+                ? ". Try a nearer waypoint or scan_blocks for a way through."
+                : ". Try a nearer waypoint or scan_blocks for a way through; if the reason above"
+                        + " names a block I can't harvest, give me the right tool for it, or"
+                        + " re-run with modify_terrain:true to force-dig through anyway"
+                        + " (slow, and those blocks drop nothing).";
         return "blocked: got within " + String.format("%.1f", remaining) + " blocks of " + where
                 + " (now on the ground at y=" + gy + "). " + failReason + advice;
     }

@@ -55,10 +55,12 @@ public final class PlayerNav {
     private final Supplier<NavGoal> goalSupplier;
     private final double speed;
     private final BooleanSupplier reached;
-    /** May this navigation modify terrain (break/place blocks)? Threaded into every
-     *  {@link NavContext} it builds (search AND execution re-costing) plus the executor's
-     *  live scaffold phase; {@code false} = pure-traversal routes only. Default true. */
-    private final boolean terrainMods;
+    /** May this navigation break blocks it can't harvest (move_to's modify_terrain:true)?
+     *  Threaded into every {@link NavContext} it builds — search AND execution re-costing,
+     *  so a tool breaking mid-route re-vetoes the remaining grinds live. Default false:
+     *  only harvestable digs are planned; a route that would require a no-drop grind
+     *  fails clean with a diagnosis instead. */
+    private final boolean forceBreak;
 
     /** Learned-heuristic table shared across this navigation's search segments (see
      *  {@link HLearningTable} for semantics). Concurrency invariant: at most one LIVE
@@ -121,7 +123,7 @@ public final class PlayerNav {
 
     /** Walk to a single cell. */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
-        this(player, () -> resolveBlockGoal(player, goal), speed, reached, true);
+        this(player, () -> resolveBlockGoal(player, goal), speed, reached, false);
     }
 
     /** Walk to a (possibly moving) single cell. */
@@ -130,30 +132,30 @@ public final class PlayerNav {
         this(player, () -> {
             BlockPos g = goalSupplier.get();
             return g == null ? null : resolveBlockGoal(player, g);
-        }, speed, reached, true);
+        }, speed, reached, false);
     }
 
     /** Walk toward an arbitrary {@link NavGoal} (composite ore field, mining stance, …). */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
                                    double speed, BooleanSupplier reached) {
-        return new PlayerNav(player, goalSupplier, speed, reached, true);
+        return new PlayerNav(player, goalSupplier, speed, reached, false);
     }
 
     /** As {@link #toGoal(NumenPlayer, Supplier, double, BooleanSupplier)} with an explicit
-     *  terrain-modification gate: {@code terrainMods:false} plans (and executes) pure-traversal
-     *  routes only — not a single block broken or placed en route. */
+     *  force-break gate: {@code forceBreak:true} also plans (and executes) breaks that
+     *  harvest nothing — the slow wrong-tool grind behind move_to's modify_terrain:true. */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
-                                   double speed, BooleanSupplier reached, boolean terrainMods) {
-        return new PlayerNav(player, goalSupplier, speed, reached, terrainMods);
+                                   double speed, BooleanSupplier reached, boolean forceBreak) {
+        return new PlayerNav(player, goalSupplier, speed, reached, forceBreak);
     }
 
     private PlayerNav(NumenPlayer player, Supplier<NavGoal> goalSupplier, double speed,
-                      BooleanSupplier reached, boolean terrainMods) {
+                      BooleanSupplier reached, boolean forceBreak) {
         this.player = player;
         this.goalSupplier = goalSupplier;
         this.speed = speed;
         this.reached = reached;
-        this.terrainMods = terrainMods;
+        this.forceBreak = forceBreak;
         startFreshSearch();
     }
 
@@ -223,7 +225,7 @@ public final class PlayerNav {
         if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
             com.dwinovo.numen.core.pathing.cache.PathCaches.ensureSnapshot(sl, player.blockPosition());
         }
-        return NavContext.forSearch(player.level(), player.getInventory(), terrainMods);
+        return NavContext.forSearch(player.level(), player.getInventory(), forceBreak);
     }
 
     /** Off-thread when the context is frozen (the normal case); on the main thread otherwise — a
@@ -253,7 +255,7 @@ public final class PlayerNav {
 
     /** Live context for EXECUTION re-costing (main thread; reads current world + inventory). */
     private NavContext executionContext() {
-        return NavContext.forExecution(player.level(), player.getInventory(), terrainMods);
+        return NavContext.forExecution(player.level(), player.getInventory(), forceBreak);
     }
 
     private void startFreshSearch() {
@@ -306,7 +308,7 @@ public final class PlayerNav {
             return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
         }
         Path cut = path.staticCutoff();
-        current = new PlayerPathExecutor(player, cut, speed, this::executionContext, terrainMods);
+        current = new PlayerPathExecutor(player, cut, speed, this::executionContext);
         previousPathHashes = EngineSearch.favoring(cut);   // favor this route on the next replan
         publishViz(cut);
         return Status.RUNNING;
@@ -398,7 +400,7 @@ public final class PlayerNav {
         nextObj = null;
         if (np != null && !np.isEmpty()) {
             Path cut = np.staticCutoff();
-            pendingNext = new PlayerPathExecutor(player, cut, speed, this::executionContext, terrainMods);
+            pendingNext = new PlayerPathExecutor(player, cut, speed, this::executionContext);
             pendingPathForViz = cut;
             previousPathHashes = EngineSearch.favoring(cut);   // the next segment becomes the favored route
         }
@@ -432,10 +434,7 @@ public final class PlayerNav {
                             : "search budget exhausted")
                     .append(String.format("; explored %d positions, up to %.1f blocks out",
                             s.expansionsDone(), Math.sqrt(s.bestProgressSq())));
-            if (lastCtx != null && !lastCtx.terrainMods) {
-                r.append("; terrain modification disabled (modify_terrain:false) — only existing"
-                        + " openings were considered, no digging or bridging");
-            } else if (lastCtx != null && !lastCtx.hasScaffold) {
+            if (lastCtx != null && !lastCtx.hasScaffold) {
                 r.append("; carrying no scaffolding blocks to bridge or pillar with");
             }
             r.append(String.format("; learned-h consults %d", s.stats().learnedConsultHits()));

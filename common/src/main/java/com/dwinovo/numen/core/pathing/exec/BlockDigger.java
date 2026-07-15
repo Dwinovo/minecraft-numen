@@ -169,8 +169,8 @@ public final class BlockDigger {
         started = false;
         // Hold the best tool BEFORE timing the dig — getDestroyProgress reads the held
         // item, and the pathing cost model prices every break with the best
-        // available tool. ToolSelect owns the scan (whole inventory, durability
-        // guard) so this stays consistent with NavContext.scanBestTool.
+        // available tool. ToolSelect owns the scan (whole inventory) so this stays
+        // consistent with NavContext.scanBestTool.
         ToolSelect.holdBestTool(player, player.level().getBlockState(pos));
     }
 

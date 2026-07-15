@@ -53,14 +53,16 @@ public final class NavContext {
     public final boolean hasScaffold;
 
     /**
-     * May this search/execution modify terrain at all (break or place blocks)?
-     * {@code false} makes {@link #costOfPlacing} and {@link #costOfBreaking}
-     * return {@link ActionCosts#COST_INF} unconditionally, so A* only produces
-     * pure-traversal routes (existing ground and openings) — the planning-side
-     * switch behind {@code move_to}'s {@code modify_terrain:false} ("walk
-     * through someone's build without touching a block"). Default {@code true}.
+     * May this search/execution break blocks it CANNOT harvest (a drop-gated block
+     * with no adequate tool in the inventory — e.g. stone with no pickaxe)?
+     * {@code false} (the default) prices such breaks {@link ActionCosts#COST_INF}:
+     * A* routes around them or fails clean with a diagnosis naming the missing
+     * tool, and the LLM decides — equip/craft the tool, or re-run with
+     * {@code modify_terrain:true}. {@code true} is the planning-side switch behind
+     * that flag: every breakable block is priced (a no-drop grind at the honest
+     * wrong-tool rate, see {@link #miningTicks}), nothing is refused.
      */
-    public final boolean terrainMods;
+    public final boolean forceBreak;
 
     /** Max blocks the entity may fall without taking dangerous damage. */
     public final int maxFallHeight;
@@ -93,12 +95,12 @@ public final class NavContext {
     private record BestTool(float speed, boolean canHarvest) {}
 
     private NavContext(Level level, BlockGetter view, Container inventory, boolean safeForThreadedUse,
-                       boolean terrainMods) {
+                       boolean forceBreak) {
         this.level = level;
         this.view = view;
         this.inventory = inventory;
         this.safeForThreadedUse = safeForThreadedUse;
-        this.terrainMods = terrainMods;
+        this.forceBreak = forceBreak;
         this.hasScaffold = hasAnyScaffold(inventory);
 
         // Survivable fall: 3 blocks — vanilla fall
@@ -113,13 +115,14 @@ public final class NavContext {
      * changed), so this reads live and is NOT safe to hand to a worker thread.
      */
     public static NavContext forExecution(Level level, Container liveInventory) {
-        return forExecution(level, liveInventory, true);
+        return forExecution(level, liveInventory, false);
     }
 
-    /** As {@link #forExecution(Level, Container)} with an explicit terrain-modification
-     *  gate — {@code terrainMods:false} prices every break/place {@code COST_INF}. */
-    public static NavContext forExecution(Level level, Container liveInventory, boolean terrainMods) {
-        return new NavContext(level, new NavSnapshot(level), liveInventory, false, terrainMods);
+    /** As {@link #forExecution(Level, Container)} with an explicit force-break gate —
+     *  {@code forceBreak:true} also prices breaks that would harvest nothing (see
+     *  {@link #forceBreak}). */
+    public static NavContext forExecution(Level level, Container liveInventory, boolean forceBreak) {
+        return new NavContext(level, new NavSnapshot(level), liveInventory, false, forceBreak);
     }
 
     /**
@@ -130,12 +133,12 @@ public final class NavContext {
      * swaps in the {@code CompactSection}-backed off-thread view so the search can move to a worker.
      */
     public static NavContext forSearch(Level level, Container liveInventory) {
-        return forSearch(level, liveInventory, true);
+        return forSearch(level, liveInventory, false);
     }
 
-    /** As {@link #forSearch(Level, Container)} with an explicit terrain-modification
-     *  gate — {@code terrainMods:false} plans pure-traversal routes only. */
-    public static NavContext forSearch(Level level, Container liveInventory, boolean terrainMods) {
+    /** As {@link #forSearch(Level, Container)} with an explicit force-break gate —
+     *  {@code forceBreak:true} also plans through breaks that would harvest nothing. */
+    public static NavContext forSearch(Level level, Container liveInventory, boolean forceBreak) {
         // Read loaded chunks LIVE through the per-tick snapshot; before the
         // snapshot exists (a level's first companion tick) fall back to the live read-through so the
         // first search is still correct.
@@ -147,7 +150,7 @@ public final class NavContext {
         BlockGetter view = loaded != null
                 ? new com.dwinovo.numen.core.pathing.cache.CachedNavView(loaded, level)
                 : new NavSnapshot(level);
-        return new NavContext(level, view, snapshotInventory(liveInventory), loaded != null, terrainMods);
+        return new NavContext(level, view, snapshotInventory(liveInventory), loaded != null, forceBreak);
     }
 
     /** A point-in-time copy of {@code live} (same slot layout, copied stacks) — read-only fodder for
@@ -180,9 +183,7 @@ public final class NavContext {
         float bestSpeed = 1.0f;                                   // bare hand baseline
         // Whole inventory, NOT just the hotbar: execution (ToolSelect.holdBestTool) can
         // swap a backpack tool into the hand, so the cost model prices breaks with that
-        // same tool — deliberately kept consistent with execution. Nearly-broken tools
-        // are skipped for the same reason: execution refuses to dig with them, so pricing
-        // a break with one would make the plan cheaper than reality.
+        // same tool — deliberately kept consistent with execution.
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack s = inventory.getItem(i);
             if (s.isEmpty()) continue;
@@ -223,7 +224,6 @@ public final class NavContext {
      * cell isn't replaceable, or placing there would touch a hazard.
      */
     public double costOfPlacing(BlockPos pos) {
-        if (!terrainMods) return ActionCosts.COST_INF;   // modify_terrain:false — no block may be placed
         if (!hasScaffold) return ActionCosts.COST_INF;
         if (!BlockHelper.isReplaceableForPlacement(view, pos)) return ActionCosts.COST_INF;
         // Never place INTO a fluid (source or flowing) — a bridge can't be planned
@@ -243,6 +243,10 @@ public final class NavContext {
      *       a fluid flow;</li>
      *   <li>{@link BlockHelper#shouldAvoidBreaking} — a player-placed functional
      *       block (chest, furnace, bed, …): don't grief it;</li>
+     *   <li>unless {@link #forceBreak}: a drop-gated block no inventory tool can
+     *       harvest (stone with no pickaxe) — mining it would drop nothing, so the
+     *       route is refused and the LLM decides (right tool, or
+     *       {@code modify_terrain:true} to grind through anyway).</li>
      * </ul>
      */
     public double costOfBreaking(BlockPos pos) {
@@ -258,18 +262,22 @@ public final class NavContext {
      * the cascade, so sand/gravel terrain stays routable instead of walling off.
      */
     public double costOfBreaking(BlockPos pos, boolean includeFalling) {
-        if (!terrainMods) return ActionCosts.COST_INF;   // modify_terrain:false — no block may be broken
         if (!BlockHelper.isBreakable(view, pos)) return ActionCosts.COST_INF;
         if (BlockHelper.isHazard(view, pos)) return ActionCosts.COST_INF;
         if (BlockHelper.breakWouldCreateFlow(view, pos)) return ActionCosts.COST_INF;
         if (BlockHelper.shouldAvoidBreaking(view, pos)) return ActionCosts.COST_INF;
 
-        // A break with the wrong (or no) tool is EXPENSIVE, never impossible: traversal
-        // only needs the block GONE, not its drops — a bare hand grinds through stone in
-        // ~seconds-per-block, and {@link #miningTicks} already prices that grind (divisor
-        // 100 when the tool can't harvest). The old COST_INF veto here sealed every
-        // enclosed pocket the moment the pickaxe broke — turning "a slow way out" into
-        // "no path" — which is strictly worse than an honest, costly route.
+        // A break that would harvest NOTHING (drop-gated block, no adequate tool
+        // anywhere in the inventory) is refused unless forceBreak: don't burn minutes
+        // bare-hand-grinding stone behind the LLM's back — fail with a diagnosis
+        // naming the missing tool ({@link #explainBreakVeto}) and let it decide.
+        // Under forceBreak the grind is allowed and priced honestly ({@link #miningTicks},
+        // divisor 100) — the explicit escape hatch for "pickaxe broke, sealed in".
+        BlockState toBreak = view.getBlockState(pos);
+        if (grindVetoed(forceBreak, toBreak.requiresCorrectToolForDrops(),
+                bestTool(toBreak).canHarvest())) {
+            return ActionCosts.COST_INF;
+        }
         double cost = miningTicks(pos) + PathSettings.BLOCK_BREAK_ADDITIONAL_PENALTY;
         if (includeFalling) {
             BlockPos above = pos.above();
@@ -280,6 +288,17 @@ public final class NavContext {
             }
         }
         return cost;
+    }
+
+    /**
+     * The one break-refusal rule behind {@code modify_terrain}, as a pure function
+     * (headless-testable): a break is vetoed when it is NOT forced, the block gates
+     * its drops behind a correct tool, and no inventory tool harvests it — i.e. the
+     * dig would yield nothing. Everything else (wrong-tool but drops anyway, like
+     * bare-hand dirt or logs) stays a normal priced break.
+     */
+    public static boolean grindVetoed(boolean forceBreak, boolean dropGated, boolean canHarvest) {
+        return !forceBreak && dropGated && !canHarvest;
     }
 
     /**
@@ -308,7 +327,7 @@ public final class NavContext {
      * name the first break-veto on it, in words the LLM can act on. The real
      * A* frontier may have died elsewhere, but the straight line is what the
      * model pictures when it asks "why can't you just go there" — "stone but
-     * I'm holding a sword" or "water behind it" turns a dead "obstructed"
+     * nothing I carry harvests it" or "water behind it" turns a dead "obstructed"
      * into a next step. Returns {@code null} when the line is clean (the
      * failure was geometric: gaps, fall limits, search budget).
      */
@@ -346,10 +365,6 @@ public final class NavContext {
             return state.getFluidState().is(FluidTags.LAVA)
                     ? "lava" : "water (I can't swim or mine through fluids)";
         }
-        if (!terrainMods) {
-            // Mirrors the unconditional gate at the top of costOfBreaking.
-            return "solid " + blockId(state) + " (terrain modification is disabled — modify_terrain:false)";
-        }
         if (!BlockHelper.isBreakable(view, pos)) {
             return "unbreakable " + blockId(state);
         }
@@ -363,7 +378,12 @@ public final class NavContext {
         if (BlockHelper.shouldAvoidBreaking(view, pos)) {
             return blockId(state) + " (a functional block I won't destroy)";
         }
-        // Wrong-tool breaks are priced, not vetoed (see costOfBreaking) — no branch here.
+        if (grindVetoed(forceBreak, state.requiresCorrectToolForDrops(),
+                bestTool(state).canHarvest())) {
+            return "solid " + blockId(state) + " (I have no tool that harvests it, so mining it"
+                    + " would drop nothing — give me the right tool, or re-run with"
+                    + " modify_terrain:true to force-grind through anyway, slow and without drops)";
+        }
         return null;
     }
 
