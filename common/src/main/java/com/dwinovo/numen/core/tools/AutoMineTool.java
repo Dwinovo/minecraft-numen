@@ -16,7 +16,7 @@ public final class AutoMineTool extends ServerNumenTool {
     private static final Gson GSON = new Gson();
     private final BlockActionTools impl = new BlockActionTools();
 
-    private record Args(List<String> block_ids, int count, Integer radius) {}
+    private record Args(List<String> block_ids, int count, Integer radius, Boolean force) {}
 
     @Override
     public String name() {
@@ -36,10 +36,14 @@ public final class AutoMineTool extends ServerNumenTool {
                 + "a path; carrying some cobblestone/dirt helps it cross terrain. Include all variants of a "
                 + "resource in block_ids (e.g. iron_ore AND deepslate_iron_ore). Optional radius caps how "
                 + "far to look (default auto-expands). Returns the actual number gathered, which may be less "
-                + "than requested if the deposit runs out. You must hold a tool that can harvest the target: "
-                + "mining a block your main-hand tool can't harvest fails up front and tells you the minimum "
-                + "tier required (e.g. iron_ore needs a stone pickaxe). Equip the right pickaxe/axe/shovel "
-                + "yourself first (equip_item) — check get_self_status for your main hand.";
+                + "than requested if the deposit runs out. Harvestability gate (`force`, default false): "
+                + "with force:false it only mines what the tools it carries can actually harvest — a target "
+                + "that would drop nothing (wrong tool tier, e.g. iron_ore with a wooden pickaxe) is skipped, "
+                + "and if NONE of the requested blocks are harvestable the task stops and tells you what tier "
+                + "you need, instead of silently destroying ore for zero yield. Set force:true ONLY when you "
+                + "want the blocks gone rather than gathered (clearing obstacles): it breaks targets even "
+                + "when they drop nothing, so `count` may never advance. To gather, keep force:false and "
+                + "bring/equip the right tool (equip_item; check get_self_status).";
     }
 
     @Override
@@ -49,12 +53,15 @@ public final class AutoMineTool extends ServerNumenTool {
                 .integer("count", "How many ITEMS to gather (not blocks) — a block may drop several, and it "
                         + "counts only items gained on top of what you already hold.", 1, 256)
                 .optionalInteger("radius", "Optional max search radius in blocks (default auto-expands to 48).", 1, 96)
+                .optionalBool("force", "Default false: skip targets the carried tools can't harvest (no drops) "
+                        + "and stop with a tool-tier reminder when none are harvestable. true: break targets "
+                        + "even without drops — for clearing blocks, not gathering.")
                 .build();
     }
 
     @Override
     public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        enqueue(companion, impl.autoMine(a.block_ids(), a.count(), a.radius(), ctx(toolCallId, companion)));
+        enqueue(companion, impl.autoMine(a.block_ids(), a.count(), a.radius(), a.force(), ctx(toolCallId, companion)));
     }
 }

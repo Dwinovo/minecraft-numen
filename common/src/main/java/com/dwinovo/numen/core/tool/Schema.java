@@ -114,6 +114,12 @@ public final class Schema {
             return this;
         }
 
+        /** An optional boolean — absent means the tool's documented default. */
+        public Builder optionalBool(String name, String desc) {
+            props.put(name, base("boolean", desc));
+            return this;
+        }
+
         /** A required string constrained to a fixed set of values. */
         public Builder enumStr(String name, String desc, String... values) {
             Map<String, Object> p = base("string", desc);
