@@ -2,11 +2,11 @@ package com.dwinovo.numen.core.pathing.exec;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
+import com.dwinovo.numen.core.task.base.ToolSelect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
@@ -169,27 +169,9 @@ public final class BlockDigger {
         started = false;
         // Hold the best tool BEFORE timing the dig — getDestroyProgress reads the held
         // item, and the pathing cost model prices every break with the best
-        // available tool.
-        switchToBestTool(player.level().getBlockState(pos));
-    }
-
-    /** Hold the item that mines {@code state} fastest in the main hand. Scans the WHOLE
-     *  inventory (not just the hotbar) and swaps a backpack tool into the hand via
-     *  {@link NumenPlayer#holdInHand} — deliberately whole-inventory,
-     *  kept consistent with the cost model (NavContext.scanBestTool) so the planned
-     *  break cost still matches the tool actually used. */
-    private void switchToBestTool(BlockState state) {
-        Inventory inv = player.getInventory();
-        int best = inv.selected;
-        float bestSpeed = inv.getItem(best).getDestroySpeed(state);
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            float s = inv.getItem(i).getDestroySpeed(state);
-            if (s > bestSpeed) {
-                bestSpeed = s;
-                best = i;
-            }
-        }
-        player.holdInHand(best);
+        // available tool. ToolSelect owns the scan (whole inventory, durability
+        // guard) so this stays consistent with NavContext.scanBestTool.
+        ToolSelect.holdBestTool(player, player.level().getBlockState(pos));
     }
 
     /** Abandon an IN-PROGRESS dig: ABORT it server-side and clear the crack.

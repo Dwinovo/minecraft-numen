@@ -12,54 +12,113 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * The two "swap the best implement into the main hand" helpers, unified from the
- * byte-for-byte duplicated scans that lived in {@code BlockDigger.switchToBestTool}
- * and {@code HuntCompanionTask.switchToBestWeapon}.
+ * byte-for-byte duplicated scans that lived in {@code BlockDigger} and
+ * {@code HuntCompanionTask.switchToBestWeapon} (both now call in here).
  *
  * <p>Both scan the WHOLE inventory (not just the hotbar) and swap via
  * {@link NumenPlayer#holdInHand(int)} — deliberately wider than a
  * hotbar-only scan, and kept consistent with the pathing cost model
  * ({@code NavContext.scanBestTool}) so the planned break cost matches the tool
- * actually used. Behaviour is preserved exactly so the Stage-2 migration onto these
- * helpers is a no-op semantically.
+ * actually used.
+ *
+ * <p>Durability guard: a damageable item whose remaining durability is inside the
+ * {@link #nearBreaking} margin never enters either scan, and if the HELD item is
+ * itself inside the margin with no usable replacement, the hand is vacated
+ * ({@link #holdIdleSlot}) — mining and melee both consume durability, so a
+ * nearly-broken pick/sword must leave the hand before it shatters.
  */
 public final class ToolSelect {
 
     private ToolSelect() {}
 
+    /** Below this many remaining uses an item counts as nearly broken (absolute floor). */
+    private static final int NEAR_BREAK_FLOOR = 8;
+
     /**
-     * Hold the item that mines {@code state} fastest (highest
-     * {@link ItemStack#getDestroySpeed}). Mirrors {@code BlockDigger.switchToBestTool}.
+     * Whether {@code stack} is close enough to breaking that it must not be used
+     * for work that consumes durability: remaining uses
+     * ({@code getMaxDamage() - getDamageValue()}) at or under
+     * {@code max(8, 10% of maxDamage)}. Non-damageable items (blocks, food, …)
+     * are never near breaking. Shared by the hand-swap scans here and the pathing
+     * cost model ({@code NavContext.scanBestTool}) so planning and execution agree
+     * on which tools are off the table.
      */
-    public static void holdBestTool(NumenPlayer p, BlockState state) {
-        Inventory inv = p.getInventory();
-        int best = inv.selected;
-        float bestSpeed = inv.getItem(best).getDestroySpeed(state);
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            float s = inv.getItem(i).getDestroySpeed(state);
-            if (s > bestSpeed) {
-                bestSpeed = s;
-                best = i;
-            }
+    public static boolean nearBreaking(ItemStack stack) {
+        if (stack.isEmpty() || !stack.isDamageableItem()) {
+            return false;
         }
-        p.holdInHand(best);
+        int max = stack.getMaxDamage();
+        int remaining = max - stack.getDamageValue();
+        return remaining <= Math.max(NEAR_BREAK_FLOOR, max / 10);
     }
 
     /**
-     * Hold the highest melee-attack-damage weapon. Mirrors
-     * {@code HuntCompanionTask.switchToBestWeapon}.
+     * Hold the item that mines {@code state} fastest (highest
+     * {@link ItemStack#getDestroySpeed}), measured against the bare-hand baseline
+     * of 1.0. Nearly-broken candidates are skipped; when nothing beats the bare
+     * hand and the held item is itself nearly broken, the hand is vacated so the
+     * dig proceeds bare-handed instead of grinding the tool to dust.
+     */
+    public static void holdBestTool(NumenPlayer p, BlockState state) {
+        Inventory inv = p.getInventory();
+        int best = -1;
+        float bestSpeed = 1.0f;                       // bare-hand baseline
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (nearBreaking(s)) continue;
+            float spd = s.getDestroySpeed(state);
+            if (spd > bestSpeed) {
+                bestSpeed = spd;
+                best = i;
+            }
+        }
+        if (best >= 0) {
+            p.holdInHand(best);
+        } else if (nearBreaking(inv.getItem(inv.selected))) {
+            holdIdleSlot(p);
+        }
+    }
+
+    /**
+     * Hold the highest melee-attack-damage weapon. Nearly-broken candidates are
+     * skipped; when no usable weapon exists and the held item is itself nearly
+     * broken, the hand is vacated — a bare-hand punch beats shattering the sword.
      */
     public static void holdBestWeapon(NumenPlayer p) {
         Inventory inv = p.getInventory();
-        int best = inv.selected;
-        double bestDmg = weaponDamage(inv.getItem(best));
+        int best = -1;
+        double bestDmg = 0.0;
         for (int i = 0; i < inv.getContainerSize(); i++) {
-            double d = weaponDamage(inv.getItem(i));
+            ItemStack s = inv.getItem(i);
+            if (nearBreaking(s)) continue;
+            double d = weaponDamage(s);
             if (d > bestDmg) {
                 bestDmg = d;
                 best = i;
             }
         }
-        p.holdInHand(best);
+        if (best >= 0) {
+            p.holdInHand(best);
+        } else if (nearBreaking(inv.getItem(inv.selected))) {
+            holdIdleSlot(p);
+        }
+    }
+
+    /**
+     * Vacate the main hand: swap in the first empty or non-damageable main-inventory
+     * slot (the 36 storage slots only — armour and offhand must never be swapped into
+     * the hand here). When every slot holds a damageable item, the hand is left as-is.
+     */
+    private static void holdIdleSlot(NumenPlayer p) {
+        Inventory inv = p.getInventory();
+        for (int i = 0; i < inv.items.size(); i++) {
+            if (i == inv.selected) continue;
+            ItemStack s = inv.getItem(i);
+            if (s.isEmpty() || !s.isDamageableItem()) {
+                p.holdInHand(i);
+                return;
+            }
+        }
     }
 
     /**

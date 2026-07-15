@@ -4,6 +4,7 @@ import com.dwinovo.numen.core.init.InitTag;
 import com.dwinovo.numen.core.pathing.util.ActionCosts;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
+import com.dwinovo.numen.core.task.base.ToolSelect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -153,12 +154,14 @@ public final class NavContext {
 
     private BestTool scanBestTool(BlockState state) {
         float bestSpeed = 1.0f;                                   // bare hand baseline
-        // Whole inventory, NOT just the hotbar: execution (switchToBestTool) can swap a
-        // backpack tool into the hand, so the cost model prices breaks with that same
-        // tool — deliberately kept consistent with execution.
+        // Whole inventory, NOT just the hotbar: execution (ToolSelect.holdBestTool) can
+        // swap a backpack tool into the hand, so the cost model prices breaks with that
+        // same tool — deliberately kept consistent with execution. Nearly-broken tools
+        // are skipped for the same reason: execution refuses to dig with them, so pricing
+        // a break with one would make the plan cheaper than reality.
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack s = inventory.getItem(i);
-            if (s.isEmpty()) continue;
+            if (s.isEmpty() || ToolSelect.nearBreaking(s)) continue;
             float spd = s.getDestroySpeed(state);
             if (spd > bestSpeed) bestSpeed = spd;
         }
