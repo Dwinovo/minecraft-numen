@@ -199,6 +199,8 @@ public final class NumenScreen extends Screen {
     // "+" summon flow: a transient name field shown over the panel
     private boolean summoning;
     private EditBox summonInput;
+    /** 皮肤:借正版玩家皮肤的玩家名(名字行右半;可留空 = 原版默认皮肤)。 */
+    private EditBox summonSkinInput;
     private UUID dismissPending;   // non-null = showing the "delete companion?" confirm bar for this uuid
 
     // settings tab widgets
@@ -331,6 +333,7 @@ public final class NumenScreen extends Screen {
         proxyIpInput = proxyPortInput = null;
         modelDropdown = null;
         summonInput = null;
+        summonSkinInput = null;
         summonPersonaDropdown = null;
         summonProviderDropdown = null;
         summonVoiceDropdown = null;
@@ -350,12 +353,22 @@ public final class NumenScreen extends Screen {
      *  162 buttons · 186 hint/warn. */
     private void buildSummonField() {
         int y0 = top + HEADER_H;
+        // 名字行一分为二:左 55% 名字,右侧皮肤(借正版玩家皮肤,可留空)——不占新行。
+        int nameW = summonNameW();
         summonInput = new FlatEditBox(font, left + PAD + FIELD_INSET_X, y0 + 34 + FIELD_INSET_Y,
-                PANEL_W - PAD * 2 - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
+                nameW - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
         summonInput.setMaxLength(com.dwinovo.numen.network.payload.SummonRequestPayload.MAX_NAME);
         summonInput.setBordered(false);
         summonInput.setTextColor(TXT);
         add(summonInput);
+        int sx = left + PAD + nameW + 6;
+        int sw = PANEL_W - PAD * 2 - nameW - 6;
+        summonSkinInput = new FlatEditBox(font, sx + FIELD_INSET_X, y0 + 34 + FIELD_INSET_Y,
+                sw - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
+        summonSkinInput.setMaxLength(com.dwinovo.numen.network.payload.SummonRequestPayload.MAX_SKIN);
+        summonSkinInput.setBordered(false);
+        summonSkinInput.setTextColor(TXT);
+        add(summonSkinInput);
         // Persona is OPTIONAL: first item = 不配置 (the persona slot then tells the
         // model "未配置人设,可以自由发挥"), presets and user personas follow. The name
         // "hint" renders in the render pass as a FAINT placeholder — the EditBox's
@@ -404,6 +417,11 @@ public final class NumenScreen extends Screen {
                 Component.translatable(ModLanguageData.Keys.SUMMON_CREATE),
                 b -> doSummon()));
         setInitialFocus(summonInput);
+    }
+
+    /** 召唤页名字行左半(名字框)的宽度;右半是皮肤框。build 与 render 共用。 */
+    private int summonNameW() {
+        return (PANEL_W - PAD * 2) * 55 / 100;
     }
 
     /** Two buttons for the "delete companion?" confirm bar — Cancel and the destructive Delete. */
@@ -2126,11 +2144,17 @@ public final class NumenScreen extends Screen {
             warnUntil = System.currentTimeMillis() + 4000;
             return;
         }
+        String skin = summonSkinInput == null ? "" : summonSkinInput.getValue().trim();
+        if (!skin.isEmpty() && !skin.matches("[A-Za-z0-9_]{3,16}")) {
+            warnText = I18n.get(ModLanguageData.Keys.SUMMON_WARN_SKIN);
+            warnUntil = System.currentTimeMillis() + 4000;
+            return;
+        }
         // Remember the picks by name; CompanionListPayload applies them when the new companion arrives.
         if (summonPersonaId != null) com.dwinovo.numen.persona.PersonaLibrary.pendSummon(n, summonPersonaId);
         com.dwinovo.numen.agent.llm.ProviderLibrary.pendSummon(n, summonProviderId);
         if (summonVoiceId != null) com.dwinovo.numen.client.voice.VoiceLibrary.pendSummon(n, summonVoiceId);
-        Services.NETWORK.sendToServer(new com.dwinovo.numen.network.payload.SummonRequestPayload(n));
+        Services.NETWORK.sendToServer(new com.dwinovo.numen.network.payload.SummonRequestPayload(n, skin));
         summoning = false;
         summonPersonaId = null;
         summonProviderId = null;
@@ -2355,7 +2379,10 @@ public final class NumenScreen extends Screen {
             int y0 = top + HEADER_H;   // offsets in lockstep with buildSummonField
             txt(g, Component.translatable("numen.summon.title"), left + PAD, y0 + 8, TXT);
             txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_NAME), left + PAD, y0 + 24, TXT_MUTED);
+            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_SKIN_LABEL),
+                    left + PAD + summonNameW() + 6, y0 + 24, TXT_MUTED);
             placeholder(g, summonInput, I18n.get(ModLanguageData.Keys.SUMMON_NAME_PLACEHOLDER));
+            placeholder(g, summonSkinInput, "Notch");
             txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_PERSONA_LABEL), left + PAD, y0 + 58, TXT_MUTED);
             txt(g, Component.literal(I18n.get(ModLanguageData.Keys.PROVIDER_TITLE)
                     + (summonProviderDropdown == null ? I18n.get(ModLanguageData.Keys.SUMMON_PROVIDER_EMPTY) : "")),

@@ -37,6 +37,13 @@ public final class CompanionFactory {
     public static NumenPlayer spawn(MinecraftServer server, UUID companionUuid, String name,
                                      UUID ownerUuid, ServerLevel level, Vec3 pos) {
         GameProfile profile = new GameProfile(companionUuid, name);
+        // 借来的正版皮肤(Mojang 签名的 textures,注册表持久化)注入档案——客户端只认
+        // 签过名的皮肤数据;没有则回落原版默认皮肤(按 UUID 哈希抽取)。
+        CompanionRegistry.Entry reg = CompanionRegistry.get(server).find(companionUuid);
+        if (reg != null && !reg.skinValue().isEmpty()) {
+            profile.getProperties().put("textures", new com.mojang.authlib.properties.Property(
+                    "textures", reg.skinValue(), reg.skinSig().isEmpty() ? null : reg.skinSig()));
+        }
         NumenPlayer player = new NumenPlayer(server, level, profile, ClientInformation.createDefault());
         FakeConnection connection = new FakeConnection();
         server.getPlayerList().placeNewPlayer(connection, player,

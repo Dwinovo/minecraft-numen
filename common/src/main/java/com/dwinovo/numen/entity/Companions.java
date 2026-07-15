@@ -37,18 +37,35 @@ public final class Companions {
      */
     public static NumenPlayer summon(MinecraftServer server, UUID ownerUuid, String name,
                                       ServerLevel level, Vec3 pos) {
+        return summon(server, ownerUuid, name, level, pos, null);
+    }
+
+    /** As {@link #summon(MinecraftServer, UUID, String, ServerLevel, Vec3)} with an optional
+     *  borrowed skin (Mojang 签名的 textures,见 {@link MojangSkins})。重复召唤携带皮肤 =
+     *  换肤:注册表更新后,休眠体这次重建就生效,活体等下次重建。 */
+    public static NumenPlayer summon(MinecraftServer server, UUID ownerUuid, String name,
+                                      ServerLevel level, Vec3 pos, MojangSkins.Skin skin) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
         UUID existing = findByOwnerName(server, ownerUuid, name);
         if (existing != null) {
+            if (skin != null) {
+                CompanionRegistry.Entry e = reg.find(existing);
+                if (e != null) reg.put(existing, e.withSkin(skin.value(), skin.signature()));
+            }
             NumenPlayer body = respawn(server, existing);
             if (body != null) return body;
-            CompanionRegistry.get(server).remove(existing);   // stale entry (no .dat) — replace it
+            reg.remove(existing);   // stale entry (no .dat) — replace it
         }
         UUID companionUuid = UUID.randomUUID();
         Vec3 safe = SafeSpawn.findNear(level, pos);
         if (safe != null) pos = safe;   // no safe spot around → keep the summoner's own position
+        // 先入册再造体:CompanionFactory.spawn 从注册表读皮肤,所有出生路径共用一个注入点。
+        CompanionRegistry.Entry fresh = new CompanionRegistry.Entry(
+                name, ownerUuid, level.dimension(), net.minecraft.core.BlockPos.containing(pos));
+        if (skin != null) fresh = fresh.withSkin(skin.value(), skin.signature());
+        reg.put(companionUuid, fresh);
         NumenPlayer body = CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos);
-        CompanionRegistry.get(server).put(companionUuid,
-                new CompanionRegistry.Entry(name, ownerUuid, level.dimension(), body.blockPosition()));
+        reg.put(companionUuid, fresh.movedTo(level.dimension(), body.blockPosition()));
         return body;
     }
 
@@ -212,9 +229,8 @@ public final class Companions {
         CompanionRegistry reg = CompanionRegistry.get(server);
         CompanionRegistry.Entry prev = reg.find(body.getUUID());
         if (prev != null) {
-            reg.put(body.getUUID(), new CompanionRegistry.Entry(
-                    prev.name(), prev.owner(),
-                    ((ServerLevel) body.level()).dimension(), body.blockPosition()));
+            reg.put(body.getUUID(),
+                    prev.movedTo(((ServerLevel) body.level()).dimension(), body.blockPosition()));
         }
         CompanionFactory.despawn(server, body);
     }

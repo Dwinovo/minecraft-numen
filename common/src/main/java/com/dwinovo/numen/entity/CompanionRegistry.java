@@ -35,12 +35,33 @@ import java.util.UUID;
 public final class CompanionRegistry extends SavedData {
 
     /** One companion's catalog entry. {@code diedAt > 0} = dead, awaiting a respawn-at-owner (the death
-     *  state is persisted here so it SURVIVES a logout during the respawn window — see Companions). */
+     *  state is persisted here so it SURVIVES a logout during the respawn window — see Companions).
+     *  {@code skinValue}/{@code skinSig} = 借来的正版皮肤(Mojang 签名的 textures 属性),
+     *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
-                        String deathCause, long diedAt) {
-        /** A live companion (not dead). */
+                        String deathCause, long diedAt, String skinValue, String skinSig) {
+        /** A live companion (not dead), no borrowed skin. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", 0L);
+            this(name, owner, dimension, pos, "", 0L, "", "");
+        }
+
+        /** 刷新落点(休眠/移动时的 respawn 提示),皮肤与死亡状态原样保留。 */
+        public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
+            return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig);
+        }
+
+        /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
+        public Entry withSkin(String value, String sig) {
+            return new Entry(name, owner, dimension, pos, deathCause, diedAt,
+                    value == null ? "" : value, sig == null ? "" : sig);
+        }
+
+        Entry dead(String cause, long at) {
+            return new Entry(name, owner, dimension, pos, cause, at, skinValue, skinSig);
+        }
+
+        Entry alive() {
+            return new Entry(name, owner, dimension, pos, "", 0L, skinValue, skinSig);
         }
 
         static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -49,7 +70,9 @@ public final class CompanionRegistry extends SavedData {
                 ResourceKey.codec(Registries.DIMENSION).fieldOf("dimension").forGetter(Entry::dimension),
                 BlockPos.CODEC.fieldOf("pos").forGetter(Entry::pos),
                 Codec.STRING.optionalFieldOf("deathCause", "").forGetter(Entry::deathCause),
-                Codec.LONG.optionalFieldOf("diedAt", 0L).forGetter(Entry::diedAt)
+                Codec.LONG.optionalFieldOf("diedAt", 0L).forGetter(Entry::diedAt),
+                Codec.STRING.optionalFieldOf("skinValue", "").forGetter(Entry::skinValue),
+                Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig)
         ).apply(i, Entry::new));
     }
 
@@ -125,7 +148,7 @@ public final class CompanionRegistry extends SavedData {
     public void markDead(UUID uuid, String cause, long diedAt) {
         Entry e = entries.get(uuid);
         if (e == null) return;
-        entries.put(uuid, new Entry(e.name(), e.owner(), e.dimension(), e.pos(), cause, diedAt));
+        entries.put(uuid, e.dead(cause, diedAt));
         setDirty();
     }
 
@@ -133,7 +156,7 @@ public final class CompanionRegistry extends SavedData {
     public void markAlive(UUID uuid) {
         Entry e = entries.get(uuid);
         if (e == null || e.diedAt() == 0L) return;
-        entries.put(uuid, new Entry(e.name(), e.owner(), e.dimension(), e.pos()));
+        entries.put(uuid, e.alive());
         setDirty();
     }
 }
