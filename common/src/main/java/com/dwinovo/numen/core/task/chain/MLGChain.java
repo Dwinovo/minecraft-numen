@@ -40,8 +40,8 @@ public final class MLGChain implements TaskChain {
     /** How far down to probe for ground. */
     private static final double PROBE_DEPTH = 8.0;
 
-    /** Diary for completed episodes — may be null (e.g. unit tests). */
-    private final com.dwinovo.numen.core.task.BodyLog journal;
+    /** BodyLog for completed episodes — dual-rail routed (may be null in unit tests). */
+    private final com.dwinovo.numen.core.task.BodyLog bodyLog;
     /** One diary line per fall episode (reset when the save ends). */
     private boolean notedThisFall;
 
@@ -49,8 +49,8 @@ public final class MLGChain implements TaskChain {
         this(null);
     }
 
-    public MLGChain(com.dwinovo.numen.core.task.BodyLog journal) {
-        this.journal = journal;
+    public MLGChain(com.dwinovo.numen.core.task.BodyLog bodyLog) {
+        this.bodyLog = bodyLog;
     }
 
     @Override
@@ -90,9 +90,9 @@ public final class MLGChain implements TaskChain {
 
     /** One diary line per fall episode, stamped with the height it survived. */
     private void noteSave(NumenPlayer companion, String means) {
-        if (journal == null || notedThisFall) return;
+        if (bodyLog == null || notedThisFall) return;
         notedThisFall = true;
-        journal.note("broke a " + (int) companion.fallDistance + "-block fall with " + means);
+        bodyLog.report("broke a " + (int) companion.fallDistance + "-block fall with " + means);
     }
 
     @Override

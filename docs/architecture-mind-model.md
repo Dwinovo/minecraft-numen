@@ -67,6 +67,10 @@ Reflex.report(id, 人话)  →  BodyLog(每同伴,有界队列)
 - **核心代码永远不直接调 emitEvent,一律 report 进 BodyLog**——核心域内
   ambient(C2)的唯一内容生产者是 BodyLog,ambient 只是它闲时出口的运输方式;
   emitEvent 作为公开 API 保留,仅供外部模组直接插入。
+- 已知偏离:换维度叙事暂由引擎直发 ambient(loader 维度钩子 →
+  `Companions.onDimensionChanged`,Fabric/NeoForge 各一处)——维度变化的
+  观察点只存在于引擎的 loader 层,核心侧没有干净的钩子;待 BodyLog 下沉
+  引擎层时统一收口。
 
 ## 五、显式意图:钉(pin)
 

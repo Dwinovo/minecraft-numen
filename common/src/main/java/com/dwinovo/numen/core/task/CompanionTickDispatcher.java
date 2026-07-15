@@ -55,11 +55,12 @@ public final class CompanionTickDispatcher {
     /**
      * Drop a companion's running task WITHOUT shipping a result — used on death, where the client's
      * {@code NumenDeathPayload} already resolves the in-flight tool call with the death cause (so a
-     * second result here would be a duplicate the client ignores).
+     * second result here would be a duplicate the client ignores). The brain also fallback-flushes
+     * its {@link BodyLog} here: entries queued for that result have no D1 tail anymore.
      */
     public static void clearActiveTask(NumenPlayer player) {
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late death
-        if (brain != null) brain.llm.dropActiveNoResult();     // event must not leak a brain
+        if (brain != null) brain.dropActiveNoResult(player);   // event must not leak a brain
     }
 
     /** Owner pressed Stop: cancel the pending queue and the running task (finalized next tick). */

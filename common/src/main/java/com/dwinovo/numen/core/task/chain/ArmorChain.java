@@ -42,8 +42,8 @@ public final class ArmorChain implements TaskChain {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
     };
 
-    /** Diary for completed wardrobe actions — may be null (e.g. unit tests). */
-    private final com.dwinovo.numen.core.task.BodyLog journal;
+    /** BodyLog for completed wardrobe actions — dual-rail routed (may be null in unit tests). */
+    private final com.dwinovo.numen.core.task.BodyLog bodyLog;
 
     /** Countdown to the next dormant-state scan. */
     private int ticksUntilScan;
@@ -54,8 +54,8 @@ public final class ArmorChain implements TaskChain {
         this(null);
     }
 
-    public ArmorChain(com.dwinovo.numen.core.task.BodyLog journal) {
-        this.journal = journal;
+    public ArmorChain(com.dwinovo.numen.core.task.BodyLog bodyLog) {
+        this.bodyLog = bodyLog;
     }
 
     @Override
@@ -182,9 +182,9 @@ public final class ArmorChain implements TaskChain {
             inv.setChanged();
         }
 
-        if (journal != null) {
+        if (bodyLog != null) {
             String name = candidate.getHoverName().getString();
-            journal.note(oldName == null
+            bodyLog.report(oldName == null
                     ? "捡到" + name + ",穿上了"
                     : "捡到" + name + ",穿上了(替换" + oldName + ")");
         }
@@ -200,8 +200,8 @@ public final class ArmorChain implements TaskChain {
         companion.setItemSlot(slot, ItemStack.EMPTY);
         inv.setItem(empty, worn);
         inv.setChanged();
-        if (journal != null) {
-            journal.note(worn.getHoverName().getString() + "快碎了,脱下来收好");
+        if (bodyLog != null) {
+            bodyLog.report(worn.getHoverName().getString() + "快碎了,脱下来收好");
         }
     }
 

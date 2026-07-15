@@ -32,8 +32,8 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class FoodChain implements TaskChain {
 
-    /** Diary for completed episodes — may be null (e.g. unit tests). */
-    private final com.dwinovo.numen.core.task.BodyLog journal;
+    /** BodyLog for completed episodes — dual-rail routed (may be null in unit tests). */
+    private final com.dwinovo.numen.core.task.BodyLog bodyLog;
 
     /** The in-flight native eat (held use), or {@code null} between eats. */
     private Interaction eat;
@@ -45,8 +45,8 @@ public final class FoodChain implements TaskChain {
         this(null);
     }
 
-    public FoodChain(com.dwinovo.numen.core.task.BodyLog journal) {
-        this.journal = journal;
+    public FoodChain(com.dwinovo.numen.core.task.BodyLog bodyLog) {
+        this.bodyLog = bodyLog;
     }
 
     @Override
@@ -80,9 +80,9 @@ public final class FoodChain implements TaskChain {
                 // stays up and the next tick starts a fresh eat; else we go dormant.
                 // Diary only a REAL meal (hunger actually rose — a declined/instant DONE
                 // with no effect isn't an episode).
-                if (journal != null
+                if (bodyLog != null
                         && companion.getFoodData().getFoodLevel() > eatingStartFood) {
-                    journal.note("got hungry and ate a " + eatingLabel);
+                    bodyLog.report("got hungry and ate a " + eatingLabel);
                 }
                 eat.stop();
                 eat = null;

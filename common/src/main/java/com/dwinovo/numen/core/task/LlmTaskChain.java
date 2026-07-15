@@ -25,8 +25,9 @@ import java.util.List;
 public final class LlmTaskChain implements TaskChain {
 
     private final TaskQueue queue;
-    /** Survival diary drained into each shipped result's message (may be null in tests). */
-    private final BodyLog journal;
+    /** {@link BodyLog} drained into each shipped result's message — the busy rail
+     *  of the body-narrative dual routing (may be null in tests). */
+    private final BodyLog bodyLog;
     private CompanionTask task;
     private TaskRecord record;
 
@@ -34,9 +35,9 @@ public final class LlmTaskChain implements TaskChain {
         this(queue, null);
     }
 
-    LlmTaskChain(TaskQueue queue, BodyLog journal) {
+    LlmTaskChain(TaskQueue queue, BodyLog bodyLog) {
         this.queue = queue;
-        this.journal = journal;
+        this.bodyLog = bodyLog;
     }
 
     @Override
@@ -44,10 +45,20 @@ public final class LlmTaskChain implements TaskChain {
         return "llm";
     }
 
+    /**
+     * Busy-rail predicate for the {@link BodyLog} routing (and this chain's own
+     * bid): a running record or a pending one means a tool result is coming that
+     * can carry the body's narrative — report lines queue instead of shipping as
+     * an ambient event.
+     */
+    boolean hasWork() {
+        return record != null || queue.hasPending();
+    }
+
     /** Active (base priority) iff there's a running task or a pending one; else dormant. */
     @Override
     public float getPriority(NumenPlayer companion) {
-        return (record != null || queue.hasPending()) ? LLM_BASE_PRIORITY : Float.NEGATIVE_INFINITY;
+        return hasWork() ? LLM_BASE_PRIORITY : Float.NEGATIVE_INFINITY;
     }
 
     @Override
@@ -92,14 +103,16 @@ public final class LlmTaskChain implements TaskChain {
     }
 
     /**
-     * Append the survival diary (episodes the body handled autonomously — fights,
-     * meals, fall saves — during or before this task) to the outgoing result message.
-     * Informational only: the model learns what happened at exactly the moment it
-     * reads the task outcome, with no extra call and no schema change.
+     * Busy-rail delivery: append the {@link BodyLog} (episodes the body handled
+     * autonomously — fights, meals, fall saves — during or before this task) to
+     * the outgoing result message (the D1 tail). Informational only: the model
+     * learns what happened at exactly the moment it reads the task outcome, with
+     * no extra call and no schema change. Draining here is what keeps the two
+     * rails single-shot — entries a result takes can never re-ship as ambient.
      */
     private TaskResult withSurvivalNotes(TaskResult result) {
-        if (journal == null || journal.isEmpty() || result == null) return result;
-        String notes = String.join("; ", journal.drain());
+        if (bodyLog == null || bodyLog.isEmpty() || result == null) return result;
+        String notes = String.join("; ", bodyLog.drain());
         return new TaskResult(result.success(),
                 result.message() + " [meanwhile, my body handled on its own: " + notes + "]",
                 result.timedOut(), result.interrupted(), result.data());
@@ -151,10 +164,17 @@ public final class LlmTaskChain implements TaskChain {
 
     // ---- lifecycle finalizers (called by CompanionTickDispatcher via CompanionLifecycle) ----
 
-    /** Death: drop the running task WITHOUT a result — the client's death payload already resolved the call. */
+    /**
+     * Death: drop the running task WITHOUT a result — the client's death payload
+     * already resolved the call — then fallback-flush the {@link BodyLog}
+     * (constitution §4): entries that were queued to ride this task's result have
+     * no D1 tail anymore, so they transfer to the ambient rail. (The flush runs
+     * after the drop, so the log's busy predicate sees this chain as idle.)
+     */
     void dropActiveNoResult() {
         task = null;
         record = null;
+        if (bodyLog != null) bodyLog.flushAmbient();
     }
 
     /** Owner Stop: mark the running record CANCELLED; the next {@link #tick} finalizes + ships it. */

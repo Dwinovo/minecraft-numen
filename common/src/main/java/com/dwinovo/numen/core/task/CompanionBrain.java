@@ -17,73 +17,71 @@ import java.util.List;
  * winner drives the body), then always drains completed LLM results.
  *
  * <p>Chain order (priority tie-break, highest-intent first): unstuck → mob-defense
- * → food → mlg → armor → {@link LlmTaskChain}. In Stage 1 the survival chains are
- * dormant stubs, so the LLM chain is the only one that ever wins — behavior is
- * identical to the pre-refactor single-task dispatcher. When survival chains go
- * live, a spike preempts the LLM task (its body is released via
- * {@link LlmTaskChain#onInterrupt}, its deadline frozen via
- * {@link LlmTaskChain#freezeTick}) and it resumes when the spike subsides.
+ * → food → mlg → armor → {@link LlmTaskChain}. A survival spike preempts the LLM
+ * task (its body is released via {@link LlmTaskChain#onInterrupt}, its deadline
+ * frozen via {@link LlmTaskChain#freezeTick}) and it resumes when the spike subsides.
+ *
+ * <p>This class also wires the {@link BodyLog} dual rail (constitution §4): chains
+ * report body episodes into the log; the log asks {@link LlmTaskChain#hasWork}
+ * (injected as a supplier — no structural cycle) to pick a rail, and its idle-rail
+ * transport is this brain's {@link #tryEmitAmbient} — one non-urgent
+ * {@code <event kind="body_log">} to the owner's client, never a wake.
  */
 final class CompanionBrain {
 
     final TaskQueue queue = new TaskQueue();
-    /** Shared survival diary: survival chains write episode lines at their completion
-     *  edges; the LLM chain drains them into the next tool result's message — the model
-     *  is informed of what its body did autonomously, never consulted. */
-    private final BodyLog journal = new BodyLog();
-    final LlmTaskChain llm = new LlmTaskChain(queue, journal);
+    /** The body's narrative outlet: busy → rides the next tool result (D1 tail),
+     *  idle → immediate non-urgent ambient event (C2). See {@link BodyLog}. */
+    private final BodyLog bodyLog;
+    final LlmTaskChain llm;
 
-    private final List<TaskChain> chains = List.of(
-            new UnstuckChain(),
-            new MobDefenseChain(journal),
-            new FoodChain(journal),
-            new MLGChain(journal),
-            new ArmorChain(journal),
-            llm);
+    private final List<TaskChain> chains;
+
+    /** The body this brain is currently acting for — bound at every entry point
+     *  that can trigger an ambient flush, read by {@link #tryEmitAmbient}. (The
+     *  brain is keyed per companion UUID, but chains report without a companion
+     *  argument, so the flush transport resolves the body through this field.) */
+    private NumenPlayer body;
 
     /** Last tick's winner, so we can fire {@code onInterrupt} exactly on the switching edge. */
     private TaskChain running;
 
-    /** Quiet ticks before an IDLE body's journal is flushed as a non-urgent {@code <event>}
-     *  (rides the owner's next message — no extra LLM call). ~5s aggregates back-to-back
-     *  episodes (two zombies = one event, not two). */
-    private static final int JOURNAL_IDLE_FLUSH_TICKS = 100;
-    private int journalQuietTicks;
-    private int lastJournalSize;
+    CompanionBrain() {
+        // The method reference defers the llm read to call time, so construction
+        // order is safe (a direct field read in a lambda trips definite assignment).
+        this.bodyLog = new BodyLog(this::llmHasWork, this::tryEmitAmbient);
+        this.llm = new LlmTaskChain(queue, bodyLog);
+        this.chains = List.of(
+                new UnstuckChain(),
+                new MobDefenseChain(bodyLog),
+                new FoodChain(bodyLog),
+                new MLGChain(bodyLog),
+                new ArmorChain(bodyLog),
+                llm);
+    }
+
+    /** {@link BodyLog}'s busy-rail predicate — "is a tool result coming that can
+     *  carry the queue?" (see {@link LlmTaskChain#hasWork}). */
+    private boolean llmHasWork() {
+        return llm.hasWork();
+    }
 
     /**
-     * Idle-path outlet for the survival diary: with no task running or queued, there is
-     * no tool result to ride, so after a quiet spell the accumulated episodes ship as a
-     * non-urgent {@code <event>} — queued client-side and spliced into the owner's NEXT
-     * message, exactly like a dimension-change event. The model is informed, not woken.
+     * {@link BodyLog}'s idle-rail transport: ship the packaged {@code body_log}
+     * event to the owner's client via the engine's public event channel.
+     * {@code urgent=false} is constitutional law (§4) — a body diary informs the
+     * next turn, it never wakes the brain. No owner online → refuse, so the log
+     * keeps its entries and retries on a later flush.
      */
-    private void flushIdleJournal(NumenPlayer companion) {
-        if (journal.isEmpty()) {
-            journalQuietTicks = 0;
-            lastJournalSize = 0;
-            return;
-        }
-        int size = journal.size();
-        if (size != lastJournalSize) {   // a new episode just landed — restart the quiet clock
-            lastJournalSize = size;
-            journalQuietTicks = 0;
-            return;
-        }
-        if (++journalQuietTicks < JOURNAL_IDLE_FLUSH_TICKS) return;
-        if (companion.resolveOwnerPlayer() == null) return;   // no client to queue on — keep holding
-        // One <event> PER episode, as siblings (the protocol's existing grammar — queued
-        // events of any kind already splice in side by side, unwrapped; the UI's tag
-        // stripper matches exactly this shape).
-        StringBuilder xml = new StringBuilder();
-        for (String line : journal.drain()) {
-            xml.append("<event kind=\"survival\">while idle, you ").append(line).append("</event>");
-        }
-        com.dwinovo.numen.entity.Companions.emitEvent(companion, xml.toString(), false);
-        journalQuietTicks = 0;
-        lastJournalSize = 0;
+    private boolean tryEmitAmbient(String xml) {
+        NumenPlayer companion = body;
+        if (companion == null || companion.resolveOwnerPlayer() == null) return false;
+        com.dwinovo.numen.entity.Companions.emitEvent(companion, xml, false);
+        return true;
     }
 
     void tick(NumenPlayer companion) {
+        body = companion;
         TaskChain best = ChainScheduler.select(chains, companion);
 
         if (best == null) {
@@ -93,7 +91,9 @@ final class CompanionBrain {
                 running.onInterrupt(companion);
                 running = null;
             }
-            flushIdleJournal(companion);
+            // Idle retry for entries a refused flush left behind (the owner was
+            // offline when they were reported) — a no-op when the log is empty.
+            bodyLog.flushAmbient();
             llm.finalizeTerminal();
             llm.drainResults(companion);
             return;
@@ -110,10 +110,6 @@ final class CompanionBrain {
             llm.freezeTick(companion);
         }
 
-        // A chain holds the body (fighting / eating / working) — the idle-flush quiet
-        // clock restarts; episodes written mid-activity ride the next channel that opens.
-        journalQuietTicks = 0;
-
         best.tick(companion);
 
         // Finalize EVERY tick, not just when llm wins: an owner Stop (cancelFor)
@@ -122,5 +118,16 @@ final class CompanionBrain {
         // survival chain holds the body. (A no-op when llm.tick already finalized.)
         llm.finalizeTerminal();
         llm.drainResults(companion);
+    }
+
+    /**
+     * Death path (via {@code CompanionTickDispatcher.clearActiveTask}): bind the
+     * body so the ambient sink can reach its owner, then let the LLM chain drop
+     * the running task and fallback-flush the {@link BodyLog} (constitution §4 —
+     * a no-result termination strands the queued entries, they transfer to C2).
+     */
+    void dropActiveNoResult(NumenPlayer companion) {
+        body = companion;
+        llm.dropActiveNoResult();
     }
 }
