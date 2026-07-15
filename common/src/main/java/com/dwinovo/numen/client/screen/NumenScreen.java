@@ -937,10 +937,13 @@ public final class NumenScreen extends Screen {
         final float vol = probe.volume();
         // 同步防线:后端构建/合成同步抛(坏 URL 曾直接崩掉渲染线程)也只落到状态行。
         java.util.concurrent.CompletableFuture<byte[]> synth;
+        final com.dwinovo.numen.client.voice.TtsBackend backend;
         try {
-            synth = probe.createBackend().synthesize(VOICE_TEST_SENTENCE);
+            backend = probe.createBackend();
+            synth = backend.synthesize(VOICE_TEST_SENTENCE);
         } catch (Exception ex) {
             String why = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+            com.dwinovo.numen.Constants.LOG.warn("[numen-voice] 试音失败(同步): {}", why);
             voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_FAIL, clip(why, secW() - 10)), true);
             return;
         }
@@ -962,6 +965,9 @@ public final class NumenScreen extends Screen {
                     Throwable cur = fail;
                     while (cur.getCause() != null && cur != cur.getCause()) cur = cur.getCause();
                     String why = cur.getMessage() == null ? cur.getClass().getSimpleName() : cur.getMessage();
+                    // 完整原因进日志(红字被 clip 且只停留几秒,排障全靠这行)。
+                    com.dwinovo.numen.Constants.LOG.warn("[numen-voice] 试音失败({}): {}",
+                            backend.describe(), why);
                     voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_FAIL, clip(why, secW() - 10)), true);
                     return;
                 }
@@ -977,7 +983,8 @@ public final class NumenScreen extends Screen {
     private void voiceNote(String msg, boolean fail) {
         voiceMsg = msg;
         voiceMsgFail = fail;
-        voiceMsgUntil = System.currentTimeMillis() + 5000;
+        // 失败信息多停一会儿——HTTP 错误原文读一遍不止 5 秒。
+        voiceMsgUntil = System.currentTimeMillis() + (fail ? 12000 : 5000);
     }
 
     private void renderVoiceSection(GuiGraphics g, int mouseX, int mouseY) {
