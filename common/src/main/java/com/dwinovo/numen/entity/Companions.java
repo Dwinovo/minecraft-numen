@@ -27,9 +27,6 @@ public final class Companions {
     /** Ticks a dead companion stays down before respawning at its owner (~30 s). */
     private static final long RESPAWN_DELAY_TICKS = 30 * 20;
 
-    /** Actionbar-notice cadence (~15 s) while a respawn is postponed for lack of a safe spot. */
-    private static final long NO_SAFE_SPOT_NOTICE_TICKS = 15 * 20;
-
     private Companions() {}
 
     /**
@@ -132,11 +129,9 @@ public final class Companions {
             if (now - entry.diedAt() < RESPAWN_DELAY_TICKS) continue;
             ServerPlayer owner = server.getPlayerList().getPlayer(entry.owner());
             if (owner == null) continue;                            // owner offline — wait for login
-            if (!respawnDead(server, e.getKey(), entry, owner)
-                    && (now - entry.diedAt() - RESPAWN_DELAY_TICKS) % NO_SAFE_SPOT_NOTICE_TICKS == 0) {
-                owner.displayClientMessage(net.minecraft.network.chat.Component.literal(
-                        entry.name() + " 在等待安全的复活位置——你附近太狭窄,到开阔处它就回来"), true);
-            }
+            // No safe spot right now → quietly retry next tick until the owner reaches open
+            // space (the maid/vanilla-pet convention: never nag about a transient squeeze).
+            respawnDead(server, e.getKey(), entry, owner);
         }
     }
 
