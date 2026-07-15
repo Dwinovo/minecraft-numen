@@ -77,6 +77,11 @@ public record CompanionListPayload(List<Entry> companions) implements CustomPack
                 com.dwinovo.numen.client.agent.AgentLoopRegistry.getOrCreate(e.uuid())
                         .setProviderEntry(providerEntry);
             }
+            // And for the voice entry picked at summon (optional — none pended = silent).
+            String voiceEntry = com.dwinovo.numen.client.voice.VoiceLibrary.takePendingSummon(e.name());
+            if (voiceEntry != null) {
+                com.dwinovo.numen.client.voice.VoiceLibrary.instance().assign(e.uuid(), voiceEntry);
+            }
         }
     }
 }

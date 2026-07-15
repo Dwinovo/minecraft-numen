@@ -70,9 +70,9 @@ public final class VoicePipeline {
 
     /**
      * 一次 LLM 分发开始：打断上一轮残余（停播 + 清队列 + 重置分句器）,
-     * 按当前配置重建后端,返回本轮的代际号。主线程调用。
+     * 按当前绑定的声线重建后端,返回本轮的代际号。主线程调用。
      */
-    public int beginTurn(VoiceConfig.CompanionVoice cfg) {
+    public int beginTurn(VoiceLibrary.Entry cfg) {
         generation++;
         stopAndClear();
         this.backend = cfg.createBackend();

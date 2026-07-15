@@ -14,9 +14,9 @@
  * </pre>
  *
  * <h2>开关与配置</h2>
- * 一切由 {@code config/numen/voice.json} 驱动
- * （{@link com.dwinovo.numen.client.voice.VoiceConfig} 有完整样例）。
- * 未配置的同伴静音且零开销。
+ * 一切由声线库驱动:{@code config/numen/voice.json} = 全局开关 + 命名声线
+ * 条目 + 每同伴绑定（{@link com.dwinovo.numen.client.voice.VoiceLibrary}
+ * 有完整样例）,设置面板"语音"tab 是它的编辑界面。未绑定的同伴静音且零开销。
  *
  * <h2>生命周期</h2>
  * 管线归 {@code EntityAgentLoop} 所有:每次 LLM 分发 beginTurn,主人打断 /

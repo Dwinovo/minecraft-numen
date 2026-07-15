@@ -1,13 +1,10 @@
 package com.dwinovo.numen.client.voice;
 
-import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.sounds.AbstractTickableSoundInstance;
 import net.minecraft.client.resources.sounds.SoundInstance;
 import net.minecraft.client.sounds.AudioStream;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
 
 import java.util.UUID;
@@ -51,18 +48,14 @@ import java.util.concurrent.CompletableFuture;
  * 每 tick 把音源坐标同步到同伴当前位置;身体解析不到（换维度重建的
  * 瞬间）先按 UUID 重找,持续找不到（死亡/卸载）则停播。
  */
-public final class EntityVoiceSound extends AbstractTickableSoundInstance {
-
-    /** 对应 assets/numen_api/sounds.json 里的 companion_voice 条目。 */
-    private static final SoundEvent VOICE_EVENT = SoundEvent.createVariableRangeEvent(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "companion_voice"));
+public final class EntityVoiceSound extends AbstractTickableSoundInstance implements VoicePcmSource {
 
     private final UUID entityUuid;
     private final PcmAudio audio;
     private AbstractClientPlayer body;
 
     EntityVoiceSound(UUID entityUuid, AbstractClientPlayer body, PcmAudio audio, float volume) {
-        super(VOICE_EVENT, SoundSource.VOICE, SoundInstance.createUnseededRandom());
+        super(VoicePcmSource.SOUND_EVENT, SoundSource.VOICE, SoundInstance.createUnseededRandom());
         this.entityUuid = entityUuid;
         this.body = body;
         this.audio = audio;
@@ -97,6 +90,7 @@ public final class EntityVoiceSound extends AbstractTickableSoundInstance {
      * 由 {@code MixinSoundEngine} 在 {@code SoundEngine.play} 的流式取数处调用,
      * 对应更高 MC 版本 {@code SoundInstance#getStream} 官方钩子的语义。
      */
+    @Override
     public CompletableFuture<AudioStream> openStream() {
         return CompletableFuture.completedFuture(new PcmAudioStream(audio));
     }

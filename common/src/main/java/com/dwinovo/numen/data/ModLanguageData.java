@@ -71,6 +71,32 @@ public final class ModLanguageData {
         // Endpoint problems surfaced in chat (EntityAgentLoop#endpointProblem).
         public static final String ENDPOINT_UNBOUND = "numen.endpoint.unbound";
         public static final String ENDPOINT_NO_KEY  = "numen.endpoint.no_key";
+
+        // Voice (TTS) section: nav label, global switch, entry list/form, preview, bindings.
+        public static final String VOICE_TITLE          = "numen.voice.title";
+        public static final String VOICE_ENABLED        = "numen.voice.enabled";
+        public static final String VOICE_EMPTY          = "numen.voice.empty";
+        public static final String VOICE_ADD            = "numen.voice.add";
+        public static final String VOICE_DELETE_CONFIRM = "numen.voice.delete_confirm";
+        public static final String VOICE_FORM_NAME      = "numen.voice.form_name";
+        public static final String VOICE_BACKEND_OPENAI = "numen.voice.backend_openai";
+        public static final String VOICE_BACKEND_SOVITS = "numen.voice.backend_sovits";
+        public static final String VOICE_FORM_URL       = "numen.voice.form_url";
+        public static final String VOICE_FORM_MODEL     = "numen.voice.form_model";
+        public static final String VOICE_FORM_VOICE     = "numen.voice.form_voice";
+        public static final String VOICE_FORM_REF       = "numen.voice.form_ref";
+        public static final String VOICE_FORM_PROMPT    = "numen.voice.form_prompt";
+        public static final String VOICE_FORM_LANG      = "numen.voice.form_lang";
+        public static final String VOICE_FORM_VOLUME    = "numen.voice.form_volume";
+        public static final String VOICE_TEST           = "numen.voice.test";
+        public static final String VOICE_TEST_RUNNING   = "numen.voice.test_running";
+        public static final String VOICE_TEST_OK        = "numen.voice.test_ok";
+        public static final String VOICE_TEST_FAIL      = "numen.voice.test_fail";
+        public static final String VOICE_WARN_NAME      = "numen.voice.warn_name";
+        public static final String VOICE_BIND_LABEL     = "numen.voice.bind_label";
+        public static final String VOICE_BIND_NONE      = "numen.voice.bind_none";
+        public static final String VOICE_SUMMON_LABEL   = "numen.voice.summon_label";
+        public static final String VOICE_SUMMON_EMPTY   = "numen.voice.summon_empty";
     }
 
     /** Loader-side providers funnel both English and Simplified Chinese through here. */
@@ -193,6 +219,32 @@ public final class ModLanguageData {
         // Endpoint problems (chat warn line)
         adder.add(Keys.ENDPOINT_UNBOUND, "This companion has no model config bound — pick or create one in Settings → Model Configs");
         adder.add(Keys.ENDPOINT_NO_KEY,  "Model config \"%s\" has no API Key yet — add it in Settings → Model Configs");
+
+        // Voice (TTS) section
+        adder.add(Keys.VOICE_TITLE,          "Voice");
+        adder.add(Keys.VOICE_ENABLED,        "Enabled");
+        adder.add(Keys.VOICE_EMPTY,          "No voice yet — click New (top-right) to create one");
+        adder.add(Keys.VOICE_ADD,            "New");
+        adder.add(Keys.VOICE_DELETE_CONFIRM, "Delete voice \"%s\"? Companions bound to it fall silent.");
+        adder.add(Keys.VOICE_FORM_NAME,      "Name (required)");
+        adder.add(Keys.VOICE_BACKEND_OPENAI, "Type: OpenAI-compatible (click to switch)");
+        adder.add(Keys.VOICE_BACKEND_SOVITS, "Type: GPT-SoVITS (click to switch)");
+        adder.add(Keys.VOICE_FORM_URL,       "Service URL");
+        adder.add(Keys.VOICE_FORM_MODEL,     "TTS model id");
+        adder.add(Keys.VOICE_FORM_VOICE,     "Voice / timbre id");
+        adder.add(Keys.VOICE_FORM_REF,       "Reference audio path (on the TTS machine)");
+        adder.add(Keys.VOICE_FORM_PROMPT,    "Reference audio transcript");
+        adder.add(Keys.VOICE_FORM_LANG,      "Language (zh/en/ja)");
+        adder.add(Keys.VOICE_FORM_VOLUME,    "Volume 0.0–2.0");
+        adder.add(Keys.VOICE_TEST,           "Preview");
+        adder.add(Keys.VOICE_TEST_RUNNING,   "Synthesizing…");
+        adder.add(Keys.VOICE_TEST_OK,        "✔ Playing");
+        adder.add(Keys.VOICE_TEST_FAIL,      "Preview failed: %s");
+        adder.add(Keys.VOICE_WARN_NAME,      "Name is required");
+        adder.add(Keys.VOICE_BIND_LABEL,     "This companion");
+        adder.add(Keys.VOICE_BIND_NONE,      "None (silent)");
+        adder.add(Keys.VOICE_SUMMON_LABEL,   "Voice");
+        adder.add(Keys.VOICE_SUMMON_EMPTY,   " (empty — create one in Settings → Voice)");
     }
 
     private static void addZh(Adder adder) {
@@ -306,5 +358,31 @@ public final class ModLanguageData {
         // Endpoint problems (chat warn line)
         adder.add(Keys.ENDPOINT_UNBOUND, "这个同伴还没有绑定模型配置——到 设置 → 模型配置 新建/选择一条");
         adder.add(Keys.ENDPOINT_NO_KEY,  "模型配置「%s」还没填 API Key——到 设置 → 模型配置 补上");
+
+        // Voice (TTS) section
+        adder.add(Keys.VOICE_TITLE,          "语音");
+        adder.add(Keys.VOICE_ENABLED,        "启用");
+        adder.add(Keys.VOICE_EMPTY,          "还没有声线——点右上「新建」创建一条");
+        adder.add(Keys.VOICE_ADD,            "新建");
+        adder.add(Keys.VOICE_DELETE_CONFIRM, "删除声线「%s」?绑定它的同伴将静音。");
+        adder.add(Keys.VOICE_FORM_NAME,      "名称(必填)");
+        adder.add(Keys.VOICE_BACKEND_OPENAI, "类型:OpenAI 兼容(点击切换)");
+        adder.add(Keys.VOICE_BACKEND_SOVITS, "类型:GPT-SoVITS(点击切换)");
+        adder.add(Keys.VOICE_FORM_URL,       "服务地址 URL");
+        adder.add(Keys.VOICE_FORM_MODEL,     "TTS 模型 id");
+        adder.add(Keys.VOICE_FORM_VOICE,     "音色 voice id");
+        adder.add(Keys.VOICE_FORM_REF,       "参考音频路径(TTS 服务所在机器上)");
+        adder.add(Keys.VOICE_FORM_PROMPT,    "参考音频的文本");
+        adder.add(Keys.VOICE_FORM_LANG,      "语言(zh/en/ja)");
+        adder.add(Keys.VOICE_FORM_VOLUME,    "音量 0.0–2.0");
+        adder.add(Keys.VOICE_TEST,           "试听");
+        adder.add(Keys.VOICE_TEST_RUNNING,   "合成中…");
+        adder.add(Keys.VOICE_TEST_OK,        "✔ 播放中");
+        adder.add(Keys.VOICE_TEST_FAIL,      "试听失败:%s");
+        adder.add(Keys.VOICE_WARN_NAME,      "名称必填");
+        adder.add(Keys.VOICE_BIND_LABEL,     "本同伴");
+        adder.add(Keys.VOICE_BIND_NONE,      "无(静音)");
+        adder.add(Keys.VOICE_SUMMON_LABEL,   "声线");
+        adder.add(Keys.VOICE_SUMMON_EMPTY,   "(空——到 设置 → 语音 新建)");
     }
 }

@@ -178,8 +178,8 @@ public final class EntityAgentLoop {
     private final ToolDispatcher dispatcher;
 
     /**
-     * 本同伴的流式语音管线,懒创建：首次在 {@code config/numen/voice.json} 里
-     * 发现这个 UUID 的配置时才 new。未配置 = 永远 null = 零开销。
+     * 本同伴的流式语音管线,懒创建：首次在声线库里 resolve 到这个 UUID 的
+     * 绑定时才 new。未绑定 = 永远 null = 零开销。
      * 见 {@link com.dwinovo.numen.client.voice.VoicePipeline}。
      */
     private com.dwinovo.numen.client.voice.VoicePipeline voice;
@@ -350,15 +350,15 @@ public final class EntityAgentLoop {
     private static final VoiceTurn SILENT_VOICE = new VoiceTurn(null, () -> {});
 
     /**
-     * 为即将发出的 chat 请求开启一轮语音（若该同伴配置了语音）。每次分发都
-     * 重读配置——{@code voice.json} 热编辑下一轮生效;开新轮会打断上一轮还在
+     * 为即将发出的 chat 请求开启一轮语音（若该同伴绑定了声线）。每次分发都
+     * 重新 resolve——声线库/绑定的编辑下一轮生效;开新轮会打断上一轮还在
      * 播的残句（新内容优先,与打断语义一致）。
      */
     private VoiceTurn beginVoiceTurn() {
-        com.dwinovo.numen.client.voice.VoiceConfig.CompanionVoice cfg =
-                com.dwinovo.numen.client.voice.VoiceConfig.forCompanion(entityUuid);
+        com.dwinovo.numen.client.voice.VoiceLibrary.Entry cfg =
+                com.dwinovo.numen.client.voice.VoiceLibrary.instance().resolve(entityUuid);
         if (cfg == null) {
-            if (voice != null) voice.interrupt();   // 配置被移除:静音存量队列
+            if (voice != null) voice.interrupt();   // 总开关关闭/解绑:静音存量队列
             return SILENT_VOICE;
         }
         if (voice == null) {
