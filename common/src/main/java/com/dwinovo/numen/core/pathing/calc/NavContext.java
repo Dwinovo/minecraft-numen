@@ -52,6 +52,16 @@ public final class NavContext {
     /** True if the entity holds at least one scaffolding block. */
     public final boolean hasScaffold;
 
+    /**
+     * May this search/execution modify terrain at all (break or place blocks)?
+     * {@code false} makes {@link #costOfPlacing} and {@link #costOfBreaking}
+     * return {@link ActionCosts#COST_INF} unconditionally, so A* only produces
+     * pure-traversal routes (existing ground and openings) — the planning-side
+     * switch behind {@code move_to}'s {@code modify_terrain:false} ("walk
+     * through someone's build without touching a block"). Default {@code true}.
+     */
+    public final boolean terrainMods;
+
     /** Max blocks the entity may fall without taking dangerous damage. */
     public final int maxFallHeight;
 
@@ -82,11 +92,13 @@ public final class NavContext {
     /** Best inventory tool for a block: its destroy speed and whether it harvests drops. */
     private record BestTool(float speed, boolean canHarvest) {}
 
-    private NavContext(Level level, BlockGetter view, Container inventory, boolean safeForThreadedUse) {
+    private NavContext(Level level, BlockGetter view, Container inventory, boolean safeForThreadedUse,
+                       boolean terrainMods) {
         this.level = level;
         this.view = view;
         this.inventory = inventory;
         this.safeForThreadedUse = safeForThreadedUse;
+        this.terrainMods = terrainMods;
         this.hasScaffold = hasAnyScaffold(inventory);
 
         // Survivable fall: 3 blocks — vanilla fall
@@ -101,7 +113,13 @@ public final class NavContext {
      * changed), so this reads live and is NOT safe to hand to a worker thread.
      */
     public static NavContext forExecution(Level level, Container liveInventory) {
-        return new NavContext(level, new NavSnapshot(level), liveInventory, false);
+        return forExecution(level, liveInventory, true);
+    }
+
+    /** As {@link #forExecution(Level, Container)} with an explicit terrain-modification
+     *  gate — {@code terrainMods:false} prices every break/place {@code COST_INF}. */
+    public static NavContext forExecution(Level level, Container liveInventory, boolean terrainMods) {
+        return new NavContext(level, new NavSnapshot(level), liveInventory, false, terrainMods);
     }
 
     /**
@@ -112,6 +130,12 @@ public final class NavContext {
      * swaps in the {@code CompactSection}-backed off-thread view so the search can move to a worker.
      */
     public static NavContext forSearch(Level level, Container liveInventory) {
+        return forSearch(level, liveInventory, true);
+    }
+
+    /** As {@link #forSearch(Level, Container)} with an explicit terrain-modification
+     *  gate — {@code terrainMods:false} plans pure-traversal routes only. */
+    public static NavContext forSearch(Level level, Container liveInventory, boolean terrainMods) {
         // Read loaded chunks LIVE through the per-tick snapshot; before the
         // snapshot exists (a level's first companion tick) fall back to the live read-through so the
         // first search is still correct.
@@ -123,7 +147,7 @@ public final class NavContext {
         BlockGetter view = loaded != null
                 ? new com.dwinovo.numen.core.pathing.cache.CachedNavView(loaded, level)
                 : new NavSnapshot(level);
-        return new NavContext(level, view, snapshotInventory(liveInventory), loaded != null);
+        return new NavContext(level, view, snapshotInventory(liveInventory), loaded != null, terrainMods);
     }
 
     /** A point-in-time copy of {@code live} (same slot layout, copied stacks) — read-only fodder for
@@ -199,6 +223,7 @@ public final class NavContext {
      * cell isn't replaceable, or placing there would touch a hazard.
      */
     public double costOfPlacing(BlockPos pos) {
+        if (!terrainMods) return ActionCosts.COST_INF;   // modify_terrain:false — no block may be placed
         if (!hasScaffold) return ActionCosts.COST_INF;
         if (!BlockHelper.isReplaceableForPlacement(view, pos)) return ActionCosts.COST_INF;
         // Never place INTO a fluid (source or flowing) — a bridge can't be planned
@@ -233,6 +258,7 @@ public final class NavContext {
      * the cascade, so sand/gravel terrain stays routable instead of walling off.
      */
     public double costOfBreaking(BlockPos pos, boolean includeFalling) {
+        if (!terrainMods) return ActionCosts.COST_INF;   // modify_terrain:false — no block may be broken
         if (!BlockHelper.isBreakable(view, pos)) return ActionCosts.COST_INF;
         if (BlockHelper.isHazard(view, pos)) return ActionCosts.COST_INF;
         if (BlockHelper.breakWouldCreateFlow(view, pos)) return ActionCosts.COST_INF;
@@ -319,6 +345,10 @@ public final class NavContext {
         if (!state.getFluidState().isEmpty()) {
             return state.getFluidState().is(FluidTags.LAVA)
                     ? "lava" : "water (I can't swim or mine through fluids)";
+        }
+        if (!terrainMods) {
+            // Mirrors the unconditional gate at the top of costOfBreaking.
+            return "solid " + blockId(state) + " (terrain modification is disabled — modify_terrain:false)";
         }
         if (!BlockHelper.isBreakable(view, pos)) {
             return "unbreakable " + blockId(state);

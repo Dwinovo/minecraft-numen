@@ -51,6 +51,11 @@ public final class PlayerPathExecutor {
     private final double speed;
     /** Builds a fresh world snapshot for per-tick cost re-verification. */
     private final java.util.function.Supplier<NavContext> ctxSupplier;
+    /** May execution modify terrain? The dig and scaffold phases are normally driven by the
+     *  plan (whose {@link NavContext} already prices breaks/places {@code COST_INF} when this
+     *  is false, so no such move exists), but the scaffold phase can ALSO fire from a live
+     *  floor check ({@code MoveDriver.scaffoldCell}) — this flag bars that path too. */
+    private final boolean terrainMods;
 
     private int index = 0;
     private int ticksOnCurrent = 0;
@@ -90,10 +95,17 @@ public final class PlayerPathExecutor {
 
     public PlayerPathExecutor(NumenPlayer player, Path path, double speed,
                               java.util.function.Supplier<NavContext> ctxSupplier) {
+        this(player, path, speed, ctxSupplier, true);
+    }
+
+    public PlayerPathExecutor(NumenPlayer player, Path path, double speed,
+                              java.util.function.Supplier<NavContext> ctxSupplier,
+                              boolean terrainMods) {
         this.player = player;
         this.path = path;
         this.speed = speed;
         this.ctxSupplier = ctxSupplier;
+        this.terrainMods = terrainMods;
         this.digger = new BlockDigger(player);
     }
 
@@ -171,6 +183,13 @@ public final class PlayerPathExecutor {
         //    pricing prediction, not the trigger). The live "edge sneak" maneuver:
         //    hold sneak, edge to the rim, look at the support face, place.
         BlockPos scaffold = placedThisMove ? null : drv.scaffoldCell();
+        if (scaffold != null && !terrainMods) {
+            // A live floor-restoration place is a world edit — barred under
+            // modify_terrain:false. Replan instead: the fresh search (same flag)
+            // routes around the hole or fails clean.
+            return replan("floor missing at " + scaffold.toShortString()
+                    + " but terrain modification is disabled");
+        }
         if (scaffold != null) {
             if (placeManeuver == null) {
                 BlockPos cell = scaffold.immutable();

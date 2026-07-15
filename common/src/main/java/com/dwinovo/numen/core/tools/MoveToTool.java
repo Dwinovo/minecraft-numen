@@ -15,7 +15,7 @@ public final class MoveToTool extends ServerNumenTool {
     private static final Gson GSON = new Gson();
     private final MovementTools impl = new MovementTools();
 
-    private record Args(Double x, Double y, Double z, double speed) {}
+    private record Args(Double x, Double y, Double z, double speed, Boolean modify_terrain) {}
 
     @Override
     public String name() {
@@ -29,7 +29,7 @@ public final class MoveToTool extends ServerNumenTool {
                 • Go to a LOCATION: give x and z, leave y null. The companion walks to that spot and stands on whatever ground is there — Y is auto-resolved to the surface. THIS IS THE DEFAULT for 'go over there' / following / exploring; never guess a Y for a location.
                 • Go to an EXACT cell: give x, y and z. Only for a specific cell you know is reachable (e.g. a block you scanned). If that cell is mid-air or walled in it will report it couldn't reach it.
                 • Change ELEVATION: give y only (x and z null) to climb to the surface or descend to a mining depth at your current column.
-                En route it mines through obstructions, digs down/up, bridges gaps and pillars up with cobblestone/dirt from inventory. Digging is gated by your HELD tool: stone/deepslate need a pickaxe IN HAND (equip_item first); a sword held makes stone an impassable wall. Consumes scaffold blocks and tool durability; carry cobblestone/dirt for gaps. Timeout scales with distance; the result reports the actual position reached (and the real ground height) — call again with the same target to resume. But if it reports NO path or stops far short, that spot is unreachable or too far: pick a NEARER waypoint, or scan first — don't just repeat the same unreachable target. move_to is for getting somewhere to STAND; to open/use a station give its coordinate to interact_at instead.""";
+                En route it mines through obstructions, digs down/up, bridges gaps and pillars up with cobblestone/dirt from inventory (`modify_terrain`, default true). Digging is gated by your HELD tool: stone/deepslate need a pickaxe IN HAND (equip_item first); a sword held makes stone an impassable wall. Consumes scaffold blocks and tool durability; carry cobblestone/dirt for gaps. Set modify_terrain:false to forbid ALL of that — not one block broken or placed, only existing ground and openings used. Use it to walk through your owner's base or someone else's build without damaging anything; if no pure-walking route exists it reports no path (the terrain is in the way — re-run with modify_terrain:true to allow digging through). Timeout scales with distance; the result reports the actual position reached (and the real ground height) — call again with the same target to resume. But if it reports NO path or stops far short, that spot is unreachable or too far: pick a NEARER waypoint, or scan first — don't just repeat the same unreachable target. move_to is for getting somewhere to STAND; to open/use a station give its coordinate to interact_at instead.""";
     }
 
     @Override
@@ -41,12 +41,17 @@ public final class MoveToTool extends ServerNumenTool {
                         + "elevation move (y alone).")
                 .nullableNumber("z", "Target Z. Null for an elevation-only move (y alone).")
                 .number("speed", "Speed multiplier in [0.1, 2.0]. 1.0 is normal walking speed.", 0.1, 2.0)
+                .optionalBool("modify_terrain", "Default true: en route, obstructions are mined through and "
+                        + "gaps bridged with scaffold blocks. false: do not break or place a single block — "
+                        + "walk a pure-traversal route over existing terrain only (for crossing builds/bases "
+                        + "without damaging them); reports no path when walking alone can't get there.")
                 .build();
     }
 
     @Override
     public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        enqueue(companion, impl.moveTo(a.x(), a.y(), a.z(), a.speed(), ctx(toolCallId, companion)));
+        enqueue(companion, impl.moveTo(a.x(), a.y(), a.z(), a.speed(), a.modify_terrain(),
+                ctx(toolCallId, companion)));
     }
 }

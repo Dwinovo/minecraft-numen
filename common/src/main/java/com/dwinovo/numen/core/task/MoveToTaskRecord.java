@@ -31,14 +31,21 @@ public final class MoveToTaskRecord extends TaskRecord {
     /** PathNavigation speed multiplier; 1.0 ≈ entity's MOVEMENT_SPEED attribute. */
     public final double speed;
     public final Kind kind;
+    /** May the journey modify terrain (dig through obstructions, bridge/pillar with
+     *  scaffold blocks)? Default true — the established behaviour. false plans a
+     *  pure-traversal route (existing ground and openings only) and touches not a
+     *  single block — for crossing someone's build without leaving a mark. */
+    public final boolean modifyTerrain;
 
     public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
-                            Double x, Double y, Double z, double speed) {
+                            Double x, Double y, Double z, double speed,
+                            boolean modifyTerrain) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.x = x;
         this.y = y;
         this.z = z;
         this.speed = speed;
+        this.modifyTerrain = modifyTerrain;
         this.kind = resolveKind(x, y, z);
     }
 
