@@ -128,6 +128,9 @@ public final class GetSelfStatusTool extends ServerNumenTool {
         root.add("target", JsonNull.INSTANCE);
         root.addProperty("on_ground", self.onGround());
         root.addProperty("in_water", self.isInWater());
+        // Remaining breath — the one stat whose absence let a body drown while its
+        // mind calmly planned an 870-block trip (frozen-ocean death, 2026-07-15).
+        root.addProperty("air", self.getAirSupply() + "/" + self.getMaxAirSupply() + " ticks");
         root.addProperty("in_lava", self.isInLava());
 
         reply.accept(root.toString());

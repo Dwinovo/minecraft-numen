@@ -48,11 +48,20 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
     private static final int COLLECT_RADIUS = 24;
     private static final int MAX_COLLECT_TICKS = 300;   // ~15 s
 
+    /** Fish deeper than this many water cells below air can't be struck from the surface
+     *  (the body can't dive — pathing keeps it on the water surface plane). */
+    private static final int MAX_STRIKE_DEPTH = 2;
+
     /** Mobs A* couldn't close on — skipped so the scan doesn't retry the same one forever. */
     private final TargetSet<LivingEntity> skipped = new TargetSet<>(LivingEntity::getId);
     /** How many of those skips happened ({@code TargetSet} keeps no count) — so the final
      *  "nothing left to hunt" message can tell the LLM "N targets were there but unreachable". */
     private int unreachableSkips;
+    /** Distinct prey seen swimming too deep to strike — filtered before any search is spent
+     *  (a frozen-ocean salmon chase once burned 20k-expansion searches per replan while the
+     *  body drowned under the ice), and named in the give-up message so the LLM stops
+     *  retrying a target class that is physically out of reach. */
+    private final java.util.Set<Integer> underwaterSeen = new java.util.HashSet<>();
     /** Drops A* can't reach — skipped so the sweep doesn't retry the same one forever. */
     private final TargetSet<BlockPos> dropBlacklist = new TargetSet<>(p -> p);
 
@@ -112,6 +121,11 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
                 scanned += " (" + unreachableSkips + " candidate"
                         + (unreachableSkips == 1 ? " was" : "s were")
                         + " skipped as unreachable)";
+            }
+            if (!underwaterSeen.isEmpty()) {
+                scanned += " (" + underwaterSeen.size() + " swimming too deep underwater — I can't"
+                        + " dive, melee only reaches ~" + MAX_STRIKE_DEPTH + " blocks below the"
+                        + " surface; don't re-hunt these, pick land prey or another food source)";
             }
             fail(scanned, FailureType.TARGET_LOST);
             return TaskState.FAILED;
@@ -256,9 +270,35 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
             if (e == player || e.isRemoved()) continue;
             if (!(e instanceof LivingEntity le) || le.isDeadOrDying()) continue;
             if (!r.targets.contains(e.getType())) continue;
+            if (submergedBeyondReach(le)) {
+                // Not permanently skipped — a fish that rises into strike range on a
+                // later scan is fair game; the id set only feeds the give-up message.
+                underwaterSeen.add(le.getId());
+                continue;
+            }
             candidates.add(le);
         }
         return skipped.pick(candidates, Comparator.comparingDouble(this::threatScore)).orElse(null);
+    }
+
+    /**
+     * Prey deeper underwater than a strike from the surface can never be closed on:
+     * the body can't dive (pathing keeps it on the water surface plane), so chasing
+     * it just replans forever while the fish circles. Deciding costs a couple of
+     * block reads; letting A* discover it costs a full exhausted search budget per
+     * replan. A solid lid (pack ice) before air within reach is the same verdict.
+     */
+    private boolean submergedBeyondReach(LivingEntity prey) {
+        var level = player.level();
+        BlockPos p = prey.blockPosition();
+        if (!level.getFluidState(p).is(net.minecraft.tags.FluidTags.WATER)) return false;
+        for (int up = 0; up < MAX_STRIKE_DEPTH; up++) {
+            p = p.above();
+            var state = level.getBlockState(p);
+            if (state.getFluidState().is(net.minecraft.tags.FluidTags.WATER)) continue;
+            return !state.getCollisionShape(level, p).isEmpty();
+        }
+        return true;
     }
 
     /** Lower is better: squared distance, shrunk for a mob that is actively targeting this body
