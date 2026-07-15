@@ -27,6 +27,9 @@ public final class Companions {
     /** Ticks a dead companion stays down before respawning at its owner (~30 s). */
     private static final long RESPAWN_DELAY_TICKS = 30 * 20;
 
+    /** Actionbar-notice cadence (~15 s) while a respawn is postponed for lack of a safe spot. */
+    private static final long NO_SAFE_SPOT_NOTICE_TICKS = 15 * 20;
+
     private Companions() {}
 
     /**
@@ -44,6 +47,8 @@ public final class Companions {
             CompanionRegistry.get(server).remove(existing);   // stale entry (no .dat) — replace it
         }
         UUID companionUuid = UUID.randomUUID();
+        Vec3 safe = SafeSpawn.findNear(level, pos);
+        if (safe != null) pos = safe;   // no safe spot around → keep the summoner's own position
         NumenPlayer body = CompanionFactory.spawn(server, companionUuid, name, ownerUuid, level, pos);
         CompanionRegistry.get(server).put(companionUuid,
                 new CompanionRegistry.Entry(name, ownerUuid, level.dimension(), body.blockPosition()));
@@ -127,21 +132,35 @@ public final class Companions {
             if (now - entry.diedAt() < RESPAWN_DELAY_TICKS) continue;
             ServerPlayer owner = server.getPlayerList().getPlayer(entry.owner());
             if (owner == null) continue;                            // owner offline — wait for login
-            respawnDead(server, e.getKey(), entry, owner);
+            if (!respawnDead(server, e.getKey(), entry, owner)
+                    && (now - entry.diedAt() - RESPAWN_DELAY_TICKS) % NO_SAFE_SPOT_NOTICE_TICKS == 0) {
+                owner.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                        entry.name() + " 在等待安全的复活位置——你附近太狭窄,到开阔处它就回来"), true);
+            }
         }
     }
 
     /** Respawn a dead companion at its owner, clear the death state, and tell the brain it died + why
-     *  (the cause rides the respawn payload, so it works even after a logout cleared the client's memory). */
-    private static void respawnDead(MinecraftServer server, UUID uuid, CompanionRegistry.Entry entry,
-                                    ServerPlayer owner) {
+     *  (the cause rides the respawn payload, so it works even after a logout cleared the client's memory).
+     *  Returns false when no safe landing spot exists near the owner right now (tight tunnel, crawling,
+     *  deep water) — the death state stays pending and the ticker retries until the owner reaches open
+     *  space. Spawning anyway wedged the body into blocks: suffocate → die → respawn into the same spot,
+     *  a death loop until the owner happened to move. */
+    private static boolean respawnDead(MinecraftServer server, UUID uuid, CompanionRegistry.Entry entry,
+                                       ServerPlayer owner) {
         ServerLevel level = (ServerLevel) owner.level();
-        NumenPlayer body = CompanionFactory.spawn(server, uuid, entry.name(), entry.owner(), level, owner.position());
+        Vec3 pos = SafeSpawn.findNear(level, owner.position());
+        if (pos == null && owner.onGround() && SafeSpawn.hasStandingRoom(level, owner.position())) {
+            pos = owner.position();   // non-full-block floor (slab/carpet): the owner's own spot fits
+        }
+        if (pos == null) return false;
+        NumenPlayer body = CompanionFactory.spawn(server, uuid, entry.name(), entry.owner(), level, pos);
         body.setHealth(body.getMaxHealth());
         body.clearFire();
         CompanionRegistry.get(server).markAlive(uuid);
         syncRosterToOwner(server, owner);
         Services.NETWORK.sendToPlayer(owner, new NumenRespawnPayload(uuid, entry.deathCause()));
+        return true;
     }
 
     /**
