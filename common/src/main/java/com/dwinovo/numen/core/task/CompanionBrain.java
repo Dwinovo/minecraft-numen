@@ -1,6 +1,5 @@
 package com.dwinovo.numen.core.task;
 
-import com.dwinovo.numen.core.task.chain.ArmorChain;
 import com.dwinovo.numen.core.task.chain.FoodChain;
 import com.dwinovo.numen.core.task.chain.MLGChain;
 import com.dwinovo.numen.core.task.chain.MobDefenseChain;
@@ -17,7 +16,7 @@ import java.util.List;
  * winner drives the body), then always drains completed LLM results.
  *
  * <p>Chain order (priority tie-break, highest-intent first): unstuck → mob-defense
- * → food → mlg → armor → {@link LlmTaskChain}. A survival spike preempts the LLM
+ * → food → mlg → {@link LlmTaskChain}. A survival spike preempts the LLM
  * task (its body is released via {@link LlmTaskChain#onInterrupt}, its deadline
  * frozen via {@link LlmTaskChain#freezeTick}) and it resumes when the spike subsides.
  *
@@ -70,7 +69,6 @@ final class CompanionBrain {
                 new MobDefenseChain(bodyLog),
                 new FoodChain(bodyLog),
                 new MLGChain(bodyLog),
-                new ArmorChain(bodyLog),
                 llm);
     }
 

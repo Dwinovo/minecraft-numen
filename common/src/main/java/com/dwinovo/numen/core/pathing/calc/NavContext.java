@@ -161,7 +161,7 @@ public final class NavContext {
         // a break with one would make the plan cheaper than reality.
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack s = inventory.getItem(i);
-            if (s.isEmpty() || ToolSelect.nearBreaking(s)) continue;
+            if (s.isEmpty()) continue;
             float spd = s.getDestroySpeed(state);
             if (spd > bestSpeed) bestSpeed = spd;
         }
