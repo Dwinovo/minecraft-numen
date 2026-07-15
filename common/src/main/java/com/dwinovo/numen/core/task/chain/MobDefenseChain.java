@@ -38,7 +38,7 @@ import net.minecraft.world.phys.Vec3;
  *
  * <p>GATED OFF by default via {@link SurvivalConfig}.
  */
-public final class MobDefenseChain implements TaskChain {
+public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.core.task.reflex.Reflex {
 
     /** How far to look for a threat, and the leash beyond which we abandon a chase. */
     private static final double SCAN_RADIUS = 12.0;
@@ -82,6 +82,9 @@ public final class MobDefenseChain implements TaskChain {
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(id())) {
+            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+        }
         // Leash cooldown: we recently proved we can neither reach nor escape the
         // threat — stop spiking so the LLM task resumes (and its deadline can run)
         // instead of holding the body forever while freezeTick pushes the deadline.
@@ -121,6 +124,18 @@ public final class MobDefenseChain implements TaskChain {
     @Override
     public String name() {
         return "mob_defense";
+    }
+
+    // ---- Reflex roster paperwork (constitution §6) ----
+
+    @Override
+    public String id() {
+        return name();
+    }
+
+    @Override
+    public String describe() {
+        return "被怪物攻击会反击,受伤太重或没武器就先逃开";
     }
 
     // ---- fight ----

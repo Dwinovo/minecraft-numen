@@ -31,9 +31,16 @@ import net.minecraft.world.item.ItemStack;
  * that are cursed or nearly broken themselves. Yields whenever the body is mid
  * item-use (eating, blocking, drawing) — a hand swap would corrupt it.
  *
+ * <p>Respects intent pins (constitution §5): a slot the owner/model explicitly
+ * equipped via {@code equip_item} is skipped entirely — no upgrade, no strip —
+ * until the pin expires (item breaks / leaves the slot / is returned with
+ * {@code item_id="auto"}). The first time the chain yields to a pin it diaries
+ * one line through the {@code BodyLog} (debounced per pin) so the model knows
+ * its instruction is what's holding the wardrobe.
+ *
  * <p>GATED OFF by default via {@link SurvivalConfig}.
  */
-public final class ArmorChain implements TaskChain {
+public final class ArmorChain implements TaskChain, com.dwinovo.numen.core.task.reflex.Reflex {
 
     /** Dormant-state scan cadence: the wardrobe changes rarely, 2s latency is plenty. */
     private static final int SCAN_INTERVAL_TICKS = 40;
@@ -61,6 +68,9 @@ public final class ArmorChain implements TaskChain {
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(id())) {
+            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+        }
         // Yield to a body mid item-use (eating, blocking, drawing a bow): both the
         // equip right-click and the hand swap behind it would corrupt the use.
         if (companion.isUsingItem()) return Float.NEGATIVE_INFINITY;
@@ -96,6 +106,18 @@ public final class ArmorChain implements TaskChain {
         return "armor";
     }
 
+    // ---- Reflex roster paperwork (constitution §6) ----
+
+    @Override
+    public String id() {
+        return name();
+    }
+
+    @Override
+    public String describe() {
+        return "会自动穿上更好的盔甲,快碎的先脱下来收好";
+    }
+
     // ---- planning ----
 
     /** One wardrobe action: equip backpack slot {@code invSlot} into {@code slot},
@@ -115,9 +137,16 @@ public final class ArmorChain implements TaskChain {
      */
     private Action planAction(NumenPlayer companion) {
         Inventory inv = companion.getInventory();
+        com.dwinovo.numen.core.task.pin.IntentPins pins =
+                com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(companion);
         Action best = null;
         for (EquipmentSlot slot : ARMOR_SLOTS) {
             ItemStack worn = companion.getItemBySlot(slot);
+            // Scan-time pin check-and-expire (constitution §5): a matching pin
+            // means the slot wears this by explicit instruction; a stale pin
+            // (item broke / left the slot) expires right here.
+            boolean pinned = pins.validate(slot.getName(),
+                    com.dwinovo.numen.core.task.pin.Fingerprints.of(worn));
             // Untouchable slots: a bound curse can't be swapped off; a worn elytra
             // is deliberate flight gear, not a defense gap to "fix".
             if (ArmorScore.isCursedOn(worn)) continue;
@@ -147,6 +176,20 @@ public final class ArmorChain implements TaskChain {
                 action = new Action(slot, candSlot, candScore - barToBeat);
             } else if (wornBreaking && !worn.isEmpty() && firstEmptyStorageSlot(inv) >= 0) {
                 action = new Action(slot, -1, 0.0f);
+            }
+            if (action != null && pinned) {
+                // The reflex WOULD act, but the slot is pinned by explicit intent —
+                // yield, and diary it once per pin (debounced) so the model can see
+                // its own instruction is what's holding the wardrobe, and how to
+                // hand the slot back (teach-on-yield, constitution §5).
+                if (bodyLog != null && pins.shouldReportYield(slot.getName())) {
+                    String wornName = worn.getHoverName().getString();
+                    bodyLog.report(action.isStrip()
+                            ? wornName + "快碎了,但那是你指示穿的,先不脱(要交还给本能就 equip_item 的 item_id 填 \"auto\")"
+                            : "背包里有更好的" + inv.getItem(action.invSlot()).getHoverName().getString()
+                                    + ",但" + wornName + "是你指示穿的,先不换(要交还给本能就 equip_item 的 item_id 填 \"auto\")");
+                }
+                continue;
             }
             if (action != null && (best == null || action.gain() > best.gain())) {
                 best = action;

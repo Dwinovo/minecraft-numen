@@ -25,7 +25,16 @@ import net.minecraft.world.level.block.state.BlockState;
  * {@link #nearBreaking} margin never enters either scan, and if the HELD item is
  * itself inside the margin with no usable replacement, the hand is vacated
  * ({@link #holdIdleSlot}) — mining and melee both consume durability, so a
- * nearly-broken pick/sword must leave the hand before it shatters.
+ * nearly-broken pick/sword must leave the hand before it shatters. The guard is
+ * a registered reflex ({@code tool_guard}) — {@link #nearBreaking} returns
+ * {@code false} across the board when the owner switches it off.
+ *
+ * <p>Intent pin (constitution §5): a MAINHAND pin — the trace of an explicit
+ * {@code equip_item} — makes both swaps a no-op: the explicitly-held item is
+ * neither replaced by a "better" one nor vacated for being nearly broken
+ * (explicit = informed consent, so even a fast-breaking pinned tool is let
+ * through). The pin expires by fingerprint the moment the item breaks or
+ * otherwise leaves the hand, and the task-idle edge releases it.
  */
 public final class ToolSelect {
 
@@ -44,6 +53,12 @@ public final class ToolSelect {
      * on which tools are off the table.
      */
     public static boolean nearBreaking(ItemStack stack) {
+        // Policy-reflex switch (constitution §6): guard off → nothing counts as
+        // nearly broken, restoring pre-guard behavior everywhere it's consulted.
+        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(
+                com.dwinovo.numen.core.task.reflex.CoreReflexes.TOOL_GUARD_ID)) {
+            return false;
+        }
         if (stack.isEmpty() || !stack.isDamageableItem()) {
             return false;
         }
@@ -60,6 +75,7 @@ public final class ToolSelect {
      * dig proceeds bare-handed instead of grinding the tool to dust.
      */
     public static void holdBestTool(NumenPlayer p, BlockState state) {
+        if (handPinned(p)) return;   // explicit hold — don't swap it, don't guard it
         Inventory inv = p.getInventory();
         int best = -1;
         float bestSpeed = 1.0f;                       // bare-hand baseline
@@ -85,6 +101,7 @@ public final class ToolSelect {
      * broken, the hand is vacated — a bare-hand punch beats shattering the sword.
      */
     public static void holdBestWeapon(NumenPlayer p) {
+        if (handPinned(p)) return;   // explicit hold — don't swap it, don't guard it
         Inventory inv = p.getInventory();
         int best = -1;
         double bestDmg = 0.0;
@@ -102,6 +119,18 @@ public final class ToolSelect {
         } else if (nearBreaking(inv.getItem(inv.selected))) {
             holdIdleSlot(p);
         }
+    }
+
+    /**
+     * Is the main hand pinned by explicit intent AND still holding the pinned
+     * item? A scan-time fingerprint check ({@code IntentPins.validate}), so a
+     * stale hand pin (item broke / was swapped by a survival chain) expires on
+     * this very call and the swap proceeds normally.
+     */
+    private static boolean handPinned(NumenPlayer p) {
+        return com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(p).validate(
+                com.dwinovo.numen.core.task.pin.IntentPins.SLOT_MAINHAND,
+                com.dwinovo.numen.core.task.pin.Fingerprints.of(p.getMainHandItem()));
     }
 
     /**

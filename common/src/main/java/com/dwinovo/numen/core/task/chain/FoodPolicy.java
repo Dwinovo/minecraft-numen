@@ -51,8 +51,15 @@ public final class FoodPolicy {
 
     private FoodPolicy() {}
 
-    /** Classification of one edible stack (Minecraft-facing entry point). */
+    /** Classification of one edible stack (Minecraft-facing entry point). The
+     *  filter is a registered reflex ({@code food_policy}, constitution §6):
+     *  switched off, everything edible competes as a regular ration. The pure
+     *  overload below stays switch-free so the tier arithmetic tests hold. */
     public static Tier classify(Item item, FoodProperties food) {
+        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(
+                com.dwinovo.numen.core.task.reflex.CoreReflexes.FOOD_POLICY_ID)) {
+            return Tier.REGULAR;
+        }
         return classify(neverAutoEat(item), likelyHarmful(food));
     }
 

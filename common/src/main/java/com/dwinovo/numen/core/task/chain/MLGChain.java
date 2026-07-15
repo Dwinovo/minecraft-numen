@@ -33,7 +33,7 @@ import net.minecraft.world.phys.Vec3;
  * once the bucket empties (it becomes a plain bucket) the chain no longer fires a
  * use — it never scoops the just-placed water back up.
  */
-public final class MLGChain implements TaskChain {
+public final class MLGChain implements TaskChain, com.dwinovo.numen.core.task.reflex.Reflex {
 
     /** Fire the water/block once the ground is this close below (blocks). */
     private static final double PLACE_WITHIN = 3.5;
@@ -56,6 +56,9 @@ public final class MLGChain implements TaskChain {
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(id())) {
+            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+        }
         boolean canSave = waterBucketSlot(companion) >= 0 || softBlockSlot(companion) >= 0;
         return SurvivalDecisions.mlgPriority(companion.onGround(), companion.fallDistance, canSave);
     }
@@ -107,6 +110,18 @@ public final class MLGChain implements TaskChain {
     @Override
     public String name() {
         return "mlg";
+    }
+
+    // ---- Reflex roster paperwork (constitution §6) ----
+
+    @Override
+    public String id() {
+        return name();
+    }
+
+    @Override
+    public String describe() {
+        return "高处坠落时会用水桶或软方块自救";
     }
 
     /** Distance from the feet to the first solid block below, or a large number if none within probe. */

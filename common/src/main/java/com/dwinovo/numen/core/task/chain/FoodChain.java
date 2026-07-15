@@ -30,7 +30,7 @@ import net.minecraft.world.item.ItemStack;
  * {@link #getPriority} short-circuits to {@link Float#NEGATIVE_INFINITY} before
  * touching the body, so the chain is a strict no-op.
  */
-public final class FoodChain implements TaskChain {
+public final class FoodChain implements TaskChain, com.dwinovo.numen.core.task.reflex.Reflex {
 
     /** BodyLog for completed episodes — dual-rail routed (may be null in unit tests). */
     private final com.dwinovo.numen.core.task.BodyLog bodyLog;
@@ -52,6 +52,9 @@ public final class FoodChain implements TaskChain {
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(id())) {
+            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+        }
         // Never preempt a body already using an item UNLESS it's our own in-flight
         // eat: the LLM may be mid-eat (whose before/after item accounting a hand
         // swap would corrupt) or drawing a bow. Our own chew must keep priority,
@@ -101,6 +104,18 @@ public final class FoodChain implements TaskChain {
     @Override
     public String name() {
         return "food";
+    }
+
+    // ---- Reflex roster paperwork (constitution §6) ----
+
+    @Override
+    public String id() {
+        return name();
+    }
+
+    @Override
+    public String describe() {
+        return "饿了或受伤时会自己吃背包里的食物";
     }
 
     /**

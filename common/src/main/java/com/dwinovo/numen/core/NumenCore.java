@@ -69,6 +69,7 @@ public final class NumenCore {
         registerTools();
         registerTaskRunners();
         registerTransport();
+        registerReflexes();
         // Enable the autonomous survival chains (auto-eat / mob-defense / unstuck /
         // MLG). SurvivalConfig's own default is OFF — the safe state a bare library
         // build ships with — and the pack turns it on here, explicitly, at init.
@@ -94,6 +95,21 @@ public final class NumenCore {
         CompanionLifecycle.onDeath(CompanionTickDispatcher::clearActiveTask);
         CompanionLifecycle.onRemove(CompanionTickDispatcher::onCompanionRemoved);
         CompanionLifecycle.onAbort(CoreServerTools::abort);
+    }
+
+    /**
+     * The reflex roster (constitution §6): bind the switch persistence
+     * ({@code config/numen/reflexes.json}), then enlist core's instincts — the
+     * five survival chains and the two pure policies. Runs on BOTH sides like the
+     * rest of init: the server consults the switches in each chain/policy, the
+     * client reads {@code ReflexRegistry.overview()} when it builds the
+     * {@code get_self_status} tool description for a request.
+     */
+    private static void registerReflexes() {
+        com.dwinovo.numen.core.task.reflex.ReflexRegistry.bindStore(
+                new com.dwinovo.numen.core.task.reflex.ReflexStateFile(
+                        Services.PLATFORM.getConfigDir().resolve("numen").resolve("reflexes.json")));
+        com.dwinovo.numen.core.task.reflex.CoreReflexes.registerAll();
     }
 
     private static void registerTools() {

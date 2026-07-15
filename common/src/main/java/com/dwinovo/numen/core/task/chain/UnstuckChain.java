@@ -26,7 +26,7 @@ import net.minecraft.world.phys.Vec3;
  * position sampling, so with the gate off nothing is recorded and the chain is a
  * strict no-op.
  */
-public final class UnstuckChain implements TaskChain {
+public final class UnstuckChain implements TaskChain, com.dwinovo.numen.core.task.reflex.Reflex {
 
     /** Rolling window length (ticks) and the disc radius (blocks) that counts as "not moving". */
     private static final int WINDOW = 40;
@@ -41,6 +41,9 @@ public final class UnstuckChain implements TaskChain {
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(id())) {
+            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+        }
         // Poll: feed the rolling window every tick (whoever holds the body this tick
         // set its locomotion inputs, so this reflects real attempted movement).
         Vec3 pos = companion.position();
@@ -77,6 +80,18 @@ public final class UnstuckChain implements TaskChain {
     @Override
     public String name() {
         return "unstuck";
+    }
+
+    // ---- Reflex roster paperwork (constitution §6) ----
+
+    @Override
+    public String id() {
+        return name();
+    }
+
+    @Override
+    public String describe() {
+        return "被地形卡住时会自己挣脱出来";
     }
 
     /** Face the chosen heading, push forward, and hop periodically to clear a lip/step. */
