@@ -13,8 +13,9 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * Autonomous auto-eat survival chain. Polls the vanilla {@code FoodData} each tick;
- * when the body is hungry (or hurt and not full) AND is carrying something edible,
- * it spikes above the LLM task, holds the most nourishing food, and drives a native
+ * when the body is hungry (or hurt and not full) AND is carrying something edible
+ * that {@link FoodPolicy} allows the chain to pick on its own, it spikes above the
+ * LLM task, holds the most nourishing acceptable food, and drives a native
  * held-use eat — mirroring {@code EatCompanionTask} (the body's own {@code aiStep}
  * finishes the chew, applying hunger / saturation / consume-effects) — then drops
  * back to dormant once fed or out of food.
@@ -103,25 +104,46 @@ public final class FoodChain implements TaskChain {
     }
 
     /**
-     * Slot of the most nourishing edible in the whole inventory (highest
-     * {@link FoodProperties#nutrition}), or -1 if the body carries nothing edible.
-     * "Edible" is the native consumable test ({@link DataComponents#FOOD} present),
-     * matching {@code EatCompanionTask} — covers food, modded consumables, milk.
+     * Slot of the most nourishing ACCEPTABLE edible in the whole inventory
+     * (highest {@link FoodProperties#nutrition}), or -1 if nothing acceptable is
+     * carried. "Edible" is the native consumable test ({@link DataComponents#FOOD}
+     * present), matching {@code EatCompanionTask} — covers food, modded
+     * consumables, milk. On top of that, {@link FoodPolicy} filters what the chain
+     * may pick on its own: hard-excluded items never, likely-harmful foods only
+     * when the body is starving and carries nothing better.
+     *
+     * <p>One scan buckets every edible into the two tiers; {@link #getPriority}
+     * and {@link #tick} both call this single method, so "priority says there is
+     * food" and "tick picks a slot" can never disagree.
      */
     private static int bestEdibleSlot(NumenPlayer companion) {
         Inventory inv = companion.getInventory();
-        int best = -1;
-        int bestNutrition = -1;
+        int bestRegular = -1;
+        int bestRegularNutrition = -1;
+        int bestFamine = -1;
+        int bestFamineNutrition = -1;
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack stack = inv.getItem(i);
             if (stack.isEmpty()) continue;
             FoodProperties food = stack.get(DataComponents.FOOD);
             if (food == null) continue;
-            if (food.nutrition() > bestNutrition) {
-                bestNutrition = food.nutrition();
-                best = i;
+            switch (FoodPolicy.classify(stack.getItem(), food)) {
+                case NEVER -> { /* excluded unconditionally */ }
+                case FAMINE_ONLY -> {
+                    if (food.nutrition() > bestFamineNutrition) {
+                        bestFamineNutrition = food.nutrition();
+                        bestFamine = i;
+                    }
+                }
+                case REGULAR -> {
+                    if (food.nutrition() > bestRegularNutrition) {
+                        bestRegularNutrition = food.nutrition();
+                        bestRegular = i;
+                    }
+                }
             }
         }
-        return best;
+        boolean famine = FoodPolicy.famineUnlocked(companion.getFoodData().getFoodLevel());
+        return FoodPolicy.resolveSlot(bestRegular, bestFamine, famine);
     }
 }
