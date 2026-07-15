@@ -28,7 +28,7 @@ class VoiceLibraryTest {
     }
 
     private static VoiceLibrary.Entry openai(VoiceLibrary lib, String name) {
-        return lib.create(name, "openai", "https://api.siliconflow.cn", "sk-test",
+        return lib.create(name, "openai", "https://api.siliconflow.cn", "sk-test", "",
                 "CosyVoice2", "CosyVoice2:alex", "", "", "", 1.0f);
     }
 
@@ -54,7 +54,7 @@ class VoiceLibraryTest {
     @Test
     void sovitsFieldsRoundTrip() {
         VoiceLibrary lib = fresh();
-        VoiceLibrary.Entry e = lib.create("派蒙", "gpt_sovits", "http://127.0.0.1:9880", "",
+        VoiceLibrary.Entry e = lib.create("派蒙", "gpt_sovits", "http://127.0.0.1:9880", "", "",
                 "", "", "D:/voices/ref.wav", "参考音频文本", "zh", 1.2f);
         VoiceLibrary.Entry r = fresh().get(e.id());
         assertTrue(r.isSovits());
@@ -65,10 +65,30 @@ class VoiceLibraryTest {
     }
 
     @Test
+    void minimaxAndFishFieldsRoundTrip() {
+        VoiceLibrary lib = fresh();
+        VoiceLibrary.Entry mm = lib.create("MM", "minimax", "https://api.minimax.io", "eyJtest",
+                "1234567890", "speech-02-turbo", "male-qn-qingse", "", "", "", 1.0f);
+        VoiceLibrary.Entry fish = lib.create("Fish", "fish_audio", "https://api.fish.audio", "fk-test",
+                "", "s1", "802e3bc2b27e49c2995d23ef70e6ac89", "", "", "", 1.0f);
+
+        VoiceLibrary reloaded = fresh();
+        VoiceLibrary.Entry m = reloaded.get(mm.id());
+        assertTrue(m.isMiniMax());
+        assertEquals("1234567890", m.groupId());
+        assertEquals("male-qn-qingse", m.voice());
+        VoiceLibrary.Entry f = reloaded.get(fish.id());
+        assertTrue(f.isFishAudio());
+        assertEquals("802e3bc2b27e49c2995d23ef70e6ac89", f.voice());
+        assertEquals("s1", f.model());
+        assertEquals("", f.groupId());   // 未填 group_id 不落盘,读回空串
+    }
+
+    @Test
     void updateReplacesInPlace() {
         VoiceLibrary lib = fresh();
         VoiceLibrary.Entry e = openai(lib, "旧名");
-        lib.update(new VoiceLibrary.Entry(e.id(), "新名", "openai", e.url(), e.apiKey(),
+        lib.update(new VoiceLibrary.Entry(e.id(), "新名", "openai", e.url(), e.apiKey(), "",
                 "NewModel", e.voice(), "", "", "", 0.5f));
         VoiceLibrary.Entry r = fresh().get(e.id());
         assertEquals("新名", r.name());
@@ -80,7 +100,7 @@ class VoiceLibraryTest {
     @Test
     void updateUnknownIdIsNoop() {
         VoiceLibrary lib = fresh();
-        lib.update(new VoiceLibrary.Entry("ghost", "x", "openai", "", "", "", "", "", "", "", 1f));
+        lib.update(new VoiceLibrary.Entry("ghost", "x", "openai", "", "", "", "", "", "", "", "", 1f));
         assertTrue(lib.list().isEmpty());
     }
 
@@ -98,7 +118,7 @@ class VoiceLibraryTest {
     @Test
     void volumeIsClampedOnCreateAndLoad() {
         VoiceLibrary lib = fresh();
-        VoiceLibrary.Entry e = lib.create("loud", "openai", "", "", "", "", "", "", "", 9.0f);
+        VoiceLibrary.Entry e = lib.create("loud", "openai", "", "", "", "", "", "", "", "", 9.0f);
         assertEquals(2.0f, e.volume());
         assertEquals(2.0f, fresh().get(e.id()).volume());
         assertEquals(0f, VoiceLibrary.clampVolume(-3f));

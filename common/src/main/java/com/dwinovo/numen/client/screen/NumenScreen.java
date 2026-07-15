@@ -141,11 +141,12 @@ public final class NumenScreen extends Screen {
     private boolean addingVoice;
     private String voiceEditId;
     private String voiceDeletePending;
-    /** Form backend type: false = OpenAI-compatible, true = GPT-SoVITS (toggle swaps the field rows). */
-    private boolean voiceSovits;
-    private String wVoiceName = "", wVoiceUrl = "", wVoiceKey = "", wVoiceModel = "",
+    /** Form backend type (openai / gpt_sovits / minimax / fish_audio),经下拉选择,切换即换字段行。 */
+    private String wVoiceBackend = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
+    private Dropdown voiceBackendDropdown;
+    private String wVoiceName = "", wVoiceUrl = "", wVoiceKey = "", wVoiceGroup = "", wVoiceModel = "",
             wVoiceVoice = "", wVoiceRef = "", wVoicePrompt = "", wVoiceLang = "", wVoiceVolume = "1.0";
-    private EditBox voiceNameInput, voiceUrlInput, voiceKeyInput, voiceModelInput,
+    private EditBox voiceNameInput, voiceUrlInput, voiceKeyInput, voiceGroupInput, voiceModelInput,
             voiceVoiceInput, voiceRefInput, voicePromptInput, voiceLangInput, voiceVolumeInput;
     /** 当前同伴的声线绑定下拉(列表视图顶部);"__none__" = 静音。 */
     private Dropdown voiceBindDropdown;
@@ -324,9 +325,10 @@ public final class NumenScreen extends Screen {
         provNameInput = provModelInput = provKeyInput = provBaseUrlInput = null;
         provProviderDropdown = null;
         provModelDropdown = null;
-        voiceNameInput = voiceUrlInput = voiceKeyInput = voiceModelInput = null;
+        voiceNameInput = voiceUrlInput = voiceKeyInput = voiceGroupInput = voiceModelInput = null;
         voiceVoiceInput = voiceRefInput = voicePromptInput = voiceLangInput = voiceVolumeInput = null;
         voiceBindDropdown = null;
+        voiceBackendDropdown = null;
         proxyIpInput = proxyPortInput = null;
         modelDropdown = null;
         summonInput = null;
@@ -776,30 +778,55 @@ public final class NumenScreen extends Screen {
     }
 
     /**
-     * 声线表单:名称 → 类型切换(OpenAI 兼容 / GPT-SoVITS,切换即换后面三行字段)→
-     * URL → (key/model/voice 或 refAudio/promptText/textLang) → 音量 + 试听。
-     * 字段标签以占位符形式画在空字段里(七行 + 保存行,标签行放不下)。
+     * 声线表单:名称 → 后端下拉(OpenAI 兼容 / GPT-SoVITS / MiniMax / Fish Audio,
+     * 切换即随选型刷新后面的字段行,typed 值经 preserve 存活)→ URL →
+     * 各后端的专属字段 → 音量 + 试听。字段标签以占位符形式画在空字段里
+     * (最多八行 + 保存行,标签行放不下)。
      */
     private void buildVoiceForm() {
         int x = secX(), w = secW();
         int fy = secY0();
         voiceNameInput = field(x, fy, w, 48, wVoiceName);
-        add(new SimpleButton(x, fy + VOICE_SP, w, 18,
-                Component.translatable(voiceSovits ? ModLanguageData.Keys.VOICE_BACKEND_SOVITS
-                        : ModLanguageData.Keys.VOICE_BACKEND_OPENAI),
-                b -> { preserveVoiceForm(); voiceSovits = !voiceSovits; rebuild(); }));
+        // 后端下拉——召唤页人设/模型下拉同款控件;点击路由在 mouseClicked,
+        // 展开列表在 render 末尾最后画(压在字段上面)。
+        voiceBackendDropdown = new Dropdown(List.of(
+                new Dropdown.Item(com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI,
+                        I18n.get(ModLanguageData.Keys.VOICE_BACKEND_OPENAI)),
+                new Dropdown.Item(com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS,
+                        I18n.get(ModLanguageData.Keys.VOICE_BACKEND_SOVITS)),
+                new Dropdown.Item(com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX,
+                        I18n.get(ModLanguageData.Keys.VOICE_BACKEND_MINIMAX)),
+                new Dropdown.Item(com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH,
+                        I18n.get(ModLanguageData.Keys.VOICE_BACKEND_FISH))),
+                wVoiceBackend);
+        voiceBackendDropdown.setBounds(x, fy + VOICE_SP, w, 18);
         voiceUrlInput = field(x, fy + 2 * VOICE_SP, w, 256, wVoiceUrl);
-        if (voiceSovits) {
-            voiceRefInput = field(x, fy + 3 * VOICE_SP, w, 256, wVoiceRef);
-            voicePromptInput = field(x, fy + 4 * VOICE_SP, w, 512, wVoicePrompt);
-            voiceLangInput = field(x, fy + 5 * VOICE_SP, w, 16, wVoiceLang);
-        } else {
-            voiceKeyInput = field(x, fy + 3 * VOICE_SP, w, 256, wVoiceKey);
-            voiceModelInput = field(x, fy + 4 * VOICE_SP, w, 128, wVoiceModel);
-            voiceVoiceInput = field(x, fy + 5 * VOICE_SP, w, 128, wVoiceVoice);
+        int row = 3;
+        switch (wVoiceBackend) {
+            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS -> {
+                voiceRefInput = field(x, fy + row++ * VOICE_SP, w, 256, wVoiceRef);
+                voicePromptInput = field(x, fy + row++ * VOICE_SP, w, 512, wVoicePrompt);
+                voiceLangInput = field(x, fy + row++ * VOICE_SP, w, 16, wVoiceLang);
+            }
+            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX -> {
+                voiceKeyInput = field(x, fy + row++ * VOICE_SP, w, 1024, wVoiceKey);
+                voiceGroupInput = field(x, fy + row++ * VOICE_SP, w, 64, wVoiceGroup);
+                voiceModelInput = field(x, fy + row++ * VOICE_SP, w, 64, wVoiceModel);
+                voiceVoiceInput = field(x, fy + row++ * VOICE_SP, w, 128, wVoiceVoice);
+            }
+            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH -> {
+                voiceKeyInput = field(x, fy + row++ * VOICE_SP, w, 256, wVoiceKey);
+                voiceVoiceInput = field(x, fy + row++ * VOICE_SP, w, 128, wVoiceVoice);
+                voiceModelInput = field(x, fy + row++ * VOICE_SP, w, 64, wVoiceModel);
+            }
+            default -> {
+                voiceKeyInput = field(x, fy + row++ * VOICE_SP, w, 256, wVoiceKey);
+                voiceModelInput = field(x, fy + row++ * VOICE_SP, w, 128, wVoiceModel);
+                voiceVoiceInput = field(x, fy + row++ * VOICE_SP, w, 128, wVoiceVoice);
+            }
         }
-        voiceVolumeInput = field(x, fy + 6 * VOICE_SP, 70, 8, wVoiceVolume);
-        add(new SimpleButton(x + w - 64, fy + 6 * VOICE_SP, 64, 18,
+        voiceVolumeInput = field(x, fy + row * VOICE_SP, 70, 8, wVoiceVolume);
+        add(new SimpleButton(x + w - 64, fy + row * VOICE_SP, 64, 18,
                 Component.translatable(ModLanguageData.Keys.VOICE_TEST), b -> onVoiceTest()));
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveVoice()));
@@ -824,11 +851,12 @@ public final class NumenScreen extends Screen {
                 b -> { voiceDeletePending = null; rebuild(); }));
     }
 
-    /** Keep typed values across a rebuild (type toggle / edit entry). */
+    /** Keep typed values across a rebuild (backend switch / edit entry). */
     private void preserveVoiceForm() {
         if (voiceNameInput != null) wVoiceName = voiceNameInput.getValue();
         if (voiceUrlInput != null) wVoiceUrl = voiceUrlInput.getValue();
         if (voiceKeyInput != null) wVoiceKey = voiceKeyInput.getValue();
+        if (voiceGroupInput != null) wVoiceGroup = voiceGroupInput.getValue();
         if (voiceModelInput != null) wVoiceModel = voiceModelInput.getValue();
         if (voiceVoiceInput != null) wVoiceVoice = voiceVoiceInput.getValue();
         if (voiceRefInput != null) wVoiceRef = voiceRefInput.getValue();
@@ -838,8 +866,8 @@ public final class NumenScreen extends Screen {
     }
 
     private void resetVoiceForm() {
-        voiceSovits = false;
-        wVoiceName = ""; wVoiceUrl = ""; wVoiceKey = ""; wVoiceModel = "";
+        wVoiceBackend = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
+        wVoiceName = ""; wVoiceUrl = ""; wVoiceKey = ""; wVoiceGroup = ""; wVoiceModel = "";
         wVoiceVoice = ""; wVoiceRef = ""; wVoicePrompt = ""; wVoiceLang = "";
         wVoiceVolume = "1.0";
         voiceMsg = null;
@@ -851,8 +879,9 @@ public final class NumenScreen extends Screen {
         try { vol = Float.parseFloat(wVoiceVolume.trim()); }
         catch (NumberFormatException ex) { vol = 1.0f; }
         return new com.dwinovo.numen.client.voice.VoiceLibrary.Entry(id, name,
-                voiceSovits ? "gpt_sovits" : "openai",
-                wVoiceUrl.trim(), wVoiceKey.trim(), wVoiceModel.trim(), wVoiceVoice.trim(),
+                wVoiceBackend,
+                wVoiceUrl.trim(), wVoiceKey.trim(), wVoiceGroup.trim(),
+                wVoiceModel.trim(), wVoiceVoice.trim(),
                 wVoiceRef.trim(), wVoicePrompt.trim(), wVoiceLang.trim(),
                 com.dwinovo.numen.client.voice.VoiceLibrary.clampVolume(vol));
     }
@@ -869,7 +898,7 @@ public final class NumenScreen extends Screen {
             lib.update(formVoiceEntry(voiceEditId, name));
         } else {
             var e = formVoiceEntry("", name);
-            lib.create(name, e.backend(), e.url(), e.apiKey(), e.model(), e.voice(),
+            lib.create(name, e.backend(), e.url(), e.apiKey(), e.groupId(), e.model(), e.voice(),
                     e.refAudio(), e.promptText(), e.textLang(), e.volume());
         }
         addingVoice = false;
@@ -970,8 +999,12 @@ public final class NumenScreen extends Screen {
             var e = list.get(i);
             int delX = x + w - 12, editX = x + w - 26;
             txt(g, Component.literal(e.name()), x, ry + 1, TXT);
-            String meta = (e.isSovits() ? "gpt-sovits · " + (nb(e.refAudio()) ? e.refAudio() : "?")
-                    : "openai · " + (nb(e.model()) ? e.model() : "?"))
+            String detail;
+            if (e.isSovits()) detail = nb(e.refAudio()) ? e.refAudio() : "?";
+            else if (e.isMiniMax()) detail = nb(e.voice()) ? e.voice() : "?";
+            else if (e.isFishAudio()) detail = nb(e.voice()) ? e.voice() : "?";
+            else detail = nb(e.model()) ? e.model() : "?";
+            String meta = (nb(e.backend()) ? e.backend() : "openai") + " · " + detail
                     + " · vol " + e.volume();
             txt(g, Component.literal(clip(meta, w - 30)), x, ry + 11, TXT_FAINT);
             txt(g, Component.literal("✎"), editX, ry + 6,
@@ -1015,10 +1048,11 @@ public final class NumenScreen extends Screen {
     private void beginEditVoice(com.dwinovo.numen.client.voice.VoiceLibrary.Entry e) {
         addingVoice = true;
         voiceEditId = e.id();
-        voiceSovits = e.isSovits();
+        wVoiceBackend = normalizeVoiceBackend(e.backend());
         wVoiceName = nv(e.name());
         wVoiceUrl = nv(e.url());
         wVoiceKey = nv(e.apiKey());
+        wVoiceGroup = nv(e.groupId());
         wVoiceModel = nv(e.model());
         wVoiceVoice = nv(e.voice());
         wVoiceRef = nv(e.refAudio());
@@ -1031,6 +1065,17 @@ public final class NumenScreen extends Screen {
 
     private static String nv(String s) {
         return s == null ? "" : s;
+    }
+
+    /** 存储里的 backend 串归一到下拉的四个已知 id(未知/留空按 openai)。 */
+    private static String normalizeVoiceBackend(String backend) {
+        String b = backend == null ? "" : backend.toLowerCase(java.util.Locale.ROOT).strip();
+        return switch (b) {
+            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS,
+                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX,
+                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH -> b;
+            default -> com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
+        };
     }
 
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
@@ -2108,6 +2153,20 @@ public final class NumenScreen extends Screen {
                         .assign(uuid, VOICE_NONE.equals(sel) ? null : sel);
                 return true;
             }
+            // 声线表单的后端下拉:选型变了就随之刷新字段区(typed 值经 preserve 存活)。
+            if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
+                    && addingVoice && voiceBackendDropdown != null) {
+                String before = voiceBackendDropdown.selectedId();
+                if (voiceBackendDropdown.mouseClicked(mouseX, mouseY)) {
+                    String sel = voiceBackendDropdown.selectedId();
+                    if (!sel.equals(before)) {
+                        preserveVoiceForm();
+                        wVoiceBackend = sel;
+                        rebuild();
+                    }
+                    return true;
+                }
+            }
             if (tab == Tab.SETTINGS && settingsClickedAt(mouseX, mouseY)) return true;
             int my = (int) mouseY;
             if (my >= top && my < top + HEADER_H) {
@@ -2250,22 +2309,38 @@ public final class NumenScreen extends Screen {
             placeholder(g, proxyIpInput, "127.0.0.1");
             placeholder(g, proxyPortInput, "7890");
         }
-        // 声线表单:标签以占位符形式画在空字段里(七行放不下独立标签行)。
+        // 声线表单:标签以占位符形式画在空字段里(行数多,放不下独立标签行)。
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE && addingVoice) {
             placeholder(g, voiceNameInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_NAME));
-            placeholder(g, voiceUrlInput, voiceSovits ? "http://127.0.0.1:9880" : "https://api.siliconflow.cn");
-            placeholder(g, voiceKeyInput, "sk-…");
-            placeholder(g, voiceModelInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_MODEL));
-            placeholder(g, voiceVoiceInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_VOICE));
+            placeholder(g, voiceUrlInput, switch (wVoiceBackend) {
+                case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS -> "http://127.0.0.1:9880";
+                case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX -> "https://api.minimax.io";
+                case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH -> "https://api.fish.audio";
+                default -> "https://api.siliconflow.cn";
+            });
+            placeholder(g, voiceKeyInput, "sk-… / eyJ…");
+            placeholder(g, voiceGroupInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_GROUP));
+            boolean fish = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH.equals(wVoiceBackend);
+            boolean minimax = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX.equals(wVoiceBackend);
+            placeholder(g, voiceModelInput, fish ? I18n.get(ModLanguageData.Keys.VOICE_FORM_FISH_MODEL)
+                    : minimax ? "speech-02-turbo"
+                    : I18n.get(ModLanguageData.Keys.VOICE_FORM_MODEL));
+            placeholder(g, voiceVoiceInput, fish ? I18n.get(ModLanguageData.Keys.VOICE_FORM_REFERENCE)
+                    : minimax ? "voice_id,如 male-qn-qingse"
+                    : I18n.get(ModLanguageData.Keys.VOICE_FORM_VOICE));
             placeholder(g, voiceRefInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_REF));
             placeholder(g, voicePromptInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_PROMPT));
             placeholder(g, voiceLangInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_LANG));
             placeholder(g, voiceVolumeInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_VOLUME));
         }
-        // 声线绑定下拉最后画(展开的列表要压在条目行上面)。
+        // 声线的下拉最后画(展开的列表要压在条目行/字段上面)。
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
                 && voiceBindDropdown != null) {
             voiceBindDropdown.render(g, font, mouseX, mouseY);
+        }
+        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
+                && addingVoice && voiceBackendDropdown != null) {
+            voiceBackendDropdown.render(g, font, mouseX, mouseY);
         }
         // The model-config form's open dropdown lists must sit above the fields.
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.PROVIDER && addingProvider) {

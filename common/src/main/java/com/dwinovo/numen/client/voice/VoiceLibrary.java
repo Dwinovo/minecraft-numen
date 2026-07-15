@@ -43,26 +43,53 @@ import java.util.UUID;
  * }</pre>
  *
  * <ul>
- *   <li>{@code backend} — {@code "openai"}(OpenAI /v1/audio/speech 协议,含硅基流动等)
- *       或 {@code "gpt_sovits"}(api_v2 的 /tts);</li>
+ *   <li>{@code backend} — {@code "openai"}(OpenAI /v1/audio/speech 协议,含硅基流动等)、
+ *       {@code "gpt_sovits"}(api_v2 的 /tts)、{@code "minimax"}(t2a_v2,字段:
+ *       url/api_key/group_id 可选/model/voice=voice_id)或 {@code "fish_audio"}
+ *       (v1/tts,字段:url/api_key/voice=reference_id/model=可选模型头);</li>
  *   <li>{@code volume} — 0.0–2.0,缺省 1.0(&gt;1 扩大可听半径,响度上限仍是 1)。</li>
  * </ul>
  */
 public final class VoiceLibrary {
 
-    /** 一条命名声线配置。允许不完整——只有名字是必填;参数错误在第一次合成时以日志报错。 */
+    /** 四种后端的标识串(存储与表单下拉共用)。未知值按 openai 兜底。 */
+    public static final String BACKEND_OPENAI = "openai";
+    public static final String BACKEND_SOVITS = "gpt_sovits";
+    public static final String BACKEND_MINIMAX = "minimax";
+    public static final String BACKEND_FISH = "fish_audio";
+
+    /**
+     * 一条命名声线配置。允许不完整——只有名字是必填;参数错误在第一次合成时以日志报错。
+     * 字段按后端复用:{@code voice} 在 openai 是音色 id、在 minimax 是 voice_id、
+     * 在 fish_audio 是 reference_id;{@code groupId} 仅 minimax 用(旧版接入的
+     * 查询参数,可空);{@code refAudio/promptText/textLang} 仅 gpt_sovits 用。
+     */
     public record Entry(String id, String name, String backend, String url, String apiKey,
-                        String model, String voice, String refAudio, String promptText,
-                        String textLang, float volume) {
+                        String groupId, String model, String voice, String refAudio,
+                        String promptText, String textLang, float volume) {
 
         public boolean isSovits() {
-            return "gpt_sovits".equalsIgnoreCase(backend);
+            return BACKEND_SOVITS.equalsIgnoreCase(backend);
+        }
+
+        public boolean isMiniMax() {
+            return BACKEND_MINIMAX.equalsIgnoreCase(backend);
+        }
+
+        public boolean isFishAudio() {
+            return BACKEND_FISH.equalsIgnoreCase(backend);
         }
 
         /** 据 backend 字段实例化对应 TTS 实现。 */
         public TtsBackend createBackend() {
             if (isSovits()) {
                 return new GptSovitsTts(url, refAudio, promptText, textLang);
+            }
+            if (isMiniMax()) {
+                return new MiniMaxTts(url, apiKey, groupId, model, voice);
+            }
+            if (isFishAudio()) {
+                return new FishAudioTts(url, apiKey, voice, model);
             }
             return new OpenAiCompatibleTts(url, apiKey, model, voice);
         }
@@ -115,11 +142,11 @@ public final class VoiceLibrary {
     }
 
     /** 新建声线——只有名字必填,其余可空;持久化并返回。 */
-    public Entry create(String name, String backend, String url, String apiKey,
+    public Entry create(String name, String backend, String url, String apiKey, String groupId,
                         String model, String voice, String refAudio, String promptText,
                         String textLang, float volume) {
         String id = "voice_" + Long.toHexString(System.currentTimeMillis()) + "_" + entries.size();
-        Entry e = new Entry(id, name, backend, url, apiKey, model, voice,
+        Entry e = new Entry(id, name, backend, url, apiKey, groupId, model, voice,
                 refAudio, promptText, textLang, clampVolume(volume));
         entries.put(id, e);
         save();
@@ -129,7 +156,7 @@ public final class VoiceLibrary {
     public void update(Entry e) {
         if (e == null || !entries.containsKey(e.id())) return;
         entries.put(e.id(), new Entry(e.id(), e.name(), e.backend(), e.url(), e.apiKey(),
-                e.model(), e.voice(), e.refAudio(), e.promptText(), e.textLang(),
+                e.groupId(), e.model(), e.voice(), e.refAudio(), e.promptText(), e.textLang(),
                 clampVolume(e.volume())));
         save();
     }
@@ -200,7 +227,8 @@ public final class VoiceLibrary {
                     if (!el.isJsonObject()) continue;
                     JsonObject o = el.getAsJsonObject();
                     Entry e = new Entry(str(o, "id"), str(o, "name"), str(o, "backend"),
-                            str(o, "url"), str(o, "api_key"), str(o, "model"), str(o, "voice"),
+                            str(o, "url"), str(o, "api_key"), str(o, "group_id"),
+                            str(o, "model"), str(o, "voice"),
                             str(o, "ref_audio"), str(o, "prompt_text"), str(o, "text_lang"),
                             clampVolume(o.has("volume") ? o.get("volume").getAsFloat() : 1.0f));
                     if (e.id() != null && !e.id().isBlank()) entries.put(e.id(), e);
@@ -231,6 +259,7 @@ public final class VoiceLibrary {
             if (nb(e.backend())) o.addProperty("backend", e.backend());
             if (nb(e.url())) o.addProperty("url", e.url());
             if (nb(e.apiKey())) o.addProperty("api_key", e.apiKey());
+            if (nb(e.groupId())) o.addProperty("group_id", e.groupId());
             if (nb(e.model())) o.addProperty("model", e.model());
             if (nb(e.voice())) o.addProperty("voice", e.voice());
             if (nb(e.refAudio())) o.addProperty("ref_audio", e.refAudio());
