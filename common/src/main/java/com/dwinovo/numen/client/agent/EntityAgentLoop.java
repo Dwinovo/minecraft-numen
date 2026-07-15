@@ -138,6 +138,16 @@ public final class EntityAgentLoop {
     private final List<String> bufferedPrompts = new ArrayList<>();
 
     /**
+     * World/body facts ({@code <event>} XML) awaiting the same protocol-valid
+     * splice point — a SEPARATE bucket from {@link #bufferedPrompts} because an
+     * owner interrupt clears superseded <em>instructions</em>, never <em>facts</em>:
+     * a death or body-log event must survive the Stop button and reach the next
+     * turn (the model's right to know what its body did). Flushed together with
+     * the prompts, events first.
+     */
+    private final List<String> pendingEvents = new ArrayList<>();
+
+    /**
      * This companion's persona (per-companion, dynamic). Sourced from the last {@code persona-change}
      * event in the log on restore, mutated live by {@link #setPersona}. Null/blank → falls back to the
      * global {@code getSystemPrompt} default. Read fresh every turn in {@link #composeSystemPrompt}.
@@ -303,7 +313,9 @@ public final class EntityAgentLoop {
     /** Snapshot of prompts (GUI or {@code NumenGateway}) still waiting for the
      *  next protocol-valid splice point — the GUI renders these as pending. */
     public List<String> queuedPrompts() {
-        return List.copyOf(bufferedPrompts);
+        List<String> all = new ArrayList<>(pendingEvents);
+        all.addAll(bufferedPrompts);
+        return List.copyOf(all);
     }
 
     /** Owner typed a prompt in the chat GUI. */
@@ -425,7 +437,7 @@ public final class EntityAgentLoop {
 
     /** Owner prompts are queued, waiting to flush into the conversation. */
     public boolean hasQueuedPrompts() {
-        return !bufferedPrompts.isEmpty();
+        return !bufferedPrompts.isEmpty() || !pendingEvents.isEmpty();
     }
 
     /** There is something an interrupt would act on — drives the Stop button's enabled state. */
@@ -497,11 +509,14 @@ public final class EntityAgentLoop {
             Constants.LOG.info("[numen-entity#{}] interrupted by owner (awaitingLlm={}, cancelledTools={}, queued={})",
                     entityUuid, wasAwaitingLlm, cancelled.size(), bufferedPrompts.size());
         } else if (!bufferedPrompts.isEmpty()) {
-            // Priority 2: idle — drop the held queue.
+            // Priority 2: idle — drop the held PROMPT queue only. Pending events are
+            // facts, not superseded instructions: they stay and ride the next turn
+            // (a death narrative wiped here left the model answering "啥情况" without
+            // knowing it had died — the exact hole this split closes).
             int dropped = bufferedPrompts.size();
             bufferedPrompts.clear();
-            Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued prompt(s)",
-                    entityUuid, dropped);
+            Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued prompt(s) ({} event(s) kept)",
+                    entityUuid, dropped, pendingEvents.size());
         }
     }
 
@@ -560,6 +575,7 @@ public final class EntityAgentLoop {
         awaitingLlmResponse = false;
         compacting = false;
         bufferedPrompts.clear();
+        pendingEvents.clear();
         dead = true;
         Constants.LOG.info("[numen-entity#{}] body died ({}) — loop frozen ({} call(s) in flight)",
                 entityUuid, cause, deathInterruptedCalls.size());
@@ -619,7 +635,7 @@ public final class EntityAgentLoop {
      */
     public void injectEvent(String xml, boolean urgent) {
         if (dead) return;
-        bufferedPrompts.add(xml);
+        pendingEvents.add(xml);
         Constants.LOG.info("[numen-entity#{}] event queued{}: {}",
                 entityUuid, urgent ? " (urgent)" : "", truncate(xml, 120));
         if (urgent) {
@@ -721,8 +737,11 @@ public final class EntityAgentLoop {
      * messages that some backends reject.
      */
     private void flushBufferedPrompts() {
-        if (bufferedPrompts.isEmpty()) return;
-        String merged = String.join("\n", bufferedPrompts);
+        if (bufferedPrompts.isEmpty() && pendingEvents.isEmpty()) return;
+        List<String> parts = new ArrayList<>(pendingEvents);
+        parts.addAll(bufferedPrompts);
+        String merged = String.join("\n", parts);
+        pendingEvents.clear();
         bufferedPrompts.clear();
         convo.addUser(merged);
         // A fresh owner directive starts a new tool-chain: restart the turn
@@ -869,7 +888,7 @@ public final class EntityAgentLoop {
                     entityUuid, compactFailures, MAX_COMPACT_FAILURES,
                     err != null ? unwrap(err) : "empty summary");
             // The conversation is untouched — the next turn just runs uncompacted.
-            if (auto || !bufferedPrompts.isEmpty()) tryStartTurn();
+            if (auto || hasQueuedPrompts()) tryStartTurn();
             return;
         }
 
@@ -913,7 +932,7 @@ public final class EntityAgentLoop {
         // Auto-compaction interrupted a turn that was about to dispatch —
         // resume it so the task chain continues on the compacted history. After
         // a MANUAL compact we stay idle unless prompts queued up meanwhile.
-        if (auto || !bufferedPrompts.isEmpty()) tryStartTurn();
+        if (auto || hasQueuedPrompts()) tryStartTurn();
     }
 
     /**
@@ -1049,7 +1068,7 @@ public final class EntityAgentLoop {
      * as before (the next prompt or event resumes).
      */
     private void failTurnKeepQueue() {
-        if (bufferedPrompts.isEmpty()) {
+        if (bufferedPrompts.isEmpty() && pendingEvents.isEmpty()) {
             aborted = true;
             return;
         }
@@ -1141,7 +1160,7 @@ public final class EntityAgentLoop {
             convo.resetTurnCount();
             // A prompt that arrived during this final turn was buffered; now that
             // the chain has settled, start a fresh turn to answer it.
-            if (!bufferedPrompts.isEmpty()) tryStartTurn();
+            if (hasQueuedPrompts()) tryStartTurn();
             return;
         }
 
