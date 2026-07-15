@@ -181,6 +181,12 @@ public final class Companions {
      * Push an async world {@code <event>} to the companion's brain (it runs on the owner's client).
      * {@code urgent} wakes an idle brain to react now; otherwise it rides along on the next owner turn.
      * No-op if the owner is offline (no client to receive it).
+     *
+     * <p><b>Discipline</b> (mind-model constitution §4): core-domain body narrative NEVER calls this
+     * method directly — everything the body does on its own reports into the core's BodyLog, whose
+     * idle rail is the only core producer of ambient events (and always passes {@code urgent=false}).
+     * {@code urgent} is reserved for EXTERNAL interaction-style consumers (bridge mods, proactive
+     * companionship features) that deliberately spend an LLM wake on the owner's behalf.
      */
     public static void emitEvent(NumenPlayer body, String xml, boolean urgent) {
         ServerPlayer owner = body.resolveOwnerPlayer();
