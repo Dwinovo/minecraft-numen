@@ -24,7 +24,10 @@ import java.util.concurrent.CompletableFuture;
 @Mixin(SoundEngine.class)
 public class MixinSoundEngine {
 
-    @Redirect(method = "play",
+    // require = 0:NeoForge 的补丁把这处取数换成了 SoundInstance.getStream 官方钩子,
+    // vanilla 形状的 INVOKE 在其运行时不存在——注入不上时静默放行(该侧走各自的
+    // 平台实现),不许把整个游戏拉下水。
+    @Redirect(method = "play", require = 0,
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/sounds/SoundBufferLibrary;getStream(Lnet/minecraft/resources/ResourceLocation;Z)Ljava/util/concurrent/CompletableFuture;"))
     private CompletableFuture<AudioStream> numen$voicePcmStream(SoundBufferLibrary library,
