@@ -25,6 +25,9 @@ import java.util.concurrent.CompletableFuture;
 public final class MiniMaxTts implements TtsBackend {
 
     private static final String T2A_SUFFIX = "/v1/t2a_v2";
+    /** 官方端点(大陆主站)——URL 留空即用它,表单选型时也预填它;
+     *  国际站账号手动改成 https://api.minimax.io(两站的 key 不通用)。 */
+    public static final String DEFAULT_BASE = "https://api.minimaxi.com";
     /** model 留空时的缺省(官方当前的低时延档)。 */
     static final String DEFAULT_MODEL = "speech-02-turbo";
 
@@ -40,9 +43,10 @@ public final class MiniMaxTts implements TtsBackend {
         this.voiceId = voiceId == null ? "" : voiceId;
     }
 
-    /** 宽容拼 URL:补默认 scheme,去尾斜杠,没带 /t2a_v2 就补 /v1/t2a_v2;groupId 非空拼成查询参数。 */
+    /** 宽容拼 URL:留空用官方端点,补默认 scheme,去尾斜杠,没带 /t2a_v2 就补 /v1/t2a_v2;groupId 非空拼成查询参数。 */
     static String composeUrl(String base, String groupId) {
         String b = VoiceHttp.ensureScheme(base);
+        if (b.isEmpty()) b = DEFAULT_BASE;
         if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         if (!b.endsWith("/t2a_v2")) b = b + T2A_SUFFIX;
         String g = groupId == null ? "" : groupId.strip();

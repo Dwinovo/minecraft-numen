@@ -31,9 +31,14 @@ public final class OpenAiCompatibleTts implements TtsBackend {
         this.voice = voice == null ? "" : voice;
     }
 
-    /** 宽容拼 URL：补默认 scheme；去尾斜杠；已带 /audio/speech 直接用；带 /v1 只补后半;否则补 /v1/audio/speech。 */
+    /** 缺省端点(硅基流动,国内直连、有免费 TTS 模型)——"OpenAI 兼容"没有唯一官方,
+     *  这里选一个开箱能用的;接别家(OpenAI 本尊等)手动改 URL 即可。 */
+    public static final String DEFAULT_BASE = "https://api.siliconflow.cn";
+
+    /** 宽容拼 URL：留空用缺省端点；补默认 scheme；去尾斜杠；已带 /audio/speech 直接用；带 /v1 只补后半;否则补 /v1/audio/speech。 */
     static String composeUrl(String base) {
         String b = VoiceHttp.ensureScheme(base);
+        if (b.isEmpty()) b = DEFAULT_BASE;
         if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         if (b.endsWith(SPEECH_SUFFIX)) return b;
         if (b.endsWith("/v1")) return b + SPEECH_SUFFIX;

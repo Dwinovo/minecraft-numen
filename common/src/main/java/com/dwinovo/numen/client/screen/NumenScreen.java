@@ -867,10 +867,25 @@ public final class NumenScreen extends Screen {
 
     private void resetVoiceForm() {
         wVoiceBackend = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
-        wVoiceName = ""; wVoiceUrl = ""; wVoiceKey = ""; wVoiceGroup = ""; wVoiceModel = "";
+        wVoiceName = ""; wVoiceKey = ""; wVoiceGroup = ""; wVoiceModel = "";
         wVoiceVoice = ""; wVoiceRef = ""; wVoicePrompt = ""; wVoiceLang = "";
+        wVoiceUrl = defaultVoiceUrl(wVoiceBackend);   // 官方端点预填,用户只补 key/音色
         wVoiceVolume = "1.0";
         voiceMsg = null;
+    }
+
+    /** 各后端的官方端点,选型即预填(后端 composeUrl 对空 URL 也回落到同一个值,
+     *  所以删空保存照样能用)。 */
+    private static String defaultVoiceUrl(String backend) {
+        return switch (backend) {
+            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS ->
+                    com.dwinovo.numen.client.voice.GptSovitsTts.DEFAULT_BASE;
+            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX ->
+                    com.dwinovo.numen.client.voice.MiniMaxTts.DEFAULT_BASE;
+            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH ->
+                    com.dwinovo.numen.client.voice.FishAudioTts.DEFAULT_BASE;
+            default -> com.dwinovo.numen.client.voice.OpenAiCompatibleTts.DEFAULT_BASE;
+        };
     }
 
     /** 当前表单(w 值)拼成一个 Entry;id 由调用方给(编辑=原 id,试听=临时)。 */
@@ -2170,6 +2185,11 @@ public final class NumenScreen extends Screen {
                     if (!sel.equals(before)) {
                         preserveVoiceForm();
                         wVoiceBackend = sel;
+                        // URL 跟着选型换成新后端的官方端点——但只覆盖"空或还是旧默认"
+                        // 的值,用户手改过的自定义地址不动。
+                        if (wVoiceUrl.isBlank() || wVoiceUrl.equals(defaultVoiceUrl(before))) {
+                            wVoiceUrl = defaultVoiceUrl(sel);
+                        }
                         rebuild();
                     }
                     return true;
@@ -2320,21 +2340,19 @@ public final class NumenScreen extends Screen {
         // 声线表单:标签以占位符形式画在空字段里(行数多,放不下独立标签行)。
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE && addingVoice) {
             placeholder(g, voiceNameInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_NAME));
-            placeholder(g, voiceUrlInput, switch (wVoiceBackend) {
-                case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS -> "http://127.0.0.1:9880";
-                case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX -> "https://api.minimax.io";
-                case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH -> "https://api.fish.audio";
-                default -> "https://api.siliconflow.cn";
-            });
-            placeholder(g, voiceKeyInput, "sk-… / eyJ…");
-            placeholder(g, voiceGroupInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_GROUP));
+            // URL 通常已被选型预填;这个占位只在用户清空后可见,值与预填一致。
+            placeholder(g, voiceUrlInput, defaultVoiceUrl(wVoiceBackend));
             boolean fish = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH.equals(wVoiceBackend);
             boolean minimax = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX.equals(wVoiceBackend);
+            placeholder(g, voiceKeyInput, fish ? I18n.get(ModLanguageData.Keys.VOICE_FORM_KEY_FISH)
+                    : minimax ? I18n.get(ModLanguageData.Keys.VOICE_FORM_KEY_MINIMAX)
+                    : I18n.get(ModLanguageData.Keys.VOICE_FORM_KEY_OPENAI));
+            placeholder(g, voiceGroupInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_GROUP));
             placeholder(g, voiceModelInput, fish ? I18n.get(ModLanguageData.Keys.VOICE_FORM_FISH_MODEL)
-                    : minimax ? "speech-02-turbo"
+                    : minimax ? I18n.get(ModLanguageData.Keys.VOICE_FORM_MINIMAX_MODEL)
                     : I18n.get(ModLanguageData.Keys.VOICE_FORM_MODEL));
             placeholder(g, voiceVoiceInput, fish ? I18n.get(ModLanguageData.Keys.VOICE_FORM_REFERENCE)
-                    : minimax ? "voice_id,如 male-qn-qingse"
+                    : minimax ? I18n.get(ModLanguageData.Keys.VOICE_FORM_MINIMAX_VOICE)
                     : I18n.get(ModLanguageData.Keys.VOICE_FORM_VOICE));
             placeholder(g, voiceRefInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_REF));
             placeholder(g, voicePromptInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_PROMPT));

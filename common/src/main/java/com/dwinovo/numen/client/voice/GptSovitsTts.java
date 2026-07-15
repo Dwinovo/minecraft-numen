@@ -32,9 +32,13 @@ public final class GptSovitsTts implements TtsBackend {
         this.textLang = (textLang == null || textLang.isBlank()) ? "zh" : textLang;
     }
 
-    /** 补默认 scheme(127.x 补 http),去尾斜杠,没带 /tts 就补上（默认服务是 http://127.0.0.1:9880）。 */
+    /** api_v2 服务的默认监听地址——URL 留空即用它,表单选型时也预填它。 */
+    public static final String DEFAULT_BASE = "http://127.0.0.1:9880";
+
+    /** 留空用默认本机地址,补默认 scheme(127.x 补 http),去尾斜杠,没带 /tts 就补上。 */
     static String composeUrl(String base) {
         String b = VoiceHttp.ensureScheme(base);
+        if (b.isEmpty()) b = DEFAULT_BASE;
         if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         if (b.endsWith("/tts")) return b;
         return b + "/tts";

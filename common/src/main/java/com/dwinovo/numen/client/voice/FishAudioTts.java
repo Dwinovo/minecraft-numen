@@ -19,6 +19,8 @@ import java.util.concurrent.CompletableFuture;
 public final class FishAudioTts implements TtsBackend {
 
     private static final String TTS_SUFFIX = "/v1/tts";
+    /** 官方端点——URL 留空即用它,表单选型时也预填它(用户只需要填 key 和声线)。 */
+    public static final String DEFAULT_BASE = "https://api.fish.audio";
 
     private final String url;
     private final String apiKey;
@@ -28,13 +30,30 @@ public final class FishAudioTts implements TtsBackend {
     public FishAudioTts(String baseUrl, String apiKey, String referenceId, String model) {
         this.url = composeUrl(baseUrl);
         this.apiKey = apiKey == null ? "" : apiKey;
-        this.referenceId = referenceId == null ? "" : referenceId.strip();
+        this.referenceId = normalizeReferenceId(referenceId);
         this.model = model == null ? "" : model.strip();
     }
 
-    /** 宽容拼 URL:补默认 scheme,去尾斜杠,没带 /tts 就补 /v1/tts。 */
+    /** 宽容取 reference_id:填纯 ID 或直接粘贴声线页网址(fish.audio/m/&lt;id&gt;)都行——
+     *  API 只认 ID(官方文档:reference_id = "Voice model ID from Fish Audio library"),
+     *  网址形态就抠出 /m/ 后那一段。 */
+    static String normalizeReferenceId(String raw) {
+        String r = raw == null ? "" : raw.strip();
+        int m = r.indexOf("/m/");
+        if (m >= 0) {
+            r = r.substring(m + 3);
+            for (char cut : new char[]{'/', '?', '#'}) {
+                int i = r.indexOf(cut);
+                if (i >= 0) r = r.substring(0, i);
+            }
+        }
+        return r;
+    }
+
+    /** 宽容拼 URL:留空用官方端点,补默认 scheme,去尾斜杠,没带 /tts 就补 /v1/tts。 */
     static String composeUrl(String base) {
         String b = VoiceHttp.ensureScheme(base);
+        if (b.isEmpty()) b = DEFAULT_BASE;
         if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         if (b.endsWith("/tts")) return b;
         return b + TTS_SUFFIX;
