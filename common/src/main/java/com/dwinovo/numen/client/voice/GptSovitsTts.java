@@ -2,7 +2,6 @@ package com.dwinovo.numen.client.voice;
 
 import com.google.gson.JsonObject;
 
-import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -33,9 +32,9 @@ public final class GptSovitsTts implements TtsBackend {
         this.textLang = (textLang == null || textLang.isBlank()) ? "zh" : textLang;
     }
 
-    /** 去尾斜杠,没带 /tts 就补上（默认服务是 http://127.0.0.1:9880）。 */
+    /** 补默认 scheme(127.x 补 http),去尾斜杠,没带 /tts 就补上（默认服务是 http://127.0.0.1:9880）。 */
     static String composeUrl(String base) {
-        String b = base == null ? "" : base.strip();
+        String b = VoiceHttp.ensureScheme(base);
         if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         if (b.endsWith("/tts")) return b;
         return b + "/tts";
@@ -54,12 +53,17 @@ public final class GptSovitsTts implements TtsBackend {
         body.addProperty("media_type", "wav");
         body.addProperty("streaming_mode", false);
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(VoiceHttp.REQUEST_TIMEOUT)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
-                .build();
+        HttpRequest request;
+        try {
+            request = HttpRequest.newBuilder()
+                    .uri(VoiceHttp.uriOf(url))
+                    .timeout(VoiceHttp.REQUEST_TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
+                    .build();
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedFuture(e);   // 坏配置走异步失败通道,绝不同步炸
+        }
 
         return VoiceHttp.CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
                 .thenApply(resp -> {

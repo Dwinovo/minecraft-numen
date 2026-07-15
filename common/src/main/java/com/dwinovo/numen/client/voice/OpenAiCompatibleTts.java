@@ -2,7 +2,6 @@ package com.dwinovo.numen.client.voice;
 
 import com.google.gson.JsonObject;
 
-import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -32,9 +31,9 @@ public final class OpenAiCompatibleTts implements TtsBackend {
         this.voice = voice == null ? "" : voice;
     }
 
-    /** 宽容拼 URL：去尾斜杠；已带 /audio/speech 直接用；带 /v1 只补后半;否则补 /v1/audio/speech。 */
+    /** 宽容拼 URL：补默认 scheme；去尾斜杠；已带 /audio/speech 直接用；带 /v1 只补后半;否则补 /v1/audio/speech。 */
     static String composeUrl(String base) {
-        String b = base == null ? "" : base.strip();
+        String b = VoiceHttp.ensureScheme(base);
         if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         if (b.endsWith(SPEECH_SUFFIX)) return b;
         if (b.endsWith("/v1")) return b + SPEECH_SUFFIX;
@@ -49,13 +48,18 @@ public final class OpenAiCompatibleTts implements TtsBackend {
         body.addProperty("voice", voice);
         body.addProperty("response_format", "wav");
 
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(VoiceHttp.REQUEST_TIMEOUT)
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
-                .build();
+        HttpRequest request;
+        try {
+            request = HttpRequest.newBuilder()
+                    .uri(VoiceHttp.uriOf(url))
+                    .timeout(VoiceHttp.REQUEST_TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
+                    .build();
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedFuture(e);   // 坏配置走异步失败通道,绝不同步炸
+        }
 
         return VoiceHttp.CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
                 .thenApply(resp -> {

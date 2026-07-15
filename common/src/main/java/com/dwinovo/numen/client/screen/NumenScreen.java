@@ -917,11 +917,19 @@ public final class NumenScreen extends Screen {
     private void onVoiceTest() {
         preserveVoiceForm();
         var probe = formVoiceEntry("__preview__", wVoiceName.isBlank() ? "preview" : wVoiceName.trim());
-        var backend = probe.createBackend();
         voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_RUNNING), false);
         final int gen = ++voiceTestGen;
         final float vol = probe.volume();
-        backend.synthesize(VOICE_TEST_SENTENCE).whenComplete((wav, err) -> {
+        // 同步防线:后端构建/合成同步抛(坏 URL 曾直接崩掉渲染线程)也只落到状态行。
+        java.util.concurrent.CompletableFuture<byte[]> synth;
+        try {
+            synth = probe.createBackend().synthesize(VOICE_TEST_SENTENCE);
+        } catch (Exception ex) {
+            String why = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
+            voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_FAIL, clip(why, secW() - 10)), true);
+            return;
+        }
+        synth.whenComplete((wav, err) -> {
             com.dwinovo.numen.client.voice.PcmAudio decoded = null;
             Throwable failure = err;
             if (err == null) {

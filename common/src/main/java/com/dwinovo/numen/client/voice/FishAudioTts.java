@@ -2,7 +2,6 @@ package com.dwinovo.numen.client.voice;
 
 import com.google.gson.JsonObject;
 
-import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -33,9 +32,9 @@ public final class FishAudioTts implements TtsBackend {
         this.model = model == null ? "" : model.strip();
     }
 
-    /** 宽容拼 URL:去尾斜杠,没带 /tts 就补 /v1/tts。 */
+    /** 宽容拼 URL:补默认 scheme,去尾斜杠,没带 /tts 就补 /v1/tts。 */
     static String composeUrl(String base) {
-        String b = base == null ? "" : base.strip();
+        String b = VoiceHttp.ensureScheme(base);
         if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         if (b.endsWith("/tts")) return b;
         return b + TTS_SUFFIX;
@@ -54,18 +53,25 @@ public final class FishAudioTts implements TtsBackend {
 
     @Override
     public CompletableFuture<byte[]> synthesize(String text) {
-        HttpRequest.Builder b = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(VoiceHttp.REQUEST_TIMEOUT)
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey);
-        if (!model.isEmpty()) {
-            b.header("model", model);   // 合成模型经请求头选择,留空用服务端默认
+        HttpRequest request;
+        try {
+            HttpRequest.Builder b = HttpRequest.newBuilder()
+                    .uri(VoiceHttp.uriOf(url))
+                    .timeout(VoiceHttp.REQUEST_TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey);
+            if (!model.isEmpty()) {
+                b.header("model", model);   // 合成模型经请求头选择,留空用服务端默认
+            }
+            request = b
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            buildBody(text, referenceId).toString(), StandardCharsets.UTF_8))
+                    .build();
+        } catch (RuntimeException e) {
+            // 配置烂(空/坏 URL、非法头)只能走异步失败通道——同步抛会把调用线程
+            // (渲染线程/管线)整个带走,试音按钮曾因此崩游戏。
+            return CompletableFuture.failedFuture(e);
         }
-        HttpRequest request = b
-                .POST(HttpRequest.BodyPublishers.ofString(
-                        buildBody(text, referenceId).toString(), StandardCharsets.UTF_8))
-                .build();
 
         return VoiceHttp.CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
                 .thenApply(resp -> {

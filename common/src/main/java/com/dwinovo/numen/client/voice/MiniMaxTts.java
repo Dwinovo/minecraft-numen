@@ -3,7 +3,6 @@ package com.dwinovo.numen.client.voice;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
-import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -41,9 +40,9 @@ public final class MiniMaxTts implements TtsBackend {
         this.voiceId = voiceId == null ? "" : voiceId;
     }
 
-    /** 宽容拼 URL:去尾斜杠,没带 /t2a_v2 就补 /v1/t2a_v2;groupId 非空拼成查询参数。 */
+    /** 宽容拼 URL:补默认 scheme,去尾斜杠,没带 /t2a_v2 就补 /v1/t2a_v2;groupId 非空拼成查询参数。 */
     static String composeUrl(String base, String groupId) {
-        String b = base == null ? "" : base.strip();
+        String b = VoiceHttp.ensureScheme(base);
         if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
         if (!b.endsWith("/t2a_v2")) b = b + T2A_SUFFIX;
         String g = groupId == null ? "" : groupId.strip();
@@ -111,14 +110,19 @@ public final class MiniMaxTts implements TtsBackend {
 
     @Override
     public CompletableFuture<byte[]> synthesize(String text) {
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(VoiceHttp.REQUEST_TIMEOUT)
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer " + apiKey)
-                .POST(HttpRequest.BodyPublishers.ofString(
-                        buildBody(model, voiceId, text).toString(), StandardCharsets.UTF_8))
-                .build();
+        HttpRequest request;
+        try {
+            request = HttpRequest.newBuilder()
+                    .uri(VoiceHttp.uriOf(url))
+                    .timeout(VoiceHttp.REQUEST_TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                            buildBody(model, voiceId, text).toString(), StandardCharsets.UTF_8))
+                    .build();
+        } catch (RuntimeException e) {
+            return CompletableFuture.failedFuture(e);   // 坏配置走异步失败通道,绝不同步炸
+        }
 
         return VoiceHttp.CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .thenApply(resp -> {
