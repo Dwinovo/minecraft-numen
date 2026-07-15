@@ -63,12 +63,16 @@ public final class CompanionTickDispatcher {
         if (brain != null) brain.dropActiveNoResult(player);   // event must not leak a brain
     }
 
-    /** Owner pressed Stop: cancel the pending queue and the running task (finalized next tick). */
+    /** Owner pressed Stop: cancel the pending queue and the running task (finalized next tick).
+     *  The 取消边沿 also releases the task-scoped MAINHAND intent pin immediately —
+     *  the explicit-hold session dies with the task it served (constitution §5). */
     public static void cancelFor(NumenPlayer player) {
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late cancel
         if (brain == null) return;                             // packet must not leak a brain
         brain.queue.cancelAll("interrupted by owner");
         brain.llm.cancelActive();
+        com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(player)
+                .unpin(com.dwinovo.numen.core.task.pin.IntentPins.SLOT_MAINHAND);
     }
 
     /**

@@ -29,6 +29,16 @@ import java.util.List;
  */
 final class CompanionBrain {
 
+    /**
+     * Grace window before the MAINHAND intent pin auto-releases once the LLM
+     * chain runs out of work (the 任务结束 edge, constitution §5 / point 11).
+     * Debounced instead of a bare edge because the client dispatches tool calls
+     * strictly serially — between two calls of one turn the chain is idle for
+     * however long the model thinks; 30s comfortably outlives that gap while
+     * still clearing a stale hand pin soon after the job truly ends.
+     */
+    private static final int HAND_PIN_GRACE_TICKS = 600;
+
     final TaskQueue queue = new TaskQueue();
     /** The body's narrative outlet: busy → rides the next tool result (D1 tail),
      *  idle → immediate non-urgent ambient event (C2). See {@link BodyLog}. */
@@ -45,6 +55,10 @@ final class CompanionBrain {
 
     /** Last tick's winner, so we can fire {@code onInterrupt} exactly on the switching edge. */
     private TaskChain running;
+
+    /** Task-idle edge for the hand pin (pure counter; see {@link #HAND_PIN_GRACE_TICKS}). */
+    private final com.dwinovo.numen.core.task.pin.HandPinRelease handPinRelease =
+            new com.dwinovo.numen.core.task.pin.HandPinRelease(HAND_PIN_GRACE_TICKS);
 
     CompanionBrain() {
         // The method reference defers the llm read to call time, so construction
@@ -82,6 +96,16 @@ final class CompanionBrain {
 
     void tick(NumenPlayer companion) {
         body = companion;
+
+        // 任务结束边沿 (constitution §5): the LLM chain has stayed workless past the
+        // grace window — the explicit-hold session is over, the hand goes back to
+        // the reflexes. Armor pins are untouched (their life is §5's four natural
+        // endpoints); only MAINHAND is task-scoped.
+        if (handPinRelease.tick(llm.hasWork())) {
+            com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(companion)
+                    .unpin(com.dwinovo.numen.core.task.pin.IntentPins.SLOT_MAINHAND);
+        }
+
         TaskChain best = ChainScheduler.select(chains, companion);
 
         if (best == null) {
@@ -128,6 +152,9 @@ final class CompanionBrain {
      */
     void dropActiveNoResult(NumenPlayer companion) {
         body = companion;
+        // Death ends the task session — the task-scoped hand pin goes with it.
+        com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(companion)
+                .unpin(com.dwinovo.numen.core.task.pin.IntentPins.SLOT_MAINHAND);
         llm.dropActiveNoResult();
     }
 }

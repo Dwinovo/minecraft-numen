@@ -30,14 +30,21 @@ public final class EquipItemTool extends ServerNumenTool {
                 + "the item the way a player does, so armor and accessories route to the correct slot on "
                 + "their own. Omit slot for that auto-routing; set it only to force a hand or a specific "
                 + "vanilla armor piece. Whatever was equipped before is stowed back. Fails if the item "
-                + "isn't in your inventory.";
+                + "isn't in your inventory. Equipping explicitly also PINS that slot: your reflexes "
+                + "(auto armor upgrade, auto tool swap, the near-breaking tool guard) will not touch a "
+                + "pinned slot while the pinned item stays there; the pin ends when the item breaks or "
+                + "leaves the slot. To release a pin yourself, call this tool with item_id \"auto\" and "
+                + "the slot — nothing is equipped, the reflexes just take that slot back.";
     }
 
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object()
-                .string("item_id", "Namespaced id of the item to equip; must be in the inventory.")
-                .optionalEnum("slot", "Optional target slot; omit to auto-route by item type.",
+                .string("item_id", "Namespaced id of the item to equip; must be in the inventory. "
+                        + "The special value \"auto\" equips nothing and instead releases the given "
+                        + "slot's pin, handing the slot back to your reflexes (slot required).")
+                .optionalEnum("slot", "Optional target slot; omit to auto-route by item type. "
+                        + "Required when item_id is \"auto\".",
                         "mainhand", "offhand", "head", "chest", "legs", "feet")
                 .build();
     }

@@ -49,9 +49,22 @@ public final class InventoryTools {
 String item_id,
 String slot,
             ToolContext ctx) {
-        Item item = ToolArgs.parseItem(item_id);
         EquipmentSlot equipSlot = readSlot(slot);
 
+        // item_id="auto" = release that slot's intent pin (constitution §5 归还):
+        // no equip happens; the reflexes take the slot back. Needs an explicit
+        // slot — "auto" without one has nothing to release.
+        if ("auto".equalsIgnoreCase(item_id)) {
+            if (equipSlot == null) {
+                throw new IllegalArgumentException(
+                        "item_id \"auto\" releases a slot's keep-as-is pin, so the slot parameter is "
+                                + "required (e.g. slot=\"chest\"); the reflexes then manage that slot again");
+            }
+            return new EquipTaskRecord(ctx.toolCallId(), ctx.deadline(EQUIP_TIMEOUT_TICKS),
+                    null, equipSlot, "auto", true);
+        }
+
+        Item item = ToolArgs.parseItem(item_id);
         String label = BuiltInRegistries.ITEM.getKey(item).getPath();
         return new EquipTaskRecord(ctx.toolCallId(), ctx.deadline(EQUIP_TIMEOUT_TICKS), item, equipSlot, label);
     }
