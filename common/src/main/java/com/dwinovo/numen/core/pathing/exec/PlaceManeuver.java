@@ -24,13 +24,16 @@ import java.util.function.IntSupplier;
  * The live "edge sneak" block placement, shared by {@code place_block} and the
  * pathfinder's bridge / step scaffolding — placing physically, the way a careful
  * player does (a block is never teleport-popped in): HOLD SNEAK (so it can't walk
- * off the ledge), and every tick re-resolve ALL candidate support faces (four
- * sides, below, and the replaceable target itself) by real raycast from wherever
- * the body stands right now. The instant ANY face is in honest line of sight, the
- * eyes lock onto it and the press fires — the eyes do the searching, tick by tick;
- * the body only edges toward a face when none is visible yet. The press is never
- * trusted as the outcome: the world state is checked after every click, and a
- * vanilla refusal is recorded rather than swallowed.
+ * off the ledge), and each tick run the one-shot resolver
+ * ({@link Placement#resolveDetailed}) from wherever the body stands right now.
+ * A resolved hit → the eyes lock onto it and the press fires. A structured
+ * failure branches immediately: NO_SUPPORT and a persistent entity in the cell
+ * fail fast with the diagnosis (no timeout grind); an occluded / out-of-reach
+ * view keeps the body edging toward the nearest candidate face for the bounded
+ * window, and the final diagnosis (with the resolver's suggested stance, exposed
+ * via {@link #suggestedStance()}) rides the failure up to the task layer. The
+ * press is never trusted as the outcome: the world state is checked after every
+ * click, and a vanilla refusal is recorded rather than swallowed.
  *
  * <p>The block source ({@code slotFinder}) and the done-check ({@code placed})
  * are injected so the same maneuver serves a specific block ({@code place_block})
@@ -58,6 +61,10 @@ public final class PlaceManeuver {
     private static final Direction[] FACES = {
             Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN};
     private static final int LIMIT_TICKS = 60;
+    /** Ticks an entity may squat in the target cell before the maneuver surfaces the
+     *  BLOCKED_BY_ENTITY diagnosis — mobs wander through cells constantly, so a moment
+     *  of patience beats failing on a chicken mid-stride. */
+    private static final int ENTITY_GRACE_TICKS = 10;
 
     private final NumenPlayer player;
     private final BlockPos placeAt;
@@ -75,6 +82,11 @@ public final class PlaceManeuver {
      *  a body that can't clear the cell it must fill (boxed in) is a distinct, fast failure. */
     private int selfBlockedTicks;
     private static final int SELF_CLEAR_TICKS = 30;
+    /** Consecutive ticks the resolver reported an entity squatting in the target cell. */
+    private int entityBlockedTicks;
+    /** The resolver's last positional diagnosis (occluded / out of reach) — its message and
+     *  suggested stance ride the eventual timeout failure up to the task layer. */
+    private PlaceResolution lastDiag;
 
     /** Pathfinder / orientation-agnostic placement. */
     public PlaceManeuver(NumenPlayer player, BlockPos placeAt,
@@ -110,28 +122,58 @@ public final class PlaceManeuver {
             failType = FailureType.NO_MATERIAL;
             return Status.FAILED;
         }
-        // Physical impossibility check: no solid neighbour to place against AND nothing in
-        // the cell to click-replace — no stance change can create support, so fail structured.
-        if (!Placement.hasAnySupport(player.level(), placeAt)
-                && player.level().getBlockState(placeAt).isAir()) {
-            failReason = "can't place at " + placeAt.toShortString() + " — nothing solid beside or below "
-                    + "it to place against (it's over air). Pick a cell that touches solid ground.";
-            failType = FailureType.NO_SUPPORT;
-            return Status.FAILED;
-        }
-
-        player.setShiftKeyDown(true);   // sneak: never walk off the ledge while working
         // For a slab/stair `half` hint, bias the click height up (top) or down (bottom)
         // so the placement lands on that half.
         Double aimY = (hints.topHalf() != null)
                 ? placeAt.getY() + (hints.topHalf() ? 0.72 : 0.28)
                 : null;
 
-        // Re-resolve EVERY candidate face fresh each tick, by real raycast from where the
-        // body stands right now — whichever face is genuinely in line of sight wins this
-        // tick. Never fabricate a hit: no face in view means keep edging, or time out.
-        BlockHitResult hit = Placement.resolve(player, placeAt, true, aimY);
-        if (hit != null) {
+        // One-shot resolution from where the body stands right now: a verified hit, or
+        // the structured reason none exists. Never fabricate a hit: no resolved hit means
+        // fail fast (unfixable causes), keep edging (positional causes), or time out.
+        PlaceResolution res = Placement.resolveDetailed(player, placeAt, true, aimY);
+        if (!res.ok()) {
+            switch (res.reason()) {
+                case NO_SUPPORT -> {
+                    // No stance change can create support — fail structured, zero ticks wasted.
+                    failReason = res.message();
+                    failType = FailureType.NO_SUPPORT;
+                    return Status.FAILED;
+                }
+                case BLOCKED_BY_ENTITY -> {
+                    // An entity squats in the cell: every press is doomed while it stays.
+                    // Hold position through a short grace (mobs wander), then surface the
+                    // diagnosis instead of grinding the timeout into a misleading "occluded".
+                    player.setShiftKeyDown(true);
+                    InputDriver.halt(player);
+                    if (++entityBlockedTicks >= ENTITY_GRACE_TICKS) {
+                        failReason = res.message();
+                        failType = FailureType.ENTITY_BLOCKED;
+                        Constants.LOG.info("[numen-path] place gave up at {} after {} ticks: {}",
+                                placeAt.toShortString(), ticks, failReason);
+                        return Status.FAILED;
+                    }
+                }
+                case NO_LINE_OF_SIGHT, OUT_OF_REACH -> {
+                    // Positional: edge (sneaking) toward the nearest candidate face so one
+                    // comes into view. The stance ladder above this maneuver is the real
+                    // "different angle" mechanism — the body never oscillates here.
+                    entityBlockedTicks = 0;
+                    lastDiag = res;
+                    player.setShiftKeyDown(true);   // sneak: never walk off the ledge while working
+                    Vec3 aim = shuffleAimPoint(aimY);
+                    if (aim != null) {
+                        edgeToward(aim);
+                    } else {
+                        InputDriver.halt(player);
+                    }
+                }
+            }
+        } else {
+            entityBlockedTicks = 0;
+            lastDiag = null;   // a face IS in view — an earlier positional diagnosis is stale
+            player.setShiftKeyDown(true);   // sneak: never walk off the ledge while working
+            BlockHitResult hit = res.hit();
             InputDriver.lookAt(player, hit.getLocation());
             if (player.getBoundingBox().intersects(new AABB(placeAt))) {
                 // Our own collision box is (partly) inside the cell being filled — a placed
@@ -181,31 +223,39 @@ public final class PlaceManeuver {
                     }
                 }
             }
-        } else {
-            // No face in sight yet: edge (sneaking) toward the nearest candidate face so one
-            // comes into view. The stance ladder above this maneuver is the real "different
-            // angle" mechanism — the body never oscillates here.
-            Vec3 aim = shuffleAimPoint(aimY);
-            if (aim != null) {
-                edgeToward(aim);
-            } else {
-                InputDriver.halt(player);
-            }
         }
         if (++ticks > LIMIT_TICKS) {
-            failReason = lastRefusal != null
-                    ? "a support face at " + placeAt.toShortString() + " was in view but every press was "
+            // Precedence: a recorded vanilla refusal is the truest story; otherwise the
+            // resolver's last diagnosis (occluded / out of reach, LLM-readable); otherwise
+            // the generic no-line summary.
+            if (lastRefusal != null) {
+                failReason = "a support face at " + placeAt.toShortString() + " was in view but every press was "
                         + "refused (" + lastRefusal + ") — the cell itself may be obstructed (an entity, "
-                        + "or my own body standing in it)"
-                    : "couldn't get a clear line to a support face at " + placeAt.toShortString()
+                        + "or my own body standing in it)";
+                failType = FailureType.OCCLUDED;
+            } else if (lastDiag != null) {
+                failReason = lastDiag.message();
+                failType = lastDiag.reason() == PlaceResolution.Reason.OUT_OF_REACH
+                        ? FailureType.OUT_OF_REACH
+                        : FailureType.OCCLUDED;
+            } else {
+                failReason = "couldn't get a clear line to a support face at " + placeAt.toShortString()
                         + " — the view to it is blocked (a wall between, or the body is boxed in). Try a more "
                         + "open spot next to solid ground.";
-            failType = FailureType.OCCLUDED;
+                failType = FailureType.OCCLUDED;
+            }
             Constants.LOG.info("[numen-path] place gave up at {} after {} ticks: {}",
                     placeAt.toShortString(), ticks, failReason);
             return Status.FAILED;
         }
         return Status.RUNNING;
+    }
+
+    /** The resolver's suggested reposition (a standable spot from which the best support
+     *  face should be visible), from the last positional diagnosis — null when none. The
+     *  task layer's recovery ladder navigates here first instead of sampling blind stances. */
+    public Vec3 suggestedStance() {
+        return lastDiag == null ? null : lastDiag.suggestedStance();
     }
 
     /** Look at {@code p} and push toward it; sneak (held by the caller every tick) pins
@@ -223,7 +273,7 @@ public final class PlaceManeuver {
     private Vec3 shuffleAimPoint(Double aimY) {
         for (Direction dir : orderedFaces()) {
             BlockPos against = placeAt.relative(dir);
-            if (!Placement.canPlaceAgainst(player.level(), against)) continue;
+            if (!Placement.canPlaceAgainst(player.level(), against, dir.getOpposite())) continue;
             return new Vec3(
                     (placeAt.getX() + against.getX() + 1.0) * 0.5,
                     aimY != null ? aimY : (placeAt.getY() + against.getY() + 0.5) * 0.5,
