@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.core.task.chain.ArmorChain;
 import com.dwinovo.numen.core.task.chain.FoodChain;
 import com.dwinovo.numen.core.task.chain.MLGChain;
 import com.dwinovo.numen.core.task.chain.MobDefenseChain;
@@ -16,7 +17,7 @@ import java.util.List;
  * winner drives the body), then always drains completed LLM results.
  *
  * <p>Chain order (priority tie-break, highest-intent first): unstuck → mob-defense
- * → food → mlg → {@link LlmTaskChain}. In Stage 1 the four survival chains are
+ * → food → mlg → armor → {@link LlmTaskChain}. In Stage 1 the survival chains are
  * dormant stubs, so the LLM chain is the only one that ever wins — behavior is
  * identical to the pre-refactor single-task dispatcher. When survival chains go
  * live, a spike preempts the LLM task (its body is released via
@@ -37,6 +38,7 @@ final class CompanionBrain {
             new MobDefenseChain(journal),
             new FoodChain(journal),
             new MLGChain(journal),
+            new ArmorChain(journal),
             llm);
 
     /** Last tick's winner, so we can fire {@code onInterrupt} exactly on the switching edge. */

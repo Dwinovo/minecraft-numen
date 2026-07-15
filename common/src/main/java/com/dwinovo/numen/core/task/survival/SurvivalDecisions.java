@@ -16,7 +16,7 @@ import com.dwinovo.numen.core.task.TaskChain;
  * mob is next; hunger (a slow drain) next; being stuck (annoying, not lethal) is
  * the lowest survival concern and must never outrank fighting or eating. All sit
  * above the LLM base (0) so any firing survival concern preempts the task:
- * <pre>  MLG(10) &gt; mob-defense(5) &gt; food-regen(4) &gt; food-hunger(3) &gt; unstuck(2) &gt; llm(0)</pre>
+ * <pre>  MLG(10) &gt; mob-defense(5) &gt; food-regen(4) &gt; food-hunger(3) &gt; unstuck(2) &gt; armor(1) &gt; llm(0)</pre>
  */
 public final class SurvivalDecisions {
 
@@ -30,6 +30,16 @@ public final class SurvivalDecisions {
     public static final float FOOD_REGEN_PRIORITY = 4.0f;
     public static final float FOOD_HUNGER_PRIORITY = 3.0f;
     public static final float UNSTUCK_PRIORITY = 2.0f;
+    /**
+     * Opportunistic wardrobe upkeep (equip a better piece, shed one about to
+     * break). Deliberately BELOW {@link #UNSTUCK_PRIORITY}: better armor is never
+     * time-critical, so every genuine survival response — even freeing a merely
+     * wedged body — must win first; armor work fills the moments nothing else
+     * wants. It still sits above the LLM base so an idle body actually gears up,
+     * and since each wardrobe action is a single tick, its preemption of a running
+     * task is momentary.
+     */
+    public static final float ARMOR_PRIORITY = 1.0f;
 
     // ---- food thresholds (vanilla FoodData is 0..20) ----
     /** Natural regeneration needs food &ge; 18, so eating below this while hurt buys HP back. */
