@@ -51,5 +51,41 @@ final class VoiceHttp {
         return uri;
     }
 
+    /**
+     * HTTP 错误体 → 人话:响应是 JSON 时挖出 {@code message}/{@code msg}/{@code detail}/
+     * {@code error(.message)} 字段直接展示(如 Fish 402 的 "Insufficient API credit…"),
+     * 挖不到才退回截断的原文——表单红字放不下一坨 JSON。
+     */
+    static String humanHttpError(String provider, int status, String body) {
+        return provider + " HTTP " + status + ": " + extractMessage(body);
+    }
+
+    private static String extractMessage(String body) {
+        String raw = body == null ? "" : body.strip();
+        try {
+            var el = com.google.gson.JsonParser.parseString(raw);
+            if (el.isJsonObject()) {
+                var o = el.getAsJsonObject();
+                for (String k : new String[]{"message", "msg", "detail", "error_msg"}) {
+                    if (o.has(k) && o.get(k).isJsonPrimitive()) {
+                        return o.get(k).getAsString();
+                    }
+                }
+                if (o.has("error")) {
+                    var err = o.get("error");
+                    if (err.isJsonObject() && err.getAsJsonObject().has("message")) {
+                        return err.getAsJsonObject().get("message").getAsString();
+                    }
+                    if (err.isJsonPrimitive()) {
+                        return err.getAsString();
+                    }
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // 不是 JSON——用原文
+        }
+        return raw.length() > 300 ? raw.substring(0, 300) + "..." : raw;
+    }
+
     private VoiceHttp() {}
 }

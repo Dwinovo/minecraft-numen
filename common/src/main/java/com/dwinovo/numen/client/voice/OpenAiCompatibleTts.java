@@ -69,10 +69,8 @@ public final class OpenAiCompatibleTts implements TtsBackend {
         return VoiceHttp.CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray())
                 .thenApply(resp -> {
                     if (resp.statusCode() / 100 != 2) {
-                        String snippet = new String(resp.body(), StandardCharsets.UTF_8);
-                        if (snippet.length() > 300) snippet = snippet.substring(0, 300) + "...";
-                        throw new IllegalStateException(
-                                "TTS HTTP " + resp.statusCode() + ": " + snippet);
+                        throw new IllegalStateException(VoiceHttp.humanHttpError("TTS",
+                                resp.statusCode(), new String(resp.body(), StandardCharsets.UTF_8)));
                     }
                     return resp.body();
                 });

@@ -144,8 +144,10 @@ public final class NumenScreen extends Screen {
     /** Form backend type (openai / gpt_sovits / minimax / fish_audio),经下拉选择,切换即换字段行。 */
     private String wVoiceBackend = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
     private Dropdown voiceBackendDropdown;
+    /** 声线表单的垂直滚动偏移(px)——MiniMax 八行放不下,滚轮驱动。 */
+    private int voiceFormScroll;
     private String wVoiceName = "", wVoiceUrl = "", wVoiceKey = "", wVoiceGroup = "", wVoiceModel = "",
-            wVoiceVoice = "", wVoiceRef = "", wVoicePrompt = "", wVoiceLang = "", wVoiceVolume = "1.0";
+            wVoiceVoice = "", wVoiceRef = "", wVoicePrompt = "", wVoiceLang = "", wVoiceVolume = "5";
     private EditBox voiceNameInput, voiceUrlInput, voiceKeyInput, voiceGroupInput, voiceModelInput,
             voiceVoiceInput, voiceRefInput, voicePromptInput, voiceLangInput, voiceVolumeInput;
     /** 当前同伴的声线绑定下拉(列表视图顶部);"__none__" = 静音。 */
@@ -751,7 +753,6 @@ public final class NumenScreen extends Screen {
 
     /** Voice form row pitch — 7 field rows + the Save row must fit, so tighter than SET_SP
      *  (labels ride inside the fields as placeholders instead of taking their own rows). */
-    private static final int VOICE_SP = 22;
     /** 试听用的固定测试句(按当前表单参数就地合成)。 */
     private static final String VOICE_TEST_SENTENCE = "你好,我是你的同伴,这是我的声音。";
 
@@ -778,15 +779,15 @@ public final class NumenScreen extends Screen {
     }
 
     /**
-     * 声线表单:名称 → 后端下拉(OpenAI 兼容 / GPT-SoVITS / MiniMax / Fish Audio,
-     * 切换即随选型刷新后面的字段行,typed 值经 preserve 存活)→ URL →
-     * 各后端的专属字段 → 音量 + 试听。字段标签以占位符形式画在空字段里
-     * (最多八行 + 保存行,标签行放不下)。
+     * 声线表单:模型配置同款制式——每个输入框上方一行标题({@code SET_SP} 行距),
+     * 名称 → 提供商下拉 → URL(选型预填)→ 各后端专属字段 → 音量 + 试听。
+     * 行数随选型变化(MiniMax 最多 8 行),放不下的部分由 {@link #voiceFormScroll}
+     * 滚动(滚轮),出视口的行连标题带控件一起隐藏;保存/关闭钉在面板右下不随滚。
      */
     private void buildVoiceForm() {
         int x = secX(), w = secW();
-        int fy = secY0();
-        voiceNameInput = field(x, fy, w, 48, wVoiceName);
+        voiceFormScroll = Math.clamp(voiceFormScroll, 0, maxVoiceFormScroll());
+        voiceNameInput = vclip(field(x, voiceVy(0), w, 48, wVoiceName), 0);
         // 后端下拉——召唤页人设/模型下拉同款控件;点击路由在 mouseClicked,
         // 展开列表在 render 末尾最后画(压在字段上面)。
         voiceBackendDropdown = new Dropdown(List.of(
@@ -799,35 +800,38 @@ public final class NumenScreen extends Screen {
                 new Dropdown.Item(com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH,
                         I18n.get(ModLanguageData.Keys.VOICE_BACKEND_FISH))),
                 wVoiceBackend);
-        voiceBackendDropdown.setBounds(x, fy + VOICE_SP, w, 18);
-        voiceUrlInput = field(x, fy + 2 * VOICE_SP, w, 256, wVoiceUrl);
+        voiceBackendDropdown.setBounds(x, voiceVy(1), w, 18);
+        voiceUrlInput = vclip(field(x, voiceVy(2), w, 256, wVoiceUrl), 2);
         int row = 3;
         switch (wVoiceBackend) {
             case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS -> {
-                voiceRefInput = field(x, fy + row++ * VOICE_SP, w, 256, wVoiceRef);
-                voicePromptInput = field(x, fy + row++ * VOICE_SP, w, 512, wVoicePrompt);
-                voiceLangInput = field(x, fy + row++ * VOICE_SP, w, 16, wVoiceLang);
+                voiceRefInput = vclip(field(x, voiceVy(row), w, 256, wVoiceRef), row++);
+                voicePromptInput = vclip(field(x, voiceVy(row), w, 512, wVoicePrompt), row++);
+                voiceLangInput = vclip(field(x, voiceVy(row), w, 16, wVoiceLang), row++);
             }
             case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX -> {
-                voiceKeyInput = field(x, fy + row++ * VOICE_SP, w, 1024, wVoiceKey);
-                voiceGroupInput = field(x, fy + row++ * VOICE_SP, w, 64, wVoiceGroup);
-                voiceModelInput = field(x, fy + row++ * VOICE_SP, w, 64, wVoiceModel);
-                voiceVoiceInput = field(x, fy + row++ * VOICE_SP, w, 128, wVoiceVoice);
+                voiceKeyInput = vclip(field(x, voiceVy(row), w, 1024, wVoiceKey), row++);
+                voiceGroupInput = vclip(field(x, voiceVy(row), w, 64, wVoiceGroup), row++);
+                voiceModelInput = vclip(field(x, voiceVy(row), w, 64, wVoiceModel), row++);
+                voiceVoiceInput = vclip(field(x, voiceVy(row), w, 128, wVoiceVoice), row++);
             }
             case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH -> {
-                voiceKeyInput = field(x, fy + row++ * VOICE_SP, w, 256, wVoiceKey);
-                voiceVoiceInput = field(x, fy + row++ * VOICE_SP, w, 128, wVoiceVoice);
-                voiceModelInput = field(x, fy + row++ * VOICE_SP, w, 64, wVoiceModel);
+                voiceKeyInput = vclip(field(x, voiceVy(row), w, 256, wVoiceKey), row++);
+                voiceVoiceInput = vclip(field(x, voiceVy(row), w, 128, wVoiceVoice), row++);
+                voiceModelInput = vclip(field(x, voiceVy(row), w, 64, wVoiceModel), row++);
             }
             default -> {
-                voiceKeyInput = field(x, fy + row++ * VOICE_SP, w, 256, wVoiceKey);
-                voiceModelInput = field(x, fy + row++ * VOICE_SP, w, 128, wVoiceModel);
-                voiceVoiceInput = field(x, fy + row++ * VOICE_SP, w, 128, wVoiceVoice);
+                voiceKeyInput = vclip(field(x, voiceVy(row), w, 256, wVoiceKey), row++);
+                voiceModelInput = vclip(field(x, voiceVy(row), w, 128, wVoiceModel), row++);
+                voiceVoiceInput = vclip(field(x, voiceVy(row), w, 128, wVoiceVoice), row++);
             }
         }
-        voiceVolumeInput = field(x, fy + row * VOICE_SP, 70, 8, wVoiceVolume);
-        add(new SimpleButton(x + w - 64, fy + row * VOICE_SP, 64, 18,
-                Component.translatable(ModLanguageData.Keys.VOICE_TEST), b -> onVoiceTest()));
+        voiceVolumeInput = vclip(field(x, voiceVy(row), 70, 8, wVoiceVolume), row);
+        SimpleButton test = new SimpleButton(x + w - 64, voiceVy(row), 64, 18,
+                Component.translatable(ModLanguageData.Keys.VOICE_TEST), b -> onVoiceTest());
+        test.visible = voiceRowVisible(row);
+        test.active = test.visible;
+        add(test);
         add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveVoice()));
         add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
@@ -835,7 +839,43 @@ public final class NumenScreen extends Screen {
                     addingVoice = false; voiceEditId = null; voiceTestGen++;
                     rebuild();
                 }));
-        setInitialFocus(voiceNameInput);
+        if (voiceNameInput.visible) {
+            setInitialFocus(voiceNameInput);
+        }
+    }
+
+    /** 表单第 {@code row} 行输入框的 y(标题画在其上方 11px);随滚动偏移。 */
+    private int voiceVy(int row) {
+        return secY0() + 11 + row * SET_SP - voiceFormScroll;
+    }
+
+    /** 第 {@code row} 行(标题+输入框)完整落在视口内? */
+    private boolean voiceRowVisible(int row) {
+        int y = voiceVy(row);
+        return y - 11 >= secY0() - 2 && y + 18 <= voiceFormBottom();
+    }
+
+    /** 表单视口底:保存行与状态行的上沿。 */
+    private int voiceFormBottom() {
+        return top + PANEL_H - PAD - 20;
+    }
+
+    /** 当前选型的总行数:名称/提供商/URL 三行 + 各后端专属行 + 音量行。 */
+    private int voiceFormRowCount() {
+        return com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX.equals(wVoiceBackend) ? 8 : 7;
+    }
+
+    private int maxVoiceFormScroll() {
+        int content = 11 + (voiceFormRowCount() - 1) * SET_SP + 18 + 2;
+        return Math.max(0, content - (voiceFormBottom() - secY0()));
+    }
+
+    /** 出视口的行隐藏(不可见的 EditBox 既不渲染也不接输入)。 */
+    private EditBox vclip(EditBox f, int row) {
+        boolean vis = voiceRowVisible(row);
+        f.visible = vis;
+        f.active = vis;
+        return f;
     }
 
     private void buildVoiceDeleteConfirm() {
@@ -866,11 +906,12 @@ public final class NumenScreen extends Screen {
     }
 
     private void resetVoiceForm() {
+        voiceFormScroll = 0;
         wVoiceBackend = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
         wVoiceName = ""; wVoiceKey = ""; wVoiceGroup = ""; wVoiceModel = "";
         wVoiceVoice = ""; wVoiceRef = ""; wVoicePrompt = ""; wVoiceLang = "";
         wVoiceUrl = defaultVoiceUrl(wVoiceBackend);   // 官方端点预填,用户只补 key/音色
-        wVoiceVolume = "1.0";
+        wVoiceVolume = "5";
         voiceMsg = null;
     }
 
@@ -892,7 +933,9 @@ public final class NumenScreen extends Screen {
     private com.dwinovo.numen.client.voice.VoiceLibrary.Entry formVoiceEntry(String id, String name) {
         float vol;
         try { vol = Float.parseFloat(wVoiceVolume.trim()); }
-        catch (NumberFormatException ex) { vol = 1.0f; }
+        catch (NumberFormatException ex) { vol = 5.0f; }
+        // UI 档位 1~10 → 存储增益 0.2~2.0(5 档 = 原始响度 1.0,老数据无需迁移)。
+        vol = Math.clamp(vol, 1.0f, 10.0f) / 5.0f;
         return new com.dwinovo.numen.client.voice.VoiceLibrary.Entry(id, name,
                 wVoiceBackend,
                 wVoiceUrl.trim(), wVoiceKey.trim(), wVoiceGroup.trim(),
@@ -913,8 +956,13 @@ public final class NumenScreen extends Screen {
             lib.update(formVoiceEntry(voiceEditId, name));
         } else {
             var e = formVoiceEntry("", name);
-            lib.create(name, e.backend(), e.url(), e.apiKey(), e.groupId(), e.model(), e.voice(),
-                    e.refAudio(), e.promptText(), e.textLang(), e.volume());
+            var created = lib.create(name, e.backend(), e.url(), e.apiKey(), e.groupId(), e.model(),
+                    e.voice(), e.refAudio(), e.promptText(), e.textLang(), e.volume());
+            // 从某个同伴的设置页新建 → 直接绑给它:用户的心智模型是"建声线就是给
+            // 这只配音",绑定下拉只用于换绑/多同伴共用一条声线。
+            if (uuid != null) {
+                lib.assign(uuid, created.id());
+            }
         }
         addingVoice = false;
         voiceEditId = null;
@@ -1035,7 +1083,7 @@ public final class NumenScreen extends Screen {
             else if (e.isFishAudio()) detail = nb(e.voice()) ? e.voice() : "?";
             else detail = nb(e.model()) ? e.model() : "?";
             String meta = (nb(e.backend()) ? e.backend() : "openai") + " · " + detail
-                    + " · vol " + e.volume();
+                    + " · vol " + Math.round(e.volume() * 5.0f);
             txt(g, Component.literal(clip(meta, w - 30)), x, ry + 11, TXT_FAINT);
             txt(g, Component.literal("✎"), editX, ry + 6,
                     overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
@@ -1077,6 +1125,7 @@ public final class NumenScreen extends Screen {
 
     private void beginEditVoice(com.dwinovo.numen.client.voice.VoiceLibrary.Entry e) {
         addingVoice = true;
+        voiceFormScroll = 0;
         voiceEditId = e.id();
         wVoiceBackend = normalizeVoiceBackend(e.backend());
         wVoiceName = nv(e.name());
@@ -1088,7 +1137,8 @@ public final class NumenScreen extends Screen {
         wVoiceRef = nv(e.refAudio());
         wVoicePrompt = nv(e.promptText());
         wVoiceLang = nv(e.textLang());
-        wVoiceVolume = String.valueOf(e.volume());
+        // 存储的是增益(0.2~2.0),表单显示 1~10 档。
+        wVoiceVolume = String.valueOf(Math.round(Math.clamp(e.volume(), 0.2f, 2.0f) * 5.0f));
         voiceMsg = null;
         rebuild();
     }
@@ -1389,9 +1439,16 @@ public final class NumenScreen extends Screen {
 
     /** Shadowless placeholder for an empty, unfocused field — the EditBox's own hint renders with a shadow. */
     private void placeholder(GuiGraphics g, EditBox f, String text) {
-        if (f != null && f.getValue().isEmpty() && !f.isFocused() && text != null && !text.isEmpty()) {
+        if (f != null && f.visible && f.getValue().isEmpty() && !f.isFocused()
+                && text != null && !text.isEmpty()) {
             txt(g, Component.literal(text), f.getX(), f.getY(), TXT_FAINT);
         }
+    }
+
+    /** 声线表单的行标题:画在该行输入框上方(随滚动偏移,出视口不画)。 */
+    private void voiceLabel(GuiGraphics g, int row, String text) {
+        if (!voiceRowVisible(row)) return;
+        txt(g, Component.literal(text), secX(), voiceVy(row) - 11, TXT_MUTED);
     }
 
     private EditBox field(int x, int y, int w, int max, String value) {
@@ -2184,8 +2241,9 @@ public final class NumenScreen extends Screen {
                 return true;
             }
             // 声线表单的后端下拉:选型变了就随之刷新字段区(typed 值经 preserve 存活)。
+            // 行滚出视口时不接点击(控件仍在,只是被表单滚动藏起来了)。
             if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
-                    && addingVoice && voiceBackendDropdown != null) {
+                    && addingVoice && voiceBackendDropdown != null && voiceRowVisible(1)) {
                 String before = voiceBackendDropdown.selectedId();
                 if (voiceBackendDropdown.mouseClicked(mouseX, mouseY)) {
                     String sel = voiceBackendDropdown.selectedId();
@@ -2235,6 +2293,14 @@ public final class NumenScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double sx, double sy) {
+        // 声线表单:滚轮上下滚整个表单(MiniMax 八行超出视口)。
+        if (sy != 0 && tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
+                && addingVoice && mx >= secX() && maxVoiceFormScroll() > 0) {
+            preserveVoiceForm();
+            voiceFormScroll = Math.clamp((long) (voiceFormScroll - sy * 16), 0, maxVoiceFormScroll());
+            rebuild();
+            return true;
+        }
         // Wheel over the left rail column scrolls the roster (works on any tab).
         if (sy != 0 && mx >= railX && mx < railX + RAIL_W && maxRailScroll() > 0) {
             railScroll = Math.clamp((long) (railScroll - sy), 0, maxRailScroll());
@@ -2344,27 +2410,48 @@ public final class NumenScreen extends Screen {
             placeholder(g, proxyIpInput, "127.0.0.1");
             placeholder(g, proxyPortInput, "7890");
         }
-        // 声线表单:标签以占位符形式画在空字段里(行数多,放不下独立标签行)。
+        // 声线表单:模型配置同款——每行标题画在输入框上方,框内只留短示例占位。
+        // 行序与 buildVoiceForm 的 switch 严格一致,随 voiceFormScroll 偏移。
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE && addingVoice) {
-            placeholder(g, voiceNameInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_NAME));
-            // URL 通常已被选型预填;这个占位只在用户清空后可见,值与预填一致。
-            placeholder(g, voiceUrlInput, defaultVoiceUrl(wVoiceBackend));
             boolean fish = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH.equals(wVoiceBackend);
             boolean minimax = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX.equals(wVoiceBackend);
-            placeholder(g, voiceKeyInput, fish ? I18n.get(ModLanguageData.Keys.VOICE_FORM_KEY_FISH)
-                    : minimax ? I18n.get(ModLanguageData.Keys.VOICE_FORM_KEY_MINIMAX)
-                    : I18n.get(ModLanguageData.Keys.VOICE_FORM_KEY_OPENAI));
-            placeholder(g, voiceGroupInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_GROUP));
-            placeholder(g, voiceModelInput, fish ? I18n.get(ModLanguageData.Keys.VOICE_FORM_FISH_MODEL)
-                    : minimax ? I18n.get(ModLanguageData.Keys.VOICE_FORM_MINIMAX_MODEL)
-                    : I18n.get(ModLanguageData.Keys.VOICE_FORM_MODEL));
-            placeholder(g, voiceVoiceInput, fish ? I18n.get(ModLanguageData.Keys.VOICE_FORM_REFERENCE)
-                    : minimax ? I18n.get(ModLanguageData.Keys.VOICE_FORM_MINIMAX_VOICE)
-                    : I18n.get(ModLanguageData.Keys.VOICE_FORM_VOICE));
-            placeholder(g, voiceRefInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_REF));
-            placeholder(g, voicePromptInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_PROMPT));
-            placeholder(g, voiceLangInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_LANG));
-            placeholder(g, voiceVolumeInput, I18n.get(ModLanguageData.Keys.VOICE_FORM_VOLUME));
+            boolean sovits = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS.equals(wVoiceBackend);
+            voiceLabel(g, 0, I18n.get(ModLanguageData.Keys.VOICE_FORM_NAME));
+            voiceLabel(g, 1, I18n.get(ModLanguageData.Keys.PROVIDER_FORM_PROVIDER));
+            voiceLabel(g, 2, I18n.get(ModLanguageData.Keys.VOICE_FORM_URL));
+            placeholder(g, voiceUrlInput, defaultVoiceUrl(wVoiceBackend));
+            int row = 3;
+            if (sovits) {
+                voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_REF));
+                placeholder(g, voiceRefInput, "D:/refs/voice.wav");
+                voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_PROMPT));
+                voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_LANG));
+                placeholder(g, voiceLangInput, "zh");
+            } else {
+                voiceLabel(g, row++, I18n.get(fish ? ModLanguageData.Keys.VOICE_FORM_KEY_FISH
+                        : minimax ? ModLanguageData.Keys.VOICE_FORM_KEY_MINIMAX
+                        : ModLanguageData.Keys.VOICE_FORM_KEY_OPENAI));
+                placeholder(g, voiceKeyInput, minimax ? "eyJ…" : "sk-…");
+                if (minimax) {
+                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_GROUP));
+                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_MINIMAX_MODEL));
+                    placeholder(g, voiceModelInput, "speech-02-turbo");
+                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_MINIMAX_VOICE));
+                    placeholder(g, voiceVoiceInput, "male-qn-qingse");
+                } else if (fish) {
+                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_REFERENCE));
+                    placeholder(g, voiceVoiceInput, "fish.audio/m/… 或纯 ID");
+                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_FISH_MODEL));
+                    placeholder(g, voiceModelInput, "s1 / s2.1-pro-free");
+                } else {
+                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_MODEL));
+                    placeholder(g, voiceModelInput, "FunAudioLLM/CosyVoice2-0.5B");
+                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_VOICE));
+                    placeholder(g, voiceVoiceInput, "FunAudioLLM/CosyVoice2-0.5B:alex");
+                }
+            }
+            voiceLabel(g, row, I18n.get(ModLanguageData.Keys.VOICE_FORM_VOLUME));
+            placeholder(g, voiceVolumeInput, "5");
         }
         // 声线的下拉最后画(展开的列表要压在条目行/字段上面)。
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
@@ -2372,7 +2459,7 @@ public final class NumenScreen extends Screen {
             voiceBindDropdown.render(g, font, mouseX, mouseY);
         }
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
-                && addingVoice && voiceBackendDropdown != null) {
+                && addingVoice && voiceBackendDropdown != null && voiceRowVisible(1)) {
             voiceBackendDropdown.render(g, font, mouseX, mouseY);
         }
         // The model-config form's open dropdown lists must sit above the fields.

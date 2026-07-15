@@ -131,10 +131,8 @@ public final class MiniMaxTts implements TtsBackend {
         return VoiceHttp.CLIENT.sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .thenApply(resp -> {
                     if (resp.statusCode() / 100 != 2) {
-                        String snippet = resp.body();
-                        if (snippet.length() > 300) snippet = snippet.substring(0, 300) + "...";
-                        throw new IllegalStateException(
-                                "MiniMax HTTP " + resp.statusCode() + ": " + snippet);
+                        throw new IllegalStateException(VoiceHttp.humanHttpError("MiniMax",
+                                resp.statusCode(), resp.body()));
                     }
                     return extractAudio(resp.body());
                 });
