@@ -5,6 +5,7 @@ import com.dwinovo.numen.platform.services.INumenConfig;
 import com.dwinovo.numen.platform.services.INetworkChannel;
 import com.dwinovo.numen.platform.services.IPlatformHelper;
 import com.dwinovo.numen.platform.services.IBlockCapabilityReader;
+import com.dwinovo.numen.platform.services.IVoiceSoundFactory;
 
 import java.util.ServiceLoader;
 
@@ -14,6 +15,8 @@ public class Services {
     public static final INetworkChannel NETWORK = load(INetworkChannel.class);
     public static final INumenConfig CONFIG = load(INumenConfig.class);
     public static final IBlockCapabilityReader CAPS = load(IBlockCapabilityReader.class);
+    /** 语音声音实例的平台工厂(取数机制两侧不同,见 {@link IVoiceSoundFactory})。 */
+    public static final IVoiceSoundFactory VOICE = load(IVoiceSoundFactory.class);
 
     public static <T> T load(Class<T> clazz) {
 

@@ -915,7 +915,7 @@ public final class NumenScreen extends Screen {
                 }
                 var sm = Minecraft.getInstance().getSoundManager();
                 if (voicePreview != null) sm.stop(voicePreview);   // 重听:停掉上一句
-                voicePreview = new com.dwinovo.numen.client.voice.VoicePreviewSound(audio, vol);
+                voicePreview = Services.VOICE.previewVoice(audio, vol);   // 平台工厂:取数机制两侧不同
                 sm.play(voicePreview);
                 voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_OK), false);
             });

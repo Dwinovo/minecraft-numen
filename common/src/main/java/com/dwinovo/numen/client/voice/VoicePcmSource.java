@@ -8,9 +8,12 @@ import net.minecraft.sounds.SoundEvent;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * "数据不来自 ogg 资源"的声音实例:{@code MixinSoundEngine} 在
- * {@code SoundEngine.play} 的流式取数处认这个接口,把取数换成
- * {@link #openStream()} 返回的内存 PCM 流。两个实现:
+ * "数据不来自 ogg 资源"的声音实例:取数被换成 {@link #openStream()}
+ * 返回的内存 PCM 流。换法按 loader 分家(见
+ * {@code com.dwinovo.numen.platform.services.IVoiceSoundFactory}):
+ * Fabric 由 fabric 模块的 {@code MixinSoundEngine} 在 {@code SoundEngine.play}
+ * 的流式取数处认这个接口;NeoForge 由子类覆写其补丁提供的官方
+ * {@code SoundInstance.getStream} 钩子。两个 common 实现:
  * {@link EntityVoiceSound}(挂实体的 3D 空间音源)与
  * {@link VoicePreviewSound}(设置界面试听的 2D 就地播放)。
  */

@@ -8,8 +8,7 @@
     "MixinServerCommonPacketListener"
   ],
   "client": [
-    "MixinMinecraft",
-    "MixinSoundEngine"
+    "MixinMinecraft"
   ],
   "server": [],
   "injectors": {
