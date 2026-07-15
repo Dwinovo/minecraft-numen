@@ -16,4 +16,30 @@ public record PcmAudio(int sampleRate, byte[] data) {
     public long durationMs() {
         return (long) (data.length / 2) * 1000L / sampleRate;
     }
+
+    /**
+     * 峰值归一化 + 用户增益,直接改写采样。两个"永远小声"的根因都在播放层之外
+     * 解决不了:TTS 返回的音频电平普遍偏低,而 MC 声音引擎把实例音量钳在 1.0,
+     * 传大于 1 的 volume 毫无作用——所以增益必须烙进 PCM。先把峰值拉到满刻度
+     * 的 95%,再乘用户增益(音量档 1~10 → 0.2~2.0,5 档=归一化原声),超出
+     * 16-bit 范围硬截(听感即"再响一点",可接受)。近静音片段原样返回,不放大底噪。
+     */
+    public PcmAudio amplified(float userGain) {
+        int peak = 1;
+        for (int i = 0; i + 1 < data.length; i += 2) {
+            int s = (short) ((data[i] & 0xFF) | (data[i + 1] << 8));
+            peak = Math.max(peak, Math.abs(s));
+        }
+        if (peak < 64) return this;
+        float scale = (32767.0f * 0.95f / peak) * userGain;
+        if (Math.abs(scale - 1.0f) < 0.01f) return this;
+        byte[] out = new byte[data.length];
+        for (int i = 0; i + 1 < data.length; i += 2) {
+            int s = (short) ((data[i] & 0xFF) | (data[i + 1] << 8));
+            int v = Math.clamp(Math.round(s * scale), -32768, 32767);
+            out[i] = (byte) v;
+            out[i + 1] = (byte) (v >> 8);
+        }
+        return new PcmAudio(sampleRate, out);
+    }
 }

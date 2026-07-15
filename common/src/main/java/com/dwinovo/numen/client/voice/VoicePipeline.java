@@ -152,7 +152,8 @@ public final class VoicePipeline {
                 Throwable failure = err;
                 if (err == null) {
                     try {
-                        decoded = WavCodec.decode(wav);
+                        // 归一化+用户增益烙进采样(MC 实例音量被引擎钳在 1.0,只能在这做响度)。
+                        decoded = WavCodec.decode(wav).amplified(volume);
                     } catch (Exception ex) {
                         failure = ex;
                     }
@@ -167,7 +168,9 @@ public final class VoicePipeline {
                                 entityUuid, backend.describe(), truncate(target.text), unwrap(fail));
                     } else {
                         target.audio = audio;
-                        Constants.LOG.debug("[numen-voice#{}] 合成完成 {}ms, {}ms 音频: {}",
+                        // INFO 而非 debug:每句一行,是"流式分句确实在 LLM 说完前就开始
+                        // 合成"的唯一运行时证据,也是合成延迟的常驻观测点。
+                        Constants.LOG.info("[numen-voice#{}] 合成完成 {}ms, {}ms 音频: {}",
                                 entityUuid, (System.nanoTime() - t0) / 1_000_000,
                                 audio.durationMs(), truncate(target.text));
                     }
@@ -203,10 +206,11 @@ public final class VoicePipeline {
         queue.poll();
         // 经平台工厂创建:NeoForge 返回覆写官方 getStream 补丁钩子的子类,
         // Fabric 返回原类走 vanilla mixin——取数机制两侧不同(见 IVoiceSoundFactory)。
+        // 响度已烙进 PCM(amplified),实例音量恒 1.0——只留 3D 距离衰减。
         playing = com.dwinovo.numen.platform.Services.VOICE
-                .entityVoice(entityUuid, body, head.audio, volume);
+                .entityVoice(entityUuid, body, head.audio, 1.0f);
         mc.getSoundManager().play(playing);
-        Constants.LOG.debug("[numen-voice#{}] 开播 {}ms: {}",
+        Constants.LOG.info("[numen-voice#{}] 开播 {}ms: {}",
                 entityUuid, head.audio.durationMs(), truncate(head.text));
         pumpSynthesis();
     }

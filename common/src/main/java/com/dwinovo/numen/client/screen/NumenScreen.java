@@ -370,6 +370,7 @@ public final class NumenScreen extends Screen {
         }
         summonPersonaDropdown = new Dropdown(items, summonPersonaId == null ? PERSONA_DEFAULT : summonPersonaId);
         summonPersonaDropdown.setBounds(left + PAD, y0 + 68, PANEL_W - PAD * 2, 18);
+        summonPersonaDropdown.setDropBottom(top + PANEL_H - 2);
         // REQUIRED model config — no default item and no fallback: an empty library
         // shows no dropdown; clicking 创建 then explains (doSummon).
         var provEntries = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
@@ -381,6 +382,7 @@ public final class NumenScreen extends Screen {
             if (summonProviderId == null) summonProviderId = provEntries.get(0).id();
             summonProviderDropdown = new Dropdown(provItems, summonProviderId);
             summonProviderDropdown.setBounds(left + PAD, y0 + 102, PANEL_W - PAD * 2, 18);
+            summonProviderDropdown.setDropBottom(top + PANEL_H - 2);
         }
         // OPTIONAL voice — first item = 无(静音), entries follow (same pattern as the
         // persona pick above); an empty library shows no dropdown, just a hint.
@@ -393,6 +395,7 @@ public final class NumenScreen extends Screen {
             }
             summonVoiceDropdown = new Dropdown(voiceItems, summonVoiceId == null ? VOICE_NONE : summonVoiceId);
             summonVoiceDropdown.setBounds(left + PAD, y0 + 136, PANEL_W - PAD * 2, 18);
+            summonVoiceDropdown.setDropBottom(top + PANEL_H - 2);
         }
         // Explicit actions — Enter stays as the fallback confirm (keyPressed), the
         // buttons are the primary path.
@@ -663,6 +666,7 @@ public final class NumenScreen extends Screen {
         }
         provProviderDropdown = new ProviderDropdown(wProvProvider, false);
         provProviderDropdown.setBounds(x, fy + 11 + SET_SP, w, 18);
+        provProviderDropdown.setDropBottom(top + PANEL_H - 2);
         // Model row: the provider's known models as a dropdown (+ 自定义 → free text),
         // free text only for custom providers.
         ModelRegistry.Provider mp = ModelRegistry.provider(LlmProviders.normalize(wProvProvider));
@@ -680,6 +684,7 @@ public final class NumenScreen extends Screen {
             String sel = known ? wProvModel : mp.models().get(0).id();
             provModelDropdown = new Dropdown(modelItems(mp), sel);
             provModelDropdown.setBounds(x, fy + 11 + 2 * SET_SP, w, 18);
+            provModelDropdown.setDropBottom(top + PANEL_H - 2);
         }
         provKeyInput = field(x, fy + 11 + 3 * SET_SP, w, 256, wProvKey);
         provBaseUrlInput = field(x, fy + 11 + 4 * SET_SP, w, 256, wProvBaseUrl);
@@ -775,6 +780,7 @@ public final class NumenScreen extends Screen {
             int x = secX(), w = secW();
             int labelW = font.width(I18n.get(ModLanguageData.Keys.VOICE_BIND_LABEL)) + 6;
             voiceBindDropdown.setBounds(x + labelW, secY0() + 12, w - labelW, 18);
+            voiceBindDropdown.setDropBottom(top + PANEL_H - 2);
         }
     }
 
@@ -801,6 +807,7 @@ public final class NumenScreen extends Screen {
                         I18n.get(ModLanguageData.Keys.VOICE_BACKEND_FISH))),
                 wVoiceBackend);
         voiceBackendDropdown.setBounds(x, voiceVy(1), w, 18);
+        voiceBackendDropdown.setDropBottom(top + PANEL_H - 2);
         voiceUrlInput = vclip(field(x, voiceVy(2), w, 256, wVoiceUrl), 2);
         int row = 3;
         switch (wVoiceBackend) {
@@ -1000,7 +1007,7 @@ public final class NumenScreen extends Screen {
             Throwable failure = err;
             if (err == null) {
                 try {
-                    decoded = com.dwinovo.numen.client.voice.WavCodec.decode(wav);
+                    decoded = com.dwinovo.numen.client.voice.WavCodec.decode(wav).amplified(vol);
                 } catch (Exception ex) {
                     failure = ex;
                 }
@@ -1021,7 +1028,7 @@ public final class NumenScreen extends Screen {
                 }
                 var sm = Minecraft.getInstance().getSoundManager();
                 if (voicePreview != null) sm.stop(voicePreview);   // 重听:停掉上一句
-                voicePreview = Services.VOICE.previewVoice(audio, vol);   // 平台工厂:取数机制两侧不同
+                voicePreview = Services.VOICE.previewVoice(audio, 1.0f);   // 响度已烙进 PCM;平台工厂:取数机制两侧不同
                 sm.play(voicePreview);
                 voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_OK), false);
             });
@@ -1379,6 +1386,7 @@ public final class NumenScreen extends Screen {
         } else {
             providerDropdown = new ProviderDropdown(wProvider, true);   // live + "+ 添加站点"
             providerDropdown.setBounds(x, y0 + 11, w, 18);
+            providerDropdown.setDropBottom(top + PANEL_H - 2);
             buildApiKeyRow(x, y0 + SET_SP + 11, w);
             buildModelRow(x, y0 + 2 * SET_SP + 11, w);
             baseUrlInput = field(x, y0 + 3 * SET_SP + 11, w, 256, wBaseUrl);
@@ -1427,6 +1435,7 @@ public final class NumenScreen extends Screen {
                     : (mp != null && !mp.models().isEmpty() ? mp.models().get(0).id() : CUSTOM_MODEL);
             modelDropdown = new Dropdown(modelItems(mp), sel);
             modelDropdown.setBounds(x, y, w, 18);
+            modelDropdown.setDropBottom(top + PANEL_H - 2);
         }
     }
 
@@ -2391,7 +2400,9 @@ public final class NumenScreen extends Screen {
         // used to paint over the auto-rendered widgets). Text fields are borderless EditBoxes, so draw
         // a parchment field background + border behind each before it renders its text.
         for (AbstractWidget w : overlay) {
-            if (w instanceof EditBox eb) {                          // parchment frame, inflated past the inset text
+            // visible 检查:声线表单滚出视口的 EditBox 隐藏了自己,框也必须跟着消失
+            // (否则空框越过面板边缘悬在世界上)。
+            if (w instanceof EditBox eb && eb.visible) {            // parchment frame, inflated past the inset text
                 g.blitSprite(
                         FIELD_SPRITE, eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
                         eb.getWidth() + FIELD_INSET_X * 2, eb.getHeight() + FIELD_INSET_Y * 2);

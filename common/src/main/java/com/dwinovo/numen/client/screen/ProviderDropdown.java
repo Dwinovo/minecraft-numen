@@ -25,6 +25,8 @@ public final class ProviderDropdown {
     private final List<LlmProviders.Option> options;   // live snapshot at construction (rebuilt each settings build)
     private final boolean allowAddSite;
     private int x, y, w, h = 18;
+    /** 展开列表不得越过的下边界(面板底);默认不限。越界时列表向上翻。 */
+    private int dropBottom = Integer.MAX_VALUE;
     private boolean open;
     private String selectedId;
 
@@ -35,6 +37,18 @@ public final class ProviderDropdown {
     }
 
     public void setBounds(int x, int y, int w, int h) { this.x = x; this.y = y; this.w = w; this.h = h; }
+
+    /** 限定展开列表的下边界(通常 = 面板底):放不下就向上翻,列表不再戳出面板。 */
+    public void setDropBottom(int bottom) { this.dropBottom = bottom; }
+
+    /** 展开列表的外框顶 y:默认贴着收起框下沿;越过 {@link #dropBottom} 则翻到上方。 */
+    private int listTop() {
+        int below = y + h - 2;
+        int lh = rowCount() * ROW + 4;
+        if (below + lh <= dropBottom || y - lh + 2 < 0) return below;
+        return y - lh + 2;
+    }
+
     public String selectedId() { return selectedId; }
     public boolean isOpen() { return open; }
     public void close() { open = false; }
@@ -61,7 +75,7 @@ public final class ProviderDropdown {
         Nb.text(g, font, open ? "▴" : "▾", x + w - 12, ty, th.textDim());
 
         if (open) {
-            int oy = y + h - 2;
+            int oy = listTop();
             int n = rowCount();
             g.blitSprite(FRAME, x, oy, w, n * ROW + 4);
             for (int i = 0; i < n; i++) {
@@ -79,7 +93,8 @@ public final class ProviderDropdown {
     /** Returns true if consumed. The host checks {@link #selectedId()} (== {@link #ADD_SITE} → add flow). */
     public boolean mouseClicked(double mx, double my) {
         if (open) {
-            int oy = y + h;
+            // 行命中区与 render 用同一个 listTop()+2 起点(旧实现相差 2px,也不会向上翻)。
+            int oy = listTop() + 2;
             for (int i = 0; i < rowCount(); i++) {
                 int ry = oy + i * ROW;
                 if (mx >= x && mx < x + w && my >= ry && my < ry + ROW) {
