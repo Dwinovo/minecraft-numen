@@ -177,6 +177,13 @@ public final class EntityAgentLoop {
      */
     private final ToolDispatcher dispatcher;
 
+    /**
+     * 本同伴的流式语音管线,懒创建：首次在 {@code config/numen/voice.json} 里
+     * 发现这个 UUID 的配置时才 new。未配置 = 永远 null = 零开销。
+     * 见 {@link com.dwinovo.numen.client.voice.VoicePipeline}。
+     */
+    private com.dwinovo.numen.client.voice.VoicePipeline voice;
+
     /** A summarization call is in flight; blocks normal turns until it lands. */
     private boolean compacting = false;
     /** Context size of the last request as the API counted it (0 = unknown yet). */
@@ -328,6 +335,38 @@ public final class EntityAgentLoop {
     /** Driven once per client tick (see {@code AgentLoopRegistry.tickAll}) — backstop timeout. */
     public void clientTick() {
         dispatcher.tick();
+        if (voice != null) voice.tick();
+    }
+
+    // ---- streaming voice (TTS) ----
+
+    /**
+     * 一次 LLM 分发的语音接线：chunk 回调 + 收尾动作打包。语音未配置时是
+     * {@link #SILENT_VOICE}（sink 为 null、finish 是空操作）,chatStreaming
+     * 收到 null onChunk 与从前完全一样。
+     */
+    private record VoiceTurn(java.util.function.Consumer<JsonObject> sink, Runnable finish) {}
+
+    private static final VoiceTurn SILENT_VOICE = new VoiceTurn(null, () -> {});
+
+    /**
+     * 为即将发出的 chat 请求开启一轮语音（若该同伴配置了语音）。每次分发都
+     * 重读配置——{@code voice.json} 热编辑下一轮生效;开新轮会打断上一轮还在
+     * 播的残句（新内容优先,与打断语义一致）。
+     */
+    private VoiceTurn beginVoiceTurn() {
+        com.dwinovo.numen.client.voice.VoiceConfig.CompanionVoice cfg =
+                com.dwinovo.numen.client.voice.VoiceConfig.forCompanion(entityUuid);
+        if (cfg == null) {
+            if (voice != null) voice.interrupt();   // 配置被移除:静音存量队列
+            return SILENT_VOICE;
+        }
+        if (voice == null) {
+            voice = new com.dwinovo.numen.client.voice.VoicePipeline(entityUuid);
+        }
+        final var vp = voice;
+        final int vgen = vp.beginTurn(cfg);
+        return new VoiceTurn(vp.chunkSink(vgen), () -> vp.endTurn(vgen));
     }
 
     /**
@@ -419,6 +458,9 @@ public final class EntityAgentLoop {
      * No-op when nothing is running and nothing is queued.
      */
     public void abort() {
+        // 语音无条件先闭嘴:不管打断的是在飞的 turn 还是排队的 prompt,
+        // 主人按下 Stop 时还在播/待播的语音都不该继续。
+        if (voice != null) voice.interrupt();
         if (isBusy()) {
             // Priority 1: stop the running turn (or the in-flight compaction —
             // its response is generation-stamped too, so it gets discarded).
@@ -510,6 +552,7 @@ public final class EntityAgentLoop {
         // restored on respawn. The body is gone, so its tool results will never arrive — we'll synth
         // them at respawn instead.
         deathCause = cause;
+        if (voice != null) voice.interrupt();   // 尸体不说话:停播 + 清队列
         // Resolve at respawn: every outstanding call (in flight + still queued) — all
         // are listed in the assistant message, so all need results.
         deathInterruptedCalls = dispatcher.cancelAndDrain();
@@ -766,8 +809,12 @@ public final class EntityAgentLoop {
         // Capture the current generation; if the owner interrupts before this
         // call resolves, handleResponse sees the mismatch and discards it.
         final int gen = turnGeneration;
-        client().chatStreaming(snapshot, tools, systemPrompt, null)
-                .whenComplete((res, err) -> bounceBackToMain(gen, res, err));
+        final VoiceTurn vt = beginVoiceTurn();
+        client().chatStreaming(snapshot, tools, systemPrompt, vt.sink())
+                .whenComplete((res, err) -> {
+                    vt.finish().run();
+                    bounceBackToMain(gen, res, err);
+                });
     }
 
     // ---- compaction ----
@@ -1055,9 +1102,13 @@ public final class EntityAgentLoop {
                 Constants.LOG.info("[numen-entity#{}] re-running failed turn once", entityUuid);
                 awaitingLlmResponse = true;
                 final int gen2 = turnGeneration;
+                final VoiceTurn vt2 = beginVoiceTurn();   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
                 client().chatStreaming(convo.snapshot(), ToolRegistry.all(),
-                                composeSystemPrompt(), null)
-                        .whenComplete((r2, e2) -> bounceBackToMain(gen2, r2, e2));
+                                composeSystemPrompt(), vt2.sink())
+                        .whenComplete((r2, e2) -> {
+                            vt2.finish().run();
+                            bounceBackToMain(gen2, r2, e2);
+                        });
                 return;
             }
             failTurnKeepQueue();
