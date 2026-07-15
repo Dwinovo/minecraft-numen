@@ -30,7 +30,7 @@ final class CompanionBrain {
     /** Shared survival diary: survival chains write episode lines at their completion
      *  edges; the LLM chain drains them into the next tool result's message — the model
      *  is informed of what its body did autonomously, never consulted. */
-    private final SurvivalJournal journal = new SurvivalJournal();
+    private final BodyLog journal = new BodyLog();
     final LlmTaskChain llm = new LlmTaskChain(queue, journal);
 
     private final List<TaskChain> chains = List.of(

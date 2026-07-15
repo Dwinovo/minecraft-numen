@@ -41,7 +41,7 @@ public final class MLGChain implements TaskChain {
     private static final double PROBE_DEPTH = 8.0;
 
     /** Diary for completed episodes — may be null (e.g. unit tests). */
-    private final com.dwinovo.numen.core.task.SurvivalJournal journal;
+    private final com.dwinovo.numen.core.task.BodyLog journal;
     /** One diary line per fall episode (reset when the save ends). */
     private boolean notedThisFall;
 
@@ -49,7 +49,7 @@ public final class MLGChain implements TaskChain {
         this(null);
     }
 
-    public MLGChain(com.dwinovo.numen.core.task.SurvivalJournal journal) {
+    public MLGChain(com.dwinovo.numen.core.task.BodyLog journal) {
         this.journal = journal;
     }
 

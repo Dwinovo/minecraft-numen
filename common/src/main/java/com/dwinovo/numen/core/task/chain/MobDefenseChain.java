@@ -57,7 +57,7 @@ public final class MobDefenseChain implements TaskChain {
     private static final long CHAIN_COOLDOWN = 100;
 
     /** Diary for completed episodes (kill / escape) — may be null (e.g. unit tests). */
-    private final com.dwinovo.numen.core.task.SurvivalJournal journal;
+    private final com.dwinovo.numen.core.task.BodyLog journal;
 
     private Mode mode = Mode.NONE;
     private LivingEntity target;
@@ -67,7 +67,7 @@ public final class MobDefenseChain implements TaskChain {
         this(null);
     }
 
-    public MobDefenseChain(com.dwinovo.numen.core.task.SurvivalJournal journal) {
+    public MobDefenseChain(com.dwinovo.numen.core.task.BodyLog journal) {
         this.journal = journal;
     }
     /** Last known threat position, for the flee goal supplier (survives the mob despawning mid-flee). */

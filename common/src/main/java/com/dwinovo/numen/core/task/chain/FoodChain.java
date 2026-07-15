@@ -33,7 +33,7 @@ import net.minecraft.world.item.ItemStack;
 public final class FoodChain implements TaskChain {
 
     /** Diary for completed episodes — may be null (e.g. unit tests). */
-    private final com.dwinovo.numen.core.task.SurvivalJournal journal;
+    private final com.dwinovo.numen.core.task.BodyLog journal;
 
     /** The in-flight native eat (held use), or {@code null} between eats. */
     private Interaction eat;
@@ -45,7 +45,7 @@ public final class FoodChain implements TaskChain {
         this(null);
     }
 
-    public FoodChain(com.dwinovo.numen.core.task.SurvivalJournal journal) {
+    public FoodChain(com.dwinovo.numen.core.task.BodyLog journal) {
         this.journal = journal;
     }
 

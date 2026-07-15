@@ -43,7 +43,7 @@ public final class ArmorChain implements TaskChain {
     };
 
     /** Diary for completed wardrobe actions — may be null (e.g. unit tests). */
-    private final com.dwinovo.numen.core.task.SurvivalJournal journal;
+    private final com.dwinovo.numen.core.task.BodyLog journal;
 
     /** Countdown to the next dormant-state scan. */
     private int ticksUntilScan;
@@ -54,7 +54,7 @@ public final class ArmorChain implements TaskChain {
         this(null);
     }
 
-    public ArmorChain(com.dwinovo.numen.core.task.SurvivalJournal journal) {
+    public ArmorChain(com.dwinovo.numen.core.task.BodyLog journal) {
         this.journal = journal;
     }
 

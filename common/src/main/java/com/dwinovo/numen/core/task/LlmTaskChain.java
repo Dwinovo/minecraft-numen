@@ -26,7 +26,7 @@ public final class LlmTaskChain implements TaskChain {
 
     private final TaskQueue queue;
     /** Survival diary drained into each shipped result's message (may be null in tests). */
-    private final SurvivalJournal journal;
+    private final BodyLog journal;
     private CompanionTask task;
     private TaskRecord record;
 
@@ -34,7 +34,7 @@ public final class LlmTaskChain implements TaskChain {
         this(queue, null);
     }
 
-    LlmTaskChain(TaskQueue queue, SurvivalJournal journal) {
+    LlmTaskChain(TaskQueue queue, BodyLog journal) {
         this.queue = queue;
         this.journal = journal;
     }

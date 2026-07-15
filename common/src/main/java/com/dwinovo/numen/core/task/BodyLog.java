@@ -17,7 +17,7 @@ import java.util.List;
  *
  * <p>Tick-thread only, like all task-layer state.
  */
-public final class SurvivalJournal {
+public final class BodyLog {
 
     private static final int MAX_ENTRIES = 6;
 
