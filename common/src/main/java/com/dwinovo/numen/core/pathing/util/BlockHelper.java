@@ -321,29 +321,29 @@ public final class BlockHelper {
     }
 
     /**
-     * A full-collision cube, EXCLUDING the handful of
-     * full-shape blocks you can't reliably look-at-and-place-against (bamboo, a moving
-     * piston, scaffolding, shulker boxes, pointed dripstone, amethyst clusters).
+     * Can we aim at the given {@code face} of this block and place against it. The face must
+     * be sturdy — the same face test vanilla uses to judge whether a block is supported —
+     * so a full cube, glass, a TOP slab's top face, a stair's solid back, or soul sand's top
+     * all qualify, while a bottom slab's top (the face sits inside the cell, a ray at the
+     * boundary misses it) does not. Judged per shared face, not per block, so a half-height
+     * platform is real support from above even though its sides are not.
+     *
+     * <p>A handful of behaviour-special blocks are refused outright regardless of face
+     * sturdiness: bamboo and pointed dripstone snap, a moving piston is mid-teleport,
+     * scaffolding shifts, shulker boxes animate their lid into the click, amethyst clusters
+     * shatter — none is a face worth aiming a placement at. GUI blocks (crafting tables,
+     * chests, hoppers) need no refusal here: placement always sneaks, and a sneaked click
+     * places against the block instead of opening it.
      */
-    public static boolean isBlockNormalCube(BlockGetter level, BlockPos pos, BlockState state) {
+    public static boolean canPlaceAgainst(BlockGetter level, BlockPos pos, Direction face) {
+        BlockState state = level.getBlockState(pos);
         Block b = state.getBlock();
         if (b instanceof BambooStalkBlock || b instanceof MovingPistonBlock
                 || b instanceof ScaffoldingBlock || b instanceof ShulkerBoxBlock
                 || b instanceof PointedDripstoneBlock || b instanceof AmethystClusterBlock) {
             return false;
         }
-        return state.isCollisionShapeFullBlock(level, pos);
-    }
-
-    /**
-     * Can we look at the centre of a side face of this
-     * block and likely place against it — a normal cube, plain glass, or stained glass
-     * (NOT every full-collision block: carpets, shulkers, scaffolding etc. are refused).
-     */
-    public static boolean canPlaceAgainst(BlockGetter level, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
-        return isBlockNormalCube(level, pos, state)
-                || state.is(Blocks.GLASS) || state.getBlock() instanceof StainedGlassBlock;
+        return state.isFaceSturdy(level, pos, face);
     }
 
     /**

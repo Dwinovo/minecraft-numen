@@ -159,7 +159,7 @@ public final class Moves {
         for (Direction d : SUPPORT_DIRS) {
             BlockPos against = floor.relative(d);
             if (against.equals(sourceBelow)) continue;   // that's the backplace face, handled below
-            if (canPlaceAgainst(level, against)) return 1.0;
+            if (canPlaceAgainst(level, against, d.getOpposite())) return 1.0;
         }
         // Sneak-backplace against the block under our feet. Gated on
         // mustBeSolidToWalkOn(srcDown), NOT on a real solid cube — and that is TRUE for
@@ -170,10 +170,11 @@ public final class Moves {
         return ActionCosts.SNEAK_ONE_BLOCK / ActionCosts.WALK_ONE_BLOCK;
     }
 
-    /** A normal cube / glass presents a face to place against
-     *  (NOT every full-collision block — see {@link BlockHelper#canPlaceAgainst}). */
-    private static boolean canPlaceAgainst(BlockGetter level, BlockPos pos) {
-        return BlockHelper.canPlaceAgainst(level, pos);
+    /** The shared face toward the placed cell must be sturdy to present a placeable face —
+     *  same judgment the live placement resolver uses ({@link BlockHelper#canPlaceAgainst}),
+     *  so the planner never prices a bridge the executor can't actually place. */
+    private static boolean canPlaceAgainst(BlockGetter level, BlockPos pos, Direction face) {
+        return BlockHelper.canPlaceAgainst(level, pos, face);
     }
 
     /** Ascend place support: a face to place the step block against,
@@ -183,7 +184,7 @@ public final class Moves {
         for (Direction d : SUPPORT_DIRS) {
             BlockPos against = step.relative(d);
             if (against.getX() == from.getX() && against.getZ() == from.getZ()) continue;
-            if (canPlaceAgainst(level, against)) return true;
+            if (canPlaceAgainst(level, against, d.getOpposite())) return true;
         }
         return false;
     }
