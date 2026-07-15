@@ -21,6 +21,7 @@ public final class CoreReflexes {
 
     public static void registerAll() {
         ReflexRegistry.register(new MLGChain());
+        ReflexRegistry.register(new com.dwinovo.numen.core.task.chain.BreathChain());
         ReflexRegistry.register(new MobDefenseChain());
         ReflexRegistry.register(new FoodChain());
         ReflexRegistry.register(new UnstuckChain());
