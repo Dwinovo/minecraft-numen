@@ -12,11 +12,12 @@ import com.dwinovo.numen.core.task.base.ToolSelect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,6 +41,9 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
     /** Melee strike range — vanilla player entity-interaction reach ≈ 3 blocks. */
     private static final double ATTACK_REACH = 3.0;
     private static final double ATTACK_REACH_SQR = ATTACK_REACH * ATTACK_REACH;
+    /** Scan-score shrink for a mob that is actively targeting this body — fight back
+     *  before wandering off to a nearer bystander. */
+    private static final double TARGETING_ME_WEIGHT = 4.0;
     /** Post-hunt loot sweep: radius scanned for mob drops, and a tick budget so it can't stall. */
     private static final int COLLECT_RADIUS = 24;
     private static final int MAX_COLLECT_TICKS = 300;   // ~15 s
@@ -211,7 +215,11 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
      *  cooldown has recovered (full-charge damage). */
     private void swing() {
         if (target == null) return;
+        ItemStack heldBefore = player.getMainHandItem();
         ToolSelect.holdBestWeapon(player);   // pathfinder may have swapped a scaffold block into the hand while bridging
+        if (player.getMainHandItem() != heldBefore) {
+            return;   // hand just changed — the item-change ticker reset lands next tick, so this swing would be void
+        }
         InputDriver.lookAt(player, target.getEyePosition());
         HitResult hit = Interaction.nativeRaytrace(player, ATTACK_REACH);
         boolean onTarget = hit.getType() == HitResult.Type.ENTITY
@@ -219,10 +227,12 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
         if (!onTarget) {
             return;   // not actually looking at the target this tick — re-aim next tick
         }
+        if (target.hurtTime > 0) {
+            return;   // still in the post-hit invulnerability window — a hit now only deals the damage difference
+        }
         player.setSprinting(false);       // sweep + no knockback-chase
         if (player.getAttackStrengthScale(0.0f) >= 0.95f) {
-            player.attack(target);        // real damage / cooldown / sweep / knockback / crit
-            player.resetAttackStrengthTicker();
+            player.attack(target);        // real damage / cooldown / sweep / knockback / crit (resets the ticker itself)
             player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
     }
@@ -232,8 +242,10 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
     }
 
     private boolean inReachAndLos() {
+        // Range is eye-to-hitbox (nearest point of the bounding box), not eye-to-block-centre:
+        // a large mob's centre can sit beyond reach while its body is already strikable.
         return target != null
-                && player.distanceToSqr(Vec3.atCenterOf(target.blockPosition())) <= ATTACK_REACH_SQR
+                && target.getBoundingBox().distanceToSqr(player.getEyePosition()) <= ATTACK_REACH_SQR
                 && player.hasLineOfSight(target);
     }
 
@@ -246,7 +258,17 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
             if (!r.targets.contains(e.getType())) continue;
             candidates.add(le);
         }
-        return skipped.pick(candidates, Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
+        return skipped.pick(candidates, Comparator.comparingDouble(this::threatScore)).orElse(null);
+    }
+
+    /** Lower is better: squared distance, shrunk for a mob that is actively targeting this body
+     *  so retaliation outranks a nearer bystander. */
+    private double threatScore(LivingEntity candidate) {
+        double score = player.distanceToSqr(candidate);
+        if (candidate instanceof Mob mob && mob.getTarget() == player) {
+            score /= TARGETING_ME_WEIGHT;
+        }
+        return score;
     }
 
     @Override
