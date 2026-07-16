@@ -38,8 +38,10 @@ public final class PersonaLibrary {
 
     /** 哨兵文件:删掉它,下次启动重新从 jar 复制缺失的内置示例。 */
     private static final String INIT_MARKER = ".init";
-    /** jar 里的内置示例(资源路径 assets/numen_api/persona/ 下的文件名)。 */
-    private static final String[] EXAMPLES = {"小焰.md"};
+    /** jar 里的内置示例(资源路径 assets/numen_api/persona/ 下的文件名)。
+     *  原型覆盖:傲娇(小焰)/猫娘(团子)/温柔守护者(暖暖)/元气伙伴(阿光)/
+     *  沉稳老哥(老墨)——低龄玩家也有零门槛的选择。 */
+    private static final String[] EXAMPLES = {"小焰.md", "团子.md", "暖暖.md", "阿光.md", "老墨.md"};
 
     private static PersonaLibrary instance;
 
