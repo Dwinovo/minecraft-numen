@@ -123,7 +123,7 @@ public final class NumenScreen extends Screen {
     private Tab tab = Tab.CHAT;
 
     /** The Settings tab is a config hub: a left sub-nav picks one of these sections. */
-    private enum SettingsSection { PROVIDER, PROXY, MCP, SKILLS, PERSONA, VOICE }
+    private enum SettingsSection { PROVIDER, PROXY, MCP, SKILLS, PERSONA, VOICE, SKIN }
 
     // ---- model-config section state (mirrors the persona section) ----
     private boolean addingProvider;
@@ -151,6 +151,30 @@ public final class NumenScreen extends Screen {
     private EditBox voiceNameInput, voiceUrlInput, voiceKeyInput, voiceGroupInput, voiceModelInput,
             voiceVoiceInput, voiceRefInput, voicePromptInput, voiceLangInput, voiceVolumeInput;
     private static final String VOICE_NONE = "__none__";
+
+    // 皮肤库 tab(列表+表单,照声线库制式)。签名发生在保存时(MineSkin 代签),
+    // 召唤只读现成结果。
+    private boolean addingSkin;
+    private String skinEditId;
+    private String skinDeletePending;
+    private String wSkinName = "";
+    private String wSkinVariant = com.dwinovo.numen.client.skin.SkinLibrary.VARIANT_CLASSIC;
+    private EditBox skinNameInput;
+    private Dropdown skinVariantDropdown;
+    /** 拖进窗口的皮肤 png 原始字节(表单会话内;保存成功后随条目落盘)。 */
+    private byte[] skinDropped;
+    private int skinDroppedW, skinDroppedH;
+    /** 保存(签名)进行中——防重复点击;skinFormGen 作废在途回调。 */
+    private boolean skinSigning;
+    private int skinFormGen;
+    private String skinMsg;
+    private boolean skinMsgFail;
+    private long skinMsgUntil;
+    /** 召唤页的皮肤下拉:null = 默认(按名字找同名正版)。 */
+    private Dropdown summonSkinDropdown;
+    private String summonSkinId;
+    private static final String SKIN_DEFAULT = "__default__";
+
     /** 试听/保存的状态行(表单底部;fail = 红色),照 summon 页 warnText 的即时反馈做法。 */
     private String voiceMsg;
     private boolean voiceMsgFail;
@@ -328,9 +352,12 @@ public final class NumenScreen extends Screen {
         voiceNameInput = voiceUrlInput = voiceKeyInput = voiceGroupInput = voiceModelInput = null;
         voiceVoiceInput = voiceRefInput = voicePromptInput = voiceLangInput = voiceVolumeInput = null;
         voiceBackendDropdown = null;
+        skinNameInput = null;
+        skinVariantDropdown = null;
         proxyIpInput = proxyPortInput = null;
         modelDropdown = null;
         summonInput = null;
+        summonSkinDropdown = null;
         summonPersonaDropdown = null;
         summonProviderDropdown = null;
         summonVoiceDropdown = null;
@@ -391,9 +418,19 @@ public final class NumenScreen extends Screen {
                 voiceItems.add(new Dropdown.Item(e.id(), e.name()));
             }
             summonVoiceDropdown = new Dropdown(voiceItems, summonVoiceId == null ? VOICE_NONE : summonVoiceId);
-            summonVoiceDropdown.setBounds(left + PAD, y0 + 136, PANEL_W - PAD * 2, 18);
+            // 声线行与皮肤下拉平分一行(左声线右皮肤),不再新占一行。
+            summonVoiceDropdown.setBounds(left + PAD, y0 + 136, summonHalfW(), 18);
             summonVoiceDropdown.setDropBottom(top + PANEL_H - 2);
         }
+        // 皮肤:默认(按名字找同名正版) + 皮肤库里已签名的条目。
+        List<Dropdown.Item> skinItems = new ArrayList<>();
+        skinItems.add(new Dropdown.Item(SKIN_DEFAULT, I18n.get(ModLanguageData.Keys.SUMMON_SKIN_DEFAULT)));
+        for (var e : com.dwinovo.numen.client.skin.SkinLibrary.instance().list()) {
+            if (e.signed()) skinItems.add(new Dropdown.Item(e.id(), e.name()));
+        }
+        summonSkinDropdown = new Dropdown(skinItems, summonSkinId == null ? SKIN_DEFAULT : summonSkinId);
+        summonSkinDropdown.setBounds(left + PAD + summonHalfW() + 6, y0 + 136, summonHalfW(), 18);
+        summonSkinDropdown.setDropBottom(top + PANEL_H - 2);
         // Explicit actions — Enter stays as the fallback confirm (keyPressed), the
         // buttons are the primary path.
         int bw = 64, gap = 8, totalW = bw * 2 + gap;
@@ -404,6 +441,56 @@ public final class NumenScreen extends Screen {
                 Component.translatable(ModLanguageData.Keys.SUMMON_CREATE),
                 b -> doSummon()));
         setInitialFocus(summonInput);
+    }
+
+    /** 召唤页"声线|皮肤"共享行的半宽。build 与 render 共用。 */
+    private int summonHalfW() {
+        return (PANEL_W - PAD * 2 - 6) / 2;
+    }
+
+    /**
+     * 召唤页四个下拉的点击路由:正展开的先吃(它的列表画在最上层,命中也必须
+     * 最优先),然后按行序。返回 true = 消费了本次点击。
+     */
+    private boolean routeSummonDropdownClick(double mx, double my) {
+        Dropdown[] all = {summonPersonaDropdown, summonProviderDropdown,
+                summonVoiceDropdown, summonSkinDropdown};
+        Dropdown open = null;
+        for (Dropdown d : all) {
+            if (d != null && d.isOpen()) { open = d; break; }
+        }
+        for (Dropdown d : (open != null ? new Dropdown[]{open} : all)) {
+            if (d == null || !d.mouseClicked(mx, my)) continue;
+            String sel = d.selectedId();
+            if (d == summonPersonaDropdown) {
+                summonPersonaId = PERSONA_DEFAULT.equals(sel) ? null : sel;
+            } else if (d == summonProviderDropdown) {
+                summonProviderId = sel;
+            } else if (d == summonVoiceDropdown) {
+                summonVoiceId = VOICE_NONE.equals(sel) ? null : sel;
+            } else {
+                summonSkinId = SKIN_DEFAULT.equals(sel) ? null : sel;
+            }
+            return true;
+        }
+        // 有列表展开时,点到列表外 = 收起并消费(mouseClicked 已处理);点到这里
+        // 说明没有任何下拉消费——放行给后面的命中。
+        return false;
+    }
+
+    /** 召唤页四个下拉的渲染:收起的先画,正展开的最后画(列表压在一切之上)。 */
+    private void renderSummonDropdowns(GuiGraphics g, int mouseX, int mouseY) {
+        Dropdown[] all = {summonSkinDropdown, summonVoiceDropdown,
+                summonProviderDropdown, summonPersonaDropdown};
+        Dropdown open = null;
+        for (Dropdown d : all) {
+            if (d == null) continue;
+            if (d.isOpen() && open == null) { open = d; continue; }
+            d.render(g, font, mouseX, mouseY);
+        }
+        if (open != null) {
+            open.render(g, font, mouseX, mouseY);
+        }
     }
 
     /** Two buttons for the "delete companion?" confirm bar — Cancel and the destructive Delete. */
@@ -569,6 +656,10 @@ public final class NumenScreen extends Screen {
         voiceEditId = null;
         voiceDeletePending = null;
         voiceTestGen++;   // 离开语音表单:在途试听回调作废
+        addingSkin = false;
+        skinEditId = null;
+        skinDeletePending = null;
+        skinFormGen++;    // 离开皮肤表单:在途 MineSkin 签名回调作废
         rebuild();
     }
 
@@ -595,6 +686,11 @@ public final class NumenScreen extends Screen {
                 if (voiceDeletePending != null) buildVoiceDeleteConfirm();
                 else if (addingVoice) buildVoiceForm();
                 else buildVoiceListWidgets();
+            }
+            case SKIN -> {
+                if (skinDeletePending != null) buildSkinDeleteConfirm();
+                else if (addingSkin) buildSkinForm();
+                else buildSkinListWidgets();
             }
             case PROXY -> buildProxyWidgets();
         }
@@ -1454,6 +1550,282 @@ public final class NumenScreen extends Screen {
         txt(g, Component.literal(text), secX(), voiceVy(row) - 11, TXT_MUTED);
     }
 
+    // ---- Skin section: the named skin library (upload png → MineSkin-signed textures) ----
+
+    private void buildSkinListWidgets() {
+        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+                Component.translatable(ModLanguageData.Keys.SKIN_ADD), b -> {
+                    addingSkin = true;
+                    skinEditId = null;
+                    resetSkinForm();
+                    rebuild();
+                }));
+    }
+
+    /**
+     * 皮肤表单:名称 + 手臂模型下拉 + 拖拽提示区(png 从系统里拖进游戏窗口,
+     * {@link #onFilesDrop} 接住)。保存 = 先 MineSkin 代签再落库,失败红字可重试。
+     */
+    private void buildSkinForm() {
+        int x = secX(), w = secW();
+        int fy = secY0();
+        skinNameInput = field(x, fy + 11, w, 48, wSkinName);
+        skinVariantDropdown = new Dropdown(List.of(
+                new Dropdown.Item(com.dwinovo.numen.client.skin.SkinLibrary.VARIANT_CLASSIC,
+                        I18n.get(ModLanguageData.Keys.SKIN_VARIANT_CLASSIC)),
+                new Dropdown.Item(com.dwinovo.numen.client.skin.SkinLibrary.VARIANT_SLIM,
+                        I18n.get(ModLanguageData.Keys.SKIN_VARIANT_SLIM))),
+                wSkinVariant);
+        skinVariantDropdown.setBounds(x, fy + 11 + SET_SP, w, 18);
+        skinVariantDropdown.setDropBottom(top + PANEL_H - 2);
+        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+                Component.translatable("numen.gui.settings.save"), b -> onSaveSkin()));
+        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
+                Component.literal("✕"), b -> {
+                    addingSkin = false;
+                    skinEditId = null;
+                    skinFormGen++;
+                    rebuild();
+                }));
+        setInitialFocus(skinNameInput);
+    }
+
+    private void buildSkinDeleteConfirm() {
+        int x = secX();
+        int by = secY0() + 24;
+        int bw = 64, gap = 8;
+        add(new SimpleButton(x, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
+            com.dwinovo.numen.client.skin.SkinLibrary.instance().remove(skinDeletePending);
+            skinDeletePending = null;
+            rebuild();
+        }));
+        add(new SimpleButton(x + bw + gap, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
+                b -> { skinDeletePending = null; rebuild(); }));
+    }
+
+    private void resetSkinForm() {
+        wSkinName = "";
+        wSkinVariant = com.dwinovo.numen.client.skin.SkinLibrary.VARIANT_CLASSIC;
+        skinDropped = null;
+        skinDroppedW = skinDroppedH = 0;
+        skinSigning = false;
+        skinMsg = null;
+        skinFormGen++;
+    }
+
+    private void beginEditSkin(com.dwinovo.numen.client.skin.SkinLibrary.Entry e) {
+        addingSkin = true;
+        skinEditId = e.id();
+        wSkinName = e.name();
+        wSkinVariant = e.variant();
+        skinDropped = null;   // 不换图时沿用落盘原图(改手臂模型重签也从盘上读)
+        skinDroppedW = skinDroppedH = 0;
+        skinSigning = false;
+        skinMsg = null;
+        skinFormGen++;
+        rebuild();
+    }
+
+    /**
+     * 保存 = 签名 + 落库。需要重签的情形:新图、或手臂模型变了(variant 编码在
+     * 签名数据里);仅改名直接落库。签名在 MineSkin 排队,期间禁止重复点击。
+     */
+    private void onSaveSkin() {
+        if (skinSigning) return;
+        if (skinNameInput != null) wSkinName = skinNameInput.getValue();
+        String name = wSkinName.trim();
+        if (name.isEmpty()) {
+            skinNote(I18n.get(ModLanguageData.Keys.SKIN_WARN_NAME), true);
+            return;
+        }
+        var lib = com.dwinovo.numen.client.skin.SkinLibrary.instance();
+        var old = skinEditId != null ? lib.get(skinEditId) : null;
+        byte[] png = skinDropped;
+        boolean needSign = png != null || old == null || !old.variant().equals(wSkinVariant)
+                || !old.signed();
+        if (needSign && png == null) {
+            if (old != null) {
+                try {
+                    png = java.nio.file.Files.readAllBytes(lib.pngPath(old.id()));
+                } catch (java.io.IOException ex) {
+                    png = null;
+                }
+            }
+            if (png == null) {
+                skinNote(I18n.get(ModLanguageData.Keys.SKIN_WARN_IMAGE), true);
+                return;
+            }
+        }
+        String id = old != null ? old.id() : lib.freshId();
+        if (!needSign) {
+            lib.put(new com.dwinovo.numen.client.skin.SkinLibrary.Entry(
+                    id, name, wSkinVariant, old.value(), old.signature()), null);
+            addingSkin = false;
+            skinEditId = null;
+            rebuild();
+            return;
+        }
+        skinSigning = true;
+        skinNote(I18n.get(ModLanguageData.Keys.SKIN_SIGNING), false);
+        final int gen = ++skinFormGen;
+        final byte[] fPng = png;
+        final String fVariant = wSkinVariant;
+        com.dwinovo.numen.client.skin.MineSkinClient.generate(fPng, fVariant, name)
+                .whenComplete((signed, err) -> Minecraft.getInstance().execute(() -> {
+                    if (gen != skinFormGen) return;   // 表单已离开/重开:作废
+                    skinSigning = false;
+                    if (err != null || signed == null) {
+                        Throwable cur = err;
+                        while (cur != null && cur.getCause() != null && cur != cur.getCause()) {
+                            cur = cur.getCause();
+                        }
+                        String why = cur == null ? "?" : (cur.getMessage() == null
+                                ? cur.getClass().getSimpleName() : cur.getMessage());
+                        com.dwinovo.numen.Constants.LOG.warn("[numen-skin] MineSkin 签名失败: {}", why);
+                        skinNote(I18n.get(ModLanguageData.Keys.SKIN_SIGN_FAIL, clip(why, secW() - 10)), true);
+                        return;
+                    }
+                    com.dwinovo.numen.Constants.LOG.info("[numen-skin] MineSkin 签名成功: {}", name);
+                    com.dwinovo.numen.client.skin.SkinLibrary.instance().put(
+                            new com.dwinovo.numen.client.skin.SkinLibrary.Entry(
+                                    id, name, fVariant, signed.value(), signed.signature()),
+                            fPng);
+                    addingSkin = false;
+                    skinEditId = null;
+                    rebuild();
+                }));
+    }
+
+    private void skinNote(String msg, boolean fail) {
+        skinMsg = msg;
+        skinMsgFail = fail;
+        skinMsgUntil = System.currentTimeMillis() + (fail ? 12000 : 60000);   // 签名中的提示常驻到结果
+    }
+
+    private void renderSkinSection(GuiGraphics g, int mouseX, int mouseY) {
+        int x = secX(), w = secW();
+        var lib = com.dwinovo.numen.client.skin.SkinLibrary.instance();
+        if (!addingSkin) {
+            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE), x, secY0() - 2, TXT);
+        }
+        if (skinDeletePending != null) {
+            var e = lib.get(skinDeletePending);
+            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_DELETE_CONFIRM,
+                    e != null ? e.name() : ""), x, secY0() + 10, TXT);
+            return;
+        }
+        if (addingSkin) {
+            int fy = secY0();
+            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_FORM_NAME), x, fy, TXT_MUTED);
+            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_FORM_VARIANT), x, fy + SET_SP, TXT_MUTED);
+            // 拖拽区:提示文字 + 已加载状态(新图优先;编辑态没换图就提示沿用原图)。
+            int dy = fy + 2 * SET_SP + 4;
+            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_DROP_HINT), x, dy, TXT_FAINT);
+            if (skinDropped != null) {
+                txt(g, Component.translatable(ModLanguageData.Keys.SKIN_LOADED,
+                        skinDroppedW + "x" + skinDroppedH), x, dy + 12, OK);
+            } else if (skinEditId != null) {
+                txt(g, Component.translatable(ModLanguageData.Keys.SKIN_KEEP_OLD), x, dy + 12, TXT_FAINT);
+            }
+            if (skinMsg != null && skinMsgUntil > System.currentTimeMillis()) {
+                txt(g, Component.literal(clip(skinMsg, w - 94)), x, top + PANEL_H - PAD - 14,
+                        skinMsgFail ? FAIL : OK);
+            }
+            // 手臂模型下拉最后画(展开列表压在下方文字上)。
+            if (skinVariantDropdown != null) {
+                skinVariantDropdown.render(g, font, mouseX, mouseY);
+            }
+            return;
+        }
+        var list = lib.list();
+        if (list.isEmpty()) {
+            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_EMPTY), x, secY0() + 16, TXT_FAINT);
+            return;
+        }
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
+        for (int i = settingsScroll; i < list.size(); i++) {
+            int ry = listY0 + (i - settingsScroll) * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            var e = list.get(i);
+            int delX = x + w - 12, editX = x + w - 26;
+            var face = com.dwinovo.numen.client.skin.SkinTextures.faceOf(e.id(), lib.pngPath(e.id()));
+            if (face != null) {
+                net.minecraft.client.gui.components.PlayerFaceRenderer.draw(g, face, x, ry + 1, 16);
+            }
+            int tx = x + 20;
+            txt(g, Component.literal(e.name()), tx, ry + 1, TXT);
+            String meta = I18n.get(com.dwinovo.numen.client.skin.SkinLibrary.VARIANT_SLIM.equals(e.variant())
+                    ? ModLanguageData.Keys.SKIN_VARIANT_SLIM : ModLanguageData.Keys.SKIN_VARIANT_CLASSIC)
+                    + " · " + I18n.get(e.signed() ? ModLanguageData.Keys.SKIN_SIGNED
+                            : ModLanguageData.Keys.SKIN_UNSIGNED);
+            txt(g, Component.literal(clip(meta, w - 50)), tx, ry + 11, e.signed() ? TXT_FAINT : FAIL);
+            txt(g, Component.literal("✎"), editX, ry + 6,
+                    overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
+            txt(g, Component.literal("✕"), delX, ry + 6,
+                    overDelete(mouseX, mouseY, delX, ry) ? FAIL : TXT_FAINT);
+        }
+    }
+
+    private boolean skinClick(int mx, int my) {
+        if (skinDeletePending != null) return false;
+        if (addingSkin) {
+            // 手臂模型下拉先于其它命中(展开列表覆盖在表单文字上)。
+            if (skinVariantDropdown != null && skinVariantDropdown.mouseClicked(mx, my)) {
+                wSkinVariant = skinVariantDropdown.selectedId();
+                return true;
+            }
+            return false;
+        }
+        int x = secX(), w = secW();
+        var lib = com.dwinovo.numen.client.skin.SkinLibrary.instance();
+        var list = lib.list();
+        int listY0 = secY0() + 14;
+        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
+        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
+        for (int i = scroll; i < list.size(); i++) {
+            int ry = listY0 + (i - scroll) * LIST_ROW;
+            if (ry + LIST_ROW > secBottom()) break;
+            var e = list.get(i);
+            int delX = x + w - 12, editX = x + w - 26;
+            if (overDelete(mx, my, editX, ry)) { beginEditSkin(e); return true; }
+            if (overDelete(mx, my, delX, ry)) { skinDeletePending = e.id(); rebuild(); return true; }
+            if (overRow(mx, my, x, w, ry)) { beginEditSkin(e); return true; }
+        }
+        return false;
+    }
+
+    /** 皮肤 png 从系统拖进游戏窗口(表单打开时)。64×64 或旧版 64×32。 */
+    @Override
+    public void onFilesDrop(List<java.nio.file.Path> paths) {
+        if (!(tab == Tab.SETTINGS && settingsSection == SettingsSection.SKIN && addingSkin)) return;
+        for (java.nio.file.Path p : paths) {
+            if (!p.toString().toLowerCase(java.util.Locale.ROOT).endsWith(".png")) continue;
+            try {
+                byte[] bytes = java.nio.file.Files.readAllBytes(p);
+                try (var img = com.mojang.blaze3d.platform.NativeImage.read(
+                        new java.io.ByteArrayInputStream(bytes))) {
+                    int iw = img.getWidth(), ih = img.getHeight();
+                    if (iw != 64 || (ih != 64 && ih != 32)) {
+                        skinNote(I18n.get(ModLanguageData.Keys.SKIN_WARN_SIZE, iw + "x" + ih), true);
+                        return;
+                    }
+                    if (skinNameInput != null) wSkinName = skinNameInput.getValue();
+                    skinDropped = bytes;
+                    skinDroppedW = iw;
+                    skinDroppedH = ih;
+                    skinNote(I18n.get(ModLanguageData.Keys.SKIN_LOADED, iw + "x" + ih), false);
+                    return;
+                }
+            } catch (java.io.IOException | RuntimeException ex) {
+                skinNote(I18n.get(ModLanguageData.Keys.SKIN_WARN_READ, ex.getMessage() == null
+                        ? ex.getClass().getSimpleName() : ex.getMessage()), true);
+                return;
+            }
+        }
+    }
+
     private EditBox field(int x, int y, int w, int max, String value) {
         EditBox e = new FlatEditBox(font, x + FIELD_INSET_X, y + FIELD_INSET_Y,
                 w - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
@@ -1539,6 +1911,7 @@ public final class NumenScreen extends Screen {
             case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
             case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
+            case SKIN -> renderSkinSection(g, mouseX, mouseY);
             case PROXY -> renderProxySection(g);
         }
     }
@@ -1637,7 +2010,8 @@ public final class NumenScreen extends Screen {
                 I18n.get(ModLanguageData.Keys.PROVIDER_TITLE), I18n.get("numen.settings.proxy"),
                 I18n.get("numen.settings.nav.mcp"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona"),
-                I18n.get(ModLanguageData.Keys.VOICE_TITLE)};
+                I18n.get(ModLanguageData.Keys.VOICE_TITLE),
+                I18n.get(ModLanguageData.Keys.SKIN_TITLE)};
         int navX = left + PAD;
         int y = secY0();
         for (int i = 0; i < labels.length; i++) {
@@ -1884,6 +2258,7 @@ public final class NumenScreen extends Screen {
         if (settingsSection == SettingsSection.PERSONA) return personaClick(mx, my);
         if (settingsSection == SettingsSection.PROVIDER) return providerClick(mx, my);
         if (settingsSection == SettingsSection.VOICE) return voiceClick(mx, my);
+        if (settingsSection == SettingsSection.SKIN) return skinClick(mx, my);
         return false;
     }
 
@@ -2139,7 +2514,16 @@ public final class NumenScreen extends Screen {
         if (summonPersonaId != null) com.dwinovo.numen.persona.PersonaLibrary.pendSummon(n, summonPersonaId);
         com.dwinovo.numen.agent.llm.ProviderLibrary.pendSummon(n, summonProviderId);
         if (summonVoiceId != null) com.dwinovo.numen.client.voice.VoiceLibrary.pendSummon(n, summonVoiceId);
-        Services.NETWORK.sendToServer(new com.dwinovo.numen.network.payload.SummonRequestPayload(n));
+        // 自定义皮肤:库里存好的 Mojang 签名数据随包捎给服务端(自验证,伪造不了);
+        // 没选就留空,服务端按名字找同名正版皮肤。
+        String skinValue = "", skinSig = "";
+        var skinEntry = com.dwinovo.numen.client.skin.SkinLibrary.instance().get(summonSkinId);
+        if (skinEntry != null && skinEntry.signed()) {
+            skinValue = skinEntry.value();
+            skinSig = skinEntry.signature();
+        }
+        Services.NETWORK.sendToServer(
+                new com.dwinovo.numen.network.payload.SummonRequestPayload(n, skinValue, skinSig));
         summoning = false;
         summonPersonaId = null;
         summonProviderId = null;
@@ -2154,25 +2538,16 @@ public final class NumenScreen extends Screen {
         }
         if (button == 0) {
             // Summon dropdowns get first pick (their open lists overlay the panel).
-            if (summoning && summonPersonaDropdown != null && summonPersonaDropdown.mouseClicked(mouseX, mouseY)) {
-                String sel = summonPersonaDropdown.selectedId();
-                summonPersonaId = PERSONA_DEFAULT.equals(sel) ? null : sel;
-                return true;
-            }
-            if (summoning && summonProviderDropdown != null && summonProviderDropdown.mouseClicked(mouseX, mouseY)) {
-                summonProviderId = summonProviderDropdown.selectedId();
-                return true;
-            }
-            if (summoning && summonVoiceDropdown != null && summonVoiceDropdown.mouseClicked(mouseX, mouseY)) {
-                String sel = summonVoiceDropdown.selectedId();
-                summonVoiceId = VOICE_NONE.equals(sel) ? null : sel;
+            // 遮挡关系:先路由"正展开"的那一个——下排下拉向上翻时,展开列表盖住
+            // 上排的折叠框,固定顺序会让上排先吞掉点击。
+            if (summoning && routeSummonDropdownClick(mouseX, mouseY)) {
                 return true;
             }
             UUID close = railCloseAt((int) mouseX, (int) mouseY);
             if (close != null) { dismissPending = close; rebuild(); return true; }   // ✕ → confirm bar
             if (railPlusAt((int) mouseX, (int) mouseY)) {   // + → start the summon name prompt
                 summoning = !summoning;
-                if (summoning) { summonPersonaId = null; summonVoiceId = null; }   // fresh summon starts at "默认/无"
+                if (summoning) { summonPersonaId = null; summonVoiceId = null; summonSkinId = null; }   // fresh summon starts at "默认/无"
                 rebuild();
                 return true;
             }
@@ -2322,6 +2697,7 @@ public final class NumenScreen extends Screen {
                 case PERSONA -> PersonaLibrary.instance().list().size();
                 case PROVIDER -> com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list().size();
                 case VOICE -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().list().size();
+                case SKIN -> com.dwinovo.numen.client.skin.SkinLibrary.instance().list().size();
                 default -> 0;
             };
             int listY0 = secY0() + 14;
@@ -2372,6 +2748,8 @@ public final class NumenScreen extends Screen {
             txt(g, Component.literal(I18n.get(ModLanguageData.Keys.VOICE_SUMMON_LABEL)
                     + (summonVoiceDropdown == null ? I18n.get(ModLanguageData.Keys.VOICE_SUMMON_EMPTY) : "")),
                     left + PAD, y0 + 126, TXT_MUTED);
+            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_SKIN),
+                    left + PAD + summonHalfW() + 6, y0 + 126, TXT_MUTED);
             txt(g, Component.translatable("numen.summon.hint"),
                     left + PAD, y0 + 186, TXT_FAINT);
         } else {
@@ -2489,14 +2867,8 @@ public final class NumenScreen extends Screen {
         if (summoning && warnUntil > System.currentTimeMillis() && warnText != null) {
             g.drawString(font, warnText, left + PAD, top + HEADER_H + 186, 0xFFCC6666, false);
         }
-        if (summoning && summonVoiceDropdown != null) {
-            summonVoiceDropdown.render(g, font, mouseX, mouseY);
-        }
-        if (summoning && summonProviderDropdown != null) {
-            summonProviderDropdown.render(g, font, mouseX, mouseY);
-        }
-        if (summoning && summonPersonaDropdown != null) {
-            summonPersonaDropdown.render(g, font, mouseX, mouseY);
+        if (summoning) {
+            renderSummonDropdowns(g, mouseX, mouseY);
         }
 
         // Hovered MCP / skill row tooltip — drawn last so nothing paints over it.
