@@ -56,7 +56,7 @@ public final class FoodPolicy {
      *  switched off, everything edible competes as a regular ration. The pure
      *  overload below stays switch-free so the tier arithmetic tests hold. */
     public static Tier classify(Item item, FoodProperties food) {
-        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(
+        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(
                 com.dwinovo.numen.core.task.reflex.CoreReflexes.FOOD_POLICY_ID)) {
             return Tier.REGULAR;
         }

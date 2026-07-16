@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.survival;
 
-import com.dwinovo.numen.core.task.TaskChain;
+import com.dwinovo.numen.task.TaskChain;
 
 /**
  * The PURE decision core of the autonomous survival layer — the "should I take the

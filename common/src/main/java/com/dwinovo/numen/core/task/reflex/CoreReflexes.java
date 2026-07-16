@@ -1,5 +1,9 @@
 package com.dwinovo.numen.core.task.reflex;
 
+import com.dwinovo.numen.task.reflex.Reflex;
+import com.dwinovo.numen.task.reflex.ReflexRegistry;
+import com.dwinovo.numen.task.reflex.PolicyReflex;
+
 import com.dwinovo.numen.core.task.chain.FoodChain;
 import com.dwinovo.numen.core.task.chain.MLGChain;
 import com.dwinovo.numen.core.task.chain.MobDefenseChain;
@@ -25,6 +29,7 @@ public final class CoreReflexes {
         ReflexRegistry.register(new MobDefenseChain());
         ReflexRegistry.register(new FoodChain());
         ReflexRegistry.register(new UnstuckChain());
+        ReflexRegistry.register(new com.dwinovo.numen.task.chain.IdleChain());
         ReflexRegistry.register(new PolicyReflex(FOOD_POLICY_ID,
                 "自己找吃的时会避开有毒或有害的食物"));
     }

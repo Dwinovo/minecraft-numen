@@ -1,7 +1,10 @@
 package com.dwinovo.numen.core.task.chain;
 
+import com.dwinovo.numen.task.BodyLog;
+import com.dwinovo.numen.task.reflex.Reflex;
+
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.core.task.TaskChain;
+import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -30,10 +33,10 @@ import net.minecraft.world.item.ItemStack;
  * {@link #getPriority} short-circuits to {@link Float#NEGATIVE_INFINITY} before
  * touching the body, so the chain is a strict no-op.
  */
-public final class FoodChain implements TaskChain, com.dwinovo.numen.core.task.reflex.Reflex {
+public final class FoodChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
 
     /** BodyLog for completed episodes — dual-rail routed (may be null in unit tests). */
-    private final com.dwinovo.numen.core.task.BodyLog bodyLog;
+    private final com.dwinovo.numen.task.BodyLog bodyLog;
 
     /** The in-flight native eat (held use), or {@code null} between eats. */
     private Interaction eat;
@@ -45,14 +48,14 @@ public final class FoodChain implements TaskChain, com.dwinovo.numen.core.task.r
         this(null);
     }
 
-    public FoodChain(com.dwinovo.numen.core.task.BodyLog bodyLog) {
+    public FoodChain(com.dwinovo.numen.task.BodyLog bodyLog) {
         this.bodyLog = bodyLog;
     }
 
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
-        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(id())) {
+        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
             return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
         }
         // Never preempt a body already using an item UNLESS it's our own in-flight

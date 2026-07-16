@@ -1,14 +1,17 @@
 package com.dwinovo.numen.core;
 
-import com.dwinovo.numen.core.tool.CoreServerTools;
+import com.dwinovo.numen.task.TaskRecord;
+import com.dwinovo.numen.task.CompanionTask;
+
+import com.dwinovo.numen.agent.tool.ServerToolTransport;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.entity.CompanionLifecycle;
 import com.dwinovo.numen.platform.Services;
-import com.dwinovo.numen.core.net.CancelTasksPayload;
-import com.dwinovo.numen.core.net.ExecuteToolPayload;
-import com.dwinovo.numen.core.net.TaskResultPayload;
-import com.dwinovo.numen.core.task.CompanionTaskFactory;
-import com.dwinovo.numen.core.task.CompanionTickDispatcher;
+import com.dwinovo.numen.network.payload.CancelTasksPayload;
+import com.dwinovo.numen.network.payload.ExecuteToolPayload;
+import com.dwinovo.numen.network.payload.TaskResultPayload;
+import com.dwinovo.numen.task.CompanionTaskFactory;
+import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.task.BreakBlockCompanionTask;
 import com.dwinovo.numen.core.task.BreakBlockTaskRecord;
 import com.dwinovo.numen.core.task.CollectItemsTaskGoal;
@@ -68,7 +71,7 @@ public final class NumenCore {
         initialised = true;
         registerTools();
         registerTaskRunners();
-        registerTransport();
+        registerChains();
         registerReflexes();
         // Enable the autonomous survival chains (auto-eat / mob-defense / unstuck /
         // MLG). SurvivalConfig's own default is OFF — the safe state a bare library
@@ -79,36 +82,34 @@ public final class NumenCore {
     }
 
     /**
-     * Core's own server-side execution wiring — none of it is the engine's: our
-     * three transport packets (client ships a body-bound tool, server replies),
-     * and the engine's {@link CompanionLifecycle} seam used to finalize our
-     * per-companion tasks on death / removal / owner-abort.
+     * 把 core 的五条生存本能链插进引擎的竞价调度(链登记口),并挂任务会话
+     * 结束钩子——引擎报"会话结束"的时点(Stop/task_stop/死亡/空闲宽限期满),
+     * core 在此释放任务作用域的 MAINHAND 意图钉(宪法 §5)。运输包与
+     * 生命周期对接已随排程机器归引擎,不再是 core 的事。
      */
-    private static void registerTransport() {
-        Services.NETWORK.registerClientToServer(
-                ExecuteToolPayload.TYPE, ExecuteToolPayload.STREAM_CODEC, ExecuteToolPayload::handle);
-        Services.NETWORK.registerServerToClient(
-                TaskResultPayload.TYPE, TaskResultPayload.STREAM_CODEC, TaskResultPayload::handle);
-        Services.NETWORK.registerClientToServer(
-                CancelTasksPayload.TYPE, CancelTasksPayload.STREAM_CODEC, CancelTasksPayload::handle);
-
-        CompanionLifecycle.onDeath(CompanionTickDispatcher::clearActiveTask);
-        CompanionLifecycle.onRemove(CompanionTickDispatcher::onCompanionRemoved);
-        CompanionLifecycle.onAbort(CoreServerTools::abort);
+    private static void registerChains() {
+        com.dwinovo.numen.task.BrainChains.register(10,
+                bodyLog -> new com.dwinovo.numen.core.task.chain.UnstuckChain());
+        com.dwinovo.numen.task.BrainChains.register(20,
+                com.dwinovo.numen.core.task.chain.MobDefenseChain::new);
+        com.dwinovo.numen.task.BrainChains.register(30,
+                com.dwinovo.numen.core.task.chain.FoodChain::new);
+        com.dwinovo.numen.task.BrainChains.register(40,
+                com.dwinovo.numen.core.task.chain.MLGChain::new);
+        com.dwinovo.numen.task.BrainChains.register(50,
+                com.dwinovo.numen.core.task.chain.BreathChain::new);
+        com.dwinovo.numen.task.TaskSessionHooks.onSessionEnd(companion ->
+                com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(companion)
+                        .unpin(com.dwinovo.numen.core.task.pin.IntentPins.SLOT_MAINHAND));
     }
 
     /**
-     * The reflex roster (constitution §6): bind the switch persistence
-     * ({@code config/numen/reflexes.json}), then enlist core's instincts — the
-     * five survival chains and the two pure policies. Runs on BOTH sides like the
-     * rest of init: the server consults the switches in each chain/policy, the
-     * client reads {@code ReflexRegistry.overview()} when it builds the
-     * {@code get_self_status} tool description for a request.
+     * The reflex roster (constitution §6): enlist core's instincts — the five
+     * survival chains and the pure policies. The switch persistence is bound by
+     * the engine ({@code CommonClass.wireTaskMachine}). Runs on BOTH sides like
+     * the rest of init.
      */
     private static void registerReflexes() {
-        com.dwinovo.numen.core.task.reflex.ReflexRegistry.bindStore(
-                new com.dwinovo.numen.core.task.reflex.ReflexStateFile(
-                        Services.PLATFORM.getConfigDir().resolve("numen").resolve("reflexes.json")));
         com.dwinovo.numen.core.task.reflex.CoreReflexes.registerAll();
     }
 
@@ -130,8 +131,8 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractEntityTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EatItemTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.WaitTool());   // SAMPLE: raw NumenTool, no @NumenAction
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.TaskStatusTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.TaskStopTool());
+        ToolRegistry.register(new com.dwinovo.numen.task.TaskStatusTool());
+        ToolRegistry.register(new com.dwinovo.numen.task.TaskStopTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.DropItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectGuiTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.TransferTool());

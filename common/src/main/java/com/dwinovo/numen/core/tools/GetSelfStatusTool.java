@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.ServerNumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
@@ -42,7 +42,7 @@ public final class GetSelfStatusTool extends ServerNumenTool {
                 + "marked \"pinned\": true — reflexes keep their gear as instructed), your "
                 + "full backpack inventory, and movement state. ALWAYS call this before "
                 + "combat or planning decisions. No arguments.";
-        String overview = com.dwinovo.numen.core.task.reflex.ReflexRegistry.overview();
+        String overview = com.dwinovo.numen.task.reflex.ReflexRegistry.overview();
         return overview.isEmpty() ? base : base + "\n\n" + overview;
     }
 

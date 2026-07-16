@@ -1,8 +1,10 @@
 package com.dwinovo.numen.core.task.chain;
 
-import com.dwinovo.numen.core.pathing.exec.InputDriver;
+import com.dwinovo.numen.task.reflex.Reflex;
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.core.task.TaskChain;
+import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.task.survival.UnstuckDetector;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -26,7 +28,7 @@ import net.minecraft.world.phys.Vec3;
  * position sampling, so with the gate off nothing is recorded and the chain is a
  * strict no-op.
  */
-public final class UnstuckChain implements TaskChain, com.dwinovo.numen.core.task.reflex.Reflex {
+public final class UnstuckChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
 
     /** Rolling window length (ticks) and the disc radius (blocks) that counts as "not moving". */
     private static final int WINDOW = 40;
@@ -41,7 +43,7 @@ public final class UnstuckChain implements TaskChain, com.dwinovo.numen.core.tas
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
-        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(id())) {
+        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
             return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
         }
         // Poll: feed the rolling window every tick (whoever holds the body this tick

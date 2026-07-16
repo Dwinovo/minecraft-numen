@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.survival;
 
-import com.dwinovo.numen.core.task.TaskChain;
+import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
 import org.junit.jupiter.api.Test;
 

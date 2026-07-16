@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+
 /**
  * Structured "why did it fail" category, threaded up out of the pathing/placement
  * substrate ({@code PlayerNav}, {@code PlaceManeuver}, {@code Interaction},

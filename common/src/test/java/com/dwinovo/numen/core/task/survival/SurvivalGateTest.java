@@ -1,7 +1,9 @@
 package com.dwinovo.numen.core.task.survival;
 
+import com.dwinovo.numen.task.ChainScheduler;
+
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.core.task.TaskChain;
+import com.dwinovo.numen.task.TaskChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 

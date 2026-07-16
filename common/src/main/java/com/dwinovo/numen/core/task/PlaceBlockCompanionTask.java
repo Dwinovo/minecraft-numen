@@ -1,5 +1,8 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+import com.dwinovo.numen.task.Suspendable;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.exec.BlockDigger;

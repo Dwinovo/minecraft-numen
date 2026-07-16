@@ -1,11 +1,14 @@
 package com.dwinovo.numen.core.task.chain;
 
+import com.dwinovo.numen.task.BodyLog;
+import com.dwinovo.numen.task.reflex.Reflex;
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.exec.InputDriver;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.core.task.TaskChain;
+import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.base.ToolSelect;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
@@ -38,7 +41,7 @@ import net.minecraft.world.phys.Vec3;
  *
  * <p>GATED OFF by default via {@link SurvivalConfig}.
  */
-public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.core.task.reflex.Reflex {
+public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
 
     /** How far to look for a threat, and the leash beyond which we abandon a chase. */
     private static final double SCAN_RADIUS = 12.0;
@@ -57,7 +60,7 @@ public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.core.
     private static final long CHAIN_COOLDOWN = 100;
 
     /** BodyLog for completed episodes (kill / escape) — dual-rail routed (may be null in unit tests). */
-    private final com.dwinovo.numen.core.task.BodyLog bodyLog;
+    private final com.dwinovo.numen.task.BodyLog bodyLog;
 
     private Mode mode = Mode.NONE;
     private LivingEntity target;
@@ -67,7 +70,7 @@ public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.core.
         this(null);
     }
 
-    public MobDefenseChain(com.dwinovo.numen.core.task.BodyLog bodyLog) {
+    public MobDefenseChain(com.dwinovo.numen.task.BodyLog bodyLog) {
         this.bodyLog = bodyLog;
     }
     /** Last known threat position, for the flee goal supplier (survives the mob despawning mid-flee). */
@@ -82,7 +85,7 @@ public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.core.
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
-        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(id())) {
+        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
             return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
         }
         // Leash cooldown: we recently proved we can neither reach nor escape the

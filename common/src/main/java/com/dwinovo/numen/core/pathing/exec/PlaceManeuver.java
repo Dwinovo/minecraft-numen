@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.pathing.exec;
 
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.task.FailureType;

@@ -1,7 +1,8 @@
 package com.dwinovo.numen.core.pathing.exec.drive;
 
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.exec.InputDriver;
 import com.dwinovo.numen.core.pathing.movement.Movement;
 import net.minecraft.world.phys.Vec3;
 

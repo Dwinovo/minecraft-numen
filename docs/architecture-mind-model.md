@@ -3,6 +3,13 @@
 一个同伴 = 一具身体(服务端)+ 一个大脑(客户端 LLM)+ 两个消息口。
 任何新功能必须能在本文档里找到自己的位置;找不到,先修宪再动工。
 
+**仓界(2026-07-16 裁决):机器在 numen-api,内容在 numen-core。** 判定口诀:
+"这是机器,还是塞进机器的内容?"——收件箱/大脑循环/任务队列与竞价调度/
+工具运输/异步受理/闲时生命体征是机器;本能链/任务执行器/30 个工具/寻路是
+内容,经四个登记口插入(BrainChains 链、CompanionTaskFactory 任务执行器、
+ToolRegistry 工具、ReflexRegistry 本能名册),外加 TaskSessionHooks 会话
+结束回调(core 在此释放意图钉)。第三方内容包与 core 地位平等。
+
 ## 一、身体层:每 tick 一次竞价
 
 所有想控制身体的机制都是 `TaskChain`,每 tick 向 `CompanionBrain` 出价

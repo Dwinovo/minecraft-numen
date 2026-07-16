@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.pathing.exec;
 
+import com.dwinovo.numen.task.CompanionTickDispatcher;
+
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.level.block.Block;
 

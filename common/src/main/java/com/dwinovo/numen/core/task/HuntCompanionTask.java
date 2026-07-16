@@ -1,8 +1,10 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.exec.InputDriver;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;

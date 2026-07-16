@@ -1,9 +1,11 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.task.CompanionTickDispatcher;
+import com.dwinovo.numen.task.TaskRecord;
+
+import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.task.WaitTaskRecord;
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.ServerNumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;

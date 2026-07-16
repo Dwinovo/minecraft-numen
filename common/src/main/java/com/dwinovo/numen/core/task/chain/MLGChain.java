@@ -1,8 +1,11 @@
 package com.dwinovo.numen.core.task.chain;
 
+import com.dwinovo.numen.task.BodyLog;
+import com.dwinovo.numen.task.reflex.Reflex;
+
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.core.task.TaskChain;
+import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.world.InteractionHand;
@@ -33,7 +36,7 @@ import net.minecraft.world.phys.Vec3;
  * once the bucket empties (it becomes a plain bucket) the chain no longer fires a
  * use — it never scoops the just-placed water back up.
  */
-public final class MLGChain implements TaskChain, com.dwinovo.numen.core.task.reflex.Reflex {
+public final class MLGChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
 
     /** Fire the water/block once the ground is this close below (blocks). */
     private static final double PLACE_WITHIN = 3.5;
@@ -41,7 +44,7 @@ public final class MLGChain implements TaskChain, com.dwinovo.numen.core.task.re
     private static final double PROBE_DEPTH = 8.0;
 
     /** BodyLog for completed episodes — dual-rail routed (may be null in unit tests). */
-    private final com.dwinovo.numen.core.task.BodyLog bodyLog;
+    private final com.dwinovo.numen.task.BodyLog bodyLog;
     /** One diary line per fall episode (reset when the save ends). */
     private boolean notedThisFall;
 
@@ -49,14 +52,14 @@ public final class MLGChain implements TaskChain, com.dwinovo.numen.core.task.re
         this(null);
     }
 
-    public MLGChain(com.dwinovo.numen.core.task.BodyLog bodyLog) {
+    public MLGChain(com.dwinovo.numen.task.BodyLog bodyLog) {
         this.bodyLog = bodyLog;
     }
 
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
-        if (!com.dwinovo.numen.core.task.reflex.ReflexRegistry.enabled(id())) {
+        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
             return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
         }
         boolean canSave = waterBucketSlot(companion) >= 0 || softBlockSlot(companion) >= 0;
