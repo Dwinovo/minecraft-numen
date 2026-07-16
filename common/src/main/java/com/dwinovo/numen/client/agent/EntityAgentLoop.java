@@ -134,7 +134,7 @@ public final class EntityAgentLoop {
      * {@code user} message in between. So we hold them here and flush them in
      * at the next protocol-valid point (see {@link #flushBufferedPrompts}).
      */
-    private final List<String> bufferedPrompts = new ArrayList<>();
+    private final List<Inboxed> bufferedPrompts = new ArrayList<>();
 
     /**
      * World/body facts ({@code <event>} XML) awaiting the same protocol-valid
@@ -144,7 +144,11 @@ public final class EntityAgentLoop {
      * turn (the model's right to know what its body did). Flushed together with
      * the prompts, events first.
      */
-    private final List<String> pendingEvents = new ArrayList<>();
+    private final List<Inboxed> pendingEvents = new ArrayList<>();
+    /** 收件箱条目:正文 + 进箱时刻(消费时给躺久的标注年龄,跨会话恢复时尤其要紧)。 */
+    private record Inboxed(String text, long ts) {}
+    /** 收件箱落盘账本:push 即存,消费即清,跨会话不失忆。 */
+    private InboxJournal inbox;
     /** 后台异步任务记账(派发回执置位,对上 id 的 task_finished 清零);null = 身体空闲。
      *  客户端自记账,不走新网络包:回执与事件本来就都经过这里。 */
     private CurrentTask currentTask;
@@ -251,6 +255,7 @@ public final class EntityAgentLoop {
             display.add(msg);
         });
         this.workBlocks = WorkBlockMemory.forEntity(numenRoot.resolve("memory"), entityUuid);
+        this.inbox = InboxJournal.forEntity(numenRoot.resolve("conversations"), entityUuid);
         this.providerEntryId = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().assignedEntry(entityUuid);
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
@@ -266,6 +271,23 @@ public final class EntityAgentLoop {
             }
         });
         restoreFromDisk();
+        // 上次会话没消费完的收件箱:原样躺回缓冲区,下一个轮子照常带上
+        // (不主动开轮——登录瞬间实体多半还没加载,而且旧闻不值得吵人)。
+        for (InboxJournal.Entry e : inbox.load()) {
+            if ("prompt".equals(e.type())) {
+                bufferedPrompts.add(new Inboxed(e.text(), e.ts()));
+            } else {
+                pendingEvents.add(new Inboxed(e.text(), e.ts()));
+            }
+        }
+    }
+
+    /** 收件箱变动即快照落盘(文件极小,整本重写免簿记)。 */
+    private void saveInbox() {
+        List<InboxJournal.Entry> all = new ArrayList<>();
+        for (Inboxed e : pendingEvents) all.add(new InboxJournal.Entry("event", e.text(), e.ts()));
+        for (Inboxed p : bufferedPrompts) all.add(new InboxJournal.Entry("prompt", p.text(), p.ts()));
+        inbox.save(all);
     }
 
     /**
@@ -374,8 +396,9 @@ public final class EntityAgentLoop {
     /** Snapshot of prompts (GUI or {@code NumenGateway}) still waiting for the
      *  next protocol-valid splice point — the GUI renders these as pending. */
     public List<String> queuedPrompts() {
-        List<String> all = new ArrayList<>(pendingEvents);
-        all.addAll(bufferedPrompts);
+        List<String> all = new ArrayList<>();
+        for (Inboxed e : pendingEvents) all.add(e.text());
+        for (Inboxed p : bufferedPrompts) all.add(p.text());
         return List.copyOf(all);
     }
 
@@ -396,7 +419,8 @@ public final class EntityAgentLoop {
         boolean deferred = awaitingLlmResponse || dispatcher.busy();
         // Wrap the owner's words in <query> so the model can always tell real user input apart from
         // anything else numen injects into the same user turn (events, and future world-state/reminders).
-        bufferedPrompts.add("<query>" + text + "</query>");
+        bufferedPrompts.add(new Inboxed("<query>" + text + "</query>", System.currentTimeMillis()));
+        saveInbox();
         Constants.LOG.info("[numen-entity#{}] user prompt ({} chars){}{}: {}",
                 entityUuid, text.length(),
                 wasAborted ? " — reset previous abort" : "",
@@ -576,6 +600,7 @@ public final class EntityAgentLoop {
             // knowing it had died — the exact hole this split closes).
             int dropped = bufferedPrompts.size();
             bufferedPrompts.clear();
+            saveInbox();
             Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued prompt(s) ({} event(s) kept)",
                     entityUuid, dropped, pendingEvents.size());
         }
@@ -637,6 +662,7 @@ public final class EntityAgentLoop {
         compacting = false;
         bufferedPrompts.clear();
         pendingEvents.clear();
+        saveInbox();
         dead = true;
         Constants.LOG.info("[numen-entity#{}] body died ({}) — loop frozen ({} call(s) in flight)",
                 entityUuid, cause, deathInterruptedCalls.size());
@@ -688,13 +714,6 @@ public final class EntityAgentLoop {
         }
     }
 
-    /**
-     * Inject an asynchronous world event into the conversation (dimension change, hazard, …) — the
-     * generic version of the Claude-Code "channel notification": the event rides the same buffered
-     * queue as owner prompts, so it splices in only at a protocol-valid boundary. {@code urgent} wakes
-     * an idle brain to react now; otherwise it sits in the queue and the brain sees it on the next
-     * owner-driven turn (no extra LLM call, no unprompted chatter). Dropped while frozen by death.
-     */
     /** 派发回执识别:异步工具的受理结果带 data.async=true 与 data.task_id。 */
     private void trackAsyncDispatch(String toolName, String resultJson) {
         try {
@@ -711,17 +730,35 @@ public final class EntityAgentLoop {
         }
     }
 
-    public void injectEvent(String xml, boolean urgent) {
+    /**
+     * 收件箱唯一入口(事件侧)。三态路由——消费时机由**发生时的状态**决定,
+     * 不由事件类型决定:
+     * <ul>
+     *   <li><b>回合进行中</b>:进箱躺着。{@link #tryStartTurn} 的守卫会挡下开轮,
+     *       到工具批结算的边界自然一次倒箱——"直接发"的最快合法形态;</li>
+     *   <li><b>身体在执行后台任务(大脑空闲)</b>:立刻开轮。任务期间的事是军情
+     *       (呛水、被袭、任务收尾都可能要改链),模型有权当场重新决策;</li>
+     *   <li><b>完全空闲</b>:进箱躺着,等下一个轮子搭车——僵尸击杀只是日记素材,
+     *       不值得单独吵主人。只有 {@code principal}(活人在说话:外部桥接的
+     *       弹幕/QQ 消息)例外,享受与主人同级的开轮资格。</li>
+     * </ul>
+     * push 即落盘(跨会话不失忆);死亡冻结期间丢弃。
+     */
+    public void injectEvent(String xml, boolean principal) {
         if (dead) return;
-        // 异步任务收尾:对上 id 就清掉记账,<current_task> 从下一回合起不再注入。
-        if (currentTask != null && xml.contains("kind=\"task_finished\"")
+        // 后台任务收尾:对上 id 清记账。注意先取"发生时的状态"再清——收尾事件
+        // 本身发生在任务态,有资格立刻开轮(主动汇报"挖完了")。
+        boolean duringTask = currentTask != null;
+        if (duringTask && xml.contains("kind=\"task_finished\"")
                 && xml.contains("id=\"" + currentTask.id() + "\"")) {
             currentTask = null;
         }
-        pendingEvents.add(xml);
-        Constants.LOG.info("[numen-entity#{}] event queued{}: {}",
-                entityUuid, urgent ? " (urgent)" : "", truncate(xml, 120));
-        if (urgent) {
+        pendingEvents.add(new Inboxed(xml, System.currentTimeMillis()));
+        saveInbox();
+        Constants.LOG.info("[numen-entity#{}] event inboxed{}{}: {}",
+                entityUuid, principal ? " (principal)" : "", duringTask ? " (during task)" : "",
+                truncate(xml, 120));
+        if (principal || duringTask) {
             tryStartTurn();
         }
     }
@@ -838,15 +875,28 @@ public final class EntityAgentLoop {
         if (!knownBlocks.isEmpty()) {
             parts.add(knownBlocks);
         }
-        parts.addAll(pendingEvents);
-        parts.addAll(bufferedPrompts);
+        long now = System.currentTimeMillis();
+        for (Inboxed e : pendingEvents) parts.add(annotateAge(e, now));
+        for (Inboxed p : bufferedPrompts) parts.add(annotateAge(p, now));
         String merged = String.join("\n", parts);
         pendingEvents.clear();
         bufferedPrompts.clear();
+        saveInbox();
         convo.addUser(merged);
         // A fresh owner directive starts a new tool-chain: restart the turn
         // counter (just log numbering now that the hard cap is gone).
         convo.resetTurnCount();
+    }
+
+    /** 躺超过 10 分钟的输入消费时标注年龄——尤其是跨会话恢复的旧闻,模型该知道
+     *  "主人不在时发生的",而不是当成刚发生的事去反应。 */
+    private static String annotateAge(Inboxed e, long now) {
+        long ageMs = e.ts() > 0 ? now - e.ts() : 0;
+        if (ageMs < 10 * 60_000L) return e.text();
+        String age = ageMs < 3_600_000L ? (ageMs / 60_000L) + "分钟"
+                : ageMs < 86_400_000L ? (ageMs / 3_600_000L) + "小时"
+                : (ageMs / 86_400_000L) + "天";
+        return "[发生于约" + age + "前] " + e.text();
     }
 
     private void tryStartTurn() {

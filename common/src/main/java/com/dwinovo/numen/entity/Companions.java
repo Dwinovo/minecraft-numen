@@ -202,19 +202,19 @@ public final class Companions {
 
     /**
      * Push an async world {@code <event>} to the companion's brain (it runs on the owner's client).
-     * {@code urgent} wakes an idle brain to react now; otherwise it rides along on the next owner turn.
+     * Consumption timing is the client inbox's business — it routes by the brain's state at arrival
+     * (mid-turn → next boundary; background task running → immediate turn; idle → wait and ride).
      * No-op if the owner is offline (no client to receive it).
      *
-     * <p><b>Discipline</b> (mind-model constitution §4): core-domain body narrative NEVER calls this
-     * method directly — everything the body does on its own reports into the core's BodyLog, whose
-     * idle rail is the only core producer of ambient events (and always passes {@code urgent=false}).
-     * {@code urgent} is reserved for EXTERNAL interaction-style consumers (bridge mods, proactive
-     * companionship features) that deliberately spend an LLM wake on the owner's behalf.
+     * <p>{@code principal} means "a live HUMAN is speaking through this event" — bridge mods relaying
+     * danmaku / QQ messages set it true and get owner-grade treatment (opens a turn even from full
+     * idle). World/body events (task wind-downs, dimension changes, body narrative) always pass
+     * false: they are facts, and facts don't get to decide their own urgency.
      */
-    public static void emitEvent(NumenPlayer body, String xml, boolean urgent) {
+    public static void emitEvent(NumenPlayer body, String xml, boolean principal) {
         ServerPlayer owner = body.resolveOwnerPlayer();
         if (owner != null) {
-            Services.NETWORK.sendToPlayer(owner, new NumenEventPayload(body.getUUID(), xml, urgent));
+            Services.NETWORK.sendToPlayer(owner, new NumenEventPayload(body.getUUID(), xml, principal));
         }
     }
 

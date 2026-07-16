@@ -13,13 +13,14 @@ import java.util.UUID;
 
 /**
  * Server → Client: an asynchronous WORLD EVENT for a companion's brain (dimension change, a hazard,
- * …) — the generic version of Claude Code's "channel notification" (an external event pushed into a
- * running session). The server detects the event (edge-triggered) and ships a ready-made {@code <event>}
- * XML string; the client loop queues it like an owner prompt and splices it in at a protocol-valid
- * boundary. {@code urgent} wakes an idle brain to react now; otherwise it rides along on the next
- * owner-driven turn (no extra LLM call). Death is its own bespoke freeze/thaw pair, not this.
+ * task wind-down, …). The server ships a ready-made {@code <event>} XML string; the client-side
+ * INBOX decides consumption timing by the brain's state at arrival (mid-turn → next boundary;
+ * background task running → immediate turn; fully idle → wait for the next turn). {@code principal}
+ * marks "a live human is speaking" (bridge mods relaying danmaku / QQ messages): those open a turn
+ * even from full idle, same privilege as the owner. Plain world events leave it false — their
+ * timing is the inbox's business, not the producer's.
  */
-public record NumenEventPayload(UUID entityUuid, String xml, boolean urgent) implements CustomPacketPayload {
+public record NumenEventPayload(UUID entityUuid, String xml, boolean principal) implements CustomPacketPayload {
 
     public static final Type<NumenEventPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_event"));
@@ -28,7 +29,7 @@ public record NumenEventPayload(UUID entityUuid, String xml, boolean urgent) imp
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, NumenEventPayload::entityUuid,
                     ByteBufCodecs.STRING_UTF8, NumenEventPayload::xml,
-                    ByteBufCodecs.BOOL, NumenEventPayload::urgent,
+                    ByteBufCodecs.BOOL, NumenEventPayload::principal,
                     NumenEventPayload::new);
 
     @Override
@@ -38,6 +39,6 @@ public record NumenEventPayload(UUID entityUuid, String xml, boolean urgent) imp
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */
     public static void handle(NumenEventPayload p) {
-        AgentLoopRegistry.get(p.entityUuid()).ifPresent(loop -> loop.injectEvent(p.xml(), p.urgent()));
+        AgentLoopRegistry.get(p.entityUuid()).ifPresent(loop -> loop.injectEvent(p.xml(), p.principal()));
     }
 }
