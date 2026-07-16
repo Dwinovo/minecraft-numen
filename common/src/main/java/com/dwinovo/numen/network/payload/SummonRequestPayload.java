@@ -44,7 +44,7 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
         return TYPE;
     }
 
-    /** 正在异步召唤中的名字(皮肤查询窗口内)——Carpet spawning 集合同款防双击竞态。 */
+    /** 正在异步召唤中的 owner/name 键——皮肤查询窗口内吃掉重复请求,防双击造重。 */
     private static final java.util.Set<String> SPAWNING =
             java.util.concurrent.ConcurrentHashMap.newKeySet();
 
@@ -53,7 +53,7 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
         String name = p.name() == null ? "" : p.name().trim();
         if (!com.dwinovo.numen.entity.MojangSkins.validName(name)) return;   // 服务端权威校验
         var server = owner.level().getServer();
-        // Carpet 同款重名闸:同名玩家已在线(真人/别的主人的同伴)一律拒绝——
+        // 重名闸:同名玩家已在线(真人/别的主人的同伴)一律拒绝——
         // 例外是自己的同名同伴(那是幂等唤醒/换肤,summon 内部处理)。
         var online = server.getPlayerList().getPlayerByName(name);
         boolean ownSameName = online instanceof com.dwinovo.numen.entity.NumenPlayer np
@@ -63,7 +63,7 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
                     "[Numen] 名字「" + name + "」已被在线玩家占用,换一个吧"));
             return;
         }
-        // Carpet 同款登录中闸:异步皮肤查询窗口内(几秒)重复点击不许再召。
+        // 登录中闸:异步皮肤查询窗口内(几秒)重复点击不许再召。
         String spawnKey = owner.getUUID() + "/" + name;
         if (!SPAWNING.add(spawnKey)) return;
         String value = p.skinValue() == null ? "" : p.skinValue();
@@ -81,7 +81,7 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
             }
             return;
         }
-        // 按名字借皮肤:查询在后台线程(Carpet 同款服务栈),绝不阻塞主线程;
+        // 按名字借皮肤:查询在后台线程,绝不阻塞主线程;
         // 取到(或确认没有)后蹦回主线程再召唤。
         com.dwinovo.numen.entity.MojangSkins.fetch(server, name).thenAccept(skin -> server.execute(() -> {
             try {

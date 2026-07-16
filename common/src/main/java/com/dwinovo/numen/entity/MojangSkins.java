@@ -11,8 +11,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * 借正版玩家皮肤——Carpet 假人({@code EntityPlayerMPFake.createFake})同款路径,
- * 零第三方、零自写 HTTP,全部走服务端内置的 Mojang 服务栈:
+ * 借正版玩家皮肤——零第三方、零自写 HTTP,全部走服务端内置的 Mojang 服务栈:
  * <ol>
  *   <li>名字 → UUID:{@link MinecraftServer#getProfileCache()}(usercache.json
  *       两级缓存,未命中才查 Mojang,离线服照常工作);</li>

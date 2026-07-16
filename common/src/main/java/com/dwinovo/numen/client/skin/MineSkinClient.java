@@ -20,9 +20,8 @@ import java.util.concurrent.CompletableFuture;
 /**
  * MineSkin 代签客户端:把任意皮肤 png 换成 Mojang 签名的 textures
  * (value+signature)。原版客户端只认 Mojang 签过名的皮肤数据,MineSkin 用
- * 正版账号池"代穿一次抠下签名"——Citizens/Taterzens/SkinsRestorer 的自定义
- * 皮肤全走它,免费匿名档按调用方 IP 限流(约 10 张/分),本客户端跑在每个
- * 玩家自己的机器上,额度天然按人头分摊,分发无瓶颈。
+ * 正版账号池"代穿一次抠下签名"。免费匿名档按调用方 IP 限流(约 10 张/分),
+ * 本客户端跑在每个玩家自己的机器上,额度天然按人头分摊,分发无瓶颈。
  *
  * <p>跟随模组的代理设置(Services.CONFIG.getProxy);失败返回带人话的
  * 异常消息(限流/网络/服务端拒绝),绝不同步抛。
