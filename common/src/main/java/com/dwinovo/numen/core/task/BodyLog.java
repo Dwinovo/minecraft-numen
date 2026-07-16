@@ -16,7 +16,7 @@ import java.util.ArrayDeque;
  * <p>唯一的滞留原因是主人离线(sink 拒收):条目留箱,由 idle-tick 的
  * {@link #flush} 重试。离线累积以 {@link #MAX_ENTRIES} 封顶(最旧的丢弃),
  * 单个事件永远不会刷屏。Tick-thread only;纯 JDK,路由核心可无头测试
- * ({@code BodyLogTest}),Minecraft 传输藏在 {@link AmbientSink} 后面。
+ * ({@code BodyLogTest}),Minecraft 传输藏在 {@link EventSink} 后面。
  */
 public final class BodyLog {
 
@@ -26,16 +26,16 @@ public final class BodyLog {
      * {@code Companions.emitEvent(companion, xml, false)}:身体叙事是事实,
      * 事实不配自定紧急度(principal 恒 false)。
      */
-    public interface AmbientSink {
+    public interface EventSink {
         boolean tryEmit(String xml);
     }
 
     static final int MAX_ENTRIES = 6;
 
     private final ArrayDeque<String> entries = new ArrayDeque<>();
-    private final AmbientSink sink;
+    private final EventSink sink;
 
-    public BodyLog(AmbientSink sink) {
+    public BodyLog(EventSink sink) {
         this.sink = sink;
     }
 

@@ -21,11 +21,10 @@ import java.util.List;
  * task (its body is released via {@link LlmTaskChain#onInterrupt}, its deadline
  * frozen via {@link LlmTaskChain#freezeTick}) and it resumes when the spike subsides.
  *
- * <p>This class also wires the {@link BodyLog} dual rail (constitution §4): chains
- * report body episodes into the log; the log asks {@link LlmTaskChain#hasWork}
- * (injected as a supplier — no structural cycle) to pick a rail, and its idle-rail
- * transport is this brain's {@link #tryEmitAmbient} — one non-urgent
- * {@code <event kind="body_log">} to the owner's client, never a wake.
+ * <p>This class also wires the {@link BodyLog} (constitution §4, 即报即发):
+ * chains report body episodes into the log, whose transport is this brain's
+ * {@link #tryEmitEvent} — one {@code <event kind="body_log">} to the owner's
+ * client; consumption timing is the client inbox's three-state routing.
  */
 final class CompanionBrain {
 
@@ -48,7 +47,7 @@ final class CompanionBrain {
     private final List<TaskChain> chains;
 
     /** The body this brain is currently acting for — bound at every entry point
-     *  that can trigger an ambient flush, read by {@link #tryEmitAmbient}. (The
+     *  that can trigger a body-log flush, read by {@link #tryEmitEvent}. (The
      *  brain is keyed per companion UUID, but chains report without a companion
      *  argument, so the flush transport resolves the body through this field.) */
     private NumenPlayer body;
@@ -61,7 +60,7 @@ final class CompanionBrain {
             new com.dwinovo.numen.core.task.pin.HandPinRelease(HAND_PIN_GRACE_TICKS);
 
     CompanionBrain() {
-        this.bodyLog = new BodyLog(this::tryEmitAmbient);
+        this.bodyLog = new BodyLog(this::tryEmitEvent);
         this.llm = new LlmTaskChain(queue);
         this.chains = List.of(
                 new UnstuckChain(),
@@ -79,7 +78,7 @@ final class CompanionBrain {
      * 状态路由(任务中=军情立刻开轮,全闲=躺着搭车)。No owner online →
      * refuse, so the log keeps its entries and retries on a later flush.
      */
-    private boolean tryEmitAmbient(String xml) {
+    private boolean tryEmitEvent(String xml) {
         NumenPlayer companion = body;
         if (companion == null || companion.resolveOwnerPlayer() == null) return false;
         com.dwinovo.numen.entity.Companions.emitEvent(companion, xml, false);

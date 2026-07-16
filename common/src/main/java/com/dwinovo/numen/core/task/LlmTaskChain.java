@@ -38,10 +38,8 @@ public final class LlmTaskChain implements TaskChain {
     }
 
     /**
-     * Busy-rail predicate for the {@link BodyLog} routing (and this chain's own
-     * bid): a running record or a pending one means a tool result is coming that
-     * can carry the body's narrative — report lines queue instead of shipping as
-     * an ambient event.
+     * 本链的出价依据(也是异步受理闸门的占用判定):有运行中或排队中的记录
+     * 即有工作。
      */
     boolean hasWork() {
         return record != null || queue.hasPending();
