@@ -3076,7 +3076,8 @@ public final class NumenScreen extends Screen {
     // ---- chat transcript + plan ----
 
     private void renderChat(GuiGraphics g) {
-        // 头部右侧(tab 左边):上下文水位 + 累计消耗。水位 ≥85% 变红提示快压缩了。
+        // 头部右侧(tab 左边):上下文水位 + 累计消耗。恒定淡色——这是信息不是警报,
+        // 临近水位线会自动压缩,不需要玩家做任何事。
         int pct = loop().contextPercent();
         long total = loop().totalTokensUsed();
         if (pct > 0 || total > 0) {
@@ -3084,7 +3085,7 @@ public final class NumenScreen extends Screen {
                     + (pct > 0 && total > 0 ? " · " : "")
                     + (total > 0 ? fmtTokens(total) + " tokens" : "");
             int tx = tabX[0] - 10 - font.width(s);
-            txt(g, Component.literal(s), tx, top + 7, pct >= 85 ? FAIL : TXT_FAINT);
+            txt(g, Component.literal(s), tx, top + 7, TXT_FAINT);
         }
         int bodyY = top + HEADER_H + 4;
         int bodyBottom = top + PANEL_H - INPUT_H - PAD - 6;
