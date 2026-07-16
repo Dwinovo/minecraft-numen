@@ -6,7 +6,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import java.util.function.Consumer;
 
 /**
- * 身体工具在 {@code runOnServer} 里用的三个静态帮手(建议 static import,
+ * 身体工具在 {@code onServerCall} 里用的三个静态帮手(建议 static import,
  * 调用点保持裸名):{@link #ctx} 造任务上下文,{@link #enqueue} 同步排队,
  * {@link #dispatchAsync} 异步受理。收口在此的还有"一具身体一件活"的占用
  * 闸门与拒绝话术。

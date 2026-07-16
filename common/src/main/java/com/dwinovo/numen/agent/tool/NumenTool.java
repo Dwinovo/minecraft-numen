@@ -10,7 +10,7 @@ import java.util.function.Consumer;
 /**
  * 工具的全部契约,一个接口没有第二个基类。绝大多数工具是<b>身体工具</b>
  * (动同伴的身体或读它的世界),那就是默认形态:什么都不覆写,调用自动
- * 发往服务端活体,你只实现 {@link #runOnServer}——当场回结果(查询),
+ * 发往服务端活体,你只实现 {@link #onServerCall}——当场回结果(查询),
  * 或经 {@code TaskDispatch.enqueue}/{@code dispatchAsync} 交给任务队列。
  *
  * <p>少数工具不走身体(纯客户端逻辑如 todowrite,或自带协议调外部服务),
@@ -34,7 +34,7 @@ public interface NumenTool {
 
     /**
      * Run this tool for one call — the engine's ONLY entry point. 默认实现是
-     * 身体工具的运输:把调用发往服务端并停靠,等 {@link #runOnServer} 的
+     * 身体工具的运输:把调用发往服务端并停靠,等 {@link #onServerCall} 的
      * 结果回家。不走身体的工具覆写它,想怎么干怎么干(当场完成、去异步、
      * 发自己的包),最后经 {@link ToolCall} 报结果。
      */
@@ -48,7 +48,7 @@ public interface NumenTool {
      * {@code dispatchAsync}(异步长跑)。只有覆写了 {@link #invoke} 的
      * 非身体工具可以不管它——默认实现兜底出一条清晰的失败。
      */
-    default void runOnServer(String toolCallId, JsonObject args,
+    default void onServerCall(String toolCallId, JsonObject args,
                              NumenPlayer companion, Consumer<String> reply) {
         reply.accept(TaskResult.fail(
                 "tool '" + name() + "' has no server-side body implementation").toJson());

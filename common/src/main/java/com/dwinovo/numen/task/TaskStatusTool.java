@@ -34,7 +34,7 @@ public final class TaskStatusTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         TaskRecord rec = CompanionTickDispatcher.asyncTaskFor(companion.getUUID());
         if (rec == null) {
             reply.accept(TaskResult.ok("身体空闲,没有后台任务。").toJson());
