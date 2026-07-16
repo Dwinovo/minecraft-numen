@@ -195,6 +195,9 @@ public final class ModLanguageData {
         adder.add("numen.chat.steps", "%s steps");
         adder.add("numen.chat.plan", "PLAN");
         adder.add("numen.chat.no_plan", "no plan yet");
+        adder.add("numen.chat.usage_tip.context", "context: how full the model's memory window is — near the top it compacts itself, nothing to do");
+        adder.add("numen.chat.usage_tip.tokens", "tokens: cumulative fresh work = cache-missed input + output");
+        adder.add("numen.chat.usage_tip.cache", "cached input is free-ish and not counted, so most messages add only a little");
         adder.add("numen.mcp.title", "MCP Tools");
         adder.add("numen.mcp.empty", "None · click ＋ Add (top-right)");
         adder.add("numen.mcp.add", "＋ Add");
@@ -366,6 +369,9 @@ public final class ModLanguageData {
         adder.add("numen.chat.steps", "%s 步");
         adder.add("numen.chat.plan", "计划");
         adder.add("numen.chat.no_plan", "暂无计划");
+        adder.add("numen.chat.usage_tip.context", "context：对话占模型记忆窗口的比例，快满时会自动压缩，无需操作");
+        adder.add("numen.chat.usage_tip.tokens", "tokens：累计新处理量 = 未命中缓存的输入 + 输出");
+        adder.add("numen.chat.usage_tip.cache", "命中缓存的输入不计入，所以平时每条消息只涨一点");
         adder.add("numen.mcp.title", "MCP 工具");
         adder.add("numen.mcp.empty", "无 · 点右上「＋ 添加」");
         adder.add("numen.mcp.add", "＋ 添加");

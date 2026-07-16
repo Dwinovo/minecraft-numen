@@ -2751,7 +2751,7 @@ public final class NumenScreen extends Screen {
             }
             switch (tab) {
                 case SETTINGS -> renderSettings(g, mouseX, mouseY);   // global — works with no companion
-                case CHAT -> { if (uuid != null) renderChat(g); else emptyHint(g); }
+                case CHAT -> { if (uuid != null) renderChat(g, mouseX, mouseY); else emptyHint(g); }
                 case ITEMS -> { if (uuid != null) renderItems(g, mouseX, mouseY); else emptyHint(g); }
             }
             if (tab == Tab.CHAT && warnUntil > System.currentTimeMillis()) {   // endpoint-problem hint above the input
@@ -3075,7 +3075,7 @@ public final class NumenScreen extends Screen {
 
     // ---- chat transcript + plan ----
 
-    private void renderChat(GuiGraphics g) {
+    private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
         // 头部右侧(tab 左边):上下文水位 + 累计消耗。恒定淡色——这是信息不是警报,
         // 临近水位线会自动压缩,不需要玩家做任何事。
         int pct = loop().contextPercent();
@@ -3086,6 +3086,12 @@ public final class NumenScreen extends Screen {
                     + (total > 0 ? fmtTokens(total) + " tokens" : "");
             int tx = tabX[0] - 10 - font.width(s);
             txt(g, Component.literal(s), tx, top + 7, TXT_FAINT);
+            if (mouseX >= tx && mouseX < tabX[0] - 10 && mouseY >= top + 5 && mouseY < top + 17) {
+                g.renderComponentTooltip(font, List.of(
+                        Component.translatable("numen.chat.usage_tip.context"),
+                        Component.translatable("numen.chat.usage_tip.tokens"),
+                        Component.translatable("numen.chat.usage_tip.cache")), mouseX, mouseY);
+            }
         }
         int bodyY = top + HEADER_H + 4;
         int bodyBottom = top + PANEL_H - INPUT_H - PAD - 6;
