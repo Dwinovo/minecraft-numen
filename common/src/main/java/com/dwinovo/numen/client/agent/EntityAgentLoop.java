@@ -198,6 +198,10 @@ public final class EntityAgentLoop {
     private boolean compacting = false;
     /** Context size of the last request as the API counted it (0 = unknown yet). */
     private int lastPromptTokens = 0;
+    /** 本同伴累计消耗的 token(每次请求的 total 之和,含压缩调用),持久化于
+     *  conversations/&lt;uuid&gt;.stats.json。计费口径:每次请求都全量计费 prompt,
+     *  所以按请求 total 累加才是真实开销。 */
+    private long totalTokensUsed = 0;
     /** Consecutive compaction failures — circuit breaker for the auto path. */
     private int compactFailures = 0;
 
@@ -273,7 +277,59 @@ public final class EntityAgentLoop {
      *       the next prompt doesn't create back-to-back user messages.</li>
      * </ul>
      */
+    /** 与自动压缩闸门同一口径的模型上下文窗口。 */
+    private static int modelWindow() {
+        return com.dwinovo.numen.agent.model.ModelRegistry.contextWindow(
+                com.dwinovo.numen.client.screen.LlmProviders.normalize(
+                        com.dwinovo.numen.platform.Services.CONFIG.getProvider()),
+                com.dwinovo.numen.platform.Services.CONFIG.getModel());
+    }
+
+    /** 上下文水位百分比(基于上次请求的实测 prompt tokens);usage 未知时返回 0。 */
+    public int contextPercent() {
+        if (lastPromptTokens <= 0) return 0;
+        return Math.min(100, Math.round(lastPromptTokens * 100f / Math.max(1, modelWindow())));
+    }
+
+    /** 本同伴累计消耗的 token(跨会话持久化)。 */
+    public long totalTokensUsed() {
+        return totalTokensUsed;
+    }
+
+    private java.nio.file.Path statsFile() {
+        return Minecraft.getInstance().gameDirectory.toPath()
+                .resolve("config").resolve("numen").resolve("conversations")
+                .resolve(entityUuid + ".stats.json");
+    }
+
+    private void loadStats() {
+        try {
+            java.nio.file.Path f = statsFile();
+            if (!java.nio.file.Files.isRegularFile(f)) return;
+            JsonObject o = com.google.gson.JsonParser.parseString(
+                    java.nio.file.Files.readString(f, java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
+            if (o.has("totalTokens")) totalTokensUsed = Math.max(0, o.get("totalTokens").getAsLong());
+        } catch (java.io.IOException | RuntimeException ex) {
+            Constants.LOG.warn("[numen-entity#{}] token 统计读取失败: {}", entityUuid, ex.toString());
+        }
+    }
+
+    /** 累加一次请求的 total tokens 并写穿到 stats 文件(文件极小,每回合一写)。 */
+    private void addTokens(int total) {
+        if (total <= 0) return;
+        totalTokensUsed += total;
+        try {
+            java.nio.file.Path f = statsFile();
+            java.nio.file.Files.createDirectories(f.getParent());
+            java.nio.file.Files.writeString(f, "{\"totalTokens\":" + totalTokensUsed + "}",
+                    java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException ex) {
+            Constants.LOG.warn("[numen-entity#{}] token 统计写盘失败: {}", entityUuid, ex.toString());
+        }
+    }
+
     private void restoreFromDisk() {
+        loadStats();
         log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
         ConvoLog.PersonaState p = log.loadCurrentPersona();   // independent of history — a persona may be set before any chat
         if (p != null && p.text() != null && !p.text().isBlank()) {
@@ -799,9 +855,7 @@ public final class EntityAgentLoop {
         // history. Mirrors Claude Code's autoCompactIfNeeded. Backends that
         // never send a usage frame leave lastPromptTokens at 0 — fall back to
         // a local estimate so the gate still fires instead of never.
-        int window = com.dwinovo.numen.agent.model.ModelRegistry.contextWindow(
-                com.dwinovo.numen.client.screen.LlmProviders.normalize(com.dwinovo.numen.platform.Services.CONFIG.getProvider()),
-                com.dwinovo.numen.platform.Services.CONFIG.getModel());
+        int window = modelWindow();
         int contextTokens = lastPromptTokens > 0
                 ? lastPromptTokens
                 : estimateContextTokens(convo.snapshot());
@@ -892,6 +946,7 @@ public final class EntityAgentLoop {
             return;
         }
 
+        addTokens(res.totalTokens());   // 压缩调用同样烧 token,计入累计
         String wrapped = SUMMARY_HEADER + summary.strip();
         // The summary is lossy, but the very next prompt is usually a follow-up
         // to the model's LAST reply ("那第三点展开讲讲") — so that reply crosses
@@ -1155,6 +1210,7 @@ public final class EntityAgentLoop {
         if (res.promptTokens() > 0) {
             lastPromptTokens = res.promptTokens();
         }
+        addTokens(res.totalTokens());
 
         convo.addAssistant(turn);
 

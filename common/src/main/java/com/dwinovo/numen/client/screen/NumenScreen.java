@@ -2191,6 +2191,13 @@ public final class NumenScreen extends Screen {
         return com.dwinovo.numen.client.chat.ChatDisplayFilters.current().filterUserMessage(s);
     }
 
+    /** token 数的人读格式:1350 → "1.4k",132400 → "132.4k",1_200_000 → "1.2m"。 */
+    private static String fmtTokens(long n) {
+        if (n >= 1_000_000) return String.format("%.1fm", n / 1_000_000.0);
+        if (n >= 1_000) return String.format("%.1fk", n / 1_000.0);
+        return String.valueOf(n);
+    }
+
     /** Truncate {@code s} with an ellipsis so it fits in {@code maxW} px. */
     private String clip(String s, int maxW) {
         if (font.width(s) <= maxW) return s;
@@ -3069,6 +3076,16 @@ public final class NumenScreen extends Screen {
     // ---- chat transcript + plan ----
 
     private void renderChat(GuiGraphics g) {
+        // 头部右侧(tab 左边):上下文水位 + 累计消耗。水位 ≥85% 变红提示快压缩了。
+        int pct = loop().contextPercent();
+        long total = loop().totalTokensUsed();
+        if (pct > 0 || total > 0) {
+            String s = (pct > 0 ? "context " + pct + "%" : "")
+                    + (pct > 0 && total > 0 ? " · " : "")
+                    + (total > 0 ? fmtTokens(total) + " tokens" : "");
+            int tx = tabX[0] - 10 - font.width(s);
+            txt(g, Component.literal(s), tx, top + 7, pct >= 85 ? FAIL : TXT_FAINT);
+        }
         int bodyY = top + HEADER_H + 4;
         int bodyBottom = top + PANEL_H - INPUT_H - PAD - 6;
         int transX = left + PAD;
