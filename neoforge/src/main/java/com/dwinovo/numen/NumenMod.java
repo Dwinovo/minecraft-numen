@@ -36,6 +36,9 @@ public class NumenMod {
         // When an owner logs in, bring their dormant companions back.
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerChangedDimension);
+        // 排程机器的心跳:每 tick 驱动全部同伴的竞价/任务/收尾。
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post e) ->
+                com.dwinovo.numen.task.CompanionTickDispatcher.tick(e.getServer()));
 
         CommonClass.init();
         Constants.LOG.info("Numen mod initialised on NeoForge.");

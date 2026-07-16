@@ -29,6 +29,24 @@ public final class NumenNetwork {
     private NumenNetwork() {}
 
     public static void register() {
+        // C→S: the client agent loop decided to run a body-bound tool on its companion.
+        Services.NETWORK.registerClientToServer(
+                com.dwinovo.numen.network.payload.ExecuteToolPayload.TYPE,
+                com.dwinovo.numen.network.payload.ExecuteToolPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.ExecuteToolPayload::handle);
+
+        // S→C: a body-bound tool's result (or an async dispatch receipt) coming home.
+        Services.NETWORK.registerServerToClient(
+                com.dwinovo.numen.network.payload.TaskResultPayload.TYPE,
+                com.dwinovo.numen.network.payload.TaskResultPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.TaskResultPayload::handle);
+
+        // C→S: owner pressed Stop — cancel the companion's queued + running tasks.
+        Services.NETWORK.registerClientToServer(
+                com.dwinovo.numen.network.payload.CancelTasksPayload.TYPE,
+                com.dwinovo.numen.network.payload.CancelTasksPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.CancelTasksPayload::handle);
+
         // S→C: an Numen body died; suspend the owner's agent loop (resolves the in-flight
         // tool call with the death cause). Recoverable — see NumenRespawnPayload.
         Services.NETWORK.registerServerToClient(

@@ -32,6 +32,10 @@ public class NumenMod implements ModInitializer {
                     }
                 });
 
+        // 排程机器的心跳:每 tick 驱动全部同伴的竞价/任务/收尾。
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(
+                com.dwinovo.numen.task.CompanionTickDispatcher::tick);
+
         CommonClass.init();
         Constants.LOG.info("Numen mod initialised on Fabric.");
     }
