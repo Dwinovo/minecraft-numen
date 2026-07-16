@@ -141,7 +141,8 @@ public final class NumenLlmClient {
      * agent loop's auto-compaction triggers on (no client-side token estimation
      * needed). Zero when the backend sent no usage frame.
      */
-    public record ChatResult(AssistantTurn turn, int promptTokens, int totalTokens) {}
+    public record ChatResult(AssistantTurn turn, int promptTokens, int totalTokens,
+                             long billedTokens) {}
 
     /**
      * Streaming chat completion. Returns a future of the final
@@ -204,7 +205,8 @@ public final class NumenLlmClient {
             logCallSummary(t0, acc, turn);
             return new ChatResult(turn,
                     jsonInt(acc.usage, "prompt_tokens"),
-                    jsonInt(acc.usage, "total_tokens"));
+                    jsonInt(acc.usage, "total_tokens"),
+                    provider.billedTokens(acc.usage));   // 计费等效:缓存折扣由 provider 自理
         });
     }
 

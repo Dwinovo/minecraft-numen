@@ -198,6 +198,20 @@ public class OpenAIProvider implements LlmProvider {
     private static final java.util.Set<String> STANDARD_DELTA_FIELDS = java.util.Set.of(
             "role", "content", "tool_calls", "refusal");
 
+    /** {@code usage.prompt_tokens_details.cached_tokens}:缓存命中的输入按半价折算
+     *  (OpenAI 兼容家族的通行折扣档;子类有更优折扣的自行覆写)。 */
+    @Override
+    public long billedTokens(JsonObject usage) {
+        long total = LlmProvider.usageInt(usage, "total_tokens");
+        if (usage != null && usage.has("prompt_tokens_details")
+                && usage.get("prompt_tokens_details").isJsonObject()) {
+            long cached = LlmProvider.usageInt(
+                    usage.getAsJsonObject("prompt_tokens_details"), "cached_tokens");
+            total -= Math.round(cached * 0.5);
+        }
+        return Math.max(0, total);
+    }
+
     @Override
     public void accumulateChunk(JsonObject chunk, StreamAccumulator acc) {
         acc.chunkCount++;

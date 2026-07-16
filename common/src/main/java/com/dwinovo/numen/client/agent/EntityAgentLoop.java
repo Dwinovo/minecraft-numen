@@ -314,8 +314,8 @@ public final class EntityAgentLoop {
         }
     }
 
-    /** 累加一次请求的 total tokens 并写穿到 stats 文件(文件极小,每回合一写)。 */
-    private void addTokens(int total) {
+    /** 累加一次请求的计费等效 tokens 并写穿到 stats 文件(文件极小,每回合一写)。 */
+    private void addTokens(long total) {
         if (total <= 0) return;
         totalTokensUsed += total;
         try {
@@ -946,7 +946,7 @@ public final class EntityAgentLoop {
             return;
         }
 
-        addTokens(res.totalTokens());   // 压缩调用同样烧 token,计入累计
+        addTokens(res.billedTokens());   // 压缩调用同样烧 token,计入累计
         String wrapped = SUMMARY_HEADER + summary.strip();
         // The summary is lossy, but the very next prompt is usually a follow-up
         // to the model's LAST reply ("那第三点展开讲讲") — so that reply crosses
@@ -1210,7 +1210,7 @@ public final class EntityAgentLoop {
         if (res.promptTokens() > 0) {
             lastPromptTokens = res.promptTokens();
         }
-        addTokens(res.totalTokens());
+        addTokens(res.billedTokens());
 
         convo.addAssistant(turn);
 

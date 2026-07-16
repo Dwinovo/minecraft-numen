@@ -112,6 +112,23 @@ public interface LlmProvider {
         body.addProperty("reasoning_effort", effort);
     }
 
+    // ---- usage accounting ----
+
+    /**
+     * 从本家 usage 帧折算"计费等效 token":缓存命中的输入按本家的缓存折扣
+     * 折算后计入,让累计消耗贴近真实账单。字段名与折扣是各家方言,由实现
+     * 自理;默认全量 total——没有缓存机制(或方言未知)的服务商如实全价。
+     */
+    default long billedTokens(JsonObject usage) {
+        return usageInt(usage, "total_tokens");
+    }
+
+    /** usage 帧安全取整(帧缺失/字段缺失 → 0)。 */
+    static int usageInt(JsonObject usage, String key) {
+        return usage != null && usage.has(key) && usage.get(key).isJsonPrimitive()
+                ? usage.get(key).getAsInt() : 0;
+    }
+
     // ---- streaming ----
 
     /**

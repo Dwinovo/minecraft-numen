@@ -48,4 +48,13 @@ public final class DeepSeekProvider extends OpenAIProvider {
     @Override public String name() { return NAME; }
 
     @Override public String defaultBaseUrl() { return DEFAULT_BASE_URL; }
+
+    /** {@code usage.prompt_cache_hit_tokens}:缓存命中的输入按一折计
+     *  (官方缓存命中价为常规输入价的 1/10)。 */
+    @Override
+    public long billedTokens(com.google.gson.JsonObject usage) {
+        long total = LlmProvider.usageInt(usage, "total_tokens");
+        long hit = LlmProvider.usageInt(usage, "prompt_cache_hit_tokens");
+        return Math.max(0, total - Math.round(hit * 0.9));
+    }
 }
