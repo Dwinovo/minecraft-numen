@@ -376,6 +376,8 @@ public final class NumenScreen extends Screen {
      *  92 模型配置 label · 102 provider dropdown · 126 声线 label · 136 voice dropdown ·
      *  162 buttons · 186 hint/warn. */
     private void buildSummonField() {
+        // 人设下拉的数据源是 persona/ 目录:每次打开召唤面板重扫一遍。
+        com.dwinovo.numen.persona.PersonaLibrary.instance().reload();
         int y0 = top + HEADER_H;
         summonInput = new FlatEditBox(font, left + PAD + FIELD_INSET_X, y0 + 34 + FIELD_INSET_Y,
                 PANEL_W - PAD * 2 - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
@@ -643,6 +645,10 @@ public final class NumenScreen extends Screen {
         if (s == settingsSection) return;
         settingsSection = s;
         settingsScroll = 0;
+        if (s == SettingsSection.PERSONA) {
+            // 人设是目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
+            PersonaLibrary.instance().reload();
+        }
         addingMcp = false;
         mcpDeletePending = null;
         mcpEditOriginal = null;

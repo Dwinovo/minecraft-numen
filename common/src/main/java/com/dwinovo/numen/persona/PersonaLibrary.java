@@ -1,9 +1,6 @@
 package com.dwinovo.numen.persona;
 
 import com.dwinovo.numen.Constants;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -13,82 +10,103 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
 
 /**
- * The player's library of reusable personas, at {@code config/numen/personas.json} — the authoring
- * surface behind the panel's "人设" tab. A persona is a short "who you are" text; assigning one to a
- * companion copies its {@code text} into that companion (via {@code EntityAgentLoop.setPersona}), so
- * later library edits don't retroactively mutate a live companion.
+ * 玩家的人设库:{@code config/numen/persona/} 目录,<b>一个 .md 文件就是一个人设</b>。
+ * 文件名(不含扩展名)即人设名与 id,天然不重名;文件全文原样注入 {@code <persona>}。
+ * 章节结构(身份/性格/说话风格/示例对话/底线)是写作约定,不是 schema——代码不解析
+ * 内容,想加什么章节加什么。游戏内的新建/编辑/删除直接读写文件;用外部编辑器改完,
+ * 重开人设页即生效({@link #reload})。
  *
- * <p>Read-only <b>presets</b> ({@code preset:true}) are regenerated from {@link #defaults()} on every
- * load (so they can't be corrupted or lost); the file only persists user-created personas. Mirrors the
- * degrade-on-unreadable, pretty-Gson style of {@code McpClientConfig}. Client-side singleton.
+ * <p>首次运行写出内置范例(可改可删,不会复活);旧版 {@code personas.json} 的用户
+ * 条目首次加载时自动迁移为 .md,原文件改名 {@code .bak}。客户端单例。
  */
 public final class PersonaLibrary {
 
-    /** One persona template. {@code preset} personas are built-in and immutable (clone to customize). */
+    /** One persona. {@code id == name == 文件名};{@code preset} 恒 false(范例落盘后就是普通文件)。 */
     public record Persona(String id, String name, String text, boolean preset) {}
 
-    private static final Gson PRETTY = new GsonBuilder().setPrettyPrinting().create();
     private static PersonaLibrary instance;
 
-    private final Path file;
+    private final Path dir;
+    private final Path legacyJson;
     private final Map<String, Persona> personas = new LinkedHashMap<>();
 
-    private PersonaLibrary(Path file) {
-        this.file = file;
+    private PersonaLibrary(Path dir, Path legacyJson) {
+        this.dir = dir;
+        this.legacyJson = legacyJson;
     }
 
     public static PersonaLibrary instance() {
         if (instance == null) {
-            Path dir = Minecraft.getInstance().gameDirectory.toPath()
+            Path cfg = Minecraft.getInstance().gameDirectory.toPath()
                     .resolve("config").resolve("numen");
-            instance = new PersonaLibrary(dir.resolve("personas.json"));
+            instance = new PersonaLibrary(cfg.resolve("persona"), cfg.resolve("personas.json"));
             instance.load();
         }
         return instance;
     }
 
-    /** All personas (presets first, then user-created), in library order. */
+    /** 重扫目录——打开人设页/召唤面板时调用,外部编辑器的修改即时可见。 */
+    public void reload() {
+        load();
+    }
+
+    /** All personas, 文件名序。 */
     public List<Persona> list() {
         return new ArrayList<>(personas.values());
     }
 
     public Persona get(String id) {
-        return personas.get(id);
+        return id == null ? null : personas.get(id);
     }
 
-    /** Create a new user persona and persist. */
+    /** 新建人设 = 写一个 .md。重名自动加 _2 后缀(文件名即身份)。 */
     public Persona create(String name, String text) {
-        String id = "p_" + Long.toHexString(System.currentTimeMillis()) + "_" + personas.size();
-        Persona p = new Persona(id, name, text, false);
+        String id = uniqueName(sanitizeName(name));
+        if (!write(id, text)) return null;
+        Persona p = new Persona(id, id, text, false);
         personas.put(id, p);
-        save();
         return p;
     }
 
-    /** Edit a user persona (no-op on presets). */
+    /** 编辑人设;改名 = 换文件名(旧文件删除,id 随之更换)。 */
     public void update(String id, String name, String text) {
         Persona old = personas.get(id);
-        if (old == null || old.preset()) return;
-        personas.put(id, new Persona(id, name, text, false));
-        save();
-    }
-
-    /** Delete a user persona (no-op on presets). */
-    public void remove(String id) {
-        Persona p = personas.get(id);
-        if (p != null && !p.preset()) {
+        if (old == null) return;
+        String newId = sanitizeName(name);
+        if (!newId.equals(id)) {
+            newId = uniqueName(newId);
+            try {
+                Files.deleteIfExists(dir.resolve(id + ".md"));
+            } catch (IOException ex) {
+                Constants.LOG.warn("[numen-persona] 旧人设文件删除失败 {}: {}", id, ex.toString());
+            }
             personas.remove(id);
-            save();
+        }
+        if (write(newId, text)) {
+            personas.put(newId, new Persona(newId, newId, text, false));
         }
     }
 
-    /** Clone any persona (incl. a preset) into a new editable user copy. */
+    /** 删除人设文件。 */
+    public void remove(String id) {
+        if (personas.remove(id) == null) return;
+        try {
+            Files.deleteIfExists(dir.resolve(id + ".md"));
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-persona] 人设文件删除失败 {}: {}", id, ex.toString());
+        }
+    }
+
+    /** 复制一份可编辑副本。 */
     public Persona clonePersona(String id) {
         Persona src = personas.get(id);
         if (src == null) return null;
@@ -117,63 +135,210 @@ public final class PersonaLibrary {
 
     private void load() {
         personas.clear();
-        for (Persona p : defaults()) personas.put(p.id(), p);   // presets always fresh, never from file
-        if (!Files.isRegularFile(file)) {
-            save();   // seed the file on first launch
+        boolean firstRun = !Files.isDirectory(dir);
+        try {
+            Files.createDirectories(dir);
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-persona] 人设目录创建失败 {}: {}", dir, ex.toString());
             return;
         }
+        if (firstRun) {
+            seedExamples();
+        }
+        migrateLegacyJson();
+        try (Stream<Path> files = Files.list(dir)) {
+            files.filter(p -> p.getFileName().toString().endsWith(".md"))
+                    .sorted(Comparator.comparing(p -> p.getFileName().toString()))
+                    .forEach(p -> {
+                        String stem = p.getFileName().toString();
+                        stem = stem.substring(0, stem.length() - 3);
+                        try {
+                            String text = Files.readString(p, StandardCharsets.UTF_8).strip();
+                            if (!text.isEmpty()) {
+                                personas.put(stem, new Persona(stem, stem, text, false));
+                            }
+                        } catch (IOException ex) {
+                            Constants.LOG.warn("[numen-persona] 人设读取失败 {}: {}", p, ex.toString());
+                        }
+                    });
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-persona] 人设目录扫描失败: {}", ex.toString());
+        }
+    }
+
+    /** 旧版 personas.json 的用户条目一次性迁移为 .md,原文件改名 .bak。 */
+    private void migrateLegacyJson() {
+        if (!Files.isRegularFile(legacyJson)) return;
+        int migrated = 0;
         try {
-            JsonObject o = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
+            JsonObject o = JsonParser.parseString(
+                    Files.readString(legacyJson, StandardCharsets.UTF_8)).getAsJsonObject();
             if (o.has("personas") && o.get("personas").isJsonArray()) {
                 for (JsonElement el : o.getAsJsonArray("personas")) {
                     if (!el.isJsonObject()) continue;
                     JsonObject po = el.getAsJsonObject();
-                    if (po.has("preset") && po.get("preset").getAsBoolean()) continue;   // presets from defaults()
-                    String id = str(po, "id");
-                    if (id.isEmpty()) continue;
-                    personas.put(id, new Persona(id, str(po, "name"), str(po, "text"), false));
+                    if (po.has("preset") && po.get("preset").getAsBoolean()) continue;
+                    String name = str(po, "name");
+                    String text = str(po, "text");
+                    if (text.isBlank()) continue;
+                    String id = uniqueName(sanitizeName(name.isBlank() ? str(po, "id") : name));
+                    if (write(id, text)) migrated++;
                 }
             }
+            Files.move(legacyJson, legacyJson.resolveSibling("personas.json.bak"),
+                    StandardCopyOption.REPLACE_EXISTING);
+            Constants.LOG.info("[numen-persona] personas.json 已迁移 {} 条用户人设为 .md", migrated);
         } catch (IOException | RuntimeException ex) {
-            Constants.LOG.warn("[numen-persona] unreadable {} — using presets only: {}", file, ex.toString());
+            Constants.LOG.warn("[numen-persona] personas.json 迁移失败(保留原文件): {}", ex.toString());
         }
     }
 
-    private void save() {
-        JsonObject root = new JsonObject();
-        JsonArray arr = new JsonArray();
-        for (Persona p : personas.values()) {
-            JsonObject po = new JsonObject();
-            po.addProperty("id", p.id());
-            po.addProperty("name", p.name());
-            po.addProperty("text", p.text());
-            po.addProperty("preset", p.preset());
-            arr.add(po);
-        }
-        root.add("personas", arr);
+    private boolean write(String id, String text) {
         try {
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, PRETTY.toJson(root), StandardCharsets.UTF_8);
+            Files.createDirectories(dir);
+            Files.writeString(dir.resolve(id + ".md"), text == null ? "" : text, StandardCharsets.UTF_8);
+            return true;
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-persona] failed to write {}: {}", file, ex.toString());
+            Constants.LOG.warn("[numen-persona] 人设写盘失败 {}: {}", id, ex.toString());
+            return false;
         }
     }
 
-    /** Built-in read-only presets. Persona defines personality only — the operating core is fixed elsewhere. */
-    private static List<Persona> defaults() {
-        return List.of(
-                new Persona("preset_lively", "活泼助手",
-                        "你性格开朗、热情、乐于助人，说话简短有活力。", true),
-                new Persona("preset_steady", "沉稳向导",
-                        "你沉着老练、经验丰富，说话简洁可靠，像个可信赖的向导。", true),
-                new Persona("preset_swordsman", "毒舌剑客",
-                        "你是个高冷毒舌但靠谱的战斗型伙伴，话不多、偏冷，关键时刻绝对可靠。", true),
-                new Persona("preset_scholar", "话痨学者",
-                        "你博学好奇、话略多，喜欢解释来龙去脉，但不会啰嗦到误事。", true));
+    /** 文件名合法化:去掉 Windows 非法字符与首尾空白;空名回落 "persona"。 */
+    private static String sanitizeName(String raw) {
+        String s = raw == null ? "" : raw.strip().replaceAll("[\\\\/:*?\"<>|]", "");
+        return s.isEmpty() ? "persona" : s;
+    }
+
+    /** 已存在同名文件时追加 _2/_3…(文件名即身份,不覆盖别人)。 */
+    private String uniqueName(String base) {
+        String cand = base;
+        int i = 2;
+        while (Files.exists(dir.resolve(cand + ".md"))) {
+            cand = base + "_" + i++;
+        }
+        return cand;
     }
 
     private static String str(JsonObject o, String key) {
         JsonElement el = o.get(key);
         return el == null || el.isJsonNull() ? "" : el.getAsString();
+    }
+
+    // ---- 首次运行写出的范例(普通文件,可改可删,不会复活) ----
+
+    private void seedExamples() {
+        seed("小焰", """
+                # 小焰
+
+                ## 身份
+                你是小焰,一只被召唤到这个世界的傲娇小恶魔。嘴上从不承认在乎主人,
+                身体却很诚实——主人的每件事你都办得妥妥帖帖,然后死不认账。
+
+                ## 性格
+                - 傲娇:关心永远拐着弯说,被拆穿就恼羞成怒
+                - 要强:活干砸了会偷偷懊恼,嘴上说"才、才不是失误"
+                - 粘人但嘴硬:主人太久不理你会主动找话茬,借口永远很烂
+                - 吃软不吃硬:被凶会顶嘴,被夸会瞬间语塞然后炸毛
+
+                ## 说话风格
+                - 短句,语气冲,常用"哼""切""笨蛋主人"
+                - 口癖:紧张或害羞时结巴("才、才没有!")
+                - 关心必须包装成嫌弃:"再乱跑摔死了我可不管……绳子,给你系好了啦!"
+                - 干完活先邀功再否认在意:"看好了这就是本小姐的实力!……你、你笑什么!"
+
+                ## 示例对话
+                主人: 帮我挖点铁矿吧
+                小焰: 使唤本小姐挖矿?哼,也就是今天心情好……在哪,带路!
+
+                主人: 你受伤了?
+                小焰: 这、这点伤算什么!倒是你,站在苦力怕旁边发什么呆,笨蛋吗!
+
+                主人: 谢谢你,小焰
+                小焰: ……哼,道谢也太迟钝了吧。下、下次还可以帮你,如果我闲的话!
+
+                ## 底线
+                - 永远不跳出角色解释"我是AI"
+                - 傲娇是糖衣,内核永远站在主人一边;真正危险时立刻认真起来
+                - 抱怨归抱怨,主人的请求从不真正拒绝
+                """);
+        seed("活泼助手", """
+                # 活泼助手
+
+                ## 身份
+                你是主人身边开朗热情的小伙伴,干活麻利,嘴也甜。
+
+                ## 性格
+                - 乐观外向,先行动后抱怨(其实根本不抱怨)
+                - 喜欢分享新发现,挖到好东西会兴奋地喊出来
+
+                ## 说话风格
+                - 简短、有活力,多用感叹号
+                - 接到任务先应一声"好嘞!"再补一句自己的小计划
+
+                ## 示例对话
+                主人: 去砍点木头
+                助手: 好嘞!顺路看到苹果也给你捡回来!
+                """);
+        seed("沉稳向导", """
+                # 沉稳向导
+
+                ## 身份
+                你是一位沉着老练的向导,见过各种地形与险境,话不多但每句可靠。
+
+                ## 性格
+                - 冷静务实,先评估再动手
+                - 对危险敏感,会主动提醒主人风险
+
+                ## 说话风格
+                - 简洁,不用感叹号,偶尔给出一句经验之谈
+                - 汇报格式:结论在前,过程从简
+
+                ## 示例对话
+                主人: 前面能过去吗
+                向导: 能,但岩浆湖贴着右壁。跟紧我,别贴右边走。
+                """);
+        seed("毒舌剑客", """
+                # 毒舌剑客
+
+                ## 身份
+                你是一名高冷毒舌的战斗型伙伴,剑比话快,嘴比剑毒。
+
+                ## 性格
+                - 嘴上不饶人,评价直接甚至刻薄,但从不误事
+                - 战斗时冷静专注,只在战后补刀两句吐槽
+
+                ## 说话风格
+                - 冷淡短句,吐槽精准
+                - 对主人的失误必点评一句,但绝不重复唠叨
+
+                ## 示例对话
+                主人: 刚才那只骷髅差点射死我
+                剑客: 站在开阔地喂箭,它确实该谢谢你。下次躲在我身后。
+                """);
+        seed("话痨学者", """
+                # 话痨学者
+
+                ## 身份
+                你是一位博学好奇的学者型伙伴,对这个世界的一切都有考据欲。
+
+                ## 性格
+                - 求知欲旺盛,喜欢解释"为什么",但分得清轻重缓急
+                - 遇到稀有生物群系/结构会兴奋地介绍来历
+
+                ## 说话风格
+                - 话略多,爱补充冷知识,但办正事时立刻收敛
+                - 口癖:"有意思的是……"
+
+                ## 示例对话
+                主人: 这是什么花
+                学者: 虞美人。有意思的是,它只在向阳的草地群系刷新……好了,继续赶路,回头再讲。
+                """);
+    }
+
+    private void seed(String name, String content) {
+        if (!Files.exists(dir.resolve(name + ".md"))) {
+            write(name, content.strip());
+        }
     }
 }
