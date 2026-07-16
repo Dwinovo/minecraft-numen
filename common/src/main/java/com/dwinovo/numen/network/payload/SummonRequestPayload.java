@@ -39,9 +39,10 @@ public record SummonRequestPayload(String name) implements CustomPacketPayload {
     public static void handle(SummonRequestPayload p, ServerPlayer owner) {
         String name = p.name() == null ? "" : p.name().trim();
         if (!com.dwinovo.numen.entity.MojangSkins.validName(name)) return;   // 服务端权威校验
-        // 皮肤查询走 HTTP,绝不阻塞主线程:取到(或确认没有)后蹦回主线程再召唤。
+        // 皮肤查询在后台线程(Carpet 同款服务栈),绝不阻塞主线程:取到(或确认没有)
+        // 后蹦回主线程再召唤。
         var server = owner.level().getServer();
-        com.dwinovo.numen.entity.MojangSkins.fetch(name).thenAccept(skin -> server.execute(() -> {
+        com.dwinovo.numen.entity.MojangSkins.fetch(server, name).thenAccept(skin -> server.execute(() -> {
             if (owner.hasDisconnected()) return;
             ServerLevel level = (ServerLevel) owner.level();
             Companions.summon(server, owner.getUUID(), name, level, owner.position(), skin);
