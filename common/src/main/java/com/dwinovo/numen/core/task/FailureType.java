@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+
 /**
  * Structured "why did it fail" category, threaded up out of the pathing/placement
  * substrate ({@code PlayerNav}, {@code PlaceManeuver}, {@code Interaction},
@@ -32,6 +34,10 @@ public enum FailureType {
     NO_MATERIAL,
     /** Nothing solid to place against at/around the target. In-ladder: try another support face. */
     NO_SUPPORT,
+    /** A living/building-blocking entity occupies the target cell — vanilla refuses every
+     *  press until it moves. Kick to LLM: waiting, luring it away, or picking another cell
+     *  is a strategic call; no stance change or dig fixes it. */
+    ENTITY_BLOCKED,
     /** No line of sight to the face/block — the view is boxed in by a wall/occluder. In-ladder. */
     OCCLUDED,
     /** The BODY itself can't move out / no path survived the replan budget. In-ladder. */

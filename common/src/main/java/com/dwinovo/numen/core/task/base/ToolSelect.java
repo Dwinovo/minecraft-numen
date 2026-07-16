@@ -12,54 +12,86 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * The two "swap the best implement into the main hand" helpers, unified from the
- * byte-for-byte duplicated scans that lived in {@code BlockDigger.switchToBestTool}
- * and {@code HuntCompanionTask.switchToBestWeapon}.
+ * byte-for-byte duplicated scans that lived in {@code BlockDigger} and
+ * {@code HuntCompanionTask.switchToBestWeapon} (both now call in here).
  *
  * <p>Both scan the WHOLE inventory (not just the hotbar) and swap via
  * {@link NumenPlayer#holdInHand(int)} — deliberately wider than a
  * hotbar-only scan, and kept consistent with the pathing cost model
  * ({@code NavContext.scanBestTool}) so the planned break cost matches the tool
- * actually used. Behaviour is preserved exactly so the Stage-2 migration onto these
- * helpers is a no-op semantically.
+ * actually used.
+ *
+ * <p>Intent pin (constitution §5): a MAINHAND pin — the trace of an explicit
+ * {@code equip_item} — makes both swaps a no-op: the explicitly-held item is
+ * not replaced by a "better" one. The pin expires by fingerprint the moment the
+ * item breaks or otherwise leaves the hand, and the task-idle edge releases it.
  */
 public final class ToolSelect {
 
     private ToolSelect() {}
 
     /**
-     * Hold the item that mines {@code state} fastest (highest
-     * {@link ItemStack#getDestroySpeed}). Mirrors {@code BlockDigger.switchToBestTool}.
+     * Hold the best implement for breaking {@code state}: among tools that beat
+     * the bare hand, one that actually harvests the block (correct tier when the
+     * block gates its drops) outranks a merely faster one — a wooden pick "mines"
+     * iron ore quickly but yields nothing, so it must not win on speed alone.
+     * Within a pool, highest {@link ItemStack#getDestroySpeed} wins.
      */
     public static void holdBestTool(NumenPlayer p, BlockState state) {
+        if (handPinned(p)) return;   // explicit hold — don't swap it away
         Inventory inv = p.getInventory();
-        int best = inv.selected;
-        float bestSpeed = inv.getItem(best).getDestroySpeed(state);
+        boolean tierGated = state.requiresCorrectToolForDrops();
+        int harvest = -1, any = -1;
+        float harvestSpeed = 1.0f, anySpeed = 1.0f;   // bare-hand baseline
         for (int i = 0; i < inv.getContainerSize(); i++) {
-            float s = inv.getItem(i).getDestroySpeed(state);
-            if (s > bestSpeed) {
-                bestSpeed = s;
-                best = i;
+            ItemStack s = inv.getItem(i);
+            float spd = s.getDestroySpeed(state);
+            if (spd <= 1.0f) continue;
+            if (!tierGated || s.isCorrectToolForDrops(state)) {
+                if (spd > harvestSpeed) { harvestSpeed = spd; harvest = i; }
+            } else if (spd > anySpeed) {
+                anySpeed = spd;
+                any = i;
             }
         }
-        p.holdInHand(best);
+        int best = harvest >= 0 ? harvest : any;
+        if (best >= 0) {
+            p.holdInHand(best);
+        }
     }
 
     /**
-     * Hold the highest melee-attack-damage weapon. Mirrors
-     * {@code HuntCompanionTask.switchToBestWeapon}.
+     * Hold the highest melee-attack-damage weapon. Mirrors the original
+     * {@code HuntCompanionTask.switchToBestWeapon} scan.
      */
     public static void holdBestWeapon(NumenPlayer p) {
+        if (handPinned(p)) return;   // explicit hold — don't swap it away
         Inventory inv = p.getInventory();
-        int best = inv.selected;
-        double bestDmg = weaponDamage(inv.getItem(best));
+        int best = -1;
+        double bestDmg = 0.0;
         for (int i = 0; i < inv.getContainerSize(); i++) {
-            double d = weaponDamage(inv.getItem(i));
+            ItemStack s = inv.getItem(i);
+            double d = weaponDamage(s);
             if (d > bestDmg) {
                 bestDmg = d;
                 best = i;
             }
         }
-        p.holdInHand(best);
+        if (best >= 0) {
+            p.holdInHand(best);
+        }
+    }
+
+    /**
+     * Is the main hand pinned by explicit intent AND still holding the pinned
+     * item? A scan-time fingerprint check ({@code IntentPins.validate}), so a
+     * stale hand pin (item broke / was swapped by a survival chain) expires on
+     * this very call and the swap proceeds normally.
+     */
+    private static boolean handPinned(NumenPlayer p) {
+        return com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(p).validate(
+                com.dwinovo.numen.core.task.pin.IntentPins.SLOT_MAINHAND,
+                com.dwinovo.numen.core.task.pin.Fingerprints.of(p.getMainHandItem()));
     }
 
     /**

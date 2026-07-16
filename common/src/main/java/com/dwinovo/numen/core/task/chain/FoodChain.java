@@ -1,7 +1,10 @@
 package com.dwinovo.numen.core.task.chain;
 
+import com.dwinovo.numen.task.BodyLog;
+import com.dwinovo.numen.task.reflex.Reflex;
+
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.core.task.TaskChain;
+import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -12,8 +15,9 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * Autonomous auto-eat survival chain. Polls the vanilla {@code FoodData} each tick;
- * when the body is hungry (or hurt and not full) AND is carrying something edible,
- * it spikes above the LLM task, holds the most nourishing food, and drives a native
+ * when the body is hungry (or hurt and not full) AND is carrying something edible
+ * that {@link FoodPolicy} allows the chain to pick on its own, it spikes above the
+ * LLM task, holds the most nourishing acceptable food, and drives a native
  * held-use eat — mirroring {@code EatCompanionTask} (the body's own {@code aiStep}
  * finishes the chew, applying hunger / saturation / consume-effects) — then drops
  * back to dormant once fed or out of food.
@@ -28,10 +32,10 @@ import net.minecraft.world.item.ItemStack;
  * {@link #getPriority} short-circuits to {@link Float#NEGATIVE_INFINITY} before
  * touching the body, so the chain is a strict no-op.
  */
-public final class FoodChain implements TaskChain {
+public final class FoodChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
 
-    /** Diary for completed episodes — may be null (e.g. unit tests). */
-    private final com.dwinovo.numen.core.task.SurvivalJournal journal;
+    /** BodyLog for completed episodes — dual-rail routed (may be null in unit tests). */
+    private final com.dwinovo.numen.task.BodyLog bodyLog;
 
     /** The in-flight native eat (held use), or {@code null} between eats. */
     private Interaction eat;
@@ -43,13 +47,16 @@ public final class FoodChain implements TaskChain {
         this(null);
     }
 
-    public FoodChain(com.dwinovo.numen.core.task.SurvivalJournal journal) {
-        this.journal = journal;
+    public FoodChain(com.dwinovo.numen.task.BodyLog bodyLog) {
+        this.bodyLog = bodyLog;
     }
 
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
+            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+        }
         // Never preempt a body already using an item UNLESS it's our own in-flight
         // eat: the LLM may be mid-eat (whose before/after item accounting a hand
         // swap would corrupt) or drawing a bow. Our own chew must keep priority,
@@ -78,9 +85,9 @@ public final class FoodChain implements TaskChain {
                 // stays up and the next tick starts a fresh eat; else we go dormant.
                 // Diary only a REAL meal (hunger actually rose — a declined/instant DONE
                 // with no effect isn't an episode).
-                if (journal != null
+                if (bodyLog != null
                         && companion.getFoodData().getFoodLevel() > eatingStartFood) {
-                    journal.note("got hungry and ate a " + eatingLabel);
+                    bodyLog.report("got hungry and ate a " + eatingLabel);
                 }
                 eat.stop();
                 eat = null;
@@ -101,27 +108,60 @@ public final class FoodChain implements TaskChain {
         return "food";
     }
 
+    // ---- Reflex roster paperwork (constitution §6) ----
+
+    @Override
+    public String id() {
+        return name();
+    }
+
+    @Override
+    public String describe() {
+        return "饿了或受伤时会自己吃背包里的食物";
+    }
+
     /**
-     * Slot of the most nourishing edible in the whole inventory (highest
-     * {@link FoodProperties#nutrition}), or -1 if the body carries nothing edible.
-     * "Edible" is the native consumable test ({@link FoodProperties} present),
-     * matching {@code EatCompanionTask} — covers food, modded consumables, milk.
+     * Slot of the most nourishing ACCEPTABLE edible in the whole inventory
+     * (highest {@link FoodProperties#getNutrition}), or -1 if nothing acceptable is
+     * carried. "Edible" is the native consumable test ({@link FoodProperties}
+     * present), matching {@code EatCompanionTask} — covers food, modded
+     * consumables, milk. On top of that, {@link FoodPolicy} filters what the chain
+     * may pick on its own: hard-excluded items never, likely-harmful foods only
+     * when the body is starving and carries nothing better.
+     *
+     * <p>One scan buckets every edible into the two tiers; {@link #getPriority}
+     * and {@link #tick} both call this single method, so "priority says there is
+     * food" and "tick picks a slot" can never disagree.
      */
     private static int bestEdibleSlot(NumenPlayer companion) {
         Inventory inv = companion.getInventory();
-        int best = -1;
-        int bestNutrition = -1;
+        int bestRegular = -1;
+        int bestRegularNutrition = -1;
+        int bestFamine = -1;
+        int bestFamineNutrition = -1;
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack stack = inv.getItem(i);
             if (stack.isEmpty()) continue;
             // 1.20.1: FoodProperties live on the Item, pre-DataComponents.
             FoodProperties food = stack.getItem().getFoodProperties();
             if (food == null) continue;
-            if (food.getNutrition() > bestNutrition) {
-                bestNutrition = food.getNutrition();
-                best = i;
+            switch (FoodPolicy.classify(stack.getItem(), food)) {
+                case NEVER -> { /* excluded unconditionally */ }
+                case FAMINE_ONLY -> {
+                    if (food.getNutrition() > bestFamineNutrition) {
+                        bestFamineNutrition = food.getNutrition();
+                        bestFamine = i;
+                    }
+                }
+                case REGULAR -> {
+                    if (food.getNutrition() > bestRegularNutrition) {
+                        bestRegularNutrition = food.getNutrition();
+                        bestRegular = i;
+                    }
+                }
             }
         }
-        return best;
+        boolean famine = FoodPolicy.famineUnlocked(companion.getFoodData().getFoodLevel());
+        return FoodPolicy.resolveSlot(bestRegular, bestFamine, famine);
     }
 }

@@ -1,8 +1,12 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
+import com.dwinovo.numen.core.task.pin.Fingerprints;
+import com.dwinovo.numen.core.task.pin.IntentPinsData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -22,6 +26,14 @@ import java.util.Map;
  * the item into a curio slot) — no per-mod integration. Explicit main/off-hand requests are a direct
  * item-conserving placement instead; a vanilla-slot direct set is the fallback if the right-click
  * didn't take. One-tick (all work in {@link #onStart()}).
+ *
+ * <p>Intent pins (constitution §5): a successful EXPLICIT equip is an intent
+ * declaration — the resolved vanilla slot is pinned with the item's fingerprint,
+ * so the reflex layer (armor upkeep, automatic tool swap) won't change that slot
+ * until the pin's natural end. Explicit means informed consent: a fast-breaking
+ * tool is equipped without objection and the hand pin keeps the guard off it for
+ * the task's duration. {@code item_id="auto"} is the return path: no equip, just
+ * release the given slot's pin.
  */
 public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRecord> {
 
@@ -36,6 +48,7 @@ public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRec
 
     @Override
     protected List<Precondition> preconditions() {
+        if (r.autoRelease) return List.of();   // a pin release needs no item in the bag
         return List.of(() -> findItem(player.getInventory()) >= 0 ? null
                 : new Precondition.Failure("no " + r.label + " in inventory to equip",
                         FailureType.NO_MATERIAL));
@@ -43,6 +56,16 @@ public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRec
 
     @Override
     protected void onStart() {
+        // item_id="auto": release the slot's intent pin, equip nothing (§5 归还).
+        if (r.autoRelease) {
+            String slot = r.slot.getName();
+            boolean released = IntentPinsData.pinsFor(player).unpin(slot);
+            succeed(released
+                    ? "released your keep-as-is pin on " + slot + "; my gear reflexes manage that slot again"
+                    : "no pin was set on " + slot + "; my gear reflexes already manage it", slot);
+            return;
+        }
+
         Inventory inv = player.getInventory();
         int invSlot = findItem(inv);   // precondition guarantees >= 0
 
@@ -151,6 +174,12 @@ public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRec
         slotName = slot == null ? "" : slot;
         equipped = true;
         result = TaskState.SUCCESS;
+        // Fall the pin (constitution §5 落钉): an explicit equip that landed in a
+        // nameable vanilla slot pins that slot with the item's fingerprint. Modded
+        // accessory slots (slot == null) can't be named, so they can't be pinned.
+        if (!r.autoRelease && !slotName.isEmpty()) {
+            IntentPinsData.pinsFor(player).pin(slotName, Fingerprints.of(r.item));
+        }
         succeed();   // base: park + stamp SUCCESS so the equip finalizes this same tick
     }
 

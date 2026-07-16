@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** Query tool (raw NumenTool): inspect the single block at the given coordinates. */
-public final class InspectBlockTool extends ServerNumenTool {
+public final class InspectBlockTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final PerceptionTools impl = new PerceptionTools();
@@ -42,7 +42,7 @@ public final class InspectBlockTool extends ServerNumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         reply.accept(impl.inspectBlock(a.x(), a.y(), a.z(), self));
     }

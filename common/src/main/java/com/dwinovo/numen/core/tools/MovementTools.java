@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.api.ToolContext;
-import com.dwinovo.numen.core.task.TaskRecord;
+import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.task.MoveToTaskRecord;
 
 /**
@@ -23,11 +23,15 @@ Double x,
 Double y,
 Double z,
 double speed,
+            Boolean modifyTerrain,
             ToolContext ctx) {
         if (speed < MIN_SPEED) speed = MIN_SPEED;
         if (speed > MAX_SPEED) speed = MAX_SPEED;
         // MoveToTaskRecord validates the x/y/z combination and throws a teaching
         // error for an ambiguous one (e.g. only x given).
-        return new MoveToTaskRecord(ctx.toolCallId(), ctx.deadline(DEFAULT_TIMEOUT_TICKS), x, y, z, speed);
+        // modify_terrain is optional; absent means the documented default (false —
+        // normal breaking only: no forced no-drop grinds).
+        return new MoveToTaskRecord(ctx.toolCallId(), ctx.deadline(DEFAULT_TIMEOUT_TICKS), x, y, z, speed,
+                Boolean.TRUE.equals(modifyTerrain));
     }
 }

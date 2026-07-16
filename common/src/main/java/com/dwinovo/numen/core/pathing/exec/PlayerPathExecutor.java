@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.pathing.exec;
 
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavContext;
@@ -49,7 +51,10 @@ public final class PlayerPathExecutor {
     private final NumenPlayer player;
     private final Path path;
     private final double speed;
-    /** Builds a fresh world snapshot for per-tick cost re-verification. */
+    /** Builds a fresh world snapshot for per-tick cost re-verification. The context carries
+     *  the force-break gate, so {@link #verifyCosts} re-prices planned breaks against the
+     *  LIVE inventory each tick — a pickaxe breaking mid-route turns the next drop-gated
+     *  break {@code COST_INF} and the path bails to a replan instead of grinding on. */
     private final java.util.function.Supplier<NavContext> ctxSupplier;
 
     private int index = 0;

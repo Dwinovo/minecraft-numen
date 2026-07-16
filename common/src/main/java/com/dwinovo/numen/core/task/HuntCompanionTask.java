@@ -1,8 +1,10 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.exec.InputDriver;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
@@ -12,11 +14,12 @@ import com.dwinovo.numen.core.task.base.ToolSelect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -40,15 +43,27 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
     /** Melee strike range — vanilla player entity-interaction reach ≈ 3 blocks. */
     private static final double ATTACK_REACH = 3.0;
     private static final double ATTACK_REACH_SQR = ATTACK_REACH * ATTACK_REACH;
+    /** Scan-score shrink for a mob that is actively targeting this body — fight back
+     *  before wandering off to a nearer bystander. */
+    private static final double TARGETING_ME_WEIGHT = 4.0;
     /** Post-hunt loot sweep: radius scanned for mob drops, and a tick budget so it can't stall. */
     private static final int COLLECT_RADIUS = 24;
     private static final int MAX_COLLECT_TICKS = 300;   // ~15 s
+
+    /** Fish deeper than this many water cells below air can't be struck from the surface
+     *  (the body can't dive — pathing keeps it on the water surface plane). */
+    private static final int MAX_STRIKE_DEPTH = 2;
 
     /** Mobs A* couldn't close on — skipped so the scan doesn't retry the same one forever. */
     private final TargetSet<LivingEntity> skipped = new TargetSet<>(LivingEntity::getId);
     /** How many of those skips happened ({@code TargetSet} keeps no count) — so the final
      *  "nothing left to hunt" message can tell the LLM "N targets were there but unreachable". */
     private int unreachableSkips;
+    /** Distinct prey seen swimming too deep to strike — filtered before any search is spent
+     *  (a frozen-ocean salmon chase once burned 20k-expansion searches per replan while the
+     *  body drowned under the ice), and named in the give-up message so the LLM stops
+     *  retrying a target class that is physically out of reach. */
+    private final java.util.Set<Integer> underwaterSeen = new java.util.HashSet<>();
     /** Drops A* can't reach — skipped so the sweep doesn't retry the same one forever. */
     private final TargetSet<BlockPos> dropBlacklist = new TargetSet<>(p -> p);
 
@@ -108,6 +123,11 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
                 scanned += " (" + unreachableSkips + " candidate"
                         + (unreachableSkips == 1 ? " was" : "s were")
                         + " skipped as unreachable)";
+            }
+            if (!underwaterSeen.isEmpty()) {
+                scanned += " (" + underwaterSeen.size() + " swimming too deep underwater — I can't"
+                        + " dive, melee only reaches ~" + MAX_STRIKE_DEPTH + " blocks below the"
+                        + " surface; don't re-hunt these, pick land prey or another food source)";
             }
             fail(scanned, FailureType.TARGET_LOST);
             return TaskState.FAILED;
@@ -211,7 +231,11 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
      *  cooldown has recovered (full-charge damage). */
     private void swing() {
         if (target == null) return;
+        ItemStack heldBefore = player.getMainHandItem();
         ToolSelect.holdBestWeapon(player);   // pathfinder may have swapped a scaffold block into the hand while bridging
+        if (player.getMainHandItem() != heldBefore) {
+            return;   // hand just changed — the item-change ticker reset lands next tick, so this swing would be void
+        }
         InputDriver.lookAt(player, target.getEyePosition());
         HitResult hit = Interaction.nativeRaytrace(player, ATTACK_REACH);
         boolean onTarget = hit.getType() == HitResult.Type.ENTITY
@@ -219,10 +243,12 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
         if (!onTarget) {
             return;   // not actually looking at the target this tick — re-aim next tick
         }
+        if (target.hurtTime > 0) {
+            return;   // still in the post-hit invulnerability window — a hit now only deals the damage difference
+        }
         player.setSprinting(false);       // sweep + no knockback-chase
         if (player.getAttackStrengthScale(0.0f) >= 0.95f) {
-            player.attack(target);        // real damage / cooldown / sweep / knockback / crit
-            player.resetAttackStrengthTicker();
+            player.attack(target);        // real damage / cooldown / sweep / knockback / crit (resets the ticker itself)
             player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
         }
     }
@@ -232,8 +258,10 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
     }
 
     private boolean inReachAndLos() {
+        // Range is eye-to-hitbox (nearest point of the bounding box), not eye-to-block-centre:
+        // a large mob's centre can sit beyond reach while its body is already strikable.
         return target != null
-                && player.distanceToSqr(Vec3.atCenterOf(target.blockPosition())) <= ATTACK_REACH_SQR
+                && target.getBoundingBox().distanceToSqr(player.getEyePosition()) <= ATTACK_REACH_SQR
                 && player.hasLineOfSight(target);
     }
 
@@ -244,9 +272,45 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
             if (e == player || e.isRemoved()) continue;
             if (!(e instanceof LivingEntity le) || le.isDeadOrDying()) continue;
             if (!r.targets.contains(e.getType())) continue;
+            if (submergedBeyondReach(le)) {
+                // Not permanently skipped — a fish that rises into strike range on a
+                // later scan is fair game; the id set only feeds the give-up message.
+                underwaterSeen.add(le.getId());
+                continue;
+            }
             candidates.add(le);
         }
-        return skipped.pick(candidates, Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
+        return skipped.pick(candidates, Comparator.comparingDouble(this::threatScore)).orElse(null);
+    }
+
+    /**
+     * Prey deeper underwater than a strike from the surface can never be closed on:
+     * the body can't dive (pathing keeps it on the water surface plane), so chasing
+     * it just replans forever while the fish circles. Deciding costs a couple of
+     * block reads; letting A* discover it costs a full exhausted search budget per
+     * replan. A solid lid (pack ice) before air within reach is the same verdict.
+     */
+    private boolean submergedBeyondReach(LivingEntity prey) {
+        var level = player.level();
+        BlockPos p = prey.blockPosition();
+        if (!level.getFluidState(p).is(net.minecraft.tags.FluidTags.WATER)) return false;
+        for (int up = 0; up < MAX_STRIKE_DEPTH; up++) {
+            p = p.above();
+            var state = level.getBlockState(p);
+            if (state.getFluidState().is(net.minecraft.tags.FluidTags.WATER)) continue;
+            return !state.getCollisionShape(level, p).isEmpty();
+        }
+        return true;
+    }
+
+    /** Lower is better: squared distance, shrunk for a mob that is actively targeting this body
+     *  so retaliation outranks a nearer bystander. */
+    private double threatScore(LivingEntity candidate) {
+        double score = player.distanceToSqr(candidate);
+        if (candidate instanceof Mob mob && mob.getTarget() == player) {
+            score /= TARGETING_ME_WEIGHT;
+        }
+        return score;
     }
 
     @Override

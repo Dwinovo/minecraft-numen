@@ -1,13 +1,13 @@
 package com.dwinovo.numen.core.task.base;
 
-import com.dwinovo.numen.core.pathing.exec.InputDriver;
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
-import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
-import com.dwinovo.numen.core.task.CompanionTask;
+import com.dwinovo.numen.task.CompanionTask;
 import com.dwinovo.numen.core.task.FailureType;
-import com.dwinovo.numen.core.task.Suspendable;
-import com.dwinovo.numen.core.task.TaskRecord;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.task.Suspendable;
+import com.dwinovo.numen.task.TaskRecord;
+import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;
 
@@ -151,7 +151,6 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     /** Release physical resources on termination. Default: stop nav + clear the path overlay. */
     protected void cleanup() {
         stopNav();
-        PathVizPublisher.clear(player);
     }
 
     /** Structured payload for the result envelope. Default: a fresh empty (mutable) map. */

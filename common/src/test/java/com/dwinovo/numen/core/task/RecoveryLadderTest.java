@@ -1,5 +1,8 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+import com.dwinovo.numen.task.CompanionTask;
+
 import com.dwinovo.numen.core.task.base.RecoveryLadder;
 import com.dwinovo.numen.core.task.base.RecoveryLadder.Rung;
 import com.dwinovo.numen.task.TaskResult;

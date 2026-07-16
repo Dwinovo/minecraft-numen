@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
@@ -87,7 +89,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         long extra = Math.min(MAX_EXTRA_TICKS, 600 + (long) (repDistance() * TICKS_PER_BLOCK));
         r.extendDeadlineTo(player.level().getGameTime() + extra);
         leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
-        nav = PlayerNav.toGoal(player, this::goal, r.speed, this::reached);
+        nav = PlayerNav.toGoal(player, this::goal, r.speed, this::reached, r.modifyTerrain);
         // Highlight the ACTUAL requested cell (not the path's best-effort end) so the overlay
         // box sits on the real target — e.g. a BLOCK goal under/over water that the path can
         // only approach to the surface. The goal itself is always rendered, not the plan's end.
@@ -180,7 +182,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     nearRetried = true;
                     stopNav();
                     NavGoal retry = nearRetryGoal();
-                    nav = PlayerNav.toGoal(player, () -> retry, r.speed, this::closeEnoughToSucceed);
+                    nav = PlayerNav.toGoal(player, () -> retry, r.speed, this::closeEnoughToSucceed,
+                            r.modifyTerrain);
                     if (r.kind == MoveToTaskRecord.Kind.BLOCK) {
                         nav.setHighlights(() -> java.util.List.of(blockTarget));
                     }
@@ -315,8 +318,17 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case BLOCK, COLUMN -> "location x=" + bx + " z=" + bz;
             case YLEVEL -> "elevation y=" + by;
         };
+        // Two different next steps for the model: under force-break everything breakable
+        // was already on the table, so the fix is geometry (waypoints/scanning); under
+        // normal breaking the failReason may name a block nothing we carry harvests —
+        // then the fix is the right tool, or the flag.
+        String advice = r.modifyTerrain
+                ? ". Try a nearer waypoint or scan_blocks for a way through."
+                : ". Try a nearer waypoint or scan_blocks for a way through; if the reason above"
+                        + " names a block I can't harvest, give me the right tool for it, or"
+                        + " re-run with modify_terrain:true to force-dig through anyway"
+                        + " (slow, and those blocks drop nothing).";
         return "blocked: got within " + String.format("%.1f", remaining) + " blocks of " + where
-                + " (now on the ground at y=" + gy + "). " + failReason
-                + ". Try a nearer waypoint, scan_blocks for a way through, or equip a pickaxe to tunnel.";
+                + " (now on the ground at y=" + gy + "). " + failReason + advice;
     }
 }

@@ -1,6 +1,8 @@
 package com.dwinovo.numen.core.task.base;
 
-import com.dwinovo.numen.core.task.CompanionTask;
+import com.dwinovo.numen.task.TaskState;
+
+import com.dwinovo.numen.task.CompanionTask;
 import com.dwinovo.numen.core.task.FailureType;
 
 import java.util.List;

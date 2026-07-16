@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
@@ -21,9 +21,9 @@ import java.util.function.Consumer;
 /**
  * SAMPLE (raw-NumenTool style, no @NumenAction). A query tool: runs on the body
  * server-side and replies in place. No arguments → an empty schema. The body of
- * {@link #runOnServer} is just the perception logic; nothing reflective.
+ * {@link #onServerCall} is just the perception logic; nothing reflective.
  */
-public final class GetSelfStatusTool extends ServerNumenTool {
+public final class GetSelfStatusTool implements NumenTool {
 
     @Override
     public String name() {
@@ -32,10 +32,18 @@ public final class GetSelfStatusTool extends ServerNumenTool {
 
     @Override
     public String description() {
-        return "Read your complete status in one call: name, game mode, HP / max HP, "
+        // The reflex overview rides THIS description (constitution §6): numen-api
+        // exposes no system-prompt injection channel to core, but every request
+        // re-reads tool descriptions, so the model sees the current roster each
+        // turn. Dynamic on purpose — switched-off reflexes drop out of the text.
+        String base = "Read your complete status in one call: name, game mode, HP / max HP, "
                 + "hunger / saturation, position, dimension, biome, the structures you "
-                + "are standing in, equipment, your full backpack inventory, and movement "
-                + "state. ALWAYS call this before combat or planning decisions. No arguments.";
+                + "are standing in, equipment (slots pinned by your explicit equip_item are "
+                + "marked \"pinned\": true — reflexes keep their gear as instructed), your "
+                + "full backpack inventory, and movement state. ALWAYS call this before "
+                + "combat or planning decisions. No arguments.";
+        String overview = com.dwinovo.numen.task.reflex.ReflexRegistry.overview();
+        return overview.isEmpty() ? base : base + "\n\n" + overview;
     }
 
     @Override
@@ -44,7 +52,7 @@ public final class GetSelfStatusTool extends ServerNumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         JsonObject root = new JsonObject();
         root.addProperty("entity_id", self.getId());
         root.addProperty("name", self.getName().getString());
@@ -75,15 +83,28 @@ public final class GetSelfStatusTool extends ServerNumenTool {
         root.add("structures", structures);
 
         JsonObject equipment = new JsonObject();
+        var pins = com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(self);
+        boolean anyPinned = false;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemStack s = self.getItemBySlot(slot);
             if (s.isEmpty()) continue;
             JsonObject o = new JsonObject();
             o.addProperty("item", BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
             if (s.getCount() > 1) o.addProperty("count", s.getCount());
+            // Pin visibility (constitution §5): the model must SEE its standing
+            // instructions to clean up stale ones. validate() is the scan-time
+            // expiry — a pin whose item is gone dies right here.
+            if (pins.validate(slot.getName(), com.dwinovo.numen.core.task.pin.Fingerprints.of(s))) {
+                o.addProperty("pinned", true);
+                anyPinned = true;
+            }
             equipment.add(slot.getName(), o);
         }
         root.add("equipment", equipment);
+        if (anyPinned) {
+            root.addProperty("pinned_meaning", "pinned slots hold what you explicitly equipped; "
+                    + "reflexes won't change them. Release one with equip_item(item_id=\"auto\", slot=...).");
+        }
 
         var inv = self.getInventory();
         JsonArray items = new JsonArray();
@@ -107,6 +128,9 @@ public final class GetSelfStatusTool extends ServerNumenTool {
         root.add("target", JsonNull.INSTANCE);
         root.addProperty("on_ground", self.onGround());
         root.addProperty("in_water", self.isInWater());
+        // Remaining breath — the one stat whose absence let a body drown while its
+        // mind calmly planned an 870-block trip (frozen-ocean death, 2026-07-15).
+        root.addProperty("air", self.getAirSupply() + "/" + self.getMaxAirSupply() + " ticks");
         root.addProperty("in_lava", self.isInLava());
 
         reply.accept(root.toString());

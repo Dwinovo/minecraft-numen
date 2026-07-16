@@ -1,12 +1,14 @@
 package com.dwinovo.numen.core.pathing.exec.drive;
 
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.exec.InputDriver;
 import com.dwinovo.numen.core.pathing.exec.Interaction;
 import com.dwinovo.numen.core.pathing.exec.Placement;
 import com.dwinovo.numen.core.pathing.movement.Movement;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
+import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -119,7 +121,7 @@ final class PillarDriver extends MoveDriver {
             underfootBlocked("no scaffold block in inventory");
             return;
         }
-        if (!Placement.canPlaceAgainst(player.level(), cell.below())) {
+        if (!Placement.canPlaceAgainst(player.level(), cell.below(), Direction.UP)) {
             underfootBlocked("support below is gone");
             return;
         }

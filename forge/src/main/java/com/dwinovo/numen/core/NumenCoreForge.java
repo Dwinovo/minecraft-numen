@@ -2,7 +2,6 @@ package com.dwinovo.numen.core;
 
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.core.pathing.cache.PathCaches;
-import com.dwinovo.numen.core.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.task.ScanBlocksJob;
 import net.minecraft.server.MinecraftServer;
 import net.minecraftforge.api.distmarker.Dist;
@@ -60,7 +59,7 @@ public class NumenCoreForge {
             return;
         }
         MinecraftServer server = event.getServer();
-        CompanionTickDispatcher.tick(server);
+        // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         ScanBlocksJob.tick(server);
         PathCaches.serverTick(server);
     }

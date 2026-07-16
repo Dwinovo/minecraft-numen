@@ -1,7 +1,9 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import static com.dwinovo.numen.task.TaskDispatch.*;
+
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -10,12 +12,12 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** World-action tool (raw NumenTool): travel with full terrain-traversing navigation. */
-public final class MoveToTool extends ServerNumenTool {
+public final class MoveToTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final MovementTools impl = new MovementTools();
 
-    private record Args(Double x, Double y, Double z, double speed) {}
+    private record Args(Double x, Double y, Double z, double speed, Boolean modify_terrain) {}
 
     @Override
     public String name() {
@@ -29,7 +31,7 @@ public final class MoveToTool extends ServerNumenTool {
                 • Go to a LOCATION: give x and z, leave y null. The companion walks to that spot and stands on whatever ground is there — Y is auto-resolved to the surface. THIS IS THE DEFAULT for 'go over there' / following / exploring; never guess a Y for a location.
                 • Go to an EXACT cell: give x, y and z. Only for a specific cell you know is reachable (e.g. a block you scanned). If that cell is mid-air or walled in it will report it couldn't reach it.
                 • Change ELEVATION: give y only (x and z null) to climb to the surface or descend to a mining depth at your current column.
-                En route it mines through obstructions, digs down/up, bridges gaps and pillars up with cobblestone/dirt from inventory. Digging is gated by your HELD tool: stone/deepslate need a pickaxe IN HAND (equip_item first); a sword held makes stone an impassable wall. Consumes scaffold blocks and tool durability; carry cobblestone/dirt for gaps. Timeout scales with distance; the result reports the actual position reached (and the real ground height) — call again with the same target to resume. But if it reports NO path or stops far short, that spot is unreachable or too far: pick a NEARER waypoint, or scan first — don't just repeat the same unreachable target. move_to is for getting somewhere to STAND; to open/use a station give its coordinate to interact_at instead.""";
+                En route it digs, bridges gaps and pillars up, auto-equipping the best tool from its whole inventory (no equip_item needed). By default it only breaks blocks its tools actually harvest — if every route would need a no-drop grind (e.g. stone with no pickaxe) it stops and names the missing tool; modify_terrain:true force-digs through anyway (slow, drops nothing). Functional blocks (chests, furnaces…) are never broken. BACKGROUND task: returns a task_id at once; the position actually reached arrives as a task_finished event — on timeout, re-dispatch the same call to resume; NO path or stopping far short means pick a NEARER waypoint or scan first. To open/use a station, give its coordinate to interact_at instead.""";
     }
 
     @Override
@@ -41,12 +43,16 @@ public final class MoveToTool extends ServerNumenTool {
                         + "elevation move (y alone).")
                 .nullableNumber("z", "Target Z. Null for an elevation-only move (y alone).")
                 .number("speed", "Speed multiplier in [0.1, 2.0]. 1.0 is normal walking speed.", 0.1, 2.0)
+                .optionalBool("modify_terrain", "Default false: dig only what your tools harvest — "
+                        + "no-drop grinds are refused with the missing tool named. true: force-break "
+                        + "everything (slow, drops nothing); pass only when a refusal asked for it.")
                 .build();
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        enqueue(companion, impl.moveTo(a.x(), a.y(), a.z(), a.speed(), ctx(toolCallId, companion)));
+        dispatchAsync(companion, impl.moveTo(a.x(), a.y(), a.z(), a.speed(), a.modify_terrain(),
+                ctx(toolCallId, companion)), reply);
     }
 }

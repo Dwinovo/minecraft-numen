@@ -1,5 +1,8 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+import com.dwinovo.numen.task.Suspendable;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.exec.BlockDigger;
@@ -45,6 +48,9 @@ import java.util.Set;
  * alternative EXECUTIONS of the same place are tried in order:
  * <ol>
  *   <li>the direct edge-sneak maneuver from wherever nav parked us (today's rung);</li>
+ *   <li>DIRECTED REPOSITION — when the placement resolver diagnosed the failure with a
+ *       suggested stance (a standable spot computed to see the best support face), walk
+ *       there first and retry: one nav straight to the geometric answer;</li>
  *   <li>REPOSITION — up to {@value #MAX_ALT_STANCES} alternate stances (adjacent to
  *       the target; anywhere within {@value #STANCE_NEAR_RADIUS} blocks of it; then
  *       on the rim ABOVE it, so the down-face comes into view — the one stance that
@@ -74,9 +80,11 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
     private static final int MAX_OCCLUDERS_DUG = 2;
     /** Radius of the loosest alternate-stance goal — still hugging the target. */
     private static final double STANCE_NEAR_RADIUS = 2.5;
-    /** Faces a block can be placed against (same order as PlaceManeuver / Placement). */
+    /** Neighbour directions a block can be placed against (all six — the resolver
+     *  considers UP too: placing against a ceiling is legal). */
     private static final Direction[] SUPPORT_FACES = {
-            Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN};
+            Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST,
+            Direction.DOWN, Direction.UP};
 
     /** Which ladder rung {@link #act()} is currently executing. */
     private enum Phase { PLACING, REPOSITIONING, DIGGING }
@@ -96,6 +104,11 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
     private static final int DIG_TICK_CAP = 100;
     /** Feet cells a maneuver already failed from — excluded from later stance goals. */
     private final Set<BlockPos> badStances = new HashSet<>();
+    /** The resolver's suggested reposition from the last maneuver failure (a standable
+     *  spot computed to see the best support face) — consumed by the directed rung. */
+    private Vec3 stanceHint;
+    /** The directed-reposition rung has been used (it never re-enters). */
+    private boolean stanceHintTried;
     /** Lazily-created digger for the dig-out rung. */
     private BlockDigger digger;
 
@@ -175,16 +188,22 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
             case FAILED -> {
                 FailureType cause = maneuver.failType();
                 String why = maneuver.failReason();
+                Vec3 hint = maneuver.suggestedStance();
                 maneuver.stop();     // release sneak before repositioning / digging
                 maneuver = null;
                 // NO_MATERIAL is a prerequisite gap — NEVER laddered. NO_SUPPORT is
                 // target geometry (no solid neighbour exists at all): no stance change
-                // or dig can create support, so it kicks back immediately too.
-                if (cause == FailureType.NO_MATERIAL || cause == FailureType.NO_SUPPORT) {
+                // or dig can create support. ENTITY_BLOCKED means a creature squats in
+                // the cell: waiting or luring it away is the model's call, no stance
+                // change or dig moves it. All three kick back immediately with the
+                // resolver's own diagnosis as the model-facing reason.
+                if (cause == FailureType.NO_MATERIAL || cause == FailureType.NO_SUPPORT
+                        || cause == FailureType.ENTITY_BLOCKED) {
                     fail(why, cause);
                     yield TaskState.FAILED;
                 }
                 badStances.add(currentFeet());   // don't come back to this stance
+                if (hint != null) stanceHint = hint;
                 yield advanceLadder(cause, why);
             }
             case RUNNING -> TaskState.RUNNING;
@@ -272,7 +291,10 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
         if (p.equals(r.pos) || p.equals(feet) || p.equals(feet.below())) return false;
         for (Direction dir : SUPPORT_FACES) {
             BlockPos against = r.pos.relative(dir);
-            if (p.equals(against) && Placement.canPlaceAgainst(player.level(), against)) return false;
+            if (p.equals(against)
+                    && Placement.canPlaceAgainst(player.level(), against, dir.getOpposite())) {
+                return false;
+            }
         }
         return !BlockHelper.shouldAvoidBreaking(player.level(), p);
     }
@@ -284,6 +306,16 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
      * into the exhausted message.
      */
     private TaskState advanceLadder(FailureType cause, String detail) {
+        // Directed rung first: the resolver already computed where to stand — walk there
+        // instead of sampling a blind stance. One shot; a second failure falls through
+        // to the generic rungs below.
+        if (stanceHint != null && !stanceHintTried) {
+            stanceHintTried = true;
+            startHintNav(stanceHint);
+            stanceHint = null;
+            phase = Phase.REPOSITIONING;
+            return TaskState.RUNNING;
+        }
         if (altStancesTried < MAX_ALT_STANCES) {
             altStancesTried++;
             startStanceNav(altStancesTried);
@@ -302,6 +334,7 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
     private TaskState exhaust(FailureType cause, String detail) {
         List<String> tried = new ArrayList<>();
         if (directPlaceTried) tried.add("direct edge-place");
+        if (stanceHintTried) tried.add("the stance the placement diagnosis suggested");
         if (altStancesTried > 0) {
             tried.add(altStancesTried + " alternate stance" + (altStancesTried == 1 ? "" : "s"));
         }
@@ -320,6 +353,30 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
     private void startStanceNav(int attempt) {
         stopNav();
         NavGoal goal = stanceGoal(attempt);
+        nav = PlayerNav.toGoal(player, () -> goal, WALK_SPEED, () -> goal.isAt(currentFeet()));
+    }
+
+    /** Replace the nav with one toward the resolver's suggested stance — the same
+     *  avoid-set discipline as the blind stances (never the target cell, its column,
+     *  or a stance already failed from), aimed at one computed cell (±1 of slack). */
+    private void startHintNav(Vec3 hint) {
+        stopNav();
+        BlockPos cell = BlockPos.containing(hint);
+        Set<BlockPos> avoid = new HashSet<>(badStances);   // copied — the search reads it off-thread
+        avoid.add(r.pos);
+        avoid.add(r.pos.above());
+        NavGoal base = NavGoal.near(cell, 1.0);
+        NavGoal goal = new NavGoal() {
+            @Override public boolean isAt(BlockPos feet) {
+                return base.isAt(feet) && !avoid.contains(feet);
+            }
+            @Override public double heuristic(BlockPos from) {
+                return base.heuristic(from);
+            }
+            @Override public BlockPos center() {
+                return base.center();
+            }
+        };
         nav = PlayerNav.toGoal(player, () -> goal, WALK_SPEED, () -> goal.isAt(currentFeet()));
     }
 
@@ -367,7 +424,7 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
         BlockPos feet = player.blockPosition();
         for (Direction dir : SUPPORT_FACES) {
             BlockPos against = r.pos.relative(dir);
-            if (!Placement.canPlaceAgainst(level, against)) continue;
+            if (!Placement.canPlaceAgainst(level, against, dir.getOpposite())) continue;
             Vec3 facePoint = new Vec3(
                     (r.pos.getX() + against.getX() + 1.0) * 0.5,
                     (r.pos.getY() + against.getY() + 0.5) * 0.5,

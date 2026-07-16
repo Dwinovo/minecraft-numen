@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.agent.tool.api.ToolContext;
-import com.dwinovo.numen.core.task.TaskRecord;
+import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.task.BreakBlockTaskRecord;
 import com.dwinovo.numen.core.task.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.InteractEntityTaskRecord;
@@ -94,6 +94,7 @@ int z,
             List<String> block_ids,
 int count,
 Integer radius,
+            Boolean force,
             ToolContext ctx) {
         Set<Block> targets = readBlockIds(block_ids);
         if (targets.isEmpty()) {
@@ -111,7 +112,8 @@ Integer radius,
         String label = labelFor(targets);
         long timeout = Math.max(MIN_TIMEOUT_TICKS, (long) clampedCount * TICKS_PER_BLOCK);
         long deadline = ctx.deadline(timeout);
-        return new MineBlockTaskRecord(ctx.toolCallId(), deadline, targets, clampedCount, searchRadius, label);
+        return new MineBlockTaskRecord(ctx.toolCallId(), deadline, targets, clampedCount, searchRadius, label,
+                Boolean.TRUE.equals(force));
     }
 
     private static Set<Block> readBlockIds(List<String> blockIds) {

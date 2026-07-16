@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskChain;
+
 /**
  * The single gate that keeps the autonomous survival layer (auto-eat, fight-back,
  * flee, unstuck, MLG fall-save) dormant by default. Every survival chain's

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task;
 
-import com.dwinovo.numen.core.task.TaskRecord;
+import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.level.block.Block;
 
 import java.util.Set;
@@ -29,6 +29,11 @@ public final class MineBlockTaskRecord extends TaskRecord {
     public final int maxRadius;
     /** Human-readable target label for messages / debug overlay (e.g. "iron_ore"). */
     public final String label;
+    /** Break targets even when the carried tools can't harvest them (no drops).
+     *  Default false: an unharvestable target is skipped, and a field with nothing
+     *  harvestable stops the task with the tool-tier reminder instead of silently
+     *  destroying ore for zero yield. */
+    public final boolean force;
 
     /** Live progress = matching ITEMS gathered since the task started (counted in the inventory,
      *  not blocks broken — multi-drop ores like redstone yield several items per block). Set each tick
@@ -36,12 +41,14 @@ public final class MineBlockTaskRecord extends TaskRecord {
     private int mined = 0;
 
     public MineBlockTaskRecord(String toolCallId, long deadlineGameTime,
-                               Set<Block> targets, int count, int maxRadius, String label) {
+                               Set<Block> targets, int count, int maxRadius, String label,
+                               boolean force) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.targets = Set.copyOf(targets);
         this.count = count;
         this.maxRadius = maxRadius;
         this.label = label;
+        this.force = force;
     }
 
     public int getMined() {

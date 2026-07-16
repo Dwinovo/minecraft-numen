@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task;
 
-import com.dwinovo.numen.core.task.TaskRecord;
+import com.dwinovo.numen.task.TaskRecord;
 
 /**
  * Typed task descriptor for the {@code move_to} tool. The goal type is chosen
@@ -31,14 +31,22 @@ public final class MoveToTaskRecord extends TaskRecord {
     /** PathNavigation speed multiplier; 1.0 ≈ entity's MOVEMENT_SPEED attribute. */
     public final double speed;
     public final Kind kind;
+    /** Force-break gate. false (default): normal breaking — the journey digs and
+     *  bridges, but only breaks blocks some inventory tool actually harvests; a route
+     *  that would need a no-drop grind (stone, no pickaxe) is refused with a
+     *  diagnosis. true: break anything breakable, including the slow wrong-tool
+     *  grind that drops nothing. */
+    public final boolean modifyTerrain;
 
     public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
-                            Double x, Double y, Double z, double speed) {
+                            Double x, Double y, Double z, double speed,
+                            boolean modifyTerrain) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.x = x;
         this.y = y;
         this.z = z;
         this.speed = speed;
+        this.modifyTerrain = modifyTerrain;
         this.kind = resolveKind(x, y, z);
     }
 

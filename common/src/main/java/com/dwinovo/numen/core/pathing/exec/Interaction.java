@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.pathing.exec;
 
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.task.FailureType;
 import net.minecraft.core.BlockPos;
@@ -298,11 +300,13 @@ public final class Interaction {
         if (entity == null || !entity.isAlive()) return false;
         InputDriver.halt(player);
         InputDriver.lookAt(player, entity.getEyePosition());
+        if (entity instanceof net.minecraft.world.entity.LivingEntity living && living.hurtTime > 0) {
+            return false;                              // post-hit invulnerability window — wait for a full-damage hit
+        }
         if (player.getAttackStrengthScale(0.0f) < 0.95f) {
             return false;                              // wait out the attack cooldown
         }
-        player.attack(entity);                         // native damage / cooldown / sweep / knockback
-        player.resetAttackStrengthTicker();
+        player.attack(entity);                         // native damage / cooldown / sweep / knockback (resets the ticker itself)
         player.swing(InteractionHand.MAIN_HAND);
         return true;
     }

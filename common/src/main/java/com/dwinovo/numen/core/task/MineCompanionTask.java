@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.exec.BlockDigger;
@@ -7,7 +9,6 @@ import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.BlockScanner;
 import com.dwinovo.numen.core.pathing.util.ScanExecutor;
-import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.BlockPos;
@@ -92,6 +93,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     private final List<BlockPos> knownOres = new ArrayList<>();
     private final Set<BlockPos> blacklist = new HashSet<>();
+    /** Targets pruned because no carried tool harvests them (force=false only) — kept so the
+     *  terminal failure can name the tool problem instead of reporting an empty field. */
+    private final Set<BlockPos> unharvestable = new HashSet<>();
     /** Items the target blocks drop (simulated via the server loot tables). The
      *  count is over THESE in the inventory, not blocks broken — redstone_ore yields ~4 redstone. */
     private Set<Item> dropItems = Set.of();
@@ -130,13 +134,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // would destroy the block for no drop. Same gate as break_block / the cost model
         // (BlockHelper.canHarvest, whole-inventory). prune() then drops any individual unharvestable
         // cell, so a mixed request (e.g. coal we can mine + diamond we can't) still works.
+        // force=true waives the whole gate: the caller wants the blocks GONE, drops or not.
+        if (r.force) {
+            return List.of();
+        }
         return List.of(() -> {
             boolean anyHarvestable = r.targets.stream().anyMatch(
                     b -> BlockHelper.canHarvest(player.getInventory(), b.defaultBlockState()));
             if (!anyHarvestable) {
                 return new Precondition.Failure(
                         "can't harvest " + r.label + " with the current tools — mining it would"
-                        + " destroy it without any drop. Equip a suitable tool (e.g. a pickaxe) first.",
+                        + " destroy it without any drop. Equip a suitable tool (e.g. a pickaxe) first,"
+                        + " or re-run with force:true if you just want the blocks destroyed.",
                         FailureType.WRONG_TOOL);
             }
             return null;
@@ -196,7 +205,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             // cleared the overlay, so re-publish the ore field boxes — otherwise the
             // boxes vanish the instant shaft-mining starts (the "boxes disappear after
             // two logs" bug). No path line while shaft-mining, just the goal.
-            PathVizPublisher.publishTargets(player, new ArrayList<>(knownOres));
             mineProgress(reachable);
             return TaskState.RUNNING;
         }
@@ -524,12 +532,22 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private void prune() {
         Level level = player.level();
         BlockPos feet = player.blockPosition();
-        knownOres.removeIf(p ->
-                level.getBlockState(p).isAir()
-                        || !r.targets.contains(level.getBlockState(p).getBlock())
-                        || blacklist.contains(p)
-                        || BlockMiningProgress.fluidBreakHazard(level, p) != null
-                        || !BlockHelper.canHarvest(player.getInventory(), level.getBlockState(p)));
+        knownOres.removeIf(p -> {
+            var state = level.getBlockState(p);
+            if (state.isAir() || !r.targets.contains(state.getBlock()) || blacklist.contains(p)
+                    || BlockMiningProgress.fluidBreakHazard(level, p) != null) {
+                return true;
+            }
+            // Harvestability gate — skipped entirely under force ("destroy, don't gather").
+            // Tool-skipped cells are remembered so the terminal failure can say "you need a
+            // better tool" instead of the misleading "nothing found" (the tool situation can
+            // also CHANGE mid-task: the only good pick breaking makes this fire on re-prune).
+            if (!r.force && !BlockHelper.canHarvest(player.getInventory(), state)) {
+                unharvestable.add(p.immutable());
+                return true;
+            }
+            return false;
+        });
         knownOres.sort(Comparator.comparingDouble(feet::distSqr));
         if (knownOres.size() > MAX_ORES) {
             knownOres.subList(MAX_ORES, knownOres.size()).clear();
@@ -552,6 +570,16 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  unreachable ({@code NO_PATH} — the terrain, not the scan radius, is the problem),
      *  with the counts. */
     private TaskState noOreFailure() {
+        if (!unharvestable.isEmpty()) {
+            // Targets exist but the carried tools can't make them drop — the actionable
+            // problem is the tool, not the deposit. Names the escape hatches explicitly.
+            fail("found " + unharvestable.size() + " " + r.label + " but none can be harvested with"
+                    + " the current tools (mining would destroy them without any drop); gathered "
+                    + r.getMined() + ". Equip a better tool (equip_item) and retry, or re-run with"
+                    + " force:true if you just want the blocks destroyed.",
+                    FailureType.WRONG_TOOL);
+            return TaskState.FAILED;
+        }
         if (!blacklist.isEmpty()) {
             fail("found " + blacklist.size() + " " + r.label + " within " + r.maxRadius
                     + " blocks but reached none of them — all " + blacklist.size()
@@ -578,7 +606,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     @Override
     protected void cleanup() {
         // super.cleanup() = stopNav() (nav.stop clears the overlay when a nav exists) + an explicit
-        // PathVizPublisher.clear — so a task that finished while shaft-mining (nav == null) still
+        // so a task that finished while shaft-mining (nav == null) still
         // clears its lingering goal boxes. Then release the dig + any in-flight scan.
         super.cleanup();
         digger.cancel();

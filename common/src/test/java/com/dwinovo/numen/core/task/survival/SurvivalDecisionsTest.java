@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.survival;
 
-import com.dwinovo.numen.core.task.TaskChain;
+import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
 import org.junit.jupiter.api.Test;
 
@@ -103,7 +103,35 @@ class SurvivalDecisionsTest {
         assertEquals(NEG, SurvivalDecisions.mlgPriority(false, 50.0, false));
     }
 
+    // ---- breath (surface-for-air) ----
+
+    @Test
+    void submergedWithLowAirFires() {
+        assertEquals(SurvivalDecisions.BREATH_PRIORITY,
+                SurvivalDecisions.breathPriority(true, SurvivalDecisions.LOW_AIR_TICKS));
+    }
+
+    @Test
+    void submergedWithFreshAirIsDormant() {
+        // A normal head-bob while swimming must not grab the body.
+        assertEquals(NEG, SurvivalDecisions.breathPriority(true, 300));
+    }
+
+    @Test
+    void headAboveWaterIsDormantEvenWithNoAir() {
+        // Air refills on its own once the head is out — nothing to do.
+        assertEquals(NEG, SurvivalDecisions.breathPriority(false, 0));
+    }
+
     // ---- ranking invariant (the documented hierarchy) ----
+
+    @Test
+    void breathOutranksMobDefenseButNotMlg() {
+        // Drowning is a hard timer: surface first, fight after. A falling body
+        // still beats it (you can't swim in mid-air).
+        assertTrue(SurvivalDecisions.BREATH_PRIORITY > SurvivalDecisions.MOB_DEFENSE_PRIORITY);
+        assertTrue(SurvivalDecisions.MLG_PRIORITY > SurvivalDecisions.BREATH_PRIORITY);
+    }
 
     @Test
     void priorityRankingIsMlgOverMobOverFoodOverUnstuckOverLlm() {

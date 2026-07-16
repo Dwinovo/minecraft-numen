@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.pathing.exec;
 
+import com.dwinovo.numen.entity.InputDriver;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.EngineSearch;
 import com.dwinovo.numen.core.pathing.calc.NavContext;
@@ -8,7 +10,6 @@ import com.dwinovo.numen.core.pathing.calc.Path;
 import com.dwinovo.numen.core.pathing.engine.HLearningTable;
 import com.dwinovo.numen.core.pathing.engine.SearchBudget;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
-import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
 import com.dwinovo.numen.core.task.FailureType;
 import net.minecraft.core.BlockPos;
@@ -55,6 +56,12 @@ public final class PlayerNav {
     private final Supplier<NavGoal> goalSupplier;
     private final double speed;
     private final BooleanSupplier reached;
+    /** May this navigation break blocks it can't harvest (move_to's modify_terrain:true)?
+     *  Threaded into every {@link NavContext} it builds — search AND execution re-costing,
+     *  so a tool breaking mid-route re-vetoes the remaining grinds live. Default false:
+     *  only harvestable digs are planned; a route that would require a no-drop grind
+     *  fails clean with a diagnosis instead. */
+    private final boolean forceBreak;
 
     /** Learned-heuristic table shared across this navigation's search segments (see
      *  {@link HLearningTable} for semantics). Concurrency invariant: at most one LIVE
@@ -98,7 +105,6 @@ public final class PlayerNav {
     private void publishViz(Path cut) {
         java.util.List<BlockPos> targets =
                 highlights != null ? highlights.get() : java.util.List.of(cut.end);
-        PathVizPublisher.publish(player, cut, targets);
     }
 
     private int replans = 0;
@@ -117,7 +123,7 @@ public final class PlayerNav {
 
     /** Walk to a single cell. */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
-        this(player, () -> resolveBlockGoal(player, goal), speed, reached, true);
+        this(player, () -> resolveBlockGoal(player, goal), speed, reached, false);
     }
 
     /** Walk to a (possibly moving) single cell. */
@@ -126,21 +132,30 @@ public final class PlayerNav {
         this(player, () -> {
             BlockPos g = goalSupplier.get();
             return g == null ? null : resolveBlockGoal(player, g);
-        }, speed, reached, true);
+        }, speed, reached, false);
     }
 
     /** Walk toward an arbitrary {@link NavGoal} (composite ore field, mining stance, …). */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
                                    double speed, BooleanSupplier reached) {
-        return new PlayerNav(player, goalSupplier, speed, reached, true);
+        return new PlayerNav(player, goalSupplier, speed, reached, false);
+    }
+
+    /** As {@link #toGoal(NumenPlayer, Supplier, double, BooleanSupplier)} with an explicit
+     *  force-break gate: {@code forceBreak:true} also plans (and executes) breaks that
+     *  harvest nothing — the slow wrong-tool grind behind move_to's modify_terrain:true. */
+    public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
+                                   double speed, BooleanSupplier reached, boolean forceBreak) {
+        return new PlayerNav(player, goalSupplier, speed, reached, forceBreak);
     }
 
     private PlayerNav(NumenPlayer player, Supplier<NavGoal> goalSupplier, double speed,
-                      BooleanSupplier reached, boolean marker) {
+                      BooleanSupplier reached, boolean forceBreak) {
         this.player = player;
         this.goalSupplier = goalSupplier;
         this.speed = speed;
         this.reached = reached;
+        this.forceBreak = forceBreak;
         startFreshSearch();
     }
 
@@ -210,7 +225,7 @@ public final class PlayerNav {
         if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
             com.dwinovo.numen.core.pathing.cache.PathCaches.ensureSnapshot(sl, player.blockPosition());
         }
-        return NavContext.forSearch(player.level(), player.getInventory());
+        return NavContext.forSearch(player.level(), player.getInventory(), forceBreak);
     }
 
     /** Off-thread when the context is frozen (the normal case); on the main thread otherwise — a
@@ -240,7 +255,7 @@ public final class PlayerNav {
 
     /** Live context for EXECUTION re-costing (main thread; reads current world + inventory). */
     private NavContext executionContext() {
-        return NavContext.forExecution(player.level(), player.getInventory());
+        return NavContext.forExecution(player.level(), player.getInventory(), forceBreak);
     }
 
     private void startFreshSearch() {
@@ -485,6 +500,5 @@ public final class PlayerNav {
         // when the path ends (inputs aren't auto-reset per tick), so the body
         // would stay crouched after arriving.
         player.setShiftKeyDown(false);
-        PathVizPublisher.clear(player);
     }
 }
