@@ -112,10 +112,14 @@ public final class NumenToasts {
     }
 
     private static void addToastLines(UUID uuid, AssistantTurn turn, long now) {
+        // 气泡与聊天面板同一套显示过滤(剥 [emotion] 语气标签等协议记号)。
+        String shown = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
+                .companionText(turn.content());
+        if (shown.isBlank()) return;
         UiTheme th = UiTheme.current();
         Status s = STATUS.computeIfAbsent(uuid, k -> new Status());
         boolean wasEmpty = s.lines.isEmpty();
-        for (String wrapped : wrapToWidth(turn.content(), INNER_W, MAX_REPLY_LINES)) {
+        for (String wrapped : wrapToWidth(shown, INNER_W, MAX_REPLY_LINES)) {
             s.lines.addLast(new Line(wrapped, th.reply(), now));
         }
         while (s.lines.size() > MAX_LINES) s.lines.removeFirst();

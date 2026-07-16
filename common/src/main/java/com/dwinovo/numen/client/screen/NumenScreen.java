@@ -2186,38 +2186,9 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    private static final java.util.regex.Pattern QUERY_PAT =
-            java.util.regex.Pattern.compile("(?s)<query>(.*?)</query>");
-
-    /**
-     * The owner's own words from a user message, for display. New messages wrap the owner's text in
-     * {@code <query>…</query>} (see {@code EntityAgentLoop.submitPrompt}), so we show only that; legacy
-     * untagged messages fall back to the raw text with injected directives stripped. Display-only — the
-     * LLM still receives the full user message.
-     */
+    /** 显示过滤统一走 {@link com.dwinovo.numen.client.chat.ChatDisplayFilter}(可整体切换)。 */
     private static String ownerText(String s) {
-        if (s == null) return "";
-        java.util.regex.Matcher m = QUERY_PAT.matcher(s);
-        StringBuilder b = new StringBuilder();
-        while (m.find()) {
-            if (b.length() > 0) b.append('\n');
-            b.append(m.group(1));
-        }
-        if (b.length() > 0) return b.toString().strip();
-        return stripInjectedDirectives(s);   // legacy / untagged owner message
-    }
-
-    /**
-     * Strip numen-injected directive blocks ({@code <persona-change>…</persona-change>},
-     * {@code <event …>…</event>}) from a user message so only the owner's own words show in chat.
-     * The full message (directives included) is still what the LLM receives — this is display-only.
-     */
-    private static String stripInjectedDirectives(String s) {
-        if (s == null) return "";
-        String out = s.replaceAll("(?s)<persona-change>.*?</persona-change>", "")
-                .replaceAll("(?s)<event\\b[^>]*>.*?</event>", "")
-                .replaceAll("(?s)<event\\b[^>]*/>", "");
-        return out.strip();
+        return com.dwinovo.numen.client.chat.ChatDisplayFilters.current().ownerText(s);
     }
 
     /** Truncate {@code s} with an ellipsis so it fits in {@code maxW} px. */
@@ -3177,10 +3148,12 @@ public final class NumenScreen extends Screen {
                 }
                 case ConvoState.Msg.Assistant a -> {
                     AssistantTurn turn = a.turn();
-                    if (turn.content() != null && !turn.content().isBlank()) {
+                    String spoken = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
+                            .companionText(turn.content());
+                    if (!spoken.isBlank()) {
                         flushTools(out, group, done, failed, width);   // spoken reply breaks the fold
                         addHeader(out, name, AI, width);         // bold name header on its OWN line
-                        wrapPlain(out, turn.content(), AI, width);
+                        wrapPlain(out, spoken, AI, width);
                     }
                     group.addAll(turn.toolCalls());
                 }
