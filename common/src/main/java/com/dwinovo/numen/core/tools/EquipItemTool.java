@@ -24,17 +24,11 @@ public final class EquipItemTool extends ServerNumenTool {
 
     @Override
     public String description() {
-        return "Equip an item from your OWN inventory so it actually takes effect — a tool/weapon to "
-                + "the main hand (speeds up auto_mine, boosts melee), armor to its slot, a modded accessory "
-                + "(Curios / Trinkets ring, amulet, …) to its accessory slot. It equips by right-clicking "
-                + "the item the way a player does, so armor and accessories route to the correct slot on "
-                + "their own. Omit slot for that auto-routing; set it only to force a hand or a specific "
-                + "vanilla armor piece. Whatever was equipped before is stowed back. Fails if the item "
-                + "isn't in your inventory. Equipping explicitly also PINS that slot: your reflexes "
-                + "(auto armor upgrade, auto tool swap, the near-breaking tool guard) will not touch a "
-                + "pinned slot while the pinned item stays there; the pin ends when the item breaks or "
-                + "leaves the slot. To release a pin yourself, call this tool with item_id \"auto\" and "
-                + "the slot — nothing is equipped, the reflexes just take that slot back.";
+        return "Equip an item from your OWN inventory: tool/weapon to the main hand, armor and modded "
+                + "accessories (Curios/Trinkets) auto-routed to their slots. Omit slot for auto-routing; "
+                + "set it only to force a hand or a specific armor piece. The previous item is stowed back. "
+                + "Explicit equipping PINS the slot — automatic gear swaps won't touch it until the item "
+                + "breaks or leaves; release a pin with item_id \"auto\" plus the slot.";
     }
 
     @Override

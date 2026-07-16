@@ -25,25 +25,15 @@ public final class AutoMineTool extends ServerNumenTool {
 
     @Override
     public String description() {
-        return "Gather blocks by type and quantity. Give the block id(s) and how many you want — the "
-                + "entity finds the nearest ones and travels to each with full terrain-traversing "
-                + "navigation: it digs tunnels to reach buried ores, pillars up to blocks high on cliffs, "
-                + "and bridges gaps with cobblestone/dirt from its own inventory, all automatically — then "
-                + "mines them and repeats until it has gathered `count` of the resulting ITEMS or none "
-                + "remain nearby. count is items, not blocks: a block can drop several (redstone_ore → ~4 "
-                + "redstone), so count:10 redstone mines only ~3 ore. It counts only NEW items gained, on "
-                + "top of what you already carry. You do NOT provide coordinates, call move_to, or pre-clear "
-                + "a path; carrying some cobblestone/dirt helps it cross terrain. Include all variants of a "
-                + "resource in block_ids (e.g. iron_ore AND deepslate_iron_ore). Optional radius caps how "
-                + "far to look (default auto-expands). Returns the actual number gathered, which may be less "
-                + "than requested if the deposit runs out. Harvestability gate (`force`, default false): "
-                + "with force:false it only mines what the tools it carries can actually harvest — a target "
-                + "that would drop nothing (wrong tool tier, e.g. iron_ore with a wooden pickaxe) is skipped, "
-                + "and if NONE of the requested blocks are harvestable the task stops and tells you what tier "
-                + "you need, instead of silently destroying ore for zero yield. Set force:true ONLY when you "
-                + "want the blocks gone rather than gathered (clearing obstacles): it breaks targets even "
-                + "when they drop nothing, so `count` may never advance. To gather, keep force:false and "
-                + "bring/equip the right tool (equip_item; check get_self_status).";
+        return "Gather blocks by type and count. Give block id(s) and how many ITEMS you want — it finds "
+                + "the nearest matches, travels to each with full terrain-traversing navigation (digs to "
+                + "buried ores, pillars up cliffs, bridges gaps), mines, and repeats until `count` NEW items "
+                + "are gained or none remain. No coordinates or move_to needed. count is items, not blocks "
+                + "(redstone_ore drops ~4). Include all variants in block_ids (iron_ore AND "
+                + "deepslate_iron_ore). Optional radius caps the search. force (default false): only mines "
+                + "what its tools actually harvest, and stops naming the needed tier if nothing qualifies; "
+                + "force:true breaks blocks even when they drop nothing — only for clearing obstacles, "
+                + "`count` may never advance.";
     }
 
     @Override

@@ -24,20 +24,13 @@ public final class PlaceBlockTool extends ServerNumenTool {
 
     @Override
     public String description() {
-        return "Place a block from your inventory at an absolute coordinate. The companion travels to a "
-                + "reachable spot next to the target on its own — digging through obstacles, bridging gaps, "
-                + "pillaring up — then places it like a real player (steps to the edge, looks, places). The "
-                + "coordinate is the cell the block will OCCUPY, not the block it sits on — to put a torch on "
-                + "top of a block at (x,y,z), target (x,y+1,z). Placement still needs a block to attach to "
-                + "(you can't place in pure mid-air), and the target cell must be empty. Optional orientation "
-                + "for blocks that have one: `facing` (north/south/east/west/up/down — "
-                + "furnace/chest/stairs/observer…), `axis` (x/y/z — logs/pillars), `half` (top/bottom — "
-                + "slabs/stairs). The result reports the block's ACTUAL orientation, so if it differs from "
-                + "what you asked, break it and retry from another angle. Fails with guidance (incl. nearby "
-                + "coords that WOULD work) if you lack the block, it isn't placeable, the target is occupied, "
-                + "or there's no reachable spot — so don't place where a block already is; build somewhere "
-                + "clear instead. Use for torches, walls/shelter, sealing caves, or positioning a crafting "
-                + "table/furnace/chest.";
+        return "Place a block from your inventory at an absolute coordinate; the companion travels there "
+                + "on its own and places it like a player. The coordinate is the cell the block will OCCUPY "
+                + "— a torch on top of (x,y,z) targets (x,y+1,z); the cell must be empty with something to "
+                + "attach to. Optional orientation: `facing` (north/south/east/west/up/down), `axis` (x/y/z, "
+                + "logs), `half` (top/bottom, slabs/stairs). The result reports the ACTUAL orientation — if "
+                + "it differs, break and retry from another angle. Failures include guidance and nearby "
+                + "coordinates that would work.";
     }
 
     @Override
