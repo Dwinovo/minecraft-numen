@@ -23,16 +23,6 @@ public interface TtsBackend {
      */
     CompletableFuture<byte[]> synthesize(String text);
 
-    /**
-     * 带情绪词的合成。{@code emotion} 是 LLM 句首 {@code [词]} 标签里的原词
-     * (小写英文,可能是任何词,也可能为 null)。翻译成自家控制方式——换括号
-     * 格式透传、映射到参数字段、不认识就忽略——由各实现自便;默认忽略,
-     * 不支持情绪控制的后端零成本兼容。
-     */
-    default CompletableFuture<byte[]> synthesize(String text, String emotion) {
-        return synthesize(text);
-    }
-
     /** 面向日志的一句话描述（不含 apiKey）。 */
     String describe();
 }

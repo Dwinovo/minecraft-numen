@@ -35,7 +35,7 @@ public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
     @Override
     public String filterAssistantMessage(String raw) {
         if (raw == null) return "";
-        return EmotionTag.extract(raw).text().strip();
+        return EmotionTag.strip(raw).strip();
     }
 
     /**

@@ -49,12 +49,10 @@ public final class VoicePipeline {
     /** 一段文本的三态：待合成 → 音频就绪 / 失败。 */
     private static final class Segment {
         final String text;
-        /** 句首 [词] 标签的原词(小写),没有则 null。 */
-        final String emotion;
         boolean synthStarted;
         PcmAudio audio;
         boolean failed;
-        Segment(String text, String emotion) { this.text = text; this.emotion = emotion; }
+        Segment(String text) { this.text = text; }
     }
 
     private final UUID entityUuid;
@@ -128,11 +126,10 @@ public final class VoicePipeline {
 
     private void enqueue(List<String> rawSegments) {
         for (String raw : rawSegments) {
-            // 情绪标签先于清洗提取(清洗器会把方括号标签兜底剥掉,顺序反了就丢情绪)。
-            EmotionTag.Tagged tagged = EmotionTag.extract(raw);
-            String clean = VoiceTextSanitizer.clean(tagged.text());
+            // 历史消息/模型模仿可能残留 [emotion] 旧标签,朗读前剥干净。
+            String clean = VoiceTextSanitizer.clean(EmotionTag.strip(raw));
             if (clean.isEmpty()) continue;   // 纯记号/纯标点段:跳过,不浪费请求
-            queue.add(new Segment(clean, tagged.emotion()));
+            queue.add(new Segment(clean));
         }
         pumpSynthesis();
         pumpPlayback();
@@ -151,7 +148,7 @@ public final class VoicePipeline {
             seg.synthStarted = true;
             final Segment target = seg;
             final long t0 = System.nanoTime();
-            backend.synthesize(seg.text, seg.emotion).whenComplete((wav, err) -> {
+            backend.synthesize(seg.text).whenComplete((wav, err) -> {
                 PcmAudio decoded = null;
                 Throwable failure = err;
                 if (err == null) {

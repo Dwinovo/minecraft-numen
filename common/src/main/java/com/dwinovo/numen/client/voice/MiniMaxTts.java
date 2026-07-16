@@ -54,33 +54,10 @@ public final class MiniMaxTts implements TtsBackend {
         return b;
     }
 
-    /** [词] → voice_setting.emotion 参数值;接口只认固定几档,词表外返回 null(不带该参数)。 */
-    static String mapEmotion(String word) {
-        if (word == null) return null;
-        return switch (word) {
-            case "happy", "joy", "joyful", "excited", "laugh", "laughing" -> "happy";
-            case "sad", "sobbing", "crying" -> "sad";
-            case "angry", "anger", "annoyed" -> "angry";
-            case "fearful", "fear", "scared" -> "fearful";
-            case "disgusted", "disgust" -> "disgusted";
-            case "surprised", "surprise", "shocked" -> "surprised";
-            case "calm", "neutral", "whisper", "whispering", "soft" -> "calm";
-            default -> null;
-        };
-    }
-
     /** 请求 body(纯函数,可测):wav 单声道 32k,hex 输出,非流式。 */
     static JsonObject buildBody(String model, String voiceId, String text) {
-        return buildBody(model, voiceId, text, null);
-    }
-
-    /** 如上,{@code emotion} 非 null 时写进 voice_setting.emotion。 */
-    static JsonObject buildBody(String model, String voiceId, String text, String emotion) {
         JsonObject voice = new JsonObject();
         voice.addProperty("voice_id", voiceId);
-        if (emotion != null) {
-            voice.addProperty("emotion", emotion);
-        }
         JsonObject audio = new JsonObject();
         audio.addProperty("format", "wav");
         audio.addProperty("sample_rate", 32_000);
@@ -136,16 +113,7 @@ public final class MiniMaxTts implements TtsBackend {
     }
 
     @Override
-    public CompletableFuture<byte[]> synthesize(String text, String emotion) {
-        return doSynthesize(text, mapEmotion(emotion));
-    }
-
-    @Override
     public CompletableFuture<byte[]> synthesize(String text) {
-        return doSynthesize(text, null);
-    }
-
-    private CompletableFuture<byte[]> doSynthesize(String text, String emotionParam) {
         HttpRequest request;
         try {
             request = HttpRequest.newBuilder()
@@ -154,7 +122,7 @@ public final class MiniMaxTts implements TtsBackend {
                     .header("Content-Type", "application/json")
                     .header("Authorization", "Bearer " + apiKey)
                     .POST(HttpRequest.BodyPublishers.ofString(
-                            buildBody(model, voiceId, text, emotionParam).toString(), StandardCharsets.UTF_8))
+                            buildBody(model, voiceId, text).toString(), StandardCharsets.UTF_8))
                     .build();
         } catch (RuntimeException e) {
             return CompletableFuture.failedFuture(e);   // 坏配置走异步失败通道,绝不同步炸
