@@ -171,6 +171,14 @@ jobs:
           version-type: ${{ steps.meta.outputs.version_type }}
           github-prerelease: ${{ steps.meta.outputs.github_prerelease }}
 
+          # CurseForge 现要求每个版本必须勾选环境组(Client/Server)——环境标签在 CF 的
+          # 版本列表里,随 game-versions 一起提交。Fabric 能从 fabric.mod.json 推断,
+          # NeoForge/Forge 的 toml 没有环境字段,不显式给就被 400(errorCode 1021)打回。
+          curseforge-game-versions: |
+            ${{ steps.meta.outputs.minecraft_version }}
+            client
+            server
+
           # TODO: Numen's CurseForge numeric project id (delete the two curseforge-* lines to skip it).
           curseforge-id: 1581109
           curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
@@ -193,6 +201,12 @@ jobs:
           game-version-filter: none
           version-type: ${{ steps.meta.outputs.version_type }}
           github-prerelease: ${{ steps.meta.outputs.github_prerelease }}
+
+          # 同 Fabric 步骤:CF 环境组必选,NeoForge/Forge 的 toml 无环境字段必须显式给。
+          curseforge-game-versions: |
+            ${{ steps.meta.outputs.minecraft_version }}
+            client
+            server
 
           # TODO: same CurseForge project id as the Fabric step.
           curseforge-id: 1581109
