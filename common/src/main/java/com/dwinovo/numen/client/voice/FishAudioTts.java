@@ -70,6 +70,14 @@ public final class FishAudioTts implements TtsBackend {
         return body;
     }
 
+    /** [词] → 句首 {@code (词) } 标记:Fish 的情绪控制走文内括号标记,原词透传,
+     *  服务端不认识的词不影响朗读。 */
+    @Override
+    public CompletableFuture<byte[]> synthesize(String text, String emotion) {
+        return synthesize(emotion == null || emotion.isBlank() ? text
+                : "(" + emotion + ") " + text);
+    }
+
     @Override
     public CompletableFuture<byte[]> synthesize(String text) {
         HttpRequest request;

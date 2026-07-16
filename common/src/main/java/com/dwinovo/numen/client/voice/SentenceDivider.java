@@ -33,6 +33,10 @@ public final class SentenceDivider {
     /** 首段的最短长度（含标点）——太短的"好,"开口反而突兀。 */
     public static final int MIN_FIRST_SEGMENT_CHARS = 10;
 
+    /** 后续段的最短长度:不足则并入下一段——"好。""嗯!"这类超短句独立成段
+     *  会多烧一次 TTS 请求,听感也碎。 */
+    public static final int MIN_SENTENCE_CHARS = 10;
+
     /** 无标点保险丝：缓冲超过这个长度还找不到边界就强制切。 */
     public static final int MAX_SEGMENT_CHARS = 60;
 
@@ -55,6 +59,8 @@ public final class SentenceDivider {
     private final StringBuilder buffer = new StringBuilder();
     /** 首段已经吐出过（之后进入"仅句末标点"模式）。 */
     private boolean firstEmitted;
+    /** 攒着待并入下一段的超短句(后续段专用;flush 时兜底吐出)。 */
+    private String carry = "";
 
     /**
      * 喂入一个流式 delta，返回本次新产生的完整句段（可能为空）。
@@ -72,7 +78,7 @@ public final class SentenceDivider {
      */
     public List<String> flush() {
         List<String> out = drain(true);
-        String rest = buffer.toString().strip();
+        String rest = (carry + buffer.toString()).strip();
         if (!rest.isEmpty()) out.add(rest);
         reset();
         return out;
@@ -82,6 +88,7 @@ public final class SentenceDivider {
     public void reset() {
         buffer.setLength(0);
         firstEmitted = false;
+        carry = "";
     }
 
     /** 当前缓冲里还攒着多少字符（测试与调试用）。 */
@@ -100,10 +107,16 @@ public final class SentenceDivider {
             int rest = cut;
             while (rest < buffer.length() && Character.isWhitespace(buffer.charAt(rest))) rest++;
             buffer.delete(0, rest);
-            if (!segment.isEmpty()) {
-                out.add(segment);
-                firstEmitted = true;
+            if (segment.isEmpty()) continue;
+            // 后续段的超短句并入下一段(首段不并,开口速度优先;流结束不并,直接吐)。
+            String candidate = carry.isEmpty() ? segment : carry + segment;
+            if (firstEmitted && !atEnd && candidate.length() < MIN_SENTENCE_CHARS) {
+                carry = candidate;
+                continue;
             }
+            carry = "";
+            out.add(candidate);
+            firstEmitted = true;
         }
         return out;
     }

@@ -38,6 +38,9 @@ public final class VoiceTextSanitizer {
     private static final Pattern MD_MARKS = Pattern.compile("(\\*\\*|__|~~|[*_`#])");
     /** 行首引用符。 */
     private static final Pattern QUOTE_MARK = Pattern.compile("(?m)^\\s*>+\\s?");
+    /** 残留的方括号情绪/记号标签(词表内的已被 Emotion.extract 剥走,这里兜底
+     *  清掉词表外的 [xxx],别让 TTS 把 "[thinking]" 念出来)。 */
+    private static final Pattern BRACKET_TAG = Pattern.compile("\\[[A-Za-z]{2,12}\\]");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     /**
@@ -52,6 +55,7 @@ public final class VoiceTextSanitizer {
         s = s.replace("**", "");             // 先剥粗体记号,免得被星号动作规则整段吃掉
         s = STAR_ACTION.matcher(s).replaceAll(" ");
         s = QUOTE_MARK.matcher(s).replaceAll("");
+        s = BRACKET_TAG.matcher(s).replaceAll(" ");
         s = MD_MARKS.matcher(s).replaceAll("");
         s = WHITESPACE.matcher(s).replaceAll(" ").strip();
         return hasSpeakable(s) ? s : "";
