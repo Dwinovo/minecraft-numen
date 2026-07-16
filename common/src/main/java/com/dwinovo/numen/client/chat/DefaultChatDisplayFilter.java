@@ -46,7 +46,9 @@ public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
     private static String stripInjectedDirectives(String s) {
         String out = s.replaceAll("(?s)<persona-change>.*?</persona-change>", "")
                 .replaceAll("(?s)<event\\b[^>]*>.*?</event>", "")
-                .replaceAll("(?s)<event\\b[^>]*/>", "");
+                .replaceAll("(?s)<event\\b[^>]*/>", "")
+                .replaceAll("(?s)<env>.*?</env>", "")
+                .replaceAll("(?s)<known_blocks>.*?</known_blocks>", "");
         return out.strip();
     }
 }

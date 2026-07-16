@@ -794,7 +794,21 @@ public final class EntityAgentLoop {
      */
     private void flushBufferedPrompts() {
         if (bufferedPrompts.isEmpty() && pendingEvents.isEmpty()) return;
-        List<String> parts = new ArrayList<>(pendingEvents);
+        List<String> parts = new ArrayList<>();
+        // 世界状态(<env>/<known_blocks>)随用户回合注入,不放系统提示:坐标每 tick
+        // 在变,放系统提示会把整个请求前缀的 prompt cache 每轮打碎。改到这里之后,
+        // "工具 schema+操作核心+人设"成为字节级稳定的前缀,支持缓存的服务商整段
+        // 命中;工具链的后续请求复用本回合的快照(工具结果本身携带更新的坐标)。
+        String envBlock = buildEnvBlock();
+        if (envBlock != null) {
+            parts.add(envBlock);
+        }
+        AbstractClientPlayer envBody = resolveEntity();
+        String knownBlocks = workBlocks.formatXml(envBody != null ? envBody.level() : null);
+        if (!knownBlocks.isEmpty()) {
+            parts.add(knownBlocks);
+        }
+        parts.addAll(pendingEvents);
         parts.addAll(bufferedPrompts);
         String merged = String.join("\n", parts);
         pendingEvents.clear();
@@ -1072,22 +1086,16 @@ public final class EntityAgentLoop {
         String base = (personaText != null && !personaText.isBlank())
                 ? personaText : Services.CONFIG.getSystemPrompt();
         if (base == null || base.isBlank()) base = "未配置人设,可以自由发挥。";
-        String envBlock = buildEnvBlock();
-        AbstractClientPlayer body = resolveEntity();
-        String knownBlocks = workBlocks.formatXml(body != null ? body.level() : null);
         String skillsXml = SkillRegistry.instance().formatXml();
 
+        // 系统提示只放会话内稳定的层——人设/操作核心/技能表/情绪词表。
+        // 每轮变化的 <env>/<known_blocks> 随用户回合注入(flushBufferedPrompts),
+        // 让这里成为字节级稳定的缓存前缀。
         StringBuilder sb = new StringBuilder();
         // Persona = the mutable "who you are" layer, wrapped so it's clearly delimited from the
         // immutable operating core (ENTITY_PROMPT) that follows.
         sb.append("<persona>\n").append(base.strip()).append("\n</persona>");
         sb.append(ENTITY_PROMPT);
-        if (envBlock != null) {
-            sb.append("\n\n").append(envBlock);
-        }
-        if (!knownBlocks.isEmpty()) {
-            sb.append("\n\n").append(knownBlocks);
-        }
         if (!skillsXml.isEmpty()) {
             sb.append("\n\n").append(skillsXml);
         }
