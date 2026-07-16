@@ -2188,7 +2188,7 @@ public final class NumenScreen extends Screen {
 
     /** 显示过滤统一走 {@link com.dwinovo.numen.client.chat.ChatDisplayFilter}(可整体切换)。 */
     private static String ownerText(String s) {
-        return com.dwinovo.numen.client.chat.ChatDisplayFilters.current().ownerText(s);
+        return com.dwinovo.numen.client.chat.ChatDisplayFilters.current().filterUserMessage(s);
     }
 
     /** Truncate {@code s} with an ellipsis so it fits in {@code maxW} px. */
@@ -3149,7 +3149,7 @@ public final class NumenScreen extends Screen {
                 case ConvoState.Msg.Assistant a -> {
                     AssistantTurn turn = a.turn();
                     String spoken = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
-                            .companionText(turn.content());
+                            .filterAssistantMessage(turn.content());
                     if (!spoken.isBlank()) {
                         flushTools(out, group, done, failed, width);   // spoken reply breaks the fold
                         addHeader(out, name, AI, width);         // bold name header on its OWN line

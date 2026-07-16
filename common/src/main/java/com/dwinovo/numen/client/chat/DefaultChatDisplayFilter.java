@@ -20,7 +20,7 @@ public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
     private static final Pattern QUERY = Pattern.compile("(?s)<query>(.*?)</query>");
 
     @Override
-    public String ownerText(String raw) {
+    public String filterUserMessage(String raw) {
         if (raw == null) return "";
         Matcher m = QUERY.matcher(raw);
         StringBuilder b = new StringBuilder();
@@ -33,7 +33,7 @@ public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
     }
 
     @Override
-    public String companionText(String raw) {
+    public String filterAssistantMessage(String raw) {
         if (raw == null) return "";
         return EmotionTag.extract(raw).text().strip();
     }

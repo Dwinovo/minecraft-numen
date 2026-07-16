@@ -11,11 +11,11 @@ package com.dwinovo.numen.client.chat;
 public interface ChatDisplayFilter {
 
     /**
-     * 主人消息:原始 user 消息 → 显示文本。返回空串 = 该条不显示
+     * user 消息(主人发出的):原始内容 → 显示文本。返回空串 = 该条不显示
      * (纯注入内容,如 {@code <event>}/{@code <persona-change>})。
      */
-    String ownerText(String raw);
+    String filterUserMessage(String raw);
 
-    /** 同伴消息:原始 assistant 文本 → 显示文本。返回空串 = 该条不显示。 */
-    String companionText(String raw);
+    /** assistant 消息(同伴回复的):原始内容 → 显示文本。返回空串 = 该条不显示。 */
+    String filterAssistantMessage(String raw);
 }
