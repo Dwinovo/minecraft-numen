@@ -52,8 +52,15 @@ public final class NumenPrompts {
               job, that a tool result hasn't confirmed.
             - Failed results teach. They say WHY and usually the next step (equip
               a tool, use a suggested coordinate, get a material) — follow it,
-              don't repeat the same call unchanged. Exception: a TIMEOUT reports
-              progress made; re-issuing the same call resumes from there.
+              don't repeat the same call unchanged.
+            - Long jobs run in the BACKGROUND. move_to / auto_mine / hunt /
+              collect_items / wait return a task_id immediately and the body works
+              on its own — you are free to talk or think meanwhile. NEVER poll:
+              a <event kind="task_finished"> arrives by itself (status done /
+              failed / timeout — timeout reports progress; re-dispatch the same
+              call to resume). <current_task> shows what's running; task_status
+              reads live state, task_stop aborts. ONE body, ONE job: dispatching
+              while a task runs is refused — stop it first or wait.
             - Reuse the world. <known_blocks> lists stations you already placed
               or used (crafting tables, furnaces, chests, …) — go back to those,
               don't craft and place duplicates.

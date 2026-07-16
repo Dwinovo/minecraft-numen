@@ -225,8 +225,10 @@ public final class Companions {
      */
     public static void onDimensionChanged(NumenPlayer body) {
         String dim = body.level().dimension().location().toString();
-        emitEvent(body, "<event kind=\"dimension_change\" to=\"" + dim + "\">你进入了 " + dim
-                + "。留意这个维度的环境和危险。</event>", false);
+        com.dwinovo.numen.event.GameEvents.emit(body,
+                com.dwinovo.numen.event.GameEvents.Kind.DIMENSION_CHANGE,
+                java.util.Map.of("to", dim),
+                "你进入了 " + dim + "。留意这个维度的环境和危险。");
     }
 
     /** Save the companion to its {@code .dat} and remove it from the world (dormancy). */

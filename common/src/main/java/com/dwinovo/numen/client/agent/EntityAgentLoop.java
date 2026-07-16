@@ -145,6 +145,11 @@ public final class EntityAgentLoop {
      * the prompts, events first.
      */
     private final List<String> pendingEvents = new ArrayList<>();
+    /** 后台异步任务记账(派发回执置位,对上 id 的 task_finished 清零);null = 身体空闲。
+     *  客户端自记账,不走新网络包:回执与事件本来就都经过这里。 */
+    private CurrentTask currentTask;
+
+    private record CurrentTask(String id, String tool, long sinceMs) {}
 
     /**
      * This companion's persona (per-companion, dynamic). Sourced from the last {@code persona-change}
@@ -250,6 +255,7 @@ public final class EntityAgentLoop {
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
                 harvestWorkBlocks(inv.name(), resultJson);
+                trackAsyncDispatch(inv.name(), resultJson);
                 convo.addToolResult(inv.id(), resultJson);
             }
             @Override public void onAllSettled() {
@@ -661,6 +667,7 @@ public final class EntityAgentLoop {
                 : (deathCause != null ? deathCause : "未知原因");
         String cause = raw.replace('<', '(').replace('>', ')');
         deathCause = null;
+        currentTask = null;   // 死亡掉了后台任务(无收尾事件),记账一并清零
         Constants.LOG.info("[numen-entity#{}] respawned ({}) — loop thawed", entityUuid, cause);
         // The death narrative is ALWAYS ambient — never a wake (mind-model constitution §4: 死亡叙事
         // 无特权). Timing of who learns what, in order:
@@ -688,8 +695,29 @@ public final class EntityAgentLoop {
      * an idle brain to react now; otherwise it sits in the queue and the brain sees it on the next
      * owner-driven turn (no extra LLM call, no unprompted chatter). Dropped while frozen by death.
      */
+    /** 派发回执识别:异步工具的受理结果带 data.async=true 与 data.task_id。 */
+    private void trackAsyncDispatch(String toolName, String resultJson) {
+        try {
+            com.google.gson.JsonObject o =
+                    com.google.gson.JsonParser.parseString(resultJson).getAsJsonObject();
+            if (!o.has("data") || !o.get("data").isJsonObject()) return;
+            com.google.gson.JsonObject data = o.getAsJsonObject("data");
+            if (data.has("async") && data.get("async").getAsBoolean() && data.has("task_id")) {
+                currentTask = new CurrentTask(data.get("task_id").getAsString(), toolName,
+                        System.currentTimeMillis());
+            }
+        } catch (RuntimeException ignored) {
+            // 非 JSON 或形状不符——不是异步回执,不记账。
+        }
+    }
+
     public void injectEvent(String xml, boolean urgent) {
         if (dead) return;
+        // 异步任务收尾:对上 id 就清掉记账,<current_task> 从下一回合起不再注入。
+        if (currentTask != null && xml.contains("kind=\"task_finished\"")
+                && xml.contains("id=\"" + currentTask.id() + "\"")) {
+            currentTask = null;
+        }
         pendingEvents.add(xml);
         Constants.LOG.info("[numen-entity#{}] event queued{}: {}",
                 entityUuid, urgent ? " (urgent)" : "", truncate(xml, 120));
@@ -794,6 +822,14 @@ public final class EntityAgentLoop {
     private void flushBufferedPrompts() {
         if (bufferedPrompts.isEmpty() && pendingEvents.isEmpty()) return;
         List<String> parts = new ArrayList<>();
+        // 身体正在后台跑异步任务:每个回合都把这行放在最前,模型不用调工具就知道
+        // 手头有活(记账来自派发回执,收尾事件对上 id 即清,见 trackAsyncDispatch)。
+        if (currentTask != null) {
+            long secs = (System.currentTimeMillis() - currentTask.sinceMs()) / 1000;
+            parts.add("<current_task>" + currentTask.id() + " " + currentTask.tool()
+                    + " 后台进行中(已 " + secs + "s)。task_status 查进度,task_stop 叫停,"
+                    + "完成会自动收到 task_finished 事件,不要轮询。</current_task>");
+        }
         // <known_blocks> 随用户回合注入,不放系统提示:它随放置/使用工作站而变,
         // 放系统提示会打碎请求前缀的 prompt cache。系统提示(工具 schema+操作
         // 核心+人设)因此字节级稳定,支持缓存的服务商整段命中。
