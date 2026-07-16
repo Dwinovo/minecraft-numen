@@ -1275,9 +1275,8 @@ public final class NumenScreen extends Screen {
     private void buildPersonaForm() {
         int x = secX(), w = secW();
         int fy = secY0() + 14;
+        // 名称即文件名;正文(自由 MD)占满剩余高度。
         personaNameInput = field(x, fy + 11, w, 48, wPersonaName);
-        // Roomy multi-line editor for the persona description (a paragraph, not one line): from below the
-        // name field down to just above the Save row.
         int ty = fy + 44;
         int th = (top + PANEL_H - PAD - 22) - ty;
         personaTextArea = new net.minecraft.client.gui.components.MultiLineEditBox(
@@ -1314,15 +1313,16 @@ public final class NumenScreen extends Screen {
         if (personaEditId != null) {
             PersonaLibrary.Persona old = lib.get(personaEditId);
             String oldName = old != null ? old.name() : null;
-            lib.update(personaEditId, name, text);
-            // Propagate the edit to any loaded companion currently using this persona: a live switch with
-            // a reconciliation message (match by library id, or by the old name for pre-id companions).
-            for (UUID cu : AgentLoopRegistry.loadedEntityUuids()) {
-                EntityAgentLoop l = AgentLoopRegistry.get(cu).orElse(null);
-                if (l == null) continue;
-                boolean uses = personaEditId.equals(l.personaId())
-                        || (l.personaId() == null && oldName != null && oldName.equals(l.personaName()));
-                if (uses) l.setPersona(personaEditId, text, name);
+            // 改名会换文件名(id 随之更换),传播用落盘后的新条目。
+            PersonaLibrary.Persona saved = lib.update(personaEditId, name, text);
+            if (saved != null) {
+                for (UUID cu : AgentLoopRegistry.loadedEntityUuids()) {
+                    EntityAgentLoop l = AgentLoopRegistry.get(cu).orElse(null);
+                    if (l == null) continue;
+                    boolean uses = personaEditId.equals(l.personaId())
+                            || (l.personaId() == null && oldName != null && oldName.equals(l.personaName()));
+                    if (uses) l.setPersona(saved.id(), saved.text(), saved.name());
+                }
             }
         } else {
             lib.create(name, text);
@@ -2866,7 +2866,7 @@ public final class NumenScreen extends Screen {
             placeholder(g, mcpHeaderInput, mcpStdio ? "KEY=value; KEY2=value2" : "Authorization: Bearer <token>");
         }
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.PERSONA && addingPersona) {
-            placeholder(g, personaNameInput, "雷");   // the text area has its own built-in placeholder
+            placeholder(g, personaNameInput, "名称(即文件名),如 小焰");   // the text area has its own built-in placeholder
         }
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
         // caret in the widget pass, so it can't paint over the caret like a screen-side draw did.)

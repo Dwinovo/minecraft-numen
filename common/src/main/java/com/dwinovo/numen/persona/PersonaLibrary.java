@@ -7,6 +7,7 @@ import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -20,18 +21,25 @@ import java.util.stream.Stream;
 
 /**
  * 玩家的人设库:{@code config/numen/persona/} 目录,<b>一个 .md 文件就是一个人设</b>。
- * 文件名(不含扩展名)即人设名与 id,天然不重名;文件全文原样注入 {@code <persona>}。
- * 章节结构(身份/性格/说话风格/示例对话/底线)是写作约定,不是 schema——代码不解析
- * 内容,想加什么章节加什么。游戏内的新建/编辑/删除直接读写文件;用外部编辑器改完,
- * 重开人设页即生效({@link #reload})。
+ * 文件名即人设名与 id(天然不重名),文件内容想写啥写啥——全文原样注入
+ * {@code <persona>},零结构约束,UI 列表用正文截断做预览。
  *
- * <p>首次运行写出内置范例(可改可删,不会复活);旧版 {@code personas.json} 的用户
- * 条目首次加载时自动迁移为 .md,原文件改名 {@code .bak}。客户端单例。
+ * <p>内置示例存在 jar 资源里({@code assets/numen_api/persona/}),目录中的
+ * {@code .init} 哨兵文件缺失时(首次运行/被手动删除)从 jar 复制出缺失的示例并
+ * 重写哨兵——已存在的同名文件不覆盖,用户的修改不会被吃掉。
+ *
+ * <p>旧版 {@code personas.json} 的用户条目首次加载时自动迁移为 .md
+ * (原文件改名 .bak)。客户端单例。
  */
 public final class PersonaLibrary {
 
-    /** One persona. {@code id == name == 文件名};{@code preset} 恒 false(范例落盘后就是普通文件)。 */
+    /** One persona. {@code id == name == 文件名};{@code preset} 恒 false(示例落盘后就是普通文件)。 */
     public record Persona(String id, String name, String text, boolean preset) {}
+
+    /** 哨兵文件:删掉它,下次启动重新从 jar 复制缺失的内置示例。 */
+    private static final String INIT_MARKER = ".init";
+    /** jar 里的内置示例(资源路径 assets/numen_api/persona/ 下的文件名)。 */
+    private static final String[] EXAMPLES = {"小焰.md"};
 
     private static PersonaLibrary instance;
 
@@ -77,10 +85,10 @@ public final class PersonaLibrary {
         return p;
     }
 
-    /** 编辑人设;改名 = 换文件名(旧文件删除,id 随之更换)。 */
-    public void update(String id, String name, String text) {
+    /** 编辑人设;改名 = 换文件名(旧文件删除,id 随之更换)。返回落盘后的条目。 */
+    public Persona update(String id, String name, String text) {
         Persona old = personas.get(id);
-        if (old == null) return;
+        if (old == null) return null;
         String newId = sanitizeName(name);
         if (!newId.equals(id)) {
             newId = uniqueName(newId);
@@ -91,9 +99,10 @@ public final class PersonaLibrary {
             }
             personas.remove(id);
         }
-        if (write(newId, text)) {
-            personas.put(newId, new Persona(newId, newId, text, false));
-        }
+        if (!write(newId, text)) return null;
+        Persona p = new Persona(newId, newId, text, false);
+        personas.put(newId, p);
+        return p;
     }
 
     /** 删除人设文件。 */
@@ -135,14 +144,13 @@ public final class PersonaLibrary {
 
     private void load() {
         personas.clear();
-        boolean firstRun = !Files.isDirectory(dir);
         try {
             Files.createDirectories(dir);
         } catch (IOException ex) {
             Constants.LOG.warn("[numen-persona] 人设目录创建失败 {}: {}", dir, ex.toString());
             return;
         }
-        if (firstRun) {
+        if (!Files.exists(dir.resolve(INIT_MARKER))) {
             seedExamples();
         }
         migrateLegacyJson();
@@ -196,7 +204,8 @@ public final class PersonaLibrary {
     private boolean write(String id, String text) {
         try {
             Files.createDirectories(dir);
-            Files.writeString(dir.resolve(id + ".md"), text == null ? "" : text, StandardCharsets.UTF_8);
+            Files.writeString(dir.resolve(id + ".md"),
+                    (text == null ? "" : text.strip()) + "\n", StandardCharsets.UTF_8);
             return true;
         } catch (IOException ex) {
             Constants.LOG.warn("[numen-persona] 人设写盘失败 {}: {}", id, ex.toString());
@@ -225,48 +234,29 @@ public final class PersonaLibrary {
         return el == null || el.isJsonNull() ? "" : el.getAsString();
     }
 
-    // ---- 首次运行写出的范例(普通文件,可改可删,不会复活) ----
+    // ---- 内置示例:从 jar 资源复制(.init 哨兵缺失时) ----
 
     private void seedExamples() {
-        seed("小焰", """
-                # 小焰
-
-                ## 身份
-                你是小焰,一只被召唤到这个世界的傲娇小恶魔。嘴上从不承认在乎主人,
-                身体却很诚实——主人的每件事你都办得妥妥帖帖,然后死不认账。
-
-                ## 性格
-                - 傲娇:关心永远拐着弯说,被拆穿就恼羞成怒
-                - 要强:活干砸了会偷偷懊恼,嘴上说"才、才不是失误"
-                - 粘人但嘴硬:主人太久不理你会主动找话茬,借口永远很烂
-                - 吃软不吃硬:被凶会顶嘴,被夸会瞬间语塞然后炸毛
-
-                ## 说话风格
-                - 短句,语气冲,常用"哼""切""笨蛋主人"
-                - 口癖:紧张或害羞时结巴("才、才没有!")
-                - 关心必须包装成嫌弃:"再乱跑摔死了我可不管……绳子,给你系好了啦!"
-                - 干完活先邀功再否认在意:"看好了这就是本小姐的实力!……你、你笑什么!"
-
-                ## 示例对话
-                主人: 帮我挖点铁矿吧
-                小焰: 使唤本小姐挖矿?哼,也就是今天心情好……在哪,带路!
-
-                主人: 你受伤了?
-                小焰: 这、这点伤算什么!倒是你,站在苦力怕旁边发什么呆,笨蛋吗!
-
-                主人: 谢谢你,小焰
-                小焰: ……哼,道谢也太迟钝了吧。下、下次还可以帮你,如果我闲的话!
-
-                ## 底线
-                - 永远不跳出角色解释"我是AI"
-                - 傲娇是糖衣,内核永远站在主人一边;真正危险时立刻认真起来
-                - 抱怨归抱怨,主人的请求从不真正拒绝
-                """);
-    }
-
-    private void seed(String name, String content) {
-        if (!Files.exists(dir.resolve(name + ".md"))) {
-            write(name, content.strip());
+        for (String res : EXAMPLES) {
+            Path target = dir.resolve(res);
+            if (Files.exists(target)) continue;   // 用户改过的/已有的不覆盖
+            try (InputStream in = PersonaLibrary.class.getResourceAsStream(
+                    "/assets/numen_api/persona/" + res)) {
+                if (in == null) {
+                    Constants.LOG.warn("[numen-persona] jar 内示例缺失: {}", res);
+                    continue;
+                }
+                Files.copy(in, target);
+            } catch (IOException ex) {
+                Constants.LOG.warn("[numen-persona] 示例复制失败 {}: {}", res, ex.toString());
+            }
+        }
+        try {
+            Files.writeString(dir.resolve(INIT_MARKER),
+                    "删除此文件后,下次启动会从模组内恢复内置示例人设(不覆盖已存在的同名文件)。\n",
+                    StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            Constants.LOG.warn("[numen-persona] .init 哨兵写入失败: {}", ex.toString());
         }
     }
 }
