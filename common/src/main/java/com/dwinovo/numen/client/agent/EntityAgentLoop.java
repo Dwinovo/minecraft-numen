@@ -20,7 +20,6 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.language.I18n;
 
 import java.nio.file.Path;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -795,14 +794,9 @@ public final class EntityAgentLoop {
     private void flushBufferedPrompts() {
         if (bufferedPrompts.isEmpty() && pendingEvents.isEmpty()) return;
         List<String> parts = new ArrayList<>();
-        // 世界状态(<env>/<known_blocks>)随用户回合注入,不放系统提示:坐标每 tick
-        // 在变,放系统提示会把整个请求前缀的 prompt cache 每轮打碎。改到这里之后,
-        // "工具 schema+操作核心+人设"成为字节级稳定的前缀,支持缓存的服务商整段
-        // 命中;工具链的后续请求复用本回合的快照(工具结果本身携带更新的坐标)。
-        String envBlock = buildEnvBlock();
-        if (envBlock != null) {
-            parts.add(envBlock);
-        }
+        // <known_blocks> 随用户回合注入,不放系统提示:它随放置/使用工作站而变,
+        // 放系统提示会打碎请求前缀的 prompt cache。系统提示(工具 schema+操作
+        // 核心+人设)因此字节级稳定,支持缓存的服务商整段命中。
         AbstractClientPlayer envBody = resolveEntity();
         String knownBlocks = workBlocks.formatXml(envBody != null ? envBody.level() : null);
         if (!knownBlocks.isEmpty()) {
@@ -1089,7 +1083,7 @@ public final class EntityAgentLoop {
         String skillsXml = SkillRegistry.instance().formatXml();
 
         // 系统提示只放会话内稳定的层——人设/操作核心/技能表/情绪词表。
-        // 每轮变化的 <env>/<known_blocks> 随用户回合注入(flushBufferedPrompts),
+        // 会变化的 <known_blocks> 随用户回合注入(flushBufferedPrompts),
         // 让这里成为字节级稳定的缓存前缀。
         StringBuilder sb = new StringBuilder();
         // Persona = the mutable "who you are" layer, wrapped so it's clearly delimited from the
@@ -1110,22 +1104,6 @@ public final class EntityAgentLoop {
                     .append("平静陈述不加标签,别每句都加。\n</speech_emotion>");
         }
         return sb.toString();
-    }
-
-    private String buildEnvBlock() {
-        AbstractClientPlayer entity = resolveEntity();
-        if (entity == null) return null;
-        // The brain runs on the owner's client, so the local player IS the owner.
-        var localOwner = Minecraft.getInstance().player;
-        String ownerName = localOwner != null ? localOwner.getName().getString() : "unknown";
-        String myName = NumenRoster.instance().name(entityUuid);   // the in-game name the owner gave this companion
-        return "<env>\n"
-                + (myName != null ? "  companion_name: " + myName + "\n" : "")
-                + "  entity_uuid: " + entityUuid + "\n"
-                + "  owner_name: " + ownerName + "\n"
-                + "  dimension: " + entity.level().dimension().location() + "\n"
-                + "  today: " + LocalDate.now() + "\n"
-                + "</env>";
     }
 
     private AbstractClientPlayer resolveEntity() {

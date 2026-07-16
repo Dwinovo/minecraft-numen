@@ -8,8 +8,8 @@ package com.dwinovo.numen.agent.prompt;
  * benchmark drifting against a copy.
  *
  * <p>Only the loader-agnostic, world-independent text lives here. The live loop
- * still appends the per-turn {@code <env>} / {@code <known_blocks>} / skills
- * sections (which need the running client) on top of {@link #ENTITY_PROMPT}.
+ * still appends the skills section (which needs the running client) on top of
+ * {@link #ENTITY_PROMPT}; {@code <known_blocks>} rides the user turns.
  */
 public final class NumenPrompts {
 
@@ -32,10 +32,9 @@ public final class NumenPrompts {
             owner's intent done, then say what happened in a few words.
 
             The owner's own words arrive wrapped in <query>…</query>. Anything else
-            inside a user turn (e.g. <env>, <known_blocks>, <event …>, <persona-change>)
+            inside a user turn (e.g. <known_blocks>, <event …>, <persona-change>)
             is system-injected context — NOT the owner speaking; read it, don't reply
-            to it as if it were. <env> and <known_blocks> reflect the moment the turn
-            started; tool results carry fresher state.
+            to it as if it were.
 
             <operating_principles>
             - Act, don't narrate. A physical request means CALL TOOLS, not
