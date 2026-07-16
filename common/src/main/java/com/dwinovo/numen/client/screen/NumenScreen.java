@@ -1850,10 +1850,12 @@ public final class NumenScreen extends Screen {
     private static final int TOG_W = 18, TOG_H = 10;
 
     private void drawToggle(GuiGraphics g, int x, int y, boolean on) {
-        g.fill(x, y, x + TOG_W, y + TOG_H, on ? CTA : FIELD);
+        // 轨道恒中性,状态全由滑块表达:开 = 黄色滑块在右,关 = 暗滑块在左。
+        // (旧画法开着时整条轨道变黄,黄色大块压在左侧,读起来像"滑块在左"。)
+        g.fill(x, y, x + TOG_W, y + TOG_H, FIELD);
         Nb.border(g, x, y, TOG_W, TOG_H, 1, BORDER);
         int knobX = on ? x + TOG_W - 8 : x + 1;
-        g.fill(knobX, y + 1, knobX + 7, y + TOG_H - 1, ON_CTA);
+        g.fill(knobX, y + 1, knobX + 7, y + TOG_H - 1, on ? CTA : TXT_FAINT);
     }
 
     private boolean overToggle(int mx, int my, int x, int y) {

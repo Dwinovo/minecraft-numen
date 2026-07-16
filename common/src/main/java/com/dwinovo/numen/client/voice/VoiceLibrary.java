@@ -120,7 +120,7 @@ public final class VoiceLibrary {
 
     // ---- global switch ----
 
-    /** 全局语音总开关(缺省 false)。关闭时 {@link #resolve} 一律返回 null。 */
+    /** 全局语音总开关(缺省 true)。关闭时 {@link #resolve} 一律返回 null。 */
     public boolean enabled() {
         return enabled;
     }
@@ -214,14 +214,14 @@ public final class VoiceLibrary {
     private void load() {
         entries.clear();
         assignments.clear();
-        enabled = false;
+        enabled = true;   // 缺省开——玩家配好声线就该出声,关闭是显式选择
         if (!Files.exists(file)) {
             return;   // 全新安装:tab 从空开始,玩家自己创建
         }
         try {
             JsonObject root = JsonParser.parseString(
                     Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
-            enabled = root.has("enabled") && root.get("enabled").getAsBoolean();
+            enabled = !root.has("enabled") || root.get("enabled").getAsBoolean();
             if (root.has("entries") && root.get("entries").isJsonArray()) {
                 for (JsonElement el : root.getAsJsonArray("entries")) {
                     if (!el.isJsonObject()) continue;
