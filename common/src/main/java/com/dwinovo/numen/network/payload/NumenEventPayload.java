@@ -39,6 +39,6 @@ public record NumenEventPayload(UUID entityUuid, String xml, boolean principal) 
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */
     public static void handle(NumenEventPayload p) {
-        AgentLoopRegistry.get(p.entityUuid()).ifPresent(loop -> loop.injectEvent(p.xml(), p.principal()));
+        AgentLoopRegistry.get(p.entityUuid()).ifPresent(loop -> loop.pushEvent(p.xml(), p.principal()));
     }
 }

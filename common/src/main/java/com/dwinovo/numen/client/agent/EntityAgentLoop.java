@@ -126,29 +126,13 @@ public final class EntityAgentLoop {
     /** Functional-block coordinate memory, injected as {@code <known_blocks>}. */
     private final WorkBlockMemory workBlocks;
     /**
-     * Prompts the owner typed while a turn was still in flight (waiting on the
-     * LLM, or on outstanding tool results). They must NOT be spliced into the
-     * conversation immediately: the OpenAI/DeepSeek protocol requires an
-     * {@code assistant} message carrying {@code tool_calls} to be followed
-     * <em>directly</em> by the matching {@code tool} results, with no
-     * {@code user} message in between. So we hold them here and flush them in
-     * at the next protocol-valid point (see {@link #flushBufferedPrompts}).
+     * 收件箱(宪法 §4):主人的话与世界事件的统一进箱口。协议约束是它存在的
+     * 底层原因——{@code assistant(tool_calls)} 后面必须直接跟 {@code tool}
+     * 结果,user 消息不能插队,所以输入一律进箱,在 {@link #drainInbox} 的
+     * 协议安全点一次倒空。三态路由(什么输入什么状态下配开轮)在
+     * {@link #pushEvent};条目、落盘、年龄标注在 {@link Inbox}。
      */
-    private final List<Inboxed> bufferedPrompts = new ArrayList<>();
-
-    /**
-     * World/body facts ({@code <event>} XML) awaiting the same protocol-valid
-     * splice point — a SEPARATE bucket from {@link #bufferedPrompts} because an
-     * owner interrupt clears superseded <em>instructions</em>, never <em>facts</em>:
-     * a death or body-log event must survive the Stop button and reach the next
-     * turn (the model's right to know what its body did). Flushed together with
-     * the prompts, events first.
-     */
-    private final List<Inboxed> pendingEvents = new ArrayList<>();
-    /** 收件箱条目:正文 + 进箱时刻(消费时给躺久的标注年龄,跨会话恢复时尤其要紧)。 */
-    private record Inboxed(String text, long ts) {}
-    /** 收件箱落盘账本:push 即存,消费即清,跨会话不失忆。 */
-    private InboxJournal inbox;
+    private Inbox inbox;
     /** 后台异步任务记账(派发回执置位,对上 id 的 task_finished 清零);null = 身体空闲。
      *  客户端自记账,不走新网络包:回执与事件本来就都经过这里。 */
     private CurrentTask currentTask;
@@ -255,7 +239,7 @@ public final class EntityAgentLoop {
             display.add(msg);
         });
         this.workBlocks = WorkBlockMemory.forEntity(numenRoot.resolve("memory"), entityUuid);
-        this.inbox = InboxJournal.forEntity(numenRoot.resolve("conversations"), entityUuid);
+        this.inbox = new Inbox(numenRoot.resolve("conversations"), entityUuid);
         this.providerEntryId = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().assignedEntry(entityUuid);
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
@@ -271,23 +255,6 @@ public final class EntityAgentLoop {
             }
         });
         restoreFromDisk();
-        // 上次会话没消费完的收件箱:原样躺回缓冲区,下一个轮子照常带上
-        // (不主动开轮——登录瞬间实体多半还没加载,而且旧闻不值得吵人)。
-        for (InboxJournal.Entry e : inbox.load()) {
-            if ("prompt".equals(e.type())) {
-                bufferedPrompts.add(new Inboxed(e.text(), e.ts()));
-            } else {
-                pendingEvents.add(new Inboxed(e.text(), e.ts()));
-            }
-        }
-    }
-
-    /** 收件箱变动即快照落盘(文件极小,整本重写免簿记)。 */
-    private void saveInbox() {
-        List<InboxJournal.Entry> all = new ArrayList<>();
-        for (Inboxed e : pendingEvents) all.add(new InboxJournal.Entry("event", e.text(), e.ts()));
-        for (Inboxed p : bufferedPrompts) all.add(new InboxJournal.Entry("prompt", p.text(), p.ts()));
-        inbox.save(all);
     }
 
     /**
@@ -396,10 +363,7 @@ public final class EntityAgentLoop {
     /** Snapshot of prompts (GUI or {@code NumenGateway}) still waiting for the
      *  next protocol-valid splice point — the GUI renders these as pending. */
     public List<String> queuedPrompts() {
-        List<String> all = new ArrayList<>();
-        for (Inboxed e : pendingEvents) all.add(e.text());
-        for (Inboxed p : bufferedPrompts) all.add(p.text());
-        return List.copyOf(all);
+        return inbox.snapshot();
     }
 
     /** Owner typed a prompt in the chat GUI. */
@@ -419,8 +383,7 @@ public final class EntityAgentLoop {
         boolean deferred = awaitingLlmResponse || dispatcher.busy();
         // Wrap the owner's words in <query> so the model can always tell real user input apart from
         // anything else numen injects into the same user turn (events, and future world-state/reminders).
-        bufferedPrompts.add(new Inboxed("<query>" + text + "</query>", System.currentTimeMillis()));
-        saveInbox();
+        inbox.pushPrompt("<query>" + text + "</query>");
         Constants.LOG.info("[numen-entity#{}] user prompt ({} chars){}{}: {}",
                 entityUuid, text.length(),
                 wasAborted ? " — reset previous abort" : "",
@@ -522,7 +485,7 @@ public final class EntityAgentLoop {
 
     /** Owner prompts are queued, waiting to flush into the conversation. */
     public boolean hasQueuedPrompts() {
-        return !bufferedPrompts.isEmpty() || !pendingEvents.isEmpty();
+        return !inbox.isEmpty();
     }
 
     /** There is something an interrupt would act on — drives the Stop button's enabled state. */
@@ -583,7 +546,7 @@ public final class EntityAgentLoop {
             // If we cut off an in-flight LLM call before its assistant turn was
             // recorded, the conversation now ends on a user message. Cap it with a
             // short assistant note so the next prompt doesn't create back-to-back
-            // user messages (some backends reject those — see flushBufferedPrompts).
+            // user messages (some backends reject those — see drainInbox).
             if (wasAwaitingLlm && cancelled.isEmpty()
                     && convo.lastMessage() instanceof ConvoState.Msg.User) {
                 convo.addAssistant(new AssistantTurn("(已中断)", List.of(), null));
@@ -592,17 +555,15 @@ public final class EntityAgentLoop {
             convo.resetTurnCount();
             aborted = true;
             Constants.LOG.info("[numen-entity#{}] interrupted by owner (awaitingLlm={}, cancelledTools={}, queued={})",
-                    entityUuid, wasAwaitingLlm, cancelled.size(), bufferedPrompts.size());
-        } else if (!bufferedPrompts.isEmpty()) {
-            // Priority 2: idle — drop the held PROMPT queue only. Pending events are
+                    entityUuid, wasAwaitingLlm, cancelled.size(), inbox.promptCount());
+        } else if (inbox.promptCount() > 0) {
+            // Priority 2: idle — drop the held PROMPT bucket only. Inboxed events are
             // facts, not superseded instructions: they stay and ride the next turn
             // (a death narrative wiped here left the model answering "啥情况" without
             // knowing it had died — the exact hole this split closes).
-            int dropped = bufferedPrompts.size();
-            bufferedPrompts.clear();
-            saveInbox();
+            int dropped = inbox.clearPrompts();
             Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued prompt(s) ({} event(s) kept)",
-                    entityUuid, dropped, pendingEvents.size());
+                    entityUuid, dropped, inbox.eventCount());
         }
     }
 
@@ -660,9 +621,7 @@ public final class EntityAgentLoop {
         turnGeneration++;          // discard any in-flight LLM response (halt output)
         awaitingLlmResponse = false;
         compacting = false;
-        bufferedPrompts.clear();
-        pendingEvents.clear();
-        saveInbox();
+        inbox.clearAll();
         dead = true;
         Constants.LOG.info("[numen-entity#{}] body died ({}) — loop frozen ({} call(s) in flight)",
                 entityUuid, cause, deathInterruptedCalls.size());
@@ -704,7 +663,7 @@ public final class EntityAgentLoop {
         //      request as the ambient rider — the turn right after the death, no extra LLM call;
         //   3. with no suspended turn (died idle, or a fresh loop after relog) it simply waits for the
         //      next owner input. The OWNER's awareness is vanilla's death broadcast, not the model's job.
-        injectEvent("<event kind=\"death\">你刚才死了(" + cause
+        pushEvent("<event kind=\"death\">你刚才死了(" + cause
                 + "),物品掉落在死亡地点,手头的任务中断了;现已在主人身边复活。先看看状况,继续或重新规划。</event>", false);
         // D1 resumes the suspended turn: the death-failure results above are exactly the tool results
         // the in-flight turn was waiting on — continuing it is turn completion, not a wake. (Before the
@@ -744,7 +703,7 @@ public final class EntityAgentLoop {
      * </ul>
      * push 即落盘(跨会话不失忆);死亡冻结期间丢弃。
      */
-    public void injectEvent(String xml, boolean principal) {
+    public void pushEvent(String xml, boolean principal) {
         if (dead) return;
         // 后台任务收尾:对上 id 清记账。注意先取"发生时的状态"再清——收尾事件
         // 本身发生在任务态,有资格立刻开轮(主动汇报"挖完了")。
@@ -753,8 +712,7 @@ public final class EntityAgentLoop {
                 && xml.contains("id=\"" + currentTask.id() + "\"")) {
             currentTask = null;
         }
-        pendingEvents.add(new Inboxed(xml, System.currentTimeMillis()));
-        saveInbox();
+        inbox.pushEvent(xml);
         Constants.LOG.info("[numen-entity#{}] event inboxed{}{}: {}",
                 entityUuid, principal ? " (principal)" : "", duringTask ? " (during task)" : "",
                 truncate(xml, 120));
@@ -829,7 +787,7 @@ public final class EntityAgentLoop {
         log.appendPersonaChange(id, text, name);
         display.add(new ConvoState.Msg.User(ConvoLog.PERSONA_DIVIDER));   // physical transcript gains a divider now
         String who = (name != null && !name.isBlank()) ? "「" + name + "」" : "新的设定";
-        injectEvent("<persona-change>你的人设已更新为" + who
+        pushEvent("<persona-change>你的人设已更新为" + who
                 + "。以上对话确实发生过，但从现在起请完全按新的人设继续，不必解释过去、不要延续旧的说话风格。</persona-change>", false);
     }
 
@@ -856,8 +814,8 @@ public final class EntityAgentLoop {
      * joined with newlines into one message to avoid back-to-back {@code user}
      * messages that some backends reject.
      */
-    private void flushBufferedPrompts() {
-        if (bufferedPrompts.isEmpty() && pendingEvents.isEmpty()) return;
+    private void drainInbox() {
+        if (inbox.isEmpty()) return;
         List<String> parts = new ArrayList<>();
         // 身体正在后台跑异步任务:每个回合都把这行放在最前,模型不用调工具就知道
         // 手头有活(记账来自派发回执,收尾事件对上 id 即清,见 trackAsyncDispatch)。
@@ -875,28 +833,12 @@ public final class EntityAgentLoop {
         if (!knownBlocks.isEmpty()) {
             parts.add(knownBlocks);
         }
-        long now = System.currentTimeMillis();
-        for (Inboxed e : pendingEvents) parts.add(annotateAge(e, now));
-        for (Inboxed p : bufferedPrompts) parts.add(annotateAge(p, now));
+        parts.addAll(inbox.drain());
         String merged = String.join("\n", parts);
-        pendingEvents.clear();
-        bufferedPrompts.clear();
-        saveInbox();
         convo.addUser(merged);
         // A fresh owner directive starts a new tool-chain: restart the turn
         // counter (just log numbering now that the hard cap is gone).
         convo.resetTurnCount();
-    }
-
-    /** 躺超过 10 分钟的输入消费时标注年龄——尤其是跨会话恢复的旧闻,模型该知道
-     *  "主人不在时发生的",而不是当成刚发生的事去反应。 */
-    private static String annotateAge(Inboxed e, long now) {
-        long ageMs = e.ts() > 0 ? now - e.ts() : 0;
-        if (ageMs < 10 * 60_000L) return e.text();
-        String age = ageMs < 3_600_000L ? (ageMs / 60_000L) + "分钟"
-                : ageMs < 86_400_000L ? (ageMs / 3_600_000L) + "小时"
-                : (ageMs / 86_400_000L) + "天";
-        return "[发生于约" + age + "前] " + e.text();
     }
 
     private void tryStartTurn() {
@@ -927,7 +869,7 @@ public final class EntityAgentLoop {
         // Safe point: no assistant reply in flight and no tool results
         // outstanding, so the conversation ends with either a tool result or a
         // final assistant message — a user message can now be appended legally.
-        flushBufferedPrompts();
+        drainInbox();
         if (convo.snapshot().isEmpty()) return;
         // No hard cap on tool-call turns and no loop guard — a capable agent
         // legitimately chains many tasks, and resuming a timed-out move_to
@@ -1169,7 +1111,7 @@ public final class EntityAgentLoop {
         String skillsXml = SkillRegistry.instance().formatXml();
 
         // 系统提示只放会话内稳定的层——人设/操作核心/技能表/情绪词表。
-        // 会变化的 <known_blocks> 随用户回合注入(flushBufferedPrompts),
+        // 会变化的 <known_blocks> 随用户回合注入(drainInbox),
         // 让这里成为字节级稳定的缓存前缀。
         StringBuilder sb = new StringBuilder();
         // Persona = the mutable "who you are" layer, wrapped so it's clearly delimited from the
@@ -1205,7 +1147,7 @@ public final class EntityAgentLoop {
      * as before (the next prompt or event resumes).
      */
     private void failTurnKeepQueue() {
-        if (bufferedPrompts.isEmpty() && pendingEvents.isEmpty()) {
+        if (inbox.isEmpty()) {
             aborted = true;
             return;
         }
@@ -1215,8 +1157,8 @@ public final class EntityAgentLoop {
         if (convo.lastMessage() instanceof ConvoState.Msg.User) {
             convo.addAssistant(new AssistantTurn("(连接中断)", List.of(), null));
         }
-        Constants.LOG.info("[numen-entity#{}] turn failed with {} queued prompt(s) — starting a fresh turn with them",
-                entityUuid, bufferedPrompts.size());
+        Constants.LOG.info("[numen-entity#{}] turn failed with {} inboxed item(s) — starting a fresh turn with them",
+                entityUuid, inbox.promptCount() + inbox.eventCount());
         tryStartTurn();
     }
 
