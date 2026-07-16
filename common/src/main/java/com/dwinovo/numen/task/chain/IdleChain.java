@@ -95,7 +95,10 @@ public final class IdleChain implements TaskChain, Reflex {
                     end(companion);
                     return;
                 }
-                InputDriver.stepToward(companion, aim, false);   // 选点已保证纯平直线,直走即可
+                InputDriver.stepToward(companion, aim, false);   // 选点保证的缓坡直线
+                if (companion.horizontalCollision) {
+                    InputDriver.jump(companion);                 // ±1 台阶:撞上就跳一格
+                }
             }
             case NONE -> { }
         }
@@ -127,38 +130,60 @@ public final class IdleChain implements TaskChain, Reflex {
 
     private void begin(NumenPlayer companion, ServerPlayer owner) {
         boolean nearOwner = companion.blockPosition().closerThan(owner.blockPosition(), GLANCE_RANGE);
-        // 四成溜达六成看人;看不着人(距离)就只考虑溜达。
+        // 四成溜达六成看人;看不着人(距离)就只考虑溜达(方向朝主人偏)。
         if (nearOwner && rng.nextInt(100) < 60) {
             episode = Episode.GLANCE;
             episodeTicksLeft = GLANCE_MIN_TICKS + rng.nextInt(GLANCE_MAX_TICKS - GLANCE_MIN_TICKS);
+            com.dwinovo.numen.Constants.LOG.debug("[numen-idle#{}] glance at owner ({} ticks)",
+                    companion.getUUID(), episodeTicksLeft);
             return;
         }
         BlockPos target = pickStroll(companion, owner);
         if (target == null) {
-            end(companion);   // 附近没有一条干净的平路,这次不散了
+            com.dwinovo.numen.Constants.LOG.debug("[numen-idle#{}] no clean stroll line, skipping",
+                    companion.getUUID());
+            end(companion);   // 附近没有一条能走的缓坡线,这次不散了
             return;
         }
         strollTarget = target;
         episode = Episode.WANDER;
         episodeTicksLeft = WANDER_TIMEOUT_TICKS;
+        com.dwinovo.numen.Constants.LOG.debug("[numen-idle#{}] stroll to {}", companion.getUUID(), target);
     }
 
     /**
-     * 挑一个"干净"的散步点:随机步幅、拴在主人 {@link #LEASH} 格内、与当前
-     * 位置<b>同一水平面</b>,且直线上每一格都纯可走(脚/头无碰撞、脚下实心)。
-     * 全平地是硬要求——直走不会跳跃也不会跌落;挑不出来返回 null,宁可不散步。
+     * 挑一个"干净"的散步点:随机步幅、拴在主人 {@link #LEASH} 格内,直线上
+     * 每一步都可站立、相邻步高差不超过 1 格(撞台阶由行走时的自动跳解决)。
+     * 主人在瞟视距离外时,方向朝主人偏——闲逛顺便凑近,而不是原地打转。
+     * 挑不出来返回 null,宁可不散步。
      */
     private BlockPos pickStroll(NumenPlayer companion, ServerPlayer owner) {
         Level level = companion.level();
         BlockPos feet = companion.blockPosition();
+        boolean towardOwner = !companion.blockPosition().closerThan(owner.blockPosition(), GLANCE_RANGE);
         for (int i = 0; i < PICK_ATTEMPTS; i++) {
-            int dx = (rng.nextBoolean() ? 1 : -1) * (STROLL_MIN + rng.nextInt(STROLL_MAX - STROLL_MIN + 1));
-            int dz = (rng.nextBoolean() ? 1 : -1) * (STROLL_MIN + rng.nextInt(STROLL_MAX - STROLL_MIN + 1));
-            BlockPos candidate = feet.offset(dx, 0, dz);
-            if (!standable(level, candidate)) continue;
-            if (!candidate.closerThan(owner.blockPosition(), LEASH)) continue;
+            int sx = towardOwner ? Integer.signum(owner.blockPosition().getX() - feet.getX())
+                    : (rng.nextBoolean() ? 1 : -1);
+            int sz = towardOwner ? Integer.signum(owner.blockPosition().getZ() - feet.getZ())
+                    : (rng.nextBoolean() ? 1 : -1);
+            if (sx == 0) sx = rng.nextBoolean() ? 1 : -1;
+            if (sz == 0) sz = rng.nextBoolean() ? 1 : -1;
+            int dx = sx * (STROLL_MIN + rng.nextInt(STROLL_MAX - STROLL_MIN + 1));
+            int dz = sz * (STROLL_MIN + rng.nextInt(STROLL_MAX - STROLL_MIN + 1));
+            BlockPos candidate = adjustToStandable(level, feet.offset(dx, 0, dz));
+            if (candidate == null) continue;
+            if (!candidate.closerThan(owner.blockPosition(), LEASH + (towardOwner ? OWNER_RANGE : 0))) continue;
             if (!lineWalkable(level, feet, candidate)) continue;
             return candidate;
+        }
+        return null;
+    }
+
+    /** 候选格上下 1 格内找可站立的落脚点(脚/头无碰撞、脚下实心)。 */
+    private static BlockPos adjustToStandable(Level level, BlockPos pos) {
+        for (int dy : new int[]{0, 1, -1}) {
+            BlockPos p = pos.above(dy);
+            if (standable(level, p)) return p;
         }
         return null;
     }
@@ -172,13 +197,16 @@ public final class IdleChain implements TaskChain, Reflex {
         return level.getBlockState(pos).getCollisionShape(level, pos).isEmpty();
     }
 
-    /** 直线可走性:同一水平面逐格采样,每格都得能站。 */
+    /** 直线可走性:逐格采样,每步都能站、相邻步高差 ≤1(缓坡;行走时撞台阶自动跳)。 */
     private static boolean lineWalkable(Level level, BlockPos from, BlockPos to) {
         int steps = Math.max(Math.abs(to.getX() - from.getX()), Math.abs(to.getZ() - from.getZ()));
+        int y = from.getY();
         for (int s = 1; s <= steps; s++) {
             int x = from.getX() + Math.round((to.getX() - from.getX()) * (float) s / steps);
             int z = from.getZ() + Math.round((to.getZ() - from.getZ()) * (float) s / steps);
-            if (!standable(level, new BlockPos(x, from.getY(), z))) return false;
+            BlockPos p = adjustToStandable(level, new BlockPos(x, y, z));
+            if (p == null) return false;
+            y = p.getY();
         }
         return true;
     }
