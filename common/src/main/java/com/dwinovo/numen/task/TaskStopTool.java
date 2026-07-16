@@ -3,7 +3,7 @@ package com.dwinovo.numen.task;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.Gson;
@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** Control tool (instant): abort the background task so the body frees up. */
-public final class TaskStopTool extends ServerNumenTool {
+public final class TaskStopTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
 

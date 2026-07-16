@@ -126,17 +126,14 @@ public record ExecuteToolPayload(UUID entityUuid,
             return;
         }
         // Run the tool against the live companion: a query replies now, a world action
-        // enqueues and its result returns via the task lifecycle. Server execution isn't
-        // part of the MC-free NumenTool contract, so dispatch via core's ServerNumenTool base.
+        // enqueues/dispatches and its result returns via the task lifecycle.
+        // runOnServer 是 NumenTool 的接口默认方法——非身体工具的默认实现
+        // 兜底出一条清晰失败,这里无需再分岔。
         java.util.function.Consumer<String> reply = json ->
                 com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(player,
                         new TaskResultPayload(p.entityUuid(), p.toolCallId(), json));
         try {
-            if (tool instanceof com.dwinovo.numen.agent.tool.ServerNumenTool st) {
-                st.runOnServer(p.toolCallId(), args, companion, reply);
-            } else {
-                replyError(player, p, "tool not server-runnable: " + p.toolName());
-            }
+            tool.runOnServer(p.toolCallId(), args, companion, reply);
         } catch (RuntimeException ex) {
             replyError(player, p, "invalid arguments: " + ex.getMessage());
         }

@@ -7,6 +7,6 @@
  * used to live here has been removed: a tool is just a
  * {@link com.dwinovo.numen.agent.tool.NumenTool} (name, description, schema,
  * {@code invoke}). numen-core provides optional authoring sugar (a {@code Schema}
- * builder and a {@code ServerNumenTool} base) for packs that want it.
+ * builder and a {@code TaskDispatch} helpers) for packs that want them.
  */
 package com.dwinovo.numen.agent.tool.api;

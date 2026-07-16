@@ -23,7 +23,7 @@ import java.util.UUID;
  *
  * <p>This class is a thin, signature-preserving facade over {@link CompanionBrain}
  * — {@link #queueFor} and the three lifecycle finalizers are the API that tools
- * ({@code ServerNumenTool.enqueue}, {@code WaitTool}) and the lifecycle wiring
+ * ({@code TaskDispatch.enqueue}, {@code WaitTool}) and the lifecycle wiring
  * depend on, so they are unchanged; the multi-chain scheduling all lives in the
  * brain.
  */

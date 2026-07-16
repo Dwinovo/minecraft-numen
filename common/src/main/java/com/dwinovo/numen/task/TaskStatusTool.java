@@ -4,7 +4,7 @@ import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** Query tool (instant): read the state of the background task, if any. */
-public final class TaskStatusTool extends ServerNumenTool {
+public final class TaskStatusTool implements NumenTool {
 
     @Override
     public String name() {
