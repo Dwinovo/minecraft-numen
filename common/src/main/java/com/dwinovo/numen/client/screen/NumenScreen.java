@@ -2522,6 +2522,8 @@ public final class NumenScreen extends Screen {
             skinValue = skinEntry.value();
             skinSig = skinEntry.signature();
         }
+        com.dwinovo.numen.Constants.LOG.info("[numen-skin] 召唤 {}: 皮肤选择={} 条目={} 携带签名数据={}",
+                n, summonSkinId, skinEntry == null ? "null" : skinEntry.name(), !skinValue.isEmpty());
         Services.NETWORK.sendToServer(
                 new com.dwinovo.numen.network.payload.SummonRequestPayload(n, skinValue, skinSig));
         summoning = false;

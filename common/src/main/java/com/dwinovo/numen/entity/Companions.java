@@ -51,6 +51,12 @@ public final class Companions {
             if (skin != null) {
                 CompanionRegistry.Entry e = reg.find(existing);
                 if (e != null) reg.put(existing, e.withSkin(skin.value(), skin.signature()));
+                // 换肤必须重建身体才看得见(GameProfile 只在构造时注入):活体先落盘
+                // 休眠,紧接着的 respawn 立即以带新皮肤的档案重建,位置物品全保留。
+                NumenPlayer live = NumenPlayer.findByUuid(server, existing);
+                if (live != null) {
+                    CompanionFactory.despawn(server, live);
+                }
             }
             NumenPlayer body = respawn(server, existing);
             if (body != null) return body;

@@ -44,28 +44,54 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
         return TYPE;
     }
 
+    /** 正在异步召唤中的名字(皮肤查询窗口内)——Carpet spawning 集合同款防双击竞态。 */
+    private static final java.util.Set<String> SPAWNING =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     /** Server main thread. */
     public static void handle(SummonRequestPayload p, ServerPlayer owner) {
         String name = p.name() == null ? "" : p.name().trim();
         if (!com.dwinovo.numen.entity.MojangSkins.validName(name)) return;   // 服务端权威校验
         var server = owner.level().getServer();
+        // Carpet 同款重名闸:同名玩家已在线(真人/别的主人的同伴)一律拒绝——
+        // 例外是自己的同名同伴(那是幂等唤醒/换肤,summon 内部处理)。
+        var online = server.getPlayerList().getPlayerByName(name);
+        boolean ownSameName = online instanceof com.dwinovo.numen.entity.NumenPlayer np
+                && np.isOwnedByPlayer(owner.getUUID());
+        if (online != null && !ownSameName) {
+            owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                    "[Numen] 名字「" + name + "」已被在线玩家占用,换一个吧"));
+            return;
+        }
+        // Carpet 同款登录中闸:异步皮肤查询窗口内(几秒)重复点击不许再召。
+        String spawnKey = owner.getUUID() + "/" + name;
+        if (!SPAWNING.add(spawnKey)) return;
         String value = p.skinValue() == null ? "" : p.skinValue();
         if (!value.isBlank()) {
             // 自定义皮肤:签名数据现成,直接召唤,零网络。
-            ServerLevel level = (ServerLevel) owner.level();
-            Companions.summon(server, owner.getUUID(), name, level, owner.position(),
-                    new com.dwinovo.numen.entity.MojangSkins.Skin(value,
-                            p.skinSig() == null ? "" : p.skinSig()));
-            Companions.syncRosterToOwner(server, owner);
+            com.dwinovo.numen.Constants.LOG.info("[numen-skin] 召唤 {} 携带自定义皮肤数据,直接入册", name);
+            try {
+                ServerLevel level = (ServerLevel) owner.level();
+                Companions.summon(server, owner.getUUID(), name, level, owner.position(),
+                        new com.dwinovo.numen.entity.MojangSkins.Skin(value,
+                                p.skinSig() == null ? "" : p.skinSig()));
+                Companions.syncRosterToOwner(server, owner);
+            } finally {
+                SPAWNING.remove(spawnKey);
+            }
             return;
         }
         // 按名字借皮肤:查询在后台线程(Carpet 同款服务栈),绝不阻塞主线程;
         // 取到(或确认没有)后蹦回主线程再召唤。
         com.dwinovo.numen.entity.MojangSkins.fetch(server, name).thenAccept(skin -> server.execute(() -> {
-            if (owner.hasDisconnected()) return;
-            ServerLevel level = (ServerLevel) owner.level();
-            Companions.summon(server, owner.getUUID(), name, level, owner.position(), skin);
-            Companions.syncRosterToOwner(server, owner);   // push the new roster to the owner
+            try {
+                if (owner.hasDisconnected()) return;
+                ServerLevel level = (ServerLevel) owner.level();
+                Companions.summon(server, owner.getUUID(), name, level, owner.position(), skin);
+                Companions.syncRosterToOwner(server, owner);   // push the new roster to the owner
+            } finally {
+                SPAWNING.remove(spawnKey);
+            }
         }));
     }
 }
