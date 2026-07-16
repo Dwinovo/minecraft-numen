@@ -1264,6 +1264,12 @@ public final class NumenScreen extends Screen {
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
 
     private void buildPersonaListWidgets() {
+        // ↻ 刷新:重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
+        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, secY0() - 2, 18, 14,
+                Component.literal("↻"), b -> {
+                    PersonaLibrary.instance().reload();
+                    rebuild();
+                }));
         add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable("numen.persona.add"), b -> {
                     addingPersona = true; personaEditId = null;
