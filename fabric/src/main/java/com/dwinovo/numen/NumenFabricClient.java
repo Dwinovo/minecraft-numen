@@ -60,16 +60,8 @@ public class NumenFabricClient implements ClientModInitializer {
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(
                 (g, delta) -> com.dwinovo.numen.client.hud.NumenToasts.render(g));
 
-        // In-world path overlay for every companion (path line + break/place/goal
-        // boxes), drawn after translucent terrain so it sits over the world.
-        net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_ENTITIES
-                .register(ctx -> com.dwinovo.numen.client.path.PathVizRenderer.render(ctx.matrixStack()));
-
-        // Drop every path overlay on disconnect so a frozen path can't survive a
-        // relog (the server can't send a clear to a player who's already gone).
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT
                 .register((handler, client) -> {
-                    com.dwinovo.numen.client.path.ClientPathViz.clearAll();
                     com.dwinovo.numen.client.data.ClientNumenInventory.clear();
                     com.dwinovo.numen.client.hud.NumenToasts.clear();
                     com.dwinovo.numen.client.agent.ClientDeaths.clearAll();

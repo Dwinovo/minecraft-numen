@@ -36,7 +36,6 @@ public class NumenNeoForgeClient {
         modBus.addListener(NumenNeoForgeClient::registerReloadListeners);
         // Game bus — per-tick / world-render / disconnect.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
-        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
     }
 
@@ -51,18 +50,7 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.client.agent.AgentLoopRegistry.tickAll();
     }
 
-    static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
-        // 1.21.5 predates the per-stage AfterTranslucentBlocks event subclass; gate on the Stage enum.
-        if (event.getStage() != net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage.AFTER_TRANSLUCENT_BLOCKS) {
-            return;
-        }
-        // In-world path overlay for every companion (path line + break/place/goal boxes).
-        com.dwinovo.numen.client.path.PathVizRenderer.render(event.getPoseStack());
-    }
-
     static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
-        // Drop every path overlay on disconnect so a frozen path can't survive a relog.
-        com.dwinovo.numen.client.path.ClientPathViz.clearAll();
         com.dwinovo.numen.client.data.ClientNumenInventory.clear();
         com.dwinovo.numen.client.hud.NumenToasts.clear();
         com.dwinovo.numen.client.agent.ClientDeaths.clearAll();

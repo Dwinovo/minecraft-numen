@@ -5,7 +5,6 @@ import com.dwinovo.numen.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.network.payload.LocateNumenPayload;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
-import com.dwinovo.numen.network.payload.PathVizPayload;
 import com.dwinovo.numen.platform.Services;
 
 /**
@@ -76,12 +75,6 @@ public final class NumenNetwork {
         Services.NETWORK.registerServerToClient(
                 CompanionListPayload.TYPE, CompanionListPayload.STREAM_CODEC,
                 CompanionListPayload::handle);
-
-        // S→C: the companion's current pathfinding plan, for the in-world path
-        // overlay (the path is server-authored, so the client must be fed it).
-        Services.NETWORK.registerServerToClient(
-                PathVizPayload.TYPE, PathVizPayload.STREAM_CODEC,
-                PathVizPayload::handle);
 
         // S→C: server `/numen` verbs that must act on the caller's own client
         // (open settings GUI / reset conversations).
