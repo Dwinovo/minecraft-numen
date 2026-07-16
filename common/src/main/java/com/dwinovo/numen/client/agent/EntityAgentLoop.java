@@ -1036,14 +1036,15 @@ public final class EntityAgentLoop {
         if (!skillsXml.isEmpty()) {
             sb.append("\n\n").append(skillsXml);
         }
-        // 语音在线时告知情绪标签用法:句首 [词] 驱动这句的语气,词汇自由,
+        // 语音在线时告知情绪标签用法:句首 [词] 驱动这句的语气,词表固定,
         // 标签在朗读前被剥掉。TTS 侧由各后端把词翻译成自家控制格式。
         if (com.dwinovo.numen.client.voice.VoiceLibrary.instance().resolve(entityUuid) != null) {
             sb.append("\n\n<speech_emotion>\n")
                     .append("你说的话会被真实朗读。想控制某句的语气,就在那句开头加一个方括号情绪词,")
-                    .append("常用: [joy] [sad] [angry] [surprised] [whisper] [laugh],也可以用其它英文情绪词。\n")
+                    .append("只从这个词表里选:\n")
+                    .append("[joy] [excited] [sad] [angry] [surprised] [fearful] [whisper] [laugh] [sarcastic]\n")
                     .append("例: \"[joy]主人你看!挖到钻石了!\" 标签会被剥掉不朗读。")
-                    .append("平静陈述不用加,别每句都加。\n</speech_emotion>");
+                    .append("平静陈述不加标签,别每句都加。\n</speech_emotion>");
         }
         return sb.toString();
     }

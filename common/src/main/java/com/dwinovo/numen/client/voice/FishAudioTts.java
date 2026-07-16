@@ -70,12 +70,32 @@ public final class FishAudioTts implements TtsBackend {
         return body;
     }
 
-    /** [词] → 句首 {@code (词) } 标记:Fish 的情绪控制走文内括号标记,原词透传,
-     *  服务端不认识的词不影响朗读。 */
+    /** [词] → Fish 认识的句首 {@code (标记) };标记词表是固定的,词表外的词
+     *  有被当正文念出来的风险,一律不加。 */
+    static String mapEmotion(String word) {
+        if (word == null) return null;
+        return switch (word) {
+            case "joy", "joyful", "happy" -> "joyful";
+            case "excited" -> "excited";
+            case "sad" -> "sad";
+            case "sobbing", "crying" -> "sobbing";
+            case "angry", "anger" -> "angry";
+            case "surprised", "surprise", "shocked" -> "surprised";
+            case "sarcastic" -> "sarcastic";
+            case "empathetic" -> "empathetic";
+            case "whisper", "whispering" -> "whispering";
+            case "soft", "calm" -> "soft tone";
+            case "laugh", "laughing" -> "laughing";
+            case "chuckling" -> "chuckling";
+            case "shouting", "shout" -> "shouting";
+            default -> null;
+        };
+    }
+
     @Override
     public CompletableFuture<byte[]> synthesize(String text, String emotion) {
-        return synthesize(emotion == null || emotion.isBlank() ? text
-                : "(" + emotion + ") " + text);
+        String marker = emotion == null ? null : mapEmotion(emotion);
+        return synthesize(marker == null ? text : "(" + marker + ") " + text);
     }
 
     @Override
