@@ -47,6 +47,8 @@ public final class IdleChain implements TaskChain, Reflex {
     private long nextEpisodeAt;
     private int episodeTicksLeft;
     private BlockPos strollTarget;
+    private net.minecraft.world.phys.Vec3 lastPos = net.minecraft.world.phys.Vec3.ZERO;
+    private int stuckTicks;
     private final Random rng = new Random();
 
     @Override
@@ -95,9 +97,24 @@ public final class IdleChain implements TaskChain, Reflex {
                     end(companion);
                     return;
                 }
-                InputDriver.stepToward(companion, aim, false);   // 选点保证的缓坡直线
+                // 原版味道的三条走路守卫:临崖收脚、见水止步、卡墙放弃。
+                // 走不到就算了——这是闲逛,不是任务。
+                if (companion.isInWater() || cliffAhead(companion)) {
+                    end(companion);
+                    return;
+                }
+                InputDriver.stepToward(companion, aim, false);
                 if (companion.horizontalCollision) {
-                    InputDriver.jump(companion);                 // ±1 台阶:撞上就跳一格
+                    InputDriver.jump(companion);                 // 台阶自动跳,原版自动跳同款手感
+                }
+                if (companion.position().distanceToSqr(lastPos) < 0.0004) {   // ~0.02 格/tick 都不到
+                    if (++stuckTicks >= 20) {
+                        end(companion);
+                        return;
+                    }
+                } else {
+                    stuckTicks = 0;
+                    lastPos = companion.position();
                 }
             }
             case NONE -> { }
@@ -148,14 +165,15 @@ public final class IdleChain implements TaskChain, Reflex {
         strollTarget = target;
         episode = Episode.WANDER;
         episodeTicksLeft = WANDER_TIMEOUT_TICKS;
+        lastPos = companion.position();
+        stuckTicks = 0;
         com.dwinovo.numen.Constants.LOG.debug("[numen-idle#{}] stroll to {}", companion.getUUID(), target);
     }
 
     /**
-     * 挑一个"干净"的散步点:随机步幅、拴在主人 {@link #LEASH} 格内,直线上
-     * 每一步都可站立、相邻步高差不超过 1 格(撞台阶由行走时的自动跳解决)。
-     * 主人在瞟视距离外时,方向朝主人偏——闲逛顺便凑近,而不是原地打转。
-     * 挑不出来返回 null,宁可不散步。
+     * 挑散步点,原版 RandomStroll 的味道:随机方向随机步幅,落脚点能站人、
+     * 不出主人的拴绳圈,就出发——不做线路预检,走的时候三条守卫兜底,
+     * 走不到就算了。主人在瞟视距离外时方向朝主人偏,闲逛顺便凑近。
      */
     private BlockPos pickStroll(NumenPlayer companion, ServerPlayer owner) {
         Level level = companion.level();
@@ -173,13 +191,12 @@ public final class IdleChain implements TaskChain, Reflex {
             BlockPos candidate = adjustToStandable(level, feet.offset(dx, 0, dz));
             if (candidate == null) continue;
             if (!candidate.closerThan(owner.blockPosition(), LEASH + (towardOwner ? OWNER_RANGE : 0))) continue;
-            if (!lineWalkable(level, feet, candidate)) continue;
             return candidate;
         }
         return null;
     }
 
-    /** 候选格上下 1 格内找可站立的落脚点(脚/头无碰撞、脚下实心)。 */
+    /** 候选格上下各 1 格内找可站立的落脚点(脚/头无碰撞、脚下实心)。 */
     private static BlockPos adjustToStandable(Level level, BlockPos pos) {
         for (int dy : new int[]{0, 1, -1}) {
             BlockPos p = pos.above(dy);
@@ -197,16 +214,15 @@ public final class IdleChain implements TaskChain, Reflex {
         return level.getBlockState(pos).getCollisionShape(level, pos).isEmpty();
     }
 
-    /** 直线可走性:逐格采样,每步都能站、相邻步高差 ≤1(缓坡;行走时撞台阶自动跳)。 */
-    private static boolean lineWalkable(Level level, BlockPos from, BlockPos to) {
-        int steps = Math.max(Math.abs(to.getX() - from.getX()), Math.abs(to.getZ() - from.getZ()));
-        int y = from.getY();
-        for (int s = 1; s <= steps; s++) {
-            int x = from.getX() + Math.round((to.getX() - from.getX()) * (float) s / steps);
-            int z = from.getZ() + Math.round((to.getZ() - from.getZ()) * (float) s / steps);
-            BlockPos p = adjustToStandable(level, new BlockPos(x, y, z));
-            if (p == null) return false;
-            y = p.getY();
+    /** 临崖守卫:面前一格落差超过 2 就收脚——原版宠物靠寻路避崖,闲逛靠这条。 */
+    private static boolean cliffAhead(NumenPlayer companion) {
+        net.minecraft.world.phys.Vec3 dir = companion.getLookAngle();
+        BlockPos ahead = companion.blockPosition().offset(
+                (int) Math.signum(dir.x), 0, (int) Math.signum(dir.z));
+        Level level = companion.level();
+        if (!passable(level, ahead)) return false;   // 前面是墙/台阶,不是崖
+        for (int dy = 1; dy <= 3; dy++) {
+            if (!passable(level, ahead.below(dy))) return false;   // 3 格内有地,安全
         }
         return true;
     }
