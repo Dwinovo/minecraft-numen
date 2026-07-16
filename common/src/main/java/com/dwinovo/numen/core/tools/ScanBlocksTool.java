@@ -49,7 +49,7 @@ public final class ScanBlocksTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         impl.scanBlocks(a.radius(), a.block_ids(), self, reply);   // replies later via the callback
     }

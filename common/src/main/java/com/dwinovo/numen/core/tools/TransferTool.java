@@ -44,7 +44,7 @@ public final class TransferTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         reply.accept(impl.transfer(a.moves(), self));
     }

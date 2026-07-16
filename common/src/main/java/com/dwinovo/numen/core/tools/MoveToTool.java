@@ -50,7 +50,7 @@ public final class MoveToTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         dispatchAsync(companion, impl.moveTo(a.x(), a.y(), a.z(), a.speed(), a.modify_terrain(),
                 ctx(toolCallId, companion)), reply);

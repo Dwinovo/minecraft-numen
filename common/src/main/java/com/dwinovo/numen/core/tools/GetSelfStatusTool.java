@@ -21,7 +21,7 @@ import java.util.function.Consumer;
 /**
  * SAMPLE (raw-NumenTool style, no @NumenAction). A query tool: runs on the body
  * server-side and replies in place. No arguments → an empty schema. The body of
- * {@link #runOnServer} is just the perception logic; nothing reflective.
+ * {@link #onServerCall} is just the perception logic; nothing reflective.
  */
 public final class GetSelfStatusTool implements NumenTool {
 
@@ -52,7 +52,7 @@ public final class GetSelfStatusTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         JsonObject root = new JsonObject();
         root.addProperty("entity_id", self.getId());
         root.addProperty("name", self.getName().getString());

@@ -48,7 +48,7 @@ public final class ShootTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         enqueue(companion, impl.shoot(a.entity_ids(), a.count(), a.radius(), ctx(toolCallId, companion)), reply);
     }

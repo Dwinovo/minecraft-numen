@@ -41,7 +41,7 @@ public final class DropItemsTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         enqueue(companion, impl.dropItems(a.item_id(), a.count(), ctx(toolCallId, companion)), reply);
     }

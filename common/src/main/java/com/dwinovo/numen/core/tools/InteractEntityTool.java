@@ -42,7 +42,7 @@ public final class InteractEntityTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         enqueue(companion, impl.interactEntity(a.button(), a.entity_id(), a.hold_ticks(), a.item_id(),
                 ctx(toolCallId, companion)), reply);

@@ -32,7 +32,7 @@ public final class GetOwnerStatusTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         reply.accept(impl.getOwnerStatus(self));
     }
 }

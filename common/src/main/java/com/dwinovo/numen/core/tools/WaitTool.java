@@ -52,7 +52,7 @@ public final class WaitTool implements NumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         int seconds = Math.clamp(a.seconds(), 1, MAX_SECONDS);
         String reason = a.reason() != null ? a.reason() : "";
