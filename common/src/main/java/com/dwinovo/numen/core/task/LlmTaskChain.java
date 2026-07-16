@@ -25,19 +25,11 @@ import java.util.List;
 public final class LlmTaskChain implements TaskChain {
 
     private final TaskQueue queue;
-    /** {@link BodyLog} drained into each shipped result's message — the busy rail
-     *  of the body-narrative dual routing (may be null in tests). */
-    private final BodyLog bodyLog;
     private CompanionTask task;
     private TaskRecord record;
 
     LlmTaskChain(TaskQueue queue) {
-        this(queue, null);
-    }
-
-    LlmTaskChain(TaskQueue queue, BodyLog bodyLog) {
         this.queue = queue;
-        this.bodyLog = bodyLog;
     }
 
     @Override
@@ -96,27 +88,11 @@ public final class LlmTaskChain implements TaskChain {
      */
     void finalizeTerminal() {
         if (record != null && record.getState().isTerminal()) {
-            record.setResult(withSurvivalNotes(task.buildResult(record.getState())));
+            record.setResult(task.buildResult(record.getState()));
             queue.complete(record);
             task = null;
             record = null;
         }
-    }
-
-    /**
-     * Busy-rail delivery: append the {@link BodyLog} (episodes the body handled
-     * autonomously — fights, meals, fall saves — during or before this task) to
-     * the outgoing result message (the D1 tail). Informational only: the model
-     * learns what happened at exactly the moment it reads the task outcome, with
-     * no extra call and no schema change. Draining here is what keeps the two
-     * rails single-shot — entries a result takes can never re-ship as ambient.
-     */
-    private TaskResult withSurvivalNotes(TaskResult result) {
-        if (bodyLog == null || bodyLog.isEmpty() || result == null) return result;
-        String notes = String.join("; ", bodyLog.drain());
-        return new TaskResult(result.success(),
-                result.message() + " [meanwhile, my body handled on its own: " + notes + "]",
-                result.timedOut(), result.interrupted(), result.data());
     }
 
     /** Lost control to a higher-priority chain: pause the running task without tearing it down. */
@@ -187,15 +163,11 @@ public final class LlmTaskChain implements TaskChain {
 
     /**
      * Death: drop the running task WITHOUT a result — the client's death payload
-     * already resolved the call — then fallback-flush the {@link BodyLog}
-     * (constitution §4): entries that were queued to ride this task's result have
-     * no D1 tail anymore, so they transfer to the ambient rail. (The flush runs
-     * after the drop, so the log's busy predicate sees this chain as idle.)
+     * already resolved the call.
      */
     void dropActiveNoResult() {
         task = null;
         record = null;
-        if (bodyLog != null) bodyLog.flushAmbient();
     }
 
     /** Owner Stop: mark the running record CANCELLED; the next {@link #tick} finalizes + ships it. */
@@ -217,7 +189,7 @@ public final class LlmTaskChain implements TaskChain {
             st = TaskState.CANCELLED;
             record.setState(st);
         }
-        record.setResult(withSurvivalNotes(task.buildResult(st)));
+        record.setResult(task.buildResult(st));
         queue.complete(record);
         task = null;
         record = null;

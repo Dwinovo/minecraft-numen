@@ -40,8 +40,8 @@ final class CompanionBrain {
     private static final int HAND_PIN_GRACE_TICKS = 600;
 
     final TaskQueue queue = new TaskQueue();
-    /** The body's narrative outlet: busy → rides the next tool result (D1 tail),
-     *  idle → immediate non-urgent ambient event (C2). See {@link BodyLog}. */
+    /** The body's narrative outlet: 即报即发,消费时机由客户端收件箱三态路由。
+     *  See {@link BodyLog}. */
     private final BodyLog bodyLog;
     final LlmTaskChain llm;
 
@@ -61,10 +61,8 @@ final class CompanionBrain {
             new com.dwinovo.numen.core.task.pin.HandPinRelease(HAND_PIN_GRACE_TICKS);
 
     CompanionBrain() {
-        // The method reference defers the llm read to call time, so construction
-        // order is safe (a direct field read in a lambda trips definite assignment).
-        this.bodyLog = new BodyLog(this::llmHasWork, this::tryEmitAmbient);
-        this.llm = new LlmTaskChain(queue, bodyLog);
+        this.bodyLog = new BodyLog(this::tryEmitAmbient);
+        this.llm = new LlmTaskChain(queue);
         this.chains = List.of(
                 new UnstuckChain(),
                 new MobDefenseChain(bodyLog),
@@ -74,18 +72,12 @@ final class CompanionBrain {
                 llm);
     }
 
-    /** {@link BodyLog}'s busy-rail predicate — "is a tool result coming that can
-     *  carry the queue?" (see {@link LlmTaskChain#hasWork}). */
-    private boolean llmHasWork() {
-        return llm.hasWork();
-    }
-
     /**
-     * {@link BodyLog}'s idle-rail transport: ship the packaged {@code body_log}
-     * event to the owner's client via the engine's public event channel.
-     * {@code urgent=false} is constitutional law (§4) — a body diary informs the
-     * next turn, it never wakes the brain. No owner online → refuse, so the log
-     * keeps its entries and retries on a later flush.
+     * {@link BodyLog}'s transport: ship the packaged {@code body_log} event to
+     * the owner's client via the engine's public event channel. principal=false
+     * ——身体叙事是事实,事实不配自定紧急度;消费时机由客户端收件箱按发生时
+     * 状态路由(任务中=军情立刻开轮,全闲=躺着搭车)。No owner online →
+     * refuse, so the log keeps its entries and retries on a later flush.
      */
     private boolean tryEmitAmbient(String xml) {
         NumenPlayer companion = body;
@@ -117,7 +109,7 @@ final class CompanionBrain {
             }
             // Idle retry for entries a refused flush left behind (the owner was
             // offline when they were reported) — a no-op when the log is empty.
-            bodyLog.flushAmbient();
+            bodyLog.flush();
             llm.finalizeTerminal();
             llm.drainResults(companion);
             return;
@@ -146,9 +138,8 @@ final class CompanionBrain {
 
     /**
      * Death path (via {@code CompanionTickDispatcher.clearActiveTask}): bind the
-     * body so the ambient sink can reach its owner, then let the LLM chain drop
-     * the running task and fallback-flush the {@link BodyLog} (constitution §4 —
-     * a no-result termination strands the queued entries, they transfer to C2).
+     * body so the sink can reach its owner, drop the running task, and retry any
+     * body-log entries a refused flush left behind (owner was offline).
      */
     void dropActiveNoResult(NumenPlayer companion) {
         body = companion;
@@ -156,5 +147,6 @@ final class CompanionBrain {
         com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(companion)
                 .unpin(com.dwinovo.numen.core.task.pin.IntentPins.SLOT_MAINHAND);
         llm.dropActiveNoResult();
+        bodyLog.flush();
     }
 }

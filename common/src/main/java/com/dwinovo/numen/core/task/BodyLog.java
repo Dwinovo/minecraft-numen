@@ -1,46 +1,30 @@
 package com.dwinovo.numen.core.task;
 
 import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.function.BooleanSupplier;
 
 /**
  * The body's narrative outlet — the ONE collection point for everything the body
  * does on its own (instinct episodes, preemption stories, wardrobe changes), and
- * the ONLY core-domain producer of ambient events. Constitution §4 ("BodyLog
- * 双轨路由"): two rails share one bounded queue.
+ * the ONLY core-domain producer of {@code body_log} events.
  *
- * <ul>
- *   <li><b>Busy rail</b> — an LLM task is running or pending: {@link #report}
- *       queues the line and it rides that task's tool-result message tail
- *       ("[meanwhile ...]", see {@code LlmTaskChain#withSurvivalNotes}) — D1,
- *       zero extra calls;</li>
- *   <li><b>Idle rail</b> — no LLM task: {@link #report} flushes the whole queue
- *       IMMEDIATELY as one non-urgent {@code <event kind="body_log">} — C2,
- *       queued client-side and spliced into the next owner-driven turn. Never
- *       urgent: the model is informed, never woken.</li>
- * </ul>
+ * <p>即报即发(宪法 §4 修订版):每条叙事到达即打包出货——箱里有几条就合并成
+ * 一个 {@code <event kind="body_log">} 发走。什么时候到模型面前不再是这里的
+ * 事:客户端收件箱按"发生时大脑的状态"三态路由(回合中贴边界/任务中立刻
+ * 开轮/全闲躺着搭车)。旧的双轨路由(忙时扣押、贴工具结果尾巴)已废除——
+ * 它的前提"任务链有活 = 模型正阻塞等结果"被异步任务抽掉了。
  *
- * <p><b>Single drain</b>: both rails consume the same queue — whichever ships
- * first takes the entries, nothing is delivered twice. <b>Fallback flush</b>: a
- * task that terminates with NO result (death drop) has no D1 tail for its queued
- * entries to ride, so they transfer to the ambient rail via {@link #flushAmbient}.
- *
- * <p>Bounded ring: at most {@link #MAX_ENTRIES} lines accumulate (oldest dropped),
- * so no single message is ever flooded. Tick-thread only, like all task-layer
- * state. Pure JDK on purpose — the routing core is headless-testable
- * ({@code BodyLogTest}); the Minecraft transport hides behind {@link AmbientSink}.
+ * <p>唯一的滞留原因是主人离线(sink 拒收):条目留箱,由 idle-tick 的
+ * {@link #flush} 重试。离线累积以 {@link #MAX_ENTRIES} 封顶(最旧的丢弃),
+ * 单个事件永远不会刷屏。Tick-thread only;纯 JDK,路由核心可无头测试
+ * ({@code BodyLogTest}),Minecraft 传输藏在 {@link AmbientSink} 后面。
  */
 public final class BodyLog {
 
     /**
-     * Idle-rail transport. Returns {@code true} when the event was handed to a
-     * client; {@code false} = nobody can receive right now (owner offline) — the
-     * entries stay queued and a later flush retries. The production wiring is
-     * {@code Companions.emitEvent(companion, xml, false)}; this interface
-     * deliberately has no urgency parameter — a body diary informs, never wakes
-     * (urgent=false is constitutional law, §4).
+     * 事件传输口。返回 {@code true} = 已交给客户端;{@code false} = 此刻没人
+     * 收得了(主人离线)——条目留箱,之后的 flush 重试。生产接线是
+     * {@code Companions.emitEvent(companion, xml, false)}:身体叙事是事实,
+     * 事实不配自定紧急度(principal 恒 false)。
      */
     public interface AmbientSink {
         boolean tryEmit(String xml);
@@ -49,21 +33,16 @@ public final class BodyLog {
     static final int MAX_ENTRIES = 6;
 
     private final ArrayDeque<String> entries = new ArrayDeque<>();
-    /** "Is a tool result coming that can carry the queue?" — injected by
-     *  {@code CompanionBrain} (reads {@code LlmTaskChain.hasWork()}) to avoid a
-     *  structural BodyLog → LlmTaskChain dependency cycle. */
-    private final BooleanSupplier llmTaskActive;
-    private final AmbientSink ambientSink;
+    private final AmbientSink sink;
 
-    public BodyLog(BooleanSupplier llmTaskActive, AmbientSink ambientSink) {
-        this.llmTaskActive = llmTaskActive;
-        this.ambientSink = ambientSink;
+    public BodyLog(AmbientSink sink) {
+        this.sink = sink;
     }
 
     /**
      * Record one completed body episode (one line, no trailing punctuation) and
-     * route it: LLM task active → queue, rides that task's result; idle → the
-     * whole queue flushes NOW as one ambient event.
+     * ship it immediately — together with anything an earlier refused flush left
+     * in the box.
      */
     public void report(String line) {
         if (line == null || line.isBlank()) return;
@@ -71,23 +50,19 @@ public final class BodyLog {
             entries.removeFirst();
         }
         entries.addLast(line);
-        if (!llmTaskActive.getAsBoolean()) {
-            flushAmbient();
-        }
+        flush();
     }
 
     /**
-     * Idle-rail outlet + fallback flush: package every queued entry into ONE
-     * non-urgent {@code <event kind="body_log">} and hand it to the sink. Sink
-     * refuses (owner offline) → entries are kept for a later retry. Also called
-     * directly on the no-result termination path (death drop), so entries that
-     * were waiting on a task result still reach the brain.
+     * 打包出货:箱内全部条目合并成一个 {@code body_log} 事件交给 sink。拒收
+     * (主人离线)则原样留箱。也是 idle-tick 重试与死亡兜底路径的入口——
+     * 空箱时是 no-op。
      */
-    public void flushAmbient() {
+    public void flush() {
         if (entries.isEmpty()) return;
         String xml = "<event kind=\"body_log\">your body handled on its own: "
                 + String.join("; ", entries) + "</event>";
-        if (ambientSink.tryEmit(xml)) {
+        if (sink.tryEmit(xml)) {
             entries.clear();
         }
     }
@@ -98,13 +73,5 @@ public final class BodyLog {
 
     public int size() {
         return entries.size();
-    }
-
-    /** Busy-rail drain: all entries in order, clearing the queue (single drain —
-     *  whatever a result takes, the ambient rail never re-sends). */
-    public List<String> drain() {
-        List<String> out = new ArrayList<>(entries);
-        entries.clear();
-        return out;
     }
 }
