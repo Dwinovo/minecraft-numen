@@ -29,7 +29,6 @@ public final class CoreReflexes {
         ReflexRegistry.register(new MobDefenseChain());
         ReflexRegistry.register(new FoodChain());
         ReflexRegistry.register(new UnstuckChain());
-        ReflexRegistry.register(new com.dwinovo.numen.task.chain.IdleChain());
         ReflexRegistry.register(new PolicyReflex(FOOD_POLICY_ID,
                 "自己找吃的时会避开有毒或有害的食物"));
     }
