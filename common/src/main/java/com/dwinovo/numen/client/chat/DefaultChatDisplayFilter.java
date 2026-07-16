@@ -35,7 +35,8 @@ public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
     @Override
     public String filterAssistantMessage(String raw) {
         if (raw == null) return "";
-        return EmotionTag.strip(raw).strip();
+        // 段落间的空行折叠成单换行——聊天面板寸土寸金,空行只是模型的排版习惯。
+        return EmotionTag.strip(raw).replaceAll("\\n\\s*\\n+", "\n").strip();
     }
 
     /**
@@ -48,7 +49,8 @@ public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
                 .replaceAll("(?s)<event\\b[^>]*>.*?</event>", "")
                 .replaceAll("(?s)<event\\b[^>]*/>", "")
                 .replaceAll("(?s)<env>.*?</env>", "")
+                .replaceAll("(?s)<current_task>.*?</current_task>", "")
                 .replaceAll("(?s)<known_blocks>.*?</known_blocks>", "");
-        return out.strip();
+        return out.replaceAll("\\n\\s*\\n+", "\n").strip();
     }
 }

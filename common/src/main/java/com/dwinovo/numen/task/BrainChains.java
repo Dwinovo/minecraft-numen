@@ -10,7 +10,7 @@ import java.util.function.Function;
  * {@link CompanionBrain} 每同伴实例化一份。工厂收一个 {@link BodyLog}(链的
  * 叙事出口),返回链实例;{@code order} 决定同 tick 平局时的先后(小者先,
  * 惯例:意图越硬的越小)。引擎自带的 {@link LlmTaskChain} 与
- * {@code IdleChain} 不经此处——它们是机器的一部分,固定排在注册链之后。
+ * 说话看人姿态链不经此处——它们是机器的一部分,固定排在注册链之后。
  *
  * <p>Init-time only(和 ToolRegistry/CompanionTaskFactory 同一约定):
  * 注册发生在 mod init,Brain 构造发生在服务器 tick——无并发窗口。

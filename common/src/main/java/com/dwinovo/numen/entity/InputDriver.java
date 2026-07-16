@@ -22,9 +22,13 @@ public final class InputDriver {
 
     private InputDriver() {}
 
-    /** Face {@code target} (yaw only) and push full forward. Call each tick while travelling. */
+    /** Face {@code target} and push full forward. Call each tick while travelling. */
     public static void stepToward(ServerPlayer p, Vec3 target, boolean sprint) {
         faceYaw(p, target);
+        // 看路:行走时视线落在前方地面,不残留上一次 lookAt 的仰角(挖矿抬头后
+        // 一路走一路望天的病根)。当 tick 需要瞄准的动作(挖/放)在 stepToward
+        // 之后自会 lookAt 覆盖,互不打架。
+        p.setXRot(12.0f);
         p.zza = 1.0f;
         p.xxa = 0.0f;
         p.setSprinting(sprint && !p.isShiftKeyDown());

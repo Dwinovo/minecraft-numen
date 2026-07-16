@@ -13,7 +13,7 @@ import java.util.List;
  * winner drives the body), then always drains completed LLM results.
  *
  * <p>Chain roster: 内容包经 {@link BrainChains} 注册(numen-core 注册五条生存
- * 本能),引擎自带的 {@link LlmTaskChain} 与 {@code IdleChain} 固定压轴。A
+ * 本能),引擎自带的 {@link LlmTaskChain} 与说话看人姿态链固定压轴。A
  * survival spike preempts the LLM task (its body is released via
  * {@link LlmTaskChain#onInterrupt}, its deadline frozen via
  * {@link LlmTaskChain#freezeTick}) and it resumes when the spike subsides.
@@ -61,7 +61,7 @@ final class CompanionBrain {
         this.llm = new LlmTaskChain(queue);
         List<TaskChain> all = new ArrayList<>(BrainChains.build(bodyLog));
         all.add(llm);
-        all.add(new com.dwinovo.numen.task.chain.IdleChain());
+        all.add(new com.dwinovo.numen.task.chain.SpeakingLookChain());
         this.chains = List.copyOf(all);
     }
 

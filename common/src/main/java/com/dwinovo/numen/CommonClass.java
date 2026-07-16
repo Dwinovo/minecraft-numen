@@ -35,6 +35,9 @@ public class CommonClass {
                 com.dwinovo.numen.task.CompanionTickDispatcher::onCompanionRemoved);
         com.dwinovo.numen.entity.CompanionLifecycle.onAbort(
                 com.dwinovo.numen.agent.tool.ServerToolTransport::abort);
+        // 引擎自带姿态链的名册文书(主人开关 + 提示词总览一行)。
+        com.dwinovo.numen.task.reflex.ReflexRegistry.register(
+                new com.dwinovo.numen.task.chain.SpeakingLookChain());
     }
 
     /**
