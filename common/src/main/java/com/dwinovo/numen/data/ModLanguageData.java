@@ -63,8 +63,7 @@ public final class ModLanguageData {
         public static final String SUMMON_NAME_PLACEHOLDER = "numen.summon.name_placeholder";
         public static final String SUMMON_PERSONA_LABEL    = "numen.summon.persona_label";
         public static final String SUMMON_PERSONA_NONE     = "numen.summon.persona_none";
-        public static final String SUMMON_SKIN_LABEL       = "numen.summon.skin_label";
-        public static final String SUMMON_WARN_SKIN        = "numen.summon.warn_skin";
+        public static final String SUMMON_WARN_NAME_FORMAT = "numen.summon.warn_name_format";
         public static final String SUMMON_PROVIDER_EMPTY   = "numen.summon.provider_empty";
         public static final String SUMMON_CREATE           = "numen.summon.create";
         public static final String SUMMON_WARN_NAME        = "numen.summon.warn_name";
@@ -219,12 +218,11 @@ public final class ModLanguageData {
         adder.add(Keys.SETTINGS_PROXY_PORT, "Port");
 
         // Summon page
-        adder.add(Keys.SUMMON_NAME,             "Name");
-        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "Give it a name, e.g. Kyu");
+        adder.add(Keys.SUMMON_NAME,             "Name (letters/digits/_; a premium player's name borrows their skin)");
+        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "e.g. Kyu — name a premium player to wear their skin");
         adder.add(Keys.SUMMON_PERSONA_LABEL,    "Persona");
         adder.add(Keys.SUMMON_PERSONA_NONE,     "None");
-        adder.add(Keys.SUMMON_SKIN_LABEL,       "Skin (premium player name, optional)");
-        adder.add(Keys.SUMMON_WARN_SKIN,        "Skin name must be 3–16 letters/digits/underscores");
+        adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "Name must be 3–16 letters/digits/underscores (Minecraft naming rules)");
         adder.add(Keys.SUMMON_PROVIDER_EMPTY,   " (empty — create one in Settings → Model Configs)");
         adder.add(Keys.SUMMON_CREATE,           "Create");
         adder.add(Keys.SUMMON_WARN_NAME,        "Give your companion a name first");
@@ -370,12 +368,11 @@ public final class ModLanguageData {
         adder.add(Keys.SETTINGS_PROXY_PORT, "端口");
 
         // Summon page
-        adder.add(Keys.SUMMON_NAME,             "名字");
-        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "给它起个名字,如:小玖");
+        adder.add(Keys.SUMMON_NAME,             "名字(英文,填正版玩家名可穿它的皮肤)");
+        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "如 Kyu;填正版玩家名自动穿同名皮肤");
         adder.add(Keys.SUMMON_PERSONA_LABEL,    "人设");
         adder.add(Keys.SUMMON_PERSONA_NONE,     "无");
-        adder.add(Keys.SUMMON_SKIN_LABEL,       "皮肤(正版玩家名,可留空)");
-        adder.add(Keys.SUMMON_WARN_SKIN,        "皮肤名需为 3~16 位字母/数字/下划线");
+        adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "名字需为 3~16 位英文字母/数字/下划线(Minecraft 官方命名规则)");
         adder.add(Keys.SUMMON_PROVIDER_EMPTY,   "(空——到 设置 → 模型配置 新建)");
         adder.add(Keys.SUMMON_CREATE,           "创建");
         adder.add(Keys.SUMMON_WARN_NAME,        "先给同伴起个名字");
