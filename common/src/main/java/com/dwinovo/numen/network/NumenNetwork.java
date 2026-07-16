@@ -47,6 +47,12 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.CancelTasksPayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.CancelTasksPayload::handle);
 
+        // C→S: 大脑开始/结束输出——身体据此在说话期间注视主人(纯姿态信号)。
+        Services.NETWORK.registerClientToServer(
+                com.dwinovo.numen.network.payload.SpeakingStatePayload.TYPE,
+                com.dwinovo.numen.network.payload.SpeakingStatePayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.SpeakingStatePayload::handle);
+
         // S→C: an Numen body died; suspend the owner's agent loop (resolves the in-flight
         // tool call with the death cause). Recoverable — see NumenRespawnPayload.
         Services.NETWORK.registerServerToClient(

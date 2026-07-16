@@ -35,7 +35,7 @@ public final class IdleChain implements TaskChain, Reflex {
     private static final int GLANCE_RANGE = 12;      // 看主人的距离上限
     private static final int LEASH = 8;              // 溜达不离主人这么多格
     private static final int STROLL_MIN = 2, STROLL_MAX = 5;   // 单次散步的步幅
-    private static final int GAP_MIN_TICKS = 160, GAP_MAX_TICKS = 500;   // 动作间歇 8~25s
+    private static final int GAP_MIN_TICKS = 60, GAP_MAX_TICKS = 200;    // 动作间歇 3~10s(原版宠物档)
     private static final int GLANCE_MIN_TICKS = 30, GLANCE_MAX_TICKS = 70;
     private static final int WANDER_TIMEOUT_TICKS = 120;
     private static final int PICK_ATTEMPTS = 8;
@@ -54,6 +54,12 @@ public final class IdleChain implements TaskChain, Reflex {
     @Override
     public float getPriority(NumenPlayer companion) {
         if (!ReflexRegistry.enabled(id())) return Float.NEGATIVE_INFINITY;
+        // 说话姿态:大脑在输出且主人在近旁——持续注视,无视间隔。任务在跑时
+        // LLM 链出价更高,自然让位(挖着矿说话不回头,合理)。
+        if (com.dwinovo.numen.entity.CompanionSpeech.isSpeaking(companion.getUUID())
+                && ownerNearby(companion, GLANCE_RANGE + 4)) {
+            return IDLE_PRIORITY;
+        }
         if (episode != Episode.NONE) return IDLE_PRIORITY;   // 把这一幕演完(除非被抢占)
         long now = companion.level().getGameTime();
         if (now < nextEpisodeAt) return Float.NEGATIVE_INFINITY;
@@ -71,6 +77,12 @@ public final class IdleChain implements TaskChain, Reflex {
         ServerPlayer owner = companion.resolveOwnerPlayer();
         if (owner == null) {
             end(companion);
+            return;
+        }
+        // 说话姿态优先:停下小动作,面向主人说话。结束后小动作从中断处继续。
+        if (com.dwinovo.numen.entity.CompanionSpeech.isSpeaking(companion.getUUID())) {
+            InputDriver.halt(companion);
+            InputDriver.lookAt(companion, owner.getEyePosition());
             return;
         }
         if (episode == Episode.NONE) {
@@ -194,6 +206,12 @@ public final class IdleChain implements TaskChain, Reflex {
             return candidate;
         }
         return null;
+    }
+
+    private static boolean ownerNearby(NumenPlayer companion, int range) {
+        ServerPlayer owner = companion.resolveOwnerPlayer();
+        return owner != null && owner.level() == companion.level()
+                && companion.blockPosition().closerThan(owner.blockPosition(), range);
     }
 
     /** 候选格上下各 1 格内找可站立的落脚点(脚/头无碰撞、脚下实心)。 */

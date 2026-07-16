@@ -396,6 +396,21 @@ public final class EntityAgentLoop {
     public void clientTick() {
         dispatcher.tick();
         if (voice != null) voice.tick();
+        syncSpeakingState();
+    }
+
+    /** 上次发给服务端的说话状态(翻转才发包,不逐 tick 刷)。 */
+    private boolean lastSpeakingSent;
+
+    /** 大脑在输出(思考/生成/跑工具/语音在播)→ 告诉身体,好在说话期间注视主人。 */
+    private void syncSpeakingState() {
+        boolean speaking = awaitingLlmResponse || dispatcher.busy()
+                || (voice != null && voice.isSpeaking());
+        if (speaking != lastSpeakingSent) {
+            lastSpeakingSent = speaking;
+            com.dwinovo.numen.platform.Services.NETWORK.sendToServer(
+                    new com.dwinovo.numen.network.payload.SpeakingStatePayload(entityUuid, speaking));
+        }
     }
 
     // ---- streaming voice (TTS) ----

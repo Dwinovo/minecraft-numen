@@ -43,7 +43,14 @@ public final class CompanionTickDispatcher {
         return brainFor(companionUuid).queue;
     }
 
+    /** 一次性心跳日志:证明排程机器的 tick 钩子真的接上了(排查"闲时链不触发"时先看它)。 */
+    private static boolean heartbeatLogged;
+
     public static void tick(MinecraftServer server) {
+        if (!heartbeatLogged) {
+            heartbeatLogged = true;
+            com.dwinovo.numen.Constants.LOG.info("[numen-task] scheduler heartbeat online (first server tick)");
+        }
         Companions.tickRespawns(server);   // timed death recoveries
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p instanceof NumenPlayer ap) {
