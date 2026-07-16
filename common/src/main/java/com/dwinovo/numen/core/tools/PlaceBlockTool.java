@@ -51,6 +51,6 @@ public final class PlaceBlockTool extends ServerNumenTool {
     public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         enqueue(companion, impl.placeBlock(a.block_id(), a.x(), a.y(), a.z(),
-                a.facing(), a.axis(), a.half(), ctx(toolCallId, companion)));
+                a.facing(), a.axis(), a.half(), ctx(toolCallId, companion)), reply);
     }
 }

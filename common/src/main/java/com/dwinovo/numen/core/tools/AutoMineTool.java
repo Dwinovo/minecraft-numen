@@ -33,7 +33,8 @@ public final class AutoMineTool extends ServerNumenTool {
                 + "deepslate_iron_ore). Optional radius caps the search. force (default false): only mines "
                 + "what its tools actually harvest, and stops naming the needed tier if nothing qualifies; "
                 + "force:true breaks blocks even when they drop nothing — only for clearing obstacles, "
-                + "`count` may never advance.";
+                + "`count` may never advance. BACKGROUND task: returns a task_id at once; the outcome "
+                + "arrives as a task_finished event — don't poll.";
     }
 
     @Override
@@ -52,6 +53,7 @@ public final class AutoMineTool extends ServerNumenTool {
     @Override
     public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        enqueue(companion, impl.autoMine(a.block_ids(), a.count(), a.radius(), a.force(), ctx(toolCallId, companion)));
+        dispatchAsync(companion, impl.autoMine(a.block_ids(), a.count(), a.radius(), a.force(),
+                ctx(toolCallId, companion)), reply);
     }
 }

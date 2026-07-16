@@ -32,11 +32,11 @@ public final class WaitTool extends ServerNumenTool {
 
     @Override
     public String description() {
-        return "Wait in place for the given number of seconds, doing nothing on "
-                + "purpose. Use it when the next step depends on time passing (a furnace "
-                + "batch, nightfall, an owner who said \"wait here\"). Max " + MAX_SECONDS
-                + "s per call — call again after re-checking for longer waits. "
-                + "Interruptible by the owner at any time.";
+        return "Set a timer: stay put for the given number of seconds. Use it when the next "
+                + "step depends on time passing (a furnace batch, nightfall, an owner who said "
+                + "\"wait here\"). Max " + MAX_SECONDS + "s per call — re-dispatch after re-checking "
+                + "for longer waits. BACKGROUND task: returns a task_id at once and the elapsed "
+                + "timer arrives as a task_finished event — you can keep chatting meanwhile.";
     }
 
     @Override
@@ -53,8 +53,7 @@ public final class WaitTool extends ServerNumenTool {
         int seconds = Math.clamp(a.seconds(), 1, MAX_SECONDS);
         String reason = a.reason() != null ? a.reason() : "";
         long deadline = companion.level().getGameTime() + seconds * 20L + DEADLINE_MARGIN_TICKS;
-        CompanionTickDispatcher.queueFor(companion.getUUID())
-                .enqueue(new WaitTaskRecord(toolCallId, deadline, seconds, reason));
-        // No reply here: the task lifecycle ships the result when the wait completes.
+        // 异步定时器:受理即回执,到点的 task_finished 事件就是闹钟响——等待期间可以聊天。
+        dispatchAsync(companion, new WaitTaskRecord(toolCallId, deadline, seconds, reason), reply);
     }
 }

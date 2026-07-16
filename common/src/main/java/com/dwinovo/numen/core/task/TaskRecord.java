@@ -53,6 +53,10 @@ public abstract class TaskRecord {
 
     private TaskState state = TaskState.PENDING;
     private TaskResult result;
+    /** 异步派发的记录:受理时已经回执过 tool_call,收尾改走 task_finished 事件。 */
+    private boolean async;
+    /** 首次进入 RUNNING 的游戏刻;task_status 用它报已耗时。-1 = 还没开跑。 */
+    private long startedGameTime = -1;
 
     protected TaskRecord(String toolName, String toolCallId, long deadlineGameTime) {
         this.id = ID_SOURCE.incrementAndGet();
@@ -72,6 +76,18 @@ public abstract class TaskRecord {
     public final void extendDeadlineTo(long gameTime) {
         if (gameTime > deadlineGameTime) deadlineGameTime = gameTime;
     }
+
+    /** LLM 可见的短任务号——受理回执、current_task、task_finished 事件三处共用。 */
+    public final String publicId() { return "t" + id; }
+
+    public final void markAsync() { this.async = true; }
+    public final boolean isAsync() { return async; }
+
+    /** 首次开跑打点(重复调用不覆盖——抢占恢复不算重新开始)。 */
+    public final void markStarted(long gameTime) {
+        if (startedGameTime < 0) startedGameTime = gameTime;
+    }
+    public final long getStartedGameTime() { return startedGameTime; }
 
     /** Called by {@code CompanionTickDispatcher} as the record transitions through lifecycle. */
     public final void setState(TaskState state) { this.state = state; }

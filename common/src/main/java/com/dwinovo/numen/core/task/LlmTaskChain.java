@@ -68,6 +68,7 @@ public final class LlmTaskChain implements TaskChain {
             TaskRecord rec = queue.pollHead();
             if (rec != null) {
                 rec.setState(TaskState.RUNNING);
+                rec.markStarted(player.level().getGameTime());
                 task = CompanionTaskFactory.create(player, rec);
                 record = rec;
                 task.start();
@@ -154,12 +155,32 @@ public final class LlmTaskChain implements TaskChain {
         if (owner == null) return;
         for (TaskRecord rec : completed) {
             TaskResult result = rec.getResult();
+            // 异步记录:tool_call 在受理时就回执过了,收尾改走 task_finished 事件
+            // (done/failed/timeout 唤醒,stopped 搭车——档位在事件登记处定)。
+            if (rec.isAsync()) {
+                String status = switch (rec.getState()) {
+                    case SUCCESS -> "done";
+                    case TIMEOUT -> "timeout";
+                    case CANCELLED -> "stopped";
+                    default -> "failed";
+                };
+                String msg = result == null ? "no result produced" : result.message();
+                com.dwinovo.numen.event.GameEvents.taskFinished(
+                        player, rec.publicId(), rec.getToolName(), status, msg);
+                continue;
+            }
             String json = result == null
                     ? "{\"success\":false,\"message\":\"no result produced\"}"
                     : result.toJson();
             Services.NETWORK.sendToPlayer(owner,
                     new TaskResultPayload(player.getUUID(), rec.getToolCallId(), json));
         }
+    }
+
+    /** 系统里的异步记录(受理策略保证至多一个):运行中的,或还在排队的。null = 没有。 */
+    TaskRecord asyncRecord() {
+        if (record != null && record.isAsync()) return record;
+        return queue.peekAsync();
     }
 
     // ---- lifecycle finalizers (called by CompanionTickDispatcher via CompanionLifecycle) ----

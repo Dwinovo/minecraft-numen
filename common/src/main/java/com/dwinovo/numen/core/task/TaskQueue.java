@@ -87,6 +87,14 @@ public final class TaskQueue {
         return pending.size();
     }
 
+    /** 第一个还未开跑的异步记录(受理即拒的策略下系统里至多一个),没有则 null。 */
+    public TaskRecord peekAsync() {
+        for (TaskRecord r : pending) {
+            if (r.isAsync()) return r;
+        }
+        return null;
+    }
+
     /**
      * Cancel every pending record (mark TaskState.CANCELLED, move to outbox).
      * Called on entity removal / death so the agent loop can flush results

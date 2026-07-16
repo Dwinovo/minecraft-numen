@@ -41,9 +41,47 @@ public abstract class ServerNumenTool implements NumenTool {
         return new ToolContext(toolCallId, companion.level().getGameTime());
     }
 
-    /** Helper for world-action tools: hand a built task record to the companion's queue. */
-    protected static void enqueue(NumenPlayer companion, TaskRecord record) {
+    /**
+     * Helper for SYNC world-action tools: hand a built task record to the companion's
+     * queue. 身体被异步任务占着时直接拒绝——同步任务排在几分钟的长活后面,等于把
+     * 当前回合(和串行的工具派发器)整个卡死;拒绝话术把选择权丢回给 LLM。
+     */
+    protected static void enqueue(NumenPlayer companion, TaskRecord record, Consumer<String> reply) {
+        TaskRecord busy = CompanionTickDispatcher.asyncTaskFor(companion.getUUID());
+        if (busy != null) {
+            reply.accept(com.dwinovo.numen.task.TaskResult.fail(busyMessage(busy)).toJson());
+            return;
+        }
         CompanionTickDispatcher.queueFor(companion.getUUID()).enqueue(record);
+    }
+
+    /**
+     * Helper for ASYNC (long-running) tools: 受理即回执 task_id,身体后台执行,
+     * 收尾经 task_finished 事件送达(事件登记处定档)。一次只受理一件——车道上
+     * 有任何工作(同步在跑/异步在跑或排队)都拒绝。
+     */
+    protected static void dispatchAsync(NumenPlayer companion, TaskRecord record, Consumer<String> reply) {
+        if (CompanionTickDispatcher.llmLaneBusy(companion.getUUID())) {
+            TaskRecord busy = CompanionTickDispatcher.asyncTaskFor(companion.getUUID());
+            reply.accept(com.dwinovo.numen.task.TaskResult.fail(busy != null
+                    ? busyMessage(busy)
+                    : "身体正在收尾上一个任务,稍候再派。").toJson());
+            return;
+        }
+        record.markAsync();
+        CompanionTickDispatcher.queueFor(companion.getUUID()).enqueue(record);
+        reply.accept(com.dwinovo.numen.task.TaskResult.ok(
+                "已受理,后台执行中。完成会自动收到 task_finished 事件,不要轮询;"
+                        + "task_status 查进度,task_stop 叫停。",
+                java.util.Map.of(
+                        "task_id", record.publicId(),
+                        "task", record.getToolName(),
+                        "async", true)).toJson());
+    }
+
+    private static String busyMessage(TaskRecord busy) {
+        return "身体正忙: " + busy.publicId() + "(" + busy.describe()
+                + ") 后台进行中。先 task_stop 叫停,或等它的 task_finished 事件再派新活。";
     }
 }
 

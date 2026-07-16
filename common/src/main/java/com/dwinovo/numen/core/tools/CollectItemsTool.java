@@ -30,7 +30,7 @@ public final class CollectItemsTool extends ServerNumenTool {
                 + "handled automatically: it digs and bridges on its own if drops landed in a pit or "
                 + "across a gap. Optionally restrict to specific item_ids (omit to collect everything). "
                 + "Optional radius (default 16). Use after auto_mine or hunt to gather scattered drops. "
-                + "Returns how many drops were collected.";
+                + "BACKGROUND task: returns a task_id at once; the tally arrives as a task_finished event.";
     }
 
     @Override
@@ -44,6 +44,7 @@ public final class CollectItemsTool extends ServerNumenTool {
     @Override
     public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        enqueue(companion, impl.collectItems(a.item_ids(), a.radius(), ctx(toolCallId, companion)));
+        dispatchAsync(companion, impl.collectItems(a.item_ids(), a.radius(),
+                ctx(toolCallId, companion)), reply);
     }
 }

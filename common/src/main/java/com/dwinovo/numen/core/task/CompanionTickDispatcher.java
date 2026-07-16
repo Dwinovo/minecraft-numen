@@ -63,6 +63,35 @@ public final class CompanionTickDispatcher {
         if (brain != null) brain.dropActiveNoResult(player);   // event must not leak a brain
     }
 
+    /** 身体当前的异步任务(运行中或已受理待跑),null = 没有。task_status/派发闸门用。 */
+    public static TaskRecord asyncTaskFor(UUID companionUuid) {
+        CompanionBrain brain = BRAINS.get(companionUuid);
+        return brain == null ? null : brain.llm.asyncRecord();
+    }
+
+    /** LLM 车道是否有任何工作(运行或排队,同步异步都算)。异步受理的占用判定用。 */
+    public static boolean llmLaneBusy(UUID companionUuid) {
+        CompanionBrain brain = BRAINS.get(companionUuid);
+        return brain != null && brain.llm.hasWork();
+    }
+
+    /**
+     * task_stop:LLM 主动叫停当前异步任务——与主人 Stop 同一条取消路(含 MAINHAND
+     * 意图钉释放),原因词不同。返回被叫停的记录,null = 本来就没有异步任务在跑。
+     * 收尾结果由 drainResults 以 task_finished(status=stopped) 事件送达。
+     */
+    public static TaskRecord stopActive(NumenPlayer player, String reason) {
+        CompanionBrain brain = BRAINS.get(player.getUUID());
+        if (brain == null) return null;
+        TaskRecord target = brain.llm.asyncRecord();
+        if (target == null) return null;
+        brain.queue.cancelAll(reason);
+        brain.llm.cancelActive();
+        com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(player)
+                .unpin(com.dwinovo.numen.core.task.pin.IntentPins.SLOT_MAINHAND);
+        return target;
+    }
+
     /** Owner pressed Stop: cancel the pending queue and the running task (finalized next tick).
      *  The 取消边沿 also releases the task-scoped MAINHAND intent pin immediately —
      *  the explicit-hold session dies with the task it served (constitution §5). */

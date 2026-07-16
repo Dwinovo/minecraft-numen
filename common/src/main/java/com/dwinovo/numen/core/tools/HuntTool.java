@@ -29,8 +29,8 @@ public final class HuntTool extends ServerNumenTool {
                 + "the nearest, chases with the full pathfinder, melees it, and repeats until the count is "
                 + "met or none remain; optional radius caps the search. It auto-wields the strongest melee "
                 + "weapon it carries (keep a good sword/axe in its pack) and auto-collects the drops "
-                + "afterwards. Auto-eats if HP runs low; the result reports kills, post-fight HP and "
-                + "anything eaten.";
+                + "afterwards. Auto-eats if HP runs low. BACKGROUND task: returns a task_id at once; "
+                + "kills, post-fight HP and anything eaten arrive as a task_finished event.";
     }
 
     @Override
@@ -45,6 +45,7 @@ public final class HuntTool extends ServerNumenTool {
     @Override
     public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        enqueue(companion, impl.hunt(a.entity_ids(), a.count(), a.radius(), ctx(toolCallId, companion)));
+        dispatchAsync(companion, impl.hunt(a.entity_ids(), a.count(), a.radius(),
+                ctx(toolCallId, companion)), reply);
     }
 }

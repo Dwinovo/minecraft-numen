@@ -45,6 +45,6 @@ public final class InteractAtTool extends ServerNumenTool {
     public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         enqueue(companion, impl.interactAt(a.button(), a.x(), a.y(), a.z(), a.hold_ticks(), a.item_id(),
-                ctx(toolCallId, companion)));
+                ctx(toolCallId, companion)), reply);
     }
 }

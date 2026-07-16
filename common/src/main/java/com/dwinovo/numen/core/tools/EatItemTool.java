@@ -42,6 +42,6 @@ public final class EatItemTool extends ServerNumenTool {
     @Override
     public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        enqueue(companion, impl.eatItem(a.item_id(), ctx(toolCallId, companion)));
+        enqueue(companion, impl.eatItem(a.item_id(), ctx(toolCallId, companion)), reply);
     }
 }
