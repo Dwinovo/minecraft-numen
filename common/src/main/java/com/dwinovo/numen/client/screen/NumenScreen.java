@@ -58,8 +58,12 @@ public final class NumenScreen extends Screen {
     private enum Tab { CHAT, ITEMS, SETTINGS }
 
     // ---- layout ----
-    private static final int PANEL_W = 380;
-    private static final int PANEL_H = 232;
+    // 面板随窗口伸缩:下限=从前的固定尺寸(小窗口下与历史布局完全一致),
+    // 上限挡住大屏上的无限变宽——行宽超过阅读舒适区就不再跟了。
+    private static final int PANEL_MIN_W = 380;
+    private static final int PANEL_MIN_H = 232;
+    private static final int PANEL_MAX_W = 520;
+    private static final int PANEL_MAX_H = 300;
     // Left companion rail (folded-in roster): one avatar per Numen, click to switch, + to summon.
     private static final int RAIL_W = 46;        // left rail column width (baked into the workspace sprite)
     private static final int RAIL_AV = 26;       // avatar tile size
@@ -260,6 +264,7 @@ public final class NumenScreen extends Screen {
 
     // geometry resolved in init()
     private int left, top, railX;
+    private int panelW = PANEL_MIN_W, panelH = PANEL_MIN_H;   // resolved in init() from the window size
     private final int[] tabX = new int[3];   // left x of each tab label, for click hit-testing
     private final int[] tabW = new int[3];
 
@@ -310,10 +315,14 @@ public final class NumenScreen extends Screen {
 
     @Override
     protected void init() {
-        int composite = RAIL_W + PANEL_W;        // rail flush against the panel — one merged sprite
-        this.railX = (this.width - composite) / 2;
+        // 窗口留 12px 边距后能给多大给多大,夹在上下限之间;窗口比下限还小时
+        // railX/top 至少钳到 0,保证头部(标题/tab/关闭途径)永远可见可点。
+        panelW = Math.clamp(this.width - RAIL_W - 24, PANEL_MIN_W, PANEL_MAX_W);
+        panelH = Math.clamp(this.height - 24, PANEL_MIN_H, PANEL_MAX_H);
+        int composite = RAIL_W + panelW;        // rail flush against the panel — one merged sprite
+        this.railX = Math.max(0, (this.width - composite) / 2);
         this.left = railX + RAIL_W;
-        this.top = (this.height - PANEL_H) / 2;
+        this.top = Math.max(0, (this.height - panelH) / 2);
         layoutTabs();
         rebuild();
     }
@@ -325,7 +334,7 @@ public final class NumenScreen extends Screen {
 
     private void layoutTabs() {
         String[] labels = tabLabels();
-        int x = left + PANEL_W - PAD;
+        int x = left + panelW - PAD;
         for (int i = labels.length - 1; i >= 0; i--) {
             int w = font.width(labels[i]) + 10;
             x -= w;
@@ -380,7 +389,7 @@ public final class NumenScreen extends Screen {
         com.dwinovo.numen.persona.PersonaLibrary.instance().reload();
         int y0 = top + HEADER_H;
         summonInput = new FlatEditBox(font, left + PAD + FIELD_INSET_X, y0 + 34 + FIELD_INSET_Y,
-                PANEL_W - PAD * 2 - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
+                panelW - PAD * 2 - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
         summonInput.setMaxLength(com.dwinovo.numen.network.payload.SummonRequestPayload.MAX_NAME);
         summonInput.setBordered(false);
         summonInput.setTextColor(TXT);
@@ -395,8 +404,8 @@ public final class NumenScreen extends Screen {
             items.add(new Dropdown.Item(p.id(), p.name()));
         }
         summonPersonaDropdown = new Dropdown(items, summonPersonaId == null ? PERSONA_DEFAULT : summonPersonaId);
-        summonPersonaDropdown.setBounds(left + PAD, y0 + 68, PANEL_W - PAD * 2, 18);
-        summonPersonaDropdown.setDropBottom(top + PANEL_H - 2);
+        summonPersonaDropdown.setBounds(left + PAD, y0 + 68, panelW - PAD * 2, 18);
+        summonPersonaDropdown.setDropBottom(top + panelH - 2);
         // REQUIRED model config — no default item and no fallback: an empty library
         // shows no dropdown; clicking 创建 then explains (doSummon).
         var provEntries = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
@@ -407,8 +416,8 @@ public final class NumenScreen extends Screen {
             }
             if (summonProviderId == null) summonProviderId = provEntries.get(0).id();
             summonProviderDropdown = new Dropdown(provItems, summonProviderId);
-            summonProviderDropdown.setBounds(left + PAD, y0 + 102, PANEL_W - PAD * 2, 18);
-            summonProviderDropdown.setDropBottom(top + PANEL_H - 2);
+            summonProviderDropdown.setBounds(left + PAD, y0 + 102, panelW - PAD * 2, 18);
+            summonProviderDropdown.setDropBottom(top + panelH - 2);
         }
         // OPTIONAL voice — first item = 无(静音), entries follow (same pattern as the
         // persona pick above); an empty library shows no dropdown, just a hint.
@@ -422,7 +431,7 @@ public final class NumenScreen extends Screen {
             summonVoiceDropdown = new Dropdown(voiceItems, summonVoiceId == null ? VOICE_NONE : summonVoiceId);
             // 声线行与皮肤下拉平分一行(左声线右皮肤),不再新占一行。
             summonVoiceDropdown.setBounds(left + PAD, y0 + 136, summonHalfW(), 18);
-            summonVoiceDropdown.setDropBottom(top + PANEL_H - 2);
+            summonVoiceDropdown.setDropBottom(top + panelH - 2);
         }
         // 皮肤:默认(按名字找同名正版) + 皮肤库里已签名的条目。
         List<Dropdown.Item> skinItems = new ArrayList<>();
@@ -432,11 +441,11 @@ public final class NumenScreen extends Screen {
         }
         summonSkinDropdown = new Dropdown(skinItems, summonSkinId == null ? SKIN_DEFAULT : summonSkinId);
         summonSkinDropdown.setBounds(left + PAD + summonHalfW() + 6, y0 + 136, summonHalfW(), 18);
-        summonSkinDropdown.setDropBottom(top + PANEL_H - 2);
+        summonSkinDropdown.setDropBottom(top + panelH - 2);
         // Explicit actions — Enter stays as the fallback confirm (keyPressed), the
         // buttons are the primary path.
         int bw = 64, gap = 8, totalW = bw * 2 + gap;
-        int bx = left + (PANEL_W - totalW) / 2;
+        int bx = left + (panelW - totalW) / 2;
         add(new SimpleButton(bx, y0 + 162, bw, 18, Component.translatable("numen.gui.settings.cancel"),
                 b -> { summoning = false; rebuild(); }));
         add(new SimpleButton(bx + bw + gap, y0 + 162, bw, 18,
@@ -447,7 +456,7 @@ public final class NumenScreen extends Screen {
 
     /** 召唤页"声线|皮肤"共享行的半宽。build 与 render 共用。 */
     private int summonHalfW() {
-        return (PANEL_W - PAD * 2 - 6) / 2;
+        return (panelW - PAD * 2 - 6) / 2;
     }
 
     /**
@@ -499,7 +508,7 @@ public final class NumenScreen extends Screen {
     private void buildDismissConfirm() {
         UUID target = dismissPending;
         int bw = 64, gap = 8, totalW = bw * 2 + gap;
-        int bx = left + (PANEL_W - totalW) / 2;
+        int bx = left + (panelW - totalW) / 2;
         int by = top + HEADER_H + 52;
         add(new SimpleButton(bx, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
                 b -> { dismissPending = null; rebuild(); }));
@@ -560,12 +569,12 @@ public final class NumenScreen extends Screen {
 
 
     private void buildChatWidgets() {
-        int inputY = top + PANEL_H - INPUT_H - PAD;
+        int inputY = top + panelH - INPUT_H - PAD;
         int compactW = 26;
         int sendW = 42;
         int stopW = 22;
         int inX = left + PAD + compactW + 4;
-        int inW = PANEL_W - PAD * 2 - compactW - sendW - stopW - 12;
+        int inW = panelW - PAD * 2 - compactW - sendW - stopW - 12;
 
         compactButton = add(new SimpleButton(left + PAD, inputY, compactW, INPUT_H,
                 Component.literal("⤬"), b -> loop().requestCompact()));
@@ -635,11 +644,11 @@ public final class NumenScreen extends Screen {
     /** Left x of the section content area (right of the sub-nav column + divider). */
     private int secX() { return left + PAD + NAV_W + 8; }
     /** Width of the section content area. */
-    private int secW() { return PANEL_W - PAD - NAV_W - 8 - PAD; }
+    private int secW() { return panelW - PAD - NAV_W - 8 - PAD; }
     /** Top y of section content (below the header). */
     private int secY0() { return top + HEADER_H + 8; }
     /** Bottom y a list row may reach. */
-    private int secBottom() { return top + PANEL_H - PAD; }
+    private int secBottom() { return top + panelH - PAD; }
 
     private void selectSection(SettingsSection s) {
         if (s == settingsSection) return;
@@ -715,7 +724,7 @@ public final class NumenScreen extends Screen {
         // One row below the section title (only two rows here — space is plentiful).
         proxyIpInput = field(x, fy + 25, w, 64, ip);
         proxyPortInput = field(x, fy + 25 + SET_SP, w, 8, port);
-        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+        add(new SimpleButton(left + panelW - PAD - 64, top + panelH - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> {
                     String i = proxyIpInput.getValue().trim();
                     String p = proxyPortInput.getValue().trim();
@@ -733,14 +742,14 @@ public final class NumenScreen extends Screen {
         txt(g, Component.translatable(ModLanguageData.Keys.SETTINGS_PROXY_IP), x, fy + 14, TXT_MUTED);
         txt(g, Component.translatable(ModLanguageData.Keys.SETTINGS_PROXY_PORT), x, fy + 14 + SET_SP, TXT_MUTED);
         if (savedFlashUntil > System.currentTimeMillis()) {
-            txt(g, Component.translatable("numen.settings.saved"), x, top + PANEL_H - PAD - 14, OK);
+            txt(g, Component.translatable("numen.settings.saved"), x, top + panelH - PAD - 14, OK);
         }
     }
 
     // ---- Provider section: the library of named LLM provider configs companions select from ----
 
     private void buildProviderListWidgets() {
-        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+        add(new SimpleButton(left + panelW - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable(ModLanguageData.Keys.PROVIDER_ADD), b -> {
                     addingProvider = true; providerEditId = null;
                     wProvName = ""; wProvProvider = ""; wProvModel = ""; wProvKey = ""; wProvBaseUrl = "";
@@ -765,7 +774,7 @@ public final class NumenScreen extends Screen {
         }
         provProviderDropdown = new ProviderDropdown(wProvProvider, false);
         provProviderDropdown.setBounds(x, fy + 11 + SET_SP, w, 18);
-        provProviderDropdown.setDropBottom(top + PANEL_H - 2);
+        provProviderDropdown.setDropBottom(top + panelH - 2);
         // Model row: the provider's known models as a dropdown (+ 自定义 → free text),
         // free text only for custom providers.
         ModelRegistry.Provider mp = ModelRegistry.provider(LlmProviders.normalize(wProvProvider));
@@ -783,13 +792,13 @@ public final class NumenScreen extends Screen {
             String sel = known ? wProvModel : mp.models().get(0).id();
             provModelDropdown = new Dropdown(modelItems(mp), sel);
             provModelDropdown.setBounds(x, fy + 11 + 2 * SET_SP, w, 18);
-            provModelDropdown.setDropBottom(top + PANEL_H - 2);
+            provModelDropdown.setDropBottom(top + panelH - 2);
         }
         provKeyInput = field(x, fy + 11 + 3 * SET_SP, w, 256, wProvKey);
         provBaseUrlInput = field(x, fy + 11 + 4 * SET_SP, w, 256, wProvBaseUrl);
-        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+        add(new SimpleButton(left + panelW - PAD - 64, top + panelH - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveProvider()));
-        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
+        add(new SimpleButton(left + panelW - PAD - 64 - 22, top + panelH - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> { addingProvider = false; providerEditId = null; rebuild(); }));
         setInitialFocus(provNameInput);
     }
@@ -861,7 +870,7 @@ public final class NumenScreen extends Screen {
     private static final String VOICE_TEST_SENTENCE = "你好,我是你的同伴,这是我的声音。";
 
     private void buildVoiceListWidgets() {
-        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+        add(new SimpleButton(left + panelW - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable(ModLanguageData.Keys.VOICE_ADD), b -> {
                     addingVoice = true; voiceEditId = null;
                     resetVoiceForm();
@@ -896,7 +905,7 @@ public final class NumenScreen extends Screen {
                         I18n.get(ModLanguageData.Keys.VOICE_BACKEND_FISH))),
                 wVoiceBackend);
         voiceBackendDropdown.setBounds(x, voiceVy(1), w, 18);
-        voiceBackendDropdown.setDropBottom(top + PANEL_H - 2);
+        voiceBackendDropdown.setDropBottom(top + panelH - 2);
         voiceUrlInput = vclip(field(x, voiceVy(2), w, 256, wVoiceUrl), 2);
         int row = 3;
         switch (wVoiceBackend) {
@@ -928,9 +937,9 @@ public final class NumenScreen extends Screen {
         test.visible = voiceRowVisible(row);
         test.active = test.visible;
         add(test);
-        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+        add(new SimpleButton(left + panelW - PAD - 64, top + panelH - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveVoice()));
-        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
+        add(new SimpleButton(left + panelW - PAD - 64 - 22, top + panelH - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> {
                     addingVoice = false; voiceEditId = null; voiceTestGen++;
                     rebuild();
@@ -953,7 +962,7 @@ public final class NumenScreen extends Screen {
 
     /** 表单视口底:保存行与状态行的上沿。 */
     private int voiceFormBottom() {
-        return top + PANEL_H - PAD - 20;
+        return top + panelH - PAD - 20;
     }
 
     /** 当前选型的总行数:名称/提供商/URL 三行 + 各后端专属行 + 音量行。 */
@@ -1146,7 +1155,7 @@ public final class NumenScreen extends Screen {
         if (addingVoice) {
             // 表单本体是占位符自述的字段 + 自标注的类型按钮;这里只画状态行。
             if (voiceMsg != null && voiceMsgUntil > System.currentTimeMillis()) {
-                txt(g, Component.literal(clip(voiceMsg, w - 94)), x, top + PANEL_H - PAD - 14,
+                txt(g, Component.literal(clip(voiceMsg, w - 94)), x, top + panelH - PAD - 14,
                         voiceMsgFail ? FAIL : OK);
             }
             return;
@@ -1265,12 +1274,12 @@ public final class NumenScreen extends Screen {
 
     private void buildPersonaListWidgets() {
         // ↻ 刷新:重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
-        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, secY0() - 2, 18, 14,
+        add(new SimpleButton(left + panelW - PAD - 64 - 22, secY0() - 2, 18, 14,
                 Component.literal("↻"), b -> {
                     PersonaLibrary.instance().reload();
                     rebuild();
                 }));
-        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+        add(new SimpleButton(left + panelW - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable("numen.persona.add"), b -> {
                     addingPersona = true; personaEditId = null;
                     wPersonaName = ""; wPersonaText = "";
@@ -1284,16 +1293,16 @@ public final class NumenScreen extends Screen {
         // 名称即文件名;正文(自由 MD)占满剩余高度。
         personaNameInput = field(x, fy + 11, w, 48, wPersonaName);
         int ty = fy + 44;
-        int th = (top + PANEL_H - PAD - 22) - ty;
+        int th = (top + panelH - PAD - 22) - ty;
         personaTextArea = new net.minecraft.client.gui.components.MultiLineEditBox(
                 font, x, ty, w, th,
                 Component.translatable("numen.persona.text_placeholder"), Component.empty());
         personaTextArea.setValue(wPersonaText);
         personaTextArea.setCharacterLimit(4096);
         add(personaTextArea);
-        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+        add(new SimpleButton(left + panelW - PAD - 64, top + panelH - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSavePersona()));
-        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
+        add(new SimpleButton(left + panelW - PAD - 64 - 22, top + panelH - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> { addingPersona = false; personaEditId = null; rebuild(); }));
         setInitialFocus(personaNameInput);
     }
@@ -1354,7 +1363,7 @@ public final class NumenScreen extends Screen {
 
     private void buildMcpListWidgets() {
         // "add server" affordance, top-right of the section.
-        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+        add(new SimpleButton(left + panelW - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable("numen.mcp.add"), b -> {
                     addingMcp = true; mcpEditOriginal = null;                 // fresh add — not editing
                     wMcpName = ""; wMcpTarget = ""; wMcpHeader = ""; mcpStdio = false;
@@ -1375,9 +1384,9 @@ public final class NumenScreen extends Screen {
         // 4th field: HTTP → request header(s) "Name: Value"; stdio → env "KEY=value" (';'-separated).
         mcpHeaderInput = field(x, fy + 100, w, 1024, wMcpHeader);
         // Save + Cancel
-        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+        add(new SimpleButton(left + panelW - PAD - 64, top + panelH - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveMcp()));
-        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
+        add(new SimpleButton(left + panelW - PAD - 64 - 22, top + panelH - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> { addingMcp = false; mcpEditOriginal = null; rebuild(); }));
         setInitialFocus(mcpNameInput);   // ready to type the name immediately
     }
@@ -1449,7 +1458,7 @@ public final class NumenScreen extends Screen {
 
     private void buildSkillsWidgets() {
         // "open skills folder" affordance, top-right of the section.
-        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+        add(new SimpleButton(left + panelW - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable("numen.skill.open_dir"), b -> openSkillsFolder()));
     }
 
@@ -1488,17 +1497,17 @@ public final class NumenScreen extends Screen {
         } else {
             providerDropdown = new ProviderDropdown(wProvider, true);   // live + "+ 添加站点"
             providerDropdown.setBounds(x, y0 + 11, w, 18);
-            providerDropdown.setDropBottom(top + PANEL_H - 2);
+            providerDropdown.setDropBottom(top + panelH - 2);
             buildApiKeyRow(x, y0 + SET_SP + 11, w);
             buildModelRow(x, y0 + 2 * SET_SP + 11, w);
             baseUrlInput = field(x, y0 + 3 * SET_SP + 11, w, 256, wBaseUrl);
             proxyInput = field(x, y0 + 4 * SET_SP + 11, w, 128, wProxy);
             // Reasoning/thinking effort cycle — a compact button in the bottom band, left of Save.
-            add(new SimpleButton(x, top + PANEL_H - PAD - 18, 118, 18, reasoningLabel(),
+            add(new SimpleButton(x, top + panelH - PAD - 18, 118, 18, reasoningLabel(),
                     b -> { cycleReasoning(); b.setMessage(reasoningLabel()); }));
         }
 
-        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18,
+        add(new SimpleButton(left + panelW - PAD - 64, top + panelH - PAD - 18,
                 64, 18, Component.translatable("numen.gui.settings.save"), b -> onSaveSettings()));
     }
 
@@ -1537,7 +1546,7 @@ public final class NumenScreen extends Screen {
                     : (mp != null && !mp.models().isEmpty() ? mp.models().get(0).id() : CUSTOM_MODEL);
             modelDropdown = new Dropdown(modelItems(mp), sel);
             modelDropdown.setBounds(x, y, w, 18);
-            modelDropdown.setDropBottom(top + PANEL_H - 2);
+            modelDropdown.setDropBottom(top + panelH - 2);
         }
     }
 
@@ -1565,7 +1574,7 @@ public final class NumenScreen extends Screen {
     // ---- Skin section: the named skin library (upload png → MineSkin-signed textures) ----
 
     private void buildSkinListWidgets() {
-        add(new SimpleButton(left + PANEL_W - PAD - 64, secY0() - 2, 64, 14,
+        add(new SimpleButton(left + panelW - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable(ModLanguageData.Keys.SKIN_ADD), b -> {
                     addingSkin = true;
                     skinEditId = null;
@@ -1589,10 +1598,10 @@ public final class NumenScreen extends Screen {
                         I18n.get(ModLanguageData.Keys.SKIN_VARIANT_SLIM))),
                 wSkinVariant);
         skinVariantDropdown.setBounds(x, fy + 11 + SET_SP, w, 18);
-        skinVariantDropdown.setDropBottom(top + PANEL_H - 2);
-        add(new SimpleButton(left + PANEL_W - PAD - 64, top + PANEL_H - PAD - 18, 64, 18,
+        skinVariantDropdown.setDropBottom(top + panelH - 2);
+        add(new SimpleButton(left + panelW - PAD - 64, top + panelH - PAD - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveSkin()));
-        add(new SimpleButton(left + PANEL_W - PAD - 64 - 22, top + PANEL_H - PAD - 18, 18, 18,
+        add(new SimpleButton(left + panelW - PAD - 64 - 22, top + panelH - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> {
                     addingSkin = false;
                     skinEditId = null;
@@ -1740,7 +1749,7 @@ public final class NumenScreen extends Screen {
                 txt(g, Component.translatable(ModLanguageData.Keys.SKIN_KEEP_OLD), x, dy + 12, TXT_FAINT);
             }
             if (skinMsg != null && skinMsgUntil > System.currentTimeMillis()) {
-                txt(g, Component.literal(clip(skinMsg, w - 94)), x, top + PANEL_H - PAD - 14,
+                txt(g, Component.literal(clip(skinMsg, w - 94)), x, top + panelH - PAD - 14,
                         skinMsgFail ? FAIL : OK);
             }
             // 手臂模型下拉最后画(展开列表压在下方文字上)。
@@ -2056,7 +2065,7 @@ public final class NumenScreen extends Screen {
             txt(g, Component.translatable("numen.settings.proxy"), x, y0 + 4 * SET_SP, TXT_MUTED);
         }
         if (savedFlashUntil > System.currentTimeMillis()) {
-            txt(g, Component.translatable("numen.settings.saved"), x, top + PANEL_H - PAD - 14, OK);
+            txt(g, Component.translatable("numen.settings.saved"), x, top + panelH - PAD - 14, OK);
         }
         // the dropdowns themselves render in render, AFTER the widgets (open list on top)
     }
@@ -2649,9 +2658,9 @@ public final class NumenScreen extends Screen {
     /** If a chat fold-toggle row sits under (mx,my), flip its expanded state. Mirrors renderChat geometry. */
     private boolean toggleFoldAt(int mx, int my) {
         int bodyY = top + HEADER_H + 4;
-        int bodyBottom = top + PANEL_H - INPUT_H - PAD - 6;
+        int bodyBottom = top + panelH - INPUT_H - PAD - 6;
         int transX = left + PAD;
-        int transW = PANEL_W - PAD * 2 - PLAN_W - 8;
+        int transW = panelW - PAD * 2 - PLAN_W - 8;
         if (mx < transX || mx >= transX + transW || my < bodyY || my >= bodyBottom) return false;
         List<Row> rows = buildRows(transW);
         int idx = (my - (bodyY - scroll)) / LINE_H;
@@ -2664,6 +2673,17 @@ public final class NumenScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mx, double my, double sx, double sy) {
+        // 打开着的下拉列表优先吃滚轮(列表被面板截断时滚动余下的行)。
+        if (sy != 0) {
+            for (Dropdown d : new Dropdown[]{modelDropdown, provModelDropdown, voiceBackendDropdown,
+                    skinVariantDropdown, summonSkinDropdown, summonPersonaDropdown,
+                    summonProviderDropdown, summonVoiceDropdown}) {
+                if (d != null && d.mouseScrolled(mx, my, sy)) return true;
+            }
+            for (ProviderDropdown d : new ProviderDropdown[]{providerDropdown, provProviderDropdown}) {
+                if (d != null && d.mouseScrolled(mx, my, sy)) return true;
+            }
+        }
         // 声线表单:滚轮上下滚整个表单(MiniMax 八行超出视口)。
         if (sy != 0 && tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
                 && addingVoice && mx >= secX() && maxVoiceFormScroll() > 0) {
@@ -2709,17 +2729,28 @@ public final class NumenScreen extends Screen {
 
         // ONE merged Cottage sprite: left rail column + panel, continuous header, no gap.
         g.blitSprite(
-                WORKSPACE_SPRITE, railX, top, RAIL_W + PANEL_W, PANEL_H);
+                WORKSPACE_SPRITE, railX, top, RAIL_W + panelW, panelH);
         renderRail(g, mouseX, mouseY);   // avatars + status + summon tile on the rail column
 
-        txt(g, Component.literal(name == null ? "Numen" : name), left + PAD, top + 7, ON_BAND);
-        int afterName = left + PAD + font.width(name == null ? "Numen" : name) + 6;
+        // 头部一行四个成员从右往左让位:tab(定宽) ← 用量 ← 人设名(可整个消失) ← 名字(最后裁)。
+        int headerLimit = tabX[0] - 8;
+        if (!summoning && dismissPending == null && tab == Tab.CHAT && uuid != null) {
+            headerLimit = renderUsage(g, mouseX, mouseY) - 8;
+        }
+        String nm = clip(name == null ? "Numen" : name, Math.max(24, headerLimit - (left + PAD)));
+        txt(g, Component.literal(nm), left + PAD, top + 7, ON_BAND);
+        int afterName = left + PAD + font.width(nm) + 6;
         if (uuid != null && ClientDeaths.isDead(uuid)) {        // active companion dead — respawn countdown
             long rem = ClientDeaths.remainingMs(uuid);
-            txt(g, Component.translatable("numen.respawn", (int) Math.ceil(rem / 1000.0)), afterName, top + 7, ON_BAND);
+            String rs = I18n.get("numen.respawn", (int) Math.ceil(rem / 1000.0));
+            if (afterName < headerLimit) {
+                txt(g, Component.literal(clip(rs, headerLimit - afterName)), afterName, top + 7, ON_BAND);
+            }
         } else {
             String pn = activePersonaName();                   // current persona, faint, right after the name
-            if (pn != null) txt(g, Component.literal(pn), afterName, top + 7, ON_BAND_FAINT);
+            if (pn != null && afterName + font.width("…") <= headerLimit) {
+                txt(g, Component.literal(clip(pn, headerLimit - afterName)), afterName, top + 7, ON_BAND_FAINT);
+            }
         }
         renderTabs(g, mouseX, mouseY);
 
@@ -2757,7 +2788,7 @@ public final class NumenScreen extends Screen {
             if (tab == Tab.CHAT && warnUntil > System.currentTimeMillis()) {   // endpoint-problem hint above the input
                 txt(g, warnText != null ? Component.literal(warnText)
                                 : Component.translatable("numen.chat.no_key"),
-                        left + PAD, top + PANEL_H - INPUT_H - PAD - 11, FAIL);
+                        left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
             }
         }
 
@@ -2912,7 +2943,7 @@ public final class NumenScreen extends Screen {
             }
         }
         // "+" summon tile (baked "+" glyph), pinned to the rail bottom
-        int py = top + PANEL_H - PAD - RAIL_AV;
+        int py = top + panelH - PAD - RAIL_AV;
         // scroll cues — gold chevrons when the roster overflows the rail in either direction
         int cx = ax + RAIL_AV / 2;
         if (railScroll > 0) chevron(g, cx, top + 1, true);
@@ -2929,7 +2960,7 @@ public final class NumenScreen extends Screen {
 
     /** Bottom edge an avatar may reach (a gap above the pinned "+" tile). */
     private int railBottomEdge() {
-        return top + PANEL_H - PAD - RAIL_AV - RAIL_BOT_GAP;
+        return top + panelH - PAD - RAIL_AV - RAIL_BOT_GAP;
     }
 
     /** How many avatar slots fit in the rail above the pinned "+" tile. */
@@ -2970,7 +3001,7 @@ public final class NumenScreen extends Screen {
 
     private boolean railPlusAt(int mx, int my) {
         int ax = railX + (RAIL_W - RAIL_AV) / 2;
-        int py = top + PANEL_H - PAD - RAIL_AV;
+        int py = top + panelH - PAD - RAIL_AV;
         return mx >= ax && mx < ax + RAIL_AV && my >= py && my < py + RAIL_AV;
     }
 
@@ -3075,28 +3106,31 @@ public final class NumenScreen extends Screen {
 
     // ---- chat transcript + plan ----
 
-    private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
-        // 头部右侧(tab 左边):上下文水位 + 累计消耗。恒定淡色——这是信息不是警报,
-        // 临近水位线会自动压缩,不需要玩家做任何事。
+    /** 头部右侧(tab 左边)的上下文水位+累计消耗。恒定淡色——这是信息不是警报,
+     *  临近水位线会自动压缩,不需要玩家做任何事。返回文字左边界,标题据此让位。 */
+    private int renderUsage(GuiGraphics g, int mouseX, int mouseY) {
         int pct = loop().contextPercent();
         long total = loop().totalTokensUsed();
-        if (pct > 0 || total > 0) {
-            String s = (pct > 0 ? "context " + pct + "%" : "")
-                    + (pct > 0 && total > 0 ? " · " : "")
-                    + (total > 0 ? fmtTokens(total) + " tokens" : "");
-            int tx = tabX[0] - 10 - font.width(s);
-            txt(g, Component.literal(s), tx, top + 7, TXT_FAINT);
-            if (mouseX >= tx && mouseX < tabX[0] - 10 && mouseY >= top + 5 && mouseY < top + 17) {
-                g.renderComponentTooltip(font, List.of(
-                        Component.translatable("numen.chat.usage_tip.context"),
-                        Component.translatable("numen.chat.usage_tip.tokens"),
-                        Component.translatable("numen.chat.usage_tip.cache")), mouseX, mouseY);
-            }
+        if (pct <= 0 && total <= 0) return tabX[0];
+        String s = (pct > 0 ? "context " + pct + "%" : "")
+                + (pct > 0 && total > 0 ? " · " : "")
+                + (total > 0 ? fmtTokens(total) + " tokens" : "");
+        int tx = tabX[0] - 10 - font.width(s);
+        txt(g, Component.literal(s), tx, top + 7, TXT_FAINT);
+        if (mouseX >= tx && mouseX < tabX[0] - 10 && mouseY >= top + 5 && mouseY < top + 17) {
+            g.renderComponentTooltip(font, List.of(
+                    Component.translatable("numen.chat.usage_tip.context"),
+                    Component.translatable("numen.chat.usage_tip.tokens"),
+                    Component.translatable("numen.chat.usage_tip.cache")), mouseX, mouseY);
         }
+        return tx;
+    }
+
+    private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
         int bodyY = top + HEADER_H + 4;
-        int bodyBottom = top + PANEL_H - INPUT_H - PAD - 6;
+        int bodyBottom = top + panelH - INPUT_H - PAD - 6;
         int transX = left + PAD;
-        int transW = PANEL_W - PAD * 2 - PLAN_W - 8;
+        int transW = panelW - PAD * 2 - PLAN_W - 8;
         int viewH = bodyBottom - bodyY;
 
         // plan panel divider + content
@@ -3362,8 +3396,8 @@ public final class NumenScreen extends Screen {
         final int STORAGE_W = 9 * 18;                     // 162 — the widest element (caps the band)
         final int COMP_W = 130 + STORAGE_W;               // left col (130) + right col (storage)
         final int COMP_H = 152;
-        int startX = left + (PANEL_W - COMP_W) / 2;
-        int cTop = top + HEADER_H + (PANEL_H - HEADER_H - COMP_H) / 2;
+        int startX = left + (panelW - COMP_W) / 2;
+        int cTop = top + HEADER_H + (panelH - HEADER_H - COMP_H) / 2;
         int rightX = startX + 130;
 
         // -- LEFT: portrait socket, armor column + offhand (vertically centred against the portrait) --
