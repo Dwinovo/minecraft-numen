@@ -954,7 +954,7 @@ public final class EntityAgentLoop {
             return;
         }
 
-        addTokens(res.billedTokens());   // 压缩调用同样烧 token,计入累计
+        addTokens(res.freshTokens());   // 压缩调用同样烧 token,计入累计
         String wrapped = SUMMARY_HEADER + summary.strip();
         // The summary is lossy, but the very next prompt is usually a follow-up
         // to the model's LAST reply ("那第三点展开讲讲") — so that reply crosses
@@ -1196,7 +1196,7 @@ public final class EntityAgentLoop {
         if (res.promptTokens() > 0) {
             lastPromptTokens = res.promptTokens();
         }
-        addTokens(res.billedTokens());
+        addTokens(res.freshTokens());
 
         convo.addAssistant(turn);
 

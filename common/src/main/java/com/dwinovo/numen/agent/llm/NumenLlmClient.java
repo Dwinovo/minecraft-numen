@@ -142,7 +142,7 @@ public final class NumenLlmClient {
      * needed). Zero when the backend sent no usage frame.
      */
     public record ChatResult(AssistantTurn turn, int promptTokens, int totalTokens,
-                             long billedTokens) {}
+                             long freshTokens) {}
 
     /**
      * Streaming chat completion. Returns a future of the final
@@ -206,7 +206,7 @@ public final class NumenLlmClient {
             return new ChatResult(turn,
                     jsonInt(acc.usage, "prompt_tokens"),
                     jsonInt(acc.usage, "total_tokens"),
-                    provider.billedTokens(acc.usage));   // 计费等效:缓存折扣由 provider 自理
+                    provider.freshTokens(acc.usage));   // 新处理量:缓存命中不计
         });
     }
 

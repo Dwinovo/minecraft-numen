@@ -115,11 +115,12 @@ public interface LlmProvider {
     // ---- usage accounting ----
 
     /**
-     * 从本家 usage 帧折算"计费等效 token":缓存命中的输入按本家的缓存折扣
-     * 折算后计入,让累计消耗贴近真实账单。字段名与折扣是各家方言,由实现
-     * 自理;默认全量 total——没有缓存机制(或方言未知)的服务商如实全价。
+     * 本次请求真正新处理的 token:缓存命中的输入不计,只算未命中的输入加输出。
+     * 缓存正常工作时这个数很小,暴涨说明缓存前缀碎了。缓存字段是各家方言,
+     * 由实现自理;默认全量 total——没有缓存机制(或方言未知)的服务商,所有
+     * 输入都算新处理。
      */
-    default long billedTokens(JsonObject usage) {
+    default long freshTokens(JsonObject usage) {
         return usageInt(usage, "total_tokens");
     }
 
