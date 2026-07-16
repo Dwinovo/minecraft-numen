@@ -9,7 +9,6 @@ import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.BlockScanner;
 import com.dwinovo.numen.core.pathing.util.ScanExecutor;
-import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.BlockPos;
@@ -206,7 +205,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             // cleared the overlay, so re-publish the ore field boxes — otherwise the
             // boxes vanish the instant shaft-mining starts (the "boxes disappear after
             // two logs" bug). No path line while shaft-mining, just the goal.
-            PathVizPublisher.publishTargets(player, new ArrayList<>(knownOres));
             mineProgress(reachable);
             return TaskState.RUNNING;
         }
@@ -608,7 +606,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     @Override
     protected void cleanup() {
         // super.cleanup() = stopNav() (nav.stop clears the overlay when a nav exists) + an explicit
-        // PathVizPublisher.clear — so a task that finished while shaft-mining (nav == null) still
+        // so a task that finished while shaft-mining (nav == null) still
         // clears its lingering goal boxes. Then release the dig + any in-flight scan.
         super.cleanup();
         digger.cancel();

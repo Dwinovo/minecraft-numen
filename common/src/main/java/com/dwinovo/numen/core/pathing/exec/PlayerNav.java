@@ -10,7 +10,6 @@ import com.dwinovo.numen.core.pathing.calc.Path;
 import com.dwinovo.numen.core.pathing.engine.HLearningTable;
 import com.dwinovo.numen.core.pathing.engine.SearchBudget;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
-import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
 import com.dwinovo.numen.core.task.FailureType;
 import net.minecraft.core.BlockPos;
@@ -106,7 +105,6 @@ public final class PlayerNav {
     private void publishViz(Path cut) {
         java.util.List<BlockPos> targets =
                 highlights != null ? highlights.get() : java.util.List.of(cut.end);
-        PathVizPublisher.publish(player, cut, targets);
     }
 
     private int replans = 0;
@@ -502,6 +500,5 @@ public final class PlayerNav {
         // when the path ends (inputs aren't auto-reset per tick), so the body
         // would stay crouched after arriving.
         player.setShiftKeyDown(false);
-        PathVizPublisher.clear(player);
     }
 }

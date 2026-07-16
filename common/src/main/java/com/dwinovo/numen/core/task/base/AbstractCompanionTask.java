@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.task.base;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
-import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
 import com.dwinovo.numen.task.CompanionTask;
 import com.dwinovo.numen.core.task.FailureType;
 import com.dwinovo.numen.task.Suspendable;
@@ -152,7 +151,6 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     /** Release physical resources on termination. Default: stop nav + clear the path overlay. */
     protected void cleanup() {
         stopNav();
-        PathVizPublisher.clear(player);
     }
 
     /** Structured payload for the result envelope. Default: a fresh empty (mutable) map. */
