@@ -1,7 +1,9 @@
 package com.dwinovo.numen.core.tools;
 
+import static com.dwinovo.numen.task.TaskDispatch.*;
+
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -11,7 +13,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** World-action tool (raw NumenTool): destroy entities at range with a bow/crossbow. */
-public final class ShootTool extends ServerNumenTool {
+public final class ShootTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final CombatTools impl = new CombatTools();

@@ -1,11 +1,13 @@
 package com.dwinovo.numen.core.tools;
 
+import static com.dwinovo.numen.task.TaskDispatch.*;
+
 import com.dwinovo.numen.task.TaskRecord;
 
 import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.task.WaitTaskRecord;
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -18,7 +20,7 @@ import java.util.function.Consumer;
  * with Gson, build a TaskRecord, hand it to core's per-companion queue; the
  * result returns later via the task lifecycle. Schema is written explicitly.
  */
-public final class WaitTool extends ServerNumenTool {
+public final class WaitTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private static final int MAX_SECONDS = 60;

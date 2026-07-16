@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -11,7 +11,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** Query tool (raw NumenTool): transfer items between slots in the open GUI; replies in place. */
-public final class TransferTool extends ServerNumenTool {
+public final class TransferTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final ContainerTools impl = new ContainerTools();

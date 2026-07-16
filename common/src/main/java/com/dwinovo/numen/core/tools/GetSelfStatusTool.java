@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  * server-side and replies in place. No arguments → an empty schema. The body of
  * {@link #runOnServer} is just the perception logic; nothing reflective.
  */
-public final class GetSelfStatusTool extends ServerNumenTool {
+public final class GetSelfStatusTool implements NumenTool {
 
     @Override
     public String name() {

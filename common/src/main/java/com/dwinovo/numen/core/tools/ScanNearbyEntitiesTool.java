@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** Query tool (raw NumenTool): list nearby entities, sorted by distance. */
-public final class ScanNearbyEntitiesTool extends ServerNumenTool {
+public final class ScanNearbyEntitiesTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final QueryExtraTools impl = new QueryExtraTools();

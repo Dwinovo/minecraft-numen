@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonObject;
 
@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** Query tool (raw NumenTool): look at the currently open GUI / inventory menu. */
-public final class InspectGuiTool extends ServerNumenTool {
+public final class InspectGuiTool implements NumenTool {
 
     private final GuiTools impl = new GuiTools();
 

@@ -1,7 +1,9 @@
 package com.dwinovo.numen.core.tools;
 
+import static com.dwinovo.numen.task.TaskDispatch.*;
+
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -10,7 +12,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** World-action tool (raw NumenTool): drop items onto the ground in front of the body. */
-public final class DropItemsTool extends ServerNumenTool {
+public final class DropItemsTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final InventoryTools impl = new InventoryTools();

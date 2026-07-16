@@ -1,7 +1,9 @@
 package com.dwinovo.numen.core.tools;
 
+import static com.dwinovo.numen.task.TaskDispatch.*;
+
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.agent.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -10,7 +12,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** World-action tool (raw NumenTool): locate the nearest structure of a type. */
-public final class LocateStructureTool extends ServerNumenTool {
+public final class LocateStructureTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final LocateTools impl = new LocateTools();
