@@ -48,9 +48,8 @@ public final class GoalCompiler {
      *                       {@link GoalAdapter}'s per-factory mapping table, so the
      *                       two goal domains can never drift apart
      * @param sacred         {@link BlockPos#asLong()} keys of cells the route must not
-     *                       break or bury (the {@code NavContext} domain — NEVER the
-     *                       engine's {@code PackedPos} packing); empty when the intent
-     *                       has no block objective
+     *                       break or bury (the {@code CalculationContext} domain);
+     *                       empty when the intent has no block objective
      * @param arrival        body-level arrival ingredients (see {@link ArrivalSpec})
      * @param coarseEligible whether the goal is an APPROACH toward its center, so a
      *                       coarse guidance field pointed at {@code goal.center()} makes

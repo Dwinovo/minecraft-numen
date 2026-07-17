@@ -18,7 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * <p>Both scan the WHOLE inventory (not just the hotbar) and swap via
  * {@link NumenPlayer#holdInHand(int)} — deliberately wider than a
  * hotbar-only scan, and kept consistent with the pathing cost model
- * ({@code NavContext.scanBestTool}) so the planned break cost matches the tool
+ * ({@code ToolSet}) so the planned break cost matches the tool
  * actually used.
  *
  * <p>Intent pin (constitution §5): a MAINHAND pin — the trace of an explicit

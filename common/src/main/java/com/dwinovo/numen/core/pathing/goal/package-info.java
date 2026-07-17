@@ -7,7 +7,7 @@
  * three things a navigation and its task must agree on: the search goal
  * (a {@link com.dwinovo.numen.core.pathing.calc.NavGoal}), the sacred cells the
  * route may neither break nor bury (threaded into
- * {@link com.dwinovo.numen.core.pathing.calc.NavContext#sacred}), and the
+ * {@link com.dwinovo.numen.core.pathing.moves.CalculationContext#sacred}), and the
  * body-level arrival ingredients
  * ({@link com.dwinovo.numen.core.pathing.goal.ArrivalSpec}).
  *

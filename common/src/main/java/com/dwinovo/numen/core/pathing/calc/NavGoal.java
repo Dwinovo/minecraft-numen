@@ -1,7 +1,6 @@
 package com.dwinovo.numen.core.pathing.calc;
 
-import com.dwinovo.numen.core.pathing.util.ActionCosts;
-import com.dwinovo.numen.core.pathing.util.PathSettings;
+import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import net.minecraft.core.BlockPos;
 
 /**
@@ -22,6 +21,17 @@ import net.minecraft.core.BlockPos;
  */
 public interface NavGoal {
 
+    // ---- 启发式常量(数值与内核成本表同源) ----
+
+    /** 对角步的水平距离系数。 */
+    double SQRT_2 = Math.sqrt(2.0);
+    /** 加权 A* 沿用的乐观单格成本(≈疾跑单格)。 */
+    double COST_HEURISTIC = 3.563;
+    /** 升一格的乐观成本(跳跃抛物线差)。 */
+    double JUMP_ONE_BLOCK = ActionCosts.JUMP_ONE_BLOCK_COST;
+    /** 降一格的乐观成本(坠落两格耗时之半)。 */
+    double DESCEND_ONE_BLOCK = ActionCosts.FALL_N_BLOCKS_COST[2] / 2.0;
+
     /** May a path legitimately end at this feet cell? */
     boolean isAt(BlockPos feet);
 
@@ -36,7 +46,7 @@ public interface NavGoal {
     /**
      * Octile horizontal distance (× walk cost) plus a vertical term — the
      * admissible point-to-point bound every concrete goal builds on. Downward
-     * must cost &gt; 0 (see {@link ActionCosts#DESCEND_ONE_BLOCK}): with a free
+     * must cost &gt; 0 (see {@link #DESCEND_ONE_BLOCK}): with a free
      * down-direction every node straight above a deep target scored h == 0
      * and partial paths collapsed to the start node.
      *
@@ -46,10 +56,9 @@ public interface NavGoal {
      * are unweighted — the split the verified behaviour was tuned on. Normalizing
      * the weights is a flagged follow-up, not something to "fix" in passing.
      *
-     * <p>Engine-adapter contract: {@code heuristic()} / {@code isAt()}
-     * implementations must not retain the {@code BlockPos} argument (the engine
-     * adapter — {@link EngineSearch} — reuses a mutable cursor across calls);
-     * read x/y/z (or compare/measure) and return.
+     * <p>Adapter contract: {@code heuristic()} / {@code isAt()} implementations
+     * must not retain the {@code BlockPos} argument (adapters may reuse a
+     * mutable cursor across calls); read x/y/z (or compare/measure) and return.
      */
     static double pointBound(BlockPos goal, BlockPos from) {
         double dx = Math.abs(goal.getX() - from.getX());
@@ -57,13 +66,13 @@ public interface NavGoal {
         // Horizontal: (diagonal·√2 + straight) × COST_HEURISTIC. COST_HEURISTIC
         // (≈ sprint cost) IS the per-block weight here — the heap key adds no
         // further multiplier (the weight is folded into the heuristic itself).
-        double horizontal = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
-                * PathSettings.COST_HEURISTIC;
+        double horizontal = (Math.min(dx, dz) * SQRT_2 + Math.abs(dx - dz))
+                * COST_HEURISTIC;
         // Vertical: up costs JUMP per block, down costs DESCEND (fall[2]/2).
         int dy = goal.getY() - from.getY();
         double vertical = dy > 0
-                ? dy * ActionCosts.JUMP_ONE_BLOCK
-                : -dy * ActionCosts.DESCEND_ONE_BLOCK;
+                ? dy * JUMP_ONE_BLOCK
+                : -dy * DESCEND_ONE_BLOCK;
         return horizontal + vertical;
     }
 
@@ -88,7 +97,7 @@ public interface NavGoal {
     /**
      * Reach a Y level at ANY X/Z: "change elevation to this height" (climb to the surface,
      * descend to a mining depth). Heuristic is the pure vertical term — up costs
-     * {@link ActionCosts#JUMP_ONE_BLOCK} per block, down {@link ActionCosts#DESCEND_ONE_BLOCK}.
+     * {@link #JUMP_ONE_BLOCK} per block, down {@link #DESCEND_ONE_BLOCK}.
      */
     static NavGoal yLevel(int level) {
         return new YLevel(level);
@@ -221,8 +230,8 @@ public interface NavGoal {
         @Override public double heuristic(BlockPos from) {
             double dx = Math.abs(x - from.getX());
             double dz = Math.abs(z - from.getZ());
-            return (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
-                    * PathSettings.COST_HEURISTIC;
+            return (Math.min(dx, dz) * SQRT_2 + Math.abs(dx - dz))
+                    * COST_HEURISTIC;
         }
 
         @Override public BlockPos center() {
@@ -244,8 +253,8 @@ public interface NavGoal {
 
         @Override public double heuristic(BlockPos from) {
             int cy = from.getY();
-            if (cy > level) return ActionCosts.DESCEND_ONE_BLOCK * (cy - level);
-            if (cy < level) return (level - cy) * ActionCosts.JUMP_ONE_BLOCK;
+            if (cy > level) return DESCEND_ONE_BLOCK * (cy - level);
+            if (cy < level) return (level - cy) * JUMP_ONE_BLOCK;
             return 0.0;
         }
 
@@ -332,7 +341,7 @@ public interface NavGoal {
         @Override public double heuristic(BlockPos from) {
             // One step + one jump of slack vs the point bound.
             return Math.max(0.0, pointBound(goal, from)
-                    - PathSettings.COST_HEURISTIC - ActionCosts.JUMP_ONE_BLOCK);
+                    - COST_HEURISTIC - JUMP_ONE_BLOCK);
         }
 
         @Override public BlockPos center() {
@@ -360,7 +369,7 @@ public interface NavGoal {
             // One step + one jump of slack vs the point bound (same slack as
             // adjacent(): any accepted cell is at most that much off-centre).
             return Math.max(0.0, pointBound(goal, from)
-                    - PathSettings.COST_HEURISTIC - ActionCosts.JUMP_ONE_BLOCK);
+                    - COST_HEURISTIC - JUMP_ONE_BLOCK);
         }
 
         @Override public BlockPos center() {
@@ -433,8 +442,8 @@ public interface NavGoal {
         @Override public double heuristic(BlockPos from) {
             double dx = Math.abs(ore.getX() - from.getX());
             double dz = Math.abs(ore.getZ() - from.getZ());
-            double horizontal = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
-                    * PathSettings.COST_HEURISTIC;
+            double horizontal = (Math.min(dx, dz) * SQRT_2 + Math.abs(dx - dz))
+                    * COST_HEURISTIC;
             // Feet anywhere in {o.y .. o.y-maxBelow} count as arrived: fold that
             // band to zero.
             int yDiff = from.getY() - ore.getY();
@@ -443,8 +452,8 @@ public interface NavGoal {
             // below it (adj<0) we ASCEND. (The old mine() had these two swapped,
             // overestimating descents — an inadmissible heuristic.)
             double vertical = adj > 0
-                    ? adj * ActionCosts.DESCEND_ONE_BLOCK
-                    : -adj * ActionCosts.JUMP_ONE_BLOCK;
+                    ? adj * DESCEND_ONE_BLOCK
+                    : -adj * JUMP_ONE_BLOCK;
             return horizontal + vertical;
         }
 
@@ -473,12 +482,12 @@ public interface NavGoal {
             // min*0.6 + yLevelTerm*1.5.
             double dx = Math.abs(from.getX() - fromPos.getX());
             double dz = Math.abs(from.getZ() - fromPos.getZ());
-            double xz = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
-                    * PathSettings.COST_HEURISTIC;
+            double xz = (Math.min(dx, dz) * SQRT_2 + Math.abs(dx - dz))
+                    * COST_HEURISTIC;
             double min = -xz;
             int cy = fromPos.getY();
-            double yLevel = cy > maintainY ? (cy - maintainY) * ActionCosts.DESCEND_ONE_BLOCK
-                    : cy < maintainY ? (maintainY - cy) * ActionCosts.JUMP_ONE_BLOCK : 0.0;
+            double yLevel = cy > maintainY ? (cy - maintainY) * DESCEND_ONE_BLOCK
+                    : cy < maintainY ? (maintainY - cy) * JUMP_ONE_BLOCK : 0.0;
             return min * 0.6 + yLevel * 1.5;
         }
 

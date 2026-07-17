@@ -17,7 +17,7 @@ import net.minecraft.world.level.material.FluidState;
  * A {@link BlockGetter} over a {@link LoadedChunks} snapshot — the search-side world view.
  * Loaded chunk → read its LIVE section
  * palette; not in the snapshot (unloaded) → AIR (an optimistic miss). Reads are
- * memoized per search (each cell once), like {@link com.dwinovo.numen.core.pathing.calc.NavSnapshot}, and
+ * memoized per search (each cell once), and
  * {@link com.dwinovo.numen.core.pathing.util.BlockHelper} reads it unchanged.
  */
 public final class CachedNavView implements BlockGetter, BlockEntityAware {

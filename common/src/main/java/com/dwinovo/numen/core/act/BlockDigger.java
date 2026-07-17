@@ -36,7 +36,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  *       for the destroy to land instead of re-starting the same block;</li>
  *   <li>interrupted: {@code ABORT_DESTROY_BLOCK} + clear the crack.</li>
  * </ul>
- * Shared by path-obstruction clearing ({@code PlayerPathExecutor}), auto-mine
+ * Shared by path-obstruction clearing ({@code ExecHarness}), auto-mine
  * ({@code MineCompanionTask}), and {@link Interaction} (break_block / interact).
  */
 public final class BlockDigger {
@@ -172,7 +172,7 @@ public final class BlockDigger {
         // Hold the best tool BEFORE timing the dig — getDestroyProgress reads the held
         // item, and the pathing cost model prices every break with the best
         // available tool. ToolSelect owns the scan (whole inventory) so this stays
-        // consistent with NavContext.scanBestTool.
+        // consistent with the pathing cost model (ToolSet).
         ToolSelect.holdBestTool(player, player.level().getBlockState(pos));
     }
 
