@@ -207,10 +207,9 @@ String item_id,
         }
         return TaskResult.ok("recipe(s) for " + name + ":\n\n" + String.join("\n\n", recipes) + "\n\n"
                 + "To make it —\n"
-                + "• [crafting]: open the grid (2x2 = your own, inspect_gui with nothing open; 3x3 = "
-                + "interact_at a crafting table), then transfer each ingredient into its cell per the "
-                + "layout above — one item per cell (count:1), matched top-left — and transfer the "
-                + "result slot out (no `to`). Repeat to make more.\n"
+                + "• [crafting]: call craft {item_id, count} — it lays out the grid and takes the "
+                + "result for you (a 3x3 recipe needs a crafting table within reach; 2x2 works "
+                + "anywhere).\n"
                 + "• [smelting|blasting|smoking]: interact_at the furnace, then transfer the input and "
                 + "the fuel with NO `to` — the menu routes each to its slot. Wait, then transfer the "
                 + "output back out.\n"
@@ -268,8 +267,9 @@ String item_id,
     }
 
     /** Name an ingredient: a single item directly, a shared-suffix tag as "planks (any)", else a few
-     *  members — so a category ingredient doesn't mislead the model into one specific item. */
-    private static String describeIngredient(Ingredient ing) {
+     *  members — so a category ingredient doesn't mislead the model into one specific item.
+     *  Package-visible: the craft tool names its material shortfalls with the same vocabulary. */
+    static String describeIngredient(Ingredient ing) {
         List<String> paths = java.util.Arrays.stream(ing.getItems())   // 1.21.1: getItems() -> ItemStack[]
                 .map(s -> BuiltInRegistries.ITEM.getKey(s.getItem()).getPath())
                 .distinct()
