@@ -56,28 +56,28 @@ class PlaceResolutionTest {
     @Test
     void rejectsHitAndReasonTogether() {
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                someHit(), PlaceResolution.Reason.NO_SUPPORT, "contradiction", null));
+                someHit(), PlaceResolution.Reason.NO_SUPPORT, "contradiction", null, null));
     }
 
     @Test
     void rejectsNeitherHitNorReason() {
         assertThrows(IllegalArgumentException.class,
-                () -> new PlaceResolution(null, null, null, null));
+                () -> new PlaceResolution(null, null, null, null, null));
     }
 
     @Test
     void rejectsAFailureWithoutAMessage() {
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                null, PlaceResolution.Reason.OUT_OF_REACH, null, null));
+                null, PlaceResolution.Reason.OUT_OF_REACH, null, null, null));
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                null, PlaceResolution.Reason.OUT_OF_REACH, "   ", null));
+                null, PlaceResolution.Reason.OUT_OF_REACH, "   ", null, null));
     }
 
     @Test
     void rejectsASuccessDressedWithDiagnosisFields() {
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                someHit(), null, "should not be here", null));
+                someHit(), null, "should not be here", null, null));
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                someHit(), null, null, new Vec3(0, 0, 0)));
+                someHit(), null, null, new Vec3(0, 0, 0), null));
     }
 }

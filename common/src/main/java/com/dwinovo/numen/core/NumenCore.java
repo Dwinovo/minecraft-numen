@@ -40,8 +40,6 @@ import com.dwinovo.numen.core.task.PlaceBlockCompanionTask;
 import com.dwinovo.numen.core.task.PlaceBlockTaskRecord;
 import com.dwinovo.numen.core.task.ShootCompanionTask;
 import com.dwinovo.numen.core.task.ShootTaskRecord;
-import com.dwinovo.numen.core.task.WaitCompanionTask;
-import com.dwinovo.numen.core.task.WaitTaskRecord;
 
 /**
  * Loader-agnostic init for the {@code numen-core} tool pack — the worked example
@@ -130,7 +128,6 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractAtTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractEntityTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EatItemTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.WaitTool());   // SAMPLE: raw NumenTool, no @NumenAction
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStatusTool());
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStopTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.DropItemsTool());
@@ -155,7 +152,6 @@ public final class NumenCore {
         CompanionTaskFactory.register(MoveToTaskRecord.class, (p, r) -> new MoveToCompanionTask(p, r));
         CompanionTaskFactory.register(MineBlockTaskRecord.class, (p, r) -> new MineCompanionTask(p, r));
         CompanionTaskFactory.register(EquipTaskRecord.class, (p, r) -> new EquipCompanionTask(p, r));
-        CompanionTaskFactory.register(WaitTaskRecord.class, (p, r) -> new WaitCompanionTask(p, r));
         CompanionTaskFactory.register(DropItemsTaskRecord.class, (p, r) -> new DropCompanionTask(p, r));
         CompanionTaskFactory.register(BreakBlockTaskRecord.class, (p, r) -> new BreakBlockCompanionTask(p, r));
         CompanionTaskFactory.register(EatItemTaskRecord.class, (p, r) -> new EatCompanionTask(p, r));

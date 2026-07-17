@@ -152,6 +152,7 @@ public final class Placement {
         int rays = 0;
         boolean triedAny = false;        // at least one ray was actually spent
         boolean skippedForReach = false; // at least one candidate face was beyond reach
+        BlockPos[] occluder = {null};    // first non-face block a sample ray struck
         for (Direction dir : ranked) {
             if (rays >= RAY_BUDGET) break;
             if (eye.distanceToSqr(PlaceGeometry.sharedFaceCenter(placeAt, dir)) > reachSqr) {
@@ -165,7 +166,7 @@ public final class Placement {
             // the proven default that clears the block's own top when leaning over an edge.
             Vec3 centre = supportAim(placeAt, against, aimY);
             triedAny = true;
-            BlockHitResult hit = castFromEye(player, eye, centre, reach, onFace);
+            BlockHitResult hit = castFromEye(player, eye, centre, reach, onFace, occluder);
             rays++;
             if (hit != null) return PlaceResolution.success(hit);
             if (rays >= RAY_BUDGET) break;
@@ -177,7 +178,7 @@ public final class Placement {
                 alt = PlaceGeometry.insetFacePoint(eye, null, placeAt, dir);
             }
             if (alt.distanceToSqr(centre) >= 0.01) {
-                hit = castFromEye(player, eye, alt, reach, onFace);
+                hit = castFromEye(player, eye, alt, reach, onFace, occluder);
                 rays++;
                 if (hit != null) return PlaceResolution.success(hit);
             }
@@ -190,7 +191,7 @@ public final class Placement {
             if (shape.isEmpty()) shape = Shapes.block();
             Predicate<BlockHitResult> onTarget = res -> res.getBlockPos().equals(placeAt);
             triedAny = true;
-            BlockHitResult hit = castFromEye(player, eye, blockCenter(level, placeAt), reach, onTarget);
+            BlockHitResult hit = castFromEye(player, eye, blockCenter(level, placeAt), reach, onTarget, occluder);
             rays++;
             for (int i = 0; hit == null && i < BLOCK_SIDES.length && rays < RAY_BUDGET; i++) {
                 Vec3 m = BLOCK_SIDES[i];
@@ -198,7 +199,7 @@ public final class Placement {
                         placeAt.getX() + shape.min(Direction.Axis.X) * m.x + shape.max(Direction.Axis.X) * (1 - m.x),
                         placeAt.getY() + shape.min(Direction.Axis.Y) * m.y + shape.max(Direction.Axis.Y) * (1 - m.y),
                         placeAt.getZ() + shape.min(Direction.Axis.Z) * m.z + shape.max(Direction.Axis.Z) * (1 - m.z));
-                hit = castFromEye(player, eye, point, reach, onTarget);
+                hit = castFromEye(player, eye, point, reach, onTarget, occluder);
                 rays++;
             }
             if (hit != null) return PlaceResolution.success(hit);
@@ -215,10 +216,10 @@ public final class Placement {
                             + " is beyond my arm's reach from where I stand — I need to get closer",
                     stance);
         }
-        return PlaceResolution.failure(PlaceResolution.Reason.NO_LINE_OF_SIGHT,
+        return PlaceResolution.occludedBy(
                 "a support face exists at " + placeAt.toShortString() + " but my view of it is"
                         + " blocked from here — something solid sits between my eyes and the face",
-                stance);
+                stance, occluder[0]);
     }
 
     /** Legacy support-face aim point: shared-face centre with Y biased 0.25 toward the
@@ -246,15 +247,22 @@ public final class Placement {
                 : player.getEyePosition();
     }
 
-    /** Raytrace from the eye toward {@code point}; return the hit if {@code ok}. */
+    /** Raytrace from the eye toward {@code point}; return the hit if {@code ok}. A BLOCK
+     *  hit that fails the test is the ray's OCCLUDER — the first one seen is recorded in
+     *  {@code occluderSink[0]} so the diagnosis can name (and the maneuver maybe punch) it. */
     private static BlockHitResult castFromEye(NumenPlayer player, Vec3 eye, Vec3 point, double reach,
-                                              Predicate<BlockHitResult> ok) {
+                                              Predicate<BlockHitResult> ok, BlockPos[] occluderSink) {
         Vec3 toPoint = point.subtract(eye);
         if (toPoint.lengthSqr() < 1.0e-6) return null;
         Vec3 end = eye.add(toPoint.normalize().scale(reach));
         BlockHitResult res = player.level().clip(new ClipContext(
                 eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
-        return (res.getType() == HitResult.Type.BLOCK && ok.test(res)) ? res : null;
+        if (res.getType() != HitResult.Type.BLOCK) return null;
+        if (ok.test(res)) return res;
+        if (occluderSink[0] == null) {
+            occluderSink[0] = res.getBlockPos().immutable();
+        }
+        return null;
     }
 
     /** Centre of the collision shape (geometric centre if empty). */

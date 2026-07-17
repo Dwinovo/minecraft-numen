@@ -56,14 +56,30 @@ public final class EngineSearch {
     private volatile SearchResult<Movement> result;
 
     private EngineSearch(NavContext ctx, BlockPos start, NavGoal goal,
-                         LongSet favoredPacked, SearchBudget budget) {
+                         LongSet favoredPacked, SearchBudget budget,
+                         com.dwinovo.numen.core.pathing.hier.CoarseField coarse) {
         this.ctx = ctx;
         this.start = start.immutable();
         long packedStart = PackedPos.pack(start.getX(), start.getY(), start.getZ());
 
         SuccessorFunction<Movement> successors = this::expand;
-        Heuristic heuristic = pos -> goal.heuristic(
-                goalCursor.set(PackedPos.x(pos), PackedPos.y(pos), PackedPos.z(pos)));
+        Heuristic heuristic = coarse == null
+                ? pos -> goal.heuristic(
+                        goalCursor.set(PackedPos.x(pos), PackedPos.y(pos), PackedPos.z(pos)))
+                : pos -> {
+                    int x = PackedPos.x(pos);
+                    int y = PackedPos.y(pos);
+                    int z = PackedPos.z(pos);
+                    double gh = goal.heuristic(goalCursor.set(x, y, z));
+                    if (gh <= 0.0) {
+                        return gh;   // at-goal / negative custom h: never inflate
+                    }
+                    // The coarse field's corridor-biased bound, capped against the
+                    // point bound so its deliberate inadmissibility stays bounded.
+                    double cb = coarse.boundAt(x, y, z);
+                    return Math.max(gh, Math.min(cb,
+                            gh * com.dwinovo.numen.core.pathing.util.PathSettings.COARSE_FIELD_CAP));
+                };
         GoalPredicate goalPredicate = pos -> goal.isAt(
                 goalCursor.set(PackedPos.x(pos), PackedPos.y(pos), PackedPos.z(pos)));
 
@@ -79,7 +95,16 @@ public final class EngineSearch {
      */
     public static EngineSearch create(NavContext ctx, BlockPos start, NavGoal goal,
                                       LongSet favoredPacked, SearchBudget budget) {
-        return new EngineSearch(ctx, start, goal, favoredPacked, budget);
+        return new EngineSearch(ctx, start, goal, favoredPacked, budget, null);
+    }
+
+    /** As {@link #create(NavContext, BlockPos, NavGoal, LongSet, SearchBudget)} with
+     *  a frozen coarse guidance field wrapped over the goal heuristic (long-range
+     *  dispatches; null degrades to the plain goal heuristic). */
+    public static EngineSearch create(NavContext ctx, BlockPos start, NavGoal goal,
+                                      LongSet favoredPacked, SearchBudget budget,
+                                      com.dwinovo.numen.core.pathing.hier.CoarseField coarse) {
+        return new EngineSearch(ctx, start, goal, favoredPacked, budget, coarse);
     }
 
     /**

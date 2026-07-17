@@ -50,6 +50,12 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
         nav = buildNav();
     }
 
+    /** Consecutive nav-ARRIVED ticks with {@link #reached()} still false. */
+    private int dudTicks = 0;
+    /** Grace before arrived-but-not-reached is declared a stance dud — landing,
+     *  settling and onGround can lag goal membership by a few ticks. */
+    private static final int DUD_GRACE_TICKS = 10;
+
     @Override
     protected final TaskState onTick() {
         if (reached()) return act();
@@ -58,7 +64,31 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
             return TaskState.FAILED;
         }
         return switch (nav.tick()) {
-            case RUNNING, ARRIVED -> TaskState.RUNNING;
+            case RUNNING -> {
+                dudTicks = 0;
+                yield TaskState.RUNNING;
+            }
+            case ARRIVED -> {
+                // reached() said no above, so the nav's arrival is a stance-dud
+                // candidate: the search's membership is satisfied but the work
+                // still can't start from here (out of reach, no sight line).
+                // Route it through the SAME recovery ladder a failed path uses —
+                // it is just one more way this bounded goal failed to yield a
+                // working stance. The grace window absorbs settle transients.
+                if (++dudTicks < DUD_GRACE_TICKS) {
+                    yield TaskState.RUNNING;
+                }
+                dudTicks = 0;
+                stopNav();
+                com.dwinovo.numen.Constants.LOG.info(
+                        "[numen-task] STANCE_DUD {} feet={} — nav arrived, reached() still"
+                                + " false after {} ticks; routing the recovery ladder",
+                        getClass().getSimpleName(), player.blockPosition().toShortString(),
+                        DUD_GRACE_TICKS);
+                yield handleNavFailure(FailureType.STANCE_DUD,
+                        "arrived where the route ends, but the target is still out of"
+                                + " reach from there");
+            }
             case FAILED -> handleNavFailure(nav.failType(), nav.failReason());
         };
     }

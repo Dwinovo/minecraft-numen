@@ -110,4 +110,29 @@ public final class PathSettings {
     public static final long SEARCH_FAILURE_MS = 2_000;
     /** Expansion fuse: memory/runaway bound, orders above depression-class terrain. */
     public static final int SEARCH_EXPANSION_FUSE = 500_000;
+
+    // ---- coarse layer (section-granular guidance field; hier/) ----
+
+    /** Coarse field engages only for approaches at least this far (blocks) —
+     *  short hops are cheapest on the fine search alone. */
+    public static final double COARSE_MIN_DISTANCE = 48.0;
+    /** Max sections one field build may price before it gives up (truncated —
+     *  still usable as partial guidance, never trusted for a sealed verdict). */
+    public static final int COARSE_SECTION_CAP = 4096;
+    /** Max EXACT (non-uniform) face scans one build may spend; each is ≈1.5k
+     *  block reads, so this bounds the dispatch-time cost. Fields are built once
+     *  per navigation (not per replan), so the budget can afford real terrain:
+     *  192 truncated every overworld build before the field reached the start. */
+    public static final int COARSE_EXACT_SCAN_CAP = 512;
+    /** Nominal cost of digging through one section face (added to a SOFT
+     *  crossing) — what makes the field flow along walkable corridors first.
+     *  Deliberate bounded inadmissibility (same doctrine as NavGoal.near's);
+     *  capped against the point bound via {@link #COARSE_FIELD_CAP}. */
+    public static final double COARSE_SOFT_CROSS_PENALTY = 40.0;
+    /** The field may inflate h to at most this multiple of the goal's own
+     *  point bound — bounds worst-case misguidance of the corridor bias. */
+    public static final double COARSE_FIELD_CAP = 3.0;
+    /** Section summaries expire after this many ticks (no event invalidation
+     *  to hook — the snapshot substrate rebuilds per tick untracked). */
+    public static final int COARSE_SUMMARY_TTL_TICKS = 20;
 }

@@ -5,6 +5,8 @@ import com.dwinovo.numen.core.pathing.util.ActionCosts;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
 import com.dwinovo.numen.core.task.base.ToolSelect;
+import it.unimi.dsi.fastutil.longs.LongSet;
+import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -64,6 +66,27 @@ public final class NavContext {
      */
     public final boolean forceBreak;
 
+    /**
+     * Cells this navigation must leave untouched — its OWN objective (the crafting
+     * table it travels to use, the ore its task will mine itself). Keys are
+     * {@link BlockPos#asLong()} values (the BlockPos domain — NEVER the engine's
+     * {@code PackedPos} packing; the two layouts are deliberately unrelated).
+     * Breaking a sacred cell is vetoed unconditionally — {@link #forceBreak} does
+     * not pierce it — and placing into one, or capping the cell directly above
+     * one, is vetoed too: a route may neither consume nor bury what it is
+     * travelling to. Empty for navigations without a block objective.
+     */
+    public final LongSet sacred;
+
+    /**
+     * Cells the EXECUTOR has proven unplaceable this navigation ({@link BlockPos#asLong()}
+     * keys): a placement there failed with NO_SUPPORT — no stance can fix it — and a
+     * deterministic re-search over the unchanged world would just plan the same
+     * impossible placement again (the rim-standing replan loop). Navigation-internal
+     * feedback with the same lifecycle as the favoring set; empty everywhere else.
+     */
+    public final LongSet deniedPlace;
+
     /** Max blocks the entity may fall without taking dangerous damage. */
     public final int maxFallHeight;
 
@@ -95,12 +118,14 @@ public final class NavContext {
     private record BestTool(float speed, boolean canHarvest) {}
 
     private NavContext(Level level, BlockGetter view, Container inventory, boolean safeForThreadedUse,
-                       boolean forceBreak) {
+                       boolean forceBreak, LongSet sacred, LongSet deniedPlace) {
         this.level = level;
         this.view = view;
         this.inventory = inventory;
         this.safeForThreadedUse = safeForThreadedUse;
         this.forceBreak = forceBreak;
+        this.sacred = sacred;
+        this.deniedPlace = deniedPlace;
         this.hasScaffold = hasAnyScaffold(inventory);
 
         // Survivable fall: 3 blocks — vanilla fall
@@ -122,7 +147,22 @@ public final class NavContext {
      *  {@code forceBreak:true} also prices breaks that would harvest nothing (see
      *  {@link #forceBreak}). */
     public static NavContext forExecution(Level level, Container liveInventory, boolean forceBreak) {
-        return new NavContext(level, new NavSnapshot(level), liveInventory, false, forceBreak);
+        return forExecution(level, liveInventory, forceBreak, LongSets.emptySet());
+    }
+
+    /** As {@link #forExecution(Level, Container, boolean)} with the navigation's
+     *  {@link #sacred} objective cells. */
+    public static NavContext forExecution(Level level, Container liveInventory, boolean forceBreak,
+                                          LongSet sacred) {
+        return forExecution(level, liveInventory, forceBreak, sacred, LongSets.emptySet());
+    }
+
+    /** As {@link #forExecution(Level, Container, boolean, LongSet)} with the navigation's
+     *  executor-proven {@link #deniedPlace} cells. */
+    public static NavContext forExecution(Level level, Container liveInventory, boolean forceBreak,
+                                          LongSet sacred, LongSet deniedPlace) {
+        return new NavContext(level, new NavSnapshot(level), liveInventory, false, forceBreak,
+                sacred, deniedPlace);
     }
 
     /**
@@ -139,6 +179,20 @@ public final class NavContext {
     /** As {@link #forSearch(Level, Container)} with an explicit force-break gate —
      *  {@code forceBreak:true} also plans through breaks that would harvest nothing. */
     public static NavContext forSearch(Level level, Container liveInventory, boolean forceBreak) {
+        return forSearch(level, liveInventory, forceBreak, LongSets.emptySet());
+    }
+
+    /** As {@link #forSearch(Level, Container, boolean)} with the navigation's
+     *  {@link #sacred} objective cells. */
+    public static NavContext forSearch(Level level, Container liveInventory, boolean forceBreak,
+                                       LongSet sacred) {
+        return forSearch(level, liveInventory, forceBreak, sacred, LongSets.emptySet());
+    }
+
+    /** As {@link #forSearch(Level, Container, boolean, LongSet)} with the navigation's
+     *  executor-proven {@link #deniedPlace} cells. */
+    public static NavContext forSearch(Level level, Container liveInventory, boolean forceBreak,
+                                       LongSet sacred, LongSet deniedPlace) {
         // Read loaded chunks LIVE through the per-tick snapshot; before the
         // snapshot exists (a level's first companion tick) fall back to the live read-through so the
         // first search is still correct.
@@ -150,7 +204,16 @@ public final class NavContext {
         BlockGetter view = loaded != null
                 ? new com.dwinovo.numen.core.pathing.cache.CachedNavView(loaded, level)
                 : new NavSnapshot(level);
-        return new NavContext(level, view, snapshotInventory(liveInventory), loaded != null, forceBreak);
+        return new NavContext(level, view, snapshotInventory(liveInventory), loaded != null,
+                forceBreak, sacred, deniedPlace);
+    }
+
+    /** TEST-ONLY seam (package-private): a context over an arbitrary block view, so
+     *  headless tests can drive {@code Moves.generate} against fake terrain.
+     *  Production code must use {@link #forSearch} / {@link #forExecution}. */
+    static NavContext forView(net.minecraft.world.level.BlockGetter view, Container inventory,
+                              boolean forceBreak, LongSet sacred) {
+        return new NavContext(null, view, inventory, false, forceBreak, sacred, LongSets.emptySet());
     }
 
     /** A point-in-time copy of {@code live} (same slot layout, copied stacks) — read-only fodder for
@@ -224,12 +287,25 @@ public final class NavContext {
      * cell isn't replaceable, or placing there would touch a hazard.
      */
     public double costOfPlacing(BlockPos pos) {
+        // The navigation's own objective: never place INTO a sacred cell, and never
+        // cap the cell directly above one — burying the target is consuming it.
+        // World-free check first (headless-testable, and the cheapest veto).
+        if (sacred.contains(pos.asLong()) || sacred.contains(pos.below().asLong())) {
+            return ActionCosts.COST_INF;
+        }
+        // Executor-proven unplaceable this navigation (NO_SUPPORT at the real cell) —
+        // re-planning the same placement would just reproduce the failure.
+        if (deniedPlace.contains(pos.asLong())) return ActionCosts.COST_INF;
         if (!hasScaffold) return ActionCosts.COST_INF;
         if (!BlockHelper.isReplaceableForPlacement(view, pos)) return ActionCosts.COST_INF;
         // Never place INTO a fluid (source or flowing) — a bridge can't be planned
         // straight into a water source.
         if (!view.getBlockState(pos).getFluidState().isEmpty()) return ActionCosts.COST_INF;
         if (BlockHelper.isHazard(view, pos)) return ActionCosts.COST_INF;
+        // Never place ON TOP of a protected functional block (a chest's lid stops
+        // opening, a crafting table's top face is its use face). Same predicate as
+        // the break-side veto, so the two protections can never drift apart.
+        if (BlockHelper.shouldAvoidBreaking(view, pos.below())) return ActionCosts.COST_INF;
         return PathSettings.BLOCK_PLACEMENT_PENALTY;
     }
 
@@ -239,6 +315,8 @@ public final class NavContext {
      * routes around, or the search fails clean) when the break is impossible,
      * unsafe, or ineffective:
      * <ul>
+     *   <li>a {@link #sacred} cell — the navigation's own objective, protected
+     *       unconditionally ({@code forceBreak} does not pierce it);</li>
      *   <li>unbreakable (bedrock/barrier), a hazard (lava/fire), or would unleash
      *       a fluid flow;</li>
      *   <li>{@link BlockHelper#shouldAvoidBreaking} — a player-placed functional
@@ -262,6 +340,10 @@ public final class NavContext {
      * the cascade, so sand/gravel terrain stays routable instead of walling off.
      */
     public double costOfBreaking(BlockPos pos, boolean includeFalling) {
+        // The navigation's own objective is untouchable — even under forceBreak
+        // (forceBreak widens what may be ground through, never what may be griefed).
+        // World-free check first (headless-testable).
+        if (sacred.contains(pos.asLong())) return ActionCosts.COST_INF;
         if (!BlockHelper.isBreakable(view, pos)) return ActionCosts.COST_INF;
         if (BlockHelper.isHazard(view, pos)) return ActionCosts.COST_INF;
         if (BlockHelper.breakWouldCreateFlow(view, pos)) return ActionCosts.COST_INF;
@@ -361,6 +443,10 @@ public final class NavContext {
      */
     private String explainBreakVeto(BlockPos pos) {
         BlockState state = view.getBlockState(pos);
+        if (sacred.contains(pos.asLong())) {
+            return blockId(state) + " (the very block this navigation is going to — I won't"
+                    + " break or bury my own target)";
+        }
         if (!state.getFluidState().isEmpty()) {
             return state.getFluidState().is(FluidTags.LAVA)
                     ? "lava" : "water (I can't swim or mine through fluids)";

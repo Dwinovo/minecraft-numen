@@ -125,7 +125,8 @@ public final class BreakBlockCompanionTask extends GoToThenDoTask<BreakBlockTask
      */
     @Override
     protected TaskState handleNavFailure(FailureType type, String reason) {
-        if (!navRetried && (type == FailureType.NO_PATH || type == FailureType.BOXED_IN)) {
+        if (!navRetried && (type == FailureType.NO_PATH || type == FailureType.BOXED_IN
+                || type == FailureType.STANCE_DUD)) {
             navRetried = true;
             stopNav();
             NavGoal loose = NavGoal.near(r.target, LOOSE_APPROACH_RADIUS);

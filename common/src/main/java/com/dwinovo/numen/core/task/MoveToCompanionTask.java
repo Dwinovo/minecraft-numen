@@ -91,7 +91,16 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         long extra = Math.min(MAX_EXTRA_TICKS, 600 + (long) (repDistance() * TICKS_PER_BLOCK));
         r.extendDeadlineTo(player.level().getGameTime() + extra);
         leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
-        nav = PlayerNav.toGoal(player, this::goal, r.speed, this::reached, r.modifyTerrain);
+        // BLOCK targets go through the compiled front door so the target cell is
+        // SACRED when solid — the route may neither dig through nor bury the very
+        // block it was asked to reach. COLUMN/YLEVEL have no block objective.
+        nav = r.kind == MoveToTaskRecord.Kind.BLOCK
+                ? PlayerNav.to(player, this::blockCompiled, r.speed, this::reached, r.modifyTerrain)
+                : PlayerNav.toGoal(player, this::goal, r.speed, this::reached, r.modifyTerrain);
+        com.dwinovo.numen.Constants.LOG.info(
+                "[numen-task] move_to start kind={} target={},{},{} arrival={} solid={} modifyTerrain={}",
+                r.kind, bx, by, bz, r.arrival,
+                r.kind == MoveToTaskRecord.Kind.BLOCK && targetCellSolid(), r.modifyTerrain);
         // Highlight the ACTUAL requested cell (not the path's best-effort end) so the overlay
         // box sits on the real target — e.g. a BLOCK goal under/over water that the path can
         // only approach to the surface. The goal itself is always rendered, not the plan's end.
@@ -117,7 +126,23 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
      * (the occupant broke) tightens back to exact.
      */
     private NavGoal blockGoal() {
-        return targetCellSolid() ? NavGoal.getToBlock(blockTarget) : NavGoal.exact(blockTarget);
+        return blockCompiled().goal();
+    }
+
+    /** The BLOCK kind's full navigation contract (goal + sacred), honouring the
+     *  LLM's optional arrival override; AUTO compiles from the live cell state
+     *  via the pure {@link com.dwinovo.numen.core.pathing.goal.GoalCompiler#block}
+     *  core — the collision-shape test is this task's historical walkability
+     *  judgement. */
+    private com.dwinovo.numen.core.pathing.goal.GoalCompiler.Compiled blockCompiled() {
+        return switch (r.arrival) {
+            case AUTO -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.block(
+                    !targetCellSolid(), blockTarget);
+            case INTERACT -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.interact(blockTarget);
+            case STAND_ON -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.standOn(blockTarget);
+            case NEAR -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.near(
+                    blockTarget, NEAR_SUCCESS_RADIUS);
+        };
     }
 
     /** Does a collision shape occupy the target cell (feet can't go there)? */

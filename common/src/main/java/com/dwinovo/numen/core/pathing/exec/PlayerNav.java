@@ -8,9 +8,12 @@ import com.dwinovo.numen.core.pathing.calc.NavContext;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.calc.Path;
 import com.dwinovo.numen.core.pathing.engine.SearchBudget;
+import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
 import com.dwinovo.numen.core.task.FailureType;
+import it.unimi.dsi.fastutil.longs.LongSet;
+import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
 
 import java.util.function.BooleanSupplier;
@@ -52,9 +55,30 @@ public final class PlayerNav {
     private static final double GOAL_MOVED_SQR = 4.0;
 
     private final NumenPlayer player;
-    private final Supplier<NavGoal> goalSupplier;
+    private final Supplier<GoalCompiler.Compiled> compiledSupplier;
     private final double speed;
     private final BooleanSupplier reached;
+    /** Sacred cells of the most recently pulled goal ({@code BlockPos.asLong()} keys) —
+     *  threaded into every {@link NavContext} this nav builds, so neither the search
+     *  nor the executor's per-tick re-costing may break or bury the objective.
+     *  Refreshed with every goal pull (a shrinking ore field stays current). */
+    private LongSet sacred = LongSets.emptySet();
+    /** Cells the executor proved unplaceable (NO_SUPPORT) during THIS navigation —
+     *  denied in every subsequent search so a deterministic re-search can't keep
+     *  planning the same impossible scaffold (the rim-standing loop). Same
+     *  navigation-internal lifecycle as the favoring set. */
+    private final it.unimi.dsi.fastutil.longs.LongOpenHashSet deniedPlace =
+            new it.unimi.dsi.fastutil.longs.LongOpenHashSet();
+    /**
+     * The search's goal membership is satisfied at the very cell we stand on (a
+     * zero-movement COMPLETE search), but the caller's richer {@code reached}
+     * still says no. Held STABLE so {@link #tick()} keeps reporting
+     * {@link Status#ARRIVED} — the task layer reads the persistent
+     * arrived-but-unsatisfied as a stance dud and reacts (reposition, blacklist
+     * the member) instead of receiving the lying one-tick "target lost" the old
+     * flow decayed into. Cleared by any restart or {@link #stop()}.
+     */
+    private boolean searchSatisfied;
     /** May this navigation break blocks it can't harvest (move_to's modify_terrain:true)?
      *  Threaded into every {@link NavContext} it builds — search AND execution re-costing,
      *  so a tool breaking mid-route re-vetoes the remaining grinds live. Default false:
@@ -110,28 +134,49 @@ public final class PlayerNav {
     /** Frozen context + start of the most recent search — kept for the no-path autopsy. */
     private NavContext lastCtx;
     private BlockPos lastStart;
+    /** Coarse-eligibility of the most recently pulled goal (see {@link GoalCompiler.Compiled}). */
+    private boolean coarseEligible;
+    /** The frozen coarse guidance field for this navigation's current goal, or null
+     *  (short range / bare goal / build declined). Rebuilt with each fresh search. */
+    private com.dwinovo.numen.core.pathing.hier.CoarseField coarseField;
+    /** A coarse SEALED verdict produced at dispatch — surfaced by
+     *  {@link #advanceFreshSearch} as the structured no-path reason. */
+    private String sealedVerdict;
     /** Whether the body stood on solid ground when the search launched — a search
      *  started mid-jump/mid-fall has an unstandable start cell and dies at 0 expansions. */
     private boolean lastStartGrounded = true;
 
-    /** Walk to a single cell. */
+    /** Walk to a single cell — compiled by intent ({@link GoalCompiler#block}: a
+     *  walkable cell is a place to STAND ON, an occupied one a block to GET TO and
+     *  not consume; never the old {@code near(2.0)} sphere whose elevated members
+     *  made "scaffold up one and count it arrived" a legal completion). */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
-        this(player, () -> resolveBlockGoal(player, goal), speed, reached, false);
+        this(player, () -> GoalCompiler.block(player.level(), goal), speed, reached, false);
     }
 
-    /** Walk to a (possibly moving) single cell. */
+    /** Walk to a (possibly moving) single cell — same intent compilation, re-run
+     *  per pull so a cell that opens up tightens back to a stand-on goal. */
     public PlayerNav(NumenPlayer player, Supplier<BlockPos> goalSupplier, double speed,
                      BooleanSupplier reached) {
         this(player, () -> {
             BlockPos g = goalSupplier.get();
-            return g == null ? null : resolveBlockGoal(player, g);
+            return g == null ? null : GoalCompiler.block(player.level(), g);
         }, speed, reached, false);
     }
 
-    /** Walk toward an arbitrary {@link NavGoal} (composite ore field, mining stance, …). */
+    /** Walk toward a compiled navigation contract (goal + sacred cells + arrival
+     *  ingredients) — the {@link GoalCompiler} front door. */
+    public static PlayerNav to(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiled,
+                               double speed, BooleanSupplier reached, boolean forceBreak) {
+        return new PlayerNav(player, compiled, speed, reached, forceBreak);
+    }
+
+    /** Walk toward an arbitrary {@link NavGoal} (custom goals: runAway, column, …).
+     *  Carries NO sacred cells — intents with a block objective should come through
+     *  {@link #to} / {@link GoalCompiler} so the objective is protected. */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
                                    double speed, BooleanSupplier reached) {
-        return new PlayerNav(player, goalSupplier, speed, reached, false);
+        return new PlayerNav(player, bare(goalSupplier), speed, reached, false);
     }
 
     /** As {@link #toGoal(NumenPlayer, Supplier, double, BooleanSupplier)} with an explicit
@@ -139,34 +184,67 @@ public final class PlayerNav {
      *  harvest nothing — the slow wrong-tool grind behind move_to's modify_terrain:true. */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
                                    double speed, BooleanSupplier reached, boolean forceBreak) {
-        return new PlayerNav(player, goalSupplier, speed, reached, forceBreak);
+        return new PlayerNav(player, bare(goalSupplier), speed, reached, forceBreak);
     }
 
-    private PlayerNav(NumenPlayer player, Supplier<NavGoal> goalSupplier, double speed,
-                      BooleanSupplier reached, boolean forceBreak) {
+    /** Wrap a bare goal supplier as a compiled contract with no sacred cells.
+     *  Bare custom goals are NOT coarse-eligible: their center may be what they
+     *  flee/hold (runAway), so a guidance field toward it would point backwards. */
+    private static Supplier<GoalCompiler.Compiled> bare(Supplier<NavGoal> goals) {
+        return () -> {
+            NavGoal g = goals.get();
+            return g == null ? null
+                    : new GoalCompiler.Compiled(g, LongSets.emptySet(), null, false);
+        };
+    }
+
+    private PlayerNav(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiledSupplier,
+                      double speed, BooleanSupplier reached, boolean forceBreak) {
         this.player = player;
-        this.goalSupplier = goalSupplier;
+        this.compiledSupplier = compiledSupplier;
         this.speed = speed;
         this.reached = reached;
         this.forceBreak = forceBreak;
         startFreshSearch();
     }
 
-    /** A cell goal: exact if standable, else reach within 2 (mirrors move_to arrival). */
-    private static NavGoal resolveBlockGoal(NumenPlayer player, BlockPos bp) {
-        return BlockHelper.canWalkThrough(player.level(), bp)
-                ? NavGoal.exact(bp)
-                : NavGoal.near(bp, 2.0);
+    /** Pull the live goal, refreshing {@link #sacred} alongside it — the two are
+     *  one contract and must never be read separately. */
+    private NavGoal pullGoal() {
+        GoalCompiler.Compiled c = compiledSupplier.get();
+        if (c == null) {
+            return null;
+        }
+        sacred = c.sacred();
+        coarseEligible = c.coarseEligible();
+        return c.goal();
     }
 
     public Status tick() {
         if (reached.getAsBoolean()) return Status.ARRIVED;
 
+        if (searchSatisfied) {
+            // Standing where the search's goal membership is satisfied, caller
+            // still unsatisfied: hold the ARRIVED verdict stable (a stance dud
+            // for the task layer to act on) instead of decaying into a lying
+            // "target lost". A goal that actually moves re-roots as usual.
+            NavGoal live = pullGoal();
+            if (live == null) {
+                failReason = "target lost";
+                failType = FailureType.TARGET_LOST;
+                return Status.FAILED;
+            }
+            if (plannedCenter != null && live.center().distSqr(plannedCenter) > GOAL_MOVED_SQR) {
+                return restartFresh(Restart.GOAL_MOVED);
+            }
+            return Status.ARRIVED;
+        }
+
         if (current == null) {
             return advanceFreshSearch();
         }
 
-        NavGoal liveGoal = goalSupplier.get();
+        NavGoal liveGoal = pullGoal();
         if (liveGoal == null) {
             failReason = "target lost";
             failType = FailureType.TARGET_LOST;
@@ -202,6 +280,13 @@ public final class PlayerNav {
             }
             case NEEDS_REPLAN -> {
                 lastExecFailure = current.replanCause();
+                BlockPos noSupport = current.lastNoSupportPlace();
+                if (noSupport != null && deniedPlace.add(noSupport.asLong())) {
+                    com.dwinovo.numen.Constants.LOG.info(
+                            "[numen-path] DENY-PLACE {} (NO_SUPPORT proven at execution;"
+                                    + " {} denied this navigation)",
+                            noSupport.toShortString(), deniedPlace.size());
+                }
                 discardPrecompute();
                 return restartFresh(Restart.EXEC_FAILURE);
             }
@@ -219,7 +304,8 @@ public final class PlayerNav {
         if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
             com.dwinovo.numen.core.pathing.cache.PathCaches.ensureSnapshot(sl, player.blockPosition());
         }
-        return NavContext.forSearch(player.level(), player.getInventory(), forceBreak);
+        return NavContext.forSearch(player.level(), player.getInventory(), forceBreak, sacred,
+                deniedPlace);
     }
 
     /** Off-thread when the context is frozen (the normal case); on the main thread otherwise — a
@@ -249,11 +335,12 @@ public final class PlayerNav {
 
     /** Live context for EXECUTION re-costing (main thread; reads current world + inventory). */
     private NavContext executionContext() {
-        return NavContext.forExecution(player.level(), player.getInventory(), forceBreak);
+        return NavContext.forExecution(player.level(), player.getInventory(), forceBreak, sacred,
+                deniedPlace);
     }
 
     private void startFreshSearch() {
-        NavGoal g = goalSupplier.get();
+        NavGoal g = pullGoal();
         plannedCenter = (g == null) ? null : g.center();
         if (g == null) {
             searchFuture = null;
@@ -263,10 +350,39 @@ public final class PlayerNav {
         NavContext ctx = searchContext();
         BlockPos startFeet = standableStart(BlockHelper.playerFeet(
                 player.level(), player.getX(), player.getY(), player.getZ()));
-        EngineSearch s = EngineSearch.create(ctx, startFeet, g, previousPathHashes, liveBudget());
         lastCtx = ctx;
         lastStart = startFeet;
         lastStartGrounded = player.onGround();
+        // Long-range approach goals get a frozen coarse guidance field (and its
+        // reachability probe) built against the SAME snapshot this search reads.
+        // Built ONCE per navigation (goal unchanged ⇒ the guidance barely moves;
+        // rebuilding on every exec-failure replan bought 30-65ms a pop for nothing)
+        // — a GOAL_MOVED restart clears it and rebuilds toward the new center.
+        if (coarseEligible && coarseField == null) {
+            coarseField = com.dwinovo.numen.core.pathing.hier.CoarsePlanner.fieldFor(
+                    player.level(), ctx.view, startFeet, g.center());
+        }
+        if (coarseField != null && coarseField.sealed()) {
+            // Sound sealed verdict (exhausted sweep, exact scans only): skip the
+            // fine search entirely — its whole failure budget would buy the same
+            // answer slower. advanceFreshSearch surfaces the structured reason.
+            com.dwinovo.numen.Constants.LOG.info(
+                    "[numen-path] COARSE-SEALED start={} goal-center={} — skipping fine search",
+                    startFeet.toShortString(), g.center().toShortString());
+            sealedVerdict = "no path to target (coarse reachability: no crossable or"
+                    + " diggable face chain connects here to there — the region around"
+                    + " the target is sealed off even allowing digging)";
+            searchObj = null;
+            searchFuture = java.util.concurrent.CompletableFuture.completedFuture(null);
+            return;
+        }
+        com.dwinovo.numen.Constants.LOG.info(
+                "[numen-path] DISPATCH start={} goal-center={} sacred={} forceBreak={} coarse={}",
+                startFeet.toShortString(), g.center().toShortString(), sacred.size(), forceBreak,
+                coarseField == null ? (coarseEligible ? "short-range" : "ineligible")
+                        : coarseField.summary());
+        EngineSearch s = EngineSearch.create(ctx, startFeet, g, previousPathHashes,
+                liveBudget(), coarseField);
         searchObj = s;
         searchFuture = dispatch(ctx, s);
     }
@@ -333,7 +449,30 @@ public final class PlayerNav {
         Path path = searchFuture.getNow(null);
         searchFuture = null;
         searchObj = null;
+        if (path != null && path.isEmpty() && !path.partial) {
+            // COMPLETE with zero movements: the search's goal test is satisfied by
+            // the very cell we stand on — there is nothing to walk, and that IS
+            // arrival for the navigation. A caller whose own arrival predicate is
+            // richer (reach + line of sight on top of the stance) must react to
+            // "arrived but not satisfied" itself — reporting this as NO-PATH sent
+            // the mining loop blacklisting perfectly good ores ("sealed in;
+            // explored 0 positions" was this case's lying autopsy). The flag keeps
+            // the verdict STABLE across ticks (see its declaration).
+            searchSatisfied = true;
+            com.dwinovo.numen.Constants.LOG.info(
+                    "[numen-path] ARRIVED-IN-PLACE feet={} goal-center={} — search goal is"
+                            + " satisfied where we stand; holding the verdict for the task layer",
+                    lastStart != null ? lastStart.toShortString() : "?",
+                    plannedCenter != null ? plannedCenter.toShortString() : "?");
+            return Status.ARRIVED;
+        }
         if (path == null || path.isEmpty()) {
+            if (sealedVerdict != null) {
+                failReason = sealedVerdict;
+                sealedVerdict = null;
+                failType = FailureType.NO_PATH;
+                return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
+            }
             failReason = noPathAutopsy(finished);
             failType = FailureType.NO_PATH;
             return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
@@ -364,6 +503,8 @@ public final class PlayerNav {
     private enum Restart { GOAL_MOVED, SEGMENT_DONE, EXEC_FAILURE }
 
     private Status restartFresh(Restart why) {
+        searchSatisfied = false;   // re-rooting — the standing-in-goal verdict is void
+        sealedVerdict = null;
         if (current != null) {
             current.stop();
             current = null;
@@ -373,13 +514,14 @@ public final class PlayerNav {
                               // that may no longer exist
         if (why == Restart.GOAL_MOVED) {
             bestGoalH = Double.MAX_VALUE;      // goal moved / re-rooted → fresh accounting
+            coarseField = null;                // and the guidance field re-aims with it
         } else {
             // Give up on STALLED effort, never on segment count —
             // a 60-block dig-up legitimately takes dozens of segments, each one a real
             // gain. Progress is judged in the GOAL'S OWN terms (its heuristic at the
             // feet): correct for yLevel (vertical only), column (horizontal only),
             // composite (nearest member) and runAway (negative, drops as we flee) alike.
-            NavGoal liveGoal = goalSupplier.get();
+            NavGoal liveGoal = pullGoal();
             double h = liveGoal == null ? Double.MAX_VALUE
                     : liveGoal.heuristic(player.blockPosition());
             if (bestGoalH - h >= REPLAN_PROGRESS_EPS_H) {
@@ -409,12 +551,15 @@ public final class PlayerNav {
         // Plan ahead: start the next segment once the current one has
         // fewer than PLANNING_TICK_LOOKAHEAD (150) ticks of travel left.
         if (current.remainingCost() > PathSettings.PLANNING_TICK_LOOKAHEAD) return;
-        NavGoal g = goalSupplier.get();
+        NavGoal g = pullGoal();
         if (g == null) return;
         plannedCenter = g.center();
         NavContext ctx = searchContext();
+        // The continuation reuses this navigation's frozen field (same goal): the
+        // guidance is section-granular, a segment of staleness is harmless, and a
+        // fresh restart rebuilds it anyway.
         EngineSearch s = EngineSearch.create(ctx, current.pathEnd(), g, previousPathHashes,
-                liveBudget());
+                liveBudget(), coarseField);
         nextObj = s;
         nextFuture = dispatch(ctx, s);
     }
@@ -515,6 +660,7 @@ public final class PlayerNav {
     }
 
     public void stop() {
+        searchSatisfied = false;
         if (current != null) {
             current.stop();
             current = null;

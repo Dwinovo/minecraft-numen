@@ -6,6 +6,7 @@ import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.Blocks;
 
@@ -152,8 +153,24 @@ public final class Moves {
      * can place against → 1.0 (normal walk-place). Otherwise we must backplace against
      * the block under our feet → {@code SNEAK/WALK} (≈3.3, a slow sneak place), vetoed
      * on soul sand (can't sneak-backplace off it). No placeable face → {@code COST_INF}.
+     *
+     * <p>The backplace gate judges the cell under the feet with the SAME
+     * placeability predicate the live maneuver uses ({@link BlockHelper#canPlaceAgainst})
+     * — "standable" is NOT "placeable-against", and pricing the difference walkable
+     * was the water/leaves replan livelock: the plan kept emitting a bridge whose
+     * backplace face the executor can never click (a swimming body's water surface,
+     * a leaf canopy), and a deterministic re-search reproduces the same plan forever.
+     * Three cases:
+     * <ul>
+     *   <li>AIR — allowed: the chain case (that cell is the block the PREVIOUS bridge
+     *       step places; the static snapshot can't see it). A genuine rim-stand over
+     *       air fails at execution and escalates through the stall ladder.</li>
+     *   <li>any fluid — {@code COST_INF}: water is never placeable-against; a swimming
+     *       body reaches shore, it does not bridge out of the water.</li>
+     *   <li>solid — must actually present a sturdy face toward the floor cell.</li>
+     * </ul>
      */
-    private static double bridgeSupport(NavContext ctx, BlockPos from, BlockPos floor) {
+    static double bridgeSupport(NavContext ctx, BlockPos from, BlockPos floor) {   // package-visible: regression-tested
         BlockGetter level = ctx.view;
         BlockPos sourceBelow = from.below();
         for (Direction d : SUPPORT_DIRS) {
@@ -161,12 +178,18 @@ public final class Moves {
             if (against.equals(sourceBelow)) continue;   // that's the backplace face, handled below
             if (canPlaceAgainst(level, against, d.getOpposite())) return 1.0;
         }
-        // Sneak-backplace against the block under our feet. Gated on
-        // mustBeSolidToWalkOn(srcDown), NOT on a real solid cube — and that is TRUE for
-        // air, so a void bridge CHAINS (the block below us was placed by the previous
-        // bridge step, even though the static world snapshot still shows air here).
-        if (!BlockHelper.mustBeSolidToWalkOn(level, sourceBelow)) return ActionCosts.COST_INF;
-        if (level.getBlockState(sourceBelow).is(Blocks.SOUL_SAND)) return ActionCosts.COST_INF;
+        BlockState below = level.getBlockState(sourceBelow);
+        if (!below.getFluidState().isEmpty()) return ActionCosts.COST_INF;
+        if (!below.isAir()) {
+            Direction toward = Direction.fromDelta(
+                    floor.getX() - sourceBelow.getX(),
+                    floor.getY() - sourceBelow.getY(),
+                    floor.getZ() - sourceBelow.getZ());
+            if (toward == null || !canPlaceAgainst(level, sourceBelow, toward)) {
+                return ActionCosts.COST_INF;
+            }
+        }
+        if (below.is(Blocks.SOUL_SAND)) return ActionCosts.COST_INF;
         return ActionCosts.SNEAK_ONE_BLOCK / ActionCosts.WALK_ONE_BLOCK;
     }
 
@@ -175,6 +198,18 @@ public final class Moves {
      *  so the planner never prices a bridge the executor can't actually place. */
     private static boolean canPlaceAgainst(BlockGetter level, BlockPos pos, Direction face) {
         return BlockHelper.canPlaceAgainst(level, pos, face);
+    }
+
+    /**
+     * A pillar places against the cell below the feet, and a fluid there can never
+     * take that placement — the plan-side twin of PillarDriver's "support below is
+     * gone" refusal. The feet-cell water check alone misses a body bobbing at the
+     * surface (feet cell is the AIR above the water). Air below stays allowed:
+     * that's the vertical chain (the previous pillar block isn't in the static
+     * snapshot yet). Package-visible: regression-tested.
+     */
+    static boolean pillarBaseIsFluid(BlockGetter level, BlockPos from) {
+        return !level.getBlockState(from.below()).getFluidState().isEmpty();
     }
 
     /** Ascend place support: a face to place the step block against,
@@ -449,6 +484,7 @@ public final class Moves {
         // floating body never has — the move would just stall and churn replans. Rising
         // from the water SURFACE is "swim to shore first" by design.
         if (BlockHelper.isWater(level, from)) return null;
+        if (pillarBaseIsFluid(level, from)) return null;
         // Can't pillar up from a bottom slab onto a non-ladder.
         if (BlockHelper.isBottomSlab(level, from.below())) return null;
         BlockPos dest = from.above();      // feet end one block up

@@ -149,6 +149,37 @@ public interface NavGoal {
     }
 
     /**
+     * Any feet cell within {@code radius} (Euclidean, blocks) of {@code pos}
+     * HORIZONTALLY, with the feet at the target's height ±1. This is the
+     * vicinity goal for chasing/following things that live on the ground: unlike
+     * the raw 3D {@link #near} sphere it admits no elevated cell, so "place a
+     * scaffold, stand on it, count as arrived" is not a satisfying completion —
+     * the geometry that once made an approach finish by frantically pillaring
+     * beside its target.
+     */
+    static NavGoal nearGround(BlockPos pos, double radius) {
+        BlockPos goal = pos.immutable();
+        double radiusSqr = radius * radius;
+        return new NavGoal() {
+            @Override public boolean isAt(BlockPos feet) {
+                int dy = feet.getY() - goal.getY();
+                if (dy < -1 || dy > 1) return false;
+                double dx = feet.getX() - goal.getX();
+                double dz = feet.getZ() - goal.getZ();
+                return dx * dx + dz * dz <= radiusSqr;
+            }
+            @Override public double heuristic(BlockPos from) {
+                // Full point bound, radius not subtracted — same deliberate slight
+                // inadmissibility as near(): aim at the centre for stable ordering.
+                return pointBound(goal, from);
+            }
+            @Override public BlockPos center() {
+                return goal;
+            }
+        };
+    }
+
+    /**
      * Any feet cell horizontally adjacent to {@code target} (±1 step on one
      * axis), at the target's height ±1 — "stand next to this block so you can
      * work on it". The standability of the ending cell is the graph's own

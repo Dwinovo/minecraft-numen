@@ -17,7 +17,8 @@ public final class MoveToTool implements NumenTool {
     private static final Gson GSON = new Gson();
     private final MovementTools impl = new MovementTools();
 
-    private record Args(Double x, Double y, Double z, double speed, Boolean modify_terrain) {}
+    private record Args(Double x, Double y, Double z, double speed, Boolean modify_terrain,
+                        String arrival) {}
 
     @Override
     public String name() {
@@ -46,6 +47,13 @@ public final class MoveToTool implements NumenTool {
                 .optionalBool("modify_terrain", "Default false: dig only what your tools harvest — "
                         + "no-drop grinds are refused with the missing tool named. true: force-break "
                         + "everything (slow, drops nothing); pass only when a refusal asked for it.")
+                .optionalNullableEnum("arrival", "How to finish at an x+y+z target; only valid with "
+                        + "all three coordinates. Omit for auto: a solid block means stop right beside "
+                        + "it (never touching it), a free cell means stand in it. 'interact' = treat "
+                        + "the cell as a block to use even if it's currently free (stop beside, keep "
+                        + "it untouched). 'stand_on' = occupy that exact cell, digging into it if "
+                        + "needed. 'near' = anywhere within 3 blocks is fine.",
+                        "interact", "stand_on", "near")
                 .build();
     }
 
@@ -53,6 +61,6 @@ public final class MoveToTool implements NumenTool {
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         dispatchAsync(companion, impl.moveTo(a.x(), a.y(), a.z(), a.speed(), a.modify_terrain(),
-                ctx(toolCallId, companion)), reply);
+                a.arrival(), ctx(toolCallId, companion)), reply);
     }
 }

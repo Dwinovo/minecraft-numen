@@ -193,6 +193,12 @@ public final class PlayerPathExecutor {
                 }
                 case FAILED -> {
                     String why = placeManeuver.failReason();
+                    // NO_SUPPORT is a stance-independent, deterministic refusal: the world
+                    // won't change by re-searching it, so surface the cell for the nav to
+                    // DENY in the next search (the rim-standing replan loop breaker).
+                    if (placeManeuver.failType() == com.dwinovo.numen.core.task.FailureType.NO_SUPPORT) {
+                        lastNoSupportPlace = scaffold.immutable();
+                    }
                     placeManeuver = null;
                     return replan("scaffold place failed: " + why);   // out of blocks / no angle → replan
                 }
@@ -648,6 +654,14 @@ public final class PlayerPathExecutor {
     }
 
     private String lastReplanCause;
+
+    /** The cell whose scaffold placement failed NO_SUPPORT (stance-independent — the nav
+     *  denies it in the next search), or null. */
+    public BlockPos lastNoSupportPlace() {
+        return lastNoSupportPlace;
+    }
+
+    private BlockPos lastNoSupportPlace;
 
     /** One-line snapshot of the current move + body state for diagnostics. */
     private String desc(Movement mv) {

@@ -52,9 +52,15 @@ public final class PlaceManeuver {
 
     public enum Status { RUNNING, DONE, FAILED }
 
-    /** Orientation the caller wants the placed block to end up with (any field null = don't care). */
-    public record Hints(Direction facing, Direction.Axis axis, Boolean topHalf) {
-        public static final Hints NONE = new Hints(null, null, null);
+    /** Orientation the caller wants the placed block to end up with (any field null = don't care).
+     *  {@code strict} withholds the press for the whole window and FAILS rather than compromise —
+     *  for batch building, where a wrong-way stair means rework; the default takes what it can
+     *  get after a grace (the right call for a single LLM-ordered block). */
+    public record Hints(Direction facing, Direction.Axis axis, Boolean topHalf, boolean strict) {
+        public static final Hints NONE = new Hints(null, null, null, false);
+        public Hints(Direction facing, Direction.Axis axis, Boolean topHalf) {
+            this(facing, axis, topHalf, false);
+        }
         public boolean isEmpty() {
             return facing == null && axis == null && topHalf == null;
         }
@@ -89,6 +95,27 @@ public final class PlaceManeuver {
     /** The resolver's last positional diagnosis (occluded / out of reach) — its message and
      *  suggested stance ride the eventual timeout failure up to the task layer. */
     private PlaceResolution lastDiag;
+    /** Progressive punch-out of a soft block occluding every sample ray (tall grass, a
+     *  snow layer, a leaf) — instead of grinding the timeout with the view blocked. */
+    private Interaction occluderBreak;
+    private BlockPos occluderPos;
+    /** A press was withheld because the predicted orientation missed the hints (strict-fail
+     *  diagnosis), and whether the eventual compromise was already logged. */
+    private boolean orientationWithheld;
+    private boolean orientationCompromiseLogged;
+
+    /** Horizontal (max-axis) distance to the target cell within which sneak engages — close
+     *  enough that the next steps may cross a rim. Farther out the body walks at full speed;
+     *  the old always-on sneak was a flat speed tax on every placement approach. */
+    private static final double SNEAK_NEAR_DIST = 1.1;
+
+    /** Sneak exactly when it earns its keep: leaning over the work (near the cell) or
+     *  committed to the press (the crouch must be active before the click). */
+    private void applySneak(boolean aboutToPress) {
+        double dist = Math.max(Math.abs(player.getX() - (placeAt.getX() + 0.5)),
+                Math.abs(player.getZ() - (placeAt.getZ() + 0.5)));
+        player.setShiftKeyDown(aboutToPress || dist < SNEAK_NEAR_DIST);
+    }
 
     /** Pathfinder / orientation-agnostic placement. */
     public PlaceManeuver(NumenPlayer player, BlockPos placeAt,
@@ -146,7 +173,7 @@ public final class PlaceManeuver {
                     // An entity squats in the cell: every press is doomed while it stays.
                     // Hold position through a short grace (mobs wander), then surface the
                     // diagnosis instead of grinding the timeout into a misleading "occluded".
-                    player.setShiftKeyDown(true);
+                    applySneak(false);
                     InputDriver.halt(player);
                     if (++entityBlockedTicks >= ENTITY_GRACE_TICKS) {
                         failReason = res.message();
@@ -157,24 +184,34 @@ public final class PlaceManeuver {
                     }
                 }
                 case NO_LINE_OF_SIGHT, OUT_OF_REACH -> {
-                    // Positional: edge (sneaking) toward the nearest candidate face so one
-                    // comes into view. The stance ladder above this maneuver is the real
-                    // "different angle" mechanism — the body never oscillates here.
+                    // Positional: edge toward the nearest candidate face so one comes into
+                    // view. The stance ladder above this maneuver is the real "different
+                    // angle" mechanism — the body never oscillates here.
                     entityBlockedTicks = 0;
                     lastDiag = res;
-                    player.setShiftKeyDown(true);   // sneak: never walk off the ledge while working
-                    Vec3 aim = shuffleAimPoint(aimY);
-                    if (aim != null) {
-                        edgeToward(aim);
+                    applySneak(false);
+                    // A SOFT occluder named by the resolver (tall grass, a snow layer, a
+                    // leaf between the eyes and the face): punch it out instead of edging
+                    // around it — the view opens in a few ticks.
+                    BlockPos blocking = res.occluder();
+                    if (blocking != null && softOccluder(blocking)) {
+                        punchOccluder(blocking);
                     } else {
-                        InputDriver.halt(player);
+                        stopPunching();
+                        Vec3 aim = shuffleAimPoint(aimY);
+                        if (aim != null) {
+                            edgeToward(aim);
+                        } else {
+                            InputDriver.halt(player);
+                        }
                     }
                 }
             }
         } else {
             entityBlockedTicks = 0;
             lastDiag = null;   // a face IS in view — an earlier positional diagnosis is stale
-            player.setShiftKeyDown(true);   // sneak: never walk off the ledge while working
+            stopPunching();
+            applySneak(true);   // committed to the press — the crouch must precede the click
             BlockHitResult hit = res.hit();
             InputDriver.lookAt(player, hit.getLocation());
             if (player.getBoundingBox().intersects(new AABB(placeAt))) {
@@ -205,14 +242,24 @@ public final class PlaceManeuver {
                 // A face is visible and the cell is clear of our body: stand still and press.
                 // The press waits one tick for the crouch to register — the sneak is also the
                 // edge protection, so the click never precedes it. With orientation hints the
-                // press is held back until a dry-run predicts the right state — but never
-                // past a grace window; while held back, keep working around the block.
-                boolean orientationOk = hints.isEmpty()
-                        || ticks > (LIMIT_TICKS * 3) / 5         // grace: take what we can get
-                        || matchesHints(predict(hit));
+                // press is held back until a dry-run predicts the right state — under strict
+                // hints for the WHOLE window (a wrong-way stair is rework), otherwise only
+                // through a grace; while held back, keep working around the block.
+                boolean matches = matchesHints(predict(hit));
+                boolean orientationOk = hints.isEmpty() || matches
+                        || (!hints.strict() && ticks > (LIMIT_TICKS * 3) / 5);
                 if (!orientationOk) {
+                    orientationWithheld = true;
+                    applySneak(false);   // circling the block, not pressing — full walk speed far out
                     edgeToward(hit.getLocation());
                 } else {
+                    if (!hints.isEmpty() && !matches && !orientationCompromiseLogged) {
+                        orientationCompromiseLogged = true;
+                        Constants.LOG.info(
+                                "[numen-path] place at {} compromising on orientation after {} ticks"
+                                        + " (hints {})",
+                                placeAt.toShortString(), ticks, hints);
+                    }
                     player.zza = 0.0f;
                     player.xxa = 0.0f;
                     player.setSprinting(false);
@@ -227,9 +274,18 @@ public final class PlaceManeuver {
             }
         }
         if (++ticks > LIMIT_TICKS) {
-            // Precedence: a recorded vanilla refusal is the truest story; otherwise the
-            // resolver's last diagnosis (occluded / out of reach, LLM-readable); otherwise
-            // the generic no-line summary.
+            // Precedence: a strict-orientation withhold is its own story; then a recorded
+            // vanilla refusal (the truest); then the resolver's last diagnosis (occluded /
+            // out of reach, LLM-readable); then the generic no-line summary.
+            if (hints.strict() && orientationWithheld && lastRefusal == null) {
+                failReason = "a face at " + placeAt.toShortString() + " was in view, but no stance"
+                        + " within the window would place the block the requested way round"
+                        + " (hints " + hints + ") — strict orientation refuses to compromise";
+                failType = FailureType.OCCLUDED;
+                Constants.LOG.info("[numen-path] place gave up at {} after {} ticks: {}",
+                        placeAt.toShortString(), ticks, failReason);
+                return Status.FAILED;
+            }
             if (lastRefusal != null) {
                 failReason = "a support face at " + placeAt.toShortString() + " was in view but every press was "
                         + "refused (" + lastRefusal + ") — the cell itself may be obstructed (an entity, "
@@ -260,13 +316,55 @@ public final class PlaceManeuver {
         return lastDiag == null ? null : lastDiag.suggestedStance();
     }
 
-    /** Look at {@code p} and push toward it; sneak (held by the caller every tick) pins
-     *  the body at the rim instead of letting it walk off. */
+    /** Look at {@code p} and push toward it; sneak (applied by the caller when near the
+     *  work) pins the body at the rim instead of letting it walk off. Past the aim point
+     *  (leaning right over the face) pushing further forward can only bury the sightline
+     *  deeper — back off a step to re-open it instead; the old always-forward push pinned
+     *  the body at the rim with the view forever half a degree short. */
     private void edgeToward(Vec3 p) {
         InputDriver.lookAt(player, p);
-        player.zza = 1.0f;
+        double horiz = Math.max(Math.abs(p.x - player.getX()), Math.abs(p.z - player.getZ()));
+        player.zza = horiz < 0.29 ? -1.0f : 1.0f;
         player.xxa = 0.0f;
         player.setSprinting(false);
+    }
+
+    /** Quick, guilt-free to punch out: near-instant hardness (tall grass, snow layers,
+     *  leaves), never a protected block, never a fluid. */
+    private boolean softOccluder(BlockPos pos) {
+        BlockState state = player.level().getBlockState(pos);
+        if (state.isAir() || !state.getFluidState().isEmpty()) return false;
+        if (com.dwinovo.numen.core.pathing.util.BlockHelper.shouldAvoidBreaking(player.level(), pos)) {
+            return false;
+        }
+        float hardness = state.getDestroySpeed(player.level(), pos);
+        return hardness >= 0.0f && hardness <= 0.2f;
+    }
+
+    /** Hold still and swing at the occluder until it pops (progressive, real facing). */
+    private void punchOccluder(BlockPos blocking) {
+        if (occluderBreak == null || !blocking.equals(occluderPos)) {
+            stopPunching();
+            occluderPos = blocking.immutable();
+            occluderBreak = Interaction.attackBlock(player, occluderPos);
+            Constants.LOG.info("[numen-path] place at {} punching occluder {} out of the sightline",
+                    placeAt.toShortString(), occluderPos.toShortString());
+        }
+        player.zza = 0.0f;
+        player.xxa = 0.0f;
+        player.setSprinting(false);
+        switch (occluderBreak.tick()) {
+            case DONE, FAILED -> stopPunching();
+            case RUNNING -> { }
+        }
+    }
+
+    private void stopPunching() {
+        if (occluderBreak != null) {
+            occluderBreak.stop();
+            occluderBreak = null;
+            occluderPos = null;
+        }
     }
 
     /** The aim point to edge toward while no face is in line of sight: the first
@@ -360,6 +458,7 @@ public final class PlaceManeuver {
 
     /** Release sneak / halt — call when the owning task or move ends. */
     public void stop() {
+        stopPunching();
         player.setShiftKeyDown(false);
         InputDriver.halt(player);
     }

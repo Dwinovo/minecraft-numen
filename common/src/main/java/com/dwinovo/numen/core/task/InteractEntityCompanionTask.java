@@ -184,7 +184,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     /** In-ladder nav causes the reposition rung handles; anything else kicks straight back to the LLM. */
     private static boolean repositionable(FailureType type) {
         return type == FailureType.NO_PATH || type == FailureType.BOXED_IN
-                || type == FailureType.OUT_OF_REACH;
+                || type == FailureType.OUT_OF_REACH || type == FailureType.STANCE_DUD;
     }
 
     private Interaction.Button button() {

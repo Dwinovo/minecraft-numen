@@ -24,6 +24,21 @@ public final class MoveToTaskRecord extends TaskRecord {
 
     public enum Kind { BLOCK, COLUMN, YLEVEL }
 
+    /**
+     * How a BLOCK move finishes (the LLM's optional override; {@link #AUTO}
+     * when omitted):
+     * <ul>
+     *   <li>{@link #AUTO} — infer from the cell: solid → stop beside it
+     *       (untouched), free → stand in it;</li>
+     *   <li>{@link #INTERACT} — treat the cell as a block to use even if it is
+     *       currently free: stop beside, keep it sacred;</li>
+     *   <li>{@link #STAND_ON} — occupy that exact cell, digging into it if
+     *       needed (subject to the normal / modify_terrain break rules);</li>
+     *   <li>{@link #NEAR} — anywhere within the near-success radius counts.</li>
+     * </ul>
+     */
+    public enum Arrival { AUTO, INTERACT, STAND_ON, NEAR }
+
     /** Nullable: {@code null} means the LLM did not supply this axis. */
     public final Double x;
     public final Double y;
@@ -37,10 +52,12 @@ public final class MoveToTaskRecord extends TaskRecord {
      *  diagnosis. true: break anything breakable, including the slow wrong-tool
      *  grind that drops nothing. */
     public final boolean modifyTerrain;
+    /** How a BLOCK move finishes; {@link Arrival#AUTO} unless the LLM overrode it. */
+    public final Arrival arrival;
 
     public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
                             Double x, Double y, Double z, double speed,
-                            boolean modifyTerrain) {
+                            boolean modifyTerrain, String arrival) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.x = x;
         this.y = y;
@@ -48,6 +65,30 @@ public final class MoveToTaskRecord extends TaskRecord {
         this.speed = speed;
         this.modifyTerrain = modifyTerrain;
         this.kind = resolveKind(x, y, z);
+        this.arrival = resolveArrival(arrival, this.kind);
+    }
+
+    /** Parse the optional arrival override; teaching errors for an unknown value
+     *  or an override on a move kind that has no cell to arrive at. */
+    private static Arrival resolveArrival(String raw, Kind kind) {
+        if (raw == null || raw.isBlank()) {
+            return Arrival.AUTO;
+        }
+        Arrival parsed = switch (raw) {
+            case "interact" -> Arrival.INTERACT;
+            case "stand_on" -> Arrival.STAND_ON;
+            case "near" -> Arrival.NEAR;
+            default -> throw new IllegalArgumentException(
+                    "unknown arrival '" + raw + "' — use interact, stand_on or near,"
+                    + " or omit it for auto.");
+        };
+        if (kind != Kind.BLOCK) {
+            throw new IllegalArgumentException(
+                    "arrival only applies to an exact x+y+z target; a "
+                    + (kind == Kind.COLUMN ? "location (x+z)" : "height (y-only)")
+                    + " move has no cell to arrive at — omit arrival for it.");
+        }
+        return parsed;
     }
 
     /**

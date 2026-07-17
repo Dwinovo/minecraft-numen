@@ -46,6 +46,11 @@ public enum FailureType {
     NO_PATH,
     /** Never got within interaction reach of the target. In-ladder: reposition. */
     OUT_OF_REACH,
+    /** The search's goal membership IS satisfied at the feet, but the task's richer
+     *  arrival (reach / line of sight / on-ground) still isn't — the stance the graph
+     *  chose is a dud for the actual work. In-ladder: reposition, or blacklist the
+     *  composite member that produced it. */
+    STANCE_DUD,
     /** Can't harvest/attack effectively with the current inventory. Prerequisite — kick to LLM. */
     WRONG_TOOL,
     /** The entity/block target is gone, dead, or moved out of the bounded search. Kick to LLM. */

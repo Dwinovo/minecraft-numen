@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.act;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -18,7 +19,8 @@ import net.minecraft.world.phys.Vec3;
  * <p>Invariants: success carries a hit and nothing else; failure carries a reason and a
  * non-blank message (stance optional). Exactly one of {@code hit} / {@code reason} is set.
  */
-public record PlaceResolution(BlockHitResult hit, Reason reason, String message, Vec3 suggestedStance) {
+public record PlaceResolution(BlockHitResult hit, Reason reason, String message, Vec3 suggestedStance,
+                              BlockPos occluder) {
 
     /** Why no placement hit could be produced. */
     public enum Reason {
@@ -39,7 +41,7 @@ public record PlaceResolution(BlockHitResult hit, Reason reason, String message,
         if ((hit == null) == (reason == null)) {
             throw new IllegalArgumentException("exactly one of hit / reason must be set");
         }
-        if (hit != null && (message != null || suggestedStance != null)) {
+        if (hit != null && (message != null || suggestedStance != null || occluder != null)) {
             throw new IllegalArgumentException("a success carries only the hit");
         }
         if (reason != null && (message == null || message.isBlank())) {
@@ -48,15 +50,23 @@ public record PlaceResolution(BlockHitResult hit, Reason reason, String message,
     }
 
     public static PlaceResolution success(BlockHitResult hit) {
-        return new PlaceResolution(hit, null, null, null);
+        return new PlaceResolution(hit, null, null, null, null);
     }
 
     public static PlaceResolution failure(Reason reason, String message) {
-        return new PlaceResolution(null, reason, message, null);
+        return new PlaceResolution(null, reason, message, null, null);
     }
 
     public static PlaceResolution failure(Reason reason, String message, Vec3 suggestedStance) {
-        return new PlaceResolution(null, reason, message, suggestedStance);
+        return new PlaceResolution(null, reason, message, suggestedStance, null);
+    }
+
+    /** A {@link Reason#NO_LINE_OF_SIGHT} failure that also names the FIRST block a
+     *  sample ray struck instead of the support face — the maneuver may be able to
+     *  simply punch it out of the way (tall grass, a snow layer, a leaf). */
+    public static PlaceResolution occludedBy(String message, Vec3 suggestedStance, BlockPos occluder) {
+        return new PlaceResolution(null, Reason.NO_LINE_OF_SIGHT, message, suggestedStance,
+                occluder == null ? null : occluder.immutable());
     }
 
     /** True when a pressable hit was resolved. */

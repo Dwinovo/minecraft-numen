@@ -4,6 +4,7 @@ import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
+import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
@@ -215,15 +216,36 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             branchTicks = 0;
             if (nav == null || navIsBranch) {
                 stopNav();
-                nav = PlayerNav.toGoal(player, this::oreFieldGoal, MINE_SPEED,
-                        () -> reachableTarget() != null);
+                // Compiled front door: every known ore is SACRED — the route gets the
+                // body to the ore; digging it is THIS task's job (with this task's
+                // bookkeeping), so the path may not consume the objective on the way.
+                nav = PlayerNav.to(player, this::oreFieldCompiled, MINE_SPEED,
+                        () -> reachableTarget() != null, false);
                 nav.setHighlights(() -> new ArrayList<>(knownOres));   // box every known target
                 navIsBranch = false;
             }
             switch (nav.tick()) {
                 case RUNNING -> { return TaskState.RUNNING; }
-                case ARRIVED -> { stopNav(); return TaskState.RUNNING; } // shaft handled next tick
+                case ARRIVED -> {
+                    stopNav();
+                    // Arrived per the stance goal but nothing is reachable from here
+                    // (line of sight blocked, ore beyond reach): this stance is a dud —
+                    // blacklist the nearest ore and move on, exactly as a failed path
+                    // would. Without this the loop re-navs to the same satisfied stance
+                    // forever ("arrived" every tick, zero progress).
+                    if (reachableTarget() == null && !knownOres.isEmpty()) {
+                        com.dwinovo.numen.Constants.LOG.info(
+                                "[numen-task] auto_mine stance dud at feet={} — arrived per"
+                                        + " goal, nothing reachable (LOS/reach)",
+                                player.blockPosition().toShortString());
+                        blacklistNearest();
+                    }
+                    return TaskState.RUNNING;   // a reachable shaft is handled next tick
+                }
                 case FAILED -> {
+                    com.dwinovo.numen.Constants.LOG.info(
+                            "[numen-task] auto_mine nav failed ({}): {}",
+                            nav.failType(), nav.failReason());
                     if (!knownOres.isEmpty()) blacklistNearest();
                     stopNav();
                     return TaskState.RUNNING;
@@ -271,17 +293,21 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     // ---- goals ----
 
-    /** One composite goal: a mining stance per ore, plus a walk-over goal per nearby
-     *  drop — one A* search heads for the closest of either. */
-    private NavGoal oreFieldGoal() {
-        List<NavGoal> goals = new ArrayList<>(knownOres.size() + drops.size());
+    /** The whole mining objective, compiled: a stance per ore + a walk-over member
+     *  per nearby drop, with every ore cell sacred — one A* search heads for the
+     *  closest of either, and the route can't consume a target on the way. */
+    private GoalCompiler.Compiled oreFieldCompiled() {
+        if (knownOres.isEmpty() && drops.isEmpty()) {
+            // Degenerate frame (targets vanished between ticks): stand where we are.
+            return GoalCompiler.standOn(player.blockPosition());
+        }
+        List<GoalCompiler.Stance> stances =
+                new ArrayList<>(knownOres.size());
         for (BlockPos ore : knownOres) {
-            goals.add(coalesce(ore));
+            stances.add(coalesce(ore));
         }
-        for (BlockPos drop : drops) {
-            goals.add(NavGoal.near(drop, 1.0));   // walk over it; native pickup grabs it
-        }
-        return goals.isEmpty() ? NavGoal.exact(player.blockPosition()) : NavGoal.composite(goals);
+        return GoalCompiler.mineField(
+                stances, new ArrayList<>(drops));
     }
 
     /**
@@ -294,7 +320,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * ground below) gets an exact-feet goal, so the ore is mined from where you
      * stand, never dug under.
      */
-    private NavGoal coalesce(BlockPos loc) {
+    private GoalCompiler.Stance coalesce(BlockPos loc) {
         boolean assumeVerticalShaftMine =
                 !(player.level().getBlockState(loc.above()).getBlock()
                         instanceof net.minecraft.world.level.block.FallingBlock);
@@ -303,15 +329,15 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         boolean doubleDownwardGoal = internalMiningGoal(loc.below(2));
         if (upwardGoal == downwardGoal) {                       // symmetric vertically
             return (doubleDownwardGoal && assumeVerticalShaftMine)
-                    ? NavGoal.mineColumn(loc, 2)                // feet up to 2 below the ore
-                    : NavGoal.mineColumn(loc, 1);              // feet at the ore or 1 below
+                    ? GoalCompiler.Stance.at(loc, 2)   // feet up to 2 below the ore
+                    : GoalCompiler.Stance.at(loc, 1);  // feet at the ore or 1 below
         }
         if (upwardGoal) {                                       // bottom of a run: stand in it
-            return NavGoal.mineColumn(loc, 0);                 // feet EXACTLY at the ore
+            return GoalCompiler.Stance.at(loc, 0);     // feet EXACTLY at the ore
         }
         return (doubleDownwardGoal && assumeVerticalShaftMine) // top of a run, more below
-                ? NavGoal.mineColumn(loc.below(), 1)           // feet at/1-below the block under it
-                : NavGoal.mineColumn(loc.below(), 0);          // feet exactly at the block under it
+                ? new GoalCompiler.Stance(loc, loc.below(), 1)  // feet at/1-below the block under it
+                : new GoalCompiler.Stance(loc, loc.below(), 0); // feet exactly at the block under it
     }
 
     /**
@@ -561,6 +587,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 .ifPresent(p -> {
                     blacklist.add(p);
                     knownOres.remove(p);
+                    com.dwinovo.numen.Constants.LOG.info(
+                            "[numen-task] auto_mine blacklisted {} (feet={}, {} target(s) left,"
+                                    + " {} blacklisted)",
+                            p.toShortString(), feet.toShortString(), knownOres.size(),
+                            blacklist.size());
                 });
     }
 

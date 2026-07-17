@@ -7,7 +7,6 @@ import com.dwinovo.numen.core.task.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.DropItemsTaskRecord;
 import com.dwinovo.numen.core.task.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.EquipTaskRecord;
-import com.dwinovo.numen.core.task.WaitTaskRecord;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -39,11 +38,6 @@ public final class InventoryTools {
     private static final int COLLECT_DEFAULT_RADIUS = 16;
     private static final int COLLECT_MAX_RADIUS = 48;
     private static final long COLLECT_TIMEOUT_TICKS = 60 * 20;   // 1 min
-
-    /** Cap one wait at 5 minutes; longer vigils chain calls (each is a checkpoint). */
-    private static final int WAIT_MAX_SECONDS = 300;
-    /** Headroom past the wait itself so the deadline never races the wake-up. */
-    private static final long WAIT_DEADLINE_MARGIN_TICKS = 100;
 
     public TaskRecord equipItem(
 String item_id,
@@ -147,13 +141,4 @@ Integer radius,
         return filter.size() == 1 ? path : path + "+" + (filter.size() - 1);
     }
 
-    public TaskRecord wait(
-int seconds,
-String reason,
-            ToolContext ctx) {
-        seconds = Math.clamp(seconds, 1, WAIT_MAX_SECONDS);
-        String reasonText = reason != null ? reason : "";
-        return new WaitTaskRecord(ctx.toolCallId(), ctx.deadline(seconds * 20L + WAIT_DEADLINE_MARGIN_TICKS),
-                seconds, reasonText);
-    }
 }

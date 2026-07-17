@@ -170,25 +170,6 @@ public final class BlockHelper {
     }
 
     /**
-     * "If a move makes us stand
-     * on this cell, will it have a top to walk on?" Returns {@code true} for AIR and
-     * solid blocks alike — crucially OPTIMISTIC about air, because when bridging the
-     * block you stand on was placed by the bridge itself and isn't in the static world
-     * snapshot yet. {@code false} only for ladders/vines (you climb, not stand) and
-     * submerged water (liquid above). This is what lets a void bridge CHAIN: each
-     * sneak-backplace is allowed against the (about-to-be-placed) block below.
-     */
-    public static boolean mustBeSolidToWalkOn(BlockGetter level, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
-        if (state.is(Blocks.LADDER) || state.is(Blocks.VINE)) return false;
-        if (!state.getFluidState().isEmpty()) {
-            // standing on water counts only at the surface (nothing fluid above)
-            return level.getBlockState(pos.above()).getFluidState().isEmpty();
-        }
-        return true;   // air or solid → optimistically a valid floor to backplace from
-    }
-
-    /**
      * Is this a FLOWING water cell?
      * A non-source level is flowing; a source block is "flowing" too when it
      * feeds a horizontal non-source neighbour (edge of a pool) — unsafe to
