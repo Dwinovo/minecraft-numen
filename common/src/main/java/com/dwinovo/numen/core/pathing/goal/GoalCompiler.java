@@ -1,6 +1,8 @@
 package com.dwinovo.numen.core.pathing.goal;
 
+import com.dwinovo.numen.core.pathing.bridge.GoalAdapter;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
+import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -41,6 +43,10 @@ public final class GoalCompiler {
      * The compiled navigation contract.
      *
      * @param goal           search goal — node-domain arrival
+     * @param engineGoal     the SAME arrival semantics as a new-kernel
+     *                       {@link Goal} — derived from {@code goal} through
+     *                       {@link GoalAdapter}'s per-factory mapping table, so the
+     *                       two goal domains can never drift apart
      * @param sacred         {@link BlockPos#asLong()} keys of cells the route must not
      *                       break or bury (the {@code NavContext} domain — NEVER the
      *                       engine's {@code PackedPos} packing); empty when the intent
@@ -51,8 +57,14 @@ public final class GoalCompiler {
      *                       sense (false for run-away/bare custom goals, whose center is
      *                       what they flee or hold — a field toward it points backwards)
      */
-    public record Compiled(NavGoal goal, LongSet sacred, ArrivalSpec arrival,
+    public record Compiled(NavGoal goal, Goal engineGoal, LongSet sacred, ArrivalSpec arrival,
                            boolean coarseEligible) {
+        /** engineGoal 从 goal 经映射表派生(既有调用方签名不变)。 */
+        public Compiled(NavGoal goal, LongSet sacred, ArrivalSpec arrival,
+                        boolean coarseEligible) {
+            this(goal, GoalAdapter.toEngineGoal(goal), sacred, arrival, coarseEligible);
+        }
+
         /** Compiler-made contracts are approach goals — coarse-eligible. */
         public Compiled(NavGoal goal, LongSet sacred, ArrivalSpec arrival) {
             this(goal, sacred, arrival, true);
