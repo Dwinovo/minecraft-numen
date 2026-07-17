@@ -1,0 +1,234 @@
+package com.dwinovo.numen.core.pathing.moves;
+
+import java.util.Objects;
+import java.util.Set;
+
+import com.dwinovo.numen.core.pathing.settings.NavSettings;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.item.FallingBlockEntity;
+import net.minecraft.world.phys.AABB;
+
+/**
+ * 移动原语抽象基类:一条"从 src 到 dest"的最小可执行动作,
+ * 自带成本计算(规划期)与逐 tick 状态机(执行期)。
+ *
+ * <p>执行侧通用框架在 {@link #update()}:先由子类推进状态机,再叠加
+ * 水中上浮强跳与卡墙自救,最后把本 tick 的按键表交给执行层钩子。
+ * 准备阶段({@link #prepared}):等待落沙实体落定、把仍挡路的
+ * toBreak 逐个交给 {@link #beginBreaking} 钩子挖掉。
+ */
+public abstract class Movement {
+
+    protected final ServerPlayer player;
+
+    protected final BlockPos src;
+    protected final BlockPos dest;
+
+    /** 本动作开跑前需要挖穿的格。 */
+    protected final BlockPos[] positionsToBreak;
+
+    /** 本动作开跑前需要放上方块的格(无则 null)。 */
+    protected final BlockPos positionToPlace;
+
+    private MovementState currentState = new MovementState().setStatus(MovementStatus.PREPPING);
+
+    /** 缓存成本;override 机制允许外部钉入更严的估价。 */
+    private Double cost;
+
+    private Set<BlockPos> validPositionsCached;
+
+    /** 成本是否是在 dest 所在 chunk 已加载时算出的(执行期涨价豁免用)。 */
+    private Boolean calculatedWhileLoaded;
+
+    protected Movement(ServerPlayer player, BlockPos src, BlockPos dest,
+                       BlockPos[] toBreak, BlockPos toPlace) {
+        this.player = player;
+        this.src = src;
+        this.dest = dest;
+        this.positionsToBreak = toBreak;
+        this.positionToPlace = toPlace;
+    }
+
+    protected Movement(ServerPlayer player, BlockPos src, BlockPos dest, BlockPos[] toBreak) {
+        this(player, src, dest, toBreak, null);
+    }
+
+    // ==================== 成本 ====================
+
+    /** 已算出的成本;未算先抛(调用方须先走 getCost(context))。 */
+    public double getCost() {
+        return cost;
+    }
+
+    public double getCost(CalculationContext context) {
+        if (cost == null) {
+            MutableMoveResult result = new MutableMoveResult();
+            cost = calculateCost(context, result);
+        }
+        return cost;
+    }
+
+    /** 重算成本(丢弃缓存与 override)。 */
+    public double recalculateCost(CalculationContext context) {
+        cost = null;
+        return getCost(context);
+    }
+
+    /** 外部钉入成本(取"算时成本与节点差的较严者"时用)。 */
+    public void override(double cost) {
+        this.cost = cost;
+    }
+
+    /**
+     * 计算本动作成本;动态落点的动作把实际落点写进 result。
+     * 不可行返回 {@link ActionCosts#COST_INF}。
+     */
+    public abstract double calculateCost(CalculationContext context, MutableMoveResult result);
+
+    // ==================== 合法过程位 ====================
+
+    /** 执行期允许身体出现的格集合(重定位锚)。 */
+    protected abstract Set<BlockPos> calculateValidPositions();
+
+    public Set<BlockPos> getValidPositions() {
+        if (validPositionsCached == null) {
+            validPositionsCached = calculateValidPositions();
+            Objects.requireNonNull(validPositionsCached);
+        }
+        return validPositionsCached;
+    }
+
+    // ==================== 执行状态机 ====================
+
+    /**
+     * 每 tick 推进一次。通用框架:子类状态机 → 水中且低于目标高度
+     * 时强按跳(上浮)→ 卡墙时按左键 → 视角与按键交执行层钩子,
+     * 按键先清后设、终态清空。
+     */
+    public MovementStatus update() {
+        currentState = updateState(currentState);
+        BlockPos feet = player.blockPosition();
+        if (MovementHelper.isLiquid(player.level().getBlockState(feet))
+                && player.getY() < dest.getY() + 0.6) {
+            currentState.setInput(Input.JUMP, true);
+        }
+        if (player.isInWall()) {
+            currentState.setInput(Input.CLICK_LEFT, true);
+        }
+
+        if (currentState.getTarget().hasRotation()) {
+            applyRotation(currentState.getTarget());
+        }
+        clearInputs();
+        currentState.getInputStates().forEach(this::applyInput);
+        currentState.getInputStates().clear();
+
+        if (currentState.getStatus().isComplete()) {
+            clearInputs();
+        }
+        return currentState.getStatus();
+    }
+
+    /**
+     * 准备阶段:toBreak 里任一格上有下坠方块实体(且开了等待开关)
+     * → 等待,不挖不动;任一格仍不可穿行 → 交给 {@link #beginBreaking}
+     * 挖,返回未就绪。全部通透即就绪(WAITING 后不再重查)。
+     */
+    protected boolean prepared(MovementState state) {
+        if (state.getStatus() == MovementStatus.WAITING) {
+            return true;
+        }
+        for (BlockPos pos : positionsToBreak) {
+            if (NavSettings.get().pauseMiningForFallingBlocks
+                    && !player.level().getEntitiesOfClass(FallingBlockEntity.class,
+                            new AABB(0, 0, 0, 1, 1.1, 1).move(pos)).isEmpty()) {
+                return false;
+            }
+            if (!MovementHelper.canWalkThrough(player.level(), pos)) {
+                beginBreaking(state, pos);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * 状态机推进,子类覆写并先走本实现:未就绪 → PREPPING;
+     * 就绪后 PREPPING → WAITING → RUNNING。
+     */
+    public MovementState updateState(MovementState state) {
+        if (!prepared(state)) {
+            return state.setStatus(MovementStatus.PREPPING);
+        } else if (state.getStatus() == MovementStatus.PREPPING) {
+            state.setStatus(MovementStatus.WAITING);
+        }
+        if (state.getStatus() == MovementStatus.WAITING) {
+            state.setStatus(MovementStatus.RUNNING);
+        }
+        return state;
+    }
+
+    /** 当前是否可被安全中断(默认恒可;悬空放置中的子类覆写)。 */
+    public boolean safeToCancel() {
+        return safeToCancel(currentState);
+    }
+
+    protected boolean safeToCancel(MovementState state) {
+        return true;
+    }
+
+    /** 重置状态机(路径回退重执行时用)。 */
+    public void reset() {
+        currentState = new MovementState().setStatus(MovementStatus.PREPPING);
+    }
+
+    // ==================== 执行层钩子(后续波次接线) ====================
+
+    /**
+     * 开挖一格:选工具、选可视面、转头、左键。由执行层覆写接线,
+     * 基类不落任何真实动作。
+     */
+    protected void beginBreaking(MovementState state, BlockPos pos) {}
+
+    /** 应用期望视角。执行层覆写。 */
+    protected void applyRotation(MovementState.MovementTarget target) {}
+
+    /** 清空全部按键。执行层覆写。 */
+    protected void clearInputs() {}
+
+    /** 应用单个按键。执行层覆写。 */
+    protected void applyInput(Input input, boolean held) {}
+
+    // ==================== 元数据 ====================
+
+    public BlockPos getSrc() {
+        return src;
+    }
+
+    public BlockPos getDest() {
+        return dest;
+    }
+
+    public BlockPos getDirection() {
+        return dest.subtract(src);
+    }
+
+    public BlockPos[] toBreakAll() {
+        return positionsToBreak;
+    }
+
+    public BlockPos getToPlace() {
+        return positionToPlace;
+    }
+
+    /** 记录成本计算时 dest 所在 chunk 是否已加载。 */
+    public void checkLoadedChunk(CalculationContext context) {
+        calculatedWhileLoaded = context.isLoaded(dest.getX(), dest.getZ());
+    }
+
+    public boolean calculatedWhileLoaded() {
+        return calculatedWhileLoaded;
+    }
+}
