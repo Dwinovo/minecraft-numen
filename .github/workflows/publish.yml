@@ -58,12 +58,11 @@ jobs:
             echo "datagen=:neoforge:runData" >> "$GITHUB_OUTPUT"
             echo "build=:neoforge:build"     >> "$GITHUB_OUTPUT"
           elif [ -d forge ]; then
-            echo "name=forge"          >> "$GITHUB_OUTPUT"
-            # No :forge:Data — the forge jar packages the Fabric module's datagen output
-            # (identical providers over common tag data; FML can't boot the Data run
-            # without the api mod on the FG6 dev classpath).
-            echo "datagen="            >> "$GITHUB_OUTPUT"
-            echo "build=:forge:build"  >> "$GITHUB_OUTPUT"
+            echo "name=forge"               >> "$GITHUB_OUTPUT"
+            # ForgeGradle registers the data run as the literal task `Data`; it writes
+            # to forge/src/generated/resources, which the forge jar packages.
+            echo "datagen=:forge:Data"      >> "$GITHUB_OUTPUT"
+            echo "build=:forge:build"       >> "$GITHUB_OUTPUT"
           else
             echo "No forge/ or neoforge/ subproject found on this branch" >&2
             exit 1
