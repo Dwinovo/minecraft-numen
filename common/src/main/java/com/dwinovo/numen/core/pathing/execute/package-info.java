@@ -5,7 +5,7 @@
  * <ul>
  *   <li>{@link com.dwinovo.numen.core.pathing.execute.PathingCore} —— 段规划
  *       状态机:目标 → 首段搜索 → 执行 → 提前规划 → 无缝接段;搜索经
- *       {@link com.dwinovo.numen.core.pathing.execute.SearchDispatcher} 派发;</li>
+ *       {@link com.dwinovo.numen.core.pathing.bridge.SearchDispatcher} 派发;</li>
  *   <li>{@link com.dwinovo.numen.core.pathing.execute.PathExecutor} —— 单条
  *       路径的逐移动驱动:重定位、脱轨看门狗、成本核验、疾跑整体决策、
  *       超时;</li>

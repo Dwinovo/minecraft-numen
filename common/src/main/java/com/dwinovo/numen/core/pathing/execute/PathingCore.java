@@ -10,6 +10,8 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.pathing.astar.Favoring;
 import com.dwinovo.numen.core.pathing.astar.NavPath;
 import com.dwinovo.numen.core.pathing.astar.PathCalcResult;
+import com.dwinovo.numen.core.pathing.bridge.SearchDispatcher;
+import com.dwinovo.numen.core.pathing.bridge.SearchHandle;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
@@ -35,12 +37,22 @@ public final class PathingCore {
     private final NumenPlayer player;
     private final ExecHarness harness;
     private final SearchDispatcher dispatcher;
-    /** 成本上下文工厂:每次 setGoalAndPath 取样一份,搜索与执行共用同一把尺。 */
-    private final Supplier<CalculationContext> contextFactory;
+    /**
+     * 搜索用成本上下文工厂:每次派发搜索时取样一份冻结快照(背包/附魔/
+     * 语义开关随之刷新),整场搜索用同一把尺。
+     */
+    private final Supplier<CalculationContext> searchContextFactory;
+    /**
+     * 执行期成本上下文工厂:活世界视图,执行器逐 tick 复核成本时取样。
+     * 与搜索侧同一套成本函数,只是世界读的是当下。
+     */
+    private final Supplier<CalculationContext> executionContextFactory;
 
     private PathExecutor current;
     private PathExecutor next;
-    private SearchDispatcher.SearchHandle inProgress;
+    private SearchHandle inProgress;
+    /** 在飞搜索的 A* 展开起点(句柄不携带,提交时在此记录)。 */
+    private BlockPos inProgressStart;
     private Goal goal;
     private CalculationContext context;
     private BlockPos expectedSegmentStart;
@@ -54,11 +66,19 @@ public final class PathingCore {
     private boolean calcFailedLastTick;
 
     public PathingCore(NumenPlayer player, SearchDispatcher dispatcher,
-                       Supplier<CalculationContext> contextFactory) {
+                       Supplier<CalculationContext> searchContextFactory,
+                       Supplier<CalculationContext> executionContextFactory) {
         this.player = player;
         this.harness = new ExecHarness(player);
         this.dispatcher = dispatcher;
-        this.contextFactory = contextFactory;
+        this.searchContextFactory = searchContextFactory;
+        this.executionContextFactory = executionContextFactory;
+    }
+
+    /** 搜索与执行同一份快照的简便构造:执行期复核直接读本次搜索的上下文。 */
+    public PathingCore(NumenPlayer player, SearchDispatcher dispatcher,
+                       Supplier<CalculationContext> contextFactory) {
+        this(player, dispatcher, contextFactory, null);
     }
 
     // ==================== 对外 API ====================
@@ -79,7 +99,6 @@ public final class PathingCore {
         if (goal == null) {
             return false;
         }
-        this.context = contextFactory.get();
         BlockPos feet = PathExecutor.playerFeet(player);
         if (goal.isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
             return false;
@@ -212,7 +231,7 @@ public final class PathingCore {
         // 在飞搜索合法性:起点既不是当前段终点、也不是身位/假起点,
         // 其最优部分路径也不含这两者 → 玩家被打飞/传送,计算作废
         if (inProgress != null) {
-            BlockPos calcFrom = inProgress.searchStart();
+            BlockPos calcFrom = inProgressStart;
             BlockPos feet = PathExecutor.playerFeet(player);
             Optional<NavPath> currentBest = inProgress.bestPathSoFar();
             if ((current == null || !current.getPath().getDest().equals(calcFrom))
@@ -296,6 +315,9 @@ public final class PathingCore {
         if (goal == null) {
             return;
         }
+        // 每次派发都重新取样冻结快照:背包/工具/饥饿与语义开关
+        // (sacred/deniedPlace)以派发一刻为准
+        context = searchContextFactory.get();
         long primaryTimeout;
         long failureTimeout;
         NavSettings settings = NavSettings.get();
@@ -315,6 +337,7 @@ public final class PathingCore {
                 && Math.abs(feet.getZ() - start.getZ()) <= 1) {
             realStart = feet;
         }
+        inProgressStart = start;
         inProgress = dispatcher.submit(realStart, start, goal, context, favoring,
                 primaryTimeout, failureTimeout);
     }
@@ -324,12 +347,12 @@ public final class PathingCore {
         if (inProgress == null) {
             return;
         }
-        Optional<PathCalcResult> polled = inProgress.poll();
-        if (polled.isEmpty()) {
+        PathCalcResult result = inProgress.poll();
+        if (result == null) {
             return;
         }
         inProgress = null;
-        PathCalcResult result = polled.get();
+        inProgressStart = null;
         Optional<PathExecutor> executor = result.getPath().map(this::newExecutor);
         if (current == null) {
             if (executor.isPresent()) {
@@ -361,8 +384,10 @@ public final class PathingCore {
     }
 
     private PathExecutor newExecutor(NavPath path) {
+        Supplier<CalculationContext> recost =
+                executionContextFactory != null ? executionContextFactory : () -> context;
         return new PathExecutor(path, player, harness,
-                () -> context,
+                recost,
                 () -> inProgress == null ? Optional.empty() : inProgress.bestPathSoFar(),
                 context.loadedTest);
     }
@@ -425,5 +450,23 @@ public final class PathingCore {
             harness.clearAllKeys();
             harness.stopBreaking();
         }
+    }
+
+    /**
+     * 无条件全停:取消在飞搜索、丢弃当前/下一段、放弃目标、清键停挖。
+     * 不看 safeToCancel——外部要求彻底停下(任务清理)时身体状态由
+     * 调用方兜底。
+     */
+    public void forceCancel() {
+        if (inProgress != null) {
+            inProgress.cancel();
+            inProgress = null;
+            inProgressStart = null;
+        }
+        current = null;
+        next = null;
+        goal = null;
+        harness.clearAllKeys();
+        harness.stopBreaking();
     }
 }

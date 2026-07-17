@@ -66,9 +66,13 @@ public final class PathExecutor {
     private int pathPosition;
     private int ticksAway;
     private int ticksOnCurrent;
+    /** 距上次真实推进(移动完成/重定位/活跃挖掘)的 tick 数,liveness 信号。 */
+    private int ticksSinceProgress;
     private Double currentMovementOriginalCostEstimate;
     private Integer costEstimateIndex;
     private boolean failed;
+    /** 取消原因(失败验尸与放弃判定的素材);未失败时为 null。 */
+    private String failureCause;
     private boolean sprintNextTick;
 
     public PathExecutor(NavPath path, NumenPlayer player, ExecHarness harness,
@@ -142,7 +146,7 @@ public final class PathExecutor {
             ticksAway++;
             if (ticksAway > MAX_TICKS_AWAY) {
                 Constants.LOG.debug("离路径太远太久,取消({} tick)", ticksAway);
-                cancel();
+                cancel("离开路径 " + ticksAway + " tick 未能回归");
                 return false;
             }
         } else {
@@ -150,7 +154,7 @@ public final class PathExecutor {
         }
         if (possiblyOffPath(distFromPath, MAX_MAX_DIST_FROM_PATH)) {
             Constants.LOG.debug("离路径过远,立即取消");
-            cancel();
+            cancel("身位离开路径超过 " + (int) MAX_MAX_DIST_FROM_PATH + " 格");
             return false;
         }
         // TODO 若接可视化,这里对 pathPosition±10 的移动重算 toBreak/toPlace
@@ -175,7 +179,7 @@ public final class PathExecutor {
                 Movement future = path.movements().get(pathPosition + i);
                 if (future.calculateCost(context, new MutableMoveResult()) >= COST_INF && canCancel) {
                     Constants.LOG.debug("世界已变化,后续移动不可行,取消");
-                    cancel();
+                    cancel("世界已变化," + describe(future) + " 不再可行");
                     return true;
                 }
             }
@@ -183,7 +187,7 @@ public final class PathExecutor {
         double currentCost = movement.recalculateCost(context);
         if (currentCost >= COST_INF && canCancel) {
             Constants.LOG.debug("世界已变化,当前移动不可行,取消");
-            cancel();
+            cancel("世界已变化," + describe(movement) + " 不再可行");
             return true;
         }
         if (!movement.calculatedWhileLoaded()
@@ -192,7 +196,8 @@ public final class PathExecutor {
             // 只对"当时在未加载区块里估出来的"移动生效:加载后货不对板;
             // 加载时算的涨价属于自己路径的连锁反应,不管
             Constants.LOG.debug("移动估价 {} 涨到 {},取消", currentMovementOriginalCostEstimate, currentCost);
-            cancel();
+            cancel(describe(movement) + " 加载后估价从 "
+                    + (int) (double) currentMovementOriginalCostEstimate + " 涨到 " + (int) currentCost);
             return true;
         }
         if (shouldPause()) {
@@ -203,7 +208,7 @@ public final class PathExecutor {
         MovementStatus movementStatus = movement.update();
         if (movementStatus == MovementStatus.UNREACHABLE || movementStatus == MovementStatus.FAILED) {
             Constants.LOG.debug("移动报 {},取消", movementStatus);
-            cancel();
+            cancel(describe(movement) + " 执行报 " + movementStatus);
             return true;
         }
         if (movementStatus == MovementStatus.SUCCESS) {
@@ -217,11 +222,18 @@ public final class PathExecutor {
                 player.setSprinting(false); // 松开按键不会自动停疾跑
             }
             ticksOnCurrent++;
+            // 活跃挖掘算真实推进(硬方块一挖几十 tick 是正常工作)
+            if (harness.isDigging()) {
+                ticksSinceProgress = 0;
+            } else {
+                ticksSinceProgress++;
+            }
             if (ticksOnCurrent > currentMovementOriginalCostEstimate
                     + NavSettings.get().movementTimeoutTicks) {
                 Constants.LOG.debug("移动耗时 {} tick,超出估价 {} 太多,取消",
                         ticksOnCurrent, currentMovementOriginalCostEstimate);
-                cancel();
+                cancel(describe(movement) + " 卡住:耗时 " + ticksOnCurrent
+                        + " tick,远超估价 " + (int) (double) currentMovementOriginalCostEstimate);
                 return true;
             }
         }
@@ -661,10 +673,19 @@ public final class PathExecutor {
     private void onChangeInPathPosition() {
         harness.clearAllKeys();
         ticksOnCurrent = 0;
+        ticksSinceProgress = 0;
     }
 
-    /** 取消:清键、停挖、把推进下标押出末尾并标失败。 */
-    private void cancel() {
+    /** 移动的人话描述(失败原因素材):类型 + 起讫格。 */
+    private static String describe(Movement movement) {
+        return movement.getClass().getSimpleName()
+                + " " + movement.getSrc().toShortString()
+                + " -> " + movement.getDest().toShortString();
+    }
+
+    /** 取消:记录原因、清键、停挖、把推进下标押出末尾并标失败。 */
+    private void cancel(String cause) {
+        failureCause = cause;
         harness.clearAllKeys();
         harness.stopBreaking();
         pathPosition = path.length() + 3;
@@ -691,6 +712,7 @@ public final class PathExecutor {
             ret.currentMovementOriginalCostEstimate = currentMovementOriginalCostEstimate;
             ret.costEstimateIndex = costEstimateIndex;
             ret.ticksOnCurrent = ticksOnCurrent;
+            ret.ticksSinceProgress = ticksSinceProgress;
             return ret;
         }).orElseGet(this::cutIfTooLong);
     }
@@ -710,6 +732,7 @@ public final class PathExecutor {
                 ret.costEstimateIndex = costEstimateIndex - cutoffAmt;
             }
             ret.ticksOnCurrent = ticksOnCurrent;
+            ret.ticksSinceProgress = ticksSinceProgress;
             return ret;
         }
         return this;
@@ -737,8 +760,18 @@ public final class PathExecutor {
         return failed;
     }
 
+    /** 失败原因(人话);未失败为 null。 */
+    public String failureCause() {
+        return failureCause;
+    }
+
     public boolean finished() {
         return pathPosition >= path.length();
+    }
+
+    /** 距上次真实推进(移动完成/重定位/活跃挖掘)的 tick 数。 */
+    public int ticksSinceProgress() {
+        return ticksSinceProgress;
     }
 
     /** 本 tick 执行器的疾跑决策结果(由拥有者落到实体上)。 */

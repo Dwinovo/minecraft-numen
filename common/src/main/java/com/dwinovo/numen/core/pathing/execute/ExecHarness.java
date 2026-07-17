@@ -161,6 +161,11 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         breakTarget = null;
     }
 
+    /** 是否有进行中的挖掘(liveness 记账:挖硬方块也是真实推进)。 */
+    public boolean isDigging() {
+        return digger.current() != null;
+    }
+
     /** 视角步进量化器(执行器做放置预判时共用同一套数学)。 */
     public AimProcessor aimProcessor() {
         return aim;
