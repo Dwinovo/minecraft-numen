@@ -15,6 +15,10 @@ import net.minecraft.core.BlockPos;
  * Live-entity arrival predicates (exact doubles, reach distances) remain the
  * task layer's business — they answer a different question ("is my body close
  * enough") than the search's ("may this node end the path").
+ *
+ * <p>工厂产物均为具名嵌套类(参数以 final 字段暴露):桥接层按类型识别
+ * 工厂产物并直映射到新内核目标族;匿名实现(任务层手写的自定义目标)
+ * 无法识别,走通用包装。行为与先前的匿名类逐字相同。
  */
 public interface NavGoal {
 
@@ -67,18 +71,7 @@ public interface NavGoal {
 
     /** Exactly this feet cell. */
     static NavGoal exact(BlockPos pos) {
-        BlockPos goal = pos.immutable();
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                return feet.equals(goal);
-            }
-            @Override public double heuristic(BlockPos from) {
-                return pointBound(goal, from);
-            }
-            @Override public BlockPos center() {
-                return goal;
-            }
-        };
+        return new Exact(pos);
     }
 
     /**
@@ -89,20 +82,7 @@ public interface NavGoal {
      * caller's Y is irrelevant, so a wrong/guessed Y can never make it unreachable.
      */
     static NavGoal column(int x, int z) {
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                return feet.getX() == x && feet.getZ() == z;
-            }
-            @Override public double heuristic(BlockPos from) {
-                double dx = Math.abs(x - from.getX());
-                double dz = Math.abs(z - from.getZ());
-                return (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
-                        * PathSettings.COST_HEURISTIC;
-            }
-            @Override public BlockPos center() {
-                return new BlockPos(x, 0, z);   // y irrelevant — goal is XZ-only
-            }
-        };
+        return new Column(x, z);
     }
 
     /**
@@ -111,41 +91,12 @@ public interface NavGoal {
      * {@link ActionCosts#JUMP_ONE_BLOCK} per block, down {@link ActionCosts#DESCEND_ONE_BLOCK}.
      */
     static NavGoal yLevel(int level) {
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                return feet.getY() == level;
-            }
-            @Override public double heuristic(BlockPos from) {
-                int cy = from.getY();
-                if (cy > level) return ActionCosts.DESCEND_ONE_BLOCK * (cy - level);
-                if (cy < level) return (level - cy) * ActionCosts.JUMP_ONE_BLOCK;
-                return 0.0;
-            }
-            @Override public BlockPos center() {
-                return new BlockPos(0, level, 0);   // x/z irrelevant — goal is Y-only
-            }
-        };
+        return new YLevel(level);
     }
 
     /** Any feet cell within {@code radius} (Euclidean, blocks) of {@code pos}. */
     static NavGoal near(BlockPos pos, double radius) {
-        BlockPos goal = pos.immutable();
-        double radiusSqr = radius * radius;
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                return feet.distSqr(goal) <= radiusSqr;
-            }
-            @Override public double heuristic(BlockPos from) {
-                // The heuristic IS the full point bound — the radius
-                // only relaxes isAt, it is NOT subtracted from the aim. (Slightly
-                // inadmissible, deliberately: aiming at the centre keeps node ordering
-                // and the best-so-far partial stable.)
-                return pointBound(goal, from);
-            }
-            @Override public BlockPos center() {
-                return goal;
-            }
-        };
+        return new Near(pos, radius);
     }
 
     /**
@@ -158,25 +109,7 @@ public interface NavGoal {
      * beside its target.
      */
     static NavGoal nearGround(BlockPos pos, double radius) {
-        BlockPos goal = pos.immutable();
-        double radiusSqr = radius * radius;
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                int dy = feet.getY() - goal.getY();
-                if (dy < -1 || dy > 1) return false;
-                double dx = feet.getX() - goal.getX();
-                double dz = feet.getZ() - goal.getZ();
-                return dx * dx + dz * dz <= radiusSqr;
-            }
-            @Override public double heuristic(BlockPos from) {
-                // Full point bound, radius not subtracted — same deliberate slight
-                // inadmissibility as near(): aim at the centre for stable ordering.
-                return pointBound(goal, from);
-            }
-            @Override public BlockPos center() {
-                return goal;
-            }
-        };
+        return new NearGround(pos, radius);
     }
 
     /**
@@ -186,23 +119,7 @@ public interface NavGoal {
      * guarantee (only occupiable cells become nodes).
      */
     static NavGoal adjacent(BlockPos target) {
-        BlockPos goal = target.immutable();
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                int dx = Math.abs(feet.getX() - goal.getX());
-                int dz = Math.abs(feet.getZ() - goal.getZ());
-                int dy = Math.abs(feet.getY() - goal.getY());
-                return dx + dz == 1 && dy <= 1;
-            }
-            @Override public double heuristic(BlockPos from) {
-                // One step + one jump of slack vs the point bound.
-                return Math.max(0.0, pointBound(goal, from)
-                        - PathSettings.COST_HEURISTIC - ActionCosts.JUMP_ONE_BLOCK);
-            }
-            @Override public BlockPos center() {
-                return goal;
-            }
-        };
+        return new Adjacent(target);
     }
 
     /**
@@ -215,25 +132,7 @@ public interface NavGoal {
      * whichever neighbouring cell the graph can actually stand on.
      */
     static NavGoal getToBlock(BlockPos target) {
-        BlockPos goal = target.immutable();
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                int dx = Math.abs(feet.getX() - goal.getX());
-                int dz = Math.abs(feet.getZ() - goal.getZ());
-                int dy = feet.getY() - goal.getY();
-                int bodyDy = dy < 0 ? dy + 1 : dy;
-                return dx + dz + Math.abs(bodyDy) <= 1;
-            }
-            @Override public double heuristic(BlockPos from) {
-                // One step + one jump of slack vs the point bound (same slack as
-                // adjacent(): any accepted cell is at most that much off-centre).
-                return Math.max(0.0, pointBound(goal, from)
-                        - PathSettings.COST_HEURISTIC - ActionCosts.JUMP_ONE_BLOCK);
-            }
-            @Override public BlockPos center() {
-                return goal;
-            }
-        };
+        return new GetToBlock(target);
     }
 
     /**
@@ -244,42 +143,7 @@ public interface NavGoal {
      * often the one walled in and unreachable).
      */
     static NavGoal composite(java.util.List<NavGoal> goals) {
-        java.util.List<NavGoal> gs = java.util.List.copyOf(goals);
-        if (gs.isEmpty()) {
-            throw new IllegalArgumentException("composite goal needs at least one member");
-        }
-        // Centre = centroid of the members, NOT gs.get(0). The member list is
-        // rebuilt every tick (ores re-sorted by distance as the body moves), so a
-        // first-member centre would jitter and trip PlayerNav's goal-moved replan
-        // every tick. The centroid only shifts when the SET changes (an ore mined
-        // or found), which is what "the goal moved" should actually mean.
-        long sx = 0, sy = 0, sz = 0;
-        for (NavGoal g : gs) {
-            BlockPos c = g.center();
-            sx += c.getX();
-            sy += c.getY();
-            sz += c.getZ();
-        }
-        BlockPos centroid = new BlockPos(
-                (int) (sx / gs.size()), (int) (sy / gs.size()), (int) (sz / gs.size()));
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                for (NavGoal g : gs) {
-                    if (g.isAt(feet)) return true;
-                }
-                return false;
-            }
-            @Override public double heuristic(BlockPos from) {
-                double min = Double.MAX_VALUE;
-                for (NavGoal g : gs) {
-                    min = Math.min(min, g.heuristic(from));
-                }
-                return min;
-            }
-            @Override public BlockPos center() {
-                return centroid;
-            }
-        };
+        return new Composite(goals);
     }
 
     /**
@@ -298,33 +162,7 @@ public interface NavGoal {
      * accepted band to zero cost.
      */
     static NavGoal mineColumn(BlockPos ore, int maxBelow) {
-        BlockPos o = ore.immutable();
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                return feet.getX() == o.getX() && feet.getZ() == o.getZ()
-                        && feet.getY() <= o.getY() && feet.getY() >= o.getY() - maxBelow;
-            }
-            @Override public double heuristic(BlockPos from) {
-                double dx = Math.abs(o.getX() - from.getX());
-                double dz = Math.abs(o.getZ() - from.getZ());
-                double horizontal = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
-                        * PathSettings.COST_HEURISTIC;
-                // Feet anywhere in {o.y .. o.y-maxBelow} count as arrived: fold that
-                // band to zero.
-                int yDiff = from.getY() - o.getY();
-                int adj = yDiff >= 0 ? yDiff : Math.min(0, yDiff + maxBelow);
-                // Above the goal (adj>0) we DESCEND to it,
-                // below it (adj<0) we ASCEND. (The old mine() had these two swapped,
-                // overestimating descents — an inadmissible heuristic.)
-                double vertical = adj > 0
-                        ? adj * ActionCosts.DESCEND_ONE_BLOCK
-                        : -adj * ActionCosts.JUMP_ONE_BLOCK;
-                return horizontal + vertical;
-            }
-            @Override public BlockPos center() {
-                return o;
-            }
-        };
+        return new MineColumn(ore, maxBelow);
     }
 
     /** Loosest-stance shorthand (feet at the ore, one, or two below). */
@@ -340,28 +178,312 @@ public interface NavGoal {
      * walks outward; the next replan continues exploring.
      */
     static NavGoal runAway(BlockPos from, int maintainY) {
-        BlockPos f0 = from.immutable();
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                return false;   // never done — keep exploring outward
+        return new RunAway(from, maintainY);
+    }
+
+    // ---- 工厂产物(具名,参数可读;行为与原匿名类逐字一致) ----
+
+    /** {@link #exact} 的产物:三轴全等才到达。 */
+    final class Exact implements NavGoal {
+        public final BlockPos goal;
+
+        Exact(BlockPos pos) {
+            this.goal = pos.immutable();
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            return feet.equals(goal);
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            return pointBound(goal, from);
+        }
+
+        @Override public BlockPos center() {
+            return goal;
+        }
+    }
+
+    /** {@link #column} 的产物:任意高度的 XZ 列。 */
+    final class Column implements NavGoal {
+        public final int x;
+        public final int z;
+
+        Column(int x, int z) {
+            this.x = x;
+            this.z = z;
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            return feet.getX() == x && feet.getZ() == z;
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            double dx = Math.abs(x - from.getX());
+            double dz = Math.abs(z - from.getZ());
+            return (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
+                    * PathSettings.COST_HEURISTIC;
+        }
+
+        @Override public BlockPos center() {
+            return new BlockPos(x, 0, z);   // y irrelevant — goal is XZ-only
+        }
+    }
+
+    /** {@link #yLevel} 的产物:任意 XZ 的 Y 层。 */
+    final class YLevel implements NavGoal {
+        public final int level;
+
+        YLevel(int level) {
+            this.level = level;
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            return feet.getY() == level;
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            int cy = from.getY();
+            if (cy > level) return ActionCosts.DESCEND_ONE_BLOCK * (cy - level);
+            if (cy < level) return (level - cy) * ActionCosts.JUMP_ONE_BLOCK;
+            return 0.0;
+        }
+
+        @Override public BlockPos center() {
+            return new BlockPos(0, level, 0);   // x/z irrelevant — goal is Y-only
+        }
+    }
+
+    /** {@link #near} 的产物:三维欧氏球邻域。 */
+    final class Near implements NavGoal {
+        public final BlockPos goal;
+        public final double radius;
+        public final double radiusSqr;
+
+        Near(BlockPos pos, double radius) {
+            this.goal = pos.immutable();
+            this.radius = radius;
+            this.radiusSqr = radius * radius;
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            return feet.distSqr(goal) <= radiusSqr;
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            // The heuristic IS the full point bound — the radius
+            // only relaxes isAt, it is NOT subtracted from the aim. (Slightly
+            // inadmissible, deliberately: aiming at the centre keeps node ordering
+            // and the best-so-far partial stable.)
+            return pointBound(goal, from);
+        }
+
+        @Override public BlockPos center() {
+            return goal;
+        }
+    }
+
+    /** {@link #nearGround} 的产物:水平半径 + 目标高度 ±1 的地面邻域。 */
+    final class NearGround implements NavGoal {
+        public final BlockPos goal;
+        public final double radius;
+        public final double radiusSqr;
+
+        NearGround(BlockPos pos, double radius) {
+            this.goal = pos.immutable();
+            this.radius = radius;
+            this.radiusSqr = radius * radius;
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            int dy = feet.getY() - goal.getY();
+            if (dy < -1 || dy > 1) return false;
+            double dx = feet.getX() - goal.getX();
+            double dz = feet.getZ() - goal.getZ();
+            return dx * dx + dz * dz <= radiusSqr;
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            // Full point bound, radius not subtracted — same deliberate slight
+            // inadmissibility as near(): aim at the centre for stable ordering.
+            return pointBound(goal, from);
+        }
+
+        @Override public BlockPos center() {
+            return goal;
+        }
+    }
+
+    /** {@link #adjacent} 的产物:水平正交贴邻、目标高度 ±1。 */
+    final class Adjacent implements NavGoal {
+        public final BlockPos goal;
+
+        Adjacent(BlockPos target) {
+            this.goal = target.immutable();
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            int dx = Math.abs(feet.getX() - goal.getX());
+            int dz = Math.abs(feet.getZ() - goal.getZ());
+            int dy = Math.abs(feet.getY() - goal.getY());
+            return dx + dz == 1 && dy <= 1;
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            // One step + one jump of slack vs the point bound.
+            return Math.max(0.0, pointBound(goal, from)
+                    - PathSettings.COST_HEURISTIC - ActionCosts.JUMP_ONE_BLOCK);
+        }
+
+        @Override public BlockPos center() {
+            return goal;
+        }
+    }
+
+    /** {@link #getToBlock} 的产物:身高修正的 Manhattan 贴脸邻域。 */
+    final class GetToBlock implements NavGoal {
+        public final BlockPos goal;
+
+        GetToBlock(BlockPos target) {
+            this.goal = target.immutable();
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            int dx = Math.abs(feet.getX() - goal.getX());
+            int dz = Math.abs(feet.getZ() - goal.getZ());
+            int dy = feet.getY() - goal.getY();
+            int bodyDy = dy < 0 ? dy + 1 : dy;
+            return dx + dz + Math.abs(bodyDy) <= 1;
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            // One step + one jump of slack vs the point bound (same slack as
+            // adjacent(): any accepted cell is at most that much off-centre).
+            return Math.max(0.0, pointBound(goal, from)
+                    - PathSettings.COST_HEURISTIC - ActionCosts.JUMP_ONE_BLOCK);
+        }
+
+        @Override public BlockPos center() {
+            return goal;
+        }
+    }
+
+    /** {@link #composite} 的产物:任一成员满足即到达,h 取成员最小值。 */
+    final class Composite implements NavGoal {
+        public final java.util.List<NavGoal> members;
+        private final BlockPos centroid;
+
+        Composite(java.util.List<NavGoal> goals) {
+            java.util.List<NavGoal> gs = java.util.List.copyOf(goals);
+            if (gs.isEmpty()) {
+                throw new IllegalArgumentException("composite goal needs at least one member");
             }
-            @Override public double heuristic(BlockPos fromPos) {
-                // Run-away heuristic: −(octile×weight) — negated so farther = lower h
-                // = preferred — then blended with the y-hold term:
-                // min*0.6 + yLevelTerm*1.5.
-                double dx = Math.abs(f0.getX() - fromPos.getX());
-                double dz = Math.abs(f0.getZ() - fromPos.getZ());
-                double xz = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
-                        * PathSettings.COST_HEURISTIC;
-                double min = -xz;
-                int cy = fromPos.getY();
-                double yLevel = cy > maintainY ? (cy - maintainY) * ActionCosts.DESCEND_ONE_BLOCK
-                        : cy < maintainY ? (maintainY - cy) * ActionCosts.JUMP_ONE_BLOCK : 0.0;
-                return min * 0.6 + yLevel * 1.5;
+            // Centre = centroid of the members, NOT gs.get(0). The member list is
+            // rebuilt every tick (ores re-sorted by distance as the body moves), so a
+            // first-member centre would jitter and trip PlayerNav's goal-moved replan
+            // every tick. The centroid only shifts when the SET changes (an ore mined
+            // or found), which is what "the goal moved" should actually mean.
+            long sx = 0, sy = 0, sz = 0;
+            for (NavGoal g : gs) {
+                BlockPos c = g.center();
+                sx += c.getX();
+                sy += c.getY();
+                sz += c.getZ();
             }
-            @Override public BlockPos center() {
-                return f0;
+            this.members = gs;
+            this.centroid = new BlockPos(
+                    (int) (sx / gs.size()), (int) (sy / gs.size()), (int) (sz / gs.size()));
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            for (NavGoal g : members) {
+                if (g.isAt(feet)) return true;
             }
-        };
+            return false;
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            double min = Double.MAX_VALUE;
+            for (NavGoal g : members) {
+                min = Math.min(min, g.heuristic(from));
+            }
+            return min;
+        }
+
+        @Override public BlockPos center() {
+            return centroid;
+        }
+    }
+
+    /** {@link #mineColumn} 的产物:矿柱站位带(脚位在矿至矿下 maxBelow 格)。 */
+    final class MineColumn implements NavGoal {
+        public final BlockPos ore;
+        public final int maxBelow;
+
+        MineColumn(BlockPos ore, int maxBelow) {
+            this.ore = ore.immutable();
+            this.maxBelow = maxBelow;
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            return feet.getX() == ore.getX() && feet.getZ() == ore.getZ()
+                    && feet.getY() <= ore.getY() && feet.getY() >= ore.getY() - maxBelow;
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            double dx = Math.abs(ore.getX() - from.getX());
+            double dz = Math.abs(ore.getZ() - from.getZ());
+            double horizontal = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
+                    * PathSettings.COST_HEURISTIC;
+            // Feet anywhere in {o.y .. o.y-maxBelow} count as arrived: fold that
+            // band to zero.
+            int yDiff = from.getY() - ore.getY();
+            int adj = yDiff >= 0 ? yDiff : Math.min(0, yDiff + maxBelow);
+            // Above the goal (adj>0) we DESCEND to it,
+            // below it (adj<0) we ASCEND. (The old mine() had these two swapped,
+            // overestimating descents — an inadmissible heuristic.)
+            double vertical = adj > 0
+                    ? adj * ActionCosts.DESCEND_ONE_BLOCK
+                    : -adj * ActionCosts.JUMP_ONE_BLOCK;
+            return horizontal + vertical;
+        }
+
+        @Override public BlockPos center() {
+            return ore;
+        }
+    }
+
+    /** {@link #runAway} 的产物:持高度外逃,永不"到达"。 */
+    final class RunAway implements NavGoal {
+        public final BlockPos from;
+        public final int maintainY;
+
+        RunAway(BlockPos from, int maintainY) {
+            this.from = from.immutable();
+            this.maintainY = maintainY;
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            return false;   // never done — keep exploring outward
+        }
+
+        @Override public double heuristic(BlockPos fromPos) {
+            // Run-away heuristic: −(octile×weight) — negated so farther = lower h
+            // = preferred — then blended with the y-hold term:
+            // min*0.6 + yLevelTerm*1.5.
+            double dx = Math.abs(from.getX() - fromPos.getX());
+            double dz = Math.abs(from.getZ() - fromPos.getZ());
+            double xz = (Math.min(dx, dz) * ActionCosts.SQRT_2 + Math.abs(dx - dz))
+                    * PathSettings.COST_HEURISTIC;
+            double min = -xz;
+            int cy = fromPos.getY();
+            double yLevel = cy > maintainY ? (cy - maintainY) * ActionCosts.DESCEND_ONE_BLOCK
+                    : cy < maintainY ? (maintainY - cy) * ActionCosts.JUMP_ONE_BLOCK : 0.0;
+            return min * 0.6 + yLevel * 1.5;
+        }
+
+        @Override public BlockPos center() {
+            return from;
+        }
     }
 }
