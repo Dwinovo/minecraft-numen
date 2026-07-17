@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.pathing.util;
+package com.dwinovo.numen.core.scan;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;

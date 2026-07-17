@@ -4,8 +4,8 @@ import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.exec.Interaction;
-import com.dwinovo.numen.core.pathing.exec.Placement;
+import com.dwinovo.numen.core.act.Interaction;
+import com.dwinovo.numen.core.act.Placement;
 import com.dwinovo.numen.core.pathing.movement.Movement;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import net.minecraft.core.Direction;

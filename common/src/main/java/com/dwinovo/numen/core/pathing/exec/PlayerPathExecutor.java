@@ -1,5 +1,8 @@
 package com.dwinovo.numen.core.pathing.exec;
 
+import com.dwinovo.numen.core.act.Interaction;
+import com.dwinovo.numen.core.act.BlockDigger;
+import com.dwinovo.numen.core.act.PlaceManeuver;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.Constants;

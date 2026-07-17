@@ -4,11 +4,11 @@ import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.exec.BlockDigger;
+import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
-import com.dwinovo.numen.core.pathing.util.BlockScanner;
-import com.dwinovo.numen.core.pathing.util.ScanExecutor;
+import com.dwinovo.numen.core.scan.BlockScanner;
+import com.dwinovo.numen.core.scan.ScanExecutor;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.BlockPos;

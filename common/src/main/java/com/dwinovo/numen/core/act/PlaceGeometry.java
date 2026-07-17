@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.pathing.exec;
+package com.dwinovo.numen.core.act;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.pathing.util;
+package com.dwinovo.numen.core.scan;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;

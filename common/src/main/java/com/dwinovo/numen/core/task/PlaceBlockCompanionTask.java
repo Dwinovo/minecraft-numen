@@ -5,9 +5,9 @@ import com.dwinovo.numen.task.Suspendable;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.exec.BlockDigger;
-import com.dwinovo.numen.core.pathing.exec.PlaceManeuver;
-import com.dwinovo.numen.core.pathing.exec.Placement;
+import com.dwinovo.numen.core.act.BlockDigger;
+import com.dwinovo.numen.core.act.PlaceManeuver;
+import com.dwinovo.numen.core.act.Placement;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.task.base.GoToThenDoTask;
