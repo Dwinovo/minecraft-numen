@@ -1,0 +1,429 @@
+package com.dwinovo.numen.core.pathing.execute;
+
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.Supplier;
+
+import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.pathing.astar.Favoring;
+import com.dwinovo.numen.core.pathing.astar.NavPath;
+import com.dwinovo.numen.core.pathing.astar.PathCalcResult;
+import com.dwinovo.numen.core.pathing.goals.Goal;
+import com.dwinovo.numen.core.pathing.moves.CalculationContext;
+import com.dwinovo.numen.core.pathing.moves.MovementHelper;
+import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.entity.NumenPlayer;
+
+import net.minecraft.core.BlockPos;
+
+/**
+ * 段规划状态机:目标 → 首段搜索 → 执行 → 提前规划接续段 → 无缝接段,
+ * 直到进入目标或被取消。持有 current(在执行的段)/ next(算好的下一
+ * 段)/ inProgress(在飞搜索)三个槽位与本次导航的成本上下文。
+ *
+ * <p>每 tick 一次 {@link #tick()}:先记录假起点(expectedSegmentStart),
+ * 依次处理暂停/取消请求、在飞搜索合法性、当前段推进、段界分流、提前
+ * 接段与拼接、提前规划触发,最后把本 tick 的输入/视角记录提交到实体。
+ *
+ * <p>独立可实例化:构造只要玩家、搜索派发器与成本上下文工厂,不挂接
+ * 任何任务层。
+ */
+public final class PathingCore {
+
+    private final NumenPlayer player;
+    private final ExecHarness harness;
+    private final SearchDispatcher dispatcher;
+    /** 成本上下文工厂:每次 setGoalAndPath 取样一份,搜索与执行共用同一把尺。 */
+    private final Supplier<CalculationContext> contextFactory;
+
+    private PathExecutor current;
+    private PathExecutor next;
+    private SearchDispatcher.SearchHandle inProgress;
+    private Goal goal;
+    private CalculationContext context;
+    private BlockPos expectedSegmentStart;
+
+    /** 上一次 current.onTick() 的返回值(可安全中断)。 */
+    private boolean safeToCancel = true;
+    private boolean pauseRequestedLastTick;
+    private boolean unpausedLastTick = true;
+    private boolean pausedThisTick;
+    private boolean cancelRequested;
+    private boolean calcFailedLastTick;
+
+    public PathingCore(NumenPlayer player, SearchDispatcher dispatcher,
+                       Supplier<CalculationContext> contextFactory) {
+        this.player = player;
+        this.harness = new ExecHarness(player);
+        this.dispatcher = dispatcher;
+        this.contextFactory = contextFactory;
+    }
+
+    // ==================== 对外 API ====================
+
+    /**
+     * 设定目标并开始寻路。目标失效裁决:当前段终点原本在旧目标内、
+     * 而不在新目标内 → 旧段作废(软取消,不清键,下一 tick 无缝重算)。
+     * 已在目标内 / 已有段或在飞搜索时不再发起新搜索。
+     *
+     * @return 是否真的发起了一次新搜索
+     */
+    public boolean setGoalAndPath(Goal newGoal) {
+        if (NavSettings.get().cancelOnGoalInvalidation && goalInvalidatedBy(newGoal)) {
+            Constants.LOG.debug("当前段终点不再被新目标认可,软取消");
+            softCancelIfSafe();
+        }
+        this.goal = newGoal;
+        if (goal == null) {
+            return false;
+        }
+        this.context = contextFactory.get();
+        BlockPos feet = PathExecutor.playerFeet(player);
+        if (goal.isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
+            return false;
+        }
+        if (current != null || inProgress != null) {
+            return false;
+        }
+        expectedSegmentStart = pathStart();
+        startSearch(expectedSegmentStart);
+        return true;
+    }
+
+    /** 目标失效裁决:当前段终点原本在旧目标内、而不在新目标内。 */
+    private boolean goalInvalidatedBy(Goal newGoal) {
+        if (current == null || goal == null || newGoal == null) {
+            return false;
+        }
+        BlockPos dest = current.getPath().getDest();
+        return goal.isInGoal(dest.getX(), dest.getY(), dest.getZ())
+                && !newGoal.isInGoal(dest.getX(), dest.getY(), dest.getZ());
+    }
+
+    /** 请求暂停;下一 tick 在安全点生效(路径保留,isPathing 变 false)。 */
+    public void requestPause() {
+        pauseRequestedLastTick = true;
+    }
+
+    /** 安全时取消当前段(取消在飞搜索、清段、清键、停挖)。 */
+    public boolean cancelSegmentIfSafe() {
+        if (isSafeToCancel()) {
+            segmentCancel();
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * 软取消:取消在飞搜索、丢弃段,但不清键——身体保持惯性,下一
+     * tick 的重规划无缝接手。不安全时只取消在飞搜索。
+     */
+    public void softCancelIfSafe() {
+        if (inProgress != null) {
+            inProgress.cancel();
+        }
+        if (!isSafeToCancel()) {
+            return;
+        }
+        current = null;
+        next = null;
+        cancelRequested = true;
+    }
+
+    /** 全面取消:段取消(若安全)并放弃目标。 */
+    public boolean cancelEverything() {
+        boolean doIt = cancelSegmentIfSafe();
+        goal = null;
+        return doIt;
+    }
+
+    /** 是否正在沿路径行进(有段且本 tick 未暂停)。 */
+    public boolean isPathing() {
+        return current != null && !pausedThisTick;
+    }
+
+    /** 当前是否可安全中断(悬空放置、跑酷空中等时刻为 false)。 */
+    public boolean isSafeToCancel() {
+        return current == null || safeToCancel;
+    }
+
+    /** 上一 tick 是否有一次首段计算以失败告终。 */
+    public boolean calcFailedLastTick() {
+        return calcFailedLastTick;
+    }
+
+    public Goal getGoal() {
+        return goal;
+    }
+
+    public PathExecutor getCurrent() {
+        return current;
+    }
+
+    public PathExecutor getNext() {
+        return next;
+    }
+
+    public boolean hasInProgressSearch() {
+        return inProgress != null;
+    }
+
+    public ExecHarness harness() {
+        return harness;
+    }
+
+    // ==================== 每 tick ====================
+
+    /**
+     * 推进一 tick。执行前强制记录假起点(执行会移动身位,搜索起点要
+     * 用执行前的);末尾统一提交输入/视角并落地疾跑决策。
+     */
+    public void tick() {
+        expectedSegmentStart = pathStart();
+        calcFailedLastTick = false;
+        tickPath();
+        harness.commitIfDirty();
+        if (current != null && !pausedThisTick) {
+            player.setSprinting(current.isSprinting());
+        }
+    }
+
+    private void tickPath() {
+        pausedThisTick = false;
+        pollSearchResult();
+        // 暂停请求:安全点生效;首次进入暂停时清键停挖,此后静默保持
+        if (pauseRequestedLastTick && isSafeToCancel()) {
+            pauseRequestedLastTick = false;
+            if (unpausedLastTick) {
+                harness.clearAllKeys();
+                harness.stopBreaking();
+            }
+            unpausedLastTick = false;
+            pausedThisTick = true;
+            return;
+        }
+        unpausedLastTick = true;
+        if (cancelRequested) {
+            cancelRequested = false;
+            harness.clearAllKeys();
+        }
+        // 在飞搜索合法性:起点既不是当前段终点、也不是身位/假起点,
+        // 其最优部分路径也不含这两者 → 玩家被打飞/传送,计算作废
+        if (inProgress != null) {
+            BlockPos calcFrom = inProgress.searchStart();
+            BlockPos feet = PathExecutor.playerFeet(player);
+            Optional<NavPath> currentBest = inProgress.bestPathSoFar();
+            if ((current == null || !current.getPath().getDest().equals(calcFrom))
+                    && !calcFrom.equals(feet) && !calcFrom.equals(expectedSegmentStart)
+                    && (currentBest.isEmpty()
+                            || (!currentBest.get().positions().contains(feet)
+                                && !currentBest.get().positions().contains(expectedSegmentStart)))) {
+                Constants.LOG.debug("在飞搜索的起点已作废,取消该计算");
+                inProgress.cancel();
+            }
+        }
+        if (current == null) {
+            return;
+        }
+        safeToCancel = current.onTick();
+        if (current.failed() || current.finished()) {
+            current = null;
+            BlockPos feet = PathExecutor.playerFeet(player);
+            if (goal == null || goal.isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
+                Constants.LOG.debug("已到达目标");
+                next = null;
+                return;
+            }
+            if (next != null && !next.getPath().positions().contains(feet)
+                    && !next.getPath().positions().contains(expectedSegmentStart)) {
+                // 段中途失败,身位已不在计划好的下一段上,只能忍痛丢弃
+                Constants.LOG.debug("下一段不含当前身位,丢弃");
+                next = null;
+            }
+            if (next != null) {
+                Constants.LOG.debug("无缝接上已计划的下一段");
+                current = next;
+                next = null;
+                current.onTick(); // 不浪费本 tick,立即推进
+                return;
+            }
+            if (inProgress != null) {
+                return; // 段刚结束,等在飞计算
+            }
+            startSearch(expectedSegmentStart);
+            return;
+        }
+        // 当前段进行中:身位恰在下一段格位上时提前跳段
+        if (safeToCancel && next != null && next.snipsnapifpossible()) {
+            Constants.LOG.debug("提前接入下一段");
+            current = next;
+            next = null;
+            current.onTick();
+            return;
+        }
+        if (NavSettings.get().splicePath) {
+            current = current.trySplice(next);
+        }
+        if (next != null && current.getPath().getDest().equals(next.getPath().getDest())) {
+            next = null;
+        }
+        if (inProgress != null) {
+            return;
+        }
+        if (next != null) {
+            return;
+        }
+        BlockPos dest = current.getPath().getDest();
+        if (goal == null || goal.isInGoal(dest.getX(), dest.getY(), dest.getZ())) {
+            return; // 当前段已能走到目标
+        }
+        // 剩余成本不含当前移动:超长的末尾移动不该阻塞提前规划
+        double ticksRemaining = current.getPath().ticksRemainingFrom(current.getPosition() + 1);
+        if (ticksRemaining < NavSettings.get().planningTickLookahead) {
+            Constants.LOG.debug("当前段剩余约 {} tick,提前规划接续段", (int) ticksRemaining);
+            startSearch(current.getPath().getDest());
+        }
+    }
+
+    // ==================== 搜索派发与收割 ====================
+
+    private void startSearch(BlockPos start) {
+        if (inProgress != null) {
+            throw new IllegalStateException("已有在飞搜索");
+        }
+        if (goal == null) {
+            return;
+        }
+        long primaryTimeout;
+        long failureTimeout;
+        NavSettings settings = NavSettings.get();
+        if (current == null) {
+            primaryTimeout = settings.primaryTimeoutMS;
+            failureTimeout = settings.failureTimeoutMS;
+        } else {
+            primaryTimeout = settings.planAheadPrimaryTimeoutMS;
+            failureTimeout = settings.planAheadFailureTimeoutMS;
+        }
+        Favoring favoring = new Favoring(current == null ? null : current.getPath(), context);
+        // 真实脚位与展开起点同层且 XZ 各差 ≤1 时,假起点素材用脚位
+        BlockPos feet = PathExecutor.playerFeet(player);
+        BlockPos realStart = start;
+        if (feet.getY() == start.getY()
+                && Math.abs(feet.getX() - start.getX()) <= 1
+                && Math.abs(feet.getZ() - start.getZ()) <= 1) {
+            realStart = feet;
+        }
+        inProgress = dispatcher.submit(realStart, start, goal, context, favoring,
+                primaryTimeout, failureTimeout);
+    }
+
+    /** 收割在飞搜索:首段须包含假起点(否则是孤儿段),接续段须首尾相接。 */
+    private void pollSearchResult() {
+        if (inProgress == null) {
+            return;
+        }
+        Optional<PathCalcResult> polled = inProgress.poll();
+        if (polled.isEmpty()) {
+            return;
+        }
+        inProgress = null;
+        PathCalcResult result = polled.get();
+        Optional<PathExecutor> executor = result.getPath().map(this::newExecutor);
+        if (current == null) {
+            if (executor.isPresent()) {
+                if (executor.get().getPath().positions().contains(expectedSegmentStart)) {
+                    current = executor.get();
+                } else {
+                    Constants.LOG.debug("丢弃起点不符的孤儿路径段");
+                }
+            } else if (result.getType() != PathCalcResult.Type.CANCELLATION
+                    && result.getType() != PathCalcResult.Type.EXCEPTION) {
+                Constants.LOG.debug("首段计算失败");
+                calcFailedLastTick = true;
+            }
+        } else {
+            if (next == null) {
+                if (executor.isPresent()) {
+                    if (executor.get().getPath().getSrc().equals(current.getPath().getDest())) {
+                        next = executor.get();
+                    } else {
+                        Constants.LOG.debug("丢弃起点与当前段终点不接的接续段");
+                    }
+                } else {
+                    Constants.LOG.debug("接续段计算失败");
+                }
+            } else {
+                Constants.LOG.warn("收到计算结果时已有下一段,丢弃该结果");
+            }
+        }
+    }
+
+    private PathExecutor newExecutor(NavPath path) {
+        return new PathExecutor(path, player, harness,
+                () -> context,
+                () -> inProgress == null ? Optional.empty() : inProgress.bestPathSoFar(),
+                context.loadedTest);
+    }
+
+    // ==================== 假起点 ====================
+
+    /**
+     * 新段的搜索起点。脚下不可站时:在地面 → 3×3 邻格按水平距离取最近
+     * 四个(XZ 都偏出 0.8 的除外,不可能悬在那块边上),第一个"下可站、
+     * 本格与上格可穿"的格当起点(半悬在边缘的判定);空中 → 再下一格
+     * 可站则用脚下格(跳跃/下落中)。其余情况就用脚位。
+     */
+    public BlockPos pathStart() {
+        BlockPos feet = PathExecutor.playerFeet(player);
+        var level = player.level();
+        if (!MovementHelper.canWalkOn(level, feet.below())) {
+            if (player.onGround()) {
+                double playerX = player.position().x;
+                double playerZ = player.position().z;
+                List<BlockPos> closest = new ArrayList<>();
+                for (int dx = -1; dx <= 1; dx++) {
+                    for (int dz = -1; dz <= 1; dz++) {
+                        closest.add(new BlockPos(feet.getX() + dx, feet.getY(), feet.getZ() + dz));
+                    }
+                }
+                closest.sort(Comparator.comparingDouble(pos ->
+                        ((pos.getX() + 0.5) - playerX) * ((pos.getX() + 0.5) - playerX)
+                        + ((pos.getZ() + 0.5) - playerZ) * ((pos.getZ() + 0.5) - playerZ)));
+                for (int i = 0; i < 4; i++) {
+                    BlockPos possibleSupport = closest.get(i);
+                    double xDist = Math.abs((possibleSupport.getX() + 0.5) - playerX);
+                    double zDist = Math.abs((possibleSupport.getZ() + 0.5) - playerZ);
+                    if (xDist > 0.8 && zDist > 0.8) {
+                        continue;
+                    }
+                    if (MovementHelper.canWalkOn(level, possibleSupport.below())
+                            && MovementHelper.canWalkThrough(level, possibleSupport)
+                            && MovementHelper.canWalkThrough(level, possibleSupport.above())) {
+                        return possibleSupport;
+                    }
+                }
+            } else {
+                if (MovementHelper.canWalkOn(level, feet.below().below())) {
+                    return feet.below();
+                }
+            }
+        }
+        return feet;
+    }
+
+    // ==================== 内部取消 ====================
+
+    private void segmentCancel() {
+        if (inProgress != null) {
+            inProgress.cancel();
+        }
+        if (current != null) {
+            current = null;
+            next = null;
+            harness.clearAllKeys();
+            harness.stopBreaking();
+        }
+    }
+}
