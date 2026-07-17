@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.pathing.moves;
 import java.util.List;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.pathing.util.BlockHelper;
 
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
@@ -250,16 +251,30 @@ public class CalculationContext {
         return placeBlockCost;
     }
 
+    /** 挖掘保护判定的专用游标(与 {@link #cursor} 分开,免得互相踩)。 */
+    private final BlockPos.MutableBlockPos protectionCursor = new BlockPos.MutableBlockPos();
+
     /**
-     * 挖 (x,y,z) 的成本乘数。sacred 永远 INF(forceBreak 不可穿透);
-     * 总开关关闭且不在例外清单 → INF;否则 1(功能方块的 ×10 修正
-     * 折在 ToolSet 速度里)。
+     * 挖 (x,y,z) 的成本乘数。三层禁令,从严到宽:
+     * <ol>
+     *   <li>sacred(自身目标格)永远 INF,任何开关都不可穿透;</li>
+     *   <li>功能方块绝不拆(don't-grief):do_not_break 标签、带方块实体
+     *       的方块(箱子/熔炉/漏斗/模组机器…)、床——直接 INF,
+     *       {@code forceBreak} 也不解除。{@code avoidBreakingMultiplier}
+     *       的 ×10 缓冲档保留为引擎能力({@link ToolSet}),产品清单走
+     *       这里的 INF 档;</li>
+     *   <li>总开关 {@code allowBreak} 关闭且不在例外清单 → INF,
+     *       {@code forceBreak} 只解除这一层普通方块的场景。</li>
+     * </ol>
      */
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
         if (sacred.contains(BlockPos.asLong(x, y, z))) {
             return COST_INF;
         }
-        if (!allowBreak && !allowBreakAnyway.contains(current.getBlock())) {
+        if (BlockHelper.shouldAvoidBreaking(view, protectionCursor.set(x, y, z))) {
+            return COST_INF;
+        }
+        if (!allowBreak && !forceBreak && !allowBreakAnyway.contains(current.getBlock())) {
             return COST_INF;
         }
         return 1;
