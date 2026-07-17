@@ -175,6 +175,37 @@ public interface NavGoal {
     }
 
     /**
+     * Any feet cell TOUCHING {@code target}: beside it, on top of it, up to two
+     * below it (the two-block body still reaches its underside) — or in it, if
+     * the cell is enterable. Membership is a Manhattan bound with the body-height
+     * correction: {@code |dx| + |dy'| + |dz| <= 1} where {@code dy' = dy < 0 ?
+     * dy+1 : dy}. This is the "get to this block to use it" goal — the target
+     * cell itself stays untouched (a chest, a crafting table), the path ends on
+     * whichever neighbouring cell the graph can actually stand on.
+     */
+    static NavGoal getToBlock(BlockPos target) {
+        BlockPos goal = target.immutable();
+        return new NavGoal() {
+            @Override public boolean isAt(BlockPos feet) {
+                int dx = Math.abs(feet.getX() - goal.getX());
+                int dz = Math.abs(feet.getZ() - goal.getZ());
+                int dy = feet.getY() - goal.getY();
+                int bodyDy = dy < 0 ? dy + 1 : dy;
+                return dx + dz + Math.abs(bodyDy) <= 1;
+            }
+            @Override public double heuristic(BlockPos from) {
+                // One step + one jump of slack vs the point bound (same slack as
+                // adjacent(): any accepted cell is at most that much off-centre).
+                return Math.max(0.0, pointBound(goal, from)
+                        - PathSettings.COST_HEURISTIC - ActionCosts.JUMP_ONE_BLOCK);
+            }
+            @Override public BlockPos center() {
+                return goal;
+            }
+        };
+    }
+
+    /**
      * Any of several goals. Satisfied by reaching
      * ANY member; the heuristic is the minimum over members, so a single A* search
      * naturally heads for the CLOSEST reachable one. This is how mining targets a

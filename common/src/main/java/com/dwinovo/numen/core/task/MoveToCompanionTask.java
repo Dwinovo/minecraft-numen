@@ -19,8 +19,10 @@ import java.util.Map;
  *   <li>{@link MoveToTaskRecord.Kind#COLUMN} → {@link NavGoal#column}:
  *       reach the (x,z) location at any height — the default "go there", a wrong/
  *       absent Y can never make it unreachable;</li>
- *   <li>{@link MoveToTaskRecord.Kind#BLOCK} → {@link NavGoal#exact}:
- *       one exact cell;</li>
+ *   <li>{@link MoveToTaskRecord.Kind#BLOCK} → {@link NavGoal#exact} when the
+ *       cell is enterable, {@link NavGoal#getToBlock} when a solid block occupies
+ *       it — the caller means "get to that block" (a chest, a crafting table),
+ *       so standing adjacent counts as arrival and the block stays untouched;</li>
  *   <li>{@link MoveToTaskRecord.Kind#YLEVEL} → {@link NavGoal#yLevel}:
  *       reach a target elevation.</li>
  * </ul>
@@ -101,10 +103,27 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** The navigation goal for this move's kind. */
     private NavGoal goal() {
         return switch (r.kind) {
-            case BLOCK -> NavGoal.exact(blockTarget);
+            case BLOCK -> blockGoal();
             case COLUMN -> NavGoal.column(bx, bz);
             case YLEVEL -> NavGoal.yLevel(by);
         };
+    }
+
+    /**
+     * BLOCK auto-typing: an enterable target cell means "stand exactly there"
+     * ({@link NavGoal#exact}); a cell occupied by a solid means "get to that
+     * block" ({@link NavGoal#getToBlock} — beside/on top counts, the block stays
+     * untouched). Re-evaluated per replan, so a cell that opens up mid-journey
+     * (the occupant broke) tightens back to exact.
+     */
+    private NavGoal blockGoal() {
+        return targetCellSolid() ? NavGoal.getToBlock(blockTarget) : NavGoal.exact(blockTarget);
+    }
+
+    /** Does a collision shape occupy the target cell (feet can't go there)? */
+    private boolean targetCellSolid() {
+        return !player.level().getBlockState(blockTarget)
+                .getCollisionShape(player.level(), blockTarget).isEmpty();
     }
 
     /** Live arrival — exact, matching each goal's own membership test:
@@ -123,7 +142,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     private boolean reached() {
         BlockPos feet = feet();
         return switch (r.kind) {
-            case BLOCK -> feet.equals(blockTarget);
+            case BLOCK -> blockGoal().isAt(feet);   // ONE membership definition, shared with the search
             case COLUMN -> feet.getX() == bx && feet.getZ() == bz;
             case YLEVEL -> feet.getY() == by && player.onGround();
         };
@@ -266,6 +285,12 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case BLOCK -> {
                 if (feet().equals(blockTarget)) {
                     yield "reached the exact cell " + bx + "," + by + "," + bz + ".";
+                }
+                if (targetCellSolid() && NavGoal.getToBlock(blockTarget).isAt(feet())) {
+                    String occupant = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(
+                            player.level().getBlockState(blockTarget).getBlock()).getPath();
+                    yield "standing right beside " + bx + "," + by + "," + bz + " — that cell is "
+                            + occupant + ", so next to it IS arrival; it's within reach to use.";
                 }
                 // Got to the column but not the exact y (the usual "guessed Y was in
                 // the air" case) — teach the model to drop Y for a location.
