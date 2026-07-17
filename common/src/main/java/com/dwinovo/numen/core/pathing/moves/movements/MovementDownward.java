@@ -2,44 +2,91 @@ package com.dwinovo.numen.core.pathing.moves.movements;
 
 import java.util.Set;
 
-import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.Movement;
+import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+
+import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
+import static com.dwinovo.numen.core.pathing.moves.ActionCosts.FALL_N_BLOCKS_COST;
+import static com.dwinovo.numen.core.pathing.moves.ActionCosts.LADDER_DOWN_ONE_COST;
 
 /** 原地向下挖:挖掉脚下方块落进下一格(或沿梯子/藤蔓下一格)。 */
 public class MovementDownward extends Movement {
+
+    /** 自由落体阶段计 tick(前 10 tick 不按键)。 */
+    private int numTicks = 0;
 
     public MovementDownward(ServerPlayer player, BlockPos src, BlockPos dest) {
         super(player, src, dest, new BlockPos[]{dest});
     }
 
-    /** 成本入口。 */
-    // TODO: 规格书 B8 节 —— 下方可站校验与挖掘成本
-    public static double cost(CalculationContext context, int x, int y, int z) {
-        return ActionCosts.COST_INF;
+    @Override
+    public void reset() {
+        super.reset();
+        numTicks = 0;
     }
 
-    // TODO: 规格书 B8 节
+    /**
+     * 成本。总开关关闭或下二格不可站则不可行;脚下是梯/藤按下爬价,
+     * 否则落一格 + 挖脚下(脚下若是落沙,轮到执行时早已变空,不计沙链)。
+     */
+    public static double cost(CalculationContext context, int x, int y, int z) {
+        if (!context.allowDownward) {
+            return COST_INF;
+        }
+        if (!MovementHelper.canWalkOn(context, x, y - 2, z)) {
+            return COST_INF;
+        }
+        BlockState down = context.get(x, y - 1, z);
+        Block downBlock = down.getBlock();
+        if (downBlock == Blocks.LADDER || downBlock == Blocks.VINE) {
+            return LADDER_DOWN_ONE_COST;
+        } else {
+            return FALL_N_BLOCKS_COST[1]
+                    + MovementHelper.getMiningDurationTicks(context, x, y - 1, z, down, false);
+        }
+    }
+
     @Override
     public double calculateCost(CalculationContext context, MutableMoveResult result) {
-        return ActionCosts.COST_INF;
+        return cost(context, src.getX(), src.getY(), src.getZ());
     }
 
-    // TODO: 规格书 B8 节 —— 执行状态机
-    @Override
-    public MovementState updateState(MovementState state) {
-        return state.setStatus(MovementStatus.FAILED);
-    }
-
-    // TODO: 规格书 B8 节
     @Override
     protected Set<BlockPos> calculateValidPositions() {
         return Set.of(src, dest);
+    }
+
+    @Override
+    public MovementState updateState(MovementState state) {
+        super.updateState(state);
+        if (state.getStatus() != MovementStatus.RUNNING) {
+            return state;
+        }
+
+        BlockPos feet = player.blockPosition();
+        if (feet.equals(dest)) {
+            return state.setStatus(MovementStatus.SUCCESS);
+        } else if (!getValidPositions().contains(feet)) {
+            return state.setStatus(MovementStatus.UNREACHABLE);
+        }
+        double diffX = player.getX() - (dest.getX() + 0.5);
+        double diffZ = player.getZ() - (dest.getZ() + 0.5);
+        double ab = Math.sqrt(diffX * diffX + diffZ * diffZ);
+
+        if (numTicks++ < 10 && ab < 0.2) {
+            return state; // 前 10 tick 且没漂出中心:自由落体,不碰按键
+        }
+        MovementHelper.moveTowards(player, state, positionsToBreak[0]);
+        return state;
     }
 }
