@@ -101,4 +101,13 @@ public final class PathSettings {
     public static final int MOB_AVOIDANCE_RADIUS = 8;
     public static final double MOB_SPAWNER_AVOIDANCE_COEFFICIENT = 2.0;
     public static final int MOB_SPAWNER_AVOIDANCE_RADIUS = 16;
+
+    // ---- live search budget (wall-clock; see SearchBudget.timed) ----
+
+    /** Primary deadline: a mid-journey segment returns its committable partial this fast. */
+    public static final long SEARCH_PRIMARY_MS = 500;
+    /** Failure deadline: a search with nothing committable earns this much desperation. */
+    public static final long SEARCH_FAILURE_MS = 2_000;
+    /** Expansion fuse: memory/runaway bound, orders above depression-class terrain. */
+    public static final int SEARCH_EXPANSION_FUSE = 500_000;
 }

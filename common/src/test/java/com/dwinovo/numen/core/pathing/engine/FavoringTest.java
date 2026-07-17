@@ -45,8 +45,7 @@ class FavoringTest {
     private static SearchResult<GridWorld.Step> run(LongSet favored) {
         return new PathSearch<>(PackedPos.pack(0, 0, 0), world(),
                 GridWorld.weightedOctileHeuristic(GOAL_X, 0, 0, 1.5, 1.0, 1.0),
-                GridWorld.exactGoal(GOAL_X, 0, 0), SearchBudget.of(10_000, 10_000),
-                new HLearningTable(), favored, PathSearch.Config.standard()).run();
+                GridWorld.exactGoal(GOAL_X, 0, 0), SearchBudget.of(10_000, 10_000), favored, PathSearch.Config.standard()).run();
     }
 
     private static void assertUsesCorridor(SearchResult<GridWorld.Step> result, int z) {

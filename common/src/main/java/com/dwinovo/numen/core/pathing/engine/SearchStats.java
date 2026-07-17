@@ -12,9 +12,6 @@ package com.dwinovo.numen.core.pathing.engine;
  *                           expanded nodes — how far the search truly got
  * @param stoppedAtPrimary   a committable candidate existed at the primary
  *                           budget (mid-journey fast path)
- * @param learnedConsultHits nodes whose effective h came from the learning
- *                           table rather than the base heuristic
- * @param learnedUpdates     entries written to the learning table on termination
  * @param rejectedEdges      successor edges dropped for hygiene (non-positive /
  *                           NaN / infinite cost)
  */
@@ -23,11 +20,9 @@ public record SearchStats(
         boolean frontierExhausted,
         double bestProgressSq,
         boolean stoppedAtPrimary,
-        int learnedConsultHits,
-        int learnedUpdates,
         int rejectedEdges) {
 
     public static SearchStats empty() {
-        return new SearchStats(0, false, 0.0, false, 0, 0, 0);
+        return new SearchStats(0, false, 0.0, false, 0);
     }
 }

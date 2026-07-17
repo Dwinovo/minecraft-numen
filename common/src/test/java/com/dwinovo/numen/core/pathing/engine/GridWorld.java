@@ -178,23 +178,19 @@ final class GridWorld implements SuccessorFunction<GridWorld.Step> {
      * Run search → if PARTIAL_COMMIT teleport the start to {@code result.end}
      * → rerun, up to {@code maxSegments}, collecting per-segment results.
      *
-     * @param shared        the learning table shared across segments, or
-     *                      {@code null} for a FRESH table per segment (the
-     *                      memoryless baseline).
      * @param retryOnNoPath NO_PATH → retry from the same position (models the
      *                      caller's stall-retry); otherwise NO_PATH ends the run.
      */
     static List<SearchResult<Step>> segments(SuccessorFunction<Step> world, long start,
                                              Heuristic heuristic, GoalPredicate goal,
-                                             SearchBudget budget, HLearningTable shared,
+                                             SearchBudget budget,
                                              PathSearch.Config config, int maxSegments,
                                              boolean retryOnNoPath) {
         List<SearchResult<Step>> results = new ArrayList<>();
         long current = start;
         for (int i = 0; i < maxSegments; i++) {
-            HLearningTable table = shared != null ? shared : new HLearningTable();
             PathSearch<Step> search = new PathSearch<>(current, world, heuristic, goal,
-                    budget, table, LongSets.EMPTY_SET, config);
+                    budget, LongSets.EMPTY_SET, config);
             SearchResult<Step> result = search.run();
             results.add(result);
             if (result.kind == SearchResult.Kind.PARTIAL_COMMIT) {

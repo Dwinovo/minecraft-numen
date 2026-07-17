@@ -1,7 +1,6 @@
 package com.dwinovo.numen.core.pathing.calc;
 
 import com.dwinovo.numen.core.pathing.engine.GoalPredicate;
-import com.dwinovo.numen.core.pathing.engine.HLearningTable;
 import com.dwinovo.numen.core.pathing.engine.Heuristic;
 import com.dwinovo.numen.core.pathing.engine.PackedPos;
 import com.dwinovo.numen.core.pathing.engine.PathSearch;
@@ -57,8 +56,7 @@ public final class EngineSearch {
     private volatile SearchResult<Movement> result;
 
     private EngineSearch(NavContext ctx, BlockPos start, NavGoal goal,
-                         LongSet favoredPacked, HLearningTable learning,
-                         SearchBudget budget) {
+                         LongSet favoredPacked, SearchBudget budget) {
         this.ctx = ctx;
         this.start = start.immutable();
         long packedStart = PackedPos.pack(start.getX(), start.getY(), start.getZ());
@@ -70,7 +68,7 @@ public final class EngineSearch {
                 goalCursor.set(PackedPos.x(pos), PackedPos.y(pos), PackedPos.z(pos)));
 
         this.search = new PathSearch<>(packedStart, successors, heuristic, goalPredicate,
-                budget, learning, favoredPacked, PathSearch.Config.standard());
+                budget, favoredPacked, PathSearch.Config.standard());
     }
 
     /**
@@ -80,9 +78,8 @@ public final class EngineSearch {
      * {@link #favoring(Path)}), never {@code BlockPos.asLong()} values.
      */
     public static EngineSearch create(NavContext ctx, BlockPos start, NavGoal goal,
-                                      LongSet favoredPacked, HLearningTable learning,
-                                      SearchBudget budget) {
-        return new EngineSearch(ctx, start, goal, favoredPacked, learning, budget);
+                                      LongSet favoredPacked, SearchBudget budget) {
+        return new EngineSearch(ctx, start, goal, favoredPacked, budget);
     }
 
     /**

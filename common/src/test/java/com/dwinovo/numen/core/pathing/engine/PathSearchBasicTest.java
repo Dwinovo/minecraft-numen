@@ -21,8 +21,8 @@ class PathSearchBasicTest {
 
     private static PathSearch<GridWorld.Step> search(SuccessorFunction<GridWorld.Step> world,
                                                      long start, Heuristic h, GoalPredicate goal,
-                                                     SearchBudget budget, HLearningTable table) {
-        return new PathSearch<>(start, world, h, goal, budget, table,
+                                                     SearchBudget budget) {
+        return new PathSearch<>(start, world, h, goal, budget,
                 LongSets.EMPTY_SET, PathSearch.Config.standard());
     }
 
@@ -34,8 +34,7 @@ class PathSearchBasicTest {
         long start = PackedPos.pack(0, 64, 0);
         Heuristic h = GridWorld.weightedOctileHeuristic(20, 64, 0, 1.5, 1.0, 1.0);
         SearchResult<GridWorld.Step> result = search(world, start, h,
-                GridWorld.exactGoal(20, 64, 0), SearchBudget.of(10_000, 10_000),
-                new HLearningTable()).run();
+                GridWorld.exactGoal(20, 64, 0), SearchBudget.of(10_000, 10_000)).run();
 
         assertEquals(SearchResult.Kind.COMPLETE, result.kind);
         assertEquals(PackedPos.pack(20, 64, 0), result.end);
@@ -43,7 +42,6 @@ class PathSearchBasicTest {
         GridWorld.assertChain(result);
         assertTrue(result.stats.expansions() < 200,
                 "weighted h must keep the search focused, got " + result.stats.expansions());
-        assertEquals(0, result.stats.learnedUpdates(), "COMPLETE never writes learning");
         assertEquals(0, result.stats.rejectedEdges());
     }
 
@@ -58,8 +56,7 @@ class PathSearchBasicTest {
         long start = PackedPos.pack(0, 0, 0);
         Heuristic h = GridWorld.weightedOctileHeuristic(10, 0, 0, 1.5, 1.0, 1.0);
         SearchResult<GridWorld.Step> result = search(world, start, h,
-                GridWorld.exactGoal(10, 0, 0), SearchBudget.of(10_000, 10_000),
-                new HLearningTable()).run();
+                GridWorld.exactGoal(10, 0, 0), SearchBudget.of(10_000, 10_000)).run();
 
         assertEquals(SearchResult.Kind.COMPLETE, result.kind);
         GridWorld.assertChain(result);
@@ -79,18 +76,14 @@ class PathSearchBasicTest {
                 .carveBox(-2, 0, -2, 2, 0, 2); // 25-cell sealed room
         long start = PackedPos.pack(0, 0, 0);
         Heuristic h = GridWorld.weightedOctileHeuristic(10, 0, 0, 1.5, 1.0, 1.0);
-        HLearningTable table = new HLearningTable();
         SearchResult<GridWorld.Step> result = search(world, start, h,
-                GridWorld.exactGoal(10, 0, 0), SearchBudget.of(1000, 1000), table).run();
+                GridWorld.exactGoal(10, 0, 0), SearchBudget.of(1000, 1000)).run();
 
         assertEquals(SearchResult.Kind.NO_PATH, result.kind);
         assertTrue(result.stats.frontierExhausted(), "every reachable cell explored");
         assertEquals(25, result.stats.expansions());
         assertTrue(result.edges.isEmpty());
         assertEquals(result.start, result.end);
-        assertEquals(0, result.stats.learnedUpdates(),
-                "frontier-exhausted terminations write NOTHING");
-        assertEquals(0, table.size());
     }
 
     @Test
@@ -102,8 +95,7 @@ class PathSearchBasicTest {
         long start = PackedPos.pack(0, 0, 0);
         Heuristic h = GridWorld.weightedOctileHeuristic(2, 0, 2, 1.5, 1.0, 1.0);
         SearchResult<GridWorld.Step> result = search(world, start, h,
-                GridWorld.exactGoal(2, 0, 2), SearchBudget.of(1000, 1000),
-                new HLearningTable()).run();
+                GridWorld.exactGoal(2, 0, 2), SearchBudget.of(1000, 1000)).run();
 
         assertEquals(SearchResult.Kind.COMPLETE, result.kind);
         assertEquals(4, result.edges.size(), "manhattan-optimal inside the room");
@@ -128,8 +120,7 @@ class PathSearchBasicTest {
         long goal = PackedPos.pack(3, 0, 0);
         PathSearch<String> search = new PathSearch<>(start, line,
                 pos -> 3.0 - PackedPos.x(pos), pos -> pos == goal,
-                SearchBudget.of(100, 100), new HLearningTable(),
-                LongSets.EMPTY_SET, PathSearch.Config.standard());
+                SearchBudget.of(100, 100), LongSets.EMPTY_SET, PathSearch.Config.standard());
         SearchResult<String> result = search.run();
 
         assertEquals(SearchResult.Kind.COMPLETE, result.kind);
@@ -158,11 +149,10 @@ class PathSearchBasicTest {
         };
 
         long start = PackedPos.pack(0, 0, 0);
-        HLearningTable table = new HLearningTable();
         PathSearch<GridWorld.Step> search = new PathSearch<>(start, blocking,
                 GridWorld.weightedOctileHeuristic(400, 0, 0, 1.5, 1.0, 1.0),
                 GridWorld.exactGoal(400, 0, 0), SearchBudget.of(100_000, 100_000),
-                table, LongSets.EMPTY_SET, PathSearch.Config.standard());
+                LongSets.EMPTY_SET, PathSearch.Config.standard());
 
         ExecutorService pool = Executors.newSingleThreadExecutor();
         try {
@@ -175,8 +165,6 @@ class PathSearchBasicTest {
             assertEquals(SearchResult.Kind.CANCELLED, result.kind);
             assertTrue(result.edges.isEmpty());
             assertEquals(result.start, result.end);
-            assertEquals(0, result.stats.learnedUpdates());
-            assertEquals(0, table.size(), "a cancelled search never writes to the learning table");
             assertTrue(result.stats.expansions() >= 1, "it was genuinely mid-run");
         } finally {
             pool.shutdownNow();
@@ -191,8 +179,7 @@ class PathSearchBasicTest {
         long start = PackedPos.pack(0, 0, 0);
         SearchResult<GridWorld.Step> result = search(world, start,
                 GridWorld.weightedOctileHeuristic(0, 0, 0, 1.5, 1.0, 1.0),
-                GridWorld.exactGoal(0, 0, 0), SearchBudget.of(10, 10),
-                new HLearningTable()).run();
+                GridWorld.exactGoal(0, 0, 0), SearchBudget.of(10, 10)).run();
 
         assertEquals(SearchResult.Kind.COMPLETE, result.kind);
         assertTrue(result.edges.isEmpty());

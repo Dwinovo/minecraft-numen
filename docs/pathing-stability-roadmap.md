@@ -46,15 +46,20 @@ RegionGraph 一次性治三个病：
 - BOXED_IN 报告带具体失败动作（kind+坐标）。
 - 回归：PillarForestTest（写回超估 + 新表复用已建柱）。
 
-### 第 1 期：稳定化收尾（1–2 天量级）
-1. **学习表审判**：DeepWellTest/OscillationTest 换成现实档位预算跑 memoryless。
-   过 → 删除 HLearningTable 及其 swap/refresh 全链路，引擎退回纯确定性；
-   不过 → 保留表，但其适用边界由测试钉死。
-2. **预算改墙钟制**：节点数预算 → 时限预算（如 primary 500ms / failure 2s，
-   展开循环内查 deadline），机器无关。
-3. **计划惯性**：重算出的新计划必须显著优于旧计划剩余代价（阈值）才替换，
-   否则续用旧计划。favoring（g×0.5）保留。
-4. 每条配回归测试后合入。
+### 第 1 期：稳定化收尾（2026-07-17 已完成）
+1. **学习表审判 → 已退役**：ProductionBudgetAuditTest 证明生产预算把洼地类
+   地形连吞带余两个数量级（深井/双口袋/3×深井全部单次 memoryless COMPLETE），
+   HLearningTable 及 swap/refresh 全链路删除，引擎退回纯确定性。超出预算保险丝
+   （50 万展开）的洼地按原则 5 走 BOXED_IN 上抛——上抛优于爬行。
+2. **预算已改墙钟制**：`SearchBudget.timed`（primary 500ms / failure 2s +
+   50 万展开保险丝），同一时间预算在任何机器上买到它能探索的量，无逐机调参。
+   测试仍用确定性的展开数预算（`SearchBudget.of`）。
+3. **计划惯性 → 审计后确认已结构性满足**：重算只由执行失败/目标移动/分段
+   边界触发，无周期性重算；favoring（g×0.5）在位。Detour 的替换阈值防的是
+   "每帧重算抖动"，我们的架构没有它的发生土壤，不另加机制。
+4. 回归测试矩阵同步更新：新增 ProductionBudgetAuditTest；DeepWellTest 保留
+   （钉 h 提交规则，饥饿预算隔离）；PillarForestTest 改钉"确定性重搜必复用
+   已建柱"；OscillationTest/LearningLifecycleTest 随表退役删除。
 
 ### 第 2 期：RegionGraph 粗层（1–2 周，先出设计稿再动工）
 - 节点 = chunk 段（16³），边 = 面连通性摘要 + 粗代价（走/挖档位）；

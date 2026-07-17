@@ -7,7 +7,6 @@ import com.dwinovo.numen.core.pathing.calc.EngineSearch;
 import com.dwinovo.numen.core.pathing.calc.NavContext;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.calc.Path;
-import com.dwinovo.numen.core.pathing.engine.HLearningTable;
 import com.dwinovo.numen.core.pathing.engine.SearchBudget;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.PathSettings;
@@ -23,9 +22,9 @@ import java.util.function.Supplier;
  * the current path; precompute the continuation of a partial path so there's no
  * planning pause at a segment boundary; re-root on a moving goal or after an
  * off-path replan — executing through {@link PlayerPathExecutor}. Planning
- * runs on the v2 engine via the {@link EngineSearch} adapter (body-neutral,
- * Minecraft-free at its core) with an {@link HLearningTable} shared across
- * this navigation's segments.
+ * runs on the engine via the {@link EngineSearch} adapter (body-neutral,
+ * Minecraft-free at its core). Every search is deterministic — the only
+ * memory it consults is the world itself.
  *
  * <p>Internally the goal is a {@link NavGoal} so callers can target a single
  * cell ({@link #PlayerNav(NumenPlayer, BlockPos, double, BooleanSupplier)}) or
@@ -62,15 +61,6 @@ public final class PlayerNav {
      *  only harvestable digs are planned; a route that would require a no-drop grind
      *  fails clean with a diagnosis instead. */
     private final boolean forceBreak;
-
-    /** Learned-heuristic table shared across this navigation's search segments (see
-     *  {@link HLearningTable} for semantics). Concurrency invariant: at most one LIVE
-     *  search at a time; cancelled workers may linger — safe because the table is
-     *  synchronized and cancelled searches never write (engine contract). */
-    private HLearningTable learning = new HLearningTable();
-    /** Dig-capability fingerprint at the last fresh dispatch — a RISE clears the
-     *  learned table (better tools → old learned values may over-estimate). */
-    private double lastDigFingerprint = -1;
 
     private BlockPos plannedCenter;
     private PlayerPathExecutor current;
@@ -273,10 +263,7 @@ public final class PlayerNav {
         NavContext ctx = searchContext();
         BlockPos startFeet = standableStart(BlockHelper.playerFeet(
                 player.level(), player.getX(), player.getY(), player.getZ()));
-        refreshLearning(ctx);
-        double dist = Math.sqrt(startFeet.distSqr(g.center()));
-        EngineSearch s = EngineSearch.create(ctx, startFeet, g, previousPathHashes,
-                learning, SearchBudget.scaled(dist));
+        EngineSearch s = EngineSearch.create(ctx, startFeet, g, previousPathHashes, liveBudget());
         lastCtx = ctx;
         lastStart = startFeet;
         lastStartGrounded = player.onGround();
@@ -317,6 +304,13 @@ public final class PlayerNav {
         return best != null ? best : feet;
     }
 
+    /** The live wall-clock budget: the same time buys whatever this machine can
+     *  explore — no per-machine expansion tuning (see {@link SearchBudget#timed}). */
+    private static SearchBudget liveBudget() {
+        return SearchBudget.timed(PathSettings.SEARCH_PRIMARY_MS,
+                PathSettings.SEARCH_FAILURE_MS, PathSettings.SEARCH_EXPANSION_FUSE);
+    }
+
     /** Cancel and forget the in-flight main search (so a stale worker stops and its result is ignored). */
     private void cancelSearch() {
         if (searchObj != null) {
@@ -352,20 +346,19 @@ public final class PlayerNav {
     }
 
     /**
-     * Why a navigation goes back to planning — each keeps a different slice of memory:
+     * Why a navigation goes back to planning. Every restart re-searches
+     * deterministically from the current world — the distinctions carry the
+     * bookkeeping, not the search:
      * <ul>
-     *   <li>{@link #GOAL_MOVED} — the target itself changed: learned h is goal-relative,
-     *       so the table AND the progress accounting both reset;</li>
-     *   <li>{@link #SEGMENT_DONE} — a partial segment was walked to its end and the journey
-     *       continues: the table is the whole point here (a heuristic depression flooded by
-     *       segment 1 must not be re-flooded by segment 2), keep it;</li>
-     *   <li>{@link #EXEC_FAILURE} — the body could not execute what the plan said. The
-     *       learned table only ever RAISES costs, but the failed attempt usually LOWERED
-     *       real ones (scaffold blocks it placed are now walkable terrain) — so the table
-     *       now over-estimates exactly the cells just built, and a re-search consulting it
-     *       flees sideways to unpenalised neighbours (the pillar-forest). A fresh table
-     *       lets the deterministic search re-price the world as it now is: the built route
-     *       wins on real cost, and the same attempt resumes instead of drifting.</li>
+     *   <li>{@link #GOAL_MOVED} — the target itself changed: the progress
+     *       accounting (bestGoalH) resets with it;</li>
+     *   <li>{@link #SEGMENT_DONE} — a partial segment was walked to its end,
+     *       the journey continues under the stall accounting;</li>
+     *   <li>{@link #EXEC_FAILURE} — the body could not execute what the plan
+     *       said; the executor's failure cause is captured for the give-up
+     *       report, and the re-search prices the world as the failed attempt
+     *       left it (its scaffolds are real terrain now — the built route wins
+     *       on cost, so the same attempt resumes instead of drifting).</li>
      * </ul>
      */
     private enum Restart { GOAL_MOVED, SEGMENT_DONE, EXEC_FAILURE }
@@ -377,19 +370,9 @@ public final class PlayerNav {
         }
         cancelSearch();       // abandon any in-flight main search before dispatching a new one
         discardPrecompute();  // and any in-flight NEXT segment — it was rooted at a path end
-                              // that may no longer exist, and letting it run would put a
-                              // second LIVE search on the shared learning table
-        if (why == Restart.EXEC_FAILURE) {
-            // SWAP, never clear() — same worker-mid-write-back rule as below.
-            learning = new HLearningTable();
-        }
+                              // that may no longer exist
         if (why == Restart.GOAL_MOVED) {
             bestGoalH = Double.MAX_VALUE;      // goal moved / re-rooted → fresh accounting
-            // Learned h is goal-relative — invalid for the new goal. SWAP the table,
-            // never clear() it: a just-cancelled worker can still be mid-write-back
-            // (a milliseconds-wide scan), and clearing would let its OLD-goal values
-            // land in the table the NEW goal consults. Swapping orphans those writes.
-            learning = new HLearningTable();
         } else {
             // Give up on STALLED effort, never on segment count —
             // a 60-block dig-up legitimately takes dozens of segments, each one a real
@@ -430,28 +413,10 @@ public final class PlayerNav {
         if (g == null) return;
         plannedCenter = g.center();
         NavContext ctx = searchContext();
-        refreshLearning(ctx);   // precompute-chained segments must see tool upgrades too
-        double dist = Math.sqrt(current.pathEnd().distSqr(g.center()));
         EngineSearch s = EngineSearch.create(ctx, current.pathEnd(), g, previousPathHashes,
-                learning, SearchBudget.scaled(dist));
+                liveBudget());
         nextObj = s;
         nextFuture = dispatch(ctx, s);
-    }
-
-    /**
-     * Learned-h lifecycle: an IMPROVED dig capability (better tool picked up,
-     * scaffolding gained) means previously-learned pessimism may now over-estimate
-     * → SWAP in a fresh table (never {@code clear()} the shared one: a stale
-     * cancelled worker could still be mid-write-back, and its writes must land in
-     * the orphaned instance, not the one live searches consult). Worse or equal
-     * capability keeps the still-valid lower bounds.
-     */
-    private void refreshLearning(NavContext ctx) {
-        double fp = ctx.digCapabilityFingerprint();
-        if (fp > lastDigFingerprint + 0.01) {
-            learning = new HLearningTable();
-        }
-        lastDigFingerprint = fp;
     }
 
     private void advancePrecompute() {
@@ -499,7 +464,6 @@ public final class PlayerNav {
             if (lastCtx != null && !lastCtx.hasScaffold) {
                 r.append("; carrying no scaffolding blocks to bridge or pillar with");
             }
-            r.append(String.format("; learned-h consults %d", s.stats().learnedConsultHits()));
             if (s.stats().stoppedAtPrimary()) {
                 r.append("; stopped at primary budget");
             }

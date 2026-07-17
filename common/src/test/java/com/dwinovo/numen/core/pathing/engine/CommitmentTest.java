@@ -12,8 +12,7 @@ class CommitmentTest {
     private static SearchResult<GridWorld.Step> run(SuccessorFunction<GridWorld.Step> world,
                                                     long start, Heuristic h, GoalPredicate goal,
                                                     SearchBudget budget) {
-        return new PathSearch<>(start, world, h, goal, budget, new HLearningTable(),
-                LongSets.EMPTY_SET, PathSearch.Config.standard()).run();
+        return new PathSearch<>(start, world, h, goal, budget, LongSets.EMPTY_SET, PathSearch.Config.standard()).run();
     }
 
     // ---- T5: far goal, tiny failure budget -> PARTIAL_COMMIT toward the goal ----
