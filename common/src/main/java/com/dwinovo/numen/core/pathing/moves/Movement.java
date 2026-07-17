@@ -184,22 +184,61 @@ public abstract class Movement {
         currentState = new MovementState().setStatus(MovementStatus.PREPPING);
     }
 
-    // ==================== 执行层钩子(后续波次接线) ====================
+    // ==================== 执行层钩子(经注入代理落地) ====================
 
     /**
-     * 开挖一格:选工具、选可视面、转头、左键。由执行层覆写接线,
-     * 基类不落任何真实动作。
+     * 执行代理:四个钩子的真实落点。移动原语只描述"要看哪、按什么键、
+     * 挖哪格",代理负责把这些落到实体上(视角步进、输入字段、渐进挖掘)。
      */
-    protected void beginBreaking(MovementState state, BlockPos pos) {}
+    public interface ExecutionDelegate {
 
-    /** 应用期望视角。执行层覆写。 */
-    protected void applyRotation(MovementState.MovementTarget target) {}
+        /** 开挖一格:选可视面、转头,视线就位后按左键。 */
+        void beginBreaking(MovementState state, BlockPos pos);
 
-    /** 清空全部按键。执行层覆写。 */
-    protected void clearInputs() {}
+        /** 应用期望视角(按鼠标步进量化逼近,不瞬间对准)。 */
+        void applyRotation(MovementState.MovementTarget target);
 
-    /** 应用单个按键。执行层覆写。 */
-    protected void applyInput(Input input, boolean held) {}
+        /** 清空全部按键。 */
+        void clearInputs();
+
+        /** 应用单个按键。 */
+        void applyInput(Input input, boolean held);
+    }
+
+    private ExecutionDelegate executionDelegate;
+
+    /** 注入执行代理;未注入时四个钩子为空操作(纯规划用途)。 */
+    public void setExecutionDelegate(ExecutionDelegate delegate) {
+        this.executionDelegate = delegate;
+    }
+
+    /** 开挖一格,转发执行代理。 */
+    protected void beginBreaking(MovementState state, BlockPos pos) {
+        if (executionDelegate != null) {
+            executionDelegate.beginBreaking(state, pos);
+        }
+    }
+
+    /** 应用期望视角,转发执行代理。 */
+    protected void applyRotation(MovementState.MovementTarget target) {
+        if (executionDelegate != null) {
+            executionDelegate.applyRotation(target);
+        }
+    }
+
+    /** 清空全部按键,转发执行代理。 */
+    protected void clearInputs() {
+        if (executionDelegate != null) {
+            executionDelegate.clearInputs();
+        }
+    }
+
+    /** 应用单个按键,转发执行代理。 */
+    protected void applyInput(Input input, boolean held) {
+        if (executionDelegate != null) {
+            executionDelegate.applyInput(input, held);
+        }
+    }
 
     // ==================== 元数据 ====================
 
