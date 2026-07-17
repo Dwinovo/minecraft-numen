@@ -27,6 +27,10 @@ import net.minecraft.world.level.block.state.BlockState;
 /**
  * 快捷栏工具评估:对任意方块给出"最优工具挖掘速度"(1/挖掘tick数)
  * 与最优槽位。结果按 Block 缓存,一次成本计算全程复用。
+ *
+ * <p>线程模型:构造在主线程,构造时把快捷栏九格逐格 copy、当前选中
+ * 槽位、药水修正与全部相关设置取样为 final 字段;此后所有查询只读
+ * 快照,worker 线程可安全调用,不会活读玩家背包或全局设置。
  */
 public class ToolSet {
 
@@ -36,27 +40,66 @@ public class ToolSet {
     /** 缓存缺失时的计算函数(构造时折入药水修正,避免逐次判断)。 */
     private final Function<Block, Double> backendCalculation;
 
-    private final ServerPlayer player;
+    /** 构造时逐格 copy 的快捷栏九格。 */
+    private final ItemStack[] hotbar;
+
+    /** 构造时的手持槽位(autoTool 关闭的成本口径用)。 */
+    private final int selectedSlot;
 
     /** true 时功能方块保护乘数失效(强制破坏语义)。 */
     private final boolean ignoreBreakingProtection;
+
+    // 构造时取样的设置(计算中途改设置不影响本次搜索)
+    private final boolean autoTool;
+    private final boolean useSwordToMine;
+    private final boolean itemSaver;
+    private final int itemSaverThreshold;
+    private final List<Block> blocksToAvoidBreaking;
+    private final double avoidBreakingMultiplier;
 
     public ToolSet(ServerPlayer player) {
         this(player, false);
     }
 
     public ToolSet(ServerPlayer player, boolean ignoreBreakingProtection) {
+        this(snapshotHotbar(player), player.getInventory().selected, ignoreBreakingProtection,
+                NavSettings.get().considerPotionEffects ? potionAmplifier(player) : 1.0);
+    }
+
+    /**
+     * 快照直构(线程安全冒烟测试与自备快照的调用方用):调用方给出
+     * 快捷栏九格(应为不再被改写的副本)、选中槽位与药水修正倍率。
+     */
+    public ToolSet(ItemStack[] hotbarSnapshot, int selectedSlot,
+                   boolean ignoreBreakingProtection, double potionAmplifier) {
         this.breakStrengthCache = new HashMap<>();
-        this.player = player;
+        this.hotbar = hotbarSnapshot.clone();
+        this.selectedSlot = selectedSlot;
         this.ignoreBreakingProtection = ignoreBreakingProtection;
 
-        if (NavSettings.get().considerPotionEffects) {
-            double amplifier = potionAmplifier();
-            Function<Double, Double> amplify = x -> amplifier * x;
+        NavSettings settings = NavSettings.get();
+        this.autoTool = settings.autoTool;
+        this.useSwordToMine = settings.useSwordToMine;
+        this.itemSaver = settings.itemSaver;
+        this.itemSaverThreshold = settings.itemSaverThreshold;
+        this.blocksToAvoidBreaking = List.copyOf(settings.blocksToAvoidBreaking());
+        this.avoidBreakingMultiplier = settings.avoidBreakingMultiplier;
+
+        if (potionAmplifier != 1.0) {
+            Function<Double, Double> amplify = x -> potionAmplifier * x;
             backendCalculation = amplify.compose(this::getBestDestructionTime);
         } else {
             backendCalculation = this::getBestDestructionTime;
         }
+    }
+
+    /** 快捷栏九格逐格 copy(主线程调用;worker 之后只读副本)。 */
+    private static ItemStack[] snapshotHotbar(ServerPlayer player) {
+        ItemStack[] hotbar = new ItemStack[9];
+        for (int i = 0; i < 9; i++) {
+            hotbar[i] = player.getInventory().getItem(i).copy();
+        }
+        return hotbar;
     }
 
     /**
@@ -101,15 +144,14 @@ public class ToolSet {
     }
 
     /**
-     * 快捷栏 9 格中挖该方块的最优槽位。速度最高者胜;平速时优先
-     * 更廉价材质,{@code preferSilkTouch} 时优先精准采集。
-     * autoTool 关闭且用于成本计算时直接返回当前手持槽
+     * 快捷栏 9 格中挖该方块的最优槽位(基于构造时的快照)。速度最高
+     * 者胜;平速时优先更廉价材质,{@code preferSilkTouch} 时优先精准
+     * 采集。autoTool 关闭且用于成本计算时直接返回构造时的手持槽
      * (让路径成本反映真实会用的那件工具)。
      */
     public int getBestSlot(Block b, boolean preferSilkTouch, boolean pathingCalculation) {
-        NavSettings settings = NavSettings.get();
-        if (!settings.autoTool && pathingCalculation) {
-            return player.getInventory().selected;
+        if (!autoTool && pathingCalculation) {
+            return selectedSlot;
         }
 
         int best = 0;
@@ -118,12 +160,12 @@ public class ToolSet {
         boolean bestSilkTouch = false;
         BlockState blockState = b.defaultBlockState();
         for (int i = 0; i < 9; i++) {
-            ItemStack itemStack = player.getInventory().getItem(i);
-            if (!settings.useSwordToMine && itemStack.getItem() instanceof SwordItem) {
+            ItemStack itemStack = hotbar[i];
+            if (!useSwordToMine && itemStack.getItem() instanceof SwordItem) {
                 continue;
             }
-            if (settings.itemSaver
-                    && itemStack.getDamageValue() + settings.itemSaverThreshold >= itemStack.getMaxDamage()
+            if (itemSaver
+                    && itemStack.getDamageValue() + itemSaverThreshold >= itemStack.getMaxDamage()
                     && itemStack.getMaxDamage() > 1) {
                 continue;
             }
@@ -150,7 +192,7 @@ public class ToolSet {
 
     /** 用最优槽位工具挖该方块的速度(已乘保护方块修正)。 */
     private double getBestDestructionTime(Block b) {
-        ItemStack stack = player.getInventory().getItem(getBestSlot(b, false, true));
+        ItemStack stack = hotbar[getBestSlot(b, false, true)];
         return calculateSpeedVsBlock(stack, b.defaultBlockState()) * avoidanceMultiplier(b);
     }
 
@@ -162,8 +204,7 @@ public class ToolSet {
         if (ignoreBreakingProtection) {
             return 1;
         }
-        return NavSettings.get().blocksToAvoidBreaking().contains(b)
-                ? NavSettings.get().avoidBreakingMultiplier : 1;
+        return blocksToAvoidBreaking.contains(b) ? avoidBreakingMultiplier : 1;
     }
 
     /**
@@ -208,8 +249,8 @@ public class ToolSet {
         }
     }
 
-    /** 急迫 / 挖掘疲劳药水对挖掘速度的修正倍率。 */
-    private double potionAmplifier() {
+    /** 急迫 / 挖掘疲劳药水对挖掘速度的修正倍率(构造时在主线程取样)。 */
+    private static double potionAmplifier(ServerPlayer player) {
         double speed = 1;
         if (player.hasEffect(MobEffects.DIG_SPEED)) {
             speed *= 1 + (player.getEffect(MobEffects.DIG_SPEED).getAmplifier() + 1) * 0.2;

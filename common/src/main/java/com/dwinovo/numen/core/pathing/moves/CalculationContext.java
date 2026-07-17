@@ -41,6 +41,12 @@ public class CalculationContext {
 
     /** 视图是否可在 worker 线程安全读取(冻结快照 true,活世界 false)。 */
     public final boolean safeForThreadedUse;
+    /**
+     * 仅供主线程侧使用(执行期状态机、装配移动时存进 Movement 备用)。
+     * 线程审计结论:成本计算路径(cost/apply/装配)不得解引用它读活
+     * 状态——背包/附魔/饥饿/药水已在构造时折进本类与 {@link ToolSet}
+     * 的 final 字段,世界边界由搜索器自行在构造时取样。
+     */
     public final ServerPlayer player;
     public final BlockGetter view;
     public final ChunkLoadedTest loadedTest;
