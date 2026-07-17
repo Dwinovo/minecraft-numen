@@ -113,6 +113,9 @@ public final class PlayerNav {
     private double bestGoalH = Double.MAX_VALUE;
     private String failReason = "target unreachable";
     private FailureType failType = FailureType.NO_PATH;
+    /** The most recent executor replan cause ("movement timeout (PILLAR …)") — names the
+     *  recurring maneuver in a BOXED_IN give-up so the task layer can change strategy. */
+    private String lastExecFailure;
 
     /** Frozen context + start of the most recent search — kept for the no-path autopsy. */
     private NavContext lastCtx;
@@ -181,7 +184,7 @@ public final class PlayerNav {
         }
         if (plannedCenter != null && liveGoal.center().distSqr(plannedCenter) > GOAL_MOVED_SQR) {
             discardPrecompute();
-            return restartFresh(false);
+            return restartFresh(Restart.GOAL_MOVED);
         }
 
         maybePrecompute();
@@ -205,11 +208,12 @@ public final class PlayerNav {
                     }
                     return Status.RUNNING;
                 }
-                return restartFresh(true);
+                return restartFresh(Restart.SEGMENT_DONE);
             }
             case NEEDS_REPLAN -> {
+                lastExecFailure = current.replanCause();
                 discardPrecompute();
-                return restartFresh(true);
+                return restartFresh(Restart.EXEC_FAILURE);
             }
             case FAILED -> {
                 return Status.FAILED;
@@ -267,8 +271,8 @@ public final class PlayerNav {
             return;
         }
         NavContext ctx = searchContext();
-        BlockPos startFeet = BlockHelper.playerFeet(
-                player.level(), player.getX(), player.getY(), player.getZ());
+        BlockPos startFeet = standableStart(BlockHelper.playerFeet(
+                player.level(), player.getX(), player.getY(), player.getZ()));
         refreshLearning(ctx);
         double dist = Math.sqrt(startFeet.distSqr(g.center()));
         EngineSearch s = EngineSearch.create(ctx, startFeet, g, previousPathHashes,
@@ -278,6 +282,39 @@ public final class PlayerNav {
         lastStartGrounded = player.onGround();
         searchObj = s;
         searchFuture = dispatch(ctx, s);
+    }
+
+    /**
+     * A rim-standing body (feet cell hanging over air, box supported by a neighbouring
+     * column) launches a search whose start node has no floor — it dies at 0 expansions
+     * and reads as "sealed in". Re-anchor the start on the closest standable cell the
+     * bounding box actually overlaps. Grounded good starts and mid-air launches pass
+     * through unchanged (the ZERO-EXPANSION autopsy still covers the latter).
+     */
+    private BlockPos standableStart(BlockPos feet) {
+        var level = player.level();
+        if (!player.onGround() || BlockHelper.isStandable(level, feet)) {
+            return feet;
+        }
+        var box = player.getBoundingBox();
+        BlockPos best = null;
+        double bestD = Double.MAX_VALUE;
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) continue;
+                BlockPos n = feet.offset(dx, 0, dz);
+                boolean overlaps = box.maxX > n.getX() && box.minX < n.getX() + 1
+                        && box.maxZ > n.getZ() && box.minZ < n.getZ() + 1;
+                if (!overlaps || !BlockHelper.isStandable(level, n)) continue;
+                double d = net.minecraft.world.phys.Vec3.atBottomCenterOf(n)
+                        .distanceToSqr(player.position());
+                if (d < bestD) {
+                    bestD = d;
+                    best = n;
+                }
+            }
+        }
+        return best != null ? best : feet;
     }
 
     /** Cancel and forget the in-flight main search (so a stale worker stops and its result is ignored). */
@@ -314,7 +351,26 @@ public final class PlayerNav {
         return Status.RUNNING;
     }
 
-    private Status restartFresh(boolean budgeted) {
+    /**
+     * Why a navigation goes back to planning — each keeps a different slice of memory:
+     * <ul>
+     *   <li>{@link #GOAL_MOVED} — the target itself changed: learned h is goal-relative,
+     *       so the table AND the progress accounting both reset;</li>
+     *   <li>{@link #SEGMENT_DONE} — a partial segment was walked to its end and the journey
+     *       continues: the table is the whole point here (a heuristic depression flooded by
+     *       segment 1 must not be re-flooded by segment 2), keep it;</li>
+     *   <li>{@link #EXEC_FAILURE} — the body could not execute what the plan said. The
+     *       learned table only ever RAISES costs, but the failed attempt usually LOWERED
+     *       real ones (scaffold blocks it placed are now walkable terrain) — so the table
+     *       now over-estimates exactly the cells just built, and a re-search consulting it
+     *       flees sideways to unpenalised neighbours (the pillar-forest). A fresh table
+     *       lets the deterministic search re-price the world as it now is: the built route
+     *       wins on real cost, and the same attempt resumes instead of drifting.</li>
+     * </ul>
+     */
+    private enum Restart { GOAL_MOVED, SEGMENT_DONE, EXEC_FAILURE }
+
+    private Status restartFresh(Restart why) {
         if (current != null) {
             current.stop();
             current = null;
@@ -323,7 +379,11 @@ public final class PlayerNav {
         discardPrecompute();  // and any in-flight NEXT segment — it was rooted at a path end
                               // that may no longer exist, and letting it run would put a
                               // second LIVE search on the shared learning table
-        if (!budgeted) {
+        if (why == Restart.EXEC_FAILURE) {
+            // SWAP, never clear() — same worker-mid-write-back rule as below.
+            learning = new HLearningTable();
+        }
+        if (why == Restart.GOAL_MOVED) {
             bestGoalH = Double.MAX_VALUE;      // goal moved / re-rooted → fresh accounting
             // Learned h is goal-relative — invalid for the new goal. SWAP the table,
             // never clear() it: a just-cancelled worker can still be mid-write-back
@@ -344,7 +404,9 @@ public final class PlayerNav {
                 stalledReplans = 0;
             } else if (++stalledReplans >= MAX_STALLED_REPLANS) {
                 failReason = "gave up: no real progress toward the target over "
-                        + MAX_STALLED_REPLANS + " consecutive attempts";
+                        + MAX_STALLED_REPLANS + " consecutive attempts"
+                        + (lastExecFailure != null
+                                ? "; the recurring failure: " + lastExecFailure : "");
                 failType = FailureType.BOXED_IN;
                 return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
             }

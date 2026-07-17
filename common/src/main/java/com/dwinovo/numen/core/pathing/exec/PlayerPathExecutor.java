@@ -633,9 +633,21 @@ public final class PlayerPathExecutor {
     /** Log a replan trigger with full context (rare event), then return the status. */
     private Status replan(String why) {
         Movement mv = index < path.movements.size() ? path.movements.get(index) : null;
+        lastReplanCause = mv != null
+                ? why + " (" + mv.kind + " " + mv.src.toShortString() + "→" + mv.dest.toShortString() + ")"
+                : why;
         Constants.LOG.info("[numen-path] REPLAN {} | {}", why, mv != null ? desc(mv) : "feet=" + feet().toShortString());
         return Status.NEEDS_REPLAN;
     }
+
+    /** The most recent replan trigger, with the maneuver that failed ("movement timeout
+     *  (PILLAR 632,64,-386→632,65,-386)") — so a final give-up can name WHAT kept failing,
+     *  not just that nothing got closer. Null until the first replan. */
+    public String replanCause() {
+        return lastReplanCause;
+    }
+
+    private String lastReplanCause;
 
     /** One-line snapshot of the current move + body state for diagnostics. */
     private String desc(Movement mv) {

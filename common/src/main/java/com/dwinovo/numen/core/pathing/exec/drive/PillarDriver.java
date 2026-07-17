@@ -91,8 +91,16 @@ final class PillarDriver extends MoveDriver {
      */
     @Override
     public String premiseBroken() {
-        if (!BlockHelper.isWater(player.level(), mv.src)
-                && !BlockHelper.canWalkOn(player.level(), mv.src.below())
+        if (BlockHelper.isWater(player.level(), mv.src)) {
+            return null;
+        }
+        // Fell below the column base: the jump-and-place premise is gone THIS tick —
+        // waiting out the movement timeout just grinds sneak-jumps in a hole.
+        if (feet().getY() < mv.src.getY()) {
+            return "fell below the pillar base " + mv.src.toShortString()
+                    + " (feet at y=" + feet().getY() + ")";
+        }
+        if (!BlockHelper.canWalkOn(player.level(), mv.src.below())
                 && !BlockHelper.canWalkOn(player.level(), mv.src)) {
             return "pillar has no floor under " + mv.src.toShortString()
                     + " (an earlier scaffold never landed)";
