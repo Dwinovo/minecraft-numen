@@ -13,6 +13,7 @@ import net.minecraft.world.level.block.BaseFireBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CarpetBlock;
+import net.minecraft.world.level.block.CauldronBlock;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
@@ -90,7 +91,8 @@ public final class BlockHelper {
                 || state.is(Blocks.HONEY_BLOCK) || state.is(Blocks.END_ROD)
                 || state.is(Blocks.SWEET_BERRY_BUSH) || state.is(Blocks.POINTED_DRIPSTONE)
                 || block instanceof AmethystClusterBlock || block instanceof AzaleaBlock
-                || state.is(Blocks.BIG_DRIPLEAF) || state.is(Blocks.POWDER_SNOW)) {
+                || state.is(Blocks.BIG_DRIPLEAF) || state.is(Blocks.POWDER_SNOW)
+                || block instanceof CauldronBlock) {
             return false;
         }
         // Wooden doors / fence gates are passable even when shut — the path
@@ -410,16 +412,15 @@ public final class BlockHelper {
     }
 
     /**
-     * 一个不该被寻路破坏的方块:命中 do_not_break 方块标签(工作台/
-     * 切石机/锻造台/砂轮/织布机/制图台/制箭台/铁砧族等无方块实体的
-     * 功能方块)。带方块实体的方块(箱子/熔炉/漏斗/潜影盒/刷怪笼/信标
-     * 等)与床不再硬禁止——寻路里它们和泥土一样可破坏、无惩罚;
-     * 想避开就放进 NavSettings.blocksToAvoidBreaking 软清单
-     * (挖掘成本 ×10,无路可走仍会破坏),与 Baritone 口径一致。
+     * 命中 do_not_break 方块标签的方块:寻路的硬禁挖清单,forceBreak
+     * 也不解除。标签默认为空——工作台/熔炉/箱子/陷阱箱等常规功能方块
+     * 不在硬禁内,它们走 NavSettings.blocksToAvoidBreaking 软清单
+     * (挖掘成本 ×10,无路可走仍会破坏)。数据包可往此标签追加任何要
+     * 硬禁挖的方块。带方块实体的方块(漏斗/潜影盒/刷怪笼/信标等)与床
+     * 和泥土一样可破坏、无惩罚,除非数据包把它们加进此标签。
      */
     public static boolean shouldAvoidBreaking(BlockGetter level, BlockPos pos) {
-        // do_not_break 标签:无 BlockEntity 的功能性工作台。标签成员测试
-        // 只读不可变 BlockState holder,off-thread 搜索可安全调用。
+        // 标签成员测试只读不可变 BlockState holder,off-thread 搜索可安全调用。
         BlockState state = level.getBlockState(pos);
         return state.is(com.dwinovo.numen.core.init.InitTag.DO_NOT_BREAK);
     }

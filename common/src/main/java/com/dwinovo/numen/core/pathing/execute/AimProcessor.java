@@ -12,6 +12,8 @@ package com.dwinovo.numen.core.pathing.execute;
  * <p>pitch 未指定(目标 pitch 与当前相等,即"只关心 yaw")时,向
  * [-20°, 10°] 的常态区间每 tick 回正 1°。
  *
+ * <p>不复刻视角随机抖动(那是客户端反作弊用途,服务端 NPC 无此需求)。
+ *
  * <p>纯数学类,不依赖 MC,可独立单测。
  */
 public final class AimProcessor {
@@ -36,15 +38,15 @@ public final class AimProcessor {
     public record Rotation(float yaw, float pitch) {}
 
     /**
-     * 从当前视角向目标视角步进一 tick。yaw 差先归一到 (-180, 180]
-     * 再步进(选短弧,视角字段可能累积出界);pitch 步进后钳制到
-     * [-90, 90]。目标 pitch 与当前相等视为"未指定",走回正逻辑。
+     * 从当前视角向目标视角步进一 tick。yaw 差不归一(直接用原始差值
+     * 累进,视角字段允许累积出界,只在角度比较处走短弧);pitch 步进后
+     * 钳制到 [-90, 90]。目标 pitch 与当前相等视为"未指定",走回正逻辑。
      */
     public Rotation step(float currentYaw, float currentPitch, float desiredYaw, float desiredPitch) {
         if (desiredPitch == currentPitch) {
             desiredPitch = nudgeToLevel(desiredPitch);
         }
-        float yaw = currentYaw + stepAngle(normalizeDelta(desiredYaw - currentYaw));
+        float yaw = currentYaw + stepAngle(desiredYaw - currentYaw);
         float pitch = clampPitch(currentPitch + stepAngle(desiredPitch - currentPitch));
         return new Rotation(yaw, pitch);
     }

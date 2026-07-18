@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 视角步进量化的数学钉桩:像素折算往返、一 tick 收敛到半像素以内、
- * 残差处停步、pitch 回正与钳制、yaw 短弧归一、输入帧变换。
+ * 残差处停步、pitch 回正与钳制、yaw 差不归一直接累进、输入帧变换。
  */
 class AimProcessorTest {
 
@@ -66,14 +66,18 @@ class AimProcessorTest {
         assertTrue(Math.abs(AimProcessor.normalizeDelta(target - current)) <= halfPixel + EPS);
     }
 
-    /** yaw 差走短弧:-170° 到 170° 应向负方向转 20°,不绕 340°。 */
+    /**
+     * yaw 差不归一:直接用原始差值累进,视角字段允许累积出界。
+     * -170° 到 170° 的原始差是 +340°,步进后向正向落(长弧),而不是
+     * 归一后的 -20° 短弧。角度比较处仍走短弧({@link #normalizeDelta})。
+     */
     @Test
-    void yawTakesShortArc() {
+    void yawDeltaNotNormalized() {
         assertEquals(-20.0f, AimProcessor.normalizeDelta(170.0f - (-170.0f)), EPS);
         AimProcessor aim = new AimProcessor();
         AimProcessor.Rotation r = aim.step(-170.0f, 0, 170.0f, 30.0f);
-        // 一步落在 -190° 附近(继续朝负向),而不是 +170
-        assertTrue(r.yaw() < -170.0f);
+        // 原始差 +340° → 步进后向正向落(长弧),不绕短弧
+        assertTrue(r.yaw() > -170.0f);
     }
 
     /** pitch 未指定(与当前相等)时向 [-20,10] 每 tick 回正 1°。 */

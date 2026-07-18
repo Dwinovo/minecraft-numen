@@ -76,6 +76,15 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     /** 本 tick 是否有任何记录待落地。 */
     private boolean dirty;
 
+    /**
+     * 上一 tick 步进落地的视角(本 tick 步进的起点)。步进基于"上一 tick
+     * 步进后的视角"而非"实体当前视角":同 tick 内若别处改写了实体视,
+     * 步进仍从上一 tick 的稳定落点累进,避免起点被中途扰动。首次尚未
+     * 步进过时用实体当前视角兜底。
+     */
+    private Float prevStepYaw;
+    private Float prevStepPitch;
+
     public ExecHarness(NumenPlayer player) {
         this.player = player;
         this.aim = new AimProcessor();
@@ -152,6 +161,8 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         keys.clear();
         target = null;
         breakTarget = null;
+        prevStepYaw = null;
+        prevStepPitch = null;
         InputDriver.halt(player);
         player.setShiftKeyDown(false);
     }
@@ -193,7 +204,12 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
 
         AimProcessor.Rotation stepped = null;
         if (t != null && t.hasRotation()) {
-            stepped = aim.step(player.getYRot(), player.getXRot(), t.getYaw(), t.getPitch());
+            // 步进起点用上一 tick 步进后的视角;首次用实体当前视角兜底。
+            float startYaw = prevStepYaw != null ? prevStepYaw : player.getYRot();
+            float startPitch = prevStepPitch != null ? prevStepPitch : player.getXRot();
+            stepped = aim.step(startYaw, startPitch, t.getYaw(), t.getPitch());
+            prevStepYaw = stepped.yaw();
+            prevStepPitch = stepped.pitch();
             applyLook(stepped);
         }
 

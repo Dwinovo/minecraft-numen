@@ -197,8 +197,9 @@ final class MovementPlacement {
      * 一个无害主手槽(空手或非工具类)以便右键走副手。
      *
      * <p>{@code select=true} 时把选中的耗材切到主手:快捷栏命中直接切
-     * 该槽;副手命中则把主手换到一个不会右键消费的槽(空手或非工具),
-     * 右键时原版走副手放置。
+     * 该槽;副手命中则把主手换到一个不会右键消费的槽(空手或带 TOOL
+     * 组件的挖掘工具——镐/斧/铲/锄,这些物品右键不放置方块),右键时
+     * 原版走副手放置。
      */
     static boolean selectThrowaway(ServerPlayer player, boolean select) {
         List<Item> acceptable = NavSettings.get().acceptableThrowawayItems();
@@ -217,12 +218,13 @@ final class MovementPlacement {
         // 快捷栏无可用耗材:无条件查副手
         ItemStack offhand = player.getOffhandItem();
         if (!offhand.isEmpty() && acceptable.contains(offhand.getItem())) {
-            // 主手不能是会右键消费/使用的物品(铲/锄/方块等),否则右键走主手
-            // 而非副手;选一个空手或非工具槽以便右键实际使用副手
+            // 主手不能是会右键消费/使用的物品(方块/桶等),否则右键走主手
+            // 而非副手;选一个空手或带 TOOL 组件的挖掘工具槽(镐/斧/铲/锄),
+            // 这些物品右键不会放置方块,右键时原版走副手放置。
             for (int i = 0; i < 9; i++) {
                 ItemStack stack = inventory.getItem(i);
                 if (stack.isEmpty()
-                        || !stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
+                        || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
                     if (select) {
                         inventory.selected = i;
                     }

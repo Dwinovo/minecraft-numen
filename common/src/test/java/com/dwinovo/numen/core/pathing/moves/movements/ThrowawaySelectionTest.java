@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *   <li>快捷栏多种可用方块且槽位顺序与优先级不一致时,按 acceptableThrowawayItems
  *       的配置顺序选(默认泥土先于圆石先于下界岩先于石头),不按槽位顺序;</li>
  *   <li>快捷栏无可用耗材而副手有可垫路方块时,回退到副手并选一个空手/
- *       非工具主手槽(避免主手物品右键消费抢走副手放置)。</li>
+ *       带 TOOL 组件的主手槽(剑/镐/斧/铲/锄右键不放置方块,右键走副手)。</li>
  * </ul>
  * selectThrowaway 是包级静态,本测试同包访问。需要 MC 注册表。
  */
@@ -103,16 +103,29 @@ class ThrowawaySelectionTest {
     }
 
     @Test
-    void offhandFallbackPicksNonToolMainHandSlot() {
-        // 副手放可垫路方块;主手是剑(工具),应换到一个非工具槽以便右键走副手。
-        // 这里没有可垫路方块在快捷栏,只有一把石剑在槽 0、空气在槽 1。
+    void offhandFallbackPicksToolOrEmptyMainHandSlot() {
+        // 副手放可垫路方块;主手快捷栏只有一把石剑(带 TOOL 组件)在槽 0、空气在槽 1。
+        // 应选带 TOOL 组件的槽(剑右键不放置方块,右键走副手),而非会放置方块的槽。
         player.getInventory().items.set(0, new ItemStack(Items.STONE_SWORD));
         // 副手设置:ServerPlayer.getOffhandItem() 读 Inventory.offhand
         player.getInventory().offhand.set(0, new ItemStack(Items.DIRT));
         assertTrue(MovementPlacement.selectThrowaway(player, true));
-        // 主手应切到槽 1(空手,非工具),不是 0(剑)
+        // 主手应切到槽 0(剑,带 TOOL 组件),不是 1(空手也合格但靠后)
+        assertEquals(0, player.getInventory().selected,
+                "副手命中时主手应换到一个空手或带 TOOL 组件的槽,实为 " + player.getInventory().selected);
+    }
+
+    @Test
+    void offhandFallbackSkipsPlaceableMainHandSlot() {
+        // 副手放可垫路方块;主手快捷栏槽 0 放橡木板(会右键放置,不在耗材清单里,
+        // 也不带 TOOL 组件),槽 1 放石剑(带 TOOL 组件)。快捷栏无可用耗材,
+        // 走副手回退;应跳过槽 0(会放置方块),选槽 1(剑),让右键走副手。
+        player.getInventory().items.set(0, new ItemStack(Items.OAK_PLANKS));
+        player.getInventory().items.set(1, new ItemStack(Items.STONE_SWORD));
+        player.getInventory().offhand.set(0, new ItemStack(Items.DIRT));
+        assertTrue(MovementPlacement.selectThrowaway(player, true));
         assertEquals(1, player.getInventory().selected,
-                "副手命中时主手应换到一个非工具/空手槽,实为 " + player.getInventory().selected);
+                "主手有可放置方块时应跳过它,选带 TOOL 组件的剑槽,实为 " + player.getInventory().selected);
     }
 
     @Test
