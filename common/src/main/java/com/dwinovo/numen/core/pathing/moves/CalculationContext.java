@@ -23,6 +23,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.border.WorldBorder;
 
 import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
 
@@ -97,6 +98,12 @@ public class CalculationContext {
     public final int worldBottom;
     public final int worldHeight;
 
+    /**
+     * 世界边界快照(构造时在主线程取样)。avoidBreaking 用它的
+     * {@code canPlaceAt(x,z)} 拒绝在边界外挖方块。
+     */
+    public final WorldBorder worldBorder;
+
     /** 便捷构造:无语义开关的活世界上下文。 */
     public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                               boolean safeForThreadedUse) {
@@ -146,6 +153,15 @@ public class CalculationContext {
         this.allowPlaceInFluidsFlow = settings.allowPlaceInFluidsFlow;
         this.worldBottom = view.getMinBuildHeight();
         this.worldHeight = view.getMaxBuildHeight();
+        WorldBorder border = null;
+        if (player != null) {
+            try {
+                border = player.level() != null ? player.level().getWorldBorder() : null;
+            } catch (NullPointerException ignored) {
+                // 测试壳玩家无 level 字段:无世界边界,按"不限制"处理
+            }
+        }
+        this.worldBorder = border;
     }
 
     /** 背包(含快捷栏)是否有可垫路耗材。 */
@@ -255,17 +271,17 @@ public class CalculationContext {
     private final BlockPos.MutableBlockPos protectionCursor = new BlockPos.MutableBlockPos();
 
     /**
-     * 挖 (x,y,z) 的成本乘数。三层禁令,从严到宽:
+     * 挖 (x,y,z) 的成本乘数。两层禁令,从严到宽:
      * <ol>
      *   <li>sacred(自身目标格)永远 INF,任何开关都不可穿透;</li>
-     *   <li>功能方块绝不拆(don't-grief):do_not_break 标签、带方块实体
-     *       的方块(箱子/熔炉/漏斗/模组机器…)、床——直接 INF,
-     *       {@code forceBreak} 也不解除。{@code avoidBreakingMultiplier}
-     *       的 ×10 缓冲档保留为引擎能力({@link ToolSet}),产品清单走
-     *       这里的 INF 档;</li>
+     *   <li>do_not_break 标签成员(数据包追加的硬禁挖方块)直接 INF,
+     *       任何开关都不可解除;</li>
      *   <li>总开关 {@code allowBreak} 关闭且不在例外清单 → INF,
-     *       {@code forceBreak} 只解除这一层普通方块的场景。</li>
+     *       {@code forceBreak} 解除这一层普通方块的场景。</li>
      * </ol>
+     * 功能方块(工作台/熔炉/箱子等)的 ×10 软惩罚由 {@link ToolSet}
+     * 的 {@code avoidanceMultiplier}(NavSettings.blocksToAvoidBreaking)
+     * 在 {@code getStrVsBlock} 里实现,此处不参与。
      */
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
         if (sacred.contains(BlockPos.asLong(x, y, z))) {

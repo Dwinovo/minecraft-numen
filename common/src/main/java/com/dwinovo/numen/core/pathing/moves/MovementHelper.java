@@ -5,9 +5,9 @@ import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.block.AbstractCauldronBlock;
-import net.minecraft.world.level.block.AbstractSkullBlock;
 import net.minecraft.world.level.block.AirBlock;
+import net.minecraft.world.level.block.CauldronBlock;
+import net.minecraft.world.level.block.AbstractSkullBlock;
 import net.minecraft.world.level.block.AmethystClusterBlock;
 import net.minecraft.world.level.block.AzaleaBlock;
 import net.minecraft.world.level.block.BambooStalkBlock;
@@ -133,7 +133,7 @@ public final class MovementHelper {
             }
             return Ternary.MAYBE;
         }
-        if (block instanceof AbstractCauldronBlock) {
+        if (block instanceof CauldronBlock) {
             return Ternary.NO;
         }
         return state.isPathfindable(PathComputationType.LAND) ? Ternary.YES : Ternary.NO;
@@ -378,13 +378,21 @@ public final class MovementHelper {
     // ==================== 禁挖判定 ====================
 
     /**
-     * 挖 (x,y,z) 是否被禁止:硬禁令清单(forceBreak 可解除)、
-     * 冰(挖了变水搅乱路径)、被虫蚀方块,以及上方/四个水平邻格的
-     * 液体与悬空落沙规则。
+     * 挖 (x,y,z) 是否被禁止:世界边界外拒绝(内缩一格,边界外的方块
+     * 没法贴放/挖到);硬禁令清单(blocksToDisallowBreaking,forceBreak
+     * 也不解除)、冰(挖了变水搅乱路径)、被虫蚀方块,以及上方/四个
+     * 水平邻格的液体与悬空落沙规则。
      */
     public static boolean avoidBreaking(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (context.worldBorder != null
+                && !(x > context.worldBorder.getMinX()
+                        && x + 1 < context.worldBorder.getMaxX()
+                        && z > context.worldBorder.getMinZ()
+                        && z + 1 < context.worldBorder.getMaxZ())) {
+            return true;
+        }
         Block b = state.getBlock();
-        if (!context.forceBreak && NavSettings.get().blocksToDisallowBreaking().contains(b)) {
+        if (NavSettings.get().blocksToDisallowBreaking().contains(b)) {
             return true;
         }
         return b == Blocks.ICE

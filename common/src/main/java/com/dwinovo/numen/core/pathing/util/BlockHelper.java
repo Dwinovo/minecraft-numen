@@ -10,7 +10,6 @@ import net.minecraft.world.level.block.AmethystClusterBlock;
 import net.minecraft.world.level.block.AzaleaBlock;
 import net.minecraft.world.level.block.BambooStalkBlock;
 import net.minecraft.world.level.block.BaseFireBlock;
-import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CarpetBlock;
@@ -411,26 +410,18 @@ public final class BlockHelper {
     }
 
     /**
-     * A block the bot must never destroy while pathing: any block-entity
-     * (chests, furnaces, hoppers, barrels, shulker boxes, spawners, beacons,
-     * lecterns, …) or a bed. These are player-placed functional/valuable blocks —
-     * route around them, don't grief. The {@code BlockEntity != null} test is a
-     * cheap, broad proxy that catches essentially every griefable block.
+     * 一个不该被寻路破坏的方块:命中 do_not_break 方块标签(工作台/
+     * 切石机/锻造台/砂轮/织布机/制图台/制箭台/铁砧族等无方块实体的
+     * 功能方块)。带方块实体的方块(箱子/熔炉/漏斗/潜影盒/刷怪笼/信标
+     * 等)与床不再硬禁止——寻路里它们和泥土一样可破坏、无惩罚;
+     * 想避开就放进 NavSettings.blocksToAvoidBreaking 软清单
+     * (挖掘成本 ×10,无路可走仍会破坏),与 Baritone 口径一致。
      */
     public static boolean shouldAvoidBreaking(BlockGetter level, BlockPos pos) {
-        // Declarative + datapack-overridable layer: the do_not_break block tag (no-BlockEntity work
-        // stations like the crafting table). A tag membership test reads only the immutable BlockState
-        // holder — no Level/snapshot — so it is safe on the off-thread search.
+        // do_not_break 标签:无 BlockEntity 的功能性工作台。标签成员测试
+        // 只读不可变 BlockState holder,off-thread 搜索可安全调用。
         BlockState state = level.getBlockState(pos);
-        if (state.is(com.dwinovo.numen.core.init.InitTag.DO_NOT_BREAK)) return true;
-        // Broad proxy: any block-entity block (chests, furnaces, hoppers, barrels, shulkers, modded
-        // machines, …) is functional/valuable. Off-thread the search can't reconstruct a block entity,
-        // so the cache view answers presence from a main-thread snapshot (BlockEntityAware).
-        boolean hasBlockEntity = level instanceof BlockEntityAware aware
-                ? aware.hasBlockEntity(pos)
-                : level.getBlockEntity(pos) != null;
-        if (hasBlockEntity) return true;
-        return state.getBlock() instanceof BedBlock;
+        return state.is(com.dwinovo.numen.core.init.InitTag.DO_NOT_BREAK);
     }
 
     /**

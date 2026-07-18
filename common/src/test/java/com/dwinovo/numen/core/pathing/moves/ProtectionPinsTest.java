@@ -40,13 +40,17 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * 挖掘/放置保护口径的回归钉,打在真实成本函数上:
  * <ul>
- *   <li>功能方块绝不拆:箱子(方块实体代理)在任何开关下都计 INF,
- *       forceBreak 也不解除;</li>
+ *   <li>功能方块软惩罚:箱子(在 NavSettings.blocksToAvoidBreaking 默认清单内)
+ *       计 ×10 软成本(有限价,无路可走仍会破坏),forceBreak 解除该软惩罚
+ *       (回到泥土一样的有限价);</li>
+ *   <li>do_not_break 标签成员(数据包追加)在任何开关下都计 INF,
+ *       forceBreak 也不解除;默认清单为空,本测试通过 NavSettings
+ *       .blocksToDisallowBreaking 钉一个方块验证;</li>
  *   <li>sacred(导航自身目标格)必 INF,forceBreak 不可穿透;</li>
  *   <li>同地形普通方块(泥土)有限价——证明是保护在起作用,不是别的
  *       东西把边价推上去的;</li>
- *   <li>deniedPlace 命中的格放置计 INF;箱子/流体不可作放置贴面,
- *       石头可以(plan/execute 一把尺的共享谓词)。</li>
+ *   <li>deniedPlace 命中格放置计 INF;石头可作放置贴面
+ *       (plan/execute 一把尺的共享谓词)。</li>
  * </ul>
  * 需要 MC 注册表,无头引导失败时跳过而不失败。
  */
@@ -161,21 +165,52 @@ class ProtectionPinsTest {
     // ==================== 挖掘保护 ====================
 
     @Test
-    void chestBreakIsInfiniteEvenForced() {
+    void chestBreakIsSoftPenaltyAndForceClearsIt() {
         BlockPos chest = SRC.north();
         FakeView v = floored();
         v.setChest(chest);
-        // don't-grief:箱子(方块实体)计 INF,forceBreak 不解除
-        assertTrue(MovementHelper.getMiningDurationTicks(
+        // 箱子在 NavSettings.blocksToAvoidBreaking 默认清单内 → ×10 软成本(有限价)
+        double soft = MovementHelper.getMiningDurationTicks(
                 context(v, LongSets.emptySet(), false),
-                chest.getX(), chest.getY(), chest.getZ(), false) >= COST_INF);
-        assertTrue(MovementHelper.getMiningDurationTicks(
+                chest.getX(), chest.getY(), chest.getZ(), false);
+        assertTrue(soft > 0 && soft < COST_INF, "软惩罚箱子应有有限价,实为 " + soft);
+        // 同地形下 forceBreak 解除软惩罚 → 成本回到正常挖掘(不会更贵)
+        double forced = MovementHelper.getMiningDurationTicks(
                 context(v, LongSets.emptySet(), true),
-                chest.getX(), chest.getY(), chest.getZ(), false) >= COST_INF);
-        // 端到端:北向平移(要挖穿箱子)不产出有限边
-        double cost = Moves.TRAVERSE_NORTH.cost(context(v, LongSets.emptySet(), true),
+                chest.getX(), chest.getY(), chest.getZ(), false);
+        assertTrue(forced > 0 && forced < COST_INF, "forceBreak 下箱子应有有限价,实为 " + forced);
+        assertTrue(forced <= soft, "forceBreak 不应比软惩罚更贵,forced=" + forced + " soft=" + soft);
+        // 端到端:北向平移(要挖穿箱子)产出有限边(不是 INF)
+        double cost = Moves.TRAVERSE_NORTH.cost(context(v, LongSets.emptySet(), false),
                 SRC.getX(), SRC.getY(), SRC.getZ());
-        assertTrue(cost >= COST_INF, "穿箱平移应计 INF,实为 " + cost);
+        assertTrue(cost > 0 && cost < COST_INF, "穿箱平移应有限价,实为 " + cost);
+    }
+
+    @Test
+    void disallowBreakingHoldsInfiniteEvenForced() {
+        // blocksToDisallowBreaking(默认空)硬禁挖:forceBreak 也不解除。
+        // 钉一个方块到该清单验证(用石头,与箱子软清单区分开)。
+        BlockPos stone = SRC.north();
+        FakeView v = floored();
+        v.set(stone, Blocks.STONE.defaultBlockState());
+        NavSettings s = NavSettings.get();
+        var savedDisallow = new java.util.ArrayList<>(s.blocksToDisallowBreaking());
+        var savedAvoid = new java.util.ArrayList<>(s.blocksToAvoidBreaking());
+        try {
+            s.blocksToDisallowBreaking().add(Blocks.STONE);
+            s.blocksToAvoidBreaking().clear();
+            assertTrue(MovementHelper.avoidBreaking(
+                    context(v, LongSets.emptySet(), false),
+                    stone.getX(), stone.getY(), stone.getZ(), v.getBlockState(stone)));
+            assertTrue(MovementHelper.avoidBreaking(
+                    context(v, LongSets.emptySet(), true),
+                    stone.getX(), stone.getY(), stone.getZ(), v.getBlockState(stone)));
+        } finally {
+            s.blocksToDisallowBreaking().clear();
+            s.blocksToDisallowBreaking().addAll(savedDisallow);
+            s.blocksToAvoidBreaking().clear();
+            s.blocksToAvoidBreaking().addAll(savedAvoid);
+        }
     }
 
     @Test
