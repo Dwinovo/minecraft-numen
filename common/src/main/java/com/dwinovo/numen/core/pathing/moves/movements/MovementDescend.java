@@ -216,7 +216,7 @@ public class MovementDescend extends Movement {
             return state;
         }
 
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         BlockPos fakeDest = new BlockPos(dest.getX() * 2 - src.getX(), dest.getY(),
                 dest.getZ() * 2 - src.getZ());
         if ((feet.equals(dest) || feet.equals(fakeDest))

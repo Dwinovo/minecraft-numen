@@ -227,7 +227,7 @@ public class MovementDiagonal extends Movement {
             return state;
         }
 
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         if (feet.equals(dest)) {
             return state.setStatus(MovementStatus.SUCCESS);
         } else if (!feetInValidPositions()
@@ -247,13 +247,13 @@ public class MovementDiagonal extends Movement {
 
     /** 身体在合法过程位内(不含 pathStart 假起点兜底)。 */
     private boolean feetInValidPositions() {
-        return getValidPositions().contains(player.blockPosition());
+        return getValidPositions().contains(feet(player));
     }
 
     /** 四个角柱全通透(且不在禁疾跑的水里)才可疾跑斜穿。 */
     private boolean sprint() {
         Level level = player.level();
-        if (MovementHelper.isLiquid(level.getBlockState(player.blockPosition()))
+        if (MovementHelper.isLiquid(level.getBlockState(feet(player)))
                 && !NavSettings.get().sprintInWater) {
             return false;
         }
@@ -278,7 +278,7 @@ public class MovementDiagonal extends Movement {
     @Override
     protected boolean safeToCancel(MovementState state) {
         Level level = player.level();
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         double offset = 0.25;
         double x = player.getX();
         double y = player.getY() - 1;

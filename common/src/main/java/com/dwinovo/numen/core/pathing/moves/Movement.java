@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.FallingBlockEntity;
 import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -110,8 +111,23 @@ public abstract class Movement {
      * 取 3×3 邻格/下一格的支撑点)——重算/回退后,整体路径起点不一定
      * 属于本移动自身的 {src,dest} 集合,假起点兜住这种情形。
      */
+    /**
+     * 脚位约定:实体坐标 y 加 0.1251(灵魂沙/农田顶面矮一截仍归上格),
+     * 落在台阶格里再上抬一格。执行器重定位、validPositions 与本类状态
+     * 机的到达/失败判定**全部**用这一把尺,避免半砖/灵魂沙顶面错位一格
+     * 导致 SUCCESS 推进与回退扫循环。
+     */
+    public static BlockPos feet(ServerPlayer player) {
+        BlockPos f = BlockPos.containing(
+                player.position().x, player.position().y + 0.1251, player.position().z);
+        if (player.level().getBlockState(f).getBlock() instanceof SlabBlock) {
+            return f.above();
+        }
+        return f;
+    }
+
     protected boolean playerInValidPosition() {
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         if (getValidPositions().contains(feet)) {
             return true;
         }
@@ -126,7 +142,7 @@ public abstract class Movement {
      * 助手供 Movement 子类(如 Downward 的 UNREACHABLE 判定)复用。
      */
     public static BlockPos pathStart(ServerPlayer player) {
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         var level = player.level();
         if (MovementHelper.canWalkOn(level, feet.below())) {
             return feet;
@@ -177,7 +193,7 @@ public abstract class Movement {
         // 置真的飞行状态干扰(对应 Baritone Movement.java:124)
         player.getAbilities().flying = false;
         currentState = updateState(currentState);
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         if (MovementHelper.isLiquid(player.level().getBlockState(feet))
                 && player.getY() < dest.getY() + 0.6) {
             currentState.setInput(Input.JUMP, true);

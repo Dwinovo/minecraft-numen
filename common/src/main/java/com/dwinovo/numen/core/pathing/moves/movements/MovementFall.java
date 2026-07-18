@@ -75,7 +75,7 @@ public class MovementFall extends Movement {
         }
 
         Level level = player.level();
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         Vec3 eye = player.getEyePosition();
         Vec3 destCenter = MovementHelper.blockCenter(dest);
         float toDestYaw = MovementHelper.yawTo(eye, destCenter);
@@ -158,7 +158,7 @@ public class MovementFall extends Movement {
     /** 脚下 15 格内的第一段梯子的朝向(回避向量)。 */
     private Direction avoid() {
         for (int i = 0; i < 15; i++) {
-            BlockState state = player.level().getBlockState(player.blockPosition().below(i));
+            BlockState state = player.level().getBlockState(feet(player).below(i));
             if (state.getBlock() == Blocks.LADDER) {
                 return state.getValue(LadderBlock.FACING);
             }
@@ -169,7 +169,7 @@ public class MovementFall extends Movement {
     /** 还没走出边缘(或还在准备期)才可取消;空中动量收不回来。 */
     @Override
     protected boolean safeToCancel(MovementState state) {
-        return player.blockPosition().equals(src) || state.getStatus() != MovementStatus.RUNNING;
+        return feet(player).equals(src) || state.getStatus() != MovementStatus.RUNNING;
     }
 
     /** 快捷栏里找指定物品的槽位,找不到返回 -1。 */

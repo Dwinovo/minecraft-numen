@@ -165,7 +165,7 @@ public class MovementPillar extends Movement {
             return state;
         }
 
-        if (player.blockPosition().getY() < src.getY()) {
+        if (feet(player).getY() < src.getY()) {
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
 
@@ -183,7 +183,7 @@ public class MovementPillar extends Movement {
                     || Math.abs(player.getZ() - destCenter.z) > 0.2) {
                 state.setInput(Input.MOVE_FORWARD, true);
             }
-            if (player.blockPosition().equals(dest)) {
+            if (feet(player).equals(dest)) {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
             return state;
@@ -205,8 +205,8 @@ public class MovementPillar extends Movement {
             if (against == null) {
                 return state.setStatus(MovementStatus.UNREACHABLE); // 藤蔓四邻无贴面爬不了
             }
-            if (player.blockPosition().equals(against.above())
-                    || player.blockPosition().equals(dest)) {
+            if (feet(player).equals(against.above())
+                    || feet(player).equals(dest)) {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
             if (MovementHelper.isBottomSlab(level.getBlockState(src.below()))) {
@@ -259,7 +259,7 @@ public class MovementPillar extends Movement {
             }
         }
 
-        if (player.blockPosition().equals(dest) && blockIsThere) {
+        if (feet(player).equals(dest) && blockIsThere) {
             return state.setStatus(MovementStatus.SUCCESS);
         }
         return state;
@@ -268,7 +268,7 @@ public class MovementPillar extends Movement {
     /** 站梯/藤上挖掘时按住潜行;头顶目标格上方是水则不做准备挖掘。 */
     @Override
     protected boolean prepared(MovementState state) {
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         if (feet.equals(src) || feet.equals(src.below())) {
             Block block = player.level().getBlockState(src.below()).getBlock();
             if (block == Blocks.LADDER || block == Blocks.VINE) {

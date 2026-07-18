@@ -246,7 +246,7 @@ public class MovementParkour extends Movement {
         if (state.getStatus() != MovementStatus.RUNNING) {
             return state;
         }
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         if (feet.getY() < src.getY()) {
             // 掉下去了
             return state.setStatus(MovementStatus.UNREACHABLE);

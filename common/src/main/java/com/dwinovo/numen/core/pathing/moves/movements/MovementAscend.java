@@ -134,13 +134,15 @@ public class MovementAscend extends Movement {
     @Override
     protected Set<BlockPos> calculateValidPositions() {
         BlockPos dir = getDirection();
-        BlockPos prior = new BlockPos(src.getX() - dir.getX(), src.getY(), src.getZ() - dir.getZ());
+        // prior = 来向同高后退一格再上一格:垫柱后退放置/sprint 上台/skip descend
+        // 落点会经过这里(Baritone 定义 src.subtract(dir).above,不是 src.subtract(dir))
+        BlockPos prior = new BlockPos(src.getX() - dir.getX(), src.getY() + 1, src.getZ() - dir.getZ());
         return Set.of(src, src.above(), dest, prior, prior.above());
     }
 
     @Override
     public MovementState updateState(MovementState state) {
-        if (player.blockPosition().getY() < src.getY()) {
+        if (feet(player).getY() < src.getY()) {
             // 掉下去了:即使还在挖掘准备期也判不可达
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
@@ -150,7 +152,7 @@ public class MovementAscend extends Movement {
         }
 
         Level level = player.level();
-        BlockPos feet = player.blockPosition();
+        BlockPos feet = feet(player);
         BlockPos dir = getDirection();
         if (feet.equals(dest) || feet.equals(dest.offset(dir.getX(), dir.getY() - 1, dir.getZ()))) {
             // 到了,或冲过头落在同层前方一格(爬升方向 Y=1,减 1 即同层)也算成功

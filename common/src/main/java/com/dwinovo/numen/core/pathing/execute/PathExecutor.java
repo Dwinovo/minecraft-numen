@@ -29,7 +29,6 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.phys.Vec3;
 
 import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
@@ -94,15 +93,11 @@ public final class PathExecutor {
 
     /**
      * 脚位约定:实体坐标 y 加 0.1251(灵魂沙/农田顶面矮一截仍归上格),
-     * 落在台阶格里再上抬一格。
+     * 落在台阶格里再上抬一格。转发 {@link Movement#feet}——执行器与
+     * 移动原语共用同一把尺,避免半砖顶面错位导致推进-回退循环。
      */
     public static BlockPos playerFeet(ServerPlayer player) {
-        BlockPos feet = BlockPos.containing(
-                player.position().x, player.position().y + 0.1251, player.position().z);
-        if (player.level().getBlockState(feet).getBlock() instanceof SlabBlock) {
-            return feet.above();
-        }
-        return feet;
+        return Movement.feet(player);
     }
 
     /**
