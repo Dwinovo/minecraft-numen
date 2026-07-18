@@ -134,9 +134,9 @@ public class MovementAscend extends Movement {
     @Override
     protected Set<BlockPos> calculateValidPositions() {
         BlockPos dir = getDirection();
-        // prior = 来向同高后退一格再上一格:垫柱后退放置/sprint 上台/skip descend
-        // 落点会经过这里(Baritone 定义 src.subtract(dir).above,不是 src.subtract(dir))
-        BlockPos prior = new BlockPos(src.getX() - dir.getX(), src.getY() + 1, src.getZ() - dir.getZ());
+        // prior = src 减去爬升方向后再上一格:垫柱后退放置/sprint 上台/skip descend
+        // 落点会经过这里(dir.y=1,subtract 后 y-1,above 后回到 src 同高)
+        BlockPos prior = src.subtract(dir).above();
         return Set.of(src, src.above(), dest, prior, prior.above());
     }
 

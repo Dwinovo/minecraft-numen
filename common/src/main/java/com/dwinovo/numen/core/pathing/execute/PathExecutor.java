@@ -71,6 +71,9 @@ public final class PathExecutor {
      * 可能在某 movement 的 SUCCESS 判定与 validPositions 不自洽时空转
      * 爆栈。超过路径长度即判定为病态循环,取消而非继续递归。 */
     private int tickRecursionDepth;
+    /** 最近若干次推进类型(pos@feet:reason)的环形记录,守卫触发时回溯定位循环。 */
+    private final String[] recentSteps = new String[16];
+    private int recentStepsHead;
     private Double currentMovementOriginalCostEstimate;
     private Integer costEstimateIndex;
     private boolean failed;
@@ -109,7 +112,15 @@ public final class PathExecutor {
      */
     public boolean onTick() {
         tickRecursionDepth = 0;
+        recentStepsHead = 0;
+        java.util.Arrays.fill(recentSteps, null);
         return onTick0();
+    }
+
+    /** 记一次推进到环形缓冲,守卫触发时回溯定位循环路径。 */
+    private void recordStep(String step) {
+        recentSteps[recentStepsHead] = step;
+        recentStepsHead = (recentStepsHead + 1) % recentSteps.length;
     }
 
     /** 递归实现:回退扫/SUCCESS 推进后自调,深度守卫止爆。 */
@@ -117,7 +128,18 @@ public final class PathExecutor {
         if (tickRecursionDepth++ > path.length()) {
             // 回退扫/SUCCESS 推进后递归 onTick 超过路径长度:某 movement 的
             // SUCCESS 判定与 validPositions 不自洽,推进-回退空转。取消止爆。
-            Constants.LOG.warn("onTick 递归深度超过路长度 {} 格,判定为推进空转,取消", path.length());
+            BlockPos feet = playerFeet(player);
+            Movement m = path.movements().get(Math.min(pathPosition, path.movements().size() - 1));
+            StringBuilder trace = new StringBuilder();
+            for (int i = 0; i < recentSteps.length; i++) {
+                String s = recentSteps[(recentStepsHead + i) % recentSteps.length];
+                if (s != null) {
+                    trace.append('[').append(s).append("] ");
+                }
+            }
+            Constants.LOG.warn("onTick 递归超路长 {} 格,推进空转取消。pos={} feet={} movement={} src={} dest={} valid={} 迹:{}",
+                    path.length(), pathPosition, feet, m.getClass().getSimpleName(),
+                    m.getSrc(), m.getDest(), m.getValidPositions(), trace);
             cancel("执行器推进空转(SUCCESS 与合法位不自洽,超 " + path.length() + " 步)");
             return false;
         }
@@ -130,7 +152,14 @@ public final class PathExecutor {
         Movement movement = path.movements().get(pathPosition);
         movement.setExecutionDelegate(harness);
         BlockPos feet = playerFeet(player);
-        if (!movement.getValidPositions().contains(feet)) {
+        boolean inValid = movement.getValidPositions().contains(feet);
+        if (tickRecursionDepth < 6 && !inValid) {
+            Constants.LOG.debug("[diag] pos={} feet={} movement={} src={} dest={} valid={} contains={}",
+                    pathPosition, feet, movement.getClass().getSimpleName(),
+                    movement.getSrc(), movement.getDest(),
+                    movement.getValidPositions(), inValid);
+        }
+        if (!inValid) {
             // 回退扫:被击退/卡顿回传后落在已走过的移动里,退回去重走
             int back = findBackwardMatch(path.movements(), pathPosition, feet);
             if (back != -1) {
@@ -139,6 +168,7 @@ public final class PathExecutor {
                 for (int j = pathPosition; j <= previousPos; j++) {
                     path.movements().get(j).reset();
                 }
+                recordStep("back " + previousPos + "->" + back + " feet=" + feet);
                 onChangeInPathPosition();
                 onTick0();
                 return false;
@@ -148,6 +178,7 @@ public final class PathExecutor {
             int forward = findForwardSkip(path.movements(), pathPosition, feet);
             if (forward != -1) {
                 pathPosition = forward - 1;
+                recordStep("fwd ->" + (forward - 1) + " feet=" + feet);
                 onChangeInPathPosition();
                 onTick0();
                 return false;
@@ -224,6 +255,7 @@ public final class PathExecutor {
         }
         if (movementStatus == MovementStatus.SUCCESS) {
             pathPosition++;
+            recordStep("success ->" + pathPosition + " feet=" + playerFeet(player));
             onChangeInPathPosition();
             onTick0();
             return true;

@@ -250,9 +250,12 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
             forward *= 0.3f;
             strafe *= 0.3f;
         }
-        // 移动方向按目标 yaw;无视角目标时就按实体当前 yaw
-        float moveYaw = (t != null && t.hasRotation()) ? t.getYaw() : player.getYRot();
-        float[] impulse = AimProcessor.remapInput(strafe, forward, moveYaw, player.getYRot());
+        // 移动方向按实体当前视角(已步进):vanilla travel 按 player.yaw
+        // 投影 zza/xxa,输入也必须按同一 yaw,否则 target 与 actual 的角差
+        // 经 remap 被当成转向补偿加进 xxa/zza,长距离累积成横向漂移。
+        // 视角步进到位前 forward 就只按当前朝向走,不预补偿。
+        float moveYaw = player.getYRot();
+        float[] impulse = AimProcessor.remapInput(strafe, forward, moveYaw, moveYaw);
         player.xxa = impulse[0];
         player.zza = impulse[1];
         player.setShiftKeyDown(sneak);
