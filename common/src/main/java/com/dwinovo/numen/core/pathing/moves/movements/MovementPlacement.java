@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
 
+import java.util.List;
+
 import com.dwinovo.numen.core.pathing.moves.Input;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
@@ -12,6 +14,7 @@ import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -146,19 +149,43 @@ final class MovementPlacement {
     }
 
     /**
-     * 快捷栏里找可垫路耗材;select=true 时切到该槽位
-     * (背包数据写入,后续执行层波次统一接管换手动作)。
+     * 找可垫路耗材并(可选)切到该槽。外层按 NavSettings.acceptableThrowawayItems
+     * 的配置优先级顺序遍历物品种类(默认泥土/圆石/下界岩/石头),内层扫
+     * 快捷栏 0-8 找该种类;快捷栏全无命中时再无条件查副手,命中则选
+     * 一个无害主手槽(空手或非工具类)以便右键走副手。
+     *
+     * <p>{@code select=true} 时把选中的耗材切到主手:快捷栏命中直接切
+     * 该槽;副手命中则把主手换到一个不会右键消费的槽(空手或非工具),
+     * 右键时原版走副手放置。
      */
     static boolean selectThrowaway(ServerPlayer player, boolean select) {
-        var acceptable = NavSettings.get().acceptableThrowawayItems();
+        List<Item> acceptable = NavSettings.get().acceptableThrowawayItems();
         Inventory inventory = player.getInventory();
-        for (int i = 0; i < 9; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && acceptable.contains(stack.getItem())) {
-                if (select) {
-                    inventory.selected = i;
+        for (Item item : acceptable) {
+            for (int i = 0; i < 9; i++) {
+                ItemStack stack = inventory.getItem(i);
+                if (!stack.isEmpty() && stack.getItem() == item) {
+                    if (select) {
+                        inventory.selected = i;
+                    }
+                    return true;
                 }
-                return true;
+            }
+        }
+        // 快捷栏无可用耗材:无条件查副手
+        ItemStack offhand = player.getOffhandItem();
+        if (!offhand.isEmpty() && acceptable.contains(offhand.getItem())) {
+            // 主手不能是会右键消费/使用的物品(铲/锄/方块等),否则右键走主手
+            // 而非副手;选一个空手或非工具槽以便右键实际使用副手
+            for (int i = 0; i < 9; i++) {
+                ItemStack stack = inventory.getItem(i);
+                if (stack.isEmpty()
+                        || !stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
+                    if (select) {
+                        inventory.selected = i;
+                    }
+                    return true;
+                }
             }
         }
         return false;
