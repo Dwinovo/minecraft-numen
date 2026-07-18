@@ -204,6 +204,7 @@ final class MovementPlacement {
     static boolean selectThrowaway(ServerPlayer player, boolean select) {
         List<Item> acceptable = NavSettings.get().acceptableThrowawayItems();
         Inventory inventory = player.getInventory();
+        boolean allowInventory = NavSettings.get().allowInventory;
         for (Item item : acceptable) {
             for (int i = 0; i < 9; i++) {
                 ItemStack stack = inventory.getItem(i);
@@ -214,21 +215,36 @@ final class MovementPlacement {
                     return true;
                 }
             }
-        }
-        // 快捷栏无可用耗材:无条件查副手
-        ItemStack offhand = player.getOffhandItem();
-        if (!offhand.isEmpty() && acceptable.contains(offhand.getItem())) {
-            // 主手不能是会右键消费/使用的物品(方块/桶等),否则右键走主手
-            // 而非副手;选一个空手或带 TOOL 组件的挖掘工具槽(镐/斧/铲/锄),
-            // 这些物品右键不会放置方块,右键时原版走副手放置。
-            for (int i = 0; i < 9; i++) {
-                ItemStack stack = inventory.getItem(i);
-                if (stack.isEmpty()
-                        || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
-                    if (select) {
-                        inventory.selected = i;
+            // 该种类快捷栏无命中:查副手
+            ItemStack offhand = player.getOffhandItem();
+            if (!offhand.isEmpty() && offhand.getItem() == item) {
+                // 主手不能是会右键消费/使用的物品(方块/桶等),否则右键走主手
+                // 而非副手;选一个空手或带 TOOL 组件的挖掘工具槽(镐/斧/铲/锄),
+                // 这些物品右键不会放置方块,右键时原版走副手放置。
+                for (int i = 0; i < 9; i++) {
+                    ItemStack stack = inventory.getItem(i);
+                    if (stack.isEmpty()
+                            || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
+                        if (select) {
+                            inventory.selected = i;
+                        }
+                        return true;
                     }
-                    return true;
+                }
+            }
+            // 背包深处:仅 allowInventory 开启时动用,搬到 7 号槽再选中
+            if (allowInventory) {
+                for (int i = 9; i < 36; i++) {
+                    ItemStack stack = inventory.getItem(i);
+                    if (!stack.isEmpty() && stack.getItem() == item) {
+                        if (select) {
+                            ItemStack tmp = inventory.getItem(7);
+                            inventory.setItem(7, stack);
+                            inventory.setItem(i, tmp);
+                            inventory.selected = 7;
+                        }
+                        return true;
+                    }
                 }
             }
         }

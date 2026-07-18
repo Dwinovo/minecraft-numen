@@ -172,14 +172,10 @@ public class MovementFall extends Movement {
         return feet(player).equals(src) || state.getStatus() != MovementStatus.RUNNING;
     }
 
-    /** 快捷栏里找指定物品的槽位,找不到返回 -1。 */
+    /** 快捷栏里找(物品与组件都相同的)指定物品槽位,找不到返回 -1。 */
     private int hotbarSlotWith(Item item) {
-        for (int i = 0; i < 9; i++) {
-            if (player.getInventory().getItem(i).is(item)) {
-                return i;
-            }
-        }
-        return -1;
+        int slot = player.getInventory().findSlotMatchingItem(new net.minecraft.world.item.ItemStack(item));
+        return net.minecraft.world.entity.player.Inventory.isHotbarSlot(slot) ? slot : -1;
     }
 
     /** 从 src.above() 到 dest 的整列(高 diffY+2)。 */

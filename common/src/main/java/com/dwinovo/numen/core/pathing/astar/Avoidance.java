@@ -6,14 +6,15 @@ import java.util.List;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.monster.Spider;
 import net.minecraft.world.entity.monster.ZombifiedPiglin;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.AABB;
 
 /**
@@ -71,17 +72,18 @@ public final class Avoidance {
         int mobSpawnerRadius = s.mobSpawnerAvoidanceRadius;
         int mobRadius = s.mobAvoidanceRadius;
         if (mobSpawnerCoeff != 1.0D) {
-            // 扫描玩家周围 2*radius 个方块内的刷怪笼(对应 Baritone
-            // cachedWorld.getLocationsOf 的语义,但直扫活世界,无缓存)
-            int r = mobSpawnerRadius * 2;
-            for (BlockPos pos : spawnersNear(player, feet, r)) {
+            for (BlockPos pos : spawnersInLoadedChunks(player, feet)) {
                 res.add(new Avoidance(pos, mobSpawnerCoeff, mobSpawnerRadius));
             }
         }
         if (mobCoeff != 1.0D) {
-            AABB box = new AABB(feet).inflate(mobRadius);
-            for (Mob mob : player.level().getEntitiesOfClass(Mob.class, box)) {
-                if (mob instanceof Spider spider && player.getLightLevelDependentMagicValue() >= 0.5) {
+            // 遍历该维度全部已加载实体(不设距离窗:路径中段远处的
+            // 敌对生物同样要计入惩罚球)
+            for (var entity : ((ServerLevel) player.level()).getAllEntities()) {
+                if (!(entity instanceof Mob mob)) {
+                    continue;
+                }
+                if (mob instanceof Spider && player.getLightLevelDependentMagicValue() >= 0.5) {
                     continue; // 蜘蛛在明亮处不主动威胁
                 }
                 if (mob instanceof EnderMan enderMan && !enderMan.isCreepy()) {
@@ -96,14 +98,29 @@ public final class Avoidance {
         return res;
     }
 
-    /** 玩家周围 r 格内的刷怪笼位置(扫活世界方块实体)。 */
-    private static List<BlockPos> spawnersNear(ServerPlayer player, BlockPos center, int r) {
+    /** 扫描周围已加载区块半径(16 区块 = 256 格)。 */
+    private static final int SPAWNER_CHUNK_SCAN_RADIUS = 16;
+
+    /**
+     * 玩家周围已加载区块里的全部刷怪笼位置。逐区块读方块实体表
+     * (map 遍历,不逐格查询),未加载的区块跳过。
+     */
+    private static List<BlockPos> spawnersInLoadedChunks(ServerPlayer player, BlockPos center) {
         List<BlockPos> out = new ArrayList<>();
-        for (BlockPos pos : BlockPos.betweenClosed(
-                center.offset(-r, -r, -r), center.offset(r, r, r))) {
-            BlockEntity be = player.level().getBlockEntity(pos);
-            if (be instanceof SpawnerBlockEntity) {
-                out.add(pos.immutable());
+        ServerLevel level = (ServerLevel) player.level();
+        int centerCx = center.getX() >> 4;
+        int centerCz = center.getZ() >> 4;
+        for (int cx = centerCx - SPAWNER_CHUNK_SCAN_RADIUS; cx <= centerCx + SPAWNER_CHUNK_SCAN_RADIUS; cx++) {
+            for (int cz = centerCz - SPAWNER_CHUNK_SCAN_RADIUS; cz <= centerCz + SPAWNER_CHUNK_SCAN_RADIUS; cz++) {
+                LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
+                if (chunk == null) {
+                    continue;
+                }
+                for (var entry : chunk.getBlockEntities().entrySet()) {
+                    if (entry.getValue() instanceof SpawnerBlockEntity) {
+                        out.add(entry.getKey().immutable());
+                    }
+                }
             }
         }
         return out;

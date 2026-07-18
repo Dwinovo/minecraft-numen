@@ -227,7 +227,8 @@ public class MovementTraverse extends Movement {
             }
         }
 
-        // 栅栏门:找出挡路的那扇,看向它右键
+        // 栅栏门:找出挡路的那扇,射线可视时才看向它右键;完全不可视
+        // 则不点击,落到后续行走逻辑继续推进
         if (pb0.getBlock() instanceof FenceGateBlock || pb1.getBlock() instanceof FenceGateBlock) {
             BlockPos blocked = !MovementHelper.isGatePassable(level, positionsToBreak[0], src.above())
                     ? positionsToBreak[0]
@@ -235,11 +236,13 @@ public class MovementTraverse extends Movement {
                             ? positionsToBreak[1]
                             : null;
             if (blocked != null) {
-                Vec3 center = MovementHelper.blockCenter(blocked);
-                return state.setTarget(new MovementState.MovementTarget(
-                                MovementHelper.yawTo(player.getEyePosition(), center),
-                                MovementHelper.pitchTo(player.getEyePosition(), center), true))
-                        .setInput(Input.CLICK_RIGHT, true);
+                Vec3 aim = MovementHelper.reachableAimPoint(player, blocked);
+                if (aim != null) {
+                    return state.setTarget(new MovementState.MovementTarget(
+                                    MovementHelper.yawTo(player.getEyePosition(), aim),
+                                    MovementHelper.pitchTo(player.getEyePosition(), aim), true))
+                            .setInput(Input.CLICK_RIGHT, true);
+                }
             }
         }
 

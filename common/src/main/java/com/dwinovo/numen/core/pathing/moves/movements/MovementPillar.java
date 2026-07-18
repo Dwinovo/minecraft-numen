@@ -242,11 +242,14 @@ public class MovementPillar extends Movement {
             if (!blockIsThere) {
                 BlockState frState = level.getBlockState(src);
                 if (!(frState.getBlock() instanceof AirBlock || frState.canBeReplaced())) {
-                    // 出发格有不可替换的杂物:看向它打掉;跳着挖慢五倍,停跳
-                    Vec3 srcCenter = MovementHelper.blockCenter(src);
-                    state.setTarget(new MovementState.MovementTarget(
-                            MovementHelper.yawTo(eye, srcCenter),
-                            MovementHelper.pitchTo(eye, srcCenter), true));
+                    // 出发格有不可替换的杂物:射线可视时才改看向它;跳着挖
+                    // 慢五倍,停跳,按左键打掉
+                    Vec3 aim = MovementHelper.reachableAimPoint(player, src);
+                    if (aim != null) {
+                        state.setTarget(new MovementState.MovementTarget(
+                                MovementHelper.yawTo(eye, aim),
+                                MovementHelper.pitchTo(eye, aim), true));
+                    }
                     state.setInput(Input.JUMP, false);
                     state.setInput(Input.CLICK_LEFT, true);
                 } else if (player.isCrouching()

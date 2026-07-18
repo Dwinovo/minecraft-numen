@@ -164,34 +164,48 @@ public class CalculationContext {
         this.worldBorder = border;
     }
 
-    /** 背包(含快捷栏)是否有可垫路耗材。 */
+    /**
+     * 是否持有可垫路耗材。查快捷栏(0-8)与副手;仅当
+     * {@code allowInventory} 开启才查背包深处(9-35)。
+     */
     private static boolean hasGenericThrowaway(ServerPlayer player, NavSettings settings) {
         List<net.minecraft.world.item.Item> acceptable = settings.acceptableThrowawayItems();
-        for (ItemStack stack : player.getInventory().items) {
+        var inv = player.getInventory();
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = inv.getItem(i);
             if (!stack.isEmpty() && acceptable.contains(stack.getItem())) {
                 return true;
             }
         }
-        return false;
-    }
-
-    private static boolean hotbarHasWaterBucket(ServerPlayer player) {
-        for (int i = 0; i < 9; i++) {
-            if (ItemStack.isSameItem(player.getInventory().getItem(i), STACK_BUCKET_WATER)) {
-                return true;
+        ItemStack offhand = player.getItemBySlot(EquipmentSlot.OFFHAND);
+        if (!offhand.isEmpty() && acceptable.contains(offhand.getItem())) {
+            return true;
+        }
+        if (settings.allowInventory) {
+            for (int i = 9; i < 36; i++) {
+                ItemStack stack = inv.getItem(i);
+                if (!stack.isEmpty() && acceptable.contains(stack.getItem())) {
+                    return true;
+                }
             }
         }
         return false;
     }
 
-    /** 全身装备里的霜行者附魔最高等级。 */
+    /** 快捷栏里是否有(物品与组件都相同的)水桶。 */
+    private static boolean hotbarHasWaterBucket(ServerPlayer player) {
+        return net.minecraft.world.entity.player.Inventory.isHotbarSlot(
+                player.getInventory().findSlotMatchingItem(STACK_BUCKET_WATER));
+    }
+
+    /** 装备槽遍历顺序中最后一件带霜行者附魔的等级。 */
     private static int equipmentEnchantLevel(ServerPlayer player) {
         int level = 0;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemEnchantments itemEnchantments = player.getItemBySlot(slot).getEnchantments();
             for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
                 if (enchant.is(Enchantments.FROST_WALKER)) {
-                    level = Math.max(level, itemEnchantments.getLevel(enchant));
+                    level = itemEnchantments.getLevel(enchant);
                 }
             }
         }
@@ -200,7 +214,7 @@ public class CalculationContext {
 
     /** 按装备的水下移动效率附魔,把水中步速在水速与平走速之间插值。 */
     private static double computeWaterWalkSpeed(ServerPlayer player) {
-        float waterSpeedMultiplier = 0.0f;
+        float waterSpeedMultiplier = 1.0f;
         OUTER:
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemEnchantments itemEnchantments = player.getItemBySlot(slot).getEnchantments();
@@ -244,7 +258,8 @@ public class CalculationContext {
 
     /**
      * 在 (x,y,z) 放一个方块的成本。无耗材、sacred/denied 命中、
-     * 出建筑高度、流体规则不许 → INF;否则放置罚金。
+     * 贴着世界边界(边界格无法右键贴放)、流体规则不许 → INF;
+     * 否则放置罚金。
      */
     public double costOfPlacingAt(int x, int y, int z, BlockState current) {
         if (!hasThrowaway) { // 构造时已含 allowPlace 判定
@@ -254,7 +269,7 @@ public class CalculationContext {
         if (sacred.contains(key) || deniedPlace.contains(key)) {
             return COST_INF;
         }
-        if (y < worldBottom || y >= worldHeight) {
+        if (!MovementHelper.placeableWithinBorder(worldBorder, x, z)) {
             return COST_INF;
         }
         if (!allowPlaceInFluidsSource && current.getFluidState().isSource()) {

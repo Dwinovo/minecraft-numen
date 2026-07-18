@@ -45,7 +45,11 @@ import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.material.WaterFluid;
 import net.minecraft.world.level.pathfinder.PathComputationType;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.Shapes;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
 
@@ -500,15 +504,35 @@ public final class MovementHelper {
     }
 
     public static boolean canPlaceAgainst(CalculationContext context, int x, int y, int z) {
-        return canPlaceAgainst(context.get(x, y, z));
+        return canPlaceAgainst(context, x, y, z, context.get(x, y, z));
     }
 
     public static boolean canPlaceAgainst(CalculationContext context, int x, int y, int z, BlockState state) {
+        if (!placeableWithinBorder(context.worldBorder, x, z)) {
+            return false;
+        }
         return canPlaceAgainst(state);
     }
 
     public static boolean canPlaceAgainst(BlockGetter level, BlockPos pos) {
+        if (level instanceof net.minecraft.world.level.Level live
+                && !placeableWithinBorder(live.getWorldBorder(), pos.getX(), pos.getZ())) {
+            return false;
+        }
         return canPlaceAgainst(level.getBlockState(pos));
+    }
+
+    /**
+     * 贴面格是否离世界边界足够远:各向内缩一格——贴着边界的方块无法
+     * 被右键选面。边界未知(null)按不限制。
+     */
+    public static boolean placeableWithinBorder(net.minecraft.world.level.border.WorldBorder border,
+                                                int x, int z) {
+        if (border == null) {
+            return true;
+        }
+        return x > border.getMinX() && x + 1 < border.getMaxX()
+                && z > border.getMinZ() && z + 1 < border.getMaxZ();
     }
 
     /**
@@ -663,6 +687,55 @@ public final class MovementHelper {
     /** 方块中心点。 */
     public static Vec3 blockCenter(BlockPos pos) {
         return new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+    }
+
+    /**
+     * 该格上眼睛能实际射到的第一个瞄点(碰撞形状中心优先,再六面心
+     * 逐一试轮廓射线);全部被遮挡返回 null。触及距离取
+     * {@link NavSettings#blockReachDistance}。
+     */
+    public static Vec3 reachableAimPoint(net.minecraft.server.level.ServerPlayer player, BlockPos pos) {
+        var level = player.level();
+        Vec3 eye = player.getEyePosition();
+        double reach = NavSettings.get().blockReachDistance;
+        VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
+        if (shape.isEmpty()) {
+            shape = Shapes.block();
+        }
+        Vec3[] aims = {
+                shapePoint(pos, shape, 0.5, 0.5, 0.5),
+                shapePoint(pos, shape, 0.5, 0.0, 0.5),
+                shapePoint(pos, shape, 0.5, 1.0, 0.5),
+                shapePoint(pos, shape, 0.5, 0.5, 0.0),
+                shapePoint(pos, shape, 0.5, 0.5, 1.0),
+                shapePoint(pos, shape, 0.0, 0.5, 0.5),
+                shapePoint(pos, shape, 1.0, 0.5, 0.5),
+        };
+        for (Vec3 aimPoint : aims) {
+            Vec3 dir = aimPoint.subtract(eye);
+            if (dir.lengthSqr() < 1.0e-8) {
+                continue;
+            }
+            Vec3 end = eye.add(dir.normalize().scale(reach));
+            BlockHitResult res = level.clip(new net.minecraft.world.level.ClipContext(
+                    eye, end, net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                    net.minecraft.world.level.ClipContext.Fluid.NONE, player));
+            if (res.getType() == HitResult.Type.BLOCK && res.getBlockPos().equals(pos)) {
+                return res.getLocation();
+            }
+        }
+        return null;
+    }
+
+    /** 方块碰撞形状上按比例取点(m 为各轴的 min↔max 插值系数)。 */
+    private static Vec3 shapePoint(BlockPos pos, VoxelShape shape, double mx, double my, double mz) {
+        double x = shape.min(net.minecraft.core.Direction.Axis.X) * mx
+                + shape.max(net.minecraft.core.Direction.Axis.X) * (1 - mx);
+        double y = shape.min(net.minecraft.core.Direction.Axis.Y) * my
+                + shape.max(net.minecraft.core.Direction.Axis.Y) * (1 - my);
+        double z = shape.min(net.minecraft.core.Direction.Axis.Z) * mz
+                + shape.max(net.minecraft.core.Direction.Axis.Z) * (1 - mz);
+        return new Vec3(pos.getX() + x, pos.getY() + y, pos.getZ() + z);
     }
 
     /** 从 from 看向 to 的 yaw(度,MC 朝向约定)。 */

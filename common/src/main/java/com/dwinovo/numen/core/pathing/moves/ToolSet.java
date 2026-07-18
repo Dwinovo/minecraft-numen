@@ -9,13 +9,15 @@ import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.AxeItem;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.MaceItem;
 import net.minecraft.world.item.SwordItem;
-import net.minecraft.world.item.Tier;
-import net.minecraft.world.item.TieredItem;
-import net.minecraft.world.item.Tiers;
+import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -111,21 +113,38 @@ public class ToolSet {
     }
 
     /**
-     * 工具材质的廉价度序:木0 石1 铁2 金3 钻4 下界合金5;
-     * 非分级工具返回 -1。平速时优先用更廉价材质,省好工具。
+     * 材质廉价度序:按材质物品标签(木板/圆石/铁锭…)从廉到贵排序,
+     * 命中哪个标签就返回其序号;不命中任何标签返回 -1(工具本体不在
+     * 材质标签里,通常恒 -1,平速时先遇到的槽位保持胜出)。
      */
+    private static final List<TagKey<Item>> MATERIAL_TAGS_PRIORITY = List.of(
+            materialTag("wooden_tool_materials"),
+            materialTag("stone_tool_materials"),
+            materialTag("iron_tool_materials"),
+            materialTag("gold_tool_materials"),
+            materialTag("diamond_tool_materials"),
+            materialTag("netherite_tool_materials")
+    );
+
+    private static TagKey<Item> materialTag(String name) {
+        return TagKey.create(net.minecraft.core.registries.Registries.ITEM,
+                net.minecraft.resources.ResourceLocation.withDefaultNamespace(name));
+    }
+
     private static int getMaterialCost(ItemStack itemStack) {
-        if (!(itemStack.getItem() instanceof TieredItem tiered)) {
-            return -1;
+        for (int i = 0; i < MATERIAL_TAGS_PRIORITY.size(); i++) {
+            if (itemStack.is(MATERIAL_TAGS_PRIORITY.get(i))) {
+                return i;
+            }
         }
-        Tier tier = tiered.getTier();
-        if (tier == Tiers.WOOD) return 0;
-        if (tier == Tiers.STONE) return 1;
-        if (tier == Tiers.IRON) return 2;
-        if (tier == Tiers.GOLD) return 3;
-        if (tier == Tiers.DIAMOND) return 4;
-        if (tier == Tiers.NETHERITE) return 5;
         return -1;
+    }
+
+    /** 是否属于武器类物品(剑/斧/三叉戟/重锤)。 */
+    private static boolean isWeapon(ItemStack itemStack) {
+        Item item = itemStack.getItem();
+        return item instanceof SwordItem || item instanceof AxeItem
+                || item instanceof TridentItem || item instanceof MaceItem;
     }
 
     /** 该物品是否带精准采集附魔。 */
@@ -161,7 +180,7 @@ public class ToolSet {
         BlockState blockState = b.defaultBlockState();
         for (int i = 0; i < 9; i++) {
             ItemStack itemStack = hotbar[i];
-            if (!useSwordToMine && itemStack.getItem() instanceof SwordItem) {
+            if (!useSwordToMine && isWeapon(itemStack)) {
                 continue;
             }
             if (itemSaver

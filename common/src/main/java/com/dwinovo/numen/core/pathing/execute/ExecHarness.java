@@ -12,7 +12,6 @@ import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Inventory;
@@ -23,8 +22,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * 输入/视角落地层:把移动原语每 tick 的输出(期望视角 + 按键表)落到
@@ -336,57 +333,21 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
      * 全部被挡返回 null。
      */
     private Vec3 reachableAimPoint(BlockPos pos) {
-        Level level = player.level();
-        Vec3 eye = player.getEyePosition();
-        double reach = NavSettings.get().blockReachDistance;
-        VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
-        if (shape.isEmpty()) {
-            shape = Shapes.block();
-        }
-        Vec3[] aims = {
-                pointOn(pos, shape, 0.5, 0.5, 0.5),
-                pointOn(pos, shape, 0.5, 0.0, 0.5),
-                pointOn(pos, shape, 0.5, 1.0, 0.5),
-                pointOn(pos, shape, 0.5, 0.5, 0.0),
-                pointOn(pos, shape, 0.5, 0.5, 1.0),
-                pointOn(pos, shape, 0.0, 0.5, 0.5),
-                pointOn(pos, shape, 1.0, 0.5, 0.5),
-        };
-        for (Vec3 aimPoint : aims) {
-            Vec3 dir = aimPoint.subtract(eye);
-            if (dir.lengthSqr() < 1.0e-8) {
-                continue;
-            }
-            Vec3 end = eye.add(dir.normalize().scale(reach));
-            BlockHitResult res = level.clip(new ClipContext(
-                    eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
-            if (res.getType() == HitResult.Type.BLOCK && res.getBlockPos().equals(pos)) {
-                return res.getLocation();
-            }
-        }
-        return null;
-    }
-
-    /** 方块碰撞形状上按比例取点(m 为各轴的 min↔max 插值系数)。 */
-    private static Vec3 pointOn(BlockPos pos, VoxelShape shape, double mx, double my, double mz) {
-        double x = shape.min(Direction.Axis.X) * mx + shape.max(Direction.Axis.X) * (1 - mx);
-        double y = shape.min(Direction.Axis.Y) * my + shape.max(Direction.Axis.Y) * (1 - my);
-        double z = shape.min(Direction.Axis.Z) * mz + shape.max(Direction.Axis.Z) * (1 - mz);
-        return new Vec3(pos.getX() + x, pos.getY() + y, pos.getZ() + z);
+        return MovementHelper.reachableAimPoint(player, pos);
     }
 
     // ==================== 换手 / 备货 ====================
 
     /**
-     * 保证快捷栏里有可垫路耗材:快捷栏已有则不动,背包深处有则换进
-     * 当前选中格(规划期按全背包判有料,执行期在这里兑现)。
+     * 保证快捷栏里有可垫路耗材:快捷栏已有则不动;背包深处有且
+     * {@code allowInventory} 开启才换进当前选中格。
      */
     public boolean ensureThrowawayInHotbar() {
         var acceptable = NavSettings.get().acceptableThrowawayItems();
         return ensureInHotbar(stack -> !stack.isEmpty() && acceptable.contains(stack.getItem()));
     }
 
-    /** 保证快捷栏里有水桶(坠落接水前备货)。 */
+    /** 保证快捷栏里有水桶(坠落接水前备货;背包深处仅 allowInventory 时动用)。 */
     public boolean ensureWaterBucketInHotbar() {
         return ensureInHotbar(stack -> stack.is(Items.WATER_BUCKET));
     }
@@ -397,6 +358,9 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
             if (what.test(inv.getItem(i))) {
                 return true;
             }
+        }
+        if (!NavSettings.get().allowInventory) {
+            return false;
         }
         for (int i = 9; i < inv.items.size(); i++) {
             if (what.test(inv.getItem(i))) {
