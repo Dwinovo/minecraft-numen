@@ -230,7 +230,7 @@ public class MovementDiagonal extends Movement {
         BlockPos feet = feet(player);
         if (feet.equals(dest)) {
             return state.setStatus(MovementStatus.SUCCESS);
-        } else if (!feetInValidPositions()
+        } else if (!playerInValidPosition()
                 && !(MovementHelper.isLiquid(player.level().getBlockState(src))
                         && getValidPositions().contains(feet.above()))) {
             return state.setStatus(MovementStatus.UNREACHABLE);
@@ -243,11 +243,6 @@ public class MovementDiagonal extends Movement {
         }
         MovementHelper.moveTowards(player, state, dest);
         return state;
-    }
-
-    /** 身体在合法过程位内(不含 pathStart 假起点兜底)。 */
-    private boolean feetInValidPositions() {
-        return getValidPositions().contains(feet(player));
     }
 
     /** 四个角柱全通透(且不在禁疾跑的水里)才可疾跑斜穿。 */
@@ -269,6 +264,22 @@ public class MovementDiagonal extends Movement {
     @Override
     protected boolean prepared(MovementState state) {
         return true;
+    }
+
+    /** 四个切角柱里此刻仍不通透的格:身体会硬挤着蹭过去的位置。 */
+    @Override
+    public java.util.List<BlockPos> toWalkInto(Level level) {
+        if (toWalkIntoCached == null) {
+            toWalkIntoCached = new java.util.ArrayList<>();
+        }
+        java.util.List<BlockPos> result = new java.util.ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            if (!MovementHelper.canWalkThrough(level, positionsToBreak[i])) {
+                result.add(positionsToBreak[i]);
+            }
+        }
+        toWalkIntoCached = result;
+        return toWalkIntoCached;
     }
 
     /**

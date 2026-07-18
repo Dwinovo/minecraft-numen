@@ -1,7 +1,10 @@
 package com.dwinovo.numen.core.pathing.execute;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 
 import com.dwinovo.numen.core.Constants;
@@ -76,6 +79,14 @@ public final class PathExecutor {
     private int recentStepsHead;
     private Double currentMovementOriginalCostEstimate;
     private Integer costEstimateIndex;
+    /** 剩余路径的三类格集需要重建(格集内容较上 tick 有变化时置位)。 */
+    private boolean recalcBP = true;
+    /** 剩余路径将要挖穿的全部格(每 tick 维护,可视化/外部查询用)。 */
+    private HashSet<BlockPos> toBreak = new HashSet<>();
+    /** 剩余路径将要放方块的全部格。 */
+    private HashSet<BlockPos> toPlace = new HashSet<>();
+    /** 剩余路径将要挤身而过的全部格。 */
+    private HashSet<BlockPos> toWalkInto = new HashSet<>();
     private boolean failed;
     /** 取消原因(失败验尸与放弃判定的素材);未失败时为 null。 */
     private String failureCause;
@@ -200,8 +211,43 @@ public final class PathExecutor {
             cancel("身位离开路径超过 " + (int) MAX_MAX_DIST_FROM_PATH + " 格");
             return false;
         }
-        // TODO 若接可视化,这里对 pathPosition±10 的移动重算 toBreak/toPlace
-        //      集合供渲染;服务端无渲染需求,暂略。
+        // 对 pathPosition±10 的移动丢弃格集缓存按当前世界重算;任一移动的
+        // 格集内容有变即重建"剩余路径全量格集"(可视化与外部查询的数据源)
+        var level = player.level();
+        for (int i = pathPosition - 10; i < pathPosition + 10; i++) {
+            if (i < 0 || i >= path.movements().size()) {
+                continue;
+            }
+            Movement m = path.movements().get(i);
+            List<BlockPos> prevBreak = m.toBreak(level);
+            List<BlockPos> prevPlace = m.toPlace(level);
+            List<BlockPos> prevWalkInto = m.toWalkInto(level);
+            m.resetBlockCache();
+            if (!prevBreak.equals(m.toBreak(level))) {
+                recalcBP = true;
+            }
+            if (!prevPlace.equals(m.toPlace(level))) {
+                recalcBP = true;
+            }
+            if (!prevWalkInto.equals(m.toWalkInto(level))) {
+                recalcBP = true;
+            }
+        }
+        if (recalcBP) {
+            HashSet<BlockPos> newBreak = new HashSet<>();
+            HashSet<BlockPos> newPlace = new HashSet<>();
+            HashSet<BlockPos> newWalkInto = new HashSet<>();
+            for (int i = pathPosition; i < path.movements().size(); i++) {
+                Movement m = path.movements().get(i);
+                newBreak.addAll(m.toBreak(level));
+                newPlace.addAll(m.toPlace(level));
+                newWalkInto.addAll(m.toWalkInto(level));
+            }
+            toBreak = newBreak;
+            toPlace = newPlace;
+            toWalkInto = newWalkInto;
+            recalcBP = false;
+        }
         if (pathPosition < path.movements().size() - 1) {
             Movement next = path.movements().get(pathPosition + 1);
             if (!loadedTest.isLoaded(next.getDest().getX(), next.getDest().getZ())) {
@@ -635,10 +681,10 @@ public final class PathExecutor {
         if (dir.getY() < -3) {
             return 0;
         }
-        if (needsToBreak(movement)) {
+        var level = player.level();
+        if (!movement.toBreak(level).isEmpty()) {
             return 0;
         }
-        var level = player.level();
         Vec3i flatDir = new Vec3i(dir.getX(), 0, dir.getZ());
         int i;
         outer:
@@ -707,7 +753,7 @@ public final class PathExecutor {
         if (!MovementHelper.canWalkOn(level, next.getDest().below())) {
             return false;
         }
-        if (needsToBreak(next)) {
+        if (!next.toBreak(level).isEmpty()) {
             return false;
         }
         for (int x = 0; x < 2; x++) {
@@ -740,16 +786,6 @@ public final class PathExecutor {
             return true;
         }
         return next instanceof MovementDiagonal && NavSettings.get().allowOvershootDiagonalDescend;
-    }
-
-    /** 该移动是否还有实际要挖的格。 */
-    private boolean needsToBreak(Movement movement) {
-        for (BlockPos pos : movement.toBreakAll()) {
-            if (!MovementHelper.canWalkThrough(player.level(), pos)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     // ==================== 备货 / 状态迁移 ====================
@@ -876,5 +912,20 @@ public final class PathExecutor {
     /** 本 tick 执行器的疾跑决策结果(由拥有者落到实体上)。 */
     public boolean isSprinting() {
         return sprintNextTick;
+    }
+
+    /** 剩余路径将要挖穿的全部格(只读)。 */
+    public Set<BlockPos> toBreak() {
+        return Collections.unmodifiableSet(toBreak);
+    }
+
+    /** 剩余路径将要放方块的全部格(只读)。 */
+    public Set<BlockPos> toPlace() {
+        return Collections.unmodifiableSet(toPlace);
+    }
+
+    /** 剩余路径将要挤身而过的全部格(只读)。 */
+    public Set<BlockPos> toWalkInto() {
+        return Collections.unmodifiableSet(toWalkInto);
     }
 }

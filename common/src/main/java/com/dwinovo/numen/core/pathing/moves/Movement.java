@@ -1,5 +1,7 @@
 package com.dwinovo.numen.core.pathing.moves;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -43,6 +45,13 @@ public abstract class Movement {
     private Double cost;
 
     private Set<BlockPos> validPositionsCached;
+
+    /** 仍需挖穿的格(懒算缓存,{@link #resetBlockCache()} 后按当前世界重算)。 */
+    protected List<BlockPos> toBreakCached;
+    /** 仍需放上方块的格(懒算缓存)。 */
+    protected List<BlockPos> toPlaceCached;
+    /** 会用身体挤进去的格(懒算缓存;仅对角移动产出非空)。 */
+    protected List<BlockPos> toWalkIntoCached;
 
     /** 成本是否是在 dest 所在 chunk 已加载时算出的(执行期涨价豁免用)。 */
     private Boolean calculatedWhileLoaded;
@@ -356,6 +365,49 @@ public abstract class Movement {
 
     public BlockPos[] toBreakAll() {
         return positionsToBreak;
+    }
+
+    /** 丢弃三类格集缓存,下次查询按当前世界重算。 */
+    public void resetBlockCache() {
+        toBreakCached = null;
+        toPlaceCached = null;
+        toWalkIntoCached = null;
+    }
+
+    /** 此刻仍不可穿行、需要挖掉的格(缓存到 {@link #resetBlockCache()})。 */
+    public List<BlockPos> toBreak(net.minecraft.world.level.Level level) {
+        if (toBreakCached != null) {
+            return toBreakCached;
+        }
+        List<BlockPos> result = new ArrayList<>();
+        for (BlockPos pos : positionsToBreak) {
+            if (!MovementHelper.canWalkThrough(level, pos)) {
+                result.add(pos);
+            }
+        }
+        toBreakCached = result;
+        return result;
+    }
+
+    /** 此刻仍不可站立、需要放上方块的格(缓存到 {@link #resetBlockCache()})。 */
+    public List<BlockPos> toPlace(net.minecraft.world.level.Level level) {
+        if (toPlaceCached != null) {
+            return toPlaceCached;
+        }
+        List<BlockPos> result = new ArrayList<>();
+        if (positionToPlace != null && !MovementHelper.canWalkOn(level, positionToPlace)) {
+            result.add(positionToPlace);
+        }
+        toPlaceCached = result;
+        return result;
+    }
+
+    /** 会用身体挤进去的格(基类恒空;对角移动覆写产出切角柱)。 */
+    public List<BlockPos> toWalkInto(net.minecraft.world.level.Level level) {
+        if (toWalkIntoCached == null) {
+            toWalkIntoCached = new ArrayList<>();
+        }
+        return toWalkIntoCached;
     }
 
     public BlockPos getToPlace() {
