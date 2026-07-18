@@ -17,7 +17,7 @@ import net.minecraft.resources.ResourceLocation;
  */
 public record ClientUiActionPayload(Action action) implements CustomPacketPayload {
 
-    public enum Action { OPEN_SETTINGS, RESET_LOOPS }
+    public enum Action { OPEN_SETTINGS, RESET_LOOPS, DEBUG_TEXT_ON, DEBUG_TEXT_OFF }
 
     public static final Type<ClientUiActionPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "client_ui_action"));
@@ -38,6 +38,9 @@ public record ClientUiActionPayload(Action action) implements CustomPacketPayloa
         switch (p.action()) {
             case OPEN_SETTINGS -> com.dwinovo.numen.client.screen.SettingsScreen.open(null);
             case RESET_LOOPS -> com.dwinovo.numen.client.agent.AgentLoopRegistry.clear();
+            case DEBUG_TEXT_ON -> com.dwinovo.numen.client.chat.ChatDisplayFilters.set(
+                    new com.dwinovo.numen.client.chat.DebugChatDisplayFilter());
+            case DEBUG_TEXT_OFF -> com.dwinovo.numen.client.chat.ChatDisplayFilters.set(null);
         }
     }
 }
