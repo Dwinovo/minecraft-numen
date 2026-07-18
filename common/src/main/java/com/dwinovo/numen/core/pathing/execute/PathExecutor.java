@@ -175,13 +175,11 @@ public final class PathExecutor {
             currentMovementOriginalCostEstimate = movement.getCost();
             prepareSupplies(movement);
             int lookahead = NavSettings.get().costVerificationLookahead;
-            for (int i = 1; i < lookahead && pathPosition + i < path.length() - 1; i++) {
-                Movement future = path.movements().get(pathPosition + i);
-                if (future.calculateCost(context, new MutableMoveResult()) >= COST_INF && canCancel) {
-                    Constants.LOG.debug("世界已变化,后续移动不可行,取消");
-                    cancel("世界已变化," + describe(future) + " 不再可行");
-                    return true;
-                }
+            int deadFuture = firstFutureImpossible(path.movements(), pathPosition, lookahead, context);
+            if (deadFuture != -1 && canCancel) {
+                Constants.LOG.debug("世界已变化,后续移动不可行,取消");
+                cancel("世界已变化," + describe(path.movements().get(deadFuture)) + " 不再可行");
+                return true;
             }
         }
         double currentCost = movement.recalculateCost(context);
@@ -191,7 +189,8 @@ public final class PathExecutor {
             return true;
         }
         if (!movement.calculatedWhileLoaded()
-                && currentCost - currentMovementOriginalCostEstimate > NavSettings.get().maxCostIncrease
+                && costIncreaseExceedsTolerance(currentMovementOriginalCostEstimate, currentCost,
+                        NavSettings.get().maxCostIncrease)
                 && canCancel) {
             // 只对"当时在未加载区块里估出来的"移动生效:加载后货不对板;
             // 加载时算的涨价属于自己路径的连锁反应,不管
@@ -228,8 +227,8 @@ public final class PathExecutor {
             } else {
                 ticksSinceProgress++;
             }
-            if (ticksOnCurrent > currentMovementOriginalCostEstimate
-                    + NavSettings.get().movementTimeoutTicks) {
+            if (ticksOnCurrent > timedOutAt(currentMovementOriginalCostEstimate,
+                    NavSettings.get().movementTimeoutTicks)) {
                 Constants.LOG.debug("移动耗时 {} tick,超出估价 {} 太多,取消",
                         ticksOnCurrent, currentMovementOriginalCostEstimate);
                 cancel(describe(movement) + " 卡住:耗时 " + ticksOnCurrent
@@ -281,14 +280,48 @@ public final class PathExecutor {
         return positions.indexOf(feet);
     }
 
+    // ==================== 成本核验 / 超时(纯逻辑,可测) ====================
+
+    /**
+     * 从当前步后一格起向前看 {@code lookahead} 个移动,返回第一个成本
+     * {@code >= COST_INF} 的下标;全可行返回 -1。窗口不含当前步与路径
+     * 末位(末位无对应移动)。
+     */
+    static int firstFutureImpossible(List<Movement> movements, int pathPosition,
+                                      int lookahead, CalculationContext context) {
+        for (int i = 1; i < lookahead && pathPosition + i < movements.size(); i++) {
+            Movement future = movements.get(pathPosition + i);
+            if (future.calculateCost(context, new MutableMoveResult()) >= COST_INF) {
+                return pathPosition + i;
+            }
+        }
+        return -1;
+    }
+
+    /** 成本涨幅是否超过容差(仅对猜价移动生效,调用方负责 calculatedWhileLoaded)。 */
+    static boolean costIncreaseExceedsTolerance(double originalEstimate, double currentCost,
+                                                double maxCostIncrease) {
+        return currentCost - originalEstimate > maxCostIncrease;
+    }
+
+    /** 单移动超时阈值:估价 tick + 宽限。 */
+    static double timedOutAt(double originalCostEstimate, int movementTimeoutTicks) {
+        return originalCostEstimate + movementTimeoutTicks;
+    }
+
     // ==================== 脱轨 ====================
 
     /** 玩家到全路径所有合法位格中心的最小距离。 */
     private double closestPathPosDist() {
+        return closestPathPosDist(path.movements(), player.getX(), player.getY(), player.getZ());
+    }
+
+    /** 纯逻辑:给定路径与玩家坐标,返回到全路径合法位格中心的最小距离。 */
+    static double closestPathPosDist(List<Movement> movements, double px, double py, double pz) {
         double best = -1;
-        for (Movement movement : path.movements()) {
+        for (Movement movement : movements) {
             for (BlockPos pos : movement.getValidPositions()) {
-                double dist = entityDistanceToCenter(pos);
+                double dist = distanceToCenter(pos, px, py, pz);
                 if (dist < best || best == -1) {
                     best = dist;
                 }
@@ -302,26 +335,48 @@ public final class PathExecutor {
      * 改用到坠落终点的水平距离判定。
      */
     private boolean possiblyOffPath(double distanceFromPath, double leniency) {
+        return possiblyOffPath(path, pathPosition, distanceFromPath, leniency,
+                player.getX(), player.getZ(), pos -> entityFlatDistanceToCenter(pos));
+    }
+
+    /**
+     * 纯逻辑:给定路径、当前下标、玩家到路径最小距离与容差,判定是否
+     * 可能脱轨。当前移动是坠落时改用到坠落终点(下标+1)的水平距离。
+     * flatDist 按格位算玩家到该格中心的水平距离(坠落终点用)。
+     */
+    static boolean possiblyOffPath(NavPath path, int pathPosition, double distanceFromPath,
+                                    double leniency, double px, double pz,
+                                    java.util.function.Function<BlockPos, Double> flatDist) {
         if (distanceFromPath <= leniency) {
             return false;
         }
         if (path.movements().get(pathPosition) instanceof MovementFall) {
             BlockPos fallDest = path.positions().get(pathPosition + 1);
-            return entityFlatDistanceToCenter(fallDest) >= leniency;
+            return flatDist.apply(fallDest) >= leniency;
         }
         return true;
     }
 
     private double entityDistanceToCenter(BlockPos pos) {
-        double dx = pos.getX() + 0.5 - player.getX();
-        double dy = pos.getY() + 0.5 - player.getY();
-        double dz = pos.getZ() + 0.5 - player.getZ();
+        return distanceToCenter(pos, player.getX(), player.getY(), player.getZ());
+    }
+
+    /** 纯逻辑:玩家坐标到格位中心的 3D 距离。 */
+    static double distanceToCenter(BlockPos pos, double px, double py, double pz) {
+        double dx = pos.getX() + 0.5 - px;
+        double dy = pos.getY() + 0.5 - py;
+        double dz = pos.getZ() + 0.5 - pz;
         return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     private double entityFlatDistanceToCenter(BlockPos pos) {
-        double dx = pos.getX() + 0.5 - player.getX();
-        double dz = pos.getZ() + 0.5 - player.getZ();
+        return flatDistanceToCenter(pos, player.getX(), player.getZ());
+    }
+
+    /** 纯逻辑:玩家坐标到格位中心的水平距离。 */
+    static double flatDistanceToCenter(BlockPos pos, double px, double pz) {
+        double dx = pos.getX() + 0.5 - px;
+        double dz = pos.getZ() + 0.5 - pz;
         return Math.sqrt(dx * dx + dz * dz);
     }
 
