@@ -690,15 +690,33 @@ public final class MovementHelper {
     }
 
     /**
-     * 该格上眼睛能实际射到的第一个瞄点(碰撞形状中心优先,再六面心
-     * 逐一试轮廓射线);全部被遮挡返回 null。触及距离取
-     * {@link NavSettings#blockReachDistance}。
+     * 该格上眼睛能实际射到的第一个瞄点;全部被遮挡返回 null。
+     * 判定次序:
+     * <ol>
+     *   <li>沿当前实际视角的射线已命中该格 → 保持视线,直接返回命中点
+     *       (已注视时不再回中,避免无谓转头);</li>
+     *   <li>碰撞形状中心与六面心逐一试射:每个候选点先算理想转角,再按
+     *       视角步进量化出"本 tick 实际能转到的转角",沿该转角射线——
+     *       命中该格才算可达(没转到位的 tick 不误判可视)。</li>
+     * </ol>
+     * 触及距离取 {@link NavSettings#blockReachDistance}。
      */
     public static Vec3 reachableAimPoint(net.minecraft.server.level.ServerPlayer player, BlockPos pos) {
         var level = player.level();
         Vec3 eye = player.getEyePosition();
         double reach = NavSettings.get().blockReachDistance;
-        VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
+        // 已注视捷径:沿当前视角的射线命中即保持
+        BlockHitResult looking = clipAlongRotation(player, player.getYRot(), player.getXRot(), reach);
+        if (looking.getType() == HitResult.Type.BLOCK && looking.getBlockPos().equals(pos)) {
+            return looking.getLocation();
+        }
+        // 取心用碰撞形状(栅栏 1.5 高、灵魂沙矮顶等按实际碰撞体);
+        // 无碰撞体的方块(火/草)退回轮廓形状,再退满格
+        var state = level.getBlockState(pos);
+        VoxelShape shape = state.getCollisionShape(level, pos);
+        if (shape.isEmpty()) {
+            shape = state.getShape(level, pos);
+        }
         if (shape.isEmpty()) {
             shape = Shapes.block();
         }
@@ -711,20 +729,35 @@ public final class MovementHelper {
                 shapePoint(pos, shape, 0.0, 0.5, 0.5),
                 shapePoint(pos, shape, 1.0, 0.5, 0.5),
         };
+        var aim = new com.dwinovo.numen.core.pathing.execute.AimProcessor();
         for (Vec3 aimPoint : aims) {
             Vec3 dir = aimPoint.subtract(eye);
             if (dir.lengthSqr() < 1.0e-8) {
                 continue;
             }
-            Vec3 end = eye.add(dir.normalize().scale(reach));
-            BlockHitResult res = level.clip(new net.minecraft.world.level.ClipContext(
-                    eye, end, net.minecraft.world.level.ClipContext.Block.OUTLINE,
-                    net.minecraft.world.level.ClipContext.Fluid.NONE, player));
+            // 本 tick 实际能转到的视角,沿它试射
+            var stepped = aim.step(player.getYRot(), player.getXRot(),
+                    yawTo(eye, aimPoint), pitchTo(eye, aimPoint));
+            BlockHitResult res = clipAlongRotation(player, stepped.yaw(), stepped.pitch(), reach);
             if (res.getType() == HitResult.Type.BLOCK && res.getBlockPos().equals(pos)) {
                 return res.getLocation();
             }
         }
         return null;
+    }
+
+    /** 从眼位沿给定 yaw/pitch 的轮廓射线(不穿流体)。 */
+    private static BlockHitResult clipAlongRotation(net.minecraft.server.level.ServerPlayer player,
+                                                    float yaw, float pitch, double reach) {
+        Vec3 eye = player.getEyePosition();
+        double yawRad = Math.toRadians(-yaw);
+        double pitchRad = Math.toRadians(pitch);
+        double cosPitch = Math.cos(pitchRad);
+        Vec3 dir = new Vec3(Math.sin(yawRad) * cosPitch, -Math.sin(pitchRad), Math.cos(yawRad) * cosPitch);
+        Vec3 end = eye.add(dir.scale(reach));
+        return player.level().clip(new net.minecraft.world.level.ClipContext(
+                eye, end, net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                net.minecraft.world.level.ClipContext.Fluid.NONE, player));
     }
 
     /** 方块碰撞形状上按比例取点(m 为各轴的 min↔max 插值系数)。 */

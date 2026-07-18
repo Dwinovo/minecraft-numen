@@ -179,7 +179,15 @@ public class CalculationContext {
         }
         ItemStack offhand = player.getItemBySlot(EquipmentSlot.OFFHAND);
         if (!offhand.isEmpty() && acceptable.contains(offhand.getItem())) {
-            return true;
+            // 副手耗材要真能用出来,主手须能切到"右键无消费"的槽
+            // (空手或带 TOOL 组件的挖掘工具),否则右键走主手放不出副手方块
+            for (int i = 0; i < 9; i++) {
+                ItemStack stack = inv.getItem(i);
+                if (stack.isEmpty() || stack.getItem().components()
+                        .has(net.minecraft.core.component.DataComponents.TOOL)) {
+                    return true;
+                }
+            }
         }
         if (settings.allowInventory) {
             for (int i = 9; i < 36; i++) {

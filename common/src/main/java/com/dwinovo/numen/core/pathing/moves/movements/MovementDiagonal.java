@@ -266,6 +266,22 @@ public class MovementDiagonal extends Movement {
         return true;
     }
 
+    /** 对角的待挖集只含终点柱两格(切角柱是挤过去的,不是挖穿的)。 */
+    @Override
+    public java.util.List<BlockPos> toBreak(Level level) {
+        if (toBreakCached != null) {
+            return toBreakCached;
+        }
+        java.util.List<BlockPos> result = new java.util.ArrayList<>();
+        for (int i = 4; i < 6; i++) {
+            if (!MovementHelper.canWalkThrough(level, positionsToBreak[i])) {
+                result.add(positionsToBreak[i]);
+            }
+        }
+        toBreakCached = result;
+        return result;
+    }
+
     /** 四个切角柱里此刻仍不通透的格:身体会硬挤着蹭过去的位置。 */
     @Override
     public java.util.List<BlockPos> toWalkInto(Level level) {
