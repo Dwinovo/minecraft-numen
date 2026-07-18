@@ -186,8 +186,29 @@ public final class PathingCore {
         return inProgress != null;
     }
 
+    /** 在飞搜索此刻的最优部分路径;无在飞搜索或暂无候选时为空。 */
+    public Optional<NavPath> inProgressBestPath() {
+        return inProgress == null ? Optional.empty() : inProgress.bestPathSoFar();
+    }
+
+    public NumenPlayer player() {
+        return player;
+    }
+
     public ExecHarness harness() {
         return harness;
+    }
+
+    // ==================== 活跃实例注册表 ====================
+
+    /** 每同伴最近一次 tick 过的内核(调试可视化等旁路消费者按此取用)。 */
+    private static final java.util.concurrent.ConcurrentHashMap<java.util.UUID, PathingCore> LIVE =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 当前各同伴最近活跃的内核快照(已移除实体的条目顺手清掉)。 */
+    public static java.util.Collection<PathingCore> liveCores() {
+        LIVE.values().removeIf(core -> core.player.isRemoved());
+        return LIVE.values();
     }
 
     // ==================== 每 tick ====================
@@ -197,6 +218,7 @@ public final class PathingCore {
      * 用执行前的);末尾统一提交输入/视角并落地疾跑决策。
      */
     public void tick() {
+        LIVE.put(player.getUUID(), this);
         expectedSegmentStart = pathStart();
         calcFailedLastTick = false;
         tickPath();
