@@ -44,9 +44,13 @@ public final class BlockDigger {
     /** The crack is broadcast under breaker id -1 (not the player's entity id),
      *  so the server's own per-player crack clearing on STOP can't wipe it early. */
     private static final int CRACK_ID = -1;
-    /** Ticks to wait after a break before starting another — the vanilla client's
-     *  own post-break hit delay is the same 5 ticks. */
-    private static final int BLOCK_HIT_DELAY = 5;
+
+    /** Ticks to wait after a survival break before starting another; follows the
+     *  blockBreakSpeed setting (period = the setting, delay = setting − 1). */
+    private static int postBreakDelay() {
+        return Math.max(0,
+                com.dwinovo.numen.core.pathing.settings.NavSettings.get().blockBreakSpeed - 1);
+    }
 
     private final NumenPlayer player;
     private BlockPos pos;
@@ -133,9 +137,9 @@ public final class BlockDigger {
                     ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, side, level.getMaxBuildHeight(), -1);
             player.swing(InteractionHand.MAIN_HAND);
             if (player.getAbilities().instabuild) {
-                blockHitDelay = BLOCK_HIT_DELAY;
+                // creative: START 即破,连挖不设间隔(每 tick 一格)
                 reset();
-                return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;                  // creative: START broke it
+                return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
             }
             if (!state.isAir()) {
                 state.attack(level, pos, player);    // left-click punch
@@ -157,7 +161,7 @@ public final class BlockDigger {
             // removes it (no intact-for-a-frame flicker).
             player.gameMode.handleBlockBreakAction(pos,
                     ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, side, level.getMaxBuildHeight(), -1);
-            blockHitDelay = BLOCK_HIT_DELAY;
+            blockHitDelay = postBreakDelay();
             reset();
             return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
         }

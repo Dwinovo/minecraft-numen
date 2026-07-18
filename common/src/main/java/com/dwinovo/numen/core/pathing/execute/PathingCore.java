@@ -72,7 +72,11 @@ public final class PathingCore {
         this.executionContextFactory = executionContextFactory;
     }
 
-    /** 搜索与执行同一份快照的简便构造:执行期复核直接读本次搜索的上下文。 */
+    /**
+     * 搜索与执行同一份快照的简便构造:执行期复核直接读本次搜索的上下文。
+     * <b>注意</b>:执行期成本复核因此读不到世界变化(快照冻结),生产
+     * 路径必须走双工厂构造(执行侧供活世界上下文),此构造仅限测试。
+     */
     public PathingCore(NumenPlayer player, SearchDispatcher dispatcher,
                        Supplier<CalculationContext> contextFactory) {
         this(player, dispatcher, contextFactory, null);

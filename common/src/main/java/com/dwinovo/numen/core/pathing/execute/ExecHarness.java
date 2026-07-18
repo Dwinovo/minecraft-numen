@@ -13,7 +13,6 @@ import com.dwinovo.numen.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -210,17 +209,17 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
             applyLook(stepped);
         }
 
-        if (rightClickCooldown > 0) {
-            rightClickCooldown--;
-        }
-        // 破坏优先:同 tick 左键被按下时,右键强制丢弃(对应 Baritone
-        // InputOverrideHandler.java:90-93 的 CLICK_LEFT 抑制 CLICK_RIGHT)
+        // 破坏优先:同 tick 左键被按下时,右键强制丢弃
         if (isKeyRequested(Input.CLICK_LEFT)) {
             keys.put(Input.CLICK_RIGHT, false);
         }
-        if (isKeyRequested(Input.CLICK_RIGHT) && rightClickCooldown == 0) {
-            rightClick();
-            rightClickCooldown = NavSettings.get().rightClickSpeed;
+        // 冷却 tick 只倒数不尝试;冷却清零后,只有"真的发起了一次点击
+        // 尝试"(准星命中方块且未在使用物品)才重新扣冷却——准星未到位
+        // 的空转 tick 不吃冷却,命中的第一个 tick 即刻点击
+        if (rightClickCooldown > 0) {
+            rightClickCooldown--;
+        } else if (isKeyRequested(Input.CLICK_RIGHT)) {
+            rightClickTick();
         }
 
         if (isKeyRequested(Input.CLICK_LEFT)) {
@@ -244,8 +243,11 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
                 + (isKeyRequested(Input.MOVE_RIGHT) ? -1.0f : 0.0f);
         boolean sneak = isKeyRequested(Input.SNEAK);
         if (sneak) {
-            forward *= 0.3f;
-            strafe *= 0.3f;
+            // 潜行冲量乘数读属性(基值 0.3,迅捷潜行附魔会提高)
+            float sneakSpeed = (float) player.getAttributeValue(
+                    net.minecraft.world.entity.ai.attributes.Attributes.SNEAKING_SPEED);
+            forward *= sneakSpeed;
+            strafe *= sneakSpeed;
         }
         // 移动方向按实体当前视角(已步进):vanilla travel 按 player.yaw
         // 投影 zza/xxa,输入也必须按同一 yaw,否则 target 与 actual 的角差
@@ -270,28 +272,30 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     // ==================== 右键 ====================
 
     /**
-     * 一次右键:沿实际视角原生 raycast,命中方块才走 useItemOn(放置/
-     * 开门/交互);未命中方块什么都不做(对应 Baritone BlockPlaceHelper
-     * .java:44 的 mouseOver==null || type!=BLOCK 早退)。正在使用物品
-     * (isUsingItem)时不重复触发。两手按主手优先逐一试,消费即挥手结束。
+     * 一次右键尝试:沿实际视角原生 raycast,未命中方块或正在使用物品
+     * 则本 tick 不算尝试(不扣冷却)。命中后扣冷却并按主手优先逐手试:
+     * 先 useItemOn(对着方块放置/开门/交互),不消费再退回 useItem
+     * (不针对方块的使用——倒水桶/收水这类只覆写 use() 的物品靠这条
+     * 才能出手);任一消费即结束(useItemOn 消费才挥手)。
      */
-    private void rightClick() {
+    private void rightClickTick() {
         if (player.isUsingItem()) {
             return; // 正在使用中(吃食物/拉弓),不重复触发打断
         }
         Level level = player.level();
         BlockHitResult hit = clipAlongView();
         if (hit.getType() != HitResult.Type.BLOCK) {
-            return; // 未命中方块:不对空挥右键(防误饮/误倒水桶到空中)
+            return; // 未命中方块:不对空挥右键,也不扣冷却
         }
+        rightClickCooldown = NavSettings.get().rightClickSpeed - 1;
         for (InteractionHand hand : HANDS) {
             ItemStack stack = player.getItemInHand(hand);
-            InteractionResult res = player.gameMode.useItemOn(player, level, stack, hand, hit);
-            if (res.consumesAction()) {
+            if (player.gameMode.useItemOn(player, level, stack, hand, hit).consumesAction()) {
                 player.swing(hand);
                 return;
             }
-            if (res == InteractionResult.FAIL) {
+            if (!stack.isEmpty()
+                    && player.gameMode.useItem(player, level, stack, hand).consumesAction()) {
                 return;
             }
         }
