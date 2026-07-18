@@ -95,6 +95,16 @@ public final class NavSettings {
     public boolean autoTool = true;
     /** 受保护方块的挖掘速度乘数(0.1 即成本 ×10)。 */
     public double avoidBreakingMultiplier = 0.1;
+    /** 启用生物/刷怪笼规避(默认关,关闭时 Favoring 不叠规避球)。 */
+    public boolean avoidance = false;
+    /** 刷怪笼规避系数(>1 规避,<1 主动靠近)。 */
+    public double mobSpawnerAvoidanceCoefficient = 2.0;
+    /** 刷怪笼规避半径(格)。 */
+    public int mobSpawnerAvoidanceRadius = 16;
+    /** 生物规避系数(>1 规避,<1 主动靠近)。 */
+    public double mobAvoidanceCoefficient = 1.5;
+    /** 生物规避半径(格)。 */
+    public int mobAvoidanceRadius = 8;
 
     // ==================== 搜索 ====================
 

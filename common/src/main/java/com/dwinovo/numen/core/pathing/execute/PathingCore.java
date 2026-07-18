@@ -325,7 +325,8 @@ public final class PathingCore {
             primaryTimeout = settings.planAheadPrimaryTimeoutMS;
             failureTimeout = settings.planAheadFailureTimeoutMS;
         }
-        Favoring favoring = new Favoring(current == null ? null : current.getPath(), context);
+        Favoring favoring = new Favoring(current == null ? null : current.getPath(), context,
+                com.dwinovo.numen.core.pathing.astar.Avoidance.create(player));
         // 真实脚位与展开起点同层且 XZ 各差 ≤1 时,假起点素材用脚位
         BlockPos feet = PathExecutor.playerFeet(player);
         BlockPos realStart = start;
