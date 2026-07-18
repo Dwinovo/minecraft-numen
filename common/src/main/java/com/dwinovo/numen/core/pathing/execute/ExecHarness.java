@@ -37,12 +37,13 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  *   <li>视角:按鼠标像素量化步进逼近目标({@link AimProcessor}),直接写
  *       实体的 yaw/头 yaw/pitch。放置/挖掘的命中判定全部用步进后的实际
  *       视角做 raycast——视线没转到位,点击就不会开始;</li>
- *   <li>右键:沿实际视角原生 raycast,命中方块走 {@code gameMode.useItemOn}
- *       (放置/开门),未消费再落 {@code gameMode.useItem}(水桶放水),
- *       两手都试,间隔 rightClickSpeed tick;</li>
+ *   <li>右键:沿实际视角原生 raycast,命中方块且不在使用物品中才走
+ *       {@code gameMode.useItemOn}(放置/开门),两手都试,间隔
+ *       rightClickSpeed tick;未命中方块不触发(不对空挥右键);</li>
  *   <li>左键:交 {@link BlockDigger} 渐进挖掘(原生 handleBlockBreakAction
- *       通道,破块延迟由其内置);目标格由 {@link #beginBreaking} 记录,
- *       没有记录时打准星命中的方块(清障);</li>
+ *       通道,破块延由其内置);目标格由 {@link #beginBreaking} 记录,
+ *       没有记录时打准星命中的方块(清障);同 tick 左键被按下时右键
+ *       强制丢弃(破坏优先);</li>
  *   <li>移动键:前后 → zza、左右 → xxa(潜行冲量 ×0.3),方向按目标 yaw
  *       定义、折算到已应用的实际 yaw 帧;JUMP 走地面起跳/液体浮力语义;
  *       SNEAK 逐 tick 写 shift 状态。</li>
@@ -199,6 +200,11 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         if (rightClickCooldown > 0) {
             rightClickCooldown--;
         }
+        // 破坏优先:同 tick 左键被按下时,右键强制丢弃(对应 Baritone
+        // InputOverrideHandler.java:90-93 的 CLICK_LEFT 抑制 CLICK_RIGHT)
+        if (isKeyRequested(Input.CLICK_LEFT)) {
+            keys.put(Input.CLICK_RIGHT, false);
+        }
         if (isKeyRequested(Input.CLICK_RIGHT) && rightClickCooldown == 0) {
             rightClick();
             rightClickCooldown = NavSettings.get().rightClickSpeed;
@@ -248,34 +254,29 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     // ==================== 右键 ====================
 
     /**
-     * 一次右键:沿实际视角原生 raycast,命中方块 → useItemOn(放置/
-     * 开门/交互);未消费 → useItem(手上物品自决,水桶放水走这里)。
-     * 两手按主手优先逐一试,消费即挥手结束。
+     * 一次右键:沿实际视角原生 raycast,命中方块才走 useItemOn(放置/
+     * 开门/交互);未命中方块什么都不做(对应 Baritone BlockPlaceHelper
+     * .java:44 的 mouseOver==null || type!=BLOCK 早退)。正在使用物品
+     * (isUsingItem)时不重复触发。两手按主手优先逐一试,消费即挥手结束。
      */
     private void rightClick() {
+        if (player.isUsingItem()) {
+            return; // 正在使用中(吃食物/拉弓),不重复触发打断
+        }
         Level level = player.level();
         BlockHitResult hit = clipAlongView();
+        if (hit.getType() != HitResult.Type.BLOCK) {
+            return; // 未命中方块:不对空挥右键(防误饮/误倒水桶到空中)
+        }
         for (InteractionHand hand : HANDS) {
             ItemStack stack = player.getItemInHand(hand);
-            if (hit.getType() == HitResult.Type.BLOCK) {
-                InteractionResult res = player.gameMode.useItemOn(player, level, stack, hand, hit);
-                if (res.consumesAction()) {
-                    player.swing(hand);
-                    return;
-                }
-                if (res == InteractionResult.FAIL) {
-                    return;
-                }
+            InteractionResult res = player.gameMode.useItemOn(player, level, stack, hand, hit);
+            if (res.consumesAction()) {
+                player.swing(hand);
+                return;
             }
-            if (!stack.isEmpty()) {
-                InteractionResult res = player.gameMode.useItem(player, level, stack, hand);
-                if (res.consumesAction()) {
-                    player.swing(hand);
-                    return;
-                }
-                if (res == InteractionResult.FAIL) {
-                    return;
-                }
+            if (res == InteractionResult.FAIL) {
+                return;
             }
         }
     }
