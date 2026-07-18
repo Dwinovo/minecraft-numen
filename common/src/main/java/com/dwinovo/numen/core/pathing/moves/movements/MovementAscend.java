@@ -152,8 +152,8 @@ public class MovementAscend extends Movement {
         Level level = player.level();
         BlockPos feet = player.blockPosition();
         BlockPos dir = getDirection();
-        if (feet.equals(dest) || feet.equals(dest.offset(dir.getX(), -1, dir.getZ()))) {
-            // 到了,或冲过头落在同层前方一格也算成功
+        if (feet.equals(dest) || feet.equals(dest.offset(dir.getX(), dir.getY() - 1, dir.getZ()))) {
+            // 到了,或冲过头落在同层前方一格(爬升方向 Y=1,减 1 即同层)也算成功
             return state.setStatus(MovementStatus.SUCCESS);
         }
 
