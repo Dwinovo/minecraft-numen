@@ -100,6 +100,66 @@ public abstract class Movement {
         return validPositionsCached;
     }
 
+    /**
+     * 当前身位是否属于本动作的合法过程位集合。脚下不在集合里时,
+     * 再按 {@link #pathStart(ServerPlayer)} 算一个假起点(脚下不可站时
+     * 取 3×3 邻格/下一格的支撑点)——重算/回退后,整体路径起点不一定
+     * 属于本移动自身的 {src,dest} 集合,假起点兜住这种情形。
+     */
+    protected boolean playerInValidPosition() {
+        BlockPos feet = player.blockPosition();
+        if (getValidPositions().contains(feet)) {
+            return true;
+        }
+        BlockPos fakeStart = pathStart(player);
+        return getValidPositions().contains(fakeStart);
+    }
+
+    /**
+     * 脚下不可站时的假起点:在地面 → 3×3 邻格按水平距离取最近四个,
+     * 第一个下可站、本格与上格可穿的格;空中 → 再下一格可站则用脚下格。
+     * 其余情况用脚位。与 PathingCore.pathStart 同一语义,提取为基类静态
+     * 助手供 Movement 子类(如 Downward 的 UNREACHABLE 判定)复用。
+     */
+    public static BlockPos pathStart(ServerPlayer player) {
+        BlockPos feet = player.blockPosition();
+        var level = player.level();
+        if (MovementHelper.canWalkOn(level, feet.below())) {
+            return feet;
+        }
+        if (player.onGround()) {
+            double playerX = player.position().x;
+            double playerZ = player.position().z;
+            java.util.List<BlockPos> closest = new java.util.ArrayList<>();
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    closest.add(new BlockPos(feet.getX() + dx, feet.getY(), feet.getZ() + dz));
+                }
+            }
+            closest.sort(java.util.Comparator.comparingDouble(pos ->
+                    ((pos.getX() + 0.5) - playerX) * ((pos.getX() + 0.5) - playerX)
+                    + ((pos.getZ() + 0.5) - playerZ) * ((pos.getZ() + 0.5) - playerZ)));
+            for (int i = 0; i < 4; i++) {
+                BlockPos possibleSupport = closest.get(i);
+                double xDist = Math.abs((possibleSupport.getX() + 0.5) - playerX);
+                double zDist = Math.abs((possibleSupport.getZ() + 0.5) - playerZ);
+                if (xDist > 0.8 && zDist > 0.8) {
+                    continue;
+                }
+                if (MovementHelper.canWalkOn(level, possibleSupport.below())
+                        && MovementHelper.canWalkThrough(level, possibleSupport)
+                        && MovementHelper.canWalkThrough(level, possibleSupport.above())) {
+                    return possibleSupport;
+                }
+            }
+        } else {
+            if (MovementHelper.canWalkOn(level, feet.below().below())) {
+                return feet.below();
+            }
+        }
+        return feet;
+    }
+
     // ==================== 执行状态机 ====================
 
     /**

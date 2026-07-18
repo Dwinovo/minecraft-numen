@@ -76,7 +76,7 @@ public class MovementDownward extends Movement {
         BlockPos feet = player.blockPosition();
         if (feet.equals(dest)) {
             return state.setStatus(MovementStatus.SUCCESS);
-        } else if (!getValidPositions().contains(feet)) {
+        } else if (!playerInValidPosition()) {
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
         double diffX = player.getX() - (dest.getX() + 0.5);

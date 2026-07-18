@@ -1,8 +1,5 @@
 package com.dwinovo.numen.core.pathing.execute;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -14,7 +11,7 @@ import com.dwinovo.numen.core.pathing.bridge.SearchDispatcher;
 import com.dwinovo.numen.core.pathing.bridge.SearchHandle;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
-import com.dwinovo.numen.core.pathing.moves.MovementHelper;
+import com.dwinovo.numen.core.pathing.moves.Movement;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.entity.NumenPlayer;
 
@@ -395,47 +392,11 @@ public final class PathingCore {
     // ==================== 假起点 ====================
 
     /**
-     * 新段的搜索起点。脚下不可站时:在地面 → 3×3 邻格按水平距离取最近
-     * 四个(XZ 都偏出 0.8 的除外,不可能悬在那块边上),第一个"下可站、
-     * 本格与上格可穿"的格当起点(半悬在边缘的判定);空中 → 再下一格
-     * 可站则用脚下格(跳跃/下落中)。其余情况就用脚位。
+     * 新段的搜索起点(脚下不可站时的假起点)。语义与 Movement.pathStart
+     * 同一,提取到基类静态助手后此处直接转发,逻辑不再重复。
      */
     public BlockPos pathStart() {
-        BlockPos feet = PathExecutor.playerFeet(player);
-        var level = player.level();
-        if (!MovementHelper.canWalkOn(level, feet.below())) {
-            if (player.onGround()) {
-                double playerX = player.position().x;
-                double playerZ = player.position().z;
-                List<BlockPos> closest = new ArrayList<>();
-                for (int dx = -1; dx <= 1; dx++) {
-                    for (int dz = -1; dz <= 1; dz++) {
-                        closest.add(new BlockPos(feet.getX() + dx, feet.getY(), feet.getZ() + dz));
-                    }
-                }
-                closest.sort(Comparator.comparingDouble(pos ->
-                        ((pos.getX() + 0.5) - playerX) * ((pos.getX() + 0.5) - playerX)
-                        + ((pos.getZ() + 0.5) - playerZ) * ((pos.getZ() + 0.5) - playerZ)));
-                for (int i = 0; i < 4; i++) {
-                    BlockPos possibleSupport = closest.get(i);
-                    double xDist = Math.abs((possibleSupport.getX() + 0.5) - playerX);
-                    double zDist = Math.abs((possibleSupport.getZ() + 0.5) - playerZ);
-                    if (xDist > 0.8 && zDist > 0.8) {
-                        continue;
-                    }
-                    if (MovementHelper.canWalkOn(level, possibleSupport.below())
-                            && MovementHelper.canWalkThrough(level, possibleSupport)
-                            && MovementHelper.canWalkThrough(level, possibleSupport.above())) {
-                        return possibleSupport;
-                    }
-                }
-            } else {
-                if (MovementHelper.canWalkOn(level, feet.below().below())) {
-                    return feet.below();
-                }
-            }
-        }
-        return feet;
+        return Movement.pathStart(player);
     }
 
     // ==================== 内部取消 ====================

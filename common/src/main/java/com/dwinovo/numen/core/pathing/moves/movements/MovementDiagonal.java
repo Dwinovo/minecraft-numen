@@ -230,7 +230,7 @@ public class MovementDiagonal extends Movement {
         BlockPos feet = player.blockPosition();
         if (feet.equals(dest)) {
             return state.setStatus(MovementStatus.SUCCESS);
-        } else if (!playerInValidPosition()
+        } else if (!feetInValidPositions()
                 && !(MovementHelper.isLiquid(player.level().getBlockState(src))
                         && getValidPositions().contains(feet.above()))) {
             return state.setStatus(MovementStatus.UNREACHABLE);
@@ -245,8 +245,8 @@ public class MovementDiagonal extends Movement {
         return state;
     }
 
-    /** 身体在合法过程位内。 */
-    private boolean playerInValidPosition() {
+    /** 身体在合法过程位内(不含 pathStart 假起点兜底)。 */
+    private boolean feetInValidPositions() {
         return getValidPositions().contains(player.blockPosition());
     }
 
