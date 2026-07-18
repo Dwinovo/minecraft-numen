@@ -72,15 +72,6 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     /** 本 tick 是否有任何记录待落地。 */
     private boolean dirty;
 
-    /**
-     * 上一 tick 步进落地的视角(本 tick 步进的起点)。步进基于"上一 tick
-     * 步进后的视角"而非"实体当前视角":同 tick 内若别处改写了实体视,
-     * 步进仍从上一 tick 的稳定落点累进,避免起点被中途扰动。首次尚未
-     * 步进过时用实体当前视角兜底。
-     */
-    private Float prevStepYaw;
-    private Float prevStepPitch;
-
     public ExecHarness(NumenPlayer player) {
         this.player = player;
         this.aim = new AimProcessor();
@@ -157,8 +148,6 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         keys.clear();
         target = null;
         breakTarget = null;
-        prevStepYaw = null;
-        prevStepPitch = null;
         InputDriver.halt(player);
         player.setShiftKeyDown(false);
     }
@@ -181,10 +170,12 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
 
     // ==================== 提交 ====================
 
-    /** 有记录待落地时提交一次;无记录跳过(不打扰别的驱动方)。 */
+    /** 有记录待落地时提交一次;无记录只递减右键冷却(冷却按游戏刻走)。 */
     public void commitIfDirty() {
         if (dirty) {
             commit();
+        } else if (rightClickCooldown > 0) {
+            rightClickCooldown--;
         }
     }
 
@@ -200,12 +191,8 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
 
         AimProcessor.Rotation stepped = null;
         if (t != null && t.hasRotation()) {
-            // 步进起点用上一 tick 步进后的视角;首次用实体当前视角兜底。
-            float startYaw = prevStepYaw != null ? prevStepYaw : player.getYRot();
-            float startPitch = prevStepPitch != null ? prevStepPitch : player.getXRot();
-            stepped = aim.step(startYaw, startPitch, t.getYaw(), t.getPitch());
-            prevStepYaw = stepped.yaw();
-            prevStepPitch = stepped.pitch();
+            // 步进起点即实体当前实际视角(头在哪就从哪转起)
+            stepped = aim.step(player.getYRot(), player.getXRot(), t.getYaw(), t.getPitch());
             applyLook(stepped);
         }
 
@@ -282,6 +269,9 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         if (player.isUsingItem()) {
             return; // 正在使用中(吃食物/拉弓),不重复触发打断
         }
+        if (player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat) {
+            return; // 坐船(手在桨上)不右键
+        }
         Level level = player.level();
         BlockHitResult hit = clipAlongView();
         if (hit.getType() != HitResult.Type.BLOCK) {
@@ -324,10 +314,11 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         return hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null;
     }
 
-    /** 沿实体当前视角的轮廓射线(不穿流体)。 */
+    /** 沿实体当前视角的轮廓射线(不穿流体);触及距离创造 5.0/生存按设置。 */
     private BlockHitResult clipAlongView() {
         Vec3 eye = player.getEyePosition();
-        Vec3 end = eye.add(player.getViewVector(1.0f).scale(NavSettings.get().blockReachDistance));
+        Vec3 end = eye.add(player.getViewVector(1.0f)
+                .scale(MovementHelper.blockReachDistance(player)));
         return player.level().clip(new ClipContext(
                 eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
     }

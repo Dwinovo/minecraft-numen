@@ -142,7 +142,9 @@ public final class BlockDigger {
                 return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
             }
             if (!state.isAir()) {
-                state.attack(level, pos, player);    // left-click punch
+                // START 通道内服务端已自带 attack 与 insta-mine 判定,这里
+                // 不再补一次(重复 attack 会翻倍副作用,红石矿甚至会在
+                // insta-mine 后被旧 state 的 attack 原地点亮放回)
                 if (state.getDestroyProgress(player, level, pos) >= 1.0f) {
                     reset();                         // instamine: START broke it (no STOP is sent)
                     return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
@@ -213,7 +215,7 @@ public final class BlockDigger {
     private BlockHitResult reachableHit(BlockPos pos) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = player.blockInteractionRange();
+        double reach = com.dwinovo.numen.core.pathing.moves.MovementHelper.blockReachDistance(player);
         VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
         if (shape.isEmpty()) {
             shape = Shapes.block();
@@ -251,7 +253,7 @@ public final class BlockDigger {
     private BlockHitResult centerRaycast(BlockPos target) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = player.blockInteractionRange();
+        double reach = com.dwinovo.numen.core.pathing.moves.MovementHelper.blockReachDistance(player);
         VoxelShape shape = level.getBlockState(target).getShape(level, target);
         Vec3 center = shape.isEmpty()
                 ? Vec3.atCenterOf(target)
