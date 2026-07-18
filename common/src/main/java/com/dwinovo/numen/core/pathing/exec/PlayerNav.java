@@ -239,9 +239,11 @@ public final class PlayerNav {
             core.tick();
         });
 
-        // 首段搜索失败:验尸并终局(caller 谓词已在开头判过,此处必 FAILED)
+        // 首段搜索失败:验尸并终局。裁定前再问一次 caller 谓词——本 tick
+        // 身体可能已挪进满足位,ARRIVED 优先于失败结论
         if (core.calcFailedLastTick()) {
-            return fail(FailureType.NO_PATH, noPathAutopsy(navGoal));
+            Status verdict = fail(FailureType.NO_PATH, noPathAutopsy(navGoal));
+            return reached.getAsBoolean() ? Status.ARRIVED : verdict;
         }
 
         // 执行失败(段被取消,状态机已自动重搜):做放弃判定的记账
@@ -301,14 +303,17 @@ public final class PlayerNav {
             bestGoalH = h;
             stalledReplans = 0;
         } else if (++stalledReplans >= MAX_STALLED_REPLANS) {
-            return fail(FailureType.BOXED_IN,
+            Status verdict = fail(FailureType.BOXED_IN,
                     "gave up: no real progress toward the target over "
                             + MAX_STALLED_REPLANS + " consecutive attempts"
                             + (lastExecFailure != null
                                     ? "; the recurring failure: " + lastExecFailure : ""));
+            return reached.getAsBoolean() ? Status.ARRIVED : verdict;
         }
         if (replans++ >= MAX_REPLANS) {
-            return fail(FailureType.BOXED_IN, "gave up after " + MAX_REPLANS + " replans");
+            Status verdict = fail(FailureType.BOXED_IN,
+                    "gave up after " + MAX_REPLANS + " replans");
+            return reached.getAsBoolean() ? Status.ARRIVED : verdict;
         }
         return null;
     }
