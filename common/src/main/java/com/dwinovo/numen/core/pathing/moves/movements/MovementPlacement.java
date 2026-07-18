@@ -30,12 +30,13 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * 移动原语执行期的放置与视线共用逻辑:五贴面枚举、贴面中心瞄点、
- * 目标转角射线校验、耗材选取、视线命中判定。
+ * 转速受限预判命中、耗材选取、视线命中判定。
  *
- * <p>视角推进目前采用"目标转角直接命中"的简化模型:假定下一 tick
- * 头就能转到目标转角,直接沿目标转角做射线校验。带 currentYaw /
- * currentPitch 参数的重载是留给后续接入真实转头节奏的接缝——届时
- * 把预测转角传进来即可,判定逻辑不变。
+ * <p>视角推进用 AimProcessor 把理想目标转角折算成"这一 tick 头实际
+ * 能转到哪"(受鼠标像素量化与转速上限约束)再 raytrace。需要单 tick
+ * 大幅转头的放置候选(如 Pillar 空中低头看脚下、Parkour 切换看
+ * dest.below)可能判定"这一 tick 还够不到"从而推迟到下一 tick 或换面。
+ * 方块中心不可视时回退到方块碰撞形状的六面心做 raytrace(边角回退)。
  */
 final class MovementPlacement {
 
@@ -59,6 +60,25 @@ final class MovementPlacement {
     /** 潜行时的眼高(米)。 */
     private static final double SNEAK_EYE_HEIGHT = 1.27;
 
+    /**
+     * 视角推进量化器:与 ExecHarness 同一灵敏度(0.5),用于把放置可行性的
+     * 理想目标转角折算成"这一 tick 头实际能转到哪"再 raytrace。单例即可,
+     * 纯数学、无状态。
+     */
+    private static final com.dwinovo.numen.core.pathing.execute.AimProcessor AIM =
+            new com.dwinovo.numen.core.pathing.execute.AimProcessor();
+
+    /** 放置可行性回退的六个面中心系数(先方块中心,再六面心)。 */
+    private static final double[][] FACE_OFFSETS = {
+            {0.5, 0.5, 0.5}, // 中心
+            {0.5, 0.0, 0.5}, // 下
+            {0.5, 1.0, 0.5}, // 上
+            {0.5, 0.5, 0.0}, // 北
+            {0.5, 0.5, 1.0}, // 南
+            {0.0, 0.5, 0.5}, // 西
+            {1.0, 0.5, 0.5}  // 东
+    };
+
     /** 以玩家当前视角作为"当前转角"的便捷入口。 */
     static PlaceResult attemptToPlaceABlock(MovementState state, ServerPlayer player,
                                             BlockPos placeAt, boolean preferDown, boolean wouldSneak) {
@@ -68,10 +88,11 @@ final class MovementPlacement {
 
     /**
      * 尝试对 placeAt 找一个可行的放置贴面:先试直视 placeAt 本体
-     * (可替换方块自带轮廓时能命中),再按 {@link #HORIZONTALS_AND_DOWN}
-     * 枚举五个贴面,要求贴面方块可贴、且沿目标转角的射线命中该贴面
-     * 且命中面的邻格恰为 placeAt。preferDown=false 取第一个可行
-     * (水平优先),true 取最后一个(DOWN 优先,空中放置不必歪头)。
+     * (可替换方块自带轮廓时能命中,中心不可视回退到六面心),再按
+     * {@link #HORIZONTALS_AND_DOWN} 枚举五个贴面,要求贴面方块可贴、
+     * 且沿"这一 tick 头实际能转到哪"的射线命中该贴面且命中面的邻格
+     * 恰为 placeAt。preferDown=false 取第一个可行(水平优先),true 取
+     * 最后一个(DOWN 优先,空中放置不必歪头)。
      *
      * <p>当前转角已命中正确目标 → READY_TO_PLACE(右键由调用方按);
      * 找到贴面但没对准 → ATTEMPTING;找不到 → NO_OPTION。
@@ -85,14 +106,21 @@ final class MovementPlacement {
         Vec3 eye = eyePosition(player, wouldSneak);
         boolean found = false;
 
-        // 直视 placeAt 本体(走到这一步说明该格必是可替换的)
-        Vec3 placeCenter = MovementHelper.blockCenter(placeAt);
-        float directYaw = MovementHelper.yawTo(eye, placeCenter);
-        float directPitch = MovementHelper.pitchTo(eye, placeCenter);
-        BlockHitResult directHit = rayTrace(player, eye, directYaw, directPitch, reach);
-        if (directHit.getType() == HitResult.Type.BLOCK && directHit.getBlockPos().equals(placeAt)) {
-            state.setTarget(new MovementState.MovementTarget(directYaw, directPitch, true));
-            found = true;
+        // 直视 placeAt 本体(走到这一步说明该格必是可替换的)。中心不可视
+        // 时回退到方块碰撞形状的六面心(对应 Baritone RotationUtils.reachable
+        // 的中心 → 边角回退),用 peek 后的实际转角做 raytrace。
+        for (double[] off : FACE_OFFSETS) {
+            Vec3 aim = shapePoint(level, placeAt, off[0], off[1], off[2]);
+            float yaw = MovementHelper.yawTo(eye, aim);
+            float pitch = MovementHelper.pitchTo(eye, aim);
+            com.dwinovo.numen.core.pathing.execute.AimProcessor.Rotation peek =
+                    AIM.step(currentYaw, currentPitch, yaw, pitch);
+            BlockHitResult hit = rayTrace(player, eye, peek.yaw(), peek.pitch(), reach);
+            if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(placeAt)) {
+                state.setTarget(new MovementState.MovementTarget(yaw, pitch, true));
+                found = true;
+                break; // 直视本体只取第一个可行,无需 preferDown
+            }
         }
 
         for (int i = 0; i < 5; i++) {
@@ -111,8 +139,10 @@ final class MovementPlacement {
             Vec3 face = new Vec3(faceX, faceY, faceZ);
             float yaw = MovementHelper.yawTo(eye, face);
             float pitch = MovementHelper.pitchTo(eye, face);
-            // 视角推进简化:直接沿目标转角做射线,要求命中贴面方块且命中面邻格 == placeAt
-            BlockHitResult hit = rayTrace(player, eye, yaw, pitch, reach);
+            // 转速受限:把理想目标转角折算成这一 tick 头实际能转到哪再 raytrace
+            com.dwinovo.numen.core.pathing.execute.AimProcessor.Rotation peek =
+                    AIM.step(currentYaw, currentPitch, yaw, pitch);
+            BlockHitResult hit = rayTrace(player, eye, peek.yaw(), peek.pitch(), reach);
             if (hit.getType() == HitResult.Type.BLOCK
                     && hit.getBlockPos().equals(against)
                     && hit.getBlockPos().relative(hit.getDirection()).equals(placeAt)) {
@@ -146,6 +176,18 @@ final class MovementPlacement {
             return PlaceResult.ATTEMPTING;
         }
         return PlaceResult.NO_OPTION;
+    }
+
+    /** 方块碰撞形状上按 (mx,my,mz) 比例取点;空形状退回满格方块。 */
+    private static Vec3 shapePoint(Level level, BlockPos pos, double mx, double my, double mz) {
+        net.minecraft.world.phys.shapes.VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
+        if (shape.isEmpty()) {
+            shape = net.minecraft.world.phys.shapes.Shapes.block();
+        }
+        double x = shape.min(Direction.Axis.X) * mx + shape.max(Direction.Axis.X) * (1 - mx);
+        double y = shape.min(Direction.Axis.Y) * my + shape.max(Direction.Axis.Y) * (1 - my);
+        double z = shape.min(Direction.Axis.Z) * mz + shape.max(Direction.Axis.Z) * (1 - mz);
+        return new Vec3(pos.getX() + x, pos.getY() + y, pos.getZ() + z);
     }
 
     /**
