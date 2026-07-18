@@ -8,7 +8,11 @@ import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.FallingBlockEntity;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 
 /**
  * 移动原语抽象基类:一条"从 src 到 dest"的最小可执行动作,
@@ -163,11 +167,15 @@ public abstract class Movement {
     // ==================== 执行状态机 ====================
 
     /**
-     * 每 tick 推进一次。通用框架:子类状态机 → 水中且低于目标高度
-     * 时强按跳(上浮)→ 卡墙时按左键 → 视角与按键交执行层钩子,
-     * 按键先清后设、终态清空。
+     * 每 tick 推进一次。通用框架:强制关闭飞行能力(走地面物理)→
+     * 子类状态机 → 水中且低于目标高度时强按跳(上浮)→ 卡墙时先换上
+     * 对该方块最优工具再按左键 → 视角与按键交执行层钩子,按键先清
+     * 后设、终态清空。
      */
     public MovementStatus update() {
+        // 强制关闭飞行能力:寻路执行期走地面物理(跳跃/下落),不被外部
+        // 置真的飞行状态干扰(对应 Baritone Movement.java:124)
+        player.getAbilities().flying = false;
         currentState = updateState(currentState);
         BlockPos feet = player.blockPosition();
         if (MovementHelper.isLiquid(player.level().getBlockState(feet))
@@ -175,6 +183,12 @@ public abstract class Movement {
             currentState.setInput(Input.JUMP, true);
         }
         if (player.isInWall()) {
+            // 卡墙自救:先换上对当前准星命中方块最优的工具再按左键,
+            // 破墙速度不拖(对应 Baritone Movement.java:129-132)
+            BlockState hitState = crosshairBlockState();
+            if (hitState != null && player instanceof com.dwinovo.numen.entity.NumenPlayer np) {
+                com.dwinovo.numen.core.task.base.ToolSelect.holdBestTool(np, hitState);
+            }
             currentState.setInput(Input.CLICK_LEFT, true);
         }
 
@@ -189,6 +203,16 @@ public abstract class Movement {
             clearInputs();
         }
         return currentState.getStatus();
+    }
+
+    /** 玩家准星当前命中的方块状态;未命中返回 null。 */
+    private BlockState crosshairBlockState() {
+        double reach = NavSettings.get().blockReachDistance;
+        HitResult hit = player.pick(reach, 1.0f, false);
+        if (hit.getType() == HitResult.Type.BLOCK) {
+            return player.level().getBlockState(((BlockHitResult) hit).getBlockPos());
+        }
+        return null;
     }
 
     /**
