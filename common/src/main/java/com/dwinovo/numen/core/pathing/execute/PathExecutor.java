@@ -68,6 +68,10 @@ public final class PathExecutor {
     private int ticksOnCurrent;
     /** 距上次真实推进(移动完成/重定位/活跃挖掘)的 tick 数,liveness 信号。 */
     private int ticksSinceProgress;
+    /** 单次 onTick 内递归推进次数守卫:回退扫/SUCCESS 推进后递归 onTick
+     * 可能在某 movement 的 SUCCESS 判定与 validPositions 不自洽时空转
+     * 爆栈。超过路径长度即判定为病态循环,取消而非继续递归。 */
+    private int tickRecursionDepth;
     private Double currentMovementOriginalCostEstimate;
     private Integer costEstimateIndex;
     private boolean failed;
@@ -102,13 +106,26 @@ public final class PathExecutor {
     }
 
     /**
-     * 推进一 tick。
+     * 推进一 tick(首层入口:重置递归深度守卫,委派 {@link #onTick0()})。
      *
      * @return true 表示一个移动刚完成/路径进入暂停等"稳定"状态,
      *         false 表示位置刚被重定位(本 tick 已递归重跑);进行中
      *         返回该移动的 safeToCancel。
      */
     public boolean onTick() {
+        tickRecursionDepth = 0;
+        return onTick0();
+    }
+
+    /** 递归实现:回退扫/SUCCESS 推进后自调,深度守卫止爆。 */
+    private boolean onTick0() {
+        if (tickRecursionDepth++ > path.length()) {
+            // 回退扫/SUCCESS 推进后递归 onTick 超过路径长度:某 movement 的
+            // SUCCESS 判定与 validPositions 不自洽,推进-回退空转。取消止爆。
+            Constants.LOG.warn("onTick 递归深度超过路长度 {} 格,判定为推进空转,取消", path.length());
+            cancel("执行器推进空转(SUCCESS 与合法位不自洽,超 " + path.length() + " 步)");
+            return false;
+        }
         if (pathPosition == path.length() - 1) {
             pathPosition++; // 最后一个格位没有对应移动,直接完成
         }
@@ -128,7 +145,7 @@ public final class PathExecutor {
                     path.movements().get(j).reset();
                 }
                 onChangeInPathPosition();
-                onTick();
+                onTick0();
                 return false;
             }
             // 前跳扫:从 +3 起(+1 由移动自己报成功,+2 不查),身位落在
@@ -137,7 +154,7 @@ public final class PathExecutor {
             if (forward != -1) {
                 pathPosition = forward - 1;
                 onChangeInPathPosition();
-                onTick();
+                onTick0();
                 return false;
             }
         }
@@ -213,7 +230,7 @@ public final class PathExecutor {
         if (movementStatus == MovementStatus.SUCCESS) {
             pathPosition++;
             onChangeInPathPosition();
-            onTick();
+            onTick0();
             return true;
         } else {
             sprintNextTick = shouldSprintNextTick();
@@ -453,7 +470,7 @@ public final class PathExecutor {
                     Constants.LOG.debug("跳过平走,直跳上台");
                     pathPosition++;
                     onChangeInPathPosition();
-                    onTick();
+                    onTick0();
                     harness.forceKey(Input.JUMP, true);
                     return true;
                 }
@@ -494,7 +511,7 @@ public final class PathExecutor {
                     // V 形:同向下降接上升,直接跳到上升步冲过去
                     pathPosition++;
                     onChangeInPathPosition();
-                    onTick();
+                    onTick0();
                     Constants.LOG.debug("V 形谷,跳过下降直接上升");
                     return true;
                 }
@@ -509,7 +526,7 @@ public final class PathExecutor {
                     if (playerFeet(player).equals(current.getDest())) {
                         pathPosition++;
                         onChangeInPathPosition();
-                        onTick();
+                        onTick0();
                     }
                     return true;
                 }
@@ -543,7 +560,7 @@ public final class PathExecutor {
                 if (playerFeet(player).equals(fallDest)) {
                     pathPosition = path.positions().indexOf(fallDest);
                     onChangeInPathPosition();
-                    onTick();
+                    onTick0();
                     return true;
                 }
                 // 疾跑冲下坡不减速:清键、直接压目标视线与前进
