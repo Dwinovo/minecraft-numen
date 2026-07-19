@@ -14,10 +14,9 @@ import com.dwinovo.numen.task.TaskRecord;
  *       one exact cell (a verified-reachable spot).</li>
  *   <li>{@code y} only → {@link Kind#YLEVEL}:
  *       change elevation to that height.</li>
- *   <li>{@code block}(alone)→ {@link Kind#FIND}: scan for the nearest
- *       block of that kind and walk up beside it, never touching it;</li>
- *   <li>{@code block} + {@code x,y,z} → {@link Kind#FIND} pinned: walk up
- *       beside THAT specific block (no scan), never touching it.</li>
+ *   <li>{@code block} only (no coordinates) → {@link Kind#FIND}:
+ *       scan for the nearest block of that kind and walk up beside it,
+ *       never touching it.</li>
  * </ul>
  * Coordinates are nullable ({@code null} = "not supplied"); the deadline-based
  * timeout is handled by the base class.
@@ -59,12 +58,10 @@ public final class MoveToTaskRecord extends TaskRecord {
         boolean hasX = x != null, hasY = y != null, hasZ = z != null;
         if (block != null) {
             if (hasX || hasY || hasZ) {
-                if (!(hasX && hasY && hasZ)) {
-                    throw new IllegalArgumentException(
-                            "block with coordinates pins ONE specific block — give all of"
-                            + " x, y and z (or none, for the nearest one).");
-                }
-                return Kind.FIND;   // pinned to the block at (x,y,z)
+                throw new IllegalArgumentException(
+                        "block means 'walk to the nearest one of these' — no coordinates with"
+                        + " it. To reach one specific block you know the position of, goto its"
+                        + " location (x+z) and interact there.");
             }
             return Kind.FIND;
         }
@@ -87,8 +84,7 @@ public final class MoveToTaskRecord extends TaskRecord {
             case BLOCK -> TOOL_NAME + " " + (int) (double) x + "," + (int) (double) y + "," + (int) (double) z;
             case COLUMN -> TOOL_NAME + " x=" + (int) (double) x + " z=" + (int) (double) z;
             case YLEVEL -> TOOL_NAME + " y=" + (int) (double) y;
-            case FIND -> TOOL_NAME + " " + block
-                    + (x != null ? "@" + (int) (double) x + "," + (int) (double) y + "," + (int) (double) z : "");
+            case FIND -> TOOL_NAME + " " + block;
         };
     }
 }

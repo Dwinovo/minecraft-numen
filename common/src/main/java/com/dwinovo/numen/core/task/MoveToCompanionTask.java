@@ -112,25 +112,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             long findExtra = Math.min(MAX_EXTRA_TICKS, 600 + (long) FIND_RADIUS * TICKS_PER_BLOCK);
             r.extendDeadlineTo(player.level().getGameTime() + findExtra);
             leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
-            if (r.x != null) {
-                // 钉死形态:block + 坐标 = 去那一个的旁边。先核对那格真是它
-                var actual = player.level().getBlockState(blockTarget).getBlock();
-                if (actual != b) {
-                    String actualId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                            .getKey(actual).getPath();
-                    fail("no " + r.block + " at " + bx + "," + by + "," + bz + " — that cell is "
-                            + actualId + ". Rescan (scan_blocks) or correct the coordinates.",
-                            FailureType.NO_PATH);
-                    return;
-                }
-                candidates.add(blockTarget.immutable());
-                findScanDrained = true;
-            } else {
-                kickFindScan();
-            }
+            kickFindScan();
             com.dwinovo.numen.Constants.LOG.info(
-                    "[numen-task] goto start kind=FIND block={}{}", r.block,
-                    r.x != null ? " pinned=" + bx + "," + by + "," + bz : "");
+                    "[numen-task] goto start kind=FIND block={}", r.block);
             return;
         }
         // Already there: don't build a nav (and don't extend the deadline). The first
