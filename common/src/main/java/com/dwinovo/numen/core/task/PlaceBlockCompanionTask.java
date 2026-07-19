@@ -145,7 +145,9 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
 
     @Override
     protected PlayerNav buildNav() {
-        return new PlayerNav(player, r.pos, WALK_SPEED, this::withinReach);
+        // 不自带到场导航(旅行归 goto);贴边放置相位机内的换站位小步
+        // 仍在动作职责内,由各 rung 自建短程导航。
+        return null;
     }
 
     @Override

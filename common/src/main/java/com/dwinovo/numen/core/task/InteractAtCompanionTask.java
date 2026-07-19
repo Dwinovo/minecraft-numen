@@ -33,17 +33,11 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     private static final double WALK_SPEED = 1.0;
     /** Reposition-rung stance radius: any feet cell this close to the aim (< {@link #REACH},
      *  so an accepted stance is still within interact reach). Never wider than the goal. */
-    private static final double REPOSITION_RADIUS = 3.5;
-    /** The reposition rung runs at most once. */
-    private static final int MAX_REPOSITIONS = 1;
 
     private Interaction interaction;
     // ---- bounded recovery state (fields, so a Suspendable mid-rung suspend/resume
     //      picks straight back up: the counter and the rebuilt nav both survive) ----
-    /** Executions of the reposition rung so far (capped at {@link #MAX_REPOSITIONS}). */
-    private int repositionAttempts;
     /** The FIRST nav failure's reason, preserved so the final give-up keeps the original wording. */
-    private String firstNavFailReason;
     private long holdUntil = -1;       // game tick to release a fixed-duration hold (holdTicks > 0)
     private String successMsg = "done";
     // A right-click that activated a real block (a station's GUI): captured so the
@@ -66,9 +60,9 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
 
     @Override
     protected PlayerNav buildNav() {
-        // An aim point → walk within arm's reach of it first. No aim → act from where we stand,
-        // facing forward (in-air use, e.g. throwing straight ahead).
-        return r.aim != null ? new PlayerNav(player, r.aim, WALK_SPEED, this::withinReach) : null;
+        // 本任务不自带到场导航:身体须已在触及距离内(基座在 reached()==false
+        // 且无导航时直接教学失败,旅行归 goto)。
+        return null;
     }
 
     @Override
@@ -139,37 +133,6 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
         };
     }
 
-    /**
-     * Bounded recovery — ONE reposition rung, as an inline attempt counter (a single
-     * rung doesn't warrant {@code RecoveryLadder}'s child-task plumbing). On an
-     * in-ladder nav cause ({@code NO_PATH} / {@code BOXED_IN} / {@code OUT_OF_REACH})
-     * retry the SAME bounded goal once with a looser stance goal —
-     * {@link NavGoal#near} within {@link #REPOSITION_RADIUS} (&lt; {@link #REACH}), so
-     * "can't stand exactly there" becomes "stand anywhere within interact reach".
-     * Never widens the search, never travels beyond the aim's own reach envelope,
-     * never acquires anything. Exhausted (or a cause no rung handles — e.g. a
-     * prerequisite gap), give up preserving the original "can't reach {aim}: {reason}"
-     * wording plus a note of what was tried, carrying the nav's failType.
-     */
-    @Override
-    protected TaskState handleNavFailure(FailureType type, String reason) {
-        if (repositionable(type) && r.aim != null && repositionAttempts < MAX_REPOSITIONS) {
-            repositionAttempts++;
-            firstNavFailReason = reason;
-            stopNav();
-            final net.minecraft.core.BlockPos aim = r.aim;
-            nav = PlayerNav.toGoal(player, () -> NavGoal.near(aim, REPOSITION_RADIUS),
-                    WALK_SPEED, this::withinReach);
-            return TaskState.RUNNING;
-        }
-        String original = firstNavFailReason != null ? firstNavFailReason : reason;
-        String tried = repositionAttempts > 0
-                ? " (also tried a looser stance anywhere within " + REPOSITION_RADIUS
-                        + " blocks of it: " + reason + ")"
-                : "";
-        fail("can't reach " + aimLabel() + ": " + original + tried, type);
-        return TaskState.FAILED;
-    }
 
     /** In-ladder nav causes the reposition rung handles; anything else kicks straight back to the LLM. */
     private static boolean repositionable(FailureType type) {

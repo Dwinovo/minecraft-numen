@@ -36,16 +36,14 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
         super(player, record);
     }
 
-    /** 允许"就地微调"的最远直线距离;更远的旅程归 goto 负责。 */
-    protected static final double GOTO_FIRST_RADIUS = 12.0;
-
-    /** Build the navigation toward this task's target. Assigned to {@link #nav} on start. */
+    /** Build the navigation toward this task's target. Assigned to {@link #nav} on start.
+     *  方块目标的动作任务返回 null——它们不再自带任何到场导航,身体必须已在
+     *  工作距离内({@link #reached()}),否则直接教学失败让调用方先 goto。 */
     protected abstract PlayerNav buildNav();
 
     /**
-     * 远距前置门的目标格:身体离它超过 {@link #GOTO_FIRST_RADIUS} 时本任务
-     * 拒绝执行并教学"先 goto 过去"。返回 null = 本任务不设此门(实体目标
-     * 会移动、无固定格的动作等)。默认 null。
+     * 教学失败要点名的目标格(算距离、给 goto 坐标用)。返回 null = 无固定
+     * 格目标(实体目标、原地动作),失败话术退化为通用文案。默认 null。
      */
     protected net.minecraft.core.BlockPos gotoFirstTarget() {
         return null;
@@ -59,20 +57,6 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
 
     @Override
     protected void onStart() {
-        // 远距前置门:动作类任务只负责"够得着就做"+就地微调,长途旅行
-        // 是 goto 的职责——超距直接教学失败,不再内嵌整段导航
-        net.minecraft.core.BlockPos t = gotoFirstTarget();
-        if (t != null) {
-            double dist = Math.sqrt(player.distanceToSqr(
-                    t.getX() + 0.5, t.getY() + 0.5, t.getZ() + 0.5));
-            if (dist > GOTO_FIRST_RADIUS) {
-                fail("target " + t.getX() + "," + t.getY() + "," + t.getZ() + " is "
-                        + (int) dist + " blocks away — too far to work from here. goto it"
-                        + " first (goto stops right beside a solid block), then call this again.",
-                        FailureType.NO_PATH);
-                return;
-            }
-        }
         nav = buildNav();
     }
 
@@ -86,7 +70,19 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
     protected final TaskState onTick() {
         if (reached()) return act();
         if (nav == null) {
-            fail("navigation unavailable", FailureType.NO_PATH);   // defensive; unreachable today
+            // 无到场导航的动作任务:不在工作距离内 = 教学失败,旅行归 goto
+            net.minecraft.core.BlockPos t = gotoFirstTarget();
+            if (t != null) {
+                double dist = Math.sqrt(player.distanceToSqr(
+                        t.getX() + 0.5, t.getY() + 0.5, t.getZ() + 0.5));
+                fail("target " + t.getX() + "," + t.getY() + "," + t.getZ() + " is "
+                        + String.format("%.1f", dist) + " blocks away — out of working reach."
+                        + " goto it first (goto stops right beside a solid block), then call"
+                        + " this again.", FailureType.OUT_OF_REACH);
+            } else {
+                fail("out of working reach and this action does not travel — goto the spot"
+                        + " first, then call this again.", FailureType.OUT_OF_REACH);
+            }
             return TaskState.FAILED;
         }
         return switch (nav.tick()) {

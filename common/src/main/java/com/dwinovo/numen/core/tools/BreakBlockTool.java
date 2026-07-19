@@ -28,8 +28,8 @@ public final class BreakBlockTool implements NumenTool {
     public String description() {
         return "Break the ONE block at exact coordinates — the precision inverse of place_block, for "
                 + "construction work: clear the cell a structure block must occupy, remove a block placed by "
-                + "mistake, prune obstructions. You must ALREADY be near it (within ~12 blocks; goto the "
-                + "block first for anything farther) — it only steps into reach. Drops are collected into "
+                + "mistake, prune obstructions. It does NOT travel: you must ALREADY be within working reach "
+                + "(~4.5 blocks; goto the block first — it stops right beside it). Drops are collected into "
                 + "your inventory. Requires the right tool in hand for blocks that need one (same rule as "
                 + "mine — stone needs a pickaxe); fails with guidance otherwise. To GATHER resources by "
                 + "type, use mine instead — it finds blocks itself.";

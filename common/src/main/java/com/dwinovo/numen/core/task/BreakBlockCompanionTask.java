@@ -34,10 +34,8 @@ public final class BreakBlockCompanionTask extends GoToThenDoTask<BreakBlockTask
     private static final double WALK_SPEED = 1.0;
     /** Recovery rung: the loosened approach goal — stand ANYWHERE within this of the
      *  target (well inside swing range) instead of the resolver's tight default. */
-    private static final double LOOSE_APPROACH_RADIUS = 4.0;
 
     /** The one reposition rung has been consumed (ladder state — survives suspend). */
-    private boolean navRetried;
 
     private Interaction breaking;
     private String brokenBlock = "?";
@@ -86,7 +84,9 @@ public final class BreakBlockCompanionTask extends GoToThenDoTask<BreakBlockTask
 
     @Override
     protected PlayerNav buildNav() {
-        return new PlayerNav(player, r.target, WALK_SPEED, this::withinReach);
+        // 本任务不自带到场导航:身体须已在挥臂距离内(基座在 reached()==false
+        // 且无导航时直接教学失败,旅行归 goto)。
+        return null;
     }
 
     @Override
@@ -119,32 +119,6 @@ public final class BreakBlockCompanionTask extends GoToThenDoTask<BreakBlockTask
         };
     }
 
-    /**
-     * Recovery ladder — ONE reposition rung. A {@code NO_PATH}/{@code BOXED_IN} to the
-     * exact approach becomes one retry with a looser goal ({@code near(target, 4)}, still
-     * within swing range — the SAME bounded break, a different stance), so "stand exactly
-     * here" failures become "stand anywhere I can swing from"; the existing dig via
-     * {@link Interaction#attackBlock} already handles occluders once in reach. A second
-     * failure (or any other cause, e.g. target lost) gives up with the original wrapped
-     * message plus what was tried.
-     */
-    @Override
-    protected TaskState handleNavFailure(FailureType type, String reason) {
-        if (!navRetried && (type == FailureType.NO_PATH || type == FailureType.BOXED_IN
-                || type == FailureType.STANCE_DUD)) {
-            navRetried = true;
-            stopNav();
-            NavGoal loose = NavGoal.near(r.target, LOOSE_APPROACH_RADIUS);
-            nav = PlayerNav.toGoal(player, () -> loose, WALK_SPEED, this::withinReach);
-            return TaskState.RUNNING;
-        }
-        String also = navRetried
-                ? " (also tried approaching anywhere within " + (int) LOOSE_APPROACH_RADIUS
-                        + " blocks of it — no path either)"
-                : "";
-        fail("can't reach " + posLabel() + ": " + reason + also, type);
-        return TaskState.FAILED;
-    }
 
     private boolean withinReach() {
         return player.onGround()
