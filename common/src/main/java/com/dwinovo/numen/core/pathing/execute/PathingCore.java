@@ -11,6 +11,7 @@ import com.dwinovo.numen.core.pathing.bridge.SearchDispatcher;
 import com.dwinovo.numen.core.pathing.bridge.SearchHandle;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
+import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.Movement;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -410,10 +411,16 @@ public final class PathingCore {
     private PathExecutor newExecutor(NavPath path) {
         Supplier<CalculationContext> recost =
                 executionContextFactory != null ? executionContextFactory : () -> context;
+        // 区块边界暂停查活世界(只查内存,不触发加载):后到的区块生成
+        // 完成后暂停即刻解除,不被搜索时的冻结快照钉死
+        var liveView = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
+        ChunkLoadedTest liveLoaded =
+                liveView instanceof com.dwinovo.numen.core.pathing.cache.LoadedOnlyView v
+                        ? v::isLoaded : context.loadedTest;
         return new PathExecutor(path, player, harness,
                 recost,
                 () -> inProgress == null ? Optional.empty() : inProgress.bestPathSoFar(),
-                context.loadedTest);
+                liveLoaded);
     }
 
     // ==================== 假起点 ====================

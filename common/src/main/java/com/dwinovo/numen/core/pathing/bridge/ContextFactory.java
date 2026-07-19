@@ -51,13 +51,17 @@ public final class ContextFactory {
     }
 
     /**
-     * 执行期实时上下文:直读活世界、视一切 chunk 为已加载。主线程
-     * 专用({@code safeForThreadedUse=false}),用于逐 tick 成本复核
-     * 与装配期重算。
+     * 执行期实时上下文:活世界的"只读已加载"视图——未加载区块读作
+     * 空气,绝不触发同步加载/生成。主线程专用
+     * ({@code safeForThreadedUse=false}),用于逐 tick 成本复核与
+     * 装配期重算。
      */
     public static CalculationContext forExecution(ServerPlayer player, LongSet sacred,
                                                   LongSet deniedPlace, boolean forceBreak) {
-        return new CalculationContext(player, player.level(), ChunkLoadedTest.ALWAYS, false,
+        var view = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
+        ChunkLoadedTest loaded = view instanceof com.dwinovo.numen.core.pathing.cache.LoadedOnlyView v
+                ? v::isLoaded : ChunkLoadedTest.ALWAYS;
+        return new CalculationContext(player, view, loaded, false,
                 sacred, deniedPlace, forceBreak);
     }
 

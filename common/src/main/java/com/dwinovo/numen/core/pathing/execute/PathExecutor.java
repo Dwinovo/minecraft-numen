@@ -212,8 +212,9 @@ public final class PathExecutor {
             return false;
         }
         // 对 pathPosition±10 的移动丢弃格集缓存按当前世界重算;任一移动的
-        // 格集内容有变即重建"剩余路径全量格集"(可视化与外部查询的数据源)
-        var level = player.level();
+        // 格集内容有变即重建"剩余路径全量格集"(可视化与外部查询的数据源)。
+        // 读取经"只读已加载"钳制:路径末端伸进未生成地形时不触发同步区块生成
+        var level = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
         for (int i = pathPosition - 10; i < pathPosition + 10; i++) {
             if (i < 0 || i >= path.movements().size()) {
                 continue;
@@ -486,7 +487,7 @@ public final class PathExecutor {
             return false;
         }
         BlockPos feet = playerFeet(player);
-        var level = player.level();
+        var level = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
         if (!MovementHelper.canWalkOn(level, feet.below())) {
             return false; // 站位本身可疑(可能跑酷中),别停
         }
@@ -681,7 +682,7 @@ public final class PathExecutor {
         if (dir.getY() < -3) {
             return 0;
         }
-        var level = player.level();
+        var level = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
         if (!movement.toBreak(level).isEmpty()) {
             return 0;
         }
@@ -746,7 +747,7 @@ public final class PathExecutor {
                 || nextNext.getDirection().getZ() != next.getDirection().getZ()) {
             return false;
         }
-        var level = player.level();
+        var level = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
         if (!MovementHelper.canWalkOn(level, current.getDest().below())) {
             return false;
         }

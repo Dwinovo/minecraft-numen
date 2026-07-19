@@ -375,7 +375,7 @@ public abstract class Movement {
     }
 
     /** 此刻仍不可穿行、需要挖掉的格(缓存到 {@link #resetBlockCache()})。 */
-    public List<BlockPos> toBreak(net.minecraft.world.level.Level level) {
+    public List<BlockPos> toBreak(net.minecraft.world.level.BlockGetter level) {
         if (toBreakCached != null) {
             return toBreakCached;
         }
@@ -390,7 +390,7 @@ public abstract class Movement {
     }
 
     /** 此刻仍不可站立、需要放上方块的格(缓存到 {@link #resetBlockCache()})。 */
-    public List<BlockPos> toPlace(net.minecraft.world.level.Level level) {
+    public List<BlockPos> toPlace(net.minecraft.world.level.BlockGetter level) {
         if (toPlaceCached != null) {
             return toPlaceCached;
         }
@@ -403,7 +403,7 @@ public abstract class Movement {
     }
 
     /** 会用身体挤进去的格(基类恒空;对角移动覆写产出切角柱)。 */
-    public List<BlockPos> toWalkInto(net.minecraft.world.level.Level level) {
+    public List<BlockPos> toWalkInto(net.minecraft.world.level.BlockGetter level) {
         if (toWalkIntoCached == null) {
             toWalkIntoCached = new ArrayList<>();
         }

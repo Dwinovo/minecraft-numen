@@ -268,7 +268,7 @@ public class MovementDiagonal extends Movement {
 
     /** 对角的待挖集只含终点柱两格(切角柱是挤过去的,不是挖穿的)。 */
     @Override
-    public java.util.List<BlockPos> toBreak(Level level) {
+    public java.util.List<BlockPos> toBreak(net.minecraft.world.level.BlockGetter level) {
         if (toBreakCached != null) {
             return toBreakCached;
         }
@@ -284,7 +284,7 @@ public class MovementDiagonal extends Movement {
 
     /** 四个切角柱里此刻仍不通透的格:身体会硬挤着蹭过去的位置。 */
     @Override
-    public java.util.List<BlockPos> toWalkInto(Level level) {
+    public java.util.List<BlockPos> toWalkInto(net.minecraft.world.level.BlockGetter level) {
         if (toWalkIntoCached == null) {
             toWalkIntoCached = new java.util.ArrayList<>();
         }
