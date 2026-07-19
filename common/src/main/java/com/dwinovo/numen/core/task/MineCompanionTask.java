@@ -26,7 +26,6 @@ import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.AABB;
@@ -75,6 +74,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     private static final int RESCAN_INTERVAL = 5;      // ticks between world rescans for targets
     private static final int MAX_ORES = 64;            // cap on tracked target locations
+    /** 扫描提前收工的同层判据:玩家 Y ±10 内有命中就不再远扫。 */
+    private static final int SCAN_Y_THRESHOLD = 10;
+    /** 已凑够但全在层外时,最远还愿意扫出去的 chunk 环半径。 */
+    private static final int SCAN_MAX_CHUNK_RADIUS = 32;
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double MINE_SPEED = 1.0;
     /** Give up branch-mining after this many ticks with no ore found (~30 s). */
@@ -146,18 +149,14 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // would destroy the block for no drop. Same gate as break_block / the cost model
         // (BlockHelper.canHarvest, whole-inventory). prune() then drops any individual unharvestable
         // cell, so a mixed request (e.g. coal we can mine + diamond we can't) still works.
-        // force=true waives the whole gate: the caller wants the blocks GONE, drops or not.
-        if (r.force) {
-            return List.of();
-        }
         return List.of(() -> {
             boolean anyHarvestable = r.targets.stream().anyMatch(
                     b -> BlockHelper.canHarvest(player.getInventory(), b.defaultBlockState()));
             if (!anyHarvestable) {
                 return new Precondition.Failure(
                         "can't harvest " + r.label + " with the current tools — mining it would"
-                        + " destroy it without any drop. Equip a suitable tool (e.g. a pickaxe) first,"
-                        + " or re-run with force:true if you just want the blocks destroyed.",
+                        + " destroy it without any drop. Equip a suitable tool (e.g. a pickaxe)"
+                        + " first; to just destroy a block regardless of drops, use break_block.",
                         FailureType.WRONG_TOOL);
             }
             return null;
@@ -170,7 +169,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // blocks drop, and snapshot how many we already hold so the tally is the delta above it.
         dropItems = computeDropItems();
         baseline = inventoryMatch();
-        rescan();
+        // 首扫也走后台线程(加载区边界内的环形扫描可能要啃整个加载区,
+        // 不挂 tick);结果落地前 onTick 的终局判定会等着。
+        kickScan();
     }
 
     @Override
@@ -184,6 +185,17 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
         Level level = player.level();
 
+        // Maintain the ore list every tick — INCLUDING while a dig below is latched
+        // (the list keeps refreshing during mining): merge a finished background
+        // scan, prune (cheap — knownOres is capped at 64), and kick a fresh
+        // off-thread scan every RESCAN_INTERVAL ticks (never more than one in flight).
+        drainScan();
+        prune();
+        if (--rescanTimer <= 0) {
+            rescanTimer = RESCAN_INTERVAL;
+            if (scan == null) kickScan();
+        }
+
         // 0) Continue an in-progress dig, locked onto its block (no re-selection)
         //    until it breaks or drifts out of reach.
         BlockPos digging = digger.current();
@@ -196,15 +208,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             }
         }
 
-        // Maintain the ore list: merge a finished background scan, prune every
-        // tick (cheap — knownOres is capped at 64), and kick a fresh off-thread
-        // scan every RESCAN_INTERVAL ticks (never more than one in flight).
-        drainScan();
-        prune();
-        if (--rescanTimer <= 0) {
-            rescanTimer = RESCAN_INTERVAL;
-            if (scan == null) kickScan();
-        }
         drops = droppedItems();
 
         // 1) Mine any target we can already reach + see from here (no pathing) —
@@ -264,7 +267,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             }
         }
 
-        // 3) No ore known and nothing dropped nearby. Default: stop here — only the
+        // 3) No ore known and nothing dropped nearby. A scan still in flight means
+        //    "don't know yet", not "nothing there" — wait for it before any verdict.
+        if (scan != null) {
+            return TaskState.RUNNING;
+        }
+        //    Default: stop here — only the
         //    opt-in explore mode branch-mines outward for more. So
         //    finish with whatever we gathered (the tool's contract: "fewer than count
         //    in range still succeeds"), rather than running off across the world.
@@ -365,8 +373,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     }
 
     /** 该目标格是否真挖得成:挖穿成本无穷(挖不动/被硬禁)、禁挖判定命中
-     *  (冰/虫蚀/贴液体/悬空落沙邻格/世界边界)、或上下都被基岩封死的都不算。 */
-    private static boolean plausibleToBreak(CalculationContext ctx, BlockPos pos, BlockState state) {
+     *  (冰/虫蚀/贴液体/悬空落沙邻格/世界边界)、或上下都被基岩封死的都不算。
+     *  包内共享:goto 的 FIND 候选入册走同一道剪枝。 */
+    static boolean plausibleToBreak(CalculationContext ctx, BlockPos pos, BlockState state) {
         if (MovementHelper.getMiningDurationTicks(ctx, pos.getX(), pos.getY(), pos.getZ(),
                 state, true) >= ActionCosts.COST_INF) {
             return false;
@@ -389,7 +398,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         Level level = player.level();
         long now = level.getGameTime();
         anticipatedDrops.values().removeIf(expiry -> expiry < now);
-        AABB box = new AABB(player.blockPosition()).inflate(r.maxRadius);
+        // 搜集范围 = 服务端视距(身体周围的加载邻域),与目标扫描的事实边界同源。
+        int reach = level instanceof ServerLevel sl
+                ? sl.getServer().getPlayerList().getViewDistance() * 16 : 128;
+        AABB box = new AABB(player.blockPosition()).inflate(reach);
         List<BlockPos> out = new ArrayList<>();
         for (ItemEntity ie : level.getEntitiesOfClass(ItemEntity.class, box)) {
             if (!dropItems.contains(ie.getItem().getItem())) continue;
@@ -549,22 +561,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     // ---- ore list maintenance ----
 
-    /** Synchronous scan — used once at task start so there are targets immediately. */
-    private void rescan() {
-        mergeHits(BlockScanner.findWithin(
-                player.level(), player.blockPosition(), r.maxRadius, r.targets));
-    }
-
-    /** Kick an off-thread scan: capture the loaded chunks on this (main) thread,
-     *  read their section palettes on the scan thread (chunk refs are captured
-     *  synchronously; only the read-only palette walk runs off-thread). */
+    /** Kick an off-thread scan: capture loaded-chunk refs ring by ring around the
+     *  body on this (main) thread — the capture stops at the loaded-area edge —
+     *  then walk their section palettes on the scan thread, nearest ring first,
+     *  stopping early once {@link #MAX_ORES} are found with one near our own Y. */
     private void kickScan() {
         Level level = player.level();
-        BlockPos center = player.blockPosition().immutable();
-        List<ChunkAccess> chunks = BlockScanner.captureLoadedChunks(level, center, r.maxRadius);
-        if (chunks.isEmpty()) return;
-        scan = ScanExecutor.submit(
-                () -> BlockScanner.scanLoaded(level, chunks, center, r.maxRadius, r.targets));
+        // 圆心用寻路口径的脚位格(0.1251 上抬 + 台阶取上格),不是裸 blockPosition:
+        // 同层判据与 section 遍历序都从它导出,差一格会改变结果集。
+        BlockScanner.RingCapture cap = BlockScanner.captureRings(level,
+                BlockHelper.playerFeet(level, player.getX(), player.getY(), player.getZ()));
+        scan = ScanExecutor.submit(() -> BlockScanner.scanRings(
+                level, cap, r.targets, MAX_ORES, SCAN_Y_THRESHOLD, SCAN_MAX_CHUNK_RADIUS));
         scanDeadline = level.getGameTime() + SCAN_TIMEOUT_TICKS;
     }
 
@@ -610,11 +618,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     || !plausibleToBreak(ctx, p, state)) {
                 return true;
             }
-            // Harvestability gate — skipped entirely under force ("destroy, don't gather").
-            // Tool-skipped cells are remembered so the terminal failure can say "you need a
-            // better tool" instead of the misleading "nothing found" (the tool situation can
-            // also CHANGE mid-task: the only good pick breaking makes this fire on re-prune).
-            if (!r.force && !BlockHelper.canHarvest(player.getInventory(), state)) {
+            // Harvestability gate. Tool-skipped cells are remembered so the terminal failure
+            // can say "you need a better tool" instead of the misleading "nothing found" (the
+            // tool situation can also CHANGE mid-task: the only good pick breaking makes this
+            // fire on re-prune).
+            if (!BlockHelper.canHarvest(player.getInventory(), state)) {
                 unharvestable.add(p.immutable());
                 return true;
             }
@@ -656,18 +664,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             // problem is the tool, not the deposit. Names the escape hatches explicitly.
             fail("found " + unharvestable.size() + " " + r.label + " but none can be harvested with"
                     + " the current tools (mining would destroy them without any drop); gathered "
-                    + r.getMined() + ". Equip a better tool (equip_item) and retry, or re-run with"
-                    + " force:true if you just want the blocks destroyed.",
+                    + r.getMined() + ". Equip a better tool (equip_item) and retry; to just destroy"
+                    + " blocks regardless of drops, use break_block.",
                     FailureType.WRONG_TOOL);
             return TaskState.FAILED;
         }
         if (!blacklist.isEmpty()) {
-            fail("found " + blacklist.size() + " " + r.label + " within " + r.maxRadius
-                    + " blocks but reached none of them — all " + blacklist.size()
+            fail("found " + blacklist.size() + " " + r.label + " nearby but reached none of them"
+                    + " — all " + blacklist.size()
                     + " were blacklisted as unreachable (no path / no clear shot); gathered 0",
                     FailureType.NO_PATH);
         } else {
-            fail("no reachable " + r.label + " found within " + r.maxRadius + " blocks",
+            fail("no reachable " + r.label + " found in the loaded area around me",
                     FailureType.MINED_OUT);
         }
         return TaskState.FAILED;

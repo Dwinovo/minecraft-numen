@@ -74,10 +74,12 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     private long leaseCapGameTime;
 
     // ==================== FIND(就近方块)状态 ====================
-    /** 就近方块搜索半径与候选上限、离线扫描的放弃时限。 */
-    private static final int FIND_RADIUS = 48;
-    private static final int FIND_MAX_CANDIDATES = 16;
+    /** 候选上限、扫描同层判据/最远环半径、离线扫描的放弃时限、行程预算基准。 */
+    private static final int FIND_MAX_CANDIDATES = 64;
+    private static final int FIND_Y_THRESHOLD = 10;
+    private static final int FIND_MAX_CHUNK_RADIUS = 32;
     private static final long FIND_SCAN_TIMEOUT_TICKS = 40;
+    private static final int FIND_BUDGET_BLOCKS = 128;
     /** 解析出的目标方块(FIND 专用)。 */
     private net.minecraft.world.level.block.Block findTarget;
     /** 仍在册的候选格(打不通的会被逐个除名)。 */
@@ -110,7 +112,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 return;
             }
             findTarget = b;
-            long findExtra = Math.min(MAX_EXTRA_TICKS, 600 + (long) FIND_RADIUS * TICKS_PER_BLOCK);
+            long findExtra = Math.min(MAX_EXTRA_TICKS, 600 + (long) FIND_BUDGET_BLOCKS * TICKS_PER_BLOCK);
             r.extendDeadlineTo(player.level().getGameTime() + findExtra);
             leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
             kickFindScan();
@@ -360,7 +362,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case YLEVEL -> Math.abs(player.getY() - by);
             case FIND -> {
                 BlockPos n = nearestCandidate();
-                yield n == null ? FIND_RADIUS
+                yield n == null ? FIND_BUDGET_BLOCKS
                         : Math.sqrt(player.distanceToSqr(n.getX() + 0.5, n.getY() + 0.5, n.getZ() + 0.5));
             }
         };
@@ -381,7 +383,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             return null;
         }
         if (findScan == null && findScanDrained) {
-            fail("no " + r.block + " found within " + FIND_RADIUS + " blocks of me — explore"
+            fail("no " + r.block + " found in the loaded area around me — explore"
                     + " closer to one, or give exact coordinates (scan_blocks/locate can find some).",
                     FailureType.NO_PATH);
             return TaskState.FAILED;
@@ -389,19 +391,19 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return TaskState.RUNNING;
     }
 
-    /** 踢一次离线扫描(半径 {@link #FIND_RADIUS} 的已加载区块)。 */
+    /** 踢一次离线扫描:主线程环形捕获身体周围的已加载 chunk 引用(捕获止于
+     *  加载区边缘),后台按环序由近及远扫,凑够即提前收工。 */
     private void kickFindScan() {
         var level = player.level();
-        BlockPos center = player.blockPosition().immutable();
-        var chunks = com.dwinovo.numen.core.scan.BlockScanner.captureLoadedChunks(
-                level, center, FIND_RADIUS);
-        if (chunks.isEmpty()) {
-            findScanDrained = true;
-            return;
-        }
+        // 圆心用寻路口径的脚位格(0.1251 上抬 + 台阶取上格)——同层判据与
+        // section 遍历序都从它导出。
+        var cap = com.dwinovo.numen.core.scan.BlockScanner.captureRings(level,
+                com.dwinovo.numen.core.pathing.util.BlockHelper.playerFeet(
+                        level, player.getX(), player.getY(), player.getZ()));
         findScan = com.dwinovo.numen.core.scan.ScanExecutor.submit(
-                () -> com.dwinovo.numen.core.scan.BlockScanner.scanLoaded(
-                        level, chunks, center, FIND_RADIUS, java.util.Set.of(findTarget)));
+                () -> com.dwinovo.numen.core.scan.BlockScanner.scanRings(
+                        level, cap, java.util.Set.of(findTarget),
+                        FIND_MAX_CANDIDATES, FIND_Y_THRESHOLD, FIND_MAX_CHUNK_RADIUS));
         findScanDeadline = level.getGameTime() + FIND_SCAN_TIMEOUT_TICKS;
     }
 
@@ -426,11 +428,16 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         }
         findScan = null;
         findScanDrained = true;
+        // 入册前过与 mine 同一道目标剪枝:挖不动/禁挖(贴液体等)/基岩上下
+        // 夹死的格不作候选——省得选中一个走近了也没法处置的目标。
+        var ctx = com.dwinovo.numen.core.pathing.bridge.ContextFactory.forExecution(player);
         hits.stream()
                 .sorted(java.util.Comparator.comparingDouble(
                         com.dwinovo.numen.core.scan.BlockScanner.Hit::distance))
-                .limit(FIND_MAX_CANDIDATES)
                 .map(h -> h.pos().immutable())
+                .filter(p -> MineCompanionTask.plausibleToBreak(
+                        ctx, p, ctx.get(p.getX(), p.getY(), p.getZ())))
+                .limit(FIND_MAX_CANDIDATES)
                 .forEach(candidates::add);
     }
 

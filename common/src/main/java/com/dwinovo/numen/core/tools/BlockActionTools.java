@@ -36,8 +36,6 @@ public final class BlockActionTools {
     private static final long BREAK_TIMEOUT_TICKS = 45 * 20;
 
     // mine budgets / bounds.
-    private static final int DEFAULT_MAX_RADIUS = 48;
-    private static final int MAX_ALLOWED_RADIUS = 96;
     private static final int MAX_COUNT = 256;
     /** Per-block budget is generous; total scales with count so big jobs don't time out. */
     private static final long TICKS_PER_BLOCK = 30 * 20;   // 30s each
@@ -90,30 +88,16 @@ int z,
         return new BreakBlockTaskRecord(ctx.toolCallId(), ctx.deadline(BREAK_TIMEOUT_TICKS), target);
     }
 
-    public TaskRecord autoMine(
-            List<String> block_ids,
-int count,
-Integer radius,
-            Boolean force,
-            ToolContext ctx) {
+    public TaskRecord autoMine(List<String> block_ids, int count, ToolContext ctx) {
         Set<Block> targets = readBlockIds(block_ids);
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("block_ids contained no valid block ids");
         }
         int clampedCount = Math.clamp(count, 1, MAX_COUNT);
-
-        int searchRadius = DEFAULT_MAX_RADIUS;
-        if (radius != null) {
-            searchRadius = radius;
-            if (searchRadius < 1) searchRadius = 1;
-            if (searchRadius > MAX_ALLOWED_RADIUS) searchRadius = MAX_ALLOWED_RADIUS;
-        }
-
         String label = labelFor(targets);
         long timeout = Math.max(MIN_TIMEOUT_TICKS, (long) clampedCount * TICKS_PER_BLOCK);
         long deadline = ctx.deadline(timeout);
-        return new MineBlockTaskRecord(ctx.toolCallId(), deadline, targets, clampedCount, searchRadius, label,
-                Boolean.TRUE.equals(force));
+        return new MineBlockTaskRecord(ctx.toolCallId(), deadline, targets, clampedCount, label);
     }
 
     private static Set<Block> readBlockIds(List<String> blockIds) {
