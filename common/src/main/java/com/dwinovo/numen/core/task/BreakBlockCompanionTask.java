@@ -90,6 +90,11 @@ public final class BreakBlockCompanionTask extends GoToThenDoTask<BreakBlockTask
     }
 
     @Override
+    protected net.minecraft.core.BlockPos gotoFirstTarget() {
+        return r.target;
+    }
+
+    @Override
     protected boolean reached() {
         return withinReach();
     }

@@ -26,8 +26,9 @@ public final class PlaceBlockTool implements NumenTool {
 
     @Override
     public String description() {
-        return "Place a block from your inventory at an absolute coordinate; the companion travels there "
-                + "on its own and places it like a player. The coordinate is the cell the block will OCCUPY "
+        return "Place a block from your inventory at an absolute coordinate and orientation, like a "
+                + "player would. You must ALREADY be near the cell (within ~12 blocks; goto first for "
+                + "anything farther) — it only steps into a working stance. The coordinate is the cell the block will OCCUPY "
                 + "— a torch on top of (x,y,z) targets (x,y+1,z); the cell must be empty with something to "
                 + "attach to. Optional orientation: `facing` (north/south/east/west/up/down), `axis` (x/y/z, "
                 + "logs), `half` (top/bottom, slabs/stairs). The result reports the ACTUAL orientation — if "

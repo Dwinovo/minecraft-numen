@@ -36,8 +36,20 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
         super(player, record);
     }
 
+    /** 允许"就地微调"的最远直线距离;更远的旅程归 goto 负责。 */
+    protected static final double GOTO_FIRST_RADIUS = 12.0;
+
     /** Build the navigation toward this task's target. Assigned to {@link #nav} on start. */
     protected abstract PlayerNav buildNav();
+
+    /**
+     * 远距前置门的目标格:身体离它超过 {@link #GOTO_FIRST_RADIUS} 时本任务
+     * 拒绝执行并教学"先 goto 过去"。返回 null = 本任务不设此门(实体目标
+     * 会移动、无固定格的动作等)。默认 null。
+     */
+    protected net.minecraft.core.BlockPos gotoFirstTarget() {
+        return null;
+    }
 
     /** Are we within reach to {@link #act()} this tick? */
     protected abstract boolean reached();
@@ -47,6 +59,20 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
 
     @Override
     protected void onStart() {
+        // 远距前置门:动作类任务只负责"够得着就做"+就地微调,长途旅行
+        // 是 goto 的职责——超距直接教学失败,不再内嵌整段导航
+        net.minecraft.core.BlockPos t = gotoFirstTarget();
+        if (t != null) {
+            double dist = Math.sqrt(player.distanceToSqr(
+                    t.getX() + 0.5, t.getY() + 0.5, t.getZ() + 0.5));
+            if (dist > GOTO_FIRST_RADIUS) {
+                fail("target " + t.getX() + "," + t.getY() + "," + t.getZ() + " is "
+                        + (int) dist + " blocks away — too far to work from here. goto it"
+                        + " first (goto stops right beside a solid block), then call this again.",
+                        FailureType.NO_PATH);
+                return;
+            }
+        }
         nav = buildNav();
     }
 

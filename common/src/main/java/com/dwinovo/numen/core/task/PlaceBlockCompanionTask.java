@@ -149,6 +149,11 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
     }
 
     @Override
+    protected net.minecraft.core.BlockPos gotoFirstTarget() {
+        return r.pos;
+    }
+
+    @Override
     protected boolean reached() {
         // Fold the old top-of-tick "already placed → success" check in here: if the target
         // is already the requested block (even before we're within reach) act() short-circuits

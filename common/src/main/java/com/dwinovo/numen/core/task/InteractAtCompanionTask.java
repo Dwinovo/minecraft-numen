@@ -72,6 +72,11 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     @Override
+    protected net.minecraft.core.BlockPos gotoFirstTarget() {
+        return r.aim;
+    }
+
+    @Override
     protected boolean reached() {
         return r.aim == null || withinReach();
     }

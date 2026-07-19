@@ -19,6 +19,10 @@ import com.mojang.brigadier.exceptions.CommandSyntaxException;
 
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.core.BlockPos;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.commands.arguments.coordinates.ColumnPosArgument;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -50,19 +54,65 @@ public final class DebugCommands {
                         .executes(DebugCommands::toggleDebug))
                 .then(Commands.literal("goto")
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .then(Commands.argument("args", StringArgumentType.greedyString())
-                                        .executes(DebugCommands::gotoCmd))))
+                                .suggests(DebugCommands::suggestCompanions)
+                                .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                                        .executes(DebugCommands::gotoPos))
+                                .then(Commands.argument("column", ColumnPosArgument.columnPos())
+                                        .executes(DebugCommands::gotoColumn))
+                                .then(Commands.argument("level", IntegerArgumentType.integer())
+                                        .executes(DebugCommands::gotoLevel))
+                                .then(Commands.argument("block", StringArgumentType.word())
+                                        .suggests(DebugCommands::suggestBlocks)
+                                        .executes(DebugCommands::gotoNearestBlock))))
                 .then(Commands.literal("thisway")
                         .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(DebugCommands::suggestCompanions)
                                 .then(Commands.argument("distance", IntegerArgumentType.integer(1))
                                         .executes(DebugCommands::thisWay))))
                 .then(Commands.literal("mine")
                         .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(DebugCommands::suggestCompanions)
                                 .then(Commands.argument("blocks", StringArgumentType.greedyString())
+                                        .suggests(DebugCommands::suggestBlocksGreedy)
                                         .executes(DebugCommands::mine))))
                 .then(Commands.literal("cancel")
                         .then(Commands.argument("name", StringArgumentType.word())
+                                .suggests(DebugCommands::suggestCompanions)
                                 .executes(DebugCommands::cancel))));
+    }
+
+    // ==================== 补全 ====================
+
+    /** 调用者名下同伴的名字。 */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions>
+            suggestCompanions(CommandContext<CommandSourceStack> ctx,
+                              com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        ServerPlayer caller = ctx.getSource().getPlayer();
+        if (caller != null) {
+            for (ServerPlayer p : caller.level().getServer().getPlayerList().getPlayers()) {
+                if (p instanceof NumenPlayer np && np.isOwnedByPlayer(caller.getUUID())) {
+                    builder.suggest(p.getName().getString());
+                }
+            }
+        }
+        return builder.buildFuture();
+    }
+
+    /** 全部方块 id(单 token 参数用)。 */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions>
+            suggestBlocks(CommandContext<CommandSourceStack> ctx,
+                          com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggestResource(
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.keySet(), builder);
+    }
+
+    /** 贪婪参数里补全最后一个 token(mine 的多方块清单用)。 */
+    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions>
+            suggestBlocksGreedy(CommandContext<CommandSourceStack> ctx,
+                                com.mojang.brigadier.suggestion.SuggestionsBuilder builder) {
+        var offset = builder.createOffset(builder.getInput().lastIndexOf(' ') + 1);
+        return SharedSuggestionProvider.suggestResource(
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK.keySet(), offset);
     }
 
     // ==================== debug 开关 ====================
@@ -81,45 +131,45 @@ public final class DebugCommands {
 
     // ==================== goto / thisway ====================
 
-    /**
-     * 参数形态与工具一致:1 个数字=高度,2 个=水平位置,3 个=精确格;
-     * 单个非数字 token=方块 id(走到最近的一个旁边)。
-     */
-    private static int gotoCmd(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+    /** goto <名> <x> <y> <z>(BlockPos 参数,支持 ~ 相对与准星坐标补全)。 */
+    private static int gotoPos(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
         NumenPlayer companion = requireCompanion(ctx);
         if (companion == null) {
             return 0;
         }
-        String[] tokens = StringArgumentType.getString(ctx, "args").trim().split("\\s+");
-        boolean allNumeric = tokens.length > 0;
-        for (String t : tokens) {
-            if (!t.matches("-?\\d+")) {
-                allNumeric = false;
-                break;
-            }
+        BlockPos pos = BlockPosArgument.getBlockPos(ctx, "pos");
+        return dispatchMoveTo(ctx, companion,
+                (double) pos.getX(), (double) pos.getY(), (double) pos.getZ(), null);
+    }
+
+    /** goto <名> <x> <z>(列坐标,支持 ~;Y 自动落地表)。 */
+    private static int gotoColumn(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NumenPlayer companion = requireCompanion(ctx);
+        if (companion == null) {
+            return 0;
         }
-        if (allNumeric) {
-            return switch (tokens.length) {
-                case 1 -> dispatchMoveTo(ctx, companion,
-                        null, Double.parseDouble(tokens[0]), null, null);
-                case 2 -> dispatchMoveTo(ctx, companion,
-                        Double.parseDouble(tokens[0]), null, Double.parseDouble(tokens[1]), null);
-                case 3 -> dispatchMoveTo(ctx, companion,
-                        Double.parseDouble(tokens[0]), Double.parseDouble(tokens[1]),
-                        Double.parseDouble(tokens[2]), null);
-                default -> {
-                    ctx.getSource().sendFailure(Component.literal(
-                            "用法: goto <名> <y> | <x> <z> | <x> <y> <z> | <方块id>"));
-                    yield 0;
-                }
-            };
+        var col = ColumnPosArgument.getColumnPos(ctx, "column");
+        return dispatchMoveTo(ctx, companion, (double) col.x(), null, (double) col.z(), null);
+    }
+
+    /** goto <名> <y>(仅高度)。 */
+    private static int gotoLevel(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NumenPlayer companion = requireCompanion(ctx);
+        if (companion == null) {
+            return 0;
         }
-        if (tokens.length == 1) {
-            return dispatchMoveTo(ctx, companion, null, null, null, tokens[0]);
+        int y = IntegerArgumentType.getInteger(ctx, "level");
+        return dispatchMoveTo(ctx, companion, null, (double) y, null, null);
+    }
+
+    /** goto <名> <方块id>(走到最近的一个旁边,带注册表补全)。 */
+    private static int gotoNearestBlock(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NumenPlayer companion = requireCompanion(ctx);
+        if (companion == null) {
+            return 0;
         }
-        ctx.getSource().sendFailure(Component.literal(
-                "用法: goto <名> <y> | <x> <z> | <x> <y> <z> | <方块id>"));
-        return 0;
+        return dispatchMoveTo(ctx, companion, null, null, null,
+                StringArgumentType.getString(ctx, "block"));
     }
 
     private static int thisWay(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
