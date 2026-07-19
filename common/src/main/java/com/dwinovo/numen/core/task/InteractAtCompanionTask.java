@@ -86,6 +86,22 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                 InputDriver.lookAt(player, Vec3.atCenterOf(r.aim));
             }
             HitResult hit = Interaction.nativeRaytrace(player, REACH);
+            // 目标格本身是实心方块、而准星实际落在别的方块上 = 被遮挡:
+            // 拒绝并点名遮挡物(点下去只会交互到错误对象还谎报成功)。
+            // 目标格是空气的瞄点(朝某处投掷等)保持准星穿透语义。
+            if (r.aim != null
+                    && !player.level().getBlockState(r.aim).isAir()
+                    && hit instanceof net.minecraft.world.phys.BlockHitResult blockedHit
+                    && !blockedHit.getBlockPos().equals(r.aim)) {
+                var blocker = blockedHit.getBlockPos();
+                String blockerId = BuiltInRegistries.BLOCK
+                        .getKey(player.level().getBlockState(blocker).getBlock()).getPath();
+                fail("aim " + aimLabel() + " is blocked from here — the crosshair lands on "
+                        + blockerId + " at " + blocker.getX() + "," + blocker.getY() + ","
+                        + blocker.getZ() + " instead. break_block that blocker, or goto the"
+                        + " target's open side, then retry.", FailureType.OCCLUDED);
+                return TaskState.FAILED;
+            }
             // A consumable / ender pearl used in the AIR is body-bound (would feed or teleport the
             // fake player) — refuse even when it's just whatever happened to be in hand.
             if (button() == Interaction.Button.USE && hit.getType() == HitResult.Type.MISS) {
