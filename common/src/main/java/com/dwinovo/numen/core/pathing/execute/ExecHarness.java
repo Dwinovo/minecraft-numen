@@ -37,9 +37,8 @@ import net.minecraft.world.phys.Vec3;
  *       {@code gameMode.useItemOn}(放置/开门),两手都试,间隔
  *       rightClickSpeed tick;未命中方块不触发(不对空挥右键);</li>
  *   <li>左键:交 {@link BlockDigger} 渐进挖掘(原生 handleBlockBreakAction
- *       通道,破块延由其内置);目标格由 {@link #beginBreaking} 记录,
- *       没有记录时打准星命中的方块(清障);同 tick 左键被按下时右键
- *       强制丢弃(破坏优先);</li>
+ *       通道,破块延由其内置);挖掘只由准星驱动——射线命中什么挖什么,
+ *       落空的 tick 不挖;同 tick 左键被按下时右键强制丢弃(破坏优先);</li>
  *   <li>移动键:前后 → zza、左右 → xxa(潜行冲量 ×0.3),方向按目标 yaw
  *       定义、折算到已应用的实际 yaw 帧;JUMP 走地面起跳/液体浮力语义;
  *       SNEAK 逐 tick 写 shift 状态。</li>
@@ -62,9 +61,6 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
 
     /** 本 tick 的期望视角;commit 后即失效。 */
     private MovementState.MovementTarget target;
-
-    /** beginBreaking 记录的挖掘目标格。 */
-    private BlockPos breakTarget;
 
     /** 距下一次允许右键的 tick 数。 */
     private int rightClickCooldown;
@@ -97,15 +93,15 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
                     MovementHelper.pitchTo(eye, aimPoint), true));
             if (isLookingAt(pos) || isFacingTarget(state.getTarget())) {
                 state.setInput(Input.CLICK_LEFT, true);
-                breakTarget = pos.immutable();
             }
         } else {
+            // 完全不可视:瞄整格中心强按左键——实际挖到的是准星命中的
+            // 遮挡物(左键落地始终以准星射线为准)
             Vec3 center = MovementHelper.blockCenter(pos);
             state.setTarget(new MovementState.MovementTarget(
                     MovementHelper.yawTo(eye, center),
                     MovementHelper.pitchTo(eye, center), true));
             state.setInput(Input.CLICK_LEFT, true);
-            breakTarget = pos.immutable();
         }
     }
 
@@ -147,7 +143,6 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     public void clearAllKeys() {
         keys.clear();
         target = null;
-        breakTarget = null;
         InputDriver.halt(player);
         player.setShiftKeyDown(false);
     }
@@ -155,7 +150,6 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     /** 中止进行中的挖掘(服务端 ABORT + 清裂纹)。 */
     public void stopBreaking() {
         digger.cancel();
-        breakTarget = null;
     }
 
     /** 是否有进行中的挖掘(liveness 记账:挖硬方块也是真实推进)。 */
@@ -207,17 +201,13 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         }
 
         if (isKeyRequested(Input.CLICK_LEFT)) {
-            // 优先挖准星实际命中的方块(打得到什么打什么);射线落空时
-            // 退回 beginBreaking 记录的意图格(不可视强挖分支)
-            BlockPos digPos = crosshairBlock();
-            if (digPos == null) {
-                digPos = breakTarget;
-            }
-            if (digPos != null) {
-                digger.digStep(digPos);
+            // 挖掘只由准星驱动:射线命中什么挖什么(命中位置与命中面
+            // 直通挖掘器);射线落空的 tick 不产生任何破坏动作
+            BlockHitResult hit = clipAlongView();
+            if (hit.getType() == HitResult.Type.BLOCK) {
+                digger.digStep(hit);
             }
         } else {
-            breakTarget = null;
             if (digger.current() != null) {
                 digger.cancel();
             }
@@ -270,9 +260,10 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
      * 才能出手);任一消费即结束(useItemOn 消费才挥手)。
      */
     private void rightClickTick() {
-        if (player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat boat
-                && (boat.getPaddleState(0) || boat.getPaddleState(1))) {
-            return; // 正在划桨(手占着)不右键;静坐船中仍可点击
+        if (player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat
+                && (isKeyRequested(Input.MOVE_FORWARD) || isKeyRequested(Input.MOVE_BACK)
+                        || isKeyRequested(Input.MOVE_LEFT) || isKeyRequested(Input.MOVE_RIGHT))) {
+            return; // 船上且本 tick 有移动输入(手在桨上)不右键;静坐可点击
         }
         Level level = player.level();
         BlockHitResult hit = clipAlongView();

@@ -93,6 +93,25 @@ public final class BlockDigger {
      *
      * @return the {@link DigResult} for this tick.
      */
+    /**
+     * Advance the dig one tick using an ALREADY-RESOLVED crosshair hit: dig
+     * exactly the block (and face) the caller's view ray landed on, no internal
+     * aim-point search. The hit block is always treated as the target.
+     */
+    public DigResult digStep(BlockHitResult crosshairHit) {
+        if (blockHitDelay > 0) {                    // let the previous break land first
+            blockHitDelay--;
+            InputDriver.halt(player);
+            return DigResult.PROGRESSING;
+        }
+        InputDriver.halt(player);
+        BlockPos effective = crosshairHit.getBlockPos();
+        if (pos == null || !pos.equals(effective)) {
+            start(effective);
+        }
+        return advance(crosshairHit, true);
+    }
+
     public DigResult digStep(BlockPos target) {
         Level level = player.level();
         if (blockHitDelay > 0) {                    // let the previous break land first
@@ -126,7 +145,12 @@ public final class BlockDigger {
         // dig() may be clearing an OCCLUDER this tick, not the target; report the break (true) ONLY
         // when the TARGET itself goes, so callers that count mined targets / treat the cell as cleared
         // aren't fooled by a leaf we broke just to open the line of sight.
-        boolean targetBreak = effective.equals(target);
+        return advance(hit, effective.equals(target));
+    }
+
+    /** Shared per-tick dig advance against a resolved hit (face + aim point). */
+    private DigResult advance(BlockHitResult hit, boolean targetBreak) {
+        Level level = player.level();
         InputDriver.lookAt(player, hit.getLocation());
         Direction side = hit.getDirection();
         BlockState state = level.getBlockState(pos);
