@@ -33,7 +33,6 @@ import net.minecraft.server.level.ServerPlayer;
  *   /numen goto &lt;name&gt; &lt;y&gt;                该同伴走到目标高度
  *   /numen goto &lt;name&gt; &lt;x&gt; &lt;z&gt;            该同伴走到该水平位置(Y 自动落地表)
  *   /numen goto &lt;name&gt; &lt;x&gt; &lt;y&gt; &lt;z&gt;        该同伴走到精确格
- *   /numen thisway &lt;name&gt; &lt;distance&gt;      沿该同伴当前朝向前方 distance 格
  *   /numen mine &lt;name&gt; [count] &lt;block...&gt; 采集指定方块(空格分隔多个 id)
  *   /numen cancel &lt;name&gt;                  叫停该同伴当前任务
  * </pre>
@@ -64,11 +63,6 @@ public final class DebugCommands {
                                 .then(Commands.argument("block", StringArgumentType.word())
                                         .suggests(DebugCommands::suggestBlocks)
                                         .executes(DebugCommands::gotoNearestBlock))))
-                .then(Commands.literal("thisway")
-                        .then(Commands.argument("name", StringArgumentType.word())
-                                .suggests(DebugCommands::suggestCompanions)
-                                .then(Commands.argument("distance", IntegerArgumentType.integer(1))
-                                        .executes(DebugCommands::thisWay))))
                 .then(Commands.literal("mine")
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .suggests(DebugCommands::suggestCompanions)
@@ -129,7 +123,7 @@ public final class DebugCommands {
         return 1;
     }
 
-    // ==================== goto / thisway ====================
+    // ==================== goto ====================
 
     /** goto <名> <x> <y> <z>(BlockPos 参数,支持 ~ 相对与准星坐标补全)。 */
     private static int gotoPos(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
@@ -170,19 +164,6 @@ public final class DebugCommands {
         }
         return dispatchMoveTo(ctx, companion, null, null, null,
                 StringArgumentType.getString(ctx, "block"));
-    }
-
-    private static int thisWay(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        NumenPlayer companion = requireCompanion(ctx);
-        if (companion == null) {
-            return 0;
-        }
-        int distance = IntegerArgumentType.getInteger(ctx, "distance");
-        // 从同伴当前朝向推前方落点(yaw 的 MC 约定:0=+Z,90=-X)
-        double theta = Math.toRadians(companion.getYHeadRot());
-        double x = companion.getX() - Math.sin(theta) * distance;
-        double z = companion.getZ() + Math.cos(theta) * distance;
-        return dispatchMoveTo(ctx, companion, Math.floor(x), null, Math.floor(z), null);
     }
 
     private static int dispatchMoveTo(CommandContext<CommandSourceStack> ctx, NumenPlayer companion,
