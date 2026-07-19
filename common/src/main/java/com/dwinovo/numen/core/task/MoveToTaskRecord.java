@@ -27,19 +27,17 @@ public final class MoveToTaskRecord extends TaskRecord {
     public enum Kind { BLOCK, COLUMN, YLEVEL, FIND }
 
     /**
-     * How a BLOCK move finishes (the LLM's optional override; {@link #AUTO}
-     * when omitted):
+     * How a BLOCK move finishes. The caller's input form IS the intent —
+     * {@link #STAND_ON} when omitted:
      * <ul>
-     *   <li>{@link #AUTO} — infer from the cell: solid → stop beside it
-     *       (untouched), free → stand in it;</li>
-     *   <li>{@link #INTERACT} — treat the cell as a block to use even if it is
-     *       currently free: stop beside, keep it sacred;</li>
-     *   <li>{@link #STAND_ON} — occupy that exact cell, digging into it if
-     *       needed (priced by pure destruction time, like any other dig);</li>
+     *   <li>{@link #STAND_ON}(缺省)— occupy that exact cell, digging into it
+     *       if needed (priced by pure destruction time, like any other dig);</li>
+     *   <li>{@link #INTERACT} — the cell is a block to USE: stop beside it,
+     *       keep it sacred (never break/bury it);</li>
      *   <li>{@link #NEAR} — anywhere within the near-success radius counts.</li>
      * </ul>
      */
-    public enum Arrival { AUTO, INTERACT, STAND_ON, NEAR }
+    public enum Arrival { INTERACT, STAND_ON, NEAR }
 
     /** Nullable: {@code null} means the LLM did not supply this axis. */
     public final Double x;
@@ -50,7 +48,7 @@ public final class MoveToTaskRecord extends TaskRecord {
     /** PathNavigation speed multiplier; 1.0 ≈ entity's MOVEMENT_SPEED attribute. */
     public final double speed;
     public final Kind kind;
-    /** How a BLOCK move finishes; {@link Arrival#AUTO} unless the LLM overrode it. */
+    /** How a BLOCK move finishes; {@link Arrival#STAND_ON} unless the LLM chose otherwise. */
     public final Arrival arrival;
 
     public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
@@ -70,7 +68,7 @@ public final class MoveToTaskRecord extends TaskRecord {
      *  or an override on a move kind that has no cell to arrive at. */
     private static Arrival resolveArrival(String raw, Kind kind) {
         if (raw == null || raw.isBlank()) {
-            return Arrival.AUTO;
+            return Arrival.STAND_ON;
         }
         Arrival parsed = switch (raw) {
             case "interact" -> Arrival.INTERACT;
@@ -78,7 +76,7 @@ public final class MoveToTaskRecord extends TaskRecord {
             case "near" -> Arrival.NEAR;
             default -> throw new IllegalArgumentException(
                     "unknown arrival '" + raw + "' — use interact, stand_on or near,"
-                    + " or omit it for auto.");
+                    + " or omit it (defaults to stand_on: occupy that exact cell).");
         };
         if (kind != Kind.BLOCK) {
             throw new IllegalArgumentException(

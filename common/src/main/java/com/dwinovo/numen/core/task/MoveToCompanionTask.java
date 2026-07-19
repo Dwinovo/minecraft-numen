@@ -172,8 +172,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
      *  judgement. */
     private com.dwinovo.numen.core.pathing.goal.GoalCompiler.Compiled blockCompiled() {
         return switch (r.arrival) {
-            case AUTO -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.block(
-                    !targetCellSolid(), blockTarget);
             case INTERACT -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.interact(blockTarget);
             case STAND_ON -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.standOn(blockTarget);
             case NEAR -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.near(
@@ -487,7 +485,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 if (feet().equals(blockTarget)) {
                     yield "reached the exact cell " + bx + "," + by + "," + bz + ".";
                 }
-                if (targetCellSolid() && NavGoal.getToBlock(blockTarget).isAt(feet())) {
+                if (r.arrival == MoveToTaskRecord.Arrival.INTERACT
+                        && NavGoal.getToBlock(blockTarget).isAt(feet())) {
                     String occupant = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(
                             player.level().getBlockState(blockTarget).getBlock()).getPath();
                     yield "standing right beside " + bx + "," + by + "," + bz + " — that cell is "
