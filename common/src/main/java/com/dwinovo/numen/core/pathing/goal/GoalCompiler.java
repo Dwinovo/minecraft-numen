@@ -146,7 +146,7 @@ public final class GoalCompiler {
             sacred.add(s.ore().asLong());
         }
         for (BlockPos drop : drops) {
-            members.add(NavGoal.near(drop, 1));   // items, not blocks — nothing sacred
+            members.add(NavGoal.exact(drop));     // items, not blocks — nothing sacred
         }
         NavGoal goal = NavGoal.composite(members);
         return new Compiled(goal, sacred, ArrivalSpec.standOn(goal));

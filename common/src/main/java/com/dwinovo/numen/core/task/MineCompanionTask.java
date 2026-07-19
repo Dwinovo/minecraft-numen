@@ -4,7 +4,11 @@ import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
+import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
+import com.dwinovo.numen.core.pathing.moves.ActionCosts;
+import com.dwinovo.numen.core.pathing.moves.CalculationContext;
+import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
@@ -69,7 +73,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTaskRecord> {
 
-    private static final int RESCAN_INTERVAL = 10;     // ticks between world rescans for targets
+    private static final int RESCAN_INTERVAL = 5;      // ticks between world rescans for targets
     private static final int MAX_ORES = 64;            // cap on tracked target locations
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double MINE_SPEED = 1.0;
@@ -91,6 +95,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  COLLIDER ray disagreement, a lip over the stance). Without this the dig could
      *  grind forever waiting for a shot that never comes. */
     private static final int MAX_NO_SHOT_TICKS = 20;
+    /** How long a just-broken target's cell stays a walk-over goal (ticks) — the drop
+     *  takes a moment to spawn, and without this window the body sprints for the next
+     *  ore before the item pops and leaves it behind. */
+    private static final int DROP_LOITER_TICKS = 5;
 
     private final List<BlockPos> knownOres = new ArrayList<>();
     private final Set<BlockPos> blacklist = new HashSet<>();
@@ -105,6 +113,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private int baseline;
     /** Nearby dropped items to collect (walked over for native pickup), refreshed per tick. */
     private List<BlockPos> drops = List.of();
+    /** Cells of just-broken targets, each held as a walk-over goal until the mapped
+     *  game time so the spawned drop gets picked up before moving on. */
+    private final Map<BlockPos, Long> anticipatedDrops = new HashMap<>();
 
     private boolean navIsBranch;
     private BlockPos branchPoint;
@@ -246,7 +257,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     com.dwinovo.numen.Constants.LOG.info(
                             "[numen-task] mine nav failed ({}): {}",
                             nav.failType(), nav.failReason());
-                    if (!knownOres.isEmpty()) blacklistNearest();
+                    blacklistNearest();
                     stopNav();
                     return TaskState.RUNNING;
                 }
@@ -301,10 +312,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             // Degenerate frame (targets vanished between ticks): stand where we are.
             return GoalCompiler.standOn(player.blockPosition());
         }
+        CalculationContext ctx = ContextFactory.forExecution(player);
         List<GoalCompiler.Stance> stances =
                 new ArrayList<>(knownOres.size());
         for (BlockPos ore : knownOres) {
-            stances.add(coalesce(ore));
+            stances.add(coalesce(ctx, ore));
         }
         return GoalCompiler.mineField(
                 stances, new ArrayList<>(drops));
@@ -320,13 +332,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * ground below) gets an exact-feet goal, so the ore is mined from where you
      * stand, never dug under.
      */
-    private GoalCompiler.Stance coalesce(BlockPos loc) {
+    private GoalCompiler.Stance coalesce(CalculationContext ctx, BlockPos loc) {
         boolean assumeVerticalShaftMine =
                 !(player.level().getBlockState(loc.above()).getBlock()
                         instanceof net.minecraft.world.level.block.FallingBlock);
-        boolean upwardGoal = internalMiningGoal(loc.above());
-        boolean downwardGoal = internalMiningGoal(loc.below());
-        boolean doubleDownwardGoal = internalMiningGoal(loc.below(2));
+        boolean upwardGoal = internalMiningGoal(ctx, loc.above());
+        boolean downwardGoal = internalMiningGoal(ctx, loc.below());
+        boolean doubleDownwardGoal = internalMiningGoal(ctx, loc.below(2));
         if (upwardGoal == downwardGoal) {                       // symmetric vertically
             return (doubleDownwardGoal && assumeVerticalShaftMine)
                     ? GoalCompiler.Stance.at(loc, 2)   // feet up to 2 below the ore
@@ -345,23 +357,56 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * match, or already-broken air continuing the shaft? Used by {@link #coalesce}
      * to read the vertical run a block sits in.
      */
-    private boolean internalMiningGoal(BlockPos pos) {
+    private boolean internalMiningGoal(CalculationContext ctx, BlockPos pos) {
         if (knownOres.contains(pos)) return true;
         net.minecraft.world.level.block.state.BlockState state = player.level().getBlockState(pos);
         if (state.isAir()) return true;                         // broken-out air still continues the run
-        return r.targets.contains(state.getBlock());
+        return r.targets.contains(state.getBlock()) && plausibleToBreak(ctx, pos, state);
     }
 
-    /** Nearby dropped items worth collecting. Tight radius — mining drops
-     *  land next to the body; walking over them lets native pickup collect them, and
-     *  a small radius keeps the body from detouring across the cave for stray items. */
+    /** 该目标格是否真挖得成:挖穿成本无穷(挖不动/被硬禁)、禁挖判定命中
+     *  (冰/虫蚀/贴液体/悬空落沙邻格/世界边界)、或上下都被基岩封死的都不算。 */
+    private static boolean plausibleToBreak(CalculationContext ctx, BlockPos pos, BlockState state) {
+        if (MovementHelper.getMiningDurationTicks(ctx, pos.getX(), pos.getY(), pos.getZ(),
+                state, true) >= ActionCosts.COST_INF) {
+            return false;
+        }
+        if (MovementHelper.avoidBreaking(ctx, pos.getX(), pos.getY(), pos.getZ(), state)) {
+            return false;
+        }
+        return !(ctx.get(pos.getX(), pos.getY() + 1, pos.getZ()).getBlock()
+                        == net.minecraft.world.level.block.Blocks.BEDROCK
+                && ctx.get(pos.getX(), pos.getY() - 1, pos.getZ()).getBlock()
+                        == net.minecraft.world.level.block.Blocks.BEDROCK);
+    }
+
+    /** Dropped items worth collecting, walked over for native pickup: only items the
+     *  targets actually drop (a stray rotten flesh isn't this task's business), within
+     *  the task's own working radius. A drop sitting next to a known ore is skipped —
+     *  mining that ore walks us there anyway. Just-broken cells linger as members for
+     *  {@link #DROP_LOITER_TICKS} so the spawning drop isn't left behind. */
     private List<BlockPos> droppedItems() {
-        AABB box = new AABB(player.blockPosition()).inflate(5.0);
+        Level level = player.level();
+        long now = level.getGameTime();
+        anticipatedDrops.values().removeIf(expiry -> expiry < now);
+        AABB box = new AABB(player.blockPosition()).inflate(r.maxRadius);
         List<BlockPos> out = new ArrayList<>();
-        for (ItemEntity ie : player.level().getEntitiesOfClass(ItemEntity.class, box)) {
-            out.add(ie.blockPosition());
+        for (ItemEntity ie : level.getEntitiesOfClass(ItemEntity.class, box)) {
+            if (!dropItems.contains(ie.getItem().getItem())) continue;
+            BlockPos p = ie.blockPosition();
+            if (blacklist.contains(p) || nearKnownOre(p)) continue;
+            out.add(p);
+        }
+        for (BlockPos p : anticipatedDrops.keySet()) {
+            if (blacklist.contains(p) || nearKnownOre(p)) continue;
+            out.add(p);
         }
         return out;
+    }
+
+    /** 距任一已知矿位 3 格内(distSqr ≤ 9)——挖那颗矿自然会带身体过去。 */
+    private boolean nearKnownOre(BlockPos p) {
+        return knownOres.stream().anyMatch(ore -> ore.distSqr(p) <= 9);
     }
 
     /**
@@ -417,6 +462,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         switch (digger.digStep(pos)) {
             case BROKE_TARGET -> {
                 knownOres.remove(pos);
+                anticipatedDrops.put(pos.immutable(),
+                        player.level().getGameTime() + DROP_LOITER_TICKS);
                 clearNoShot();
             }
             case NO_SHOT -> {
@@ -449,8 +496,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         if (dropItems.isEmpty()) return baseline;   // before start() resolved the set — no progress yet
         Inventory inv = player.getInventory();
         int sum = 0;
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            ItemStack s = inv.getItem(i);
+        // 只数主背包 36 格:盔甲/副手不算采集所得。
+        for (ItemStack s : inv.items) {
             if (!s.isEmpty() && dropItems.contains(s.getItem())) sum += s.getCount();
         }
         return sum;
@@ -545,11 +592,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  Every candidate is re-validated here on the main thread, so a slightly
      *  stale async scan result is harmless. */
     private void mergeHits(List<BlockScanner.Hit> hits) {
-        Level level = player.level();
         for (BlockScanner.Hit hit : hits) {
             BlockPos p = hit.pos().immutable();
             if (blacklist.contains(p) || knownOres.contains(p)) continue;
-            if (BlockMiningProgress.fluidBreakHazard(level, p) != null) continue;
             knownOres.add(p);
         }
         prune();
@@ -558,10 +603,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private void prune() {
         Level level = player.level();
         BlockPos feet = player.blockPosition();
+        CalculationContext ctx = ContextFactory.forExecution(player);
         knownOres.removeIf(p -> {
             var state = level.getBlockState(p);
             if (state.isAir() || !r.targets.contains(state.getBlock()) || blacklist.contains(p)
-                    || BlockMiningProgress.fluidBreakHazard(level, p) != null) {
+                    || !plausibleToBreak(ctx, p, state)) {
                 return true;
             }
             // Harvestability gate — skipped entirely under force ("destroy, don't gather").
@@ -582,10 +628,14 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     private void blacklistNearest() {
         BlockPos feet = player.blockPosition();
-        knownOres.stream()
+        // 掉落物路过点与矿位同池:走不到的那个不管是矿还是掉落物都拉黑,
+        // 否则一个够不着的掉落物能让循环原地打转到超时。
+        List<BlockPos> pool = new ArrayList<>(knownOres);
+        pool.addAll(drops);
+        pool.stream()
                 .min(Comparator.comparingDouble(feet::distSqr))
                 .ifPresent(p -> {
-                    blacklist.add(p);
+                    blacklist.add(p.immutable());
                     knownOres.remove(p);
                     com.dwinovo.numen.Constants.LOG.info(
                             "[numen-task] mine blacklisted {} (feet={}, {} target(s) left,"
