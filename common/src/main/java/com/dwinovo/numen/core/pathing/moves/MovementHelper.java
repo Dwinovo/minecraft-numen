@@ -707,9 +707,9 @@ public final class MovementHelper {
         double reach = blockReachDistance(player);
         var state = level.getBlockState(pos);
         boolean fire = state.getBlock() instanceof BaseFireBlock;
-        // 已注视捷径:沿当前视角的射线命中即保持
+        // 已注视捷径:沿当前视角的射线恰好命中该格才保持(严格等格)
         BlockHitResult looking = clipAlongRotation(player, player.getYRot(), player.getXRot(), reach);
-        if (hitsTarget(looking, pos, fire)) {
+        if (looking.getType() == HitResult.Type.BLOCK && looking.getBlockPos().equals(pos)) {
             return looking.getLocation();
         }
         // 首选取心:碰撞形状中点(无碰撞体退整格心);火取底面高度
@@ -734,12 +734,13 @@ public final class MovementHelper {
             if (dir.lengthSqr() < 1.0e-8) {
                 continue;
             }
-            // 本 tick 实际能转到的视角,沿它试射
+            // 本 tick 实际能转到的视角,沿它试射;可达则返回候选点本身
+            // (调用方以候选点为视角目标,后续 tick 向它收敛)
             var stepped = aim.step(player.getYRot(), player.getXRot(),
                     yawTo(eye, aimPoint), pitchTo(eye, aimPoint));
             BlockHitResult res = clipAlongRotation(player, stepped.yaw(), stepped.pitch(), reach);
             if (hitsTarget(res, pos, fire)) {
-                return res.getLocation();
+                return aimPoint;
             }
         }
         return null;
@@ -754,7 +755,7 @@ public final class MovementHelper {
     }
 
     /** 碰撞形状中点;无碰撞体取整格心;火把 y 压到格底(看火的根部)。 */
-    private static Vec3 collisionCenter(net.minecraft.world.level.Level level, BlockPos pos, BlockState state) {
+    public static Vec3 collisionCenter(net.minecraft.world.level.Level level, BlockPos pos, BlockState state) {
         VoxelShape shape = state.getCollisionShape(level, pos);
         if (shape.isEmpty()) {
             return new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
@@ -801,20 +802,20 @@ public final class MovementHelper {
         return new Vec3(pos.getX() + x, pos.getY() + y, pos.getZ() + z);
     }
 
-    /** 从 from 看向 to 的 yaw(度,MC 朝向约定)。 */
+    /** 从 from 看向 to 的 yaw(度,MC 朝向约定;用 Mth.atan2 多项式近似)。 */
     public static float yawTo(Vec3 from, Vec3 to) {
-        double dx = to.x - from.x;
-        double dz = to.z - from.z;
-        return (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
+        double dx = from.x - to.x;
+        double dz = from.z - to.z;
+        return (float) Math.toDegrees(net.minecraft.util.Mth.atan2(dx, -dz));
     }
 
-    /** 从 from 看向 to 的 pitch(度,向下为正)。 */
+    /** 从 from 看向 to 的 pitch(度,向下为正;用 Mth.atan2 多项式近似)。 */
     public static float pitchTo(Vec3 from, Vec3 to) {
-        double dx = to.x - from.x;
-        double dy = to.y - from.y;
-        double dz = to.z - from.z;
+        double dx = from.x - to.x;
+        double dy = from.y - to.y;
+        double dz = from.z - to.z;
         double horizontal = Math.sqrt(dx * dx + dz * dz);
-        return (float) -Math.toDegrees(Math.atan2(dy, horizontal));
+        return (float) Math.toDegrees(net.minecraft.util.Mth.atan2(dy, horizontal));
     }
 
     /**

@@ -180,29 +180,26 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     }
 
     /**
-     * 把本 tick 的记录落到实体上。顺序:视角步进 → 右键(用步进后的
-     * 实际视角 raycast)→ 左键挖掘 → 恢复步进视角(挖掘器内部会把
-     * 视线吸到命中点,视角所有权归步进器)→ 移动输入字段。
+     * 把本 tick 的记录落到实体上。顺序:左右键点击(用上一 tick 已落地
+     * 的视角做射线——点击相位先于本 tick 转头)→ 视角步进(覆盖挖掘器
+     * 内部的临时看向,视角所有权归步进器)→ 移动输入字段。
      */
     public void commit() {
         dirty = false;
         MovementState.MovementTarget t = target;
         target = null;
-
-        AimProcessor.Rotation stepped = null;
-        if (t != null && t.hasRotation()) {
-            // 步进起点即实体当前实际视角(头在哪就从哪转起)
-            stepped = aim.step(player.getYRot(), player.getXRot(), t.getYaw(), t.getPitch());
-            applyLook(stepped);
-        }
+        // 步进起点在点击相位前取样:挖掘器内部会把视线临时吸到命中点,
+        // 步进必须仍从上一 tick 已落地的视角转起
+        float startYaw = player.getYRot();
+        float startPitch = player.getXRot();
 
         // 破坏优先:同 tick 左键被按下时,右键强制丢弃
         if (isKeyRequested(Input.CLICK_LEFT)) {
             keys.put(Input.CLICK_RIGHT, false);
         }
         // 冷却 tick 只倒数不尝试;冷却清零后,只有"真的发起了一次点击
-        // 尝试"(准星命中方块且未在使用物品)才重新扣冷却——准星未到位
-        // 的空转 tick 不吃冷却,命中的第一个 tick 即刻点击
+        // 尝试"(准星命中方块)才重新扣冷却——准星未到位的空转 tick
+        // 不吃冷却,命中的第一个 tick 即刻点击
         if (rightClickCooldown > 0) {
             rightClickCooldown--;
         } else if (isKeyRequested(Input.CLICK_RIGHT)) {
@@ -210,18 +207,25 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         }
 
         if (isKeyRequested(Input.CLICK_LEFT)) {
-            BlockPos digPos = breakTarget != null ? breakTarget : crosshairBlock();
+            // 优先挖准星实际命中的方块(打得到什么打什么);射线落空时
+            // 退回 beginBreaking 记录的意图格(不可视强挖分支)
+            BlockPos digPos = crosshairBlock();
+            if (digPos == null) {
+                digPos = breakTarget;
+            }
             if (digPos != null) {
                 digger.digStep(digPos);
-            }
-            if (stepped != null) {
-                applyLook(stepped);
             }
         } else {
             breakTarget = null;
             if (digger.current() != null) {
                 digger.cancel();
             }
+        }
+
+        if (t != null && t.hasRotation()) {
+            AimProcessor.Rotation stepped = aim.step(startYaw, startPitch, t.getYaw(), t.getPitch());
+            applyLook(stepped);
         }
 
         float forward = (isKeyRequested(Input.MOVE_FORWARD) ? 1.0f : 0.0f)
@@ -259,18 +263,16 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     // ==================== 右键 ====================
 
     /**
-     * 一次右键尝试:沿实际视角原生 raycast,未命中方块或正在使用物品
+     * 一次右键尝试:沿实际视角原生 raycast,未命中方块(或正在划桨)
      * 则本 tick 不算尝试(不扣冷却)。命中后扣冷却并按主手优先逐手试:
      * 先 useItemOn(对着方块放置/开门/交互),不消费再退回 useItem
      * (不针对方块的使用——倒水桶/收水这类只覆写 use() 的物品靠这条
      * 才能出手);任一消费即结束(useItemOn 消费才挥手)。
      */
     private void rightClickTick() {
-        if (player.isUsingItem()) {
-            return; // 正在使用中(吃食物/拉弓),不重复触发打断
-        }
-        if (player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat) {
-            return; // 坐船(手在桨上)不右键
+        if (player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat boat
+                && (boat.getPaddleState(0) || boat.getPaddleState(1))) {
+            return; // 正在划桨(手占着)不右键;静坐船中仍可点击
         }
         Level level = player.level();
         BlockHitResult hit = clipAlongView();
