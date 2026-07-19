@@ -412,7 +412,7 @@ public final class BlockHelper {
     }
 
     /**
-     * 命中 do_not_break 方块标签的方块:寻路的硬禁挖清单,forceBreak
+     * 命中 do_not_break 方块标签的方块:寻路的硬禁挖清单,任何开关
      * 也不解除。标签默认为空——工作台/熔炉/箱子/陷阱箱等常规功能方块
      * 不在硬禁内,它们走 NavSettings.blocksToAvoidBreaking 软清单
      * (挖掘成本 ×10,无路可走仍会破坏)。数据包可往此标签追加任何要

@@ -33,7 +33,7 @@ public final class MoveToTaskRecord extends TaskRecord {
      *   <li>{@link #INTERACT} — treat the cell as a block to use even if it is
      *       currently free: stop beside, keep it sacred;</li>
      *   <li>{@link #STAND_ON} — occupy that exact cell, digging into it if
-     *       needed (subject to the normal / modify_terrain break rules);</li>
+     *       needed (priced by pure destruction time, like any other dig);</li>
      *   <li>{@link #NEAR} — anywhere within the near-success radius counts.</li>
      * </ul>
      */
@@ -46,24 +46,17 @@ public final class MoveToTaskRecord extends TaskRecord {
     /** PathNavigation speed multiplier; 1.0 ≈ entity's MOVEMENT_SPEED attribute. */
     public final double speed;
     public final Kind kind;
-    /** Force-break gate. false (default): normal breaking — the journey digs and
-     *  bridges, but only breaks blocks some inventory tool actually harvests; a route
-     *  that would need a no-drop grind (stone, no pickaxe) is refused with a
-     *  diagnosis. true: break anything breakable, including the slow wrong-tool
-     *  grind that drops nothing. */
-    public final boolean modifyTerrain;
     /** How a BLOCK move finishes; {@link Arrival#AUTO} unless the LLM overrode it. */
     public final Arrival arrival;
 
     public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
                             Double x, Double y, Double z, double speed,
-                            boolean modifyTerrain, String arrival) {
+                            String arrival) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.x = x;
         this.y = y;
         this.z = z;
         this.speed = speed;
-        this.modifyTerrain = modifyTerrain;
         this.kind = resolveKind(x, y, z);
         this.arrival = resolveArrival(arrival, this.kind);
     }

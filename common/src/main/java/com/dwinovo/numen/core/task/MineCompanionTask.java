@@ -220,7 +220,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 // body to the ore; digging it is THIS task's job (with this task's
                 // bookkeeping), so the path may not consume the objective on the way.
                 nav = PlayerNav.to(player, this::oreFieldCompiled, MINE_SPEED,
-                        () -> reachableTarget() != null, false);
+                        () -> reachableTarget() != null);
                 nav.setHighlights(() -> new ArrayList<>(knownOres));   // box every known target
                 navIsBranch = false;
             }

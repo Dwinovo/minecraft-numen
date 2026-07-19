@@ -34,20 +34,19 @@ public final class ContextFactory {
      *
      * @param sacred      不可挖不可埋的自身目标格({@code BlockPos.asLong} 键)
      * @param deniedPlace 执行层证明放不上的格
-     * @param forceBreak  功能方块挖掘保护失效开关
      */
     public static CalculationContext forSearch(ServerPlayer player, LongSet sacred,
-                                               LongSet deniedPlace, boolean forceBreak) {
+                                               LongSet deniedPlace) {
         ServerLevel level = (ServerLevel) player.level();
         LoadedChunks loaded = PathCaches.ensureSnapshot(level, player.blockPosition());
         CachedNavView view = new CachedNavView(loaded, level);
         return new CalculationContext(player, view, view::isLoaded, true,
-                sacred, deniedPlace, forceBreak);
+                sacred, deniedPlace);
     }
 
     /** 无语义开关的搜索用冻结上下文。 */
     public static CalculationContext forSearch(ServerPlayer player) {
-        return forSearch(player, LongSets.emptySet(), LongSets.emptySet(), false);
+        return forSearch(player, LongSets.emptySet(), LongSets.emptySet());
     }
 
     /**
@@ -57,16 +56,16 @@ public final class ContextFactory {
      * 装配期重算。
      */
     public static CalculationContext forExecution(ServerPlayer player, LongSet sacred,
-                                                  LongSet deniedPlace, boolean forceBreak) {
+                                                  LongSet deniedPlace) {
         var view = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
         ChunkLoadedTest loaded = view instanceof com.dwinovo.numen.core.pathing.cache.LoadedOnlyView v
                 ? v::isLoaded : ChunkLoadedTest.ALWAYS;
         return new CalculationContext(player, view, loaded, false,
-                sacred, deniedPlace, forceBreak);
+                sacred, deniedPlace);
     }
 
     /** 无语义开关的执行期实时上下文。 */
     public static CalculationContext forExecution(ServerPlayer player) {
-        return forExecution(player, LongSets.emptySet(), LongSets.emptySet(), false);
+        return forExecution(player, LongSets.emptySet(), LongSets.emptySet());
     }
 }

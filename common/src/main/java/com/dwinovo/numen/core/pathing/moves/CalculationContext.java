@@ -33,9 +33,8 @@ import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
  * 因中途改设置得到自相矛盾的路径。
  *
  * <p>世界读取走注入的 {@link BlockGetter} 视图 + {@link ChunkLoadedTest}
- * 谓词;三个语义开关:{@code sacred}(自身目标格,不可挖不可埋,
- * 任何开关都不可穿透)、{@code deniedPlace}(执行层证明放不上的格)、
- * {@code forceBreak}(功能方块挖掘保护失效)。
+ * 谓词;两个语义开关:{@code sacred}(自身目标格,不可挖不可埋,
+ * 不可穿透)、{@code deniedPlace}(执行层证明放不上的格)。
  */
 public class CalculationContext {
 
@@ -87,12 +86,10 @@ public class CalculationContext {
     public final boolean allowPlaceInFluidsSource;
     public final boolean allowPlaceInFluidsFlow;
 
-    /** 不可挖不可埋的自身目标格(BlockPos.asLong 键);forceBreak 也不可穿透。 */
+    /** 不可挖不可埋的自身目标格(BlockPos.asLong 键),不可穿透。 */
     public final LongSet sacred;
     /** 执行层证明无支撑放不上的格:放置成本直接 INF。 */
     public final LongSet deniedPlace;
-    /** 功能方块挖掘保护失效开关(sacred 除外)。 */
-    public final boolean forceBreak;
 
     /** 世界可建高度下界(含)与上界(不含)。 */
     public final int worldBottom;
@@ -108,12 +105,12 @@ public class CalculationContext {
     public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                               boolean safeForThreadedUse) {
         this(player, view, loadedTest, safeForThreadedUse,
-                LongSets.emptySet(), LongSets.emptySet(), false);
+                LongSets.emptySet(), LongSets.emptySet());
     }
 
     public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                               boolean safeForThreadedUse,
-                              LongSet sacred, LongSet deniedPlace, boolean forceBreak) {
+                              LongSet sacred, LongSet deniedPlace) {
         NavSettings settings = NavSettings.get();
         this.safeForThreadedUse = safeForThreadedUse;
         this.player = player;
@@ -121,8 +118,7 @@ public class CalculationContext {
         this.loadedTest = loadedTest;
         this.sacred = sacred;
         this.deniedPlace = deniedPlace;
-        this.forceBreak = forceBreak;
-        this.toolSet = new ToolSet(player, forceBreak);
+        this.toolSet = new ToolSet(player);
         this.hasThrowaway = settings.allowPlace && hasGenericThrowaway(player, settings);
         this.hasWaterBucket = settings.allowWaterBucketFall
                 && hotbarHasWaterBucket(player)
@@ -299,8 +295,7 @@ public class CalculationContext {
      *   <li>sacred(自身目标格)永远 INF,任何开关都不可穿透;</li>
      *   <li>do_not_break 标签成员(数据包追加的硬禁挖方块)直接 INF,
      *       任何开关都不可解除;</li>
-     *   <li>总开关 {@code allowBreak} 关闭且不在例外清单 → INF,
-     *       {@code forceBreak} 解除这一层普通方块的场景。</li>
+     *   <li>总开关 {@code allowBreak} 关闭且不在例外清单 → INF。</li>
      * </ol>
      * 功能方块(工作台/熔炉/箱子等)的 ×10 软惩罚由 {@link ToolSet}
      * 的 {@code avoidanceMultiplier}(NavSettings.blocksToAvoidBreaking)
@@ -313,7 +308,7 @@ public class CalculationContext {
         if (BlockHelper.shouldAvoidBreaking(view, protectionCursor.set(x, y, z))) {
             return COST_INF;
         }
-        if (!allowBreak && !forceBreak && !allowBreakAnyway.contains(current.getBlock())) {
+        if (!allowBreak && !allowBreakAnyway.contains(current.getBlock())) {
             return COST_INF;
         }
         return 1;

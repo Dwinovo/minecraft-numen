@@ -7,7 +7,7 @@
  *   <li>{@code goals/} —— 内核目标族:单格/双格/邻域/列/层/复合/外逃等
  *       到达语义与各自的启发式。</li>
  *   <li>{@code moves/} —— 成本模型与移动原语:动作成本表、成本上下文
- *       ({@code CalculationContext},吸收 sacred/deniedPlace/forceBreak
+ *       ({@code CalculationContext},吸收 sacred/deniedPlace
  *       三个语义开关)、谓词库({@code MovementHelper})、工具评估
  *       ({@code ToolSet})与八类移动原语的计价+逐 tick 状态机。</li>
  *   <li>{@code astar/} —— 搜索器:二叉堆开集、系数分档的部分路径候选、

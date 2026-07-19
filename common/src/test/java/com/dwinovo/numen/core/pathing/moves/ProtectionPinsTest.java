@@ -41,12 +41,12 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * 挖掘/放置保护口径的回归钉,打在真实成本函数上:
  * <ul>
  *   <li>功能方块软惩罚:箱子(在 NavSettings.blocksToAvoidBreaking 默认清单内)
- *       计 ×10 软成本(有限价,无路可走仍会破坏),forceBreak 解除该软惩罚
+ *       计 ×10 软成本(有限价,无路可走仍会破坏)
  *       (回到泥土一样的有限价);</li>
  *   <li>do_not_break 标签成员(数据包追加)在任何开关下都计 INF,
- *       forceBreak 也不解除;默认清单为空,本测试通过 NavSettings
+ *       默认清单为空,本测试通过 NavSettings
  *       .blocksToDisallowBreaking 钉一个方块验证;</li>
- *   <li>sacred(导航自身目标格)必 INF,forceBreak 不可穿透;</li>
+ *   <li>sacred(导航自身目标格)必 INF;</li>
  *   <li>同地形普通方块(泥土)有限价——证明是保护在起作用,不是别的
  *       东西把边价推上去的;</li>
  *   <li>deniedPlace 命中格放置计 INF;石头可作放置贴面
@@ -151,9 +151,9 @@ class ProtectionPinsTest {
         return v;
     }
 
-    private static CalculationContext context(FakeView view, LongSet sacred, boolean forceBreak) {
+    private static CalculationContext context(FakeView view, LongSet sacred) {
         return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, false,
-                sacred, LongSets.emptySet(), forceBreak);
+                sacred, LongSets.emptySet());
     }
 
     private static LongSet sacredOf(BlockPos pos) {
@@ -165,31 +165,32 @@ class ProtectionPinsTest {
     // ==================== 挖掘保护 ====================
 
     @Test
-    void chestBreakIsSoftPenaltyAndForceClearsIt() {
+    void chestBreakIsSoftPenaltyButFinite() {
         BlockPos chest = SRC.north();
         FakeView v = floored();
         v.setChest(chest);
         // 箱子在 NavSettings.blocksToAvoidBreaking 默认清单内 → ×10 软成本(有限价)
         double soft = MovementHelper.getMiningDurationTicks(
-                context(v, LongSets.emptySet(), false),
+                context(v, LongSets.emptySet()),
                 chest.getX(), chest.getY(), chest.getZ(), false);
         assertTrue(soft > 0 && soft < COST_INF, "软惩罚箱子应有有限价,实为 " + soft);
-        // 同地形下 forceBreak 解除软惩罚 → 成本回到正常挖掘(不会更贵)
-        double forced = MovementHelper.getMiningDurationTicks(
-                context(v, LongSets.emptySet(), true),
-                chest.getX(), chest.getY(), chest.getZ(), false);
-        assertTrue(forced > 0 && forced < COST_INF, "forceBreak 下箱子应有有限价,实为 " + forced);
-        assertTrue(forced <= soft, "forceBreak 不应比软惩罚更贵,forced=" + forced + " soft=" + soft);
+        // 对照:普通泥土无软惩罚,应显著更便宜(软惩罚真实生效)
+        BlockPos dirt = SRC.south();
+        v.set(dirt, Blocks.DIRT.defaultBlockState());
+        double plain = MovementHelper.getMiningDurationTicks(
+                context(v, LongSets.emptySet()),
+                dirt.getX(), dirt.getY(), dirt.getZ(), false);
+        assertTrue(plain < soft, "软惩罚应贵于普通方块,soft=" + soft + " plain=" + plain);
         // 端到端:北向平移(要挖穿箱子)产出有限边(不是 INF)
-        double cost = Moves.TRAVERSE_NORTH.cost(context(v, LongSets.emptySet(), false),
+        double cost = Moves.TRAVERSE_NORTH.cost(context(v, LongSets.emptySet()),
                 SRC.getX(), SRC.getY(), SRC.getZ());
         assertTrue(cost > 0 && cost < COST_INF, "穿箱平移应有限价,实为 " + cost);
     }
 
     @Test
-    void disallowBreakingHoldsInfiniteEvenForced() {
-        // blocksToDisallowBreaking(默认空)硬禁挖:forceBreak 也不解除。
-        // 钉一个方块到该清单验证(用石头,与箱子软清单区分开)。
+    void disallowBreakingHoldsInfinite() {
+        // blocksToDisallowBreaking(默认空)硬禁挖。钉一个方块到该清单
+        // 验证(用石头,与箱子软清单区分开)。
         BlockPos stone = SRC.north();
         FakeView v = floored();
         v.set(stone, Blocks.STONE.defaultBlockState());
@@ -200,10 +201,7 @@ class ProtectionPinsTest {
             s.blocksToDisallowBreaking().add(Blocks.STONE);
             s.blocksToAvoidBreaking().clear();
             assertTrue(MovementHelper.avoidBreaking(
-                    context(v, LongSets.emptySet(), false),
-                    stone.getX(), stone.getY(), stone.getZ(), v.getBlockState(stone)));
-            assertTrue(MovementHelper.avoidBreaking(
-                    context(v, LongSets.emptySet(), true),
+                    context(v, LongSets.emptySet()),
                     stone.getX(), stone.getY(), stone.getZ(), v.getBlockState(stone)));
         } finally {
             s.blocksToDisallowBreaking().clear();
@@ -220,15 +218,12 @@ class ProtectionPinsTest {
         v.set(dirt, Blocks.DIRT.defaultBlockState());
         // 未保护:同地形泥土障碍有限价(证明后面翻成 INF 的是 sacred)
         double open = MovementHelper.getMiningDurationTicks(
-                context(v, LongSets.emptySet(), false),
+                context(v, LongSets.emptySet()),
                 dirt.getX(), dirt.getY(), dirt.getZ(), false);
         assertTrue(open > 0 && open < COST_INF, "未保护的泥土应有限价,实为 " + open);
-        // sacred:一模一样的地形,该格是导航自身的目标 → INF,force 也不穿
+        // sacred:一模一样的地形,该格是导航自身的目标 → INF
         assertTrue(MovementHelper.getMiningDurationTicks(
-                context(v, sacredOf(dirt), false),
-                dirt.getX(), dirt.getY(), dirt.getZ(), false) >= COST_INF);
-        assertTrue(MovementHelper.getMiningDurationTicks(
-                context(v, sacredOf(dirt), true),
+                context(v, sacredOf(dirt)),
                 dirt.getX(), dirt.getY(), dirt.getZ(), false) >= COST_INF);
     }
 
@@ -239,14 +234,14 @@ class ProtectionPinsTest {
         FakeView v = floored();
         BlockPos cell = SRC.north();
         // sacred 格不可被埋
-        CalculationContext sacredCtx = context(v, sacredOf(cell), false);
+        CalculationContext sacredCtx = context(v, sacredOf(cell));
         assertEquals(COST_INF, sacredCtx.costOfPlacingAt(
                 cell.getX(), cell.getY(), cell.getZ(), v.getBlockState(cell)));
         // deniedPlace 格(执行层证明无支撑)不可再规划放置
         LongSet denied = new LongOpenHashSet();
         denied.add(cell.asLong());
         CalculationContext deniedCtx = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
-                false, LongSets.emptySet(), denied, false);
+                false, LongSets.emptySet(), denied);
         assertEquals(COST_INF, deniedCtx.costOfPlacingAt(
                 cell.getX(), cell.getY(), cell.getZ(), v.getBlockState(cell)));
     }

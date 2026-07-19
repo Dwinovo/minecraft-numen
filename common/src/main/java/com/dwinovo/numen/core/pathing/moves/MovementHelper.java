@@ -383,7 +383,7 @@ public final class MovementHelper {
 
     /**
      * 挖 (x,y,z) 是否被禁止:世界边界外拒绝(内缩一格,边界外的方块
-     * 没法贴放/挖到);硬禁令清单(blocksToDisallowBreaking,forceBreak
+     * 没法贴放/挖到);硬禁令清单(blocksToDisallowBreaking,
      * 也不解除)、冰(挖了变水搅乱路径)、被虫蚀方块,以及上方/四个
      * 水平邻格的液体与悬空落沙规则。
      */

@@ -23,7 +23,6 @@ Double x,
 Double y,
 Double z,
 double speed,
-            Boolean modifyTerrain,
             String arrival,
             ToolContext ctx) {
         if (speed < MIN_SPEED) speed = MIN_SPEED;
@@ -31,9 +30,7 @@ double speed,
         // MoveToTaskRecord validates the x/y/z combination and the arrival string,
         // throwing a teaching error for an ambiguous one (e.g. only x given, or
         // arrival on a non-BLOCK move).
-        // modify_terrain is optional; absent means the documented default (false —
-        // normal breaking only: no forced no-drop grinds).
         return new MoveToTaskRecord(ctx.toolCallId(), ctx.deadline(DEFAULT_TIMEOUT_TICKS), x, y, z, speed,
-                Boolean.TRUE.equals(modifyTerrain), arrival);
+                arrival);
     }
 }

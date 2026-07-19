@@ -129,7 +129,7 @@ public final class DebugCommands {
                                       Double x, Double y, Double z) {
         TaskRecord record;
         try {
-            record = (TaskRecord) MOVEMENT_TOOLS.moveTo(x, y, z, 1.0, false, null,
+            record = (TaskRecord) MOVEMENT_TOOLS.moveTo(x, y, z, 1.0, null,
                     TaskDispatch.ctx("debug-goto", companion));
         } catch (IllegalArgumentException e) {
             ctx.getSource().sendFailure(Component.literal(e.getMessage()));

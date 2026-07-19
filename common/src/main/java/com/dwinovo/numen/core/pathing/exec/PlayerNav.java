@@ -41,7 +41,7 @@ import net.minecraft.core.BlockPos;
  * 改善 → FAILED(BOXED_IN);{@link #MAX_REPLANS} 次硬保险丝兜底。
  *
  * <p>sacred(自身目标格,不可挖不可埋)/ deniedPlace(执行层证明放不上
- * 的格)/ forceBreak(强制破坏开关)三个语义开关穿透本导航建的每一个
+ * 的格)两个语义开关穿透本导航建的每一个
  * {@link CalculationContext}:搜索用冻结快照、执行期复核用活世界,同一
  * 套开关同一把尺。
  */
@@ -72,12 +72,6 @@ public final class PlayerNav {
      * 的每个 tick 里禁疾跑(见 {@link #tick} 的 allowSprint 包夹)。
      */
     private final boolean sprintAllowed;
-    /**
-     * 本导航是否允许规划无收获的破坏(move_to 的 modify_terrain:true)。
-     * 穿进每个 CalculationContext;不解除功能方块的 don't-grief 保护,
-     * 也永远不解除 sacred。
-     */
-    private final boolean forceBreak;
 
     /** 段规划状态机:搜索派发、段执行、无缝接段、失败自动重搜全在其内。 */
     private final PathingCore core;
@@ -128,35 +122,29 @@ public final class PlayerNav {
 
     /** 单格目标:按意图编译(可走格=站上去,占用格=贴脸即到,不吞噬目标)。 */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
-        this(player, () -> GoalCompiler.block(player.level(), goal), speed, reached, false);
+        this(player, speed, reached, () -> GoalCompiler.block(player.level(), goal));
     }
 
     /** 可移动的单格目标:每次拉取重新按意图编译(格位腾空后收紧为站上去)。 */
     public PlayerNav(NumenPlayer player, Supplier<BlockPos> goalSupplier, double speed,
                      BooleanSupplier reached) {
-        this(player, () -> {
+        this(player, speed, reached, () -> {
             BlockPos g = goalSupplier.get();
             return g == null ? null : GoalCompiler.block(player.level(), g);
-        }, speed, reached, false);
+        });
     }
 
     /** 编译契约正门:goal + sacred + 到达原料一体下发。 */
     public static PlayerNav to(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiled,
-                               double speed, BooleanSupplier reached, boolean forceBreak) {
-        return new PlayerNav(player, compiled, speed, reached, forceBreak);
+                               double speed, BooleanSupplier reached) {
+        return new PlayerNav(player, speed, reached, compiled);
     }
 
     /** 裸自定义目标(runAway、column 等)。不带 sacred——有方块目标的意图
      *  应走 {@link #to} / {@link GoalCompiler},让目标受保护。 */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
                                    double speed, BooleanSupplier reached) {
-        return new PlayerNav(player, bare(goalSupplier), speed, reached, false);
-    }
-
-    /** 同上,带显式强制破坏门(move_to 的 modify_terrain:true 语义)。 */
-    public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
-                                   double speed, BooleanSupplier reached, boolean forceBreak) {
-        return new PlayerNav(player, bare(goalSupplier), speed, reached, forceBreak);
+        return new PlayerNav(player, speed, reached, bare(goalSupplier));
     }
 
     /** 把裸目标包成无 sacred 的编译契约(engineGoal 经词表映射同步派生)。 */
@@ -168,27 +156,26 @@ public final class PlayerNav {
         };
     }
 
-    private PlayerNav(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiledSupplier,
-                      double speed, BooleanSupplier reached, boolean forceBreak) {
+    private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
+                      Supplier<GoalCompiler.Compiled> compiledSupplier) {
         this.player = player;
         this.compiledSupplier = compiledSupplier;
         this.sprintAllowed = speed >= 1.0;
         this.reached = reached;
-        this.forceBreak = forceBreak;
         this.core = new PathingCore(player, PoolSearchDispatcher.INSTANCE,
                 this::searchContext, this::executionContext);
     }
 
     /** 搜索用冻结上下文:快照世界 + 快照背包,穿透三个语义开关。 */
     private CalculationContext searchContext() {
-        CalculationContext ctx = ContextFactory.forSearch(player, sacred, deniedPlace, forceBreak);
+        CalculationContext ctx = ContextFactory.forSearch(player, sacred, deniedPlace);
         lastSearchContext = ctx;
         return ctx;
     }
 
     /** 执行期复核用实时上下文:活世界 + 当下背包,同一套语义开关。 */
     private CalculationContext executionContext() {
-        return ContextFactory.forExecution(player, sacred, deniedPlace, forceBreak);
+        return ContextFactory.forExecution(player, sacred, deniedPlace);
     }
 
     public Status tick() {
@@ -346,10 +333,6 @@ public final class PlayerNav {
         if (!deniedPlace.isEmpty()) {
             r.append("; ").append(deniedPlace.size())
                     .append(" scaffold spot(s) already proven unplaceable this navigation");
-        }
-        if (!forceBreak) {
-            r.append("; terrain modification is off — modify_terrain:true would let the route"
-                    + " dig through more of the obstruction");
         }
         r.append(')');
         String reason = r.toString();
