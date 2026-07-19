@@ -210,11 +210,14 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         boolean digTicked = false;
         if (isKeyRequested(Input.CLICK_LEFT)) {
             // 挖掘只由准星驱动:射线命中什么挖什么(命中位置与命中面
-            // 直通挖掘器);射线落空或被实体挡住的 tick 不产生破坏动作
+            // 直通挖掘器);落空或被实体挡住的 tick 不产生破坏动作,且
+            // 进行中的挖掘取消归零——遮挡消失后从头重挖,不续存进度
             BlockHitResult hit = pickAlongView();
             if (hit != null) {
                 digger.digStep(hit);
                 digTicked = true;
+            } else if (digger.current() != null) {
+                digger.cancel();
             }
         } else {
             if (digger.current() != null) {

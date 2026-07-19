@@ -224,7 +224,9 @@ public final class BlockDigger {
             // consistent with the pathing cost model (ToolSet).
             ToolSelect.holdBestTool(player, player.level().getBlockState(pos));
         }
-        destroyingItem = player.getMainHandItem().copy();
+        // 存活引用而非副本:主手栈原地变异(修补吸经验改耐久)时引用相等,
+        // 不触发重置;只有真正换持(不同栈对象且物品/组件不同)才重开
+        destroyingItem = player.getMainHandItem();
     }
 
     /** Abandon an IN-PROGRESS dig: ABORT it server-side and clear the crack.
