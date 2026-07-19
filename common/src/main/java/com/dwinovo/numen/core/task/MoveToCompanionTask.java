@@ -151,12 +151,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 .getCollisionShape(player.level(), blockTarget).isEmpty();
     }
 
-    /** Live arrival — exact, matching each goal's own membership test:
-     *  BLOCK (feet == cell), COLUMN (feet x/z == target), YLEVEL (feet y == level).
-     *  YLEVEL additionally requires being ON THE GROUND: a pillar reaches the target y at
-     *  the jump APEX a tick before its support block is placed, so without the onGround
-     *  gate we'd declare success mid-air, pre-empt the place, and fall back (the stray
-     *  extra hop). onGround makes the body actually settle on the placed block. */
     /** Slab-aware feet cell — the pathing node, not raw blockPosition (standing on a
      *  bottom slab counts as the cell above it, like the planner sees it). */
     private BlockPos feet() {
@@ -164,12 +158,33 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 player.level(), player.getX(), player.getY(), player.getZ());
     }
 
+    /**
+     * Live arrival — DOUBLE membership: the feet cell AND the supported
+     * fake-start cell must both satisfy the goal. The second gate is what keeps
+     * transient cell-entry from counting as arrival: a pillar's final jump puts
+     * the feet in the goal cell at the APEX a tick before its support block is
+     * placed, and a bridge's final backplace hovers the feet into the goal cell
+     * while sneak-clinging to the previous block's edge — in both states the
+     * body has no support under the goal cell yet, pathStart resolves to the
+     * neighbouring supported cell, and arrival is (correctly) withheld until
+     * the block is actually placed and stood on. Declaring success on the
+     * feet-only test stopped the nav mid-move: the place never fired and the
+     * halt released the sneak that was holding the body on the edge — the
+     * "one block short, one step too far" fall.
+     */
     private boolean reached() {
-        BlockPos feet = feet();
+        return inGoalCell(feet())
+                && inGoalCell(com.dwinovo.numen.core.pathing.moves.Movement.pathStart(player));
+    }
+
+    /** ONE membership definition per kind, shared with the search:
+     *  BLOCK (cell == target per arrival mode), COLUMN (x/z match),
+     *  YLEVEL (y match + on the ground). */
+    private boolean inGoalCell(BlockPos cell) {
         return switch (r.kind) {
-            case BLOCK -> blockGoal().isAt(feet);   // ONE membership definition, shared with the search
-            case COLUMN -> feet.getX() == bx && feet.getZ() == bz;
-            case YLEVEL -> feet.getY() == by && player.onGround();
+            case BLOCK -> blockGoal().isAt(cell);
+            case COLUMN -> cell.getX() == bx && cell.getZ() == bz;
+            case YLEVEL -> cell.getY() == by && player.onGround();
         };
     }
 
@@ -268,8 +283,14 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         };
     }
 
-    /** Did we get close enough to the destination to call it done (teaching success)? */
+    /** Did we get close enough to the destination to call it done (teaching success)?
+     *  Requires solid footing (or water — the settle path): as a live arrival
+     *  predicate on the near-retry nav this must not fire during a mid-air jump
+     *  or a sneak-hover over the edge, for the same reason as {@link #reached}. */
     private boolean closeEnoughToSucceed() {
+        if (!player.onGround() && !player.isInWater()) {
+            return false;
+        }
         return switch (r.kind) {
             case BLOCK, COLUMN -> horizontalDistSqr(bx, bz) <= NEAR_SUCCESS_RADIUS * NEAR_SUCCESS_RADIUS;
             case YLEVEL -> Math.abs(feet().getY() - by) <= 1;
