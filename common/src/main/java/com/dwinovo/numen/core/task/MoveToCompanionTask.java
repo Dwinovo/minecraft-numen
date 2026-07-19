@@ -112,9 +112,25 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             long findExtra = Math.min(MAX_EXTRA_TICKS, 600 + (long) FIND_RADIUS * TICKS_PER_BLOCK);
             r.extendDeadlineTo(player.level().getGameTime() + findExtra);
             leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
-            kickFindScan();
+            if (r.x != null) {
+                // 钉死形态:block + 坐标 = 去那一个的旁边。先核对那格真是它
+                var actual = player.level().getBlockState(blockTarget).getBlock();
+                if (actual != b) {
+                    String actualId = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                            .getKey(actual).getPath();
+                    fail("no " + r.block + " at " + bx + "," + by + "," + bz + " — that cell is "
+                            + actualId + ". Rescan (scan_blocks) or correct the coordinates.",
+                            FailureType.NO_PATH);
+                    return;
+                }
+                candidates.add(blockTarget.immutable());
+                findScanDrained = true;
+            } else {
+                kickFindScan();
+            }
             com.dwinovo.numen.Constants.LOG.info(
-                    "[numen-task] goto start kind=FIND block={}", r.block);
+                    "[numen-task] goto start kind=FIND block={}{}", r.block,
+                    r.x != null ? " pinned=" + bx + "," + by + "," + bz : "");
             return;
         }
         // Already there: don't build a nav (and don't extend the deadline). The first
@@ -133,8 +149,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 ? PlayerNav.to(player, this::blockCompiled, r.speed, this::reached)
                 : PlayerNav.toGoal(player, this::goal, r.speed, this::reached);
         com.dwinovo.numen.Constants.LOG.info(
-                "[numen-task] goto start kind={} target={},{},{} arrival={} solid={}",
-                r.kind, bx, by, bz, r.arrival,
+                "[numen-task] goto start kind={} target={},{},{} solid={}",
+                r.kind, bx, by, bz,
                 r.kind == MoveToTaskRecord.Kind.BLOCK && targetCellSolid());
         // Highlight the ACTUAL requested cell (not the path's best-effort end) so the overlay
         // box sits on the real target — e.g. a BLOCK goal under/over water that the path can
@@ -165,18 +181,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return blockCompiled().goal();
     }
 
-    /** The BLOCK kind's full navigation contract (goal + sacred), honouring the
-     *  LLM's optional arrival override; AUTO compiles from the live cell state
-     *  via the pure {@link com.dwinovo.numen.core.pathing.goal.GoalCompiler#block}
-     *  core — the collision-shape test is this task's historical walkability
-     *  judgement. */
+    /** The BLOCK kind's navigation contract: bare coordinates mean occupy
+     *  exactly that cell, digging out whatever is there (the block form is
+     *  the way to say "walk up beside it instead"). */
     private com.dwinovo.numen.core.pathing.goal.GoalCompiler.Compiled blockCompiled() {
-        return switch (r.arrival) {
-            case INTERACT -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.interact(blockTarget);
-            case STAND_ON -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.standOn(blockTarget);
-            case NEAR -> com.dwinovo.numen.core.pathing.goal.GoalCompiler.near(
-                    blockTarget, NEAR_SUCCESS_RADIUS);
-        };
+        return com.dwinovo.numen.core.pathing.goal.GoalCompiler.standOn(blockTarget);
     }
 
     /** Does a collision shape occupy the target cell (feet can't go there)? */
@@ -484,13 +493,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case BLOCK -> {
                 if (feet().equals(blockTarget)) {
                     yield "reached the exact cell " + bx + "," + by + "," + bz + ".";
-                }
-                if (r.arrival == MoveToTaskRecord.Arrival.INTERACT
-                        && NavGoal.getToBlock(blockTarget).isAt(feet())) {
-                    String occupant = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(
-                            player.level().getBlockState(blockTarget).getBlock()).getPath();
-                    yield "standing right beside " + bx + "," + by + "," + bz + " — that cell is "
-                            + occupant + ", so next to it IS arrival; it's within reach to use.";
                 }
                 // Got to the column but not the exact y (the usual "guessed Y was in
                 // the air" case) — teach the model to drop Y for a location.

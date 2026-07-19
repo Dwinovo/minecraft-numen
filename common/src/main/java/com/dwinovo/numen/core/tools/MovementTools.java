@@ -24,14 +24,13 @@ Double y,
 Double z,
 double speed,
             String block,
-            String arrival,
             ToolContext ctx) {
         if (speed < MIN_SPEED) speed = MIN_SPEED;
         if (speed > MAX_SPEED) speed = MAX_SPEED;
-        // MoveToTaskRecord validates the x/y/z/block combination and the arrival
-        // string, throwing a teaching error for an ambiguous one (e.g. only x
-        // given, block plus coordinates, or arrival on a non-BLOCK move).
+        // MoveToTaskRecord validates the x/y/z/block combination, throwing a
+        // teaching error for an ambiguous one (e.g. only x given, or block with
+        // a partial coordinate set).
         return new MoveToTaskRecord(ctx.toolCallId(), ctx.deadline(DEFAULT_TIMEOUT_TICKS), x, y, z, speed,
-                block, arrival);
+                block);
     }
 }

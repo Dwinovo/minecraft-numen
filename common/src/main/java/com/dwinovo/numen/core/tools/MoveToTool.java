@@ -17,8 +17,7 @@ public final class MoveToTool implements NumenTool {
     private static final Gson GSON = new Gson();
     private final MovementTools impl = new MovementTools();
 
-    private record Args(Double x, Double y, Double z, double speed, String block,
-                        String arrival) {}
+    private record Args(Double x, Double y, Double z, double speed, String block) {}
 
     @Override
     public String name() {
@@ -30,9 +29,9 @@ public final class MoveToTool implements NumenTool {
         return """
                 Travel somewhere — full terrain-traversing navigation, not just walking. Pick ONE of four intents by which inputs you fill (leave the others null):
                 • Go to a LOCATION: give x and z, leave y null. The companion walks to that spot and stands on whatever ground is there — Y is auto-resolved to the surface. THIS IS THE DEFAULT for 'go over there' / following / exploring; never guess a Y for a location.
-                • Go to an EXACT cell: give x, y and z. It occupies exactly that cell — if something solid is there, it digs it out and stands in its place. To go USE a block (chest, crafting table, furnace, ore…) do NOT send bare coordinates (that would dig it): send its coordinates WITH arrival:'interact' (stops right beside it, never touches it), or just send block:'<its name>' for the nearest one.
+                • Go to an EXACT cell: give x, y and z (no block). It occupies exactly that cell — if something solid is there, it digs it out and stands in its place. NEVER send bare coordinates of a block you want to USE (that would dig it) — use the block form below instead.
                 • Change ELEVATION: give y only (x and z null) to climb to the surface or descend to a mining depth at your current column.
-                • Go to the NEAREST block of a kind: give block only (e.g. 'crafting_table'), no coordinates. It scans nearby, walks up beside the closest one (never touching it) and reports where it is — no locate/scan call needed first.
+                • Go to a BLOCK to use it (chest, crafting table, furnace, ore…): give block:'<its name>'. Alone = it scans nearby and walks up beside the closest one; WITH x,y,z = walks up beside that specific one (when you know exactly which). Either way it stops right beside it, never touches it, and reports its position.
                 En route it digs, bridges gaps and pillars up, auto-equipping the best tool from its whole inventory (no equip_item needed). Anything breakable counts as a route — cost is pure digging time, so with the right tool it tunnels fast, and with no tool it will still slowly punch through (e.g. bare-handing stone at ~7s a block) when that is the only way out; it always prefers the faster route when one exists. It strongly avoids breaking functional blocks (chests, furnaces…) and never touches the target block itself. BACKGROUND task: returns a task_id at once; the position actually reached arrives as a task_finished event — on timeout, re-dispatch the same call to resume; NO path or stopping far short means pick a NEARER waypoint or scan first. To open/use a station, give its coordinate to interact_at instead.""";
     }
 
@@ -45,16 +44,10 @@ public final class MoveToTool implements NumenTool {
                         + "elevation move (y alone).")
                 .nullableNumber("z", "Target Z. Null for an elevation-only move (y alone).")
                 .number("speed", "Speed multiplier in [0.1, 2.0]. 1.0 is normal walking speed.", 0.1, 2.0)
-                .optionalString("block", "Namespaced block id to walk to the nearest of (e.g. "
-                        + "'crafting_table' or 'minecraft:chest'). Give it ALONE — no coordinates. "
-                        + "It stops right beside the closest match and names its position.")
-                .optionalNullableEnum("arrival", "How to finish at an x+y+z target; only valid with "
-                        + "all three coordinates. Your choice IS the intent, like picking a command: "
-                        + "omitted/'stand_on' = occupy exactly that cell, digging out whatever is "
-                        + "there. 'interact' = the cell is a block you want to USE: stop right beside "
-                        + "it and never touch it — ALWAYS pick this for chests/stations/ores you'll "
-                        + "work on. 'near' = anywhere within 3 blocks is fine.",
-                        "interact", "stand_on", "near")
+                .optionalString("block", "Namespaced block id of a block to walk up BESIDE (e.g. "
+                        + "'crafting_table' or 'minecraft:chest') — it is never broken or buried. "
+                        + "Alone = nearest one found by scanning; with x,y,z = that specific one. "
+                        + "ALWAYS use this form for a block you intend to use or mine.")
                 .build();
     }
 
@@ -62,6 +55,6 @@ public final class MoveToTool implements NumenTool {
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         dispatchAsync(companion, impl.moveTo(a.x(), a.y(), a.z(), a.speed(),
-                a.block(), a.arrival(), ctx(toolCallId, companion)), reply);
+                a.block(), ctx(toolCallId, companion)), reply);
     }
 }

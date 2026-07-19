@@ -14,8 +14,10 @@ import com.dwinovo.numen.task.TaskRecord;
  *       one exact cell (a verified-reachable spot).</li>
  *   <li>{@code y} only → {@link Kind#YLEVEL}:
  *       change elevation to that height.</li>
- *   <li>{@code block} only (no coordinates) → {@link Kind#FIND}:
- *       scan for the nearest block of that kind and walk up beside it.</li>
+ *   <li>{@code block}(alone)→ {@link Kind#FIND}: scan for the nearest
+ *       block of that kind and walk up beside it, never touching it;</li>
+ *   <li>{@code block} + {@code x,y,z} → {@link Kind#FIND} pinned: walk up
+ *       beside THAT specific block (no scan), never touching it.</li>
  * </ul>
  * Coordinates are nullable ({@code null} = "not supplied"); the deadline-based
  * timeout is handled by the base class.
@@ -26,19 +28,6 @@ public final class MoveToTaskRecord extends TaskRecord {
 
     public enum Kind { BLOCK, COLUMN, YLEVEL, FIND }
 
-    /**
-     * How a BLOCK move finishes. The caller's input form IS the intent —
-     * {@link #STAND_ON} when omitted:
-     * <ul>
-     *   <li>{@link #STAND_ON}(缺省)— occupy that exact cell, digging into it
-     *       if needed (priced by pure destruction time, like any other dig);</li>
-     *   <li>{@link #INTERACT} — the cell is a block to USE: stop beside it,
-     *       keep it sacred (never break/bury it);</li>
-     *   <li>{@link #NEAR} — anywhere within the near-success radius counts.</li>
-     * </ul>
-     */
-    public enum Arrival { INTERACT, STAND_ON, NEAR }
-
     /** Nullable: {@code null} means the LLM did not supply this axis. */
     public final Double x;
     public final Double y;
@@ -48,12 +37,10 @@ public final class MoveToTaskRecord extends TaskRecord {
     /** PathNavigation speed multiplier; 1.0 ≈ entity's MOVEMENT_SPEED attribute. */
     public final double speed;
     public final Kind kind;
-    /** How a BLOCK move finishes; {@link Arrival#STAND_ON} unless the LLM chose otherwise. */
-    public final Arrival arrival;
 
     public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
                             Double x, Double y, Double z, double speed,
-                            String block, String arrival) {
+                            String block) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.x = x;
         this.y = y;
@@ -61,34 +48,6 @@ public final class MoveToTaskRecord extends TaskRecord {
         this.block = block == null || block.isBlank() ? null : block.trim();
         this.speed = speed;
         this.kind = resolveKind(x, y, z, this.block);
-        this.arrival = resolveArrival(arrival, this.kind);
-    }
-
-    /** Parse the optional arrival override; teaching errors for an unknown value
-     *  or an override on a move kind that has no cell to arrive at. */
-    private static Arrival resolveArrival(String raw, Kind kind) {
-        if (raw == null || raw.isBlank()) {
-            return Arrival.STAND_ON;
-        }
-        Arrival parsed = switch (raw) {
-            case "interact" -> Arrival.INTERACT;
-            case "stand_on" -> Arrival.STAND_ON;
-            case "near" -> Arrival.NEAR;
-            default -> throw new IllegalArgumentException(
-                    "unknown arrival '" + raw + "' — use interact, stand_on or near,"
-                    + " or omit it (defaults to stand_on: occupy that exact cell).");
-        };
-        if (kind != Kind.BLOCK) {
-            throw new IllegalArgumentException(
-                    "arrival only applies to an exact x+y+z target; a "
-                    + switch (kind) {
-                        case COLUMN -> "location (x+z)";
-                        case YLEVEL -> "height (y-only)";
-                        default -> "nearest-block (block) ";
-                    }
-                    + " move has no cell to arrive at — omit arrival for it.");
-        }
-        return parsed;
     }
 
     /**
@@ -100,9 +59,12 @@ public final class MoveToTaskRecord extends TaskRecord {
         boolean hasX = x != null, hasY = y != null, hasZ = z != null;
         if (block != null) {
             if (hasX || hasY || hasZ) {
-                throw new IllegalArgumentException(
-                        "block means 'walk to the nearest one of these' — give EITHER block"
-                        + " OR coordinates, not both.");
+                if (!(hasX && hasY && hasZ)) {
+                    throw new IllegalArgumentException(
+                            "block with coordinates pins ONE specific block — give all of"
+                            + " x, y and z (or none, for the nearest one).");
+                }
+                return Kind.FIND;   // pinned to the block at (x,y,z)
             }
             return Kind.FIND;
         }
@@ -125,7 +87,8 @@ public final class MoveToTaskRecord extends TaskRecord {
             case BLOCK -> TOOL_NAME + " " + (int) (double) x + "," + (int) (double) y + "," + (int) (double) z;
             case COLUMN -> TOOL_NAME + " x=" + (int) (double) x + " z=" + (int) (double) z;
             case YLEVEL -> TOOL_NAME + " y=" + (int) (double) y;
-            case FIND -> TOOL_NAME + " " + block;
+            case FIND -> TOOL_NAME + " " + block
+                    + (x != null ? "@" + (int) (double) x + "," + (int) (double) y + "," + (int) (double) z : "");
         };
     }
 }
