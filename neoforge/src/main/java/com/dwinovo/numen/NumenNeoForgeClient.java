@@ -37,6 +37,16 @@ public class NumenNeoForgeClient {
         // Game bus — per-tick / world-render / disconnect.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
+        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
+    }
+
+    static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
+        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后)。
+        if (event.getStage() == net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage
+                .AFTER_TRANSLUCENT_BLOCKS) {
+            com.dwinovo.numen.client.debug.PathDebugRenderer.render(
+                    event.getPoseStack(), event.getCamera());
+        }
     }
 
     static void registerKeyMappings(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {
@@ -54,6 +64,7 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.client.data.ClientNumenInventory.clear();
         com.dwinovo.numen.client.hud.NumenToasts.clear();
         com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
+        com.dwinovo.numen.client.debug.PathDebugState.clear();
     }
 
     static void registerGuiLayers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {

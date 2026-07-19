@@ -65,6 +65,16 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.data.ClientNumenInventory.clear();
                     com.dwinovo.numen.client.hud.NumenToasts.clear();
                     com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
+                    com.dwinovo.numen.client.debug.PathDebugState.clear();
+                });
+
+        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后)。
+        net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_TRANSLUCENT
+                .register(context -> {
+                    if (context.matrixStack() != null) {
+                        com.dwinovo.numen.client.debug.PathDebugRenderer.render(
+                                context.matrixStack(), context.camera());
+                    }
                 });
     }
 }

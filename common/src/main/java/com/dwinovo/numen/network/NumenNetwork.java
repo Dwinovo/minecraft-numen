@@ -82,6 +82,12 @@ public final class NumenNetwork {
                 ClientUiActionPayload.TYPE, ClientUiActionPayload.STREAM_CODEC,
                 ClientUiActionPayload::handle);
 
+        // S→C: a companion's live pathing state for the debug overlay (lines/boxes).
+        Services.NETWORK.registerServerToClient(
+                com.dwinovo.numen.network.payload.PathDebugPayload.TYPE,
+                com.dwinovo.numen.network.payload.PathDebugPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.PathDebugPayload::handle);
+
         // C→S: roster panel asks where its (possibly far / cross-dimension) pets are.
         Services.NETWORK.registerClientToServer(
                 LocateNumenPayload.TYPE, LocateNumenPayload.STREAM_CODEC,
