@@ -33,19 +33,15 @@ public final class MoveToTaskRecord extends TaskRecord {
     public final Double z;
     /** Namespaced block id to walk to the nearest of; null when coordinates drive. */
     public final String block;
-    /** PathNavigation speed multiplier; 1.0 ≈ entity's MOVEMENT_SPEED attribute. */
-    public final double speed;
     public final Kind kind;
 
     public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
-                            Double x, Double y, Double z, double speed,
-                            String block) {
+                            Double x, Double y, Double z, String block) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.x = x;
         this.y = y;
         this.z = z;
         this.block = block == null || block.isBlank() ? null : block.trim();
-        this.speed = speed;
         this.kind = resolveKind(x, y, z, this.block);
     }
 

@@ -53,6 +53,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** When the planner CAN'T reach the exact goal, a stop within this of the
      *  requested column still counts as "got there" (a teaching success, not a
      *  thrash). This is the only tolerance — arrival itself is exact. */
+    private static final double WALK_SPEED = 1.0;
     private static final double NEAR_SUCCESS_RADIUS = 3.0;
     /** Once the planner can't get closer (e.g. it stopped at the water surface above an
      *  underwater goal), keep the task alive this many ticks of NO progress before giving
@@ -130,8 +131,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // SACRED when solid — the route may neither dig through nor bury the very
         // block it was asked to reach. COLUMN/YLEVEL have no block objective.
         nav = r.kind == MoveToTaskRecord.Kind.BLOCK
-                ? PlayerNav.to(player, this::blockCompiled, r.speed, this::reached)
-                : PlayerNav.toGoal(player, this::goal, r.speed, this::reached);
+                ? PlayerNav.to(player, this::blockCompiled, WALK_SPEED, this::reached)
+                : PlayerNav.toGoal(player, this::goal, WALK_SPEED, this::reached);
         com.dwinovo.numen.Constants.LOG.info(
                 "[numen-task] goto start kind={} target={},{},{} solid={}",
                 r.kind, bx, by, bz,
@@ -262,7 +263,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     }
                     rebuildFindContract();
                     stopNav();
-                    nav = PlayerNav.to(player, () -> findContract, r.speed, this::reached);
+                    nav = PlayerNav.to(player, () -> findContract, WALK_SPEED, this::reached);
                     nav.setHighlights(() -> java.util.List.copyOf(candidates));
                     yield TaskState.RUNNING;
                 }
@@ -288,7 +289,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     nearRetried = true;
                     stopNav();
                     NavGoal retry = nearRetryGoal();
-                    nav = PlayerNav.toGoal(player, () -> retry, r.speed, this::closeEnoughToSucceed);
+                    nav = PlayerNav.toGoal(player, () -> retry, WALK_SPEED, this::closeEnoughToSucceed);
                     if (r.kind == MoveToTaskRecord.Kind.BLOCK) {
                         nav.setHighlights(() -> java.util.List.of(blockTarget));
                     }
@@ -375,7 +376,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         drainFindScan();
         if (!candidates.isEmpty()) {
             rebuildFindContract();
-            nav = PlayerNav.to(player, () -> findContract, r.speed, this::reached);
+            nav = PlayerNav.to(player, () -> findContract, WALK_SPEED, this::reached);
             nav.setHighlights(() -> java.util.List.copyOf(candidates));
             return null;
         }
