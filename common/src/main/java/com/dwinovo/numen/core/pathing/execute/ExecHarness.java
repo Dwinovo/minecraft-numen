@@ -85,6 +85,10 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     @Override
     public void beginBreaking(MovementState state, BlockPos pos) {
         dirty = true;
+        // 每 tick 按意图格选最优工具(遮挡回退挖到别的方块时仍持意图格
+        // 的工具;实际落地的挖掘不再改选)
+        com.dwinovo.numen.core.task.base.ToolSelect.holdBestTool(
+                player, player.level().getBlockState(pos));
         Vec3 eye = player.getEyePosition();
         Vec3 aimPoint = reachableAimPoint(pos);
         if (aimPoint != null) {
@@ -168,8 +172,11 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     public void commitIfDirty() {
         if (dirty) {
             commit();
-        } else if (rightClickCooldown > 0) {
-            rightClickCooldown--;
+        } else {
+            if (rightClickCooldown > 0) {
+                rightClickCooldown--;
+            }
+            digger.tickCooldown();
         }
     }
 
@@ -200,17 +207,22 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
             rightClickTick();
         }
 
+        boolean digTicked = false;
         if (isKeyRequested(Input.CLICK_LEFT)) {
             // 挖掘只由准星驱动:射线命中什么挖什么(命中位置与命中面
-            // 直通挖掘器);射线落空的 tick 不产生任何破坏动作
-            BlockHitResult hit = clipAlongView();
-            if (hit.getType() == HitResult.Type.BLOCK) {
+            // 直通挖掘器);射线落空或被实体挡住的 tick 不产生破坏动作
+            BlockHitResult hit = pickAlongView();
+            if (hit != null) {
                 digger.digStep(hit);
+                digTicked = true;
             }
         } else {
             if (digger.current() != null) {
                 digger.cancel();
             }
+        }
+        if (!digTicked) {
+            digger.tickCooldown(); // 破块后冷却按游戏刻走,不随落空/松键冻结
         }
 
         if (t != null && t.hasRotation()) {
@@ -260,15 +272,15 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
      * 才能出手);任一消费即结束(useItemOn 消费才挥手)。
      */
     private void rightClickTick() {
-        if (player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat
+        if (player.getControlledVehicle() instanceof net.minecraft.world.entity.vehicle.Boat
                 && (isKeyRequested(Input.MOVE_FORWARD) || isKeyRequested(Input.MOVE_BACK)
                         || isKeyRequested(Input.MOVE_LEFT) || isKeyRequested(Input.MOVE_RIGHT))) {
-            return; // 船上且本 tick 有移动输入(手在桨上)不右键;静坐可点击
+            return; // 驾船且本 tick 有移动输入(手在桨上)不右键;副座/静坐可点击
         }
         Level level = player.level();
-        BlockHitResult hit = clipAlongView();
-        if (hit.getType() != HitResult.Type.BLOCK) {
-            return; // 未命中方块:不对空挥右键,也不扣冷却
+        BlockHitResult hit = pickAlongView();
+        if (hit == null) {
+            return; // 未命中方块或被实体遮挡:不对空挥右键,也不扣冷却
         }
         rightClickCooldown = NavSettings.get().rightClickSpeed - 1;
         for (InteractionHand hand : HANDS) {
@@ -286,10 +298,27 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
 
     // ==================== 视线判定 ====================
 
-    /** 实际视角的射线是否命中该格。 */
+    /** 实际视角的射线是否命中该格(实体遮挡视为未命中)。 */
     public boolean isLookingAt(BlockPos pos) {
+        BlockHitResult hit = pickAlongView();
+        return hit != null && hit.getBlockPos().equals(pos);
+    }
+
+    /**
+     * 视线拾取:方块射线命中、且眼与命中点之间没有可拾取实体遮挡时
+     * 返回命中;否则 null(实体挡视线的 tick 点击不落地)。
+     */
+    private BlockHitResult pickAlongView() {
         BlockHitResult hit = clipAlongView();
-        return hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos);
+        if (hit.getType() != HitResult.Type.BLOCK) {
+            return null;
+        }
+        Vec3 eye = player.getEyePosition();
+        Vec3 end = hit.getLocation();
+        var entityHit = net.minecraft.world.entity.projectile.ProjectileUtil.getEntityHitResult(
+                player, eye, end, new net.minecraft.world.phys.AABB(eye, end).inflate(1.0),
+                e -> !e.isSpectator() && e.isPickable(), end.distanceToSqr(eye));
+        return entityHit == null ? hit : null;
     }
 
     /** 实际视角是否已贴住目标转角(角度容差 0.01°;量化残差下很少成立,主判据是射线)。 */
@@ -301,10 +330,10 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
                 && Math.abs(player.getXRot() - target.getPitch()) < 0.01;
     }
 
-    /** 准星此刻命中的方块;未命中返回 null。 */
+    /** 准星此刻命中的方块;未命中或被实体遮挡返回 null。 */
     public BlockPos crosshairBlock() {
-        BlockHitResult hit = clipAlongView();
-        return hit.getType() == HitResult.Type.BLOCK ? hit.getBlockPos() : null;
+        BlockHitResult hit = pickAlongView();
+        return hit != null ? hit.getBlockPos() : null;
     }
 
     /** 沿实体当前视角的轮廓射线(不穿流体);触及距离创造 5.0/生存按设置。 */

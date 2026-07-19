@@ -57,6 +57,8 @@ public final class BlockDigger {
     private float progress;       // accumulated 0..1 destroy fraction
     private boolean started;      // START_DESTROY_BLOCK has been sent for `pos`
     private int blockHitDelay;    // post-break cooldown (survives reset())
+    /** 开挖时的主手物品快照;中途换持(物品/组件级)即重开进度。 */
+    private net.minecraft.world.item.ItemStack destroyingItem;
 
     public BlockDigger(NumenPlayer player) {
         this.player = player;
@@ -107,9 +109,17 @@ public final class BlockDigger {
         InputDriver.halt(player);
         BlockPos effective = crosshairHit.getBlockPos();
         if (pos == null || !pos.equals(effective)) {
-            start(effective);
+            // 工具由外层(移动原语按意图格)选择,这里不按命中格改选
+            start(effective, false);
         }
         return advance(crosshairHit, true);
+    }
+
+    /** 破块后冷却按游戏刻递减;本 tick 没走 digStep 的驱动方调用此保持计时。 */
+    public void tickCooldown() {
+        if (blockHitDelay > 0) {
+            blockHitDelay--;
+        }
     }
 
     public DigResult digStep(BlockPos target) {
@@ -140,7 +150,7 @@ public final class BlockDigger {
             return DigResult.NO_SHOT;                // no clear shot, nothing safe in the way — stuck
         }
         if (pos == null || !pos.equals(effective)) {
-            start(effective);
+            start(effective, true);
         }
         // dig() may be clearing an OCCLUDER this tick, not the target; report the break (true) ONLY
         // when the TARGET itself goes, so callers that count mined targets / treat the cell as cleared
@@ -151,6 +161,14 @@ public final class BlockDigger {
     /** Shared per-tick dig advance against a resolved hit (face + aim point). */
     private DigResult advance(BlockHitResult hit, boolean targetBreak) {
         Level level = player.level();
+        // 主手物品与开挖时不同(物品/组件级比较)→ 重开:ABORT 旧进度、
+        // 按新手持重新 START(与原版换持重置破坏进度同语义)
+        if (started && destroyingItem != null
+                && !net.minecraft.world.item.ItemStack.isSameItemSameComponents(
+                        destroyingItem, player.getMainHandItem())) {
+            BlockPos samePos = pos;
+            start(samePos, false);
+        }
         InputDriver.lookAt(player, hit.getLocation());
         Direction side = hit.getDirection();
         BlockState state = level.getBlockState(pos);
@@ -194,16 +212,19 @@ public final class BlockDigger {
         return DigResult.PROGRESSING;
     }
 
-    private void start(BlockPos target) {
+    private void start(BlockPos target, boolean selectTool) {
         cancel();
         pos = target.immutable();
         progress = 0.0f;
         started = false;
-        // Hold the best tool BEFORE timing the dig — getDestroyProgress reads the held
-        // item, and the pathing cost model prices every break with the best
-        // available tool. ToolSelect owns the scan (whole inventory) so this stays
-        // consistent with the pathing cost model (ToolSet).
-        ToolSelect.holdBestTool(player, player.level().getBlockState(pos));
+        if (selectTool) {
+            // Hold the best tool BEFORE timing the dig — getDestroyProgress reads the held
+            // item, and the pathing cost model prices every break with the best
+            // available tool. ToolSelect owns the scan (whole inventory) so this stays
+            // consistent with the pathing cost model (ToolSet).
+            ToolSelect.holdBestTool(player, player.level().getBlockState(pos));
+        }
+        destroyingItem = player.getMainHandItem().copy();
     }
 
     /** Abandon an IN-PROGRESS dig: ABORT it server-side and clear the crack.
