@@ -33,7 +33,10 @@ public class NumenMod implements ModInitializer {
                 });
 
         // 排程机器的心跳:每 tick 驱动全部同伴的竞价/任务/收尾。
-        net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.END_SERVER_TICK.register(
+        // 挂 START(实体更新之前):任务→导航→执行器落下的移动/按键输入由
+        // 本 tick 的实体物理立即消费——"在位置 P 做的决策作用于从 P 出发
+        // 的这一步",不产生一 tick 的输入滞后(潜行/松跳等边缘时机全靠它)。
+        net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents.START_SERVER_TICK.register(
                 com.dwinovo.numen.task.CompanionTickDispatcher::tick);
 
         CommonClass.init();
