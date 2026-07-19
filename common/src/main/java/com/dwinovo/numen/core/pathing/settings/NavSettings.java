@@ -33,8 +33,9 @@ public final class NavSettings {
     public boolean allowSprint = true;
     /** 允许放置方块搭路。 */
     public boolean allowPlace = true;
-    /** 允许动用背包深处(9-35 格)的物品;关闭时只认快捷栏与副手。 */
-    public boolean allowInventory = false;
+    /** 允许动用背包深处(9-35 格)的物品:规划期全背包计入耗材,执行期
+     *  自动把耗材/水桶搬进快捷栏。关闭时只认快捷栏与副手。 */
+    public boolean allowInventory = true;
     /** 允许把方块放进流体源方块所在格。 */
     public boolean allowPlaceInFluidsSource = true;
     /** 允许把方块放进流动流体所在格。 */
