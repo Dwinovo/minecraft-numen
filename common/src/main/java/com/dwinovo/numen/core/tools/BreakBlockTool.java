@@ -30,8 +30,8 @@ public final class BreakBlockTool implements NumenTool {
                 + "construction work: clear the cell a structure block must occupy, remove a block placed by "
                 + "mistake, prune obstructions. The entity walks within reach first. Drops are collected into "
                 + "your inventory. Requires the right tool in hand for blocks that need one (same rule as "
-                + "auto_mine — stone needs a pickaxe); fails with guidance otherwise. To GATHER resources by "
-                + "type, use auto_mine instead — it finds blocks itself.";
+                + "mine — stone needs a pickaxe); fails with guidance otherwise. To GATHER resources by "
+                + "type, use mine instead — it finds blocks itself.";
     }
 
     @Override

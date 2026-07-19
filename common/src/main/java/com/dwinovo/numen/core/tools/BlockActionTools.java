@@ -35,7 +35,7 @@ public final class BlockActionTools {
     // break_block: walk + dig budget; obsidian by hand-tier diamond pick is ~10s alone.
     private static final long BREAK_TIMEOUT_TICKS = 45 * 20;
 
-    // auto_mine budgets / bounds.
+    // mine budgets / bounds.
     private static final int DEFAULT_MAX_RADIUS = 48;
     private static final int MAX_ALLOWED_RADIUS = 96;
     private static final int MAX_COUNT = 256;

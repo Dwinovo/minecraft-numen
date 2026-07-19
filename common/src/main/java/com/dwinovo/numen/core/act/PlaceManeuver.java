@@ -230,7 +230,7 @@ public final class PlaceManeuver {
                 if (++selfBlockedTicks >= SELF_CLEAR_TICKS) {
                     failReason = "I'm standing in the very cell to fill at " + placeAt.toShortString()
                             + " and can't step out of it (boxed in). Move me a block away first,"
-                            + " or use move_to with a higher y — pillaring up places beneath my"
+                            + " or use goto with a higher y — pillaring up places beneath my"
                             + " own feet properly.";
                     failType = FailureType.OCCLUDED;
                     Constants.LOG.info("[numen-path] place gave up at {} after {} ticks: {}",

@@ -326,7 +326,7 @@ public final class LocateStructureTaskGoal extends AbstractCompanionTask<LocateS
             String dir = CompassUtil.compass(dx, dz);
             return "nearest " + r.structure + " at " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks). move_to the x/z (pick a sensible y for the terrain), "
+                    + " blocks). goto the x/z (pick a sensible y for the terrain), "
                     + "then scan_blocks to find its actual blocks.";
         }
         String dim = player.level().dimension().location().getPath();

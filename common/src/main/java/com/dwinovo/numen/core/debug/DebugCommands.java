@@ -50,12 +50,8 @@ public final class DebugCommands {
                         .executes(DebugCommands::toggleDebug))
                 .then(Commands.literal("goto")
                         .then(Commands.argument("name", StringArgumentType.word())
-                                .then(Commands.argument("a", IntegerArgumentType.integer())
-                                        .executes(ctx -> gotoYLevel(ctx))
-                                        .then(Commands.argument("b", IntegerArgumentType.integer())
-                                                .executes(ctx -> gotoColumn(ctx))
-                                                .then(Commands.argument("c", IntegerArgumentType.integer())
-                                                        .executes(ctx -> gotoBlock(ctx)))))))
+                                .then(Commands.argument("args", StringArgumentType.greedyString())
+                                        .executes(DebugCommands::gotoCmd))))
                 .then(Commands.literal("thisway")
                         .then(Commands.argument("name", StringArgumentType.word())
                                 .then(Commands.argument("distance", IntegerArgumentType.integer(1))
@@ -85,22 +81,45 @@ public final class DebugCommands {
 
     // ==================== goto / thisway ====================
 
-    private static int gotoYLevel(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        int y = IntegerArgumentType.getInteger(ctx, "a");
-        return dispatchMove(ctx, null, (double) y, null);
-    }
-
-    private static int gotoColumn(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        int x = IntegerArgumentType.getInteger(ctx, "a");
-        int z = IntegerArgumentType.getInteger(ctx, "b");
-        return dispatchMove(ctx, (double) x, null, (double) z);
-    }
-
-    private static int gotoBlock(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
-        int x = IntegerArgumentType.getInteger(ctx, "a");
-        int y = IntegerArgumentType.getInteger(ctx, "b");
-        int z = IntegerArgumentType.getInteger(ctx, "c");
-        return dispatchMove(ctx, (double) x, (double) y, (double) z);
+    /**
+     * 参数形态与工具一致:1 个数字=高度,2 个=水平位置,3 个=精确格;
+     * 单个非数字 token=方块 id(走到最近的一个旁边)。
+     */
+    private static int gotoCmd(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
+        NumenPlayer companion = requireCompanion(ctx);
+        if (companion == null) {
+            return 0;
+        }
+        String[] tokens = StringArgumentType.getString(ctx, "args").trim().split("\\s+");
+        boolean allNumeric = tokens.length > 0;
+        for (String t : tokens) {
+            if (!t.matches("-?\\d+")) {
+                allNumeric = false;
+                break;
+            }
+        }
+        if (allNumeric) {
+            return switch (tokens.length) {
+                case 1 -> dispatchMoveTo(ctx, companion,
+                        null, Double.parseDouble(tokens[0]), null, null);
+                case 2 -> dispatchMoveTo(ctx, companion,
+                        Double.parseDouble(tokens[0]), null, Double.parseDouble(tokens[1]), null);
+                case 3 -> dispatchMoveTo(ctx, companion,
+                        Double.parseDouble(tokens[0]), Double.parseDouble(tokens[1]),
+                        Double.parseDouble(tokens[2]), null);
+                default -> {
+                    ctx.getSource().sendFailure(Component.literal(
+                            "用法: goto <名> <y> | <x> <z> | <x> <y> <z> | <方块id>"));
+                    yield 0;
+                }
+            };
+        }
+        if (tokens.length == 1) {
+            return dispatchMoveTo(ctx, companion, null, null, null, tokens[0]);
+        }
+        ctx.getSource().sendFailure(Component.literal(
+                "用法: goto <名> <y> | <x> <z> | <x> <y> <z> | <方块id>"));
+        return 0;
     }
 
     private static int thisWay(CommandContext<CommandSourceStack> ctx) throws CommandSyntaxException {
@@ -113,23 +132,14 @@ public final class DebugCommands {
         double theta = Math.toRadians(companion.getYHeadRot());
         double x = companion.getX() - Math.sin(theta) * distance;
         double z = companion.getZ() + Math.cos(theta) * distance;
-        return dispatchMoveTo(ctx, companion, Math.floor(x), null, Math.floor(z));
-    }
-
-    private static int dispatchMove(CommandContext<CommandSourceStack> ctx,
-                                    Double x, Double y, Double z) throws CommandSyntaxException {
-        NumenPlayer companion = requireCompanion(ctx);
-        if (companion == null) {
-            return 0;
-        }
-        return dispatchMoveTo(ctx, companion, x, y, z);
+        return dispatchMoveTo(ctx, companion, Math.floor(x), null, Math.floor(z), null);
     }
 
     private static int dispatchMoveTo(CommandContext<CommandSourceStack> ctx, NumenPlayer companion,
-                                      Double x, Double y, Double z) {
+                                      Double x, Double y, Double z, String block) {
         TaskRecord record;
         try {
-            record = (TaskRecord) MOVEMENT_TOOLS.moveTo(x, y, z, 1.0, null,
+            record = (TaskRecord) MOVEMENT_TOOLS.moveTo(x, y, z, 1.0, block, null,
                     TaskDispatch.ctx("debug-goto", companion));
         } catch (IllegalArgumentException e) {
             ctx.getSource().sendFailure(Component.literal(e.getMessage()));

@@ -38,7 +38,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * {@code auto_mine} — the scan → path → dig gathering loop, run on the
+ * {@code mine} — the scan → path → dig gathering loop, run on the
  * companion player body (a server-side fake player, so every break goes
  * through real server-side interaction rules, not client input).
  *
@@ -235,7 +235,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     // forever ("arrived" every tick, zero progress).
                     if (reachableTarget() == null && !knownOres.isEmpty()) {
                         com.dwinovo.numen.Constants.LOG.info(
-                                "[numen-task] auto_mine stance dud at feet={} — arrived per"
+                                "[numen-task] mine stance dud at feet={} — arrived per"
                                         + " goal, nothing reachable (LOS/reach)",
                                 player.blockPosition().toShortString());
                         blacklistNearest();
@@ -244,7 +244,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 }
                 case FAILED -> {
                     com.dwinovo.numen.Constants.LOG.info(
-                            "[numen-task] auto_mine nav failed ({}): {}",
+                            "[numen-task] mine nav failed ({}): {}",
                             nav.failType(), nav.failReason());
                     if (!knownOres.isEmpty()) blacklistNearest();
                     stopNav();
@@ -588,7 +588,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     blacklist.add(p);
                     knownOres.remove(p);
                     com.dwinovo.numen.Constants.LOG.info(
-                            "[numen-task] auto_mine blacklisted {} (feet={}, {} target(s) left,"
+                            "[numen-task] mine blacklisted {} (feet={}, {} target(s) left,"
                                     + " {} blacklisted)",
                             p.toShortString(), feet.toShortString(), knownOres.size(),
                             blacklist.size());

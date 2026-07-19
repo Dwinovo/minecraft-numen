@@ -6,7 +6,7 @@ import net.minecraft.core.BlockPos;
 /**
  * Typed task descriptor for {@code break_block}: walk to and break ONE exact
  * block cell. The precision complement to {@code place_block} for construction
- * work; {@code auto_mine} stays the bulk by-type gatherer.
+ * work; {@code mine} stays the bulk by-type gatherer.
  */
 public final class BreakBlockTaskRecord extends TaskRecord {
 

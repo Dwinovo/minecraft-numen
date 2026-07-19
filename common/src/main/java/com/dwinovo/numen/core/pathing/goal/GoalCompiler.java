@@ -152,6 +152,24 @@ public final class GoalCompiler {
         return new Compiled(goal, sacred, ArrivalSpec.standOn(goal));
     }
 
+    /**
+     * Get beside ANY of these same-kind blocks (a "walk to the nearest X"
+     * objective): composite of per-candidate {@link NavGoal#getToBlock}
+     * members, EVERY candidate sacred — the route may neither break nor bury
+     * the very blocks it is travelling to; whichever ends up cheapest wins.
+     */
+    public static Compiled anyOf(List<BlockPos> candidates) {
+        List<NavGoal> members = new ArrayList<>(candidates.size());
+        LongSet sacred = new LongOpenHashSet(candidates.size());
+        for (BlockPos c : candidates) {
+            BlockPos t = c.immutable();
+            members.add(NavGoal.getToBlock(t));
+            sacred.add(t.asLong());
+        }
+        NavGoal goal = NavGoal.composite(members);
+        return new Compiled(goal, sacred, ArrivalSpec.standOn(goal));
+    }
+
     private static LongSet single(BlockPos pos) {
         LongSet set = new LongOpenHashSet(1);
         set.add(pos.asLong());

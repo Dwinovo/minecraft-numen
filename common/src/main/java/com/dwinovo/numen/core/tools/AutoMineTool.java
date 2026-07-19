@@ -22,7 +22,7 @@ public final class AutoMineTool implements NumenTool {
 
     @Override
     public String name() {
-        return "auto_mine";
+        return "mine";
     }
 
     @Override
@@ -30,7 +30,7 @@ public final class AutoMineTool implements NumenTool {
         return "Gather blocks by type and count. Give block id(s) and how many ITEMS you want — it finds "
                 + "the nearest matches, travels to each with full terrain-traversing navigation (digs to "
                 + "buried ores, pillars up cliffs, bridges gaps), mines, and repeats until `count` NEW items "
-                + "are gained or none remain. No coordinates or move_to needed. count is items, not blocks "
+                + "are gained or none remain. No coordinates or goto needed. count is items, not blocks "
                 + "(redstone_ore drops ~4). Include all variants in block_ids (iron_ore AND "
                 + "deepslate_iron_ore). Optional radius caps the search. force (default false): only mines "
                 + "what its tools actually harvest, and stops naming the needed tier if nothing qualifies; "

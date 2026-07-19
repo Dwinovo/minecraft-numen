@@ -31,7 +31,7 @@ public final class LocateBiomeTool implements NumenTool {
                 + "for pearls), minecraft:soul_sand_valley, minecraft:desert, minecraft:plains, "
                 + "minecraft:dark_forest — or a #tag for families like #minecraft:is_forest or "
                 + "#minecraft:is_ocean. Searches YOUR CURRENT dimension only, ~6400 blocks out. Biome edges "
-                + "are fuzzy: the answer is accurate to ~64 blocks, so move_to the x/z (pick a sensible y) "
+                + "are fuzzy: the answer is accurate to ~64 blocks, so goto the x/z (pick a sensible y) "
                 + "and confirm with scan_blocks or scan_nearby_entities when you arrive.";
     }
 

@@ -17,20 +17,20 @@ Phase 2 of the dragon route. Build a portal, ignite it, walk through. Actual Net
 Mine it from a **ruined portal** — a structure that's just standing obsidian, no lava-casting. This is the only route: casting your own (water over lava) leaves every fresh obsidian block touching lava, and I refuse to mine fluid-adjacent blocks (it would flood or burn the dig), so a cast wall is unminable by design.
 
 1. `locate_structure("#minecraft:ruined_portal")` — searches the whole family and returns the nearest. **Skip `ruined_portal_ocean`** (underwater) if the result names it; re-search or pick a land one — I can't dive.
-2. `equip_item(diamond_pickaxe)` (obsidian needs diamond), `move_to` the portal coordinates.
-3. `auto_mine(obsidian, 10, radius=24)` — it digs the frame's obsidian on its own. ~9.4s per block is normal.
+2. `equip_item(diamond_pickaxe)` (obsidian needs diamond), `goto` the portal coordinates.
+3. `mine(obsidian, 10, radius=24)` — it digs the frame's obsidian on its own. ~9.4s per block is normal.
 
 Notes:
-- A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — `auto_mine(obsidian)` already ignores it, so a single portal may yield fewer than 10. If you come up short, `locate_structure("#minecraft:ruined_portal")` again for the next nearest and top up.
-- If `auto_mine` reports it skipped blocks "against water or lava", that portal sits in a wet/lava pocket — relocate to a cleaner one rather than fighting the fluid.
+- A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — `mine(obsidian)` already ignores it, so a single portal may yield fewer than 10. If you come up short, `locate_structure("#minecraft:ruined_portal")` again for the next nearest and top up.
+- If `mine` reports it skipped blocks "against water or lava", that portal sits in a wet/lava pocket — relocate to a cleaner one rather than fighting the fluid.
 
 ## Portal build
 
 - Frame: 4 wide × 5 tall, **corners omitted = exactly 10 obsidian**, standing vertically. Inner opening is 2×3 air.
 - Pick flat ground near your base. Build the frame with `place_block` (two columns of 3 at the sides, two rows of 2 at top and bottom).
-- **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`lookup_recipe` + `transfer` into your own grid; see the `containers` skill). Flint drops from `auto_mine(gravel)`, ~10%/block.
+- **Flint & steel**: craft `flint_and_steel` = 1 iron ingot + 1 flint, a 2×2 recipe (`lookup_recipe` + `transfer` into your own grid; see the `containers` skill). Flint drops from `mine(gravel)`, ~10%/block.
 - **Ignite**: `interact_at(button=right, x, y, z, item_id=minecraft:flint_and_steel)` aimed at an **empty air cell INSIDE the frame** (a bottom one), not at the obsidian. The fire lands in that cell and the portal forms.
-- Enter: `move_to` the portal cell and stand in it until the dimension changes (`get_self_status` confirms).
+- Enter: `goto` the portal cell and stand in it until the dimension changes (`get_self_status` confirms).
 
 ## Packlist (verify with `get_self_status` before igniting)
 

@@ -162,7 +162,7 @@ public final class CraftTools {
                 return TaskResult.fail(name + " is a 3x3 recipe — it needs a crafting table within reach "
                         + "(~4 blocks). " + (hintPos != null
                                 ? "Nearest one is at " + hintPos.getX() + "," + hintPos.getY() + ","
-                                        + hintPos.getZ() + " — move_to it, then craft again."
+                                        + hintPos.getZ() + " — goto it, then craft again."
                                 : "None within " + HINT_H + " blocks — craft a crafting_table (4 planks, "
                                         + "fits your own 2x2) and place_block it, then craft again.")).toJson();
             }

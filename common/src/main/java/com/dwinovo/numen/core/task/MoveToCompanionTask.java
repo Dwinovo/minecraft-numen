@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * {@code move_to} on the companion player body — a coordinate walk whose goal
+ * {@code goto} on the companion player body — a coordinate walk whose goal
  * type is chosen by which coordinates were supplied
  * ({@link MoveToTaskRecord.Kind}):
  * <ul>
@@ -72,6 +72,22 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** Absolute ceiling for lease renewals (start + {@link #CHECK_IN_CAP_TICKS}); 0 = unset. */
     private long leaseCapGameTime;
 
+    // ==================== FIND(就近方块)状态 ====================
+    /** 就近方块搜索半径与候选上限、离线扫描的放弃时限。 */
+    private static final int FIND_RADIUS = 48;
+    private static final int FIND_MAX_CANDIDATES = 16;
+    private static final long FIND_SCAN_TIMEOUT_TICKS = 40;
+    /** 解析出的目标方块(FIND 专用)。 */
+    private net.minecraft.world.level.block.Block findTarget;
+    /** 仍在册的候选格(打不通的会被逐个除名)。 */
+    private final java.util.List<BlockPos> candidates = new java.util.ArrayList<>();
+    /** 在飞的离线扫描;完成/超时后归 null。 */
+    private java.util.concurrent.CompletableFuture<java.util.List<com.dwinovo.numen.core.scan.BlockScanner.Hit>> findScan;
+    private long findScanDeadline;
+    private boolean findScanDrained;
+    /** 候选集编译出的导航契约(候选变动时重建)。 */
+    private com.dwinovo.numen.core.pathing.goal.GoalCompiler.Compiled findContract;
+
     public MoveToCompanionTask(NumenPlayer player, MoveToTaskRecord record) {
         super(player, record);
         this.bx = record.x != null ? (int) Math.floor(record.x) : 0;
@@ -82,6 +98,25 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     @Override
     protected void onStart() {
+        if (r.kind == MoveToTaskRecord.Kind.FIND) {
+            // 就近方块:解析 id → 离线扫描附近候选;导航等首批候选到手再建
+            var id = net.minecraft.resources.ResourceLocation.tryParse(r.block);
+            var b = id == null ? null : net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(id);
+            if (b == null || b == net.minecraft.world.level.block.Blocks.AIR) {
+                fail("unknown block id '" + r.block
+                        + "' — use a namespaced block id like minecraft:crafting_table",
+                        FailureType.NO_PATH);
+                return;
+            }
+            findTarget = b;
+            long findExtra = Math.min(MAX_EXTRA_TICKS, 600 + (long) FIND_RADIUS * TICKS_PER_BLOCK);
+            r.extendDeadlineTo(player.level().getGameTime() + findExtra);
+            leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
+            kickFindScan();
+            com.dwinovo.numen.Constants.LOG.info(
+                    "[numen-task] goto start kind=FIND block={}", r.block);
+            return;
+        }
         // Already there: don't build a nav (and don't extend the deadline). The first
         // onTick observes reached() and returns SUCCESS — same outcome as the old
         // start-time short-circuit, one tick later per the base's lifecycle.
@@ -98,7 +133,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 ? PlayerNav.to(player, this::blockCompiled, r.speed, this::reached)
                 : PlayerNav.toGoal(player, this::goal, r.speed, this::reached);
         com.dwinovo.numen.Constants.LOG.info(
-                "[numen-task] move_to start kind={} target={},{},{} arrival={} solid={}",
+                "[numen-task] goto start kind={} target={},{},{} arrival={} solid={}",
                 r.kind, bx, by, bz, r.arrival,
                 r.kind == MoveToTaskRecord.Kind.BLOCK && targetCellSolid());
         // Highlight the ACTUAL requested cell (not the path's best-effort end) so the overlay
@@ -115,6 +150,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case BLOCK -> blockGoal();
             case COLUMN -> NavGoal.column(bx, bz);
             case YLEVEL -> NavGoal.yLevel(by);
+            case FIND -> findContract == null ? null : findContract.goal();
         };
     }
 
@@ -185,6 +221,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case BLOCK -> blockGoal().isAt(cell);
             case COLUMN -> cell.getX() == bx && cell.getZ() == bz;
             case YLEVEL -> cell.getY() == by && player.onGround();
+            case FIND -> findContract != null && findContract.goal().isAt(cell);
         };
     }
 
@@ -193,6 +230,12 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // reached() is checked BEFORE the nav==null guard so an already-at-target start
         // (which never builds a nav) lands on SUCCESS rather than the defensive FAILED.
         if (reached()) return TaskState.SUCCESS;
+        if (r.kind == MoveToTaskRecord.Kind.FIND && nav == null) {
+            TaskState pre = tickFindDiscovery();
+            if (pre != null) {
+                return pre;
+            }
+        }
         if (nav == null) {
             fail(blockedMessage("no path"), FailureType.NO_PATH);
             return TaskState.FAILED;
@@ -220,6 +263,18 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case RUNNING -> TaskState.RUNNING;
             case ARRIVED -> TaskState.SUCCESS;
             case FAILED -> {
+                // FIND:打不通就近候选 -> 除名,朝余下候选重开导航
+                if (r.kind == MoveToTaskRecord.Kind.FIND && candidates.size() > 1) {
+                    int nearest = nearestCandidateIndex();
+                    if (nearest >= 0) {
+                        candidates.remove(nearest);
+                    }
+                    rebuildFindContract();
+                    stopNav();
+                    nav = PlayerNav.to(player, () -> findContract, r.speed, this::reached);
+                    nav.setHighlights(() -> java.util.List.copyOf(candidates));
+                    yield TaskState.RUNNING;
+                }
                 // The planner can't get closer. In water, keep waiting while the body is
                 // still drifting toward the goal (sinking onto an underwater target); give
                 // up only once it's stopped making progress (bobbing at the surface below an
@@ -237,7 +292,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 // YLEVEL has no looser near-equivalent (its goal is already any-x/z), and
                 // the water-settle path above is untouched.
                 if (!nearRetried && !player.isInWater()
-                        && r.kind != MoveToTaskRecord.Kind.YLEVEL) {
+                        && r.kind != MoveToTaskRecord.Kind.YLEVEL
+                        && r.kind != MoveToTaskRecord.Kind.FIND) {
                     nearRetried = true;
                     stopNav();
                     NavGoal retry = nearRetryGoal();
@@ -293,6 +349,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return switch (r.kind) {
             case BLOCK, COLUMN -> horizontalDistSqr(bx, bz) <= NEAR_SUCCESS_RADIUS * NEAR_SUCCESS_RADIUS;
             case YLEVEL -> Math.abs(feet().getY() - by) <= 1;
+            // FIND 候选众多,失败梯已在候选间轮换过,不设贴近成功档
+            case FIND -> false;
         };
     }
 
@@ -308,7 +366,105 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case BLOCK -> Math.sqrt(player.distanceToSqr(bx + 0.5, by, bz + 0.5));
             case COLUMN -> Math.sqrt(horizontalDistSqr(bx, bz));
             case YLEVEL -> Math.abs(player.getY() - by);
+            case FIND -> {
+                BlockPos n = nearestCandidate();
+                yield n == null ? FIND_RADIUS
+                        : Math.sqrt(player.distanceToSqr(n.getX() + 0.5, n.getY() + 0.5, n.getZ() + 0.5));
+            }
         };
+    }
+
+    // ==================== FIND(就近方块)机制 ====================
+
+    /**
+     * 候选发现期(导航尚未建立)推进一步:收割扫描 -> 有候选即建导航
+     * (返回 null 表示落入正常驱动),扫完仍无候选 -> 失败,否则继续等。
+     */
+    private TaskState tickFindDiscovery() {
+        drainFindScan();
+        if (!candidates.isEmpty()) {
+            rebuildFindContract();
+            nav = PlayerNav.to(player, () -> findContract, r.speed, this::reached);
+            nav.setHighlights(() -> java.util.List.copyOf(candidates));
+            return null;
+        }
+        if (findScan == null && findScanDrained) {
+            fail("no " + r.block + " found within " + FIND_RADIUS + " blocks of me — explore"
+                    + " closer to one, or give exact coordinates (scan_blocks/locate can find some).",
+                    FailureType.NO_PATH);
+            return TaskState.FAILED;
+        }
+        return TaskState.RUNNING;
+    }
+
+    /** 踢一次离线扫描(半径 {@link #FIND_RADIUS} 的已加载区块)。 */
+    private void kickFindScan() {
+        var level = player.level();
+        BlockPos center = player.blockPosition().immutable();
+        var chunks = com.dwinovo.numen.core.scan.BlockScanner.captureLoadedChunks(
+                level, center, FIND_RADIUS);
+        if (chunks.isEmpty()) {
+            findScanDrained = true;
+            return;
+        }
+        findScan = com.dwinovo.numen.core.scan.ScanExecutor.submit(
+                () -> com.dwinovo.numen.core.scan.BlockScanner.scanLoaded(
+                        level, chunks, center, FIND_RADIUS, java.util.Set.of(findTarget)));
+        findScanDeadline = level.getGameTime() + FIND_SCAN_TIMEOUT_TICKS;
+    }
+
+    /** 收割离线扫描:按距离取最近的前 {@link #FIND_MAX_CANDIDATES} 个入册。 */
+    private void drainFindScan() {
+        if (findScan == null) {
+            return;
+        }
+        if (!findScan.isDone()) {
+            if (player.level().getGameTime() > findScanDeadline) {
+                findScan.cancel(false);
+                findScan = null;
+                findScanDrained = true;
+            }
+            return;
+        }
+        java.util.List<com.dwinovo.numen.core.scan.BlockScanner.Hit> hits;
+        try {
+            hits = findScan.join();
+        } catch (Exception e) {
+            hits = java.util.List.of();
+        }
+        findScan = null;
+        findScanDrained = true;
+        hits.stream()
+                .sorted(java.util.Comparator.comparingDouble(
+                        com.dwinovo.numen.core.scan.BlockScanner.Hit::distance))
+                .limit(FIND_MAX_CANDIDATES)
+                .map(h -> h.pos().immutable())
+                .forEach(candidates::add);
+    }
+
+    private void rebuildFindContract() {
+        findContract = candidates.isEmpty() ? null
+                : com.dwinovo.numen.core.pathing.goal.GoalCompiler.anyOf(candidates);
+    }
+
+    /** 离身体最近的在册候选;无候选返回 null。 */
+    private BlockPos nearestCandidate() {
+        int i = nearestCandidateIndex();
+        return i < 0 ? null : candidates.get(i);
+    }
+
+    private int nearestCandidateIndex() {
+        int best = -1;
+        double bestD = Double.MAX_VALUE;
+        for (int i = 0; i < candidates.size(); i++) {
+            BlockPos c = candidates.get(i);
+            double d = player.distanceToSqr(c.getX() + 0.5, c.getY() + 0.5, c.getZ() + 0.5);
+            if (d < bestD) {
+                bestD = d;
+                best = i;
+            }
+        }
+        return best;
     }
 
     @Override
@@ -349,6 +505,13 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     + ", standing on the ground at y=" + gy + ".";
             case YLEVEL -> "reached elevation y=" + gy
                     + (gy == by ? "." : " (requested y=" + by + ").");
+            case FIND -> {
+                BlockPos n = nearestCandidate();
+                yield n == null
+                        ? "arrived beside the target block."
+                        : "arrived beside " + r.block + " at " + n.getX() + "," + n.getY()
+                                + "," + n.getZ() + " — within reach to use.";
+            }
         };
     }
 
@@ -363,10 +526,10 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return "timed out " + String.format("%.1f", remaining) + " blocks from target (now at "
                 + bx(gy) + "); "
                 + (stalled
-                        ? "progress had stopped — likely blocked; call move_to again to retry, or"
+                        ? "progress had stopped — likely blocked; call goto again to retry, or"
                                 + " try a nearer waypoint / scan_blocks for a way through."
                         : "the journey was still progressing and simply exceeded its check-in budget;"
-                                + " call move_to again with the same target to resume.");
+                                + " call goto again with the same target to resume.");
     }
 
     @Override
@@ -387,6 +550,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         String where = switch (r.kind) {
             case BLOCK, COLUMN -> "location x=" + bx + " z=" + bz;
             case YLEVEL -> "elevation y=" + by;
+            case FIND -> "the nearest " + r.block;
         };
         // Everything breakable is already on the table (priced by dig time), so the
         // fix for a block is always geometry: nearer waypoint or scanning.

@@ -6,7 +6,7 @@ import net.minecraft.core.BlockPos;
 /**
  * What the search is trying to reach. Until
  * now arrival semantics were written five times in five places (the search's
- * tolerance hack, move_to's radius, three hand-rolled "stand next to X"
+ * tolerance hack, goto's radius, three hand-rolled "stand next to X"
  * pickers); a goal object makes the search terminate, the heuristic aim and
  * the caller assert against the SAME definition.
  *

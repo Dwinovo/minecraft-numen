@@ -167,7 +167,7 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
         return TaskState.RUNNING;
     }
 
-    /** Done fighting — switch to a post-hunt loot sweep. Mirrors auto_mine's drop collection
+    /** Done fighting — switch to a post-hunt loot sweep. Mirrors mine's drop collection
      *  (scan nearby item drops, walk over them so native player pickup grabs them) so a finished
      *  hunt leaves loot in the pack instead of on the ground. */
     private void beginCollect() {
@@ -195,7 +195,7 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
         return TaskState.RUNNING;
     }
 
-    /** Nearby dropped items to sweep up after the fight (auto_mine's droppedItemsScan, with a wider
+    /** Nearby dropped items to sweep up after the fight (mine's droppedItemsScan, with a wider
      *  radius because mobs die spread across the engagement). Unreachable (blacklisted) ones excluded. */
     private List<BlockPos> nearbyDrops() {
         AABB box = player.getBoundingBox().inflate(COLLECT_RADIUS);
@@ -209,7 +209,7 @@ public final class HuntCompanionTask extends AbstractCompanionTask<HuntTaskRecor
         return out;
     }
 
-    /** GoalComposite over every nearby drop — one A* heads for the closest reachable (auto_mine pattern). */
+    /** GoalComposite over every nearby drop — one A* heads for the closest reachable (mine pattern). */
     private NavGoal collectGoal() {
         List<BlockPos> drops = nearbyDrops();
         if (drops.isEmpty()) return NavGoal.exact(player.blockPosition());

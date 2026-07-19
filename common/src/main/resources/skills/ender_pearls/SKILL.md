@@ -27,12 +27,12 @@ Phase 4 of the dragon route. You need **12 pearls** for up to 12 eyes of ender (
 | Overworld at night | Low | Plains/desert, flat sight-lines; `get_world_info` to confirm darkness |
 | Soul sand valley | Medium | Slow walking (soul sand), watch for ghasts |
 
-**Finding the forest: `locate_biome(biome="minecraft:warped_forest")` — never wander-and-scan.** It answers with coordinates and distance up to ~6400 blocks out. The answer is accurate to ~64 blocks: `move_to` the x/z, then `scan_nearby_entities` to confirm endermen (or `scan_blocks` for `warped_nylium`). Not found → travel a few thousand blocks and retry, same as `locate_structure`.
+**Finding the forest: `locate_biome(biome="minecraft:warped_forest")` — never wander-and-scan.** It answers with coordinates and distance up to ~6400 blocks out. The answer is accurate to ~64 blocks: `goto` the x/z, then `scan_nearby_entities` to confirm endermen (or `scan_blocks` for `warped_nylium`). Not found → travel a few thousand blocks and retry, same as `locate_structure`.
 
 ## Hunting loop
 
 1. `equip_item(diamond_sword)`, food check (`get_self_status`).
-2. `scan_nearby_entities` to confirm endermen around; reposition with `move_to` if the area is dry.
+2. `scan_nearby_entities` to confirm endermen around; reposition with `goto` if the area is dry.
 3. `hunt(enderman, 4)` in batches → `collect_items` for scattered pearls.
 4. `get_self_status` between batches; HP ≤ 8 → disengage, eat.
 5. Repeat until ≥12 pearls.

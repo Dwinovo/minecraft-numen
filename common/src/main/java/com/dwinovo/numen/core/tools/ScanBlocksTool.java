@@ -31,7 +31,7 @@ public final class ScanBlocksTool implements NumenTool {
     public String description() {
         return "Bulk find blocks of given type(s) within a spherical radius around you. Returns matches "
                 + "sorted by distance, capped at 32. A perception tool for surveying the area — to actually "
-                + "gather blocks use auto_mine, which finds and digs them itself. Radius is in blocks (max "
+                + "gather blocks use mine, which finds and digs them itself. Radius is in blocks (max "
                 + "192 = 12 chunks — use big radii for landscape features like water, lava lakes or villages' "
                 + "blocks; a big scan answers after a few seconds, you can keep acting meanwhile). FLUIDS are "
                 + "scannable too: minecraft:water / minecraft:lava work as block_ids, and fluid matches carry "
