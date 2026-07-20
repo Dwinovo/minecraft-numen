@@ -137,6 +137,7 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 **扩展一个同伴**——同伴自己的大脑仍然做主：
 - **桥（Bridge）** 把一个外部渠道接进同伴：消息进来，同伴自己决定怎么做。基于 `NumenGateway`。→ **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)**（QQ），后续还有更多。
 - **技能（Skill）** 教同伴怎么做事——markdown 注入它的上下文。随 Numen 内置，或社区编写。
+- **社区 Addon** 为同伴增加面向特定玩法的工具和技能。→ **[Numen Creative](https://github.com/venti0824/numen-creative)**（非官方社区扩展；Minecraft 1.20.1 Forge、Numen 0.0.7、Java 17）
 
 **把 Numen 暴露出去**——把操控权交给外部大脑：
 - **[numen-mcp](https://github.com/Dwinovo/numen-mcp)** 是一个 Model Context Protocol 服务器：任意外部智能体（比如 Claude）直接驱动同伴。基于 `NumenActuator`。
