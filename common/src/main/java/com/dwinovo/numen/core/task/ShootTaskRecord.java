@@ -8,12 +8,12 @@ import java.util.Set;
 /**
  * Typed task descriptor for the intent-level {@code shoot} tool: "destroy
  * {@code count} of these entity types with a bow". The ranged sibling of
- * {@link HuntTaskRecord} — the goal ({@link ShootTaskGoal}) scans for the
+ * {@link MeleeAttackTaskRecord} — the goal ({@link ShootTaskGoal}) scans for the
  * nearest matching entity, closes to within bow range + line of sight with the
  * pathfinder, and looses arrows until it's down, repeating until the count is
  * met or none remain.
  *
- * <p>Unlike {@code hunt}, targets need not be living — an {@code end_crystal} is
+ * <p>Unlike {@code melee_attack}, targets need not be living — an {@code end_crystal} is
  * a non-living entity that <em>must</em> be destroyed at range, which is exactly
  * why this tool exists on the road to the dragon.
  */

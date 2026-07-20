@@ -43,7 +43,7 @@ While you're up high, the dragon may strafe the pillar — if `get_self_status` 
 Two modes, alternating:
 
 - **Flying**: `shoot(ender_dragon)`. Head shots take full damage, body shots are reduced — accept slow progress.
-- **Perched** (it lands on the central fountain periodically, more often at low HP): `equip_item(diamond_sword)` → `hunt(ender_dragon)` — the melee window does the real damage. Back off (`goto` 10+ blocks sideways) when it takes off again.
+- **Perched** (it lands on the central fountain periodically, more often at low HP): `scan_nearby_entities` → select the dragon runtime ID → `melee_attack({"entity_ids":[id]})` — the melee window does the real damage. Back off (`goto` 10+ blocks sideways) when it takes off again.
 
 ### Its attacks and your answers
 

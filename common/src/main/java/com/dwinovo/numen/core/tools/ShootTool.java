@@ -34,7 +34,7 @@ public final class ShootTool implements NumenTool {
                 + "Dragon's end_crystal (which MUST be destroyed at range) and for blazes. REQUIRES a bow or "
                 + "crossbow in your main hand (equip_item) and matching ammo in your inventory — fails up "
                 + "front if either is missing. Optional radius (default auto-expands). Returns the actual "
-                + "number destroyed. Unlike hunt, shoot does NOT pick up drops — ranged kills scatter their "
+                + "number destroyed. Unlike melee_attack, shoot does NOT pick up drops — ranged kills scatter their "
                 + "loot away from you, so call collect_items afterward if you want it.";
     }
 

@@ -38,10 +38,8 @@ public final class GetSelfStatusTool implements NumenTool {
         // turn. Dynamic on purpose — switched-off reflexes drop out of the text.
         String base = "Read your complete status in one call: name, game mode, HP / max HP, "
                 + "hunger / saturation, position, dimension, biome, the structures you "
-                + "are standing in, equipment (slots pinned by your explicit equip_item are "
-                + "marked \"pinned\": true — reflexes keep their gear as instructed), your "
-                + "full backpack inventory, and movement state. ALWAYS call this before "
-                + "combat or planning decisions. No arguments.";
+                + "are standing in, equipment, your full backpack inventory, and movement state. "
+                + "ALWAYS call this before combat or planning decisions. No arguments.";
         String overview = com.dwinovo.numen.task.reflex.ReflexRegistry.overview();
         return overview.isEmpty() ? base : base + "\n\n" + overview;
     }
@@ -83,28 +81,15 @@ public final class GetSelfStatusTool implements NumenTool {
         root.add("structures", structures);
 
         JsonObject equipment = new JsonObject();
-        var pins = com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(self);
-        boolean anyPinned = false;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
             ItemStack s = self.getItemBySlot(slot);
             if (s.isEmpty()) continue;
             JsonObject o = new JsonObject();
             o.addProperty("item", BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
             if (s.getCount() > 1) o.addProperty("count", s.getCount());
-            // Pin visibility (constitution §5): the model must SEE its standing
-            // instructions to clean up stale ones. validate() is the scan-time
-            // expiry — a pin whose item is gone dies right here.
-            if (pins.validate(slot.getName(), com.dwinovo.numen.core.task.pin.Fingerprints.of(s))) {
-                o.addProperty("pinned", true);
-                anyPinned = true;
-            }
             equipment.add(slot.getName(), o);
         }
         root.add("equipment", equipment);
-        if (anyPinned) {
-            root.addProperty("pinned_meaning", "pinned slots hold what you explicitly equipped; "
-                    + "reflexes won't change them. Release one with equip_item(item_id=\"auto\", slot=...).");
-        }
 
         var inv = self.getInventory();
         JsonArray items = new JsonArray();

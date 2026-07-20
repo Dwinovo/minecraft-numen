@@ -22,6 +22,7 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
 
 /**
  * 任务层的导航正门:把一份编译好的导航契约({@link GoalCompiler.Compiled})
@@ -66,6 +67,7 @@ public final class PlayerNav {
     private final NumenPlayer player;
     private final Supplier<GoalCompiler.Compiled> compiledSupplier;
     private final BooleanSupplier reached;
+    private final boolean revalidateGoalEachTick;
     /**
      * speed 参数保留在签名上;新执行体系不支持变速(移动全走原版输入
      * 物理),这里把它路由成疾跑门:speed &lt; 1.0 表示"慢速",本导航
@@ -140,6 +142,13 @@ public final class PlayerNav {
         return new PlayerNav(player, speed, reached, compiled);
     }
 
+    /** 持续跟随一个实时实体,每 tick 用实体当前脚位重新校验目标。 */
+    public static PlayerNav followEntity(NumenPlayer player, Supplier<? extends Entity> entitySupplier,
+                                         double followRadius, double speed, BooleanSupplier reached) {
+        return new PlayerNav(player, speed, reached,
+                () -> followEntityContract(player, entitySupplier, followRadius), true);
+    }
+
     /** 裸自定义目标(runAway、column 等)。不带 sacred——有方块目标的意图
      *  应走 {@link #to} / {@link GoalCompiler},让目标受保护。 */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
@@ -156,12 +165,34 @@ public final class PlayerNav {
         };
     }
 
+    private static GoalCompiler.Compiled followEntityContract(NumenPlayer player,
+                                                             Supplier<? extends Entity> entitySupplier,
+                                                             double followRadius) {
+        Entity entity = entitySupplier.get();
+        if (entity == null || entity == player || entity.isRemoved() || !entity.isAlive()) {
+            return null;
+        }
+        NavGoal goal = followEntityGoal(entity.blockPosition(), followRadius);
+        return new GoalCompiler.Compiled(goal, LongSets.emptySet(), null, false);
+    }
+
+    static NavGoal followEntityGoal(BlockPos entityFeet, double followRadius) {
+        return NavGoal.near(entityFeet, Math.max(0.0, followRadius));
+    }
+
     private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
                       Supplier<GoalCompiler.Compiled> compiledSupplier) {
+        this(player, speed, reached, compiledSupplier, false);
+    }
+
+    private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
+                      Supplier<GoalCompiler.Compiled> compiledSupplier,
+                      boolean revalidateGoalEachTick) {
         this.player = player;
         this.compiledSupplier = compiledSupplier;
         this.sprintAllowed = speed >= 1.0;
         this.reached = reached;
+        this.revalidateGoalEachTick = revalidateGoalEachTick;
         this.core = new PathingCore(player, PoolSearchDispatcher.INSTANCE,
                 this::searchContext, this::executionContext);
     }
@@ -212,14 +243,21 @@ public final class PlayerNav {
         }
 
         if (searchSatisfied) {
-            return Status.ARRIVED;
+            if (!revalidateGoalEachTick) {
+                return Status.ARRIVED;
+            }
+            BlockPos feet = PathExecutor.playerFeet(player);
+            if (compiled.engineGoal().isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
+                return Status.ARRIVED;
+            }
+            searchSatisfied = false;
         }
 
         PathExecutor before = core.getCurrent();
         withSprintGate(() -> {
             // 状态机空闲(初次、或结果被判孤儿丢弃)时(重新)下发目标;
             // setGoalAndPath 已在目标内/已有段/已有在飞搜索时自会不派发
-            if (core.getGoal() == null
+            if (revalidateGoalEachTick || core.getGoal() == null
                     || (core.getCurrent() == null && !core.hasInProgressSearch())) {
                 core.setGoalAndPath(compiled.engineGoal());
             }

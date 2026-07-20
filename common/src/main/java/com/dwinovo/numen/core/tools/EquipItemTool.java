@@ -28,19 +28,15 @@ public final class EquipItemTool implements NumenTool {
     public String description() {
         return "Equip an item from your OWN inventory: tool/weapon to the main hand, armor and modded "
                 + "accessories (Curios/Trinkets) auto-routed to their slots. Omit slot for auto-routing; "
-                + "set it only to force a hand or a specific armor piece. The previous item is stowed back. "
-                + "Explicit equipping PINS the slot — automatic gear swaps won't touch it until the item "
-                + "breaks or leaves; release a pin with item_id \"auto\" plus the slot.";
+                + "set it only to force a hand or a specific armor piece. The previous item is stowed back.";
     }
 
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object()
-                .string("item_id", "Namespaced id of the item to equip; must be in the inventory. "
-                        + "The special value \"auto\" equips nothing and instead releases the given "
-                        + "slot's pin, handing the slot back to your reflexes (slot required).")
+                .string("item_id", "Namespaced id of the item to equip; must be in the inventory.")
                 .optionalEnum("slot", "Optional target slot; omit to auto-route by item type. "
-                        + "Required when item_id is \"auto\".",
+                        + "Use only to force a hand or a specific armor piece.",
                         "mainhand", "offhand", "head", "chest", "legs", "feet")
                 .build();
     }

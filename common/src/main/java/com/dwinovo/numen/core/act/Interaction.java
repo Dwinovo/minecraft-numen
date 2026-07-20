@@ -23,7 +23,7 @@ import net.minecraft.world.phys.Vec3;
  * aim the eyes at a target, then "press"
  * one mouse button (left = ATTACK, right = USE) with a {@link Timing}. Every
  * higher-level action is a thin layer on top: {@code break_block} = ATTACK a
- * block (hold), {@code place_block} = USE a block (once), {@code hunt} = ATTACK an
+ * block (hold), {@code place_block} = USE a block (once), {@code melee_attack} = ATTACK an
  * entity, eat/bow = hold USE in the air.
  *
  * <h2>Native dispatch (the same server entry points a real client's packets reach)</h2>

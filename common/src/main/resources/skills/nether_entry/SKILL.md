@@ -50,7 +50,7 @@ Notes:
 
 - **Don't dig straight down**; lava oceans sit under most terrain. Navigation bridges lava when it must — keep cobblestone stocked.
 - **Water doesn't exist here**: buckets won't place.
-- **Zombified piglins are pacifists until hit — and then they ALL swarm.** Never `hunt` them.
+- **Zombified piglins are pacifists until hit — and then they ALL swarm.** Never `melee_attack` them.
 - **Ghasts** snipe from far; their fireballs can break the portal. On arrival, note the Nether-side portal coordinates (`get_self_status`) and report them to your owner. Overworld↔Nether coordinates map 8:1 horizontally.
 
 ## What to load next
