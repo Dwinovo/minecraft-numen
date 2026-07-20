@@ -38,7 +38,7 @@ Notes:
 |---|---|---|
 | Cooked food | 32+ | Your healing |
 | Diamond sword + bow | 1 + 1 | Equip for combat only — hold the pickaxe while travelling (navigation digs with the held tool) |
-| Arrows | 32+ | `shoot` consumes them (~6 per blaze); run low → switch to melee + extra food |
+| Arrows | 32+ | `ranged_attack` consumes them (~6 per blaze); run low → switch to melee + extra food |
 | Diamond pickaxe (+ iron backup) | 1 + 1 | Obsidian, digging |
 | Cobblestone | 64+ | Navigation scaffold — bridging lava lakes eats it |
 | Gold helmet (worn) | 1 | Piglin truce; 5 gold ingots if you must craft one |

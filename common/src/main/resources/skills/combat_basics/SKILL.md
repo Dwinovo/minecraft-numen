@@ -1,6 +1,6 @@
 ---
 name: combat_basics
-description: Generic combat tactics for the Numen entity - target authorization, melee_attack vs shoot choice, drops, retreat rules, and aggro pitfalls.
+description: Generic combat tactics for the Numen entity - target authorization, melee_attack vs ranged_attack choice, drops, retreat rules, and aggro pitfalls.
 ---
 
 # Skill: combat_basics
@@ -9,7 +9,7 @@ Load this support skill before a combat-heavy phase.
 
 ## Choose and authorize targets
 
-`melee_attack` does not scan by mob type. First call `scan_nearby_entities`, select the exact living entities you intend to attack, then pass 1-20 returned runtime integer IDs:
+Combat tools do not scan by mob type. First call `scan_nearby_entities`, select the exact entities you intend to attack, then pass 1-20 returned runtime integer IDs:
 
 ```json
 {"entity_ids":[184,207,215]}
@@ -25,18 +25,18 @@ Players and mobs use the same ID field. Never guess IDs and never include an ent
 
 After terrain-heavy travel, `melee_attack` can recover its weapon from the full inventory even if navigation temporarily selected a tool or block.
 
-## melee_attack vs shoot
+## melee_attack vs ranged_attack
 
 | Situation | Tool | Why |
 |---|---|---|
-| Blazes | `shoot`, or `melee_attack` when arrows are low | Range avoids fireball volleys |
-| End crystals | `shoot` | They explode and are not living melee targets |
-| Dragon flying | `shoot` | It is outside melee reach |
+| Blazes | `ranged_attack`, or `melee_attack` when arrows are low | Range avoids fireball volleys |
+| End crystals | `ranged_attack` | They explode and are not living melee targets |
+| Dragon flying | `ranged_attack` | It is outside melee reach |
 | Dragon perched | `melee_attack` | Use the melee window |
 | Endermen | `melee_attack` | They evade arrows |
 | Common mobs and food animals | `melee_attack` | Preserve arrows and collect drops automatically |
 
-Bow and crossbow combat stays in `shoot`; never pass them to `melee_attack`.
+Bow and crossbow combat stays in `ranged_attack`; never pass those fights to `melee_attack`.
 
 ## During and after melee
 

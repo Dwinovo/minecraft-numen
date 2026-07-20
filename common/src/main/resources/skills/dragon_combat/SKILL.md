@@ -1,6 +1,6 @@
 ---
 name: dragon_combat
-description: Final boss. End arena layout, crystal destruction with shoot (caged ones via auto-pillar + mine), dragon attack patterns and the perch melee window, HP discipline over a long fight.
+description: Final boss. End arena layout, crystal destruction with ranged_attack (caged ones via auto-pillar + mine), dragon attack patterns and the perch melee window, HP discipline over a long fight.
 ---
 
 # Skill: dragon_combat
@@ -26,7 +26,7 @@ The dragon's HP reaches 0: death animation plays, ~the exit portal opens in the 
 
 ## Step 1 — the 8 open crystals
 
-`equip_item(bow)` → `shoot(end_crystal, 8)`. The tool finds each crystal, walks into line of sight and fires; crystals die to one arrow and **explode** — range is exactly why `shoot` is mandatory here, never approach one.
+`equip_item(bow)` → `scan_nearby_entities` → `ranged_attack({"entity_ids":[crystal_ids]})`. The tool walks into a clear firing window and fires; crystals die to one arrow and **explode** — range is exactly why `ranged_attack` is mandatory here, never approach one.
 
 ## Step 2 — the 2 caged crystals
 
@@ -34,7 +34,7 @@ Per caged pillar:
 
 1. `goto(pillar_top_x, top_y + 1, pillar_top_z)` — navigation pillars up the side on its own (this is what the spare cobblestone is for).
 2. `mine(iron_bars)` to open the cage.
-3. `goto` back down/away 8+ blocks, then `shoot(end_crystal, 1)` — never pop a crystal at point-blank; the explosion hits hard.
+3. `goto` back down/away 8+ blocks, then scan that crystal and call `ranged_attack({"entity_ids":[id]})` — never pop a crystal at point-blank; the explosion hits hard.
 
 While you're up high, the dragon may strafe the pillar — if `get_self_status` shows falling HP, finish the bars and get down first.
 
@@ -42,7 +42,7 @@ While you're up high, the dragon may strafe the pillar — if `get_self_status` 
 
 Two modes, alternating:
 
-- **Flying**: `shoot(ender_dragon)`. Head shots take full damage, body shots are reduced — accept slow progress.
+- **Flying**: scan the dragon runtime ID, then `ranged_attack({"entity_ids":[id]})`. Head shots take full damage, body shots are reduced — accept slow progress.
 - **Perched** (it lands on the central fountain periodically, more often at low HP): `scan_nearby_entities` → select the dragon runtime ID → `melee_attack({"entity_ids":[id]})` — the melee window does the real damage. Back off (`goto` 10+ blocks sideways) when it takes off again.
 
 ### Its attacks and your answers

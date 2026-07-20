@@ -1,6 +1,6 @@
 ---
 name: blaze_rods
-description: Locate a Nether fortress, shoot blazes at their spawner, and collect ≥7 blaze rods (each grinds into 2 blaze powder; 12 eyes of ender need 12 powder = 6 rods, +1 margin).
+description: Locate a Nether fortress, fight blazes at their spawner, and collect ≥7 blaze rods (each grinds into 2 blaze powder; 12 eyes of ender need 12 powder = 6 rods, +1 margin).
 ---
 
 # Skill: blaze_rods
@@ -23,12 +23,12 @@ Phase 3 of the dragon route. Eyes of ender need blaze powder; `locate_structure`
 
 - 20 HP, fly/hover, volley of 3 fireballs (~5 dmg each + sets you on fire) every ~3s at line of sight, fire-immune.
 - They spawn from **blaze spawners**: small fortress rooms with a caged spawner block, plus naturally on fortress bridges.
-- **`shoot` is the safe default** (~6 arrows per blaze); melee walks into fireball volleys. But **scan a blaze and use its runtime ID with `melee_attack` and a diamond sword is a real fallback when arrows run low**: 3 hits kill, and your auto-eat reflex covers the fireball damage as long as you carry plenty of cooked food. Pick by what's in your inventory, not dogma.
+- **`ranged_attack` is the safe default** (~6 arrows per blaze); melee walks into fireball volleys. First scan blazes and pass their runtime IDs. **Using `melee_attack` with a diamond sword is a real fallback when arrows run low**: 3 hits kill, and your auto-eat reflex covers the fireball damage as long as you carry plenty of cooked food. Pick by what's in your inventory, not dogma.
 
 ## Farming loop
 
 1. Find the spawner room (`scan_blocks(spawner)` inside the fortress helps).
-2. `equip_item(bow)` → `shoot(blaze, 3)` in small batches.
+2. `equip_item(bow)` → `scan_nearby_entities` → `ranged_attack({"entity_ids":[id]})` in small batches.
 3. `collect_items` — rods drop on the floor; grab them before they burn in nearby lava... rods are fire-immune items, but lava destroys them. Don't let drops land in lava.
 4. `get_self_status` between batches: HP ≤ 8 → `goto` out of spawner range, eat, return.
 5. Repeat until `get_self_status` shows ≥7 rods. Drop rate is 0–1 per kill (avg 0.5) → expect **~14 kills**, more if unlucky.
