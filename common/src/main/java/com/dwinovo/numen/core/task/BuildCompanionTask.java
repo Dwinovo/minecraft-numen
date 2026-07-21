@@ -133,6 +133,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     @Override
     protected TaskState onTick() {
+        // SNEAK 每 tick 重新决策:默认站立,仅放置、及破坏时若上一 tick 仍在蹲才按下——
+        // 避免搭完/动作间残留蹲姿(输入为持久状态,不像客户端 force-state 会自动清零)。
+        boolean wasSneaking = player.isShiftKeyDown();
+        player.setShiftKeyDown(false);
         registerProvider();
         updateCompleted();
         tickPlaceDelay();
@@ -157,7 +161,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 digger.cancel();
                 return TaskState.RUNNING;
             }
-            return tickBreak();
+            return tickBreak(wasSneaking);
         }
 
         BuildTaskRecord.Target breakTarget = localBreakCandidate();
@@ -165,7 +169,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             emptyArrivalTicks = 0;
             stopNav();
             activeBreak = breakTarget;
-            return tickBreak();
+            return tickBreak(wasSneaking);
         }
 
         // 破块后的落定延迟只抑制"就近放置",导航照常推进(不整体静止)。
@@ -213,7 +217,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         };
     }
 
-    private TaskState tickBreak() {
+    private TaskState tickBreak(boolean wasSneaking) {
         BuildTaskRecord.Target target = activeBreak;
         BlockState state = player.level().getBlockState(target.pos());
         if (target.matches(state) || state.isAir() || state.getBlock() instanceof LiquidBlock) {
@@ -232,6 +236,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             activeBreak = null;
             digger.cancel();
             return TaskState.RUNNING;
+        }
+        if (wasSneaking) {
+            // 破坏时保持上一 tick 的蹲姿:眼高在放置(蹲)↔破坏之间不跳变,
+            // 目标块不会因半格眼高差瞬时脱离射线可达而反复打空。
+            player.setShiftKeyDown(true);
         }
         if (!readyToBreak(target.pos(), aim)) {
             applySteppedAim(aim);
@@ -1279,6 +1288,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         super.cleanup();
         unregisterProvider();
         digger.cancel();
+        player.setShiftKeyDown(false);
     }
 
     @Override
