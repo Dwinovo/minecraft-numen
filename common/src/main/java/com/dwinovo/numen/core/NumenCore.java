@@ -13,6 +13,8 @@ import com.dwinovo.numen.network.payload.TaskResultPayload;
 import com.dwinovo.numen.task.CompanionTaskFactory;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.task.BreakBlockCompanionTask;
+import com.dwinovo.numen.core.task.BuildCompanionTask;
+import com.dwinovo.numen.core.task.BuildTaskRecord;
 import com.dwinovo.numen.core.task.BreakBlockTaskRecord;
 import com.dwinovo.numen.core.task.CollectItemsTaskGoal;
 import com.dwinovo.numen.core.task.CollectItemsTaskRecord;
@@ -118,6 +120,7 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.CollectItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.AutoMineTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EquipItemTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.BuildTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.PlaceBlockTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.BreakBlockTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractAtTool());
@@ -153,6 +156,7 @@ public final class NumenCore {
         CompanionTaskFactory.register(MeleeAttackTaskRecord.class, (p, r) -> new MeleeAttackCompanionTask(p, r));
         CompanionTaskFactory.register(RangedAttackTaskRecord.class, (p, r) -> new RangedAttackCompanionTask(p, r));
         CompanionTaskFactory.register(CollectItemsTaskRecord.class, (p, r) -> new CollectItemsTaskGoal(p, r));
+        CompanionTaskFactory.register(BuildTaskRecord.class, (p, r) -> new BuildCompanionTask(p, r));
         CompanionTaskFactory.register(PlaceBlockTaskRecord.class, (p, r) -> new PlaceBlockCompanionTask(p, r));
         CompanionTaskFactory.register(InteractAtTaskRecord.class, (p, r) -> new InteractAtCompanionTask(p, r));
         CompanionTaskFactory.register(InteractEntityTaskRecord.class, (p, r) -> new InteractEntityCompanionTask(p, r));
@@ -160,3 +164,4 @@ public final class NumenCore {
         CompanionTaskFactory.register(LocateBiomeTaskRecord.class, (p, r) -> new LocateBiomeTaskGoal(p, r));
     }
 }
+

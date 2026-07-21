@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.BlockGetter;
 
 /**
  * 上下文工厂:把服务端快照体系接到新内核的 {@link CalculationContext}。
@@ -28,6 +29,12 @@ public final class ContextFactory {
 
     private ContextFactory() {}
 
+    @FunctionalInterface
+    public interface ContextBuilder {
+        CalculationContext create(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
+                                  boolean safeForThreadedUse, LongSet sacred, LongSet deniedPlace);
+    }
+
     /**
      * 搜索用冻结上下文。必须在主线程调用(快照补建与背包取样都要求
      * 主线程);返回后可交给 worker 线程只读使用。
@@ -37,11 +44,15 @@ public final class ContextFactory {
      */
     public static CalculationContext forSearch(ServerPlayer player, LongSet sacred,
                                                LongSet deniedPlace) {
+        return forSearch(player, sacred, deniedPlace, CalculationContext::new);
+    }
+
+    public static CalculationContext forSearch(ServerPlayer player, LongSet sacred,
+                                               LongSet deniedPlace, ContextBuilder builder) {
         ServerLevel level = (ServerLevel) player.level();
         LoadedChunks loaded = PathCaches.ensureSnapshot(level, player.blockPosition());
         CachedNavView view = new CachedNavView(loaded, level);
-        return new CalculationContext(player, view, view::isLoaded, true,
-                sacred, deniedPlace);
+        return builder.create(player, view, view::isLoaded, true, sacred, deniedPlace);
     }
 
     /** 无语义开关的搜索用冻结上下文。 */
@@ -57,11 +68,15 @@ public final class ContextFactory {
      */
     public static CalculationContext forExecution(ServerPlayer player, LongSet sacred,
                                                   LongSet deniedPlace) {
+        return forExecution(player, sacred, deniedPlace, CalculationContext::new);
+    }
+
+    public static CalculationContext forExecution(ServerPlayer player, LongSet sacred,
+                                                  LongSet deniedPlace, ContextBuilder builder) {
         var view = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
         ChunkLoadedTest loaded = view instanceof com.dwinovo.numen.core.pathing.cache.LoadedOnlyView v
                 ? v::isLoaded : ChunkLoadedTest.ALWAYS;
-        return new CalculationContext(player, view, loaded, false,
-                sacred, deniedPlace);
+        return builder.create(player, view, loaded, false, sacred, deniedPlace);
     }
 
     /** 无语义开关的执行期实时上下文。 */

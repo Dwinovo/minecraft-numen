@@ -16,7 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Semantics of the placement resolver's structured answer — headless (a
  * {@link BlockHitResult} is plain data, no bootstrapped game needed): a success
- * carries exactly a hit, a failure carries exactly a reason + message, and the
+ * carries a hit with optional candidate rotation, a failure carries exactly a reason
+ * plus message, and the
  * invariants reject every malformed mix.
  */
 class PlaceResolutionTest {
@@ -31,9 +32,21 @@ class PlaceResolutionTest {
         PlaceResolution r = PlaceResolution.success(hit);
         assertTrue(r.ok());
         assertSame(hit, r.hit());
+        assertNull(r.yaw());
+        assertNull(r.pitch());
         assertNull(r.reason());
         assertNull(r.message());
         assertNull(r.suggestedStance());
+    }
+
+    @Test
+    void successMayCarryCandidateRotation() {
+        BlockHitResult hit = someHit();
+        PlaceResolution r = PlaceResolution.success(hit, 45.0f, 12.5f);
+        assertTrue(r.ok());
+        assertTrue(r.hasRotation());
+        assertEquals(45.0f, r.yaw());
+        assertEquals(12.5f, r.pitch());
     }
 
     @Test
@@ -56,28 +69,28 @@ class PlaceResolutionTest {
     @Test
     void rejectsHitAndReasonTogether() {
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                someHit(), PlaceResolution.Reason.NO_SUPPORT, "contradiction", null, null));
+                someHit(), null, null, PlaceResolution.Reason.NO_SUPPORT, "contradiction", null, null));
     }
 
     @Test
     void rejectsNeitherHitNorReason() {
         assertThrows(IllegalArgumentException.class,
-                () -> new PlaceResolution(null, null, null, null, null));
+                () -> new PlaceResolution(null, null, null, null, null, null, null));
     }
 
     @Test
     void rejectsAFailureWithoutAMessage() {
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                null, PlaceResolution.Reason.OUT_OF_REACH, null, null, null));
+                null, null, null, PlaceResolution.Reason.OUT_OF_REACH, null, null, null));
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                null, PlaceResolution.Reason.OUT_OF_REACH, "   ", null, null));
+                null, null, null, PlaceResolution.Reason.OUT_OF_REACH, "   ", null, null));
     }
 
     @Test
     void rejectsASuccessDressedWithDiagnosisFields() {
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                someHit(), null, "should not be here", null, null));
+                someHit(), null, null, null, "should not be here", null, null));
         assertThrows(IllegalArgumentException.class, () -> new PlaceResolution(
-                someHit(), null, null, new Vec3(0, 0, 0), null));
+                someHit(), null, null, null, null, new Vec3(0, 0, 0), null));
     }
 }

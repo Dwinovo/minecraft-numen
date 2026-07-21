@@ -4,12 +4,14 @@ import java.lang.reflect.Field;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.food.FoodData;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
@@ -80,6 +82,9 @@ class ThrowawaySelectionTest {
         for (int i = 0; i < inv.items.size(); i++) {
             inv.items.set(i, ItemStack.EMPTY);
         }
+        for (int i = 0; i < inv.offhand.size(); i++) {
+            inv.offhand.set(i, ItemStack.EMPTY);
+        }
         player.getInventory().selected = 0;
     }
 
@@ -129,8 +134,39 @@ class ThrowawaySelectionTest {
     }
 
     @Test
+    void activeBuildProviderBeatsGenericThrowaway() {
+        player.getInventory().items.set(0, new ItemStack(Items.DIRT));
+        player.getInventory().items.set(3, new ItemStack(Blocks.OBSIDIAN.asItem()));
+        BuildPlacementRegistry.Provider provider = placeAt -> placeAt.equals(BlockPos.ZERO)
+                ? Blocks.OBSIDIAN.defaultBlockState() : null;
+        try {
+            BuildPlacementRegistry.register(player, provider);
+            assertTrue(MovementPlacement.selectForLocation(player, BlockPos.ZERO, true));
+            assertEquals(3, player.getInventory().selected,
+                    "建造位置应选择请求方块,不是普通垫路耗材");
+        } finally {
+            BuildPlacementRegistry.unregister(player, provider);
+        }
+    }
+
+    @Test
+    void activeBuildProviderFallsBackToThrowawayWhenTargetBlockIsMissing() {
+        player.getInventory().items.set(0, new ItemStack(Items.DIRT));
+        BuildPlacementRegistry.Provider provider = placeAt -> placeAt.equals(BlockPos.ZERO)
+                ? Blocks.OBSIDIAN.defaultBlockState() : null;
+        try {
+            BuildPlacementRegistry.register(player, provider);
+            assertTrue(MovementPlacement.selectForLocation(player, BlockPos.ZERO, true));
+            assertEquals(0, player.getInventory().selected,
+                    "建造位置缺少请求方块时应能选择普通垫脚块继续移动");
+        } finally {
+            BuildPlacementRegistry.unregister(player, provider);
+        }
+    }
+    @Test
     void noThrowawayReturnsFalse() {
         // 既无快捷栏耗材也无副手耗材
         assertFalse(MovementPlacement.selectThrowaway(player, false));
     }
 }
+

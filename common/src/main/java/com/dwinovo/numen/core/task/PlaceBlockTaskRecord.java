@@ -6,11 +6,9 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Block;
 
 /**
- * Typed task descriptor for {@code place_block}: "put one {@code block} at
- * {@code pos}." The companion pathfinds to a standable spot next to the target
- * (bridging/digging like goto), then places the block from its inventory like
- * a real player (edge-sneak, native useItemOn). Optional orientation hints steer
- * which way the placed block ends up facing.
+ * Typed task descriptor for {@code place_block}: put one {@code block} at one
+ * nearby target cell. Optional orientation hints steer which way the placed
+ * block ends up facing.
  */
 public final class PlaceBlockTaskRecord extends TaskRecord {
 

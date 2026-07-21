@@ -105,10 +105,12 @@ final class MovementPlacement {
         double reach = NavSettings.get().blockReachDistance;
         Vec3 eye = eyePosition(player, wouldSneak);
         boolean found = false;
+        BlockHitResult foundHit = null;
+        float foundYaw = currentYaw;
+        float foundPitch = currentPitch;
 
         // 直视 placeAt 本体(走到这一步说明该格必是可替换的)。中心不可视
-        // 时回退到方块碰撞形状的六面心(对应 Baritone RotationUtils.reachable
-        // 的中心 → 边角回退),用 peek 后的实际转角做 raytrace。
+        // 时回退到方块碰撞形状的六面心,用 peek 后的实际转角做 raytrace。
         for (double[] off : FACE_OFFSETS) {
             Vec3 aim = shapePoint(level, placeAt, off[0], off[1], off[2]);
             float yaw = MovementHelper.yawTo(eye, aim);
@@ -117,8 +119,15 @@ final class MovementPlacement {
                     AIM.step(currentYaw, currentPitch, yaw, pitch);
             BlockHitResult hit = rayTrace(player, eye, peek.yaw(), peek.pitch(), reach);
             if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(placeAt)) {
+                if (!selectForLocation(player, placeAt, hit, peek.yaw(), peek.pitch(), false)) {
+                    state.setStatus(MovementStatus.UNREACHABLE);
+                    return PlaceResult.NO_OPTION;
+                }
                 state.setTarget(new MovementState.MovementTarget(yaw, pitch, true));
                 found = true;
+                foundHit = hit;
+                foundYaw = peek.yaw();
+                foundPitch = peek.pitch();
                 break; // 直视本体只取第一个可行,无需 preferDown
             }
         }
@@ -127,10 +136,6 @@ final class MovementPlacement {
             BlockPos against = placeAt.relative(HORIZONTALS_AND_DOWN[i]);
             if (!MovementHelper.canPlaceAgainst(level, against)) {
                 continue;
-            }
-            if (!selectThrowaway(player, false)) {
-                state.setStatus(MovementStatus.UNREACHABLE);
-                return PlaceResult.NO_OPTION;
             }
             // 贴面中心:两格坐标的中点,落在共享面上
             double faceX = (placeAt.getX() + against.getX() + 1.0) * 0.5;
@@ -146,8 +151,15 @@ final class MovementPlacement {
             if (hit.getType() == HitResult.Type.BLOCK
                     && hit.getBlockPos().equals(against)
                     && hit.getBlockPos().relative(hit.getDirection()).equals(placeAt)) {
+                if (!selectForLocation(player, placeAt, hit, peek.yaw(), peek.pitch(), false)) {
+                    state.setStatus(MovementStatus.UNREACHABLE);
+                    return PlaceResult.NO_OPTION;
+                }
                 state.setTarget(new MovementState.MovementTarget(yaw, pitch, true));
                 found = true;
+                foundHit = hit;
+                foundYaw = peek.yaw();
+                foundPitch = peek.pitch();
                 if (!preferDown) {
                     break; // 水平优先:第一个可行即取
                 }
@@ -155,7 +167,7 @@ final class MovementPlacement {
         }
 
         // 当前转角已经命中正确目标 → 就绪
-        BlockHitResult looking = rayTrace(player, eyePosition(player, false), currentYaw, currentPitch, reach);
+        BlockHitResult looking = rayTrace(player, eyePosition(player, wouldSneak), currentYaw, currentPitch, reach);
         if (looking.getType() == HitResult.Type.BLOCK) {
             BlockPos selected = looking.getBlockPos();
             if (selected.equals(placeAt)
@@ -164,7 +176,10 @@ final class MovementPlacement {
                 if (wouldSneak) {
                     state.setInput(Input.SNEAK, true);
                 }
-                selectThrowaway(player, true);
+                if (!selectForLocation(player, placeAt, looking, currentYaw, currentPitch, true)) {
+                    state.setStatus(MovementStatus.UNREACHABLE);
+                    return PlaceResult.NO_OPTION;
+                }
                 return PlaceResult.READY_TO_PLACE;
             }
         }
@@ -172,12 +187,26 @@ final class MovementPlacement {
             if (wouldSneak) {
                 state.setInput(Input.SNEAK, true);
             }
-            selectThrowaway(player, true);
+            selectForLocation(player, placeAt, foundHit, foundYaw, foundPitch, true);
             return PlaceResult.ATTEMPTING;
         }
         return PlaceResult.NO_OPTION;
     }
 
+    static boolean selectForLocation(ServerPlayer player, BlockPos placeAt, boolean select) {
+        if (BuildPlacementRegistry.hasTarget(player, placeAt)) {
+            return BuildPlacementRegistry.selectForLocation(player, placeAt, select);
+        }
+        return selectThrowaway(player, select);
+    }
+
+    static boolean selectForLocation(ServerPlayer player, BlockPos placeAt, BlockHitResult hit,
+                                     float yaw, float pitch, boolean select) {
+        if (BuildPlacementRegistry.hasTarget(player, placeAt)) {
+            return BuildPlacementRegistry.selectForLocation(player, placeAt, hit, yaw, pitch, select);
+        }
+        return selectThrowaway(player, select);
+    }
     /** 方块碰撞形状上按 (mx,my,mz) 比例取点;空形状退回满格方块。 */
     private static Vec3 shapePoint(Level level, BlockPos pos, double mx, double my, double mz) {
         net.minecraft.world.phys.shapes.VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
@@ -323,3 +352,4 @@ final class MovementPlacement {
         return player.getEyePosition();
     }
 }
+

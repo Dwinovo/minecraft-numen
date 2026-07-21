@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.act;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -34,19 +35,18 @@ import java.util.function.Predicate;
  *       The resolving player itself is exempt: self-overlap is the maneuver's business
  *       (it backs the body off, which needs a resolved hit to aim at).</li>
  *   <li><b>Support enumeration</b> — all six neighbours (UP included: placing against a
- *       ceiling is legal) whose shared face is sturdy ({@link #canPlaceAgainst}). An empty
+ *       ceiling is legal) that expose a usable shape or known sturdy shared face. An empty
  *       set with nothing clickable in the cell is {@link PlaceResolution.Reason#NO_SUPPORT},
  *       immediately.</li>
  *   <li><b>Face ranking</b> — back-facing planes are dropped (geometrically unhittable)
  *       and the rest sorted most-facing-first, so the first ray is the likeliest
  *       ({@link PlaceGeometry#rankVisible}). Zero rays spent so far.</li>
- *   <li><b>Budgeted raycast</b> — per face: the shared-face centre first (Y biased 0.25
- *       low so the ray clears the block's own top when leaning over an edge; an explicit
- *       {@code aimY} — the slab/stair half bias — overrides), then, if the centre is
- *       occluded, one retry at a point inside the 15%-inset face rectangle nearest the
- *       current sight line ({@link PlaceGeometry#insetFacePoint}). A hit must land on the
- *       support block, on the face pointing back at the target (that face selects the
- *       relative cell vanilla places into).</li>
+ *   <li><b>Budgeted raycast</b> — per face: try the biased shared-face centre,
+ *       a sight-line inset point, and fixed face samples. Up/down support faces use
+ *       centre plus four edge-safe offsets; side faces use low/high samples so slab and
+ *       stair halves can be selected. A hit must land on the support block, on the face
+ *       pointing back at the target (that face selects the relative cell vanilla places
+ *       into), and pass the caller's optional hit verifier.</li>
  *   <li><b>Direct click-replace</b> — a block already sitting in the target cell (grass,
  *       snow layer, litter) is aimed at directly and replaced; its own shape is sampled
  *       (centre + face centres) within the same ray budget.</li>
@@ -70,8 +70,8 @@ public final class Placement {
     private Placement() {}
 
     /** Hard cap on {@code level.clip} calls per resolution — the search is a computation,
-     *  never a grind. Typical resolutions commit on the first or second ray. */
-    static final int RAY_BUDGET = 8;
+     *  never a grind. Typical resolutions still commit on the first few rays. */
+    static final int RAY_BUDGET = 32;
 
     /** Reach slack for the face-centre pre-filter: the nearest hittable point of a face can
      *  be up to about half a cell diagonal nearer than its centre. */
@@ -112,6 +112,12 @@ public final class Placement {
      */
     public static PlaceResolution resolveDetailed(NumenPlayer player, BlockPos placeAt,
                                                   boolean wouldSneak, Double aimY) {
+        return resolveDetailed(player, placeAt, wouldSneak, aimY, null);
+    }
+
+    public static PlaceResolution resolveDetailed(NumenPlayer player, BlockPos placeAt,
+                                                  boolean wouldSneak, Double aimY,
+                                                  Predicate<BlockHitResult> hitVerifier) {
         Level level = player.level();
         double reach = player.blockInteractionRange();
         Vec3 eye = eye(player, wouldSneak);
@@ -121,18 +127,20 @@ public final class Placement {
         // moves. The full-cell box is the exact test for full cubes and conservative for
         // sub-cube blocks — acceptable, the task layer retries on a diagnosis. Our own
         // body is exempt: the maneuver handles self-overlap by backing off.
-        Entity blocker = obstructingEntity(level, player, placeAt);
-        if (blocker != null) {
-            return PlaceResolution.failure(PlaceResolution.Reason.BLOCKED_BY_ENTITY,
-                    "can't place at " + placeAt.toShortString() + " — "
-                            + blocker.getName().getString() + " is standing in that cell and a block"
-                            + " can't be placed inside a creature; wait for it to move or lead it away");
+        if (hitVerifier == null) {
+            Entity blocker = obstructingEntity(level, player, placeAt);
+            if (blocker != null) {
+                return PlaceResolution.failure(PlaceResolution.Reason.BLOCKED_BY_ENTITY,
+                        "can't place at " + placeAt.toShortString() + " — "
+                                + blocker.getName().getString() + " is standing in that cell and a block"
+                                + " can't be placed inside a creature; wait for it to move or lead it away");
+            }
         }
 
         // ---- 2. support candidates: all six neighbours with a sturdy shared face.
         List<Direction> supports = new ArrayList<>(6);
         for (Direction dir : Direction.values()) {
-            if (canPlaceAgainst(level, placeAt.relative(dir), dir.getOpposite())) {
+            if (supportCandidate(level, placeAt, dir)) {
                 supports.add(dir);
             }
         }
@@ -162,25 +170,13 @@ public final class Placement {
             BlockPos against = placeAt.relative(dir);
             Predicate<BlockHitResult> onFace = res -> res.getBlockPos().equals(against)
                     && against.relative(res.getDirection()).equals(placeAt);
-            // Sample 1: the shared-face centre, Y biased 0.25 low (or the caller's aimY) —
-            // the proven default that clears the block's own top when leaning over an edge.
-            Vec3 centre = supportAim(placeAt, against, aimY);
-            triedAny = true;
-            BlockHitResult hit = castFromEye(player, eye, centre, reach, onFace, occluder);
-            rays++;
-            if (hit != null) return PlaceResolution.success(hit);
-            if (rays >= RAY_BUDGET) break;
-            // Sample 2: centre occluded — retry once at the inset-rectangle point nearest
-            // the current sight line (falling back to the point nearest the eye, the spot
-            // most likely to peek around whatever blocked the centre).
-            Vec3 alt = PlaceGeometry.insetFacePoint(eye, look, placeAt, dir);
-            if (alt.distanceToSqr(centre) < 0.01) {
-                alt = PlaceGeometry.insetFacePoint(eye, null, placeAt, dir);
-            }
-            if (alt.distanceToSqr(centre) >= 0.01) {
-                hit = castFromEye(player, eye, alt, reach, onFace, occluder);
+            for (Vec3 point : supportSamples(level, placeAt, dir, aimY, eye, look)) {
+                if (rays >= RAY_BUDGET) break;
+                triedAny = true;
+                BlockHitResult hit = castFromEye(player, eye, point, reach, onFace, occluder);
                 rays++;
-                if (hit != null) return PlaceResolution.success(hit);
+                PlaceResolution accepted = acceptedHit(player, hit, hitVerifier, eye, point);
+                if (accepted != null) return accepted;
             }
         }
 
@@ -191,9 +187,12 @@ public final class Placement {
             if (shape.isEmpty()) shape = Shapes.block();
             Predicate<BlockHitResult> onTarget = res -> res.getBlockPos().equals(placeAt);
             triedAny = true;
-            BlockHitResult hit = castFromEye(player, eye, blockCenter(level, placeAt), reach, onTarget, occluder);
+            Vec3 targetCenter = blockCenter(level, placeAt);
+            BlockHitResult hit = castFromEye(player, eye, targetCenter, reach, onTarget, occluder);
             rays++;
-            for (int i = 0; hit == null && i < BLOCK_SIDES.length && rays < RAY_BUDGET; i++) {
+            PlaceResolution accepted = acceptedHit(player, hit, hitVerifier, eye, targetCenter);
+            if (accepted != null) return accepted;
+            for (int i = 0; i < BLOCK_SIDES.length && rays < RAY_BUDGET; i++) {
                 Vec3 m = BLOCK_SIDES[i];
                 Vec3 point = new Vec3(
                         placeAt.getX() + shape.min(Direction.Axis.X) * m.x + shape.max(Direction.Axis.X) * (1 - m.x),
@@ -201,8 +200,9 @@ public final class Placement {
                         placeAt.getZ() + shape.min(Direction.Axis.Z) * m.z + shape.max(Direction.Axis.Z) * (1 - m.z));
                 hit = castFromEye(player, eye, point, reach, onTarget, occluder);
                 rays++;
+                PlaceResolution sideAccepted = acceptedHit(player, hit, hitVerifier, eye, point);
+                if (sideAccepted != null) return sideAccepted;
             }
-            if (hit != null) return PlaceResolution.success(hit);
         }
 
         // ---- 6. diagnosis. Best face = the most-facing visible one, else any sturdy one
@@ -220,6 +220,113 @@ public final class Placement {
                 "a support face exists at " + placeAt.toShortString() + " but my view of it is"
                         + " blocked from here — something solid sits between my eyes and the face",
                 stance, occluder[0]);
+    }
+
+    private static PlaceResolution acceptedHit(NumenPlayer player, BlockHitResult hit,
+                                               Predicate<BlockHitResult> hitVerifier,
+                                               Vec3 eye, Vec3 point) {
+        if (hit == null) {
+            return null;
+        }
+        float yaw = MovementHelper.yawTo(eye, point);
+        float pitch = MovementHelper.pitchTo(eye, point);
+        if (hitVerifier == null) {
+            return PlaceResolution.success(hit, yaw, pitch);
+        }
+        float oldYaw = player.getYRot();
+        float oldPitch = player.getXRot();
+        try {
+            player.setYRot(yaw);
+            player.setXRot(pitch);
+            return hitVerifier.test(hit) ? PlaceResolution.success(hit, yaw, pitch) : null;
+        } finally {
+            player.setYRot(oldYaw);
+            player.setXRot(oldPitch);
+        }
+    }
+
+    private static List<Vec3> supportSamples(Level level, BlockPos placeAt, Direction support,
+                                             Double aimY, Vec3 eye, Vec3 look) {
+        List<Vec3> samples = new ArrayList<>(8);
+        Vec3 centre = supportAim(placeAt, placeAt.relative(support), aimY);
+        addDistinct(samples, centre);
+        Vec3 alt = PlaceGeometry.insetFacePoint(eye, look, placeAt, support);
+        if (alt.distanceToSqr(centre) < 0.01) {
+            alt = PlaceGeometry.insetFacePoint(eye, null, placeAt, support);
+        }
+        addDistinct(samples, alt);
+
+        BlockPos against = placeAt.relative(support);
+        VoxelShape shape = level.getBlockState(against).getShape(level, against);
+        if (shape.isEmpty()) {
+            return samples;
+        }
+        switch (support) {
+            case DOWN -> {
+                addShapePoint(samples, against, shape, 0.5, 1.0, 0.5, null);
+                addShapePoint(samples, against, shape, 0.1, 1.0, 0.5, null);
+                addShapePoint(samples, against, shape, 0.9, 1.0, 0.5, null);
+                addShapePoint(samples, against, shape, 0.5, 1.0, 0.1, null);
+                addShapePoint(samples, against, shape, 0.5, 1.0, 0.9, null);
+            }
+            case UP -> {
+                addShapePoint(samples, against, shape, 0.5, 0.0, 0.5, null);
+                addShapePoint(samples, against, shape, 0.1, 0.0, 0.5, null);
+                addShapePoint(samples, against, shape, 0.9, 0.0, 0.5, null);
+                addShapePoint(samples, against, shape, 0.5, 0.0, 0.1, null);
+                addShapePoint(samples, against, shape, 0.5, 0.0, 0.9, null);
+            }
+            case NORTH -> {
+                addShapePoint(samples, against, shape, 0.5, 0.25, 1.0, aimY);
+                addShapePoint(samples, against, shape, 0.5, 0.75, 1.0, aimY);
+            }
+            case SOUTH -> {
+                addShapePoint(samples, against, shape, 0.5, 0.25, 0.0, aimY);
+                addShapePoint(samples, against, shape, 0.5, 0.75, 0.0, aimY);
+            }
+            case WEST -> {
+                addShapePoint(samples, against, shape, 1.0, 0.25, 0.5, aimY);
+                addShapePoint(samples, against, shape, 1.0, 0.75, 0.5, aimY);
+            }
+            case EAST -> {
+                addShapePoint(samples, against, shape, 0.0, 0.25, 0.5, aimY);
+                addShapePoint(samples, against, shape, 0.0, 0.75, 0.5, aimY);
+            }
+        }
+        return samples;
+    }
+
+    private static void addShapePoint(List<Vec3> samples, BlockPos pos, VoxelShape shape,
+                                      double fx, double fy, double fz, Double absoluteY) {
+        double y = absoluteY == null || absoluteY.isNaN()
+                ? pos.getY() + lerp(shape.min(Direction.Axis.Y), shape.max(Direction.Axis.Y), fy)
+                : absoluteY;
+        addDistinct(samples, new Vec3(
+                pos.getX() + lerp(shape.min(Direction.Axis.X), shape.max(Direction.Axis.X), fx),
+                y,
+                pos.getZ() + lerp(shape.min(Direction.Axis.Z), shape.max(Direction.Axis.Z), fz)));
+    }
+
+    private static double lerp(double a, double b, double t) {
+        return a + (b - a) * t;
+    }
+
+    private static void addDistinct(List<Vec3> samples, Vec3 point) {
+        for (Vec3 existing : samples) {
+            if (existing.distanceToSqr(point) < 0.0001) {
+                return;
+            }
+        }
+        samples.add(point);
+    }
+
+    private static boolean supportCandidate(Level level, BlockPos placeAt, Direction dir) {
+        BlockPos against = placeAt.relative(dir);
+        if (canPlaceAgainst(level, against, dir.getOpposite())) {
+            return true;
+        }
+        BlockState state = level.getBlockState(against);
+        return !state.canBeReplaced() && !state.getShape(level, against).isEmpty();
     }
 
     /** Legacy support-face aim point: shared-face centre with Y biased 0.25 toward the

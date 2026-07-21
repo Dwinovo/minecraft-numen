@@ -16,11 +16,12 @@ import net.minecraft.world.phys.Vec3;
  * a standable spot from which the best support face should be visible, so the task layer
  * can walk straight to a computed answer instead of sampling blind stances.
  *
- * <p>Invariants: success carries a hit and nothing else; failure carries a reason and a
- * non-blank message (stance optional). Exactly one of {@code hit} / {@code reason} is set.
+ * <p>Invariants: success carries a hit plus optional candidate rotation and nothing else;
+ * failure carries a reason and a non-blank message (stance optional). Exactly one of
+ * {@code hit} / {@code reason} is set.
  */
-public record PlaceResolution(BlockHitResult hit, Reason reason, String message, Vec3 suggestedStance,
-                              BlockPos occluder) {
+public record PlaceResolution(BlockHitResult hit, Float yaw, Float pitch, Reason reason,
+                              String message, Vec3 suggestedStance, BlockPos occluder) {
 
     /** Why no placement hit could be produced. */
     public enum Reason {
@@ -42,7 +43,7 @@ public record PlaceResolution(BlockHitResult hit, Reason reason, String message,
             throw new IllegalArgumentException("exactly one of hit / reason must be set");
         }
         if (hit != null && (message != null || suggestedStance != null || occluder != null)) {
-            throw new IllegalArgumentException("a success carries only the hit");
+            throw new IllegalArgumentException("a success carries only the hit and candidate rotation");
         }
         if (reason != null && (message == null || message.isBlank())) {
             throw new IllegalArgumentException("a failure must carry a human-readable message");
@@ -50,22 +51,30 @@ public record PlaceResolution(BlockHitResult hit, Reason reason, String message,
     }
 
     public static PlaceResolution success(BlockHitResult hit) {
-        return new PlaceResolution(hit, null, null, null, null);
+        return new PlaceResolution(hit, null, null, null, null, null, null);
+    }
+
+    public static PlaceResolution success(BlockHitResult hit, float yaw, float pitch) {
+        return new PlaceResolution(hit, yaw, pitch, null, null, null, null);
+    }
+
+    public boolean hasRotation() {
+        return yaw != null && pitch != null;
     }
 
     public static PlaceResolution failure(Reason reason, String message) {
-        return new PlaceResolution(null, reason, message, null, null);
+        return new PlaceResolution(null, null, null, reason, message, null, null);
     }
 
     public static PlaceResolution failure(Reason reason, String message, Vec3 suggestedStance) {
-        return new PlaceResolution(null, reason, message, suggestedStance, null);
+        return new PlaceResolution(null, null, null, reason, message, suggestedStance, null);
     }
 
     /** A {@link Reason#NO_LINE_OF_SIGHT} failure that also names the FIRST block a
      *  sample ray struck instead of the support face — the maneuver may be able to
      *  simply punch it out of the way (tall grass, a snow layer, a leaf). */
     public static PlaceResolution occludedBy(String message, Vec3 suggestedStance, BlockPos occluder) {
-        return new PlaceResolution(null, Reason.NO_LINE_OF_SIGHT, message, suggestedStance,
+        return new PlaceResolution(null, null, null, Reason.NO_LINE_OF_SIGHT, message, suggestedStance,
                 occluder == null ? null : occluder.immutable());
     }
 

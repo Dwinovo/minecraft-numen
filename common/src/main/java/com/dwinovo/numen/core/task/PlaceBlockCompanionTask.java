@@ -34,41 +34,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code place_block} on the player body: walk within reach (full pathfinding —
- * digs / bridges / climbs to get there), then place like a real player with the
- * shared {@link PlaceManeuver} "edge sneak" — hold sneak, edge to the block's rim
- * so the support face comes into view, look at it, and place natively.
- *
- * <p>A "navigate to a target then do one bounded thing" task, so it grows on
- * {@link GoToThenDoTask}: {@link #buildNav()} walks to the cell, {@link #reached()}
- * gates the place, {@link #act()} runs the placement maneuver.
- *
- * <h2>Recovery ladder (failure path only — the success path is untouched)</h2>
- * Instead of bouncing the first substrate failure back to the LLM, bounded
- * alternative EXECUTIONS of the same place are tried in order:
- * <ol>
- *   <li>the direct edge-sneak maneuver from wherever nav parked us (today's rung);</li>
- *   <li>DIRECTED REPOSITION — when the placement resolver diagnosed the failure with a
- *       suggested stance (a standable spot computed to see the best support face), walk
- *       there first and retry: one nav straight to the geometric answer;</li>
- *   <li>REPOSITION — up to {@value #MAX_ALT_STANCES} alternate stances (adjacent to
- *       the target; anywhere within {@value #STANCE_NEAR_RADIUS} blocks of it; then
- *       on the rim ABOVE it, so the down-face comes into view — the one stance that
- *       works when all four sides are walled in — always excluding cells already
- *       failed from), each followed by a fresh maneuver;</li>
- *   <li>DIG-OUT (on {@code OCCLUDED} only) — clear at most {@value #MAX_OCCLUDERS_DUG}
- *       identifiable, non-protected blocks off the line to a support face, then retry
- *       the maneuver once; if no clean occluder is identifiable the rung is skipped;</li>
- *   <li>exhausted — ONE structured failure saying what was tried.</li>
- * </ol>
- * Implemented as an inline state machine ({@link Phase} + attempt counters) rather
- * than a {@code RecoveryLadder} of child tasks: every rung is a parameter variation
- * (stance goal / dig target) of the SAME two primitives this task already owns
- * (nav + {@link PlaceManeuver}), and keeping them in fields is what makes
- * {@code Suspendable} resume trivial — a preempted tick re-drives them in place.
- * The boundary rule holds: every stance hugs the target (≤{@value #STANCE_NEAR_RADIUS}
- * blocks), no material is acquired, {@code NO_MATERIAL} is never laddered, and the
- * dig rung refuses {@code BlockHelper.shouldAvoidBreaking} blocks.
+ * {@code place_block} on the player body: place one nearby cell like a real
+ * player, using the shared edge-sneak placement maneuver and a bounded recovery
+ * ladder for alternate stances or small sight-line cleanup. Long-distance travel
+ * belongs to {@code goto}; multi-block construction belongs to {@code build}.
  */
 public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTaskRecord> {
 
@@ -551,3 +520,4 @@ public final class PlaceBlockCompanionTask extends GoToThenDoTask<PlaceBlockTask
         return "place_block interrupted";
     }
 }
+

@@ -18,9 +18,11 @@ import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
+import java.util.function.Predicate;
 
 /**
  * The live "edge sneak" block placement, shared by {@code place_block} and the
@@ -67,7 +69,7 @@ public final class PlaceManeuver {
     }
 
     private static final Direction[] FACES = {
-            Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN};
+            Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN, Direction.UP};
     private static final int LIMIT_TICKS = 60;
     /** Ticks an entity may squat in the target cell before the maneuver surfaces the
      *  BLOCKED_BY_ENTITY diagnosis — mobs wander through cells constantly, so a moment
@@ -80,6 +82,7 @@ public final class PlaceManeuver {
     private final BooleanSupplier placed;    // is placeAt now filled the way we want?
     private final Hints hints;
     private final Block block;               // for the dry-run; null for the pathfinder (no hints)
+    private final Predicate<BlockState> stateVerifier;
 
     private int ticks;
     private String failReason = "couldn't place";
@@ -127,12 +130,20 @@ public final class PlaceManeuver {
     public PlaceManeuver(NumenPlayer player, BlockPos placeAt,
                          IntSupplier slotFinder, BooleanSupplier placed,
                          Hints hints, Block block) {
+        this(player, placeAt, slotFinder, placed, hints, block, null);
+    }
+
+    /** Oriented placement with a full predicted-state verifier for exact build cells. */
+    public PlaceManeuver(NumenPlayer player, BlockPos placeAt,
+                         IntSupplier slotFinder, BooleanSupplier placed,
+                         Hints hints, Block block, Predicate<BlockState> stateVerifier) {
         this.player = player;
         this.placeAt = placeAt.immutable();
         this.slotFinder = slotFinder;
         this.placed = placed;
         this.hints = hints == null ? Hints.NONE : hints;
         this.block = block;
+        this.stateVerifier = stateVerifier;
     }
 
     public String failReason() {
@@ -160,8 +171,11 @@ public final class PlaceManeuver {
         // One-shot resolution from where the body stands right now: a verified hit, or
         // the structured reason none exists. Never fabricate a hit: no resolved hit means
         // fail fast (unfixable causes), keep edging (positional causes), or time out.
-        PlaceResolution res = Placement.resolveDetailed(player, placeAt, true, aimY);
+        PlaceResolution res = Placement.resolveDetailed(player, placeAt, true, aimY, this::acceptsResolvedHit);
         if (!res.ok()) {
+            if (stateVerifier != null || hints.strict()) {
+                orientationWithheld = true;
+            }
             switch (res.reason()) {
                 case NO_SUPPORT -> {
                     // No stance change can create support — fail structured, zero ticks wasted.
@@ -194,7 +208,7 @@ public final class PlaceManeuver {
                     // leaf between the eyes and the face): punch it out instead of edging
                     // around it — the view opens in a few ticks.
                     BlockPos blocking = res.occluder();
-                    if (blocking != null && softOccluder(blocking)) {
+                    if (stateVerifier == null && blocking != null && softOccluder(blocking)) {
                         punchOccluder(blocking);
                     } else {
                         stopPunching();
@@ -213,7 +227,7 @@ public final class PlaceManeuver {
             stopPunching();
             applySneak(true);   // committed to the press — the crouch must precede the click
             BlockHitResult hit = res.hit();
-            InputDriver.lookAt(player, hit.getLocation());
+            lookAtResolvedHit(res);
             if (player.getBoundingBox().intersects(new AABB(placeAt))) {
                 // Our own collision box is (partly) inside the cell being filled — a placed
                 // block may never overlap an entity, so vanilla refuses EVERY such press.
@@ -245,15 +259,25 @@ public final class PlaceManeuver {
                 // press is held back until a dry-run predicts the right state — under strict
                 // hints for the WHOLE window (a wrong-way stair is rework), otherwise only
                 // through a grace; while held back, keep working around the block.
-                boolean matches = matchesHints(predict(hit));
-                boolean orientationOk = hints.isEmpty() || matches
-                        || (!hints.strict() && ticks > (LIMIT_TICKS * 3) / 5);
-                if (!orientationOk) {
+                BlockState predicted = predict(hit, res.yaw(), res.pitch());
+                if (block != null && predicted == null) {
+                    failReason = "the selected face at " + placeAt.toShortString()
+                            + " would not accept that block from here";
+                    failType = FailureType.OCCLUDED;
+                    return Status.FAILED;
+                }
+                boolean matches = stateVerifier == null
+                        ? matchesHints(predicted)
+                        : predicted != null && stateVerifier.test(predicted);
+                boolean mustMatch = stateVerifier != null || !hints.isEmpty();
+                boolean placementOk = !mustMatch || matches
+                        || (stateVerifier == null && !hints.strict() && ticks > (LIMIT_TICKS * 3) / 5);
+                if (!placementOk) {
                     orientationWithheld = true;
                     applySneak(false);   // circling the block, not pressing — full walk speed far out
                     edgeToward(hit.getLocation());
                 } else {
-                    if (!hints.isEmpty() && !matches && !orientationCompromiseLogged) {
+                    if (stateVerifier == null && !hints.isEmpty() && !matches && !orientationCompromiseLogged) {
                         orientationCompromiseLogged = true;
                         Constants.LOG.info(
                                 "[numen-path] place at {} compromising on orientation after {} ticks"
@@ -277,10 +301,15 @@ public final class PlaceManeuver {
             // Precedence: a strict-orientation withhold is its own story; then a recorded
             // vanilla refusal (the truest); then the resolver's last diagnosis (occluded /
             // out of reach, LLM-readable); then the generic no-line summary.
-            if (hints.strict() && orientationWithheld && lastRefusal == null) {
-                failReason = "a face at " + placeAt.toShortString() + " was in view, but no stance"
-                        + " within the window would place the block the requested way round"
-                        + " (hints " + hints + ") — strict orientation refuses to compromise";
+            if ((stateVerifier != null || hints.strict()) && orientationWithheld && lastRefusal == null) {
+                if (stateVerifier != null) {
+                    failReason = "a face at " + placeAt.toShortString() + " was in view, but no stance"
+                            + " within the window would place the requested block state";
+                } else {
+                    failReason = "a face at " + placeAt.toShortString() + " was in view, but no stance"
+                            + " within the window would place the block the requested way round"
+                            + " (hints " + hints + ") — strict orientation refuses to compromise";
+                }
                 failType = FailureType.OCCLUDED;
                 Constants.LOG.info("[numen-path] place gave up at {} after {} ticks: {}",
                         placeAt.toShortString(), ticks, failReason);
@@ -387,21 +416,73 @@ public final class PlaceManeuver {
     private Direction[] orderedFaces() {
         if (hints.axis() == null) return FACES;
         return switch (hints.axis()) {
-            case Y -> new Direction[]{Direction.DOWN, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
-            case X -> new Direction[]{Direction.EAST, Direction.WEST, Direction.NORTH, Direction.SOUTH, Direction.DOWN};
-            case Z -> new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN};
+            case Y -> new Direction[]{Direction.DOWN, Direction.UP, Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST};
+            case X -> new Direction[]{Direction.EAST, Direction.WEST, Direction.NORTH, Direction.SOUTH, Direction.DOWN, Direction.UP};
+            case Z -> new Direction[]{Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN, Direction.UP};
         };
+    }
+
+    private boolean acceptsResolvedHit(BlockHitResult hit) {
+        if (block == null) {
+            return true;
+        }
+        BlockState predicted = predict(hit);
+        if (predicted == null) {
+            return false;
+        }
+        if (stateVerifier != null) {
+            return stateVerifier.test(predicted);
+        }
+        if (hints.isEmpty()) {
+            return true;
+        }
+        return matchesHints(predicted) || (!hints.strict() && ticks > (LIMIT_TICKS * 3) / 5);
+    }
+
+    private void lookAtResolvedHit(PlaceResolution res) {
+        if (res.hasRotation()) {
+            player.setYRot(res.yaw());
+            player.setYHeadRot(res.yaw());
+            player.setXRot(res.pitch());
+        } else {
+            InputDriver.lookAt(player, res.hit().getLocation());
+        }
     }
 
     /** The blockstate this hit would place right now (vanilla's own rules), or null if unknown. */
     private BlockState predict(BlockHitResult hit) {
+        return predict(hit, null, null);
+    }
+
+    private BlockState predict(BlockHitResult hit, Float yaw, Float pitch) {
         if (block == null) return null;
+        float oldYaw = player.getYRot();
+        float oldPitch = player.getXRot();
         try {
-            return block.getStateForPlacement(
-                    new BlockPlaceContext(player, InteractionHand.MAIN_HAND, new ItemStack(block.asItem()), hit));
+            if (yaw != null && pitch != null) {
+                player.setYRot(yaw);
+                player.setXRot(pitch);
+            }
+            BlockPlaceContext context = new BlockPlaceContext(player, InteractionHand.MAIN_HAND,
+                    new ItemStack(block.asItem()), hit);
+            BlockState state = block.getStateForPlacement(context);
+            if (state == null || !context.canPlace() || !state.canSurvive(player.level(), placeAt)
+                    || !placementPlausible(state)) {
+                return null;
+            }
+            return state;
         } catch (RuntimeException e) {
             return null;
+        } finally {
+            player.setYRot(oldYaw);
+            player.setXRot(oldPitch);
         }
+    }
+
+    private boolean placementPlausible(BlockState state) {
+        VoxelShape shape = state.getCollisionShape(player.level(), placeAt);
+        return shape.isEmpty() || player.level().isUnobstructed(null,
+                shape.move(placeAt.getX(), placeAt.getY(), placeAt.getZ()));
     }
 
     /** Does the predicted state satisfy every hint that applies to it? (Unknown property = no veto.) */

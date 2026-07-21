@@ -1,7 +1,9 @@
 package com.dwinovo.numen.core.pathing.settings;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -96,6 +98,28 @@ public final class NavSettings {
     public boolean preferSilkTouch = false;
     /** 自动切换最优工具。 */
     public boolean autoTool = true;
+    /** 破坏已完成建筑目标的成本乘数。 */
+    public double breakCorrectBlockPenaltyMultiplier = 10.0;
+    /** 在建筑目标格临时放置错误方块的成本乘数。 */
+    public double placeIncorrectBlockPenaltyMultiplier = 2.0;
+    /** 建造时是否把任意非空气现有方块视为已可接受。 */
+    public boolean buildIgnoreExisting = false;
+    /** 建造时是否忽略朝向类方块属性。 */
+    public boolean buildIgnoreDirection = false;
+    /** 建造时是否把水/液体方块视为已可接受。 */
+    public boolean okIfWater = false;
+    /** 建造清理时允许从目标上一层附近处理下方方块。 */
+    public boolean breakFromAbove = false;
+    /** 清理目标可从上方处理时，把上方附近也纳入导航目标。 */
+    public boolean goalBreakFromAbove = false;
+    /** 分层建造中当前层没有可执行动作时是否跳到下一层。 */
+    public boolean skipFailedLayers = false;
+    /** 建造任务一次全量重算最多保留的未完成目标数。 */
+    public int incorrectSize = 100;
+    /** 建造任务每 tick 在玩家附近重新检查的半径。 */
+    public int builderTickScanRadius = 5;
+    /** 是否只保留离玩家较近的未完成目标窗口。 */
+    public boolean distanceTrim = true;
     /** 受保护方块的挖掘速度乘数(0.1 即成本 ×10)。 */
     public double avoidBreakingMultiplier = 0.1;
     /** 启用生物/刷怪笼规避(默认关,关闭时 Favoring 不叠规避球)。 */
@@ -187,6 +211,10 @@ public final class NavSettings {
     private List<Block> blocksToDisallowBreaking;
     private List<Block> blocksToAvoidBreaking;
     private List<Block> allowBreakAnyway;
+    private List<Block> buildIgnoreBlocks;
+    private List<Block> okIfAir;
+    private List<String> buildIgnoreProperties;
+    private Map<Block, List<Block>> buildValidSubstitutes;
 
     /** 可用作垫路耗材的物品。 */
     public List<Item> acceptableThrowawayItems() {
@@ -228,5 +256,37 @@ public final class NavSettings {
             allowBreakAnyway = new ArrayList<>();
         }
         return allowBreakAnyway;
+    }
+
+    /** 目标为空气时仍视为可接受的现有方块。 */
+    public List<Block> buildIgnoreBlocks() {
+        if (buildIgnoreBlocks == null) {
+            buildIgnoreBlocks = new ArrayList<>();
+        }
+        return buildIgnoreBlocks;
+    }
+
+    /** 现有空气可接受的目标方块类型。 */
+    public List<Block> okIfAir() {
+        if (okIfAir == null) {
+            okIfAir = new ArrayList<>();
+        }
+        return okIfAir;
+    }
+
+    /** 建造有效性判断中忽略的方块状态属性名。 */
+    public List<String> buildIgnoreProperties() {
+        if (buildIgnoreProperties == null) {
+            buildIgnoreProperties = new ArrayList<>();
+        }
+        return buildIgnoreProperties;
+    }
+
+    /** 目标方块到可接受替代方块的映射。 */
+    public Map<Block, List<Block>> buildValidSubstitutes() {
+        if (buildValidSubstitutes == null) {
+            buildValidSubstitutes = new HashMap<>();
+        }
+        return buildValidSubstitutes;
     }
 }

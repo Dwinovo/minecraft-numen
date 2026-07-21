@@ -67,6 +67,7 @@ public final class PlayerNav {
     private final NumenPlayer player;
     private final Supplier<GoalCompiler.Compiled> compiledSupplier;
     private final BooleanSupplier reached;
+    private final ContextProvider contextProvider;
     private final boolean revalidateGoalEachTick;
     /**
      * speed 参数保留在签名上;新执行体系不支持变速(移动全走原版输入
@@ -142,6 +143,20 @@ public final class PlayerNav {
         return new PlayerNav(player, speed, reached, compiled);
     }
 
+    /** 编译契约正门,带任务专用的搜索/执行成本上下文。 */
+    public static PlayerNav to(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiled,
+                               double speed, BooleanSupplier reached,
+                               ContextProvider contextProvider) {
+        return new PlayerNav(player, speed, reached, compiled, false, contextProvider);
+    }
+
+    /** 编译契约正门,并在每 tick 重新读取目标与保护格。 */
+    public static PlayerNav toRevalidating(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiled,
+                                           double speed, BooleanSupplier reached,
+                                           ContextProvider contextProvider) {
+        return new PlayerNav(player, speed, reached, compiled, true, contextProvider);
+    }
+
     /** 持续跟随一个实时实体,每 tick 用实体当前脚位重新校验目标。 */
     public static PlayerNav followEntity(NumenPlayer player, Supplier<? extends Entity> entitySupplier,
                                          double followRadius, double speed, BooleanSupplier reached) {
@@ -182,16 +197,24 @@ public final class PlayerNav {
 
     private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
                       Supplier<GoalCompiler.Compiled> compiledSupplier) {
-        this(player, speed, reached, compiledSupplier, false);
+        this(player, speed, reached, compiledSupplier, false, ContextProvider.DEFAULT);
     }
 
     private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
                       Supplier<GoalCompiler.Compiled> compiledSupplier,
                       boolean revalidateGoalEachTick) {
+        this(player, speed, reached, compiledSupplier, revalidateGoalEachTick,
+                ContextProvider.DEFAULT);
+    }
+
+    private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
+                      Supplier<GoalCompiler.Compiled> compiledSupplier,
+                      boolean revalidateGoalEachTick, ContextProvider contextProvider) {
         this.player = player;
         this.compiledSupplier = compiledSupplier;
         this.sprintAllowed = speed >= 1.0;
         this.reached = reached;
+        this.contextProvider = contextProvider == null ? ContextProvider.DEFAULT : contextProvider;
         this.revalidateGoalEachTick = revalidateGoalEachTick;
         this.core = new PathingCore(player, PoolSearchDispatcher.INSTANCE,
                 this::searchContext, this::executionContext);
@@ -199,14 +222,31 @@ public final class PlayerNav {
 
     /** 搜索用冻结上下文:快照世界 + 快照背包,穿透三个语义开关。 */
     private CalculationContext searchContext() {
-        CalculationContext ctx = ContextFactory.forSearch(player, sacred, deniedPlace);
+        CalculationContext ctx = contextProvider.forSearch(player, sacred, deniedPlace);
         lastSearchContext = ctx;
         return ctx;
     }
 
     /** 执行期复核用实时上下文:活世界 + 当下背包,同一套语义开关。 */
     private CalculationContext executionContext() {
-        return ContextFactory.forExecution(player, sacred, deniedPlace);
+        return contextProvider.forExecution(player, sacred, deniedPlace);
+    }
+
+    public interface ContextProvider {
+        ContextProvider DEFAULT = new ContextProvider() {
+            @Override
+            public CalculationContext forSearch(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
+                return ContextFactory.forSearch(player, sacred, deniedPlace);
+            }
+
+            @Override
+            public CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
+                return ContextFactory.forExecution(player, sacred, deniedPlace);
+            }
+        };
+
+        CalculationContext forSearch(NumenPlayer player, LongSet sacred, LongSet deniedPlace);
+        CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace);
     }
 
     public Status tick() {
@@ -323,7 +363,8 @@ public final class PlayerNav {
      * {@link #MAX_STALLED_REPLANS} 判 BOXED_IN。返回 null 表示继续跑。
      */
     private Status accountReplan(NavGoal liveGoal) {
-        double h = liveGoal.heuristic(player.blockPosition());
+        BlockPos feet = PathExecutor.playerFeet(player);
+        double h = liveGoal.heuristic(feet);
         if (bestGoalH - h >= REPLAN_PROGRESS_EPS_H) {
             bestGoalH = h;
             stalledReplans = 0;
@@ -379,6 +420,14 @@ public final class PlayerNav {
         return reason;
     }
 
+    public boolean isSafeToCancel() {
+        return core.isSafeToCancel();
+    }
+
+    public BlockPos pathStart() {
+        return core.pathStart();
+    }
+
     /** FAILED 后的人话验尸(直接喂 LLM)。 */
     public String failReason() {
         return failReason;
@@ -414,3 +463,5 @@ public final class PlayerNav {
         player.setShiftKeyDown(false);
     }
 }
+
+

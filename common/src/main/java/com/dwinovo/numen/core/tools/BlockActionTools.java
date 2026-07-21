@@ -30,7 +30,7 @@ import java.util.Set;
  */
 public final class BlockActionTools {
 
-    // place_block: covers walking to the spot.
+    // place_block: one nearby cell; travel belongs to goto or build.
     private static final long PLACE_TIMEOUT_TICKS = 30 * 20;
     // break_block: walk + dig budget; obsidian by hand-tier diamond pick is ~10s alone.
     private static final long BREAK_TIMEOUT_TICKS = 45 * 20;
@@ -182,3 +182,4 @@ String item_id,
         };
     }
 }
+

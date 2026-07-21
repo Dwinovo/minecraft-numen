@@ -268,7 +268,7 @@ public class MovementParkour extends Movement {
             if (feet.equals(src.relative(direction)) || player.getY() - src.getY() > 0.0001) {
                 // 已跳出第一格或已离地
                 if (NavSettings.get().allowPlace
-                        && MovementPlacement.selectThrowaway(player, false)
+                        && MovementPlacement.selectForLocation(player, dest.below(), false)
                         && !MovementHelper.canWalkOn(player.level(), dest.below())
                         && !player.onGround()
                         && MovementPlacement.attemptToPlaceABlock(state, player, dest.below(), true, false)
@@ -299,3 +299,4 @@ public class MovementParkour extends Movement {
         return state;
     }
 }
+

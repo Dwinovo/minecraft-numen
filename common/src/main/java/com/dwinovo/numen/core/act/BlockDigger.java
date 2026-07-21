@@ -158,6 +158,23 @@ public final class BlockDigger {
         return advance(hit, effective.equals(target));
     }
 
+
+    public DigResult digTargetStep(BlockPos target) {
+        if (blockHitDelay > 0) {
+            blockHitDelay--;
+            InputDriver.halt(player);
+            return DigResult.PROGRESSING;
+        }
+        BlockHitResult hit = reachableHit(target);
+        InputDriver.halt(player);
+        if (hit == null) {
+            return DigResult.NO_SHOT;
+        }
+        if (pos == null || !pos.equals(target)) {
+            start(target, true);
+        }
+        return advance(hit, true);
+    }
     /** Shared per-tick dig advance against a resolved hit (face + aim point). */
     private DigResult advance(BlockHitResult hit, boolean targetBreak) {
         Level level = player.level();

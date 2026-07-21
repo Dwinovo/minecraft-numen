@@ -216,7 +216,7 @@ public class MovementPillar extends Movement {
             return state;
         } else {
             // 垫柱:先把耗材拿到手
-            if (!MovementPlacement.selectThrowaway(player, true)) {
+            if (!MovementPlacement.selectForLocation(player, src, true)) {
                 return state.setStatus(MovementStatus.UNREACHABLE);
             }
 
@@ -284,3 +284,4 @@ public class MovementPillar extends Movement {
         return super.prepared(state);
     }
 }
+
