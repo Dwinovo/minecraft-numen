@@ -48,12 +48,13 @@ public final class BuildTool implements NumenTool {
 
     @Override
     public String description() {
-        return "Build a small explicit structure from inventory as one background task. Pass 1-512 "
-                + "absolute block cells in `blocks`; each cell has `block_id`, `x`, `y`, `z`, and optional "
-                + "state fields (`facing`, `axis`, `half`, `properties`). The task walks, climbs, bridges, clears wrong "
-                + "blocks at requested cells when replacement is enabled, and can build in optional vertical layers. "
-                + "Use this for portals, frames, walls, stairs, pillars, roofs, and other multi-block "
-                + "construction instead of many place_block calls. It does not read schematic files yet.";
+        return "Place or clear explicit block cells from inventory as one background task — one cell or "
+                + "many (1-512). Pass absolute cells in `blocks`; each has `block_id`, `x`, `y`, `z`, and optional "
+                + "state fields (`facing`, `axis`, `half`, `properties`). A cell whose `block_id` is `minecraft:air` "
+                + "CLEARS/breaks whatever is there (drops harvest normally). The task walks, climbs and bridges to "
+                + "each cell, clears wrong blocks at requested cells when replacement is enabled, and can build in "
+                + "optional vertical layers. Use this for a single block, a correction, or portals, frames, walls, "
+                + "stairs, pillars, roofs and larger construction. It does not read schematic files yet.";
     }
 
     @Override
@@ -61,7 +62,8 @@ public final class BuildTool implements NumenTool {
         Map<String, Object> props = new LinkedHashMap<>();
         props.put("block_id", Map.of(
                 "type", "string",
-                "description", "Namespaced id of the block item to place, e.g. minecraft:obsidian."));
+                "description", "Namespaced id of the block item to place, e.g. minecraft:obsidian. "
+                        + "Use minecraft:air to clear/break whatever occupies the cell."));
         props.put("x", Map.of("type", "integer", "description", "Target x."));
         props.put("y", Map.of("type", "integer", "description", "Target y."));
         props.put("z", Map.of("type", "integer", "description", "Target z."));

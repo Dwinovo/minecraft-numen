@@ -33,7 +33,7 @@ The room has a lava pool under the frame and a **silverfish spawner** on the sta
 
 1. `mine(spawner)` immediately — unlike the blaze spawner, this one is pure liability.
 2. If silverfish are already out, scan them, then pass their runtime IDs to `melee_attack`; don't let them burrow into the brickwork.
-3. `place_block` cobblestone over the lava pool edges where you'll stand.
+3. `build` cobblestone over the lava pool edges where you'll stand.
 
 ## Step 4 — fill the frames
 

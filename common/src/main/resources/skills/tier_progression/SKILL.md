@@ -41,7 +41,7 @@ Below Y 0 every ore is its **deepslate variant** — always pass both ids to `mi
 
 ## Recommended order
 
-1. **Wood**: `mine` 8+ logs (any `*_log`; hand works) → craft planks → sticks → a `wooden_pickaxe`. Crafting = `lookup_recipe` then `transfer` the ingredients into a grid (load the `containers` skill for the how). 2×2 recipes (planks, sticks) use your own grid; a 3×3 (the pickaxe) needs a crafting table — once you have planks, craft one, `place_block` it, then `interact_at` to open it. Remember the table's coordinates and reuse it.
+1. **Wood**: `mine` 8+ logs (any `*_log`; hand works) → craft planks → sticks → a `wooden_pickaxe`. Crafting = `lookup_recipe` then `transfer` the ingredients into a grid (load the `containers` skill for the how). 2×2 recipes (planks, sticks) use your own grid; a 3×3 (the pickaxe) needs a crafting table — once you have planks, craft one, `build` it (a single cell), then `interact_at` to open it. Remember the table's coordinates and reuse it.
 2. **Stone**: `equip_item(wooden_pickaxe)` → `mine(stone, 20)` (drops cobblestone) → craft a `stone_pickaxe`, `stone_sword`, and a `furnace`.
 3. **Food**: scan cows/pigs/chickens and pass their runtime IDs to `melee_attack` (6+ total) → cook the raw meat: `interact_at` a furnace, `transfer` the raw food into the top slot + fuel (coal or planks) below, then `wait` and `transfer` the cooked food out (see the `containers` skill). Always cook; raw meat barely heals.
 4. **Iron**: descend (`goto(x, 16, z)` — navigation digs its own way down) → `equip_item(stone_pickaxe)` → `mine(iron_ore, deepslate_iron_ore, 10+)` → smelt `raw_iron` (same furnace flow) → craft an `iron_pickaxe`, `iron_sword`, then armor as ingots allow (helmet 5, chestplate 8, leggings 7, boots 4).

@@ -3,16 +3,12 @@ package com.dwinovo.numen.core.tools;
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.agent.tool.api.ToolContext;
 import com.dwinovo.numen.task.TaskRecord;
-import com.dwinovo.numen.core.task.BreakBlockTaskRecord;
 import com.dwinovo.numen.core.task.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.InteractEntityTaskRecord;
 import com.dwinovo.numen.core.task.MineBlockTaskRecord;
-import com.dwinovo.numen.core.task.PlaceBlockTaskRecord;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -30,11 +26,6 @@ import java.util.Set;
  */
 public final class BlockActionTools {
 
-    // place_block: one nearby cell; travel belongs to goto or build.
-    private static final long PLACE_TIMEOUT_TICKS = 30 * 20;
-    // break_block: walk + dig budget; obsidian by hand-tier diamond pick is ~10s alone.
-    private static final long BREAK_TIMEOUT_TICKS = 45 * 20;
-
     // mine budgets / bounds.
     private static final int MAX_COUNT = 256;
     /** Per-block budget is generous; total scales with count so big jobs don't time out. */
@@ -45,48 +36,6 @@ public final class BlockActionTools {
     private static final long INTERACT_AT_TIMEOUT_TICKS = 30 * 20;
     // interact_entity: covers chasing a moving target.
     private static final long INTERACT_ENTITY_TIMEOUT_TICKS = 60 * 20;
-
-    public TaskRecord placeBlock(
-String block_id,
-int x,
-int y,
-int z,
-String facing,
-String axis,
-String half,
-            ToolContext ctx) {
-        Item item = ToolArgs.parseItem(block_id);
-        if (!(item instanceof BlockItem blockItem)) {
-            throw new IllegalArgumentException(
-                    BuiltInRegistries.ITEM.getKey(item) + " is not a placeable block");
-        }
-        BlockPos pos = new BlockPos(x, y, z);
-        String label = BuiltInRegistries.ITEM.getKey(item).getPath();
-        Direction facingDir = optEnum(facing) == null ? null
-                : Direction.byName(optEnum(facing));
-        Direction.Axis axisVal = optEnum(axis) == null ? null
-                : Direction.Axis.byName(optEnum(axis));
-        String halfVal = optEnum(half);
-        Boolean topHalf = halfVal == null ? null : halfVal.equals("top");
-        return new PlaceBlockTaskRecord(ctx.toolCallId(), ctx.deadline(PLACE_TIMEOUT_TICKS),
-                blockItem.getBlock(), item, pos, label, facingDir, axisVal, topHalf);
-    }
-
-    /** A lowercased optional enum string value, or null if absent / blank. */
-    private static String optEnum(String v) {
-        if (v == null) return null;
-        v = v.trim().toLowerCase();
-        return v.isEmpty() ? null : v;
-    }
-
-    public TaskRecord breakBlock(
-int x,
-int y,
-int z,
-            ToolContext ctx) {
-        BlockPos target = new BlockPos(x, y, z);
-        return new BreakBlockTaskRecord(ctx.toolCallId(), ctx.deadline(BREAK_TIMEOUT_TICKS), target);
-    }
 
     public TaskRecord autoMine(List<String> block_ids, int count, ToolContext ctx) {
         Set<Block> targets = readBlockIds(block_ids);
