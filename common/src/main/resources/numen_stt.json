@@ -1,0 +1,33 @@
+{
+  "_comment": "Numen STT (voice-input) providers. OpenAI-compatible POST {base}/v1/audio/transcriptions (multipart file+model) unless 'backend' says otherwise. Per provider: base URL + known model ids. Model lists refreshed from each provider's docs (2026-07); best-effort, may drift. USER-EDITABLE: this is copied to config/numen/stt.json on first run; edit that file to add your own providers/models or override URLs. The settings 'custom' model escape hatch also accepts any id.",
+  "providers": [
+    {
+      "id": "siliconflow",
+      "name": "SiliconFlow (硅基流动)",
+      "backend": "whisper-http",
+      "baseUrl": "https://api.siliconflow.cn",
+      "models": ["FunAudioLLM/SenseVoiceSmall"]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI Whisper",
+      "backend": "whisper-http",
+      "baseUrl": "https://api.openai.com",
+      "models": ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"]
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "backend": "whisper-http",
+      "baseUrl": "https://api.groq.com/openai",
+      "models": ["whisper-large-v3-turbo", "whisper-large-v3", "distil-whisper-large-v3-en"]
+    },
+    {
+      "id": "custom",
+      "name": "Custom (OpenAI-compatible)",
+      "backend": "whisper-http",
+      "baseUrl": "",
+      "models": []
+    }
+  ]
+}

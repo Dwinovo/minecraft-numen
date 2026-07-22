@@ -127,7 +127,7 @@ public final class NumenScreen extends Screen {
     private Tab tab = Tab.CHAT;
 
     /** The Settings tab is a config hub: a left sub-nav picks one of these sections. */
-    private enum SettingsSection { PROVIDER, PROXY, MCP, SKILLS, PERSONA, VOICE, SKIN }
+    private enum SettingsSection { PROVIDER, PROXY, MCP, SKILLS, PERSONA, VOICE, SKIN, STT }
 
     // ---- model-config section state (mirrors the persona section) ----
     private boolean addingProvider;
@@ -222,6 +222,7 @@ public final class NumenScreen extends Screen {
     private SimpleButton sendButton;
     private SimpleButton stopButton;
     private SimpleButton compactButton;
+    private SimpleButton micButton;
     private String savedInput = "";
 
     // "+" summon flow: a transient name field shown over the panel
@@ -244,7 +245,13 @@ public final class NumenScreen extends Screen {
     private EditBox apiKeyInput;
     private EditBox modelInput;
     private EditBox baseUrlInput;
+    private EditBox sttKeyInput, sttBaseUrlInput, sttModelInput;
+    private Dropdown sttProviderDropdown, sttModelDropdown, sttMicDropdown;
+    private boolean sttCustomModel;
+    private String wSttProvider, wSttKey, wSttBaseUrl, wSttModel, wSttMic;
     private long savedFlashUntil;
+    private String micNotice;
+    private long micNoticeUntil;
     private long warnUntil;        // transient "no API key" hint on the chat tab
     /** The current warn hint's text (endpoint problems vary: unbound provider vs keyless
      *  entry); null falls back to the generic no-key translation. */
@@ -350,8 +357,10 @@ public final class NumenScreen extends Screen {
         clearWidgets();
         overlay.clear();
         input = null;
-        sendButton = stopButton = compactButton = null;
+        sendButton = stopButton = compactButton = micButton = null;
         apiKeyInput = modelInput = baseUrlInput = proxyInput = siteNameInput = null;
+        sttKeyInput = sttBaseUrlInput = sttModelInput = null;
+        sttProviderDropdown = sttModelDropdown = sttMicDropdown = null;
         mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
         personaNameInput = null;
         personaTextArea = null;
@@ -571,14 +580,18 @@ public final class NumenScreen extends Screen {
     private void buildChatWidgets() {
         int inputY = top + panelH - INPUT_H - PAD;
         int compactW = 26;
+        int micW = 22;
         int sendW = 42;
         int stopW = 22;
-        int inX = left + PAD + compactW + 4;
-        int inW = panelW - PAD * 2 - compactW - sendW - stopW - 12;
+        int inX = left + PAD + compactW + 4 + micW + 4;
+        int inW = panelW - PAD * 2 - compactW - micW - sendW - stopW - 16;
 
         compactButton = add(new SimpleButton(left + PAD, inputY, compactW, INPUT_H,
                 Component.literal("⤬"), b -> loop().requestCompact()));
         compactButton.active = loop().canCompact();
+
+        micButton = add(new SimpleButton(left + PAD + compactW + 4, inputY, micW, INPUT_H,
+                Component.literal("●"), b -> onMicToggle()));
 
         input = new FlatEditBox(font, inX + FIELD_INSET_X, inputY + FIELD_INSET_Y,
                 inW - FIELD_INSET_X * 2, INPUT_H - FIELD_INSET_Y * 2, Component.literal("numen.chat.input"));
@@ -588,7 +601,7 @@ public final class NumenScreen extends Screen {
         // FlatEditBox draws the hint shadowless and UNDER the caret (same widget pass), so use it
         // directly — no separate screen-side placeholder that would paint over the blinking caret.
         // Faint colour is baked into the Component's Style.
-        input.setHint(Nb.colored(I18n.get("numen.chat.hint", name == null ? "" : name), TXT_FAINT));
+        input.setHint(defaultChatHint());
         if (!savedInput.isEmpty()) { input.setValue(savedInput); savedInput = ""; }
         add(input);
         setInitialFocus(input);
@@ -599,6 +612,31 @@ public final class NumenScreen extends Screen {
         stopButton = add(new SimpleButton(inX + inW + 4 + sendW + 4, inputY, stopW, INPUT_H,
                 Component.literal("■"), b -> loop().abort()));
         stopButton.active = loop().canInterrupt();
+    }
+
+    /** 正常的输入框占位文案("说点什么…, {name}");麦克风状态提示消失后用它复位。 */
+    private Component defaultChatHint() {
+        return Nb.colored(I18n.get("numen.chat.hint", name == null ? "" : name), TXT_FAINT);
+    }
+
+    /** 麦克风按钮:点击开录/再点停;转写文本(批量结尾一次、流式边说边刷)落进输入框。 */
+    private void onMicToggle() {
+        com.dwinovo.numen.client.stt.VoiceInputController.toggle(
+                Services.CONFIG,
+                text -> { if (input != null) input.setValue(text); },
+                // 状态提示(未配置/无麦克风/失败)落在输入框的 placeholder 上——眼睛正看的地方,醒目
+                // 却不写进真实输入。框里已有文字时 hint 不显示,由渲染里的底部一行兜底。
+                status -> {
+                    micNotice = status;
+                    micNoticeUntil = System.currentTimeMillis() + 4000;
+                    if (input != null && input.getValue().isEmpty()) {
+                        input.setHint(Nb.colored(status, FAIL));
+                    }
+                });
+        if (micButton != null) {
+            micButton.setMessage(Component.literal(
+                    com.dwinovo.numen.client.stt.VoiceInputController.isActive() ? "■" : "●"));
+        }
     }
 
     private void selectTab(Tab t) {
@@ -654,6 +692,7 @@ public final class NumenScreen extends Screen {
         if (s == settingsSection) return;
         settingsSection = s;
         settingsScroll = 0;
+        wSttProvider = null;   // re-seed STT form from saved config on entry
         if (s == SettingsSection.PERSONA) {
             // 人设是目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
             PersonaLibrary.instance().reload();
@@ -708,6 +747,7 @@ public final class NumenScreen extends Screen {
                 else buildSkinListWidgets();
             }
             case PROXY -> buildProxyWidgets();
+            case STT -> buildSttWidgets();
         }
     }
 
@@ -733,6 +773,124 @@ public final class NumenScreen extends Screen {
                     NumenLlmClient.reset();
                     savedFlashUntil = System.currentTimeMillis() + 1500;
                 }));
+    }
+
+    // ---- Voice input (STT) section: provider dropdown → prefilled base/model, mic dropdown ----
+
+    private void buildSttWidgets() {
+        int x = secX(), w = secW();
+        int fy = secY0();
+        INumenConfig cfg = Services.CONFIG;
+        if (wSttProvider == null) {   // seed working fields from config on section entry
+            wSttProvider = cfg.getSttProvider();
+            wSttKey = cfg.getSttApiKey();
+            wSttBaseUrl = cfg.getSttBaseUrl();
+            wSttModel = cfg.getSttModel();
+            wSttMic = cfg.getSttMicrophone();
+            com.dwinovo.numen.client.stt.SttProviders.Option seed =
+                    com.dwinovo.numen.client.stt.SttProviders.byId(wSttProvider);
+            sttCustomModel = seed.models().isEmpty() || !seed.models().contains(wSttModel);
+        }
+        com.dwinovo.numen.client.stt.SttProviders.Option opt =
+                com.dwinovo.numen.client.stt.SttProviders.byId(wSttProvider);
+        sttProviderDropdown = new Dropdown(sttProviderItems(), opt.id());
+        sttProviderDropdown.setBounds(x, fy + 25, w, 18);
+        sttProviderDropdown.setDropBottom(top + panelH - 2);
+        sttKeyInput = field(x, fy + 25 + SET_SP, w, 256, wSttKey);
+        // Model row: provider's known models as a dropdown (+ 自定义 → free text).
+        int modelY = fy + 25 + 2 * SET_SP;
+        if (sttCustomModel || opt.models().isEmpty()) {
+            sttModelDropdown = null;
+            boolean hasModels = !opt.models().isEmpty();
+            sttModelInput = field(x, modelY, hasModels ? w - 20 : w, 128, wSttModel);
+            if (hasModels) {
+                add(new SimpleButton(x + w - 18, modelY, 18, 18, Component.literal("▾"),
+                        b -> { preserveSttForm(); sttCustomModel = false; rebuild(); }));
+            }
+        } else {
+            sttModelInput = null;
+            String sel = opt.models().contains(wSttModel) ? wSttModel : opt.models().get(0);
+            sttModelDropdown = new Dropdown(sttModelItems(opt), sel);
+            sttModelDropdown.setBounds(x, modelY, w, 18);
+            sttModelDropdown.setDropBottom(top + panelH - 2);
+        }
+        sttBaseUrlInput = field(x, fy + 25 + 3 * SET_SP, w, 256, wSttBaseUrl);
+        sttMicDropdown = new Dropdown(sttMicItems(), wSttMic == null ? "" : wSttMic);
+        sttMicDropdown.setBounds(x, fy + 25 + 4 * SET_SP, w, 18);
+        sttMicDropdown.setDropBottom(top + panelH - 2);
+        add(new SimpleButton(left + panelW - PAD - 64, top + panelH - PAD - 18, 64, 18,
+                Component.translatable("numen.gui.settings.save"), b -> {
+                    String sttModel = sttModelDropdown != null
+                            && !CUSTOM_MODEL.equals(sttModelDropdown.selectedId())
+                            ? sttModelDropdown.selectedId()
+                            : (sttModelInput != null ? sttModelInput.getValue().trim() : wSttModel);
+                    cfg.setSttProvider(sttProviderDropdown.selectedId());
+                    cfg.setSttApiKey(sttKeyInput.getValue().trim());
+                    cfg.setSttModel(sttModel);
+                    cfg.setSttBaseUrl(sttBaseUrlInput.getValue().trim());
+                    cfg.setSttMicrophone(sttMicDropdown.selectedId());
+                    cfg.save();
+                    savedFlashUntil = System.currentTimeMillis() + 1500;
+                }));
+    }
+
+    private java.util.List<Dropdown.Item> sttProviderItems() {
+        java.util.List<Dropdown.Item> out = new java.util.ArrayList<>();
+        for (com.dwinovo.numen.client.stt.SttProviders.Option o
+                : com.dwinovo.numen.client.stt.SttProviders.all()) {
+            out.add(new Dropdown.Item(o.id(), o.displayName()));
+        }
+        return out;
+    }
+
+    private java.util.List<Dropdown.Item> sttMicItems() {
+        java.util.List<Dropdown.Item> out = new java.util.ArrayList<>();
+        out.add(new Dropdown.Item("", I18n.get(ModLanguageData.Keys.STT_MIC_DEFAULT)));
+        for (String name : com.dwinovo.numen.client.stt.MicrophoneManager.deviceNames()) {
+            out.add(new Dropdown.Item(name, name));
+        }
+        return out;
+    }
+
+    private java.util.List<Dropdown.Item> sttModelItems(com.dwinovo.numen.client.stt.SttProviders.Option o) {
+        java.util.List<Dropdown.Item> items = new java.util.ArrayList<>();
+        for (String m : o.models()) {
+            items.add(new Dropdown.Item(m, m));
+        }
+        items.add(new Dropdown.Item(CUSTOM_MODEL, I18n.get("numen.settings.custom_model")));
+        return items;
+    }
+
+    /** Keep typed key/model/baseUrl across a rebuild triggered by a dropdown. */
+    private void preserveSttForm() {
+        if (sttKeyInput != null) wSttKey = sttKeyInput.getValue();
+        if (sttBaseUrlInput != null) wSttBaseUrl = sttBaseUrlInput.getValue();
+        if (sttModelInput != null) {
+            wSttModel = sttModelInput.getValue();
+        } else if (sttModelDropdown != null && !CUSTOM_MODEL.equals(sttModelDropdown.selectedId())) {
+            wSttModel = sttModelDropdown.selectedId();
+        }
+    }
+
+    /** Provider changed → adapt model + base URL to the pick's preset defaults (still editable). */
+    private void adaptToSttProvider(String id) {
+        wSttProvider = id;
+        com.dwinovo.numen.client.stt.SttProviders.Option o =
+                com.dwinovo.numen.client.stt.SttProviders.byId(id);
+        sttCustomModel = o.models().isEmpty();   // custom provider → free-text model
+        wSttModel = o.defaultModel();
+        wSttBaseUrl = o.defaultBaseUrl();
+    }
+
+    private void renderSttSection(GuiGraphics g) {
+        int x = secX();
+        int fy = secY0();
+        txt(g, Component.translatable(ModLanguageData.Keys.STT_TITLE), x, fy - 2, TXT);
+        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_PROVIDER), x, fy + 14, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_API_KEY), x, fy + 14 + SET_SP, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_MODEL), x, fy + 14 + 2 * SET_SP, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_BASE_URL), x, fy + 14 + 3 * SET_SP, TXT_MUTED);
+        txt(g, Component.translatable(ModLanguageData.Keys.STT_MICROPHONE), x, fy + 14 + 4 * SET_SP, TXT_MUTED);
     }
 
     private void renderProxySection(GuiGraphics g) {
@@ -1934,6 +2092,7 @@ public final class NumenScreen extends Screen {
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
             case PROXY -> renderProxySection(g);
+            case STT -> renderSttSection(g);
         }
     }
 
@@ -2032,7 +2191,8 @@ public final class NumenScreen extends Screen {
                 I18n.get("numen.settings.nav.mcp"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona"),
                 I18n.get(ModLanguageData.Keys.VOICE_TITLE),
-                I18n.get(ModLanguageData.Keys.SKIN_TITLE)};
+                I18n.get(ModLanguageData.Keys.SKIN_TITLE),
+                I18n.get(ModLanguageData.Keys.STT_NAV)};
         int navX = left + PAD;
         int y = secY0();
         for (int i = 0; i < labels.length; i++) {
@@ -2620,6 +2780,38 @@ public final class NumenScreen extends Screen {
                 }
                 return true;
             }
+            if (tab == Tab.SETTINGS && settingsSection == SettingsSection.STT && sttProviderDropdown != null) {
+                String beforeStt = sttProviderDropdown.selectedId();
+                if (sttProviderDropdown.mouseClicked(mouseX, mouseY)) {
+                    if (sttModelDropdown != null) sttModelDropdown.close();
+                    if (sttMicDropdown != null) sttMicDropdown.close();
+                    String selStt = sttProviderDropdown.selectedId();
+                    if (!selStt.equals(beforeStt)) {   // provider changed → prefill model + base URL
+                        preserveSttForm();
+                        adaptToSttProvider(selStt);
+                        rebuild();
+                    }
+                    return true;
+                }
+            }
+            if (tab == Tab.SETTINGS && settingsSection == SettingsSection.STT && sttModelDropdown != null
+                    && sttModelDropdown.mouseClicked(mouseX, mouseY)) {
+                if (sttProviderDropdown != null) sttProviderDropdown.close();
+                if (sttMicDropdown != null) sttMicDropdown.close();
+                if (CUSTOM_MODEL.equals(sttModelDropdown.selectedId())) {   // 自定义 → free text
+                    preserveSttForm();
+                    sttCustomModel = true;
+                    wSttModel = "";
+                    rebuild();
+                }
+                return true;
+            }
+            if (tab == Tab.SETTINGS && settingsSection == SettingsSection.STT && sttMicDropdown != null
+                    && sttMicDropdown.mouseClicked(mouseX, mouseY)) {
+                if (sttProviderDropdown != null) sttProviderDropdown.close();
+                if (sttModelDropdown != null) sttModelDropdown.close();
+                return true;
+            }
             // 声线表单的后端下拉:选型变了就随之刷新字段区(typed 值经 preserve 存活)。
             // 行滚出视口时不接点击(控件仍在,只是被表单滚动藏起来了)。
             if (tab == Tab.SETTINGS && settingsSection == SettingsSection.VOICE
@@ -2874,6 +3066,16 @@ public final class NumenScreen extends Screen {
                 if (provProviderDropdown != null) provProviderDropdown.render(g, font, mouseX, mouseY);
                 if (provModelDropdown != null) provModelDropdown.render(g, font, mouseX, mouseY);
             }
+        }
+        if (tab == Tab.SETTINGS && settingsSection == SettingsSection.STT) {
+            Dropdown[] sttDd = { sttProviderDropdown, sttModelDropdown, sttMicDropdown };
+            Dropdown sttOpen = null;
+            for (Dropdown d : sttDd) {
+                if (d == null) continue;
+                if (d.isOpen()) sttOpen = d;
+                else d.render(g, font, mouseX, mouseY);
+            }
+            if (sttOpen != null) sttOpen.render(g, font, mouseX, mouseY);   // open list overlays fields
         }
         if (tab == Tab.SETTINGS && settingsSection == SettingsSection.MCP && addingMcp) {
             placeholder(g, mcpNameInput, "kfc");
@@ -3176,6 +3378,16 @@ public final class NumenScreen extends Screen {
             int sbX = transX + transW - 4;
             g.blitSprite(SCROLL_TRACK, sbX, bodyY, 4, viewH);
             g.blitSprite(SCROLL_THUMB, sbX, thumbY, 4, thumbH);
+        }
+        boolean noticeLive = micNotice != null && micNoticeUntil > System.currentTimeMillis();
+        if (!noticeLive && micNoticeUntil != 0) {   // 过期一次性复位:把醒目 hint 换回正常的淡色占位
+            micNoticeUntil = 0;
+            micNotice = null;
+            if (input != null) input.setHint(defaultChatHint());
+        }
+        // 框里已有文字时 hint 不显示,这条兜底行接管(用醒目的 FAIL 色,不再是淡 ACCENT)
+        if (noticeLive && input != null && !input.getValue().isEmpty()) {
+            txt(g, Component.literal(micNotice), left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
         }
     }
 

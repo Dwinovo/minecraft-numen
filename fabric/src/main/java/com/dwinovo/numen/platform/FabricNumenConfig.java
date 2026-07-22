@@ -184,6 +184,36 @@ public final class FabricNumenConfig implements INumenConfig {
     public void setSystemPrompt(String value) { data.systemPrompt = value == null ? "" : value; }
 
     @Override
+    public String getSttProvider() { return data.sttProvider == null || data.sttProvider.isBlank() ? "siliconflow" : data.sttProvider; }
+
+    @Override
+    public String getSttApiKey() { return data.sttApiKey == null ? "" : data.sttApiKey; }
+
+    @Override
+    public String getSttBaseUrl() { return data.sttBaseUrl == null ? "" : data.sttBaseUrl; }
+
+    @Override
+    public String getSttModel() { return data.sttModel == null ? "" : data.sttModel; }
+
+    @Override
+    public String getSttMicrophone() { return data.sttMicrophone == null ? "" : data.sttMicrophone; }
+
+    @Override
+    public void setSttProvider(String value) { data.sttProvider = value == null || value.isBlank() ? "siliconflow" : value; }
+
+    @Override
+    public void setSttApiKey(String value) { data.sttApiKey = value == null ? "" : value; }
+
+    @Override
+    public void setSttBaseUrl(String value) { data.sttBaseUrl = value == null ? "" : value; }
+
+    @Override
+    public void setSttModel(String value) { data.sttModel = value == null ? "" : value; }
+
+    @Override
+    public void setSttMicrophone(String value) { data.sttMicrophone = value == null ? "" : value; }
+
+    @Override
     public void save() {
         Path configPath = FabricLoader.getInstance().getConfigDir().resolve(FILE_NAME);
         try {
@@ -216,6 +246,12 @@ public final class FabricNumenConfig implements INumenConfig {
         public String provider = "openai";
         public String proxy = "";   // optional host:port HTTP proxy for LLM calls
         public String reasoningEffort = "auto";   // auto | low | medium | high (reasoning-capable models)
+        // STT (voice input) — global. provider picks the preset; empty apiKey = disabled.
+        public String sttProvider = "siliconflow";
+        public String sttApiKey = "";
+        public String sttBaseUrl = "";
+        public String sttModel = "FunAudioLLM/SenseVoiceSmall";
+        public String sttMicrophone = "";
         // Deliberately short. The planning behaviour (use todowrite for
         // multi-step tasks, load_skill to fetch detailed workflows) emerges
         // entirely from those tools' own descriptions plus the runtime-injected
@@ -237,6 +273,11 @@ public final class FabricNumenConfig implements INumenConfig {
             if (proxy == null) proxy = d.proxy;
             if (reasoningEffort == null || reasoningEffort.isBlank()) reasoningEffort = d.reasoningEffort;
             if (systemPrompt == null) systemPrompt = d.systemPrompt;
+            if (sttProvider == null || sttProvider.isBlank()) sttProvider = d.sttProvider;
+            if (sttApiKey == null) sttApiKey = d.sttApiKey;
+            if (sttBaseUrl == null) sttBaseUrl = d.sttBaseUrl;
+            if (sttModel == null) sttModel = d.sttModel;
+            if (sttMicrophone == null) sttMicrophone = d.sttMicrophone;
             return this;
         }
     }

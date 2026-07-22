@@ -28,6 +28,11 @@ public final class NeoForgeNumenConfig implements INumenConfig {
     public static final ModConfigSpec.ConfigValue<String> PROXY;
     public static final ModConfigSpec.ConfigValue<String> REASONING_EFFORT;
     public static final ModConfigSpec.ConfigValue<String> SYSTEM_PROMPT;
+    public static final ModConfigSpec.ConfigValue<String> STT_PROVIDER;
+    public static final ModConfigSpec.ConfigValue<String> STT_API_KEY;
+    public static final ModConfigSpec.ConfigValue<String> STT_BASE_URL;
+    public static final ModConfigSpec.ConfigValue<String> STT_MODEL;
+    public static final ModConfigSpec.ConfigValue<String> STT_MICROPHONE;
     public static final ModConfigSpec SPEC;
 
     static {
@@ -74,6 +79,20 @@ public final class NeoForgeNumenConfig implements INumenConfig {
                                 + "Use the tools provided to act in the world; output text only to talk to your owner.");
         b.pop();
 
+        b.comment("Voice input (STT) — global, one microphone / one transcription service.").push("stt");
+        STT_PROVIDER = b.comment("Provider preset (whisper-http adapter).",
+                "siliconflow | openai | groq | custom (fill base_url + model yourself)")
+                .define("provider", "siliconflow");
+        STT_API_KEY = b.comment("Voice-input service API key (bearer). Empty = voice input off.")
+                .define("api_key", "");
+        STT_BASE_URL = b.comment("Base URL override. Empty = provider preset default.")
+                .define("base_url", "");
+        STT_MODEL = b.comment("Transcription model id (e.g. whisper-1, FunAudioLLM/SenseVoiceSmall).")
+                .define("model", "FunAudioLLM/SenseVoiceSmall");
+        STT_MICROPHONE = b.comment("Input device name; empty = first available microphone.")
+                .define("microphone", "");
+        b.pop();
+
         SPEC = b.build();
     }
 
@@ -117,6 +136,32 @@ public final class NeoForgeNumenConfig implements INumenConfig {
         return s.isEmpty() ? "auto" : s;
     }
 
+    @Override
+    public String getSttProvider() {
+        String s = safe(STT_PROVIDER);
+        return s.isEmpty() ? "siliconflow" : s;
+    }
+
+    @Override
+    public String getSttApiKey() {
+        return safe(STT_API_KEY);
+    }
+
+    @Override
+    public String getSttBaseUrl() {
+        return safe(STT_BASE_URL);
+    }
+
+    @Override
+    public String getSttModel() {
+        return safe(STT_MODEL);
+    }
+
+    @Override
+    public String getSttMicrophone() {
+        return safe(STT_MICROPHONE);
+    }
+
     // ---- mutations ----
 
     @Override
@@ -152,6 +197,31 @@ public final class NeoForgeNumenConfig implements INumenConfig {
     @Override
     public void setSystemPrompt(String value) {
         SYSTEM_PROMPT.set(value == null ? "" : value);
+    }
+
+    @Override
+    public void setSttProvider(String value) {
+        STT_PROVIDER.set(value == null || value.isBlank() ? "siliconflow" : value);
+    }
+
+    @Override
+    public void setSttApiKey(String value) {
+        STT_API_KEY.set(value == null ? "" : value);
+    }
+
+    @Override
+    public void setSttBaseUrl(String value) {
+        STT_BASE_URL.set(value == null ? "" : value);
+    }
+
+    @Override
+    public void setSttModel(String value) {
+        STT_MODEL.set(value == null ? "" : value);
+    }
+
+    @Override
+    public void setSttMicrophone(String value) {
+        STT_MICROPHONE.set(value == null ? "" : value);
     }
 
     /**

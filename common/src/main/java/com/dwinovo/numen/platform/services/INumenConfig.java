@@ -95,6 +95,33 @@ public interface INumenConfig {
     /** Set the reasoning effort ({@code auto}/{@code low}/{@code medium}/{@code high}). Caller must {@link #save()}. */
     void setReasoningEffort(String value);
 
+    // ---- STT (voice input) — global, one microphone / one transcription service ----
+
+    /** STT provider id selecting the preset (wire adapter + default endpoint). Default {@code siliconflow}. */
+    String getSttProvider();
+
+    /** STT service API key (bearer). Empty = voice input disabled. */
+    String getSttApiKey();
+
+    /** STT base URL override. Empty = use the provider preset's default endpoint. */
+    String getSttBaseUrl();
+
+    /** STT model id (e.g. {@code whisper-1}, {@code FunAudioLLM/SenseVoiceSmall}). */
+    String getSttModel();
+
+    /** Chosen input device name; empty = first available microphone. */
+    String getSttMicrophone();
+
+    void setSttProvider(String value);
+
+    void setSttApiKey(String value);
+
+    void setSttBaseUrl(String value);
+
+    void setSttModel(String value);
+
+    void setSttMicrophone(String value);
+
     /**
      * Flush in-memory changes to the loader-native config file. Best-effort:
      * errors are logged but never thrown — settings GUI shouldn't crash the

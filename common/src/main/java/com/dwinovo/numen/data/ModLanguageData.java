@@ -131,6 +131,15 @@ public final class ModLanguageData {
         public static final String VOICE_BIND_NONE      = "numen.voice.bind_none";
         public static final String VOICE_SUMMON_LABEL   = "numen.voice.summon_label";
         public static final String VOICE_SUMMON_EMPTY   = "numen.voice.summon_empty";
+
+        // STT (voice input)
+        public static final String STT_NAV            = "numen.settings.nav.stt";
+        public static final String STT_TITLE          = "numen.stt.title";
+        public static final String STT_MICROPHONE     = "numen.stt.microphone";
+        public static final String STT_MIC_DEFAULT    = "numen.stt.mic_default";
+        public static final String STT_NOT_CONFIGURED = "numen.stt.not_configured";
+        public static final String STT_NO_MIC         = "numen.stt.no_mic";
+        public static final String STT_FAILED         = "numen.stt.failed";
     }
 
     /** Loader-side providers funnel both English and Simplified Chinese through here. */
@@ -162,6 +171,13 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.llm", "Models");
         adder.add("numen.settings.nav.mcp", "MCP");
         adder.add("numen.settings.nav.skills", "Skills");
+        adder.add(Keys.STT_NAV, "Voice input");
+        adder.add(Keys.STT_TITLE, "Voice input (STT)");
+        adder.add(Keys.STT_MICROPHONE, "Microphone");
+        adder.add(Keys.STT_MIC_DEFAULT, "(default microphone)");
+        adder.add(Keys.STT_NOT_CONFIGURED, "Voice input not configured — set an STT API key in settings");
+        adder.add(Keys.STT_NO_MIC, "No microphone available");
+        adder.add(Keys.STT_FAILED, "Voice input failed: %s");
         adder.add("numen.settings.nav.persona", "Persona");
         adder.add("numen.persona.title", "Personas");
         adder.add("numen.persona.empty", "None · click ＋ New (top-right)");
@@ -336,6 +352,13 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.llm", "模型接入");
         adder.add("numen.settings.nav.mcp", "MCP");
         adder.add("numen.settings.nav.skills", "技能");
+        adder.add(Keys.STT_NAV, "语音输入");
+        adder.add(Keys.STT_TITLE, "语音输入 (STT)");
+        adder.add(Keys.STT_MICROPHONE, "麦克风");
+        adder.add(Keys.STT_MIC_DEFAULT, "（默认麦克风）");
+        adder.add(Keys.STT_NOT_CONFIGURED, "未配置语音输入 —— 请在设置里填入 STT 的 API Key");
+        adder.add(Keys.STT_NO_MIC, "无可用麦克风");
+        adder.add(Keys.STT_FAILED, "语音输入失败：%s");
         adder.add("numen.settings.nav.persona", "人设");
         adder.add("numen.persona.title", "人设库");
         adder.add("numen.persona.empty", "无 · 点右上「＋ 新建」");
