@@ -185,4 +185,6 @@ Numen 还很年轻。原版玩法已经跑得很顺；而"让 AI 通达整个模
 
 <sub>寻路的<b>规划层</b>基于启发式搜索文献实现：加权 A*、预算化的部分路径提交、以及 RTAA* 式跨段启发学习（Koenig &amp; Likhachev, <i>Real-Time Adaptive A*</i>, AAMAS 2006），附独立于游戏的单元测试。<b>路径跟随层</b>（沿计划路径的进度追踪与偏差恢复）参考机器人学与游戏 AI 的路径跟随文献：Pure Pursuit 前瞻点跟随（Coulter, <i>Implementation of the Pure Pursuit Path Tracking Algorithm</i>, CMU-RI-TR-92-01, 1992）、参数连贯（coherence）定位（Millington, <i>AI for Games</i>），以及 Recast/Detour 走廊跟随与 ROS 2 Nav2 进度检查的工业实践。<b>执行层</b>与 <a href="https://github.com/cabaletta/baritone">Baritone</a> 的根本区别在于运行位置：Baritone 是纯客户端模组、操控本机玩家；Numen 驱动的是<b>服务端假玩家</b>，移动/挖掘/放置全部经服务端 API 实现——设计思路上借鉴了其公开机制，<b>未复制、移植或改写其任何源码</b>。本项目代码采用 LGPL-3.0 属自主选择，与 Baritone（同为 LGPL-3.0）无衍生关系。</sub>
 
+<sub>喂给大模型的<b>空间感知表征</b>采用「自我中心的语义字符网格」而非裸坐标列表：把玩家周围的体素离散化、语义 pooling 成以自身为中心的字符矩阵。该表征形式的有效性依据 Gao 等，<i>Exploring Spatial Representation to Enhance LLM Reasoning in Aerial Vision-Language Navigation</i>（arXiv:2410.08500, 2024）——其消融实验表明，同为文本输入时，语义-拓扑-度量的网格矩阵显著优于拓扑图与方向距离描述，亦远优于直接输入图像。Numen 取其「egocentric + 离散化 + 语义 pooling」的格式原则，并针对方块世界的竖直性做三维适配（分层切片 / 高度信息）。</sub>
+
 </div>
