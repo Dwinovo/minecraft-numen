@@ -68,6 +68,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private static final int POST_BREAK_PLACE_DELAY_TICKS = 5;
     private static final int LOCAL_ACTION_RADIUS = 5;
     private static final double DISTANCE_TRIM_SQR = 200.0;
+    /** Give up (rather than spin to the deadline) if no cell completes for this long. */
+    private static final int STALL_LIMIT_TICKS = 30 * 20;
     private static final Direction[] PLACE_GOAL_FACES = {
             Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN
     };
@@ -90,6 +92,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private int noShotTicks;
     private int emptyArrivalTicks;
     private int placeDelayTicks;
+    private int stallTicks;
+    private int highWaterCompleted;
     private String note = "done";
 
     public BuildCompanionTask(NumenPlayer player, BuildTaskRecord record) {
@@ -126,8 +130,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         layerTop = usesLayers() ? Math.min(maxY, minY + Math.max(1, r.layerHeight) - 1) : maxY;
         incorrectPositions = null;
         observedCompleted = new LongOpenHashSet();
+        stallTicks = 0;
         registerProvider();
         updateCompleted();
+        highWaterCompleted = r.completed();
         advanceFinishedLayers();
     }
 
@@ -143,6 +149,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (r.completed() >= r.targets.size()) {
             note = "all requested cells match";
             return TaskState.SUCCESS;
+        }
+        // 停滞检测:以"完成格数"为进展信号(放/清可空转,门那种放了又清也不算进展),
+        // 连续 STALL_LIMIT_TICKS 无新完成就优雅失败退出,别空转到 deadline。
+        if (r.completed() > highWaterCompleted) {
+            highWaterCompleted = r.completed();
+            stallTicks = 0;
+        } else if (++stallTicks >= STALL_LIMIT_TICKS) {
+            fail("stalled: no build progress for " + (STALL_LIMIT_TICKS / 20) + "s ("
+                    + note + "); completed " + r.completed() + "/" + r.targets.size(),
+                    FailureType.NO_PATH);
+            return TaskState.FAILED;
         }
         advanceFinishedLayers();
         if (!recalc()) {
