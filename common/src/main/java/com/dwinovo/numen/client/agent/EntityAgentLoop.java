@@ -404,6 +404,12 @@ public final class EntityAgentLoop {
 
     /** 大脑在输出(思考/生成/跑工具/语音在播)→ 告诉身体,好在说话期间注视主人。 */
     private void syncSpeakingState() {
+        // 退出游戏的最后几个 client tick 里连接已拆——此时发包会在
+        // PacketDistributor.sendToServer 里 NPE 崩掉客户端。断线期不发,
+        // 状态留在 lastSpeakingSent 里,重连后首次翻转自然补上。
+        if (net.minecraft.client.Minecraft.getInstance().getConnection() == null) {
+            return;
+        }
         boolean speaking = awaitingLlmResponse || dispatcher.busy()
                 || (voice != null && voice.isSpeaking());
         if (speaking != lastSpeakingSent) {
