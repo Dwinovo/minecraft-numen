@@ -45,6 +45,16 @@ public final class NumenPlayer extends ServerPlayer {
         super(server, level, profile, clientInformation);
     }
 
+    /**
+     * 点亮全部皮肤覆盖层(帽子/夹克/左右袖/左右裤腿)与披风。假玩家没有客户端上报的
+     * 模型定制,不设这个字节客户端只渲染单层基础皮肤。该字节是同步实体数据、不随 .dat
+     * 存取,故每次进世界都要重设一次(经 {@code protected} 的 DATA_PLAYER_MODE_CUSTOMISATION
+     * 访问,子类内可见)。
+     */
+    public void showAllSkinLayers() {
+        getEntityData().set(DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7f);
+    }
+
     /** The loaded companion body with this UUID, or {@code null} if not spawned. */
     public static NumenPlayer findByUuid(MinecraftServer server, UUID uuid) {
         return server.getPlayerList().getPlayer(uuid) instanceof NumenPlayer ap ? ap : null;

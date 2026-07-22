@@ -52,6 +52,9 @@ public final class CompanionFactory {
         // it ourselves: position, inventory, health, owner from
         // disk. Without this a respawned companion spawns at 0,0,0 with no items.
         loadPlayerData(server, player);
+        // 假玩家没有客户端上报的模型定制:点亮全部皮肤覆盖层与披风,否则只显示单层基础皮肤。
+        // 每次 spawn(首建与重生)都重设——该字节是同步实体数据、不随 .dat 存取。
+        player.showAllSkinLayers();
         // Companions are always survival, whatever the world's default game type — their whole design
         // (gather/drops, real combat, recoverable death) is survival-shaped, and placeNewPlayer would
         // otherwise hand a creative world's body instabuild (no block drops, breaks auto_mine). Forced
