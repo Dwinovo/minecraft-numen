@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -15,7 +15,7 @@ import java.util.function.Consumer;
  * budget-sliced across server ticks, so it replies later through the callback —
  * the engine just waits for complete() (here driven by the reply).
  */
-public final class ScanBlocksTool extends ServerNumenTool {
+public final class ScanBlocksTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final ScanTools impl = new ScanTools();
@@ -31,7 +31,7 @@ public final class ScanBlocksTool extends ServerNumenTool {
     public String description() {
         return "Bulk find blocks of given type(s) within a spherical radius around you. Returns matches "
                 + "sorted by distance, capped at 32. A perception tool for surveying the area — to actually "
-                + "gather blocks use auto_mine, which finds and digs them itself. Radius is in blocks (max "
+                + "gather blocks use mine, which finds and digs them itself. Radius is in blocks (max "
                 + "192 = 12 chunks — use big radii for landscape features like water, lava lakes or villages' "
                 + "blocks; a big scan answers after a few seconds, you can keep acting meanwhile). FLUIDS are "
                 + "scannable too: minecraft:water / minecraft:lava work as block_ids, and fluid matches carry "
@@ -49,7 +49,7 @@ public final class ScanBlocksTool extends ServerNumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         impl.scanBlocks(a.radius(), a.block_ids(), self, reply);   // replies later via the callback
     }

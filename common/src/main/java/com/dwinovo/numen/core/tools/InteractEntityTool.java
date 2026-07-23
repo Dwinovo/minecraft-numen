@@ -1,7 +1,9 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import static com.dwinovo.numen.task.TaskDispatch.*;
+
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -10,7 +12,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** World-action tool (raw NumenTool): press a mouse button on a moving entity. */
-public final class InteractEntityTool extends ServerNumenTool {
+public final class InteractEntityTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final BlockActionTools impl = new BlockActionTools();
@@ -40,9 +42,9 @@ public final class InteractEntityTool extends ServerNumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         enqueue(companion, impl.interactEntity(a.button(), a.entity_id(), a.hold_ticks(), a.item_id(),
-                ctx(toolCallId, companion)));
+                ctx(toolCallId, companion)), reply);
     }
 }

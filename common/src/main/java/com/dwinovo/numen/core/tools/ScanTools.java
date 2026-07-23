@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.util.BlockScanner;
+import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.task.ScanBlocksJob;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -33,7 +33,7 @@ public final class ScanTools {
 int radius,
 List<String> block_ids,
             NumenPlayer self, Consumer<String> reply) {
-        int r = Math.max(MIN_RADIUS, Math.min(MAX_RADIUS, radius));
+        int r = net.minecraft.util.Mth.clamp(radius, MIN_RADIUS, MAX_RADIUS);
         Set<Block> targets = readBlockIds(block_ids);
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("no valid block_ids provided");
