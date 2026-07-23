@@ -24,14 +24,18 @@ import java.util.concurrent.CompletableFuture;
  * <p>NeoForge <b>不走这里</b>:其 1.21.1 补丁已提前引入官方钩子,那侧由
  * {@code NeoEntityVoiceSound}/{@code NeoVoicePreviewSound} 直接覆写,零 mixin
  * (vanilla 形状的 INVOKE 在其运行时不存在,本 mixin 若留在 common 会因
- * 0 目标掀桌——这正是分家的原因)。在 Fabric 上目标必然存在,保持默认
- * require:注入失败应当炸出来,而不是静默哑掉。vanilla 正式引入官方钩子的
- * 版本再删本 mixin 改覆写。
+ * 0 目标掀桌——这正是分家的原因)。
+ *
+ * <p><b>require = 0</b>:完整版 Fabric API 的 fabric-sound-api-v1 会抢先
+ * @Redirect 同一个调用点(本重定向被让位跳过是<b>预期</b>,不是故障)——
+ * 那条路上由 {@link MixinVoicePcmFabricSound} 给声音实例补
+ * {@code FabricSoundInstance} 接口走它的官方扩展点。本重定向只在
+ * sound-api 不在场的精简环境里生效,双保险互斥、必有一条通。
  */
 @Mixin(SoundEngine.class)
 public class MixinSoundEngine {
 
-    @Redirect(method = "play",
+    @Redirect(method = "play", require = 0,
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/client/sounds/SoundBufferLibrary;getStream(Lnet/minecraft/resources/ResourceLocation;Z)Ljava/util/concurrent/CompletableFuture;"))
     private CompletableFuture<AudioStream> numen$voicePcmStream(SoundBufferLibrary library,

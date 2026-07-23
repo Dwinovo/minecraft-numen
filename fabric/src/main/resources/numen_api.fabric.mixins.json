@@ -6,7 +6,8 @@
   "mixins": [],
   "client": [
     "MixinTitleScreen",
-    "MixinSoundEngine"
+    "MixinSoundEngine",
+    "MixinVoicePcmFabricSound"
   ],
   "server": [],
   "injectors": {
