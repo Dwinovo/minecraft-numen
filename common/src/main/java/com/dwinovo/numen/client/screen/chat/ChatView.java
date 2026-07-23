@@ -457,11 +457,9 @@ public final class ChatView {
         if (own) {
             AbstractClientPlayer p = Minecraft.getInstance().player;
             if (p != null) return p.getSkin();
-        } else {
-            AbstractClientPlayer e = ClientNumenLookup.resolve(uuid.get());
-            if (e != null) return e.getSkin();
+            return DefaultPlayerSkin.get(uuid.get());
         }
-        return DefaultPlayerSkin.get(uuid.get());
+        return com.dwinovo.numen.client.agent.KnownSkins.of(uuid.get());
     }
 
     // ---- text helpers ----

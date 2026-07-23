@@ -210,7 +210,7 @@ public final class NumenToasts {
 
     private static PlayerSkin skinFor(UUID uuid) {
         AbstractClientPlayer e = ClientNumenLookup.resolve(uuid);
-        return e != null ? e.getSkin() : DefaultPlayerSkin.get(uuid);
+        return com.dwinovo.numen.client.agent.KnownSkins.of(uuid);
     }
 
     /** Eased slide: {@code dist} px → 0 over {@link #SLIDE_MS}. */

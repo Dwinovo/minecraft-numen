@@ -73,6 +73,7 @@ public class NumenNeoForgeClient {
 
     static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
         com.dwinovo.numen.client.data.ClientNumenInventory.clear();
+        com.dwinovo.numen.client.agent.KnownSkins.clear();
         com.dwinovo.numen.client.hud.NumenToasts.clear();
         com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
         com.dwinovo.numen.client.debug.PathDebugState.clear();

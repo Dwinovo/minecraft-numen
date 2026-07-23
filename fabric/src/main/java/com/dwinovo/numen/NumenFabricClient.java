@@ -85,6 +85,7 @@ public class NumenFabricClient implements ClientModInitializer {
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT
                 .register((handler, client) -> {
                     com.dwinovo.numen.client.data.ClientNumenInventory.clear();
+                    com.dwinovo.numen.client.agent.KnownSkins.clear();
                     com.dwinovo.numen.client.hud.NumenToasts.clear();
                     com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
                     com.dwinovo.numen.client.debug.PathDebugState.clear();

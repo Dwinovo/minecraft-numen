@@ -1094,8 +1094,7 @@ public final class NumenScreen extends Screen {
     }
 
     private static PlayerSkin skinFor(UUID u) {
-        AbstractClientPlayer e = ClientNumenLookup.resolve(u);
-        return e != null ? e.getSkin() : DefaultPlayerSkin.get(u);
+        return com.dwinovo.numen.client.agent.KnownSkins.of(u);
     }
 
     /** Roster index of the avatar under (mx,my), or -1. */
