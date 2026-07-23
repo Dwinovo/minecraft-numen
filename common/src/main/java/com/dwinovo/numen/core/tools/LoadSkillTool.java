@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
-import com.dwinovo.numen.core.tool.Schema;
+import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.Gson;
 

@@ -14,7 +14,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * Forge data-generation entry point for numen-core. Auto-registered via
  * {@link Mod.EventBusSubscriber} on the MOD bus; runs through
- * {@code ./gradlew :forge:runData}. Emits core's tags (the engine generates its
+ * {@code ./gradlew :forge:Data}. Emits core's tags (the engine generates its
  * own GUI language separately). Outputs land in
  * {@code forge/src/generated/resources/}, already wired into the main resource
  * source set by the subproject's {@code build.gradle}.

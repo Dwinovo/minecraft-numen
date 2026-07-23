@@ -24,16 +24,16 @@ Both are 2×2/shapeless recipes — `lookup_recipe` for the layout, then `transf
 ## Step 2 — go there
 
 1. `locate_structure("minecraft:stronghold")` → coordinates, direction, distance (often 1000–2500 blocks; the journey is the long part).
-2. `move_to(x, ~60, z)` to cross the surface, then `move_to(x, 30, z)` — navigation digs down on its own. Strongholds sit around Y 6–50.
-3. Hit stone bricks → you're inside. `scan_blocks(end_portal_frame)` to find the portal room; no match → explore corridors with `move_to` and rescan. (Stronghold corridors are stone_bricks / mossy_stone_bricks / cracked_stone_bricks.)
+2. `goto(x, ~60, z)` to cross the surface, then `goto(x, 30, z)` — navigation digs down on its own. Strongholds sit around Y 6–50.
+3. Hit stone bricks → you're inside. `scan_blocks(end_portal_frame)` to find the portal room; no match → explore corridors with `goto` and rescan. (Stronghold corridors are stone_bricks / mossy_stone_bricks / cracked_stone_bricks.)
 
 ## Step 3 — secure the portal room
 
 The room has a lava pool under the frame and a **silverfish spawner** on the stairs:
 
-1. `auto_mine(spawner)` immediately — unlike the blaze spawner, this one is pure liability.
-2. If silverfish are already out, `hunt(silverfish, …)` them; don't let them burrow into the brickwork.
-3. `place_block` cobblestone over the lava pool edges where you'll stand.
+1. `mine(spawner)` immediately — unlike the blaze spawner, this one is pure liability.
+2. If silverfish are already out, scan them, then pass their runtime IDs to `melee_attack`; don't let them burrow into the brickwork.
+3. `build` cobblestone over the lava pool edges where you'll stand.
 
 ## Step 4 — fill the frames
 

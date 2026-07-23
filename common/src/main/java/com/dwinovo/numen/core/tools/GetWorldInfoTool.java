@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonObject;
 
@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** Query tool (raw NumenTool): read the current world state. */
-public final class GetWorldInfoTool extends ServerNumenTool {
+public final class GetWorldInfoTool implements NumenTool {
 
     private final PerceptionTools impl = new PerceptionTools();
 
@@ -31,7 +31,7 @@ public final class GetWorldInfoTool extends ServerNumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         reply.accept(impl.getWorldInfo(self));
     }
 }

@@ -42,7 +42,7 @@ public final class InitTag {
     /**
      * Blocks the pathfinder must never break while travelling — the player's
      * functional/valuable furniture. Any block in this tag gets {@code COST_INF},
-     * so it's routed around (and a {@code move_to} onto one relaxes to "stand
+     * so it's routed around (and a {@code goto} onto one relaxes to "stand
      * adjacent" rather than digging it). This tag carries the no-BlockEntity work
      * stations (crafting table, stonecutter, smithing table, …) that the
      * BlockEntity proxy can't catch; container blocks are still covered by that
