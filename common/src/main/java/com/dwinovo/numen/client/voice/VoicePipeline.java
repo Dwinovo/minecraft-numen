@@ -231,7 +231,7 @@ public final class VoicePipeline {
      * {@code choices[0].delta.content} 且必须是字符串原语。
      * 没有 content（reasoning/tool_call/usage 帧）返回 null。
      */
-    static String extractContentDelta(JsonObject chunk) {
+    public static String extractContentDelta(JsonObject chunk) {
         if (chunk == null || !chunk.has("choices")) return null;
         JsonElement choicesEl = chunk.get("choices");
         if (!choicesEl.isJsonArray()) return null;

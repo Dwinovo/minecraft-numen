@@ -62,6 +62,9 @@ public final class ChatView {
     private static final int ICON_W = 11;       // chip status-icon column
     private static final int TOOL_ARG_CHARS = 44;
     private static final float SCROLL_RATE = 14f;
+    /** Typewriter reveal speed (chars/s) and the max lag before it jumps to catch up. */
+    private static final float REVEAL_CPS = 80f;
+    private static final int REVEAL_MAX_LAG = 120;
     private static final String[] SPIN = {"|", "/", "-", "\\"};
 
     // ---- palette (tuned against UiTheme.WARM's tan ground #CBA87B) ----
@@ -100,6 +103,11 @@ public final class ChatView {
     private boolean pinBottom = true;
     private int lastMaxScroll;
     private long lastFrameMs;
+    /** Typewriter state: how much of the live partial is revealed, and the string
+     *  (text + blinking caret) the current frame shows — build() reads the cache so
+     *  click-time rebuilds see the same geometry. */
+    private float revealed;
+    private String liveShown = "";
     /** Completed tool-call groups the user clicked open (keyed by the group's first call id). */
     private final Set<String> expandedGroups = new HashSet<>();
     // geometry of the last render, for click / wheel hit-testing
@@ -118,6 +126,8 @@ public final class ChatView {
         scrollTarget = 0;
         pinBottom = true;
         lastFrameMs = 0;
+        revealed = 0;
+        liveShown = "";
         expandedGroups.clear();
     }
 
@@ -130,14 +140,15 @@ public final class ChatView {
 
     public void render(GuiGraphics g, int x, int y, int w, int h) {
         gx = x; gy = y; gw = w; gh = h;
+        long now = System.currentTimeMillis();
+        float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
+        lastFrameMs = now;
+        updateLive(dt, now);
         List<Block> blocks = build(bubbleMaxW(w));
         int content = totalHeight(blocks);
         lastMaxScroll = Math.max(0, content - h);
         if (pinBottom) scrollTarget = lastMaxScroll;
         scrollTarget = Math.clamp(scrollTarget, 0, lastMaxScroll);
-        long now = System.currentTimeMillis();
-        float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
-        lastFrameMs = now;
         scrollPos = Anim.approach(scrollPos, scrollTarget, SCROLL_RATE, dt);
 
         g.enableScissor(x, y, x + w, y + h);
@@ -183,9 +194,11 @@ public final class ChatView {
 
     private sealed interface Block permits Bubble, Chip, Notice {}
 
-    /** One spoken message. {@code label} non-null = companion side (name above the bubble). */
+    /** One spoken message. {@code label} non-null = companion side (name above the bubble);
+     *  {@code showAvatar} false = a consecutive message from the same side (head hidden). */
     private record Bubble(boolean own, String label, List<FormattedCharSequence> lines,
-                          int maxLineW, int textColor, int fill, int border) implements Block {}
+                          int maxLineW, int textColor, int fill, int border,
+                          boolean showAvatar) implements Block {}
 
     /** A run of tool calls. {@code foldKey} non-null = finished group, clickable to expand/fold. */
     private record Chip(List<ChipRow> rows, String foldKey) implements Block {}
@@ -230,28 +243,38 @@ public final class ChatView {
         }
         int innerW = bubbleMaxW - PAD_H * 2;
         List<LlmToolCall> group = new ArrayList<>();
+        // Consecutive same-side messages group like a chat app: avatar + name only on
+        // the first of a run. Chips don't break a run; notices do. null = run broken.
+        Boolean lastSide = null;
         for (ConvoState.Msg msg : lp.display()) {
             switch (msg) {
                 case ConvoState.Msg.User u -> {
                     flushTools(out, group, done, failed, bubbleMaxW);
                     if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.persona_changed"));
+                        lastSide = null;
                         continue;
                     }
                     if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.compacted"));
+                        lastSide = null;
                         continue;
                     }
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
-                    out.add(bubble(true, null, shown, TXT, OWN_FILL, OWN_BORDER, innerW));
+                    boolean first = lastSide == null || !lastSide;
+                    out.add(bubble(true, null, shown, TXT, OWN_FILL, OWN_BORDER, innerW, first));
+                    lastSide = true;
                 }
                 case ConvoState.Msg.Assistant a -> {
                     AssistantTurn turn = a.turn();
                     String spoken = ChatDisplayFilters.current().filterAssistantMessage(turn.content());
                     if (!spoken.isBlank()) {
                         flushTools(out, group, done, failed, bubbleMaxW);   // spoken reply breaks the fold
-                        out.add(bubble(false, name.get(), spoken, TXT, AI_FILL, AI_BORDER, innerW));
+                        boolean first = lastSide == null || lastSide;
+                        out.add(bubble(false, first ? name.get() : null, spoken,
+                                TXT, AI_FILL, AI_BORDER, innerW, first));
+                        lastSide = false;
                     }
                     group.addAll(turn.toolCalls());
                 }
@@ -259,23 +282,56 @@ public final class ChatView {
             }
         }
         flushTools(out, group, done, failed, bubbleMaxW);
+        // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
+        if (!liveShown.isEmpty()) {
+            boolean first = lastSide == null || lastSide;
+            out.add(bubble(false, first ? name.get() : null, liveShown,
+                    TXT, AI_FILL, AI_BORDER, innerW, first));
+            lastSide = false;
+        }
         // Prompts still waiting for a protocol-valid splice point — visible immediately
         // so a queued message never feels swallowed.
         for (String queued : lp.queuedPrompts()) {
             String shown = ownerText(queued);
             if (shown.isEmpty()) continue;
-            out.add(bubble(true, null, "⌛ " + shown, FAINT, QUEUED_FILL, QUEUED_BORDER, innerW));
+            boolean first = lastSide == null || !lastSide;
+            out.add(bubble(true, null, "⌛ " + shown, FAINT, QUEUED_FILL, QUEUED_BORDER, innerW, first));
+            lastSide = true;
         }
         if (lp.isCompacting()) notice(out, I18n.get("numen.chat.compacting"));
         if (out.isEmpty()) notice(out, I18n.get("numen.chat.empty", name.get()));
         return out;
     }
 
-    private Bubble bubble(boolean own, String label, String text, int color, int fill, int border, int innerW) {
+    private Bubble bubble(boolean own, String label, String text, int color, int fill, int border,
+                          int innerW, boolean showAvatar) {
         List<FormattedCharSequence> lines = font.split(Nb.colored(text, color), innerW);
         int maxW = 0;
         for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
-        return new Bubble(own, label, lines, maxW, color, fill, border);
+        return new Bubble(own, label, lines, maxW, color, fill, border, showAvatar);
+    }
+
+    /** Advance the typewriter: filter the live partial, hide a half-typed [emotion tag,
+     *  ease the reveal toward the full length, and cache "revealed text + blinking caret". */
+    private void updateLive(float dt, long now) {
+        String full = ChatDisplayFilters.current().filterAssistantMessage(loop.get().livePartial());
+        full = full.replaceAll("\\[[^\\]\\n]*$", "").strip();
+        if (full.isEmpty()) {
+            revealed = 0;
+            liveShown = "";
+            return;
+        }
+        if (revealed > full.length()) revealed = full.length();
+        if (full.length() - revealed > REVEAL_MAX_LAG) revealed = full.length() - REVEAL_MAX_LAG;
+        revealed = Math.min(full.length(), revealed + dt * REVEAL_CPS);
+        liveShown = cut(full, (int) revealed) + (((now / 500) & 1) == 0 ? "_" : "");
+    }
+
+    /** Cut at {@code n} chars without splitting a surrogate pair. */
+    private static String cut(String s, int n) {
+        if (n >= s.length()) return s;
+        if (n > 0 && Character.isHighSurrogate(s.charAt(n - 1))) n--;
+        return s.substring(0, n);
     }
 
     private void notice(List<Block> out, String text) {
@@ -355,8 +411,10 @@ public final class ChatView {
         if (b.label() != null) {
             draw(g, Nb.colored(b.label(), MUTED).getVisualOrderText(), bx + 2, y);
         }
-        g.blitSprite(AVATAR_FRAME, avX - 2, bubTop - 2, AV + 4, AV + 4);
-        PlayerFaceRenderer.draw(g, skin(b.own()), avX, bubTop, AV);
+        if (b.showAvatar()) {
+            g.blitSprite(AVATAR_FRAME, avX - 2, bubTop - 2, AV + 4, AV + 4);
+            PlayerFaceRenderer.draw(g, skin(b.own()), avX, bubTop, AV);
+        }
         RoundRect.card(g, bx, bubTop, bx + bw, bubTop + bh, RADIUS, b.fill(), b.border());
         int ty = bubTop + PAD_V + 1;
         for (FormattedCharSequence l : b.lines()) {

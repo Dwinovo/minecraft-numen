@@ -366,6 +366,30 @@ public final class EntityAgentLoop {
         return inbox.snapshot();
     }
 
+    /** 在飞回复的已到 content 增量(流式打字机的数据源)。主线程读写:chunk 在
+     *  HTTP 线程到达后经 {@code Minecraft.execute} 蹦回来追加,代际不符直接丢;
+     *  回复落库/打断/死亡时清空——committed 消息接管显示,永不双份。 */
+    private final StringBuilder livePartial = new StringBuilder();
+
+    /** Live partial of the in-flight assistant reply ("" when idle) — GUI typewriter source. */
+    public String livePartial() {
+        return livePartial.toString();
+    }
+
+    /** onChunk 接线:content delta 直通 UI 的 live-partial,原始 chunk 原样继续喂语音。 */
+    private java.util.function.Consumer<JsonObject> tapForUi(
+            int gen, java.util.function.Consumer<JsonObject> voiceSink) {
+        return chunk -> {
+            String delta = com.dwinovo.numen.client.voice.VoicePipeline.extractContentDelta(chunk);
+            if (delta != null && !delta.isEmpty()) {
+                Minecraft.getInstance().execute(() -> {
+                    if (gen == turnGeneration) livePartial.append(delta);
+                });
+            }
+            if (voiceSink != null) voiceSink.accept(chunk);
+        };
+    }
+
     /** Owner typed a prompt in the chat GUI. */
     public void submitPrompt(String text) {
         if (dead) {
@@ -549,6 +573,7 @@ public final class EntityAgentLoop {
             boolean wasAwaitingLlm = awaitingLlmResponse;
             awaitingLlmResponse = false;
             compacting = false;
+            livePartial.setLength(0);   // 半截打字随打断作废
 
             // Synthesize cancelled results for EVERY outstanding call (in flight AND
             // still-queued) so the assistant(tool_calls) message keeps matching tool
@@ -642,6 +667,7 @@ public final class EntityAgentLoop {
         turnGeneration++;          // discard any in-flight LLM response (halt output)
         awaitingLlmResponse = false;
         compacting = false;
+        livePartial.setLength(0);
         inbox.clearAll();
         dead = true;
         Constants.LOG.info("[numen-entity#{}] body died ({}) — loop frozen ({} call(s) in flight)",
@@ -940,7 +966,8 @@ public final class EntityAgentLoop {
         // call resolves, handleResponse sees the mismatch and discards it.
         final int gen = turnGeneration;
         final VoiceTurn vt = beginVoiceTurn();
-        client().chatStreaming(snapshot, tools, systemPrompt, vt.sink())
+        livePartial.setLength(0);
+        client().chatStreaming(snapshot, tools, systemPrompt, tapForUi(gen, vt.sink()))
                 .whenComplete((res, err) -> {
                     vt.finish().run();
                     bounceBackToMain(gen, res, err);
@@ -1189,6 +1216,7 @@ public final class EntityAgentLoop {
             return;
         }
         awaitingLlmResponse = false;
+        livePartial.setLength(0);   // committed 消息(下方 addAssistant)接管显示
 
         // World is unloading (owner quit / disconnected): the client→server channel is gone, so a
         // dispatched ExecuteToolPayload would NPE in the platform sender. Drop this turn quietly.
@@ -1212,8 +1240,9 @@ public final class EntityAgentLoop {
                 awaitingLlmResponse = true;
                 final int gen2 = turnGeneration;
                 final VoiceTurn vt2 = beginVoiceTurn();   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
+                livePartial.setLength(0);                 // 失败那次的半截文字同理作废
                 client().chatStreaming(convo.snapshot(), ToolRegistry.all(),
-                                composeSystemPrompt(), vt2.sink())
+                                composeSystemPrompt(), tapForUi(gen2, vt2.sink()))
                         .whenComplete((r2, e2) -> {
                             vt2.finish().run();
                             bounceBackToMain(gen2, r2, e2);
