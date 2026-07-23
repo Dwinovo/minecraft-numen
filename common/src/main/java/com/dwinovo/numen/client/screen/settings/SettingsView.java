@@ -51,6 +51,8 @@ public final class SettingsView {
         int top();
         int panelW();
         int panelH();
+        /** Left edge of the companion rail — the delete-confirm scrim covers rail + panel. */
+        int railX();
         UUID uuid();
         /** Bump the transient warn timer (text untouched — matches the old {@code warnUntil} pokes). */
         void warnPulse();
@@ -288,6 +290,70 @@ public final class SettingsView {
         skinDeletePending = null;
         skinFormGen++;    // 离开皮肤表单:在途 MineSkin 签名回调作废
         host.rebuild();
+    }
+
+    // ---- delete-confirm modal (shared by the five sections that can delete) ----
+
+    /** 当前待确认删除的标题(null = 无模态)。build 与 render 共用同一份文案,
+     *  ConfirmModal 的卡片几何(高度随换行数)才不会漂。 */
+    private Component activeModalTitle() {
+        if (providerDeletePending != null) {
+            var e = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerDeletePending);
+            return Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM, e != null ? e.name() : "");
+        }
+        if (voiceDeletePending != null) {
+            var e = com.dwinovo.numen.client.voice.VoiceLibrary.instance().get(voiceDeletePending);
+            return Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM, e != null ? e.name() : "");
+        }
+        if (skinDeletePending != null) {
+            var e = com.dwinovo.numen.client.skin.SkinLibrary.instance().get(skinDeletePending);
+            return Component.translatable(ModLanguageData.Keys.SKIN_DELETE_CONFIRM, e != null ? e.name() : "");
+        }
+        if (personaDeletePending != null) {
+            PersonaLibrary.Persona p = PersonaLibrary.instance().get(personaDeletePending);
+            return Component.translatable("numen.persona.delete_confirm", p != null ? p.name() : "");
+        }
+        if (mcpDeletePending != null) {
+            return Component.translatable("numen.mcp.delete_confirm", mcpDeletePending);
+        }
+        return null;
+    }
+
+    /** A delete-confirm modal is up — the screen blocks rail/tab/scroll interaction meanwhile. */
+    public boolean modalActive() {
+        return activeModalTitle() != null;
+    }
+
+    /** Esc while a confirm modal is up: dismiss it (instead of closing the whole screen). */
+    public boolean cancelModal() {
+        if (!modalActive()) return false;
+        clearDeletePending();
+        host.rebuild();
+        return true;
+    }
+
+    private void clearDeletePending() {
+        providerDeletePending = null;
+        voiceDeletePending = null;
+        skinDeletePending = null;
+        personaDeletePending = null;
+        mcpDeletePending = null;
+    }
+
+    /** The confirm card's two buttons (widget pass draws them above the scrim):
+     *  Cancel left, destructive Delete right — positioned by the SAME box the render uses. */
+    private void buildConfirmButtons(Runnable onDelete) {
+        var box = com.dwinovo.numen.client.ui.ConfirmModal.box(font(), host.railX(),
+                left() + panelW(), top(), panelH(), activeModalTitle(), null);
+        int bw = com.dwinovo.numen.client.ui.ConfirmModal.BTN_W;
+        int gap = com.dwinovo.numen.client.ui.ConfirmModal.BTN_GAP;
+        int bx = box.x() + (box.w() - (bw * 2 + gap)) / 2;
+        host.add(new SimpleButton(bx, box.buttonY(), bw, com.dwinovo.numen.client.ui.ConfirmModal.BTN_H,
+                Component.translatable("numen.gui.settings.cancel"),
+                b -> { clearDeletePending(); host.rebuild(); }));
+        host.add(new SimpleButton(bx + bw + gap, box.buttonY(), bw,
+                com.dwinovo.numen.client.ui.ConfirmModal.BTN_H,
+                Component.translatable("numen.dismiss.delete"), b -> onDelete.run()).danger());
     }
 
     /** Dispatch widget building by the active section (skill/MCP lists render manually). */
@@ -558,16 +624,11 @@ public final class SettingsView {
     }
 
     private void buildProviderDeleteConfirm() {
-        int x = secX();
-        int by = secY0() + 24;
-        int bw = 64, gap = 8;
-        host.add(new SimpleButton(x, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
+        buildConfirmButtons(() -> {
             com.dwinovo.numen.agent.llm.ProviderLibrary.instance().remove(providerDeletePending);
             providerDeletePending = null;
             host.rebuild();
-        }));
-        host.add(new SimpleButton(x + bw + gap, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
-                b -> { providerDeletePending = null; host.rebuild(); }));
+        });
     }
 
     private void onSaveProvider() {
@@ -717,16 +778,11 @@ public final class SettingsView {
     }
 
     private void buildVoiceDeleteConfirm() {
-        int x = secX();
-        int by = secY0() + 24;
-        int bw = 64, gap = 8;
-        host.add(new SimpleButton(x, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
+        buildConfirmButtons(() -> {
             com.dwinovo.numen.client.voice.VoiceLibrary.instance().remove(voiceDeletePending);
             voiceDeletePending = null;
             host.rebuild();
-        }));
-        host.add(new SimpleButton(x + bw + gap, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
-                b -> { voiceDeletePending = null; host.rebuild(); }));
+        });
     }
 
     /** Keep typed values across a rebuild (backend switch / edit entry). */
@@ -878,12 +934,6 @@ public final class SettingsView {
         var lib = com.dwinovo.numen.client.voice.VoiceLibrary.instance();
         if (!addingVoice) {
             txt(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE), x, secY0() - 2, TXT);
-        }
-        if (voiceDeletePending != null) {
-            var e = lib.get(voiceDeletePending);
-            txt(g, Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM, e != null ? e.name() : ""),
-                    x, secY0() + 10, TXT);
-            return;
         }
         if (addingVoice) {
             // 表单本体是占位符自述的字段 + 自标注的类型按钮;这里只画状态行。
@@ -1037,16 +1087,11 @@ public final class SettingsView {
     }
 
     private void buildPersonaDeleteConfirm() {
-        int x = secX();
-        int by = secY0() + 24;
-        int bw = 64, gap = 8;
-        host.add(new SimpleButton(x, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
+        buildConfirmButtons(() -> {
             PersonaLibrary.instance().remove(personaDeletePending);
             personaDeletePending = null;
             host.rebuild();
-        }));
-        host.add(new SimpleButton(x + bw + gap, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
-                b -> { personaDeletePending = null; host.rebuild(); }));
+        });
     }
 
     private void onSavePersona() {
@@ -1080,16 +1125,11 @@ public final class SettingsView {
     // ---- MCP section ----
 
     private void buildMcpDeleteConfirm() {
-        int x = secX();
-        int by = secY0() + 24;
-        int bw = 64, gap = 8;
-        host.add(new SimpleButton(x, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
+        buildConfirmButtons(() -> {
             com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(mcpDeletePending);
             mcpDeletePending = null;
             host.rebuild();
-        }));
-        host.add(new SimpleButton(x + bw + gap, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
-                b -> { mcpDeletePending = null; host.rebuild(); }));
+        });
     }
 
     private void buildMcpListWidgets() {
@@ -1251,16 +1291,11 @@ public final class SettingsView {
     }
 
     private void buildSkinDeleteConfirm() {
-        int x = secX();
-        int by = secY0() + 24;
-        int bw = 64, gap = 8;
-        host.add(new SimpleButton(x, by, bw, 18, Component.translatable("numen.dismiss.delete"), b -> {
+        buildConfirmButtons(() -> {
             com.dwinovo.numen.client.skin.SkinLibrary.instance().remove(skinDeletePending);
             skinDeletePending = null;
             host.rebuild();
-        }));
-        host.add(new SimpleButton(x + bw + gap, by, bw, 18, Component.translatable("numen.gui.settings.cancel"),
-                b -> { skinDeletePending = null; host.rebuild(); }));
+        });
     }
 
     private void resetSkinForm() {
@@ -1367,12 +1402,6 @@ public final class SettingsView {
         var lib = com.dwinovo.numen.client.skin.SkinLibrary.instance();
         if (!addingSkin) {
             txt(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE), x, secY0() - 2, TXT);
-        }
-        if (skinDeletePending != null) {
-            var e = lib.get(skinDeletePending);
-            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_DELETE_CONFIRM,
-                    e != null ? e.name() : ""), x, secY0() + 10, TXT);
-            return;
         }
         if (addingSkin) {
             int fy = secY0();
@@ -1501,6 +1530,13 @@ public final class SettingsView {
             case STT -> renderSttSection(g);
             case THEME -> renderThemeSection(g);
         }
+        // 删除确认改模态:列表照常渲染作背景,暗幕+确认卡压在上面(按钮走 widget
+        // 通道,在暗幕之后渲染,天然浮在卡上)。
+        Component modal = activeModalTitle();
+        if (modal != null) {
+            com.dwinovo.numen.client.ui.ConfirmModal.render(g, font(), host.railX(),
+                    left() + panelW(), top(), panelH(), modal, null);
+        }
     }
 
     /** 主题选择:五套配色一行一个(三色小样 + 名字),点击即切换并写入 ui.json。 */
@@ -1530,12 +1566,6 @@ public final class SettingsView {
         // "名称(必填)" first label takes the top line.
         if (!addingProvider) {
             txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE), x, secY0() - 2, TXT);
-        }
-        if (providerDeletePending != null) {
-            var e = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerDeletePending);
-            txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM, e != null ? e.name() : ""),
-                    x, secY0() + 10, TXT);
-            return;
         }
         if (addingProvider) { renderProviderForm(g); return; }
         var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
@@ -1638,10 +1668,6 @@ public final class SettingsView {
     private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
         txt(g, Component.translatable("numen.mcp.title"), x, secY0() - 2, TXT);
-        if (mcpDeletePending != null) {
-            txt(g, Component.translatable("numen.mcp.delete_confirm", mcpDeletePending), x, secY0() + 10, TXT);
-            return;
-        }
         if (addingMcp) { renderMcpForm(g); return; }
         var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
         if (servers.isEmpty()) {
@@ -1778,12 +1804,6 @@ public final class SettingsView {
     private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
         txt(g, Component.translatable("numen.persona.title"), x, secY0() - 2, TXT);
-        if (personaDeletePending != null) {
-            PersonaLibrary.Persona p = PersonaLibrary.instance().get(personaDeletePending);
-            txt(g, Component.translatable("numen.persona.delete_confirm", p != null ? p.name() : ""),
-                    x, secY0() + 10, TXT);
-            return;
-        }
         if (addingPersona) { renderPersonaForm(g); return; }
         var list = PersonaLibrary.instance().list();
         if (list.isEmpty()) {
@@ -1877,6 +1897,9 @@ public final class SettingsView {
      *  the fields), then the sub-nav / theme rows / per-row toggles. Returns true = consumed. */
     public boolean mouseClicked(double mouseX, double mouseY) {
         loadPalette();
+        // 模态确认卡在场:面板内容只是背景,任何命中(子导航/主题行/列表行)都不放行
+        // ——卡上的两颗按钮走 Screen 的 widget 通道,不经过这里。
+        if (modalActive()) return false;
         // Model-config form pickers get first pick (their open lists overlay the form).
         if (addingProvider && provProviderDropdown != null) {
             String before = provProviderDropdown.selectedId();

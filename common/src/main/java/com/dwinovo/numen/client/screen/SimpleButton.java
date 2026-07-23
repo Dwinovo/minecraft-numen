@@ -22,6 +22,7 @@ public final class SimpleButton extends Button {
 
     private ResourceLocation icon;
     private boolean primary;
+    private boolean danger;
 
     public SimpleButton(int x, int y, int width, int height, Component message, Button.OnPress onPress) {
         super(x, y, width, height, message, onPress,
@@ -40,20 +41,28 @@ public final class SimpleButton extends Button {
         return this;
     }
 
+    /** Destructive styling (fail-red fill) — for the confirm card's Delete. */
+    public SimpleButton danger() {
+        this.danger = true;
+        return this;
+    }
+
     @Override
     protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         UiTheme t = UiTheme.current();
         int x = getX(), y = getY(), w = getWidth(), h = getHeight();
         boolean hovered = active && isHoveredOrFocused();
 
-        int base = primary ? t.cta() : t.field();
+        int base = danger ? t.fail() : primary ? t.cta() : t.field();
         int fill = !active ? UiTheme.mix(base, t.ground(), 0.55f)
                 : hovered ? UiTheme.mix(base, 0xFFFFFFFF, 0.18f)
                 : base;
         int border = !active ? UiTheme.mix(t.border(), t.ground(), 0.45f) : t.border();
         RoundRect.card(g, x, y, x + w, y + h, 5, fill, border);
 
+        // danger 的深红底上深棕字不可读——用 onBand 奶油浅色(五套预设的 fail 都是深红系)。
         int labelColor = !active ? UiTheme.mix(t.textDim(), t.ground(), 0.3f)
+                : danger ? t.onBand()
                 : primary ? t.onCta()
                 : t.text();
 
