@@ -347,7 +347,7 @@ public final class SettingsView {
                     Services.CONFIG.save();
                     NumenLlmClient.reset();
                     savedFlashUntil = System.currentTimeMillis() + 1500;
-                }));
+                }).primary());
     }
 
     // ---- Voice input (STT) section: provider dropdown → prefilled base/model, mic dropdown ----
@@ -406,7 +406,7 @@ public final class SettingsView {
                     cfg.setSttMicrophone(sttMicDropdown.selectedId());
                     cfg.save();
                     savedFlashUntil = System.currentTimeMillis() + 1500;
-                }));
+                }).primary());
     }
 
     private List<Dropdown.Item> sttProviderItems() {
@@ -530,7 +530,7 @@ public final class SettingsView {
         provKeyInput = field(x, fy + 11 + 3 * SET_SP, w, 256, wProvKey);
         provBaseUrlInput = field(x, fy + 11 + 4 * SET_SP, w, 256, wProvBaseUrl);
         host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> onSaveProvider()));
+                Component.translatable("numen.gui.settings.save"), b -> onSaveProvider()).primary());
         host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> { addingProvider = false; providerEditId = null; host.rebuild(); }));
         host.focus(provNameInput);
@@ -671,7 +671,7 @@ public final class SettingsView {
         test.active = test.visible;
         host.add(test);
         host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> onSaveVoice()));
+                Component.translatable("numen.gui.settings.save"), b -> onSaveVoice()).primary());
         host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> {
                     addingVoice = false; voiceEditId = null; voiceTestGen++;
@@ -1030,7 +1030,7 @@ public final class SettingsView {
         personaTextArea.setCharacterLimit(4096);
         host.add(personaTextArea);
         host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> onSavePersona()));
+                Component.translatable("numen.gui.settings.save"), b -> onSavePersona()).primary());
         host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> { addingPersona = false; personaEditId = null; host.rebuild(); }));
         host.focus(personaNameInput);
@@ -1116,7 +1116,7 @@ public final class SettingsView {
         mcpHeaderInput = field(x, fy + 100, w, 1024, wMcpHeader);
         // Save + Cancel
         host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> onSaveMcp()));
+                Component.translatable("numen.gui.settings.save"), b -> onSaveMcp()).primary());
         host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> { addingMcp = false; mcpEditOriginal = null; host.rebuild(); }));
         host.focus(mcpNameInput);   // ready to type the name immediately
@@ -1239,7 +1239,7 @@ public final class SettingsView {
         skinVariantDropdown.setBounds(x, fy + 11 + SET_SP, w, 18);
         skinVariantDropdown.setDropBottom(top() + panelH() - 2);
         host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> onSaveSkin()));
+                Component.translatable("numen.gui.settings.save"), b -> onSaveSkin()).primary());
         host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
                 Component.literal("✕"), b -> {
                     addingSkin = false;

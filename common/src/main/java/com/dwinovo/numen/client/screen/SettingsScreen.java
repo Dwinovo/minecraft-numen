@@ -70,7 +70,7 @@ public final class SettingsScreen extends Screen {
         addRenderableWidget(new SimpleButton(rightX - btnW - 4, footerY, btnW, 18,
                 Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), b -> onClose()));
         addRenderableWidget(new SimpleButton(rightX, footerY, btnW, 18,
-                Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_SAVE), b -> onSave()));
+                Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_SAVE), b -> onSave()).primary());
     }
 
     private EditBox field(int x, int y, int max, String value) {

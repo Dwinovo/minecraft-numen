@@ -204,6 +204,10 @@ public final class ModLanguageData {
         adder.add("numen.settings.reasoning.medium", "Medium");
         adder.add("numen.settings.reasoning.high", "High");
         adder.add("numen.chat.send", "Send");
+        adder.add("numen.chat.tip.compact", "Compact history");
+        adder.add("numen.chat.tip.mic", "Voice input");
+        adder.add("numen.chat.tip.mic_stop", "Stop recording");
+        adder.add("numen.chat.tip.stop", "Stop the turn");
         adder.add("numen.chat.hint", "Talk to %s…");
         adder.add("numen.chat.no_key", "⚠ No API key — open Settings to add one");
         adder.add("numen.chat.empty", "Say something to %s.");
@@ -416,6 +420,10 @@ public final class ModLanguageData {
         adder.add("numen.settings.reasoning.medium", "中");
         adder.add("numen.settings.reasoning.high", "高");
         adder.add("numen.chat.send", "发送");
+        adder.add("numen.chat.tip.compact", "压缩对话历史");
+        adder.add("numen.chat.tip.mic", "语音输入");
+        adder.add("numen.chat.tip.mic_stop", "停止录音");
+        adder.add("numen.chat.tip.stop", "停止当前回合");
         adder.add("numen.chat.hint", "对 %s 说…");
         adder.add("numen.chat.no_key", "⚠ 未配置 API Key —— 打开设置添加");
         adder.add("numen.chat.empty", "对 %s 说点什么。");
