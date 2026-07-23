@@ -291,7 +291,18 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    /** Row layout (offsets from top+HEADER_H) — each control gets its own label row,
+    // ---- summon modal card: 居中卡 + 暗幕,当前 tab 内容照常渲染作背景 ----
+    private static final int SUMMON_CARD_H = 208;
+    private int sumCardW() { return Math.min(320, panelW - 24); }
+    private int sumCardX() { return left + (panelW - sumCardW()) / 2; }
+    private int sumCardY() { return top + Math.max(10, (panelH - SUMMON_CARD_H) / 2); }
+    private int sumCardBottom() { return sumCardY() + Math.min(SUMMON_CARD_H, panelH - 20); }
+    /** 卡内内容左缘 / 宽 / 行基准(行偏移沿用原布局表)。 */
+    private int sumX() { return sumCardX() + 10; }
+    private int sumW() { return sumCardW() - 20; }
+    private int sumY0() { return sumCardY() + 2; }
+
+    /** Row layout (offsets from sumY0()) — each control gets its own label row,
      *  drawn in the render pass at these SAME offsets (keep the two in lockstep):
      *  8 title · 24 名字 label · 34 name field · 58 人设 label · 68 persona dropdown ·
      *  92 模型配置 label · 102 provider dropdown · 126 声线 label · 136 voice dropdown ·
@@ -299,9 +310,9 @@ public final class NumenScreen extends Screen {
     private void buildSummonField() {
         // 人设下拉的数据源是 persona/ 目录:每次打开召唤面板重扫一遍。
         com.dwinovo.numen.persona.PersonaLibrary.instance().reload();
-        int y0 = top + HEADER_H;
-        summonInput = new FlatEditBox(font, left + PAD + FIELD_INSET_X, y0 + 34 + FIELD_INSET_Y,
-                panelW - PAD * 2 - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
+        int y0 = sumY0();
+        summonInput = new FlatEditBox(font, sumX() + FIELD_INSET_X, y0 + 34 + FIELD_INSET_Y,
+                sumW() - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
         summonInput.setMaxLength(com.dwinovo.numen.network.payload.SummonRequestPayload.MAX_NAME);
         summonInput.setBordered(false);
         summonInput.setTextColor(TXT);
@@ -316,7 +327,7 @@ public final class NumenScreen extends Screen {
             items.add(new Dropdown.Item(p.id(), p.name()));
         }
         summonPersonaDropdown = new Dropdown(items, summonPersonaId == null ? PERSONA_DEFAULT : summonPersonaId);
-        summonPersonaDropdown.setBounds(left + PAD, y0 + 68, panelW - PAD * 2, 18);
+        summonPersonaDropdown.setBounds(sumX(), y0 + 68, sumW(), 18);
         summonPersonaDropdown.setDropBottom(top + panelH - 2);
         // REQUIRED model config — no default item and no fallback: an empty library
         // shows no dropdown; clicking 创建 then explains (doSummon).
@@ -328,7 +339,7 @@ public final class NumenScreen extends Screen {
             }
             if (summonProviderId == null) summonProviderId = provEntries.get(0).id();
             summonProviderDropdown = new Dropdown(provItems, summonProviderId);
-            summonProviderDropdown.setBounds(left + PAD, y0 + 102, panelW - PAD * 2, 18);
+            summonProviderDropdown.setBounds(sumX(), y0 + 102, sumW(), 18);
             summonProviderDropdown.setDropBottom(top + panelH - 2);
         }
         // OPTIONAL voice — first item = 无(静音), entries follow (same pattern as the
@@ -342,7 +353,7 @@ public final class NumenScreen extends Screen {
             }
             summonVoiceDropdown = new Dropdown(voiceItems, summonVoiceId == null ? VOICE_NONE : summonVoiceId);
             // 声线行与皮肤下拉平分一行(左声线右皮肤),不再新占一行。
-            summonVoiceDropdown.setBounds(left + PAD, y0 + 136, summonHalfW(), 18);
+            summonVoiceDropdown.setBounds(sumX(), y0 + 136, summonHalfW(), 18);
             summonVoiceDropdown.setDropBottom(top + panelH - 2);
         }
         // 皮肤:默认(按名字找同名正版) + 皮肤库里已签名的条目。
@@ -352,12 +363,12 @@ public final class NumenScreen extends Screen {
             if (e.signed()) skinItems.add(new Dropdown.Item(e.id(), e.name()));
         }
         summonSkinDropdown = new Dropdown(skinItems, summonSkinId == null ? SKIN_DEFAULT : summonSkinId);
-        summonSkinDropdown.setBounds(left + PAD + summonHalfW() + 6, y0 + 136, summonHalfW(), 18);
+        summonSkinDropdown.setBounds(sumX() + summonHalfW() + 6, y0 + 136, summonHalfW(), 18);
         summonSkinDropdown.setDropBottom(top + panelH - 2);
         // Explicit actions — Enter stays as the fallback confirm (keyPressed), the
         // buttons are the primary path.
         int bw = 64, gap = 8, totalW = bw * 2 + gap;
-        int bx = left + (panelW - totalW) / 2;
+        int bx = sumX() + (sumW() - totalW) / 2;
         add(new SimpleButton(bx, y0 + 162, bw, 18, Component.translatable("numen.gui.settings.cancel"),
                 b -> { summoning = false; rebuild(); }));
         add(new SimpleButton(bx + bw + gap, y0 + 162, bw, 18,
@@ -366,9 +377,9 @@ public final class NumenScreen extends Screen {
         setInitialFocus(summonInput);
     }
 
-    /** 召唤页"声线|皮肤"共享行的半宽。build 与 render 共用。 */
+    /** 召唤卡"声线|皮肤"共享行的半宽。build 与 render 共用。 */
     private int summonHalfW() {
-        return (panelW - PAD * 2 - 6) / 2;
+        return (sumW() - 6) / 2;
     }
 
     /**
@@ -679,8 +690,11 @@ public final class NumenScreen extends Screen {
             if (k == 256) { dismissPending = null; rebuild(); return true; }   // Esc cancels the confirm
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
-        // 设置页的删除确认模态:Esc 收起卡片而不是关掉整个面板。
-        if (k == 256 && tab == Tab.SETTINGS && settings.cancelModal()) return true;
+        // 设置页的模态(删除确认卡 / 新建编辑表单卡):Esc 收起卡片而不是关掉整个面板。
+        if (k == 256 && tab == Tab.SETTINGS && !summoning
+                && (settings.cancelModal() || settings.cancelForm())) {
+            return true;
+        }
         if (summoning) {
             if (k == 257 || k == 335) { doSummon(); return true; }    // Enter
             if (k == 256) { summoning = false; rebuild(); return true; } // Esc cancels (doesn't close panel)
@@ -746,6 +760,12 @@ public final class NumenScreen extends Screen {
             // 设置页的删除确认模态:侧栏/页签/列表全部只是背景,只有卡上按钮可点。
             return super.mouseClicked(mouseX, mouseY, button);
         }
+        if (!summoning && tab == Tab.SETTINGS && settings.formActive()) {
+            // 设置页的表单模态:先给表单自己的下拉路由,其余只放行 widget 通道
+            // (卡上字段/按钮),侧栏/页签/背景列表全部屏蔽。
+            if (button == 0 && settings.mouseClicked(mouseX, mouseY)) return true;
+            return super.mouseClicked(mouseX, mouseY, button);
+        }
         if (button == 0) {
             // Summon dropdowns get first pick (their open lists overlay the panel).
             // 遮挡关系:先路由"正展开"的那一个——下排下拉向上翻时,展开列表盖住
@@ -778,6 +798,11 @@ public final class NumenScreen extends Screen {
                 }
                 return true;
             }
+            if (summoning) {
+                // 召唤模态:页签/聊天/设置全在暗幕之下,只放行 widget 通道(卡上控件);
+                // 侧栏的 +/头像/✕ 在上面已处理(保留为模态的逃生口)。
+                return super.mouseClicked(mouseX, mouseY, button);
+            }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
             int my = (int) mouseY;
             if (my >= top && my < top + HEADER_H) {
@@ -805,6 +830,11 @@ public final class NumenScreen extends Screen {
                     summonProviderDropdown, summonVoiceDropdown}) {
                 if (d != null && d.mouseScrolled(mx, my, sy)) return true;
             }
+        }
+        if (summoning) return false;   // 召唤模态:背景(侧栏/聊天/设置)不响应滚轮
+        if (tab == Tab.SETTINGS && settings.formActive()) {
+            // 表单模态:只放行表单自己的滚动(下拉列表 + 声线表单视口),背景列表/侧栏屏蔽。
+            return sy != 0 && settings.mouseScrolledEarly(mx, my, sy);
         }
         // 设置页第一段:表单下拉 + 声线表单整体滚动(顺位与拆分前一致)。
         if (sy != 0 && tab == Tab.SETTINGS && settings.mouseScrolledEarly(mx, my, sy)) return true;
@@ -852,44 +882,52 @@ public final class NumenScreen extends Screen {
         }
         renderTabs(g, mouseX, mouseY);
 
-        if (summoning) {
-            int y0 = top + HEADER_H;   // offsets in lockstep with buildSummonField
-            txt(g, Component.translatable("numen.summon.title"), left + PAD, y0 + 8, TXT);
-            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_NAME), left + PAD, y0 + 24, TXT_MUTED);
-            placeholder(g, summonInput, I18n.get(ModLanguageData.Keys.SUMMON_NAME_PLACEHOLDER));
-            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_PERSONA_LABEL), left + PAD, y0 + 58, TXT_MUTED);
-            txt(g, Component.literal(I18n.get(ModLanguageData.Keys.PROVIDER_TITLE)
-                    + (summonProviderDropdown == null ? I18n.get(ModLanguageData.Keys.SUMMON_PROVIDER_EMPTY) : "")),
-                    left + PAD, y0 + 92, TXT_MUTED);
-            txt(g, Component.literal(I18n.get(ModLanguageData.Keys.VOICE_SUMMON_LABEL)
-                    + (summonVoiceDropdown == null ? I18n.get(ModLanguageData.Keys.VOICE_SUMMON_EMPTY) : "")),
-                    left + PAD, y0 + 126, TXT_MUTED);
-            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_SKIN),
-                    left + PAD + summonHalfW() + 6, y0 + 126, TXT_MUTED);
-            txt(g, Component.translatable("numen.summon.hint"),
-                    left + PAD, y0 + 186, TXT_FAINT);
-        } else {
-            if (uuid != null) {
-                if (compactButton != null) compactButton.active = loop().canCompact();
-                if (stopButton != null) stopButton.active = loop().canInterrupt();
-            }
-            switch (tab) {
-                case SETTINGS -> settings.render(g, mouseX, mouseY);   // global — works with no companion
-                case CHAT -> { if (uuid != null) renderChat(g, mouseX, mouseY); else emptyHint(g); }
-                case ITEMS -> {
-                    if (uuid != null) {
-                        com.dwinovo.numen.client.screen.items.ItemsView.render(
-                                g, font, uuid, left, top, panelW, panelH, HEADER_H, mouseX, mouseY);
-                    } else {
-                        emptyHint(g);
-                    }
+        // 当前 tab 内容永远渲染——召唤模态时它是暗幕下的背景(widgets 只建了召唤卡的,
+        // 背景不可交互)。
+        if (uuid != null && !summoning) {
+            if (compactButton != null) compactButton.active = loop().canCompact();
+            if (stopButton != null) stopButton.active = loop().canInterrupt();
+        }
+        switch (tab) {
+            case SETTINGS -> settings.render(g, mouseX, mouseY);   // global — works with no companion
+            case CHAT -> { if (uuid != null) renderChat(g, mouseX, mouseY); else emptyHint(g); }
+            case ITEMS -> {
+                if (uuid != null) {
+                    com.dwinovo.numen.client.screen.items.ItemsView.render(
+                            g, font, uuid, left, top, panelW, panelH, HEADER_H, mouseX, mouseY);
+                } else {
+                    emptyHint(g);
                 }
             }
-            if (tab == Tab.CHAT && warnUntil > System.currentTimeMillis()) {   // endpoint-problem hint above the input
-                txt(g, warnText != null ? Component.literal(warnText)
-                                : Component.translatable("numen.chat.no_key"),
-                        left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
-            }
+        }
+        if (!summoning && tab == Tab.CHAT && warnUntil > System.currentTimeMillis()) {
+            // endpoint-problem hint above the input
+            txt(g, warnText != null ? Component.literal(warnText)
+                            : Component.translatable("numen.chat.no_key"),
+                    left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
+        }
+        if (summoning) {
+            // 召唤模态:暗幕 + 居中卡(与确认卡同族),行偏移沿用原布局表。
+            g.fill(railX, top, railX + RAIL_W + panelW, top + panelH,
+                    (UiTheme.current().border() & 0xFFFFFF) | 0x99000000);
+            com.dwinovo.numen.client.ui.RoundRect.card(g, sumCardX(), sumCardY(),
+                    sumCardX() + sumCardW(), sumCardBottom(), 6,
+                    UiTheme.current().aiFill(), UiTheme.current().aiBorder());
+            int y0 = sumY0();   // offsets in lockstep with buildSummonField
+            txt(g, Component.translatable("numen.summon.title"), sumX(), y0 + 8, TXT);
+            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_NAME), sumX(), y0 + 24, TXT_MUTED);
+            placeholder(g, summonInput, I18n.get(ModLanguageData.Keys.SUMMON_NAME_PLACEHOLDER));
+            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_PERSONA_LABEL), sumX(), y0 + 58, TXT_MUTED);
+            txt(g, Component.literal(I18n.get(ModLanguageData.Keys.PROVIDER_TITLE)
+                    + (summonProviderDropdown == null ? I18n.get(ModLanguageData.Keys.SUMMON_PROVIDER_EMPTY) : "")),
+                    sumX(), y0 + 92, TXT_MUTED);
+            txt(g, Component.literal(I18n.get(ModLanguageData.Keys.VOICE_SUMMON_LABEL)
+                    + (summonVoiceDropdown == null ? I18n.get(ModLanguageData.Keys.VOICE_SUMMON_EMPTY) : "")),
+                    sumX(), y0 + 126, TXT_MUTED);
+            txt(g, Component.translatable(ModLanguageData.Keys.SUMMON_SKIN),
+                    sumX() + summonHalfW() + 6, y0 + 126, TXT_MUTED);
+            txt(g, Component.translatable("numen.summon.hint"),
+                    sumX(), y0 + 186, TXT_FAINT);
         }
 
         // 删除同伴改模态:上面的 tab 内容只是背景(rebuild 只建了确认卡的两颗按钮,
@@ -926,7 +964,7 @@ public final class NumenScreen extends Screen {
         // Settings-tab overlay pass: field placeholders, voice-form row labels, and the form
         // dropdowns' open lists (drawn last so they sit above the fields) — see SettingsView.
         // 同伴删除模态在场时跳过——占位符/行标题不能画到暗幕上面。
-        if (tab == Tab.SETTINGS && dismissPending == null) {
+        if (tab == Tab.SETTINGS && dismissPending == null && !summoning) {
             settings.renderOverlays(g, mouseX, mouseY);
         }
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
@@ -934,7 +972,7 @@ public final class NumenScreen extends Screen {
         // Summon warn — shown only when 创建 was clicked and something is missing
         // (error at the action, never ambient text). Takes the hint line's spot.
         if (summoning && warnUntil > System.currentTimeMillis() && warnText != null) {
-            g.drawString(font, warnText, left + PAD, top + HEADER_H + 186, 0xFFCC6666, false);
+            g.drawString(font, warnText, sumX(), sumY0() + 186, 0xFFCC6666, false);
         }
         if (summoning) {
             renderSummonDropdowns(g, mouseX, mouseY);

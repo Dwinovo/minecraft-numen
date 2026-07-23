@@ -199,6 +199,52 @@ public final class SettingsView {
     /** Bottom y a list row may reach. */
     private int secBottom() { return top() + panelH() - PAD; }
 
+    // ---- form modal (add/edit forms float on a card over the dimmed list) ----
+
+    /** 任一新建/编辑表单在场(表单模态)——屏幕据此屏蔽背景交互。 */
+    public boolean formActive() {
+        return addingProvider || addingVoice || addingSkin || addingPersona || addingMcp;
+    }
+
+    /** Esc while a form modal is up: close it back to the list (same semantics as the ✕ button). */
+    public boolean cancelForm() {
+        if (!formActive()) return false;
+        addingProvider = false; providerEditId = null;
+        addingVoice = false; voiceEditId = null; voiceTestGen++;
+        addingSkin = false; skinEditId = null; skinFormGen++;
+        addingPersona = false; personaEditId = null;
+        addingMcp = false; mcpEditOriginal = null;
+        host.rebuild();
+        return true;
+    }
+
+    // 表单卡:面板区域内缩 10px 的近全幅卡——小面板下可用面积本就紧张,弹层感
+    // 靠四周暗边 + 圆角传达。卡内表单坐标系(f*)只在表单态使用,列表照旧走 sec*。
+    private int cardX0() { return left() + 10; }
+    private int cardY0() { return top() + 10; }
+    private int cardX1() { return left() + panelW() - 10; }
+    private int cardY1() { return top() + panelH() - 10; }
+    /** Left x of form content inside the card. */
+    private int fx() { return cardX0() + 10; }
+    /** Width of form content inside the card. */
+    private int fw() { return cardX1() - cardX0() - 20; }
+    /** Top y of form content (below the card's title row). */
+    private int fy0() { return cardY0() + 18; }
+    /** Right edge form buttons align to. */
+    private int fRight() { return cardX1() - 10; }
+    /** Bottom edge the form's save row sits above. */
+    private int fBottom() { return cardY1() - 10; }
+
+    /** 表单模态的暗幕 + 近全幅圆角卡 + 卡顶标题(与 ConfirmModal 同族的视觉参数)。 */
+    private void formModal(GuiGraphics g, Component title) {
+        UiTheme t = UiTheme.current();
+        g.fill(host.railX(), top(), left() + panelW(), top() + panelH(),
+                (t.border() & 0xFFFFFF) | 0x99000000);
+        com.dwinovo.numen.client.ui.RoundRect.card(g, cardX0(), cardY0(), cardX1(), cardY1(),
+                6, t.aiFill(), t.aiBorder());
+        txt(g, title, fx(), cardY0() + 6, TXT);
+    }
+
     // ---- shared draw helpers (private copies — see NumenScreen's originals) ----
 
     private void txt(GuiGraphics g, Component c, int x, int y, int color) {
@@ -562,8 +608,8 @@ public final class SettingsView {
      * default URL, editable) → API Key. Saving yields a complete config.
      */
     private void buildProviderForm() {
-        int x = secX(), w = secW();
-        int fy = secY0();
+        int x = fx(), w = fw();
+        int fy = fy0();
         provNameInput = field(x, fy + 11, w, 48, wProvName);
         // Provider picker — same catalog as everywhere else (built-ins + user sites),
         // no "+add site" row here. Blank state (fresh form) starts on the first entry
@@ -595,9 +641,9 @@ public final class SettingsView {
         }
         provKeyInput = field(x, fy + 11 + 3 * SET_SP, w, 256, wProvKey);
         provBaseUrlInput = field(x, fy + 11 + 4 * SET_SP, w, 256, wProvBaseUrl);
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
+        host.add(new SimpleButton(fRight() - 64, fBottom() - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveProvider()).primary());
-        host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
+        host.add(new SimpleButton(fRight() - 64 - 22, fBottom() - 18, 18, 18,
                 Component.literal("✕"), b -> { addingProvider = false; providerEditId = null; host.rebuild(); }));
         host.focus(provNameInput);
     }
@@ -683,7 +729,7 @@ public final class SettingsView {
      * 滚动(滚轮),出视口的行连标题带控件一起隐藏;保存/关闭钉在面板右下不随滚。
      */
     private void buildVoiceForm() {
-        int x = secX(), w = secW();
+        int x = fx(), w = fw();
         voiceFormScroll = Math.clamp(voiceFormScroll, 0, maxVoiceFormScroll());
         voiceNameInput = vclip(field(x, voiceVy(0), w, 48, wVoiceName), 0);
         // 后端下拉——召唤页人设/模型下拉同款控件;点击路由在 mouseClicked,
@@ -731,9 +777,9 @@ public final class SettingsView {
         test.visible = voiceRowVisible(row);
         test.active = test.visible;
         host.add(test);
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
+        host.add(new SimpleButton(fRight() - 64, fBottom() - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveVoice()).primary());
-        host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
+        host.add(new SimpleButton(fRight() - 64 - 22, fBottom() - 18, 18, 18,
                 Component.literal("✕"), b -> {
                     addingVoice = false; voiceEditId = null; voiceTestGen++;
                     host.rebuild();
@@ -745,18 +791,18 @@ public final class SettingsView {
 
     /** 表单第 {@code row} 行输入框的 y(标题画在其上方 11px);随滚动偏移。 */
     private int voiceVy(int row) {
-        return secY0() + 11 + row * SET_SP - voiceFormScroll;
+        return fy0() + 11 + row * SET_SP - voiceFormScroll;
     }
 
     /** 第 {@code row} 行(标题+输入框)完整落在视口内? */
     private boolean voiceRowVisible(int row) {
         int y = voiceVy(row);
-        return y - 11 >= secY0() - 2 && y + 18 <= voiceFormBottom();
+        return y - 11 >= fy0() - 2 && y + 18 <= voiceFormBottom();
     }
 
-    /** 表单视口底:保存行与状态行的上沿。 */
+    /** 表单视口底:保存行与状态行的上沿(卡内坐标)。 */
     private int voiceFormBottom() {
-        return top() + panelH() - PAD - 20;
+        return fBottom() - 20;
     }
 
     /** 当前选型的总行数:名称/提供商/URL 三行 + 各后端专属行 + 音量行。 */
@@ -766,7 +812,7 @@ public final class SettingsView {
 
     private int maxVoiceFormScroll() {
         int content = 11 + (voiceFormRowCount() - 1) * SET_SP + 18 + 2;
-        return Math.max(0, content - (voiceFormBottom() - secY0()));
+        return Math.max(0, content - (voiceFormBottom() - fy0()));
     }
 
     /** 出视口的行隐藏(不可见的 EditBox 既不渲染也不接输入)。 */
@@ -886,7 +932,7 @@ public final class SettingsView {
         } catch (Exception ex) {
             String why = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
             com.dwinovo.numen.Constants.LOG.warn("[numen-voice] 试音失败(同步): {}", why);
-            voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_FAIL, clip(why, secW() - 10)), true);
+            voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_FAIL, clip(why, fw() - 10)), true);
             return;
         }
         synth.whenComplete((wav, err) -> {
@@ -910,7 +956,7 @@ public final class SettingsView {
                     // 完整原因进日志(红字被 clip 且只停留几秒,排障全靠这行)。
                     com.dwinovo.numen.Constants.LOG.warn("[numen-voice] 试音失败({}): {}",
                             backend.describe(), why);
-                    voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_FAIL, clip(why, secW() - 10)), true);
+                    voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_FAIL, clip(why, fw() - 10)), true);
                     return;
                 }
                 var sm = Minecraft.getInstance().getSoundManager();
@@ -930,19 +976,24 @@ public final class SettingsView {
     }
 
     private void renderVoiceSection(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX(), w = secW();
-        var lib = com.dwinovo.numen.client.voice.VoiceLibrary.instance();
-        if (!addingVoice) {
-            txt(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE), x, secY0() - 2, TXT);
-        }
         if (addingVoice) {
+            // 表单模态:列表照常渲染作背景,暗幕+表单卡压上;字段/标题在 overlay 通道。
+            renderVoiceList(g, -10000, -10000);
+            formModal(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE));
             // 表单本体是占位符自述的字段 + 自标注的类型按钮;这里只画状态行。
             if (voiceMsg != null && voiceMsgUntil > System.currentTimeMillis()) {
-                txt(g, Component.literal(clip(voiceMsg, w - 94)), x, top() + panelH() - PAD - 14,
+                txt(g, Component.literal(clip(voiceMsg, fw() - 94)), fx(), fBottom() - 14,
                         voiceMsgFail ? FAIL : OK);
             }
             return;
         }
+        renderVoiceList(g, mouseX, mouseY);
+    }
+
+    private void renderVoiceList(GuiGraphics g, int mouseX, int mouseY) {
+        int x = secX(), w = secW();
+        var lib = com.dwinovo.numen.client.voice.VoiceLibrary.instance();
+        txt(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE), x, secY0() - 2, TXT);
         // 列表视图:全局总开关(标题行右侧,新建按钮左边)。
         int togX = x + w - 64 - 10 - TOG_W;
         String onLabel = I18n.get(ModLanguageData.Keys.VOICE_ENABLED);
@@ -1067,21 +1118,21 @@ public final class SettingsView {
     }
 
     private void buildPersonaForm() {
-        int x = secX(), w = secW();
-        int fy = secY0() + 14;
+        int x = fx(), w = fw();
+        int fy = fy0();
         // 名称即文件名;正文(自由 MD)占满剩余高度。
         personaNameInput = field(x, fy + 11, w, 48, wPersonaName);
         int ty = fy + 44;
-        int th = (top() + panelH() - PAD - 22) - ty;
+        int th = (fBottom() - 22) - ty;
         personaTextArea = new net.minecraft.client.gui.components.MultiLineEditBox(
                 font(), x, ty, w, th,
                 Component.translatable("numen.persona.text_placeholder"), Component.empty());
         personaTextArea.setValue(wPersonaText);
         personaTextArea.setCharacterLimit(4096);
         host.add(personaTextArea);
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
+        host.add(new SimpleButton(fRight() - 64, fBottom() - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSavePersona()).primary());
-        host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
+        host.add(new SimpleButton(fRight() - 64 - 22, fBottom() - 18, 18, 18,
                 Component.literal("✕"), b -> { addingPersona = false; personaEditId = null; host.rebuild(); }));
         host.focus(personaNameInput);
     }
@@ -1144,8 +1195,8 @@ public final class SettingsView {
 
     /** The add-MCP-server form: name, type (http/stdio) toggle, and URL / command. */
     private void buildMcpForm() {
-        int x = secX(), w = secW();
-        int fy = secY0() + 14;     // start below the "MCP 工具" title so nothing overlaps
+        int x = fx(), w = fw();
+        int fy = fy0();
         mcpNameInput = field(x, fy + 11, w, 48, wMcpName);
         // type toggle button (cycles http ↔ stdio; rebuild swaps the URL/command row)
         host.add(new SimpleButton(x, fy + 34, w, 18,
@@ -1155,9 +1206,9 @@ public final class SettingsView {
         // 4th field: HTTP → request header(s) "Name: Value"; stdio → env "KEY=value" (';'-separated).
         mcpHeaderInput = field(x, fy + 100, w, 1024, wMcpHeader);
         // Save + Cancel
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
+        host.add(new SimpleButton(fRight() - 64, fBottom() - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveMcp()).primary());
-        host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
+        host.add(new SimpleButton(fRight() - 64 - 22, fBottom() - 18, 18, 18,
                 Component.literal("✕"), b -> { addingMcp = false; mcpEditOriginal = null; host.rebuild(); }));
         host.focus(mcpNameInput);   // ready to type the name immediately
     }
@@ -1247,7 +1298,7 @@ public final class SettingsView {
     /** 声线表单的行标题:画在该行输入框上方(随滚动偏移,出视口不画)。 */
     private void voiceLabel(GuiGraphics g, int row, String text) {
         if (!voiceRowVisible(row)) return;
-        txt(g, Component.literal(text), secX(), voiceVy(row) - 11, TXT_MUTED);
+        txt(g, Component.literal(text), fx(), voiceVy(row) - 11, TXT_MUTED);
     }
 
     // ---- Skin section: the named skin library (upload png → MineSkin-signed textures) ----
@@ -1267,8 +1318,8 @@ public final class SettingsView {
      * {@link #onFilesDrop} 接住)。保存 = 先 MineSkin 代签再落库,失败红字可重试。
      */
     private void buildSkinForm() {
-        int x = secX(), w = secW();
-        int fy = secY0();
+        int x = fx(), w = fw();
+        int fy = fy0();
         skinNameInput = field(x, fy + 11, w, 48, wSkinName);
         skinVariantDropdown = new Dropdown(List.of(
                 new Dropdown.Item(com.dwinovo.numen.client.skin.SkinLibrary.VARIANT_CLASSIC,
@@ -1278,9 +1329,9 @@ public final class SettingsView {
                 wSkinVariant);
         skinVariantDropdown.setBounds(x, fy + 11 + SET_SP, w, 18);
         skinVariantDropdown.setDropBottom(top() + panelH() - 2);
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
+        host.add(new SimpleButton(fRight() - 64, fBottom() - 18, 64, 18,
                 Component.translatable("numen.gui.settings.save"), b -> onSaveSkin()).primary());
-        host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, top() + panelH() - PAD - 18, 18, 18,
+        host.add(new SimpleButton(fRight() - 64 - 22, fBottom() - 18, 18, 18,
                 Component.literal("✕"), b -> {
                     addingSkin = false;
                     skinEditId = null;
@@ -1377,7 +1428,7 @@ public final class SettingsView {
                         String why = cur == null ? "?" : (cur.getMessage() == null
                                 ? cur.getClass().getSimpleName() : cur.getMessage());
                         com.dwinovo.numen.Constants.LOG.warn("[numen-skin] MineSkin 签名失败: {}", why);
-                        skinNote(I18n.get(ModLanguageData.Keys.SKIN_SIGN_FAIL, clip(why, secW() - 10)), true);
+                        skinNote(I18n.get(ModLanguageData.Keys.SKIN_SIGN_FAIL, clip(why, fw() - 10)), true);
                         return;
                     }
                     com.dwinovo.numen.Constants.LOG.info("[numen-skin] MineSkin 签名成功: {}", name);
@@ -1398,13 +1449,11 @@ public final class SettingsView {
     }
 
     private void renderSkinSection(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX(), w = secW();
-        var lib = com.dwinovo.numen.client.skin.SkinLibrary.instance();
-        if (!addingSkin) {
-            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE), x, secY0() - 2, TXT);
-        }
         if (addingSkin) {
-            int fy = secY0();
+            renderSkinList(g, -10000, -10000);
+            formModal(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE));
+            int x = fx(), w = fw();
+            int fy = fy0();
             txt(g, Component.translatable(ModLanguageData.Keys.SKIN_FORM_NAME), x, fy, TXT_MUTED);
             txt(g, Component.translatable(ModLanguageData.Keys.SKIN_FORM_VARIANT), x, fy + SET_SP, TXT_MUTED);
             // 拖拽区:提示文字 + 已加载状态(新图优先;编辑态没换图就提示沿用原图)。
@@ -1417,7 +1466,7 @@ public final class SettingsView {
                 txt(g, Component.translatable(ModLanguageData.Keys.SKIN_KEEP_OLD), x, dy + 12, TXT_FAINT);
             }
             if (skinMsg != null && skinMsgUntil > System.currentTimeMillis()) {
-                txt(g, Component.literal(clip(skinMsg, w - 94)), x, top() + panelH() - PAD - 14,
+                txt(g, Component.literal(clip(skinMsg, w - 94)), x, fBottom() - 14,
                         skinMsgFail ? FAIL : OK);
             }
             // 手臂模型下拉最后画(展开列表压在下方文字上)。
@@ -1426,6 +1475,13 @@ public final class SettingsView {
             }
             return;
         }
+        renderSkinList(g, mouseX, mouseY);
+    }
+
+    private void renderSkinList(GuiGraphics g, int mouseX, int mouseY) {
+        int x = secX(), w = secW();
+        var lib = com.dwinovo.numen.client.skin.SkinLibrary.instance();
+        txt(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE), x, secY0() - 2, TXT);
         var list = lib.list();
         if (list.isEmpty()) {
             txt(g, Component.translatable(ModLanguageData.Keys.SKIN_EMPTY), x, secY0() + 16, TXT_FAINT);
@@ -1560,14 +1616,19 @@ public final class SettingsView {
     }
 
     private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX(), w = secW();
-        // The form fills the section from the very top (5 rows + Save is a tight fit),
-        // so the section title only draws in list/confirm states — the form's own
-        // "名称(必填)" first label takes the top line.
-        if (!addingProvider) {
-            txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE), x, secY0() - 2, TXT);
+        if (addingProvider) {
+            // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压在上面。
+            renderProviderList(g, -10000, -10000);
+            formModal(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE));
+            renderProviderForm(g);
+            return;
         }
-        if (addingProvider) { renderProviderForm(g); return; }
+        renderProviderList(g, mouseX, mouseY);
+    }
+
+    private void renderProviderList(GuiGraphics g, int mouseX, int mouseY) {
+        int x = secX(), w = secW();
+        txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE), x, secY0() - 2, TXT);
         var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
         if (list.isEmpty()) {
             txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_EMPTY), x, secY0() + 16, TXT_FAINT);
@@ -1594,8 +1655,8 @@ public final class SettingsView {
     }
 
     private void renderProviderForm(GuiGraphics g) {
-        int x = secX();
-        int fy = secY0();
+        int x = fx();
+        int fy = fy0();
         txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_FORM_NAME), x, fy, TXT_MUTED);
         txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_FORM_PROVIDER), x, fy + SET_SP, TXT_MUTED);
         txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_MODEL), x, fy + 2 * SET_SP, TXT_MUTED);
@@ -1666,9 +1727,18 @@ public final class SettingsView {
     // ---- MCP section: external server list with a live on/off switch per row ----
 
     private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
+        if (addingMcp) {
+            renderMcpList(g, -10000, -10000);
+            formModal(g, Component.translatable("numen.mcp.title"));
+            renderMcpForm(g);
+            return;
+        }
+        renderMcpList(g, mouseX, mouseY);
+    }
+
+    private void renderMcpList(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
         txt(g, Component.translatable("numen.mcp.title"), x, secY0() - 2, TXT);
-        if (addingMcp) { renderMcpForm(g); return; }
         var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
         if (servers.isEmpty()) {
             txt(g, Component.translatable("numen.mcp.empty"), x, secY0() + 16, TXT_FAINT);
@@ -1703,8 +1773,8 @@ public final class SettingsView {
 
     /** Add-server form labels + placeholders (fields/buttons are widgets, drawn in the overlay pass). */
     private void renderMcpForm(GuiGraphics g) {
-        int x = secX();
-        int fy = secY0() + 14;   // matches buildMcpForm
+        int x = fx();
+        int fy = fy0();   // matches buildMcpForm
         txt(g, Component.translatable("numen.mcp.form_name"), x, fy, TXT_MUTED);
         // the type row is the self-labelled toggle button (no separate label)
         txt(g, Component.translatable(mcpStdio ? "numen.mcp.form_command" : "numen.mcp.form_url"),
@@ -1802,9 +1872,18 @@ public final class SettingsView {
     // ---- Persona section render + hit-test ----
 
     private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
+        if (addingPersona) {
+            renderPersonaList(g, -10000, -10000);
+            formModal(g, Component.translatable("numen.persona.title"));
+            renderPersonaForm(g);
+            return;
+        }
+        renderPersonaList(g, mouseX, mouseY);
+    }
+
+    private void renderPersonaList(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX(), w = secW();
         txt(g, Component.translatable("numen.persona.title"), x, secY0() - 2, TXT);
-        if (addingPersona) { renderPersonaForm(g); return; }
         var list = PersonaLibrary.instance().list();
         if (list.isEmpty()) {
             txt(g, Component.translatable("numen.persona.empty"), x, secY0() + 16, TXT_FAINT);
@@ -1834,8 +1913,8 @@ public final class SettingsView {
     }
 
     private void renderPersonaForm(GuiGraphics g) {
-        int x = secX();
-        int fy = secY0() + 14;
+        int x = fx();
+        int fy = fy0();
         txt(g, Component.translatable("numen.persona.form_name"), x, fy, TXT_MUTED);
         txt(g, Component.translatable("numen.persona.form_text"), x, fy + 33, TXT_MUTED);
     }
@@ -1983,6 +2062,12 @@ public final class SettingsView {
     /** Sub-nav column, the theme rows, then per-row toggles / edits in the section lists. */
     private boolean settingsClickedAt(double mxd, double myd) {
         int mx = (int) mxd, my = (int) myd;
+        // 表单模态:子导航/主题行/列表全在暗幕之下,不放行;皮肤表单的手臂下拉
+        // 仍要路由(它在 skinClick 的 addingSkin 分支里)。
+        if (formActive()) {
+            if (section == Section.SKIN && addingSkin) return skinClick(mx, my);
+            return false;
+        }
         int navX = left() + PAD, y = secY0();
         if (mx >= navX && mx < navX + NAV_W) {
             for (int i = 0; i < Section.values().length; i++) {
@@ -2087,9 +2172,9 @@ public final class SettingsView {
             if (d != null && d.mouseScrolled(mx, my, sy)) return true;
         }
         if (provProviderDropdown != null && provProviderDropdown.mouseScrolled(mx, my, sy)) return true;
-        // 声线表单:滚轮上下滚整个表单(MiniMax 八行超出视口)。
+        // 声线表单:滚轮上下滚整个表单(MiniMax 八行超出视口);命中区 = 表单卡。
         if (section == Section.VOICE
-                && addingVoice && mx >= secX() && maxVoiceFormScroll() > 0) {
+                && addingVoice && mx >= cardX0() && maxVoiceFormScroll() > 0) {
             preserveVoiceForm();
             voiceFormScroll = Math.clamp((long) (voiceFormScroll - sy * 16), 0, maxVoiceFormScroll());
             host.rebuild();
@@ -2100,7 +2185,7 @@ public final class SettingsView {
 
     /** Wheel pass 2 (after the rail/chat checks): scroll the section list. */
     public boolean mouseScrolledList(double sy) {
-        if (addingPersona || addingProvider || addingVoice) return false;
+        if (formActive()) return false;   // 列表在表单模态的暗幕之下,不滚
         int count = switch (section) {
             case MCP -> com.dwinovo.numen.mcp.client.McpClientManager.servers().size();
             case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
