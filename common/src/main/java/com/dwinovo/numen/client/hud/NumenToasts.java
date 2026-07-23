@@ -43,7 +43,6 @@ public final class NumenToasts {
     private static final int MARGIN = 0;         // avatar flush against the left window edge (no gap)
     private static final int STACK_GAP = 8;
     private static final int BUBBLE_GAP = 5;
-    private static final int TIP_W = 6, TIP_H = 11;
     private static final int SLIVER_W = 3;       // collapsed gold edge
     private static final int COLLAPSE_MAX = 5;   // more than this many companions → one shared slot
     private static final int LINE_H = 11;
@@ -58,8 +57,6 @@ public final class NumenToasts {
     private static net.minecraft.resources.ResourceLocation spr(String n) {
         return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, n);
     }
-    private static final net.minecraft.resources.ResourceLocation BUBBLE_SPRITE = spr("bubble");
-    private static final net.minecraft.resources.ResourceLocation TIP_SPRITE = spr("bubble_tip");
     private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME = spr("avatar_frame");
 
     private static final Map<UUID, Integer> SEEN = new HashMap<>();
@@ -120,7 +117,7 @@ public final class NumenToasts {
         Status s = STATUS.computeIfAbsent(uuid, k -> new Status());
         boolean wasEmpty = s.lines.isEmpty();
         for (String wrapped : wrapToWidth(shown, INNER_W, MAX_REPLY_LINES)) {
-            s.lines.addLast(new Line(wrapped, th.reply(), now));
+            s.lines.addLast(new Line(wrapped, th.text(), now));   // 深字浅底,与面板气泡同款
         }
         while (s.lines.size() > MAX_LINES) s.lines.removeFirst();
         if (wasEmpty) s.bubbleBornMs = now;                 // fresh bubble → restart the slide
@@ -194,11 +191,16 @@ public final class NumenToasts {
 
     private static void drawBubble(GuiGraphics g, Font font, int ax, int ay, Status s, long now) {
         int h = s.lines.size() * LINE_H + PADV * 2;
+        // 与聊天面板同款的圆角奶油气泡,宽度贴内容(短句不再拖一整条)。
+        int need = 0;
+        for (Line line : s.lines) need = Math.max(need, font.width(line.text()));
+        int bw = Math.min(W, need + 14);
         int targetX = ax + AVATAR + BUBBLE_GAP;
         int bx = targetX - slideOut(now - s.bubbleBornMs, AVATAR + BUBBLE_GAP);
         int by = ay + AVATAR / 2 - h / 2;
-        g.blitSprite(TIP_SPRITE, bx - TIP_W + 1, ay + AVATAR / 2 - TIP_H / 2, TIP_W, TIP_H);
-        g.blitSprite(BUBBLE_SPRITE, bx, by, W, h);
+        com.dwinovo.numen.client.ui.RoundRect.card(g, bx, by, bx + bw, by + h, 4,
+                com.dwinovo.numen.client.ui.ChatColors.AI_FILL,
+                com.dwinovo.numen.client.ui.ChatColors.AI_BORDER);
         int ly = by + PADV;
         for (Line line : s.lines) {
             Nb.text(g, font, line.text(), bx + 7, ly, line.color());
@@ -214,8 +216,8 @@ public final class NumenToasts {
     /** Eased slide: {@code dist} px → 0 over {@link #SLIDE_MS}. */
     private static int slideOut(long age, int dist) {
         if (age >= SLIDE_MS) return 0;
-        float p = 1f - (float) age / SLIDE_MS;
-        return (int) (dist * p * p);
+        return (int) (dist * (1f - com.dwinovo.numen.client.ui.Anim.easeOutCubic(
+                (float) age / SLIDE_MS)));
     }
 
     /** Greedily wrap to a pixel width (CJK-aware), capped at {@code maxLines}; ellipsis if truncated. */

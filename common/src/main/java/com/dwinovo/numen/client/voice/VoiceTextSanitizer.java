@@ -38,8 +38,7 @@ public final class VoiceTextSanitizer {
     private static final Pattern MD_MARKS = Pattern.compile("(\\*\\*|__|~~|[*_`#])");
     /** 行首引用符。 */
     private static final Pattern QUOTE_MARK = Pattern.compile("(?m)^\\s*>+\\s?");
-    /** 残留的方括号情绪/记号标签(EmotionTag.strip 先剥,这里兜底
-     *  清掉词表外的 [xxx],别让 TTS 把 "[thinking]" 念出来)。 */
+    /** 方括号记号标签:清掉 [thinking] 这类模型自造记号,别让 TTS 念出来。 */
     private static final Pattern BRACKET_TAG = Pattern.compile("\\[[A-Za-z]{2,12}\\]");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 

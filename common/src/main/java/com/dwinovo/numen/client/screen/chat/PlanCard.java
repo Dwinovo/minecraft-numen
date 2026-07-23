@@ -27,10 +27,10 @@ public final class PlanCard {
     private static final int PAD = 7;
     private static final int RADIUS = 6;
     private static final UiTheme TH = UiTheme.WARM;
-    private static final int CARD_FILL = 0x16352818;
+    private static final int CARD_FILL = com.dwinovo.numen.client.ui.ChatColors.CARD_FILL;
     private static final int TXT = TH.text();
     private static final int MUTED = TH.textDim();
-    private static final int FAINT = 0xFF8C7C62;
+    private static final int FAINT = com.dwinovo.numen.client.ui.ChatColors.FAINT;
     private static final int OK = TH.ok();
     private static final int RUN = TH.run();
 
@@ -66,7 +66,7 @@ public final class PlanCard {
             int sub = 0;
             for (FormattedCharSequence seq : lines) {
                 if (ly + LINE_H >= bottom) break;
-                g.drawString(font, seq, ix + 10, ly, -1, false);
+                Nb.text(g, font, seq, ix + 10, ly);
                 ly += LINE_H;
                 if (++sub >= 2) break;   // cap each item at 2 lines
             }

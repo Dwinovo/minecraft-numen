@@ -88,7 +88,7 @@ public final class NumenScreen extends Screen {
     private static final int ACCENT = TH.cta();
     private static final int TXT = TH.text();
     private static final int TXT_MUTED = TH.textDim();
-    private static final int TXT_FAINT = 0xFF8C7C62;
+    private static final int TXT_FAINT = com.dwinovo.numen.client.ui.ChatColors.FAINT;
     private static final int ON_BAND = TH.onBand();
     /** Faint on-band text (persona name after the companion name): cream blended toward the green band. */
     private static final int ON_BAND_FAINT = 0xFFB2BF9F;
@@ -554,13 +554,12 @@ public final class NumenScreen extends Screen {
     // the glyph merge with its own shadow ("smudged"). This build's shadowless path ignores the colour
     // PARAM, so we bake the colour into the text's Style instead.
     private void txt(GuiGraphics g, Component c, int x, int y, int color) {
-        g.drawString(font, c.copy().withStyle(s -> s.withColor(
-                net.minecraft.network.chat.TextColor.fromRgb(color & 0xFFFFFF))), x, y, -1, false);
+        Nb.text(g, font, c, x, y, color);
     }
 
-    /** The FormattedCharSequence must already carry its colour (see {@link #colored}). */
+    /** The FormattedCharSequence must already carry its colour in its Style. */
     private void txt(GuiGraphics g, FormattedCharSequence c, int x, int y, int color) {
-        g.drawString(font, c, x, y, -1, false);
+        Nb.text(g, font, c, x, y);
     }
 
 

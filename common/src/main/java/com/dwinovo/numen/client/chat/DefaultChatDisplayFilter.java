@@ -1,7 +1,5 @@
 package com.dwinovo.numen.client.chat;
 
-import com.dwinovo.numen.client.voice.EmotionTag;
-
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -11,8 +9,7 @@ import java.util.regex.Pattern;
  *   <li><b>主人消息</b>:{@code <query>} 包着的才是主人的原话,只显示它;
  *       未打标的旧消息剥掉注入指令块({@code <persona-change>}/{@code <event>})
  *       后展示,纯注入消息显示为空(调用方跳过);</li>
- *   <li><b>同伴消息</b>:剥掉 {@code [emotion]} 语音情绪标签(它们是给 TTS 的
- *       语气指令,不属于正文)。</li>
+ *   <li><b>同伴消息</b>:折叠段落空行(模型的排版习惯,面板寸土寸金)。</li>
  * </ul>
  */
 public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
@@ -36,7 +33,7 @@ public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
     public String filterAssistantMessage(String raw) {
         if (raw == null) return "";
         // 段落间的空行折叠成单换行——聊天面板寸土寸金,空行只是模型的排版习惯。
-        return EmotionTag.strip(raw).replaceAll("\\n\\s*\\n+", "\n").strip();
+        return raw.replaceAll("\\n\\s*\\n+", "\n").strip();
     }
 
     /**

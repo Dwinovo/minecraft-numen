@@ -126,8 +126,7 @@ public final class VoicePipeline {
 
     private void enqueue(List<String> rawSegments) {
         for (String raw : rawSegments) {
-            // 历史消息/模型模仿可能残留 [emotion] 旧标签,朗读前剥干净。
-            String clean = VoiceTextSanitizer.clean(EmotionTag.strip(raw));
+            String clean = VoiceTextSanitizer.clean(raw);
             if (clean.isEmpty()) continue;   // 纯记号/纯标点段:跳过,不浪费请求
             queue.add(new Segment(clean));
         }

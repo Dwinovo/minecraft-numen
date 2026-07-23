@@ -4,6 +4,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.TextColor;
+import net.minecraft.util.FormattedCharSequence;
 
 /**
  * Shared BlockFrame ("neobrutalist") drawing helpers for the Numen GUI.
@@ -28,6 +29,11 @@ public final class Nb {
 
     public static void text(GuiGraphics g, Font font, Component c, int x, int y, int color) {
         g.drawString(font, c.copy().withStyle(st -> st.withColor(TextColor.fromRgb(color & 0xFFFFFF))), x, y, -1, false);
+    }
+
+    /** Shadowless split-line draw — the colour must already be baked into the sequence's Style. */
+    public static void text(GuiGraphics g, Font font, FormattedCharSequence seq, int x, int y) {
+        g.drawString(font, seq, x, y, -1, false);
     }
 
     /** Square thick border = four filled edge rects (no rounded corners). */

@@ -11,6 +11,7 @@ import com.dwinovo.numen.client.chat.ChatDisplayFilters;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
+import com.dwinovo.numen.client.ui.ChatColors;
 import com.dwinovo.numen.client.ui.RoundRect;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -67,23 +68,19 @@ public final class ChatView {
     private static final int REVEAL_MAX_LAG = 120;
     private static final String[] SPIN = {"|", "/", "-", "\\"};
 
-    // ---- palette (tuned against UiTheme.WARM's tan ground #CBA87B) ----
+    // ---- palette (shared definitions live in ChatColors, WARM-tuned) ----
     private static final UiTheme TH = UiTheme.WARM;
     private static final int TOOL = TH.textDim();
     private static final int MUTED = TH.textDim();
-    private static final int FAINT = 0xFF8C7C62;
+    private static final int FAINT = ChatColors.FAINT;
     private static final int OK = TH.ok();
     private static final int RUN = TH.run();
     private static final int FAIL = TH.fail();
     private static final int TXT = TH.text();
-    /** Companion bubble: cream card lifting off the tan ground. */
-    private static final int AI_FILL = 0xFFF2E9D2, AI_BORDER = 0xFFA99062;
-    /** Owner bubble: soft amber (the theme's CTA warmth, desaturated for body text). */
-    private static final int OWN_FILL = 0xFFEDC98F, OWN_BORDER = 0xFFC1913B;
-    /** Queued prompt: a half-present owner bubble (still waiting for a splice point). */
-    private static final int QUEUED_FILL = 0x80EDC98F, QUEUED_BORDER = 0x80C1913B;
-    /** Tool chip: translucent dark wash — status, not a message. */
-    private static final int CHIP_FILL = 0x22352818;
+    private static final int AI_FILL = ChatColors.AI_FILL, AI_BORDER = ChatColors.AI_BORDER;
+    private static final int OWN_FILL = ChatColors.OWN_FILL, OWN_BORDER = ChatColors.OWN_BORDER;
+    private static final int QUEUED_FILL = ChatColors.QUEUED_FILL, QUEUED_BORDER = ChatColors.QUEUED_BORDER;
+    private static final int CHIP_FILL = ChatColors.CHIP_FILL;
 
     private static ResourceLocation spr(String n) {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, n);
@@ -311,11 +308,10 @@ public final class ChatView {
         return new Bubble(own, label, lines, maxW, color, fill, border, showAvatar);
     }
 
-    /** Advance the typewriter: filter the live partial, hide a half-typed [emotion tag,
-     *  ease the reveal toward the full length, and cache "revealed text + blinking caret". */
+    /** Advance the typewriter: filter the live partial, ease the reveal toward the
+     *  full length, and cache "revealed text + blinking caret". */
     private void updateLive(float dt, long now) {
         String full = ChatDisplayFilters.current().filterAssistantMessage(loop.get().livePartial());
-        full = full.replaceAll("\\[[^\\]\\n]*$", "").strip();
         if (full.isEmpty()) {
             revealed = 0;
             liveShown = "";
@@ -440,7 +436,7 @@ public final class ChatView {
 
     /** Shadowless draw — the colour is baked into the sequence's Style (see {@link Nb}). */
     private void draw(GuiGraphics g, FormattedCharSequence seq, int x, int y) {
-        g.drawString(font, seq, x, y, -1, false);
+        Nb.text(g, font, seq, x, y);
     }
 
     private PlayerSkin skin(boolean own) {
