@@ -76,6 +76,10 @@ public record UiTheme(
     /** Companion bubble: pale card lifting off the ground. */
     public int aiFill() { return mix(ground, 0xFFFFFFFF, 0.7f); }
     public int aiBorder() { return mix(ground, border, 0.22f); }
+    /** Content surface: a page one step lighter than the ground — text sits on THIS,
+     *  never on the raw dotted ground (the dots stay as ambient frame texture). */
+    public int surface() { return mix(ground, 0xFFFFFFFF, 0.38f); }
+    public int surfaceBorder() { return mix(ground, border, 0.14f); }
     /** Owner bubble: the CTA warmth, desaturated for body text. */
     public int ownFill() { return mix(cta, 0xFFFFFFFF, 0.4f); }
     public int ownBorder() { return mix(cta, border, 0.15f); }

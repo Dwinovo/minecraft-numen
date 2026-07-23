@@ -1592,6 +1592,12 @@ public final class SettingsView {
             mouseX = -10000;
             mouseY = -10000;
         }
+        // 内容底板:比地面亮一档的"纸面"垫住整个设置区(导航+正文),文字不再直接
+        // 铺在点纹地面上——点纹退成底板四周的氛围纹理,层级和对比度都立起来。
+        UiTheme th = UiTheme.current();
+        com.dwinovo.numen.client.ui.RoundRect.card(g,
+                left() + 5, top() + HEADER_H + 2, left() + panelW() - 5, top() + panelH() - 5,
+                6, th.surface(), th.surfaceBorder());
         renderSettingsNav(g, mouseX, mouseY);
         switch (section) {
             case MCP -> renderMcpSection(g, mouseX, mouseY);
