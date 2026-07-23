@@ -25,6 +25,9 @@
             "com.dwinovo.numen.core.data.FabricDataGenerators"
         ]
     },
+    "mixins": [
+        "${mod_id}.mixins.json"
+    ],
     "depends": {
         "fabricloader": ">=${fabric_loader_version}",
         "fabric-api": "*",
