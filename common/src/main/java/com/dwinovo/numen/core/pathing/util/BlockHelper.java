@@ -10,10 +10,10 @@ import net.minecraft.world.level.block.AmethystClusterBlock;
 import net.minecraft.world.level.block.AzaleaBlock;
 import net.minecraft.world.level.block.BambooStalkBlock;
 import net.minecraft.world.level.block.BaseFireBlock;
-import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.CarpetBlock;
+import net.minecraft.world.level.block.CauldronBlock;
 import net.minecraft.world.level.block.DoorBlock;
 import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.FenceGateBlock;
@@ -91,7 +91,8 @@ public final class BlockHelper {
                 || state.is(Blocks.HONEY_BLOCK) || state.is(Blocks.END_ROD)
                 || state.is(Blocks.SWEET_BERRY_BUSH) || state.is(Blocks.POINTED_DRIPSTONE)
                 || block instanceof AmethystClusterBlock || block instanceof AzaleaBlock
-                || state.is(Blocks.BIG_DRIPLEAF) || state.is(Blocks.POWDER_SNOW)) {
+                || state.is(Blocks.BIG_DRIPLEAF) || state.is(Blocks.POWDER_SNOW)
+                || block instanceof CauldronBlock) {
             return false;
         }
         // Wooden doors / fence gates are passable even when shut — the path
@@ -167,25 +168,6 @@ public final class BlockHelper {
     public static boolean isWater(BlockGetter level, BlockPos pos) {
         return level.getBlockState(pos).getFluidState()
                 .is(net.minecraft.tags.FluidTags.WATER);
-    }
-
-    /**
-     * "If a move makes us stand
-     * on this cell, will it have a top to walk on?" Returns {@code true} for AIR and
-     * solid blocks alike — crucially OPTIMISTIC about air, because when bridging the
-     * block you stand on was placed by the bridge itself and isn't in the static world
-     * snapshot yet. {@code false} only for ladders/vines (you climb, not stand) and
-     * submerged water (liquid above). This is what lets a void bridge CHAIN: each
-     * sneak-backplace is allowed against the (about-to-be-placed) block below.
-     */
-    public static boolean mustBeSolidToWalkOn(BlockGetter level, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
-        if (state.is(Blocks.LADDER) || state.is(Blocks.VINE)) return false;
-        if (!state.getFluidState().isEmpty()) {
-            // standing on water counts only at the surface (nothing fluid above)
-            return level.getBlockState(pos.above()).getFluidState().isEmpty();
-        }
-        return true;   // air or solid → optimistically a valid floor to backplace from
     }
 
     /**
@@ -430,26 +412,17 @@ public final class BlockHelper {
     }
 
     /**
-     * A block the bot must never destroy while pathing: any block-entity
-     * (chests, furnaces, hoppers, barrels, shulker boxes, spawners, beacons,
-     * lecterns, …) or a bed. These are player-placed functional/valuable blocks —
-     * route around them, don't grief. The {@code BlockEntity != null} test is a
-     * cheap, broad proxy that catches essentially every griefable block.
+     * 命中 do_not_break 方块标签的方块:寻路的硬禁挖清单,任何开关
+     * 也不解除。标签默认为空——工作台/熔炉/箱子/陷阱箱等常规功能方块
+     * 不在硬禁内,它们走 NavSettings.blocksToAvoidBreaking 软清单
+     * (挖掘成本 ×10,无路可走仍会破坏)。数据包可往此标签追加任何要
+     * 硬禁挖的方块。带方块实体的方块(漏斗/潜影盒/刷怪笼/信标等)与床
+     * 和泥土一样可破坏、无惩罚,除非数据包把它们加进此标签。
      */
     public static boolean shouldAvoidBreaking(BlockGetter level, BlockPos pos) {
-        // Declarative + datapack-overridable layer: the do_not_break block tag (no-BlockEntity work
-        // stations like the crafting table). A tag membership test reads only the immutable BlockState
-        // holder — no Level/snapshot — so it is safe on the off-thread search.
+        // 标签成员测试只读不可变 BlockState holder,off-thread 搜索可安全调用。
         BlockState state = level.getBlockState(pos);
-        if (state.is(com.dwinovo.numen.core.init.InitTag.DO_NOT_BREAK)) return true;
-        // Broad proxy: any block-entity block (chests, furnaces, hoppers, barrels, shulkers, modded
-        // machines, …) is functional/valuable. Off-thread the search can't reconstruct a block entity,
-        // so the cache view answers presence from a main-thread snapshot (BlockEntityAware).
-        boolean hasBlockEntity = level instanceof BlockEntityAware aware
-                ? aware.hasBlockEntity(pos)
-                : level.getBlockEntity(pos) != null;
-        if (hasBlockEntity) return true;
-        return state.getBlock() instanceof BedBlock;
+        return state.is(com.dwinovo.numen.core.init.InitTag.DO_NOT_BREAK);
     }
 
     /**
