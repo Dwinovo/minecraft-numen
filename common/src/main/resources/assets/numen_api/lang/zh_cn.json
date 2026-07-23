@@ -69,6 +69,8 @@
   "numen.settings.nav.mcp": "MCP",
   "numen.settings.nav.persona": "人设",
   "numen.settings.nav.skills": "技能",
+  "numen.settings.nav.theme": "主题",
+  "numen.settings.theme.title": "主题",
   "numen.settings.nav.stt": "语音输入",
   "numen.settings.proxy": "代理",
   "numen.settings.proxy_ip": "IP(留空 = 直连)",

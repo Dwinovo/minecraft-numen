@@ -171,6 +171,8 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.llm", "Models");
         adder.add("numen.settings.nav.mcp", "MCP");
         adder.add("numen.settings.nav.skills", "Skills");
+        adder.add("numen.settings.nav.theme", "Theme");
+        adder.add("numen.settings.theme.title", "Theme");
         adder.add(Keys.STT_NAV, "Voice input");
         adder.add(Keys.STT_TITLE, "Voice input (STT)");
         adder.add(Keys.STT_MICROPHONE, "Microphone");
@@ -381,6 +383,8 @@ public final class ModLanguageData {
         adder.add("numen.settings.nav.llm", "模型接入");
         adder.add("numen.settings.nav.mcp", "MCP");
         adder.add("numen.settings.nav.skills", "技能");
+        adder.add("numen.settings.nav.theme", "主题");
+        adder.add("numen.settings.theme.title", "主题");
         adder.add(Keys.STT_NAV, "语音输入");
         adder.add(Keys.STT_TITLE, "语音输入 (STT)");
         adder.add(Keys.STT_MICROPHONE, "麦克风");

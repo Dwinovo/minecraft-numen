@@ -36,6 +36,10 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.mcp.server.NumenMcp.initClient(
                 net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get());
 
+        // 读回上次选择的 GUI 主题(config/numen/ui.json)。
+        com.dwinovo.numen.client.screen.UiTheme.init(
+                net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("numen"));
+
         // Mod bus — registration events.
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);

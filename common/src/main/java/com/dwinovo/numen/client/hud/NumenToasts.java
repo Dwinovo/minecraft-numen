@@ -198,9 +198,9 @@ public final class NumenToasts {
         int targetX = ax + AVATAR + BUBBLE_GAP;
         int bx = targetX - slideOut(now - s.bubbleBornMs, AVATAR + BUBBLE_GAP);
         int by = ay + AVATAR / 2 - h / 2;
+        UiTheme th = UiTheme.current();
         com.dwinovo.numen.client.ui.RoundRect.card(g, bx, by, bx + bw, by + h, 4,
-                com.dwinovo.numen.client.ui.ChatColors.AI_FILL,
-                com.dwinovo.numen.client.ui.ChatColors.AI_BORDER);
+                th.aiFill(), th.aiBorder());
         int ly = by + PADV;
         for (Line line : s.lines) {
             Nb.text(g, font, line.text(), bx + 7, ly, line.color());

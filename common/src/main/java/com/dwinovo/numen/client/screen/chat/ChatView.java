@@ -11,7 +11,6 @@ import com.dwinovo.numen.client.chat.ChatDisplayFilters;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
-import com.dwinovo.numen.client.ui.ChatColors;
 import com.dwinovo.numen.client.ui.RoundRect;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -68,19 +67,29 @@ public final class ChatView {
     private static final int REVEAL_MAX_LAG = 120;
     private static final String[] SPIN = {"|", "/", "-", "\\"};
 
-    // ---- palette (shared definitions live in ChatColors, WARM-tuned) ----
-    private static final UiTheme TH = UiTheme.WARM;
-    private static final int TOOL = TH.textDim();
-    private static final int MUTED = TH.textDim();
-    private static final int FAINT = ChatColors.FAINT;
-    private static final int OK = TH.ok();
-    private static final int RUN = TH.run();
-    private static final int FAIL = TH.fail();
-    private static final int TXT = TH.text();
-    private static final int AI_FILL = ChatColors.AI_FILL, AI_BORDER = ChatColors.AI_BORDER;
-    private static final int OWN_FILL = ChatColors.OWN_FILL, OWN_BORDER = ChatColors.OWN_BORDER;
-    private static final int QUEUED_FILL = ChatColors.QUEUED_FILL, QUEUED_BORDER = ChatColors.QUEUED_BORDER;
-    private static final int CHIP_FILL = ChatColors.CHIP_FILL;
+    // ---- palette: re-read from the CURRENT theme each frame (loadPalette), so the
+    // Settings picker recolours the transcript live. Field names keep the constant
+    // convention — they behave as constants within a frame. ----
+    private int TOOL, MUTED, FAINT, OK, RUN, FAIL, TXT;
+    private int AI_FILL, AI_BORDER, OWN_FILL, OWN_BORDER, QUEUED_FILL, QUEUED_BORDER, CHIP_FILL;
+
+    private void loadPalette() {
+        UiTheme t = UiTheme.current();
+        TOOL = t.textDim();
+        MUTED = t.textDim();
+        FAINT = t.faint();
+        OK = t.ok();
+        RUN = t.run();
+        FAIL = t.fail();
+        TXT = t.text();
+        AI_FILL = t.aiFill();
+        AI_BORDER = t.aiBorder();
+        OWN_FILL = t.ownFill();
+        OWN_BORDER = t.ownBorder();
+        QUEUED_FILL = t.queuedFill();
+        QUEUED_BORDER = t.queuedBorder();
+        CHIP_FILL = t.chipFill();
+    }
 
     private static ResourceLocation spr(String n) {
         return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, n);
@@ -137,6 +146,7 @@ public final class ChatView {
 
     public void render(GuiGraphics g, int x, int y, int w, int h) {
         gx = x; gy = y; gw = w; gh = h;
+        loadPalette();
         long now = System.currentTimeMillis();
         float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
         lastFrameMs = now;
@@ -175,6 +185,7 @@ public final class ChatView {
     /** Toggle the fold of a completed tool chip under the mouse. */
     public boolean mouseClicked(double mx, double my) {
         if (gw == 0 || mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return false;
+        loadPalette();
         int cy = gy + TOP_PAD - Math.round(scrollPos);
         for (Block b : build(bubbleMaxW(gw))) {
             int bh = heightOf(b);

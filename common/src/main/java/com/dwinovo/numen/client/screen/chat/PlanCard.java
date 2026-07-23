@@ -26,18 +26,15 @@ public final class PlanCard {
     private static final int LINE_H = 10;
     private static final int PAD = 7;
     private static final int RADIUS = 6;
-    private static final UiTheme TH = UiTheme.WARM;
-    private static final int CARD_FILL = com.dwinovo.numen.client.ui.ChatColors.CARD_FILL;
-    private static final int TXT = TH.text();
-    private static final int MUTED = TH.textDim();
-    private static final int FAINT = com.dwinovo.numen.client.ui.ChatColors.FAINT;
-    private static final int OK = TH.ok();
-    private static final int RUN = TH.run();
 
     private PlanCard() {}
 
     public static void render(GuiGraphics g, Font font, EntityAgentLoop loop,
                               int x, int y, int w, int bottom) {
+        // 每帧从当前主题取色——设置页切主题即时生效。
+        UiTheme th = UiTheme.current();
+        int CARD_FILL = th.cardFill(), TXT = th.text(), MUTED = th.textDim(),
+                FAINT = th.faint(), OK = th.ok(), RUN = th.run();
         int ix = x + PAD;
         int iw = w - PAD * 2;
         JsonArray todos = latestPlan(loop);

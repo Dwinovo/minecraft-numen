@@ -22,6 +22,10 @@ public class NumenFabricClient implements ClientModInitializer {
                 .resolve("config").resolve(Constants.MOD_ID);
         Path skillsDir = numenConfigRoot.resolve("skills");
 
+        // 读回上次选择的 GUI 主题(config/numen/ui.json)。
+        com.dwinovo.numen.client.screen.UiTheme.init(
+                Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("numen"));
+
         // MCP client: connect to any external MCP servers listed in
         // config/numen/mcp_clients.json and register their tools so the built-in
         // brain can call them. Config dir from the loader (avoids Minecraft timing).

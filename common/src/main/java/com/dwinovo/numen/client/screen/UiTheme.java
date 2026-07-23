@@ -54,8 +54,6 @@ public record UiTheme(
 
     public static final List<UiTheme> ALL = List.of(VANILLA, FORMAT, DIAMOND, COZY, WARM);
 
-    // Single active theme for now (Cottage/Cozy-2); the picker + persistence land later, hence the
-    // full presets above are kept ready.
     private static UiTheme current = WARM;
 
     public static UiTheme current() { return current; }
@@ -65,5 +63,67 @@ public record UiTheme(
             if (t.id().equals(id)) { current = t; return; }
         }
         current = FORMAT;
+    }
+
+    // ---- derived tints: computed from the base palette so every preset gets the full
+    // chat-app family (bubbles/chips/cards) without hand-tuning 5×10 extra colours.
+    // The mix ratios were fitted to reproduce WARM's original hand-picked values. ----
+
+    /** Faintest text tier (placeholders, pending items, empty-state hints). */
+    public int faint() { return mix(textDim, field, 0.5f); }
+    /** Muted on-band text (persona name after the companion name in the header). */
+    public int onBandFaint() { return mix(onBand, band, 0.5f); }
+    /** Companion bubble: pale card lifting off the ground. */
+    public int aiFill() { return mix(ground, 0xFFFFFFFF, 0.7f); }
+    public int aiBorder() { return mix(ground, border, 0.22f); }
+    /** Owner bubble: the CTA warmth, desaturated for body text. */
+    public int ownFill() { return mix(cta, 0xFFFFFFFF, 0.4f); }
+    public int ownBorder() { return mix(cta, border, 0.15f); }
+    /** Queued prompt: a half-present owner bubble. */
+    public int queuedFill() { return (ownFill() & 0xFFFFFF) | 0x80000000; }
+    public int queuedBorder() { return (ownBorder() & 0xFFFFFF) | 0x80000000; }
+    /** Tool chip: translucent dark wash — status, not a message. */
+    public int chipFill() { return (border & 0xFFFFFF) | 0x22000000; }
+    /** Sidebar card (plan panel): a fainter wash of the same dark. */
+    public int cardFill() { return (border & 0xFFFFFF) | 0x16000000; }
+
+    /** Per-channel RGB mix of {@code a} toward {@code b} by {@code t}; alpha forced opaque. */
+    public static int mix(int a, int b, float t) {
+        int r = Math.round(((a >> 16) & 0xFF) + (((b >> 16) & 0xFF) - ((a >> 16) & 0xFF)) * t);
+        int gr = Math.round(((a >> 8) & 0xFF) + (((b >> 8) & 0xFF) - ((a >> 8) & 0xFF)) * t);
+        int bl = Math.round((a & 0xFF) + ((b & 0xFF) - (a & 0xFF)) * t);
+        return 0xFF000000 | (r << 16) | (gr << 8) | bl;
+    }
+
+    // ---- persistence: config/numen/ui.json {"theme": "<id>"} ----
+
+    private static java.nio.file.Path file;
+
+    /** Load the saved pick (client init). Missing/broken file keeps the default. */
+    public static void init(java.nio.file.Path numenConfigDir) {
+        file = numenConfigDir.resolve("ui.json");
+        try {
+            if (java.nio.file.Files.exists(file)) {
+                var o = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(file))
+                        .getAsJsonObject();
+                if (o.has("theme")) set(o.get("theme").getAsString());
+            }
+        } catch (Exception e) {
+            com.dwinovo.numen.Constants.LOG.warn("ui.json unreadable — using default theme", e);
+        }
+    }
+
+    /** The picker's entry point: switch AND save. */
+    public static void select(String id) {
+        set(id);
+        if (file == null) return;
+        try {
+            java.nio.file.Files.createDirectories(file.getParent());
+            var o = new com.google.gson.JsonObject();
+            o.addProperty("theme", current.id());
+            java.nio.file.Files.writeString(file, o.toString());
+        } catch (Exception e) {
+            com.dwinovo.numen.Constants.LOG.warn("ui.json write failed — theme not persisted", e);
+        }
     }
 }

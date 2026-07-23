@@ -69,6 +69,8 @@
   "numen.settings.nav.mcp": "MCP",
   "numen.settings.nav.persona": "Persona",
   "numen.settings.nav.skills": "Skills",
+  "numen.settings.nav.theme": "Theme",
+  "numen.settings.theme.title": "Theme",
   "numen.settings.nav.stt": "Voice input",
   "numen.settings.proxy": "Proxy",
   "numen.settings.proxy_ip": "IP (empty = direct)",

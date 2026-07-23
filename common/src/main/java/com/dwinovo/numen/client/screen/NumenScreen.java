@@ -82,27 +82,32 @@ public final class NumenScreen extends Screen {
     private static final int PLAN_W = 122;
     private static final int MAX_PROMPT = 1024;
 
-    // ---- palette (BlockFrame "Cottage" theme — single theme for now, see UiTheme) ----
-    private static final UiTheme TH = UiTheme.WARM;
-    private static final int BORDER = TH.border();
-    private static final int ACCENT = TH.cta();
-    private static final int TXT = TH.text();
-    private static final int TXT_MUTED = TH.textDim();
-    private static final int TXT_FAINT = com.dwinovo.numen.client.ui.ChatColors.FAINT;
-    private static final int ON_BAND = TH.onBand();
-    /** Faint on-band text (persona name after the companion name): cream blended toward the green band. */
-    private static final int ON_BAND_FAINT = 0xFFB2BF9F;
-    private static final int CTA = TH.cta();
-    private static final int ON_CTA = TH.onCta();
-    private static final int FIELD = TH.field();
-    private static final int OK = TH.ok();
-    private static final int RUN = TH.run();
-    private static final int FAIL = TH.fail();
+    // ---- palette: static but REFRESHABLE — the theme picker calls repaint() and every
+    // constant re-reads UiTheme.current() (single active theme, shared by all instances). ----
+    private static int BORDER, ACCENT, TXT, TXT_MUTED, TXT_FAINT, ON_BAND, ON_BAND_FAINT,
+            CTA, ON_CTA, FIELD, OK, RUN, FAIL;
+    static { repaint(); }
+
+    /** Re-read every palette constant from the current theme (called after a theme switch). */
+    static void repaint() {
+        UiTheme t = UiTheme.current();
+        BORDER = t.border();
+        ACCENT = t.cta();
+        TXT = t.text();
+        TXT_MUTED = t.textDim();
+        TXT_FAINT = t.faint();
+        ON_BAND = t.onBand();
+        ON_BAND_FAINT = t.onBandFaint();
+        CTA = t.cta();
+        ON_CTA = t.onCta();
+        FIELD = t.field();
+        OK = t.ok();
+        RUN = t.run();
+        FAIL = t.fail();
+    }
     private static net.minecraft.resources.ResourceLocation railSpr(String n) {
         return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, n);
     }
-    /** rail + panel composited into ONE sprite (continuous header, no gap; panel's left border = divider). */
-    private static final net.minecraft.resources.ResourceLocation WORKSPACE_SPRITE = railSpr("workspace");
     private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME = railSpr("avatar_frame");
     private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME_ACTIVE = railSpr("avatar_frame_active");
     private static final net.minecraft.resources.ResourceLocation SUMMON_SPRITE = railSpr("summon");
@@ -122,7 +127,7 @@ public final class NumenScreen extends Screen {
     private Tab tab = Tab.CHAT;
 
     /** The Settings tab is a config hub: a left sub-nav picks one of these sections. */
-    private enum SettingsSection { PROVIDER, PROXY, MCP, SKILLS, PERSONA, VOICE, SKIN, STT }
+    private enum SettingsSection { PROVIDER, PROXY, MCP, SKILLS, PERSONA, VOICE, SKIN, STT, THEME }
 
     // ---- model-config section state (mirrors the persona section) ----
     private boolean addingProvider;
@@ -733,6 +738,7 @@ public final class NumenScreen extends Screen {
             }
             case PROXY -> buildProxyWidgets();
             case STT -> buildSttWidgets();
+            case THEME -> { /* no widgets — plain click rows */ }
         }
     }
 
@@ -2067,6 +2073,23 @@ public final class NumenScreen extends Screen {
                 I18n.get("numen.settings.reasoning." + normalizeReasoning(wReasoning)));
     }
 
+    /** BlockFrame workspace chrome, drawn procedurally from the CURRENT theme — border frame,
+     *  rail column, header band + underline, panel ground with the 16px dot grid. Replaces the
+     *  old WARM-baked workspace sprite so a theme switch recolours the whole frame. */
+    private void drawWorkspace(GuiGraphics g) {
+        UiTheme t = UiTheme.current();
+        int x0 = railX, y0 = top, x1 = railX + RAIL_W + panelW, y1 = top + panelH;
+        g.fill(x0, y0, x1, y1, t.border());                          // frame + rail divider base
+        g.fill(x0 + 3, y0 + 3, x0 + RAIL_W, y1 - 3, t.ground());     // rail column
+        g.fill(left + 3, y0 + 3, x1 - 3, y0 + 20, t.band());         // header band (underline = border gap)
+        g.fill(left + 3, y0 + HEADER_H, x1 - 3, y1 - 3, t.ground()); // panel ground
+        for (int dy = y0 + HEADER_H + 7; dy < y1 - 5; dy += 16) {    // dot grid (translucent theme dot)
+            for (int dx = left + 10; dx < x1 - 5; dx += 16) {
+                g.fill(dx, dy, dx + 2, dy + 2, t.dot());
+            }
+        }
+    }
+
     private void renderSettings(GuiGraphics g, int mouseX, int mouseY) {
         renderSettingsNav(g);
         switch (settingsSection) {
@@ -2078,6 +2101,27 @@ public final class NumenScreen extends Screen {
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
             case PROXY -> renderProxySection(g);
             case STT -> renderSttSection(g);
+            case THEME -> renderThemeSection(g);
+        }
+    }
+
+    /** 主题选择:五套配色一行一个(三色小样 + 名字),点击即切换并写入 ui.json。 */
+    private void renderThemeSection(GuiGraphics g) {
+        int x = secX();
+        txt(g, Component.translatable("numen.settings.theme.title"), x, secY0() - 2, TXT);
+        int listY0 = secY0() + 14;
+        for (int i = 0; i < UiTheme.ALL.size(); i++) {
+            UiTheme t = UiTheme.ALL.get(i);
+            int ry = listY0 + i * LIST_ROW;
+            boolean cur = t == UiTheme.current();
+            g.fill(x, ry + 1, x + 10, ry + 13, t.ground());
+            g.fill(x + 10, ry + 1, x + 20, ry + 13, t.band());
+            g.fill(x + 20, ry + 1, x + 30, ry + 13, t.cta());
+            Nb.border(g, x - 1, ry, 32, 14, 1, cur ? ACCENT : BORDER);
+            txt(g, Component.literal(t.label()), x + 38, ry + 3, cur ? TXT : TXT_MUTED);
+            if (cur) {
+                txt(g, Component.literal("✔"), x + 38 + font.width(t.label()) + 6, ry + 3, OK);
+            }
         }
     }
 
@@ -2177,7 +2221,8 @@ public final class NumenScreen extends Screen {
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona"),
                 I18n.get(ModLanguageData.Keys.VOICE_TITLE),
                 I18n.get(ModLanguageData.Keys.SKIN_TITLE),
-                I18n.get(ModLanguageData.Keys.STT_NAV)};
+                I18n.get(ModLanguageData.Keys.STT_NAV),
+                I18n.get("numen.settings.nav.theme")};
         int navX = left + PAD;
         int y = secY0();
         for (int i = 0; i < labels.length; i++) {
@@ -2389,6 +2434,17 @@ public final class NumenScreen extends Screen {
                 int ry = y + i * NAV_SP;
                 if (my >= ry - 3 && my < ry + NAV_SP - 5) {
                     selectSection(SettingsSection.values()[i]);
+                    return true;
+                }
+            }
+        }
+        if (settingsSection == SettingsSection.THEME && mx >= secX()) {
+            int listY0 = secY0() + 14;
+            for (int i = 0; i < UiTheme.ALL.size(); i++) {
+                int ry = listY0 + i * LIST_ROW;
+                if (my >= ry && my < ry + LIST_ROW) {
+                    UiTheme.select(UiTheme.ALL.get(i).id());
+                    repaint();          // 全部调色板常量重读新主题
                     return true;
                 }
             }
@@ -2882,9 +2938,7 @@ public final class NumenScreen extends Screen {
         super.render(g, mouseX, mouseY, partial);
         pendingTip = null;   // recollected each frame by the section renderers
 
-        // ONE merged Cottage sprite: left rail column + panel, continuous header, no gap.
-        g.blitSprite(
-                WORKSPACE_SPRITE, railX, top, RAIL_W + panelW, panelH);
+        drawWorkspace(g);                // rail column + panel chrome, in the CURRENT theme's colours
         renderRail(g, mouseX, mouseY);   // avatars + status + summon tile on the rail column
 
         // 头部一行四个成员从右往左让位:tab(定宽) ← 用量 ← 人设名(可整个消失) ← 名字(最后裁)。
@@ -2960,8 +3014,7 @@ public final class NumenScreen extends Screen {
                             eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
                             eb.getX() + eb.getWidth() + FIELD_INSET_X,
                             eb.getY() + eb.getHeight() + FIELD_INSET_Y, 5,
-                            com.dwinovo.numen.client.ui.ChatColors.AI_FILL,
-                            com.dwinovo.numen.client.ui.ChatColors.AI_BORDER);
+                            UiTheme.current().aiFill(), UiTheme.current().aiBorder());
                 } else {                                           // parchment frame, inflated past the inset text
                     g.blitSprite(
                             FIELD_SPRITE, eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
