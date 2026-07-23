@@ -19,8 +19,6 @@ public final class ProviderDropdown {
     public static final String ADD_SITE = "__add_site__";
 
     private static final int ROW = 16;
-    private static final net.minecraft.resources.ResourceLocation FRAME =
-            net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, "button");
 
     private final List<LlmProviders.Option> options;   // live snapshot at construction (rebuilt each settings build)
     private final boolean allowAddSite;
@@ -80,7 +78,9 @@ public final class ProviderDropdown {
 
     public void render(GuiGraphics g, Font font, int mouseX, int mouseY) {
         UiTheme th = UiTheme.current();
-        g.blitSprite(FRAME, x, y, w, h);
+        // 收起框与字段同款圆角卡;展开时边框亮 CTA 提示"正处于选择中"。
+        com.dwinovo.numen.client.ui.RoundRect.card(g, x, y, x + w, y + h, 5,
+                th.aiFill(), open ? th.cta() : th.aiBorder());
         int ty = y + (h - 8) / 2;
         Nb.text(g, font, selectedLabel(), x + 6, ty, th.text());
         Nb.text(g, font, open ? "▴" : "▾", x + w - 12, ty, th.textDim());
@@ -89,15 +89,18 @@ public final class ProviderDropdown {
             int rows = rowsShown();
             scrollOff = Math.clamp(scrollOff, 0, rowCount() - rows);
             int oy = listTop();
-            g.blitSprite(FRAME, x, oy, w, rows * ROW + 4);
+            com.dwinovo.numen.client.ui.RoundRect.card(g, x, oy, x + w, oy + rows * ROW + 4, 5,
+                    th.aiFill(), th.aiBorder());
             for (int i = 0; i < rows; i++) {
                 int idx = scrollOff + i;
                 int ry = oy + 2 + i * ROW;
                 if (mouseX >= x && mouseX < x + w && mouseY >= ry && mouseY < ry + ROW) {
-                    g.fill(x + 2, ry, x + w - 2, ry + ROW, 0x33000000);
+                    com.dwinovo.numen.client.ui.RoundRect.fill(g, x + 2, ry, x + w - 2, ry + ROW,
+                            4, th.chipFill());
                 }
                 boolean add = idx >= options.size();
-                int color = idAt(idx).equals(selectedId) ? th.cta() : (add ? th.run() : th.text());
+                // 选中行最深、其余退为次级;"＋新增站点"行保持 run 蓝区分动作行。
+                int color = idAt(idx).equals(selectedId) ? th.text() : (add ? th.run() : th.textDim());
                 Nb.text(g, font, label(idx), x + 6, ry + (ROW - 8) / 2, color);
             }
             if (rows < rowCount()) {   // 截断态:右缘一根细滚动指示条

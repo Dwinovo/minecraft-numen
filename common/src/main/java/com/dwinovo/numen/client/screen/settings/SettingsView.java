@@ -1013,6 +1013,7 @@ public final class SettingsView {
             if (ry + LIST_ROW > secBottom()) break;
             var e = list.get(i);
             int delX = x + w - 12, editX = x + w - 26;
+            hoverRow(g, mouseX, mouseY, x, w, ry);
             int tx = x;
             if (host.uuid() != null) {
                 // 行首 ● = 本同伴正在用的声线(召唤时选定/新建时自动绑定)。只读标记,
@@ -1126,7 +1127,17 @@ public final class SettingsView {
         int th = (fBottom() - 22) - ty;
         personaTextArea = new net.minecraft.client.gui.components.MultiLineEditBox(
                 font(), x, ty, w, th,
-                Component.translatable("numen.persona.text_placeholder"), Component.empty());
+                Component.translatable("numen.persona.text_placeholder"), Component.empty()) {
+            @Override
+            protected void renderBackground(GuiGraphics gg) {
+                // 圆角深色编辑底替换原版方框——正文字色是原版硬编码的浅色,底必须够深;
+                // 主题 text 深色正好当底,聚焦时边框亮 CTA,与单行字段同一套语言。
+                UiTheme t = UiTheme.current();
+                com.dwinovo.numen.client.ui.RoundRect.card(gg, getX(), getY(),
+                        getX() + getWidth(), getY() + getHeight(), 5,
+                        t.text(), isFocused() ? t.cta() : t.aiBorder());
+            }
+        };
         personaTextArea.setValue(wPersonaText);
         personaTextArea.setCharacterLimit(4096);
         host.add(personaTextArea);
@@ -1495,6 +1506,7 @@ public final class SettingsView {
             if (ry + LIST_ROW > secBottom()) break;
             var e = list.get(i);
             int delX = x + w - 12, editX = x + w - 26;
+            hoverRow(g, mouseX, mouseY, x, w, ry);
             var face = com.dwinovo.numen.client.skin.SkinTextures.faceOf(e.id(), lib.pngPath(e.id()));
             if (face != null) {
                 net.minecraft.client.gui.components.PlayerFaceRenderer.draw(g, face, x, ry + 1, 16);
@@ -1574,7 +1586,13 @@ public final class SettingsView {
 
     public void render(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
-        renderSettingsNav(g);
+        // 任一模态(确认卡/表单卡)在场时整体屏蔽悬停坐标——暗幕下的列表行/导航
+        // 不该亮悬停底,MCP 行 tooltip 也不该浮到暗幕上。
+        if (activeModalTitle() != null || formActive()) {
+            mouseX = -10000;
+            mouseY = -10000;
+        }
+        renderSettingsNav(g, mouseX, mouseY);
         switch (section) {
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
@@ -1584,7 +1602,7 @@ public final class SettingsView {
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
             case PROXY -> renderProxySection(g);
             case STT -> renderSttSection(g);
-            case THEME -> renderThemeSection(g);
+            case THEME -> renderThemeSection(g, mouseX, mouseY);
         }
         // 删除确认改模态:列表照常渲染作背景,暗幕+确认卡压在上面(按钮走 widget
         // 通道,在暗幕之后渲染,天然浮在卡上)。
@@ -1596,7 +1614,7 @@ public final class SettingsView {
     }
 
     /** 主题选择:五套配色一行一个(三色小样 + 名字),点击即切换并写入 ui.json。 */
-    private void renderThemeSection(GuiGraphics g) {
+    private void renderThemeSection(GuiGraphics g, int mouseX, int mouseY) {
         int x = secX();
         txt(g, Component.translatable("numen.settings.theme.title"), x, secY0() - 2, TXT);
         int listY0 = secY0() + 14;
@@ -1604,10 +1622,13 @@ public final class SettingsView {
             UiTheme t = UiTheme.ALL.get(i);
             int ry = listY0 + i * LIST_ROW;
             boolean cur = t == UiTheme.current();
+            hoverRow(g, mouseX, mouseY, x, secW(), ry);
+            // 圆角描边环:先画整块圆角底当"框",三色小样叠在内缩区上。
+            com.dwinovo.numen.client.ui.RoundRect.fill(g, x - 2, ry - 1, x + 32, ry + 15, 4,
+                    cur ? ACCENT : BORDER);
             g.fill(x, ry + 1, x + 10, ry + 13, t.ground());
             g.fill(x + 10, ry + 1, x + 20, ry + 13, t.band());
             g.fill(x + 20, ry + 1, x + 30, ry + 13, t.cta());
-            Nb.border(g, x - 1, ry, 32, 14, 1, cur ? ACCENT : BORDER);
             txt(g, Component.literal(t.label()), x + 38, ry + 3, cur ? TXT : TXT_MUTED);
             if (cur) {
                 txt(g, Component.literal("✔"), x + 38 + font().width(t.label()) + 6, ry + 3, OK);
@@ -1642,6 +1663,7 @@ public final class SettingsView {
             if (ry + LIST_ROW > secBottom()) break;
             var e = list.get(i);
             int delX = x + w - 12, editX = x + w - 26;
+            hoverRow(g, mouseX, mouseY, x, w, ry);
             txt(g, Component.literal(e.name()), x, ry + 1, TXT);
             String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
                     + (nb(e.model()) ? e.model() : "?")
@@ -1699,7 +1721,7 @@ public final class SettingsView {
     }
 
     /** The config-hub left sub-nav + the divider. */
-    private void renderSettingsNav(GuiGraphics g) {
+    private void renderSettingsNav(GuiGraphics g, int mouseX, int mouseY) {
         String[] labels = {
                 I18n.get(ModLanguageData.Keys.PROVIDER_TITLE), I18n.get("numen.settings.proxy"),
                 I18n.get("numen.settings.nav.mcp"),
@@ -1710,9 +1732,18 @@ public final class SettingsView {
                 I18n.get("numen.settings.nav.theme")};
         int navX = left() + PAD;
         int y = secY0();
+        int chip = UiTheme.current().chipFill();
+        int chipFaint = (chip & 0xFFFFFF) | (((chip >>> 24) / 2) << 24);   // 悬停胶囊:半透明再减半
         for (int i = 0; i < labels.length; i++) {
             boolean active = section == Section.values()[i];
             int ry = y + i * NAV_SP;
+            // 命中区与 navClick 完全一致(ry-3 .. ry+NAV_SP-5)。
+            boolean hovered = mouseX >= navX && mouseX < navX + NAV_W
+                    && mouseY >= ry - 3 && mouseY < ry + NAV_SP - 5;
+            if (active || hovered) {                              // 选中/悬停胶囊底
+                com.dwinovo.numen.client.ui.RoundRect.fill(g, navX - 4, ry - 3,
+                        navX + NAV_W - 2, ry + NAV_SP - 5, 4, active ? chip : chipFaint);
+            }
             if (active) {
                 g.fill(navX - 2, ry - 3, navX - 1, ry + NAV_SP - 5, ACCENT);   // gold left bar
                 txt(g, Component.literal(labels[i]), navX + 3, ry, TXT);
@@ -1753,6 +1784,7 @@ public final class SettingsView {
             if (ry + LIST_ROW > secBottom()) break;
             var h = servers.get(i);
             int togX = x + w - 34, delX = x + w - 12;
+            hoverRow(g, mouseX, mouseY, x, w, ry);
             // status dot
             int dy = ry + 3;
             g.fill(x, dy, x + 5, dy + 5, mcpDotColor(h.status()));
@@ -1839,6 +1871,7 @@ public final class SettingsView {
             if (ry + LIST_ROW > secBottom()) break;
             var s = skills.get(i);
             boolean on = !com.dwinovo.numen.agent.skill.SkillRegistry.instance().isDisabled(s.name());
+            hoverRow(g, mouseX, mouseY, x, w, ry);
             txt(g, Component.literal(s.name()), x, ry + 1, on ? TXT : TXT_FAINT);
             String desc = s.description() == null ? I18n.get("numen.skill.no_desc") : s.description();
             txt(g, Component.literal(clip(desc, w - 26)), x, ry + 11, TXT_FAINT);
@@ -1869,6 +1902,15 @@ public final class SettingsView {
         return mx >= x && mx < x + w && my >= ry && my < ry + LIST_ROW;
     }
 
+    /** 列表行悬停底:一层 chipFill 圆角暗洗,让"行可点"可感知(表单模态的背景列表
+     *  以 (-10000,-10000) 渲染,自然不触发)。画在行内容之前。 */
+    private void hoverRow(GuiGraphics g, int mouseX, int mouseY, int x, int w, int ry) {
+        if (overRow(mouseX, mouseY, x, w, ry)) {
+            com.dwinovo.numen.client.ui.RoundRect.fill(g, x - 3, ry - 1, x + w + 1,
+                    ry + LIST_ROW - 3, 4, UiTheme.current().chipFill());
+        }
+    }
+
     // ---- Persona section render + hit-test ----
 
     private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
@@ -1897,6 +1939,7 @@ public final class SettingsView {
             if (ry + LIST_ROW > secBottom()) break;
             PersonaLibrary.Persona p = list.get(i);
             int delX = x + w - 12, editX = x + w - 26;
+            hoverRow(g, mouseX, mouseY, x, w, ry);
             txt(g, Component.literal(p.name()), x, ry + 1, TXT);
             String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
             txt(g, Component.literal(clip(badge + p.text(), w - 30)), x, ry + 11, TXT_FAINT);

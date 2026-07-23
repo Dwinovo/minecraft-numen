@@ -72,8 +72,8 @@ public final class NumenScreen extends Screen {
     private static final int RAIL_BOT_GAP = 6;   // gap kept above the pinned "+" tile
     private static final int HEADER_H = 22;
     private static final int INPUT_H = 18;
-    /** Text fields are inset inside their parchment frame: the EditBox is shrunk by this much
-     *  (so vanilla's top-left unbordered text lands padded + centred) and the FIELD_SPRITE is
+    /** Text fields are inset inside their rounded card: the EditBox is shrunk by this much
+     *  (so vanilla's top-left unbordered text lands padded + centred) and the card is
      *  inflated back out to the full frame. */
     private static final int FIELD_INSET_X = 5;
     private static final int FIELD_INSET_Y = 4;
@@ -939,23 +939,18 @@ public final class NumenScreen extends Screen {
 
         // Widgets render LAST, on top of the panel background (fixes the "dim fields" — the panel fill
         // used to paint over the auto-rendered widgets). Text fields are borderless EditBoxes, so draw
-        // a parchment field background + border behind each before it renders its text.
+        // the shared rounded field card behind each before it renders its text.
         for (AbstractWidget w : overlay) {
             // visible 检查:声线表单滚出视口的 EditBox 隐藏了自己,框也必须跟着消失
             // (否则空框越过面板边缘悬在世界上)。
             if (w instanceof EditBox eb && eb.visible) {
-                if (eb == input) {
-                    // 聊天输入框:与气泡同款的圆角奶油卡(表单字段仍用羊皮纸方角 sprite)。
-                    com.dwinovo.numen.client.ui.RoundRect.card(g,
-                            eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
-                            eb.getX() + eb.getWidth() + FIELD_INSET_X,
-                            eb.getY() + eb.getHeight() + FIELD_INSET_Y, 5,
-                            UiTheme.current().aiFill(), UiTheme.current().aiBorder());
-                } else {                                           // parchment frame, inflated past the inset text
-                    g.blitSprite(
-                            FIELD_SPRITE, eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
-                            eb.getWidth() + FIELD_INSET_X * 2, eb.getHeight() + FIELD_INSET_Y * 2);
-                }
+                // 所有文本字段与气泡同款的圆角奶油卡;聚焦的字段边框亮 CTA。
+                com.dwinovo.numen.client.ui.RoundRect.card(g,
+                        eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
+                        eb.getX() + eb.getWidth() + FIELD_INSET_X,
+                        eb.getY() + eb.getHeight() + FIELD_INSET_Y, 5,
+                        UiTheme.current().aiFill(),
+                        eb.isFocused() ? UiTheme.current().cta() : UiTheme.current().aiBorder());
             }
         }
         for (AbstractWidget w : overlay) {
@@ -1182,12 +1177,6 @@ public final class NumenScreen extends Screen {
             txt(g, Component.literal(micNotice), left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
         }
     }
-
-    private static net.minecraft.resources.ResourceLocation spr(String name) {
-        return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, name);
-    }
-    /** Parchment frame (reuses the button sprite) behind text fields. */
-    private static final net.minecraft.resources.ResourceLocation FIELD_SPRITE = spr("button");
 
     @Override
     public boolean isPauseScreen() {
