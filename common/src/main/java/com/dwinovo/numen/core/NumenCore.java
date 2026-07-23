@@ -22,6 +22,8 @@ import com.dwinovo.numen.core.task.EatCompanionTask;
 import com.dwinovo.numen.core.task.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.EquipCompanionTask;
 import com.dwinovo.numen.core.task.EquipTaskRecord;
+import com.dwinovo.numen.core.task.FishCompanionTask;
+import com.dwinovo.numen.core.task.FishTaskRecord;
 import com.dwinovo.numen.core.task.MeleeAttackCompanionTask;
 import com.dwinovo.numen.core.task.MeleeAttackTaskRecord;
 import com.dwinovo.numen.core.task.RangedAttackCompanionTask;
@@ -114,6 +116,7 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.LocateStructureTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.LocateBiomeTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.CollectItemsTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.FishTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.AutoMineTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EquipItemTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.BuildTool());
@@ -150,6 +153,7 @@ public final class NumenCore {
         CompanionTaskFactory.register(MeleeAttackTaskRecord.class, (p, r) -> new MeleeAttackCompanionTask(p, r));
         CompanionTaskFactory.register(RangedAttackTaskRecord.class, (p, r) -> new RangedAttackCompanionTask(p, r));
         CompanionTaskFactory.register(CollectItemsTaskRecord.class, (p, r) -> new CollectItemsTaskGoal(p, r));
+        CompanionTaskFactory.register(FishTaskRecord.class, (p, r) -> new FishCompanionTask(p, r));
         CompanionTaskFactory.register(BuildTaskRecord.class, (p, r) -> new BuildCompanionTask(p, r));
         CompanionTaskFactory.register(InteractAtTaskRecord.class, (p, r) -> new InteractAtCompanionTask(p, r));
         CompanionTaskFactory.register(InteractEntityTaskRecord.class, (p, r) -> new InteractEntityCompanionTask(p, r));
@@ -157,4 +161,3 @@ public final class NumenCore {
         CompanionTaskFactory.register(LocateBiomeTaskRecord.class, (p, r) -> new LocateBiomeTaskGoal(p, r));
     }
 }
-
