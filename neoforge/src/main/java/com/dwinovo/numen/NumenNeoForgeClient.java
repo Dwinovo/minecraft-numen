@@ -40,6 +40,7 @@ public class NumenNeoForgeClient {
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
         modBus.addListener(NumenNeoForgeClient::registerReloadListeners);
+        modBus.addListener(NumenNeoForgeClient::registerShaders);
         // Game bus — per-tick / world-render / disconnect.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
@@ -78,6 +79,19 @@ public class NumenNeoForgeClient {
         event.registerAboveAll(
                 ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
                 (g, delta) -> com.dwinovo.numen.client.hud.NumenToasts.render(g));
+    }
+
+    static void registerShaders(net.neoforged.neoforge.client.event.RegisterShadersEvent event) {
+        // GUI 圆角 SDF shader;加载失败仅告警——RoundRect 会自动降级成方角 fill。
+        try {
+            event.registerShader(new net.minecraft.client.renderer.ShaderInstance(
+                            event.getResourceProvider(),
+                            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "rendertype_round_rect"),
+                            com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR),
+                    com.dwinovo.numen.client.ui.RoundRect::setShader);
+        } catch (Exception e) {
+            Constants.LOG.warn("round rect shader failed to load, falling back to square corners", e);
+        }
     }
 
     static void registerReloadListeners(RegisterClientReloadListenersEvent event) {

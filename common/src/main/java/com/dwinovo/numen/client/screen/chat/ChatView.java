@@ -1,0 +1,422 @@
+package com.dwinovo.numen.client.screen.chat;
+
+import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.llm.ConvoLog;
+import com.dwinovo.numen.agent.llm.ConvoState;
+import com.dwinovo.numen.agent.provider.AssistantTurn;
+import com.dwinovo.numen.agent.provider.LlmToolCall;
+import com.dwinovo.numen.client.agent.ClientNumenLookup;
+import com.dwinovo.numen.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.client.chat.ChatDisplayFilters;
+import com.dwinovo.numen.client.screen.Nb;
+import com.dwinovo.numen.client.screen.UiTheme;
+import com.dwinovo.numen.client.ui.Anim;
+import com.dwinovo.numen.client.ui.RoundRect;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.resources.DefaultPlayerSkin;
+import net.minecraft.client.resources.PlayerSkin;
+import net.minecraft.client.resources.language.I18n;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.FormattedCharSequence;
+
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.function.Supplier;
+
+/**
+ * The chat transcript as a conversation: the owner's messages are right-aligned
+ * bubbles, the companion's replies left-aligned bubbles — both with their real
+ * skin avatar — and a run of consecutive tool calls folds into one rounded chip
+ * (click to expand once done). System notes (persona change / compaction / empty
+ * hint) sit centred and faint. Scrolling is eased ({@link Anim#approach}) and
+ * pins to the bottom while the owner hasn't scrolled away.
+ *
+ * <p>Blocks are rebuilt every frame from the loop's PHYSICAL transcript (exactly
+ * what the old flat row list read), so live tool spinners and mid-run arrivals
+ * need no extra invalidation. The view owns scroll + fold state; {@code reset()}
+ * on companion/tab switch.
+ */
+public final class ChatView {
+
+    // ---- metrics ----
+    private static final int LINE_H = 10;
+    private static final int LABEL_H = 9;       // companion name line above its bubble
+    private static final int AV = 18;           // avatar face size
+    private static final int AV_GAP = 5;        // avatar ↔ bubble
+    private static final int PAD_H = 5;         // bubble text inset
+    private static final int PAD_V = 4;         // 1 line → 18px bubble = exactly the avatar height
+    private static final int BLOCK_GAP = 6;
+    private static final int TOP_PAD = 2;
+    private static final int BOT_PAD = 2;
+    private static final int SB_W = 4;          // scrollbar width
+    private static final int EDGE = 2;          // left inset so the avatar FRAME (-2px) clears the scissor
+    private static final int OPP_MARGIN = 24;   // kept clear on the far side of a bubble
+    private static final int RADIUS = 4;
+    private static final int ICON_W = 11;       // chip status-icon column
+    private static final int TOOL_ARG_CHARS = 44;
+    private static final float SCROLL_RATE = 14f;
+    private static final String[] SPIN = {"|", "/", "-", "\\"};
+
+    // ---- palette (tuned against UiTheme.WARM's tan ground #CBA87B) ----
+    private static final UiTheme TH = UiTheme.WARM;
+    private static final int TOOL = TH.textDim();
+    private static final int MUTED = TH.textDim();
+    private static final int FAINT = 0xFF8C7C62;
+    private static final int OK = TH.ok();
+    private static final int RUN = TH.run();
+    private static final int FAIL = TH.fail();
+    private static final int TXT = TH.text();
+    /** Companion bubble: cream card lifting off the tan ground. */
+    private static final int AI_FILL = 0xFFF2E9D2, AI_BORDER = 0xFFA99062;
+    /** Owner bubble: soft amber (the theme's CTA warmth, desaturated for body text). */
+    private static final int OWN_FILL = 0xFFEDC98F, OWN_BORDER = 0xFFC1913B;
+    /** Queued prompt: a half-present owner bubble (still waiting for a splice point). */
+    private static final int QUEUED_FILL = 0x80EDC98F, QUEUED_BORDER = 0x80C1913B;
+    /** Tool chip: translucent dark wash — status, not a message. */
+    private static final int CHIP_FILL = 0x22352818;
+
+    private static ResourceLocation spr(String n) {
+        return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, n);
+    }
+    private static final ResourceLocation AVATAR_FRAME = spr("avatar_frame");
+    private static final ResourceLocation SCROLL_TRACK = spr("scroll_track");
+    private static final ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
+
+    private final Font font;
+    private final Supplier<EntityAgentLoop> loop;
+    private final Supplier<String> name;
+    private final Supplier<UUID> uuid;
+
+    // ---- scroll + fold state ----
+    private float scrollPos;
+    private int scrollTarget;
+    private boolean pinBottom = true;
+    private int lastMaxScroll;
+    private long lastFrameMs;
+    /** Completed tool-call groups the user clicked open (keyed by the group's first call id). */
+    private final Set<String> expandedGroups = new HashSet<>();
+    // geometry of the last render, for click / wheel hit-testing
+    private int gx, gy, gw, gh;
+
+    public ChatView(Font font, Supplier<EntityAgentLoop> loop, Supplier<String> name, Supplier<UUID> uuid) {
+        this.font = font;
+        this.loop = loop;
+        this.name = name;
+        this.uuid = uuid;
+    }
+
+    /** Forget scroll + fold state (companion or tab switch). */
+    public void reset() {
+        scrollPos = 0;
+        scrollTarget = 0;
+        pinBottom = true;
+        lastFrameMs = 0;
+        expandedGroups.clear();
+    }
+
+    /** Re-pin to the bottom (a message was just sent). */
+    public void pinToBottom() {
+        pinBottom = true;
+    }
+
+    // ---- render ----
+
+    public void render(GuiGraphics g, int x, int y, int w, int h) {
+        gx = x; gy = y; gw = w; gh = h;
+        List<Block> blocks = build(bubbleMaxW(w));
+        int content = totalHeight(blocks);
+        lastMaxScroll = Math.max(0, content - h);
+        if (pinBottom) scrollTarget = lastMaxScroll;
+        scrollTarget = Math.clamp(scrollTarget, 0, lastMaxScroll);
+        long now = System.currentTimeMillis();
+        float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
+        lastFrameMs = now;
+        scrollPos = Anim.approach(scrollPos, scrollTarget, SCROLL_RATE, dt);
+
+        g.enableScissor(x, y, x + w, y + h);
+        int cy = y + TOP_PAD - Math.round(scrollPos);
+        for (Block b : blocks) {
+            int bh = heightOf(b);
+            if (cy + bh > y && cy < y + h) drawBlock(g, b, x, cy, w);
+            cy += bh + BLOCK_GAP;
+        }
+        g.disableScissor();
+
+        if (lastMaxScroll > 0) {
+            int thumbH = Math.max(12, h * h / (h + lastMaxScroll));
+            int thumbY = y + Math.round((h - thumbH) * (scrollPos / lastMaxScroll));
+            g.blitSprite(SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
+            g.blitSprite(SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
+        }
+    }
+
+    /** Wheel anywhere on the chat tab scrolls the transcript (parity with the old list). */
+    public boolean mouseScrolled(double sy) {
+        scrollTarget = Math.clamp((long) (scrollTarget - sy * LINE_H * 3), 0, lastMaxScroll);
+        pinBottom = scrollTarget >= lastMaxScroll;
+        return true;
+    }
+
+    /** Toggle the fold of a completed tool chip under the mouse. */
+    public boolean mouseClicked(double mx, double my) {
+        if (gw == 0 || mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return false;
+        int cy = gy + TOP_PAD - Math.round(scrollPos);
+        for (Block b : build(bubbleMaxW(gw))) {
+            int bh = heightOf(b);
+            if (b instanceof Chip c && c.foldKey() != null && my >= cy && my < cy + bh) {
+                if (!expandedGroups.add(c.foldKey())) expandedGroups.remove(c.foldKey());
+                return true;
+            }
+            cy += bh + BLOCK_GAP;
+        }
+        return false;
+    }
+
+    // ---- blocks ----
+
+    private sealed interface Block permits Bubble, Chip, Notice {}
+
+    /** One spoken message. {@code label} non-null = companion side (name above the bubble). */
+    private record Bubble(boolean own, String label, List<FormattedCharSequence> lines,
+                          int maxLineW, int textColor, int fill, int border) implements Block {}
+
+    /** A run of tool calls. {@code foldKey} non-null = finished group, clickable to expand/fold. */
+    private record Chip(List<ChipRow> rows, String foldKey) implements Block {}
+
+    private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
+
+    /** A centred, faint system note. */
+    private record Notice(FormattedCharSequence text) implements Block {}
+
+    private int bubbleMaxW(int w) {
+        return w - EDGE - AV - AV_GAP - OPP_MARGIN - SB_W - 3;
+    }
+
+    private int heightOf(Block b) {
+        return switch (b) {
+            case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + bb.lines().size() * LINE_H + PAD_V * 2;
+            case Chip c -> c.rows().size() * LINE_H + PAD_V * 2;
+            case Notice ignored -> LINE_H;
+        };
+    }
+
+    private int totalHeight(List<Block> blocks) {
+        int sum = TOP_PAD + BOT_PAD;
+        for (int i = 0; i < blocks.size(); i++) {
+            sum += heightOf(blocks.get(i)) + (i > 0 ? BLOCK_GAP : 0);
+        }
+        return sum;
+    }
+
+    /** Flatten the loop's PHYSICAL transcript (not the LLM context — compaction must
+     *  never eat the owner's visible history) into renderable blocks. */
+    private List<Block> build(int bubbleMaxW) {
+        List<Block> out = new ArrayList<>();
+        EntityAgentLoop lp = loop.get();
+        Set<String> done = new HashSet<>();
+        Set<String> failed = new HashSet<>();
+        for (ConvoState.Msg m : lp.display()) {
+            if (m instanceof ConvoState.Msg.Tool t) {
+                done.add(t.toolCallId());
+                if (looksFailed(t.content())) failed.add(t.toolCallId());
+            }
+        }
+        int innerW = bubbleMaxW - PAD_H * 2;
+        List<LlmToolCall> group = new ArrayList<>();
+        for (ConvoState.Msg msg : lp.display()) {
+            switch (msg) {
+                case ConvoState.Msg.User u -> {
+                    flushTools(out, group, done, failed, bubbleMaxW);
+                    if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
+                        notice(out, I18n.get("numen.chat.persona_changed"));
+                        continue;
+                    }
+                    if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
+                        notice(out, I18n.get("numen.chat.compacted"));
+                        continue;
+                    }
+                    String shown = ownerText(u.content());   // owner's words only, never injected content
+                    if (shown.isEmpty()) continue;
+                    out.add(bubble(true, null, shown, TXT, OWN_FILL, OWN_BORDER, innerW));
+                }
+                case ConvoState.Msg.Assistant a -> {
+                    AssistantTurn turn = a.turn();
+                    String spoken = ChatDisplayFilters.current().filterAssistantMessage(turn.content());
+                    if (!spoken.isBlank()) {
+                        flushTools(out, group, done, failed, bubbleMaxW);   // spoken reply breaks the fold
+                        out.add(bubble(false, name.get(), spoken, TXT, AI_FILL, AI_BORDER, innerW));
+                    }
+                    group.addAll(turn.toolCalls());
+                }
+                case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
+            }
+        }
+        flushTools(out, group, done, failed, bubbleMaxW);
+        // Prompts still waiting for a protocol-valid splice point — visible immediately
+        // so a queued message never feels swallowed.
+        for (String queued : lp.queuedPrompts()) {
+            String shown = ownerText(queued);
+            if (shown.isEmpty()) continue;
+            out.add(bubble(true, null, "⌛ " + shown, FAINT, QUEUED_FILL, QUEUED_BORDER, innerW));
+        }
+        if (lp.isCompacting()) notice(out, I18n.get("numen.chat.compacting"));
+        if (out.isEmpty()) notice(out, I18n.get("numen.chat.empty", name.get()));
+        return out;
+    }
+
+    private Bubble bubble(boolean own, String label, String text, int color, int fill, int border, int innerW) {
+        List<FormattedCharSequence> lines = font.split(Nb.colored(text, color), innerW);
+        int maxW = 0;
+        for (FormattedCharSequence l : lines) maxW = Math.max(maxW, font.width(l));
+        return new Bubble(own, label, lines, maxW, color, fill, border);
+    }
+
+    private void notice(List<Block> out, String text) {
+        out.add(new Notice(Nb.colored(text, FAINT).getVisualOrderText()));
+    }
+
+    /** Emit the chip for a run of consecutive tool calls. A single call is one unfoldable chip;
+     *  a run stays EXPANDED while any call still runs (live spinners) and auto-folds to a
+     *  "N steps · names" summary once done — unless clicked open ({@link #expandedGroups}). */
+    private void flushTools(List<Block> out, List<LlmToolCall> group,
+                            Set<String> done, Set<String> failed, int chipMaxW) {
+        if (group.isEmpty()) return;
+        int textW = chipMaxW - PAD_H * 2 - ICON_W;
+        long t = System.currentTimeMillis();
+        List<ChipRow> rows = new ArrayList<>();
+        String foldKey = null;
+        if (group.size() == 1) {
+            rows.add(toolRow(group.get(0), done, failed, t, textW));
+        } else {
+            String key = group.get(0).id();
+            boolean running = group.stream().anyMatch(tc -> !done.contains(tc.id()));
+            if (!running) foldKey = key;
+            if (running || expandedGroups.contains(key)) {
+                if (!running) {
+                    rows.add(new ChipRow("▾", MUTED,
+                            Nb.colored(I18n.get("numen.chat.steps", group.size()), MUTED).getVisualOrderText()));
+                }
+                for (LlmToolCall tc : group) rows.add(toolRow(tc, done, failed, t, textW));
+            } else {
+                List<String> names = new ArrayList<>();
+                for (LlmToolCall tc : group) if (!names.contains(tc.name())) names.add(tc.name());
+                boolean anyFail = group.stream().anyMatch(tc -> failed.contains(tc.id()));
+                String summary = I18n.get("numen.chat.steps", group.size())
+                        + " · " + String.join(" · ", names) + " ▸";
+                rows.add(new ChipRow(anyFail ? "✗" : "✔", anyFail ? FAIL : OK,
+                        Nb.colored(fitOneLine(summary, textW), anyFail ? FAIL : TOOL).getVisualOrderText()));
+            }
+        }
+        out.add(new Chip(List.copyOf(rows), foldKey));
+        group.clear();
+    }
+
+    private ChipRow toolRow(LlmToolCall tc, Set<String> done, Set<String> failed, long t, int textW) {
+        boolean running = !done.contains(tc.id());
+        boolean fail = failed.contains(tc.id());
+        String icon = running ? SPIN[(int) ((t / 120) % 4)] : (fail ? "✗" : "✔");
+        int ic = running ? RUN : (fail ? FAIL : OK);
+        return new ChipRow(icon, ic,
+                Nb.colored(fitOneLine(toolLine(tc), textW), fail ? FAIL : TOOL).getVisualOrderText());
+    }
+
+    // ---- drawing ----
+
+    private void drawBlock(GuiGraphics g, Block b, int x, int y, int w) {
+        switch (b) {
+            case Notice n -> {
+                int tw = font.width(n.text());
+                draw(g, n.text(), x + (w - SB_W - tw) / 2, y);
+            }
+            case Bubble bb -> drawBubble(g, bb, x, y, w);
+            case Chip c -> drawChip(g, c, x, y);
+        }
+    }
+
+    private void drawBubble(GuiGraphics g, Bubble b, int x, int y, int w) {
+        int bw = b.maxLineW() + PAD_H * 2;
+        int bh = b.lines().size() * LINE_H + PAD_V * 2;
+        int bubTop = y + (b.label() != null ? LABEL_H : 0);
+        int avX, bx;
+        if (b.own()) {
+            avX = x + w - SB_W - 3 - AV;
+            bx = avX - AV_GAP - bw;
+        } else {
+            avX = x + EDGE;
+            bx = x + EDGE + AV + AV_GAP;
+        }
+        if (b.label() != null) {
+            draw(g, Nb.colored(b.label(), MUTED).getVisualOrderText(), bx + 2, y);
+        }
+        g.blitSprite(AVATAR_FRAME, avX - 2, bubTop - 2, AV + 4, AV + 4);
+        PlayerFaceRenderer.draw(g, skin(b.own()), avX, bubTop, AV);
+        RoundRect.card(g, bx, bubTop, bx + bw, bubTop + bh, RADIUS, b.fill(), b.border());
+        int ty = bubTop + PAD_V + 1;
+        for (FormattedCharSequence l : b.lines()) {
+            draw(g, l, bx + PAD_H, ty);
+            ty += LINE_H;
+        }
+    }
+
+    private void drawChip(GuiGraphics g, Chip c, int x, int y) {
+        int maxW = 0;
+        for (ChipRow r : c.rows()) maxW = Math.max(maxW, font.width(r.text()));
+        int cx = x + EDGE + AV + AV_GAP;
+        int cw = ICON_W + maxW + PAD_H * 2;
+        int ch = c.rows().size() * LINE_H + PAD_V * 2;
+        RoundRect.fill(g, cx, y, cx + cw, y + ch, RADIUS, CHIP_FILL);
+        int ty = y + PAD_V + 1;
+        for (ChipRow r : c.rows()) {
+            draw(g, Nb.colored(r.icon(), r.iconColor()).getVisualOrderText(), cx + PAD_H, ty);
+            draw(g, r.text(), cx + PAD_H + ICON_W, ty);
+            ty += LINE_H;
+        }
+    }
+
+    /** Shadowless draw — the colour is baked into the sequence's Style (see {@link Nb}). */
+    private void draw(GuiGraphics g, FormattedCharSequence seq, int x, int y) {
+        g.drawString(font, seq, x, y, -1, false);
+    }
+
+    private PlayerSkin skin(boolean own) {
+        if (own) {
+            AbstractClientPlayer p = Minecraft.getInstance().player;
+            if (p != null) return p.getSkin();
+        } else {
+            AbstractClientPlayer e = ClientNumenLookup.resolve(uuid.get());
+            if (e != null) return e.getSkin();
+        }
+        return DefaultPlayerSkin.get(uuid.get());
+    }
+
+    // ---- text helpers ----
+
+    private static String ownerText(String s) {
+        return ChatDisplayFilters.current().filterUserMessage(s);
+    }
+
+    private String fitOneLine(String s, int pxWidth) {
+        if (font.width(s) <= pxWidth) return s;
+        while (s.length() > 1 && font.width(s + "…") > pxWidth) s = s.substring(0, s.length() - 1);
+        return s + "…";
+    }
+
+    private static String toolLine(LlmToolCall tc) {
+        String args = tc.arguments() == null ? "" : tc.arguments().replaceAll("\\s+", " ").trim();
+        if (args.length() > TOOL_ARG_CHARS) args = args.substring(0, TOOL_ARG_CHARS) + "…";
+        return tc.name() + "  " + args;
+    }
+
+    private static boolean looksFailed(String content) {
+        if (content == null) return false;
+        String c = content.replaceAll("\\s+", "");
+        return c.contains("\"success\":false") || c.startsWith("ERROR") || c.contains("\"error\"");
+    }
+}

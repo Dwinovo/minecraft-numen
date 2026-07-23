@@ -81,7 +81,6 @@ public final class NumenScreen extends Screen {
     private static final int LINE_H = 10;
     private static final int PLAN_W = 122;
     private static final int MAX_PROMPT = 1024;
-    private static final int TOOL_ARG_CHARS = 44;
 
     // ---- palette (BlockFrame "Cottage" theme — single theme for now, see UiTheme) ----
     private static final UiTheme TH = UiTheme.WARM;
@@ -96,9 +95,6 @@ public final class NumenScreen extends Screen {
     private static final int CTA = TH.cta();
     private static final int ON_CTA = TH.onCta();
     private static final int FIELD = TH.field();
-    private static final int YOU = TH.reply();          // user messages — teal
-    private static final int AI = 0xFF35562F;            // assistant replies — deep moss green (the "point")
-    private static final int TOOL = TH.textDim();        // folded tool-call rows — muted, secondary
     private static final int OK = TH.ok();
     private static final int RUN = TH.run();
     private static final int FAIL = TH.fail();
@@ -117,7 +113,6 @@ public final class NumenScreen extends Screen {
     private static final net.minecraft.resources.ResourceLocation CHEVRON_UP = railSpr("chevron_up");
     private static final net.minecraft.resources.ResourceLocation CHEVRON_DOWN = railSpr("chevron_down");
 
-    private static final String[] SPIN = {"|", "/", "-", "\\"};
     /** Armor column on the Items tab (top → bottom); offhand is drawn separately below it. */
     private static final EquipmentSlot[] ARMOR = {
             EquipmentSlot.HEAD, EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET};
@@ -275,13 +270,11 @@ public final class NumenScreen extends Screen {
     private final int[] tabX = new int[3];   // left x of each tab label, for click hit-testing
     private final int[] tabW = new int[3];
 
-    // chat transcript scroll
-    private int scroll;            // px scrolled down from the top of the content
-    private boolean pinBottom = true;
-    private int lastMaxScroll;
+    /** Chat transcript view (bubbles + tool chips + eased scroll); reset on companion/tab switch. */
+    private final com.dwinovo.numen.client.screen.chat.ChatView chatView =
+            new com.dwinovo.numen.client.screen.chat.ChatView(
+                    Minecraft.getInstance().font, this::loop, () -> name, () -> uuid);
     private int railScroll;        // index of the first visible rail avatar (wheel-scroll when many companions)
-    /** Completed tool-call groups the user clicked open (keyed by the group's first call id). */
-    private final Set<String> expandedGroups = new HashSet<>();
 
     /** Re-request the backpack every ~1 s while the Items tab is open. */
     private static final int INV_REFRESH_TICKS = 20;
@@ -311,7 +304,7 @@ public final class NumenScreen extends Screen {
         if (java.util.Objects.equals(u, uuid)) return;
         input = null; savedInput = "";          // don't carry typed text across companions
         uuid = u; name = n;
-        scroll = 0; pinBottom = true; expandedGroups.clear();
+        chatView.reset();
         rebuild();
         if (tab == Tab.ITEMS && u != null) requestInventory();
     }
@@ -570,12 +563,6 @@ public final class NumenScreen extends Screen {
         g.drawString(font, c, x, y, -1, false);
     }
 
-    /** A coloured text Component (colour in the Style, so shadowless rendering keeps it). */
-    private static Component colored(String s, int color) {
-        return Component.literal(s).withStyle(st -> st.withColor(
-                net.minecraft.network.chat.TextColor.fromRgb(color & 0xFFFFFF)));
-    }
-
 
     private void buildChatWidgets() {
         int inputY = top + panelH - INPUT_H - PAD;
@@ -642,8 +629,7 @@ public final class NumenScreen extends Screen {
     private void selectTab(Tab t) {
         if (t == tab) return;
         tab = t;
-        scroll = 0;
-        pinBottom = true;
+        chatView.reset();
         if (t == Tab.ITEMS) requestInventory();
         if (t == Tab.SETTINGS) initModelMode();
         rebuild();
@@ -2356,10 +2342,6 @@ public final class NumenScreen extends Screen {
     }
 
     /** 显示过滤统一走 {@link com.dwinovo.numen.client.chat.ChatDisplayFilter}(可整体切换)。 */
-    private static String ownerText(String s) {
-        return com.dwinovo.numen.client.chat.ChatDisplayFilters.current().filterUserMessage(s);
-    }
-
     /** token 数的人读格式:1350 → "1.4k",132400 → "132.4k",1_200_000 → "1.2m"。 */
     private static String fmtTokens(long n) {
         if (n >= 1_000_000) return String.format("%.1fm", n / 1_000_000.0);
@@ -2624,7 +2606,7 @@ public final class NumenScreen extends Screen {
         }
         loop().submitPrompt(text);
         input.setValue("");
-        pinBottom = true;
+        chatView.pinToBottom();
     }
 
     // ---- input ----
@@ -2842,25 +2824,9 @@ public final class NumenScreen extends Screen {
                     }
                 }
             }
-            if (tab == Tab.CHAT && toggleFoldAt((int) mouseX, my)) return true;
+            if (tab == Tab.CHAT && chatView.mouseClicked(mouseX, mouseY)) return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
-    }
-
-    /** If a chat fold-toggle row sits under (mx,my), flip its expanded state. Mirrors renderChat geometry. */
-    private boolean toggleFoldAt(int mx, int my) {
-        int bodyY = top + HEADER_H + 4;
-        int bodyBottom = top + panelH - INPUT_H - PAD - 6;
-        int transX = left + PAD;
-        int transW = panelW - PAD * 2 - PLAN_W - 8;
-        if (mx < transX || mx >= transX + transW || my < bodyY || my >= bodyBottom) return false;
-        List<Row> rows = buildRows(transW);
-        int idx = (my - (bodyY - scroll)) / LINE_H;
-        if (idx < 0 || idx >= rows.size()) return false;
-        String key = rows.get(idx).foldKey();
-        if (key == null) return false;
-        if (!expandedGroups.add(key)) expandedGroups.remove(key);   // toggle open/closed
-        return true;
     }
 
     @Override
@@ -2890,9 +2856,7 @@ public final class NumenScreen extends Screen {
             return true;
         }
         if (tab == Tab.CHAT && sy != 0) {
-            scroll = Math.clamp((long) (scroll - sy * LINE_H * 3), 0, lastMaxScroll);
-            pinBottom = scroll >= lastMaxScroll;
-            return true;
+            return chatView.mouseScrolled(sy);
         }
         if (tab == Tab.SETTINGS && sy != 0 && !addingPersona && !addingProvider && !addingVoice) {
             int count = switch (settingsSection) {
@@ -3333,52 +3297,13 @@ public final class NumenScreen extends Screen {
         int bodyBottom = top + panelH - INPUT_H - PAD - 6;
         int transX = left + PAD;
         int transW = panelW - PAD * 2 - PLAN_W - 8;
-        int viewH = bodyBottom - bodyY;
 
-        // plan panel divider + content
+        // right-side PLAN card + the bubble transcript
         int planX = transX + transW + 8;
-        g.fill(planX - 4, bodyY, planX - 3, bodyBottom, BORDER);
-        renderPlan(g, planX, bodyY, bodyBottom);
+        com.dwinovo.numen.client.screen.chat.PlanCard.render(
+                g, font, loop(), planX - 4, bodyY, PLAN_W + 4, bodyBottom);
+        chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY);
 
-        List<Row> rows = buildRows(transW);
-        int contentH = rows.size() * LINE_H;
-        lastMaxScroll = Math.max(0, contentH - viewH);
-        if (pinBottom) scroll = lastMaxScroll;
-        scroll = Math.clamp((long) scroll, 0, lastMaxScroll);
-
-        g.enableScissor(transX, bodyY, transX + transW, bodyBottom);
-        int y = bodyY - scroll;
-        long t = System.currentTimeMillis();
-        Set<String> done = doneIds();
-        Set<String> failed = failedIds();
-        for (Row row : rows) {
-            if (y + LINE_H > bodyY && y < bodyBottom) {
-                if (row.foldKey() != null) {                 // clickable fold toggle — glyph baked into text
-                    txt(g, row.text, transX, y, row.color);
-                } else if (row.toolIds() != null) {          // tool row — status icon + text
-                    boolean anyRunning = row.toolIds().stream().anyMatch(id -> !done.contains(id));
-                    boolean anyFail = row.toolIds().stream().anyMatch(failed::contains);
-                    String icon = anyRunning ? SPIN[(int) ((t / 120) % 4)] : (anyFail ? "✗" : "✔");
-                    int ic = anyRunning ? RUN : (anyFail ? FAIL : OK);
-                    txt(g, Component.literal(icon), transX, y, ic);
-                    txt(g, row.text, transX + 11, y, row.color);
-                } else {
-                    txt(g, row.text, transX, y, row.color);
-                }
-            }
-            y += LINE_H;
-        }
-        g.disableScissor();
-
-        // scrollbar — Cottage track + thumb sprites (was off-theme white fills)
-        if (lastMaxScroll > 0) {
-            int trackH = viewH;
-            int thumbH = Math.max(12, trackH * viewH / (viewH + lastMaxScroll));
-            int thumbY = bodyY + (trackH - thumbH) * scroll / lastMaxScroll;
-            int sbX = transX + transW - 4;
-            g.blitSprite(SCROLL_TRACK, sbX, bodyY, 4, viewH);
-            g.blitSprite(SCROLL_THUMB, sbX, thumbY, 4, thumbH);
-        }
         boolean noticeLive = micNotice != null && micNoticeUntil > System.currentTimeMillis();
         if (!noticeLive && micNoticeUntil != 0) {   // 过期一次性复位:把醒目 hint 换回正常的淡色占位
             micNoticeUntil = 0;
@@ -3389,209 +3314,6 @@ public final class NumenScreen extends Screen {
         if (noticeLive && input != null && !input.getValue().isEmpty()) {
             txt(g, Component.literal(micNotice), left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
         }
-    }
-
-    /** Flatten the convo into render rows. Tool RESULT messages aren't drawn — they only mark the
-     *  matching tool call done (via {@link #doneIds()}); the call line shows the spinner/check. */
-    private List<Row> buildRows(int width) {
-        List<Row> out = new ArrayList<>();
-        Set<String> done = doneIds();
-        Set<String> failed = failedIds();
-        List<LlmToolCall> group = new ArrayList<>();        // a run of consecutive tool calls
-        // The PHYSICAL transcript, not the LLM context: compaction rewires what
-        // the model sees but must never eat the owner's visible history.
-        for (ConvoState.Msg msg : loop().display()) {
-            switch (msg) {
-                case ConvoState.Msg.User u -> {
-                    flushTools(out, group, done, failed, width);
-                    if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
-                        wrapPlain(out, I18n.get("numen.chat.persona_changed"), TXT_FAINT, width);
-                        continue;
-                    }
-                    if (ConvoLog.COMPACT_DIVIDER.equals(u.content())) {
-                        wrapPlain(out, I18n.get("numen.chat.compacted"), TXT_FAINT, width);
-                        continue;
-                    }
-                    String shown = ownerText(u.content());       // show only the owner's words, not injected content
-                    if (shown.isEmpty()) continue;               // a pure directive/injected message → not shown
-                    wrapPlain(out, shown, YOU, width);           // user = teal body, no label
-                }
-                case ConvoState.Msg.Assistant a -> {
-                    AssistantTurn turn = a.turn();
-                    String spoken = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
-                            .filterAssistantMessage(turn.content());
-                    if (!spoken.isBlank()) {
-                        flushTools(out, group, done, failed, width);   // spoken reply breaks the fold
-                        addHeader(out, name, AI, width);         // bold name header on its OWN line
-                        wrapPlain(out, spoken, AI, width);
-                    }
-                    group.addAll(turn.toolCalls());
-                }
-                case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a row */ }
-            }
-        }
-        flushTools(out, group, done, failed, width);
-        // Prompts still waiting for a protocol-valid splice point (typed
-        // mid-task, or pushed in by an external bridge via NumenGateway) —
-        // visible immediately so a queued message never feels swallowed.
-        for (String queued : loop().queuedPrompts()) {
-            String shown = ownerText(queued);       // injected events (persona-change / <event>) → empty → not shown
-            if (shown.isEmpty()) continue;
-            wrapPlain(out, "⌛ " + shown, TXT_FAINT, width);
-        }
-        if (loop().isCompacting()) {
-            wrapPlain(out, I18n.get("numen.chat.compacting"), TXT_MUTED, width);
-        }
-        if (out.isEmpty()) {
-            wrapPlain(out, I18n.get("numen.chat.empty", name), TXT_FAINT, width);
-        }
-        return out;
-    }
-
-    /** Emit rows for a run of consecutive tool calls. A single call is always one plain row. A run of
-     *  many stays EXPANDED while any is still running (live per-tool spinners) and AUTO-FOLDS to a muted
-     *  "N steps · names" summary once all are done — unless the user clicked it open (keyed by the first
-     *  id in {@link #expandedGroups}), in which case it shows a "▾" header + the tool rows. */
-    private void flushTools(List<Row> out, List<LlmToolCall> group, Set<String> done, Set<String> failed, int width) {
-        if (group.isEmpty()) return;
-        if (group.size() == 1) {                                  // single tool — never folds
-            addToolRow(out, group.get(0), width);
-            group.clear();
-            return;
-        }
-        String key = group.get(0).id();
-        boolean running = group.stream().anyMatch(tc -> !done.contains(tc.id()));
-        boolean expanded = running || expandedGroups.contains(key);
-        if (!expanded) {                                          // folded summary (click to expand)
-            List<String> names = new ArrayList<>();
-            for (LlmToolCall tc : group) if (!names.contains(tc.name())) names.add(tc.name());
-            boolean anyFail = group.stream().anyMatch(tc -> failed.contains(tc.id()));
-            String summary = "▸ " + I18n.get("numen.chat.steps", group.size()) + " · " + String.join(" · ", names);
-            out.add(new Row(colored(fitOneLine(summary, width - 2), anyFail ? FAIL : TOOL).getVisualOrderText(),
-                    anyFail ? FAIL : TOOL, null, key));
-        } else {
-            if (!running) {                                       // manually expanded → collapsible header
-                String hdr = "▾ " + I18n.get("numen.chat.steps", group.size());
-                out.add(new Row(colored(hdr, TXT_MUTED).getVisualOrderText(), TXT_MUTED, null, key));
-            }
-            for (LlmToolCall tc : group) addToolRow(out, tc, width);
-        }
-        group.clear();
-    }
-
-    private void addToolRow(List<Row> out, LlmToolCall tc, int width) {
-        FormattedCharSequence seq = colored(fitOneLine(toolLine(tc), width - 2 - 11), TOOL).getVisualOrderText();
-        out.add(new Row(seq, TOOL, List.of(tc.id()), null));
-    }
-
-    /** Trim a string with an ellipsis so it fits one line of the given pixel width. */
-    private String fitOneLine(String s, int pxWidth) {
-        if (font.width(s) <= pxWidth) return s;
-        while (s.length() > 1 && font.width(s + "…") > pxWidth) s = s.substring(0, s.length() - 1);
-        return s + "…";
-    }
-
-    private String toolLine(LlmToolCall tc) {
-        String args = tc.arguments() == null ? "" : tc.arguments().replaceAll("\\s+", " ").trim();
-        if (args.length() > TOOL_ARG_CHARS) args = args.substring(0, TOOL_ARG_CHARS) + "…";
-        return tc.name() + "  " + args;
-    }
-
-    /** A bold name header on its OWN line (fixed format — never merges into the body). */
-    private void addHeader(List<Row> out, String label, int color, int width) {
-        var tc = net.minecraft.network.chat.TextColor.fromRgb(color & 0xFFFFFF);
-        Component c = Component.literal(label).withStyle(s -> s.withColor(tc).withBold(true));
-        for (FormattedCharSequence seq : font.split(c, width - 2)) {
-            out.add(new Row(seq, color, null, null));
-        }
-    }
-
-    /** A plain, regular-weight line (status hints) — colour baked into the style. */
-    private void wrapPlain(List<Row> out, String text, int color, int width) {
-        for (FormattedCharSequence seq : font.split(colored(text, color), width - 2)) {
-            out.add(new Row(seq, color, null, null));
-        }
-    }
-
-    private Set<String> doneIds() {
-        Set<String> s = new HashSet<>();
-        for (ConvoState.Msg m : loop().display()) {
-            if (m instanceof ConvoState.Msg.Tool t) s.add(t.toolCallId());
-        }
-        return s;
-    }
-
-    private Set<String> failedIds() {
-        Set<String> s = new HashSet<>();
-        for (ConvoState.Msg m : loop().display()) {
-            if (m instanceof ConvoState.Msg.Tool t && looksFailed(t.content())) s.add(t.toolCallId());
-        }
-        return s;
-    }
-
-    private static boolean looksFailed(String content) {
-        if (content == null) return false;
-        String c = content.replaceAll("\\s+", "");
-        return c.contains("\"success\":false") || c.startsWith("ERROR") || c.contains("\"error\"");
-    }
-
-    /** Right-side PLAN panel: the companion's latest {@code todowrite}, with status glyphs. */
-    private void renderPlan(GuiGraphics g, int x, int y, int bottom) {
-        txt(g, Component.translatable("numen.chat.plan"), x, y, TXT_MUTED);
-        int ly = y + 13;
-        JsonArray todos = latestPlan();
-        if (todos == null || todos.isEmpty()) {
-            txt(g, Component.translatable("numen.chat.no_plan"), x, ly, TXT_FAINT);
-            return;
-        }
-        for (int i = 0; i < todos.size() && ly + LINE_H < bottom; i++) {
-            if (!todos.get(i).isJsonObject()) continue;
-            JsonObject it = todos.get(i).getAsJsonObject();
-            String status = str(it, "status");
-            String content = str(it, "content");
-            String glyph = switch (status) { case "completed" -> "✔"; case "in_progress" -> "▸"; default -> "○"; };
-            int color = switch (status) { case "completed" -> OK; case "in_progress" -> RUN; default -> TXT_FAINT; };
-            txt(g, Component.literal(glyph), x, ly, color);
-            // text hierarchy: in-progress = strong (current focus), completed = recede, pending = faint
-            int textColor = switch (status) {
-                case "in_progress" -> TXT;
-                case "completed" -> TXT_MUTED;
-                default -> TXT_FAINT;
-            };
-            List<FormattedCharSequence> lines = font.split(colored(content, textColor), PLAN_W - 14);
-            int sub = 0;
-            for (FormattedCharSequence seq : lines) {
-                if (ly + LINE_H >= bottom) break;
-                txt(g, seq, x + 10, ly, textColor);
-                ly += LINE_H;
-                if (++sub >= 2) break;   // cap each item at 2 lines
-            }
-            if (lines.isEmpty()) ly += LINE_H;
-        }
-    }
-
-    /** Parse the most recent todowrite call's todos array, or null. Reads the
-     *  physical transcript so the plan survives a context compaction. */
-    private JsonArray latestPlan() {
-        JsonArray latest = null;
-        for (ConvoState.Msg m : loop().display()) {
-            if (m instanceof ConvoState.Msg.Assistant a) {
-                for (LlmToolCall tc : a.turn().toolCalls()) {
-                    if (!"todowrite".equals(tc.name())) continue;
-                    try {
-                        JsonObject args = JsonParser.parseString(tc.arguments()).getAsJsonObject();
-                        if (args.has("todos") && args.get("todos").isJsonArray()) {
-                            latest = args.getAsJsonArray("todos");
-                        }
-                    } catch (RuntimeException ignored) { /* keep the last good one */ }
-                }
-            }
-        }
-        return latest;
-    }
-
-    private static String str(JsonObject o, String k) {
-        return o.has(k) && !o.get(k).isJsonNull() ? o.get(k).getAsString() : "";
     }
 
     /** The Items tab: a vanilla-inventory-style "companion sheet" — armor column + offhand, a live
@@ -3675,15 +3397,10 @@ public final class NumenScreen extends Screen {
     private static final net.minecraft.resources.ResourceLocation FOOD_FULL = spr("food_full");
     private static final net.minecraft.resources.ResourceLocation FOOD_HALF = spr("food_half");
     private static final net.minecraft.resources.ResourceLocation FOOD_EMPTY = spr("food_empty");
-    private static final net.minecraft.resources.ResourceLocation SCROLL_TRACK = spr("scroll_track");
-    private static final net.minecraft.resources.ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
 
     @Override
     public boolean isPauseScreen() {
         return false;
     }
 
-    /** A rendered transcript line. {@code toolIds} non-null = a tool row (status icon = spinner/✔/✗).
-     *  {@code foldKey} non-null = a clickable fold toggle (the group's first id); both null = plain text. */
-    private record Row(FormattedCharSequence text, int color, List<String> toolIds, String foldKey) {}
 }

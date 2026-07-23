@@ -51,6 +51,19 @@ public class NumenFabricClient implements ClientModInitializer {
                     }
                 });
 
+        // GUI 圆角 SDF shader;注册失败仅告警——RoundRect 会自动降级成方角 fill。
+        net.fabricmc.fabric.api.client.rendering.v1.CoreShaderRegistrationCallback.EVENT
+                .register(context -> {
+                    try {
+                        context.register(
+                                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "rendertype_round_rect"),
+                                com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR,
+                                com.dwinovo.numen.client.ui.RoundRect::setShader);
+                    } catch (Exception e) {
+                        Constants.LOG.warn("round rect shader failed to load, falling back to square corners", e);
+                    }
+                });
+
         // G → companion roster panel (chat entry + settings/reset live in there).
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.OPEN_ROSTER);
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
