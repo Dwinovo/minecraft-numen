@@ -2953,10 +2953,20 @@ public final class NumenScreen extends Screen {
         for (AbstractWidget w : overlay) {
             // visible 检查:声线表单滚出视口的 EditBox 隐藏了自己,框也必须跟着消失
             // (否则空框越过面板边缘悬在世界上)。
-            if (w instanceof EditBox eb && eb.visible) {            // parchment frame, inflated past the inset text
-                g.blitSprite(
-                        FIELD_SPRITE, eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
-                        eb.getWidth() + FIELD_INSET_X * 2, eb.getHeight() + FIELD_INSET_Y * 2);
+            if (w instanceof EditBox eb && eb.visible) {
+                if (eb == input) {
+                    // 聊天输入框:与气泡同款的圆角奶油卡(表单字段仍用羊皮纸方角 sprite)。
+                    com.dwinovo.numen.client.ui.RoundRect.card(g,
+                            eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
+                            eb.getX() + eb.getWidth() + FIELD_INSET_X,
+                            eb.getY() + eb.getHeight() + FIELD_INSET_Y, 5,
+                            com.dwinovo.numen.client.ui.ChatColors.AI_FILL,
+                            com.dwinovo.numen.client.ui.ChatColors.AI_BORDER);
+                } else {                                           // parchment frame, inflated past the inset text
+                    g.blitSprite(
+                            FIELD_SPRITE, eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
+                            eb.getWidth() + FIELD_INSET_X * 2, eb.getHeight() + FIELD_INSET_Y * 2);
+                }
             }
         }
         for (AbstractWidget w : overlay) {

@@ -38,12 +38,26 @@ public final class PlanCard {
 
     public static void render(GuiGraphics g, Font font, EntityAgentLoop loop,
                               int x, int y, int w, int bottom) {
-        RoundRect.fill(g, x, y, x + w, bottom, RADIUS, CARD_FILL);
         int ix = x + PAD;
         int iw = w - PAD * 2;
+        JsonArray todos = latestPlan(loop);
+        // 先量后画:卡片高度贴内容(空计划只有标题+一行),不再拖满整条侧栏。
+        int contentH = PAD + 13;
+        if (todos == null || todos.isEmpty()) {
+            contentH += LINE_H;
+        } else {
+            for (int i = 0; i < todos.size(); i++) {
+                if (!todos.get(i).isJsonObject()) continue;
+                JsonObject it = todos.get(i).getAsJsonObject();
+                int n = font.split(Nb.colored(str(it, "content"), TXT), iw - 10).size();
+                contentH += Math.max(1, Math.min(2, n)) * LINE_H;
+                if (y + contentH + PAD >= bottom) break;
+            }
+        }
+        int cardBottom = Math.min(bottom, y + contentH + PAD - 2);
+        RoundRect.fill(g, x, y, x + w, cardBottom, RADIUS, CARD_FILL);
         Nb.text(g, font, I18n.get("numen.chat.plan"), ix, y + PAD, MUTED);
         int ly = y + PAD + 13;
-        JsonArray todos = latestPlan(loop);
         if (todos == null || todos.isEmpty()) {
             Nb.text(g, font, I18n.get("numen.chat.no_plan"), ix, ly, FAINT);
             return;
