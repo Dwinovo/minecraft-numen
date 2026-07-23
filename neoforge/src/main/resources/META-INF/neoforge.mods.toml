@@ -9,6 +9,8 @@ logoFile="${mod_id}.png" #optional
 credits="${credits}" #optional
 authors = "${mod_author}" #optional
 description = '''${description}''' #mandatory (Supports multiline text)
+[[mixins]]
+config = "${mod_id}.mixins.json"
 [[dependencies.${mod_id}]] #optional
 modId = "numen_api" #mandatory — core supplies tools to the numen-api engine
 type="required" #mandatory
