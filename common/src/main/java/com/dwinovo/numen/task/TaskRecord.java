@@ -83,6 +83,19 @@ public abstract class TaskRecord {
     public final void markAsync() { this.async = true; }
     public final boolean isAsync() { return async; }
 
+    /**
+     * Prefix of the synthetic tool-call ids NumenActuator mints for external (MCP)
+     * invocations — disjoint from the LLM's ids. The async wind-down keys off this
+     * to route completion: internal tasks fire a task_finished event to the built-in
+     * brain; external ones don't (their driver polls task_status instead).
+     */
+    public static final String EXTERNAL_CALL_PREFIX = "mcp-";
+
+    /** True if an external brain (MCP) dispatched this task, not the built-in LLM. */
+    public final boolean isExternalCall() {
+        return toolCallId != null && toolCallId.startsWith(EXTERNAL_CALL_PREFIX);
+    }
+
     /** 首次开跑打点(重复调用不覆盖——抢占恢复不算重新开始)。 */
     public final void markStarted(long gameTime) {
         if (startedGameTime < 0) startedGameTime = gameTime;

@@ -27,6 +27,11 @@ public class NumenFabricClient implements ClientModInitializer {
         // brain can call them. Config dir from the loader (avoids Minecraft timing).
         McpClientManager.initClient(FabricLoader.getInstance().getConfigDir().resolve(Constants.MOD_ID));
 
+        // MCP server: the other direction — stand up a loopback MCP server so an
+        // external agent can drive companions directly, bypassing the built-in brain.
+        // Off unless enabled in config/numen/mcp_server.json.
+        com.dwinovo.numen.mcp.server.NumenMcp.initClient(FabricLoader.getInstance().getConfigDir());
+
         // Skills live under config/numen/skills. Hook the resource reload
         // pipeline so /reload picks up newly added SKILL.md files without a
         // client restart.

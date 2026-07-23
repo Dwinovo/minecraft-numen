@@ -8,6 +8,10 @@ import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
+import com.dwinovo.numen.network.payload.DismissRequestPayload;
+import com.dwinovo.numen.network.payload.SummonRequestPayload;
+import com.dwinovo.numen.platform.Services;
+import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -132,6 +136,53 @@ public final class NumenActuator {
     }
 
     /**
+     * Summon a fresh companion into the world by name — exactly the owner's panel
+     * "+" button (idempotent per name). The body arrives asynchronously (a skin
+     * lookup runs first), so confirm it by polling {@link #companions()}. Provider
+     * and persona are the game's own defaults; an external driver never uses the
+     * built-in brain, so a companion with no provider is still fully drivable here.
+     *
+     * @return true once the request was sent; false if not currently in a world
+     */
+    public static CompletableFuture<Boolean> create(String name) {
+        CompletableFuture<Boolean> f = new CompletableFuture<>();
+        Minecraft.getInstance().execute(() -> {
+            if (Minecraft.getInstance().getConnection() == null) {
+                f.complete(false);
+                return;
+            }
+            String n = name == null ? "" : name.trim();
+            Services.NETWORK.sendToServer(new SummonRequestPayload(n, "", ""));
+            f.complete(true);
+        });
+        return f;
+    }
+
+    /**
+     * Permanently dismiss a companion — its body drops its whole inventory (like
+     * death), then it's gone for good — exactly the panel's ✕. The roster updates
+     * asynchronously; confirm via {@link #companions()}.
+     *
+     * @return true once the request was sent; false if not currently in a world
+     */
+    public static CompletableFuture<Boolean> delete(UUID companion) {
+        CompletableFuture<Boolean> f = new CompletableFuture<>();
+        if (companion == null) {
+            f.complete(false);
+            return f;
+        }
+        Minecraft.getInstance().execute(() -> {
+            if (Minecraft.getInstance().getConnection() == null) {
+                f.complete(false);
+                return;
+            }
+            Services.NETWORK.sendToServer(new DismissRequestPayload(companion));
+            f.complete(true);
+        });
+        return f;
+    }
+
+    /**
      * Run one tool for {@code companion} directly — the same tools the built-in
      * brain uses (see {@link ToolRegistry#all()} for the catalogue), invoked
      * without the LLM. Perception tools resolve fast; world-action tools resolve
@@ -161,7 +212,7 @@ public final class NumenActuator {
                     return;
                 }
                 AbstractClientPlayer body = ClientNumenLookup.resolve(companion);
-                String id = "mcp-" + SEQ.incrementAndGet();
+                String id = TaskRecord.EXTERNAL_CALL_PREFIX + SEQ.incrementAndGet();
                 String args = (argsJson == null || argsJson.isBlank()) ? "{}" : argsJson;
                 ToolCall call = new ToolCall(id, toolName, args,
                         new ClientToolContext(body, companion),

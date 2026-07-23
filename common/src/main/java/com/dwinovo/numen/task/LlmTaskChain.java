@@ -132,6 +132,11 @@ public final class LlmTaskChain implements TaskChain {
             // 异步记录:tool_call 在受理时就回执过了,收尾改走 task_finished 事件
             // (done/failed/timeout 唤醒,stopped 搭车——档位在事件登记处定)。
             if (rec.isAsync()) {
+                // 外部(MCP)派的异步任务:不投 task_finished 事件——那条会唤醒并没有派它的内置大脑。
+                // 外部驱动靠 task_status 轮询 + 感知确认闭环(见 TaskDispatch/NumenActuator)。
+                if (rec.isExternalCall()) {
+                    continue;
+                }
                 String status = switch (rec.getState()) {
                     case SUCCESS -> "done";
                     case TIMEOUT -> "timeout";

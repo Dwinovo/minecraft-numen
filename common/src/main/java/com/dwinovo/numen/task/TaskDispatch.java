@@ -49,9 +49,13 @@ public final class TaskDispatch {
         }
         record.markAsync();
         CompanionTickDispatcher.queueFor(companion.getUUID()).enqueue(record);
+        // 内置大脑靠 task_finished 事件收尾(别轮询);外部(MCP)夺舍收不到事件(那条投给内置大脑,
+        // 不是它),得自己轮询 task_status 到身体空闲,再感知确认。
+        String note = record.isExternalCall()
+                ? "已受理,后台执行中。用 task_status 轮询,身体转空闲即为完成,再用感知工具确认结果;task_stop 叫停。"
+                : "已受理,后台执行中。完成会自动收到 task_finished 事件,不要轮询;task_status 查进度,task_stop 叫停。";
         reply.accept(TaskResult.ok(
-                "已受理,后台执行中。完成会自动收到 task_finished 事件,不要轮询;"
-                        + "task_status 查进度,task_stop 叫停。",
+                note,
                 java.util.Map.of(
                         "task_id", record.publicId(),
                         "task", record.getToolName(),
