@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -10,7 +10,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** Query tool (raw NumenTool): list nearby entities, sorted by distance. */
-public final class ScanNearbyEntitiesTool extends ServerNumenTool {
+public final class ScanNearbyEntitiesTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final QueryExtraTools impl = new QueryExtraTools();
@@ -27,8 +27,8 @@ public final class ScanNearbyEntitiesTool extends ServerNumenTool {
         return "List entities within a radius around you, sorted by distance. Use type_filter to "
                 + "narrow: 'hostile' for monsters, 'passive' for animals/items, 'player' for players, "
                 + "'all' for everything. Returns at most 20 entities; truncated:true means more exist. "
-                + "Each entry has id, type, position, distance, hp, and category. To fight mobs, use "
-                + "hunt (it scans by type itself).";
+                + "Each entry has id, type, position, distance, hp, and category. Pass "
+                + "the returned runtime ids to melee_attack or ranged_attack; neither tool can attack outside that set.";
     }
 
     @Override
@@ -41,7 +41,7 @@ public final class ScanNearbyEntitiesTool extends ServerNumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         reply.accept(impl.scanNearbyEntities(a.radius(), a.type_filter(), self));
     }

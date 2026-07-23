@@ -1,8 +1,8 @@
 package com.dwinovo.numen.core.task;
 
 /**
- * Target-selection economics for {@code auto_mine}. Every bot we surveyed
- * (Baritone MineProcess, Altoclef, mineflayer-collectblock) picks targets by
+ * Target-selection economics for {@code mine}. The obvious policy —
+ * and the one open-source mining bots commonly ship — picks targets by
  * pure nearest-first — which, on a surface made of dirt-over-stone, means
  * "the nearest stone is under my feet", so bulk collection digs a vertical
  * shaft and then spends the yield pillaring back out. The fix is a scoring

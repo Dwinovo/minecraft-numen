@@ -5,6 +5,7 @@ import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
@@ -71,6 +72,14 @@ List<Move> moves,
     private static String route(AbstractContainerMenu menu, NumenPlayer entity, int from, Integer count) {
         ItemStack before = menu.slots.get(from).getItem().copy();
         if (before.isEmpty()) {
+            if (menu.slots.get(from) instanceof ResultSlot) {
+                // Empty crafting result = the grid doesn't form a valid recipe (usually a mis-placed
+                // 2x2 layout). Point the model back at the recipe so it self-corrects.
+                return "slot " + from + " (crafting result) is empty — the grid doesn't form a valid "
+                        + "recipe yet. Call lookup_recipe for the exact layout, then inspect_gui and match "
+                        + "it onto the grid cell-for-cell (a smaller recipe goes top-left; 2x2 slot "
+                        + "indices are easy to guess wrong).";
+            }
             return "slot " + from + " is empty — nothing to move.";
         }
         menu.clicked(from, 0, ClickType.QUICK_MOVE, entity);
