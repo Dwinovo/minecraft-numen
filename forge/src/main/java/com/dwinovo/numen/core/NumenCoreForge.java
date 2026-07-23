@@ -34,6 +34,9 @@ public class NumenCoreForge {
         MinecraftForge.EVENT_BUS.addListener(NumenCoreForge::onServerTickPost);
         // Release pathfinding chunk-ref snapshots when the server stops (don't pin an old world).
         MinecraftForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> PathCaches.dropAll());
+        // Debug verbs merged into the /numen root registered by the engine mod.
+        MinecraftForge.EVENT_BUS.addListener((net.minecraftforge.event.RegisterCommandsEvent e) ->
+                com.dwinovo.numen.core.debug.DebugCommands.register(e.getDispatcher()));
 
         // Client-only: declare core's built-in skills, read in place from the
         // skills/ dir bundled in this jar. Skills feed the client-side LLM, so
@@ -62,5 +65,7 @@ public class NumenCoreForge {
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         ScanBlocksJob.tick(server);
         PathCaches.serverTick(server);
+        // Debug particles for pathing state, sent only to players with debug on.
+        com.dwinovo.numen.core.debug.PathDebugRenderer.serverTick(server);
     }
 }
