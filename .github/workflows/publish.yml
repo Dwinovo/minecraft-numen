@@ -160,7 +160,7 @@ jobs:
       - name: Publish Fabric to Modrinth and CurseForge
         continue-on-error: true
         if: ${{ steps.meta.outputs.fabric_file != '' }}
-        uses: Kira-NT/mc-publish@v3.3.0
+        uses: Kira-NT/mc-publish@v3.3.1
         with:
           files: ${{ steps.meta.outputs.fabric_file }}
           loaders: fabric
@@ -170,6 +170,10 @@ jobs:
           game-version-filter: none
           version-type: ${{ steps.meta.outputs.version_type }}
           github-prerelease: ${{ steps.meta.outputs.github_prerelease }}
+
+          # CurseForge 要求每个版本勾选环境组(Client/Server,errorCode 1021)。
+          # Fabric 可从 fabric.mod.json 推断,这里统一显式声明,两个步骤同款。
+          environment: client|server
 
           # TODO: Numen's CurseForge numeric project id (delete the two curseforge-* lines to skip it).
           curseforge-id: 1581109
@@ -183,7 +187,7 @@ jobs:
 
       - name: Publish ${{ steps.meta.outputs.second_loader }} to Modrinth and CurseForge
         if: ${{ steps.meta.outputs.second_file != '' }}
-        uses: Kira-NT/mc-publish@v3.3.0
+        uses: Kira-NT/mc-publish@v3.3.1
         with:
           files: ${{ steps.meta.outputs.second_file }}
           loaders: ${{ steps.meta.outputs.second_loader }}
@@ -193,6 +197,9 @@ jobs:
           game-version-filter: none
           version-type: ${{ steps.meta.outputs.version_type }}
           github-prerelease: ${{ steps.meta.outputs.github_prerelease }}
+
+          # 同 Fabric 步骤:CF 环境组必选(NeoForge/Forge 的 toml 无环境字段,必须显式)。
+          environment: client|server
 
           # TODO: same CurseForge project id as the Fabric step.
           curseforge-id: 1581109
