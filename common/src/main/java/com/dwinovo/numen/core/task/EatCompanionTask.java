@@ -3,7 +3,7 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.exec.Interaction;
+import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.world.InteractionHand;
@@ -40,7 +40,7 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
                 () -> PlayerInv.count(player.getInventory(), r.item) > 0 ? null
                         : new Precondition.Failure("no " + r.label + " in inventory to eat",
                                 FailureType.NO_MATERIAL),
-                // Native "is this consumable?" — 1.20.1 FoodProperties (food/modded edibles).
+                // Native "is this consumable?" — covers food, potions, milk, and modded consumables alike.
                 () -> r.item.getFoodProperties() != null ? null
                         : new Precondition.Failure(r.label + " can't be eaten or drunk",
                                 FailureType.UNKNOWN));

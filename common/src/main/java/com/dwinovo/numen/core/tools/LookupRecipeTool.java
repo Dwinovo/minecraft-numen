@@ -27,10 +27,10 @@ public final class LookupRecipeTool implements NumenTool {
         return "Look up how to make an item — like JEI. Returns every recipe whose output is this "
                 + "item, across all stations: crafting (with the grid layout), smelting / blasting / "
                 + "smoking, stonecutting, and smithing — each tagged [crafting] / [smelting] / "
-                + "[stonecutter] / [smithing] / …. Then make it: [crafting] → transfer each ingredient "
-                + "into a grid cell (your own 2x2, or a crafting table for 3x3); [smelting] → open the "
-                + "furnace and transfer the input + fuel; [stonecutter] / [smithing] → open the station "
-                + "and transfer the inputs. No recipe found = the item is mined or traded, not made.";
+                + "[stonecutter] / [smithing] / …. Then make it: [crafting] → call craft, which lays "
+                + "out the grid for you; [smelting] → open the furnace and transfer the input + fuel; "
+                + "[stonecutter] / [smithing] → open the station and transfer the inputs. No recipe "
+                + "found = the item is mined or traded, not made.";
     }
 
     @Override

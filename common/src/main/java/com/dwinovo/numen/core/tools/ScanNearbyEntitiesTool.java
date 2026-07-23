@@ -27,8 +27,8 @@ public final class ScanNearbyEntitiesTool implements NumenTool {
         return "List entities within a radius around you, sorted by distance. Use type_filter to "
                 + "narrow: 'hostile' for monsters, 'passive' for animals/items, 'player' for players, "
                 + "'all' for everything. Returns at most 20 entities; truncated:true means more exist. "
-                + "Each entry has id, type, position, distance, hp, and category. To fight mobs, use "
-                + "hunt (it scans by type itself).";
+                + "Each entry has id, type, position, distance, hp, and category. Pass "
+                + "the returned runtime ids to melee_attack or ranged_attack; neither tool can attack outside that set.";
     }
 
     @Override

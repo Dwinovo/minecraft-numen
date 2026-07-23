@@ -17,21 +17,22 @@ public final class MoveToTool implements NumenTool {
     private static final Gson GSON = new Gson();
     private final MovementTools impl = new MovementTools();
 
-    private record Args(Double x, Double y, Double z, double speed, Boolean modify_terrain) {}
+    private record Args(Double x, Double y, Double z, String block) {}
 
     @Override
     public String name() {
-        return "move_to";
+        return "goto";
     }
 
     @Override
     public String description() {
         return """
-                Travel somewhere — full terrain-traversing navigation, not just walking. Pick ONE of three intents by which coordinates you fill (leave the others null):
-                • Go to a LOCATION: give x and z, leave y null. The companion walks to that spot and stands on whatever ground is there — Y is auto-resolved to the surface. THIS IS THE DEFAULT for 'go over there' / following / exploring; never guess a Y for a location.
-                • Go to an EXACT cell: give x, y and z. Only for a specific cell you know is reachable (e.g. a block you scanned). If that cell is mid-air or walled in it will report it couldn't reach it.
-                • Change ELEVATION: give y only (x and z null) to climb to the surface or descend to a mining depth at your current column.
-                En route it digs, bridges gaps and pillars up, auto-equipping the best tool from its whole inventory (no equip_item needed). By default it only breaks blocks its tools actually harvest — if every route would need a no-drop grind (e.g. stone with no pickaxe) it stops and names the missing tool; modify_terrain:true force-digs through anyway (slow, drops nothing). Functional blocks (chests, furnaces…) are never broken. BACKGROUND task: returns a task_id at once; the position actually reached arrives as a task_finished event — on timeout, re-dispatch the same call to resume; NO path or stopping far short means pick a NEARER waypoint or scan first. To open/use a station, give its coordinate to interact_at instead.""";
+                Travel anywhere. Full pathfinding: digs through, bridges gaps, pillars up, swims, auto-equips the right tool. Anything breakable is a route (no tool = slow punching, still works). Which fields you fill IS your intent — fill exactly one pattern:
+                • x+z — go to a place. Y resolves to the surface. Your default for "go there".
+                • block — e.g. block:'crafting_table'. Finds the nearest one and stops RIGHT BESIDE it, never damaging it. Always use this for a chest/station/ore you intend to use; you arrive in reach, interact directly.
+                • x+y+z — stand EXACTLY in that cell, digging out whatever occupies it. Never aim this at a block you want to keep.
+                • y — climb/descend to that elevation.
+                Background task: returns task_id now, arrival comes as a task_finished event with the final position. Timed out mid-journey? Re-send the same call to continue.""";
     }
 
     @Override
@@ -42,17 +43,17 @@ public final class MoveToTool implements NumenTool {
                         + "auto-resolved to the surface. Only set it for an exact cell (x+y+z) or an "
                         + "elevation move (y alone).")
                 .nullableNumber("z", "Target Z. Null for an elevation-only move (y alone).")
-                .number("speed", "Speed multiplier in [0.1, 2.0]. 1.0 is normal walking speed.", 0.1, 2.0)
-                .optionalBool("modify_terrain", "Default false: dig only what your tools harvest — "
-                        + "no-drop grinds are refused with the missing tool named. true: force-break "
-                        + "everything (slow, drops nothing); pass only when a refusal asked for it.")
+                .optionalString("block", "Namespaced block id of a block to walk up BESIDE (e.g. "
+                        + "'crafting_table' or 'minecraft:chest') — it is never broken or buried. "
+                        + "Give it ALONE (no coordinates); the nearest one is found by scanning. "
+                        + "ALWAYS use this form for a block you intend to use or mine.")
                 .build();
     }
 
     @Override
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        dispatchAsync(companion, impl.moveTo(a.x(), a.y(), a.z(), a.speed(), a.modify_terrain(),
-                ctx(toolCallId, companion)), reply);
+        dispatchAsync(companion, impl.moveTo(a.x(), a.y(), a.z(),
+                a.block(), ctx(toolCallId, companion)), reply);
     }
 }

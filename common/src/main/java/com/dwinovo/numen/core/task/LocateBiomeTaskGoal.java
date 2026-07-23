@@ -227,7 +227,7 @@ public final class LocateBiomeTaskGoal extends AbstractCompanionTask<LocateBiome
             String dir = CompassUtil.compass(dx, dz);
             return "nearest " + r.biome + " around " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). move_to the "
+                    + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). goto the "
                     + "x/z (pick a sensible y for the terrain), then confirm with "
                     + "scan_blocks or scan_nearby_entities.";
         }

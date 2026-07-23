@@ -6,7 +6,7 @@ import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
-import com.dwinovo.numen.core.pathing.exec.Interaction;
+import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Inventory;

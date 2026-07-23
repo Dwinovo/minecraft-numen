@@ -12,8 +12,8 @@ import com.dwinovo.numen.network.payload.ExecuteToolPayload;
 import com.dwinovo.numen.network.payload.TaskResultPayload;
 import com.dwinovo.numen.task.CompanionTaskFactory;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
-import com.dwinovo.numen.core.task.BreakBlockCompanionTask;
-import com.dwinovo.numen.core.task.BreakBlockTaskRecord;
+import com.dwinovo.numen.core.task.BuildCompanionTask;
+import com.dwinovo.numen.core.task.BuildTaskRecord;
 import com.dwinovo.numen.core.task.CollectItemsTaskGoal;
 import com.dwinovo.numen.core.task.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.DropCompanionTask;
@@ -22,8 +22,10 @@ import com.dwinovo.numen.core.task.EatCompanionTask;
 import com.dwinovo.numen.core.task.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.EquipCompanionTask;
 import com.dwinovo.numen.core.task.EquipTaskRecord;
-import com.dwinovo.numen.core.task.HuntCompanionTask;
-import com.dwinovo.numen.core.task.HuntTaskRecord;
+import com.dwinovo.numen.core.task.MeleeAttackCompanionTask;
+import com.dwinovo.numen.core.task.MeleeAttackTaskRecord;
+import com.dwinovo.numen.core.task.RangedAttackCompanionTask;
+import com.dwinovo.numen.core.task.RangedAttackTaskRecord;
 import com.dwinovo.numen.core.task.InteractAtCompanionTask;
 import com.dwinovo.numen.core.task.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.InteractEntityCompanionTask;
@@ -36,12 +38,6 @@ import com.dwinovo.numen.core.task.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MineCompanionTask;
 import com.dwinovo.numen.core.task.MoveToCompanionTask;
 import com.dwinovo.numen.core.task.MoveToTaskRecord;
-import com.dwinovo.numen.core.task.PlaceBlockCompanionTask;
-import com.dwinovo.numen.core.task.PlaceBlockTaskRecord;
-import com.dwinovo.numen.core.task.ShootCompanionTask;
-import com.dwinovo.numen.core.task.ShootTaskRecord;
-import com.dwinovo.numen.core.task.WaitCompanionTask;
-import com.dwinovo.numen.core.task.WaitTaskRecord;
 
 /**
  * Loader-agnostic init for the {@code numen-core} tool pack — the worked example
@@ -82,9 +78,7 @@ public final class NumenCore {
     }
 
     /**
-     * 把 core 的五条生存本能链插进引擎的竞价调度(链登记口),并挂任务会话
-     * 结束钩子——引擎报"会话结束"的时点(Stop/task_stop/死亡/空闲宽限期满),
-     * core 在此释放任务作用域的 MAINHAND 意图钉(宪法 §5)。运输包与
+     * 把 core 的五条生存本能链插进引擎的竞价调度(链登记口)。运输包与
      * 生命周期对接已随排程机器归引擎,不再是 core 的事。
      */
     private static void registerChains() {
@@ -98,9 +92,6 @@ public final class NumenCore {
                 com.dwinovo.numen.core.task.chain.MLGChain::new);
         com.dwinovo.numen.task.BrainChains.register(50,
                 com.dwinovo.numen.core.task.chain.BreathChain::new);
-        com.dwinovo.numen.task.TaskSessionHooks.onSessionEnd(companion ->
-                com.dwinovo.numen.core.task.pin.IntentPinsData.pinsFor(companion)
-                        .unpin(com.dwinovo.numen.core.task.pin.IntentPins.SLOT_MAINHAND));
     }
 
     /**
@@ -118,19 +109,17 @@ public final class NumenCore {
         // Registration ORDER is preserved (backends with prompt-caching keyed off
         // the tool list cache stably across requests).
         ToolRegistry.register(new com.dwinovo.numen.core.tools.MoveToTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.HuntTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.ShootTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.MeleeAttackTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.RangedAttackTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.LocateStructureTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.LocateBiomeTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.CollectItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.AutoMineTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EquipItemTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.PlaceBlockTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.BreakBlockTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.BuildTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractAtTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractEntityTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EatItemTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.WaitTool());   // SAMPLE: raw NumenTool, no @NumenAction
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStatusTool());
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStopTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.DropItemsTool());
@@ -140,8 +129,10 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.GetSelfStatusTool());   // SAMPLE: raw NumenTool
         ToolRegistry.register(new com.dwinovo.numen.core.tools.GetOwnerStatusTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.LookupRecipeTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.CraftTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.ScanNearbyEntitiesTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.ScanBlocksTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.LookAroundTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectBlockTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectBlockStorageTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.GetWorldInfoTool());
@@ -154,17 +145,16 @@ public final class NumenCore {
         CompanionTaskFactory.register(MoveToTaskRecord.class, (p, r) -> new MoveToCompanionTask(p, r));
         CompanionTaskFactory.register(MineBlockTaskRecord.class, (p, r) -> new MineCompanionTask(p, r));
         CompanionTaskFactory.register(EquipTaskRecord.class, (p, r) -> new EquipCompanionTask(p, r));
-        CompanionTaskFactory.register(WaitTaskRecord.class, (p, r) -> new WaitCompanionTask(p, r));
         CompanionTaskFactory.register(DropItemsTaskRecord.class, (p, r) -> new DropCompanionTask(p, r));
-        CompanionTaskFactory.register(BreakBlockTaskRecord.class, (p, r) -> new BreakBlockCompanionTask(p, r));
         CompanionTaskFactory.register(EatItemTaskRecord.class, (p, r) -> new EatCompanionTask(p, r));
-        CompanionTaskFactory.register(HuntTaskRecord.class, (p, r) -> new HuntCompanionTask(p, r));
-        CompanionTaskFactory.register(ShootTaskRecord.class, (p, r) -> new ShootCompanionTask(p, r));
+        CompanionTaskFactory.register(MeleeAttackTaskRecord.class, (p, r) -> new MeleeAttackCompanionTask(p, r));
+        CompanionTaskFactory.register(RangedAttackTaskRecord.class, (p, r) -> new RangedAttackCompanionTask(p, r));
         CompanionTaskFactory.register(CollectItemsTaskRecord.class, (p, r) -> new CollectItemsTaskGoal(p, r));
-        CompanionTaskFactory.register(PlaceBlockTaskRecord.class, (p, r) -> new PlaceBlockCompanionTask(p, r));
+        CompanionTaskFactory.register(BuildTaskRecord.class, (p, r) -> new BuildCompanionTask(p, r));
         CompanionTaskFactory.register(InteractAtTaskRecord.class, (p, r) -> new InteractAtCompanionTask(p, r));
         CompanionTaskFactory.register(InteractEntityTaskRecord.class, (p, r) -> new InteractEntityCompanionTask(p, r));
         CompanionTaskFactory.register(LocateStructureTaskRecord.class, (p, r) -> new LocateStructureTaskGoal(p, r));
         CompanionTaskFactory.register(LocateBiomeTaskRecord.class, (p, r) -> new LocateBiomeTaskGoal(p, r));
     }
 }
+

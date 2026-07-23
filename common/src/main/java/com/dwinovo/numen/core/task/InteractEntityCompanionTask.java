@@ -6,7 +6,7 @@ import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.exec.Interaction;
+import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.task.base.GoToThenDoTask;
 import com.dwinovo.numen.core.task.base.Precondition;
@@ -21,12 +21,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code interact_entity} on the player body — the entity-aimed native interaction. Auto-paths
- * and FOLLOWS the live entity (the only moving interaction target), then aims at it and presses
- * the requested mouse button — but only when the native raytrace actually REACHES the entity.
- * A wall in between blocks it, and we re-position instead of blindly acting on whatever the
- * ray returns — deliberate: this tool means "act on THIS
- * entity", not "grief the wall it hid behind". attack+hold = keep hitting until dead (= hunt).
+ * {@code interact_entity} on the player body: the entity-aimed native interaction.
+ * It auto-paths and follows the live entity, then aims at it and presses the
+ * requested mouse button only when the native raytrace reaches that entity.
+ * A wall in between blocks it, and the task repositions instead of acting on
+ * whatever the ray returns. LEFT+hold repeats the native attack until the hold
+ * ends, the target dies, or the task times out.
  */
 public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEntityTaskRecord> {
 
@@ -92,7 +92,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
 
     @Override
     protected TaskState act() {
-        // Target gone: death is success for an attack that landed (the old hunt's contract); otherwise
+        // Target gone: death is success for a left-click that already landed; otherwise
         // the target slipped away before we could touch it.
         if (entity == null || !entity.isAlive()) {
             if (acted) {
@@ -184,7 +184,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     /** In-ladder nav causes the reposition rung handles; anything else kicks straight back to the LLM. */
     private static boolean repositionable(FailureType type) {
         return type == FailureType.NO_PATH || type == FailureType.BOXED_IN
-                || type == FailureType.OUT_OF_REACH;
+                || type == FailureType.OUT_OF_REACH || type == FailureType.STANCE_DUD;
     }
 
     private Interaction.Button button() {

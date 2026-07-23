@@ -6,34 +6,27 @@ import net.minecraft.world.level.block.Block;
 import java.util.Set;
 
 /**
- * Typed task descriptor for the intent-level {@code auto_mine} tool: "gather
+ * Typed task descriptor for the intent-level {@code mine} tool: "gather
  * {@code count} of these block types, search/pathfind/dig it yourself". The
- * goal ({@link MineBlockTaskGoal}) owns the whole loop — scan for the nearest
- * target, walk to it with the terrain-modifying pathfinder (bridging / digging
- * as needed), mine it into the entity inventory, repeat until the count is met
- * or the deposit runs dry within the radius.
+ * task owns the whole loop — scan the loaded area around the body for
+ * targets, walk to them with the terrain-modifying pathfinder (bridging /
+ * digging as needed), mine into the entity inventory, repeat until the count
+ * is met or nothing reachable remains.
  *
  * <p>The LLM never sees coordinates: it only declares <em>what</em> and
- * <em>how many</em> (and optionally how far to look). Drops/tool-tier follow
- * from whatever the entity holds, as in vanilla.
+ * <em>how many</em>. Drops/tool-tier follow from whatever the entity holds,
+ * as in vanilla.
  */
 public final class MineBlockTaskRecord extends TaskRecord {
 
-    public static final String TOOL_NAME = "auto_mine";
+    public static final String TOOL_NAME = "mine";
 
     /** Block types to gather (include variants, e.g. iron_ore + deepslate_iron_ore). */
     public final Set<Block> targets;
     /** How many to gather before reporting success. */
     public final int count;
-    /** Max spherical search radius (the goal auto-expands up to this). */
-    public final int maxRadius;
     /** Human-readable target label for messages / debug overlay (e.g. "iron_ore"). */
     public final String label;
-    /** Break targets even when the carried tools can't harvest them (no drops).
-     *  Default false: an unharvestable target is skipped, and a field with nothing
-     *  harvestable stops the task with the tool-tier reminder instead of silently
-     *  destroying ore for zero yield. */
-    public final boolean force;
 
     /** Live progress = matching ITEMS gathered since the task started (counted in the inventory,
      *  not blocks broken — multi-drop ores like redstone yield several items per block). Set each tick
@@ -41,14 +34,11 @@ public final class MineBlockTaskRecord extends TaskRecord {
     private int mined = 0;
 
     public MineBlockTaskRecord(String toolCallId, long deadlineGameTime,
-                               Set<Block> targets, int count, int maxRadius, String label,
-                               boolean force) {
+                               Set<Block> targets, int count, String label) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.targets = Set.copyOf(targets);
         this.count = count;
-        this.maxRadius = maxRadius;
         this.label = label;
-        this.force = force;
     }
 
     public int getMined() {

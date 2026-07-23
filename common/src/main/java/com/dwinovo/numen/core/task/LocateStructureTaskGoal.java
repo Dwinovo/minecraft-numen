@@ -268,7 +268,7 @@ public final class LocateStructureTaskGoal extends AbstractCompanionTask<LocateS
         ChunkAccess loaded = null;   // one load permit per candidate, shared by all its structures
         for (Structure structure : job.structures) {
             StructureCheckResult res = sl.structureManager()
-                    .checkStructurePresence(candidate, structure, false);   // 1.20.4: no StructurePlacement arg
+                    .checkStructurePresence(candidate, structure, false);   // 1.20.1:无 placement 参
             if (res == StructureCheckResult.START_NOT_PRESENT) continue;
             if (res == StructureCheckResult.START_PRESENT) return true;
             // CHUNK_LOAD_NEEDED — the expensive fallback, globally budgeted.
@@ -326,7 +326,7 @@ public final class LocateStructureTaskGoal extends AbstractCompanionTask<LocateS
             String dir = CompassUtil.compass(dx, dz);
             return "nearest " + r.structure + " at " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks). move_to the x/z (pick a sensible y for the terrain), "
+                    + " blocks). goto the x/z (pick a sensible y for the terrain), "
                     + "then scan_blocks to find its actual blocks.";
         }
         String dim = player.level().dimension().location().getPath();

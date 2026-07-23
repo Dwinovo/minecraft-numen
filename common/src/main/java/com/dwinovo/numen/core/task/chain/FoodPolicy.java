@@ -88,11 +88,10 @@ public final class FoodPolicy {
      * probability &ge; {@link #HARMFUL_EFFECT_PROBABILITY}.
      */
     public static boolean likelyHarmful(FoodProperties food) {
-        // 1.20.1: effects are (MobEffectInstance, probability) pairs on the Item-era FoodProperties.
+        // 1.20.1:效果表是 Pair<MobEffectInstance, 概率>,无 PossibleEffect/Holder。
         for (com.mojang.datafixers.util.Pair<net.minecraft.world.effect.MobEffectInstance, Float> possible
                 : food.getEffects()) {
             if (possible.getSecond() >= HARMFUL_EFFECT_PROBABILITY
-                    && possible.getFirst() != null
                     && possible.getFirst().getEffect().getCategory() == MobEffectCategory.HARMFUL) {
                 return true;
             }

@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.task;
 
 /**
- * Target-selection economics for {@code auto_mine}. The obvious policy —
+ * Target-selection economics for {@code mine}. The obvious policy —
  * and the one open-source mining bots commonly ship — picks targets by
  * pure nearest-first — which, on a surface made of dirt-over-stone, means
  * "the nearest stone is under my feet", so bulk collection digs a vertical

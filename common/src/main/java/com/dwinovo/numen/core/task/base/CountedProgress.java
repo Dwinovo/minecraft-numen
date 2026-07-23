@@ -4,8 +4,8 @@ import java.util.function.IntSupplier;
 
 /**
  * A tiny "gather N more" counter — the delta-above-baseline progress model shared
- * by {@code auto_mine} (items gathered above the count held at start) and
- * {@code hunt} (mobs killed). It snapshots a baseline reading at construction and
+ * by {@code mine} (items gathered above the count held at start) and
+ * {@code melee_attack} (mobs killed). It snapshots a baseline reading at construction and
  * measures everything relative to it, so the tally is "how many MORE since we
  * began", never the absolute inventory/kill count.
  *

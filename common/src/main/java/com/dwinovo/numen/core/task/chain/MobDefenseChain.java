@@ -1,11 +1,12 @@
 package com.dwinovo.numen.core.task.chain;
 
+import com.google.common.collect.Multimap;
 import com.dwinovo.numen.task.BodyLog;
 import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.exec.Interaction;
+import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.task.TaskChain;
@@ -14,14 +15,13 @@ import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
-import com.google.common.collect.Multimap;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Monster;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 

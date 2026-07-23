@@ -27,8 +27,9 @@ public final class InteractAtTool implements NumenTool {
     @Override
     public String description() {
         return "Aim at a world point and press one mouse button — the native crosshair interaction for "
-                + "BLOCKS and the AIR (moving entities use interact_entity). Auto-paths within reach like "
-                + "move_to, then a raytrace resolves what's under the aim.";
+                + "BLOCKS and the AIR (moving entities use interact_entity). It does NOT travel: you must "
+                + "ALREADY be within working reach (~4.5 blocks) of the aim point — goto stops you right "
+                + "beside a block, which is in reach. Farther away it fails and tells you to goto first.";
     }
 
     @Override
