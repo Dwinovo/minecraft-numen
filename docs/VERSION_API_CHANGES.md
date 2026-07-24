@@ -16,7 +16,7 @@ Fabric + NeoForge 同源，**api 与 core 各自同名分支**。向上移植（
 `1.20.1 → 1.20.2 → 1.20.4 → 1.20.6 → 1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 → 1.21.11 → 26.1.2`
 
 新架构（numen-api 拆分 + 调度器 + raw `NumenTool` + skill 体系）基线在 **`1.21.1`**，正逐档向上移植。
-**已移植：1.21.1 → 1.21.4 → 1.21.5 ✓**
+**已移植：1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 ✓**
 
 ## 每档的流程
 
@@ -269,8 +269,71 @@ extends net.minecraft.data.tags.ItemTagsProvider + 空 block-tag lookup
 `comm -23 <(git ls-tree -r HEAD --name-only|sort) <(git ls-tree -r <src> --name-only|sort)`
 清点并 `git rm` 残留(本档 api 清了 14 个、core 清了 47 个旧 0.0.x 文件)。
 
-## 1.21.8 → 1.21.10
-_待移植时填写_
+## 1.21.8 → 1.21.10 ✓（已验证，双 loader 编译 + 出包 + 222 测试全绿；跳过 1.21.9）
+
+含 1.21.9 的**输入 API 重构 + NeoForge Transfer 重写 + authlib 9**。构建旋钮：MC `1.21.10` /
+range `[1.21.10, 1.21.11)` / NeoForm `1.21.10-20251010.172816` / Fabric `0.138.4+1.21.10` / NeoForge `21.10.64`。
+
+### 客户端输入 ❗（api：NumenScreen、SettingsScreen）
+```java
+keyPressed(int keyCode, int scanCode, int modifiers)  → keyPressed(KeyEvent event)          // event.key()
+mouseClicked(double x, double y, int button)          → mouseClicked(MouseButtonEvent event, boolean dbl)
+                                                                              // event.x()/y()/button()
+// 方法开头取局部 mouseX/mouseY/button 保持方法体不变;super 调用透传 event。
+// 只有 Screen 子类受影响,自有 (mx,my) 辅助方法(ChatView/Dropdown/SettingsView)不动。
+// import net.minecraft.client.input.KeyEvent / MouseButtonEvent
+```
+
+### 其它客户端（api）
+```java
+// EditBox 格式化器:setFormatter(BiFunction) → addFormatter(EditBox.TextFormatter);fmt.apply→fmt.format(FlatEditBox)
+// KeyMapping 分类:字符串 "key.categories.misc" → KeyMapping.Category.MISC(NumenKeys;默认键保持 N)
+// PlayerSkin 包移动:net.minecraft.client.resources → net.minecraft.world.entity.player(4 文件)
+// GuiElementRenderState.buildVertices(VertexConsumer, float z) → buildVertices(VertexConsumer)
+//   addVertexWith2DPose(pose, x, y, z) → addVertexWith2DPose(pose, x, y)(RoundRect$State,z 由体系管理)
+// ShapeRenderer.renderLineBox 首参 PoseStack → PoseStack.Pose(传 poseStack.last(),PathDebugRenderer)
+// Fabric 世界渲染事件:...rendering.v1.WorldRenderEvents → ...rendering.v1.world.WorldRenderEvents
+//   AFTER_TRANSLUCENT 与 ctx.camera() 均被撤:挂 BEFORE_DEBUG_RENDER(原版调试线绘制点),
+//   ctx.matrixStack()→ctx.matrices(),相机走 Minecraft.getInstance().gameRenderer.getMainCamera()
+// NeoForge RenderLevelStageEvent 子事件也撤了 getCamera() → 同样走 getMainCamera()
+```
+
+### authlib 9 ❗（api：CompanionFactory、MojangSkins）
+```java
+// GameProfile 变不可变 record:getProperties()/getId()/getName() → properties()/id()/name();
+// 要带 textures 构造,只能建 Multimap → new PropertyMap(map) → new GameProfile(uuid, name, propMap)
+// MinecraftServer.getProfileCache()/getSessionService() 收进 services() record:
+server.getProfileCache().get(name)            → server.services().nameToIdCache().get(name) // Optional<NameAndId>,取 .id()
+server.getSessionService().fetchProfile(...)  → server.services().sessionService().fetchProfile(...)
+```
+
+### 存档 load（api：CompanionFactory）❗
+```java
+getPlayerList().load(player, reporter).ifPresent(player::load)   // 1.21.8 形态
+  → getPlayerList().loadPlayerData(new NameAndId(player.getGameProfile()))
+        .map(tag -> TagValueInput.create(ProblemReporter.DISCARDING, player.registryAccess(), tag))
+        .ifPresent(player::load)
+```
+
+### NeoForge 平台（api）❗
+```java
+// Transfer API 重写(NeoForgeBlockCapabilityReader 整体重写,可整搬旧 1.21.10 分支已迁版):
+IItemHandler/IFluidHandler + Capabilities.ItemHandler/FluidHandler.BLOCK
+   → ResourceHandler<ItemResource>/<FluidResource> + Capabilities.Item/Fluid.BLOCK
+     (size()/getResource(i)/getAmountAsLong(i)/getCapacityAsLong(i,res))
+IEnergyStorage + Capabilities.EnergyStorage.BLOCK → EnergyHandler + Capabilities.Energy.BLOCK
+   canReceive()/canExtract() 没了 → 在回滚的 Transaction 里模拟 insert/extract 探测方向
+// FMLLoader.isProduction() → FMLLoader.getCurrent().isProduction()(NeoForgePlatformHelper)
+```
+
+### NeoForge 核心入口（core：NumenCoreNeoForge）❗
+```java
+// FMLEnvironment.dist(静态字段没了)→ FMLLoader.getCurrent().getDist()
+// IModFile.findResource 一直在变 → classloader 资源解析:
+Path.of(NumenCoreNeoForge.class.getResource("/skills").toURI())   // 防御式 try/catch
+```
+
+（残留清点:本档 api 清 14 个旧文件/贴图、core 清 51 个旧 0.0.x 引擎类。）
 
 ## 1.21.10 → 1.21.11
 _待移植时填写_
