@@ -45,10 +45,10 @@ public final class AgentLoopRegistry {
     }
 
     /**
-     * UUIDs of the companions whose loop is mid-turn ({@link EntityAgentLoop#canInterrupt()}
-     * — thinking, awaiting tool results, or with a queued prompt). These are the
-     * heartbeat targets: a server-side chunk-ticket lease should be held for each
-     * so the body stays loaded through the owner's think-time.
+     * UUIDs of companions with interruptible work ({@link EntityAgentLoop#canInterrupt()} —
+     * thinking, awaiting tool results, running a background body task, or holding queued input).
+     * These are the heartbeat targets: a server-side chunk-ticket lease should be held for each
+     * so the body stays loaded through both model think-time and long-running work.
      */
     public static List<UUID> activeEntityUuids() {
         List<UUID> out = new ArrayList<>();

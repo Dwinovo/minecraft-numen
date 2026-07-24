@@ -159,9 +159,19 @@ public final class EntityAgentLoop {
     private String providerEntryId;
 
     private boolean awaitingLlmResponse = false;
-    private boolean aborted = false;
-    /** One turn-level re-run per failure has been spent (reset when a response lands). */
+    /** Why new turns are paused; preserves owner Stop while allowing system-failure recovery. */
+    private AgentTurnPause turnPause = AgentTurnPause.NONE;
+    /** One turn-level re-run per failure has been spent (reset when that turn settles). */
     private boolean turnRetried = false;
+
+    /**
+     * Set while an external driver (an MCP client / Claude) holds this body via
+     * {@link com.dwinovo.numen.api.NumenActuator}. The internal brain is paused —
+     * no LLM turn starts — until {@link #releaseExternal}. Distinct from
+     * {@link #dead} (body gone) and {@link #turnPause} (one paused internal turn):
+     * this is a deliberate hand-off of the whole body to an outside brain.
+     */
+    private boolean externallyDriven = false;
 
     /**
      * Runs this turn's tool calls one at a time and reports each result back
@@ -388,8 +398,8 @@ public final class EntityAgentLoop {
             Constants.LOG.info("[numen-entity#{}] prompt ignored — body is dead", entityUuid);
             return;
         }
-        boolean wasAborted = aborted;
-        aborted = false;
+        boolean wasAborted = turnPause.isPaused();
+        turnPause = AgentTurnPause.NONE;
         // Always buffer first; tryStartTurn() splices buffered prompts into the
         // conversation only at a protocol-valid point. If we're mid-turn (the
         // guards in tryStartTurn fire), the prompt stays buffered and gets
@@ -505,9 +515,9 @@ public final class EntityAgentLoop {
 
     // ---- interrupt (owner-triggered, from the chat GUI "Stop" button) ----
 
-    /** A turn is actively running: waiting on the LLM, on tool results, or compacting. */
+    /** The brain or body is actively working: LLM, tool round-trip, compaction, or background task. */
     public boolean isBusy() {
-        return awaitingLlmResponse || compacting || dispatcher.busy();
+        return awaitingLlmResponse || compacting || dispatcher.busy() || currentTask != null;
     }
 
     /** A summarization call is currently in flight (drives the GUI status line). */
@@ -535,9 +545,9 @@ public final class EntityAgentLoop {
      * Code's {@code handleCancel} (useCancelRequest.ts) two-priority rule:
      *
      * <ol>
-     *   <li><b>A turn is in flight</b> → stop it. The in-flight LLM response is
-     *       invalidated via {@link #turnGeneration} (discarded when it lands, so
-     *       it can't dispatch tools after the fact); any world-action tool calls
+     *   <li><b>A turn or background body task is active</b> → stop it. An in-flight
+     *       LLM response is invalidated via {@link #turnGeneration} (discarded when
+     *       it lands, so it can't dispatch tools after the fact); any world-action tool calls
      *       still awaiting a server result get a synthetic "interrupted" result
      *       so every {@code assistant(tool_calls)} keeps matching {@code tool}
      *       results and the next request stays protocol-valid. A
@@ -559,10 +569,11 @@ public final class EntityAgentLoop {
         // 主人按下 Stop 时还在播/待播的语音都不该继续。
         if (voice != null) voice.interrupt();
         if (isBusy()) {
-            // Priority 1: stop the running turn (or the in-flight compaction —
-            // its response is generation-stamped too, so it gets discarded).
+            // Priority 1: stop the running turn, in-flight compaction, or a body background task.
+            // Responses are generation-stamped, so any in-flight one is discarded.
             turnGeneration++; // any in-flight LLM response is now stale → discarded on arrival
             boolean wasAwaitingLlm = awaitingLlmResponse;
+            boolean wasBackgroundTask = currentTask != null;
             awaitingLlmResponse = false;
             compacting = false;
             livePartial.setLength(0);   // 半截打字随打断作废
@@ -591,9 +602,9 @@ public final class EntityAgentLoop {
             }
 
             convo.resetTurnCount();
-            aborted = true;
-            Constants.LOG.info("[numen-entity#{}] interrupted by owner (awaitingLlm={}, cancelledTools={}, queued={})",
-                    entityUuid, wasAwaitingLlm, cancelled.size(), inbox.promptCount());
+            turnPause = AgentTurnPause.OWNER_INTERRUPT;
+            Constants.LOG.info("[numen-entity#{}] interrupted by owner (awaitingLlm={}, backgroundTask={}, cancelledTools={}, queued={})",
+                    entityUuid, wasAwaitingLlm, wasBackgroundTask, cancelled.size(), inbox.promptCount());
         } else if (inbox.promptCount() > 0) {
             // Priority 2: idle — drop the held PROMPT bucket only. Inboxed events are
             // facts, not superseded instructions: they stay and ride the next turn
@@ -603,6 +614,39 @@ public final class EntityAgentLoop {
             Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued prompt(s) ({} event(s) kept)",
                     entityUuid, dropped, inbox.eventCount());
         }
+    }
+
+    // ---- external control (an MCP client / Claude drives the body directly) ----
+
+    /**
+     * An external driver takes control of this body. The internal brain stops
+     * starting turns and any in-flight turn/task is aborted (via {@link #abort},
+     * which also fires {@code CompanionLifecycle.onAbort} so the body itself
+     * stops), leaving the body free for the external driver. Reverse with
+     * {@link #releaseExternal}. Idempotent.
+     */
+    public void acquireExternal() {
+        if (externallyDriven) return;
+        externallyDriven = true;
+        abort();   // stop any running internal turn + free the body
+        Constants.LOG.info("[numen-entity#{}] external control acquired — internal brain paused", entityUuid);
+    }
+
+    /**
+     * The external driver released control — the internal brain may act again.
+     * Does not auto-start a turn; waits for the next owner prompt or event.
+     * Idempotent.
+     */
+    public void releaseExternal() {
+        if (!externallyDriven) return;
+        externallyDriven = false;
+        turnPause = AgentTurnPause.NONE; // clear the owner-interrupt latch set by acquireExternal
+        Constants.LOG.info("[numen-entity#{}] external control released — internal brain resumed", entityUuid);
+    }
+
+    /** True while an external driver (MCP / Claude) holds this body. */
+    public boolean isExternallyDriven() {
+        return externallyDriven;
     }
 
     /**
@@ -722,9 +766,17 @@ public final class EntityAgentLoop {
         Constants.LOG.info("[numen-entity#{}] event inboxed{}{}: {}",
                 entityUuid, principal ? " (principal)" : "", duringTask ? " (during task)" : "",
                 truncate(xml, 120));
-        if (principal || duringTask) {
-            tryStartTurn();
+        boolean wakeWorthy = principal || duringTask;
+        AgentTurnPause previousPause = turnPause;
+        turnPause = turnPause.afterWakeEvent(wakeWorthy);
+        if (previousPause != turnPause) {
+            // The failed LLM turn was already abandoned. This event starts a fresh turn and therefore
+            // receives a fresh turn-level retry budget as well.
+            turnRetried = false;
+            Constants.LOG.info("[numen-entity#{}] wake event resumed chain after recoverable LLM failure",
+                    entityUuid);
         }
+        if (wakeWorthy) tryStartTurn();
     }
 
     /** This companion's current persona name (for the panel), or null. */
@@ -852,8 +904,8 @@ public final class EntityAgentLoop {
             Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: body dead", entityUuid);
             return;
         }
-        if (aborted) {
-            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: aborted", entityUuid);
+        if (turnPause.isPaused()) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: pause={}", entityUuid, turnPause);
             return;
         }
         // 「外接大脑」模式的总闸:模式开着,身体归外部 MCP 驱动者,内置大脑一轮都不开。
@@ -890,7 +942,7 @@ public final class EntityAgentLoop {
         String problem = endpointProblem();
         if (problem != null) {
             Constants.LOG.warn("[numen-entity#{}] can't start turn: {}", entityUuid, problem);
-            aborted = true;
+            turnPause = AgentTurnPause.BLOCKED;
             return;
         }
 
@@ -1143,12 +1195,15 @@ public final class EntityAgentLoop {
      * prompts are pending intent and must not be held hostage by the dead turn — a
      * REPL that errors returns to idle and drains its command queue; same here: if
      * prompts are waiting, start a fresh turn carrying them. Only an OWNER interrupt
-     * holds the queue (Stop means stop). With no prompts queued, latch {@code aborted}
-     * as before (the next prompt or event resumes).
+     * holds the queue (Stop means stop). With no inputs queued, latch a recoverable failure;
+     * the next owner prompt or wake-worthy event resumes it without weakening explicit Stop.
      */
     private void failTurnKeepQueue() {
+        // The failed turn is over. Any fresh turn started now or by a later wake event gets its own
+        // one-retry allowance rather than inheriting the exhausted budget from this turn.
+        turnRetried = false;
         if (inbox.isEmpty()) {
-            aborted = true;
+            turnPause = AgentTurnPause.RECOVERABLE_FAILURE;
             return;
         }
         // The failed turn may have left the conversation ending on a user message
@@ -1184,7 +1239,7 @@ public final class EntityAgentLoop {
         // dispatched ExecuteToolPayload would NPE in the platform sender. Drop this turn quietly.
         if (Minecraft.getInstance().getConnection() == null) {
             Constants.LOG.info("[numen-entity#{}] client disconnected — dropping LLM turn", entityUuid);
-            aborted = true;
+            turnPause = AgentTurnPause.BLOCKED;
             return;
         }
 
