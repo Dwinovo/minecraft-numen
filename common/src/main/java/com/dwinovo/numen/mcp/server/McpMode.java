@@ -182,6 +182,14 @@ public final class McpMode {
         return lastError;
     }
 
+    /**
+     * 「复制接入提示词」的内容:内嵌当前端点与令牌,用户复制后发给自己的 AI,
+     * 由那个 AI 去配本机 MCP。含明文令牌,故只走剪贴板、不上屏。
+     */
+    public String accessPrompt() {
+        return McpAccessPrompt.build(endpoint(), token());
+    }
+
     public ActivityFeed feed() {
         return feed;
     }
