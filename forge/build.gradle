@@ -60,6 +60,10 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     // mixin 注解处理器:生成上面 mixin 块要的 refmap(official → SRG 映射表)。
     annotationProcessor 'org.spongepowered:mixin:0.8.5-SNAPSHOT:processor'
+    // common 用 MixinExtras;Forge 运行期自带,但本模块编译 common 源码时需要它在处理器链上
+    // (与 numen-api 同分支的 forge 模块保持一致的写法)。
+    compileOnly 'io.github.llamalad7:mixinextras-common:0.3.5'
+    annotationProcessor 'io.github.llamalad7:mixinextras-common:0.3.5'
     // The numen-api engine (matching-loader artifact, so the mcgradleconventions
     // loader attribute resolves). compileOnly: the api classes are provided at
     // runtime by the bundled numen-api mod, not by core's own jar.
