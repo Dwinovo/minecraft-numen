@@ -17,6 +17,11 @@ dependencies {
 }
 
 loom {
+    mixin {
+        // mixins.json 声明的 refmap 名是 numen.refmap.json,而 loom 默认按归档名生成
+        // numen-fabric-1.20.1-refmap.json,运行期照声明的名字读不到,这里显式对齐。
+        defaultRefmapName = "${mod_id}.refmap.json"
+    }
     def aw = project(':common').file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {
         accessWidenerPath.set(aw)
