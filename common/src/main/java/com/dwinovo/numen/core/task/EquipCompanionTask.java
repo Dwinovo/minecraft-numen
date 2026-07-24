@@ -1,10 +1,10 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.task.CompanionTask;
-import com.dwinovo.numen.core.task.PlayerInv;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -13,6 +13,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -22,29 +23,30 @@ import java.util.Map;
  * component), shields, AND modded accessories like Curios / Trinkets (their right-click handler slots
  * the item into a curio slot) — no per-mod integration. Explicit main/off-hand requests are a direct
  * item-conserving placement instead; a vanilla-slot direct set is the fallback if the right-click
- * didn't take. One-tick (all work in {@link #start()}).
+ * didn't take. One-tick (all work in {@link #onStart()}).
  */
-public final class EquipCompanionTask implements CompanionTask {
+public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRecord> {
 
-    private final NumenPlayer player;
-    private final EquipTaskRecord r;
     private String message = "";
     private boolean equipped = false;
     private String slotName = "";
+    private TaskState result;
 
     public EquipCompanionTask(NumenPlayer player, EquipTaskRecord record) {
-        this.player = player;
-        this.r = record;
+        super(player, record);
     }
 
     @Override
-    public void start() {
+    protected List<Precondition> preconditions() {
+        return List.of(() -> findItem(player.getInventory()) >= 0 ? null
+                : new Precondition.Failure("no " + r.label + " in inventory to equip",
+                        FailureType.NO_MATERIAL));
+    }
+
+    @Override
+    protected void onStart() {
         Inventory inv = player.getInventory();
-        int invSlot = findItem(inv);
-        if (invSlot < 0) {
-            fail("no " + r.label + " in inventory to equip");
-            return;
-        }
+        int invSlot = findItem(inv);   // precondition guarantees >= 0
 
         // Explicit hand placement: just select / set it, no right-click (we don't want to "use" a
         // shield or tool, only hold it).
@@ -82,13 +84,18 @@ public final class EquipCompanionTask implements CompanionTask {
             directSet(target, inv.getSelectedSlot(), one);
             return;
         }
-        fail(r.label + " can't be equipped" + (r.slot != null ? " in " + r.slot.getName() : ""));
+        fail(r.label + " can't be equipped" + (r.slot != null ? " in " + r.slot.getName() : ""),
+                FailureType.UNKNOWN);
     }
 
     @Override
-    public TaskState tick() {
-        return r.getState();   // terminal already; start() did the work
+    protected TaskState onTick() {
+        return result != null ? result : TaskState.FAILED;   // fail() short-circuits before here
     }
+
+    /** No nav / overlay to release. */
+    @Override
+    protected void cleanup() {}
 
     /** Direct, item-conserving set of one item into {@code slot}, stowing whatever was there (and
      *  dropping it only if the inventory is full). Used for off-hand and as the right-click fallback. */
@@ -104,7 +111,7 @@ public final class EquipCompanionTask implements CompanionTask {
         if (!previous.isEmpty()) {
             inv.add(previous);                              // mutates `previous` down by what fit
             if (!previous.isEmpty() && player.level() instanceof ServerLevel sl) {
-                player.spawnAtLocation(sl, previous);       // overflow → drop
+                player.spawnAtLocation(player.level(), previous);       // overflow → drop
             }
         }
         inv.setChanged();
@@ -145,23 +152,25 @@ public final class EquipCompanionTask implements CompanionTask {
         message = msg;
         slotName = slot == null ? "" : slot;
         equipped = true;
-        r.setState(TaskState.SUCCESS);
-    }
-
-    private void fail(String reason) {
-        message = reason;
-        r.setState(TaskState.FAILED);
+        result = TaskState.SUCCESS;
+        succeed();   // base: park + stamp SUCCESS so the equip finalizes this same tick
     }
 
     @Override
-    public TaskResult buildResult(TaskState finalState) {
+    protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("item", r.label);
         if (equipped && !slotName.isEmpty()) data.put("slot", slotName);
-        return switch (finalState) {
-            case SUCCESS -> TaskResult.ok(message, data);
-            case CANCELLED -> TaskResult.cancelled("equip interrupted");
-            default -> TaskResult.fail(message.isEmpty() ? "equip failed" : message, data);
-        };
+        return data;
+    }
+
+    @Override
+    protected String successMessage() {
+        return message;
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "equip interrupted";
     }
 }

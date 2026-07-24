@@ -1,12 +1,15 @@
 package com.dwinovo.numen.core;
 
 import com.dwinovo.numen.agent.skill.SkillRegistry;
+import com.dwinovo.numen.core.debug.DebugCommands;
+import com.dwinovo.numen.core.debug.PathDebugRenderer;
 import com.dwinovo.numen.core.pathing.cache.PathCaches;
-import com.dwinovo.numen.core.task.CompanionTickDispatcher;
+import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.task.ScanBlocksJob;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.common.NeoForge;
@@ -31,6 +34,9 @@ public class NumenCoreNeoForge {
         NeoForge.EVENT_BUS.addListener(NumenCoreNeoForge::onServerTickPost);
         // Release pathfinding chunk-ref snapshots when the server stops (don't pin an old world).
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> PathCaches.dropAll());
+        // Debug verbs merged into the /numen root registered by the engine mod.
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
+                DebugCommands.register(e.getDispatcher()));
 
         // Client-only: declare core's built-in skills, read in place from the
         // skills/ dir bundled in this jar. Skills feed the client-side LLM, so
@@ -59,8 +65,10 @@ public class NumenCoreNeoForge {
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {
-        CompanionTickDispatcher.tick(event.getServer());
+        // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         ScanBlocksJob.tick(event.getServer());
         PathCaches.serverTick(event.getServer());
+        // Debug particles for pathing state, sent only to players with debug on.
+        PathDebugRenderer.serverTick(event.getServer());
     }
 }

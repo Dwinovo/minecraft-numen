@@ -1,16 +1,19 @@
 package com.dwinovo.numen.core;
 
-import com.dwinovo.numen.core.tool.CoreServerTools;
+import com.dwinovo.numen.task.TaskRecord;
+import com.dwinovo.numen.task.CompanionTask;
+
+import com.dwinovo.numen.agent.tool.ServerToolTransport;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.entity.CompanionLifecycle;
 import com.dwinovo.numen.platform.Services;
-import com.dwinovo.numen.core.net.CancelTasksPayload;
-import com.dwinovo.numen.core.net.ExecuteToolPayload;
-import com.dwinovo.numen.core.net.TaskResultPayload;
-import com.dwinovo.numen.core.task.CompanionTaskFactory;
-import com.dwinovo.numen.core.task.CompanionTickDispatcher;
-import com.dwinovo.numen.core.task.BreakBlockCompanionTask;
-import com.dwinovo.numen.core.task.BreakBlockTaskRecord;
+import com.dwinovo.numen.network.payload.CancelTasksPayload;
+import com.dwinovo.numen.network.payload.ExecuteToolPayload;
+import com.dwinovo.numen.network.payload.TaskResultPayload;
+import com.dwinovo.numen.task.CompanionTaskFactory;
+import com.dwinovo.numen.task.CompanionTickDispatcher;
+import com.dwinovo.numen.core.task.BuildCompanionTask;
+import com.dwinovo.numen.core.task.BuildTaskRecord;
 import com.dwinovo.numen.core.task.CollectItemsTaskGoal;
 import com.dwinovo.numen.core.task.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.DropCompanionTask;
@@ -19,8 +22,10 @@ import com.dwinovo.numen.core.task.EatCompanionTask;
 import com.dwinovo.numen.core.task.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.EquipCompanionTask;
 import com.dwinovo.numen.core.task.EquipTaskRecord;
-import com.dwinovo.numen.core.task.HuntCompanionTask;
-import com.dwinovo.numen.core.task.HuntTaskRecord;
+import com.dwinovo.numen.core.task.MeleeAttackCompanionTask;
+import com.dwinovo.numen.core.task.MeleeAttackTaskRecord;
+import com.dwinovo.numen.core.task.RangedAttackCompanionTask;
+import com.dwinovo.numen.core.task.RangedAttackTaskRecord;
 import com.dwinovo.numen.core.task.InteractAtCompanionTask;
 import com.dwinovo.numen.core.task.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.InteractEntityCompanionTask;
@@ -33,12 +38,6 @@ import com.dwinovo.numen.core.task.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MineCompanionTask;
 import com.dwinovo.numen.core.task.MoveToCompanionTask;
 import com.dwinovo.numen.core.task.MoveToTaskRecord;
-import com.dwinovo.numen.core.task.PlaceBlockCompanionTask;
-import com.dwinovo.numen.core.task.PlaceBlockTaskRecord;
-import com.dwinovo.numen.core.task.ShootCompanionTask;
-import com.dwinovo.numen.core.task.ShootTaskRecord;
-import com.dwinovo.numen.core.task.WaitCompanionTask;
-import com.dwinovo.numen.core.task.WaitTaskRecord;
 
 /**
  * Loader-agnostic init for the {@code numen-core} tool pack — the worked example
@@ -68,28 +67,41 @@ public final class NumenCore {
         initialised = true;
         registerTools();
         registerTaskRunners();
-        registerTransport();
-        Constants.LOG.info("[numen-core] registered {} tool(s), {} task type(s)",
+        registerChains();
+        registerReflexes();
+        // Enable the autonomous survival chains (auto-eat / mob-defense / unstuck /
+        // MLG). SurvivalConfig's own default is OFF — the safe state a bare library
+        // build ships with — and the pack turns it on here, explicitly, at init.
+        com.dwinovo.numen.core.task.SurvivalConfig.setEnabled(true);
+        Constants.LOG.info("[numen-core] registered {} tool(s), {} task type(s); survival chains enabled",
                 ToolRegistry.size(), CompanionTaskFactory.size());
     }
 
     /**
-     * Core's own server-side execution wiring — none of it is the engine's: our
-     * three transport packets (client ships a body-bound tool, server replies),
-     * and the engine's {@link CompanionLifecycle} seam used to finalize our
-     * per-companion tasks on death / removal / owner-abort.
+     * 把 core 的五条生存本能链插进引擎的竞价调度(链登记口)。运输包与
+     * 生命周期对接已随排程机器归引擎,不再是 core 的事。
      */
-    private static void registerTransport() {
-        Services.NETWORK.registerClientToServer(
-                ExecuteToolPayload.TYPE, ExecuteToolPayload.STREAM_CODEC, ExecuteToolPayload::handle);
-        Services.NETWORK.registerServerToClient(
-                TaskResultPayload.TYPE, TaskResultPayload.STREAM_CODEC, TaskResultPayload::handle);
-        Services.NETWORK.registerClientToServer(
-                CancelTasksPayload.TYPE, CancelTasksPayload.STREAM_CODEC, CancelTasksPayload::handle);
+    private static void registerChains() {
+        com.dwinovo.numen.task.BrainChains.register(10,
+                bodyLog -> new com.dwinovo.numen.core.task.chain.UnstuckChain());
+        com.dwinovo.numen.task.BrainChains.register(20,
+                com.dwinovo.numen.core.task.chain.MobDefenseChain::new);
+        com.dwinovo.numen.task.BrainChains.register(30,
+                com.dwinovo.numen.core.task.chain.FoodChain::new);
+        com.dwinovo.numen.task.BrainChains.register(40,
+                com.dwinovo.numen.core.task.chain.MLGChain::new);
+        com.dwinovo.numen.task.BrainChains.register(50,
+                com.dwinovo.numen.core.task.chain.BreathChain::new);
+    }
 
-        CompanionLifecycle.onDeath(CompanionTickDispatcher::clearActiveTask);
-        CompanionLifecycle.onRemove(CompanionTickDispatcher::onCompanionRemoved);
-        CompanionLifecycle.onAbort(CoreServerTools::abort);
+    /**
+     * The reflex roster (constitution §6): enlist core's instincts — the five
+     * survival chains and the pure policies. The switch persistence is bound by
+     * the engine ({@code CommonClass.wireTaskMachine}). Runs on BOTH sides like
+     * the rest of init.
+     */
+    private static void registerReflexes() {
+        com.dwinovo.numen.core.task.reflex.CoreReflexes.registerAll();
     }
 
     private static void registerTools() {
@@ -97,19 +109,19 @@ public final class NumenCore {
         // Registration ORDER is preserved (backends with prompt-caching keyed off
         // the tool list cache stably across requests).
         ToolRegistry.register(new com.dwinovo.numen.core.tools.MoveToTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.HuntTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.ShootTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.MeleeAttackTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.RangedAttackTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.LocateStructureTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.LocateBiomeTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.CollectItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.AutoMineTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EquipItemTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.PlaceBlockTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.BreakBlockTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.BuildTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractAtTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractEntityTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EatItemTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.WaitTool());   // SAMPLE: raw NumenTool, no @NumenAction
+        ToolRegistry.register(new com.dwinovo.numen.task.TaskStatusTool());
+        ToolRegistry.register(new com.dwinovo.numen.task.TaskStopTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.DropItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectGuiTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.TransferTool());
@@ -117,8 +129,10 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.GetSelfStatusTool());   // SAMPLE: raw NumenTool
         ToolRegistry.register(new com.dwinovo.numen.core.tools.GetOwnerStatusTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.LookupRecipeTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.CraftTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.ScanNearbyEntitiesTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.ScanBlocksTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.LookAroundTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectBlockTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectBlockStorageTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.GetWorldInfoTool());
@@ -131,17 +145,16 @@ public final class NumenCore {
         CompanionTaskFactory.register(MoveToTaskRecord.class, (p, r) -> new MoveToCompanionTask(p, r));
         CompanionTaskFactory.register(MineBlockTaskRecord.class, (p, r) -> new MineCompanionTask(p, r));
         CompanionTaskFactory.register(EquipTaskRecord.class, (p, r) -> new EquipCompanionTask(p, r));
-        CompanionTaskFactory.register(WaitTaskRecord.class, (p, r) -> new WaitCompanionTask(p, r));
         CompanionTaskFactory.register(DropItemsTaskRecord.class, (p, r) -> new DropCompanionTask(p, r));
-        CompanionTaskFactory.register(BreakBlockTaskRecord.class, (p, r) -> new BreakBlockCompanionTask(p, r));
         CompanionTaskFactory.register(EatItemTaskRecord.class, (p, r) -> new EatCompanionTask(p, r));
-        CompanionTaskFactory.register(HuntTaskRecord.class, (p, r) -> new HuntCompanionTask(p, r));
-        CompanionTaskFactory.register(ShootTaskRecord.class, (p, r) -> new ShootCompanionTask(p, r));
+        CompanionTaskFactory.register(MeleeAttackTaskRecord.class, (p, r) -> new MeleeAttackCompanionTask(p, r));
+        CompanionTaskFactory.register(RangedAttackTaskRecord.class, (p, r) -> new RangedAttackCompanionTask(p, r));
         CompanionTaskFactory.register(CollectItemsTaskRecord.class, (p, r) -> new CollectItemsTaskGoal(p, r));
-        CompanionTaskFactory.register(PlaceBlockTaskRecord.class, (p, r) -> new PlaceBlockCompanionTask(p, r));
+        CompanionTaskFactory.register(BuildTaskRecord.class, (p, r) -> new BuildCompanionTask(p, r));
         CompanionTaskFactory.register(InteractAtTaskRecord.class, (p, r) -> new InteractAtCompanionTask(p, r));
         CompanionTaskFactory.register(InteractEntityTaskRecord.class, (p, r) -> new InteractEntityCompanionTask(p, r));
         CompanionTaskFactory.register(LocateStructureTaskRecord.class, (p, r) -> new LocateStructureTaskGoal(p, r));
         CompanionTaskFactory.register(LocateBiomeTaskRecord.class, (p, r) -> new LocateBiomeTaskGoal(p, r));
     }
 }
+

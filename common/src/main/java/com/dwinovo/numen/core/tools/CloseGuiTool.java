@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonObject;
 
@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** Query tool (raw NumenTool): close the open container GUI. */
-public final class CloseGuiTool extends ServerNumenTool {
+public final class CloseGuiTool implements NumenTool {
 
     private final GuiTools impl = new GuiTools();
 
@@ -30,7 +30,7 @@ public final class CloseGuiTool extends ServerNumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         reply.accept(impl.closeGui(self));
     }
 }
