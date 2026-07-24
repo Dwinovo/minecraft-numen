@@ -336,6 +336,41 @@ Path.of(NumenCoreNeoForge.class.getResource("/skills").toURI())   // 防御式 t
 （残留清点:本档 api 清 14 个旧文件/贴图、core 清 51 个旧 0.0.x 引擎类。）
 
 ## 1.21.10 → 1.21.11
+
+构建旋钮:MC `1.21.11` / range `[1.21.11, 1.22)` / NeoForm `1.21.11-20251209.172050` /
+Fabric `0.139.5+1.21.11` / NeoForge `21.11.42`。
+
+### Mojang 大改名(机械替换,两仓 45 文件)❗
+```java
+ResourceLocation → Identifier                      // 类改名,包仍 net.minecraft.resources,工厂方法全保留
+ResourceKey.location() → identifier()              // dimension().location()/ref.key().location()/unwrapKey k.location()
+net.minecraft.Util → net.minecraft.util.Util       // 迁包(import 与全限定名都要改)
+RenderType → net.minecraft.client.renderer.rendertype.RenderTypes   // 移包+复数化;RenderType.lines()→RenderTypes.lines()
+```
+注意:自有类型的 `.location()`(如 SkillRegistry 的 record 访问器)不要误替换——逐调用点确认接收者是 ResourceKey。
+
+### GUI(api)
+```java
+AbstractButton.renderWidget → renderContents       // 仅 AbstractButton 系;EditBox 系仍是 renderWidget(FlatEditBox 不动)
+KeyMapping 构造第 4 参 String 分类 → KeyMapping.Category.MISC
+ShapeRenderer.renderLineBox 整个删除 → PathDebugRenderer 12 棱 seg() 自绘(不再依赖 vanilla 线框助手)
+```
+
+### 实体类包重组(core)
+```java
+net.minecraft.world.entity.monster.Spider          → monster.spider.Spider          // CaveSpider 同包
+net.minecraft.world.entity.monster.ZombifiedPiglin → monster.zombie.ZombifiedPiglin
+net.minecraft.world.entity.vehicle.Boat            → vehicle.boat.Boat              // AbstractBoat 层级不变,instanceof 语义不漂移
+// EnderMan/Monster 未动
+```
+
+### 未发生的预警项
+- FMLLoader.getCurrent() 中转在 21.11.42 仍在(loader 9 静态化预警留给 26.x);
+- authlib 9 无感沿用;GuiRenderState/RoundRect$State 本档接口面零变化;AT/AW 目标字段未改名。
+
+(残留清点:本档 api 清 14 个旧文件/贴图、core 清 51 个旧 0.0.x 引擎类——与 1.21.10 档同集合。)
+
+## 1.21.11 → 26.1.2
 _待移植时填写_
 
 ## 1.21.11 → 26.1.2
