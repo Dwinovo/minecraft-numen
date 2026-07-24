@@ -13,11 +13,12 @@ import java.util.function.Supplier;
  * {@link com.dwinovo.numen.core.pathing.exec.PlayerNav} submits its search here and polls the returned
  * future each tick.
  *
- * <p>Sizing copies Baritone's executor verbatim ({@code Baritone.java}): 4 core threads, grow on demand
- * to handle bursts, 60s idle reap, direct hand-off ({@link SynchronousQueue}). Threads are daemon so
+ * <p>Sizing: 4 core threads, grow on demand
+ * to handle bursts, 60s idle reap, direct hand-off ({@link SynchronousQueue}) — a
+ * long-proven executor shape for pathfinding workloads. Threads are daemon so
  * they never hold up JVM shutdown.
  *
- * <p>TODO (config): expose core/max thread counts as a server setting, defaulting to these Baritone
+ * <p>TODO (config): expose core/max thread counts as a server setting, defaulting to these
  * values, for operators tuning many-companion servers.
  */
 public final class PathPlannerPool {

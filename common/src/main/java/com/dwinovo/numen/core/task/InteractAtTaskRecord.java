@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task;
 
-import com.dwinovo.numen.core.task.TaskRecord;
+import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -58,7 +58,7 @@ public final class InteractAtTaskRecord extends TaskRecord {
                     + " is a consumable — use eat_item (using it through the world body wouldn't heal you).";
         }
         if (item == Items.ENDER_PEARL) {
-            return "ender_pearl teleportation is body-bound and not supported — to travel use move_to, "
+            return "ender_pearl teleportation is body-bound and not supported — to travel use goto, "
                     + "to find a stronghold use locate_structure(\"minecraft:stronghold\").";
         }
         return null;

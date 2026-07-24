@@ -16,7 +16,7 @@ Fabric + NeoForge 同源，**api 与 core 各自同名分支**。向上移植（
 `1.20.1 → 1.20.2 → 1.20.4 → 1.20.6 → 1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 → 1.21.11 → 26.1.2`
 
 新架构（numen-api 拆分 + 调度器 + raw `NumenTool` + skill 体系）基线在 **`1.21.1`**，正逐档向上移植。
-**已移植：1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 ✓**
+**已移植：1.21.1 → 1.21.4 → 1.21.5 ✓**
 
 ## 每档的流程
 
@@ -175,63 +175,43 @@ if (input.hasUUID(KEY)) x = input.getUUID(KEY)   → input.read(KEY, UUIDUtil.CO
 9 字段 payload 改回 `StreamCodec.composite`（1.21.4 上限 8）、`GetOwnerStatusTool` 的 `EntityReference`。
 新架构当前实现未用到这些点，故本档未改；后续相关代码若改动碰到，再按此补。
 
-## 1.21.5 → 1.21.8 ✓（已验证，双 loader 编译 + 出包通过）
+### 0.0.9 功能面二次移植追加（2026-07 全量对齐时新碰到的）
 
-**跨过 1.21.6/1.21.7**，含 1.21.6 的渲染 + IO 大改。构建旋钮：MC `1.21.8` / range `[1.21.8, 1.21.9)` /
-NeoForm `1.21.8-20250717.133445` / Fabric `0.136.1+1.21.8` / NeoForge `21.8.47`。
-
-### 客户端渲染（api）
-**blitSprite 首参：函数 → 常量** ❗ — 1.21.6 渲染管线化：
+**物品类扁平化** ❗ — `SwordItem`/`DiggerItem` 等工具子类被删，武器身份改数据组件（`ToolSet.isWeapon`）：
 ```java
-g.blitSprite(RenderType::guiTextured, sprite, x,y,w,h)
-   → g.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, x,y,w,h)   // net.minecraft.client.renderer.RenderPipelines
-```
-（全限定写法：`net.minecraft.client.renderer.RenderType::guiTextured` → `...RenderPipelines.GUI_TEXTURED`，22 处。）
-
-**其它渲染**：
-```java
-camera.getPosition()                    → camera.position()                 // PathVizRenderer
-g.renderTooltip(font, st, mx, my)       → g.setTooltipForNextFrame(font, st, mx, my)   // NumenScreen
+item instanceof SwordItem || item instanceof AxeItem || ... → itemStack.has(DataComponents.WEAPON)
+// AxeItem/TridentItem/MaceItem 类还在,但 SwordItem 没了;统一走 minecraft:weapon 组件最稳
 ```
 
-### 存档 / IO 大改（api，1.21.6 ValueInput/ValueOutput 重构）❗
+**Inventory 结构重构** ❗ — 盔甲/副手迁入 `EntityEquipment`，主背包列表私有化：
 ```java
-// Entity 存读档签名换类型且变 protected（NumenPlayer）：
-public void addAdditionalSaveData(CompoundTag output)  → protected void addAdditionalSaveData(ValueOutput output)
-public void readAdditionalSaveData(CompoundTag input)  → protected void readAdditionalSaveData(ValueInput input)
-// 方法体不变：ValueOutput.store(key,CODEC,v) / ValueInput.read(key,CODEC) 与 CompoundTag 同名可用。
-// import net.minecraft.world.level.storage.ValueInput / ValueOutput
-
-// PlayerList.load 加 ProblemReporter（CompanionFactory）：
-getPlayerList().load(player)  → getPlayerList().load(player, ProblemReporter.DISCARDING)  // 仍 .ifPresent(player::load)
-
-// Connection.send 的 listener 类型（FakeConnection）：
-send(Packet<?>, PacketSendListener, boolean)  → send(Packet<?>, ChannelFutureListener, boolean)
-// import io.netty.channel.ChannelFutureListener（去 net.minecraft.network.PacketSendListener）
+inv.items                      → inv.getNonEquipmentItems()   // 36 格主背包(含快捷栏)
+inv.offhand.set(0, stack)      → inv.setItem(Inventory.SLOT_OFFHAND, stack)  // 经槽位映射进 equipment
+new Inventory(player)          → new Inventory(player, entityEquipment)      // 与实体共享同一实例
+// 测试里 Unsafe 裸构 ServerPlayer 时,LivingEntity.equipment 字段也要反射种上同一实例,
+// 否则 getOffhandItem()(读实体 equipment)与背包写入(写 Inventory 的 equipment)不同源
 ```
 
-### NeoForge loader（api）
+**MobEffects 字段改名** ❗（`ToolSet` 药水修正）：
 ```java
-// @EventBusSubscriber 的 bus 属性 1.21.8 删除（总线已合并）：
-@EventBusSubscriber(modid = MOD_ID, bus = Bus.MOD)  → @EventBusSubscriber(modid = MOD_ID)
-// RenderLevelStageEvent 用 per-stage 子类，去掉 Stage 枚举判断：
-onRenderLevel(RenderLevelStageEvent e){ if(e.getStage()!=AFTER_TRANSLUCENT_BLOCKS) return; … }
-   → onRenderLevel(RenderLevelStageEvent.AfterTranslucentBlocks e){ … }
-// 客户端发包用 ClientPacketDistributor（NeoForgeNetworkChannel）：
-PacketDistributor.sendToServer(payload)  → net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(payload)
+MobEffects.DIG_SPEED → MobEffects.HASTE
+MobEffects.DIG_SLOWDOWN → MobEffects.MINING_FATIGUE
 ```
 
-### 数据生成（core）
-```java
-// Fabric：getOrCreateTagBuilder 改名 valueLookupBuilder（Fabric{Block,Item}TagsProvider）：
-var b = getOrCreateTagBuilder(key)  → var b = valueLookupBuilder(key)
-// NeoForge：改用 NeoForge 自带 ItemTagsProvider（3 参构造），弃 vanilla + 空 block-tag lookup：
-extends net.minecraft.data.tags.ItemTagsProvider
-  super(output, lookup, completedFuture(TagLookup.empty()))
-   → extends net.neoforged.neoforge.common.data.ItemTagsProvider
-     super(output, lookup, Constants.MOD_ID)
-// NeoForge DataGenerators 同样去掉 @EventBusSubscriber 的 bus 属性。
-```
+**世界明暗判断**（0.0.9 里在 `PerceptionTools`）：`isDay/isNight → isBrightOutside/isDarkOutside`（同上节）。
+
+**（api 仓）shader 体系再地震** ❗ — 1.21.2–1.21.4 的 `ShaderProgram`/`CompiledShaderProgram`/JSON
+配置整体移除，改代码定义的 `RenderPipeline`（`RenderPipeline.builder()` 声明 GLSL 位置/uniform/混合/
+顶点格式），懒编译零注册（NeoForge `RegisterShadersEvent` 已删）；自定义 uniform 只能在裸
+`RenderPass` 上 `setUniform`，GUI 内需 `g.flush()` 后对主 RenderTarget 自开 pass 绘制，scissor 用
+`RenderSystem.SCISSOR_STATE` 手动继承（`RoundRect` 全重写，shader json 删除、GLSL 原样复用）。
+
+**（api 仓）`DynamicTexture` 构造器** ❗ — 新增调试名首参：`new DynamicTexture(img)` →
+`new DynamicTexture(() -> "label", img)`（`SkinTextures`）。
+
+## 1.21.5 → 1.21.8
+<!-- 约 24 文件 -->
+_待移植时填写_
 
 ## 1.21.8 → 1.21.10
 _待移植时填写_
