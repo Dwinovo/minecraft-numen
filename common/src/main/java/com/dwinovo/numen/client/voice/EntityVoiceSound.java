@@ -29,7 +29,7 @@ import java.util.concurrent.CompletableFuture;
  *       的声道池是私有的,拿到它同样绕不开访问拓宽——脆、代码量大好几倍。</li>
  * </ol>
  *
- * <h2>取数按 loader 分家（{@code Services.VOICE} 工厂）</h2>
+ * <h2>取数按 loader 分家（{@code ClientServices.VOICE} 工厂）</h2>
  * "换取数"这一步两侧机制不同,所以实例经
  * {@link com.dwinovo.numen.platform.services.IVoiceSoundFactory} 创建：
  * <ul>
@@ -63,7 +63,7 @@ public class EntityVoiceSound extends AbstractTickableSoundInstance implements V
     private final PcmAudio audio;
     private AbstractClientPlayer body;
 
-    /** 经 {@code Services.VOICE} 工厂创建(loader 子类需要,故 public)。 */
+    /** 经 {@code ClientServices.VOICE} 工厂创建(loader 子类需要,故 public)。 */
     public EntityVoiceSound(UUID entityUuid, AbstractClientPlayer body, PcmAudio audio, float volume) {
         super(VoicePcmSource.SOUND_EVENT, SoundSource.VOICE, SoundInstance.createUnseededRandom());
         this.entityUuid = entityUuid;

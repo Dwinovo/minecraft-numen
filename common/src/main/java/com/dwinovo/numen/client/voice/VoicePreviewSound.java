@@ -10,7 +10,7 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 设置界面"试听"用的 2D 就地播放:不挂实体、无距离衰减、位置相对监听者
  * (即耳边直出,vanilla UI 音效同款做法)。数据同样是内存 PCM,取数与 3D
- * 路径共用一套 loader 分家机制(经 {@code Services.VOICE} 工厂创建:
+ * 路径共用一套 loader 分家机制(经 {@code ClientServices.VOICE} 工厂创建:
  * NeoForge 返回覆写官方 {@code getStream} 补丁钩子的 {@code NeoVoicePreviewSound},
  * Fabric 走本类 + fabric 模块的 {@code MixinSoundEngine} 取数重定向),
  * 不另起播放机制。详见 {@link EntityVoiceSound} 的选型说明。

@@ -207,7 +207,7 @@ public final class VoicePipeline {
         // 经平台工厂创建:NeoForge 返回覆写官方 getStream 补丁钩子的子类,
         // Fabric 返回原类走 vanilla mixin——取数机制两侧不同(见 IVoiceSoundFactory)。
         // 响度已烙进 PCM(amplified),实例音量恒 1.0——只留 3D 距离衰减。
-        playing = com.dwinovo.numen.platform.Services.VOICE
+        playing = com.dwinovo.numen.client.platform.ClientServices.VOICE
                 .entityVoice(entityUuid, body, head.audio, 1.0f);
         mc.getSoundManager().play(playing);
         Constants.LOG.info("[numen-voice#{}] 开播 {}ms: {}",
