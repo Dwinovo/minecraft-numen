@@ -1,6 +1,15 @@
 plugins {
     id 'multiloader-loader'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7-SNAPSHOT'
+}
+
+// Forge 运行期用 SRG 名(f_xxxxx_),而 mixin 源码写的是 official 名(nibble)——两者靠
+// 注解处理器生成的 refmap 搭桥。不接这一步,required 的 FishingHookAccessor 在真实环境
+// 找不到字段就装不上,直接崩游戏(开发环境用 official 名反而看不出问题)。
+mixin {
+    add(sourceSets.main, "${mod_id}.refmap.json")
+    config("${mod_id}.mixins.json")
 }
 
 minecraft {
@@ -49,6 +58,8 @@ jarJar.enable()
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // mixin 注解处理器:生成上面 mixin 块要的 refmap(official → SRG 映射表)。
+    annotationProcessor 'org.spongepowered:mixin:0.8.5-SNAPSHOT:processor'
     // The numen-api engine (matching-loader artifact, so the mcgradleconventions
     // loader attribute resolves). compileOnly: the api classes are provided at
     // runtime by the bundled numen-api mod, not by core's own jar.

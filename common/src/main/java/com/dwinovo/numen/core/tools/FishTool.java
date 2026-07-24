@@ -49,7 +49,8 @@ public final class FishTool implements NumenTool {
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion,
                              Consumer<String> reply) {
         Args parsed = GSON.fromJson(args, Args.class);
-        int count = Math.clamp(parsed.count(), 1, MAX_COUNT);
+        // Math.clamp 是 Java 21 API,本档为 Java 17,用等价的 max/min 夹取。
+        int count = Math.max(1, Math.min(MAX_COUNT, parsed.count()));
         long timeout = Math.max(MIN_TIMEOUT_TICKS, count * TICKS_PER_CATCH);
         var context = ctx(toolCallId, companion);
         dispatchAsync(companion, new FishTaskRecord(toolCallId, context.deadline(timeout), count), reply);

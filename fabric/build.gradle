@@ -17,6 +17,12 @@ dependencies {
 }
 
 loom {
+    mixin {
+        // 本档 loom 用 refmap 做混淆重映射(不像 1.21.1 那代直接改写注解):mixins.json 声明的
+        // refmap 名是 numen.refmap.json,而 loom 默认按归档名生成 numen-fabric-1.20.2-refmap.json,
+        // 运行期读不到就找不到 nibble 字段,required 的 mixin 装不上直接崩,故显式指定。
+        defaultRefmapName = "${mod_id}.refmap.json"
+    }
     def aw = project(':common').file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {
         accessWidenerPath.set(aw)
