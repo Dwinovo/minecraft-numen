@@ -66,11 +66,18 @@ String priority) {}
 
     public String todowrite(
 List<Todo> todos) {
+        if (todos == null) {
+            throw new IllegalArgumentException("todos is required");
+        }
         int inProgressCount = 0;
+        boolean workRemains = false;
         // Echo back the canonical JSON; the model reads it next turn as its plan.
         JsonArray echo = new JsonArray();
         for (int i = 0; i < todos.size(); i++) {
             Todo t = todos.get(i);
+            if (t == null || t.content() == null || t.content().isBlank()) {
+                throw new IllegalArgumentException("todos[" + i + "].content must not be blank");
+            }
             if (!ALLOWED_STATUSES.contains(t.status())) {
                 throw new IllegalArgumentException(
                         "todos[" + i + "].status must be one of " + ALLOWED_STATUSES + ", got: " + t.status());
@@ -80,6 +87,7 @@ List<Todo> todos) {
                         "todos[" + i + "].priority must be one of " + ALLOWED_PRIORITIES + ", got: " + t.priority());
             }
             if ("in_progress".equals(t.status())) inProgressCount++;
+            if ("in_progress".equals(t.status()) || "pending".equals(t.status())) workRemains = true;
             JsonObject o = new JsonObject();
             o.addProperty("content", t.content());
             o.addProperty("status", t.status());
@@ -87,10 +95,11 @@ List<Todo> todos) {
             echo.add(o);
         }
         String echoed = echo.toString();
-        if (inProgressCount > 1) {
-            return "{\"success\":true,\"warning\":\"more than one todo in_progress ("
-                    + inProgressCount + "); keep exactly one\",\"todos\":" + echoed + "}";
+        if (workRemains && inProgressCount != 1) {
+            return "{\"success\":false,\"message\":\"unfinished work requires exactly one todo in_progress; got "
+                    + inProgressCount + "\",\"todos\":" + echoed + "}";
         }
-        return "{\"success\":true,\"todos\":" + echoed + "}";
+        return "{\"success\":true,\"message\":\"plan snapshot replaced; continue only the in_progress item\",\"todos\":"
+                + echoed + "}";
     }
 }

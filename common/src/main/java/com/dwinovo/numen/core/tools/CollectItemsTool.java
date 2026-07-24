@@ -32,7 +32,12 @@ public final class CollectItemsTool implements NumenTool {
                 + "handled automatically: it digs and bridges on its own if drops landed in a pit or "
                 + "across a gap. Optionally restrict to specific item_ids (omit to collect everything). "
                 + "Optional radius (default 16). Use after ranged combat or manual interactions; melee_attack collects its own drops. "
-                + "BACKGROUND task: returns a task_id at once; the tally arrives as a task_finished event.";
+                + "BACKGROUND: acceptance means collection is already running; wait for task_finished, do not poll or resend unchanged.";
+    }
+
+    /** Layer-one summary used by numen-api versions with progressive tool disclosure. */
+    public String summary() {
+        return "Collect nearby dropped item entities, optionally filtered, as one background pickup job.";
     }
 
     @Override

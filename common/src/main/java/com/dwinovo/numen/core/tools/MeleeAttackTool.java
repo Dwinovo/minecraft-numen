@@ -28,8 +28,13 @@ public final class MeleeAttackTool implements NumenTool {
                 + "scan_nearby_entities. Tracks moving targets with the full pathfinder, uses "
                 + "nearest-target selection, visible aiming, vanilla cooldown attacks and weapon switching, "
                 + "then picks up each target's drops before moving on. Players and mobs use the same ids. "
-                + "BACKGROUND task: returns task_id immediately; per-target outcomes and loot arrive in "
-                + "task_finished.";
+                + "BACKGROUND: acceptance means combat is already running; do not resend ids, poll, or launch "
+                + "another body action until task_finished reports the terminal outcome.";
+    }
+
+    /** Layer-one summary used by numen-api versions with progressive tool disclosure. */
+    public String summary() {
+        return "Melee-attack specific current runtime entity ids and collect their drops as one background job.";
     }
 
     @Override

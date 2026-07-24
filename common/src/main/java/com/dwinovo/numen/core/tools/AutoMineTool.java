@@ -34,8 +34,14 @@ public final class AutoMineTool implements NumenTool {
                 + "blocks (redstone_ore drops ~4). Include all variants in block_ids (iron_ore AND "
                 + "deepslate_iron_ore). Only mines what its tools actually harvest, and stops naming the "
                 + "needed tier if nothing qualifies (to destroy blocks regardless of drops, use "
-                + "break_block). BACKGROUND task: returns a task_id at once; the outcome arrives as a "
-                + "task_finished event — don't poll.";
+                + "break_block). BACKGROUND: a successful call is already running; do not call mine/goto "
+                + "again while <current_task> exists and do not poll. task_finished status=done means the "
+                + "requested count is complete; only timeout permits resending the same arguments.";
+    }
+
+    /** Layer-one summary used by numen-api versions with progressive tool disclosure. */
+    public String summary() {
+        return "Find and gather a requested item count from named block variants as one background job; no goto or polling needed.";
     }
 
     @Override

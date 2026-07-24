@@ -32,8 +32,13 @@ public final class RangedAttackTool implements NumenTool {
                 + "targets with the pathfinder until an arrow can hit, backs away when too close, "
                 + "aims visibly, fires only after the shot path is clear, and stops with a clear "
                 + "failure if no bow/crossbow or arrows are available. Targets may be living entities "
-                + "or breakable non-living entities such as end crystals. BACKGROUND task: returns "
-                + "task_id immediately; per-target outcomes arrive in task_finished.";
+                + "or breakable non-living entities such as end crystals. BACKGROUND: acceptance means combat "
+                + "is already running; do not resend ids, poll, or launch another body action until task_finished.";
+    }
+
+    /** Layer-one summary used by numen-api versions with progressive tool disclosure. */
+    public String summary() {
+        return "Ranged-attack specific current runtime entity ids with a bow/crossbow as one background job.";
     }
 
     @Override
