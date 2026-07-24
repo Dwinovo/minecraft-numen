@@ -4,9 +4,7 @@ import com.dwinovo.numen.agent.tool.ClientToolContext;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
-import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
-import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.network.payload.DismissRequestPayload;
 import com.dwinovo.numen.network.payload.SummonRequestPayload;
@@ -38,18 +36,21 @@ import java.util.concurrent.atomic.AtomicLong;
  *       directly, and reads their results. The built-in brain steps aside.</li>
  * </ul>
  *
- * <h2>The contract: acquire → invoke* → release</h2>
- * Before driving a companion, {@link #acquire} it — this pauses its built-in
- * brain and frees its body (any in-flight internal turn/task is stopped) so the
- * two brains never fight over one body. Then {@link #invoke} tools as needed.
- * When done, {@link #release} so the built-in brain can act again.
+ * <h2>没有"取得控制权"这一步</h2>
+ * 直接 {@link #invoke} 即可,不需要先申请、用完再归还。两个大脑不打架靠两道现成的闸:
+ * <ul>
+ *   <li><b>大脑层</b>——「外接大脑」模式开启期间({@code McpMode.enabled()})内置大脑
+ *       一轮都不开,主人聊天、弹幕桥接送进来的消息都只进收件箱不开轮;</li>
+ *   <li><b>身体层</b>——{@code TaskDispatch} 的"一具身体一件活"闸门:身体上有活时新派
+ *       的活当场被拒(附带话术),物理上不可能两件活撕扯一具身体。</li>
+ * </ul>
+ * 模式没开时外部驱动者依然能调工具,只是要和内置大脑抢身体闸门——这是刻意留的口子
+ * (程序化调用者不该被 UI 模式绑住)。
  *
  * <h2>Parallelism is free</h2>
  * Every call is addressed to a companion UUID, and each companion runs its own
- * body tasks independently on the server. So one external brain can {@link
- * #acquire} several companions and {@link #invoke} on each — they execute
- * concurrently. Mixed fleets work too: acquire A and B, leave C to its built-in
- * brain.
+ * body tasks independently on the server. So one external brain can {@link #invoke}
+ * on several companions — they execute concurrently.
  *
  * <h2>No conversation side effects</h2>
  * A headless {@link #invoke} does NOT touch the companion's conversation log or
@@ -86,51 +87,6 @@ public final class NumenActuator {
                 out.add(new Companion(e.uuid(), e.name()));
             }
             f.complete(out);
-        });
-        return f;
-    }
-
-    /**
-     * Take external control of {@code companion}: pause its built-in brain and
-     * stop any in-flight internal turn/task, leaving the body free to drive.
-     * Idempotent.
-     *
-     * @return true once control is held; false if {@code companion} is not one of
-     *         the owner's live companions
-     */
-    public static CompletableFuture<Boolean> acquire(UUID companion) {
-        CompletableFuture<Boolean> f = new CompletableFuture<>();
-        if (companion == null) {
-            f.complete(false);
-            return f;
-        }
-        Minecraft.getInstance().execute(() -> {
-            boolean known = NumenRoster.instance().entries().stream()
-                    .anyMatch(e -> companion.equals(e.uuid()));
-            if (!known) {
-                f.complete(false);
-                return;
-            }
-            AgentLoopRegistry.getOrCreate(companion).acquireExternal();
-            f.complete(true);
-        });
-        return f;
-    }
-
-    /**
-     * Release external control of {@code companion} — its built-in brain may act
-     * again (it does not auto-start; it waits for the next owner prompt).
-     * Idempotent; a no-op if the companion was never acquired.
-     */
-    public static CompletableFuture<Boolean> release(UUID companion) {
-        CompletableFuture<Boolean> f = new CompletableFuture<>();
-        if (companion == null) {
-            f.complete(false);
-            return f;
-        }
-        Minecraft.getInstance().execute(() -> {
-            AgentLoopRegistry.get(companion).ifPresent(EntityAgentLoop::releaseExternal);
-            f.complete(true);
         });
         return f;
     }
@@ -188,11 +144,11 @@ public final class NumenActuator {
      * without the LLM. Perception tools resolve fast; world-action tools resolve
      * when the body finishes the task.
      *
-     * <p>The caller should {@link #acquire} the companion first so its built-in
-     * brain isn't also driving the body. The future carries the tool's result as
-     * a {@link TaskResult} JSON string; failures (unknown tool, bad args, a thrown
-     * tool) come back as a {@code TaskResult.fail} JSON, never an exceptional
-     * future.
+     * <p>不需要先取得控制权:内置大脑要么被「外接大脑」模式整体挂起,要么和这次调用
+     * 一起受"一具身体一件活"闸门约束(身体忙时收到带话术的拒绝)。The future carries
+     * the tool's result as a {@link TaskResult} JSON string; failures (unknown tool,
+     * bad args, a thrown tool) come back as a {@code TaskResult.fail} JSON, never an
+     * exceptional future.
      *
      * @param companion the body to act with
      * @param toolName  a registered tool name (case-tolerant, see {@link ToolRegistry#resolve})

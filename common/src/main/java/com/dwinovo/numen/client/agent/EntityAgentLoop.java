@@ -10,6 +10,7 @@ import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.agent.tool.ToolInvocation;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.data.ModLanguageData;
+import com.dwinovo.numen.mcp.server.McpMode;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.platform.services.INumenConfig;
 import com.dwinovo.numen.task.TaskResult;
@@ -161,15 +162,6 @@ public final class EntityAgentLoop {
     private boolean aborted = false;
     /** One turn-level re-run per failure has been spent (reset when a response lands). */
     private boolean turnRetried = false;
-
-    /**
-     * Set while an external driver (an MCP client / Claude) holds this body via
-     * {@link com.dwinovo.numen.api.NumenActuator}. The internal brain is paused —
-     * no LLM turn starts — until {@link #releaseExternal}. Distinct from
-     * {@link #dead} (body gone) and {@link #aborted} (owner stopped one turn):
-     * this is a deliberate hand-off of the whole body to an outside brain.
-     */
-    private boolean externallyDriven = false;
 
     /**
      * Runs this turn's tool calls one at a time and reports each result back
@@ -613,39 +605,6 @@ public final class EntityAgentLoop {
         }
     }
 
-    // ---- external control (an MCP client / Claude drives the body directly) ----
-
-    /**
-     * An external driver takes control of this body. The internal brain stops
-     * starting turns and any in-flight turn/task is aborted (via {@link #abort},
-     * which also fires {@code CompanionLifecycle.onAbort} so the body itself
-     * stops), leaving the body free for the external driver. Reverse with
-     * {@link #releaseExternal}. Idempotent.
-     */
-    public void acquireExternal() {
-        if (externallyDriven) return;
-        externallyDriven = true;
-        abort();   // stop any running internal turn + free the body
-        Constants.LOG.info("[numen-entity#{}] external control acquired — internal brain paused", entityUuid);
-    }
-
-    /**
-     * The external driver released control — the internal brain may act again.
-     * Does not auto-start a turn; waits for the next owner prompt or event.
-     * Idempotent.
-     */
-    public void releaseExternal() {
-        if (!externallyDriven) return;
-        externallyDriven = false;
-        aborted = false;   // clear the abort latch acquireExternal set, so the brain can resume
-        Constants.LOG.info("[numen-entity#{}] external control released — internal brain resumed", entityUuid);
-    }
-
-    /** True while an external driver (MCP / Claude) holds this body. */
-    public boolean isExternallyDriven() {
-        return externallyDriven;
-    }
-
     /**
      * The body died — the server tells us via {@code NumenDeathPayload} with the death cause. SUSPEND
      * (not dispose): the companion respawns at its owner shortly and {@link #onRespawned} resumes us.
@@ -897,8 +856,11 @@ public final class EntityAgentLoop {
             Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: aborted", entityUuid);
             return;
         }
-        if (externallyDriven) {
-            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: externally driven", entityUuid);
+        // 「外接大脑」模式的总闸:模式开着,身体归外部 MCP 驱动者,内置大脑一轮都不开。
+        // 收件箱照收不误(事件不丢),模式关掉后主人下次说话就能带着这段空白期的见闻开轮。
+        // 聊天框禁用只是体验层——弹幕/QQ 桥接送进来的 principal 消息只有这里拦得住。
+        if (McpMode.instance().enabled()) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: 外接大脑模式开启中", entityUuid);
             return;
         }
         if (awaitingLlmResponse) {
