@@ -66,7 +66,8 @@ Give it an intent and it breaks it into dozens of actions and runs them end to e
 - ⛏️ **Real work** — mine, chop, gather, build, place and break with precision, hand-craft by recipe, smelt in furnaces, sort loot into chests.
 - 🧭 **Real movement** — a server-side navigation engine: it bridges gaps, pillars up, tunnels through, staircases down, and swims. *"Go to that coordinate"* is meant literally — even if that means digging all the way to diamond level, or carving a way back up from the bottom of a shaft.
 - ⚔️ **Real combat** — native player melee and bow: real cooldowns, real crits; it eats when hurt and swims to shore before it drowns.
-- 🔭 **Real perception** — scan blocks, scan entities, check status, look up recipes, locate any structure or biome, even x-ray what's inside a machine without opening its GUI.
+- 🔭 **Real perception** — structured scans, status, recipes, and machine inspection remain the default. The player may explicitly enable hybrid or visual mode to send the companion body's own first-person frame. Numen never guesses vision support from the model name.
+- 🧠 **Learns new Skills** — after a successful novel multi-step workflow with no loaded Skill, it reviews real tool feedback in the background and distills a reusable local Skill without overwriting existing ones.
 - 🧠 **Real memory** — conversations persist across saves and auto-compact when they grow long; it remembers the crafting tables, furnaces, and chests it has used, and walks back to them instead of building new ones. Death is recoverable: vanilla death drops as usual, then it respawns by your side after a moment.
 
 Nearly thirty tools like these make up its hands and eyes *right now*. And its abilities keep growing — through the very two instruments of [Reach](#reach):
