@@ -68,22 +68,41 @@ public record McpConfig(
         return hiddenTools.contains(toolName);
     }
 
+    /** 配置文件还没读到时的占位(模式关闭),避免 {@link McpMode} 持 null 配置。 */
+    static McpConfig disabledDefault() {
+        return new McpConfig(false, "127.0.0.1", 8765, "", 300, DEFAULT_HIDDEN);
+    }
+
+    /** 只改开关的副本——设置面板拨动开关时用,其余字段保持用户手改的值。 */
+    McpConfig withEnabled(boolean on) {
+        return new McpConfig(on, host, port, token, callTimeoutSeconds, hiddenTools);
+    }
+
+    /** 写回配置文件:游戏内拨的开关要跨会话记住。 */
+    void save(Path file) {
+        write(file, this, "saved config");
+    }
+
     private static void writeDefault(Path file, McpConfig def) {
+        write(file, def, "wrote default config");
+    }
+
+    private static void write(Path file, McpConfig cfg, String what) {
         JsonObject o = new JsonObject();
-        o.addProperty("enabled", def.enabled());
-        o.addProperty("host", def.host());
-        o.addProperty("port", def.port());
-        o.addProperty("token", def.token());
-        o.addProperty("call_timeout_seconds", def.callTimeoutSeconds());
+        o.addProperty("enabled", cfg.enabled());
+        o.addProperty("host", cfg.host());
+        o.addProperty("port", cfg.port());
+        o.addProperty("token", cfg.token());
+        o.addProperty("call_timeout_seconds", cfg.callTimeoutSeconds());
         JsonArray hidden = new JsonArray();
-        def.hiddenTools().forEach(hidden::add);
+        cfg.hiddenTools().forEach(hidden::add);
         o.add("hidden_tools", hidden);
         try {
             Files.createDirectories(file.getParent());
             Files.writeString(file, o.toString(), StandardCharsets.UTF_8);
-            Constants.LOG.info("[numen-mcp] wrote default config {}", file);
+            Constants.LOG.info("[numen-mcp] {} {}", what, file);
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-mcp] failed to write default config {}: {}", file, ex.toString());
+            Constants.LOG.warn("[numen-mcp] failed to write config {}: {}", file, ex.toString());
         }
     }
 

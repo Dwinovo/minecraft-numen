@@ -39,17 +39,20 @@ import java.util.concurrent.TimeoutException;
  * Every engine tool (from {@link ToolRegistry}, minus the config's hidden set)
  * is advertised with an extra {@code companion} argument, and calls route to
  * {@link NumenActuator#invoke}. Three management tools — {@code list_companions},
- * {@code acquire_companion}, {@code release_companion} — wrap the actuator's
- * roster and control methods. Since every call is addressed to a companion and
- * each body runs its tasks independently, an agent can acquire several
- * companions and drive them in parallel.
+ * {@code create_companion}, {@code delete_companion} — wrap the actuator's roster
+ * methods. There is no take-control handshake: 模式开启期间内置大脑一轮都不开
+ * (见 {@link McpMode}), 所以外部驱动者直接派活即可。Since every call is addressed
+ * to a companion and each body runs its tasks independently, an agent can drive
+ * several companions in parallel.
  */
 public final class McpServer {
 
     private static final String PROTOCOL_VERSION = "2025-06-18";
     private static final String SERVER_VERSION = "0.1.0";
-    /** Roster / acquire / release are fast; only tool actions use the config timeout. */
+    /** Roster / create / delete are fast; only tool actions use the config timeout. */
     private static final int CONTROL_TIMEOUT_SECONDS = 10;
+    /** 活动流里一条参数/结果摘要的截断长度——面板一行放得下即可。 */
+    private static final int SUMMARY_LIMIT = 90;
 
     /**
      * Sent to the connecting agent in the {@code initialize} handshake (MCP's
@@ -72,8 +75,8 @@ public final class McpServer {
 
             Rules: survival mode — the tools do only what a real player can (mine to get stone; there is no \
             give or setblock). You are blind between calls, so perceive before and after acting. Action \
-            tools return only when the task finishes or times out. You can acquire several companions and \
-            drive them in parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.""";
+            tools return only when the task finishes or times out. You can drive several companions in \
+            parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.""";
 
     private final McpConfig config;
     private final Gson gson = new Gson();
@@ -110,6 +113,8 @@ public final class McpServer {
                 respond(ex, 401, "");
                 return;
             }
+            // 任何通过鉴权的请求都算"对方还在"——面板的活跃时间靠它,ping 也算数。
+            McpMode.instance().touch();
             String body = new String(ex.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
             JsonElement parsed;
             try {
@@ -197,6 +202,8 @@ public final class McpServer {
         if (req.has("params") && req.get("params").isJsonObject()) {
             JsonObject p = req.getAsJsonObject("params");
             if (p.has("protocolVersion")) clientProto = p.get("protocolVersion").getAsString();
+            // 握手报的名字就是面板上"谁接进来了"的那一行。
+            McpMode.instance().handshake(clientLabel(p));
         }
         JsonObject result = new JsonObject();
         result.addProperty("protocolVersion", clientProto);
@@ -209,6 +216,15 @@ public final class McpServer {
         result.add("serverInfo", info);
         result.addProperty("instructions", INSTRUCTIONS);
         return result;
+    }
+
+    /** {@code params.clientInfo} → "Claude Desktop 1.2.3";没报名字就叫 unknown client。 */
+    private static String clientLabel(JsonObject params) {
+        if (!params.has("clientInfo") || !params.get("clientInfo").isJsonObject()) return "unknown client";
+        JsonObject info = params.getAsJsonObject("clientInfo");
+        String name = info.has("name") ? info.get("name").getAsString() : "unknown client";
+        String version = info.has("version") ? info.get("version").getAsString() : "";
+        return version.isBlank() ? name : name + " " + version;
     }
 
     // ---- tools/list ----
@@ -306,6 +322,7 @@ public final class McpServer {
 
     // ---- tools/call ----
 
+    /** 派发一次工具调用,并把它记进活动流——面板上那条流就是这里喂的。 */
     private JsonObject toolsCallResult(JsonObject req) {
         JsonObject params = req.has("params") && req.get("params").isJsonObject()
                 ? req.getAsJsonObject("params") : new JsonObject();
@@ -313,6 +330,12 @@ public final class McpServer {
         JsonObject args = params.has("arguments") && params.get("arguments").isJsonObject()
                 ? params.getAsJsonObject("arguments") : new JsonObject();
 
+        JsonObject out = dispatchToolCall(name, args);
+        McpMode.instance().record(name, argsSummary(args), textOf(out), isError(out));
+        return out;
+    }
+
+    private JsonObject dispatchToolCall(String name, JsonObject args) {
         try {
             return switch (name) {
                 case "list_companions" -> content(listCompanions(), false);
@@ -325,6 +348,35 @@ public final class McpServer {
         } catch (Exception ex) {
             return content("call failed: " + ex.getMessage(), true);
         }
+    }
+
+    /** 参数压成一行 {@code companion=Alice, count=5};过长截断,面板一行放得下。 */
+    private static String argsSummary(JsonObject args) {
+        StringBuilder sb = new StringBuilder();
+        for (var entry : args.entrySet()) {
+            if (sb.length() > 0) sb.append(", ");
+            JsonElement v = entry.getValue();
+            String text = v.isJsonPrimitive() ? v.getAsString() : v.toString();
+            sb.append(entry.getKey()).append('=').append(truncate(text, 30));
+            if (sb.length() > SUMMARY_LIMIT) break;
+        }
+        return truncate(sb.toString(), SUMMARY_LIMIT);
+    }
+
+    private static String textOf(JsonObject result) {
+        if (!result.has("content") || !result.get("content").isJsonArray()) return "";
+        JsonArray arr = result.getAsJsonArray("content");
+        if (arr.isEmpty() || !arr.get(0).isJsonObject()) return "";
+        JsonObject first = arr.get(0).getAsJsonObject();
+        return first.has("text") ? truncate(first.get("text").getAsString().replace('\n', ' '), SUMMARY_LIMIT) : "";
+    }
+
+    private static boolean isError(JsonObject result) {
+        return result.has("isError") && result.get("isError").getAsBoolean();
+    }
+
+    private static String truncate(String s, int limit) {
+        return s.length() <= limit ? s : s.substring(0, limit) + "…";
     }
 
     private String listCompanions() throws Exception {
