@@ -370,8 +370,69 @@ net.minecraft.world.entity.vehicle.Boat            → vehicle.boat.Boat        
 
 (残留清点:本档 api 清 14 个旧文件/贴图、core 清 51 个旧 0.0.x 引擎类——与 1.21.10 档同集合。)
 
-## 1.21.11 → 26.1.2
-_待移植时填写_
+## 1.21.11 → 26.1.2 ✓（0.0.9 全量对齐;跨版本纪元的大跳:渲染第四震 + Java 25 + Fabric 原生 loom）
 
-## 1.21.11 → 26.1.2
-_待移植时填写_
+构建旋钮:MC `26.1.2` / range `[26.1.2, 26.2)` / NeoForm `26.1.2-1` / Fabric `0.148.2+26.1.2` /
+**Fabric loader `0.19.2`** / NeoForge `26.1.2.50-beta`。
+
+### ⚠ Java 25 ❗（环境级）
+26.1 要求 **Gradle JVM 本身是 Java 25**(不是 toolchain)。`java_version=21 → 25`;构建时
+`JAVA_HOME` 指 JDK 25(本机可用 gradle 自供给的 `~/.gradle/jdks/eclipse_adoptium-25-*`)。
+CI 无需改:publish.yml 的 setup-java 动态读 gradle.properties 的 java_version。
+
+### 渲染第四震:GuiGraphics → GuiGraphicsExtractor（api,render-state 提取模型)
+```java
+GuiGraphics → GuiGraphicsExtractor(类型+import,全量机械替换)
+Screen.render → extractRenderState(+super);renderBackground → extractBackground
+AbstractWidget: w.render(…) → w.extractRenderState(…);抽象 renderWidget → extractWidgetRenderState
+AbstractButton.renderContents → extractContents;EditBox.renderWidget → extractWidgetRenderState
+g.drawString → g.text;drawCenteredString → centeredText;renderItem → item;
+renderItemDecorations → itemDecorations(fill/blitSprite 不变)
+PlayerFaceRenderer → PlayerFaceExtractor(.draw → .extractRenderState,同参)
+InventoryScreen.renderEntityInInventoryFollowsMouse → extractEntityInInventoryFollowsMouse
+```
+RoundRect(自定义 GuiElementRenderState):接口迁包 `client.gui.render.state → client.renderer.state.gui`
+(方法面不变,addGuiElement 提交,原 submitGuiElement 改名);RenderPipeline 建造器
+`withBlend(BlendFunction) → withColorTargetState(new ColorTargetState(BlendFunction))`、
+`withDepthTestFunction(DepthTestFunction) → withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true))`
+(BlendFunction 迁 blaze3d.pipeline;DepthTestFunction 类删除);顶点格式 `NEW_ENTITY → ENTITY`。
+**AW 命名空间 `named → official`**(原生 Mojang 映射下 official 即 Mojang 名,loom 会拒 named);
+AW/AT 目标类 GuiGraphics→GuiGraphicsExtractor(guiRenderState/scissorStack 字段名不变,
+ScissorStack 内部类随迁)。
+
+### Fabric 原生 loom + Fabric API 大迁移
+构建:`fabric-loom-remap → fabric-loom`,删 mappings 块,`modImplementation → implementation`
+(api JiJ 的 include 不变;root/settings 不动)。API:
+```java
+KeyBindingHelper(keybinding.v1) → KeyMappingHelper(keymapping.v1).registerKeyMapping
+HudRenderCallback.EVENT → hud.HudElementRegistry.addLast(Identifier, HudElement)
+  (HudElement.extractRenderState(GuiGraphicsExtractor, DeltaTracker),lambda 兼容)
+rendering.v1.world.WorldRenderEvents → rendering.v1.level.LevelRenderEvents
+  (BEFORE_DEBUG_RENDER 没了 → BEFORE_GIZMOS,ctx.poseStack(),相机仍走 gameRenderer)
+ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD → ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL
+PayloadTypeRegistry.playC2S/playS2C → serverboundPlay/clientboundPlay
+FabricDataOutput → FabricPackOutput;FabricTagProvider.BlockTagProvider → FabricTagsProvider.BlockTagsProvider
+```
+NeoForge 侧本档零改动(AfterTranslucentBlocks/FMLLoader.getCurrent() 均健在,loader 9 静态化预警未兑现)。
+
+### core 侧代差
+```java
+ClickType → ContainerInput(常量同名)
+ChunkPos.asLong(x,z) → pack(x,z);.x/.z 私有化 → x()/z()
+Entity.interact / Player.interactOn 增加实体相对命中点 Vec3(中身高点为安全默认)
+Recipe.assemble 去掉 registryAccess 参数(crafting/single/smithing 全family)
+StateHolder.getValues() 返回 Stream<Property.Value> → 比对改走 getProperties()+getValue()
+WaterlilyBlock → LilyPadBlock
+SavedDataType 名参 String → Identifier(沿用旧分支 numen:companions 保存档兼容)
+```
+
+### ⚠ 测试环境:组件绑定迁数据包加载期 ❗
+26.1 的 Item 不再自持 DataComponentMap(Item.components() 反委托 holder),绑定发生在
+数据包加载(DataComponentInitializers)。headless 测试只跑 Bootstrap.bootStrap() 会在
+ItemStack 构造时抛 "Components not bound yet" —— 引导后调
+`McTestComponents.bindAll()`(官方 DATA_COMPONENT_INITIALIZERS.build(...).apply() 管线)。
+另:@BeforeEach 的 assumeTrue 跳过**不会**拦住 @AfterEach,teardown 要兜底空对象,
+否则 boot 失败会把 skip 变成 NPE 假失败。
+
+(残留清点:本档 api 清 14 个旧文件/贴图、core 清 51 个旧 0.0.x 引擎类——与 1.21.10 档同集合;
+两仓 README/CI 等主分支身份文件与 1.21.11 同路径,树替换直接覆盖为新版,无需单独保留。)
