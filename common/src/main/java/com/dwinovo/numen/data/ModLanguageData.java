@@ -169,9 +169,37 @@ public final class ModLanguageData {
         adder.add("numen.tab.status", "Status");
         adder.add("numen.tab.settings", "Settings");
         adder.add("numen.settings.nav.llm", "Models");
-        adder.add("numen.settings.nav.mcp", "MCP");
+        adder.add("numen.settings.nav.mcp", "MCP Tools");
+        adder.add("numen.settings.nav.brain", "MCP Brain");
         adder.add("numen.settings.nav.skills", "Skills");
         adder.add("numen.settings.nav.theme", "Theme");
+        // 外接大脑(我们当 MCP 服务器)——与"工具扩展"方向相反的那一半
+        adder.add("numen.brain.title", "External Brain (MCP)");
+        adder.add("numen.brain.toggle", "External-brain mode");
+        adder.add("numen.brain.hint_on",
+                "On — an outside AI drives your companions; the built-in brain is paused.");
+        adder.add("numen.brain.hint_off",
+                "Off — companions think with their own brain and answer you in chat.");
+        adder.add("numen.brain.start_failed", "Could not start the server: %s");
+        adder.add("numen.brain.endpoint", "Endpoint");
+        adder.add("numen.brain.token", "Access token");
+        adder.add("numen.brain.token_none", "not set (loopback only)");
+        adder.add("numen.brain.copy", "Copy");
+        adder.add("numen.brain.copy_prompt", "Copy setup prompt");
+        adder.add("numen.brain.prompt_warn",
+                "The prompt contains your local token — only send it to an AI you trust.");
+        adder.add("numen.brain.copied", "✔ Copied");
+        adder.add("numen.brain.status_off", "Server stopped");
+        adder.add("numen.brain.status_waiting", "Waiting for a client to connect…");
+        adder.add("numen.brain.status_connected", "%s · active %s");
+        adder.add("numen.brain.since_sec", "%ds ago");
+        adder.add("numen.brain.since_min", "%dmin ago");
+        adder.add("numen.brain.console_title", "External brain console");
+        adder.add("numen.brain.console_empty", "No tool calls yet — the feed fills as the AI acts.");
+        adder.add("numen.brain.chat_locked", "🔌 External brain in control — turn it off in settings to chat");
+        adder.add("numen.brain.guide_title", "Connect an external AI");
+        adder.add("numen.brain.guide_step",
+                "Copy the setup prompt in Settings → MCP Brain, paste it to your AI, and it configures the rest.");
         adder.add("numen.settings.theme.title", "Theme");
         adder.add(Keys.STT_NAV, "Voice input");
         adder.add(Keys.STT_TITLE, "Voice input (STT)");
@@ -249,7 +277,7 @@ public final class ModLanguageData {
         adder.add("numen.tool.scan_nearby_entities", "Scan entities");
         adder.add("numen.tool.todowrite", "Update plan");
         adder.add("numen.tool.transfer", "Transfer items");
-        adder.add("numen.mcp.title", "MCP Tools");
+        adder.add("numen.mcp.title", "Tool Extensions (MCP)");
         adder.add("numen.mcp.empty", "None · click ＋ Add (top-right)");
         adder.add("numen.mcp.add", "＋ Add");
         adder.add("numen.mcp.type_http", "Type: HTTP (click to switch)");
@@ -385,9 +413,34 @@ public final class ModLanguageData {
         adder.add("numen.tab.status", "状态");
         adder.add("numen.tab.settings", "设置");
         adder.add("numen.settings.nav.llm", "模型接入");
-        adder.add("numen.settings.nav.mcp", "MCP");
+        adder.add("numen.settings.nav.mcp", "工具扩展");
+        adder.add("numen.settings.nav.brain", "外接大脑");
         adder.add("numen.settings.nav.skills", "技能");
         adder.add("numen.settings.nav.theme", "主题");
+        // 外接大脑(我们当 MCP 服务器)——与"工具扩展"方向相反的那一半
+        adder.add("numen.brain.title", "外接大脑 (MCP)");
+        adder.add("numen.brain.toggle", "外接大脑模式");
+        adder.add("numen.brain.hint_on", "已开启——同伴交给外部 AI 驱动,内置大脑暂停。");
+        adder.add("numen.brain.hint_off", "已关闭——同伴用自己的大脑思考,在聊天里回你。");
+        adder.add("numen.brain.start_failed", "服务器启动失败:%s");
+        adder.add("numen.brain.endpoint", "接入端点");
+        adder.add("numen.brain.token", "访问令牌");
+        adder.add("numen.brain.token_none", "未设置(仅本机回环)");
+        adder.add("numen.brain.copy", "复制");
+        adder.add("numen.brain.copy_prompt", "复制接入提示词");
+        adder.add("numen.brain.prompt_warn", "提示词含你的本机令牌,只发给你信任的 AI。");
+        adder.add("numen.brain.copied", "✔ 已复制");
+        adder.add("numen.brain.status_off", "服务器未运行");
+        adder.add("numen.brain.status_waiting", "等待客户端接入…");
+        adder.add("numen.brain.status_connected", "%s · %s活跃");
+        adder.add("numen.brain.since_sec", "%d 秒前");
+        adder.add("numen.brain.since_min", "%d 分钟前");
+        adder.add("numen.brain.console_title", "外接大脑控制台");
+        adder.add("numen.brain.console_empty", "还没有工具调用——外部 AI 一动手这里就会滚动。");
+        adder.add("numen.brain.chat_locked", "🔌 外接大脑接管中,在设置里关闭后恢复对话");
+        adder.add("numen.brain.guide_title", "接入外部 AI");
+        adder.add("numen.brain.guide_step",
+                "到「设置 → 外接大脑」复制接入提示词,粘贴给你的 AI,剩下的它会自己配好。");
         adder.add("numen.settings.theme.title", "主题");
         adder.add(Keys.STT_NAV, "语音输入");
         adder.add(Keys.STT_TITLE, "语音输入 (STT)");
@@ -465,7 +518,7 @@ public final class ModLanguageData {
         adder.add("numen.tool.scan_nearby_entities", "扫描实体");
         adder.add("numen.tool.todowrite", "更新计划");
         adder.add("numen.tool.transfer", "转移物品");
-        adder.add("numen.mcp.title", "MCP 工具");
+        adder.add("numen.mcp.title", "工具扩展 (MCP)");
         adder.add("numen.mcp.empty", "无 · 点右上「＋ 添加」");
         adder.add("numen.mcp.add", "＋ 添加");
         adder.add("numen.mcp.type_http", "类型：HTTP（点击切换）");

@@ -12,6 +12,7 @@ import com.dwinovo.numen.client.screen.ProviderDropdown;
 import com.dwinovo.numen.client.screen.SimpleButton;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.data.ModLanguageData;
+import com.dwinovo.numen.mcp.server.McpMode;
 import com.dwinovo.numen.persona.PersonaLibrary;
 import com.dwinovo.numen.client.platform.ClientServices;
 import com.dwinovo.numen.platform.Services;
@@ -63,8 +64,12 @@ public final class SettingsView {
         void repaintPalette();
     }
 
-    /** The config hub's sections, in nav order. */
-    private enum Section { PROVIDER, PROXY, MCP, SKILLS, PERSONA, VOICE, SKIN, STT, THEME }
+    /**
+     * The config hub's sections, in nav order. MCP 出现两次是刻意的——方向相反的两件事:
+     * {@link #MCP} 是"给同伴的大脑加外部工具"(我们当 client),{@link #BRAIN} 是"把同伴
+     * 交给外面的大脑"(我们当 server),故在 UI 上按用户视角分成工具扩展/外接大脑两节。
+     */
+    private enum Section { PROVIDER, PROXY, MCP, BRAIN, SKILLS, PERSONA, VOICE, SKIN, STT, THEME }
 
     // ---- layout constants (mirror the screen's) ----
     private static final int PAD = 8;
@@ -434,6 +439,7 @@ public final class SettingsView {
                 else buildSkinListWidgets();
             }
             case PROXY -> buildProxyWidgets();
+            case BRAIN -> buildBrainWidgets();
             case STT -> buildSttWidgets();
             case THEME -> { /* no widgets — plain click rows */ }
         }
@@ -590,6 +596,96 @@ public final class SettingsView {
         if (savedFlashUntil > System.currentTimeMillis()) {
             txt(g, Component.translatable("numen.settings.saved"), x, top() + panelH() - PAD - 14, OK);
         }
+    }
+
+    // ---- External-brain section: 我们自己当 MCP 服务器,把同伴交给外面的 AI 驱动 ----
+
+    /** 本节的纵向锚点(相对 secY0):build 与 render 共读一份,按钮和标签才不会跑偏。 */
+    private static final int BR_TOGGLE = 16, BR_HINT = 32, BR_ENDPOINT = 56,
+            BR_TOKEN = 86, BR_PROMPT = 118, BR_WARN = 140, BR_STATUS = 158;
+    private static final int BR_COPY_W = 46;
+
+    private void buildBrainWidgets() {
+        int x = secX(), w = secW(), fy = secY0();
+        McpMode mcp = McpMode.instance();
+        host.add(new SimpleButton(x + w - BR_COPY_W, fy + BR_ENDPOINT + 9, BR_COPY_W, 14,
+                Component.translatable("numen.brain.copy"),
+                b -> copyToClipboard(mcp.endpoint())));
+        if (!mcp.token().isBlank()) {
+            host.add(new SimpleButton(x + w - BR_COPY_W, fy + BR_TOKEN + 9, BR_COPY_W, 14,
+                    Component.translatable("numen.brain.copy"),
+                    b -> copyToClipboard(mcp.token())));
+        }
+        host.add(new SimpleButton(x, fy + BR_PROMPT, 150, 16,
+                Component.translatable("numen.brain.copy_prompt"),
+                b -> copyToClipboard(mcp.accessPrompt())).primary());
+    }
+
+    /** 复制并闪一下"已复制"——与保存态共用同一个提示位。 */
+    private void copyToClipboard(String text) {
+        Minecraft.getInstance().keyboardHandler.setClipboard(text);
+        savedFlashUntil = System.currentTimeMillis() + 1500;
+    }
+
+    private void renderBrainSection(GuiGraphics g, int mouseX, int mouseY) {
+        int x = secX(), w = secW(), fy = secY0();
+        McpMode mcp = McpMode.instance();
+        boolean on = mcp.enabled();
+
+        txt(g, Component.translatable("numen.brain.title"), x, fy - 2, TXT);
+
+        // 开关行:整行可点(与 brainToggleClick 的命中区一致)。
+        txt(g, Component.translatable("numen.brain.toggle"), x, fy + BR_TOGGLE, TXT);
+        drawToggle(g, x + w - TOG_W, fy + BR_TOGGLE - 1, on);
+        txt(g, Component.translatable(on ? "numen.brain.hint_on" : "numen.brain.hint_off"),
+                x, fy + BR_HINT, TXT_FAINT);
+        String err = mcp.lastError();
+        if (err != null) {
+            txt(g, Component.translatable("numen.brain.start_failed", err), x, fy + BR_HINT + 10, FAIL);
+        }
+
+        txt(g, Component.translatable("numen.brain.endpoint"), x, fy + BR_ENDPOINT, TXT_MUTED);
+        txt(g, Component.literal(mcp.endpoint()), x, fy + BR_ENDPOINT + 11, TXT);
+
+        txt(g, Component.translatable("numen.brain.token"), x, fy + BR_TOKEN, TXT_MUTED);
+        // 明文令牌不上屏:截图/录屏泄露一次就永久泄露,要整份走复制按钮。
+        txt(g, mcp.token().isBlank()
+                        ? Component.translatable("numen.brain.token_none")
+                        : Component.literal(mcp.maskedToken()),
+                x, fy + BR_TOKEN + 11, mcp.token().isBlank() ? TXT_FAINT : TXT);
+
+        txt(g, Component.translatable("numen.brain.prompt_warn"), x, fy + BR_WARN, TXT_FAINT);
+        txt(g, brainStatusLine(mcp), x, fy + BR_STATUS, on ? OK : TXT_FAINT);
+
+        if (savedFlashUntil > System.currentTimeMillis()) {
+            txt(g, Component.translatable("numen.brain.copied"), x, top() + panelH() - PAD - 14, OK);
+        }
+    }
+
+    /** 连接状态一行:没开 → 关闭;开着没人连 → 等待接入;连过 → 谁 + 多久前活跃。 */
+    private Component brainStatusLine(McpMode mcp) {
+        if (!mcp.enabled()) return Component.translatable("numen.brain.status_off");
+        String who = mcp.clientName();
+        if (who == null) return Component.translatable("numen.brain.status_waiting");
+        return Component.translatable("numen.brain.status_connected", who, sinceLabel(mcp.lastActivityMs()));
+    }
+
+    /** "12 秒前" / "3 分钟前" —— 面板每帧重算,不缓存。 */
+    private static String sinceLabel(long stampMs) {
+        long sec = Math.max(0, (System.currentTimeMillis() - stampMs) / 1000);
+        if (sec < 60) return I18n.get("numen.brain.since_sec", sec);
+        return I18n.get("numen.brain.since_min", sec / 60);
+    }
+
+    private boolean brainToggleClick(int mx, int my) {
+        int x = secX(), w = secW(), fy = secY0();
+        boolean onToggle = overToggle(mx, my, x + w - TOG_W, fy + BR_TOGGLE - 1);
+        boolean onRow = mx >= x && mx < x + w && my >= fy + BR_TOGGLE - 2 && my < fy + BR_TOGGLE + 11;
+        if (!onToggle && !onRow) return false;
+        McpMode mcp = McpMode.instance();
+        mcp.setEnabled(!mcp.enabled());
+        host.rebuild();   // 令牌行的复制按钮随配置在场与否增减
+        return true;
     }
 
     // ---- Provider section: the library of named LLM provider configs companions select from ----
@@ -1608,6 +1704,7 @@ public final class SettingsView {
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
             case PROXY -> renderProxySection(g);
+            case BRAIN -> renderBrainSection(g, mouseX, mouseY);
             case STT -> renderSttSection(g);
             case THEME -> renderThemeSection(g, mouseX, mouseY);
         }
@@ -1731,7 +1828,7 @@ public final class SettingsView {
     private void renderSettingsNav(GuiGraphics g, int mouseX, int mouseY) {
         String[] labels = {
                 I18n.get(ModLanguageData.Keys.PROVIDER_TITLE), I18n.get("numen.settings.proxy"),
-                I18n.get("numen.settings.nav.mcp"),
+                I18n.get("numen.settings.nav.mcp"), I18n.get("numen.settings.nav.brain"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona"),
                 I18n.get(ModLanguageData.Keys.VOICE_TITLE),
                 I18n.get(ModLanguageData.Keys.SKIN_TITLE),
@@ -2140,6 +2237,7 @@ public final class SettingsView {
             }
         }
         if (section == Section.MCP) return mcpToggleClick(mx, my);
+        if (section == Section.BRAIN) return brainToggleClick(mx, my);
         if (section == Section.SKILLS) return skillToggleClick(mx, my);
         if (section == Section.PERSONA) return personaClick(mx, my);
         if (section == Section.PROVIDER) return providerClick(mx, my);
