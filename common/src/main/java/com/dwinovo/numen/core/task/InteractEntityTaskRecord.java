@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task;
 
-import com.dwinovo.numen.core.task.TaskRecord;
+import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 
@@ -10,8 +10,8 @@ import net.minecraft.world.item.Item;
  * Entities are the only MOVING interaction target, so this is the one that auto-paths AND
  * follows the live entity (by id from {@code scan_nearby_entities}) before pressing a button:
  * <ul>
- *   <li>{@link Button#LEFT} (attack): hit it — tap = one cooldown-gated hit, hold = keep
- *       hitting until it dies (= the old {@code hunt}).</li>
+ *   <li>{@link Button#LEFT} (attack): hit it. Tap = one cooldown-gated hit; hold = keep
+ *       hitting until the target dies, the hold ends, or the task times out.</li>
  *   <li>{@link Button#RIGHT} (use): interact — trade / breed / mount / shear / name with the
  *       held item; hold = a modded entity needing continuous right-click.</li>
  * </ul>

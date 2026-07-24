@@ -1,26 +1,28 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
-import com.dwinovo.numen.core.task.CompanionTask;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.core.task.base.TargetSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.phys.AABB;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Intent-level item sweeper for {@link CollectItemsTaskRecord}: "pick up the
  * dropped items around here." The entity already auto-absorbs items within ~1
  * block ({@code setCanPickUpLoot}); this goal actively walks it to each
  * scattered drop with the pathfinder so nothing is left behind after a mine or a
- * hunt.
+ * melee_attack.
  *
  * <h2>State machine (per tick)</h2>
  * <pre>
@@ -29,7 +31,7 @@ import java.util.Set;
  *              reach the spot without picking it up (skip), then re-SCAN.
  * </pre>
  */
-public final class CollectItemsTaskGoal implements CompanionTask {
+public final class CollectItemsTaskGoal extends AbstractCompanionTask<CollectItemsTaskRecord> {
 
     private enum Phase { SCAN, APPROACH }
 
@@ -39,51 +41,44 @@ public final class CollectItemsTaskGoal implements CompanionTask {
 
     private Phase phase = Phase.SCAN;
     private ItemEntity target;
-    private PlayerNav nav;
 
     /** Item-entity ids we reached but couldn't absorb, so SCAN won't loop on them. */
-    private final Set<Integer> skipped = new HashSet<>();
-
-    private final NumenPlayer player;
-    private final CollectItemsTaskRecord r;
+    private final TargetSet<ItemEntity> skipped = new TargetSet<>(ItemEntity::getId);
 
     public CollectItemsTaskGoal(NumenPlayer player, CollectItemsTaskRecord record) {
-        this.player = player;
-        this.r = record;
+        super(player, record);
     }
 
     @Override
-    public void start() {
+    protected void onStart() {
         this.phase = Phase.SCAN;
     }
 
     @Override
-    public TaskState tick() {
+    protected TaskState onTick() {
         if (player.isDeadOrDying()) {
-            r.setState(TaskState.CANCELLED);
-            return r.getState();
+            return TaskState.CANCELLED;
         }
-        switch (phase) {
-            case SCAN -> tickScan(r);
-            case APPROACH -> tickApproach(r);
-        }
-        return r.getState();
+        return switch (phase) {
+            case SCAN -> tickScan();
+            case APPROACH -> tickApproach();
+        };
     }
 
-    private void tickScan(CollectItemsTaskRecord r) {
-        ItemEntity best = nearestItem(r);
+    private TaskState tickScan() {
+        ItemEntity best = nearestItem();
         if (best == null) {
             // Nothing left within radius — done. Success even at 0 (the LLM asked
             // us to sweep; "nothing here" is a valid, useful answer).
-            r.setState(TaskState.SUCCESS);
-            return;
+            return TaskState.SUCCESS;
         }
         target = best;
         nav = new PlayerNav(player, this::targetCell, WALK_SPEED, this::picked);
         phase = Phase.APPROACH;
+        return TaskState.RUNNING;
     }
 
-    private void tickApproach(CollectItemsTaskRecord r) {
+    private TaskState tickApproach() {
         if (target == null || target.isRemoved()) {
             // Absorbed (by us or otherwise) — count it if it was ours to get.
             if (target != null) {
@@ -91,7 +86,7 @@ public final class CollectItemsTaskGoal implements CompanionTask {
             }
             stopNav();
             phase = Phase.SCAN;
-            return;
+            return TaskState.RUNNING;
         }
         switch (nav.tick()) {
             case RUNNING -> { /* walking to it */ }
@@ -99,19 +94,20 @@ public final class CollectItemsTaskGoal implements CompanionTask {
                 // Reached the spot. If it's now absorbed, the removed-branch above
                 // counts it next tick; otherwise we can't pick it up — skip it.
                 if (!target.isRemoved()) {
-                    skipped.add(target.getId());
+                    skipped.skip(target);
                     target = null;
                     stopNav();
                     phase = Phase.SCAN;
                 }
             }
             case FAILED -> {                 // can't route to it — abandon
-                if (target != null) skipped.add(target.getId());
+                if (target != null) skipped.skip(target);
                 target = null;
                 stopNav();
                 phase = Phase.SCAN;
             }
         }
+        return TaskState.RUNNING;
     }
 
     private BlockPos targetCell() {
@@ -124,50 +120,38 @@ public final class CollectItemsTaskGoal implements CompanionTask {
                 || player.distanceToSqr(target) <= PICKUP_REACH_SQR;
     }
 
-    private ItemEntity nearestItem(CollectItemsTaskRecord r) {
+    private ItemEntity nearestItem() {
         AABB box = player.getBoundingBox().inflate(r.radius);
-        ItemEntity best = null;
-        double bestDistSq = Double.MAX_VALUE;
+        List<ItemEntity> candidates = new ArrayList<>();
         for (Entity e : player.level().getEntities(player, box)) {
             if (!(e instanceof ItemEntity ie) || ie.isRemoved()) continue;
-            if (skipped.contains(ie.getId())) continue;
             if (!r.filter.isEmpty() && !r.filter.contains(ie.getItem().getItem())) continue;
-            double d = player.distanceToSqr(ie);
-            if (d < bestDistSq) {
-                bestDistSq = d;
-                best = ie;
-            }
+            candidates.add(ie);
         }
-        return best;
-    }
-
-    private void stopNav() {
-        if (nav != null) {
-            nav.stop();
-            nav = null;
-        }
+        return skipped.pick(candidates, Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
     }
 
     @Override
-    public TaskResult buildResult(TaskState finalState) {
-        stopNav();
-
+    protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("label", r.label);
         data.put("collected", r.getCollected());
         data.put("radius", r.radius);
+        return data;
+    }
 
-        return switch (finalState) {
-            case SUCCESS -> TaskResult.ok(
-                    "collected " + r.getCollected() + " " + r.label, data);
-            case TIMEOUT -> new TaskResult(false,
-                    "timed out after collecting " + r.getCollected() + " " + r.label,
-                    true, false, data);
-            case CANCELLED -> new TaskResult(false,
-                    "interrupted after collecting " + r.getCollected() + " " + r.label,
-                    false, true, data);
-            case FAILED -> TaskResult.fail("could not collect items", data);
-            default -> TaskResult.fail("unexpected state: " + finalState, data);
-        };
+    @Override
+    protected String successMessage() {
+        return "collected " + r.getCollected() + " " + r.label;
+    }
+
+    @Override
+    protected String timeoutMessage() {
+        return "timed out after collecting " + r.getCollected() + " " + r.label;
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "interrupted after collecting " + r.getCollected() + " " + r.label;
     }
 }
