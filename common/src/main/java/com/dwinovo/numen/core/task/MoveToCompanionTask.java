@@ -103,7 +103,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     protected void onStart() {
         if (r.kind == MoveToTaskRecord.Kind.FIND) {
             // 就近方块:解析 id → 离线扫描附近候选;导航等首批候选到手再建
-            var id = net.minecraft.resources.ResourceLocation.tryParse(r.block);
+            var id = net.minecraft.resources.Identifier.tryParse(r.block);
             var b = id == null ? null : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getValue(id);
             if (b == null || b == net.minecraft.world.level.block.Blocks.AIR) {
                 fail("unknown block id '" + r.block

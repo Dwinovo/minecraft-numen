@@ -275,7 +275,7 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
      * 才能出手);任一消费即结束(useItemOn 消费才挥手)。
      */
     private void rightClickTick() {
-        if (player.getControlledVehicle() instanceof net.minecraft.world.entity.vehicle.Boat
+        if (player.getControlledVehicle() instanceof net.minecraft.world.entity.vehicle.boat.Boat
                 && (isKeyRequested(Input.MOVE_FORWARD) || isKeyRequested(Input.MOVE_BACK)
                         || isKeyRequested(Input.MOVE_LEFT) || isKeyRequested(Input.MOVE_RIGHT))) {
             return; // 驾船且本 tick 有移动输入(手在桨上)不右键;副座/静坐可点击

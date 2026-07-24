@@ -8,7 +8,7 @@ import com.dwinovo.numen.core.task.DropItemsTaskRecord;
 import com.dwinovo.numen.core.task.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.EquipTaskRecord;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -70,7 +70,7 @@ String slot,
     public TaskRecord eatItem(
 String item_id,
             ToolContext ctx) {
-        ResourceLocation id = ResourceLocation.tryParse(item_id);
+        Identifier id = Identifier.tryParse(item_id);
         if (id == null) {
             throw new IllegalArgumentException("item_id is not a valid id: " + item_id);
         }
@@ -103,7 +103,7 @@ Integer radius,
         if (item_ids != null) {
             for (String el : item_ids) {
                 if (el == null) continue;
-                ResourceLocation id = ResourceLocation.tryParse(el);
+                Identifier id = Identifier.tryParse(el);
                 if (id != null && BuiltInRegistries.ITEM.containsKey(id)) {
                     filter.add(BuiltInRegistries.ITEM.getValue(id));
                 }

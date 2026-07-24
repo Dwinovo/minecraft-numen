@@ -125,7 +125,7 @@ public class ToolSet {
 
     private static TagKey<Item> materialTag(String name) {
         return TagKey.create(net.minecraft.core.registries.Registries.ITEM,
-                net.minecraft.resources.ResourceLocation.withDefaultNamespace(name));
+                net.minecraft.resources.Identifier.withDefaultNamespace(name));
     }
 
     private static int getMaterialCost(ItemStack itemStack) {

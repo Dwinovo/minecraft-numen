@@ -9,7 +9,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
@@ -98,7 +98,7 @@ public final class LocateBiomeTaskGoal extends AbstractCompanionTask<LocateBiome
     private Predicate<Holder<Biome>> resolveBiomePredicate(ServerLevel sl, String arg) {
         var registry = sl.registryAccess().lookupOrThrow(Registries.BIOME);
         if (arg.startsWith("#")) {
-            ResourceLocation tagId = ResourceLocation.tryParse(arg.substring(1));
+            Identifier tagId = Identifier.tryParse(arg.substring(1));
             if (tagId == null) {
                 failReason = "invalid biome tag: " + arg;
                 return null;
@@ -114,7 +114,7 @@ public final class LocateBiomeTaskGoal extends AbstractCompanionTask<LocateBiome
             }
             return holder -> holder.is(tag);
         }
-        ResourceLocation id = ResourceLocation.tryParse(arg);
+        Identifier id = Identifier.tryParse(arg);
         if (id == null || registry.get(ResourceKey.create(Registries.BIOME, id)).isEmpty()) {
             if (id != null && isStructureId(sl, id)) {
                 failReason = arg + " is a STRUCTURE, not a biome — call "
@@ -122,7 +122,7 @@ public final class LocateBiomeTaskGoal extends AbstractCompanionTask<LocateBiome
                 return null;
             }
             String suggestion = IdSuggest.closest(
-                    registry.listElements().map(ref -> ref.key().location()), arg);
+                    registry.listElements().map(ref -> ref.key().identifier()), arg);
             failReason = "unknown biome: " + arg
                     + (suggestion != null
                             ? " — did you mean " + suggestion + "?"
@@ -135,12 +135,12 @@ public final class LocateBiomeTaskGoal extends AbstractCompanionTask<LocateBiome
         return holder -> holder.is(key);
     }
 
-    private static boolean isStructureId(ServerLevel sl, ResourceLocation id) {
+    private static boolean isStructureId(ServerLevel sl, Identifier id) {
         return sl.registryAccess().lookupOrThrow(Registries.STRUCTURE)
                 .get(ResourceKey.create(Registries.STRUCTURE, id)).isPresent();
     }
 
-    private static boolean isStructureTag(ServerLevel sl, ResourceLocation tagId) {
+    private static boolean isStructureTag(ServerLevel sl, Identifier tagId) {
         return sl.registryAccess().lookupOrThrow(Registries.STRUCTURE)
                 .get(TagKey.create(Registries.STRUCTURE, tagId)).isPresent();
     }
@@ -231,7 +231,7 @@ public final class LocateBiomeTaskGoal extends AbstractCompanionTask<LocateBiome
                     + "x/z (pick a sensible y for the terrain), then confirm with "
                     + "scan_blocks or scan_nearby_entities.";
         }
-        String dim = player.level().dimension().location().getPath();
+        String dim = player.level().dimension().identifier().getPath();
         int searched = Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS;
         return "no " + r.biome + " within ~" + searched
                 + " blocks IN THIS DIMENSION (" + dim + ") — check the biome's "
