@@ -26,13 +26,15 @@ import java.util.concurrent.CompletableFuture;
  * (vanilla 形状的 INVOKE 在其运行时不存在,本 mixin 若留在 common 会因
  * 0 目标掀桌——这正是分家的原因)。
  *
- * <p><b>require = 0</b>:完整版 Fabric API 的 fabric-sound-api-v1 会抢先
- * @Redirect 同一个调用点(本重定向被让位跳过是<b>预期</b>,不是故障)——
- * 那条路上由 {@link MixinVoicePcmFabricSound} 给声音实例补
- * {@code FabricSoundInstance} 接口走它的官方扩展点。本重定向只在
- * sound-api 不在场的精简环境里生效,双保险互斥、必有一条通。
+ * <p><b>require = 0 且 priority = 900</b>:fabric-sound-api-v1 也 @Redirect
+ * 同一个调用点。同为默认优先级 1000 时谁先安装靠注册顺序——顺序翻转时
+ * sound-api 后到被跳过,而它 require=1,注入失败直接崩游戏(26.1.2 实证)。
+ * 降到 900 让顺序确定:我们先装,sound-api 以更高优先级合法<b>覆盖</b>本重定向
+ * (两边注入都算成功),那条路上由 {@link MixinVoicePcmFabricSound} 给声音实例补
+ * {@code FabricSoundInstance} 接口走它的官方扩展点;sound-api 不在场的精简
+ * 环境里本重定向独立生效。双保险互斥、必有一条通。
  */
-@Mixin(SoundEngine.class)
+@Mixin(value = SoundEngine.class, priority = 900)
 public class MixinSoundEngine {
 
     @Redirect(method = "play", require = 0,
