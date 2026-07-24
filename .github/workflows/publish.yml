@@ -155,6 +155,7 @@ jobs:
             echo "second_name=${second_name}"
             echo "fabric_version=${fabric_version}"
             echo "second_version=${second_version}"
+            echo "release_name=${mod_id} ${mod_version}-${channel} (MC ${minecraft_version})"
           } >> "$GITHUB_OUTPUT"
 
       - name: Publish Fabric to Modrinth and CurseForge
@@ -165,6 +166,7 @@ jobs:
           files: ${{ steps.meta.outputs.fabric_file }}
           loaders: fabric
           name: ${{ steps.meta.outputs.fabric_name }}
+          github-name: ${{ steps.meta.outputs.release_name }}
           version: ${{ steps.meta.outputs.fabric_version }}
           game-versions: ${{ steps.meta.outputs.minecraft_version }}
           game-version-filter: none
@@ -192,6 +194,7 @@ jobs:
           files: ${{ steps.meta.outputs.second_file }}
           loaders: ${{ steps.meta.outputs.second_loader }}
           name: ${{ steps.meta.outputs.second_name }}
+          github-name: ${{ steps.meta.outputs.release_name }}
           version: ${{ steps.meta.outputs.second_version }}
           game-versions: ${{ steps.meta.outputs.minecraft_version }}
           game-version-filter: none
