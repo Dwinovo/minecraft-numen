@@ -552,6 +552,17 @@ public final class NumenScreen extends Screen {
         stopButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
                 Component.translatable("numen.chat.tip.stop")));
         stopButton.active = loop().canInterrupt();
+
+        // 「外接大脑」模式:发言入口整排锁死(输入框/发送/麦克风/压缩),占位文案说明原因。
+        // 真正的互斥在 EntityAgentLoop 的开轮闸门上——这里只是把"按了没反应"提前成
+        // "按不下去"。叫停键不锁:那是主人的急刹车,外部 AI 抽风时更需要它。
+        if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) {
+            input.setEditable(false);
+            input.setHint(Nb.colored(I18n.get("numen.brain.chat_locked"), TXT_FAINT));
+            sendButton.active = false;
+            micButton.active = false;
+            compactButton.active = false;
+        }
     }
 
     /** 正常的输入框占位文案("说点什么…, {name}");麦克风状态提示消失后用它复位。 */
@@ -664,6 +675,9 @@ public final class NumenScreen extends Screen {
 
     private void onSend() {
         if (input == null) return;
+        // 回车走的是这条路,绕过了被禁用的发送键——模式开着时一并挡掉,
+        // 否则消息会进内置大脑的收件箱、在模式关闭后突然诈尸开轮。
+        if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) return;
         String text = input.getValue() == null ? "" : input.getValue().trim();
         if (text.isEmpty()) return;
         // Endpoint check for THIS companion (its provider entry, not the legacy global
@@ -1163,7 +1177,12 @@ public final class NumenScreen extends Screen {
         int planX = transX + transW + 8;
         com.dwinovo.numen.client.screen.chat.PlanCard.render(
                 g, font, loop(), planX - 4, bodyY, PLAN_W + 4, bodyBottom);
-        chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY);
+        // 「外接大脑」模式:对话流换成控制台——身体归外部 AI,这屏就该显示它在干嘛。
+        if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) {
+            chatView.renderConsole(g, transX, bodyY, transW, bodyBottom - bodyY);
+        } else {
+            chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY);
+        }
 
         boolean noticeLive = micNotice != null && micNoticeUntil > System.currentTimeMillis();
         if (!noticeLive && micNoticeUntil != 0) {   // 过期一次性复位:把醒目 hint 换回正常的淡色占位

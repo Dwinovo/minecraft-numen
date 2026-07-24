@@ -12,6 +12,7 @@ import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
 import com.dwinovo.numen.client.ui.RoundRect;
+import com.dwinovo.numen.mcp.server.McpMode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -173,6 +174,80 @@ public final class ChatView {
             g.blitSprite(SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
             g.blitSprite(SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
         }
+    }
+
+    // ---- 外接大脑控制台:模式开启时顶掉整条对话流 ----
+
+    /**
+     * 「外接大脑」模式下的聊天区形态:这不是对话,是一台控制台——顶部写清谁接进来了,
+     * 下面滚外部 AI 的工具调用。故意长得和聊天完全不一样(无气泡、无头像、等宽两行一条),
+     * 让主人一眼知道"这屏不是我在跟同伴说话,是别的 AI 在开她"。
+     *
+     * <p>数据来自 {@link McpMode.ActivityFeed} 的只读快照(HTTP 线程写、这里读),
+     * 纯内存不持久化;还没人接入时这里改显示接入向导。
+     */
+    public void renderConsole(GuiGraphics g, int x, int y, int w, int h) {
+        loadPalette();
+        McpMode mcp = McpMode.instance();
+        int cx = x + EDGE;
+        int cw = w - EDGE - SB_W - 3;
+
+        g.enableScissor(x, y, x + w, y + h);
+        line(g, I18n.get("numen.brain.console_title"), cx, y + 2, TXT);
+        String who = mcp.clientName();
+        line(g, who == null
+                        ? I18n.get("numen.brain.status_waiting")
+                        : I18n.get("numen.brain.status_connected", who, sinceLabel(mcp.lastActivityMs())),
+                cx, y + 14, who == null ? FAINT : OK);
+        g.fill(cx, y + 26, cx + cw, y + 27, CHIP_FILL);
+
+        List<McpMode.Activity> feed = mcp.feed().snapshot();
+        int listTop = y + 32;
+        if (feed.isEmpty()) {
+            renderConsoleGuide(g, mcp, cx, listTop, cw, who != null);
+            g.disableScissor();
+            return;
+        }
+        // 自底向上画:最新一条钉在底部,超出上沿的自然被裁掉(不做滚动——这是活动流,
+        // 要看历史去日志;面板只答"现在在干嘛")。
+        int rowH = LINE_H * 2 + 2;
+        int cy = y + h - BOT_PAD - rowH;
+        for (int i = feed.size() - 1; i >= 0 && cy >= listTop; i--, cy -= rowH) {
+            McpMode.Activity a = feed.get(i);
+            String head = (a.error() ? "✗ " : "✔ ") + a.tool()
+                    + (a.args().isBlank() ? "" : "  " + a.args());
+            line(g, fitOneLine(head, cw), cx, cy, a.error() ? FAIL : TXT);
+            line(g, fitOneLine("→ " + a.summary(), cw - 6), cx + 6, cy + LINE_H, FAINT);
+        }
+        g.disableScissor();
+    }
+
+    /** 还没有调用记录时的引导:连上了就等它动手,没连过就讲怎么接。 */
+    private void renderConsoleGuide(GuiGraphics g, McpMode mcp, int cx, int cy, int cw, boolean connected) {
+        if (connected) {
+            line(g, I18n.get("numen.brain.console_empty"), cx, cy, FAINT);
+            return;
+        }
+        line(g, I18n.get("numen.brain.guide_title"), cx, cy, TXT);
+        line(g, I18n.get("numen.brain.endpoint") + ": " + mcp.endpoint(), cx, cy + 14, MUTED);
+        line(g, I18n.get("numen.brain.token") + ": "
+                        + (mcp.token().isBlank() ? I18n.get("numen.brain.token_none") : mcp.maskedToken()),
+                cx, cy + 26, MUTED);
+        int ty = cy + 44;
+        for (FormattedCharSequence l : font.split(Nb.colored(I18n.get("numen.brain.guide_step"), FAINT), cw)) {
+            draw(g, l, cx, ty);
+            ty += LINE_H + 2;
+        }
+    }
+
+    private void line(GuiGraphics g, String text, int x, int y, int color) {
+        draw(g, Nb.colored(text, color).getVisualOrderText(), x, y);
+    }
+
+    /** "12 秒前" / "3 分钟前"。 */
+    private static String sinceLabel(long stampMs) {
+        long sec = Math.max(0, (System.currentTimeMillis() - stampMs) / 1000);
+        return sec < 60 ? I18n.get("numen.brain.since_sec", sec) : I18n.get("numen.brain.since_min", sec / 60);
     }
 
     /** Wheel anywhere on the chat tab scrolls the transcript (parity with the old list). */
