@@ -54,8 +54,10 @@ public final class BuildTool implements NumenTool {
                 + "CLEARS/breaks whatever is there (drops harvest normally). The task walks, climbs and bridges to "
                 + "each cell, clears wrong blocks at requested cells when replacement is enabled, and can build in "
                 + "optional vertical layers. Use this for a single block, a correction, or portals, frames, walls, "
-                + "stairs, pillars, roofs and larger construction. It does not read schematic files yet.";
+                + "stairs, pillars, roofs and larger construction. It does not read schematic files yet. BACKGROUND: "
+                + "after acceptance, wait for task_finished and never resend the same cell list while it is running or after status=done.";
     }
+
 
     @Override
     public Map<String, Object> parameterSchema() {
