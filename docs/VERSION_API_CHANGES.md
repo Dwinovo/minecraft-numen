@@ -209,9 +209,65 @@ MobEffects.DIG_SLOWDOWN → MobEffects.MINING_FATIGUE
 **（api 仓）`DynamicTexture` 构造器** ❗ — 新增调试名首参：`new DynamicTexture(img)` →
 `new DynamicTexture(() -> "label", img)`（`SkinTextures`）。
 
-## 1.21.5 → 1.21.8
-<!-- 约 24 文件 -->
-_待移植时填写_
+## 1.21.5 → 1.21.8 ✓（已验证，双 loader 编译 + 出包 + 222 测试全绿）
+
+**跨过 1.21.6/1.21.7**，含 1.21.6 的 GUI 深绘制 + IO 大改。构建旋钮：MC `1.21.8` / range `[1.21.8, 1.21.9)` /
+NeoForm `1.21.8-20250717.133445` / Fabric `0.136.1+1.21.8` / NeoForge `21.8.47`。
+
+### GUI 深绘制(api,1.21.6 GuiRenderState 重构)❗ 渲染第三震
+GuiGraphics 不再即时绘制:元素收集为 `GuiElementRenderState`,GuiRenderer 帧末统一
+批渲染(按 pipeline+textureSetup 分组,mesh 用**各管线自带的顶点格式**构建,只喂标准
+UBO)。自定义 uniform 通道彻底消失:
+```java
+// RoundRect:弃"flush 后自开 RenderPass 直绘",改自定义 GuiElementRenderState 提交:
+g.guiRenderState.submitGuiElement(state)         // guiRenderState/scissorStack 是 private
+//   → common AT(META-INF/accesstransformer.cfg) + fabric AW(numen_api.accesswidener) 开放,
+//     fabric.mod.json 需声明 "accessWidener";零 mixin
+// SDF 参数从 uniform 迁顶点属性(NEW_ENTITY 格式):UV0=局部偏移(线性插值),
+//   UV1=(半宽,半高)×16,UV2.x=圆角×16(flat varying);GLSL 迁 std140 UBO
+//   (DynamicTransforms/Projection,照抄 vanilla core/gui 的内联写法)
+// pose 变 Matrix3x2f(2D 仿射):顶点走 addVertexWith2DPose(pose,x,y,z);
+//   scissor 从 g.scissorStack.peek() 取,bounds=transformMaxBounds+intersection
+g.blitSprite(RenderType::guiTextured, …)   → g.blitSprite(RenderPipelines.GUI_TEXTURED, …)
+g.renderTooltip(font, st, mx, my)          → g.setTooltipForNextFrame(font, st, mx, my)
+g.renderComponentTooltip(font, list, x, y) → g.setComponentTooltipForNextFrame(font, list, x, y)
+camera.getPosition()                        → camera.position()
+// MultiLineEditBox 构造器包私有化 → builder()(setShowBackground(false) 可关原版方框底);
+//   自绘控件底只能走 Screen.renderBackground 底层通道(控件在 super.render 先画,视图压不到底)
+```
+
+### 存档 / IO(api,1.21.6 ValueInput/ValueOutput 重构)❗
+```java
+public void addAdditionalSaveData(CompoundTag)  → protected void addAdditionalSaveData(ValueOutput)
+public void readAdditionalSaveData(CompoundTag) → protected void readAdditionalSaveData(ValueInput)
+// store/read(key,CODEC) 同名可用。import net.minecraft.world.level.storage.ValueInput/ValueOutput
+getPlayerList().load(player)   → getPlayerList().load(player, ProblemReporter.DISCARDING)
+send(Packet, PacketSendListener, boolean) → send(Packet, ChannelFutureListener, boolean)  // io.netty
+```
+
+### 通用(core)
+```java
+player.serverLevel()  → player.level()   // 1.21.6 起 ServerPlayer.level() 协变返回 ServerLevel
+```
+
+### NeoForge loader
+```java
+@EventBusSubscriber(modid, bus = Bus.MOD)  → @EventBusSubscriber(modid)   // 总线合并,bus 属性删除
+onRenderLevel(RenderLevelStageEvent e){ if(getStage()!=…) return; } → onRenderLevel(RenderLevelStageEvent.AfterTranslucentBlocks e)
+PacketDistributor.sendToServer(payload)    → ClientPacketDistributor.sendToServer(payload)  // client.network
+```
+
+### 数据生成(core)
+```java
+getOrCreateTagBuilder(key)  → valueLookupBuilder(key)                       // Fabric
+extends net.minecraft.data.tags.ItemTagsProvider + 空 block-tag lookup
+    → extends net.neoforged.neoforge.common.data.ItemTagsProvider, super(output, lookup, MOD_ID)
+```
+
+### 树替换陷阱 ❗
+`git checkout <src> -- .` 不删除目标分支独有文件——替换后必须
+`comm -23 <(git ls-tree -r HEAD --name-only|sort) <(git ls-tree -r <src> --name-only|sort)`
+清点并 `git rm` 残留(本档 api 清了 14 个、core 清了 47 个旧 0.0.x 文件)。
 
 ## 1.21.8 → 1.21.10
 _待移植时填写_
