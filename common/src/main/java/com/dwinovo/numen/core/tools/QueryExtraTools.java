@@ -19,7 +19,6 @@ import net.minecraft.world.item.crafting.AbstractCookingRecipe;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.PlacementInfo;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
@@ -36,7 +35,6 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
@@ -148,9 +146,8 @@ String item_id,
             }
             Recipe<?> r = holder.value();
             if (r instanceof CraftingRecipe cr) {
-                // A special recipe (firework, map-clone, …) has no static ingredient list.
-                PlacementInfo info = cr.placementInfo();
-                if (info.isImpossibleToPlace() || info.ingredients().isEmpty()) {
+                // 1.21.2+:静态清单在 PlacementInfo,不可摆放即特殊配方(firework、map-clone …)。
+                if (cr.placementInfo().isImpossibleToPlace() || cr.placementInfo().ingredients().isEmpty()) {
                     continue;
                 }
                 ItemStack result;
@@ -209,10 +206,9 @@ String item_id,
         }
         return TaskResult.ok("recipe(s) for " + name + ":\n\n" + String.join("\n\n", recipes) + "\n\n"
                 + "To make it —\n"
-                + "• [crafting]: open the grid (2x2 = your own, inspect_gui with nothing open; 3x3 = "
-                + "interact_at a crafting table), then transfer each ingredient into its cell per the "
-                + "layout above — one item per cell (count:1), matched top-left — and transfer the "
-                + "result slot out (no `to`). Repeat to make more.\n"
+                + "• [crafting]: call craft {item_id, count} — it lays out the grid and takes the "
+                + "result for you (a 3x3 recipe needs a crafting table within reach; 2x2 works "
+                + "anywhere).\n"
                 + "• [smelting|blasting|smoking]: interact_at the furnace, then transfer the input and "
                 + "the fuel with NO `to` — the menu routes each to its slot. Wait, then transfer the "
                 + "output back out.\n"
@@ -226,13 +222,13 @@ String item_id,
         if (recipe instanceof ShapedRecipe shaped) {
             int w = shaped.getWidth();
             int h = shaped.getHeight();
-            List<Optional<Ingredient>> cells = shaped.getIngredients();   // row-major, gaps = empty
+            var cells = shaped.getIngredients();   // 1.21.2+: List<Optional<Ingredient>>,空格 = empty
             StringBuilder sb = new StringBuilder("shaped " + w + "x" + h + ", makes " + count + ":");
             for (int r = 0; r < h; r++) {
                 sb.append("\n  ");
                 for (int c = 0; c < w; c++) {
-                    Optional<Ingredient> ing = cells.get(r * w + c);
-                    sb.append(ing.map(QueryExtraTools::describeIngredient).orElse("."));
+                    Ingredient ing = cells.get(r * w + c).orElse(null);
+                    sb.append(ing == null || ing.isEmpty() ? "." : describeIngredient(ing));
                     if (c < w - 1) {
                         sb.append(" | ");
                     }
@@ -243,6 +239,7 @@ String item_id,
         // Shapeless: order doesn't matter, place anywhere.
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (Ingredient ing : recipe.placementInfo().ingredients()) {
+            if (ing.isEmpty()) continue;
             counts.merge(describeIngredient(ing), 1, Integer::sum);
         }
         String list = counts.entrySet().stream()
@@ -269,9 +266,10 @@ String item_id,
     }
 
     /** Name an ingredient: a single item directly, a shared-suffix tag as "planks (any)", else a few
-     *  members — so a category ingredient doesn't mislead the model into one specific item. */
-    private static String describeIngredient(Ingredient ing) {
-        List<String> paths = ing.items()   // 1.21.4: items() -> Stream<Holder<Item>>
+     *  members — so a category ingredient doesn't mislead the model into one specific item.
+     *  Package-visible: the craft tool names its material shortfalls with the same vocabulary. */
+    static String describeIngredient(Ingredient ing) {
+        List<String> paths = ing.items()   // 1.21.2+: Stream<Holder<Item>>
                 .map(h -> BuiltInRegistries.ITEM.getKey(h.value()).getPath())
                 .distinct()
                 .toList();

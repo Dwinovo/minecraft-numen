@@ -4,16 +4,16 @@ plugins {
 }
 
 dependencies {
-    // 26.1+ Fabric is Mojang-mapped natively — plain loom, no remap / mappings block.
     minecraft "com.mojang:minecraft:${minecraft_version}"
+    // 26.1+ Fabric is Mojang-mapped natively — plain loom, no remap / mappings block.
     implementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     implementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
     // The numen-api engine (resolved from local maven). Native loom (Mojang-mapped) has no
     // modImplementation/remap step, so it's a plain implementation dep + include for JiJ.
-    implementation "com.dwinovo.numen:numen-api-fabric-26.1.2:0.0.1-SNAPSHOT"
+    implementation "com.dwinovo.numen:numen-api-fabric-26.1.2:0.0.7-SNAPSHOT"
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get
     // both mods — exactly like including a library mod such as GeckoLib.
-    include "com.dwinovo.numen:numen-api-fabric-26.1.2:0.0.1-SNAPSHOT"
+    include "com.dwinovo.numen:numen-api-fabric-26.1.2:0.0.7-SNAPSHOT"
 }
 
 loom {

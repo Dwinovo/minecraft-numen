@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.data;
 import com.dwinovo.numen.core.data.ModItemTagData.TagAppenderProvider;
 import com.dwinovo.numen.core.init.InitTag;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 
 /**
  * Single source of truth for every block tag numen-core emits — mirrors
@@ -22,24 +21,14 @@ public final class ModBlockTagData {
     private ModBlockTagData() {}
 
     /**
-     * Functional/valuable blocks the pathfinder must never break. We list only the
-     * vanilla work stations that have NO block entity (so the
-     * {@code shouldAvoidBreaking} BlockEntity proxy can't catch them); container
-     * blocks (chests, furnaces, barrels, …) and modded machines stay covered by that
-     * proxy. Mirrors the intent of Baritone's default {@code blocksToAvoidBreaking},
-     * which likewise protects the crafting table. Packs can extend this tag freely.
+     * do_not_break 标签默认为空:寻路的硬禁挖清单由 NavSettings
+     * .blocksToDisallowBreaking(默认空)在运行期管理,与 Baritone
+     * MovementHelper 的 blocksToDisallowBreaking 同义。功能方块
+     * (工作台/熔炉/箱子/陷阱箱)走 NavSettings.blocksToAvoidBreaking
+     * 软惩罚(挖掘成本 ×10,无路可走仍会破坏),不在此标签内。数据包
+     * 可自由往此标签追加要硬禁挖的方块(任何开关都不破坏)。
      */
     public static void addBlockTags(TagAppenderProvider<Block> tags) {
-        tags.tag(InitTag.DO_NOT_BREAK)
-                .add(Blocks.CRAFTING_TABLE)
-                .add(Blocks.STONECUTTER)
-                .add(Blocks.SMITHING_TABLE)
-                .add(Blocks.GRINDSTONE)
-                .add(Blocks.LOOM)
-                .add(Blocks.CARTOGRAPHY_TABLE)
-                .add(Blocks.FLETCHING_TABLE)
-                .add(Blocks.ANVIL)
-                .add(Blocks.CHIPPED_ANVIL)
-                .add(Blocks.DAMAGED_ANVIL);
+        tags.tag(InitTag.DO_NOT_BREAK);
     }
 }

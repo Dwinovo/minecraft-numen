@@ -26,9 +26,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * Once per tick (from both loaders' end-of-tick hook) we rebuild each
  * companion-level's {@link LoadedChunks} from the chunks currently loaded around its companions — a
  * cheap gather of live {@link LevelChunk} references via the non-blocking {@code getChunkNow}. The
- * planner then reads those refs LIVE (Baritone's {@code useTheRealWorld}); because the snapshot is
+ * planner then reads those refs LIVE; because the snapshot is
  * rebuilt fresh each tick and never mutated after, there is no cache to invalidate, no block-change
- * tracking, and no staleness beyond what Baritone itself tolerates — the server's own chunk
+ * tracking, and no staleness beyond a single tick of drift — the server's own chunk
  * loading/unloading bounds it for free.
  */
 public final class PathCaches {

@@ -14,10 +14,10 @@ import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.material.FluidState;
 
 /**
- * A {@link BlockGetter} over a {@link LoadedChunks} snapshot — the search-side world view, the
- * server-side twin of Baritone's {@code BlockStateInterface}. Loaded chunk → read its LIVE section
- * palette ({@code useTheRealWorld}); not in the snapshot (unloaded) → AIR (Baritone's miss). Reads are
- * memoized per search (each cell once), like {@link com.dwinovo.numen.core.pathing.calc.NavSnapshot}, and
+ * A {@link BlockGetter} over a {@link LoadedChunks} snapshot — the search-side world view.
+ * Loaded chunk → read its LIVE section
+ * palette; not in the snapshot (unloaded) → AIR (an optimistic miss). Reads are
+ * memoized per search (each cell once), and
  * {@link com.dwinovo.numen.core.pathing.util.BlockHelper} reads it unchanged.
  */
 public final class CachedNavView implements BlockGetter, BlockEntityAware {
@@ -45,13 +45,20 @@ public final class CachedNavView implements BlockGetter, BlockEntityAware {
         return state;
     }
 
+    /** Was the chunk containing block-column ({@code blockX},{@code blockZ}) captured in the
+     *  snapshot? {@code false} means every read there was the optimistic AIR miss — prices
+     *  computed from it are guesses, not measurements. */
+    public boolean isLoaded(int blockX, int blockZ) {
+        return loaded.at(SectionPos.blockToSectionCoord(blockX), SectionPos.blockToSectionCoord(blockZ)) != null;
+    }
+
     private BlockState read(int x, int y, int z) {
         if (y < level.getMinY() || y >= level.getMinY() + level.getHeight()) {
             return AIR;
         }
         LevelChunk chunk = loaded.at(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z));
         if (chunk == null) {
-            return AIR;   // unloaded / outside the snapshot — Baritone's miss → AIR
+            return AIR;   // unloaded / outside the snapshot — optimistic miss → AIR
         }
         try {
             int idx = level.getSectionIndex(y);

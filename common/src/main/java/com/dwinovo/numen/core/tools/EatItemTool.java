@@ -1,7 +1,9 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import static com.dwinovo.numen.task.TaskDispatch.*;
+
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -10,7 +12,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /** World-action tool (raw NumenTool): eat/drink a consumable from the inventory. */
-public final class EatItemTool extends ServerNumenTool {
+public final class EatItemTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private final InventoryTools impl = new InventoryTools();
@@ -40,8 +42,8 @@ public final class EatItemTool extends ServerNumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        enqueue(companion, impl.eatItem(a.item_id(), ctx(toolCallId, companion)));
+        enqueue(companion, impl.eatItem(a.item_id(), ctx(toolCallId, companion)), reply);
     }
 }

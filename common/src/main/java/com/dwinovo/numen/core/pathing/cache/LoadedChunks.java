@@ -7,13 +7,13 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.LevelChunk;
 
 /**
- * An immutable snapshot of the loaded chunks near a level's companions — the server-side equivalent of
- * Baritone's {@code createThreadSafeCopy()} of the chunk provider. Built on
+ * An immutable snapshot of the loaded chunks near a level's companions — a thread-safe copy of the
+ * chunk provider's "what is loaded right now". Built on
  * the main thread once per tick ({@link PathCaches#serverTick}) and read by the planner (off-thread
- * from P-C). It holds live {@link LevelChunk} references, so a lookup reads the LIVE section palette
- * (Baritone's {@code useTheRealWorld}) — exact for loaded terrain. We tolerate the rare race of reading
+ * from P-C). It holds live {@link LevelChunk} references, so a lookup reads the LIVE section
+ * palette — exact for loaded terrain. We tolerate the rare race of reading
  * a palette the main thread is concurrently resizing (the reader catches it and yields AIR; the
- * executor re-costs live and replans), exactly the trade Baritone makes.
+ * executor re-costs live and replans) — a deliberate exactness-for-cheapness trade.
  *
  * <p>Never mutated after construction, so a worker reading the map structure can't race a writer — only
  * the shared chunk CONTENTS are live. A fresh snapshot is published (via {@link PathCaches}'s
