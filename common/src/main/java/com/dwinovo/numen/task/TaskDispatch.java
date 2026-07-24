@@ -28,7 +28,7 @@ public final class TaskDispatch {
     public static void enqueue(NumenPlayer companion, TaskRecord record, Consumer<String> reply) {
         TaskRecord busy = CompanionTickDispatcher.asyncTaskFor(companion.getUUID());
         if (busy != null) {
-            reply.accept(TaskResult.fail(busyMessage(busy)).toJson());
+            reply.accept(TaskResult.fail(busyMessage(busy, record)).toJson());
             return;
         }
         CompanionTickDispatcher.queueFor(companion.getUUID()).enqueue(record);
@@ -43,7 +43,7 @@ public final class TaskDispatch {
         if (CompanionTickDispatcher.llmLaneBusy(companion.getUUID())) {
             TaskRecord busy = CompanionTickDispatcher.asyncTaskFor(companion.getUUID());
             reply.accept(TaskResult.fail(busy != null
-                    ? busyMessage(busy)
+                    ? busyMessage(busy, record)
                     : "身体正在收尾上一个任务,稍候再派。").toJson());
             return;
         }
@@ -62,8 +62,16 @@ public final class TaskDispatch {
                         "async", true)).toJson());
     }
 
-    private static String busyMessage(TaskRecord busy) {
-        return "身体正忙: " + busy.publicId() + "(" + busy.describe()
-                + ") 后台进行中。先 task_stop 叫停,或等它的 task_finished 事件再派新活。";
+    /**
+     * 占用拒绝话术。要不要提"等 task_finished 事件"得看两头:那条事件只为内置大脑
+     * 派的任务发、也只投给内置大脑。占身体的是外部(MCP)任务、或被拒的是外部调用者时,
+     * 事件都不会到被拒者手里——照旧引导它"等事件"等于教它死等,只能建议 task_stop。
+     */
+    private static String busyMessage(TaskRecord busy, TaskRecord caller) {
+        String head = "身体正忙: " + busy.publicId() + "(" + busy.describe() + ") 后台进行中。";
+        boolean eventReachesCaller = !busy.isExternalCall() && !caller.isExternalCall();
+        return eventReachesCaller
+                ? head + "先 task_stop 叫停,或等它的 task_finished 事件再派新活。"
+                : head + "先 task_stop 叫停它,再派新活(这件活不会给你发 task_finished 事件)。";
     }
 }
