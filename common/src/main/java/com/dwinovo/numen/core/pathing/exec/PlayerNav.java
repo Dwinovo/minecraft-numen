@@ -1,340 +1,467 @@
 package com.dwinovo.numen.core.pathing.exec;
 
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.calc.AStar;
-import com.dwinovo.numen.core.pathing.calc.AStarSearch;
-import com.dwinovo.numen.core.pathing.calc.NavContext;
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.calc.Path;
-import com.dwinovo.numen.core.pathing.util.BlockHelper;
-import com.dwinovo.numen.core.pathing.viz.PathVizPublisher;
-import com.dwinovo.numen.core.pathing.util.PathSettings;
-import net.minecraft.core.BlockPos;
-
+import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
+import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
+import com.dwinovo.numen.core.pathing.bridge.PoolSearchDispatcher;
+import com.dwinovo.numen.core.pathing.calc.NavGoal;
+import com.dwinovo.numen.core.pathing.execute.PathExecutor;
+import com.dwinovo.numen.core.pathing.execute.PathingCore;
+import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
+import com.dwinovo.numen.core.pathing.goals.Goal;
+import com.dwinovo.numen.core.pathing.moves.CalculationContext;
+import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.task.FailureType;
+import com.dwinovo.numen.entity.InputDriver;
+import com.dwinovo.numen.entity.NumenPlayer;
+
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
+import it.unimi.dsi.fastutil.longs.LongSets;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+
 /**
- * Plan → execute → replan driver for a companion {@link NumenPlayer} body.
- * The player-body twin of {@code Navigator}: same path-while-moving loop (walk
- * the current path; precompute the continuation of a partial path so there's no
- * planning pause at a segment boundary; re-root on a moving goal or after an
- * off-path replan) but executing through {@link PlayerPathExecutor}. The A*
- * planner ({@link NavContext}/{@link AStar}) is body-neutral and reused as-is.
+ * 任务层的导航正门:把一份编译好的导航契约({@link GoalCompiler.Compiled})
+ * 交给段规划状态机 {@link PathingCore} 驱动,对外维持三态合同
+ * ({@link Status}):
+ * <ul>
+ *   <li>caller 的 {@code reached} 谓词永远最先判、判真即 ARRIVED;</li>
+ *   <li>搜索目标在脚下即满足(无路可走)时稳定持续返回 ARRIVED——任务层
+ *       据此判"到位却不满足"(STANCE_DUD)并自行处置,绝不衰变成一跳
+ *       而过的 target lost;</li>
+ *   <li>目标中心移动超过 2 格重根;执行失败由状态机自动重搜,本层只做
+ *       放弃判定的记账(见 {@link #accountReplan})。</li>
+ * </ul>
  *
- * <p>Internally the goal is a {@link NavGoal} so callers can target a single
- * cell ({@link #PlayerNav(NumenPlayer, BlockPos, double, BooleanSupplier)}) or
- * a richer goal — a {@link NavGoal#composite composite} ore field, a mining
- * stance — via {@link #toGoal}.
+ * <p>引擎自身无限重试;"何时放弃"是任务过程层的语义,住在这里:连续
+ * {@link #MAX_STALLED_REPLANS} 次失败重规划目标启发值无 ≥{@link #REPLAN_PROGRESS_EPS_H}
+ * 改善 → FAILED(BOXED_IN);{@link #MAX_REPLANS} 次硬保险丝兜底。
+ *
+ * <p>sacred(自身目标格,不可挖不可埋)/ deniedPlace(执行层证明放不上
+ * 的格)两个语义开关穿透本导航建的每一个
+ * {@link CalculationContext}:搜索用冻结快照、执行期复核用活世界,同一
+ * 套开关同一把尺。
  */
 public final class PlayerNav {
 
     public enum Status { RUNNING, ARRIVED, FAILED }
 
-    private static final int MAX_REPLANS = 40;
+    /** 重规划次数硬保险丝(理智上限,不是真正的放弃条件)。 */
+    private static final int MAX_REPLANS = 200;
+    /** 真正的放弃条件:连续这么多次失败重规划都没有真实接近目标。 */
+    private static final int MAX_STALLED_REPLANS = 6;
+    /**
+     * 算作"真实接近"的启发值降幅——约等于按目标自己的尺度前进一格
+     * (平走约 3.56 加权、爬升约 3.16、下降约 3.89)。进度以目标启发
+     * 函数在脚下的取值度量,不用到 center() 的欧氏距离:yLevel 目标的
+     * center 是 (0, level, 0),欧氏距离被无意义的水平偏移淹没。
+     */
+    private static final double REPLAN_PROGRESS_EPS_H = 4.0;
+    /** 目标中心移动超过该距离平方(2 格)即重根。 */
     private static final double GOAL_MOVED_SQR = 4.0;
 
     private final NumenPlayer player;
-    private final Supplier<NavGoal> goalSupplier;
-    private final double speed;
+    private final Supplier<GoalCompiler.Compiled> compiledSupplier;
     private final BooleanSupplier reached;
-    private final AStar astar = new AStar();
+    private final ContextProvider contextProvider;
+    private final boolean revalidateGoalEachTick;
+    /**
+     * speed 参数保留在签名上;新执行体系不支持变速(移动全走原版输入
+     * 物理),这里把它路由成疾跑门:speed &lt; 1.0 表示"慢速",本导航
+     * 的每个 tick 里禁疾跑(见 {@link #tick} 的 allowSprint 包夹)。
+     */
+    private final boolean sprintAllowed;
 
+    /** 段规划状态机:搜索派发、段执行、无缝接段、失败自动重搜全在其内。 */
+    private final PathingCore core;
+
+    /**
+     * 最近一次拉取的目标的 sacred 格({@code BlockPos.asLong()} 键)。
+     * 每次拉目标同步刷新——goal 与 sacred 是同一份契约,不允许分开读。
+     */
+    private LongSet sacred = LongSets.emptySet();
+    /**
+     * 执行层证明"无支撑放不上"(NO_SUPPORT)的格,本次导航内累积、
+     * 穿进此后每次搜索,确定性重搜才不会反复规划同一个不可能的脚手架。
+     *
+     * <p>回填点说明:新执行体系里放置失败表现为移动原语 FAILED → 整段
+     * 取消重规划,途中不携带"哪一格无支撑"的结构化信息;能拿到该信息
+     * 时在 {@link #tick} 的执行失败分支里 {@code deniedPlace.add(...)}。
+     * 机制与上下文穿透保留,当前无生产者。
+     */
+    private final LongOpenHashSet deniedPlace = new LongOpenHashSet();
+
+    /**
+     * 搜索目标在脚下即满足、而 caller 的 reached 仍不满足:钉稳 ARRIVED
+     * 结论供任务层判 STANCE_DUD(换站位、拉黑该成员),绝不衰变成撒谎
+     * 的一跳 target lost。目标真移动时照常重根清位。
+     */
+    private boolean searchSatisfied;
+    /** 最近一次下发给状态机的目标中心(重根判定的基准)。 */
     private BlockPos plannedCenter;
-    private PlayerPathExecutor current;
 
-    // A* now runs on the planner pool, not stepped on the tick thread. We hold the future (polled each
-    // tick) plus the search object itself (to cancel it on replan/stop so a stale worker stops wasting
-    // CPU). One in-flight search at a time for the main path, one for the precomputed next segment.
-    private java.util.concurrent.CompletableFuture<Path> searchFuture;
-    private AStarSearch searchObj;
-    private java.util.concurrent.CompletableFuture<Path> nextFuture;
-    private AStarSearch nextObj;
-    private PlayerPathExecutor pendingNext;
-    private Path pendingPathForViz;
-
-    /** Packed positions of the path we're currently executing — fed to the next
-     *  search as Baritone's {@code Favoring} so a replan reuses this route (damps
-     *  the flip-flopping a from-scratch replan would otherwise cause). */
-    private it.unimi.dsi.fastutil.longs.LongSet previousPathHashes =
-            it.unimi.dsi.fastutil.longs.LongSets.emptySet();
-
-    /** Cells to highlight in the overlay; null → just the path's destination.
-     *  The mining task sets this to its whole known-ore field (Baritone boxes
-     *  every GoalComposite member). */
-    private Supplier<java.util.List<BlockPos>> highlights;
-
-    /** Highlight these cells in the path overlay (e.g. the full ore field). */
-    public void setHighlights(Supplier<java.util.List<BlockPos>> highlights) {
-        this.highlights = highlights;
-    }
-
-    private void publishViz(Path cut) {
-        java.util.List<BlockPos> targets =
-                highlights != null ? highlights.get() : java.util.List.of(cut.end);
-        PathVizPublisher.publish(player, cut, targets);
-    }
-
-    private int replans = 0;
+    private int replans;
+    private int stalledReplans;
+    /** 脚下到过的最优(最低)目标启发值——停滞重规划的量尺。 */
+    private double bestGoalH = Double.MAX_VALUE;
     private String failReason = "target unreachable";
+    private FailureType failType = FailureType.NO_PATH;
+    /** 最近一次执行失败的原因(放弃报告里点名反复失败的动作)。 */
+    private String lastExecFailure;
+    /** 终局闩:FAILED 一经裁定即稳定持续(failReason 不再被覆写)。 */
+    private boolean failedTerminal;
+    private boolean stopped;
 
-    /** Walk to a single cell. */
+    /** 最近一次搜索上下文(验尸文案的素材:有无脚手架耗材等)。 */
+    private CalculationContext lastSearchContext;
+
+    /** 调试覆盖层钩子。可视化尚未接回,仅存引用(与旧行为一致的空壳)。 */
+    @SuppressWarnings("unused")
+    private Supplier<List<BlockPos>> highlights;
+
+    /** 单格目标:按意图编译(可走格=站上去,占用格=贴脸即到,不吞噬目标)。 */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
-        this(player, () -> resolveBlockGoal(player, goal), speed, reached, true);
+        this(player, speed, reached, () -> GoalCompiler.block(player.level(), goal));
     }
 
-    /** Walk to a (possibly moving) single cell. */
+    /** 可移动的单格目标:每次拉取重新按意图编译(格位腾空后收紧为站上去)。 */
     public PlayerNav(NumenPlayer player, Supplier<BlockPos> goalSupplier, double speed,
                      BooleanSupplier reached) {
-        this(player, () -> {
+        this(player, speed, reached, () -> {
             BlockPos g = goalSupplier.get();
-            return g == null ? null : resolveBlockGoal(player, g);
-        }, speed, reached, true);
+            return g == null ? null : GoalCompiler.block(player.level(), g);
+        });
     }
 
-    /** Walk toward an arbitrary {@link NavGoal} (composite ore field, mining stance, …). */
+    /** 编译契约正门:goal + sacred + 到达原料一体下发。 */
+    public static PlayerNav to(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiled,
+                               double speed, BooleanSupplier reached) {
+        return new PlayerNav(player, speed, reached, compiled);
+    }
+
+    /** 编译契约正门,带任务专用的搜索/执行成本上下文。 */
+    public static PlayerNav to(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiled,
+                               double speed, BooleanSupplier reached,
+                               ContextProvider contextProvider) {
+        return new PlayerNav(player, speed, reached, compiled, false, contextProvider);
+    }
+
+    /** 编译契约正门,并在每 tick 重新读取目标与保护格。 */
+    public static PlayerNav toRevalidating(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiled,
+                                           double speed, BooleanSupplier reached,
+                                           ContextProvider contextProvider) {
+        return new PlayerNav(player, speed, reached, compiled, true, contextProvider);
+    }
+
+    /** 持续跟随一个实时实体,每 tick 用实体当前脚位重新校验目标。 */
+    public static PlayerNav followEntity(NumenPlayer player, Supplier<? extends Entity> entitySupplier,
+                                         double followRadius, double speed, BooleanSupplier reached) {
+        return new PlayerNav(player, speed, reached,
+                () -> followEntityContract(player, entitySupplier, followRadius), true);
+    }
+
+    /** 裸自定义目标(runAway、column 等)。不带 sacred——有方块目标的意图
+     *  应走 {@link #to} / {@link GoalCompiler},让目标受保护。 */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
                                    double speed, BooleanSupplier reached) {
-        return new PlayerNav(player, goalSupplier, speed, reached, true);
+        return new PlayerNav(player, speed, reached, bare(goalSupplier));
     }
 
-    private PlayerNav(NumenPlayer player, Supplier<NavGoal> goalSupplier, double speed,
-                      BooleanSupplier reached, boolean marker) {
+    /** 把裸目标包成无 sacred 的编译契约(engineGoal 经词表映射同步派生)。 */
+    private static Supplier<GoalCompiler.Compiled> bare(Supplier<NavGoal> goals) {
+        return () -> {
+            NavGoal g = goals.get();
+            return g == null ? null
+                    : new GoalCompiler.Compiled(g, LongSets.emptySet(), null, false);
+        };
+    }
+
+    private static GoalCompiler.Compiled followEntityContract(NumenPlayer player,
+                                                             Supplier<? extends Entity> entitySupplier,
+                                                             double followRadius) {
+        Entity entity = entitySupplier.get();
+        if (entity == null || entity == player || entity.isRemoved() || !entity.isAlive()) {
+            return null;
+        }
+        NavGoal goal = followEntityGoal(entity.blockPosition(), followRadius);
+        return new GoalCompiler.Compiled(goal, LongSets.emptySet(), null, false);
+    }
+
+    static NavGoal followEntityGoal(BlockPos entityFeet, double followRadius) {
+        return NavGoal.near(entityFeet, Math.max(0.0, followRadius));
+    }
+
+    private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
+                      Supplier<GoalCompiler.Compiled> compiledSupplier) {
+        this(player, speed, reached, compiledSupplier, false, ContextProvider.DEFAULT);
+    }
+
+    private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
+                      Supplier<GoalCompiler.Compiled> compiledSupplier,
+                      boolean revalidateGoalEachTick) {
+        this(player, speed, reached, compiledSupplier, revalidateGoalEachTick,
+                ContextProvider.DEFAULT);
+    }
+
+    private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
+                      Supplier<GoalCompiler.Compiled> compiledSupplier,
+                      boolean revalidateGoalEachTick, ContextProvider contextProvider) {
         this.player = player;
-        this.goalSupplier = goalSupplier;
-        this.speed = speed;
+        this.compiledSupplier = compiledSupplier;
+        this.sprintAllowed = speed >= 1.0;
         this.reached = reached;
-        startFreshSearch();
+        this.contextProvider = contextProvider == null ? ContextProvider.DEFAULT : contextProvider;
+        this.revalidateGoalEachTick = revalidateGoalEachTick;
+        this.core = new PathingCore(player, PoolSearchDispatcher.INSTANCE,
+                this::searchContext, this::executionContext);
     }
 
-    /** A cell goal: exact if standable, else reach within 2 (mirrors move_to arrival). */
-    private static NavGoal resolveBlockGoal(NumenPlayer player, BlockPos bp) {
-        return BlockHelper.canWalkThrough(player.level(), bp)
-                ? NavGoal.exact(bp)
-                : NavGoal.near(bp, 2.0);
+    /** 搜索用冻结上下文:快照世界 + 快照背包,穿透三个语义开关。 */
+    private CalculationContext searchContext() {
+        CalculationContext ctx = contextProvider.forSearch(player, sacred, deniedPlace);
+        lastSearchContext = ctx;
+        return ctx;
+    }
+
+    /** 执行期复核用实时上下文:活世界 + 当下背包,同一套语义开关。 */
+    private CalculationContext executionContext() {
+        return contextProvider.forExecution(player, sacred, deniedPlace);
+    }
+
+    public interface ContextProvider {
+        ContextProvider DEFAULT = new ContextProvider() {
+            @Override
+            public CalculationContext forSearch(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
+                return ContextFactory.forSearch(player, sacred, deniedPlace);
+            }
+
+            @Override
+            public CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
+                return ContextFactory.forExecution(player, sacred, deniedPlace);
+            }
+        };
+
+        CalculationContext forSearch(NumenPlayer player, LongSet sacred, LongSet deniedPlace);
+        CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace);
     }
 
     public Status tick() {
-        if (reached.getAsBoolean()) return Status.ARRIVED;
-
-        if (current == null) {
-            return advanceFreshSearch();
+        if (reached.getAsBoolean()) {
+            return Status.ARRIVED;
         }
-
-        NavGoal liveGoal = goalSupplier.get();
-        if (liveGoal == null) {
-            failReason = "target lost";
+        if (failedTerminal) {
             return Status.FAILED;
         }
-        if (plannedCenter != null && liveGoal.center().distSqr(plannedCenter) > GOAL_MOVED_SQR) {
-            discardPrecompute();
-            return restartFresh(false);
+        if (stopped) {
+            failReason = "target lost";
+            failType = FailureType.TARGET_LOST;
+            return Status.FAILED;
         }
 
-        maybePrecompute();
-        advancePrecompute();
+        // goal 与 sacred 一体拉取——两者是同一份契约
+        GoalCompiler.Compiled compiled = compiledSupplier.get();
+        if (compiled == null) {
+            return fail(FailureType.TARGET_LOST, "target lost");
+        }
+        sacred = compiled.sacred();
+        NavGoal navGoal = compiled.goal();
 
-        switch (current.tick()) {
-            case RUNNING -> { return Status.RUNNING; }
-            case ARRIVED -> {
-                replans = 0;
-                if (reached.getAsBoolean()) return Status.ARRIVED;
-                if (pendingNext != null) {
-                    // Hand off to the precomputed segment WITHOUT halting — calling
-                    // current.stop() zeroes the inputs for a tick and causes a visible
-                    // hitch at every segment boundary. pendingNext takes over the
-                    // inputs on its first tick, so motion stays continuous.
-                    current = pendingNext;
-                    pendingNext = null;
-                    if (pendingPathForViz != null) {
-                        publishViz(pendingPathForViz);
-                        pendingPathForViz = null;
-                    }
-                    return Status.RUNNING;
-                }
-                return restartFresh(true);
+        // 目标中心移动 >2 格:重根(进度量尺随之复位,状态机自会软取消旧段)
+        if (plannedCenter != null && navGoal.center().distSqr(plannedCenter) > GOAL_MOVED_SQR) {
+            searchSatisfied = false;
+            bestGoalH = Double.MAX_VALUE;
+            plannedCenter = navGoal.center();
+            withSprintGate(() -> core.setGoalAndPath(compiled.engineGoal()));
+            return Status.RUNNING;
+        }
+        if (plannedCenter == null) {
+            plannedCenter = navGoal.center();
+        }
+
+        if (searchSatisfied) {
+            if (!revalidateGoalEachTick) {
+                return Status.ARRIVED;
             }
-            case NEEDS_REPLAN -> {
-                discardPrecompute();
-                return restartFresh(true);
+            BlockPos feet = PathExecutor.playerFeet(player);
+            if (compiled.engineGoal().isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
+                return Status.ARRIVED;
             }
-            case FAILED -> {
-                return Status.FAILED;
+            searchSatisfied = false;
+        }
+
+        PathExecutor before = core.getCurrent();
+        withSprintGate(() -> {
+            // 状态机空闲(初次、或结果被判孤儿丢弃)时(重新)下发目标;
+            // setGoalAndPath 已在目标内/已有段/已有在飞搜索时自会不派发
+            if (revalidateGoalEachTick || core.getGoal() == null
+                    || (core.getCurrent() == null && !core.hasInProgressSearch())) {
+                core.setGoalAndPath(compiled.engineGoal());
+            }
+            core.tick();
+        });
+
+        // 首段搜索失败:验尸并终局。裁定前再问一次 caller 谓词——本 tick
+        // 身体可能已挪进满足位,ARRIVED 优先于失败结论
+        if (core.calcFailedLastTick()) {
+            Status verdict = fail(FailureType.NO_PATH, noPathAutopsy(navGoal));
+            return reached.getAsBoolean() ? Status.ARRIVED : verdict;
+        }
+
+        // 执行失败(段被取消,状态机已自动重搜):做放弃判定的记账
+        PathExecutor after = core.getCurrent();
+        if (before != null && after != before && before.failed()) {
+            lastExecFailure = before.failureCause();
+            Status verdict = accountReplan(navGoal);
+            if (verdict != null) {
+                return verdict;
+            }
+        }
+
+        // 到达判定:状态机归于空闲且脚下满足搜索目标 → 稳定 ARRIVED。
+        // 覆盖两种情形:路径走完进入目标;以及"原地即满足"(setGoalAndPath
+        // 因脚下已在目标内根本不派发搜索)。
+        Goal engineGoal = core.getGoal();
+        if (engineGoal != null && core.getCurrent() == null && !core.hasInProgressSearch()) {
+            BlockPos feet = PathExecutor.playerFeet(player);
+            if (engineGoal.isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
+                searchSatisfied = true;
+                Constants.LOG.info(
+                        "[numen-path] ARRIVED-IN-PLACE feet={} goal-center={} —— 搜索目标在脚下"
+                                + "即满足,钉稳结论交任务层裁决",
+                        feet.toShortString(), plannedCenter.toShortString());
+                return Status.ARRIVED;
             }
         }
         return Status.RUNNING;
     }
 
-    /** Frozen context for a SEARCH — snapshot inventory + an immutable loaded-chunk view, safe to read
-     *  off the tick thread. Ensure the level's snapshot exists first so the view is never the live
-     *  read-through fallback (which a worker thread mustn't touch). */
-    private NavContext searchContext() {
-        if (player.level() instanceof net.minecraft.server.level.ServerLevel sl) {
-            com.dwinovo.numen.core.pathing.cache.PathCaches.ensureSnapshot(sl, player.blockPosition());
-        }
-        return NavContext.forSearch(player.level(), player.getInventory());
-    }
-
-    /** Off-thread when the context is frozen (the normal case); on the main thread otherwise — a
-     *  context whose view is the live read-through ({@code safeForThreadedUse == false}) must NOT run
-     *  on a worker. The latter is a rare safety net (e.g. no chunk snapshot yet); it returns an
-     *  already-completed future so the polling code is identical. */
-    private java.util.concurrent.CompletableFuture<Path> dispatch(NavContext ctx, AStarSearch s) {
-        return ctx.safeForThreadedUse ? runAsync(s) : java.util.concurrent.CompletableFuture.completedFuture(runToCompletion(s));
-    }
-
-    /** Run a search to completion on the planner pool (off the tick thread). The node cap inside the
-     *  search bounds it, so one {@code step} call runs the whole thing. */
-    private static java.util.concurrent.CompletableFuture<Path> runAsync(AStarSearch s) {
-        return com.dwinovo.numen.core.pathing.calc.PathPlannerPool.submit(() -> runToCompletion(s));
-    }
-
-    /** One {@code step} to the node cap; a thrown planner bug yields no path rather than wedging the
-     *  companion (or, off-thread, completing the future exceptionally). */
-    private static Path runToCompletion(AStarSearch s) {
+    /**
+     * speed 参数的落点:本导航的每一段驱动都包在 allowSprint 门里,
+     * slow(speed&lt;1.0)时全局禁疾跑——搜索上下文的 canSprint 快照与
+     * 执行器的逐 tick 疾跑决策读的都是这一个开关,包夹后原值复原,
+     * 不影响别的同伴。
+     */
+    private void withSprintGate(Runnable body) {
+        NavSettings settings = NavSettings.get();
+        boolean saved = settings.allowSprint;
+        settings.allowSprint = saved && sprintAllowed;
         try {
-            s.step(Integer.MAX_VALUE);
-            return s.result();
-        } catch (Throwable t) {
-            com.dwinovo.numen.Constants.LOG.error("path search failed", t);
-            return null;
+            body.run();
+        } finally {
+            settings.allowSprint = saved;
         }
     }
 
-    /** Live context for EXECUTION re-costing (main thread; reads current world + inventory). */
-    private NavContext executionContext() {
-        return NavContext.forExecution(player.level(), player.getInventory());
+    /**
+     * 一次失败重规划的记账。进度按目标自己的启发函数在脚下的取值度量
+     * (yLevel 只看竖直、column 只看水平、composite 看最近成员、runAway
+     * 负值随逃离下降,各自天然正确);有真实改善清零连击,否则连击到
+     * {@link #MAX_STALLED_REPLANS} 判 BOXED_IN。返回 null 表示继续跑。
+     */
+    private Status accountReplan(NavGoal liveGoal) {
+        BlockPos feet = PathExecutor.playerFeet(player);
+        double h = liveGoal.heuristic(feet);
+        if (bestGoalH - h >= REPLAN_PROGRESS_EPS_H) {
+            bestGoalH = h;
+            stalledReplans = 0;
+        } else if (++stalledReplans >= MAX_STALLED_REPLANS) {
+            Status verdict = fail(FailureType.BOXED_IN,
+                    "gave up: no real progress toward the target over "
+                            + MAX_STALLED_REPLANS + " consecutive attempts"
+                            + (lastExecFailure != null
+                                    ? "; the recurring failure: " + lastExecFailure : ""));
+            return reached.getAsBoolean() ? Status.ARRIVED : verdict;
+        }
+        if (replans++ >= MAX_REPLANS) {
+            Status verdict = fail(FailureType.BOXED_IN,
+                    "gave up after " + MAX_REPLANS + " replans");
+            return reached.getAsBoolean() ? Status.ARRIVED : verdict;
+        }
+        return null;
     }
 
-    private void startFreshSearch() {
-        NavGoal g = goalSupplier.get();
-        plannedCenter = (g == null) ? null : g.center();
-        if (g == null) {
-            searchFuture = null;
-            searchObj = null;
-            return;
-        }
-        NavContext ctx = searchContext();
-        AStarSearch s = astar.newSearch(ctx,
-                BlockHelper.playerFeet(player.level(), player.getX(), player.getY(), player.getZ()),
-                g, previousPathHashes);
-        searchObj = s;
-        searchFuture = dispatch(ctx, s);
+    /** 终局裁定:停下身体、钉住原因,此后 tick 稳定返回 FAILED。 */
+    private Status fail(FailureType type, String reason) {
+        failReason = reason;
+        failType = type;
+        failedTerminal = true;
+        core.forceCancel();
+        return Status.FAILED;
     }
 
-    /** Cancel and forget the in-flight main search (so a stale worker stops and its result is ignored). */
-    private void cancelSearch() {
-        if (searchObj != null) {
-            searchObj.cancel();
-            searchObj = null;
+    /**
+     * 空搜索结果的教学式验尸——直接喂给模型的人话:离目标多远、有无
+     * 搭路耗材、还有什么可解锁的手段。搜索器统计面未随异步句柄暴露,
+     * 此处按可得素材给结构化结论。
+     */
+    private String noPathAutopsy(NavGoal goal) {
+        BlockPos feet = PathExecutor.playerFeet(player);
+        BlockPos center = goal.center();
+        double dist = Math.sqrt(feet.distSqr(center));
+        StringBuilder r = new StringBuilder("no path to target");
+        r.append(String.format(" (from %s toward %s, about %.0f blocks away;"
+                        + " the search burned its whole budget without finding a route",
+                feet.toShortString(), center.toShortString(), dist));
+        if (lastSearchContext != null && !lastSearchContext.hasThrowaway) {
+            r.append("; carrying no scaffolding blocks to bridge or pillar with");
         }
-        searchFuture = null;
+        if (!deniedPlace.isEmpty()) {
+            r.append("; ").append(deniedPlace.size())
+                    .append(" scaffold spot(s) already proven unplaceable this navigation");
+        }
+        r.append(')');
+        String reason = r.toString();
+        Constants.LOG.info("[numen-path] NO-PATH start={} goal={} | {}",
+                feet.toShortString(), center.toShortString(), reason);
+        return reason;
     }
 
-    /** Packed positions (start + every movement dest) of a path — its Favoring set. */
-    private static it.unimi.dsi.fastutil.longs.LongSet pathHashes(Path p) {
-        var set = new it.unimi.dsi.fastutil.longs.LongOpenHashSet(p.movements.size() + 1);
-        set.add(p.start.asLong());
-        for (com.dwinovo.numen.core.pathing.movement.Movement m : p.movements) {
-            set.add(m.dest.asLong());
-        }
-        return set;
+    public boolean isSafeToCancel() {
+        return core.isSafeToCancel();
     }
 
-    private Status advanceFreshSearch() {
-        if (searchFuture == null) {
-            failReason = "target lost";
-            return Status.FAILED;
-        }
-        if (!searchFuture.isDone()) {
-            return Status.RUNNING;   // worker still planning — body waits (it was idle anyway)
-        }
-        Path path = searchFuture.getNow(null);
-        searchFuture = null;
-        searchObj = null;
-        if (path == null || path.isEmpty()) {
-            failReason = "no path to target (obstructed or out of bridging blocks)";
-            return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
-        }
-        Path cut = path.staticCutoff();
-        current = new PlayerPathExecutor(player, cut, speed, this::executionContext);
-        previousPathHashes = pathHashes(cut);   // favor this route on the next replan
-        publishViz(cut);
-        return Status.RUNNING;
+    public BlockPos pathStart() {
+        return core.pathStart();
     }
 
-    private Status restartFresh(boolean budgeted) {
-        if (current != null) {
-            current.stop();
-            current = null;
-        }
-        cancelSearch();   // abandon any in-flight main search before dispatching a new one
-        if (budgeted && replans++ >= MAX_REPLANS) {
-            failReason = "gave up after " + MAX_REPLANS + " replans";
-            return reached.getAsBoolean() ? Status.ARRIVED : Status.FAILED;
-        }
-        startFreshSearch();
-        return Status.RUNNING;
-    }
-
-    private void maybePrecompute() {
-        if (nextFuture != null || pendingNext != null) return;
-        if (current == null || !current.isPartial()) return;
-        // Baritone planAhead: start the next segment once the current one has
-        // fewer than planningTickLookahead (150) ticks of travel left.
-        if (current.remainingCost() > PathSettings.PLANNING_TICK_LOOKAHEAD) return;
-        NavGoal g = goalSupplier.get();
-        if (g == null) return;
-        plannedCenter = g.center();
-        NavContext ctx = searchContext();
-        AStarSearch s = astar.newSearch(ctx, current.pathEnd(), g, previousPathHashes);
-        nextObj = s;
-        nextFuture = dispatch(ctx, s);
-    }
-
-    private void advancePrecompute() {
-        if (nextFuture == null) return;
-        if (!nextFuture.isDone()) return;
-        Path np = nextFuture.getNow(null);
-        nextFuture = null;
-        nextObj = null;
-        if (np != null && !np.isEmpty()) {
-            Path cut = np.staticCutoff();
-            pendingNext = new PlayerPathExecutor(player, cut, speed, this::executionContext);
-            pendingPathForViz = cut;
-            previousPathHashes = pathHashes(cut);   // the next segment becomes the favored route
-        }
-    }
-
-    private void discardPrecompute() {
-        if (nextObj != null) {
-            nextObj.cancel();
-            nextObj = null;
-        }
-        nextFuture = null;
-        pendingPathForViz = null;
-        if (pendingNext != null) {
-            pendingNext.stop();
-            pendingNext = null;
-        }
-    }
-
+    /** FAILED 后的人话验尸(直接喂 LLM)。 */
     public String failReason() {
         return failReason;
     }
 
+    /** FAILED 的结构化归因,任务层恢复梯按枚举分支。 */
+    public FailureType failType() {
+        return failType;
+    }
+
+    /**
+     * 距上次真实推进(移动完成/重定位/活跃挖掘)的 tick 数——进度租约
+     * 型任务 deadline 的 liveness 信号。规划间隙(无执行段)读 0:预算内
+     * 的搜索本身就是进度,只是不是走路那种。
+     */
+    public int stallTicks() {
+        PathExecutor current = core.getCurrent();
+        return current == null ? 0 : current.ticksSinceProgress();
+    }
+
+    /** 调试覆盖层格集(如整片矿区)。可视化未接回,暂为空壳。 */
+    public void setHighlights(Supplier<List<BlockPos>> highlights) {
+        this.highlights = highlights;
+    }
+
+    /** 停止导航:取消在飞搜索、丢段、清键停挖,并把身体停稳、松潜行。 */
     public void stop() {
-        if (current != null) {
-            current.stop();
-            current = null;
-        }
-        discardPrecompute();
-        cancelSearch();
+        stopped = true;
+        searchSatisfied = false;
+        core.forceCancel();
         InputDriver.halt(player);
-        // Release sneak too — a pillar holds it every tick, and unlike Baritone (which
-        // resets all inputs per tick) nothing clears it when the path ends, so the body
-        // would stay crouched after arriving.
+        // 垫柱逐 tick 按着潜行,路径终止时没有别人替它松——这里兜底
         player.setShiftKeyDown(false);
-        PathVizPublisher.clear(player);
     }
 }
+
+

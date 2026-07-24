@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.tool.Schema;
-import com.dwinovo.numen.core.tool.ServerNumenTool;
+import com.dwinovo.numen.agent.tool.Schema;
+import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
@@ -9,7 +9,7 @@ import com.google.gson.JsonObject;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
@@ -21,9 +21,9 @@ import java.util.function.Consumer;
 /**
  * SAMPLE (raw-NumenTool style, no @NumenAction). A query tool: runs on the body
  * server-side and replies in place. No arguments → an empty schema. The body of
- * {@link #runOnServer} is just the perception logic; nothing reflective.
+ * {@link #onServerCall} is just the perception logic; nothing reflective.
  */
-public final class GetSelfStatusTool extends ServerNumenTool {
+public final class GetSelfStatusTool implements NumenTool {
 
     @Override
     public String name() {
@@ -32,10 +32,16 @@ public final class GetSelfStatusTool extends ServerNumenTool {
 
     @Override
     public String description() {
-        return "Read your complete status in one call: name, game mode, HP / max HP, "
+        // The reflex overview rides THIS description (constitution §6): numen-api
+        // exposes no system-prompt injection channel to core, but every request
+        // re-reads tool descriptions, so the model sees the current roster each
+        // turn. Dynamic on purpose — switched-off reflexes drop out of the text.
+        String base = "Read your complete status in one call: name, game mode, HP / max HP, "
                 + "hunger / saturation, position, dimension, biome, the structures you "
-                + "are standing in, equipment, your full backpack inventory, and movement "
-                + "state. ALWAYS call this before combat or planning decisions. No arguments.";
+                + "are standing in, equipment, your full backpack inventory, and movement state. "
+                + "ALWAYS call this before combat or planning decisions. No arguments.";
+        String overview = com.dwinovo.numen.task.reflex.ReflexRegistry.overview();
+        return overview.isEmpty() ? base : base + "\n\n" + overview;
     }
 
     @Override
@@ -44,7 +50,7 @@ public final class GetSelfStatusTool extends ServerNumenTool {
     }
 
     @Override
-    public void runOnServer(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
+    public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         JsonObject root = new JsonObject();
         root.addProperty("entity_id", self.getId());
         root.addProperty("name", self.getName().getString());
@@ -60,15 +66,15 @@ public final class GetSelfStatusTool extends ServerNumenTool {
         pos.addProperty("z", self.getZ());
         root.add("position", pos);
 
-        root.addProperty("dimension", self.level().dimension().identifier().toString());
+        root.addProperty("dimension", self.level().dimension().location().toString());
         root.addProperty("biome", self.level().getBiome(self.blockPosition())
-                .unwrapKey().map(k -> k.identifier().toString()).orElse("unknown"));
+                .unwrapKey().map(k -> k.location().toString()).orElse("unknown"));
 
         JsonArray structures = new JsonArray();
         if (self.level() instanceof ServerLevel sl) {
             Registry<Structure> reg = sl.registryAccess().lookupOrThrow(Registries.STRUCTURE);
             for (Structure s : sl.structureManager().getAllStructuresAt(self.blockPosition()).keySet()) {
-                Identifier key = reg.getKey(s);
+                ResourceLocation key = reg.getKey(s);
                 if (key != null) structures.add(key.toString());
             }
         }
@@ -107,6 +113,9 @@ public final class GetSelfStatusTool extends ServerNumenTool {
         root.add("target", JsonNull.INSTANCE);
         root.addProperty("on_ground", self.onGround());
         root.addProperty("in_water", self.isInWater());
+        // Remaining breath — the one stat whose absence let a body drown while its
+        // mind calmly planned an 870-block trip (frozen-ocean death, 2026-07-15).
+        root.addProperty("air", self.getAirSupply() + "/" + self.getMaxAirSupply() + " ticks");
         root.addProperty("in_lava", self.isInLava());
 
         reply.accept(root.toString());

@@ -26,8 +26,9 @@ public final class BlockMiningProgress {
      * consult {@link com.dwinovo.numen.core.pathing.util.BlockHelper#fluidReleasedByBreaking}
      * (UP + the four horizontals — vanilla's flood directions) so "safe to
      * route through" and "safe to mine on purpose" can never disagree. We
-     * refuse the dig whole rather than dive, dam, or race the flow — mirroring
-     * mineflayer's {@code dontCreateFlow} and Baritone's {@code COST_INF}:
+     * refuse the dig whole rather than dive, dam, or race the flow — an
+     * infinite cost, not a large one, a rule long-proven in open-source
+     * pathfinding practice:
      * there is no finite price that correctly values flooding the worksite or
      * bathing in lava. Water teaches "drain it"; lava teaches "leave it".
      * A fully-submerged block trips this too (water on every face), so it

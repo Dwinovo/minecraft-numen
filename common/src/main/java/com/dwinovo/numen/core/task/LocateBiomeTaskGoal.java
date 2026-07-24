@@ -1,14 +1,15 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.task.TaskState;
+
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.task.CompanionTask;
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.QuartPos;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
@@ -45,7 +46,7 @@ import java.util.function.Predicate;
  * reach is 10k with the same 64-block grid. Worst-case full miss ≈ 40k samples
  * ≈ 160 budgeted ticks ≈ 8s, far under the task deadline.
  */
-public final class LocateBiomeTaskGoal implements CompanionTask {
+public final class LocateBiomeTaskGoal extends AbstractCompanionTask<LocateBiomeTaskRecord> {
 
     /** Sample grid pitch — NC's default (16 × biome size 4). Vanilla /locate uses 32. */
     private static final int SAMPLE_STEP_BLOCKS = 64;
@@ -64,16 +65,12 @@ public final class LocateBiomeTaskGoal implements CompanionTask {
     private BlockPos best;
     private String failReason = "not on a server level";
 
-    private final NumenPlayer player;
-    private final LocateBiomeTaskRecord r;
-
     public LocateBiomeTaskGoal(NumenPlayer player, LocateBiomeTaskRecord record) {
-        this.player = player;
-        this.r = record;
+        super(player, record);
     }
 
     @Override
-    public void start() {
+    protected void onStart() {
         match = null;
         best = null;
         ring = 0;
@@ -81,14 +78,12 @@ public final class LocateBiomeTaskGoal implements CompanionTask {
         exhausted = false;
 
         if (!(player.level() instanceof ServerLevel sl)) {
-            failReason = "not on a server level";
-            r.setState(TaskState.FAILED);
+            fail("not on a server level", FailureType.UNKNOWN);
             return;
         }
         match = resolveBiomePredicate(sl, r.biome.trim());
         if (match == null) {
-            // failReason set by resolveBiomePredicate
-            r.setState(TaskState.FAILED);
+            fail(failReason, FailureType.UNKNOWN);   // failReason set by resolveBiomePredicate
             return;
         }
         biomeSource = sl.getChunkSource().getGenerator().getBiomeSource();
@@ -103,7 +98,7 @@ public final class LocateBiomeTaskGoal implements CompanionTask {
     private Predicate<Holder<Biome>> resolveBiomePredicate(ServerLevel sl, String arg) {
         var registry = sl.registryAccess().lookupOrThrow(Registries.BIOME);
         if (arg.startsWith("#")) {
-            Identifier tagId = Identifier.tryParse(arg.substring(1));
+            ResourceLocation tagId = ResourceLocation.tryParse(arg.substring(1));
             if (tagId == null) {
                 failReason = "invalid biome tag: " + arg;
                 return null;
@@ -119,7 +114,7 @@ public final class LocateBiomeTaskGoal implements CompanionTask {
             }
             return holder -> holder.is(tag);
         }
-        Identifier id = Identifier.tryParse(arg);
+        ResourceLocation id = ResourceLocation.tryParse(arg);
         if (id == null || registry.get(ResourceKey.create(Registries.BIOME, id)).isEmpty()) {
             if (id != null && isStructureId(sl, id)) {
                 failReason = arg + " is a STRUCTURE, not a biome — call "
@@ -127,7 +122,7 @@ public final class LocateBiomeTaskGoal implements CompanionTask {
                 return null;
             }
             String suggestion = IdSuggest.closest(
-                    registry.listElements().map(ref -> ref.key().identifier()), arg);
+                    registry.listElements().map(ref -> ref.key().location()), arg);
             failReason = "unknown biome: " + arg
                     + (suggestion != null
                             ? " — did you mean " + suggestion + "?"
@@ -140,37 +135,34 @@ public final class LocateBiomeTaskGoal implements CompanionTask {
         return holder -> holder.is(key);
     }
 
-    private static boolean isStructureId(ServerLevel sl, Identifier id) {
+    private static boolean isStructureId(ServerLevel sl, ResourceLocation id) {
         return sl.registryAccess().lookupOrThrow(Registries.STRUCTURE)
                 .get(ResourceKey.create(Registries.STRUCTURE, id)).isPresent();
     }
 
-    private static boolean isStructureTag(ServerLevel sl, Identifier tagId) {
+    private static boolean isStructureTag(ServerLevel sl, ResourceLocation tagId) {
         return sl.registryAccess().lookupOrThrow(Registries.STRUCTURE)
                 .get(TagKey.create(Registries.STRUCTURE, tagId)).isPresent();
     }
 
     @Override
-    public TaskState tick() {
+    protected TaskState onTick() {
         if (!(player.level() instanceof ServerLevel sl)) {
-            failReason = "not on a server level";
-            r.setState(TaskState.FAILED);
-            return r.getState();
+            fail("not on a server level", FailureType.UNKNOWN);
+            return TaskState.FAILED;
         }
         SearchBudget.refresh(sl.getServer());
         while (true) {
             if (exhausted) {
-                r.setState(TaskState.SUCCESS);   // best == null → "not found"
-                return r.getState();
+                return TaskState.SUCCESS;   // best == null → "not found"
             }
             if (!SearchBudget.tryBiomeSample()) {
-                return r.getState();             // pool drained — resume next tick
+                return TaskState.RUNNING;    // pool drained — resume next tick
             }
             BlockPos hit = sampleNext();
             if (hit != null) {
-                best = hit;                      // ring order ⇒ first hit ≈ nearest
-                r.setState(TaskState.SUCCESS);
-                return r.getState();
+                best = hit;                  // ring order ⇒ first hit ≈ nearest
+                return TaskState.SUCCESS;
             }
         }
     }
@@ -200,43 +192,63 @@ public final class LocateBiomeTaskGoal implements CompanionTask {
         return null;
     }
 
+    /** Search tasks paint no path overlay — nothing to release. */
     @Override
-    public TaskResult buildResult(TaskState finalState) {
+    protected void cleanup() {}
+
+    @Override
+    protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("biome", r.biome);
-        String dim = player.level().dimension().identifier().getPath();
-        if (finalState == TaskState.SUCCESS && best != null) {
+        if (best != null) {
+            BlockPos me = player.blockPosition();
+            int dx = best.getX() - me.getX();
+            int dz = best.getZ() - me.getZ();
+            int dist = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
+            data.put("found", true);
+            data.put("x", best.getX());
+            data.put("y", best.getY());
+            data.put("z", best.getZ());
+            data.put("direction", CompassUtil.compass(dx, dz));
+            data.put("horizontal_distance", dist);
+        } else {
+            data.put("found", false);
+        }
+        return data;
+    }
+
+    @Override
+    protected String successMessage() {
+        if (best != null) {
             BlockPos me = player.blockPosition();
             int dx = best.getX() - me.getX();
             int dz = best.getZ() - me.getZ();
             int dist = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
             String dir = CompassUtil.compass(dx, dz);
-            data.put("found", true);
-            data.put("x", best.getX());
-            data.put("y", best.getY());
-            data.put("z", best.getZ());
-            data.put("direction", dir);
-            data.put("horizontal_distance", dist);
-            return TaskResult.ok("nearest " + r.biome + " around " + best.getX() + ","
+            return "nearest " + r.biome + " around " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). move_to the "
+                    + " blocks; accurate to ~" + SAMPLE_STEP_BLOCKS + "). goto the "
                     + "x/z (pick a sensible y for the terrain), then confirm with "
-                    + "scan_blocks or scan_nearby_entities.", data);
+                    + "scan_blocks or scan_nearby_entities.";
         }
-        data.put("found", false);
+        String dim = player.level().dimension().location().getPath();
         int searched = Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS;
-        return switch (finalState) {
-            case SUCCESS -> TaskResult.ok("no " + r.biome + " within ~" + searched
-                    + " blocks IN THIS DIMENSION (" + dim + ") — check the biome's "
-                    + "home dimension (warped_forest/soul_sand_valley: nether; most "
-                    + "others: overworld) or travel a few thousand blocks and retry", data);
-            case TIMEOUT -> TaskResult.timeout("biome search deadline hit after ~"
-                    + searched + " blocks with no " + r.biome
-                    + " — retrying immediately is fine, or travel first");
-            case CANCELLED -> TaskResult.cancelled("locate_biome interrupted");
-            case FAILED -> TaskResult.fail(failReason, data);
-            default -> TaskResult.fail("unexpected state: " + finalState, data);
-        };
+        return "no " + r.biome + " within ~" + searched
+                + " blocks IN THIS DIMENSION (" + dim + ") — check the biome's "
+                + "home dimension (warped_forest/soul_sand_valley: nether; most "
+                + "others: overworld) or travel a few thousand blocks and retry";
     }
 
+    @Override
+    protected String timeoutMessage() {
+        int searched = Math.min(ring, SEARCH_RADIUS_RINGS) * SAMPLE_STEP_BLOCKS;
+        return "biome search deadline hit after ~"
+                + searched + " blocks with no " + r.biome
+                + " — retrying immediately is fine, or travel first";
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "locate_biome interrupted";
+    }
 }

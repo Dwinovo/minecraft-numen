@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.task;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.core.pathing.util.BlockScanner;
+import com.dwinovo.numen.core.scan.BlockScanner;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceKey;
@@ -105,7 +105,7 @@ public final class ScanBlocksJob {
         ScanBlocksJob job = new ScanBlocksJob(entityUuid, level, center, radius, targets, onDone, onPartial);
         JOBS.add(job);
         Constants.LOG.info("[numen-scan] started radius-{} scan around {} in {} ({} columns)",
-                radius, center.toShortString(), level.dimension().identifier(), job.columnsTotal);
+                radius, center.toShortString(), level.dimension().location(), job.columnsTotal);
     }
 
     /** Drop pending scans for one entity (owner interrupt — client already

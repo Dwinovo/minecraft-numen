@@ -2,17 +2,13 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.agent.tool.api.ToolContext;
-import com.dwinovo.numen.core.task.TaskRecord;
-import com.dwinovo.numen.core.task.BreakBlockTaskRecord;
+import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.task.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.InteractEntityTaskRecord;
 import com.dwinovo.numen.core.task.MineBlockTaskRecord;
-import com.dwinovo.numen.core.task.PlaceBlockTaskRecord;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
-import net.minecraft.world.item.BlockItem;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -30,14 +26,7 @@ import java.util.Set;
  */
 public final class BlockActionTools {
 
-    // place_block: covers walking to the spot.
-    private static final long PLACE_TIMEOUT_TICKS = 30 * 20;
-    // break_block: walk + dig budget; obsidian by hand-tier diamond pick is ~10s alone.
-    private static final long BREAK_TIMEOUT_TICKS = 45 * 20;
-
-    // auto_mine budgets / bounds.
-    private static final int DEFAULT_MAX_RADIUS = 48;
-    private static final int MAX_ALLOWED_RADIUS = 96;
+    // mine budgets / bounds.
     private static final int MAX_COUNT = 256;
     /** Per-block budget is generous; total scales with count so big jobs don't time out. */
     private static final long TICKS_PER_BLOCK = 30 * 20;   // 30s each
@@ -48,77 +37,23 @@ public final class BlockActionTools {
     // interact_entity: covers chasing a moving target.
     private static final long INTERACT_ENTITY_TIMEOUT_TICKS = 60 * 20;
 
-    public TaskRecord placeBlock(
-String block_id,
-int x,
-int y,
-int z,
-String facing,
-String axis,
-String half,
-            ToolContext ctx) {
-        Item item = ToolArgs.parseItem(block_id);
-        if (!(item instanceof BlockItem blockItem)) {
-            throw new IllegalArgumentException(
-                    BuiltInRegistries.ITEM.getKey(item) + " is not a placeable block");
-        }
-        BlockPos pos = new BlockPos(x, y, z);
-        String label = BuiltInRegistries.ITEM.getKey(item).getPath();
-        Direction facingDir = optEnum(facing) == null ? null
-                : Direction.byName(optEnum(facing));
-        Direction.Axis axisVal = optEnum(axis) == null ? null
-                : Direction.Axis.byName(optEnum(axis));
-        String halfVal = optEnum(half);
-        Boolean topHalf = halfVal == null ? null : halfVal.equals("top");
-        return new PlaceBlockTaskRecord(ctx.toolCallId(), ctx.deadline(PLACE_TIMEOUT_TICKS),
-                blockItem.getBlock(), item, pos, label, facingDir, axisVal, topHalf);
-    }
-
-    /** A lowercased optional enum string value, or null if absent / blank. */
-    private static String optEnum(String v) {
-        if (v == null) return null;
-        v = v.trim().toLowerCase();
-        return v.isEmpty() ? null : v;
-    }
-
-    public TaskRecord breakBlock(
-int x,
-int y,
-int z,
-            ToolContext ctx) {
-        BlockPos target = new BlockPos(x, y, z);
-        return new BreakBlockTaskRecord(ctx.toolCallId(), ctx.deadline(BREAK_TIMEOUT_TICKS), target);
-    }
-
-    public TaskRecord autoMine(
-            List<String> block_ids,
-int count,
-Integer radius,
-            ToolContext ctx) {
+    public TaskRecord autoMine(List<String> block_ids, int count, ToolContext ctx) {
         Set<Block> targets = readBlockIds(block_ids);
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("block_ids contained no valid block ids");
         }
         int clampedCount = Math.clamp(count, 1, MAX_COUNT);
-
-        int searchRadius = DEFAULT_MAX_RADIUS;
-        if (radius != null) {
-            searchRadius = radius;
-            if (searchRadius < 1) searchRadius = 1;
-            if (searchRadius > MAX_ALLOWED_RADIUS) searchRadius = MAX_ALLOWED_RADIUS;
-        }
-
         String label = labelFor(targets);
         long timeout = Math.max(MIN_TIMEOUT_TICKS, (long) clampedCount * TICKS_PER_BLOCK);
         long deadline = ctx.deadline(timeout);
-        return new MineBlockTaskRecord(ctx.toolCallId(), deadline, targets, clampedCount, searchRadius, label);
+        return new MineBlockTaskRecord(ctx.toolCallId(), deadline, targets, clampedCount, label);
     }
 
     private static Set<Block> readBlockIds(List<String> blockIds) {
         Set<Block> out = new LinkedHashSet<>();
         for (String el : blockIds) {
             if (el == null) continue;
-            Identifier id = Identifier.tryParse(el);
+            ResourceLocation id = ResourceLocation.tryParse(el);
             if (id == null) continue;
             Block b = BuiltInRegistries.BLOCK.getValue(id);
             if (b != null && b != Blocks.AIR) out.add(b);
@@ -196,3 +131,4 @@ String item_id,
         };
     }
 }
+

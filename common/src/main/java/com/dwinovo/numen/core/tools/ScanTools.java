@@ -1,13 +1,13 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.util.BlockScanner;
+import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.task.ScanBlocksJob;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -89,7 +89,7 @@ List<String> block_ids,
         Set<Block> out = new HashSet<>();
         for (String raw : ids) {
             if (raw == null) continue;
-            Identifier id = Identifier.tryParse(raw);
+            ResourceLocation id = ResourceLocation.tryParse(raw);
             if (id == null) continue;
             Block b = BuiltInRegistries.BLOCK.getValue(id);
             if (b != null && b != Blocks.AIR) out.add(b);

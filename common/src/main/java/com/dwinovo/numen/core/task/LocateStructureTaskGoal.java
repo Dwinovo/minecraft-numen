@@ -1,15 +1,15 @@
 package com.dwinovo.numen.core.task;
 
-import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.task.CompanionTask;
+import com.dwinovo.numen.task.TaskState;
 
-import com.dwinovo.numen.task.TaskResult;
-import com.dwinovo.numen.core.task.TaskState;
+import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
@@ -57,7 +57,7 @@ import java.util.Optional;
  * </ul>
  * Worst case the answer takes a handful of ticks instead of hitching one.
  */
-public final class LocateStructureTaskGoal implements CompanionTask {
+public final class LocateStructureTaskGoal extends AbstractCompanionTask<LocateStructureTaskRecord> {
 
     /**
      * Search radius in placement-region RINGS, exactly vanilla /locate's
@@ -110,16 +110,12 @@ public final class LocateStructureTaskGoal implements CompanionTask {
     private double bestDistSqr = Double.MAX_VALUE;
     private String failReason = "not on a server level";
 
-    private final NumenPlayer player;
-    private final LocateStructureTaskRecord r;
-
     public LocateStructureTaskGoal(NumenPlayer player, LocateStructureTaskRecord record) {
-        this.player = player;
-        this.r = record;
+        super(player, record);
     }
 
     @Override
-    public void start() {
+    protected void onStart() {
         jobs.clear();
         jobIndex = 0;
         pendingCandidate = null;
@@ -127,19 +123,16 @@ public final class LocateStructureTaskGoal implements CompanionTask {
         bestDistSqr = Double.MAX_VALUE;
 
         if (!(player.level() instanceof ServerLevel sl)) {
-            failReason = "not on a server level";
-            r.setState(TaskState.FAILED);
+            fail("not on a server level", FailureType.UNKNOWN);
             return;
         }
         List<Holder<Structure>> holders = resolveStructures(sl, r.structure.trim());
         if (holders == null) {
-            // failReason set by resolveStructures
-            r.setState(TaskState.FAILED);
+            fail(failReason, FailureType.UNKNOWN);   // failReason set by resolveStructures
             return;
         }
         if (holders.isEmpty()) {
-            r.setState(TaskState.SUCCESS);   // valid tag, nothing in it → "not found"
-            return;
+            return;   // valid tag, nothing in it → onTick reports "not found" (SUCCESS)
         }
 
         ChunkGeneratorStructureState state = sl.getChunkSource().getGeneratorState();
@@ -171,11 +164,8 @@ public final class LocateStructureTaskGoal implements CompanionTask {
                 }
             }
         }
-        // No jobs and no ring hit → finish immediately as "not found" (e.g.
+        // No jobs and no ring hit → onTick finishes immediately as "not found" (e.g.
         // fortress searched from the overworld: no placement in this dimension).
-        if (jobs.isEmpty()) {
-            r.setState(TaskState.SUCCESS);
-        }
     }
 
     /** @return resolved holders, empty list for a valid-but-empty tag, or null on bad input. */
@@ -183,7 +173,7 @@ public final class LocateStructureTaskGoal implements CompanionTask {
         var registry = sl.registryAccess().lookupOrThrow(Registries.STRUCTURE);
         List<Holder<Structure>> out = new ArrayList<>();
         if (arg.startsWith("#")) {
-            Identifier tagId = Identifier.tryParse(arg.substring(1));
+            ResourceLocation tagId = ResourceLocation.tryParse(arg.substring(1));
             if (tagId == null) {
                 failReason = "invalid structure tag: " + arg;
                 return null;
@@ -200,7 +190,7 @@ public final class LocateStructureTaskGoal implements CompanionTask {
             set.get().forEach(out::add);
             return out;
         }
-        Identifier id = Identifier.tryParse(arg);
+        ResourceLocation id = ResourceLocation.tryParse(arg);
         Optional<? extends Holder<Structure>> holder = id == null ? Optional.empty()
                 : registry.get(ResourceKey.create(Registries.STRUCTURE, id));
         if (holder.isEmpty()) {
@@ -210,7 +200,7 @@ public final class LocateStructureTaskGoal implements CompanionTask {
                 return null;
             }
             String suggestion = IdSuggest.closest(
-                    registry.listElements().map(ref -> ref.key().identifier()), arg);
+                    registry.listElements().map(ref -> ref.key().location()), arg);
             failReason = "unknown structure: " + arg
                     + (suggestion != null
                             ? " — did you mean " + suggestion + "?"
@@ -223,30 +213,28 @@ public final class LocateStructureTaskGoal implements CompanionTask {
         return out;
     }
 
-    private static boolean isBiomeId(ServerLevel sl, Identifier id) {
+    private static boolean isBiomeId(ServerLevel sl, ResourceLocation id) {
         return sl.registryAccess().lookupOrThrow(Registries.BIOME)
                 .get(ResourceKey.create(Registries.BIOME, id)).isPresent();
     }
 
-    private static boolean isBiomeTag(ServerLevel sl, Identifier tagId) {
+    private static boolean isBiomeTag(ServerLevel sl, ResourceLocation tagId) {
         return sl.registryAccess().lookupOrThrow(Registries.BIOME)
                 .get(TagKey.create(Registries.BIOME, tagId)).isPresent();
     }
 
     @Override
-    public TaskState tick() {
+    protected TaskState onTick() {
         if (!(player.level() instanceof ServerLevel sl)) {
-            failReason = "not on a server level";
-            r.setState(TaskState.FAILED);
-            return r.getState();
+            fail("not on a server level", FailureType.UNKNOWN);
+            return TaskState.FAILED;
         }
         // GLOBAL budget: shared by every searching companion on the server, so
         // total per-tick search cost is a constant regardless of pet count.
         SearchBudget.refresh(sl.getServer());
         while (true) {
             if (jobIndex >= jobs.size()) {
-                r.setState(TaskState.SUCCESS);
-                return r.getState();
+                return TaskState.SUCCESS;
             }
             Job job = jobs.get(jobIndex);
             ChunkPos candidate = pendingCandidate != null ? pendingCandidate : job.next();
@@ -257,12 +245,12 @@ public final class LocateStructureTaskGoal implements CompanionTask {
             }
             if (!SearchBudget.tryCheck()) {
                 pendingCandidate = candidate;   // pool drained — resume next tick
-                return r.getState();
+                return TaskState.RUNNING;
             }
             Boolean hit = checkCandidate(sl, job, candidate);
             if (hit == null) {
                 pendingCandidate = candidate;   // out of chunk-load budget — resume next tick
-                return r.getState();
+                return TaskState.RUNNING;
             }
             if (hit) {
                 consider(job.placement.getLocatePos(candidate));
@@ -303,49 +291,67 @@ public final class LocateStructureTaskGoal implements CompanionTask {
         }
     }
 
+    /** Search tasks paint no path overlay — nothing to release. */
     @Override
-    public TaskResult buildResult(TaskState finalState) {
+    protected void cleanup() {}
+
+    @Override
+    protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("structure", r.structure);
-        if (finalState == TaskState.SUCCESS && best != null) {
+        if (best != null) {
+            BlockPos me = player.blockPosition();
+            int dx = best.getX() - me.getX();
+            int dz = best.getZ() - me.getZ();
+            int dist = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
+            data.put("found", true);
+            data.put("x", best.getX());
+            data.put("y", best.getY());
+            data.put("z", best.getZ());
+            data.put("direction", CompassUtil.compass(dx, dz));
+            data.put("horizontal_distance", dist);
+        } else {
+            data.put("found", false);
+        }
+        return data;
+    }
+
+    @Override
+    protected String successMessage() {
+        if (best != null) {
             BlockPos me = player.blockPosition();
             int dx = best.getX() - me.getX();
             int dz = best.getZ() - me.getZ();
             int dist = (int) Math.sqrt((double) dx * dx + (double) dz * dz);
             String dir = CompassUtil.compass(dx, dz);
-            data.put("found", true);
-            data.put("x", best.getX());
-            data.put("y", best.getY());
-            data.put("z", best.getZ());
-            data.put("direction", dir);
-            data.put("horizontal_distance", dist);
-            return TaskResult.ok("nearest " + r.structure + " at " + best.getX() + ","
+            return "nearest " + r.structure + " at " + best.getX() + ","
                     + best.getY() + "," + best.getZ() + " (" + dir + ", ~" + dist
-                    + " blocks). move_to the x/z (pick a sensible y for the terrain), "
-                    + "then scan_blocks to find its actual blocks.", data);
+                    + " blocks). goto the x/z (pick a sensible y for the terrain), "
+                    + "then scan_blocks to find its actual blocks.";
         }
-        data.put("found", false);
-        String dim = player.level().dimension().identifier().getPath();
-        return switch (finalState) {
-            case SUCCESS -> {
-                int searched = searchedRadiusBlocks();
-                yield searched == 0
-                        ? TaskResult.ok(r.structure + " does not generate IN THIS DIMENSION ("
-                                + dim + ") — fortress/bastion: nether; end_city: the end; "
-                                + "stronghold/village/mansion/monument: overworld", data)
-                        : TaskResult.ok("no " + r.structure + " within ~" + searched
-                                + " blocks of here (" + dim + ") — extremely unlucky seed; "
-                                + "travel a few thousand blocks and retry", data);
-            }
-            case TIMEOUT -> TaskResult.timeout("search deadline hit after covering ~"
-                    + searchedRadiusBlocks() + " blocks outward with no " + r.structure
-                    + " — it is at least that far. Retrying immediately is fine (results "
-                    + "are cached, the search resumes fast), or travel toward unexplored "
-                    + "land first");
-            case CANCELLED -> TaskResult.cancelled("locate_structure interrupted");
-            case FAILED -> TaskResult.fail(failReason, data);
-            default -> TaskResult.fail("unexpected state: " + finalState, data);
-        };
+        String dim = player.level().dimension().location().getPath();
+        int searched = searchedRadiusBlocks();
+        return searched == 0
+                ? r.structure + " does not generate IN THIS DIMENSION ("
+                        + dim + ") — fortress/bastion: nether; end_city: the end; "
+                        + "stronghold/village/mansion/monument: overworld"
+                : "no " + r.structure + " within ~" + searched
+                        + " blocks of here (" + dim + ") — extremely unlucky seed; "
+                        + "travel a few thousand blocks and retry";
+    }
+
+    @Override
+    protected String timeoutMessage() {
+        return "search deadline hit after covering ~"
+                + searchedRadiusBlocks() + " blocks outward with no " + r.structure
+                + " — it is at least that far. Retrying immediately is fine (results "
+                + "are cached, the search resumes fast), or travel toward unexplored "
+                + "land first";
+    }
+
+    @Override
+    protected String cancelledMessage() {
+        return "locate_structure interrupted";
     }
 
     /** How far outward (blocks) the random-spread spirals have covered so far. */
@@ -358,5 +364,4 @@ public final class LocateStructureTaskGoal implements CompanionTask {
         }
         return max;
     }
-
 }

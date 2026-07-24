@@ -15,7 +15,9 @@ neoForge {
 dependencies {
     // The numen-api engine (composite-substituted from ../numen-api). compileOnly:
     // the api classes are provided at runtime by the numen-api mod, not bundled.
-    compileOnly "com.dwinovo.numen:numen-api-common-1.21.11:0.0.1-SNAPSHOT"
+    compileOnly "com.dwinovo.numen:numen-api-common-1.21.11:0.0.7-SNAPSHOT"
+    // 单元测试要真的跑到引擎类(排程机器随 api),运行时类路径补上同一坐标。
+    testImplementation "com.dwinovo.numen:numen-api-common-1.21.11:0.0.7-SNAPSHOT"
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common

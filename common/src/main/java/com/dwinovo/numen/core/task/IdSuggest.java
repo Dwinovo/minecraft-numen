@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task;
 
-import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.stream.Stream;
 
@@ -19,11 +19,11 @@ final class IdSuggest {
      * nothing is plausibly close (threshold scales with input length, plus a
      * containment shortcut so {@code ocean_monument} finds {@code monument}).
      */
-    static String closest(Stream<Identifier> candidates, String input) {
+    static String closest(Stream<ResourceLocation> candidates, String input) {
         String want = pathOf(input);
-        Identifier best = null;
+        ResourceLocation best = null;
         int bestDist = Integer.MAX_VALUE;
-        for (Identifier id : (Iterable<Identifier>) candidates::iterator) {
+        for (ResourceLocation id : (Iterable<ResourceLocation>) candidates::iterator) {
             String path = id.getPath();
             int dist;
             if (want.contains(path) || path.contains(want)) {
