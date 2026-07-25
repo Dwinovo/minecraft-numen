@@ -137,6 +137,7 @@ Every mod you can name, the AI can play. It's a big promise — but every brick 
 **Extend a companion** — its own brain stays in charge:
 - **Bridges** carry an outside channel into a companion: a message arrives, and the companion decides what to do. Built on `NumenGateway`. → **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)** (QQ), with more to come.
 - **Skills** teach a companion how to behave — markdown loaded into its context. Bundled with Numen, or community-written.
+- **Community addons** add tools and skills for a particular play style. → **[Numen Creative](https://github.com/venti0824/numen-creative)** (unofficial community addon; Minecraft 1.20.1 Forge, Numen 0.0.7, Java 17)
 
 **Expose Numen** — hand the controls to an outside brain:
 - **[numen-mcp](https://github.com/Dwinovo/numen-mcp)** is a Model Context Protocol server: any external agent (like Claude) drives companions directly. Built on `NumenActuator`.
