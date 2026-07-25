@@ -1,5 +1,6 @@
 {
   "key.numen.open_roster": "Open Companion Roster",
+  "key.categories.numen": "Numen",
   "numen.brain.chat_locked": "🔌 External brain in control — turn it off in settings to chat",
   "numen.brain.console_empty": "No tool calls yet — the feed fills as the AI acts.",
   "numen.brain.console_title": "External brain console",

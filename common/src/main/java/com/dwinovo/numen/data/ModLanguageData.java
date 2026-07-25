@@ -44,6 +44,9 @@ public final class ModLanguageData {
         /** Hotkey: open the companion roster panel (shown in Controls settings). */
         public static final String KEY_OPEN_ROSTER = "key.numen.open_roster";
 
+        /** Dedicated Minecraft Controls category so the hotkey gets its own "Numen" section. */
+        public static final String KEY_CATEGORY_NUMEN = "key.categories.numen";
+
         // Model-config (provider library) section: nav label, list, form.
         public static final String PROVIDER_TITLE          = "numen.provider.title";
         public static final String PROVIDER_EMPTY          = "numen.provider.empty";
@@ -163,6 +166,7 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_SETTINGS_SAVED,         "Saved");
 
         adder.add(Keys.KEY_OPEN_ROSTER, "Open Companion Roster");
+        adder.add(Keys.KEY_CATEGORY_NUMEN, "Numen");
 
         // --- consolidated into the datagen source (persona / mcp / reasoning / tabs / status ...) ---
         adder.add("numen.tab.chat", "Chat");

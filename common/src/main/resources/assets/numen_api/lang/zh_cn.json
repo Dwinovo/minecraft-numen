@@ -1,5 +1,6 @@
 {
   "key.numen.open_roster": "打开同伴名册",
+  "key.categories.numen": "Numen",
   "numen.brain.chat_locked": "🔌 外接大脑接管中,在设置里关闭后恢复对话",
   "numen.brain.console_empty": "还没有工具调用——外部 AI 一动手这里就会滚动。",
   "numen.brain.console_title": "外接大脑控制台",
