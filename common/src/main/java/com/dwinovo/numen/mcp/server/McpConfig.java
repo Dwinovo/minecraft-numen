@@ -18,7 +18,7 @@ import java.util.List;
  * created with defaults on first launch.
  *
  * <ul>
- *   <li>{@code enabled} — master switch (default true);</li>
+ *   <li>{@code enabled} — master switch (default false; owner opts in);</li>
  *   <li>{@code host}/{@code port} — where the MCP HTTP endpoint binds. Loopback
  *       by default; an external agent reaches it through the {@code mcp-remote}
  *       stdio bridge in {@code claude_desktop_config.json};</li>
@@ -44,7 +44,7 @@ public record McpConfig(
 
     public static McpConfig load(Path file) {
         if (!Files.isRegularFile(file)) {
-            McpConfig def = new McpConfig(true, "127.0.0.1", 8765, "", 300, DEFAULT_HIDDEN);
+            McpConfig def = new McpConfig(false, "127.0.0.1", 8765, "", 300, DEFAULT_HIDDEN);
             writeDefault(file, def);
             return def;
         }
@@ -52,7 +52,7 @@ public record McpConfig(
             JsonObject o = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8))
                     .getAsJsonObject();
             return new McpConfig(
-                    o.has("enabled") ? o.get("enabled").getAsBoolean() : true,
+                    o.has("enabled") ? o.get("enabled").getAsBoolean() : false,
                     strOr(o, "host", "127.0.0.1"),
                     o.has("port") ? o.get("port").getAsInt() : 8765,
                     strOr(o, "token", ""),
