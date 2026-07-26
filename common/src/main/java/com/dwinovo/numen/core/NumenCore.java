@@ -125,6 +125,9 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EatItemTool());
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStatusTool());
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStopTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.ScheduleWakeTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.ListScheduledWakesTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.CancelScheduledWakeTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.DropItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectGuiTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.TransferTool());

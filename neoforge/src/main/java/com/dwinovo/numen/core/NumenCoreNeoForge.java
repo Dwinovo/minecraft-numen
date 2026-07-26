@@ -4,6 +4,7 @@ import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
 import com.dwinovo.numen.core.pathing.cache.PathCaches;
+import com.dwinovo.numen.core.wake.ScheduledWakeRegistry;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.task.ScanBlocksJob;
 import net.neoforged.api.distmarker.Dist;
@@ -60,6 +61,7 @@ public class NumenCoreNeoForge {
     private static void onServerTickPost(ServerTickEvent.Post event) {
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         ScanBlocksJob.tick(event.getServer());
+        ScheduledWakeRegistry.tick(event.getServer());
         PathCaches.serverTick(event.getServer());
         // Debug particles for pathing state, sent only to players with debug on.
         PathDebugRenderer.serverTick(event.getServer());

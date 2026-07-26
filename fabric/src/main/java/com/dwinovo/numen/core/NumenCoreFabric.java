@@ -4,6 +4,7 @@ import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
 import com.dwinovo.numen.core.pathing.cache.PathCaches;
 import com.dwinovo.numen.core.task.ScanBlocksJob;
+import com.dwinovo.numen.core.wake.ScheduledWakeRegistry;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -25,6 +26,8 @@ public class NumenCoreFabric implements ModInitializer {
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         // Advance budget-sliced long-range block scans each tick.
         ServerTickEvents.END_SERVER_TICK.register(ScanBlocksJob::tick);
+        // Durable one-shot brain timers; one-second checks, no body-lane reservation.
+        ServerTickEvents.END_SERVER_TICK.register(ScheduledWakeRegistry::tick);
         // Snapshot loaded chunks near companions for the off-thread planner to read live.
         ServerTickEvents.END_SERVER_TICK.register(PathCaches::serverTick);
         // Release those chunk references when the server stops (don't pin an old world's chunks).
