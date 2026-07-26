@@ -138,7 +138,7 @@ public final class EntityAgentLoop {
      *  客户端自记账,不走新网络包:回执与事件本来就都经过这里。 */
     private CurrentTask currentTask;
 
-    private record CurrentTask(String id, String tool, long sinceMs) {}
+    private record CurrentTask(String id, String tool, String arguments, long sinceMs) {}
 
     /**
      * This companion's persona (per-companion, dynamic). Sourced from the last {@code persona-change}
@@ -246,7 +246,7 @@ public final class EntityAgentLoop {
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
                 harvestWorkBlocks(inv.name(), resultJson);
-                trackAsyncDispatch(inv.name(), resultJson);
+                trackAsyncDispatch(inv, resultJson);
                 convo.addToolResult(inv.id(), resultJson);
             }
             @Override public void onAllSettled() {
@@ -724,15 +724,15 @@ public final class EntityAgentLoop {
     }
 
     /** 派发回执识别:异步工具的受理结果带 data.async=true 与 data.task_id。 */
-    private void trackAsyncDispatch(String toolName, String resultJson) {
+    private void trackAsyncDispatch(ToolInvocation invocation, String resultJson) {
         try {
             com.google.gson.JsonObject o =
                     com.google.gson.JsonParser.parseString(resultJson).getAsJsonObject();
             if (!o.has("data") || !o.get("data").isJsonObject()) return;
             com.google.gson.JsonObject data = o.getAsJsonObject("data");
             if (data.has("async") && data.get("async").getAsBoolean() && data.has("task_id")) {
-                currentTask = new CurrentTask(data.get("task_id").getAsString(), toolName,
-                        System.currentTimeMillis());
+                currentTask = new CurrentTask(data.get("task_id").getAsString(), invocation.name(),
+                        invocation.argsJson(), System.currentTimeMillis());
             }
         } catch (RuntimeException ignored) {
             // 非 JSON 或形状不符——不是异步回执,不记账。
@@ -875,14 +875,8 @@ public final class EntityAgentLoop {
     private void drainInbox() {
         if (inbox.isEmpty()) return;
         List<String> parts = new ArrayList<>();
-        // 身体正在后台跑异步任务:每个回合都把这行放在最前,模型不用调工具就知道
-        // 手头有活(记账来自派发回执,收尾事件对上 id 即清,见 trackAsyncDispatch)。
-        if (currentTask != null) {
-            long secs = (System.currentTimeMillis() - currentTask.sinceMs()) / 1000;
-            parts.add("<current_task>" + currentTask.id() + " " + currentTask.tool()
-                    + " 后台进行中(已 " + secs + "s)。task_status 查进度,task_stop 叫停,"
-                    + "完成会自动收到 task_finished 事件,不要轮询。</current_task>");
-        }
+        // current_task is live runtime state. It is attached request-locally by
+        // modelContextSnapshot(), never written into conversation history or JSONL.
         // <known_blocks> 随用户回合注入,不放系统提示:它随放置/使用工作站而变,
         // 放系统提示会打碎请求前缀的 prompt cache。系统提示(工具 schema+操作
         // 核心+人设)因此字节级稳定,支持缓存的服务商整段命中。
@@ -970,7 +964,7 @@ public final class EntityAgentLoop {
         awaitingLlmResponse = true;
 
         var tools = ToolRegistry.all();
-        var snapshot = convo.snapshot();
+        var snapshot = modelContextSnapshot();
         String systemPrompt = composeSystemPrompt();
 
         Constants.LOG.info("[numen-entity#{}] turn {}: convo={} msgs, tools={}",
@@ -1162,6 +1156,24 @@ public final class EntityAgentLoop {
         return raw.replaceFirst("(?s)<analysis>.*?(</analysis>|$)", "").strip();
     }
 
+    /** Effective request history; the source conversation and append-only log remain untouched. */
+    private List<ConvoState.Msg> modelContextSnapshot() {
+        return AgentRequestContext.attach(convo.snapshot(), currentTaskXml());
+    }
+
+    /** Live async-task state, recomputed for every worker request and never persisted. */
+    private String currentTaskXml() {
+        CurrentTask task = currentTask;
+        if (task == null) return "";
+        long elapsed = Math.max(0, System.currentTimeMillis() - task.sinceMs()) / 1000;
+        return "<runtime_state><current_task id=\"" + xml(task.id()) + "\" tool=\""
+                + xml(task.tool()) + "\" state=\"running\" elapsed_s=\"" + elapsed
+                + "\">Original arguments: " + xml(truncate(task.arguments(), 600)) + ". "
+                + "This exact background call is ACTIVE. Do not dispatch it again or start another "
+                + "body action. Wait for its task_finished event; use task_status only when the owner "
+                + "asks for progress, and task_stop only to abort.</current_task></runtime_state>";
+    }
+
     private String composeSystemPrompt() {
         // Per-companion persona wins; fall back to the global default; with neither,
         // the persona slot says so EXPLICITLY — an unconfigured persona is a valid
@@ -1258,7 +1270,7 @@ public final class EntityAgentLoop {
                 final int gen2 = turnGeneration;
                 final VoiceTurn vt2 = beginVoiceTurn();   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
                 livePartial.setLength(0);                 // 失败那次的半截文字同理作废
-                client().chatStreaming(convo.snapshot(), ToolRegistry.all(),
+                client().chatStreaming(modelContextSnapshot(), ToolRegistry.all(),
                                 composeSystemPrompt(), tapForUi(gen2, vt2.sink()))
                         .whenComplete((r2, e2) -> {
                             vt2.finish().run();
@@ -1312,6 +1324,15 @@ public final class EntityAgentLoop {
     private static String truncate(String s, int max) {
         if (s == null) return "";
         return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
+    private static String xml(String value) {
+        if (value == null) return "";
+        return value.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&apos;");
     }
 
     private static String unwrap(Throwable t) {
