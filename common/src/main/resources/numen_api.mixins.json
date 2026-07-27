@@ -4,6 +4,7 @@
   "package": "com.dwinovo.numen.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "ChunkMapCompanionMixin",
     "MenuDataSlotsAccessor",
     "MixinServerCommonPacketListener"
   ],

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.task;
 
+import com.dwinovo.numen.entity.CompanionChunkLoader;
 import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.server.MinecraftServer;
@@ -54,6 +55,19 @@ public final class CompanionTickDispatcher {
         Companions.tickRespawns(server);   // timed death recoveries
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p instanceof NumenPlayer ap) {
+                // Re-stamp the companion's loading pad from the SERVER tick (this runs every tick over
+                // the player list, unconditionally) — NOT from NumenPlayer.tick(), which the entity
+                // system only calls while the companion's chunk is already entity-ticking. Doing it here
+                // breaks the chicken-and-egg: a companion whose chunk fell out of ticking range still gets
+                // its pad refreshed, which pulls its chunk back into range so it resumes ticking. Gated on
+                // the owner being online — an owner-less companion (owner logged off on a server) shouldn't
+                // hold chunks loaded; its pad lapses and it idles until the owner returns. In single-player
+                // the owner is always online while the world runs, so this never gates there. See
+                // CompanionChunkLoader.
+                UUID owner = ap.getOwnerUuid();
+                if (owner != null && server.getPlayerList().getPlayer(owner) != null) {
+                    CompanionChunkLoader.refresh(ap);
+                }
                 brainFor(ap.getUUID()).tick(ap);
             }
         }
