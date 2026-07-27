@@ -2,6 +2,9 @@ package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.tools.BlockActionTools;
+import com.dwinovo.numen.core.task.BuildTaskRecord;
+import net.minecraft.world.level.block.Blocks;
+import java.util.ArrayList;
 import com.dwinovo.numen.core.tools.MovementTools;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -106,6 +109,106 @@ public class CompanionGameTests {
                     "companion has not gathered 8 spruce logs");
             CompanionFactory.despawn(level.getServer(), companion);
         });
+    }
+
+    // ==================== 建造用例 ====================
+
+    /** 建造批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_build")
+    public static void prepareBuildBatch(ServerLevel level) {
+        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
+        level.setDayTime(6000);
+    }
+
+    /**
+     * 建造用例的公共骨架:floor20 平地、rel(2,2,2) 出生、按需发圆石,派 build
+     * 任务(不传分层——走生产默认的自动分层),判据两条:每格就位 + 同伴回到
+     * 地面(建完人还挂在结构上不算交付)。
+     */
+    private static void runBuildCase(GameTestHelper helper, String name,
+                                     List<BlockPos> relCells, int cobbleStacks) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+                name, UUID.randomUUID(), level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        for (int i = 0; i < cobbleStacks; i++) {
+            companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        }
+        List<BuildTaskRecord.Target> targets = new ArrayList<>(relCells.size());
+        for (BlockPos rel : relCells) {
+            targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
+                    helper.absolutePos(rel), "cobblestone", null, null, null));
+        }
+        var ctx = TaskDispatch.ctx("gametest-build", companion);
+        long deadline = ctx.deadline(Math.max(1200L, targets.size() * 400L));
+        TaskDispatch.dispatchAsync(companion,
+                new BuildTaskRecord(ctx.toolCallId(), deadline, targets, true, 0), reply -> {});
+
+        List<BlockPos> cells = targets.stream().map(BuildTaskRecord.Target::pos).toList();
+        int groundY = spawn.getY();
+        helper.succeedWhen(() -> {
+            for (BlockPos cell : cells) {
+                helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
+                        "structure incomplete at " + cell.toShortString());
+            }
+            helper.assertTrue(companion.blockPosition().getY() <= groundY + 1,
+                    "structure done but companion is stranded at y="
+                            + companion.blockPosition().getY() + " (ground y=" + groundY + ")");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** rel 起点 + 尺寸圈出的长方体格集;hollow = 只留外壳。 */
+    private static List<BlockPos> boxCells(BlockPos origin, int sx, int sy, int sz, boolean hollow) {
+        List<BlockPos> cells = new ArrayList<>();
+        for (int dy = 0; dy < sy; dy++) {
+            for (int dx = 0; dx < sx; dx++) {
+                for (int dz = 0; dz < sz; dz++) {
+                    if (hollow && dx != 0 && dx != sx - 1 && dy != 0 && dy != sy - 1
+                            && dz != 0 && dz != sz - 1) {
+                        continue;
+                    }
+                    cells.add(origin.offset(dx, dy, dz));
+                }
+            }
+        }
+        return cells;
+    }
+
+    /** 空心 8x8x8 壳(296 格):高结构 + 封闭几何,建造循环最重的常规形状。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_hollow_cube(GameTestHelper helper) {
+        runBuildCase(helper, "gametest_builder",
+                boxCells(new BlockPos(6, 2, 6), 8, 8, 8, true), 6);
+    }
+
+    /** 实心 5x5x5(125 格):逐层实心浇筑,身体要在自己刚铺的层面上走位。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_solid_cube(GameTestHelper helper) {
+        runBuildCase(helper, "gametest_mason",
+                boxCells(new BlockPos(7, 2, 7), 5, 5, 5, false), 4);
+    }
+
+    /** 一堵 10x4 的墙(40 格):长条高结构,沿线往返 + 够高处的格子。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_wall(GameTestHelper helper) {
+        runBuildCase(helper, "gametest_waller",
+                boxCells(new BlockPos(5, 2, 10), 10, 4, 1, false), 2);
+    }
+
+    /** 2x2x8 高塔(32 格):细高结构,自体脚手架式攀升,收尾要从塔顶回地面。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_pillar(GameTestHelper helper) {
+        runBuildCase(helper, "gametest_towerer",
+                boxCells(new BlockPos(9, 2, 9), 2, 8, 2, false), 2);
+    }
+
+    /** 9x9 平台(81 格):纯水平铺面,不触发分层,考横向站位与边铺边退。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_platform(GameTestHelper helper) {
+        runBuildCase(helper, "gametest_paver",
+                boxCells(new BlockPos(5, 2, 5), 9, 1, 9, false), 3);
     }
 
     /**
