@@ -22,6 +22,8 @@ public final class BuildTaskRecord extends TaskRecord {
     public final List<Target> targets;
     public final boolean replaceExisting;
     public final int layerHeight;
+    /** 是否消耗背包材料(蓝图施工暂以免材料模式运行,材料记账后续接入)。 */
+    public final boolean consumeMaterials;
 
     private int placed;
     private int broken;
@@ -29,10 +31,16 @@ public final class BuildTaskRecord extends TaskRecord {
 
     public BuildTaskRecord(String toolCallId, long deadlineGameTime,
                            List<Target> targets, boolean replaceExisting, int layerHeight) {
+        this(toolCallId, deadlineGameTime, targets, replaceExisting, layerHeight, true);
+    }
+
+    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
+                           boolean replaceExisting, int layerHeight, boolean consumeMaterials) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.targets = List.copyOf(targets);
         this.replaceExisting = replaceExisting;
         this.layerHeight = layerHeight;
+        this.consumeMaterials = consumeMaterials;
     }
 
     public int placed() {

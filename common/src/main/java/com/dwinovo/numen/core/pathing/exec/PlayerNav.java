@@ -256,6 +256,9 @@ public final class PlayerNav {
         CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace);
     }
 
+    /** ARRIVED-IN-PLACE 已打点(边沿去重)。 */
+    private boolean arrivedInPlaceLogged;
+
     public Status tick() {
         NavProfiler.tickFrame();
         if (reached.getAsBoolean()) {
@@ -341,10 +344,15 @@ public final class PlayerNav {
             BlockPos feet = PathExecutor.playerFeet(player);
             if (engineGoal.isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
                 searchSatisfied = true;
-                Constants.LOG.info(
-                        "[numen-path] ARRIVED-IN-PLACE feet={} goal-center={} —— 搜索目标在脚下"
-                                + "即满足,钉稳结论交任务层裁决",
-                        feet.toShortString(), plannedCenter.toShortString());
+                if (!arrivedInPlaceLogged) {
+                    // 只在进入边沿打一次:任务层反复重建导航时,同一驻留会逐 tick 重进
+                    // 这个分支,连续打点是日志洪水
+                    arrivedInPlaceLogged = true;
+                    Constants.LOG.info(
+                            "[numen-path] ARRIVED-IN-PLACE feet={} goal-center={} —— 搜索目标在脚下"
+                                    + "即满足,钉稳结论交任务层裁决",
+                            feet.toShortString(), plannedCenter.toShortString());
+                }
                 return Status.ARRIVED;
             }
         }

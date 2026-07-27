@@ -38,12 +38,6 @@ final class BuildCalculationContext extends CalculationContext {
         this.availableStates = Set.copyOf(availableStates);
         this.replaceExisting = replaceExisting;
         this.passingThrough = passingThrough;
-        if (passingThrough) {
-            // 从自己作品上下来,最省事的路往往就是玩家的走法:走到边沿跳下去。
-            // 摔伤按 (高度-3) 半心计,身强体壮的建造者吃得起;放宽落差上限,
-            // 让"跳下来"进入候选,免得所有路线都得挖穿成品。
-            this.maxFallHeightNoWater = 10;
-        }
         this.jumpPenalty += 10.0;
         this.backtrackCostFavoringCoefficient = 1.0;
     }
@@ -105,10 +99,9 @@ final class BuildCalculationContext extends CalculationContext {
         BuildTaskRecord.Target target = activeTargets.get(key);
         if (target != null) {
             if (target.matches(current)) {
-                // 过路模式下挖已建对的格子不罚:罚金会让"填回借道洞绕着走"比
-                // "挖穿下行"便宜,重规划在两族路线间摇摆;身后的随行修补会把
-                // 借道洞封回,交付物不吃亏。
-                return passingThrough ? 1.0 : NavSettings.get().breakCorrectBlockPenaltyMultiplier;
+                // 施工期已建对的格子不可破坏——拆补拉锯从定价层面被禁止;交付后
+                // 的过路(回撤)按普通格子计价,借道破坏由后续施工遍补上。
+                return passingThrough ? 1.0 : COST_INF;
             }
             return replaceExisting ? 1.0 : COST_INF;
         }

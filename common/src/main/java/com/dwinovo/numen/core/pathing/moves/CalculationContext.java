@@ -138,7 +138,11 @@ public class CalculationContext {
         this.allowDiagonalAscend = settings.allowDiagonalAscend;
         this.allowDownward = settings.allowDownward;
         this.minFallHeight = 3;
-        this.maxFallHeightNoWater = settings.maxFallHeightNoWater;
+        // 落差上限不写死:摔不死的高度都可以是路,只是疼。原版摔伤 = 高度-3(半心/格),
+        // 按当前血量留 3 颗心(6 点)保命余量反推可承受高度;设置值兜底为下限。
+        int survivableFall = 3 + Math.max(0, (int) ((player.getHealth() - 6.0f) / 1.0f));
+        this.maxFallHeightNoWater = Math.min(12,
+                Math.max(settings.maxFallHeightNoWater, survivableFall));
         this.maxFallHeightBucket = settings.maxFallHeightBucket;
         this.waterWalkSpeed = computeWaterWalkSpeed(player);
         this.breakBlockAdditionalCost = settings.blockBreakAdditionalPenalty;
