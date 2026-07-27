@@ -21,6 +21,9 @@ neoForge {
     runs {
         configureEach {
             systemProperty('neoforge.enabledGameTestNamespaces', mod_id)
+            // 所有运行配置都指向仓库内的 SNBT 模板目录:无头跑批用,开发客户端里
+            // /test run <用例> 现场围观也用(见 CompanionGameTests 静态块)。
+            systemProperty('numen.gametest.structures', file('gameteststructures').absolutePath)
             ideName = "NeoForge ${it.name.capitalize()} (${project.path})" // Unify the run config names with fabric
         }
         client {
@@ -42,9 +45,6 @@ neoForge {
         gameTestServer {
             type = "gameTestServer"
             gameDirectory = this.mkdir(this.file("runs/gametestserver"))
-            // Structure templates live in-repo as readable SNBT; the test bootstrap points
-            // vanilla's template fallback dir here (see CompanionGameTests static init).
-            systemProperty('numen.gametest.structures', file('gameteststructures').absolutePath)
         }
     }
     mods {
