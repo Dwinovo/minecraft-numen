@@ -176,6 +176,60 @@ public class CompanionGameTests {
         return cells;
     }
 
+    // ==================== 蓝图用例 ====================
+
+    /** 蓝图批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_blueprint")
+    public static void prepareBlueprintBatch(ServerLevel level) {
+        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
+        level.setDayTime(6000);
+    }
+
+    /**
+     * 经典蓝图:运行时从原版资源里取雪屋顶屋(igloo/top,7x5x8——雪墙、冰窗、
+     * 木门、床、火把、熔炉、工作台俱全),写成 config/numen/blueprints 下的 .nbt,
+     * 再经 BlueprintStore 展开成建造任务。覆盖 .nbt 读取、精确状态落位(门/床双格、
+     * 火把贴附)、骨架先行贴附后置的阶段序,以及免材料模式。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_blueprint")
+    public static void blueprint_igloo(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        try {
+            var template = server.getStructureManager()
+                    .get(net.minecraft.resources.ResourceLocation.parse("minecraft:igloo/top")).orElseThrow();
+            var tag = template.save(new net.minecraft.nbt.CompoundTag());
+            java.nio.file.Path dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(server);
+            net.minecraft.nbt.NbtIo.writeCompressed(tag, dir.resolve("igloo_top.nbt"));
+        } catch (java.io.IOException e) {
+            throw new RuntimeException(e);
+        }
+
+        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+                "gametest_architect", UUID.randomUUID(), level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+
+        BlockPos anchorPos = helper.absolutePos(new BlockPos(7, 2, 7));
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "igloo_top", anchorPos, 0);
+        var ctx = TaskDispatch.ctx("gametest-blueprint", companion);
+        long deadline = ctx.deadline(Math.max(2400L, loaded.targets().size() * 400L));
+        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
+                loaded.targets(), true, 0, false), reply -> {});
+
+        int groundY = spawn.getY();
+        helper.succeedWhen(() -> {
+            for (BuildTaskRecord.Target target : loaded.targets()) {
+                helper.assertTrue(target.matches(level.getBlockState(target.pos())),
+                        "blueprint cell mismatch at " + target.pos().toShortString()
+                                + " want " + target.desiredState());
+            }
+            helper.assertTrue(companion.blockPosition().getY() <= groundY + 1,
+                    "blueprint done but companion is stranded at y=" + companion.blockPosition().getY());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 单块悬置:目标在头部高度、上方为空——真实世界曾整任务卡死的最小场景
      *  (站在旁边就该侧身放上,不接受任何"找不到角度")。 */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
