@@ -14,6 +14,7 @@ import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.pathing.util.NavProfiler;
 import com.dwinovo.numen.core.task.FailureType;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -157,6 +158,12 @@ public final class PlayerNav {
         return new PlayerNav(player, speed, reached, compiled, true, contextProvider);
     }
 
+    /** 同上,用缺省搜索/执行上下文。 */
+    public static PlayerNav toRevalidating(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiled,
+                                           double speed, BooleanSupplier reached) {
+        return new PlayerNav(player, speed, reached, compiled, true);
+    }
+
     /** 持续跟随一个实时实体,每 tick 用实体当前脚位重新校验目标。 */
     public static PlayerNav followEntity(NumenPlayer player, Supplier<? extends Entity> entitySupplier,
                                          double followRadius, double speed, BooleanSupplier reached) {
@@ -250,6 +257,7 @@ public final class PlayerNav {
     }
 
     public Status tick() {
+        NavProfiler.tickFrame();
         if (reached.getAsBoolean()) {
             return Status.ARRIVED;
         }
@@ -263,7 +271,9 @@ public final class PlayerNav {
         }
 
         // goal 与 sacred 一体拉取——两者是同一份契约
+        long tCompile = NavProfiler.begin();
         GoalCompiler.Compiled compiled = compiledSupplier.get();
+        NavProfiler.end("goal.compile", tCompile);
         if (compiled == null) {
             return fail(FailureType.TARGET_LOST, "target lost");
         }
@@ -294,6 +304,7 @@ public final class PlayerNav {
         }
 
         PathExecutor before = core.getCurrent();
+        long tExec = NavProfiler.begin();
         withSprintGate(() -> {
             // 状态机空闲(初次、或结果被判孤儿丢弃)时(重新)下发目标;
             // setGoalAndPath 已在目标内/已有段/已有在飞搜索时自会不派发
@@ -303,6 +314,7 @@ public final class PlayerNav {
             }
             core.tick();
         });
+        NavProfiler.end("core.tick", tExec);
 
         // 首段搜索失败:验尸并终局。裁定前再问一次 caller 谓词——本 tick
         // 身体可能已挪进满足位,ARRIVED 优先于失败结论
@@ -460,6 +472,16 @@ public final class PlayerNav {
         core.forceCancel();
         InputDriver.halt(player);
         // 垫柱逐 tick 按着潜行,路径终止时没有别人替它松——这里兜底
+        player.setShiftKeyDown(false);
+    }
+
+    /**
+     * 本 tick 原地站住:清移动输入、松潜行,但目标、当前路径段与在飞搜索全部保留,
+     * 下一次 {@link #tick()} 从当前状态续跑——不产生任何冷启动搜索。身体必须静止的
+     * 就地作业(如站桩挖掘)期间逐 tick 调用;与 {@link #stop()}(终局释放)互不替代。
+     */
+    public void pause() {
+        InputDriver.halt(player);
         player.setShiftKeyDown(false);
     }
 }
