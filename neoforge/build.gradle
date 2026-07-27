@@ -39,6 +39,13 @@ neoForge {
             this.file("runs/server").createParentDirectories()
             gameDirectory = this.mkdir(this.file("runs/server"))
         }
+        gameTestServer {
+            type = "gameTestServer"
+            gameDirectory = this.mkdir(this.file("runs/gametestserver"))
+            // Structure templates live in-repo as readable SNBT; the test bootstrap points
+            // vanilla's template fallback dir here (see CompanionGameTests static init).
+            systemProperty('numen.gametest.structures', file('gameteststructures').absolutePath)
+        }
     }
     mods {
         "${mod_id}" {
