@@ -176,6 +176,14 @@ public class CompanionGameTests {
         return cells;
     }
 
+    /** 单块悬置:目标在头部高度、上方为空——真实世界曾整任务卡死的最小场景
+     *  (站在旁边就该侧身放上,不接受任何"找不到角度")。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_single_block(GameTestHelper helper) {
+        runBuildCase(helper, "gametest_handyman",
+                List.of(new BlockPos(6, 3, 6)), 1);
+    }
+
     /** 空心 8x8x8 壳(296 格):高结构 + 封闭几何,建造循环最重的常规形状。 */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
     public static void build_hollow_cube(GameTestHelper helper) {
