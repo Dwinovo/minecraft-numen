@@ -81,11 +81,11 @@ Every mod you can name, the AI can play. It's a big promise — but every brick 
 ## Quick start
 
 1. **Install** the mod (plus [Fabric API](https://modrinth.com/mod/fabric-api) if you're on Fabric) and launch once.
-2. **Add your API key.** Press **`G`** → **Settings**, pick a provider, and paste your own key (OpenAI, DeepSeek, Kimi, Qwen, Doubao… any OpenAI-compatible backend works).
+2. **Add your API key.** Press **`N`** → **Settings**, pick a provider, and paste your own key (OpenAI, DeepSeek, Kimi, Qwen, Doubao… any OpenAI-compatible backend works).
 3. **Summon a companion.** Click the **`+`** in the panel's left rail, give it a name, hit Enter.
 4. **Click its avatar to chat**, and tell it what to do. The rest is on it.
 
-> The panel (press `G`) has three tabs: **Chat** (conversation + a live plan board), **Items** (a read-only character sheet styled like the vanilla inventory), and **Settings** (key and model). The left rail *is* your companion roster — click an avatar to switch, **`+`** to summon, **`✕`** to dismiss; you barely need commands at all. A small avatar HUD hugs the left screen edge, too — when a companion speaks, its avatar and a speech bubble slide out together.
+> The panel (press `N`) has three tabs: **Chat** (conversation + a live plan board), **Items** (a read-only character sheet styled like the vanilla inventory), and **Settings** (key and model). The left rail *is* your companion roster — click an avatar to switch, **`+`** to summon, **`✕`** to dismiss; you barely need commands at all. A small avatar HUD hugs the left screen edge, too — when a companion speaks, its avatar and a speech bubble slide out together.
 
 ## What it can do
 
