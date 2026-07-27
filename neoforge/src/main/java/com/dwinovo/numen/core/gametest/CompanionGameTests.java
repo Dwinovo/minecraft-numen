@@ -196,6 +196,14 @@ public class CompanionGameTests {
         level.setDayTime(6000);
     }
 
+    /** 重型建造批次前置(与轻型批分开,别让六个建造者同时抢搜索池——
+     *  生产环境是 20tps 一两个同伴,测试没必要用数量级更苛的并发打自己)。 */
+    @BeforeBatch(batch = "numen_build_heavy")
+    public static void prepareHeavyBuildBatch(ServerLevel level) {
+        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
+        level.setDayTime(6000);
+    }
+
     /**
      * 经典蓝图:运行时从原版资源里取雪屋顶屋(igloo/top,7x5x8——雪墙、冰窗、
      * 木门、床、火把、熔炉、工作台俱全),写成 config/numen/blueprints 下的 .nbt,
@@ -220,6 +228,9 @@ public class CompanionGameTests {
         NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_architect", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        // 蓝图免材料只是不消耗;寻路的脚手架(垫柱上穹顶)是真实放置,得有料
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
 
         BlockPos anchorPos = helper.absolutePos(new BlockPos(7, 2, 7));
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "igloo_top", anchorPos, 0);
@@ -250,14 +261,14 @@ public class CompanionGameTests {
     }
 
     /** 空心 8x8x8 壳(296 格):高结构 + 封闭几何,建造循环最重的常规形状。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_heavy")
     public static void build_hollow_cube(GameTestHelper helper) {
         runBuildCase(helper, "gametest_builder",
                 boxCells(new BlockPos(6, 2, 6), 8, 8, 8, true), 6);
     }
 
     /** 实心 5x5x5(125 格):逐层实心浇筑,身体要在自己刚铺的层面上走位。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_heavy")
     public static void build_solid_cube(GameTestHelper helper) {
         runBuildCase(helper, "gametest_mason",
                 boxCells(new BlockPos(7, 2, 7), 5, 5, 5, false), 4);
