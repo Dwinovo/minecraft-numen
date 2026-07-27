@@ -176,6 +176,17 @@ public class CompanionGameTests {
         return cells;
     }
 
+    /** 形状 DSL:空心圆柱(半径 3、高 4 的塔筒)。几何由 build_shape 的展开器
+     *  生成,走常规建造任务(消耗材料),验"搭积木"路线的地基。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_shape_cylinder(GameTestHelper helper) {
+        BlockPos center = new BlockPos(10, 2, 10);
+        List<BlockPos> rel = com.dwinovo.numen.core.tools.BuildShapeTool.cells(
+                "cylinder", true, center.getX(), center.getY(), center.getZ(),
+                null, null, null, 3, 4);
+        runBuildCase(helper, "gametest_mason2", rel, 2);
+    }
+
     // ==================== 蓝图用例 ====================
 
     /** 蓝图批次前置:和平难度 + 正午。 */
