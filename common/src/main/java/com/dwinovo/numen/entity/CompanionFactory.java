@@ -8,7 +8,6 @@ import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -46,12 +45,26 @@ public final class CompanionFactory {
         }
         NumenPlayer player = new NumenPlayer(server, level, profile, ClientInformation.createDefault());
         FakeConnection connection = new FakeConnection();
+        // Restore saved state (position, inventory, health, owner) before joining so the body is at its
+        // real location as early as possible. (This explicit restore is kept because placeNewPlayer's own
+        // player-data load has not reliably restored a hand-built fake player's .dat in this setup; it is
+        // idempotent if placeNewPlayer does load.)
+        loadPlayerData(server, player);
+        // First spawn has no .dat to restore the owner from; set it explicitly.
+        if (player.getOwnerUuid() == null) {
+            player.setOwnerUuid(ownerUuid);
+        }
         server.getPlayerList().placeNewPlayer(connection, player,
                 CommonListenerCookie.createInitial(profile, false));
-        // placeNewPlayer does NOT load a hand-built fake player's .dat, so restore
-        // it ourselves: position, inventory, health, owner from
-        // disk. Without this a respawned companion spawns at 0,0,0 with no items.
-        loadPlayerData(server, player);
+        // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
+        // apply it AFTER the join: placeNewPlayer internally re-applies the saved .dat, which would otherwise
+        // clobber the spawn pos and send a died-then-revived companion back to its death location instead of
+        // to its owner. Same-level setPos via moveTo — NOT the teleportTo(ServerLevel,…) dimension-travel
+        // overload, which fires EntityTravelToDimensionEvent (tripping some world-protection mods) even for a
+        // same-level move. A respawn from dormancy passes null and keeps exactly what the .dat restored.
+        if (pos != null) {
+            player.moveTo(pos.x, pos.y, pos.z, player.getYRot(), player.getXRot());
+        }
         // 假玩家没有客户端上报的模型定制:点亮全部皮肤覆盖层与披风,否则只显示单层基础皮肤。
         // 每次 spawn(首建与重生)都重设——该字节是同步实体数据、不随 .dat 存取。
         player.showAllSkinLayers();
@@ -60,15 +73,6 @@ public final class CompanionFactory {
         // otherwise hand a creative world's body instabuild (no block drops, breaks auto_mine). Forced
         // here after the .dat restore so a stale saved game type can't override it.
         player.setGameMode(GameType.SURVIVAL);
-        // First spawn has no .dat to restore the owner from; set it explicitly.
-        if (player.getOwnerUuid() == null) {
-            player.setOwnerUuid(ownerUuid);
-        }
-        // An explicit pos (fresh summon) overrides the restored position; a respawn
-        // from dormancy passes null to keep exactly what the .dat restored.
-        if (pos != null) {
-            player.teleportTo(level, pos.x, pos.y, pos.z, Set.of(), player.getYRot(), player.getXRot());
-        }
         return player;
     }
 
