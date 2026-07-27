@@ -29,6 +29,9 @@ public final class NavSettings {
 
     // ==================== 成本 / 能力开关 ====================
 
+    /** 调试:打开寻路性能探针,{@link com.dwinovo.numen.core.pathing.util.NavProfiler} 按窗口打 [nav-profile] 日志。默认关。 */
+    public boolean profile = false;
+
     /** 允许挖掘方块开路。 */
     public boolean allowBreak = true;
     /** 允许疾跑。 */
@@ -157,6 +160,17 @@ public final class NavSettings {
     public long planAheadPrimaryTimeoutMS = 4000;
     /** 接续段搜索的 failure 预算(毫秒)。 */
     public long planAheadFailureTimeoutMS = 5000;
+    /**
+     * 单次 A* 展开节点数的【失控安全网】,不是常规限制。正常搜索由时间预算({@link #primaryTimeoutMS}
+     * 等)约束:一次搜索探到时间预算耗尽为止,CPU 由有界线程池 + 低优先级线程兜住。
+     * 此值设得足够高,以致 5 秒时间预算总是先触发(挖掘寻路约 5 万节点/秒,5 秒也才 ~25 万),
+     * 因此它在正常游戏里【永不触发】,只用于兜底一个理论上"时间检查都没能停下"的病态死循环。
+     *
+     * <p>历史教训:曾经设成 5 万当"节点上限"来压挖钻石卡顿,结果挖矿的大复合目标(几十个矿一起搜)
+     * 启发指引弱、要探超过 5 万节点才找到路 → 被砍断误判无路 → 拉黑近处矿、舍近求远。CPU 的事改由
+     * 线程池/优先级解决,这里退回纯安全网。命中(极罕见)时返回当前最优半程,与超时同收尾。
+     */
+    public int maxNodesPerSearch = 2_000_000;
 
     // ==================== 路径 / 分段 ====================
 
