@@ -70,6 +70,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private static final double DISTANCE_TRIM_SQR = 200.0;
     /** Give up (rather than spin to the deadline) if no cell completes for this long. */
     private static final int STALL_LIMIT_TICKS = 30 * 20;
+    /** 已建成的格子刚被挖开后的通行宽限:期间不重新列为待补。挖开它的多半是
+     *  自己的路径在借道(下行/穿行),身体还没走过去就秒填回去,就是拆补拉锯;
+     *  等身体通过、格子静置后再修(外因破坏也只是晚这一小会儿再补,无害)。 */
+    private static final int RELOST_REPAIR_GRACE_TICKS = 20;
+    /** 工完场清:建成后走回开工时的落脚点再报成功——站在成品屋顶上收工,交付
+     *  物完好但人挂在高处,下一个指令还得先救人。回撤沿用本任务的成本上下文
+     *  (挖已建对的格子有重罚金),借道破坏由近旁修补随行回填;这里是回撤的
+     *  时限,走不回去就原地交付,不为收尾赖掉一个成功的任务。 */
+    private static final int WITHDRAW_MAX_TICKS = 60 * 20;
+    /** 回撤路上的借道破坏近旁修不着多久后,才放弃回撤回去施工。要给"挖开
+     *  屋顶-下行-随行封顶"完整的施展窗口,过急的翻转会把回撤路径拆掉、让
+     *  修复反射把刚挖的口子封回去,战争换个战场重演。 */
+    private static final int WITHDRAW_REPAIR_GAP_TICKS = 200;
     private static final Direction[] PLACE_GOAL_FACES = {
             Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN
     };
@@ -88,11 +101,18 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private int layerTop;
     private boolean providerRegistered;
     private BuildTaskRecord.Target activeBreak;
+    /** 开工时的落脚点——建成后的回撤目的地。 */
+    private BlockPos startFeet;
+    private boolean withdrawing;
+    private int withdrawTicks;
+    private int withdrawRepairGap;
     private BlockPos noShotPos;
     private int noShotTicks;
     private int emptyArrivalTicks;
     private int placeDelayTicks;
     private int stallTicks;
+    private final it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap recentlyLost =
+            new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
     private int highWaterCompleted;
     private String note = "done";
 
@@ -127,13 +147,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected void onStart() {
         minY = r.targets.stream().mapToInt(t -> t.pos().getY()).min().orElse(playerFeet().getY());
         maxY = r.targets.stream().mapToInt(t -> t.pos().getY()).max().orElse(minY);
-        layerTop = usesLayers() ? Math.min(maxY, minY + Math.max(1, r.layerHeight) - 1) : maxY;
+        layerTop = usesLayers() ? Math.min(maxY, minY + layerHeightEffective() - 1) : maxY;
         incorrectPositions = null;
         observedCompleted = new LongOpenHashSet();
         stallTicks = 0;
         registerProvider();
         updateCompleted();
         highWaterCompleted = r.completed();
+        startFeet = playerFeet().immutable();
         advanceFinishedLayers();
     }
 
@@ -147,26 +168,56 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         updateCompleted();
         tickPlaceDelay();
         if (r.completed() >= r.targets.size()) {
-            note = "all requested cells match";
-            return TaskState.SUCCESS;
+            if (!withdrawing) {
+                withdrawing = true;
+                stopNav();
+                com.dwinovo.numen.Constants.LOG.info(
+                        "[numen-task] build withdraw start feet={} home={}",
+                        playerFeet().toShortString(), startFeet.toShortString());
+            }
+            withdrawRepairGap = 0;
+            boolean planning = nav != null && nav.planningInFlight();
+            if (playerFeet().distSqr(startFeet) <= 4
+                    || (!planning && ++withdrawTicks > WITHDRAW_MAX_TICKS)) {
+                note = "all requested cells match";
+                return TaskState.SUCCESS;
+            }
+        } else if (withdrawing) {
+            // 回撤路上有格子失守(多半是自己借道挖的):不整体切回施工模式——
+            // 那会在"回撤-施工"两个模式间打转。就地随行修补(下方的近旁拆/放
+            // 反射照常工作);只有修补长时间够不着,才放弃回撤回去施工。
+            if (++withdrawRepairGap > WITHDRAW_REPAIR_GAP_TICKS && !hasLocalWorkWindow()) {
+                withdrawing = false;
+                withdrawRepairGap = 0;
+                stopNav();
+            }
         }
         // 停滞检测:以"完成格数"为进展信号(放/清可空转,门那种放了又清也不算进展),
         // 连续 STALL_LIMIT_TICKS 无新完成就优雅失败退出,别空转到 deadline。
         if (r.completed() > highWaterCompleted) {
             highWaterCompleted = r.completed();
             stallTicks = 0;
+        } else if (withdrawing) {
+            stallTicks = 0;   // 交付后的回撤/随行修补阶段,进展另由回撤时限约束
+        } else if (nav != null && nav.planningInFlight()) {
+            // 身体站着等异步搜索返回:不是停滞,是规划器在飞——这些刻不计入
+            // 停滞预算(与任务 deadline 的冻结同一原则)。
         } else if (++stallTicks >= STALL_LIMIT_TICKS) {
+            com.dwinovo.numen.Constants.LOG.info(
+                    "[numen-task] build STALL-FUSE completed={}/{} feet={} note={}",
+                    r.completed(), r.targets.size(), player.blockPosition().toShortString(), note);
             fail("stalled: no build progress for " + (STALL_LIMIT_TICKS / 20) + "s ("
                     + note + "); completed " + r.completed() + "/" + r.targets.size(),
                     FailureType.NO_PATH);
             return TaskState.FAILED;
         }
         advanceFinishedLayers();
-        if (!recalc()) {
+        // 回撤期一切格子都正确,recalc 恒为假——不能让这个早退拦住回撤导航
+        if (!recalc() && !withdrawing) {
             updateCompleted();
             if (r.completed() >= r.targets.size()) {
                 note = "all requested cells match";
-                return TaskState.SUCCESS;
+                return TaskState.RUNNING;   // 下一 tick 顶部进入回撤
             }
             return TaskState.RUNNING;
         }
@@ -181,11 +232,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return tickBreak(wasSneaking);
         }
 
+        // 局部作业只暂停导航,不拆除:goal、当前路径、在飞搜索都保温——作业结束
+        // 下一 tick 原地续走,不用冷启动重搜;路径的计划挖掘集也因此存活,补格
+        // 逻辑才看得见"这格是借道用的"而让行。
         BuildTaskRecord.Target breakTarget = localBreakCandidate();
         if (breakTarget != null) {
             emptyArrivalTicks = 0;
-            stopNav();
+            if (nav != null) {
+                nav.pause();
+            }
             activeBreak = breakTarget;
+            com.dwinovo.numen.Constants.LOG.debug("[numen-task] build break {} (now {})",
+                    breakTarget.pos().toShortString(),
+                    player.level().getBlockState(breakTarget.pos()).getBlock());
             return tickBreak(wasSneaking);
         }
 
@@ -193,18 +252,26 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         LocalPlacement placeTarget = placeDelayTicks > 0 ? null : localPlaceCandidate();
         if (placeTarget != null) {
             emptyArrivalTicks = 0;
-            stopNav();
+            if (nav != null) {
+                nav.pause();
+            }
             return tickPlace(placeTarget);
         }
 
         if (nav == null) {
-            GoalCompiler.Compiled compiled = buildCompiled();
-            if (compiled == null) {
-                return failNoWork();
+            if (withdrawing) {
+                nav = PlayerNav.to(player, () -> GoalCompiler.standOn(startFeet), WALK_SPEED,
+                        () -> playerFeet().distSqr(startFeet) <= 4, this);
+                nav.setHighlights(java.util.List::of);
+            } else {
+                GoalCompiler.Compiled compiled = buildCompiled();
+                if (compiled == null) {
+                    return failNoWork();
+                }
+                nav = PlayerNav.toRevalidating(player, this::buildCompiled, WALK_SPEED,
+                        this::hasLocalWorkWindow, this);
+                nav.setHighlights(this::activePositions);
             }
-            nav = PlayerNav.toRevalidating(player, this::buildCompiled, WALK_SPEED,
-                    this::hasLocalWorkWindow, this);
-            nav.setHighlights(this::activePositions);
         }
 
         return switch (nav.tick()) {
@@ -227,6 +294,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 String reason = nav.failReason();
                 emptyArrivalTicks = 0;
                 stopNav();
+                if (withdrawing && r.completed() >= r.targets.size()) {
+                    // 回不去:结构已交付,不为收尾赖掉一个成功的任务
+                    com.dwinovo.numen.Constants.LOG.info(
+                            "[numen-task] build withdraw gave up: {} feet={}",
+                            reason, player.blockPosition().toShortString());
+                    note = "all requested cells match";
+                    yield TaskState.SUCCESS;
+                }
+                com.dwinovo.numen.Constants.LOG.info(
+                        "[numen-task] build nav FAILED: {} feet={}",
+                        reason, player.blockPosition().toShortString());
                 note = "waiting for a reachable build stance" + (reason == null || reason.isBlank()
                         ? "" : ": " + reason);
                 yield TaskState.RUNNING;
@@ -329,6 +407,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         use.tick();
         if (target.matches(player.level().getBlockState(target.pos()))) {
             r.placedOne();
+            com.dwinovo.numen.Constants.LOG.debug("[numen-task] build placed {} (#{})",
+                    target.pos().toShortString(), r.placed());
             noSupport.clear();
             markObserved(target, true);
         } else {
@@ -373,15 +453,22 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         BlockPos center = playerFeet();
         int radius = LOCAL_ACTION_RADIUS;
+        // 施工期不把头顶上方列为放置候选(往自己头上盖会把自己埋进结构里);
+        // 回撤期反过来:身体已在下行竖井里,借道洞正在头顶上方,封回去是
+        // 收尾的本分——上限放开到全半径。
+        int dyMax = withdrawing ? radius : 1;
         for (int dx = -radius; dx <= radius; dx++) {
-            for (int dy = -radius; dy <= 1; dy++) {
+            for (int dy = -radius; dy <= dyMax; dy++) {
                 for (int dz = -radius; dz <= radius; dz++) {
                     BlockPos pos = center.offset(dx, dy, dz);
                     BuildTaskRecord.Target target = targetAt(pos);
                     if (target == null || !isIncorrect(target) || !canStartLocalPlace(target)) {
                         continue;
                     }
-                    if (dy == 1 && player.level().getBlockState(pos.above()).isAir()) {
+                    if (navPlansToBreak(pos) || inRepairGrace(pos)) {
+                        continue;   // 路径正/刚借道挖开它——等身体通过,别现在填回去
+                    }
+                    if (!withdrawing && dy == 1 && player.level().getBlockState(pos.above()).isAir()) {
                         continue;
                     }
                     LocalPlacement placement = resolveLocalPlacement(target);
@@ -395,7 +482,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     private LocalPlacement resolveLocalPlacement(BuildTaskRecord.Target target) {
-        if (blockedByOtherEntity(target.pos(), target.desiredState())) {
+        if (blockedByEntity(target.pos(), target.desiredState())) {
             return null;
         }
         if (!placementPlausible(target.pos(), target.desiredState())) {
@@ -409,6 +496,22 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         int slot = matchingSlotForHit(target, resolution.hit(), resolution.yaw(), resolution.pitch(), true);
         return slot < 0 || !nextTickCanReach(resolution) ? null : new LocalPlacement(target, resolution, slot);
     }
+    /** 路径执行器计划挖开的格子:修复/补格逻辑必须让行——同一具身体不能一边
+     *  为走路挖它、一边判它"缺格待补"秒填回去(那是拆补拉锯,双方都赢不了)。
+     *  身体通过后它自然回到缺格名单,再补。 */
+    private boolean navPlansToBreak(BlockPos pos) {
+        return nav != null && nav.plannedBreaks().contains(pos);
+    }
+
+    /** 刚失守的格子仍在通行宽限内?计划挖掘集只覆盖"还没挖"的格子——挖完
+     *  路径段即退休,名单随之清空,而身体还没落进洞里;这段空窗由失守时间戳
+     *  兜住。 */
+    private boolean inRepairGrace(BlockPos pos) {
+        long lost = recentlyLost.getOrDefault(pos.asLong(), Long.MIN_VALUE);
+        return lost != Long.MIN_VALUE
+                && player.level().getGameTime() - lost < RELOST_REPAIR_GRACE_TICKS;
+    }
+
     private boolean canInterruptPath() {
         return player.onGround() && (nav == null || nav.isSafeToCancel());
     }
@@ -830,8 +933,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return incorrectPositions == null || incorrectPositions.contains(target.pos());
     }
 
+    /** 生效分层高:显式传参优先;未传(0)时,高于两格的结构自动按 1 格层
+     *  自底向上推进——自由顺序建高结构,身体必须穿透已建成的部分去够低处的
+     *  格子,和自己的作品抢同一空间(拆补拉锯的几何根源);逐层让身体始终站
+     *  在施工面上方。矮结构(≤2 格高)无此问题,维持整体一次成型。 */
+    private int layerHeightEffective() {
+        if (r.layerHeight > 0) {
+            return r.layerHeight;
+        }
+        return (maxY - minY + 1) > 2 ? 1 : 0;
+    }
+
     private boolean usesLayers() {
-        return r.layerHeight > 0;
+        return layerHeightEffective() > 0;
     }
 
     private boolean canStartLocalPlace(BuildTaskRecord.Target target) {
@@ -1004,9 +1118,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return shape.isEmpty() || level.isUnobstructed(null,
                 shape.move(pos.getX(), pos.getY(), pos.getZ()));
     }
-    private boolean blockedByOtherEntity(BlockPos pos, BlockState state) {
+    /** 谁都不豁免——包括同伴自己:身体占着/正落进的格子不可放置。放置对自己
+     *  身体让路,是"挖开脚下想下去、又立刻把方块补回自己脚底"这类自我拉扯的
+     *  物理性防线,不需要任何显式停火状态。 */
+    private boolean blockedByEntity(BlockPos pos, BlockState state) {
         VoxelShape shape = state.getCollisionShape(player.level(), pos);
-        return !shape.isEmpty() && !player.level().isUnobstructed(player,
+        return !shape.isEmpty() && !player.level().isUnobstructed(null,
                 shape.move(pos.getX(), pos.getY(), pos.getZ()));
     }
     private boolean hasItem(Item item) {
@@ -1126,8 +1243,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 if (target.matches(view.getBlockState(pos))) {
                     observedCompleted.add(pos.asLong());
                     completed++;
-                } else {
-                    observedCompleted.remove(pos.asLong());
+                } else if (observedCompleted.remove(pos.asLong())) {
+                    recentlyLost.put(pos.asLong(), player.level().getGameTime());
+                    com.dwinovo.numen.Constants.LOG.debug(
+                            "[numen-task] build cell LOST {} (now {})",
+                            pos.toShortString(), view.getBlockState(pos).getBlock());
                 }
             } else if (observedCompleted.contains(pos.asLong())) {
                 completed++;
@@ -1145,11 +1265,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return currentCrosshairHits(pos) || rotationReady(aim);
     }
 
+    /** 就绪 = 当前视角射线已命中;或步进器已停在它能到的最近栅格点(残差在半
+     *  像素死区内,再转也不会动)——该停点视角在选点时已做过射线验证,交互包
+     *  又自带命中数据,停即可点。 */
     private boolean readyToPlace(LocalPlacement placement) {
-        return placementRaycastMatches(placement.resolution().hit(), player.getYRot(), player.getXRot());
-    }
-
-    private boolean nextTickCanReach(PlaceResolution resolution) {
+        PlaceResolution resolution = placement.resolution();
         if (placementRaycastMatches(resolution.hit(), player.getYRot(), player.getXRot())) {
             return true;
         }
@@ -1158,7 +1278,37 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         AimProcessor.Rotation next = AIM.step(player.getYRot(), player.getXRot(),
                 resolution.yaw(), resolution.pitch());
-        return placementRaycastMatches(resolution.hit(), next.yaw(), next.pitch());
+        return next.yaw() == player.getYRot() && next.pitch() == player.getXRot();
+    }
+
+    /** 选点验证:射线必须在"步进器实际会停下的视角"上命中。视角只能落在鼠标
+     *  像素栅格上,理想角度差半像素以内就到不了——拿理想视角验证会放进一批
+     *  "转到停点后射线恰好跨到隔壁格"的候选,执行层永远等不到命中。 */
+    private boolean nextTickCanReach(PlaceResolution resolution) {
+        if (placementRaycastMatches(resolution.hit(), player.getYRot(), player.getXRot())) {
+            return true;
+        }
+        if (!resolution.hasRotation()) {
+            return false;
+        }
+        AimProcessor.Rotation settled = settledAim(resolution.yaw(), resolution.pitch());
+        return placementRaycastMatches(resolution.hit(), settled.yaw(), settled.pitch());
+    }
+
+    /** 从当前视角朝目标步进到不动点——步进器真正会停住的视角(几步内必收敛:
+     *  首步吞掉几乎全部角度差,余下的落在量化死区)。 */
+    private AimProcessor.Rotation settledAim(float wantYaw, float wantPitch) {
+        float yaw = player.getYRot();
+        float pitch = player.getXRot();
+        for (int i = 0; i < 4; i++) {
+            AimProcessor.Rotation next = AIM.step(yaw, pitch, wantYaw, wantPitch);
+            if (next.yaw() == yaw && next.pitch() == pitch) {
+                break;
+            }
+            yaw = next.yaw();
+            pitch = next.pitch();
+        }
+        return new AimProcessor.Rotation(yaw, pitch);
     }
 
     private boolean currentCrosshairHits(BlockPos pos) {
@@ -1279,14 +1429,16 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     public CalculationContext forSearch(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
         return ContextFactory.forSearch(player, sacred, deniedPlace,
                 (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
-                        p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true), r.replaceExisting));
+                        p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true),
+                        r.replaceExisting, withdrawing));
     }
 
     @Override
     public CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
         return ContextFactory.forExecution(player, sacred, deniedPlace,
                 (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
-                        p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true), r.replaceExisting));
+                        p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true),
+                        r.replaceExisting, withdrawing));
     }
 
     @Override

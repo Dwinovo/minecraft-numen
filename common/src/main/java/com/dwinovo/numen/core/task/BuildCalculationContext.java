@@ -23,15 +23,27 @@ final class BuildCalculationContext extends CalculationContext {
     private final Map<Long, BuildTaskRecord.Target> activeTargets;
     private final Set<BlockState> availableStates;
     private final boolean replaceExisting;
+    /** 过路模式(交付后的回撤):目标格的放置不再免费——施工期"顺路补格 = 生产力"
+     *  的 0 成本,在回撤期会让"把刚挖开的借道洞填回去"成为每次重规划的免费首选,
+     *  和下行挖掘互相拆台。过路人眼里它们只是普通格子。 */
+    private final boolean passingThrough;
 
     BuildCalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                             boolean safeForThreadedUse, LongSet sacred, LongSet deniedPlace,
                             Map<Long, BuildTaskRecord.Target> activeTargets,
-                            Set<BlockState> availableStates, boolean replaceExisting) {
+                            Set<BlockState> availableStates, boolean replaceExisting,
+                            boolean passingThrough) {
         super(player, view, loadedTest, safeForThreadedUse, sacred, deniedPlace);
         this.activeTargets = Map.copyOf(activeTargets);
         this.availableStates = Set.copyOf(availableStates);
         this.replaceExisting = replaceExisting;
+        this.passingThrough = passingThrough;
+        if (passingThrough) {
+            // 从自己作品上下来,最省事的路往往就是玩家的走法:走到边沿跳下去。
+            // 摔伤按 (高度-3) 半心计,身强体壮的建造者吃得起;放宽落差上限,
+            // 让"跳下来"进入候选,免得所有路线都得挖穿成品。
+            this.maxFallHeightNoWater = 10;
+        }
         this.jumpPenalty += 10.0;
         this.backtrackCostFavoringCoefficient = 1.0;
     }
@@ -53,6 +65,10 @@ final class BuildCalculationContext extends CalculationContext {
             }
             if (target.matches(current)) {
                 return COST_INF;
+            }
+            if (passingThrough) {
+                // 回撤路上的缺格按普通脚手架计价,不给任何补格激励
+                return super.costOfPlacingAt(x, y, z, current);
             }
             if (containsAvailableState(target.desiredState())
                     && MovementHelper.isReplaceable(x, y, z, current, loadedTest)) {
@@ -89,7 +105,10 @@ final class BuildCalculationContext extends CalculationContext {
         BuildTaskRecord.Target target = activeTargets.get(key);
         if (target != null) {
             if (target.matches(current)) {
-                return NavSettings.get().breakCorrectBlockPenaltyMultiplier;
+                // 过路模式下挖已建对的格子不罚:罚金会让"填回借道洞绕着走"比
+                // "挖穿下行"便宜,重规划在两族路线间摇摆;身后的随行修补会把
+                // 借道洞封回,交付物不吃亏。
+                return passingThrough ? 1.0 : NavSettings.get().breakCorrectBlockPenaltyMultiplier;
             }
             return replaceExisting ? 1.0 : COST_INF;
         }

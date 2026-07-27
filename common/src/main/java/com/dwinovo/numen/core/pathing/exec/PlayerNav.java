@@ -470,6 +470,13 @@ public final class PlayerNav {
         return core.hasInProgressSearch() && core.getCurrent() == null;
     }
 
+    /** 当前执行路段计划挖开的格子集(无路段时为空集)。任务层的世界修复
+     *  逻辑对这些格子让行:同一具身体不能一边为走路挖它、一边把它填回去。 */
+    public java.util.Set<BlockPos> plannedBreaks() {
+        PathExecutor current = core.getCurrent();
+        return current == null ? java.util.Set.of() : current.toBreak();
+    }
+
     /** 调试覆盖层格集(如整片矿区)。可视化未接回,暂为空壳。 */
     public void setHighlights(Supplier<List<BlockPos>> highlights) {
         this.highlights = highlights;

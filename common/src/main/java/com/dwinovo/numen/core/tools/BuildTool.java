@@ -98,7 +98,10 @@ public final class BuildTool implements NumenTool {
                 "description", "Optional, default true. Clear wrong non-protected blocks at requested cells."));
         rootProps.put("layer_height", Map.of(
                 "type", "integer",
-                "description", "Optional, default 0. Use 0 to build the whole structure at once; positive values enable vertical layer steps."));
+                "description", "Optional. Explicit vertical layer step (1-16) builds bottom-up in slices of"
+                        + " that height. Default 0 = auto: structures taller than 2 blocks build in 1-block"
+                        + " layers (the body always works from atop the finished part); flat or low"
+                        + " structures place freely."));
 
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("type", "object");
