@@ -1,0 +1,48 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.dwinovo.numen.core.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "FishingHookAccessor",
+    "CompanionFactoryLoginMixin",
+    "BlockScannerLoadedChunksMixin",
+    "ScanBlocksLoadedChunksMixin",
+    "LocateStructureLoadedChunksMixin",
+    "NumenPlayerChunkTrackingMixin",
+    "ChunkMapNonBlockingSaveMixin",
+    "YawpDimensionTravelMixin",
+    "InteractAtSafetyMixin",
+    "CollectItemsStackCountMixin",
+    "InspectGuiNamedSlotsMixin",
+    "ScanNearbyEntitiesScopeMixin",
+    "MeleeAttackTaskAccessor",
+    "MeleeAttackScopeMixin",
+    "MeleeAttackShieldMixin",
+    "MobDefenseShieldMixin",
+    "RangedAttackTaskAccessor",
+    "RangedAttackScopeMixin",
+    "ReliableMineMixin",
+    "MoveToTargetLifecycleMixin",
+    "TaskResultScaffoldReportMixin",
+    "NavSettingsScaffoldMixin",
+    "BuildPlacementRegistryAccessor",
+    "BuildPlacementRegistryLifecycleMixin",
+    "BuildPlacementScaffoldGuardMixin",
+    "FollowOwnerRegistrationMixin",
+    "NumenModLoginMixin",
+    "CompanionsRespawnMixin",
+    "CompanionTickDispatcherMixin",
+    "CompanionBrainScaffoldCleanupMixin",
+    "OwnerLogoutMixin",
+    "MinecraftServerShutdownMixin"
+  ],
+  "client": [
+    "AddressedChatRegistrationMixin",
+    "EntityAgentLoopPromptMixin"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
