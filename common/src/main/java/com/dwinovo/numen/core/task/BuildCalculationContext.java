@@ -99,9 +99,11 @@ final class BuildCalculationContext extends CalculationContext {
         BuildTaskRecord.Target target = activeTargets.get(key);
         if (target != null) {
             if (target.matches(current)) {
-                // 施工期已建对的格子不可破坏——拆补拉锯从定价层面被禁止;交付后
-                // 的过路(回撤)按普通格子计价,借道破坏由后续施工遍补上。
-                return passingThrough ? 1.0 : COST_INF;
+                // 施工期拆已建对的格子收重罚:只有被自己的作品困住(封顶后人在
+                // 屋里、门窗未通)这类无路可走的处境才值得付——玩家也是拆一块
+                // 出去再补上。补墙由下一遍施工完成;游标模型没有即时回填反射,
+                // 不存在逐 tick 拆补拉锯。交付后的过路(回撤)按普通格子计价。
+                return passingThrough ? 1.0 : 50.0;
             }
             return replaceExisting ? 1.0 : COST_INF;
         }

@@ -108,6 +108,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final Map<Item, Integer> passMissing = new LinkedHashMap<>();
     /** 遍起点的完成数,用于判定"整遍零进展"。 */
     private int passStartCompleted = -1;
+    /** 连续零进展的遍数;达到上限才判"真不可达"。 */
+    private int zeroProgressPasses;
+    private static final int MAX_ZERO_PROGRESS_PASSES = 3;
     /** 本遍构建时的施工层顶,层推进后遍作废重排。 */
     private int passLayerTop = Integer.MIN_VALUE;
     /** 当前导航针对的游标格(换格重建导航)。 */
@@ -368,8 +371,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         boolean progressed = r.completed() > passStartCompleted;
         if (!progressed) {
+            // 单遍零进展未必是真不可达:并发搜索抢预算的瞬时枯竭也长这样。
+            // 连续几遍都颗粒无收才认输——重试一遍的代价极低(已正确格秒过)。
+            if (++zeroProgressPasses < MAX_ZERO_PROGRESS_PASSES) {
+                passOrder = null;
+                return TaskState.RUNNING;
+            }
             String reason = passFailureReason();
             if (skipFailedLayer(reason)) {
+                zeroProgressPasses = 0;
                 passOrder = null;
                 return TaskState.RUNNING;
             }
@@ -377,6 +387,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     passMissing.isEmpty() ? FailureType.NO_PATH : FailureType.NO_MATERIAL);
             return TaskState.FAILED;
         }
+        zeroProgressPasses = 0;
         passOrder = null;
         return TaskState.RUNNING;
     }
@@ -659,12 +670,13 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (!player.level().getBlockState(pos).isAir()) {
             return goalPlace(pos);
         }
-        boolean allowSameLevel = !player.level().getBlockState(pos.above()).isAir();
         for (Direction facing : PLACE_GOAL_FACES) {
             BlockPos against = pos.relative(facing);
-            if (MovementHelper.canPlaceAgainst(player.level(), against)
-                    && placementPlausible(pos, target.desiredState())) {
-                return goalAdjacent(pos, against, allowSameLevel);
+            // 只按世界几何选目标形状,不掺任何随身位变化的谓词(身体正压着目标格
+            // 之类的事交执行期 canWorkOn):站位目标必须编译稳定,否则一次恰好
+            // 站在格上的取样会把目标劣化成"站上未建格的正上方"这种不可能任务。
+            if (MovementHelper.canPlaceAgainst(player.level(), against)) {
+                return goalAdjacent(pos, against);
             }
         }
         return goalPlace(pos);
@@ -722,7 +734,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         };
     }
 
-    private NavGoal goalAdjacent(BlockPos target, BlockPos no, boolean allowSameLevel) {
+    private NavGoal goalAdjacent(BlockPos target, BlockPos no) {
         BlockPos t = target.immutable();
         BlockPos excluded = no.immutable();
         return new NavGoal() {
@@ -730,8 +742,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 if (feet.equals(t) || feet.equals(excluded)) {
                     return false;
                 }
-                if (!allowSameLevel && feet.getY() == t.getY() - 1) {
-                    return false;
+                if (feet.getY() == t.getY() + 1
+                        && Math.abs(feet.getX() - t.getX()) + Math.abs(feet.getZ() - t.getZ()) <= 1) {
+                    // 站在旁边高一格、朝脚边的洞里放——玩家补地板的标准姿势
+                    return true;
                 }
                 if (feet.getY() < t.getY() - 1) {
                     return false;
