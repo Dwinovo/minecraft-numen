@@ -460,6 +460,16 @@ public final class PlayerNav {
         return current == null ? 0 : current.ticksSinceProgress();
     }
 
+    /**
+     * 规划器在飞且当前无路段在执行——身体站着等异步搜索返回。任务层用它
+     * 冻结任务 deadline:deadline 度量的是身体干活的刻,搜索的墙钟延迟不该
+     * 折算成任务超时(tick 越快于真实时间,这笔折算越离谱,无上限 tick 的
+     * 测试服上足以在首次搜索返回前烧光整个预算)。
+     */
+    public boolean planningInFlight() {
+        return core.hasInProgressSearch() && core.getCurrent() == null;
+    }
+
     /** 调试覆盖层格集(如整片矿区)。可视化未接回,暂为空壳。 */
     public void setHighlights(Supplier<List<BlockPos>> highlights) {
         this.highlights = highlights;

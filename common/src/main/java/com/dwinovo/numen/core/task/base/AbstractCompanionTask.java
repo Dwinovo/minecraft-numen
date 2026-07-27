@@ -119,6 +119,14 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     @Override
     public final TaskState tick() {
         if (pendingTerminal != null) return pendingTerminal;
+        // 规划器在飞、身体没有路段可走的等待刻,不烧任务预算:deadline 度量
+        // 的是身体干活的刻,异步搜索的墙钟延迟不是任务的错(与调度层被生存
+        // 链抢占时的 freezeTick 同一原则)。正常 tick 速率下一次搜索只有几刻,
+        // 这里几乎不动;tick 远快于真实时间时(如不限速的测试服),没有这道
+        // 冻结,任务会在第一次搜索返回前就被判 TIMEOUT。
+        if (nav != null && nav.planningInFlight()) {
+            r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
+        }
         return onTick();
     }
 

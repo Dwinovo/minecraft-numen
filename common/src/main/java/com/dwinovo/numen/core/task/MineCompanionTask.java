@@ -193,6 +193,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             TargetIndex.register(sl, r.targets);
         }
         runQuery();
+        // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
+        com.dwinovo.numen.Constants.LOG.info(
+                "[numen-task] mine start targets={} count={} feet={} firstQuery={} hit(s)",
+                r.label, r.count, player.blockPosition().toShortString(),
+                knownOres.size());
     }
 
     @Override
@@ -743,6 +748,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         TargetIndex.Result res = TargetIndex.query(sl, player.blockPosition(), r.targets,
                 MAX_ORES, QUERY_MAX_CHUNK_RADIUS, QUERY_BUILD_BUDGET);
         lastQueryComplete = res.complete();
+        com.dwinovo.numen.Constants.LOG.debug(
+                "[numen-task] mine query feet={} raw={} complete={} known(before merge)={}",
+                player.blockPosition().toShortString(), res.hits().size(), res.complete(),
+                knownOres.size());
         mergeHits(res.hits());
     }
 
