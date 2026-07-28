@@ -19,9 +19,10 @@ import org.lwjgl.glfw.GLFW;
 import java.util.UUID;
 
 /**
- * 面对面搭话:准星指着自己的同伴按对话键(默认 V,可改键,入口在
- * {@code NumenKeys}),弹出这一条极简输入框——就一行字,回车说出去立刻
- * 关屏,回复会浮在它头顶的气泡里。屏只是输入法,不是对话窗口;历史与
+ * 快捷对话:按对话键(默认 Y,入口在 {@code NumenKeys})对「当前交互
+ * 对象」弹出这一条极简输入框——就一行字,回车说出去立刻关屏,回复会浮
+ * 在它头顶的气泡里。收件人由 {@code SelectedCompanion} 解析:准星指着
+ * 谁优先谁,否则是轮盘选中的那位。屏只是输入法,不是对话窗口;历史与
  * 长文在 G 面板。准星提示见 {@code TalkHint}。
  *
  * <p>与 {@code @名字} 路由是同一条管线({@link NumenGateway#enqueue}),

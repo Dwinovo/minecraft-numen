@@ -70,8 +70,10 @@ public class NumenFabricClient implements ClientModInitializer {
 
         // G → companion roster panel (chat entry + settings/reset live in there).
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.OPEN_ROSTER);
-        // V → face-to-face chat with the companion under the crosshair.
+        // R(hold) → companion wheel; Y → quick chat; V(hold) → quick voice.
+        KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.COMPANION_WHEEL);
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.TALK_COMPANION);
+        KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.QUICK_VOICE);
 
         // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」。
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(
@@ -92,6 +94,8 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.agent.KnownSkins.clear();
                     com.dwinovo.numen.client.hud.SpeechBubbles.clear();
                     com.dwinovo.numen.client.chat.CompanionCompletions.clear();
+                    com.dwinovo.numen.client.chat.SelectedCompanion.clear();
+                    com.dwinovo.numen.client.chat.QuickVoice.clear();
                     com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
                     com.dwinovo.numen.client.debug.PathDebugState.clear();
                 });

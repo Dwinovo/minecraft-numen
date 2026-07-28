@@ -26,6 +26,62 @@ public final class VoiceInputController {
     }
 
     /**
+     * 对讲机式:按下开录,{@link #stop()} 松开收音。与 {@link #toggle} 的差别
+     * 只在回调口径——增量与最终分开,方便"松开后拿最终转写直接发送"的用法。
+     * 已在录音中则直接返回 false(两条路共用一只麦克风,不并录)。
+     */
+    public static synchronized boolean start(INumenConfig cfg, Consumer<String> onPartial,
+                                             Consumer<String> onFinal, Consumer<String> onStatus) {
+        if (isActive()) {
+            return false;
+        }
+        SttBackend backend = SttProviders.fromConfig(cfg);
+        if (backend == null) {
+            onStatus.accept(I18n.get(ModLanguageData.Keys.STT_NOT_CONFIGURED));
+            return false;
+        }
+        SttSession s = backend.open(new SttListener() {
+            @Override
+            public void onPartial(String text) {
+                onMain(() -> onPartial.accept(text));
+            }
+
+            @Override
+            public void onFinal(String text) {
+                onMain(() -> {
+                    active = false;
+                    onFinal.accept(text);
+                });
+            }
+
+            @Override
+            public void onError(Throwable error) {
+                onMain(() -> {
+                    active = false;
+                    onStatus.accept(I18n.get(ModLanguageData.Keys.STT_FAILED, rootMessage(error)));
+                });
+            }
+        });
+        session = s;
+        boolean started = MicrophoneManager.start(cfg.getSttMicrophone(), s::feed, s::finish);
+        if (!started) {
+            s.cancel();
+            active = false;
+            onStatus.accept(I18n.get(ModLanguageData.Keys.STT_NO_MIC));
+            return false;
+        }
+        active = true;
+        return true;
+    }
+
+    /** 对讲机式的松开:停采集,采集线程收尾时触发 session.finish() → onFinal。 */
+    public static synchronized void stop() {
+        if (isActive()) {
+            MicrophoneManager.stop();
+        }
+    }
+
+    /**
      * 切换录音。{@code onText} 收到(增量/最终)转写文本刷输入框;{@code onStatus}
      * 收到状态/错误提示(如未配置、无麦克风、请求失败)。
      */

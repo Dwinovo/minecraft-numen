@@ -19,11 +19,17 @@ public final class TalkHint {
     private TalkHint() {}
 
     public static void render(GuiGraphics g) {
-        if (!UiTheme.talkHintEnabled()) {
-            return;
-        }
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null || mc.options.hideGui) {
+            return;
+        }
+        // 快捷语音的实时状态(录音中/没听清等提示)优先于按键提示
+        String voiceLine = com.dwinovo.numen.client.chat.QuickVoice.hudLine();
+        if (voiceLine != null) {
+            draw(g, mc, voiceLine, 0xFFFFC862);
+            return;
+        }
+        if (!UiTheme.talkHintEnabled()) {
             return;
         }
         AbstractClientPlayer body = CompanionChatScreen.crosshairCompanion();
@@ -34,12 +40,16 @@ public final class TalkHint {
         if (name == null || name.isBlank()) {
             name = body.getScoreboardName();
         }
-        String key = NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString();
-        String text = "按 [" + key + "] 与 " + name + " 对话";
+        String talk = NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString();
+        String voice = NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString();
+        draw(g, mc, "按 [" + talk + "] 与 " + name + " 对话 · 按住 [" + voice + "] 说话",
+                0xFFFFFFFF);
+    }
 
+    private static void draw(GuiGraphics g, Minecraft mc, String text, int color) {
         Font font = mc.font;
         int x = (g.guiWidth() - font.width(text)) / 2;
         int y = g.guiHeight() / 2 + 16;   // 准星正下方一点,不挡视线焦点
-        g.drawString(font, text, x, y, 0xFFFFFFFF, true);
+        g.drawString(font, text, x, y, color, true);
     }
 }

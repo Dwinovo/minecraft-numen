@@ -73,8 +73,10 @@ public class NumenNeoForgeClient {
     static void registerKeyMappings(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {
         // G → companion roster panel (chat entry + settings/reset live in there).
         event.register(com.dwinovo.numen.client.NumenKeys.OPEN_ROSTER);
-        // V → face-to-face chat with the companion under the crosshair.
+        // R(hold) → companion wheel; Y → quick chat; V(hold) → quick voice.
+        event.register(com.dwinovo.numen.client.NumenKeys.COMPANION_WHEEL);
         event.register(com.dwinovo.numen.client.NumenKeys.TALK_COMPANION);
+        event.register(com.dwinovo.numen.client.NumenKeys.QUICK_VOICE);
     }
 
     static void registerGuiLayers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {
@@ -94,6 +96,8 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.client.agent.KnownSkins.clear();
         com.dwinovo.numen.client.hud.SpeechBubbles.clear();
         com.dwinovo.numen.client.chat.CompanionCompletions.clear();
+        com.dwinovo.numen.client.chat.SelectedCompanion.clear();
+        com.dwinovo.numen.client.chat.QuickVoice.clear();
         com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
         com.dwinovo.numen.client.debug.PathDebugState.clear();
     }

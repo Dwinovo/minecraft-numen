@@ -47,6 +47,12 @@ public final class ModLanguageData {
         /** Hotkey: talk to the companion under the crosshair (face-to-face chat). */
         public static final String KEY_TALK_COMPANION = "key.numen.talk_companion";
 
+        /** Hotkey (hold): the companion wheel — pick the current interaction target. */
+        public static final String KEY_COMPANION_WHEEL = "key.numen.companion_wheel";
+
+        /** Hotkey (hold): push-to-talk voice to the current interaction target. */
+        public static final String KEY_QUICK_VOICE = "key.numen.quick_voice";
+
         /** Dedicated Minecraft Controls category so the hotkey gets its own "Numen" section. */
         public static final String KEY_CATEGORY_NUMEN = "key.categories.numen";
 
@@ -170,6 +176,8 @@ public final class ModLanguageData {
 
         adder.add(Keys.KEY_OPEN_ROSTER, "Open Companion Roster");
         adder.add(Keys.KEY_TALK_COMPANION, "Talk to Companion");
+        adder.add(Keys.KEY_COMPANION_WHEEL, "Companion Wheel (hold)");
+        adder.add(Keys.KEY_QUICK_VOICE, "Quick Voice (hold)");
         adder.add(Keys.KEY_CATEGORY_NUMEN, "Numen");
 
         // --- consolidated into the datagen source (persona / mcp / reasoning / tabs / status ...) ---
@@ -416,6 +424,8 @@ public final class ModLanguageData {
 
         adder.add(Keys.KEY_OPEN_ROSTER, "打开同伴名册");
         adder.add(Keys.KEY_TALK_COMPANION, "与同伴对话");
+        adder.add(Keys.KEY_COMPANION_WHEEL, "同伴轮盘(按住)");
+        adder.add(Keys.KEY_QUICK_VOICE, "快捷语音(按住)");
 
         // --- consolidated into the datagen source (persona / mcp / reasoning / tabs / status ...) ---
         adder.add("numen.tab.chat", "对话");
