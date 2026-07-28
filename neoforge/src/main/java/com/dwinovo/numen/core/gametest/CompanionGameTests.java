@@ -650,6 +650,141 @@ public class CompanionGameTests {
         });
     }
 
+    /**
+     * 社区图纸格式解码:代码现场构造最小 .litematic(跨 long 位流、YZX 序、
+     * 稀疏丢空气)与 .schem v2(varint 数据、带属性的调色板键),写进蓝图目录
+     * 经 BlueprintStore 统一管线加载,逐格断言。不提交二进制夹具。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    public static void blueprint_community_formats(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        java.nio.file.Path dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
+
+        // ---- .litematic:2×1×2,调色板 [air, cobblestone],条目 [1,1,0,1] bits=2 ----
+        var region = new net.minecraft.nbt.CompoundTag();
+        var pos = new net.minecraft.nbt.CompoundTag();
+        pos.putInt("x", 0); pos.putInt("y", 0); pos.putInt("z", 0);
+        region.put("Position", pos);
+        var size = new net.minecraft.nbt.CompoundTag();
+        size.putInt("x", 2); size.putInt("y", 1); size.putInt("z", 2);
+        region.put("Size", size);
+        var pal = new net.minecraft.nbt.ListTag();
+        var air = new net.minecraft.nbt.CompoundTag(); air.putString("Name", "minecraft:air");
+        var cob = new net.minecraft.nbt.CompoundTag(); cob.putString("Name", "minecraft:cobblestone");
+        pal.add(air); pal.add(cob);
+        region.put("BlockStatePalette", pal);
+        region.putLongArray("BlockStates", new long[]{0b01000101L});   // [1,1,0,1]
+        var regions = new net.minecraft.nbt.CompoundTag();
+        regions.put("main", region);
+        var liteRoot = new net.minecraft.nbt.CompoundTag();
+        liteRoot.put("Regions", regions);
+        net.minecraft.nbt.NbtIo.writeCompressed(liteRoot, dir.resolve("fixture_lite.litematic"));
+
+        BlockPos anchor = helper.absolutePos(new BlockPos(4, 4, 4));
+        var lite = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_lite", anchor, 0);
+        helper.assertTrue(lite.targets().size() == 3, "litematic: expect 3 non-air cells, got "
+                + lite.targets().size());
+        var litePos = lite.targets().stream().map(BuildTaskRecord.Target::pos).toList();
+        helper.assertTrue(litePos.contains(anchor)
+                        && litePos.contains(anchor.offset(1, 0, 0))
+                        && litePos.contains(anchor.offset(1, 0, 1)),
+                "litematic: wrong cell positions " + litePos);
+        helper.assertTrue(lite.targets().stream().allMatch(
+                        t -> t.desiredState().is(Blocks.COBBLESTONE)),
+                "litematic: all cells should be cobblestone");
+
+        // ---- .schem v2:2×1×2,调色板含带属性键,BlockData=[1,1,0,1] ----
+        var schemRoot = new net.minecraft.nbt.CompoundTag();
+        schemRoot.putInt("Version", 2);
+        schemRoot.putShort("Width", (short) 2);
+        schemRoot.putShort("Height", (short) 1);
+        schemRoot.putShort("Length", (short) 2);
+        var spal = new net.minecraft.nbt.CompoundTag();
+        spal.putInt("minecraft:air", 0);
+        spal.putInt("minecraft:oak_stairs[facing=north]", 1);
+        schemRoot.put("Palette", spal);
+        schemRoot.putByteArray("BlockData", new byte[]{1, 1, 0, 1});
+        net.minecraft.nbt.NbtIo.writeCompressed(schemRoot, dir.resolve("fixture_schem.schem"));
+
+        var schem = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_schem", anchor, 0);
+        helper.assertTrue(schem.targets().size() == 3, "schem: expect 3 non-air cells, got "
+                + schem.targets().size());
+        helper.assertTrue(schem.targets().stream().allMatch(t ->
+                        t.desiredState().is(Blocks.OAK_STAIRS)
+                                && t.desiredState().getValue(net.minecraft.world.level.block.state
+                                        .properties.BlockStateProperties.HORIZONTAL_FACING)
+                                == net.minecraft.core.Direction.NORTH),
+                "schem: cells should be north-facing oak stairs");
+        helper.assertTrue(com.dwinovo.numen.core.blueprint.BlueprintStore.list(level.getServer())
+                        .containsAll(List.of("fixture_lite", "fixture_schem")),
+                "blueprint list should include community formats");
+        helper.succeed();
+    }
+
+    /** 真实社区图纸解码:日式小屋(40×23×45,负 z 尺寸区域、379 项调色板
+     *  9bit 跨 long 位流)。Litematica 元数据 TotalBlocks=5859 当金标准,
+     *  解码格数必须分毫不差。 */
+    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    public static void blueprint_japanese_cottage_decode(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        copyCottageFixture(level);
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                level, "japanese_cottage", helper.absolutePos(new BlockPos(0, 2, 0)), 0);
+        helper.assertTrue(loaded.size().getX() == 40 && loaded.size().getY() == 23
+                        && loaded.size().getZ() == 45,
+                "cottage size mismatch: " + loaded.size());
+        helper.assertTrue(loaded.targets().size() == 5859,
+                "cottage decode: expect 5859 cells (litematica TotalBlocks), got "
+                        + loaded.targets().size());
+        helper.succeed();
+    }
+
+    /** 图纸夹具从测试结构目录拷进蓝图目录(幂等)。 */
+    private static void copyCottageFixture(ServerLevel level) throws Exception {
+        java.nio.file.Path src = java.nio.file.Path.of(
+                StructureUtils.testStructuresDir, "japanese_cottage.litematic");
+        java.nio.file.Files.copy(src,
+                com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer())
+                        .resolve("japanese_cottage.litematic"),
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    /** 建造批次(重):创造同伴照真实社区图纸把整栋日式小屋盖出来。 */
+    @BeforeBatch(batch = "numen_cottage_jp")
+    public static void prepareJpCottageBatch(ServerLevel level) {
+        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
+        level.setDayTime(6000);
+    }
+
+    /**
+     * 终极实战:创造同伴(免材料+自动脚手架)把 5859 格的日式小屋从图纸
+     * 盖到世界里,逐格对账(液体格已被管线跳过,不在目标集内)。
+     *
+     * <p>【站位专项试金石——当前已知不过,注解封存】实测停在 2335/5859:
+     * 第四层起大量格子"到场但放置门不放行",触发 30s 停滞保险丝。这正是
+     * 真实世界"高层打转"的可重复复现;站位专项开工时恢复下面这行注解,
+     * 它转绿即专项完工。
+     */
+    // @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_cottage_jp")
+    public static void build_japanese_cottage(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        copyCottageFixture(level);
+        NumenPlayer companion = spawnAt(helper, "gametest_daiku", new BlockPos(2, 2, 2), true);
+        BlockPos anchor = helper.absolutePos(new BlockPos(6, 2, 4));
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                level, "japanese_cottage", anchor, 0);
+        var ctx = TaskDispatch.ctx("gametest-jp-cottage", companion);
+        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+                ctx.deadline(95000L), loaded.targets(), true, 0, false), reply -> {});
+        helper.succeedWhen(() -> {
+            for (BuildTaskRecord.Target t : loaded.targets()) {
+                helper.assertTrue(t.matches(level.getBlockState(t.pos())),
+                        "cottage cell mismatch at " + t.pos().toShortString());
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 创造取物:take_items 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void creative_take_items(GameTestHelper helper) {

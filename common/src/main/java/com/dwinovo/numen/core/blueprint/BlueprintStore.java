@@ -67,7 +67,8 @@ public final class BlueprintStore {
             stream.forEach(path -> {
                 String file = path.getFileName().toString();
                 String lower = file.toLowerCase(Locale.ROOT);
-                if (lower.endsWith(".nbt") || lower.endsWith(".snbt")) {
+                if (lower.endsWith(".nbt") || lower.endsWith(".snbt")
+                        || lower.endsWith(".litematic") || lower.endsWith(".schem")) {
                     names.add(file.substring(0, file.lastIndexOf('.')));
                 }
             });
@@ -159,12 +160,23 @@ public final class BlueprintStore {
         Path base = dir(server);
         Path nbt = base.resolve(name + ".nbt");
         Path snbt = base.resolve(name + ".snbt");
+        Path litematic = base.resolve(name + ".litematic");
+        Path schem = base.resolve(name + ".schem");
         try {
             if (Files.exists(nbt)) {
                 return NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap());
             }
             if (Files.exists(snbt)) {
                 return NbtUtils.snbtToStructure(Files.readString(snbt));
+            }
+            // 社区格式:读出 gzip NBT 后转成原版结构形态,下游管线无感
+            if (Files.exists(litematic)) {
+                return BlueprintFormats.fromLitematic(
+                        NbtIo.readCompressed(litematic, NbtAccounter.unlimitedHeap()));
+            }
+            if (Files.exists(schem)) {
+                return BlueprintFormats.fromSchem(
+                        NbtIo.readCompressed(schem, NbtAccounter.unlimitedHeap()));
             }
         } catch (Exception e) {
             throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);
