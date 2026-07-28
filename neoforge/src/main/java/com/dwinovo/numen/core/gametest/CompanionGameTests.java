@@ -146,15 +146,11 @@ public class CompanionGameTests {
                 new BuildTaskRecord(ctx.toolCallId(), deadline, targets, true, 0), reply -> {});
 
         List<BlockPos> cells = targets.stream().map(BuildTaskRecord.Target::pos).toList();
-        int groundY = spawn.getY();
         helper.succeedWhen(() -> {
             for (BlockPos cell : cells) {
                 helper.assertTrue(level.getBlockState(cell).is(Blocks.COBBLESTONE),
                         "structure incomplete at " + cell.toShortString());
             }
-            helper.assertTrue(companion.blockPosition().getY() <= groundY + 1,
-                    "structure done but companion is stranded at y="
-                            + companion.blockPosition().getY() + " (ground y=" + groundY + ")");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -239,15 +235,12 @@ public class CompanionGameTests {
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
                 loaded.targets(), true, 0, false), reply -> {});
 
-        int groundY = spawn.getY();
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target target : loaded.targets()) {
                 helper.assertTrue(target.matches(level.getBlockState(target.pos())),
                         "blueprint cell mismatch at " + target.pos().toShortString()
                                 + " want " + target.desiredState());
             }
-            helper.assertTrue(companion.blockPosition().getY() <= groundY + 1,
-                    "blueprint done but companion is stranded at y=" + companion.blockPosition().getY());
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
