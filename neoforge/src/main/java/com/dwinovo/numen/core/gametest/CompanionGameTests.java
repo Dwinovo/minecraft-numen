@@ -229,15 +229,9 @@ public class CompanionGameTests {
         // 2) 墙体:walls 周界墙 y3-5(3 高,整墙地面臂展可及)(无顶底面——地板只有地基那一层,守则单层地板铁律)
         ordered.addAll(vol.apply("minecraft:oak_planks",
                 com.dwinovo.numen.core.tools.BuildTool.shapeCells("walls", false, 4, 3, 5, 15, 5, 14, null, null)));
-        // 3) 屋顶:x 向每层收 2、z 向出檐 1 的实心层——山墙同步填实
+        // 3) 屋顶:roof 原语一笔成型(长轴为脊逐层收分,山墙填实,兼作天花板)
         ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 4, 6, 5, 15, 6, 14, null, null)));
-        ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 5, 7, 5, 14, 7, 14, null, null)));
-        ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 7, 8, 5, 12, 8, 14, null, null)));
-        ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 9, 9, 5, 10, 9, 14, null, null)));
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("roof", false, 4, 6, 5, 15, null, 14, null, null)));
         // 4) 细节(后写覆盖先写):四角原木柱、南门洞 1x2、四扇玻璃窗、屋内火把
         for (int[] c : new int[][]{{4, 5}, {15, 5}, {4, 14}, {15, 14}}) {
             for (int y = 3; y <= 5; y++) {
