@@ -111,6 +111,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private int passLayerTop = Integer.MIN_VALUE;
     /** 当前导航针对的游标格(换格重建导航)。 */
     private BlockPos navTargetCell;
+    /** 施工期寻路放置的非目标格(脚手架/垫柱残料),交付前拆除。尽力而为:
+     *  够不着的放弃,不为清扫赖掉一个成功的任务。 */
+    private final LinkedHashSet<BlockPos> scaffoldDebt = new LinkedHashSet<>();
     private String note = "done";
 
     public BuildCompanionTask(NumenPlayer player, BuildTaskRecord record) {
@@ -163,15 +166,35 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         registerProvider();
         updateCompleted();
         tickPlaceDelay();
+        // 收寻路放置回执:非目标格入残料账(目标格是正品,不算)
+        for (BlockPos placed : BuildPlacementRegistry.drainScaffold(player)) {
+            if (targetByPos.get(placed.asLong()) == null) {
+                scaffoldDebt.add(placed);
+            }
+        }
         if (r.completed() >= r.targets.size()) {
-            note = "all requested cells match";
-            return TaskState.SUCCESS;
+            BuildTaskRecord.Target debt = nextScaffoldDebt();
+            if (debt == null) {
+                note = "all requested cells match";
+                return TaskState.SUCCESS;
+            }
+            // 工完场清:交付前拆掉自己垫的脚手架残料(复用破拆通路)
+            if (canInterruptPath() && MovementHelper.reachableAimPoint(player, debt.pos()) != null) {
+                if (nav != null) {
+                    nav.pause();
+                }
+                activeBreak = debt;
+                return tickBreak(wasSneaking);
+            }
+            return driveNavTo(debt, true);
         }
         // 停滞检测:以"完成格数"为进展信号(放/清可空转,门那种放了又清也不算进展),
         // 连续 STALL_LIMIT_TICKS 无新完成就优雅失败退出,别空转到 deadline。
         if (r.completed() > highWaterCompleted) {
             highWaterCompleted = r.completed();
             stallTicks = 0;
+        } else if (r.completed() >= r.targets.size()) {
+            stallTicks = 0;   // 结构已齐,残料清扫阶段不算停滞(有自己的放弃路径)
         } else if (nav != null && nav.planningInFlight()) {
             // 身体站着等异步搜索返回:不是停滞,是规划器在飞——这些刻不计入
             // 停滞预算(与任务 deadline 的冻结同一原则)。
@@ -320,10 +343,28 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return null;
     }
 
-    /** 放弃当前游标格(本遍内不再回头),游标前移。 */
+    /** 放弃当前游标格(本遍内不再回头),游标前移;残料格同时销账(留着就留着,
+     *  清扫是尽力而为)。 */
     private void skipCell(BuildTaskRecord.Target target) {
         passSkipped.add(target.pos().asLong());
+        scaffoldDebt.remove(target.pos());
         dropNav();
+    }
+
+    /** 下一个待拆残料:已经变空的顺手销账;返回合成的空气目标(走破拆通路)。 */
+    private BuildTaskRecord.Target nextScaffoldDebt() {
+        var it = scaffoldDebt.iterator();
+        while (it.hasNext()) {
+            BlockPos pos = it.next();
+            BlockState state = player.level().getBlockState(pos);
+            if (state.isAir() || state.getBlock() instanceof LiquidBlock) {
+                it.remove();
+                continue;
+            }
+            return new BuildTaskRecord.Target(Blocks.AIR, net.minecraft.world.item.Items.AIR, pos,
+                    "scaffold-cleanup", null, null, null);
+        }
+        return null;
     }
 
     /** 一遍扫完:全部就位 → 顶部下一 tick 进回撤;有剩且整遍零进展 → 先试跳层,

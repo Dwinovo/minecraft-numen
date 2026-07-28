@@ -18,7 +18,21 @@ import java.util.stream.Collectors;
 public final class AgentTools {
 
     public String loadSkill(String name) {
+        return loadSkill(name, null);
+    }
+
+    public String loadSkill(String name, String file) {
         SkillRegistry registry = SkillRegistry.instance();
+        if (file != null && !file.isBlank()) {
+            // 三级披露:正文引用的附属文件按需拉取
+            try {
+                String text = registry.readSupportFile(name, file);
+                return "<skill_file skill=\"" + escapeXmlAttr(name) + "\" path=\""
+                        + escapeXmlAttr(file) + "\">\n" + text.trim() + "\n</skill_file>";
+            } catch (IllegalArgumentException ex) {
+                return "{\"success\":false,\"error\":\"" + escapeJson(ex.getMessage()) + "\"}";
+            }
+        }
         var maybe = registry.get(name);
         if (maybe.isEmpty()) {
             String available = registry.all().stream()

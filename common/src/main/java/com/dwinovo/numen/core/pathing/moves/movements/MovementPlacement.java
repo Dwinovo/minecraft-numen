@@ -101,6 +101,7 @@ final class MovementPlacement {
     static PlaceResult attemptToPlaceABlock(MovementState state, ServerPlayer player,
                                             BlockPos placeAt, boolean preferDown, boolean wouldSneak,
                                             float currentYaw, float currentPitch) {
+        BuildPlacementRegistry.recordScaffold(player, placeAt);
         Level level = player.level();
         double reach = NavSettings.get().blockReachDistance;
         Vec3 eye = eyePosition(player, wouldSneak);
