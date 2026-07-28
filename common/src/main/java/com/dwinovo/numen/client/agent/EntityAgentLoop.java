@@ -1359,8 +1359,12 @@ public final class EntityAgentLoop {
                     reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
                 }
             } else {
+                // 模型交了白卷(无工具调用、正文为空,部分后端偶发)——不能无声
+                // 咽下变成"已读不回",给主人一条透明的提示
                 Constants.LOG.info("[numen-entity#{}] assistant (final, empty content)", entityUuid);
                 reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+                com.dwinovo.numen.client.hud.TalkHint.flash(
+                        speakerName() + " 想了想,什么也没说——再问一句试试", 3500);
             }
             convo.resetTurnCount();
             // A prompt that arrived during this final turn was buffered; now that
