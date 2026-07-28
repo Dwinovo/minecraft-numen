@@ -818,6 +818,11 @@ public final class NumenScreen extends Screen {
                 return super.mouseClicked(mouseX, mouseY, button);
             }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
+            if (tab == Tab.ITEMS && uuid != null
+                    && com.dwinovo.numen.client.screen.items.ItemsView.click(
+                            mouseX, mouseY, uuid, name, left, top, panelW, panelH, HEADER_H)) {
+                return true;
+            }
             int my = (int) mouseY;
             if (my >= top && my < top + HEADER_H) {
                 for (int i = 0; i < 3; i++) {

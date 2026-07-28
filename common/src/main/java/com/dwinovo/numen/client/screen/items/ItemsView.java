@@ -5,6 +5,7 @@ import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.data.ClientNumenInventory;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.AbstractClientPlayer;
@@ -12,6 +13,7 @@ import net.minecraft.client.resources.language.I18n;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.GameType;
 
 import java.util.List;
 import java.util.UUID;
@@ -87,6 +89,17 @@ public final class ItemsView {
         int food = (snap != null && snap.loaded()) ? snap.foodLevel() : 0;
         renderStatRow(g, rightX, cTop + 46 + ICON + 2, food, 20, FOOD_FULL, FOOD_HALF, FOOD_EMPTY);
 
+        // -- 体征区右端:游戏模式芯片(点击切换,详见 click) --
+        int[] rc = modeChipRect(left, top, panelW, panelH, headerH);
+        boolean chipHover = mouseX >= rc[0] && mouseX < rc[0] + rc[2]
+                && mouseY >= rc[1] && mouseY < rc[1] + rc[3];
+        // 只适配生存/创造两档:创造显创造,其余一律按生存对待
+        GameType mode = gameModeOf(uuid);
+        String modeLabel = mode == null ? "…" : (mode == GameType.CREATIVE ? "创造" : "生存");
+        com.dwinovo.numen.client.ui.RoundRect.card(g, rc[0], rc[1], rc[0] + rc[2], rc[1] + rc[3], 3,
+                th.surface(), chipHover ? th.cta() : th.surfaceBorder());
+        Nb.text(g, font, modeLabel, rc[0] + (rc[2] - font.width(modeLabel)) / 2, rc[1] + 6, th.text());
+
         // -- RIGHT bottom: checkerboard 3×9 storage + hotbar --
         int storeY = cTop + 74;
         if (snap == null) {
@@ -110,6 +123,49 @@ public final class ItemsView {
             slotBg(g, (i & 1) == 0 ? SLOT_SPRITE : SLOT_ALT, x, hotbarY);
             stackOn(g, font, items.get(i), x, hotbarY, mouseX, mouseY);
         }
+    }
+
+    /**
+     * 模式芯片点击:以主人身份执行原版 {@code /gamemode <模式> <同伴名>}
+     * ——权限判定与成败反馈全部交给原版(没权限时原版红字回话),这里
+     * 零权限代码,天然兼容各类权限插件。生存 ↔ 创造往返切换。
+     *
+     * @return true = 点在芯片上(无论命令结果如何)
+     */
+    public static boolean click(double mouseX, double mouseY, UUID uuid, String companionName,
+                                int left, int top, int panelW, int panelH, int headerH) {
+        int[] rc = modeChipRect(left, top, panelW, panelH, headerH);
+        if (mouseX < rc[0] || mouseX >= rc[0] + rc[2] || mouseY < rc[1] || mouseY >= rc[1] + rc[3]) {
+            return false;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null || mc.getConnection() == null
+                || companionName == null || companionName.isBlank()) {
+            return true;
+        }
+        // 只在生存/创造间往返:创造 → 生存,其余(含生存)→ 创造
+        GameType cur = gameModeOf(uuid);
+        String next = cur == GameType.CREATIVE ? "survival" : "creative";
+        mc.player.connection.sendCommand("gamemode " + next + " " + companionName);
+        return true;
+    }
+
+    /** 体征区右端的模式芯片矩形 {x, y, w, h}(与 render 同一套布局推导)。 */
+    private static int[] modeChipRect(int left, int top, int panelW, int panelH, int headerH) {
+        final int STORAGE_W = 9 * 18;
+        final int COMP_W = 130 + STORAGE_W;
+        final int COMP_H = 152;
+        int startX = left + (panelW - COMP_W) / 2;
+        int cTop = top + headerH + (panelH - headerH - COMP_H) / 2;
+        int rightX = startX + 130;
+        return new int[]{rightX + STORAGE_W - 58, cTop + 46, 58, 19};
+    }
+
+    /** 同伴当前游戏模式:tab 列表的 PlayerInfo 白拿(服务端改模式时原版自动同步)。 */
+    private static GameType gameModeOf(UUID uuid) {
+        var conn = Minecraft.getInstance().getConnection();
+        var info = conn == null ? null : conn.getPlayerInfo(uuid);
+        return info == null ? null : info.getGameMode();
     }
 
     /** A row of segmented icons for a 0..max stat (2 units per icon): empty sockets first, then
