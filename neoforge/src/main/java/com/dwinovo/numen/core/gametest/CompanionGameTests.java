@@ -113,6 +113,13 @@ public class CompanionGameTests {
 
     // ==================== 建造用例 ====================
 
+    /** 小屋独立批次前置(薄墙环几何对并发搜索池最敏感,单独跑)。 */
+    @BeforeBatch(batch = "numen_build_cottage")
+    public static void prepareCottageBatch(ServerLevel level) {
+        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
+        level.setDayTime(6000);
+    }
+
     /** 建造批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_build")
     public static void prepareBuildBatch(ServerLevel level) {
@@ -189,7 +196,7 @@ public class CompanionGameTests {
      * 南面 1x2 门洞、玻璃窗、屋内火把),后写覆盖先写——与 build 工具的混排语义
      * 完全一致,免材料模式。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_heavy")
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_cottage")
     public static void build_medieval_cottage(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -219,21 +226,21 @@ public class CompanionGameTests {
         // 1) 地基:圆石 12x1x10
         ordered.addAll(vol.apply("minecraft:cobblestone",
                 com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 4, 2, 5, 15, 2, 14, null, null)));
-        // 2) 墙体:橡木板空心盒 12x4x10(y3-6,顶面自成阁楼板)
+        // 2) 墙体:walls 周界墙 y3-5(3 高,整墙地面臂展可及)(无顶底面——地板只有地基那一层,守则单层地板铁律)
         ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", true, 4, 3, 5, 15, 6, 14, null, null)));
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("walls", false, 4, 3, 5, 15, 5, 14, null, null)));
         // 3) 屋顶:x 向每层收 2、z 向出檐 1 的实心层——山墙同步填实
         ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 4, 7, 5, 15, 7, 14, null, null)));
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 4, 6, 5, 15, 6, 14, null, null)));
         ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 5, 8, 5, 14, 8, 14, null, null)));
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 5, 7, 5, 14, 7, 14, null, null)));
         ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 7, 9, 5, 12, 9, 14, null, null)));
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 7, 8, 5, 12, 8, 14, null, null)));
         ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 9, 10, 5, 10, 10, 14, null, null)));
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 9, 9, 5, 10, 9, 14, null, null)));
         // 4) 细节(后写覆盖先写):四角原木柱、南门洞 1x2、四扇玻璃窗、屋内火把
         for (int[] c : new int[][]{{4, 5}, {15, 5}, {4, 14}, {15, 14}}) {
-            for (int y = 3; y <= 6; y++) {
+            for (int y = 3; y <= 5; y++) {
                 ordered.add(new BuildTaskRecord.Target(Blocks.OAK_LOG, Items.OAK_LOG,
                         helper.absolutePos(new BlockPos(c[0], y, c[1])), "oak_log",
                         null, net.minecraft.core.Direction.Axis.Y, null));
@@ -241,6 +248,8 @@ public class CompanionGameTests {
         }
         ordered.addAll(vol.apply("minecraft:air",
                 List.of(new BlockPos(9, 3, 5), new BlockPos(9, 4, 5))));
+        // 门槛台阶:室内地板(y2 顶面=脚位 y3)比室外地面高一格,守则要求门外补一级
+        ordered.addAll(vol.apply("minecraft:cobblestone", List.of(new BlockPos(9, 2, 4))));
         ordered.addAll(vol.apply("minecraft:glass_pane",
                 List.of(new BlockPos(4, 4, 8), new BlockPos(4, 4, 11),
                         new BlockPos(15, 4, 8), new BlockPos(15, 4, 11))));
@@ -263,6 +272,12 @@ public class CompanionGameTests {
                 helper.assertTrue(target.matches(level.getBlockState(target.pos())),
                         "cottage cell mismatch at " + target.pos().toShortString()
                                 + " want " + target.desiredState());
+            }
+            // 可通行断言:门洞两格为空、门内落脚两格为空——守则"门是走进去的"
+            for (BlockPos rel : List.of(new BlockPos(9, 3, 5), new BlockPos(9, 4, 5),
+                    new BlockPos(9, 3, 6), new BlockPos(9, 4, 6))) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
+                        "doorway blocked at rel " + rel.toShortString());
             }
             CompanionFactory.despawn(level.getServer(), companion);
         });
