@@ -55,10 +55,10 @@ public final class BuildTool implements NumenTool {
 
     @Override
     public String description() {
-        return "Construct or clear blocks as ONE background task. Consult build_guide BEFORE designing. Two ways to express the work, freely mixed in "
+        return "Construct or clear blocks as ONE background task. Load the building_design skill (load_skill) BEFORE designing anything non-trivial. Two ways to express the work, freely mixed in "
                 + "a single call: `blocks` = explicit cells (each with block_id, x, y, z and optional state fields "
                 + "facing/axis/half/properties — use for precise details like stairs, doors, torches); `shapes` = "
-                + "parametric volumes, each {shape: box|line|cylinder|sphere, block_id, hollow?, coords} — box/line "
+                + "parametric volumes, each {shape: box|walls|line|cylinder|sphere, block_id, hollow?, coords} — walls = vertical perimeter ring only (NO top/bottom face — the right primitive for wall rings, avoids double floors), corners x1,y1,z1 to x2,y2,z2; box/line "
                 + "take corners x1,y1,z1 to x2,y2,z2; cylinder takes bottom-center x1,y1,z1 + radius + height; "
                 + "sphere takes center x1,y1,z1 + radius; hollow keeps only the outer shell. block_id "
                 + "minecraft:air CLEARS/carves (drops harvest normally; liquids are always left untouched). "
@@ -103,7 +103,7 @@ public final class BuildTool implements NumenTool {
 
         Map<String, Object> shapeProps = new LinkedHashMap<>();
         shapeProps.put("shape", Map.of("type", "string",
-                "enum", List.of("box", "line", "cylinder", "sphere")));
+                "enum", List.of("box", "walls", "line", "cylinder", "sphere")));
         shapeProps.put("block_id", Map.of("type", "string",
                 "description", "Block for this shape; minecraft:air carves."));
         shapeProps.put("hollow", Map.of("type", "boolean",
@@ -337,6 +337,23 @@ public final class BuildTool implements NumenTool {
                         for (int z = az; z <= bz; z++) {
                             if (hollow && x != ax && x != bx && y != ay && y != by
                                     && z != az && z != bz) {
+                                continue;
+                            }
+                            add(out, x, y, z);
+                        }
+                    }
+                }
+            }
+            case "walls" -> {
+                // 周界竖墙:只有四面墙柱,不含顶底面——盖房的正确原语(空心盒的
+                // 顶底面会在地基上叠出第二层地板,把门洞下半埋进屋里)。
+                int ax = Math.min(x1, req(x2, "x2")), bx = Math.max(x1, x2);
+                int ay = Math.min(y1, req(y2, "y2")), by = Math.max(y1, y2);
+                int az = Math.min(z1, req(z2, "z2")), bz = Math.max(z1, z2);
+                for (int y = ay; y <= by; y++) {
+                    for (int x = ax; x <= bx; x++) {
+                        for (int z = az; z <= bz; z++) {
+                            if (x != ax && x != bx && z != az && z != bz) {
                                 continue;
                             }
                             add(out, x, y, z);
