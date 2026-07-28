@@ -76,6 +76,17 @@ public final class SkinLibrary {
         return skinDir.resolve(id + ".png");
     }
 
+    /** 免拖拽导入的落点(手机 FCL 没有文件拖拽):玩家用文件管理器把 png
+     *  放进来,皮肤表单里列出点选。取用时保证目录存在。 */
+    public Path importDir() {
+        Path dir = skinDir.resolve("import");
+        try {
+            java.nio.file.Files.createDirectories(dir);
+        } catch (java.io.IOException ignored) {
+        }
+        return dir;
+    }
+
     /** 新建/更新条目并持久化;{@code png} 非 null 时一并写盘(新图/换图)。 */
     public void put(Entry e, byte[] png) {
         entries.put(e.id(), e);
