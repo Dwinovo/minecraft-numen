@@ -108,7 +108,7 @@ public final class NumenActuator {
                 return;
             }
             String n = name == null ? "" : name.trim();
-            Services.NETWORK.sendToServer(new SummonRequestPayload(n, "", ""));
+            Services.NETWORK.sendToServer(new SummonRequestPayload(n, "", "", false));
             f.complete(true);
         });
         return f;

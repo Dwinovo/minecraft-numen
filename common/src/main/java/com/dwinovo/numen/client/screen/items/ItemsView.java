@@ -189,7 +189,16 @@ public final class ItemsView {
                 state = "积压 " + loop.queuedPrompts().size() + " 条"; stateColor = th.run(); alive = true;
             } else { state = "空闲"; stateColor = th.ok(); alive = false; }
             String dot = alive ? (System.currentTimeMillis() / 500 % 2 == 0 ? "●" : "○") : "●";
-            Nb.text(g, font, dot + " " + state, c2, ly + 24, stateColor);
+            String stateText = dot + " " + state;
+            Nb.text(g, font, stateText, c2, ly + 24, stateColor);
+            // 游戏模式只读展示(创建时选定;切换交互待定)
+            var conn = Minecraft.getInstance().getConnection();
+            var info = conn == null ? null : conn.getPlayerInfo(uuid);
+            if (info != null) {
+                String modeText = " · " + (info.getGameMode() == net.minecraft.world.level.GameType.CREATIVE
+                        ? "创造" : "生存");
+                Nb.text(g, font, modeText, c2 + font.width(stateText), ly + 24, th.textDim());
+            }
         } else {
             Nb.text(g, font, "○ 尚未对话", c2, ly, th.faint());
         }

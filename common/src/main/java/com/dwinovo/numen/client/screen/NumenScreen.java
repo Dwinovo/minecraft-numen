@@ -131,6 +131,9 @@ public final class NumenScreen extends Screen {
     private Dropdown summonPersonaDropdown;
     /** Provider entry for the new companion — REQUIRED (no default, no fallback). */
     private Dropdown summonProviderDropdown;
+    /** 召唤时的游戏模式选择(默认生存;创造在服务端过权限门)。 */
+    private Dropdown summonModeDropdown;
+    private boolean summonCreative;
     private String summonProviderId;
     /** Voice entry for the new companion — optional (null = silent). */
     private Dropdown summonVoiceDropdown;
@@ -339,9 +342,17 @@ public final class NumenScreen extends Screen {
             }
             if (summonProviderId == null) summonProviderId = provEntries.get(0).id();
             summonProviderDropdown = new Dropdown(provItems, summonProviderId);
-            summonProviderDropdown.setBounds(sumX(), y0 + 102, sumW(), 18);
+            // 模型行与模式下拉平分一行(左模型右模式)。
+            summonProviderDropdown.setBounds(sumX(), y0 + 102, summonHalfW(), 18);
             summonProviderDropdown.setDropBottom(top + panelH - 2);
         }
+        // 游戏模式:生存/创造,创造在服务端过权限门(不够按生存召唤并说明)。
+        summonModeDropdown = new Dropdown(List.of(
+                new Dropdown.Item("survival", "生存"),
+                new Dropdown.Item("creative", "创造")),
+                summonCreative ? "creative" : "survival");
+        summonModeDropdown.setBounds(sumX() + summonHalfW() + 6, y0 + 102, summonHalfW(), 18);
+        summonModeDropdown.setDropBottom(top + panelH - 2);
         // OPTIONAL voice — first item = 无(静音), entries follow (same pattern as the
         // persona pick above); an empty library shows no dropdown, just a hint.
         var voiceEntries = com.dwinovo.numen.client.voice.VoiceLibrary.instance().list();
@@ -387,7 +398,7 @@ public final class NumenScreen extends Screen {
      * 最优先),然后按行序。返回 true = 消费了本次点击。
      */
     private boolean routeSummonDropdownClick(double mx, double my) {
-        Dropdown[] all = {summonPersonaDropdown, summonProviderDropdown,
+        Dropdown[] all = {summonPersonaDropdown, summonProviderDropdown, summonModeDropdown,
                 summonVoiceDropdown, summonSkinDropdown};
         Dropdown open = null;
         for (Dropdown d : all) {
@@ -400,6 +411,8 @@ public final class NumenScreen extends Screen {
                 summonPersonaId = PERSONA_DEFAULT.equals(sel) ? null : sel;
             } else if (d == summonProviderDropdown) {
                 summonProviderId = sel;
+            } else if (d == summonModeDropdown) {
+                summonCreative = "creative".equals(sel);
             } else if (d == summonVoiceDropdown) {
                 summonVoiceId = VOICE_NONE.equals(sel) ? null : sel;
             } else {
@@ -412,9 +425,9 @@ public final class NumenScreen extends Screen {
         return false;
     }
 
-    /** 召唤页四个下拉的渲染:收起的先画,正展开的最后画(列表压在一切之上)。 */
+    /** 召唤页下拉的渲染:收起的先画,正展开的最后画(列表压在一切之上)。 */
     private void renderSummonDropdowns(GuiGraphics g, int mouseX, int mouseY) {
-        Dropdown[] all = {summonSkinDropdown, summonVoiceDropdown,
+        Dropdown[] all = {summonSkinDropdown, summonVoiceDropdown, summonModeDropdown,
                 summonProviderDropdown, summonPersonaDropdown};
         Dropdown open = null;
         for (Dropdown d : all) {
@@ -757,11 +770,13 @@ public final class NumenScreen extends Screen {
         com.dwinovo.numen.Constants.LOG.info("[numen-skin] 召唤 {}: 皮肤选择={} 条目={} 携带签名数据={}",
                 n, summonSkinId, skinEntry == null ? "null" : skinEntry.name(), !skinValue.isEmpty());
         Services.NETWORK.sendToServer(
-                new com.dwinovo.numen.network.payload.SummonRequestPayload(n, skinValue, skinSig));
+                new com.dwinovo.numen.network.payload.SummonRequestPayload(n, skinValue, skinSig,
+                        summonCreative));
         summoning = false;
         summonPersonaId = null;
         summonProviderId = null;
         summonVoiceId = null;
+        summonCreative = false;
         rebuild();   // the new companion arrives via CompanionListPayload — click its avatar to open
     }
 
@@ -796,7 +811,7 @@ public final class NumenScreen extends Screen {
             }
             if (railPlusAt((int) mouseX, (int) mouseY)) {   // + → start the summon name prompt
                 summoning = !summoning;
-                if (summoning) { summonPersonaId = null; summonVoiceId = null; summonSkinId = null; }   // fresh summon starts at "默认/无"
+                if (summoning) { summonPersonaId = null; summonVoiceId = null; summonSkinId = null; summonCreative = false; }   // fresh summon starts at "默认/无/生存"
                 rebuild();
                 return true;
             }
@@ -935,6 +950,7 @@ public final class NumenScreen extends Screen {
             txt(g, Component.literal(I18n.get(ModLanguageData.Keys.PROVIDER_TITLE)
                     + (summonProviderDropdown == null ? I18n.get(ModLanguageData.Keys.SUMMON_PROVIDER_EMPTY) : "")),
                     sumX(), y0 + 92, TXT_MUTED);
+            txt(g, Component.literal("模式"), sumX() + summonHalfW() + 6, y0 + 92, TXT_MUTED);
             txt(g, Component.literal(I18n.get(ModLanguageData.Keys.VOICE_SUMMON_LABEL)
                     + (summonVoiceDropdown == null ? I18n.get(ModLanguageData.Keys.VOICE_SUMMON_EMPTY) : "")),
                     sumX(), y0 + 126, TXT_MUTED);
