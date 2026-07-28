@@ -620,6 +620,48 @@ public class CompanionGameTests {
         });
     }
 
+    /** 创造取物:take_items 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
+    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    public static void creative_take_items(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
+        var args = new com.google.gson.JsonObject();
+        args.addProperty("item_id", "minecraft:diamond");
+        args.addProperty("count", 100);
+        java.util.concurrent.atomic.AtomicReference<String> reply =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        new com.dwinovo.numen.core.tools.TakeItemsTool()
+                .onServerCall("gametest-take", args, companion, reply::set);
+        helper.succeedWhen(() -> {
+            helper.assertTrue(reply.get() != null && reply.get().contains("\"success\":true"),
+                    "take_items should succeed in creative, got: " + reply.get());
+            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 100,
+                    "expected 100 diamonds in inventory");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 生存取物拒绝:take_items 在生存画像下吃诚实拒绝,背包不动。 */
+    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    public static void survival_take_items_refused(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
+        var args = new com.google.gson.JsonObject();
+        args.addProperty("item_id", "minecraft:diamond");
+        args.addProperty("count", 10);
+        java.util.concurrent.atomic.AtomicReference<String> reply =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        new com.dwinovo.numen.core.tools.TakeItemsTool()
+                .onServerCall("gametest-take2", args, companion, reply::set);
+        helper.succeedWhen(() -> {
+            helper.assertTrue(reply.get() != null && reply.get().contains("\"success\":false"),
+                    "take_items must refuse in survival, got: " + reply.get());
+            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
+                    "survival refusal must not add items");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 生存耗料建造:恰好给足一组圆石,9 格平台建成且背包精确少 9。 */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
     public static void survival_build_consumes(GameTestHelper helper) {
