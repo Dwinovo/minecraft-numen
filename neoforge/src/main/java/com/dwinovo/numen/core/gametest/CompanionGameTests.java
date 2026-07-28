@@ -75,6 +75,49 @@ public class CompanionGameTests {
         });
     }
 
+    /**
+     * 开门出屋:同伴被关在四面石墙(3 高、无顶但空背包无从垫高、徒手拆墙
+     * 代价高昂)的屋里,唯一出口是一扇关着的橡木门——goto 屋外目标必须
+     * 走"规划穿门 + 执行层右键开门"这条链。守的是 MovementTraverse 的
+     * 门交互与 canWalkThroughBlockState 的木门可通行假定。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_smoke")
+    public static void goto_through_closed_door(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        // 周界石墙 rel x,z ∈ [1,5]、y 2..4;南墙中央 (3,*,5) 留门洞
+        for (int x = 1; x <= 5; x++) {
+            for (int z = 1; z <= 5; z++) {
+                boolean perimeter = x == 1 || x == 5 || z == 1 || z == 5;
+                if (!perimeter) continue;
+                for (int y = 2; y <= 4; y++) {
+                    if (x == 3 && z == 5 && y <= 3) continue;   // 门占的两格
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
+                            Blocks.STONE.defaultBlockState());
+                }
+            }
+        }
+        BlockPos doorLow = helper.absolutePos(new BlockPos(3, 2, 5));
+        var lower = Blocks.OAK_DOOR.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.DoorBlock.FACING,
+                        net.minecraft.core.Direction.SOUTH);
+        level.setBlockAndUpdate(doorLow, lower);
+        level.setBlockAndUpdate(doorLow.above(), lower.setValue(
+                net.minecraft.world.level.block.DoorBlock.HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER));
+
+        NumenPlayer companion = spawnAt(helper, "gametest_shutin", new BlockPos(3, 2, 3), false);
+        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
+        TaskRecord record = (TaskRecord) new MovementTools().moveTo(
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
+                TaskDispatch.ctx("gametest-door", companion));
+        TaskDispatch.enqueue(companion, record, reply -> {});
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+                    "companion has not escaped through the door");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     // ==================== 真实地形挖掘用例(模板取自实际存档地形)====================
 
     /** 挖掘批次前置:和平难度 + 正午,排除怪物袭扰与昼夜随机性。 */
