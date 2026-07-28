@@ -2,13 +2,13 @@ package com.dwinovo.numen.client.chat;
 
 import com.dwinovo.numen.api.NumenGateway;
 import com.dwinovo.numen.client.agent.NumenRoster;
+import com.dwinovo.numen.client.screen.FlatEditBox;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.RoundRect;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.network.chat.Component;
@@ -35,7 +35,7 @@ public class CompanionChatScreen extends Screen {
 
     private final UUID companionUuid;
     private final String companionName;
-    private EditBox input;
+    private FlatEditBox input;
 
     public CompanionChatScreen(UUID companionUuid, String companionName) {
         super(Component.literal("Numen face-to-face chat"));
@@ -65,10 +65,13 @@ public class CompanionChatScreen extends Screen {
         String kept = input != null ? input.getValue() : "";
         int x = (this.width - INPUT_W) / 2;
         int y = this.height - 44;
-        input = new EditBox(this.font, x, y, INPUT_W, INPUT_H, Component.literal("numen chat input"));
+        // G 面板同款 FlatEditBox:深色字、无阴影、占位提示画在光标下层——
+        // 原版 EditBox 的阴影是写死的,浅底上深色字会糊成一团
+        input = new FlatEditBox(this.font, x, y, INPUT_W, INPUT_H,
+                Component.literal("numen chat input"));
         input.setBordered(false);
-        // 奶油卡上必须深色字:EditBox 默认白字带阴影,在浅底上看不清
         input.setTextColor(UiTheme.current().text());
+        input.setHint(Nb.colored("想说什么…(回车说出去,Esc 算了)", UiTheme.current().textDim()));
         input.setMaxLength(256);
         input.setValue(kept);
         input.setCanLoseFocus(false);
@@ -98,9 +101,6 @@ public class CompanionChatScreen extends Screen {
         RoundRect.card(g, x - 8, y - 6, x + INPUT_W + 8, y + INPUT_H + 4, 4,
                 th.aiFill(), th.border());
         input.render(g, mouseX, mouseY, partialTicks);
-        if (input.getValue().isEmpty()) {
-            Nb.text(g, this.font, "想说什么…(回车说出去,Esc 算了)", x + 1, y + 3, th.textDim());
-        }
 
         super.render(g, mouseX, mouseY, partialTicks);
     }
