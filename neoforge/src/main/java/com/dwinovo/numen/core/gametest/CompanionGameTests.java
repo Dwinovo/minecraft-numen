@@ -399,4 +399,157 @@ public class CompanionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    // ==================== 能力画像用例(生存 / 创造 分道)====================
+
+    /** 画像批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_mode")
+    public static void prepareModeBatch(ServerLevel level) {
+        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
+        level.setDayTime(6000);
+    }
+
+    /** floor20 上拉起同伴的公共步骤;creative = 召后切创造档。 */
+    private static NumenPlayer spawnAt(GameTestHelper helper, String name, BlockPos rel,
+                                       boolean creative) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spawn = helper.absolutePos(rel);
+        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+                name, UUID.randomUUID(), level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        if (creative) {
+            companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
+        }
+        return companion;
+    }
+
+    /** 创造 goto:无畏/无饥饿画像下移动与疾跑门照常工作。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
+    public static void creative_goto(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
+        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
+        TaskRecord record = (TaskRecord) new MovementTools().moveTo(
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
+                TaskDispatch.ctx("gametest-cgoto", companion));
+        TaskDispatch.enqueue(companion, record, reply -> {});
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+                    "creative companion has not reached the goto target");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 创造挖矿:空手(无镐)采金矿——验证三件事:瞬破画像跳过工具门
+     * (生存下金矿需铁镐,空手会 WRONG_TOOL 拒工)、无掉落画像按"破坏的
+     * 目标方块"计数(背包增量恒零)、以及确实没有掉落物入包。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    public static void creative_mine_no_drops(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> ores = List.of(
+                helper.absolutePos(new BlockPos(8, 2, 8)), helper.absolutePos(new BlockPos(9, 2, 8)),
+                helper.absolutePos(new BlockPos(8, 2, 9)), helper.absolutePos(new BlockPos(9, 2, 9)));
+        for (BlockPos ore : ores) {
+            level.setBlockAndUpdate(ore, Blocks.GOLD_ORE.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_cminer", new BlockPos(2, 2, 2), true);
+
+        TaskRecord record = new BlockActionTools().autoMine(
+                List.of("minecraft:gold_ore"), 4, TaskDispatch.ctx("gametest-cmine", companion));
+        TaskDispatch.dispatchAsync(companion, record, reply -> {});
+
+        helper.succeedWhen(() -> {
+            for (BlockPos ore : ores) {
+                helper.assertTrue(level.getBlockState(ore).isAir(),
+                        "gold ore not broken at " + ore.toShortString());
+            }
+            helper.assertTrue(companion.getInventory().countItem(Items.RAW_GOLD) == 0
+                            && companion.getInventory().countItem(Items.GOLD_ORE.asItem()) == 0,
+                    "creative mining must not yield drops");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 创造建造:背包全空 + 免耗材记账,想建就建;建完背包依旧全空。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    public static void creative_build_empty_inventory(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_cmason", new BlockPos(2, 2, 2), true);
+        List<BuildTaskRecord.Target> targets = new ArrayList<>();
+        for (BlockPos rel : boxCells(new BlockPos(8, 2, 8), 3, 1, 3, false)) {
+            targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
+                    helper.absolutePos(rel), "cobblestone", null, null, null));
+        }
+        var ctx = TaskDispatch.ctx("gametest-cbuild", companion);
+        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+                ctx.deadline(3600L), targets, true, 0, false), reply -> {});
+        helper.succeedWhen(() -> {
+            for (BuildTaskRecord.Target t : targets) {
+                helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
+                        "structure incomplete at " + t.pos().toShortString());
+            }
+            helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 0,
+                    "free-material build must not touch the inventory");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 生存缺料拒工:空背包 + 消耗记账 → 开工前盘料失败,回执逐项报缺。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    public static void survival_build_missing_materials(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_broke", new BlockPos(2, 2, 2), false);
+        List<BuildTaskRecord.Target> targets = new ArrayList<>();
+        for (BlockPos rel : boxCells(new BlockPos(8, 2, 8), 3, 1, 3, false)) {
+            targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
+                    helper.absolutePos(rel), "cobblestone", null, null, null));
+        }
+        var ctx = TaskDispatch.ctx("gametest-sbuild-broke", companion);
+        // dispatchAsync 的回调只回"已受理"收条;预检失败落在任务记录的终态上
+        BuildTaskRecord record = new BuildTaskRecord(ctx.toolCallId(),
+                ctx.deadline(3600L), targets, true, 0, true);
+        TaskDispatch.dispatchAsync(companion, record, reply -> {});
+        helper.succeedWhen(() -> {
+            var result = record.getResult();
+            helper.assertTrue(result != null && !result.success()
+                            && result.message() != null
+                            && result.message().contains("not enough materials"),
+                    "expected an itemized missing-materials refusal, got: "
+                            + (result == null ? "still running" : result.message()));
+            for (BuildTaskRecord.Target t : targets) {
+                helper.assertTrue(!level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
+                        "must not build anything without materials");
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 生存耗料建造:恰好给足一组圆石,9 格平台建成且背包精确少 9。 */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    public static void survival_build_consumes(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_frugal", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        List<BuildTaskRecord.Target> targets = new ArrayList<>();
+        for (BlockPos rel : boxCells(new BlockPos(8, 2, 8), 3, 1, 3, false)) {
+            targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
+                    helper.absolutePos(rel), "cobblestone", null, null, null));
+        }
+        var ctx = TaskDispatch.ctx("gametest-sbuild", companion);
+        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+                ctx.deadline(3600L), targets, true, 0, true), reply -> {});
+        helper.succeedWhen(() -> {
+            for (BuildTaskRecord.Target t : targets) {
+                helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
+                        "structure incomplete at " + t.pos().toShortString());
+            }
+            int left = companion.getInventory().countItem(Items.COBBLESTONE);
+            helper.assertTrue(left == 64 - targets.size(),
+                    "survival build must consume exactly " + targets.size()
+                            + " cobblestone, inventory has " + left);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }
