@@ -137,9 +137,6 @@ public final class SettingsView {
     /** 拖进窗口的皮肤 png 原始字节(表单会话内;保存成功后随条目落盘)。 */
     private byte[] skinDropped;
     private int skinDroppedW, skinDroppedH;
-    /** 导入文件夹扫描缓存(1s 刷新;手机端免拖拽通路)。 */
-    private List<java.nio.file.Path> skinImportCache = List.of();
-    private long skinImportScanMs;
     /** 保存(签名)进行中——防重复点击;skinFormGen 作废在途回调。 */
     private boolean skinSigning;
     private int skinFormGen;
@@ -1567,38 +1564,23 @@ public final class SettingsView {
             int fy = fy0();
             txt(g, Component.translatable(ModLanguageData.Keys.SKIN_FORM_NAME), x, fy, TXT_MUTED);
             txt(g, Component.translatable(ModLanguageData.Keys.SKIN_FORM_VARIANT), x, fy + SET_SP, TXT_MUTED);
-            // 导入区:拖拽照旧,另给两条免拖拽通路(手机 FCL 没有文件拖拽)——
-            // 原生文件对话框 + 导入文件夹点选;已加载状态固定在表单底部状态行上方。
+            // 导入区:唯一入口「选择文件…」——原生文件对话框(FCL 会把它翻译成
+            // 安卓的文件选择器);拖拽入窗仍被 onFilesDrop 静默接住,不再宣传。
             int dy = fy + 2 * SET_SP + 4;
-            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_IMPORT_HINT), x, dy, TXT_FAINT);
             UiTheme sth = UiTheme.current();
-            for (int b = 0; b < 2; b++) {
-                int[] rc = skinChipRect(b);
-                boolean hov = mouseX >= rc[0] && mouseX < rc[0] + rc[2]
-                        && mouseY >= rc[1] && mouseY < rc[1] + rc[3];
-                com.dwinovo.numen.client.ui.RoundRect.card(g, rc[0], rc[1],
-                        rc[0] + rc[2], rc[1] + rc[3], 3, sth.field(),
-                        hov ? CTA : sth.surfaceBorder());
-                txt(g, Component.translatable(b == 0 ? ModLanguageData.Keys.SKIN_PICK_FILE
-                        : ModLanguageData.Keys.SKIN_OPEN_FOLDER), rc[0] + 6, rc[1] + 3, TXT);
-            }
-            var pngs = importPngs();
-            int ry0 = skinChipRect(0)[1] + 18;
-            if (pngs.isEmpty()) {
-                txt(g, Component.translatable(ModLanguageData.Keys.SKIN_IMPORT_EMPTY), x, ry0, TXT_FAINT);
-            } else {
-                for (int i = 0; i < pngs.size(); i++) {
-                    int ry = ry0 + i * 12;
-                    boolean hov = mouseX >= x && mouseX < x + w - 90 && mouseY >= ry && mouseY < ry + 12;
-                    txt(g, Component.literal("▸ " + clip(pngs.get(i).getFileName().toString(), w - 100)),
-                            x, ry, hov ? CTA : TXT_MUTED);
-                }
-            }
+            int[] rc = skinChipRect();
+            boolean hov = mouseX >= rc[0] && mouseX < rc[0] + rc[2]
+                    && mouseY >= rc[1] && mouseY < rc[1] + rc[3];
+            com.dwinovo.numen.client.ui.RoundRect.card(g, rc[0], rc[1],
+                    rc[0] + rc[2], rc[1] + rc[3], 3, sth.field(),
+                    hov ? CTA : sth.surfaceBorder());
+            txt(g, Component.translatable(ModLanguageData.Keys.SKIN_PICK_FILE),
+                    rc[0] + 6, rc[1] + 4, TXT);
             if (skinDropped != null) {
                 txt(g, Component.translatable(ModLanguageData.Keys.SKIN_LOADED,
-                        skinDroppedW + "x" + skinDroppedH), x, fBottom() - 26, OK);
+                        skinDroppedW + "x" + skinDroppedH), x, dy + 22, OK);
             } else if (skinEditId != null) {
-                txt(g, Component.translatable(ModLanguageData.Keys.SKIN_KEEP_OLD), x, fBottom() - 26, TXT_FAINT);
+                txt(g, Component.translatable(ModLanguageData.Keys.SKIN_KEEP_OLD), x, dy + 22, TXT_FAINT);
             }
             if (skinMsg != null && skinMsgUntil > System.currentTimeMillis()) {
                 txt(g, Component.literal(clip(skinMsg, w - 94)), x, fBottom() - 14,
@@ -1649,13 +1631,12 @@ public final class SettingsView {
         }
     }
 
-    /** 导入区两枚芯片的矩形 {x, y, w, h}(render 与 click 同一套推导)。 */
-    private int[] skinChipRect(int idx) {
+    /** 「选择文件…」按钮矩形 {x, y, w, h}(render 与 click 同一套推导)。 */
+    private int[] skinChipRect() {
         int x = fx();
-        int cy = fy0() + 2 * SET_SP + 15;
-        int w0 = font().width(I18n.get(ModLanguageData.Keys.SKIN_PICK_FILE)) + 12;
-        int w1 = font().width(I18n.get(ModLanguageData.Keys.SKIN_OPEN_FOLDER)) + 12;
-        return idx == 0 ? new int[]{x, cy, w0, 14} : new int[]{x + w0 + 6, cy, w1, 14};
+        int cy = fy0() + 2 * SET_SP + 4;
+        int w0 = font().width(I18n.get(ModLanguageData.Keys.SKIN_PICK_FILE)) + 14;
+        return new int[]{x, cy, w0, 16};
     }
 
     private boolean skinClick(int mx, int my) {
@@ -1666,27 +1647,10 @@ public final class SettingsView {
                 wSkinVariant = skinVariantDropdown.selectedId();
                 return true;
             }
-            for (int b = 0; b < 2; b++) {
-                int[] rc = skinChipRect(b);
-                if (mx >= rc[0] && mx < rc[0] + rc[2] && my >= rc[1] && my < rc[1] + rc[3]) {
-                    if (b == 0) {
-                        openNativeSkinPicker();
-                    } else {
-                        net.minecraft.Util.getPlatform().openFile(
-                                com.dwinovo.numen.client.skin.SkinLibrary.instance()
-                                        .importDir().toFile());
-                    }
-                    return true;
-                }
-            }
-            var pngs = importPngs();
-            int ry0 = skinChipRect(0)[1] + 18;
-            for (int i = 0; i < pngs.size(); i++) {
-                int ry = ry0 + i * 12;
-                if (mx >= fx() && mx < fx() + fw() - 90 && my >= ry && my < ry + 12) {
-                    importSkinFile(pngs.get(i));
-                    return true;
-                }
+            int[] rc = skinChipRect();
+            if (mx >= rc[0] && mx < rc[0] + rc[2] && my >= rc[1] && my < rc[1] + rc[3]) {
+                openNativeSkinPicker();
+                return true;
             }
             return false;
         }
@@ -1741,34 +1705,8 @@ public final class SettingsView {
         }
     }
 
-    /** 导入文件夹里的 png 清单(1s 缓存,新文件优先;手机端免拖拽的主通路)。 */
-    private List<java.nio.file.Path> importPngs() {
-        long now = System.currentTimeMillis();
-        if (now - skinImportScanMs > 1000) {
-            skinImportScanMs = now;
-            List<java.nio.file.Path> out = new java.util.ArrayList<>();
-            java.nio.file.Path dir = com.dwinovo.numen.client.skin.SkinLibrary.instance().importDir();
-            try (var stream = java.nio.file.Files.list(dir)) {
-                stream.filter(f -> f.toString().toLowerCase(java.util.Locale.ROOT).endsWith(".png"))
-                        .sorted((a, b) -> {
-                            try {
-                                return java.nio.file.Files.getLastModifiedTime(b)
-                                        .compareTo(java.nio.file.Files.getLastModifiedTime(a));
-                            } catch (java.io.IOException e) {
-                                return 0;
-                            }
-                        })
-                        .limit(3)
-                        .forEach(out::add);
-            } catch (java.io.IOException ignored) {
-            }
-            skinImportCache = out;
-        }
-        return skinImportCache;
-    }
-
-    /** 原生文件对话框(LWJGL tinyfd,MC 自带):独立线程弹窗防冻主循环,
-     *  选中后回主线程导入。移动端(FCL)弹不出来就静默——文件夹通路兜底。 */
+    /** 原生文件对话框(LWJGL tinyfd,MC 自带;FCL 端会翻译成安卓文件选择器):
+     *  独立线程弹窗防冻主循环,选中后回主线程导入。 */
     private void openNativeSkinPicker() {
         new Thread(() -> {
             String chosen = null;

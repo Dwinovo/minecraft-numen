@@ -89,11 +89,8 @@ public final class ModLanguageData {
         public static final String SKIN_VARIANT_SLIM    = "numen.skin.variant_slim";
         public static final String SKIN_DROP_HINT       = "numen.skin.drop_hint";
         public static final String SKIN_LOADED          = "numen.skin.loaded";
-        /** 皮肤导入的免拖拽通路(手机 FCL 没有文件拖拽)。 */
+        /** 皮肤导入的唯一入口:原生文件对话框(FCL 端翻译成安卓文件选择器)。 */
         public static final String SKIN_PICK_FILE       = "numen.skin.pick_file";
-        public static final String SKIN_OPEN_FOLDER     = "numen.skin.open_folder";
-        public static final String SKIN_IMPORT_HINT     = "numen.skin.import_hint";
-        public static final String SKIN_IMPORT_EMPTY    = "numen.skin.import_empty";
         public static final String SKIN_KEEP_OLD        = "numen.skin.keep_old";
         public static final String SKIN_SIGNING         = "numen.skin.signing";
         public static final String SKIN_SIGN_FAIL       = "numen.skin.sign_fail";
@@ -360,10 +357,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_VARIANT_SLIM,    "Slim (thin arms)");
         adder.add(Keys.SKIN_DROP_HINT,       "Drag a skin png (64x64) into the game window");
         adder.add(Keys.SKIN_LOADED,          "Loaded %s ✓ — Save signs it via MineSkin");
-        adder.add(Keys.SKIN_PICK_FILE,       "Choose file…");
-        adder.add(Keys.SKIN_OPEN_FOLDER,     "Open import folder");
-        adder.add(Keys.SKIN_IMPORT_HINT,     "Drag a 64x64 png in, or put it in the import folder and pick below:");
-        adder.add(Keys.SKIN_IMPORT_EMPTY,    "(no png in the import folder yet)");
+        adder.add(Keys.SKIN_PICK_FILE,       "Choose skin file (64x64 png)…");
         adder.add(Keys.SKIN_KEEP_OLD,        "Keeping the current image (drag a new png to replace)");
         adder.add(Keys.SKIN_SIGNING,         "Signing via MineSkin… (a few seconds)");
         adder.add(Keys.SKIN_SIGN_FAIL,       "Signing failed: %s");
@@ -608,10 +602,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_VARIANT_SLIM,    "纤细(瘦手臂)");
         adder.add(Keys.SKIN_DROP_HINT,       "把皮肤 png(64x64)直接拖进游戏窗口");
         adder.add(Keys.SKIN_LOADED,          "已加载 %s ✓——点保存经 MineSkin 签名");
-        adder.add(Keys.SKIN_PICK_FILE,       "选择文件…");
-        adder.add(Keys.SKIN_OPEN_FOLDER,     "打开导入文件夹");
-        adder.add(Keys.SKIN_IMPORT_HINT,     "拖入 64x64 皮肤 png;或放进导入文件夹后在下方点选:");
-        adder.add(Keys.SKIN_IMPORT_EMPTY,    "(导入文件夹里还没有 png)");
+        adder.add(Keys.SKIN_PICK_FILE,       "选择皮肤文件(64x64 png)…");
         adder.add(Keys.SKIN_KEEP_OLD,        "沿用当前图片(拖入新 png 可替换)");
         adder.add(Keys.SKIN_SIGNING,         "MineSkin 签名中…(需要几秒)");
         adder.add(Keys.SKIN_SIGN_FAIL,       "签名失败: %s");
