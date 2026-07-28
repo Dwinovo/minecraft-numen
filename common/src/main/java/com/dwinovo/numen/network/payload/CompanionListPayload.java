@@ -60,6 +60,8 @@ public record CompanionListPayload(List<Entry> companions) implements CustomPack
             snapshot.add(new NumenRoster.Entry(e.uuid(), e.name()));
         }
         NumenRoster.instance().replaceAll(snapshot);
+        // 聊天框的 @名字 原生补全跟着花名册走
+        com.dwinovo.numen.client.chat.CompanionCompletions.sync();
 
         // A newly-arrived companion may have a persona the owner picked at summon (resolved by name here,
         // since the UUID wasn't known client-side until now). Apply it as the starting persona.

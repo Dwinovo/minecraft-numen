@@ -445,6 +445,21 @@ public final class EntityAgentLoop {
         }
     }
 
+    /**
+     * 头顶气泡上报:思考中/正文/收起。服务端校验主人身份后转发给同伴
+     * 附近的所有玩家(含主人自己——不做本地特例,单一路径)。断线期不发,
+     * 气泡本来就是会话态。
+     */
+    private void reportBubble(byte kind, String text) {
+        if (net.minecraft.client.Minecraft.getInstance().getConnection() == null) {
+            return;
+        }
+        String capped = text == null ? "" : truncate(text,
+                com.dwinovo.numen.network.payload.SpeechBubblePayload.MAX_TEXT / 2 - 4);
+        com.dwinovo.numen.platform.Services.NETWORK.sendToServer(
+                new com.dwinovo.numen.network.payload.SpeechBubblePayload(entityUuid, kind, capped));
+    }
+
     // ---- streaming voice (TTS) ----
 
     /**
@@ -568,6 +583,8 @@ public final class EntityAgentLoop {
         // 语音无条件先闭嘴:不管打断的是在飞的 turn 还是排队的 prompt,
         // 主人按下 Stop 时还在播/待播的语音都不该继续。
         if (voice != null) voice.interrupt();
+        // 头顶的思考/残句气泡同理随打断收起
+        reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
         if (isBusy()) {
             // Priority 1: stop the running turn, in-flight compaction, or a body background task.
             // Responses are generation-stamped, so any in-flight one is discarded.
@@ -981,6 +998,8 @@ public final class EntityAgentLoop {
         final int gen = turnGeneration;
         final VoiceTurn vt = beginVoiceTurn();
         livePartial.setLength(0);
+        // 头顶挂思考气泡:从发出请求到回应落地的整个空窗都有反馈
+        reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
         client().chatStreaming(snapshot, tools, systemPrompt, tapForUi(gen, vt.sink()))
                 .whenComplete((res, err) -> {
                     vt.finish().run();
@@ -1202,6 +1221,7 @@ public final class EntityAgentLoop {
         // The failed turn is over. Any fresh turn started now or by a later wake event gets its own
         // one-retry allowance rather than inheriting the exhausted budget from this turn.
         turnRetried = false;
+        reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
         if (inbox.isEmpty()) {
             turnPause = AgentTurnPause.RECOVERABLE_FAILURE;
             return;
@@ -1258,6 +1278,7 @@ public final class EntityAgentLoop {
                 final int gen2 = turnGeneration;
                 final VoiceTurn vt2 = beginVoiceTurn();   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
                 livePartial.setLength(0);                 // 失败那次的半截文字同理作废
+                reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
                 client().chatStreaming(convo.snapshot(), ToolRegistry.all(),
                                 composeSystemPrompt(), tapForUi(gen2, vt2.sink()))
                         .whenComplete((r2, e2) -> {
@@ -1291,26 +1312,40 @@ public final class EntityAgentLoop {
             if (!turn.content().isEmpty()) {
                 Constants.LOG.info("[numen-entity#{}] assistant (final): {}",
                         entityUuid, turn.content());
-                // 回复顺带进聊天框(与气泡同一套显示过滤):聊天是日常主通道,
-                // G 面板与 HUD 都是可选项
+                // 双通道落地:头顶气泡是回复的主显示(附近玩家都看得见),
+                // 聊天框回显一份当日志;超长折叠,悬停看全文,完整记录在 G 面板
                 String shown = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
                         .filterAssistantMessage(turn.content());
                 if (!shown.isBlank()) {
+                    reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, shown);
                     String who = personaName != null && !personaName.isBlank()
                             ? personaName
                             : String.valueOf(com.dwinovo.numen.client.agent.NumenRoster.instance()
                                     .name(entityUuid));
-                    net.minecraft.client.Minecraft.getInstance().gui.getChat().addMessage(
-                            net.minecraft.network.chat.Component.literal("<" + who + "> " + shown));
+                    net.minecraft.client.Minecraft.getInstance().gui.getChat()
+                            .addMessage(foldedChatLine(who, shown));
+                } else {
+                    reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
                 }
             } else {
                 Constants.LOG.info("[numen-entity#{}] assistant (final, empty content)", entityUuid);
+                reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
             }
             convo.resetTurnCount();
             // A prompt that arrived during this final turn was buffered; now that
             // the chain has settled, start a fresh turn to answer it.
             if (hasQueuedPrompts()) tryStartTurn();
             return;
+        }
+
+        // 开工前的顺嘴一句(tool_calls 旁附的 content)也上气泡——她边干活边嘟囔;
+        // 没话说就收起思考气泡,身体动起来本身就是反馈
+        String aside = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
+                .filterAssistantMessage(turn.content() == null ? "" : turn.content());
+        if (!aside.isBlank()) {
+            reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, aside);
+        } else {
+            reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
         }
 
         // Hand this turn's calls to the dispatcher — it runs them serially and
@@ -1324,6 +1359,22 @@ public final class EntityAgentLoop {
     private static String truncate(String s, int max) {
         if (s == null) return "";
         return s.length() <= max ? s : s.substring(0, max) + "...";
+    }
+
+    /**
+     * 聊天栏回显行:小作文折叠成前 200 字加省略号,悬停浮出全文——聊天栏
+     * 是日志不是阅读器,完整记录在 G 面板。
+     */
+    private static net.minecraft.network.chat.Component foldedChatLine(String who, String shown) {
+        String flat = shown.replaceAll("\\s+", " ").trim();
+        String head = "<" + who + "> ";
+        if (flat.length() <= 200) {
+            return net.minecraft.network.chat.Component.literal(head + flat);
+        }
+        return net.minecraft.network.chat.Component.literal(head + flat.substring(0, 200) + " ……")
+                .withStyle(s -> s.withHoverEvent(new net.minecraft.network.chat.HoverEvent(
+                        net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
+                        net.minecraft.network.chat.Component.literal(flat))));
     }
 
     private static String unwrap(Throwable t) {

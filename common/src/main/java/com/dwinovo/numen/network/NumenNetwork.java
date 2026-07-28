@@ -52,6 +52,18 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.SpeakingStatePayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.SpeakingStatePayload::handle);
 
+        // C→S: 同伴的头顶气泡状态(思考中/正文/收起),大脑在主人客户端。
+        Services.NETWORK.registerClientToServer(
+                com.dwinovo.numen.network.payload.SpeechBubblePayload.TYPE,
+                com.dwinovo.numen.network.payload.SpeechBubblePayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.SpeechBubblePayload::handle);
+
+        // S→C: 气泡状态转发给同伴附近的所有玩家——说话路人也看得见。
+        Services.NETWORK.registerServerToClient(
+                com.dwinovo.numen.network.payload.SpeechBubbleSyncPayload.TYPE,
+                com.dwinovo.numen.network.payload.SpeechBubbleSyncPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.SpeechBubbleSyncPayload::handle);
+
         // S→C: an Numen body died; suspend the owner's agent loop (resolves the in-flight
         // tool call with the death cause). Recoverable — see NumenRespawnPayload.
         Services.NETWORK.registerServerToClient(

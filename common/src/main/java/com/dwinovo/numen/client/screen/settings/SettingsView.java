@@ -1738,12 +1738,6 @@ public final class SettingsView {
                 txt(g, Component.literal("✔"), x + 38 + font().width(t.label()) + 6, ry + 3, OK);
             }
         }
-        // 回复 HUD 开关行(默认关:回复走聊天框)
-        int hy = listY0 + UiTheme.ALL.size() * LIST_ROW + 8;
-        hoverRow(g, mouseX, mouseY, x, secW(), hy);
-        boolean hudOn = UiTheme.replyHudEnabled();
-        txt(g, Component.literal((hudOn ? "[开] " : "[关] ") + "回复悬浮 HUD(关闭时回复走聊天框)"),
-                x, hy + 3, hudOn ? TXT : TXT_MUTED);
     }
 
     private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
@@ -2240,11 +2234,6 @@ public final class SettingsView {
                     host.repaintPalette();          // 屏幕的调色板常量重读新主题
                     return true;
                 }
-            }
-            int hy = listY0 + UiTheme.ALL.size() * LIST_ROW + 8;
-            if (my >= hy && my < hy + LIST_ROW) {
-                UiTheme.setReplyHud(!UiTheme.replyHudEnabled());
-                return true;
             }
         }
         if (section == Section.MCP) return mcpToggleClick(mx, my);

@@ -73,29 +73,30 @@ public class NumenFabricClient implements ClientModInitializer {
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {
                     com.dwinovo.numen.client.NumenKeys.tick();
-                    com.dwinovo.numen.client.hud.NumenToasts.tick();
                     com.dwinovo.numen.client.agent.AgentLoopRegistry.tickAll();
                 });
 
-        // HUD: advancement-style activity toasts (top-right) when not watching a panel.
-        // 1.21.5 predates the HudElementRegistry layer API; use the classic HudRenderCallback.
-        net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(
-                (g, delta) -> com.dwinovo.numen.client.hud.NumenToasts.render(g));
+        // @名字 消息 → 路由给同伴,不上公屏(名字没命中照常发送)。
+        net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT
+                .register(message -> !com.dwinovo.numen.client.chat.NumenChatRouter.route(message));
 
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT
                 .register((handler, client) -> {
                     com.dwinovo.numen.client.data.ClientNumenInventory.clear();
                     com.dwinovo.numen.client.agent.KnownSkins.clear();
-                    com.dwinovo.numen.client.hud.NumenToasts.clear();
+                    com.dwinovo.numen.client.hud.SpeechBubbles.clear();
+                    com.dwinovo.numen.client.chat.CompanionCompletions.clear();
                     com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
                     com.dwinovo.numen.client.debug.PathDebugState.clear();
                 });
 
-        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后)。
+        // 世界空间覆盖层(半透明方块阶段之后):寻路调试线 + 同伴头顶气泡。
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_TRANSLUCENT
                 .register(context -> {
                     if (context.matrixStack() != null) {
                         com.dwinovo.numen.client.debug.PathDebugRenderer.render(
+                                context.matrixStack(), context.camera());
+                        com.dwinovo.numen.client.hud.SpeechBubbleRenderer.render(
                                 context.matrixStack(), context.camera());
                     }
                 });

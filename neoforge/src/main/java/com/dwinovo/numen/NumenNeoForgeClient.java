@@ -42,21 +42,30 @@ public class NumenNeoForgeClient {
 
         // Mod bus — registration events.
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
-        modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
         modBus.addListener(NumenNeoForgeClient::registerReloadListeners);
         modBus.addListener(NumenNeoForgeClient::registerShaders);
-        // Game bus — per-tick / world-render / disconnect.
+        // Game bus — per-tick / world-render / chat-routing / disconnect.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
+        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientChat);
     }
 
     static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
-        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后)。
+        // 世界空间覆盖层(半透明方块阶段之后):寻路调试线 + 同伴头顶气泡。
         if (event.getStage() == net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage
                 .AFTER_TRANSLUCENT_BLOCKS) {
             com.dwinovo.numen.client.debug.PathDebugRenderer.render(
                     event.getPoseStack(), event.getCamera());
+            com.dwinovo.numen.client.hud.SpeechBubbleRenderer.render(
+                    event.getPoseStack(), event.getCamera());
+        }
+    }
+
+    static void onClientChat(net.neoforged.neoforge.client.event.ClientChatEvent event) {
+        // @名字 消息 → 路由给同伴,不上公屏(名字没命中照常发送)。
+        if (com.dwinovo.numen.client.chat.NumenChatRouter.route(event.getMessage())) {
+            event.setCanceled(true);
         }
     }
 
@@ -67,23 +76,16 @@ public class NumenNeoForgeClient {
 
     static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
         com.dwinovo.numen.client.NumenKeys.tick();
-        com.dwinovo.numen.client.hud.NumenToasts.tick();
         com.dwinovo.numen.client.agent.AgentLoopRegistry.tickAll();
     }
 
     static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
         com.dwinovo.numen.client.data.ClientNumenInventory.clear();
         com.dwinovo.numen.client.agent.KnownSkins.clear();
-        com.dwinovo.numen.client.hud.NumenToasts.clear();
+        com.dwinovo.numen.client.hud.SpeechBubbles.clear();
+        com.dwinovo.numen.client.chat.CompanionCompletions.clear();
         com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
         com.dwinovo.numen.client.debug.PathDebugState.clear();
-    }
-
-    static void registerGuiLayers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {
-        // HUD: advancement-style activity toasts (top-right) when not watching a panel.
-        event.registerAboveAll(
-                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
-                (g, delta) -> com.dwinovo.numen.client.hud.NumenToasts.render(g));
     }
 
     static void registerShaders(net.neoforged.neoforge.client.event.RegisterShadersEvent event) {
