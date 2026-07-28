@@ -337,6 +337,58 @@ public final class SkillRegistry {
         return info;
     }
 
+    /** 附属文件尺寸上限(角色是"给模型看的文本",不是数据仓)。 */
+    private static final long SUPPORT_FILE_MAX_BYTES = 256 * 1024;
+
+    /**
+     * 三级披露:读取技能目录内的一个附属文件(SKILL.md 正文以相对路径引用,
+     * 模型按需拉取)。路径规范化后必须仍在技能目录内——拒绝任何形式的穿越。
+     *
+     * @return 文件文本;技能不存在、路径越界、文件缺失或超限时抛 IllegalArgumentException
+     */
+    public String readSupportFile(String skillName, String relPath) {
+        SkillInfo info = get(skillName).orElseThrow(() ->
+                new IllegalArgumentException("unknown skill: " + skillName));
+        if (relPath == null || relPath.isBlank()) {
+            throw new IllegalArgumentException("file is required");
+        }
+        Path dir = info.location().getParent();
+        Path target = dir.resolve(relPath).normalize();
+        if (!target.startsWith(dir.normalize())) {
+            throw new IllegalArgumentException("file must stay inside the skill directory");
+        }
+        try {
+            if (!Files.isRegularFile(target)) {
+                throw new IllegalArgumentException("no such file in skill " + skillName + ": " + relPath
+                        + "; available: " + String.join(", ", listSupportFiles(skillName)));
+            }
+            if (Files.size(target) > SUPPORT_FILE_MAX_BYTES) {
+                throw new IllegalArgumentException(relPath + " exceeds the "
+                        + (SUPPORT_FILE_MAX_BYTES / 1024) + "KB support-file cap");
+            }
+            return Files.readString(target, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("cannot read " + relPath + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** 技能目录内可引用的附属文件相对路径清单(不含 SKILL.md 本身,字典序)。 */
+    public List<String> listSupportFiles(String skillName) {
+        SkillInfo info = get(skillName).orElseThrow(() ->
+                new IllegalArgumentException("unknown skill: " + skillName));
+        Path dir = info.location().getParent();
+        List<String> out = new ArrayList<>();
+        try (Stream<Path> stream = Files.walk(dir)) {
+            stream.filter(Files::isRegularFile)
+                    .filter(f -> !f.getFileName().toString().equals("SKILL.md"))
+                    .forEach(f -> out.add(dir.relativize(f).toString().replace('\\', '/')));
+        } catch (IOException e) {
+            Constants.LOG.warn("[numen-skill] cannot list support files of {}", skillName, e);
+        }
+        out.sort(String::compareTo);
+        return out;
+    }
+
     /**
      * Parse {@code SKILL.md} text into a {@link SkillInfo}, or {@code null} if it
      * lacks a {@code name:} frontmatter key.
