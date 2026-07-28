@@ -135,6 +135,9 @@ public final class BlueprintStore {
                     || state.is(Blocks.STRUCTURE_BLOCK)) {
                 continue;   // 结构工装块不是建筑的一部分
             }
+            if (state.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
+                continue;   // 液体格暂不承接(排水/布水都不做,先绕开)
+            }
             int rx;
             int rz;
             switch (quarters) {

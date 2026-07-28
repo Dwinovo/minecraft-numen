@@ -306,7 +306,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 cursor++;
                 continue;
             }
-            if (target.matches(player.level().getBlockState(target.pos()))) {
+            BlockState now = player.level().getBlockState(target.pos());
+            if (target.matches(now) || now.getBlock() instanceof LiquidBlock
+                    || target.desiredState().getBlock() instanceof LiquidBlock) {
+                // 液体一律跳过(与对账口径一致):游标不在液体上停留
                 markObserved(target, true);
                 cursor++;
                 continue;
@@ -1158,7 +1161,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             BlockPos pos = target.pos();
             boolean loaded = loadedView == null || loadedView.isLoaded(pos.getX(), pos.getZ());
             if (loaded) {
-                if (target.matches(view.getBlockState(pos))) {
+                BlockState observed = view.getBlockState(pos);
+                if (target.matches(observed)
+                        || observed.getBlock() instanceof LiquidBlock
+                        || target.desiredState().getBlock() instanceof LiquidBlock) {
+                    // 液体一律跳过:不放液体、不清液体、含液体的格子不入对账——
+                    // 排水/布水都不是本任务的事,别让一格水拖出"永远缺格"的死局
                     observedCompleted.add(pos.asLong());
                     completed++;
                 } else if (observedCompleted.remove(pos.asLong())) {
