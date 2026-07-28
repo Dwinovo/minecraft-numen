@@ -68,11 +68,6 @@ public final class ChatLines {
         add(name(companionName).append(Component.literal(flat).withColor(TEXT)));
     }
 
-    /** 工具调用状态行:⚙ 名字 · 工具名。 */
-    public static void tool(String companionName, String toolName) {
-        add(Component.literal("⚙ " + companionName + " · " + toolName).withColor(TOOL));
-    }
-
     /** 系统性提醒(连接失败/配置问题):琥珀警示行——玩家必须知道发生了什么,
      *  不能让失败沉进日志里变成"已读不回"。 */
     public static void notice(String companionName, String text) {

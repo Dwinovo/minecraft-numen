@@ -35,22 +35,36 @@ public final class SpeechBubbles {
 
     private SpeechBubbles() {}
 
-    /** 网络层入口:清除/思考/正文三态,新状态直接覆盖旧气泡。 */
+    /** 网络层入口。文本优先:活着的正文泡不被思考态顶掉;SETTLE(开工)
+     *  只收思考泡;TEXT 顶掉一切;CLEAR 收掉一切。 */
     public static void apply(UUID entityUuid, byte kind, String text) {
         if (entityUuid == null) return;
         if (kind == SpeechBubblePayload.KIND_CLEAR) {
             LIVE.remove(entityUuid);
             return;
         }
+        long now = System.currentTimeMillis();
+        Bubble cur = LIVE.get(entityUuid);
+        if (kind == SpeechBubblePayload.KIND_SETTLE) {
+            if (cur != null && cur.thinking()) {
+                LIVE.remove(entityUuid);
+            }
+            return;
+        }
+        if (kind == SpeechBubblePayload.KIND_THINKING) {
+            if (cur != null && !cur.thinking() && !cur.expired(now)) {
+                return;   // 正文还活着:让她把话说完,不换成省略号
+            }
+            LIVE.put(entityUuid, new Bubble(kind, "", now, THINKING_LIFE_MS));
+            return;
+        }
         String shown = text == null ? "" : text.trim();
-        if (kind == SpeechBubblePayload.KIND_TEXT && shown.isEmpty()) {
+        if (shown.isEmpty()) {
             LIVE.remove(entityUuid);
             return;
         }
-        long life = kind == SpeechBubblePayload.KIND_THINKING
-                ? THINKING_LIFE_MS
-                : Math.min(TEXT_LIFE_MAX_MS, TEXT_LIFE_BASE_MS + shown.length() * TEXT_LIFE_PER_CHAR_MS);
-        LIVE.put(entityUuid, new Bubble(kind, shown, System.currentTimeMillis(), life));
+        long life = Math.min(TEXT_LIFE_MAX_MS, TEXT_LIFE_BASE_MS + shown.length() * TEXT_LIFE_PER_CHAR_MS);
+        LIVE.put(entityUuid, new Bubble(kind, shown, now, life));
     }
 
     /** 某实体此刻的活气泡;过期就地摘除返回 null。渲染方逐实体查询。 */

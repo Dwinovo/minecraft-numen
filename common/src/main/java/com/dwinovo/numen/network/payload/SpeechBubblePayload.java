@@ -20,12 +20,14 @@ import java.util.UUID;
  */
 public record SpeechBubblePayload(UUID entityUuid, byte kind, String text) implements CustomPacketPayload {
 
-    /** 收起气泡(开工干活/回合失败/被打断)。 */
+    /** 收起一切(回合失败/被打断/空回复)。 */
     public static final byte KIND_CLEAR = 0;
-    /** 思考中:等待气泡,客户端渲染成跳动的省略号。 */
+    /** 思考中:省略号等待泡。客户端规则:活着的正文泡优先,不被它顶掉。 */
     public static final byte KIND_THINKING = 1;
-    /** 正文:一句话浮在头顶,按长度限时消失。 */
+    /** 正文:一句话浮在头顶,按长度限时消失;顶掉一切旧泡。 */
     public static final byte KIND_TEXT = 2;
+    /** 落定(开工干活):只收思考泡,正文泡留着走完自己的生命周期。 */
+    public static final byte KIND_SETTLE = 3;
 
     /** 气泡是预览,不是全文载体——全文在聊天栏与 G 面板。 */
     public static final int MAX_TEXT = 512;

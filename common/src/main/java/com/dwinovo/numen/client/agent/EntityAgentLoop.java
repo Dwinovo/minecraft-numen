@@ -1399,22 +1399,16 @@ public final class EntityAgentLoop {
             return;
         }
 
-        // 开工前的顺嘴一句(tool_calls 旁附的 content):气泡 + 字幕行都上——
-        // 长任务可能几分钟不收工,她说的每句话聊天框都该有记录,气泡和
-        // 聊天框只是显示面不同,内容必须一致;没话说就收起思考气泡,
-        // 身体动起来本身就是反馈
+        // 开工前的顺嘴一句(tool_calls 旁附的 content):是话就上气泡+字幕行;
+        // 没话说就 SETTLE——只收思考泡,上一句正文泡留着走完生命周期,
+        // 工具执行期不显示"…"(身体动起来本身就是反馈)
         String aside = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
                 .filterAssistantMessage(turn.content() == null ? "" : turn.content());
         if (!aside.isBlank()) {
             reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, aside);
             com.dwinovo.numen.client.chat.ChatLines.companion(speakerName(), aside);
         } else {
-            reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
-        }
-
-        // 工具调用同步落一条最暗的状态行——不开 G 面板也知道她在干什么
-        for (var tc : turn.toolCalls()) {
-            com.dwinovo.numen.client.chat.ChatLines.tool(speakerName(), tc.name());
+            reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_SETTLE, "");
         }
 
         // Hand this turn's calls to the dispatcher — it runs them serially and
