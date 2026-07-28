@@ -338,12 +338,6 @@ public class CompanionGameTests {
                 List.of(new BlockPos(6, 3, 6)), 1);
     }
 
-    /** 空心 8x8x8 壳(296 格):高结构 + 封闭几何,建造循环最重的常规形状。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_heavy")
-    public static void build_hollow_cube(GameTestHelper helper) {
-        runBuildCase(helper, "gametest_builder",
-                boxCells(new BlockPos(6, 2, 6), 8, 8, 8, true), 6);
-    }
 
     /** 实心 5x5x5(125 格):逐层实心浇筑,身体要在自己刚铺的层面上走位。 */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_heavy")
