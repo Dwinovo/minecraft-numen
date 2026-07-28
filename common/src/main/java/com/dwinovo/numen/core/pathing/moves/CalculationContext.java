@@ -77,6 +77,7 @@ public class CalculationContext {
     public int minFallHeight;
     public int maxFallHeightNoWater;
     public final int maxFallHeightBucket;
+    public final double fallDamageCostPerPoint;
     /** 水中行走单格成本(水下速附魔按系数折向平走速度)。 */
     public final double waterWalkSpeed;
     public final double breakBlockAdditionalCost;
@@ -144,6 +145,7 @@ public class CalculationContext {
         this.maxFallHeightNoWater = Math.min(12,
                 Math.max(settings.maxFallHeightNoWater, survivableFall));
         this.maxFallHeightBucket = settings.maxFallHeightBucket;
+        this.fallDamageCostPerPoint = settings.fallDamageCostPerPoint;
         this.waterWalkSpeed = computeWaterWalkSpeed(player);
         this.breakBlockAdditionalCost = settings.blockBreakAdditionalPenalty;
         this.backtrackCostFavoringCoefficient = settings.backtrackCostFavoringCoefficient;

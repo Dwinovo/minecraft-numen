@@ -89,6 +89,9 @@ public final class NavSettings {
     public boolean avoidUpdatingFallingBlocks = true;
     /** 无水情况下可接受的最大坠落高度。 */
     public int maxFallHeightNoWater = 3;
+    /** 每点摔落伤害折算的代价(tick 当量)。走一格约 4.6,默认 20 即"每掉半颗心
+     *  宁可多绕四格多路"——疼不再免费,但摔不死的高度依然是路。 */
+    public double fallDamageCostPerPoint = 20.0;
     /** 持水桶时可接受的最大坠落高度。 */
     public int maxFallHeightBucket = 20;
     /** 允许用剑参与挖掘选材。 */
