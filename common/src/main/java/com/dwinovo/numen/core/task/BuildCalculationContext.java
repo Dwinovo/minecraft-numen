@@ -23,21 +23,14 @@ final class BuildCalculationContext extends CalculationContext {
     private final Map<Long, BuildTaskRecord.Target> activeTargets;
     private final Set<BlockState> availableStates;
     private final boolean replaceExisting;
-    /** 过路模式(交付后的回撤):目标格的放置不再免费——施工期"顺路补格 = 生产力"
-     *  的 0 成本,在回撤期会让"把刚挖开的借道洞填回去"成为每次重规划的免费首选,
-     *  和下行挖掘互相拆台。过路人眼里它们只是普通格子。 */
-    private final boolean passingThrough;
-
     BuildCalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                             boolean safeForThreadedUse, LongSet sacred, LongSet deniedPlace,
                             Map<Long, BuildTaskRecord.Target> activeTargets,
-                            Set<BlockState> availableStates, boolean replaceExisting,
-                            boolean passingThrough) {
+                            Set<BlockState> availableStates, boolean replaceExisting) {
         super(player, view, loadedTest, safeForThreadedUse, sacred, deniedPlace);
         this.activeTargets = Map.copyOf(activeTargets);
         this.availableStates = Set.copyOf(availableStates);
         this.replaceExisting = replaceExisting;
-        this.passingThrough = passingThrough;
         this.jumpPenalty += 10.0;
         this.backtrackCostFavoringCoefficient = 1.0;
     }
@@ -59,10 +52,6 @@ final class BuildCalculationContext extends CalculationContext {
             }
             if (target.matches(current)) {
                 return COST_INF;
-            }
-            if (passingThrough) {
-                // 回撤路上的缺格按普通脚手架计价,不给任何补格激励
-                return super.costOfPlacingAt(x, y, z, current);
             }
             if (containsAvailableState(target.desiredState())
                     && MovementHelper.isReplaceable(x, y, z, current, loadedTest)) {
@@ -103,7 +92,7 @@ final class BuildCalculationContext extends CalculationContext {
                 // 屋里、门窗未通)这类无路可走的处境才值得付——玩家也是拆一块
                 // 出去再补上。补墙由下一遍施工完成;游标模型没有即时回填反射,
                 // 不存在逐 tick 拆补拉锯。交付后的过路(回撤)按普通格子计价。
-                return passingThrough ? 1.0 : 50.0;
+                return 50.0;
             }
             return replaceExisting ? 1.0 : COST_INF;
         }

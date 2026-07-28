@@ -73,7 +73,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      *  物完好但人挂在高处,下一个指令还得先救人。回撤沿用本任务的成本上下文
      *  (挖已建对的格子有重罚金),借道破坏由近旁修补随行回填;这里是回撤的
      *  时限,走不回去就原地交付,不为收尾赖掉一个成功的任务。 */
-    private static final int WITHDRAW_MAX_TICKS = 60 * 20;
     private static final Direction[] PLACE_GOAL_FACES = {
             Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN
     };
@@ -90,9 +89,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private boolean providerRegistered;
     private BuildTaskRecord.Target activeBreak;
     /** 开工时的落脚点——建成后的回撤目的地。 */
-    private BlockPos startFeet;
-    private boolean withdrawing;
-    private int withdrawTicks;
     private BlockPos noShotPos;
     private int noShotTicks;
     private int placeDelayTicks;
@@ -155,7 +151,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         registerProvider();
         updateCompleted();
         highWaterCompleted = r.completed();
-        startFeet = playerFeet().immutable();
         advanceFinishedLayers();
     }
 
@@ -169,33 +164,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         updateCompleted();
         tickPlaceDelay();
         if (r.completed() >= r.targets.size()) {
-            if (!withdrawing) {
-                withdrawing = true;
-                dropNav();
-                com.dwinovo.numen.Constants.LOG.info(
-                        "[numen-task] build withdraw start feet={} home={}",
-                        playerFeet().toShortString(), startFeet.toShortString());
-            }
-            boolean planning = nav != null && nav.planningInFlight();
-            if (playerFeet().distSqr(startFeet) <= 4
-                    || (!planning && ++withdrawTicks > WITHDRAW_MAX_TICKS)) {
-                note = "all requested cells match";
-                return TaskState.SUCCESS;
-            }
-        } else if (withdrawing) {
-            // 回撤路上有格子失守(外因破坏或借道):回到施工遍补上,补完顶部
-            // 判定自会重新进入回撤。施工期成品不可破坏,没有拆补拉锯可打。
-            withdrawing = false;
-            passOrder = null;
-            dropNav();
+            note = "all requested cells match";
+            return TaskState.SUCCESS;
         }
         // 停滞检测:以"完成格数"为进展信号(放/清可空转,门那种放了又清也不算进展),
         // 连续 STALL_LIMIT_TICKS 无新完成就优雅失败退出,别空转到 deadline。
         if (r.completed() > highWaterCompleted) {
             highWaterCompleted = r.completed();
             stallTicks = 0;
-        } else if (withdrawing) {
-            stallTicks = 0;   // 交付后的回撤/随行修补阶段,进展另由回撤时限约束
         } else if (nav != null && nav.planningInFlight()) {
             // 身体站着等异步搜索返回:不是停滞,是规划器在飞——这些刻不计入
             // 停滞预算(与任务 deadline 的冻结同一原则)。
@@ -209,25 +185,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return TaskState.FAILED;
         }
         advanceFinishedLayers();
-        // 回撤期一切格子都正确,recalc 恒为假——不能让这个早退拦住回撤导航
-        if (!recalc() && !withdrawing) {
+        if (!recalc()) {
             updateCompleted();
             if (r.completed() >= r.targets.size()) {
                 note = "all requested cells match";
-                return TaskState.RUNNING;   // 下一 tick 顶部进入回撤
+                return TaskState.SUCCESS;
             }
             return TaskState.RUNNING;
         }
         trimIncorrectPositions();
-
-        if (activeBreak != null) {
-            if (!canInterruptPath()) {
-                activeBreak = null;
-                digger.cancel();
-                return TaskState.RUNNING;
-            }
-            return tickBreak(wasSneaking);
-        }
 
         // —— 游标流水线:确定性顺序(蛇形逐层,骨架先、贴附后),一次盯一格 ——
         // 到位判据是"臂展内 + 眼到格心一条诚实射线"。看得见就转头挥手放,看不见
@@ -243,10 +209,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 nav.pause();
             }
             return tickBreak(wasSneaking);
-        }
-
-        if (withdrawing) {
-            return tickWithdrawNav();
         }
 
         ensurePassOrder();
@@ -496,31 +458,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private void dropNav() {
         navTargetCell = null;
         stopNav();
-    }
-
-    /** 回撤导航(建成后走回开工点):独立于施工游标,单独驱动。 */
-    private TaskState tickWithdrawNav() {
-        if (nav == null) {
-            nav = PlayerNav.to(player, () -> GoalCompiler.standOn(startFeet), WALK_SPEED,
-                    () -> playerFeet().distSqr(startFeet) <= 4, this);
-            nav.setHighlights(java.util.List::of);
-        }
-        return switch (nav.tick()) {
-            case RUNNING -> TaskState.RUNNING;
-            case ARRIVED -> TaskState.RUNNING;   // 顶部的距离判定负责终局
-            case FAILED -> {
-                if (r.completed() >= r.targets.size()) {
-                    com.dwinovo.numen.Constants.LOG.info(
-                            "[numen-task] build withdraw gave up: {} feet={}",
-                            nav.failReason(), player.blockPosition().toShortString());
-                    note = "all requested cells match";
-                    dropNav();
-                    yield TaskState.SUCCESS;
-                }
-                dropNav();
-                yield TaskState.RUNNING;
-            }
-        };
     }
 
     private TaskState tickBreak(boolean wasSneaking) {
@@ -1336,7 +1273,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return ContextFactory.forSearch(player, sacred, deniedPlace,
                 (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
                         p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true),
-                        r.replaceExisting, withdrawing));
+                        r.replaceExisting));
     }
 
     @Override
@@ -1344,7 +1281,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return ContextFactory.forExecution(player, sacred, deniedPlace,
                 (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
                         p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true),
-                        r.replaceExisting, withdrawing));
+                        r.replaceExisting));
     }
 
     @Override
