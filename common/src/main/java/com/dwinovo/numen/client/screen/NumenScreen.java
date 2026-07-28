@@ -346,13 +346,22 @@ public final class NumenScreen extends Screen {
             summonProviderDropdown.setBounds(sumX(), y0 + 102, summonHalfW(), 18);
             summonProviderDropdown.setDropBottom(top + panelH - 2);
         }
-        // 游戏模式:生存/创造,创造在服务端过权限门(不够按生存召唤并说明)。
-        summonModeDropdown = new Dropdown(List.of(
-                new Dropdown.Item("survival", "生存"),
-                new Dropdown.Item("creative", "创造")),
-                summonCreative ? "creative" : "survival");
-        summonModeDropdown.setBounds(sumX() + summonHalfW() + 6, y0 + 102, summonHalfW(), 18);
-        summonModeDropdown.setDropBottom(top + panelH - 2);
+        // 游戏模式:有 gamemode 权限(等级 2,原版已同步到客户端)才给下拉自选;
+        // 没有就继承主人当前档(非创造一律按生存),渲染为置灰不可点 + 悬停说明。
+        boolean canChooseMode = this.minecraft != null && this.minecraft.player != null
+                && this.minecraft.player.hasPermissions(2);
+        if (canChooseMode) {
+            summonModeDropdown = new Dropdown(List.of(
+                    new Dropdown.Item("survival", "生存"),
+                    new Dropdown.Item("creative", "创造")),
+                    summonCreative ? "creative" : "survival");
+            summonModeDropdown.setBounds(sumX() + summonHalfW() + 6, y0 + 102, summonHalfW(), 18);
+            summonModeDropdown.setDropBottom(top + panelH - 2);
+        } else {
+            summonModeDropdown = null;
+            summonCreative = this.minecraft != null && this.minecraft.player != null
+                    && this.minecraft.player.isCreative();
+        }
         // OPTIONAL voice — first item = 无(静音), entries follow (same pattern as the
         // persona pick above); an empty library shows no dropdown, just a hint.
         var voiceEntries = com.dwinovo.numen.client.voice.VoiceLibrary.instance().list();
@@ -951,6 +960,20 @@ public final class NumenScreen extends Screen {
                     + (summonProviderDropdown == null ? I18n.get(ModLanguageData.Keys.SUMMON_PROVIDER_EMPTY) : "")),
                     sumX(), y0 + 92, TXT_MUTED);
             txt(g, Component.literal("模式"), sumX() + summonHalfW() + 6, y0 + 92, TXT_MUTED);
+            if (summonModeDropdown == null) {
+                // 无 gamemode 权限:置灰的继承档,悬停解释为什么点不了
+                int mx0 = sumX() + summonHalfW() + 6, my0 = y0 + 102;
+                com.dwinovo.numen.client.ui.RoundRect.card(g, mx0, my0,
+                        mx0 + summonHalfW(), my0 + 18, 4,
+                        UiTheme.current().field(), UiTheme.current().surfaceBorder());
+                txt(g, Component.literal((summonCreative ? "创造" : "生存") + "(继承)"),
+                        mx0 + 6, my0 + 5, TXT_FAINT);
+                if (mouseX >= mx0 && mouseX < mx0 + summonHalfW()
+                        && mouseY >= my0 && mouseY < my0 + 18) {
+                    g.renderTooltip(font, Component.literal(
+                            "没有 gamemode 权限——同伴将继承你当前的模式"), mouseX, mouseY);
+                }
+            }
             txt(g, Component.literal(I18n.get(ModLanguageData.Keys.VOICE_SUMMON_LABEL)
                     + (summonVoiceDropdown == null ? I18n.get(ModLanguageData.Keys.VOICE_SUMMON_EMPTY) : "")),
                     sumX(), y0 + 126, TXT_MUTED);

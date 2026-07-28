@@ -99,15 +99,16 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
     }
 
     /**
-     * 召唤表单选的游戏模式落地。创造档过权限门:主人自己够不着 /gamemode
-     * (权限等级 2)就按生存召唤并说明——同伴的模式上限 = 主人的权限上限。
+     * 召唤表单选的游戏模式落地。创造档过权限门:主人有 /gamemode 权限
+     * (等级 2)<b>或本人就在创造</b>(无权限时客户端继承主人档)都放行;
+     * 都不满足(伪造/竞态)按生存并说明——同伴的模式上限 = 主人的上限。
      */
     private static void applyMode(ServerPlayer owner, com.dwinovo.numen.entity.NumenPlayer body,
                                   boolean creative) {
         if (body == null || !creative) {
             return;   // 生存是出厂默认(CompanionFactory 已保证),无须重复设置
         }
-        if (!owner.hasPermissions(2)) {
+        if (!owner.hasPermissions(2) && !owner.isCreative()) {
             owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                     "[Numen] 创造档需要作弊/OP 权限,已按生存召唤"));
             return;
