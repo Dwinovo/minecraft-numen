@@ -55,7 +55,7 @@ public final class BuildTool implements NumenTool {
 
     @Override
     public String description() {
-        return "Construct or clear blocks as ONE background task. Two ways to express the work, freely mixed in "
+        return "Construct or clear blocks as ONE background task. Consult build_guide BEFORE designing. Two ways to express the work, freely mixed in "
                 + "a single call: `blocks` = explicit cells (each with block_id, x, y, z and optional state fields "
                 + "facing/axis/half/properties — use for precise details like stairs, doors, torches); `shapes` = "
                 + "parametric volumes, each {shape: box|line|cylinder|sphere, block_id, hollow?, coords} — box/line "
