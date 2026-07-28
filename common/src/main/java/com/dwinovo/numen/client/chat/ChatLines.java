@@ -73,28 +73,40 @@ public final class ChatLines {
         add(Component.literal("⚙ " + companionName + " · " + toolName).withColor(TOOL));
     }
 
+    /** 系统性提醒(连接失败/配置问题):琥珀警示行——玩家必须知道发生了什么,
+     *  不能让失败沉进日志里变成"已读不回"。 */
+    public static void notice(String companionName, String text) {
+        add(Component.literal("⚠ " + companionName + ":").withColor(0xE0A53A)
+                .append(Component.literal(text).withColor(OWN)));
+    }
+
     /**
      * 流式行更新:摘掉这只同伴的旧行,补上更长的新行(带光标记号)。
      * 新行永远落在聊天最新位,像正在打字。
      */
     public static void streaming(UUID companion, String companionName, String partial) {
-        ChatComponent chat = Minecraft.getInstance().gui.getChat();
-        ChatComponentAccessor acc = (ChatComponentAccessor) chat;
-        removeLive(acc, companion);
-        MutableComponent line = name(companionName)
-                .append(Component.literal(partial).withColor(TEXT))
-                .append(Component.literal("▌").withColor(OWN));
-        chat.addMessage(line);
-        List<GuiMessage> all = acc.numen$allMessages();
-        if (!all.isEmpty()) {
-            LIVE.put(companion, all.get(0));   // addMessage 把新行放在 0 位
-        }
+        // 崩溃护栏:摘行手术碰的是原版聊天内部结构,出错宁可这帧不更新
+        com.dwinovo.numen.client.ui.SafeUi.run("chat-streaming", () -> {
+            ChatComponent chat = Minecraft.getInstance().gui.getChat();
+            ChatComponentAccessor acc = (ChatComponentAccessor) chat;
+            removeLive(acc, companion);
+            MutableComponent line = name(companionName)
+                    .append(Component.literal(partial).withColor(TEXT))
+                    .append(Component.literal("▌").withColor(OWN));
+            chat.addMessage(line);
+            List<GuiMessage> all = acc.numen$allMessages();
+            if (!all.isEmpty()) {
+                LIVE.put(companion, all.get(0));   // addMessage 把新行放在 0 位
+            }
+        });
     }
 
     /** 流式收尾:摘掉在飞行(定格行由调用方随后补上)。 */
     public static void streamingDone(UUID companion) {
-        ChatComponent chat = Minecraft.getInstance().gui.getChat();
-        removeLive((ChatComponentAccessor) chat, companion);
+        com.dwinovo.numen.client.ui.SafeUi.run("chat-streaming", () -> {
+            ChatComponent chat = Minecraft.getInstance().gui.getChat();
+            removeLive((ChatComponentAccessor) chat, companion);
+        });
     }
 
     /** 退出世界:清句柄(聊天框本身随会话销毁)。 */

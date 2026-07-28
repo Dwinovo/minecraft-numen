@@ -134,6 +134,14 @@ public class CompanionWheelScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
+        // 崩溃护栏:轮盘渲染出错直接关盘,不带走游戏
+        if (!com.dwinovo.numen.client.ui.SafeUi.run("wheel-render",
+                () -> renderInner(g, mouseX, mouseY))) {
+            onClose();
+        }
+    }
+
+    private void renderInner(GuiGraphics g, int mouseX, int mouseY) {
         if (entries.isEmpty()) {
             onClose();
             return;

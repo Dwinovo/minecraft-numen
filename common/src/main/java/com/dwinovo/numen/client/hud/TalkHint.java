@@ -28,6 +28,11 @@ public final class TalkHint {
     }
 
     public static void render(GuiGraphics g) {
+        // 崩溃护栏:HUD 层逐帧执行,异常绝不外抛
+        com.dwinovo.numen.client.ui.SafeUi.run("talk-hint", () -> renderInner(g));
+    }
+
+    private static void renderInner(GuiGraphics g) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null || mc.options.hideGui) {
             return;

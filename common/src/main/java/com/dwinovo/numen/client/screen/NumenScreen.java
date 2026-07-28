@@ -791,6 +791,12 @@ public final class NumenScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // 崩溃护栏:点击处理出错按"未消费"降级,面板还能继续用
+        return com.dwinovo.numen.client.ui.SafeUi.click("panel-click",
+                () -> mouseClickedInner(mouseX, mouseY, button));
+    }
+
+    private boolean mouseClickedInner(double mouseX, double mouseY, int button) {
         if (dismissPending != null) {
             return super.mouseClicked(mouseX, mouseY, button);   // modal confirm — let its Cancel/Delete buttons handle it
         }
@@ -892,6 +898,15 @@ public final class NumenScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+        // 崩溃护栏:面板渲染的任何异常都不许带走游戏——降级成一行红字
+        if (!com.dwinovo.numen.client.ui.SafeUi.run("panel-render",
+                () -> renderInner(g, mouseX, mouseY, partial))) {
+            g.drawString(font, "Numen 面板渲染出错,已兜底——详情见 latest.log",
+                    left + 10, top + 10, 0xFFFF6B6B, true);
+        }
+    }
+
+    private void renderInner(GuiGraphics g, int mouseX, int mouseY, float partial) {
         super.render(g, mouseX, mouseY, partial);
         pendingTip = null;   // recollected each frame by the section renderers
 

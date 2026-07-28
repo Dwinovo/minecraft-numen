@@ -994,6 +994,9 @@ public final class EntityAgentLoop {
         String problem = endpointProblem();
         if (problem != null) {
             Constants.LOG.warn("[numen-entity#{}] can't start turn: {}", entityUuid, problem);
+            // 配置问题不能静默:快捷键用户不开面板,聊天栏警示行是唯一出口
+            com.dwinovo.numen.client.chat.ChatLines.notice(speakerName(), truncate(problem, 160));
+            reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
             turnPause = AgentTurnPause.BLOCKED;
             return;
         }
@@ -1252,11 +1255,20 @@ public final class EntityAgentLoop {
      * holds the queue (Stop means stop). With no inputs queued, latch a recoverable failure;
      * the next owner prompt or wake-worthy event resumes it without weakening explicit Stop.
      */
+    /** 最近一次回合失败的人话原因(驱动聊天栏的警示行)。 */
+    private String lastTurnError;
+
     private void failTurnKeepQueue() {
         // The failed turn is over. Any fresh turn started now or by a later wake event gets its own
         // one-retry allowance rather than inheriting the exhausted budget from this turn.
         turnRetried = false;
         reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+        // 失败必须让主人看见——沉进日志就是"已读不回"
+        String why = lastTurnError == null ? "连接中断" : lastTurnError;
+        lastTurnError = null;
+        com.dwinovo.numen.client.chat.ChatLines.notice(speakerName(),
+                "这次没连上(" + truncate(why, 90) + ")——稍后再试一句,详情见日志");
+        com.dwinovo.numen.client.hud.TalkHint.flash(speakerName() + " 连接出错——详情看聊天栏", 3500);
         if (inbox.isEmpty()) {
             turnPause = AgentTurnPause.RECOVERABLE_FAILURE;
             return;
@@ -1300,8 +1312,9 @@ public final class EntityAgentLoop {
         }
 
         if (err != null) {
+            lastTurnError = unwrap(err);
             Constants.LOG.warn("[numen-entity#{}] LLM call failed: {}",
-                    entityUuid, unwrap(err));
+                    entityUuid, lastTurnError);
             // MID-STREAM deaths (idle watchdog, connection reset after first tokens) are
             // outside the transport's retry scope — the SDKs surface them to the caller,
             // and the caller's standard answer is: discard the partial (never entered the
@@ -1329,6 +1342,7 @@ public final class EntityAgentLoop {
         turnRetried = false;   // a response landed — the next failure gets a fresh retry
         if (res == null || res.turn() == null) {
             Constants.LOG.warn("[numen-entity#{}] LLM returned null turn", entityUuid);
+            lastTurnError = "服务端返回了空回应";
             failTurnKeepQueue();
             return;
         }

@@ -53,6 +53,13 @@ public final class SpeechBubbleRenderer {
      */
     public static void render(AbstractClientPlayer body, PoseStack poseStack,
                               MultiBufferSource buffers) {
+        // 崩溃护栏:实体渲染通道里的异常会带走整个渲染线程——这里绝不外抛
+        com.dwinovo.numen.client.ui.SafeUi.run("speech-bubble",
+                () -> renderInner(body, poseStack, buffers));
+    }
+
+    private static void renderInner(AbstractClientPlayer body, PoseStack poseStack,
+                                    MultiBufferSource buffers) {
         SpeechBubbles.Bubble bubble = SpeechBubbles.live(body.getUUID());
         if (bubble == null || body.isInvisible()) {
             return;
