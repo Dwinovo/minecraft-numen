@@ -75,3 +75,26 @@ bottom face) for wall rings; reserve hollow `box` for fully sealed shells.
   go last
 - whole structure files: `blueprint` tool (action=list first, then action=build
   at a flat anchor); liquids are always skipped
+
+## Style library (load on demand)
+
+Before building in a named style, load its reference:
+`load_skill(building_design, file="references/<style>.md")` — then follow its
+proportions/palette/recipes over the generic rules above. Available styles:
+
+- medieval_rustic — 中世纪乡村 timber houses
+- medieval_castle — 城堡 keep/walls/towers
+- japanese — 和风 low wide roofs, dark frame + white infill
+- chinese — 中式 axis symmetry, red columns, courtyards
+- nordic_viking — 北欧长屋 roof-is-the-building
+- desert_adobe — 沙漠土坯 flat roofs, thick cubes
+- gothic — 哥特 vertical, pointed arches, buttresses
+- steampunk — 蒸汽朋克 copper pipes and towers
+- elven_nature — 精灵树屋 grown curves and canopies
+- modern — 现代极简 glass planes and cantilevers
+- witch_hut — 女巫小屋 crooked stilted hut
+- lighthouse_coastal — 海岸灯塔 striped landmark tower
+
+Also `references/decoration.md` — finishing-touch recipes (windows, paths,
+gardens, chimneys, interiors); load it before the detail pass of any build.
+
