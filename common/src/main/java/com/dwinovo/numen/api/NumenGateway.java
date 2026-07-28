@@ -45,19 +45,27 @@ public final class NumenGateway {
      * seen by the model at the next tool-batch boundary (queued messages merge
      * into one user message).
      *
+     * <p>The agent loop is created on first contact: any companion on the
+     * client's roster is addressable immediately after login — no need to have
+     * opened its chat panel first. (Loops used to be panel-created only, which
+     * made every quick-key/bridge message before the first panel visit vanish
+     * with "not online".)
+     *
      * @param companion the companion entity's UUID
      * @param message   delivered exactly as given — formatting is the caller's
      *                  business
-     * @return false when the message is blank or no agent loop exists for
-     *         {@code companion} at call time (never summoned this session);
+     * @return false when the message is blank or {@code companion} is neither
+     *         on the roster nor already running a loop (unknown UUID);
      *         true means the message was handed to the client thread for
      *         enqueueing (a dead-and-awaiting-respawn body may still drop it)
      */
     public static boolean enqueue(UUID companion, String message) {
         if (companion == null || message == null || message.isBlank()) return false;
-        if (AgentLoopRegistry.get(companion).isEmpty()) return false;
+        boolean known = AgentLoopRegistry.get(companion).isPresent()
+                || com.dwinovo.numen.client.agent.NumenRoster.instance().name(companion) != null;
+        if (!known) return false;
         Minecraft.getInstance().execute(() ->
-                AgentLoopRegistry.get(companion).ifPresent(loop -> loop.submitPrompt(message)));
+                AgentLoopRegistry.getOrCreate(companion).submitPrompt(message));
         return true;
     }
 }
