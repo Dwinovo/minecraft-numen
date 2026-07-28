@@ -620,6 +620,36 @@ public class CompanionGameTests {
         });
     }
 
+    /**
+     * 空手创造爬井:1×1 黑曜石竖井(徒手黑曜石按不可破计价,四面无路),
+     * 背包全空——唯一出路是免耗材画像自动补脚手架泥土后原地垫柱。守两件事:
+     * 规划器敢想放置路线(hasThrowaway 画像位)+ 执行层自动补料与垫柱动作。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
+    public static void creative_pillar_out_empty_handed(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int y = 2; y <= 4; y++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx == 0 && dz == 0) continue;
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(3 + dx, y, 3 + dz)),
+                            Blocks.OBSIDIAN.defaultBlockState());
+                }
+            }
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 3), true);
+        BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
+        TaskRecord record = (TaskRecord) new MovementTools().moveTo(
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
+                TaskDispatch.ctx("gametest-climb", companion));
+        TaskDispatch.enqueue(companion, record, reply -> {});
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+                    "empty-handed creative companion has not pillared out");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 创造取物:take_items 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void creative_take_items(GameTestHelper helper) {
