@@ -8,9 +8,7 @@
     "MenuDataSlotsAccessor",
     "MixinServerCommonPacketListener"
   ],
-  "client": [
-    "MixinMinecraft"
-  ],
+  "client": [],
   "server": [],
   "injectors": {
     "defaultRequire": 1

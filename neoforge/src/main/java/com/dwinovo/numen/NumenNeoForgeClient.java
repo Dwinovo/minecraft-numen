@@ -42,6 +42,7 @@ public class NumenNeoForgeClient {
 
         // Mod bus — registration events.
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
+        modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
         modBus.addListener(NumenNeoForgeClient::registerReloadListeners);
         modBus.addListener(NumenNeoForgeClient::registerShaders);
         // Game bus — per-tick / world-render / chat-routing / disconnect.
@@ -72,6 +73,15 @@ public class NumenNeoForgeClient {
     static void registerKeyMappings(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {
         // G → companion roster panel (chat entry + settings/reset live in there).
         event.register(com.dwinovo.numen.client.NumenKeys.OPEN_ROSTER);
+        // V → face-to-face chat with the companion under the crosshair.
+        event.register(com.dwinovo.numen.client.NumenKeys.TALK_COMPANION);
+    }
+
+    static void registerGuiLayers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {
+        // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」。
+        event.registerAboveAll(
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "talk_hint"),
+                (g, delta) -> com.dwinovo.numen.client.hud.TalkHint.render(g));
     }
 
     static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {

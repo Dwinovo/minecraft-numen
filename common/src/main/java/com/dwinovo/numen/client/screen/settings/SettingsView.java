@@ -1738,6 +1738,12 @@ public final class SettingsView {
                 txt(g, Component.literal("✔"), x + 38 + font().width(t.label()) + 6, ry + 3, OK);
             }
         }
+        // 快捷对话提醒开关行(默认开:准星指着同伴时浮「按 [键] 对话」)
+        int hy = listY0 + UiTheme.ALL.size() * LIST_ROW + 8;
+        hoverRow(g, mouseX, mouseY, x, secW(), hy);
+        boolean hintOn = UiTheme.talkHintEnabled();
+        txt(g, Component.literal((hintOn ? "[开] " : "[关] ") + "快捷对话提醒(准星指着同伴时提示按键)"),
+                x, hy + 3, hintOn ? TXT : TXT_MUTED);
     }
 
     private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
@@ -2234,6 +2240,11 @@ public final class SettingsView {
                     host.repaintPalette();          // 屏幕的调色板常量重读新主题
                     return true;
                 }
+            }
+            int hy = listY0 + UiTheme.ALL.size() * LIST_ROW + 8;
+            if (my >= hy && my < hy + LIST_ROW) {
+                UiTheme.setTalkHint(!UiTheme.talkHintEnabled());
+                return true;
             }
         }
         if (section == Section.MCP) return mcpToggleClick(mx, my);

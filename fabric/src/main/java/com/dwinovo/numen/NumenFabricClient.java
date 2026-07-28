@@ -70,6 +70,12 @@ public class NumenFabricClient implements ClientModInitializer {
 
         // G → companion roster panel (chat entry + settings/reset live in there).
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.OPEN_ROSTER);
+        // V → face-to-face chat with the companion under the crosshair.
+        KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.TALK_COMPANION);
+
+        // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」。
+        net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(
+                (g, delta) -> com.dwinovo.numen.client.hud.TalkHint.render(g));
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {
                     com.dwinovo.numen.client.NumenKeys.tick();

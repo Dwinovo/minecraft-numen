@@ -44,6 +44,9 @@ public final class ModLanguageData {
         /** Hotkey: open the companion roster panel (shown in Controls settings). */
         public static final String KEY_OPEN_ROSTER = "key.numen.open_roster";
 
+        /** Hotkey: talk to the companion under the crosshair (face-to-face chat). */
+        public static final String KEY_TALK_COMPANION = "key.numen.talk_companion";
+
         /** Dedicated Minecraft Controls category so the hotkey gets its own "Numen" section. */
         public static final String KEY_CATEGORY_NUMEN = "key.categories.numen";
 
@@ -166,6 +169,7 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_SETTINGS_SAVED,         "Saved");
 
         adder.add(Keys.KEY_OPEN_ROSTER, "Open Companion Roster");
+        adder.add(Keys.KEY_TALK_COMPANION, "Talk to Companion");
         adder.add(Keys.KEY_CATEGORY_NUMEN, "Numen");
 
         // --- consolidated into the datagen source (persona / mcp / reasoning / tabs / status ...) ---
@@ -411,6 +415,7 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_SETTINGS_SAVED,         "已保存");
 
         adder.add(Keys.KEY_OPEN_ROSTER, "打开同伴名册");
+        adder.add(Keys.KEY_TALK_COMPANION, "与同伴对话");
 
         // --- consolidated into the datagen source (persona / mcp / reasoning / tabs / status ...) ---
         adder.add("numen.tab.chat", "对话");

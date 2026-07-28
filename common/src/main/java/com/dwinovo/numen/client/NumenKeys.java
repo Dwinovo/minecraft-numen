@@ -1,9 +1,11 @@
 package com.dwinovo.numen.client;
 
+import com.dwinovo.numen.client.chat.CompanionChatScreen;
 import com.dwinovo.numen.client.screen.NumenScreen;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.AbstractClientPlayer;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -22,6 +24,13 @@ public final class NumenKeys {
             InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_G,
             CATEGORY);
 
+    /** V — 面对面搭话:准星指着自己的同伴按下,弹极简输入框。可改键,
+     *  准星提示({@code TalkHint})会跟着显示当前绑定。 */
+    public static final KeyMapping TALK_COMPANION = new KeyMapping(
+            com.dwinovo.numen.data.ModLanguageData.Keys.KEY_TALK_COMPANION,
+            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_V,
+            CATEGORY);
+
     private NumenKeys() {}
 
     /** Per-client-tick poll; key presses only register while no screen is open. */
@@ -31,6 +40,21 @@ public final class NumenKeys {
             if (mc.player != null && mc.screen == null) {
                 NumenScreen.openWorkspace();
             }
+        }
+        while (TALK_COMPANION.consumeClick()) {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.screen != null) {
+                continue;
+            }
+            AbstractClientPlayer body = CompanionChatScreen.crosshairCompanion();
+            if (body == null) {
+                continue;   // 没指着自己的同伴:这个键不做别的事
+            }
+            String name = com.dwinovo.numen.client.agent.NumenRoster.instance().name(body.getUUID());
+            if (name == null || name.isBlank()) {
+                name = body.getScoreboardName();
+            }
+            mc.setScreen(new CompanionChatScreen(body.getUUID(), name));
         }
     }
 }
