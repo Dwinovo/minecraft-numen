@@ -183,6 +183,91 @@ public class CompanionGameTests {
         runBuildCase(helper, "gametest_mason2", rel, 2);
     }
 
+    /**
+     * 守则驱动的中世纪小屋(12x10x8):形状打底(圆石地基、橡木板空心墙、逐层
+     * 收分的实心屋顶层——山墙天然填实;出檐待仰放站位落地后恢复)+ 精确格修饰(原木角柱 axis=y、
+     * 南面 1x2 门洞、玻璃窗、屋内火把),后写覆盖先写——与 build 工具的混排语义
+     * 完全一致,免材料模式。
+     */
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_heavy")
+    public static void build_medieval_cottage(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
+        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+                "gametest_carpenter", UUID.randomUUID(), level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        // 免材料只免建材;寻路上墙上顶的脚手架是真实放置,得有料
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+
+        java.util.function.BiFunction<String, List<BlockPos>, List<BuildTaskRecord.Target>> vol =
+                (id, cells) -> {
+                    var item = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                            .get(net.minecraft.resources.ResourceLocation.parse(id));
+                    var block = item instanceof net.minecraft.world.item.BlockItem bi
+                            ? bi.getBlock() : Blocks.AIR;
+                    List<BuildTaskRecord.Target> out = new ArrayList<>();
+                    for (BlockPos rel : cells) {
+                        out.add(new BuildTaskRecord.Target(block, item, helper.absolutePos(rel),
+                                id, null, null, null));
+                    }
+                    return out;
+                };
+        var shape = com.dwinovo.numen.core.tools.BuildTool.class;   // shapeCells 静态引用可读性别名
+
+        List<BuildTaskRecord.Target> ordered = new ArrayList<>();
+        // 1) 地基:圆石 12x1x10
+        ordered.addAll(vol.apply("minecraft:cobblestone",
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 4, 2, 5, 15, 2, 14, null, null)));
+        // 2) 墙体:橡木板空心盒 12x4x10(y3-6,顶面自成阁楼板)
+        ordered.addAll(vol.apply("minecraft:oak_planks",
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", true, 4, 3, 5, 15, 6, 14, null, null)));
+        // 3) 屋顶:x 向每层收 2、z 向出檐 1 的实心层——山墙同步填实
+        ordered.addAll(vol.apply("minecraft:oak_planks",
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 4, 7, 5, 15, 7, 14, null, null)));
+        ordered.addAll(vol.apply("minecraft:oak_planks",
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 5, 8, 5, 14, 8, 14, null, null)));
+        ordered.addAll(vol.apply("minecraft:oak_planks",
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 7, 9, 5, 12, 9, 14, null, null)));
+        ordered.addAll(vol.apply("minecraft:oak_planks",
+                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 9, 10, 5, 10, 10, 14, null, null)));
+        // 4) 细节(后写覆盖先写):四角原木柱、南门洞 1x2、四扇玻璃窗、屋内火把
+        for (int[] c : new int[][]{{4, 5}, {15, 5}, {4, 14}, {15, 14}}) {
+            for (int y = 3; y <= 6; y++) {
+                ordered.add(new BuildTaskRecord.Target(Blocks.OAK_LOG, Items.OAK_LOG,
+                        helper.absolutePos(new BlockPos(c[0], y, c[1])), "oak_log",
+                        null, net.minecraft.core.Direction.Axis.Y, null));
+            }
+        }
+        ordered.addAll(vol.apply("minecraft:air",
+                List.of(new BlockPos(9, 3, 5), new BlockPos(9, 4, 5))));
+        ordered.addAll(vol.apply("minecraft:glass_pane",
+                List.of(new BlockPos(4, 4, 8), new BlockPos(4, 4, 11),
+                        new BlockPos(15, 4, 8), new BlockPos(15, 4, 11))));
+        ordered.addAll(vol.apply("minecraft:torch", List.of(new BlockPos(9, 3, 9))));
+
+        // 与 build 工具同语义:同格后写覆盖先写
+        java.util.LinkedHashMap<Long, BuildTaskRecord.Target> byPos = new java.util.LinkedHashMap<>();
+        for (BuildTaskRecord.Target t : ordered) {
+            byPos.put(t.pos().asLong(), t);
+        }
+        List<BuildTaskRecord.Target> targets = new ArrayList<>(byPos.values());
+
+        var ctx = TaskDispatch.ctx("gametest-cottage", companion);
+        long deadline = ctx.deadline(Math.max(2400L, targets.size() * 400L));
+        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
+                targets, true, 0, false), reply -> {});
+
+        helper.succeedWhen(() -> {
+            for (BuildTaskRecord.Target target : targets) {
+                helper.assertTrue(target.matches(level.getBlockState(target.pos())),
+                        "cottage cell mismatch at " + target.pos().toShortString()
+                                + " want " + target.desiredState());
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     // ==================== 蓝图用例 ====================
 
     /** 蓝图批次前置:和平难度 + 正午。 */
