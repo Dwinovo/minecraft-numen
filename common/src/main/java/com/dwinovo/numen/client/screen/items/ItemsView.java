@@ -14,7 +14,6 @@ import net.minecraft.client.resources.language.I18n;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.GameType;
 
 import java.util.List;
 import java.util.UUID;
@@ -45,8 +44,6 @@ public final class ItemsView {
     private static final int TOP_H = 116;                 // 上半(立绘/储物)
     private static final int AGENT_H = 46;                // Agent 状态带
     private static final int COMP_H = TOP_H + 6 + AGENT_H;
-    private static final int CHIP_W = 46;
-    private static final int CHIP_H = 14;
 
     // 原版 HUD 贴图:心与鸡腿
     private static final ResourceLocation HEART_BG = ResourceLocation.withDefaultNamespace("hud/heart/container");
@@ -74,11 +71,11 @@ public final class ItemsView {
         // ---- 左块:盔甲柱(纵向,原版语序头→脚+副手)+ 立绘卡 ----
         int armorTop = cTop + (TOP_H - 5 * SLOT) / 2;
         for (int i = 0; i < ARMOR.length; i++) {
-            slot(g, startX, armorTop + i * SLOT);
+            slot(g, th, startX, armorTop + i * SLOT);
             if (e != null) collect(g, font, e.getItemBySlot(ARMOR[i]),
                     startX + 1, armorTop + i * SLOT + 1, mouseX, mouseY, hover);
         }
-        slot(g, startX, armorTop + 4 * SLOT);
+        slot(g, th, startX, armorTop + 4 * SLOT);
         if (e != null) collect(g, font, e.getItemBySlot(EquipmentSlot.OFFHAND),
                 startX + 1, armorTop + 4 * SLOT + 1, mouseX, mouseY, hover);
 
@@ -99,13 +96,13 @@ public final class ItemsView {
 
         for (int i = 0; i < 4; i++) {
             int cx = rightX + 96 + (i % 2) * SLOT, cy = cTop + (i / 2) * SLOT;
-            slot(g, cx, cy);
+            slot(g, th, cx, cy);
             collect(g, font, i < craft.size() ? craft.get(i) : ItemStack.EMPTY,
                     cx + 1, cy + 1, mouseX, mouseY, hover);
         }
         Nb.text(g, font, "→", rightX + 96 + 38, cTop + 13, th.faint());
         int resX = rightX + RIGHT_W - SLOT, resY = cTop + 9;
-        slot(g, resX, resY);
+        slot(g, th, resX, resY);
         collect(g, font, craft.size() > 4 ? craft.get(4) : ItemStack.EMPTY,
                 resX + 1, resY + 1, mouseX, mouseY, hover);
 
@@ -119,13 +116,13 @@ public final class ItemsView {
             for (int i = 9; i < 36; i++) {
                 int col = (i - 9) % 9, row = (i - 9) / 9;
                 int x = rightX + col * SLOT, y = storeY + row * SLOT;
-                slot(g, x, y);
+                slot(g, th, x, y);
                 collect(g, font, items.get(i), x + 1, y + 1, mouseX, mouseY, hover);
             }
             int hotbarY = storeY + 3 * SLOT + 4;
             for (int i = 0; i < 9; i++) {
                 int x = rightX + i * SLOT;
-                slot(g, x, hotbarY);
+                slot(g, th, x, hotbarY);
                 collect(g, font, items.get(i), x + 1, hotbarY + 1, mouseX, mouseY, hover);
             }
         }
@@ -189,62 +186,14 @@ public final class ItemsView {
             Nb.text(g, font, "○ 尚未对话", c2, ly, th.faint());
         }
 
-        // 模式芯片:Agent 带右上角,点击在生存/创造间切换
-        int[] rc = modeChipRect(left, top, panelW, panelH, headerH);
-        boolean chipHover = mouseX >= rc[0] && mouseX < rc[0] + rc[2]
-                && mouseY >= rc[1] && mouseY < rc[1] + rc[3];
-        GameType mode = gameModeOf(uuid);
-        String modeLabel = mode == null ? "…" : (mode == GameType.CREATIVE ? "创造" : "生存");
-        RoundRect.card(g, rc[0], rc[1], rc[0] + rc[2], rc[1] + rc[3], 3,
-                th.field(), chipHover ? th.cta() : th.surfaceBorder());
-        Nb.text(g, font, modeLabel, rc[0] + (rc[2] - font.width(modeLabel)) / 2, rc[1] + 3, th.text());
-
         tooltipLast(g, font, hover, mouseX, mouseY);
     }
 
-    /**
-     * 模式芯片点击:以主人身份执行原版 {@code /gamemode <模式> <同伴名>}
-     * ——权限判定与成败反馈全部交给原版(没权限时原版红字回话),这里
-     * 零权限代码,天然兼容各类权限插件。生存 ↔ 创造往返切换。
-     *
-     * @return true = 点在芯片上(无论命令结果如何)
-     */
-    public static boolean click(double mouseX, double mouseY, UUID uuid, String companionName,
-                                int left, int top, int panelW, int panelH, int headerH) {
-        int[] rc = modeChipRect(left, top, panelW, panelH, headerH);
-        if (mouseX < rc[0] || mouseX >= rc[0] + rc[2] || mouseY < rc[1] || mouseY >= rc[1] + rc[3]) {
-            return false;
-        }
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.getConnection() == null
-                || companionName == null || companionName.isBlank()) {
-            return true;
-        }
-        GameType cur = gameModeOf(uuid);
-        String next = cur == GameType.CREATIVE ? "survival" : "creative";
-        mc.player.connection.sendCommand("gamemode " + next + " " + companionName);
-        return true;
-    }
-
-    /** Agent 带右上角的模式芯片矩形 {x, y, w, h}(与 render 同一套布局推导)。 */
-    private static int[] modeChipRect(int left, int top, int panelW, int panelH, int headerH) {
-        int startX = left + (panelW - COMP_W) / 2;
-        int cTop = top + headerH + (panelH - headerH - COMP_H) / 2;
-        int aY = cTop + TOP_H + 6;
-        return new int[]{startX + COMP_W - CHIP_W - 5, aY + 4, CHIP_W, CHIP_H};
-    }
-
-    /** 同伴当前游戏模式:tab 列表的 PlayerInfo 白拿(服务端改模式时原版自动同步)。 */
-    private static GameType gameModeOf(UUID uuid) {
-        var conn = Minecraft.getInstance().getConnection();
-        var info = conn == null ? null : conn.getPlayerInfo(uuid);
-        return info == null ? null : info.getGameMode();
-    }
-
-    /** 统一深色凹槽:半透黑两层(边深内浅),任何主题下都读得出格子。 */
-    private static void slot(GuiGraphics g, int x, int y) {
-        g.fill(x, y, x + SLOT, y + SLOT, 0xA8000000);
-        g.fill(x + 1, y + 1, x + SLOT - 1, y + SLOT - 1, 0x5E000000);
+    /** 统一凹槽:从当前主题的地色向边框色压暗两档(边更深、内浅一档)——
+     *  深色但同一家谱,切主题跟着换装,不是生硬的半透黑。 */
+    private static void slot(GuiGraphics g, UiTheme th, int x, int y) {
+        g.fill(x, y, x + SLOT, y + SLOT, UiTheme.mix(th.ground(), th.border(), 0.62f));
+        g.fill(x + 1, y + 1, x + SLOT - 1, y + SLOT - 1, UiTheme.mix(th.ground(), th.border(), 0.34f));
     }
 
     /** A row of segmented icons for a 0..max stat (2 units per icon): vanilla HUD sprites. */
