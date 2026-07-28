@@ -75,6 +75,9 @@ public final class NumenToasts {
 
     /** Expire toast lines, then poll loops for new assistant turns / busy state. */
     public static void tick() {
+        if (!UiTheme.replyHudEnabled()) {
+            return;   // HUD 关(默认):回复走聊天框,浮窗整套不采集不渲染
+        }
         long now = System.currentTimeMillis();
         STATUS.values().forEach(s -> s.lines.removeIf(l -> now - l.bornMs() > LINE_LIFE_MS));
 
@@ -124,6 +127,7 @@ public final class NumenToasts {
     }
 
     public static void render(GuiGraphics g) {
+        if (!UiTheme.replyHudEnabled()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen instanceof NumenScreen) return;
         List<NumenRoster.Entry> entries = new ArrayList<>(NumenRoster.instance().entries());

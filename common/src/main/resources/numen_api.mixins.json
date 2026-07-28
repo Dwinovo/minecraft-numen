@@ -9,6 +9,7 @@
     "MixinServerCommonPacketListener"
   ],
   "client": [
+    "MixinChatScreen",
     "MixinMinecraft"
   ],
   "server": [],

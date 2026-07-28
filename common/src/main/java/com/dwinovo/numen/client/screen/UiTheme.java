@@ -99,9 +99,21 @@ public record UiTheme(
         return 0xFF000000 | (r << 16) | (gr << 8) | bl;
     }
 
-    // ---- persistence: config/numen/ui.json {"theme": "<id>"} ----
+    // ---- persistence: config/numen/ui.json {"theme": "<id>", "replyHud": bool} ----
 
     private static java.nio.file.Path file;
+    /** 同伴回复的悬浮 HUD 开关。默认关——回复走聊天框,想要浮窗去设置里开。 */
+    private static boolean replyHud = false;
+
+    public static boolean replyHudEnabled() {
+        return replyHud;
+    }
+
+    /** 设置入口:切换 HUD 开关并落盘。 */
+    public static void setReplyHud(boolean enabled) {
+        replyHud = enabled;
+        persist();
+    }
 
     /** Load the saved pick (client init). Missing/broken file keeps the default. */
     public static void init(java.nio.file.Path numenConfigDir) {
@@ -111,6 +123,7 @@ public record UiTheme(
                 var o = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(file))
                         .getAsJsonObject();
                 if (o.has("theme")) set(o.get("theme").getAsString());
+                if (o.has("replyHud")) replyHud = o.get("replyHud").getAsBoolean();
             }
         } catch (Exception e) {
             com.dwinovo.numen.Constants.LOG.warn("ui.json unreadable — using default theme", e);
@@ -120,14 +133,19 @@ public record UiTheme(
     /** The picker's entry point: switch AND save. */
     public static void select(String id) {
         set(id);
+        persist();
+    }
+
+    private static void persist() {
         if (file == null) return;
         try {
             java.nio.file.Files.createDirectories(file.getParent());
             var o = new com.google.gson.JsonObject();
             o.addProperty("theme", current.id());
+            o.addProperty("replyHud", replyHud);
             java.nio.file.Files.writeString(file, o.toString());
         } catch (Exception e) {
-            com.dwinovo.numen.Constants.LOG.warn("ui.json write failed — theme not persisted", e);
+            com.dwinovo.numen.Constants.LOG.warn("ui.json write failed — prefs not persisted", e);
         }
     }
 }

@@ -1291,6 +1291,18 @@ public final class EntityAgentLoop {
             if (!turn.content().isEmpty()) {
                 Constants.LOG.info("[numen-entity#{}] assistant (final): {}",
                         entityUuid, turn.content());
+                // 回复顺带进聊天框(与气泡同一套显示过滤):聊天是日常主通道,
+                // G 面板与 HUD 都是可选项
+                String shown = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
+                        .filterAssistantMessage(turn.content());
+                if (!shown.isBlank()) {
+                    String who = personaName != null && !personaName.isBlank()
+                            ? personaName
+                            : String.valueOf(com.dwinovo.numen.client.agent.NumenRoster.instance()
+                                    .name(entityUuid));
+                    net.minecraft.client.Minecraft.getInstance().gui.getChat().addMessage(
+                            net.minecraft.network.chat.Component.literal("<" + who + "> " + shown));
+                }
             } else {
                 Constants.LOG.info("[numen-entity#{}] assistant (final, empty content)", entityUuid);
             }
