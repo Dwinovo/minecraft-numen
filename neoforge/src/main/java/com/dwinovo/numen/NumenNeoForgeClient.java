@@ -50,6 +50,17 @@ public class NumenNeoForgeClient {
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientChat);
+        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onMovementInput);
+    }
+
+    static void onMovementInput(net.neoforged.neoforge.client.event.MovementInputUpdateEvent event) {
+        // 同伴转盘开着时不断步:NeoForge 的按键冲突上下文会把游戏内按键在
+        // 界面期间读成 false,这里在输入采样后按物理按键状态改写移动输入。
+        if (Minecraft.getInstance().screen
+                instanceof com.dwinovo.numen.client.chat.CompanionWheelScreen) {
+            com.dwinovo.numen.client.chat.CompanionWheelScreen.feedMovement(
+                    event.getInput(), event.getEntity());
+        }
     }
 
     static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {

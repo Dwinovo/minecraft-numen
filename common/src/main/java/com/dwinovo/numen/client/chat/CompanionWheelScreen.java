@@ -105,6 +105,37 @@ public class CompanionWheelScreen extends Screen {
         return InputConstants.isKeyDown(window, key.getValue());
     }
 
+    /**
+     * NeoForge 专用的第二条放行通路:它给 {@code KeyMapping.isDown()} 打了
+     * 冲突上下文补丁——界面开着时游戏内按键一律读成 false,上面 tick()
+     * 喂进去的状态过不了这道闸。于是在输入采样后的
+     * {@code MovementInputUpdateEvent} 里直接改写玩家移动输入(加载器
+     * 入口判断转盘在开时调这里)。Fabric 无此补丁,tick() 那条已够。
+     */
+    public static void feedMovement(net.minecraft.client.player.Input input,
+                                    net.minecraft.world.entity.player.Player player) {
+        Minecraft mc = Minecraft.getInstance();
+        long window = mc.getWindow().getWindow();
+        boolean up = physicallyDown(window, mc.options.keyUp);
+        boolean down = physicallyDown(window, mc.options.keyDown);
+        boolean left = physicallyDown(window, mc.options.keyLeft);
+        boolean right = physicallyDown(window, mc.options.keyRight);
+        input.up = up;
+        input.down = down;
+        input.left = left;
+        input.right = right;
+        input.forwardImpulse = (up ? 1f : 0f) - (down ? 1f : 0f);
+        input.leftImpulse = (left ? 1f : 0f) - (right ? 1f : 0f);
+        input.jumping = physicallyDown(window, mc.options.keyJump);
+        input.shiftKeyDown = physicallyDown(window, mc.options.keyShift);
+        if (input.shiftKeyDown) {
+            float f = (float) player.getAttributeValue(
+                    net.minecraft.world.entity.ai.attributes.Attributes.SNEAKING_SPEED);
+            input.forwardImpulse *= f;
+            input.leftImpulse *= f;
+        }
+    }
+
     private float step() {
         return 360f / entries.size();
     }
