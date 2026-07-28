@@ -120,7 +120,11 @@ public class CalculationContext {
         this.sacred = sacred;
         this.deniedPlace = deniedPlace;
         this.toolSet = new ToolSet(player);
-        this.hasThrowaway = settings.allowPlace && hasGenericThrowaway(player, settings);
+        // 免耗材画像(创造)恒有耗材:执行层选料时会自动补一组(伸手进创造
+        // 物品栏的代码版),规划器因此敢想所有需要垫方块的路线——不然空手
+        // 创造同伴会挖坑出不来(离目标 2 格报 NO-PATH)。
+        this.hasThrowaway = settings.allowPlace && (hasGenericThrowaway(player, settings)
+                || com.dwinovo.numen.core.task.WorkProfile.of(player).freeMaterials());
         this.hasWaterBucket = settings.allowWaterBucketFall
                 && hotbarHasWaterBucket(player)
                 && player.level().dimension() != Level.NETHER;

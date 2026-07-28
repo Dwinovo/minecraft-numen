@@ -208,6 +208,19 @@ final class MovementPlacement {
         }
         return selectThrowaway(player, select);
     }
+    /** 全背包+副手里是否已有任一耗材(自动补货前的查重)。 */
+    private static boolean hasAnyThrowaway(ServerPlayer player, List<Item> acceptable) {
+        Inventory inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (!s.isEmpty() && acceptable.contains(s.getItem())) {
+                return true;
+            }
+        }
+        ItemStack off = player.getOffhandItem();
+        return !off.isEmpty() && acceptable.contains(off.getItem());
+    }
+
     /** 方块碰撞形状上按 (mx,my,mz) 比例取点;空形状退回满格方块。 */
     private static Vec3 shapePoint(Level level, BlockPos pos, double mx, double my, double mz) {
         net.minecraft.world.phys.shapes.VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
@@ -235,6 +248,17 @@ final class MovementPlacement {
         List<Item> acceptable = NavSettings.get().acceptableThrowawayItems();
         Inventory inventory = player.getInventory();
         boolean allowInventory = NavSettings.get().allowInventory;
+        // 免耗材画像的"伸手进创造物品栏":背包连一块耗材都没有时自动补一组
+        // 泥土——原版创造玩家放置也得先手持方块,真人是从创造栏抓,假玩家
+        // 没有那个 GUI,这里就是那只手。生存画像不进此分支。
+        if (player.hasInfiniteMaterials() && !hasAnyThrowaway(player, acceptable)) {
+            ItemStack restock = new ItemStack(net.minecraft.world.item.Items.DIRT, 64);
+            if (!inventory.add(restock)) {
+                return false;   // 背包满还没耗材:罕见,按无料处理
+            }
+            com.dwinovo.numen.core.Constants.LOG.debug(
+                    "[numen-place] 免耗材画像自动补脚手架泥土 ×64");
+        }
         for (Item item : acceptable) {
             for (int i = 0; i < 9; i++) {
                 ItemStack stack = inventory.getItem(i);
