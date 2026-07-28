@@ -9,10 +9,16 @@ import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
 import com.dwinovo.numen.client.ui.RoundRect;
 
+import com.mojang.blaze3d.platform.InputConstants;
+
+import net.minecraft.client.KeyMapping;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+
+import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
 
@@ -66,6 +72,37 @@ public class CompanionWheelScreen extends Screen {
         for (int i = 0; i < sizePx.length; i++) {
             sizePx[i] = i == index ? AVATAR + SELECTED_PX : AVATAR;
         }
+    }
+
+    /**
+     * 移动放行:开屏会清空并接管按键,但奔跑不该为选人断步——每 tick 把
+     * 移动七键(前后左右/跳/潜行/疾跑)的物理按下状态原样喂回
+     * {@code KeyMapping},{@code KeyboardInput} 照常读到。直接查 GLFW
+     * 而非依赖事件,开盘前就按住的 W 也无缝接上。鼠标视角仍锁定(被
+     * 转盘征用),这是武器轮盘式的标准取舍。
+     */
+    @Override
+    public void tick() {
+        Minecraft mc = Minecraft.getInstance();
+        long window = mc.getWindow().getWindow();
+        KeyMapping[] movement = {
+                mc.options.keyUp, mc.options.keyDown, mc.options.keyLeft, mc.options.keyRight,
+                mc.options.keyJump, mc.options.keyShift, mc.options.keySprint,
+        };
+        for (KeyMapping k : movement) {
+            k.setDown(physicallyDown(window, k));
+        }
+    }
+
+    private static boolean physicallyDown(long window, KeyMapping k) {
+        if (k.isUnbound()) {
+            return false;
+        }
+        InputConstants.Key key = InputConstants.getKey(k.saveString());
+        if (key.getType() == InputConstants.Type.MOUSE) {
+            return GLFW.glfwGetMouseButton(window, key.getValue()) == GLFW.GLFW_PRESS;
+        }
+        return InputConstants.isKeyDown(window, key.getValue());
     }
 
     private float step() {
