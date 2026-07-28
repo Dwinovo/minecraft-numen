@@ -16,6 +16,8 @@ import net.minecraft.client.Minecraft;
 public final class QuickVoice {
 
     private static boolean recording;
+    /** 松开到转写结果落地之间的等待态(批量后端要跑一趟 HTTP)。 */
+    private static boolean transcribing;
     private static NumenRoster.Entry target;
     private static String livePartial = "";
     private static String notice;
@@ -39,17 +41,18 @@ public final class QuickVoice {
         boolean ok = VoiceInputController.start(Services.CONFIG,
                 partial -> livePartial = partial,
                 QuickVoice::deliver,
-                status -> { recording = false; flash(status); });
+                status -> { recording = false; transcribing = false; flash(status); });
         recording = ok;
         if (!ok) {
             target = null;
         }
     }
 
-    /** 按键松开:停采集,最终转写异步回 {@link #deliver}。 */
+    /** 按键松开:停采集,进入转写等待态,最终转写异步回 {@link #deliver}。 */
     public static void release() {
         if (recording) {
             recording = false;
+            transcribing = true;
             VoiceInputController.stop();
         }
     }
@@ -59,6 +62,7 @@ public final class QuickVoice {
         target = null;
         livePartial = "";
         recording = false;
+        transcribing = false;
         String said = text == null ? "" : text.trim();
         if (t == null || said.isEmpty()) {
             if (said.isEmpty()) flash("没听清,再试一次");
@@ -79,11 +83,16 @@ public final class QuickVoice {
         return recording;
     }
 
-    /** 提示层文案:录音时的实时状态,或短暂的错误提示;没有就 null。 */
+    /** 提示层文案:录音/转写中的实时状态,或短暂的错误提示;没有就 null。 */
     public static String hudLine() {
         if (recording && target != null) {
+            // 脉冲圆点:让"正在听"看起来活着
+            String dot = System.currentTimeMillis() / 500 % 2 == 0 ? "●" : "○";
             String live = livePartial.isBlank() ? "" : ":" + livePartial;
-            return "● 正在听" + live + "  (松开发给 " + target.name() + ")";
+            return dot + " 正在听" + live + "  (松开发给 " + target.name() + ")";
+        }
+        if (transcribing && target != null) {
+            return "◌ 转写中…  (马上发给 " + target.name() + ")";
         }
         if (notice != null && System.currentTimeMillis() < noticeUntilMs) {
             return notice;
@@ -98,6 +107,7 @@ public final class QuickVoice {
 
     public static void clear() {
         recording = false;
+        transcribing = false;
         target = null;
         livePartial = "";
         notice = null;
