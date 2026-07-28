@@ -18,6 +18,15 @@ public final class TalkHint {
 
     private TalkHint() {}
 
+    /** 短暂的教学/反馈行(如转盘关盘后的「按 [键] 对话」),盖过常规提示。 */
+    private static String flashText;
+    private static long flashUntilMs;
+
+    public static void flash(String text, long lifeMs) {
+        flashText = text;
+        flashUntilMs = System.currentTimeMillis() + lifeMs;
+    }
+
     public static void render(GuiGraphics g) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null || mc.options.hideGui) {
@@ -27,6 +36,10 @@ public final class TalkHint {
         String voiceLine = com.dwinovo.numen.client.chat.QuickVoice.hudLine();
         if (voiceLine != null) {
             draw(g, mc, voiceLine, 0xFFFFC862);
+            return;
+        }
+        if (flashText != null && System.currentTimeMillis() < flashUntilMs) {
+            draw(g, mc, flashText, 0xFFFFE9B0);
             return;
         }
         if (!UiTheme.talkHintEnabled()) {

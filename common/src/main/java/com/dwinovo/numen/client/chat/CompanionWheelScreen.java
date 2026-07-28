@@ -1,7 +1,9 @@
 package com.dwinovo.numen.client.chat;
 
+import com.dwinovo.numen.client.NumenKeys;
 import com.dwinovo.numen.client.agent.KnownSkins;
 import com.dwinovo.numen.client.agent.NumenRoster;
+import com.dwinovo.numen.client.hud.TalkHint;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
@@ -15,30 +17,38 @@ import net.minecraft.network.chat.Component;
 import java.util.List;
 
 /**
- * 同伴轮盘:头像围一圈,滚轮轮转、鼠标指向、点击都能选,选中者放大带
- * 呼吸,圈顶浮「当前选中 名字」。按住轮盘键打开、松开即确认(对讲机
- * 手感);点击立即确认;Esc 放弃不改选。选中结果写进
- * {@link SelectedCompanion},此后快捷对话/快捷语音都发给这一位。
+ * 同伴转盘:抽奖转盘的操作模型——顶槽固定(金环 + 指针 ▼),滚轮转动
+ * 整个轮盘把人送进顶槽,点击别处的头像沿最短路径转过去,点击顶槽头像
+ * 确认,松开轮盘键也确认(对讲机手感),Esc 放弃不改选。悬浮任意头像
+ * 在光标旁浮名字;确认关盘后准星下方闪一行「按 [键] 对话 · 按住 [键]
+ * 说话」教学下一步。
  *
- * <p>动效与 GUI 同一套语汇:开盘从圆心 easeOutCubic 弹出,选中/落选的
- * 尺寸用帧率无关的指数趋近({@link Anim#approach})柔滑过渡,呼吸是
- * 浮点正弦叠在 pose 缩放上——没有任何整数跳格。
+ * <p>动效:旋转角走欠阻尼弹簧(拨过去带一丝回弹,拨盘手感),顶槽
+ * 住客的尺寸用帧率无关指数趋近柔滑放大,呼吸是慢周期浮点正弦叠在
+ * pose 缩放上;开盘 170ms 从圆心 easeOutCubic 弹出。
  */
 public class CompanionWheelScreen extends Screen {
 
     private static final int AVATAR = 26;             // 基础头像尺寸(px)
-    private static final float SELECTED_PX = 7f;      // 选中态的目标增量(px)
-    private static final float APPROACH_RATE = 16f;   // 尺寸趋近速率(与聊天滚动同族)
-    private static final float BREATH_AMP = 0.035f;   // 呼吸振幅(选中态缩放比)
+    private static final float SELECTED_PX = 7f;      // 顶槽住客的目标增量(px)
+    private static final float APPROACH_RATE = 16f;   // 尺寸趋近速率
+    private static final float BREATH_AMP = 0.035f;   // 呼吸振幅(缩放比)
     private static final long BREATH_PERIOD_MS = 2600;
     private static final long OPEN_MS = 170;          // 开盘弹出时长
-    private static final int DEAD_ZONE = 18;          // 圆心附近不改选中
+    private static final float SPRING_K = 260f;       // 旋转弹簧刚度
+    private static final float SPRING_DAMP = 0.78f;   // 阻尼比(<1:一丝回弹)
+    private static final long FLASH_MS = 3200;        // 关盘教学提示时长
 
     private final List<NumenRoster.Entry> entries;
-    private final float[] sizePx;                     // 每席位的动画中尺寸
+    private final float[] sizePx;
     private final long openedAtMs = System.currentTimeMillis();
     private long lastFrameNanos = System.nanoTime();
+
+    /** 顶槽目标(entries 下标);旋转角朝它的席位角趋近。 */
     private int index;
+    /** 轮盘当前旋转角(度)与角速度——欠阻尼弹簧驱动。 */
+    private float rotDeg;
+    private float rotVel;
 
     public CompanionWheelScreen() {
         super(Component.literal("Numen companion wheel"));
@@ -51,15 +61,29 @@ public class CompanionWheelScreen extends Screen {
                 break;
             }
         }
-        // 初始就带着选中差,开盘瞬间不闪变
+        this.rotDeg = targetRotFor(index);   // 开盘即对位,不空转
         this.sizePx = new float[entries.size()];
         for (int i = 0; i < sizePx.length; i++) {
             sizePx[i] = i == index ? AVATAR + SELECTED_PX : AVATAR;
         }
     }
 
+    private float step() {
+        return 360f / entries.size();
+    }
+
+    /** 让 i 号坐进顶槽所需的旋转角。 */
+    private float targetRotFor(int i) {
+        return -i * step();
+    }
+
     private int radius() {
         return Math.clamp(Math.min(this.width, this.height) / 5, 56, 104);
+    }
+
+    /** i 号此刻的方位角(弧度,顶槽为 -90°)。 */
+    private double slotAngle(int i) {
+        return Math.toRadians(-90 + i * step() + rotDeg);
     }
 
     @Override
@@ -70,39 +94,52 @@ public class CompanionWheelScreen extends Screen {
         }
         long nowMs = System.currentTimeMillis();
         long nowNanos = System.nanoTime();
-        float dt = Math.min((nowNanos - lastFrameNanos) / 1.0e9f, 0.1f);
+        float dt = Math.min((nowNanos - lastFrameNanos) / 1.0e9f, 0.05f);
         lastFrameNanos = nowNanos;
-        // 开盘进度:圆环半径与头像尺寸一起从圆心弹出,快起柔收
         float open = Anim.easeOutCubic((nowMs - openedAtMs) / (float) OPEN_MS);
 
-        // 背景轻压随开盘淡入,聚焦轮盘;不模糊——世界还在那儿
+        // 旋转角:欠阻尼弹簧追目标——拨过去,末端一丝回弹
+        float target = rotDeg + wrapDeg(targetRotFor(index) - rotDeg);
+        float acc = SPRING_K * (target - rotDeg)
+                - 2f * (float) Math.sqrt(SPRING_K) * SPRING_DAMP * rotVel;
+        rotVel += acc * dt;
+        rotDeg += rotVel * dt;
+        if (Math.abs(target - rotDeg) < 0.05f && Math.abs(rotVel) < 0.5f) {
+            rotDeg = target;
+            rotVel = 0f;
+        }
+
         g.fill(0, 0, this.width, this.height, (int) (0x48 * open) << 24);
 
         int cx = this.width / 2;
         int cy = this.height / 2;
         int r = radius();
         float rNow = r * open;
-
-        // 鼠标指向选中:圆心死区外,按方位角就近吸附
-        double dx = mouseX - cx;
-        double dy = mouseY - cy;
-        if (dx * dx + dy * dy > (double) DEAD_ZONE * DEAD_ZONE) {
-            index = nearestSlot(Math.atan2(dy, dx));
-        }
-
         UiTheme th = UiTheme.current();
+
+        // 顶槽底座:固定的金环 + 指针 ▼(先画,头像转进来压在上面)
+        int topX = cx;
+        int topY = cy - Math.round(rNow);
+        int ringHalf = AVATAR / 2 + 5;
+        RoundRect.fill(g, topX - ringHalf, topY - ringHalf, topX + ringHalf, topY + ringHalf, 5,
+                th.cta());
+        Nb.text(g, this.font, "▼", topX - this.font.width("▼") / 2,
+                topY - ringHalf - 12, th.cta());
+
+        int hovered = -1;
         for (int i = 0; i < entries.size(); i++) {
-            boolean sel = i == index;
-            // 选中/落选:指数趋近目标尺寸——快速跟手,末端自然缓住
-            sizePx[i] = Anim.approach(sizePx[i], sel ? AVATAR + SELECTED_PX : AVATAR,
+            boolean atTop = i == index;
+            sizePx[i] = Anim.approach(sizePx[i], atTop ? AVATAR + SELECTED_PX : AVATAR,
                     APPROACH_RATE, dt);
 
             double ang = slotAngle(i);
             float ax = cx + (float) (Math.cos(ang) * rNow);
             float ay = cy + (float) (Math.sin(ang) * rNow);
+            if (hitAvatar(mouseX, mouseY, ax, ay)) {
+                hovered = i;
+            }
 
-            // 呼吸:慢周期浮点正弦,只叠在选中者的缩放上
-            float breath = sel
+            float breath = atTop
                     ? 1f + BREATH_AMP * (0.5f + 0.5f * (float) Math.sin(
                             nowMs % BREATH_PERIOD_MS / (double) BREATH_PERIOD_MS * Math.PI * 2))
                     : 1f;
@@ -112,47 +149,42 @@ public class CompanionWheelScreen extends Screen {
             g.pose().translate(ax, ay, 0);
             g.pose().scale(scale, scale, 1f);
             int half = AVATAR / 2;
-            RoundRect.fill(g, -half - 2, -half - 2, half + 2, half + 2, 4,
-                    sel ? th.cta() : th.border());
+            if (!atTop) {
+                RoundRect.fill(g, -half - 2, -half - 2, half + 2, half + 2, 4, th.border());
+            }
             PlayerFaceRenderer.draw(g, KnownSkins.of(entries.get(i).uuid()),
                     -half, -half, AVATAR);
             g.pose().popPose();
         }
 
-        // 圈顶名牌:当前选中 xxx(随开盘一起立起)
         if (open > 0.4f) {
+            // 顶槽名牌:当前选中 xxx
             String label = "当前选中  " + entries.get(index).name();
             int tw = this.font.width(label);
             int nx = cx - tw / 2;
-            int ny = cy - r - 40;
+            int ny = cy - r - 46;
             RoundRect.card(g, nx - 10, ny - 6, nx + tw + 10, ny + 14, 4, th.aiFill(), th.border());
             Nb.text(g, this.font, label, nx, ny, th.text());
 
-            String hint = "滚轮/指向选择 · 点击或松开确认 · Esc 取消";
+            String hint = "滚轮转盘 · 点击送到顶槽 · 点顶槽或松开确认 · Esc 取消";
             Nb.text(g, this.font, hint, cx - this.font.width(hint) / 2, cy + r + 30, 0xB0FFFFFF);
         }
-    }
 
-    private double slotAngle(int i) {
-        return Math.toRadians(-90 + i * 360.0 / entries.size());
-    }
-
-    private int nearestSlot(double mouseAngle) {
-        int best = index;
-        double bestDiff = Double.MAX_VALUE;
-        for (int i = 0; i < entries.size(); i++) {
-            double diff = Math.abs(wrapAngle(mouseAngle - slotAngle(i)));
-            if (diff < bestDiff) {
-                bestDiff = diff;
-                best = i;
-            }
+        // 悬浮名字:光标旁小字(顶槽住客的名字已在名牌上,不重复)
+        if (hovered >= 0 && hovered != index) {
+            String name = entries.get(hovered).name();
+            Nb.text(g, this.font, name, mouseX + 10, mouseY - 4, 0xE0FFFFFF);
         }
-        return best;
     }
 
-    private static double wrapAngle(double a) {
-        while (a > Math.PI) a -= Math.PI * 2;
-        while (a < -Math.PI) a += Math.PI * 2;
+    private boolean hitAvatar(double mx, double my, float ax, float ay) {
+        int half = AVATAR / 2 + 3;
+        return mx >= ax - half && mx <= ax + half && my >= ay - half && my <= ay + half;
+    }
+
+    private static float wrapDeg(float a) {
+        while (a > 180f) a -= 360f;
+        while (a < -180f) a += 360f;
         return a;
     }
 
@@ -168,18 +200,34 @@ public class CompanionWheelScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button == 0 && !entries.isEmpty()) {
-            confirm();
-            return true;
+        if (button != 0 || entries.isEmpty()) {
+            return super.mouseClicked(mouseX, mouseY, button);
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        // 命中检测与渲染同一套席位坐标
+        int cx = this.width / 2;
+        int cy = this.height / 2;
+        float rNow = radius() * Anim.easeOutCubic(
+                (System.currentTimeMillis() - openedAtMs) / (float) OPEN_MS);
+        for (int i = 0; i < entries.size(); i++) {
+            double ang = slotAngle(i);
+            float ax = cx + (float) (Math.cos(ang) * rNow);
+            float ay = cy + (float) (Math.sin(ang) * rNow);
+            if (hitAvatar(mouseX, mouseY, ax, ay)) {
+                if (i == index) {
+                    confirm();      // 点顶槽住客:确认关盘
+                } else {
+                    index = i;      // 点别处:最短路径转过去(弹簧自己追)
+                }
+                return true;
+            }
+        }
+        return true;
     }
 
     @Override
     public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
         // 按住开、松开定:轮盘键抬起即确认(对讲机手感)
-        if (com.dwinovo.numen.client.NumenKeys.COMPANION_WHEEL.matches(keyCode, scanCode)
-                && !entries.isEmpty()) {
+        if (NumenKeys.COMPANION_WHEEL.matches(keyCode, scanCode) && !entries.isEmpty()) {
             confirm();
             return true;
         }
@@ -187,7 +235,13 @@ public class CompanionWheelScreen extends Screen {
     }
 
     private void confirm() {
-        SelectedCompanion.set(entries.get(index).uuid());
+        NumenRoster.Entry chosen = entries.get(index);
+        SelectedCompanion.set(chosen.uuid());
+        // 关盘教学:下一步怎么跟它说话
+        TalkHint.flash("已选中 " + chosen.name()
+                + " · 按 [" + NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString()
+                + "] 对话 · 按住 [" + NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString()
+                + "] 说话", FLASH_MS);
         onClose();
     }
 
