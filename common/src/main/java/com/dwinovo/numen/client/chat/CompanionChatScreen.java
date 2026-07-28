@@ -73,8 +73,13 @@ public class CompanionChatScreen extends Screen {
     }
 
     @Override
+    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
+        // 刻意留空:super.render 默认会画菜单模糊+压暗遮罩,面对面说话
+        // 不该把世界糊掉——她就站在你面前
+    }
+
+    @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
-        // 不渲染全屏遮罩:面对面说话不该把世界按暗——她就站在你面前
         UiTheme th = UiTheme.current();
         int x = input.getX();
         int y = input.getY();
