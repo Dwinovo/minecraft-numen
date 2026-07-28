@@ -74,26 +74,6 @@ public class CompanionWheelScreen extends Screen {
         }
     }
 
-    /**
-     * 移动放行:开屏会清空并接管按键,但奔跑不该为选人断步——每 tick 把
-     * 移动七键(前后左右/跳/潜行/疾跑)的物理按下状态原样喂回
-     * {@code KeyMapping},{@code KeyboardInput} 照常读到。直接查 GLFW
-     * 而非依赖事件,开盘前就按住的 W 也无缝接上。鼠标视角仍锁定(被
-     * 转盘征用),这是武器轮盘式的标准取舍。
-     */
-    @Override
-    public void tick() {
-        Minecraft mc = Minecraft.getInstance();
-        long window = mc.getWindow().getWindow();
-        KeyMapping[] movement = {
-                mc.options.keyUp, mc.options.keyDown, mc.options.keyLeft, mc.options.keyRight,
-                mc.options.keyJump, mc.options.keyShift, mc.options.keySprint,
-        };
-        for (KeyMapping k : movement) {
-            k.setDown(physicallyDown(window, k));
-        }
-    }
-
     private static boolean physicallyDown(long window, KeyMapping k) {
         if (k.isUnbound()) {
             return false;
@@ -106,14 +86,14 @@ public class CompanionWheelScreen extends Screen {
     }
 
     /**
-     * NeoForge 专用的第二条放行通路:它给 {@code KeyMapping.isDown()} 打了
-     * 冲突上下文补丁——界面开着时游戏内按键一律读成 false,上面 tick()
-     * 喂进去的状态过不了这道闸。于是在输入采样后的
-     * {@code MovementInputUpdateEvent} 里直接改写玩家移动输入(加载器
-     * 入口判断转盘在开时调这里)。Fabric 无此补丁,tick() 那条已够。
+     * 移动放行的唯一通路(由 {@code MixinKeyboardInput} 在原版采样之后
+     * 调用,两个加载器同一个点):开屏期间按键系统被闸,采出来的移动
+     * 意图全是零——这里按 GLFW 物理按键状态原样重建,奔跑不为选人断步,
+     * 开盘前就按住的 W 也无缝接上。不碰 {@code KeyMapping} 状态,键位
+     * 冲突类模组无感。鼠标视角仍锁定(被转盘征用),武器轮盘式取舍。
      */
     public static void feedMovement(net.minecraft.client.player.Input input,
-                                    net.minecraft.world.entity.player.Player player) {
+                                    float sneakingSpeedMultiplier) {
         Minecraft mc = Minecraft.getInstance();
         long window = mc.getWindow().getWindow();
         boolean up = physicallyDown(window, mc.options.keyUp);
@@ -129,10 +109,8 @@ public class CompanionWheelScreen extends Screen {
         input.jumping = physicallyDown(window, mc.options.keyJump);
         input.shiftKeyDown = physicallyDown(window, mc.options.keyShift);
         if (input.shiftKeyDown) {
-            float f = (float) player.getAttributeValue(
-                    net.minecraft.world.entity.ai.attributes.Attributes.SNEAKING_SPEED);
-            input.forwardImpulse *= f;
-            input.leftImpulse *= f;
+            input.forwardImpulse *= sneakingSpeedMultiplier;
+            input.leftImpulse *= sneakingSpeedMultiplier;
         }
     }
 
