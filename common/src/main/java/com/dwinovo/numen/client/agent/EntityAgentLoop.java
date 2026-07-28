@@ -1322,8 +1322,7 @@ public final class EntityAgentLoop {
                             ? personaName
                             : String.valueOf(com.dwinovo.numen.client.agent.NumenRoster.instance()
                                     .name(entityUuid));
-                    net.minecraft.client.Minecraft.getInstance().gui.getChat()
-                            .addMessage(foldedChatLine(who, shown));
+                    com.dwinovo.numen.client.chat.ChatLines.companion(who, shown);
                 } else {
                     reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
                 }
@@ -1361,21 +1360,6 @@ public final class EntityAgentLoop {
         return s.length() <= max ? s : s.substring(0, max) + "...";
     }
 
-    /**
-     * 聊天栏回显行:小作文折叠成前 200 字加省略号,悬停浮出全文——聊天栏
-     * 是日志不是阅读器,完整记录在 G 面板。
-     */
-    private static net.minecraft.network.chat.Component foldedChatLine(String who, String shown) {
-        String flat = shown.replaceAll("\\s+", " ").trim();
-        String head = "<" + who + "> ";
-        if (flat.length() <= 200) {
-            return net.minecraft.network.chat.Component.literal(head + flat);
-        }
-        return net.minecraft.network.chat.Component.literal(head + flat.substring(0, 200) + " ……")
-                .withStyle(s -> s.withHoverEvent(new net.minecraft.network.chat.HoverEvent(
-                        net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT,
-                        net.minecraft.network.chat.Component.literal(flat))));
-    }
 
     private static String unwrap(Throwable t) {
         Throwable cur = t;

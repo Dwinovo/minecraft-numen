@@ -9,7 +9,6 @@ import com.dwinovo.numen.client.screen.NumenScreen;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -67,7 +66,7 @@ public final class NumenKeys {
                 continue;
             }
             if (NumenRoster.instance().entries().isEmpty()) {
-                mc.gui.getChat().addMessage(Component.literal("还没有同伴——先在 G 面板召唤一位"));
+                com.dwinovo.numen.client.hud.TalkHint.flash("还没有同伴——先在 G 面板召唤一位", 3000);
                 continue;
             }
             mc.setScreen(new CompanionWheelScreen());
@@ -78,9 +77,9 @@ public final class NumenKeys {
             }
             NumenRoster.Entry target = SelectedCompanion.resolveTarget();
             if (target == null) {
-                mc.gui.getChat().addMessage(Component.literal(
+                com.dwinovo.numen.client.hud.TalkHint.flash(
                         "先按 [" + COMPANION_WHEEL.getTranslatedKeyMessage().getString()
-                                + "] 选一位同伴,或把准星对准它"));
+                                + "] 选一位同伴,或把准星对准它", 3000);
                 continue;
             }
             mc.setScreen(new CompanionChatScreen(target.uuid(), target.name()));

@@ -6,7 +6,6 @@ import com.dwinovo.numen.client.stt.VoiceInputController;
 import com.dwinovo.numen.platform.Services;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
 
 /**
  * 快捷语音:对讲机式按住说话,松开把最终转写直接发给当前交互对象
@@ -66,9 +65,11 @@ public final class QuickVoice {
             return;
         }
         boolean accepted = NumenGateway.enqueue(t.uuid(), said);
-        Minecraft.getInstance().gui.getChat().addMessage(Component.literal(
-                accepted ? "[→ " + t.name() + "] (语音) " + said
-                         : "[" + t.name() + "] (没能送达——它可能不在线)"));
+        if (accepted) {
+            ChatLines.owner(t.name(), said, true);
+        } else {
+            flash(t.name() + " 没能收到——它可能不在线");
+        }
     }
 
     /** 录音中(驱动提示层的红点)。 */

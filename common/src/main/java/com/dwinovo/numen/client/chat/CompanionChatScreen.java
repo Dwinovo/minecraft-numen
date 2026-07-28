@@ -114,12 +114,14 @@ public class CompanionChatScreen extends Screen {
 
     private void send() {
         String text = input.getValue().trim();
-        Minecraft mc = Minecraft.getInstance();
         if (!text.isEmpty()) {
             boolean accepted = NumenGateway.enqueue(companionUuid, text);
-            mc.gui.getChat().addMessage(Component.literal(
-                    accepted ? "[→ " + companionName + "] " + text
-                             : "[" + companionName + "] (没能送达——它可能不在线)"));
+            if (accepted) {
+                ChatLines.owner(companionName, text, false);
+            } else {
+                com.dwinovo.numen.client.hud.TalkHint.flash(
+                        companionName + " 没能收到——它可能不在线", 3000);
+            }
         }
         onClose();
     }

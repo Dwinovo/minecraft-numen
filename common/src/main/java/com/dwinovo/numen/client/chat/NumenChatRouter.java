@@ -3,9 +3,6 @@ package com.dwinovo.numen.client.chat;
 import com.dwinovo.numen.api.NumenGateway;
 import com.dwinovo.numen.client.agent.NumenRoster;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.chat.Component;
-
 /**
  * 聊天框直连同伴:{@code @名字 消息} 一步到位——寻址明确(只有自己的同伴会
  * 响应)、无模式状态(不存在"忘了退出对话模式把私房话喊上公屏")、管线与
@@ -44,16 +41,18 @@ public final class NumenChatRouter {
         if (match == null) {
             return false;   // 不是同伴名:照常走公屏
         }
-        Minecraft mc = Minecraft.getInstance();
         if (text.isEmpty()) {
-            mc.gui.getChat().addMessage(Component.literal("[" + match.name() + "] 在呢——@"
-                    + match.name() + " 后面接上你想说的话"));
+            com.dwinovo.numen.client.hud.TalkHint.flash(
+                    match.name() + " 在呢——@" + match.name() + " 后面接上想说的话", 3000);
             return true;
         }
         boolean accepted = NumenGateway.enqueue(match.uuid(), text);
-        mc.gui.getChat().addMessage(Component.literal(
-                accepted ? "[→ " + match.name() + "] " + text
-                         : "[" + match.name() + "] (没能送达——它可能不在线)"));
+        if (accepted) {
+            ChatLines.owner(match.name(), text, false);
+        } else {
+            com.dwinovo.numen.client.hud.TalkHint.flash(
+                    match.name() + " 没能收到——它可能不在线", 3000);
+        }
         return true;
     }
 }
