@@ -49,7 +49,7 @@ public final class CompanionFactory {
         // real location as early as possible. (This explicit restore is kept because placeNewPlayer's own
         // player-data load has not reliably restored a hand-built fake player's .dat in this setup; it is
         // idempotent if placeNewPlayer does load.)
-        loadPlayerData(server, player);
+        var savedTag = loadPlayerData(server, player);
         // First spawn has no .dat to restore the owner from; set it explicitly.
         if (player.getOwnerUuid() == null) {
             player.setOwnerUuid(ownerUuid);
@@ -68,11 +68,17 @@ public final class CompanionFactory {
         // 假玩家没有客户端上报的模型定制:点亮全部皮肤覆盖层与披风,否则只显示单层基础皮肤。
         // 每次 spawn(首建与重生)都重设——该字节是同步实体数据、不随 .dat 存取。
         player.showAllSkinLayers();
-        // Companions are always survival, whatever the world's default game type — their whole design
-        // (gather/drops, real combat, recoverable death) is survival-shaped, and placeNewPlayer would
-        // otherwise hand a creative world's body instabuild (no block drops, breaks auto_mine). Forced
-        // here after the .dat restore so a stale saved game type can't override it.
-        player.setGameMode(GameType.SURVIVAL);
+        // 模式策略:首次召唤一律生存——不继承创造世界的默认档,同伴的整套设计
+        // (采集掉落/真实战斗/可恢复死亡)是生存形状的,placeNewPlayer 会把
+        // 创造世界的默认档连秒破无掉落一起塞过来。老同伴尊重主人上次设的档
+        // (面板芯片 / /gamemode 指令,存在 .dat 的 playerGameType 里),但只认
+        // 生存/创造两档,其余一律归生存。placeNewPlayer 之后强制,保证胜出。
+        GameType mode = GameType.SURVIVAL;
+        if (savedTag != null && savedTag.contains("playerGameType")
+                && GameType.byId(savedTag.getInt("playerGameType")) == GameType.CREATIVE) {
+            mode = GameType.CREATIVE;
+        }
+        player.setGameMode(mode);
         return player;
     }
 
@@ -83,11 +89,13 @@ public final class CompanionFactory {
      * skips this for hand-constructed players, so we invoke the same load
      * ourselves. No-op on first summon (no file yet).
      */
-    private static void loadPlayerData(MinecraftServer server, NumenPlayer player) {
+    /** @return 载入的 .dat(供上层读 playerGameType 等玩家级字段);首次召唤无档返回 null */
+    private static net.minecraft.nbt.CompoundTag loadPlayerData(MinecraftServer server, NumenPlayer player) {
         // 1.21.5: PlayerList.load(player) returns Optional<CompoundTag> (predates the
         // ValueInput IO refactor); Entity.load(CompoundTag) consumes it directly.
-        server.getPlayerList().load(player)
-                .ifPresent(player::load);
+        var maybe = server.getPlayerList().load(player);
+        maybe.ifPresent(player::load);
+        return maybe.orElse(null);
     }
 
     /** Save the companion's data and remove it from the world (dormancy). */
