@@ -48,6 +48,7 @@ public abstract class TaskResultScaffoldReportMixin {
             item.put("y", report.y());
             item.put("z", report.z());
             item.put("block", report.placedBlockId());
+            item.put("role", report.role().name().toLowerCase(java.util.Locale.ROOT));
             item.put("reason", report.reason());
             item.put("reason_text", TemporaryScaffoldController.explainReason(report.reason()));
             details.add(Map.copyOf(item));
@@ -56,7 +57,8 @@ public abstract class TaskResultScaffoldReportMixin {
 
         String coordinateSummary = reports.stream()
             .map(report -> "(" + report.x() + "," + report.y() + "," + report.z() + ") "
-                + report.placedBlockId() + ": "
+                + report.placedBlockId() + " [" + report.role().name().toLowerCase(java.util.Locale.ROOT)
+                + "]: "
                 + TemporaryScaffoldController.explainReason(report.reason()))
             .collect(Collectors.joining("; "));
         String message = original.message() + " Temporary scaffolds not reclaimed: "

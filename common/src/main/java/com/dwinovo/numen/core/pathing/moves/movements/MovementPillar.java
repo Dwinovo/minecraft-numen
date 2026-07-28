@@ -9,6 +9,7 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.scaffold.NavigationPlacementRole;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -257,6 +258,11 @@ public class MovementPillar extends Movement {
                                 || MovementPlacement.isLookingAt(player, src))
                         && player.getY() > dest.getY() + 0.1) {
                     // 已蹲稳、看准、跳够高度:放块
+                    MovementPlacement.expectNavigationPlacement(
+                        player,
+                        src,
+                        NavigationPlacementRole.PILLAR
+                    );
                     state.setInput(Input.CLICK_RIGHT, true);
                 }
             }
@@ -284,4 +290,3 @@ public class MovementPillar extends Movement {
         return super.prepared(state);
     }
 }
-

@@ -78,6 +78,37 @@ public final class EntityPromptContractTest {
                 && normalized.contains("line of sight remains an attack-time safety check"),
             "nearby discovery must use the bounded cylindrical range while attack visibility stays intact"
         );
+        require(
+            normalized.contains("primary goal is sleep")
+                && normalized.contains("call sleep directly")
+                && normalized.contains("must not call follow_owner"),
+            "sleep requests must keep sleep as the primary goal instead of routing come to follow_owner"
+        );
+        require(
+            normalized.contains("romanized sleep intent")
+                && normalized.contains("laishuijiao")
+                && normalized.contains("qushuijiao")
+                && normalized.contains("Never use interact_at on a bed"),
+            "romanized sleep requests must route to the verified sleep task"
+        );
+        require(
+            normalized.contains("initial accepted reply is not sleep success")
+                && normalized.contains("task_finished(status=done)"),
+            "an accepted asynchronous task must not be reported as completed sleep"
+        );
+        require(
+            normalized.contains("generic request to eat")
+                && normalized.contains("ordinary safe food")
+                && normalized.contains("golden carrot only when no ordinary safe food is available"),
+            "generic eating requests must preserve the safe food value order"
+        );
+        require(
+            normalized.contains("Risky food is a last famine fallback only when hunger is 6 or lower")
+                && normalized.contains("Do not use a golden apple, enchanted golden apple, or healing potion")
+                && normalized.contains("recovery policy selects it")
+                && normalized.contains("Naming the exact item does not override this safety rule"),
+            "generic eating must preserve risky and emergency consumables"
+        );
     }
 
     private static void require(boolean condition, String message) {

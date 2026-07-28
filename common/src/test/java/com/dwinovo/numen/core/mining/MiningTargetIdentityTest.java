@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import com.dwinovo.numen.core.mining.MiningTargetIdentity;
 import com.dwinovo.numen.core.scaffold.TemporaryScaffoldLedger;
+import com.dwinovo.numen.core.scaffold.NavigationPlacementRole;
+import com.dwinovo.numen.core.scaffold.TemporaryScaffoldTracker;
 import java.util.UUID;
 
 public final class MiningTargetIdentityTest {
@@ -22,7 +24,16 @@ public final class MiningTargetIdentityTest {
             "a coordinate whose block type changed must not remain eligible"
         );
 
-        TemporaryScaffoldLedger.recordPlacement(
+        TemporaryScaffoldTracker.expectNavigationPlacement(
+            companion,
+            dimension,
+            4,
+            72,
+            9,
+            NavigationPlacementRole.PILLAR,
+            200L
+        );
+        TemporaryScaffoldTracker.recordObservedPlacement(
             companion,
             dimension,
             4,
@@ -42,7 +53,7 @@ public final class MiningTargetIdentityTest {
             "temporary status must be coordinate-specific"
         );
 
-        TemporaryScaffoldLedger.clear(companion);
+        TemporaryScaffoldTracker.clear(companion);
     }
 
     private static void require(boolean condition, String message) {

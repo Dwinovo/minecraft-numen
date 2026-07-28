@@ -7,6 +7,9 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.scaffold.NavigationPlacementRole;
+import com.dwinovo.numen.core.scaffold.TemporaryScaffoldTracker;
+import com.dwinovo.numen.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -200,6 +203,27 @@ final class MovementPlacement {
         return selectThrowaway(player, select);
     }
 
+    static void expectNavigationPlacement(
+        ServerPlayer player,
+        BlockPos placeAt,
+        NavigationPlacementRole role
+    ) {
+        if (!(player instanceof NumenPlayer)
+            || BuildPlacementRegistry.hasTarget(player, placeAt)) {
+            return;
+        }
+        Level level = player.level();
+        TemporaryScaffoldTracker.expectNavigationPlacement(
+            player.getUUID(),
+            level.dimension().identifier().toString(),
+            placeAt.getX(),
+            placeAt.getY(),
+            placeAt.getZ(),
+            role,
+            level.getGameTime()
+        );
+    }
+
     static boolean selectForLocation(ServerPlayer player, BlockPos placeAt, BlockHitResult hit,
                                      float yaw, float pitch, boolean select) {
         if (BuildPlacementRegistry.hasTarget(player, placeAt)) {
@@ -352,4 +376,3 @@ final class MovementPlacement {
         return player.getEyePosition();
     }
 }
-

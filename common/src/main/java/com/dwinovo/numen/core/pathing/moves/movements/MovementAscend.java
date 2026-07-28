@@ -9,6 +9,7 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.scaffold.NavigationPlacementRole;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
@@ -167,6 +168,11 @@ public class MovementAscend extends Movement {
                     == MovementPlacement.PlaceResult.READY_TO_PLACE) {
                 state.setInput(Input.SNEAK, true);
                 if (player.isCrouching()) {
+                    MovementPlacement.expectNavigationPlacement(
+                        player,
+                        dest.below(),
+                        NavigationPlacementRole.STEP
+                    );
                     state.setInput(Input.CLICK_RIGHT, true);
                 }
             }

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.follow;
+package com.dwinovo.numen.core.sleep;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.Schema;
@@ -9,21 +9,21 @@ import com.google.gson.JsonObject;
 import java.util.Map;
 import java.util.function.Consumer;
 
-public final class FollowOwnerTool implements NumenTool {
+public final class SleepTool implements NumenTool {
     private static final long TIMEOUT_TICKS = 2_400L;
 
     @Override
     public String name() {
-        return FollowOwnerTaskRecord.TOOL_NAME;
+        return SleepTaskRecord.TOOL_NAME;
     }
 
     @Override
     public String description() {
-        return "Come to the owner's CURRENT position only when proximity to the owner is the primary requested "
-            + "outcome, such as \u8fc7\u6765, \u56de\u5230\u6211\u8eab\u8fb9, \u5230\u6211\u8fd9\u91cc, come here, "
-            + "or return to me. Do not use this merely because a compound request contains \u6765/come; requests "
-            + "to come sleep or come to bed use sleep. The target follows the owner's live position while travelling, "
-            + "and finishes within a 4-block horizontal X/Z radius on the same floor (feet Y differs by at most 1 block).";
+        return "Sleep in a nearby bed. Use this whenever the primary requested outcome is sleeping, resting, "
+            + "going to bed, coming to sleep, laishuijiao, or qushuijiao. This task finds the bed and travels "
+            + "there itself; do not call follow_owner, scan_blocks, goto, or interact_at first. It succeeds only "
+            + "when the vanilla server confirms that you are actually sleeping, and otherwise returns the exact "
+            + "rejection reason.";
     }
 
     @Override
@@ -39,7 +39,7 @@ public final class FollowOwnerTool implements NumenTool {
         Consumer<String> reply
     ) {
         ToolContext context = TaskDispatch.ctx(toolCallId, player);
-        FollowOwnerTaskRecord task = new FollowOwnerTaskRecord(
+        SleepTaskRecord task = new SleepTaskRecord(
             context.toolCallId(),
             context.deadline(TIMEOUT_TICKS)
         );

@@ -59,6 +59,43 @@ public final class EntityPromptContract {
 </nearby_combat_routing>
 """;
 
+    private static final String SLEEP_ROUTE = """
+
+
+<sleep_task_routing>
+- When the primary goal is sleep, rest, or getting into a bed, call sleep directly.
+  This includes compound requests such as "come sleep" or "come to bed": the
+  movement word does not replace the requested sleep outcome, so you must not
+  call follow_owner for those requests.
+- Treat Chinese and romanized sleep intent the same way. Common romanized forms
+  include laishuijiao, lai shuijiao, qushuijiao, and qu shuijiao.
+- Do not assemble sleep manually from scan_blocks, goto, and interact_at. The
+  sleep task finds a nearby bed, travels to it, asks the vanilla server to sleep,
+  and reports the verified outcome.
+- Never use interact_at on a bed to satisfy a sleep request. The initial accepted
+  reply is not sleep success; wait for task_finished(status=done) and the verified
+  sleeping result before saying that sleep completed.
+- Claim that you slept only when sleep reports success. If it reports daytime,
+  obstruction, danger, occupancy, no nearby bed, or another failure, state that
+  reason accurately instead of treating a right-click as successful sleep.
+</sleep_task_routing>
+""";
+
+    private static final String CONSUMABLE_ROUTE = """
+
+
+<survival_consumable_routing>
+- For a generic request to eat, inspect current status and inventory, then choose
+  ordinary safe food. Use a golden carrot only when no ordinary safe food is available.
+- Risky food is a last famine fallback only when hunger is 6 or lower and no safe
+  food is available. Otherwise report that no suitable food is currently available.
+- Do not use a golden apple, enchanted golden apple, or healing potion for ordinary
+  hunger. It is eligible only when the active survival-healing conditions require it
+  and the recovery policy selects it. Naming the exact item does not override this
+  safety rule. Never choose one merely because it is the rarest, strongest, or "best".
+</survival_consumable_routing>
+""";
+
     private EntityPromptContract() {
     }
 
@@ -74,6 +111,12 @@ public final class EntityPromptContract {
         }
         if (!corrected.contains("<nearby_combat_routing>")) {
             corrected += COMBAT_ROUTE;
+        }
+        if (!corrected.contains("<sleep_task_routing>")) {
+            corrected += SLEEP_ROUTE;
+        }
+        if (!corrected.contains("<survival_consumable_routing>")) {
+            corrected += CONSUMABLE_ROUTE;
         }
         return corrected;
     }

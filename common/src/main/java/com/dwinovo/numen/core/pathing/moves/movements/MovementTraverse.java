@@ -10,6 +10,7 @@ import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.scaffold.NavigationPlacementRole;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -326,6 +327,11 @@ public class MovementTraverse extends Movement {
                 case READY_TO_PLACE: {
                     // 潜行确认后下一 tick 才右键(先蹲住再放,防滑落)
                     if (player.isCrouching() || NavSettings.get().assumeSafeWalk) {
+                        MovementPlacement.expectNavigationPlacement(
+                            player,
+                            dest.below(),
+                            NavigationPlacementRole.BRIDGE
+                        );
                         state.setInput(Input.CLICK_RIGHT, true);
                     }
                     return state;
@@ -368,6 +374,11 @@ public class MovementTraverse extends Movement {
                             MovementHelper.yawTo(player.getEyePosition(), face), facePitch, true));
                 }
                 if (MovementPlacement.isLookingAt(player, goalLook)) {
+                    MovementPlacement.expectNavigationPlacement(
+                        player,
+                        dest.below(),
+                        NavigationPlacementRole.BRIDGE
+                    );
                     return state.setInput(Input.CLICK_RIGHT, true);
                 }
                 if (MovementPlacement.isFacing(player, state.getTarget())) {

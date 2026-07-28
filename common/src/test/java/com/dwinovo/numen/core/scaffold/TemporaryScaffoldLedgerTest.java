@@ -9,19 +9,9 @@ public final class TemporaryScaffoldLedgerTest {
     @Test
     void verifiedRuntimeBehavior() {
         UUID companion = UUID.fromString("14abef10-dfa9-4e53-8cec-fb5527551962");
-        TemporaryScaffoldLedger.clear(companion);
+        TemporaryScaffoldTracker.clear(companion);
 
-        boolean tracked = TemporaryScaffoldLedger.recordPlacement(
-            companion,
-            "minecraft:overworld",
-            12,
-            70,
-            -4,
-            "minecraft:dirt",
-            "minecraft:air",
-            false,
-            100L
-        );
+        boolean tracked = place(companion, 12, 70, -4, 100L);
         require(tracked, "ordinary path scaffolding must be tracked");
         require(TemporaryScaffoldLedger.entries(companion).size() == 1, "tracked placement missing");
         require(
@@ -54,8 +44,17 @@ public final class TemporaryScaffoldLedgerTest {
             "a temporary coordinate later adopted by a build must never be reclaimed"
         );
 
-        TemporaryScaffoldLedger.clear(companion);
-        boolean buildTracked = TemporaryScaffoldLedger.recordPlacement(
+        TemporaryScaffoldTracker.clear(companion);
+        TemporaryScaffoldTracker.expectNavigationPlacement(
+            companion,
+            "minecraft:overworld",
+            12,
+            70,
+            -4,
+            NavigationPlacementRole.PILLAR,
+            101L
+        );
+        boolean buildTracked = TemporaryScaffoldTracker.recordObservedPlacement(
             companion,
             "minecraft:overworld",
             12,
@@ -72,23 +71,11 @@ public final class TemporaryScaffoldLedgerTest {
             "explicit build target could later be dismantled as temporary scaffolding"
         );
 
-        TemporaryScaffoldLedger.recordPlacement(
-            companion, "minecraft:overworld", 4, 70, 8,
-            "minecraft:dirt", "minecraft:air", false, 102L
-        );
-        TemporaryScaffoldLedger.recordPlacement(
-            companion, "minecraft:overworld", 4, 72, 8,
-            "minecraft:dirt", "minecraft:air", false, 103L
-        );
-        TemporaryScaffoldLedger.recordPlacement(
-            companion, "minecraft:overworld", 4, 71, 8,
-            "minecraft:dirt", "minecraft:air", false, 104L
-        );
-        TemporaryScaffoldLedger.recordPlacement(
-            companion, "minecraft:overworld", 5, 69, 8,
-            "minecraft:cobblestone", "minecraft:air", false, 105L
-        );
-        var topmost = TemporaryScaffoldLedger.topmostEntries(companion);
+        place(companion, 4, 70, 8, 102L);
+        place(companion, 4, 72, 8, 103L);
+        place(companion, 4, 71, 8, 104L);
+        place(companion, 5, 69, 8, 105L);
+        var topmost = TemporaryScaffoldLedger.topmostReclaimableEntries(companion);
         require(topmost.size() == 2, "only one block per temporary column may be reclaimed at a time");
         require(
             topmost.stream().anyMatch(entry -> entry.x() == 4 && entry.y() == 72 && entry.z() == 8),
@@ -98,7 +85,30 @@ public final class TemporaryScaffoldLedgerTest {
             topmost.stream().anyMatch(entry -> entry.x() == 5 && entry.y() == 69 && entry.z() == 8),
             "independent temporary columns must remain eligible"
         );
-        TemporaryScaffoldLedger.clear(companion);
+        TemporaryScaffoldTracker.clear(companion);
+    }
+
+    private static boolean place(UUID companion, int x, int y, int z, long gameTime) {
+        TemporaryScaffoldTracker.expectNavigationPlacement(
+            companion,
+            "minecraft:overworld",
+            x,
+            y,
+            z,
+            NavigationPlacementRole.PILLAR,
+            gameTime
+        );
+        return TemporaryScaffoldTracker.recordObservedPlacement(
+            companion,
+            "minecraft:overworld",
+            x,
+            y,
+            z,
+            "minecraft:dirt",
+            "minecraft:air",
+            false,
+            gameTime
+        );
     }
 
     private static void require(boolean condition, String message) {

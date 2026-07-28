@@ -11,6 +11,7 @@ import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.scaffold.NavigationPlacementRole;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -274,6 +275,11 @@ public class MovementParkour extends Movement {
                         && MovementPlacement.attemptToPlaceABlock(state, player, dest.below(), true, false)
                                 == MovementPlacement.PlaceResult.READY_TO_PLACE) {
                     // preferDown:优先朝下的贴面,空中不必歪头搅乱轨迹
+                    MovementPlacement.expectNavigationPlacement(
+                        player,
+                        dest.below(),
+                        NavigationPlacementRole.BRIDGE
+                    );
                     state.setInput(Input.CLICK_RIGHT, true);
                 }
                 if (dist == 3 && !ascend) {
@@ -299,4 +305,3 @@ public class MovementParkour extends Movement {
         return state;
     }
 }
-

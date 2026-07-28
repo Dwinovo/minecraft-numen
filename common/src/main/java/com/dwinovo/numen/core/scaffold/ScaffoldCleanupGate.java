@@ -16,11 +16,17 @@ public final class ScaffoldCleanupGate {
         boolean chainRunning,
         boolean queuePending,
         boolean asyncTaskActive,
+        boolean agentTurnActive,
         boolean currentPathActive,
         boolean nextPathActive,
         boolean pathSearchActive
     ) {
-        return canContinueRetreat(chainRunning, queuePending, asyncTaskActive)
+        return canContinueRetreat(
+            chainRunning,
+            queuePending,
+            asyncTaskActive,
+            agentTurnActive
+        )
             && !currentPathActive
             && !nextPathActive
             && !pathSearchActive;
@@ -29,8 +35,9 @@ public final class ScaffoldCleanupGate {
     public static boolean canContinueRetreat(
         boolean chainRunning,
         boolean queuePending,
-        boolean asyncTaskActive
+        boolean asyncTaskActive,
+        boolean agentTurnActive
     ) {
-        return !chainRunning && !queuePending && !asyncTaskActive;
+        return !chainRunning && !queuePending && !asyncTaskActive && !agentTurnActive;
     }
 }

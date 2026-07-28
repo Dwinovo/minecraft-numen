@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.scaffold;
 
 import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.act.BlockDigger.DigResult;
+import com.dwinovo.numen.core.agent.AgentTurnActivity;
 import com.dwinovo.numen.core.mining.ActiveMiningTargets;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.execute.PathExecutor;
@@ -71,12 +72,17 @@ public final class TemporaryScaffoldController {
         boolean queuePending
     ) {
         boolean asyncTaskActive = CompanionTickDispatcher.asyncTaskFor(player.getUUID()) != null;
+        boolean agentTurnActive = AgentTurnActivity.isActive(
+            player.getUUID(),
+            player.level().getServer().getTickCount()
+        );
         CleanupState state = STATES.get(player.getUUID());
         if (state != null && state.retreatNav != null) {
             return ScaffoldCleanupGate.canContinueRetreat(
                 chainRunning,
                 queuePending,
-                asyncTaskActive
+                asyncTaskActive,
+                agentTurnActive
             );
         }
 
@@ -95,6 +101,7 @@ public final class TemporaryScaffoldController {
             chainRunning,
             queuePending,
             asyncTaskActive,
+            agentTurnActive,
             currentPathActive,
             nextPathActive,
             pathSearchActive
@@ -110,6 +117,13 @@ public final class TemporaryScaffoldController {
         UUID id = player.getUUID();
         List<TemporaryScaffoldLedger.Entry> entries = TemporaryScaffoldLedger.entries(id);
         if (entries.isEmpty()) {
+            CleanupState removed = STATES.remove(id);
+            if (removed != null) {
+                cancelState(removed);
+            }
+            return;
+        }
+        if (entries.stream().noneMatch(entry -> entry.role().automaticallyReclaimable())) {
             CleanupState removed = STATES.remove(id);
             if (removed != null) {
                 cancelState(removed);
@@ -138,7 +152,7 @@ public final class TemporaryScaffoldController {
 
         if (state.current == null) {
             refreshReasons(player);
-            state.current = TemporaryScaffoldLedger.topmostEntries(id).stream()
+            state.current = TemporaryScaffoldLedger.topmostReclaimableEntries(id).stream()
                 .filter(entry -> decision(player, entry).action() == ScaffoldRemovalSafety.Action.REMOVE)
                 .min(Comparator.comparingDouble(entry -> distanceToSqr(player, entry)))
                 .orElse(null);
@@ -213,12 +227,21 @@ public final class TemporaryScaffoldController {
             cancelState(state);
         }
         ActiveMiningTargets.clear(companionId);
-        TemporaryScaffoldLedger.clear(companionId);
+        AgentTurnActivity.clear(companionId);
+        TemporaryScaffoldTracker.clear(companionId);
     }
 
     public static void refreshReasons(NumenPlayer player) {
         UUID id = player.getUUID();
         for (TemporaryScaffoldLedger.Entry entry : TemporaryScaffoldLedger.entries(id)) {
+            if (!entry.role().automaticallyReclaimable()) {
+                TemporaryScaffoldLedger.markReason(
+                    id,
+                    entry,
+                    entry.role().preservationReason()
+                );
+                continue;
+            }
             ScaffoldRemovalSafety.Decision decision = decision(player, entry);
             if (decision.action() == ScaffoldRemovalSafety.Action.FORGET) {
                 TemporaryScaffoldLedger.remove(id, entry);
@@ -251,6 +274,12 @@ public final class TemporaryScaffoldController {
             case "cleanup_in_progress" -> "safe cleanup is currently in progress";
             case "moving_to_safe_cleanup_stance" ->
                 "moving to a safe off-column stance before reclaiming the support";
+            case "preserved_navigation_bridge" ->
+                "kept because it is a navigation bridge, not a disposable vertical support";
+            case "preserved_navigation_step" ->
+                "kept because it is a navigation step needed as part of the route";
+            case "preserved_navigation_route" ->
+                "kept because it is part of a reusable navigation route";
             case "no_safe_retreat_stance" ->
                 "no loaded, non-hazardous off-column landing is currently available";
             case "no_safe_cleanup_stance" ->
@@ -314,7 +343,7 @@ public final class TemporaryScaffoldController {
         boolean leavingTemporaryColumn = isStandingOnTemporaryScaffold(player);
         TemporaryScaffoldLedger.Entry cleanupTarget = leavingTemporaryColumn
             ? null
-            : TemporaryScaffoldLedger.topmostEntries(player.getUUID()).stream()
+            : TemporaryScaffoldLedger.topmostReclaimableEntries(player.getUUID()).stream()
                 .filter(entry -> ScaffoldRemovalSafety.canNavigateForRemoval(
                     removalContext(player, entry)
                 ))
@@ -474,7 +503,8 @@ public final class TemporaryScaffoldController {
         }
         String dimensionId = level.dimension().identifier().toString();
         boolean temporaryColumn = entries.stream().anyMatch(entry ->
-            entry.dimensionId().equals(dimensionId)
+            entry.role().automaticallyReclaimable()
+                && entry.dimensionId().equals(dimensionId)
                 && entry.x() == feet.getX()
                 && entry.z() == feet.getZ()
         );
@@ -501,7 +531,7 @@ public final class TemporaryScaffoldController {
     private static boolean isStandingOnTemporaryScaffold(NumenPlayer player) {
         ServerLevel level = player.level();
         BlockPos support = PathExecutor.playerFeet(player).below();
-        return TemporaryScaffoldLedger.contains(
+        return TemporaryScaffoldLedger.containsReclaimable(
             player.getUUID(),
             level.dimension().identifier().toString(),
             support.getX(),
@@ -625,6 +655,7 @@ public final class TemporaryScaffoldController {
             return false;
         }
         return TemporaryScaffoldLedger.entries(player.getUUID()).stream()
+            .filter(other -> other.role().automaticallyReclaimable())
             .anyMatch(other -> other.dimensionId().equals(entry.dimensionId())
                 && other.x() == entry.x()
                 && other.z() == entry.z()

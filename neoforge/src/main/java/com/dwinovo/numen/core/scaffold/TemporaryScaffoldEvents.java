@@ -22,7 +22,7 @@ public final class TemporaryScaffoldEvents {
         boolean explicitBuildTarget = BuildPlacementRegistryAccessor.numen$hasTarget(player, pos);
         BlockState placed = event.getPlacedBlock();
         BlockState previous = event.getBlockSnapshot().getState();
-        TemporaryScaffoldLedger.recordPlacement(
+        TemporaryScaffoldTracker.recordObservedPlacement(
             player.getUUID(),
             level.dimension().identifier().toString(),
             pos.getX(),

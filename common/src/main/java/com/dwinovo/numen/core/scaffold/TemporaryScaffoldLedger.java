@@ -15,6 +15,7 @@ public final class TemporaryScaffoldLedger {
         int z,
         String placedBlockId,
         String previousBlockId,
+        NavigationPlacementRole role,
         long placedAtGameTime
     ) {
     }
@@ -25,6 +26,7 @@ public final class TemporaryScaffoldLedger {
         int y,
         int z,
         String placedBlockId,
+        NavigationPlacementRole role,
         String reason
     ) {
     }
@@ -48,13 +50,13 @@ public final class TemporaryScaffoldLedger {
         int z,
         String placedBlockId,
         String previousBlockId,
-        boolean explicitBuildTarget,
+        NavigationPlacementRole role,
         long placedAtGameTime
     ) {
-        if (explicitBuildTarget
-            || companionId == null
+        if (companionId == null
             || dimensionId == null
-            || placedBlockId == null) {
+            || placedBlockId == null
+            || role == null) {
             return false;
         }
 
@@ -73,11 +75,17 @@ public final class TemporaryScaffoldLedger {
                 z,
                 placedBlockId,
                 existing == null ? previousBlockId : existing.previousBlockId(),
+                role,
                 existing == null ? placedAtGameTime : existing.placedAtGameTime()
             )
         );
         REASONS.computeIfAbsent(companionId, ignored -> new LinkedHashMap<>())
-            .put(key, "pending_safety_recheck");
+            .put(
+                key,
+                role.automaticallyReclaimable()
+                    ? "pending_safety_recheck"
+                    : role.preservationReason()
+            );
         return true;
     }
 
@@ -101,6 +109,20 @@ public final class TemporaryScaffoldLedger {
             .toList();
     }
 
+    public static synchronized List<Entry> topmostReclaimableEntries(UUID companionId) {
+        List<Entry> entries = entries(companionId).stream()
+            .filter(entry -> entry.role().automaticallyReclaimable())
+            .toList();
+        return entries.stream()
+            .filter(candidate -> entries.stream().noneMatch(other ->
+                other.dimensionId().equals(candidate.dimensionId())
+                    && other.x() == candidate.x()
+                    && other.z() == candidate.z()
+                    && other.y() > candidate.y()
+            ))
+            .toList();
+    }
+
     public static synchronized boolean contains(
         UUID companionId,
         String dimensionId,
@@ -110,6 +132,18 @@ public final class TemporaryScaffoldLedger {
     ) {
         Map<Key, Entry> entries = BY_COMPANION.get(companionId);
         return entries != null && entries.containsKey(new Key(dimensionId, x, y, z));
+    }
+
+    public static synchronized boolean containsReclaimable(
+        UUID companionId,
+        String dimensionId,
+        int x,
+        int y,
+        int z
+    ) {
+        Map<Key, Entry> entries = BY_COMPANION.get(companionId);
+        Entry entry = entries == null ? null : entries.get(new Key(dimensionId, x, y, z));
+        return entry != null && entry.role().automaticallyReclaimable();
     }
 
     public static synchronized void markExplicitBuildTarget(
@@ -170,8 +204,14 @@ public final class TemporaryScaffoldLedger {
         if (!entries.containsKey(key)) {
             return;
         }
+        Entry entryAtKey = entries.get(key);
         REASONS.computeIfAbsent(companionId, ignored -> new LinkedHashMap<>())
-            .put(key, reason);
+            .put(
+                key,
+                entryAtKey.role().automaticallyReclaimable()
+                    ? reason
+                    : entryAtKey.role().preservationReason()
+            );
     }
 
     public static synchronized List<Report> reports(UUID companionId) {
@@ -190,6 +230,7 @@ public final class TemporaryScaffoldLedger {
                     entry.y(),
                     entry.z(),
                     entry.placedBlockId(),
+                    entry.role(),
                     reasons.getOrDefault(item.getKey(), "pending_safety_recheck")
                 )
             );
