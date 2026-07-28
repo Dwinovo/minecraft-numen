@@ -252,17 +252,37 @@ public class MovementPillar extends Movement {
                     }
                     state.setInput(Input.JUMP, false);
                     state.setInput(Input.CLICK_LEFT, true);
-                } else if (player.isCrouching()
-                        && (MovementPlacement.isLookingAt(player, src.below())
-                                || MovementPlacement.isLookingAt(player, src))
-                        && player.getY() > dest.getY() + 0.1) {
-                    // 已蹲稳、看准、跳够高度:放块
-                    state.setInput(Input.CLICK_RIGHT, true);
+                } else {
+                    boolean crouched = player.isCrouching();
+                    boolean looking = MovementPlacement.isLookingAt(player, src.below())
+                            || MovementPlacement.isLookingAt(player, src);
+                    boolean highEnough = player.getY() > dest.getY() + 0.1;
+                    if (crouched && looking && highEnough) {
+                        // 已蹲稳、看准、跳够高度:放块
+                        state.setInput(Input.CLICK_RIGHT, true);
+                        com.dwinovo.numen.core.Constants.LOG.debug(
+                                "[numen-pillar] 放置尝试 src={} y={} sneak={} dist={}",
+                                src.toShortString(),
+                                String.format("%.2f", player.getY()), player.isShiftKeyDown(),
+                                String.format("%.2f", dist));
+                    } else if (player.tickCount % 10 == 0) {
+                        // 插桩:跳搭三条件逐值(500ms 限频)——之前这里全哑,只能猜
+                        com.dwinovo.numen.core.Constants.LOG.debug(
+                                "[numen-pillar] 未就绪 src={} 蹲={} 看准={} 高度够={} y={} dy={} dist={} 手持格选中={}",
+                                src.toShortString(), crouched, looking, highEnough,
+                                String.format("%.2f", player.getY()),
+                                String.format("%.2f", player.getY() - dest.getY()),
+                                String.format("%.2f", dist),
+                                player.getInventory().selected);
+                    }
                 }
             }
         }
 
         if (feet(player).equals(dest) && blockIsThere) {
+            com.dwinovo.numen.core.Constants.LOG.debug(
+                    "[numen-pillar] 垫柱成功 src={} feet={}", src.toShortString(),
+                    feet(player).toShortString());
             return state.setStatus(MovementStatus.SUCCESS);
         }
         return state;
