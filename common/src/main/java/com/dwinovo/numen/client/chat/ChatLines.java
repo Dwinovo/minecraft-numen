@@ -33,32 +33,39 @@ import java.util.UUID;
  */
 public final class ChatLines {
 
-    /** 自己发言:整行暗灰(知道自己说了什么,回显只为日志完整)。 */
-    private static final int OWN = 0x8E939B;
-    /** 同伴正文:比真人聊天的纯白暗一层的浅灰。 */
-    private static final int TEXT = 0xC9CDD3;
+    /** 自己发言:暗一层的灰(知道自己说了什么,回显只为日志完整)。 */
+    private static final int OWN = 0xAAB0B8;
+    /** 同伴正文:近白——正文必须一眼可读,"退后"交给名字配色与工具行。 */
+    private static final int TEXT = 0xE8EBEF;
     /** 工具调用状态行:最暗一档——是动作记录,不是话。 */
-    private static final int TOOL = 0x6E7278;
+    private static final int TOOL = 0x8A9099;
 
     /** 每个同伴的在飞流式行(摘行用的句柄)。 */
     private static final Map<UUID, GuiMessage> LIVE = new HashMap<>();
 
     private ChatLines() {}
 
-    /** 主人发出的一句(文字或语音),回显为暗灰字幕行。 */
-    public static void owner(String companionName, String text, boolean voice) {
-        String line = "你 → " + companionName + ":" + (voice ? "(语音) " : "") + text;
-        add(Component.literal(line).withColor(OWN));
+    /**
+     * 主人发出的一句(文字或语音),回显为暗灰字幕行;{@code queued} 时
+     * 缀上排队标记——她正忙,这条在队列里等她收口。
+     */
+    public static void owner(String companionName, String text, boolean voice, boolean queued) {
+        MutableComponent line = Component.literal(
+                "你 → " + companionName + ":" + (voice ? "(语音) " : "") + text)
+                .withColor(OWN);
+        if (queued) {
+            line.append(Component.literal("  (排队中,她忙完就看)").withColor(TOOL));
+        }
+        add(line);
     }
 
-    /** 同伴的回复定格行:着色名字 + 浅灰正文,全文显示不折叠。 */
+    /** 同伴的回复定格行:加粗着色名字 + 近白正文,全文显示不折叠。 */
     public static void companion(String companionName, String text) {
         String flat = text.replaceAll("\\s+", " ").trim();
         if (flat.isEmpty()) {
             return;
         }
-        add(Component.literal(companionName + ":").withColor(nameColor())
-                .append(Component.literal(flat).withColor(TEXT)));
+        add(name(companionName).append(Component.literal(flat).withColor(TEXT)));
     }
 
     /** 工具调用状态行:⚙ 名字 · 工具名。 */
@@ -74,7 +81,7 @@ public final class ChatLines {
         ChatComponent chat = Minecraft.getInstance().gui.getChat();
         ChatComponentAccessor acc = (ChatComponentAccessor) chat;
         removeLive(acc, companion);
-        MutableComponent line = Component.literal(companionName + ":").withColor(nameColor())
+        MutableComponent line = name(companionName)
                 .append(Component.literal(partial).withColor(TEXT))
                 .append(Component.literal("▌").withColor(OWN));
         chat.addMessage(line);
@@ -102,8 +109,11 @@ public final class ChatLines {
         }
     }
 
-    private static int nameColor() {
-        return UiTheme.current().reply() & 0xFFFFFF;
+    /** 加粗的主题色名字前缀——同伴行的视觉锚点。 */
+    private static MutableComponent name(String companionName) {
+        return Component.literal(companionName + ":")
+                .withColor(UiTheme.current().reply() & 0xFFFFFF)
+                .withStyle(s -> s.withBold(true));
     }
 
     private static void add(Component line) {

@@ -67,6 +67,8 @@ public class CompanionChatScreen extends Screen {
         int y = this.height - 44;
         input = new EditBox(this.font, x, y, INPUT_W, INPUT_H, Component.literal("numen chat input"));
         input.setBordered(false);
+        // 奶油卡上必须深色字:EditBox 默认白字带阴影,在浅底上看不清
+        input.setTextColor(UiTheme.current().text());
         input.setMaxLength(256);
         input.setValue(kept);
         input.setCanLoseFocus(false);
@@ -97,7 +99,7 @@ public class CompanionChatScreen extends Screen {
                 th.aiFill(), th.border());
         input.render(g, mouseX, mouseY, partialTicks);
         if (input.getValue().isEmpty()) {
-            Nb.text(g, this.font, "想说什么…(回车说出去,Esc 算了)", x + 1, y + 3, th.faint());
+            Nb.text(g, this.font, "想说什么…(回车说出去,Esc 算了)", x + 1, y + 3, th.textDim());
         }
 
         super.render(g, mouseX, mouseY, partialTicks);
@@ -115,9 +117,11 @@ public class CompanionChatScreen extends Screen {
     private void send() {
         String text = input.getValue().trim();
         if (!text.isEmpty()) {
+            boolean queued = com.dwinovo.numen.client.agent.AgentLoopRegistry.get(companionUuid)
+                    .map(l -> l.isBusy() || l.hasQueuedPrompts()).orElse(false);
             boolean accepted = NumenGateway.enqueue(companionUuid, text);
             if (accepted) {
-                ChatLines.owner(companionName, text, false);
+                ChatLines.owner(companionName, text, false, queued);
             } else {
                 com.dwinovo.numen.client.hud.TalkHint.flash(
                         companionName + " 没能收到——它可能不在线", 3000);
