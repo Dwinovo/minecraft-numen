@@ -423,6 +423,40 @@ public final class EntityAgentLoop {
         dispatcher.tick();
         if (voice != null) voice.tick();
         syncSpeakingState();
+        streamToChat();
+    }
+
+    /** 上次刷进聊天框流式行的文本(变了才重刷,不逐 tick 折腾聊天框)。 */
+    private String lastStreamedPartial = "";
+
+    /** 聊天框的打字机:在飞回复逐 tick 长出来——不开面板也能实时看她说话。 */
+    private void streamToChat() {
+        if (!awaitingLlmResponse || livePartial.length() == 0) {
+            return;
+        }
+        String filtered = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
+                .filterAssistantMessage(livePartial.toString());
+        if (filtered.isBlank() || filtered.equals(lastStreamedPartial)) {
+            return;
+        }
+        lastStreamedPartial = filtered;
+        com.dwinovo.numen.client.chat.ChatLines.streaming(entityUuid, speakerName(), filtered);
+    }
+
+    /** 流式行收尾:摘掉在飞行(定格行由各分支自己补)。 */
+    private void finishStreamLine() {
+        if (!lastStreamedPartial.isEmpty()) {
+            lastStreamedPartial = "";
+            com.dwinovo.numen.client.chat.ChatLines.streamingDone(entityUuid);
+        }
+    }
+
+    /** 说话人显示名:人设名优先,否则花名册名。 */
+    private String speakerName() {
+        return personaName != null && !personaName.isBlank()
+                ? personaName
+                : String.valueOf(com.dwinovo.numen.client.agent.NumenRoster.instance()
+                        .name(entityUuid));
     }
 
     /** 上次发给服务端的说话状态(翻转才发包,不逐 tick 刷)。 */
@@ -594,6 +628,7 @@ public final class EntityAgentLoop {
             awaitingLlmResponse = false;
             compacting = false;
             livePartial.setLength(0);   // 半截打字随打断作废
+            finishStreamLine();
 
             // Synthesize cancelled results for EVERY outstanding call (in flight AND
             // still-queued) so the assistant(tool_calls) message keeps matching tool
@@ -1254,6 +1289,7 @@ public final class EntityAgentLoop {
         }
         awaitingLlmResponse = false;
         livePartial.setLength(0);   // committed 消息(下方 addAssistant)接管显示
+        finishStreamLine();         // 聊天框在飞行同步摘掉(定格行随分支落地)
 
         // World is unloading (owner quit / disconnected): the client→server channel is gone, so a
         // dispatched ExecuteToolPayload would NPE in the platform sender. Drop this turn quietly.
@@ -1318,11 +1354,7 @@ public final class EntityAgentLoop {
                         .filterAssistantMessage(turn.content());
                 if (!shown.isBlank()) {
                     reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, shown);
-                    String who = personaName != null && !personaName.isBlank()
-                            ? personaName
-                            : String.valueOf(com.dwinovo.numen.client.agent.NumenRoster.instance()
-                                    .name(entityUuid));
-                    com.dwinovo.numen.client.chat.ChatLines.companion(who, shown);
+                    com.dwinovo.numen.client.chat.ChatLines.companion(speakerName(), shown);
                 } else {
                     reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
                 }
@@ -1345,13 +1377,14 @@ public final class EntityAgentLoop {
                 .filterAssistantMessage(turn.content() == null ? "" : turn.content());
         if (!aside.isBlank()) {
             reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, aside);
-            String who = personaName != null && !personaName.isBlank()
-                    ? personaName
-                    : String.valueOf(com.dwinovo.numen.client.agent.NumenRoster.instance()
-                            .name(entityUuid));
-            com.dwinovo.numen.client.chat.ChatLines.companion(who, aside);
+            com.dwinovo.numen.client.chat.ChatLines.companion(speakerName(), aside);
         } else {
             reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+        }
+
+        // 工具调用同步落一条最暗的状态行——不开 G 面板也知道她在干什么
+        for (var tc : turn.toolCalls()) {
+            com.dwinovo.numen.client.chat.ChatLines.tool(speakerName(), tc.name());
         }
 
         // Hand this turn's calls to the dispatcher — it runs them serially and

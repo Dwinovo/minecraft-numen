@@ -9,6 +9,7 @@
     "MixinServerCommonPacketListener"
   ],
   "client": [
+    "ChatComponentAccessor",
     "MixinKeyboardInput"
   ],
   "server": [],

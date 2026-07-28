@@ -1,24 +1,35 @@
 package com.dwinovo.numen.client.chat;
 
 import com.dwinovo.numen.client.screen.UiTheme;
+import com.dwinovo.numen.mixin.ChatComponentAccessor;
 
+import net.minecraft.client.GuiMessage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+
 /**
- * 同伴对话在聊天框里的唯一出样口——统一格式、统一配色,整体比真人聊天
- * 暗一层,像一条安静的字幕:
+ * 同伴对话在聊天框里的唯一出样口——聊天框是不开面板时的全量实时面:
  *
  * <pre>
  * 你 → sadasdas:帮我看看矿洞          (整行暗灰;语音带「(语音)」记号)
- * sadasdas:好,这就去……               (名字用主题 reply 色,正文浅灰)
+ * sadasdas:我看看…▌                    (流式行:边生成边长,完成后定格)
+ * ⚙ sadasdas · goto                    (工具调用,最暗的状态行)
+ * sadasdas:到了,矿洞在这边……          (回复全文,不折叠)
  * </pre>
  *
- * 没有尖括号——不冒充真人玩家发言;瞬态状态(没能送达/先选人/没听清)
- * 一律不进聊天框,走准星提示层 {@code TalkHint#flash}。长回复超过
- * {@link #FOLD_AT} 字折叠,悬停浮全文,完整记录在 G 面板。
+ * 统一格式统一配色,整体比真人聊天暗一层;没有尖括号,不冒充真人发言。
+ * 瞬态提示(没能送达/先选人/没听清)不进聊天框,走 {@code TalkHint#flash}。
+ *
+ * <p>流式实现:原版聊天行不可编辑,靠"摘掉旧行 → 补一条更长的新行"
+ * 模拟打字机(经 {@link ChatComponentAccessor});每个同伴最多一条在飞行,
+ * 完成后由定格行接替。客户端主线程专用。
  */
 public final class ChatLines {
 
@@ -26,7 +37,11 @@ public final class ChatLines {
     private static final int OWN = 0x8E939B;
     /** 同伴正文:比真人聊天的纯白暗一层的浅灰。 */
     private static final int TEXT = 0xC9CDD3;
-    private static final int FOLD_AT = 200;
+    /** 工具调用状态行:最暗一档——是动作记录,不是话。 */
+    private static final int TOOL = 0x6E7278;
+
+    /** 每个同伴的在飞流式行(摘行用的句柄)。 */
+    private static final Map<UUID, GuiMessage> LIVE = new HashMap<>();
 
     private ChatLines() {}
 
@@ -36,23 +51,59 @@ public final class ChatLines {
         add(Component.literal(line).withColor(OWN));
     }
 
-    /** 同伴的回复:着色名字 + 浅灰正文,超长折叠悬停看全文。 */
+    /** 同伴的回复定格行:着色名字 + 浅灰正文,全文显示不折叠。 */
     public static void companion(String companionName, String text) {
         String flat = text.replaceAll("\\s+", " ").trim();
         if (flat.isEmpty()) {
             return;
         }
-        MutableComponent line = Component.literal(companionName + ":")
-                .withColor(UiTheme.current().reply() & 0xFFFFFF);
-        if (flat.length() <= FOLD_AT) {
-            line.append(Component.literal(flat).withColor(TEXT));
-        } else {
-            line.append(Component.literal(flat.substring(0, FOLD_AT) + " ……")
-                    .withColor(TEXT)
-                    .withStyle(s -> s.withHoverEvent(new HoverEvent(
-                            HoverEvent.Action.SHOW_TEXT, Component.literal(flat)))));
+        add(Component.literal(companionName + ":").withColor(nameColor())
+                .append(Component.literal(flat).withColor(TEXT)));
+    }
+
+    /** 工具调用状态行:⚙ 名字 · 工具名。 */
+    public static void tool(String companionName, String toolName) {
+        add(Component.literal("⚙ " + companionName + " · " + toolName).withColor(TOOL));
+    }
+
+    /**
+     * 流式行更新:摘掉这只同伴的旧行,补上更长的新行(带光标记号)。
+     * 新行永远落在聊天最新位,像正在打字。
+     */
+    public static void streaming(UUID companion, String companionName, String partial) {
+        ChatComponent chat = Minecraft.getInstance().gui.getChat();
+        ChatComponentAccessor acc = (ChatComponentAccessor) chat;
+        removeLive(acc, companion);
+        MutableComponent line = Component.literal(companionName + ":").withColor(nameColor())
+                .append(Component.literal(partial).withColor(TEXT))
+                .append(Component.literal("▌").withColor(OWN));
+        chat.addMessage(line);
+        List<GuiMessage> all = acc.numen$allMessages();
+        if (!all.isEmpty()) {
+            LIVE.put(companion, all.get(0));   // addMessage 把新行放在 0 位
         }
-        add(line);
+    }
+
+    /** 流式收尾:摘掉在飞行(定格行由调用方随后补上)。 */
+    public static void streamingDone(UUID companion) {
+        ChatComponent chat = Minecraft.getInstance().gui.getChat();
+        removeLive((ChatComponentAccessor) chat, companion);
+    }
+
+    /** 退出世界:清句柄(聊天框本身随会话销毁)。 */
+    public static void clearLive() {
+        LIVE.clear();
+    }
+
+    private static void removeLive(ChatComponentAccessor acc, UUID companion) {
+        GuiMessage old = LIVE.remove(companion);
+        if (old != null && acc.numen$allMessages().remove(old)) {
+            acc.numen$refreshTrimmedMessages();
+        }
+    }
+
+    private static int nameColor() {
+        return UiTheme.current().reply() & 0xFFFFFF;
     }
 
     private static void add(Component line) {

@@ -89,6 +89,7 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.client.hud.SpeechBubbles.clear();
         com.dwinovo.numen.client.chat.SelectedCompanion.clear();
         com.dwinovo.numen.client.chat.QuickVoice.clear();
+        com.dwinovo.numen.client.chat.ChatLines.clearLive();
         com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
         com.dwinovo.numen.client.debug.PathDebugState.clear();
     }
