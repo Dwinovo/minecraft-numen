@@ -307,9 +307,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 continue;
             }
             BlockState now = player.level().getBlockState(target.pos());
-            if (target.matches(now) || now.getBlock() instanceof LiquidBlock
-                    || target.desiredState().getBlock() instanceof LiquidBlock) {
-                // 液体一律跳过(与对账口径一致):游标不在液体上停留
+            if (target.matches(now)
+                    || target.desiredState().getBlock() instanceof LiquidBlock
+                    || (isAirTarget(target) && now.getBlock() instanceof LiquidBlock)) {
+                // 与对账同口径:液体目标与"清空遇液体"跳过;固体目标淹水照放
                 markObserved(target, true);
                 cursor++;
                 continue;
@@ -1163,10 +1164,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (loaded) {
                 BlockState observed = view.getBlockState(pos);
                 if (target.matches(observed)
-                        || observed.getBlock() instanceof LiquidBlock
-                        || target.desiredState().getBlock() instanceof LiquidBlock) {
-                    // 液体一律跳过:不放液体、不清液体、含液体的格子不入对账——
-                    // 排水/布水都不是本任务的事,别让一格水拖出"永远缺格"的死局
+                        || target.desiredState().getBlock() instanceof LiquidBlock
+                        || (isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {
+                    // 液体口径:不放液体目标、清空型目标不排水——这两类跳过豁免;
+                    // 固体目标被液体淹着不豁免,照放,方块直接顶掉水(原版语义)
                     observedCompleted.add(pos.asLong());
                     completed++;
                 } else if (observedCompleted.remove(pos.asLong())) {
