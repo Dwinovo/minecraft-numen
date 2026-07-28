@@ -184,10 +184,12 @@ public final class BuildTool implements NumenTool {
             throw new IllegalArgumentException("layer_height must be between 0 and 16");
         }
         long timeout = Math.max(MIN_TIMEOUT_TICKS, (long) targets.size() * TICKS_PER_BLOCK);
-        // 材料校验暂全关(想建就建):不查背包、不扣数量;寻路搭脚手架仍用背包真实方块
+        // 材料记账随能力画像:免耗材(创造)想建就建;否则消耗背包,开工前
+        // 由任务预检并逐项报缺(见 BuildCompanionTask 的 preflight)。
+        boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting, layerHeight,
-                false), reply);
+                consume), reply);
     }
 
     /** 一条指令展开为目标格集。set/set_door 携带状态;体积算子单一方块类型。 */

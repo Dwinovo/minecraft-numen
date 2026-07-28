@@ -530,7 +530,9 @@ public final class PathExecutor {
         harness.forceKey(Input.SPRINT, false);
 
         // 与成本模型同判据:允许疾跑且饥饿值足够
-        if (!(NavSettings.get().allowSprint && player.getFoodData().getFoodLevel() > 6)) {
+        if (!(NavSettings.get().allowSprint
+                && (!com.dwinovo.numen.core.task.WorkProfile.of(player).hasHunger()
+                        || player.getFoodData().getFoodLevel() > 6))) {
             return false;
         }
         Movement current = path.movements().get(pathPosition);

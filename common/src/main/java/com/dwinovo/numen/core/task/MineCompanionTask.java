@@ -131,6 +131,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** Cells of just-broken targets, each held as a walk-over goal until the mapped
      *  game time so the spawned drop gets picked up before moving on. */
     private final Map<BlockPos, Long> anticipatedDrops = new HashMap<>();
+    /** 无掉落画像(创造)下的进度计数:破坏的目标方块数——背包增量在
+     *  这种画像下恒为 0,数拾取物会让任务铲平半径 32 chunk 后报败。 */
+    private int brokenTargets;
 
     private boolean navIsBranch;
     private BlockPos branchPoint;
@@ -168,6 +171,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // (BlockHelper.canHarvest, whole-inventory). prune() then drops any individual unharvestable
         // cell, so a mixed request (e.g. coal we can mine + diamond we can't) still works.
         return List.of(() -> {
+            if (WorkProfile.of(player).instaBreak()) {
+                return null;   // 瞬破画像无视工具等级,工具门不适用
+            }
             boolean anyHarvestable = r.targets.stream().anyMatch(
                     b -> BlockHelper.canHarvest(player.getInventory(), b.defaultBlockState()));
             if (!anyHarvestable) {
@@ -202,7 +208,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     @Override
     protected TaskState onTick() {
-        int gathered = Math.max(0, inventoryMatch() - baseline);   // matching items gained so far
+        // 进度口径随画像:有掉落 = 数拾取到的物品(一块矿可能出多个);
+        // 无掉落(创造) = 数破坏的目标方块——否则永远数不满。
+        int gathered = WorkProfile.of(player).dropsLoot()
+                ? Math.max(0, inventoryMatch() - baseline)
+                : brokenTargets;
         r.setMined(gathered);
         if (gathered >= r.count) {
             progressNote = "gathered all requested";
@@ -635,8 +645,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         switch (digger.digStep(pos)) {
             case BROKE_TARGET -> {
                 knownOres.remove(pos);
-                anticipatedDrops.put(pos.immutable(),
-                        player.level().getGameTime() + DROP_LOITER_TICKS);
+                brokenTargets++;
+                if (WorkProfile.of(player).dropsLoot()) {
+                    // 无掉落画像不登记逗留格:等一个永不出现的掉落物只会来回绕路
+                    anticipatedDrops.put(pos.immutable(),
+                            player.level().getGameTime() + DROP_LOITER_TICKS);
+                }
                 clearNoShot();
             }
             case NO_SHOT -> {
@@ -784,7 +798,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             // can say "you need a better tool" instead of the misleading "nothing found" (the
             // tool situation can also CHANGE mid-task: the only good pick breaking makes this
             // fire on re-prune).
-            if (!BlockHelper.canHarvest(player.getInventory(), state)) {
+            if (!WorkProfile.of(player).instaBreak()
+                    && !BlockHelper.canHarvest(player.getInventory(), state)) {
                 unharvestable.add(p.immutable());
                 return true;
             }

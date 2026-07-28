@@ -106,8 +106,10 @@ public final class BlueprintTool implements NumenTool {
             throw new IllegalArgumentException("blueprint " + a.file() + " contains no buildable cells");
         }
         long timeout = Math.max(MIN_TIMEOUT_TICKS, loaded.targets().size() * TICKS_PER_BLOCK);
+        // 材料记账随能力画像(同 build 工具):免耗材想建就建,否则消耗并预检报缺。
+        boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), loaded.targets(),
-                true, 0, false), reply);
+                true, 0, consume), reply);
     }
 }

@@ -126,7 +126,45 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     @Override
     protected List<Precondition> preconditions() {
-        return List.of(this::checkExistingBlocks);
+        return List.of(this::checkExistingBlocks, this::checkMaterials);
+    }
+
+    /**
+     * 生存记账的开工盘料:把还没达标的实体格按物品汇总,背包(全格)不够
+     * 就逐项报缺——模型拿到的是"先去筹什么、各差多少",不是一句干瘪的
+     * 材料不足。免耗材画像(consumeMaterials=false,创造)不盘。拆除格与
+     * 液体格不费料;脚手架用的是寻路层的真实方块,不在此账内。
+     */
+    private Precondition.Failure checkMaterials() {
+        if (!r.consumeMaterials) {
+            return null;
+        }
+        java.util.Map<Item, Integer> need = new java.util.LinkedHashMap<>();
+        for (BuildTaskRecord.Target target : r.targets) {
+            if (isAirTarget(target)) continue;
+            BlockState desired = target.desiredState();
+            if (desired != null && desired.getBlock() instanceof LiquidBlock) continue;
+            if (target.matches(player.level().getBlockState(target.pos()))) continue;
+            need.merge(target.item(), 1, Integer::sum);
+        }
+        StringBuilder missing = new StringBuilder();
+        for (var e : need.entrySet()) {
+            int have = PlayerInv.count(player.getInventory(), e.getKey());
+            if (have < e.getValue()) {
+                if (missing.length() > 0) missing.append(", ");
+                missing.append(net.minecraft.core.registries.BuiltInRegistries.ITEM
+                                .getKey(e.getKey()).getPath())
+                        .append(" ×").append(e.getValue() - have)
+                        .append(" (have ").append(have).append("/").append(e.getValue()).append(")");
+            }
+        }
+        if (missing.length() > 0) {
+            return new Precondition.Failure(
+                    "not enough materials to start building — missing: " + missing
+                            + ". Survival mode consumes 1 item per cell; gather or craft these first.",
+                    FailureType.NO_MATERIAL);
+        }
+        return null;
     }
 
     private Precondition.Failure checkExistingBlocks() {
@@ -458,6 +496,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /** 从背包扣掉一个该物品(主手优先已由 holdInHand 保证展示,扣哪格无所谓)。 */
     private void consumeOne(Item item) {
+        if (player.hasInfiniteMaterials()) {
+            return;   // 任务中途被切成免耗材画像:记账即刻停手,别扣真方块
+        }
         Inventory inventory = player.getInventory();
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack stack = inventory.getItem(i);

@@ -124,7 +124,10 @@ public class CalculationContext {
         this.hasWaterBucket = settings.allowWaterBucketFall
                 && hotbarHasWaterBucket(player)
                 && player.level().dimension() != Level.NETHER;
-        this.canSprint = settings.allowSprint && player.getFoodData().getFoodLevel() > 6;
+        // 无饥饿画像(创造)不受饱食度门限——否则 food≤6 时被切创造会永久锁死疾跑
+        this.canSprint = settings.allowSprint
+                && (!com.dwinovo.numen.core.task.WorkProfile.of(player).hasHunger()
+                        || player.getFoodData().getFoodLevel() > 6);
         this.placeBlockCost = settings.blockPlacementPenalty;
         this.allowBreak = settings.allowBreak;
         this.allowBreakAnyway = List.copyOf(settings.allowBreakAnyway());
