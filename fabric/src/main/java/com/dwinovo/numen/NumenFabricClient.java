@@ -84,16 +84,11 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.agent.AgentLoopRegistry.tickAll();
                 });
 
-        // @名字 消息 → 路由给同伴,不上公屏(名字没命中照常发送)。
-        net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT
-                .register(message -> !com.dwinovo.numen.client.chat.NumenChatRouter.route(message));
-
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT
                 .register((handler, client) -> {
                     com.dwinovo.numen.client.data.ClientNumenInventory.clear();
                     com.dwinovo.numen.client.agent.KnownSkins.clear();
                     com.dwinovo.numen.client.hud.SpeechBubbles.clear();
-                    com.dwinovo.numen.client.chat.CompanionCompletions.clear();
                     com.dwinovo.numen.client.chat.SelectedCompanion.clear();
                     com.dwinovo.numen.client.chat.QuickVoice.clear();
                     com.dwinovo.numen.client.agent.ClientDeaths.clearAll();

@@ -45,11 +45,10 @@ public class NumenNeoForgeClient {
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
         modBus.addListener(NumenNeoForgeClient::registerReloadListeners);
         modBus.addListener(NumenNeoForgeClient::registerShaders);
-        // Game bus — per-tick / world-render / chat-routing / disconnect.
+        // Game bus — per-tick / world-render / disconnect.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
-        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientChat);
     }
 
     static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
@@ -60,13 +59,6 @@ public class NumenNeoForgeClient {
                     event.getPoseStack(), event.getCamera());
             com.dwinovo.numen.client.hud.SpeechBubbleRenderer.render(
                     event.getPoseStack(), event.getCamera());
-        }
-    }
-
-    static void onClientChat(net.neoforged.neoforge.client.event.ClientChatEvent event) {
-        // @名字 消息 → 路由给同伴,不上公屏(名字没命中照常发送)。
-        if (com.dwinovo.numen.client.chat.NumenChatRouter.route(event.getMessage())) {
-            event.setCanceled(true);
         }
     }
 
@@ -95,7 +87,6 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.client.data.ClientNumenInventory.clear();
         com.dwinovo.numen.client.agent.KnownSkins.clear();
         com.dwinovo.numen.client.hud.SpeechBubbles.clear();
-        com.dwinovo.numen.client.chat.CompanionCompletions.clear();
         com.dwinovo.numen.client.chat.SelectedCompanion.clear();
         com.dwinovo.numen.client.chat.QuickVoice.clear();
         com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
