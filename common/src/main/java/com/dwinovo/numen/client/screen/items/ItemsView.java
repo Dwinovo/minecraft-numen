@@ -142,11 +142,19 @@ public final class ItemsView {
         String persona = loop != null && loop.personaName() != null && !loop.personaName().isBlank()
                 ? loop.personaName() : "默认人设";
         Nb.text(g, font, clip(font, persona, lw - 11), c1 + 11, ly, th.text());
-        String model = loop != null && loop.providerEntryId() != null && !loop.providerEntryId().isBlank()
-                ? loop.providerEntryId() : "未绑定模型";
-        Nb.text(g, font, clip(font, "⚡ " + model, lw), c1, ly + 12, th.textDim());
+        // 模型行:条目 ID 解析回人读的名字(条目名 · 型号),别把主键糊给用户
+        String model = "未绑定模型";
+        if (loop != null && loop.providerEntryId() != null && !loop.providerEntryId().isBlank()) {
+            var entry = com.dwinovo.numen.agent.llm.ProviderLibrary.instance()
+                    .get(loop.providerEntryId());
+            model = entry != null
+                    ? entry.name() + (entry.model() == null || entry.model().isBlank()
+                            ? "" : " · " + entry.model())
+                    : "条目已删除";
+        }
+        Nb.text(g, font, clip(font, "模型 " + model, lw), c1, ly + 12, th.textDim());
         var voice = com.dwinovo.numen.client.voice.VoiceLibrary.instance().resolve(uuid);
-        Nb.text(g, font, clip(font, voice != null ? "♪ " + voice.name() : "♪ 无声线", lw),
+        Nb.text(g, font, clip(font, "声线 " + (voice != null ? voice.name() : "无"), lw),
                 c1, ly + 24, th.textDim());
         if (loop != null) {
             // 记忆行:水位条(绿→琥珀→红)+ 条数与累计消耗
