@@ -1,37 +1,38 @@
 package com.dwinovo.numen.client.hud;
 
-import com.dwinovo.numen.client.agent.ClientNumenLookup;
+import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
-import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.world.phys.Vec3;
+import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-import java.util.UUID;
 
 /**
- * 头顶气泡的世界渲染:同伴说的话浮在它自己头上,而不是弹在屏幕角落
- * ——话从人身上冒出来,它才是这个世界的居民。
+ * 头顶气泡的渲染:同伴说的话浮在它自己头上,而不是弹在屏幕角落——话
+ * 从人身上冒出来,它才是这个世界的居民。
+ *
+ * <p>从玩家实体渲染尾部进入(mixin,与名牌同一条管线):实体通道是
+ * 光影/着色器正确处理的路径,世界渲染阶段的裸几何在 Iris 下会被管线
+ * 吃掉只剩残影。几何一律挂在名牌同款的 {@code RenderType.text} 上
+ * (白色底图 + 顶点着色),文字全亮度——夜里也得看得清她在说什么。
  *
  * <p>视觉沿用 GUI 的 BlockFrame 方言:方角、粗边、硬偏移阴影,配色取
  * 当前 {@link UiTheme}(奶油底深字),底部一枚小方尾指向说话者。思考
- * 态渲染成跳动的省略号。文字全亮度——夜里也得看得清她在说什么。
- *
- * <p>从两个加载器共用的世界渲染阶段进入(与寻路调试覆盖层同一钩子),
- * poseStack 为世界空间;逐帧矢量绘制,无实体数据、无粒子。
+ * 态渲染成跳动的省略号。
  */
 public final class SpeechBubbleRenderer {
+
+    private static final ResourceLocation WHITE =
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/white.png");
 
     private static final float SCALE = 0.025f;
     private static final int MAX_WIDTH = 130;     // 文本换行宽(px)
@@ -46,42 +47,27 @@ public final class SpeechBubbleRenderer {
 
     private SpeechBubbleRenderer() {}
 
-    /** 世界渲染钩子入口(半透明方块阶段之后;poseStack 为世界空间)。 */
-    public static void render(PoseStack poseStack, Camera camera) {
-        if (SpeechBubbles.isEmpty()) {
+    /**
+     * 实体渲染尾部入口(poseStack 原点在实体脚下,交给我们时是干净的)。
+     * 没有气泡的实体(包括所有真人玩家)一次 map 查询即返回。
+     */
+    public static void render(AbstractClientPlayer body, PoseStack poseStack,
+                              MultiBufferSource buffers) {
+        SpeechBubbles.Bubble bubble = SpeechBubbles.live(body.getUUID());
+        if (bubble == null || body.isInvisible()) {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        if (mc.level == null) {
+        if (mc.getEntityRenderDispatcher().distanceToSqr(body) > VIEW_RANGE_SQ) {
             return;
         }
-        float partialTick = mc.getTimer().getGameTimeDeltaPartialTick(true);
-        MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
-        Vec3 cam = camera.getPosition();
-
-        Iterator<Map.Entry<UUID, SpeechBubbles.Bubble>> it = SpeechBubbles.drainLive();
-        while (it.hasNext()) {
-            Map.Entry<UUID, SpeechBubbles.Bubble> e = it.next();
-            AbstractClientPlayer body = ClientNumenLookup.resolve(e.getKey());
-            if (body == null || body.isInvisible()) {
-                continue;
-            }
-            if (body.distanceToSqr(cam.x, cam.y, cam.z) > VIEW_RANGE_SQ) {
-                continue;
-            }
-            Vec3 pos = body.getPosition(partialTick);
-            poseStack.pushPose();
-            // 锚点在名牌上方:小方尾的尖端落在这里,气泡向上生长
-            poseStack.translate(pos.x - cam.x,
-                    pos.y - cam.y + body.getBbHeight() + 0.95,
-                    pos.z - cam.z);
-            poseStack.mulPose(mc.getEntityRenderDispatcher().cameraOrientation());
-            poseStack.scale(SCALE, -SCALE, SCALE);
-            drawBubble(poseStack, buffers, mc.font, e.getValue());
-            poseStack.popPose();
-        }
-        buffers.endBatch(RenderType.debugQuads());
-        buffers.endBatch();
+        poseStack.pushPose();
+        // 锚点在名牌上方:小方尾的尖端落在这里,气泡向上生长
+        poseStack.translate(0, body.getBbHeight() + 0.95, 0);
+        poseStack.mulPose(mc.getEntityRenderDispatcher().cameraOrientation());
+        poseStack.scale(SCALE, -SCALE, SCALE);
+        drawBubble(poseStack, buffers, mc.font, bubble);
+        poseStack.popPose();
     }
 
     /**
@@ -109,7 +95,7 @@ public final class SpeechBubbleRenderer {
         float y0 = -boxH;
         float y1 = 0;
 
-        VertexConsumer vc = buffers.getBuffer(RenderType.debugQuads());
+        VertexConsumer vc = buffers.getBuffer(RenderType.text(WHITE));
         Matrix4f m = poseStack.last().pose();
         // 硬偏移阴影(整体,含尾影由主影覆盖)
         quad(vc, m, x0 + SHADOW_OFF, y0 + SHADOW_OFF, x1 + SHADOW_OFF, y1 + SHADOW_OFF,
@@ -143,19 +129,19 @@ public final class SpeechBubbleRenderer {
 
     private static void quad(VertexConsumer vc, Matrix4f m,
                              float x0, float y0, float x1, float y1, float z, int argb) {
-        vc.addVertex(m, x0, y0, z).setColor(argb);
-        vc.addVertex(m, x0, y1, z).setColor(argb);
-        vc.addVertex(m, x1, y1, z).setColor(argb);
-        vc.addVertex(m, x1, y0, z).setColor(argb);
+        vc.addVertex(m, x0, y0, z).setColor(argb).setUv(0f, 0f).setLight(FULL_BRIGHT);
+        vc.addVertex(m, x0, y1, z).setColor(argb).setUv(0f, 1f).setLight(FULL_BRIGHT);
+        vc.addVertex(m, x1, y1, z).setColor(argb).setUv(1f, 1f).setLight(FULL_BRIGHT);
+        vc.addVertex(m, x1, y0, z).setColor(argb).setUv(1f, 0f).setLight(FULL_BRIGHT);
     }
 
     /** 以 (cx, top) 为上顶点的下指菱形(方尾)。 */
     private static void diamond(VertexConsumer vc, Matrix4f m,
                                 float cx, float top, float halfW, float h, float z, int argb) {
-        vc.addVertex(m, cx - halfW, top, z).setColor(argb);
-        vc.addVertex(m, cx, top + h, z).setColor(argb);
-        vc.addVertex(m, cx + halfW, top, z).setColor(argb);
-        vc.addVertex(m, cx, top - 1, z).setColor(argb);
+        vc.addVertex(m, cx - halfW, top, z).setColor(argb).setUv(0f, 0f).setLight(FULL_BRIGHT);
+        vc.addVertex(m, cx, top + h, z).setColor(argb).setUv(0f, 1f).setLight(FULL_BRIGHT);
+        vc.addVertex(m, cx + halfW, top, z).setColor(argb).setUv(1f, 1f).setLight(FULL_BRIGHT);
+        vc.addVertex(m, cx, top - 1, z).setColor(argb).setUv(1f, 0f).setLight(FULL_BRIGHT);
     }
 
     /** 逐像素贪心换行(CJK 友好),超行数截断并补省略号。 */

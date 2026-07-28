@@ -52,12 +52,12 @@ public class NumenNeoForgeClient {
     }
 
     static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
-        // 世界空间覆盖层(半透明方块阶段之后):寻路调试线 + 同伴头顶气泡。
+        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后)。
+        // 头顶气泡不在这里——它走玩家实体渲染尾部(MixinPlayerRenderer),
+        // 与名牌同管线,光影下才正常。
         if (event.getStage() == net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage
                 .AFTER_TRANSLUCENT_BLOCKS) {
             com.dwinovo.numen.client.debug.PathDebugRenderer.render(
-                    event.getPoseStack(), event.getCamera());
-            com.dwinovo.numen.client.hud.SpeechBubbleRenderer.render(
                     event.getPoseStack(), event.getCamera());
         }
     }

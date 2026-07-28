@@ -96,13 +96,13 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.debug.PathDebugState.clear();
                 });
 
-        // 世界空间覆盖层(半透明方块阶段之后):寻路调试线 + 同伴头顶气泡。
+        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后)。
+        // 头顶气泡不在这里——它走玩家实体渲染尾部(MixinPlayerRenderer),
+        // 与名牌同管线,光影下才正常。
         net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_TRANSLUCENT
                 .register(context -> {
                     if (context.matrixStack() != null) {
                         com.dwinovo.numen.client.debug.PathDebugRenderer.render(
-                                context.matrixStack(), context.camera());
-                        com.dwinovo.numen.client.hud.SpeechBubbleRenderer.render(
                                 context.matrixStack(), context.camera());
                     }
                 });

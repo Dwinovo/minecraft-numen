@@ -3,7 +3,6 @@ package com.dwinovo.numen.client.hud;
 import com.dwinovo.numen.network.payload.SpeechBubblePayload;
 
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 
@@ -54,15 +53,17 @@ public final class SpeechBubbles {
         LIVE.put(entityUuid, new Bubble(kind, shown, System.currentTimeMillis(), life));
     }
 
-    /** 渲染方逐帧迭代;过期条目就地摘除。 */
-    public static Iterator<Map.Entry<UUID, Bubble>> drainLive() {
-        long now = System.currentTimeMillis();
-        LIVE.values().removeIf(b -> b.expired(now));
-        return LIVE.entrySet().iterator();
-    }
-
-    public static boolean isEmpty() {
-        return LIVE.isEmpty();
+    /** 某实体此刻的活气泡;过期就地摘除返回 null。渲染方逐实体查询。 */
+    public static Bubble live(UUID entityUuid) {
+        Bubble b = LIVE.get(entityUuid);
+        if (b == null) {
+            return null;
+        }
+        if (b.expired(System.currentTimeMillis())) {
+            LIVE.remove(entityUuid);
+            return null;
+        }
+        return b;
     }
 
     /** 退出世界时清台账(和其他客户端会话态一起挂在断线钩子上)。 */

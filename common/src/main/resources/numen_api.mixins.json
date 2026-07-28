@@ -10,7 +10,8 @@
   ],
   "client": [
     "ChatComponentAccessor",
-    "MixinKeyboardInput"
+    "MixinKeyboardInput",
+    "MixinPlayerRenderer"
   ],
   "server": [],
   "injectors": {
