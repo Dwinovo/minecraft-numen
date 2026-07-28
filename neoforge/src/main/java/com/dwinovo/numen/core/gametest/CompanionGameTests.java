@@ -177,7 +177,7 @@ public class CompanionGameTests {
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
     public static void build_shape_cylinder(GameTestHelper helper) {
         BlockPos center = new BlockPos(10, 2, 10);
-        List<BlockPos> rel = com.dwinovo.numen.core.tools.BuildShapeTool.cells(
+        List<BlockPos> rel = com.dwinovo.numen.core.tools.BuildTool.shapeCells(
                 "cylinder", true, center.getX(), center.getY(), center.getZ(),
                 null, null, null, 3, 4);
         runBuildCase(helper, "gametest_mason2", rel, 2);
