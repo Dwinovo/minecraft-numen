@@ -13,8 +13,9 @@ finished build looks wrong.
 1. PLAN first: purpose, footprint, height, one main material + one accent material.
 2. Inspect the site (goto / look around): flat enough? big enough? Note the GROUND
    level — every vertical decision below is anchored to it.
-3. Build big-to-small in ONE build call where possible: `shapes` for volumes,
-   `blocks` for stateful details (stairs facing, doors, torches).
+3. Build big-to-small in ONE build call where possible: a single ordered `ops`
+   stream — volumes first, stateful details (`set`, `set_door`) last; later ops
+   overwrite earlier cells.
 4. After task_finished, LOOK at the result, run the checklist below, patch gaps
    with a small follow-up build call.
 
@@ -50,10 +51,12 @@ bottom face) for wall rings; reserve hollow `box` for fully sealed shells.
 
 1. foundation slab (`box`, 1 thick — this IS the interior floor)
 2. `walls` perimeter on top of it
-3. roof (stacked shrinking solid `box` layers = gable with filled ends, or top
-   half of a hollow `sphere` for a dome); roof layer doubles as the ceiling
-4. openings: air cells for the door (2 tall) and windows (1-2 above floor)
-5. details: stairs facing the right way, door blocks, glass panes, torches
+3. `roof` op over the wall rect (gable, filled ends, doubles as ceiling); use
+   the top half of a hollow `sphere` for a dome
+4. openings: `set` air cells for windows (1-2 above floor); `set_door` cuts and
+   fits the whole door in one op
+5. details: `set` stairs facing the right way, glass panes, torches; `scatter`
+   for flowers/grass around the yard
 
 ## Quality checklist
 
@@ -66,9 +69,9 @@ bottom face) for wall rings; reserve hollow `box` for fully sealed shells.
 
 ## Tool mapping
 
-- volumes & carving: `build` with `shapes` — box / walls / line / cylinder /
-  sphere; hollow variants; block_id minecraft:air carves
-- precise stateful blocks: `build` with `blocks` (facing / axis / half /
-  properties); later entries overwrite earlier cells, so details go last
+- everything goes through `build`'s ordered `ops` stream: set / box / walls /
+  line / cylinder / sphere / roof / set_door / scatter; hollow variants;
+  block_id minecraft:air carves; later ops overwrite earlier cells, so details
+  go last
 - whole structure files: `blueprint` tool (action=list first, then action=build
   at a flat anchor); liquids are always skipped
