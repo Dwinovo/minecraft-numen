@@ -118,6 +118,57 @@ public class CompanionGameTests {
         });
     }
 
+    /**
+     * mine 也走门:黑曜石屋(铁镐非正确工具,成本模型按不可破对待——拆墙
+     * 不再是廉价选项)关住矿工,矿在屋外,唯一通路是关着的橡木门。验证
+     * 挖掘任务的站位寻路复用同一条开门链;收工后墙体完好(确实没打洞)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_through_closed_door(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 1; x <= 5; x++) {
+            for (int z = 1; z <= 5; z++) {
+                boolean perimeter = x == 1 || x == 5 || z == 1 || z == 5;
+                if (!perimeter) continue;
+                for (int y = 2; y <= 4; y++) {
+                    if (x == 3 && z == 5 && y <= 3) continue;   // 门占的两格
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
+                            Blocks.OBSIDIAN.defaultBlockState());
+                }
+            }
+        }
+        BlockPos doorLow = helper.absolutePos(new BlockPos(3, 2, 5));
+        var lower = Blocks.OAK_DOOR.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.DoorBlock.FACING,
+                        net.minecraft.core.Direction.SOUTH);
+        level.setBlockAndUpdate(doorLow, lower);
+        level.setBlockAndUpdate(doorLow.above(), lower.setValue(
+                net.minecraft.world.level.block.DoorBlock.HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER));
+
+        List<BlockPos> ores = List.of(
+                helper.absolutePos(new BlockPos(12, 2, 12)),
+                helper.absolutePos(new BlockPos(13, 2, 12)));
+        for (BlockPos ore : ores) {
+            level.setBlockAndUpdate(ore, Blocks.GOLD_ORE.defaultBlockState());
+        }
+
+        NumenPlayer companion = spawnAt(helper, "gametest_tunneler", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        TaskRecord record = new BlockActionTools().autoMine(
+                List.of("minecraft:gold_ore"), 2, TaskDispatch.ctx("gametest-doormine", companion));
+        TaskDispatch.dispatchAsync(companion, record, reply -> {});
+
+        BlockPos wallProbe = helper.absolutePos(new BlockPos(1, 3, 3));
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.getInventory().countItem(Items.RAW_GOLD) >= 2,
+                    "companion has not mined the gold outside the door");
+            helper.assertTrue(level.getBlockState(wallProbe).is(Blocks.OBSIDIAN),
+                    "wall breached — expected the door route");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     // ==================== 真实地形挖掘用例(模板取自实际存档地形)====================
 
     /** 挖掘批次前置:和平难度 + 正午,排除怪物袭扰与昼夜随机性。 */
