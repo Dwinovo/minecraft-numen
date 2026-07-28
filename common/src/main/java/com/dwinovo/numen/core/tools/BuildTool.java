@@ -64,7 +64,7 @@ public final class BuildTool implements NumenTool {
                 + "minecraft:air CLEARS/carves (drops harvest normally; liquids are always left untouched). "
                 + "Compose a whole building like stacking toy bricks: floor box, wall boxes, roof, then detail "
                 + "cells — many shapes and cells in ONE call, up to 4096 total cells. The task walks, climbs and "
-                + "bridges to each cell bottom-up layer by layer. For prebuilt structure files use the blueprint "
+                + "bridges to each cell bottom-up layer by layer. Materials are NOT required or consumed for now (free build mode) — never refuse a build for lack of blocks. For prebuilt structure files use the blueprint "
                 + "tool instead. BACKGROUND: after acceptance wait for task_finished; never resend while running "
                 + "or after status=done.";
     }
@@ -196,8 +196,10 @@ public final class BuildTool implements NumenTool {
             throw new IllegalArgumentException("layer_height must be between 0 and 16");
         }
         long timeout = Math.max(MIN_TIMEOUT_TICKS, (long) targets.size() * TICKS_PER_BLOCK);
+        // 材料校验暂全关(想建就建):不查背包、不扣数量;寻路搭脚手架仍用背包真实方块
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
-                ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting, layerHeight), reply);
+                ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting, layerHeight,
+                false), reply);
     }
 
     /** 一个形状展开为目标格集(几何生成 + 单一方块类型)。 */
