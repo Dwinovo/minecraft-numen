@@ -1,27 +1,42 @@
-# Style: medieval_rustic — 中世纪乡村
+# medieval_rustic — 中世纪村舍
 
-Cozy village houses: timber frame, steep roofs, warm and worn.
+A village house built by the people living in it, out of whatever the woods and
+the field gave them. Nothing is plumb, nothing repeats exactly, and the upper
+floor usually overhangs the lower because ground-floor area was what got taxed.
+It looks handmade because it was: heavy timber, rough infill, and a roof far
+larger than the walls holding it up.
+
+## Materials
+- **frame**: oak_log, spruce_log, stripped_oak_log — heavy, visible, irregular
+- **infill**: white_terracotta, bone_block, clay, smooth_quartz for daub
+- **base course**: cobblestone, mossy_cobblestone, stone — mix heavily so it
+  looks laid by hand, never one flat colour
+- **roof**: dark_oak_stairs or spruce_stairs for shingle; hay_block for thatch
+- **light**: torch, lantern on a fence post, campfire in the yard
+- **accent**: barrels, a woodpile, a cart — clutter belongs to this style
 
 ## Proportions
-- house 9x7 to 13x11, walls 3-4 tall, roof adds 4-6; door centered on the long side
-- windows 1x1 every 2-3 blocks of wall, sill at wall_y+1
+- small footprint, tall roof: the roof takes 0.5–0.7 of total height
+- walls 3–5, often with an upper floor jettied 1 past the lower
+- roof rise 0.8–1.2 of half-span — **steep**, for snow and thatch
+- eaves 1–2, low enough to nearly brush a standing player
 
-## Palette
-- primary: oak_planks or white `smooth_quartz`-look walls? no — use `mud_bricks` or plain oak_planks
-- frame/accent: dark_oak_log corners + horizontal dark_oak beams at wall top
-- foundation: cobblestone; roof: dark oak (planks layers) or `deepslate_tile`-look; trim: fences
-- glass: glass_pane; light: torch, lantern
+## Signature moves
+- **Jetty** — the upper storey oversails the lower by a block. Instantly
+  medieval, and it costs two ops.
+- **Stone base, timber above** — a course or two of rough stone before the wood
+  begins, because damp rots timber.
+- **Crooked repetition** — vary post spacing and wall height by a block here and
+  there. Perfect regularity is the wrong century.
+- **Chimney** — a stone stack breaking through the roof, smoking.
 
-## Roof recipe
-`roof` op over wall rect; ridge along the long axis; add 1-block overhang later only
-if the stance work supports it — skip overhang for now.
-
-## Signature details (ops idioms)
-- corner posts: `set` dark_oak_log axis=y at all four corners, full wall height
-- wall-top beam: `box` dark_oak_log (axis=x/z via `set` per run) one course at wall top
-- window boxes: `set` oak_trapdoor/flower under windows; `set` flower_pot on sills
-- chimney: 1x1 cobblestone column from ground past the ridge +1, campfire on top
-- door step: cobblestone `set` outside the door; path: `scatter` coarse_dirt/path blocks
+## Variants
+- **cottage** — one room, thatch, a garden plot
+- **longhouse** — animals at one end, family at the other, one roof over both
+- **shop** — open ground floor, living quarters jettied over it
+- **mill** — the same house plus a wheel and a race
 
 ## Avoid
-- flat roofs; pure-cobblestone boxes; windows at floor level
+- clean symmetry and identical bays
+- polished or manufactured-looking blocks
+- large glass; openings are small and shuttered

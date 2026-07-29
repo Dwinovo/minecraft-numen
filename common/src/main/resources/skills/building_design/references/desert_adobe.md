@@ -1,17 +1,42 @@
-# Style: desert_adobe — 沙漠土坯
+# desert_adobe — 沙漠土坯
 
-Thick flat-roofed blocks, small windows, ladder rhythm — heat architecture.
+Mud brick, hand-smoothed, with walls thick enough that the inside stays cool
+until evening. Everything is rounded because it was shaped by hand and re-
+plastered every few years; corners are soft, parapets are wavy, and the roof is
+flat because it is another room. Buildings grow by accretion, merging into each
+other and climbing a slope.
+
+## Materials
+- **walls**: smooth_sandstone, sandstone, cut_sandstone, terracotta,
+  orange_terracotta — mix at least three so the plaster looks hand-applied
+- **beams**: stripped_oak_log, stripped_jungle_log — poking straight out of the
+  wall, which is how the real thing looks
+- **roof surface**: smooth_sandstone_slab, sandstone_slab
+- **floor**: terracotta, smooth_sandstone
+- **light**: lantern, torch, campfire on the roof terrace
+- **accent**: one saturated colour on doors only — blue or turquoise
 
 ## Proportions
-- cubic clusters: several 7x7 to 11x9 boxes of different heights (3-5) sharing walls
-- FLAT roofs with 1-high parapet; windows tiny 1x1 and sparse
+- walls thick: 2 deep where the section shows, especially around openings
+- **flat roofs** with a parapet 1–2 above the roof surface
+- openings small and deeply recessed, 1x2 or 2x2 at most
+- 1–3 storeys, each stepping back so lower roofs become upper terraces
 
-## Palette
-- primary: smooth_sandstone + terracotta mix; accents: cut_sandstone bands
-- roof beams: dark_oak_log ends poking out of walls just under the roof line (set, axis horizontal)
-- light: lantern; ground: sand/sandstone, `scatter` dead_bush + cactus (on sand)
+## Signature moves
+- **Protruding beams** — round timbers sticking 1 out of the wall just below the
+  roof line, at a regular interval. Cheapest and strongest signal of the style.
+- **Roof as room** — the flat roof is used: parapet, stair up, furniture.
+- **Softened corners** — chamfer or step the corners rather than leaving them
+  crisp.
+- **Stepped accretion** — several boxes at different heights merged into one mass.
 
-## Recipe
-1. per volume: `box` walls (hollow) with flat top = `box` 1-thick roof + `walls` 1-high parapet
-2. beam ends: `set` log axis=x/z protruding at roof level every 2 blocks
-3. connect volumes with shared walls and rooftop ladders
+## Variants
+- **village** — houses merging, alleys between, shared roof terraces
+- **kasbah** — fortified, tapering corner towers, few openings
+- **oasis house** — palms and a water channel through the courtyard
+- **granary** — tall blank walls, tiny high openings, ladder access
+
+## Avoid
+- pitched roofs
+- crisp machine-cut corners
+- cool grey or white; the palette is warm earth throughout

@@ -1,21 +1,43 @@
-# Style: nordic_viking — 北欧长屋
+# nordic_viking — 维京长屋
 
-One big longhouse: boat-like proportions, all wood, steep shaggy roof to the ground.
+The roof is the building. Walls are barely a metre of turf and stave before the
+enormous shingled roof takes over and comes down almost to the ground, because
+snow load and wind matter more than headroom at the edges. Everything is long
+rather than wide — one continuous hall — and the ornament is carved into the
+structure itself: dragon heads on the gable ends, patterned stave doors.
+
+## Materials
+- **walls / staves**: spruce_planks, dark_oak_planks, stripped_spruce_log —
+  vertical boards, not horizontal courses
+- **roof**: spruce_stairs, dark_oak_stairs for shingle; grass_block or moss_block
+  for a turf roof, which is very much in period
+- **base**: cobblestone, andesite, mossy_cobblestone — a low stone footing
+- **posts**: oak_log, spruce_log — heavy and few
+- **light**: campfire down the centre line, lantern on the posts
+- **accent**: carved gable ends; banners inside the hall
 
 ## Proportions
-- long and narrow: 17x7 up to 21x9; walls only 2-3 tall — the ROOF is the building
-- roof slopes start at wall_y+0 and nearly reach the ground on the long sides
+- length 3–5 times the width — commit to the long thin hall
+- walls very low, 2–3, and the eave comes down to nearly meet the ground
+- roof rise 0.8–1.2 of half-span, and the roof is 0.6–0.75 of total height
+- no windows to speak of; light comes from the door and a roof vent
 
-## Palette
-- spruce everything: spruce_log frame, spruce_planks walls, spruce stairs/planks roof layers
-- dark oak trim; foundation: cobblestone/stone; light: campfire + lantern
+## Signature moves
+- **Roof to the ground** — extend the eave down past the wall until it almost
+  touches the earth. This single move is the style.
+- **Turf roof** — grass on top with the shingle edge showing at the eave.
+- **Carved gable finials** — crossed beams or a dragon head at each end of the
+  ridge.
+- **Central hearth** — a fire line down the middle of the hall, smoke hole above.
 
-## Recipe
-1. low `walls`, then oversized `roof` whose base rect extends 1-2 beyond the walls
-2. gable ends: keep vertical, add exposed X-bracing with `set` log cells
-3. ridge: full-length log run (`set` axis along ridge) with crossed rafter tips at both ends
+## Variants
+- **longhouse** — the standard hall, family and animals sharing it
+- **stave church** — the same logic gone vertical: stacked shrinking roofs,
+  dark shingle, extremely steep
+- **boathouse** — open at one gable end, a ship inside
+- **hillside farm** — dug into a slope, turf roof continuing the hill
 
-## Signature details
-- carved prow: extend the ridge log 1-2 past each gable, tip with a fence+trapdoor curl
-- fire pit inside: campfire centered, smoke hole (leave 1 air gap in the ridge above it)
-- shields on walls: alternating banner colors along the long face
+## Avoid
+- tall walls or large windows
+- clean bright materials; everything here is weathered
+- square footprints — length is the point

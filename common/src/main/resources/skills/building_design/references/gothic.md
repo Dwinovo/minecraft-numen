@@ -1,20 +1,45 @@
-# Style: gothic — 哥特
+# gothic — 哥特
 
-Vertical drama: height 2x footprint, pointed arches, buttresses, rose window.
+Gothic is an argument about weight: how little stone can hold up how much
+height, and how much of the wall can be replaced by glass. Every device — the
+pointed arch, the buttress, the shafted pier — exists to push thrust outward and
+downward so the wall between can be dissolved. Verticality is not decoration
+here, it is the structural logic showing through.
+
+## Materials
+- **stone**: stone_bricks, chiseled_stone_bricks, polished_diorite, calcite,
+  smooth_stone — light, cool, and mixed so the mass reads as coursed masonry
+- **tracery and ribs**: stone_brick_wall, iron_bars, stone_brick_stairs
+- **glass**: stained_glass and stained_glass_pane — deep blues and reds, used in
+  tall narrow strips
+- **roof**: deepslate_tiles, gray_concrete, dark_prismarine; very steep
+- **light**: lantern, soul_lantern, and let the glass carry the colour
+- **accent**: copper for spire caps as it weathers green
 
 ## Proportions
-- nave 9-11 wide, walls 10-14 tall; windows 1x4 slits with pointed tops
-- buttresses every 3 blocks along the long sides, stepping in as they rise
+- height is 2–4 times the width of the nave — commit to it
+- windows fill 0.5–0.75 of each bay; the wall is what is left over, not the
+  starting point
+- buttresses project 1–3 and step back as they rise
+- roof rise 1.0–1.6 of half-span — among the steepest of any style
+- spires taller than the building they sit on
 
-## Palette
-- primary: stone_bricks + deepslate_bricks mix; trim: polished_blackstone
-- glass: colored panes (red/blue/purple) in tall windows; light: soul_lantern, candles
+## Signature moves
+- **Pointed arch** — two stair or slab runs meeting at a point, never a
+  semicircle. Use it on every opening, including doors.
+- **Buttress rhythm** — vertical piers at every bay, stepping outward at the
+  base. They are what make the wall look thin.
+- **Vertical shafts** — thin continuous lines running the full height, unbroken
+  by any horizontal band.
+- **Rose window** — one large circular opening on the main facade.
 
-## Recipe
-1. tall `walls`; buttresses: 1x1 columns (`box`) against the wall, capped with stairs
-2. pointed windows: 1x3 air slit + stair (half=top, facing sideways) as the point
-3. steep `roof` (use a narrow rect so the gable is tall); ridge crosses/spikes: fence+wall blocks
-4. rose window: on the gable face, a diamond of colored panes around a center block
+## Variants
+- **cathedral** — cruciform plan, twin west towers, flying buttresses
+- **chapel** — single narrow hall, one tall window at the end
+- **dark gothic** — blackstone and deepslate, soul fire, no colour in the glass
+- **ruined abbey** — walls and window tracery standing, roof entirely gone
 
 ## Avoid
-- squat proportions; warm woods; big square windows
+- round arches (that is romanesque)
+- strong horizontal banding, which flattens the whole effect
+- warm stone; keep the palette cool and pale
