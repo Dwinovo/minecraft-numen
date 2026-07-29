@@ -20,6 +20,7 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.moves.NavigationCapabilities;
 import com.dwinovo.numen.core.pathing.moves.movements.MovementAscend;
 import com.dwinovo.numen.core.pathing.moves.movements.MovementDescend;
 import com.dwinovo.numen.core.pathing.moves.movements.MovementDiagonal;
@@ -161,7 +162,6 @@ public final class PathExecutor {
             return true;
         }
         Movement movement = path.movements().get(pathPosition);
-        movement.setExecutionDelegate(harness);
         BlockPos feet = playerFeet(player);
         boolean inValid = movement.getValidPositions().contains(feet);
         if (tickRecursionDepth < 6 && !inValid) {
@@ -294,6 +294,8 @@ public final class PathExecutor {
             harness.clearAllKeys();
             return true;
         }
+        movement.setExecutionDelegate(capabilityGuardedDelegate(
+                harness, context.navigationCapabilities()));
         MovementStatus movementStatus = movement.update();
         if (movementStatus == MovementStatus.UNREACHABLE || movementStatus == MovementStatus.FAILED) {
             Constants.LOG.debug("移动报 {},取消", movementStatus);
@@ -564,7 +566,8 @@ public final class PathExecutor {
                     // 霜行者只在贴地跨过方块边缘时结冰,可能冲过头;下一步
                     // 同向平走/跑酷时强制慢速直进(跑酷且有耗材可放置替代除外)
                     if (next instanceof MovementTraverse || next instanceof MovementParkour) {
-                        boolean couldPlaceInstead = NavSettings.get().allowPlace
+                        boolean couldPlaceInstead = context.canPlace()
+                                && NavSettings.get().allowPlace
                                 && context.hasThrowaway && next instanceof MovementParkour;
                         boolean sameFlatDirection =
                                 !current.getDirection().above().offset(next.getDirection()).equals(BlockPos.ZERO)
@@ -648,6 +651,46 @@ public final class PathExecutor {
             }
         }
         return false;
+    }
+
+    static boolean permitsWorldModificationInput(NavigationCapabilities capabilities, Input input) {
+        return switch (input) {
+            case CLICK_LEFT -> capabilities.allowBreak();
+            case CLICK_RIGHT -> capabilities.allowPlace()
+                    || capabilities.allowWaterBucketLanding();
+            default -> true;
+        };
+    }
+
+    static Movement.ExecutionDelegate capabilityGuardedDelegate(
+            Movement.ExecutionDelegate delegate, NavigationCapabilities capabilities) {
+        java.util.Objects.requireNonNull(delegate, "delegate");
+        java.util.Objects.requireNonNull(capabilities, "capabilities");
+        return new Movement.ExecutionDelegate() {
+            @Override
+            public void beginBreaking(MovementState state, BlockPos pos) {
+                if (capabilities.allowBreak()) {
+                    delegate.beginBreaking(state, pos);
+                }
+            }
+
+            @Override
+            public void applyRotation(MovementState.MovementTarget target) {
+                delegate.applyRotation(target);
+            }
+
+            @Override
+            public void clearInputs() {
+                delegate.clearInputs();
+            }
+
+            @Override
+            public void applyInput(Input input, boolean held) {
+                if (permitsWorldModificationInput(capabilities, input)) {
+                    delegate.applyInput(input, held);
+                }
+            }
+        };
     }
 
     /**

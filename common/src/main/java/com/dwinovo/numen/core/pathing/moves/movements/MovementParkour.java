@@ -10,6 +10,7 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.moves.NavigationCapabilities;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
@@ -33,9 +34,17 @@ public class MovementParkour extends Movement {
     private final Direction direction;
     private final int dist;
     private final boolean ascend;
+    private final NavigationCapabilities navigationCapabilities;
 
     public MovementParkour(ServerPlayer player, BlockPos src, BlockPos dest) {
+        this(player, src, dest, NavigationCapabilities.DEFAULT);
+    }
+
+    public MovementParkour(ServerPlayer player, BlockPos src, BlockPos dest,
+                           NavigationCapabilities navigationCapabilities) {
         super(player, src, dest, EMPTY, dest.below());
+        this.navigationCapabilities = java.util.Objects.requireNonNull(
+                navigationCapabilities, "navigationCapabilities");
         int dx = dest.getX() - src.getX();
         int dz = dest.getZ() - src.getZ();
         this.direction = Direction.getNearest(dx, 0, dz);
@@ -267,7 +276,7 @@ public class MovementParkour extends Movement {
         } else if (!feet.equals(src)) {
             if (feet.equals(src.relative(direction)) || player.getY() - src.getY() > 0.0001) {
                 // 已跳出第一格或已离地
-                if (NavSettings.get().allowPlace
+                if (navigationCapabilities.permitsPlace(NavSettings.get().allowPlace)
                         && MovementPlacement.selectForLocation(player, dest.below(), false)
                         && !MovementHelper.canWalkOn(player.level(), dest.below())
                         && !player.onGround()
@@ -299,4 +308,3 @@ public class MovementParkour extends Movement {
         return state;
     }
 }
-

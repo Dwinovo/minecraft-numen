@@ -358,6 +358,7 @@ public enum Moves {
         if (res.cost >= ActionCosts.COST_INF) {
             return null;
         }
-        return new MovementParkour(context.player, src, new BlockPos(res.x, res.y, res.z));
+        return new MovementParkour(context.player, src, new BlockPos(res.x, res.y, res.z),
+                context.navigationCapabilities());
     }
 }

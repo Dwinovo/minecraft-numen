@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.pathing.moves;
 
 import java.util.List;
+import java.util.Objects;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
@@ -83,6 +84,7 @@ public class CalculationContext {
     public final double walkOnWaterOnePenalty;
     public final boolean allowPlaceInFluidsSource;
     public final boolean allowPlaceInFluidsFlow;
+    private final NavigationCapabilities navigationCapabilities;
 
     /** 不可挖不可埋的自身目标格(BlockPos.asLong 键),不可穿透。 */
     public final LongSet sacred;
@@ -103,13 +105,30 @@ public class CalculationContext {
     public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                               boolean safeForThreadedUse) {
         this(player, view, loadedTest, safeForThreadedUse,
-                LongSets.emptySet(), LongSets.emptySet());
+                LongSets.emptySet(), LongSets.emptySet(), NavigationCapabilities.DEFAULT);
+    }
+
+    public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
+                              boolean safeForThreadedUse,
+                              NavigationCapabilities navigationCapabilities) {
+        this(player, view, loadedTest, safeForThreadedUse,
+                LongSets.emptySet(), LongSets.emptySet(), navigationCapabilities);
     }
 
     public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                               boolean safeForThreadedUse,
                               LongSet sacred, LongSet deniedPlace) {
+        this(player, view, loadedTest, safeForThreadedUse,
+                sacred, deniedPlace, NavigationCapabilities.DEFAULT);
+    }
+
+    public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
+                              boolean safeForThreadedUse,
+                              LongSet sacred, LongSet deniedPlace,
+                              NavigationCapabilities navigationCapabilities) {
         NavSettings settings = NavSettings.get();
+        this.navigationCapabilities = Objects.requireNonNull(
+                navigationCapabilities, "navigationCapabilities");
         this.safeForThreadedUse = safeForThreadedUse;
         this.player = player;
         this.view = view;
@@ -117,14 +136,17 @@ public class CalculationContext {
         this.sacred = sacred;
         this.deniedPlace = deniedPlace;
         this.toolSet = new ToolSet(player);
-        this.hasThrowaway = settings.allowPlace && hasGenericThrowaway(player, settings);
-        this.hasWaterBucket = settings.allowWaterBucketFall
+        this.hasThrowaway = navigationCapabilities.permitsPlace(settings.allowPlace)
+                && hasGenericThrowaway(player, settings);
+        this.hasWaterBucket = navigationCapabilities.permitsWaterBucketLanding(
+                settings.allowWaterBucketFall)
                 && hotbarHasWaterBucket(player)
                 && player.level().dimension() != Level.NETHER;
         this.canSprint = settings.allowSprint && player.getFoodData().getFoodLevel() > 6;
         this.placeBlockCost = settings.blockPlacementPenalty;
-        this.allowBreak = settings.allowBreak;
-        this.allowBreakAnyway = List.copyOf(settings.allowBreakAnyway());
+        this.allowBreak = navigationCapabilities.permitsBreak(settings.allowBreak);
+        this.allowBreakAnyway = navigationCapabilities.permittedBreakExceptions(
+                settings.allowBreakAnyway());
         this.allowParkour = settings.allowParkour;
         this.allowParkourPlace = settings.allowParkourPlace;
         this.allowJumpAtBuildLimit = settings.allowJumpAtBuildLimit;
@@ -253,7 +275,7 @@ public class CalculationContext {
      * 否则放置罚金。
      */
     public double costOfPlacingAt(int x, int y, int z, BlockState current) {
-        if (!hasThrowaway) { // 构造时已含 allowPlace 判定
+        if (!canPlace() || !hasThrowaway) { // 构造时已含全局 allowPlace 判定
             return COST_INF;
         }
         long key = BlockPos.asLong(x, y, z);
@@ -289,6 +311,9 @@ public class CalculationContext {
      * 在 {@code getStrVsBlock} 里实现,此处不参与。
      */
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
+        if (!canBreak()) {
+            return COST_INF;
+        }
         if (sacred.contains(BlockPos.asLong(x, y, z))) {
             return COST_INF;
         }
@@ -303,6 +328,25 @@ public class CalculationContext {
 
     /** 坠落中放水桶的成本(与放置罚金同价)。 */
     public double placeBucketCost() {
-        return placeBlockCost;
+        return canUseWaterBucketLanding() ? placeBlockCost : COST_INF;
+    }
+
+    public NavigationCapabilities navigationCapabilities() {
+        return navigationCapabilities;
+    }
+
+    /** 本次导航是否允许走破坏链；全局设置仍由 allowBreak/例外快照收窄。 */
+    public boolean canBreak() {
+        return navigationCapabilities.allowBreak();
+    }
+
+    /** 本次导航是否允许走放置链；全局设置和库存仍由 hasThrowaway 收窄。 */
+    public boolean canPlace() {
+        return navigationCapabilities.allowPlace();
+    }
+
+    /** 本次导航是否允许走水桶落地链；全局设置和库存仍由 hasWaterBucket 收窄。 */
+    public boolean canUseWaterBucketLanding() {
+        return navigationCapabilities.allowWaterBucketLanding();
     }
 }
