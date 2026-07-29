@@ -44,6 +44,7 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
     private final FollowAccess followAccess;
     private final NavigationFactory navigationFactory;
     private final HaltAction haltAction;
+    private final FollowConfig config;
 
     private Navigation navigation;
     private FollowRuntimeState runtimeState = FollowRuntimeState.DISABLED;
@@ -59,14 +60,25 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
     private transient FollowStateStore boundStore;
 
     public OwnerFollowChain() {
-        this(new LiveFollowAccess(), OwnerFollowChain::createPlayerNavigation, InputDriver::halt);
+        this(FollowConfig.defaults());
+    }
+
+    public OwnerFollowChain(FollowConfig config) {
+        this(new LiveFollowAccess(), OwnerFollowChain::createPlayerNavigation,
+                InputDriver::halt, config);
     }
 
     OwnerFollowChain(FollowAccess followAccess, NavigationFactory navigationFactory,
                      HaltAction haltAction) {
+        this(followAccess, navigationFactory, haltAction, FollowConfig.defaults());
+    }
+
+    OwnerFollowChain(FollowAccess followAccess, NavigationFactory navigationFactory,
+                     HaltAction haltAction, FollowConfig config) {
         this.followAccess = Objects.requireNonNull(followAccess, "followAccess");
         this.navigationFactory = Objects.requireNonNull(navigationFactory, "navigationFactory");
         this.haltAction = Objects.requireNonNull(haltAction, "haltAction");
+        this.config = Objects.requireNonNull(config, "config");
     }
 
     @Override
@@ -74,7 +86,7 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
         ensureBound(companion);
         Snapshot snapshot = followAccess.snapshot(companion);
         observe(snapshot);
-        Decision decision = decide(snapshot, following, failedUntilTick);
+        Decision decision = decide(snapshot, following, failedUntilTick, config);
         apply(decision);
         return decision.priority();
     }
@@ -84,7 +96,7 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
         ensureBound(companion);
         Snapshot snapshot = followAccess.snapshot(companion);
         observe(snapshot);
-        Decision decision = decide(snapshot, following, failedUntilTick);
+        Decision decision = decide(snapshot, following, failedUntilTick, config);
         apply(decision);
         if (!decision.active()) {
             releaseControl(inactiveReason(snapshot), companion, true);
@@ -110,7 +122,8 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
         if (status == PlayerNav.Status.ARRIVED) {
             Snapshot arrivalSnapshot = followAccess.snapshot(companion);
             observe(arrivalSnapshot);
-            Decision arrival = decide(arrivalSnapshot, following, failedUntilTick);
+            Decision arrival = decide(
+                    arrivalSnapshot, following, failedUntilTick, config);
             apply(arrival);
             if (!arrival.active()) {
                 releaseControl(inactiveReason(arrivalSnapshot), companion, true);
@@ -120,7 +133,7 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
         if (status == PlayerNav.Status.FAILED) {
             releaseControl(
                     FollowReleaseReason.INTERNAL_STATE_CHANGE, companion, true);
-            apply(failedAt(decision, snapshot.gameTime()));
+            apply(failedAt(decision, snapshot.gameTime(), config));
         }
     }
 
@@ -293,18 +306,38 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
 
     static Decision decide(
             Snapshot snapshot, boolean wasFollowing, long failedUntilTick) {
+        return decide(snapshot, wasFollowing, failedUntilTick, FollowConfig.defaults());
+    }
+
+    static Decision decide(
+            Snapshot snapshot,
+            boolean wasFollowing,
+            long failedUntilTick,
+            FollowConfig config) {
         FollowDecisions.Result result = FollowDecisions.decide(
-                toInput(snapshot), wasFollowing, failedUntilTick);
+                toInput(snapshot), wasFollowing, failedUntilTick, config);
         return fromResult(result);
     }
 
     static Decision failedAt(Decision previous, long currentTick) {
-        return fromResult(FollowDecisions.failedAt(toResult(previous), currentTick));
+        return failedAt(previous, currentTick, FollowConfig.defaults());
+    }
+
+    static Decision failedAt(
+            Decision previous, long currentTick, FollowConfig config) {
+        return fromResult(
+                FollowDecisions.failedAt(toResult(previous), currentTick, config));
     }
 
     static Distances resolveDistances(Double stopOverride, Double startOverride) {
+        return resolveDistances(
+                stopOverride, startOverride, FollowConfig.defaults());
+    }
+
+    static Distances resolveDistances(
+            Double stopOverride, Double startOverride, FollowConfig config) {
         FollowDecisions.Distances distances =
-                FollowDecisions.resolveDistances(stopOverride, startOverride);
+                FollowDecisions.resolveDistances(stopOverride, startOverride, config);
         return new Distances(distances.stop(), distances.start());
     }
 
@@ -329,6 +362,10 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
 
     long remainingCooldownTicks(long currentTick) {
         return FollowDecisions.remainingCooldownTicks(failedUntilTick, currentTick);
+    }
+
+    FollowConfig config() {
+        return config;
     }
 
     private void apply(Decision decision) {

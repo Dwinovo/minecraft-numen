@@ -11,19 +11,35 @@ import java.util.Objects;
 final class FollowDecisions {
 
     static final float PRIORITY = -2.0f;
-    static final double DEFAULT_STOP_DISTANCE = 3.0;
-    static final double DEFAULT_START_DISTANCE = 5.5;
-    static final double DEFAULT_SPRINT_DISTANCE = 12.0;
-    static final double DEFAULT_CATCH_UP_DISTANCE = 24.0;
-    static final double DEFAULT_LOST_DISTANCE = 64.0;
-    static final long FAILED_COOLDOWN_TICKS = 100L;
+    static final double DEFAULT_STOP_DISTANCE =
+            FollowConfig.DEFAULT_STOP_DISTANCE;
+    static final double DEFAULT_START_DISTANCE =
+            FollowConfig.DEFAULT_START_DISTANCE;
+    static final double DEFAULT_SPRINT_DISTANCE =
+            FollowConfig.DEFAULT_SPRINT_DISTANCE;
+    static final double DEFAULT_CATCH_UP_DISTANCE =
+            FollowConfig.DEFAULT_CATCH_UP_DISTANCE;
+    static final double DEFAULT_LOST_DISTANCE =
+            FollowConfig.DEFAULT_LOST_DISTANCE;
+    static final long FAILED_COOLDOWN_TICKS =
+            FollowConfig.DEFAULT_FAILED_COOLDOWN_TICKS;
     static final long NO_FAILED_COOLDOWN = Long.MIN_VALUE;
 
     private FollowDecisions() {}
 
     static Result decide(Input input, boolean wasFollowing, long failedUntilTick) {
+        return decide(input, wasFollowing, failedUntilTick, FollowConfig.defaults());
+    }
+
+    static Result decide(
+            Input input,
+            boolean wasFollowing,
+            long failedUntilTick,
+            FollowConfig config) {
         Objects.requireNonNull(input, "input");
-        Distances distances = resolveDistances(input.stopOverride(), input.startOverride());
+        Objects.requireNonNull(config, "config");
+        Distances distances = resolveDistances(
+                input.stopOverride(), input.startOverride(), config);
 
         if (!input.companionValid()) {
             return dormant(FollowRuntimeState.WAITING_FOR_OWNER,
@@ -57,7 +73,7 @@ final class FollowDecisions {
             return dormant(FollowRuntimeState.WAITING_FOR_OWNER,
                     FollowWaitingReason.OWNER_INVALID, false, distances);
         }
-        if (input.distance() >= DEFAULT_LOST_DISTANCE) {
+        if (input.distance() >= config.lostDistance()) {
             return dormant(FollowRuntimeState.WAITING_FOR_OWNER,
                     FollowWaitingReason.OWNER_TOO_FAR, wasFollowing, distances);
         }
@@ -79,17 +95,23 @@ final class FollowDecisions {
         }
         return new Result(FollowRuntimeState.FOLLOWING, FollowWaitingReason.NONE,
                 PRIORITY, true,
-                input.distance() >= DEFAULT_SPRINT_DISTANCE,
-                input.distance() >= DEFAULT_CATCH_UP_DISTANCE,
+                input.distance() >= config.sprintDistance(),
+                input.distance() >= config.catchUpDistance(),
                 NO_FAILED_COOLDOWN, distances);
     }
 
     static Result failedAt(Result previous, long currentTick) {
+        return failedAt(previous, currentTick, FollowConfig.defaults());
+    }
+
+    static Result failedAt(
+            Result previous, long currentTick, FollowConfig config) {
         Objects.requireNonNull(previous, "previous");
+        Objects.requireNonNull(config, "config");
         return new Result(FollowRuntimeState.FAILED_COOLDOWN,
                 FollowWaitingReason.NONE, Float.NEGATIVE_INFINITY,
                 previous.following(), false, false,
-                currentTick + FAILED_COOLDOWN_TICKS, previous.distances());
+                currentTick + config.failedCooldownTicks(), previous.distances());
     }
 
     static long remainingCooldownTicks(long failedUntilTick, long currentTick) {
@@ -100,12 +122,21 @@ final class FollowDecisions {
     }
 
     static Distances resolveDistances(Double stopOverride, Double startOverride) {
+        return resolveDistances(
+                stopOverride, startOverride, FollowConfig.defaults());
+    }
+
+    static Distances resolveDistances(
+            Double stopOverride,
+            Double startOverride,
+            FollowConfig config) {
+        Objects.requireNonNull(config, "config");
         if (stopOverride == null || startOverride == null
                 || !Double.isFinite(stopOverride) || !Double.isFinite(startOverride)
                 || stopOverride <= 0.0 || startOverride <= 0.0
                 || stopOverride >= startOverride
-                || startOverride >= DEFAULT_SPRINT_DISTANCE) {
-            return new Distances(DEFAULT_STOP_DISTANCE, DEFAULT_START_DISTANCE);
+                || startOverride >= config.sprintDistance()) {
+            return new Distances(config.stopDistance(), config.startDistance());
         }
         return new Distances(stopOverride, startOverride);
     }

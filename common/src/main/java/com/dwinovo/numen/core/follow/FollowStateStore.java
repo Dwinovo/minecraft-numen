@@ -184,6 +184,30 @@ public final class FollowStateStore extends SavedData {
         put(companionUuid, getOrDefault(companionUuid).withManualPaused(manualPaused));
     }
 
+    /**
+     * Atomically updates both user-control bits while preserving schema and
+     * per-companion distance overrides.
+     *
+     * @return {@code true} only when persistent state actually changed
+     */
+    public boolean setControlState(
+            UUID companionUuid, boolean enabled, boolean manualPaused) {
+        Objects.requireNonNull(companionUuid, "companionUuid");
+        FollowState current = getOrDefault(companionUuid);
+        FollowState replacement = new FollowState(
+                enabled,
+                manualPaused,
+                current.schemaVersion(),
+                current.stopDistanceOverride(),
+                current.startDistanceOverride());
+        if (replacement.equals(current)) {
+            return false;
+        }
+        states.put(companionUuid, replacement);
+        setDirty();
+        return true;
+    }
+
     public void setDistanceOverrides(UUID companionUuid, Double stopDistance, Double startDistance) {
         put(companionUuid, getOrDefault(companionUuid)
                 .withDistanceOverrides(stopDistance, startDistance));
@@ -230,13 +254,11 @@ public final class FollowStateStore extends SavedData {
     /**
      * Releases movement while retaining the runtime binding for later resume.
      */
-    public void releaseRuntime(UUID companionUuid, FollowReleaseReason reason) {
+    public boolean releaseRuntime(UUID companionUuid, FollowReleaseReason reason) {
         Objects.requireNonNull(reason, "reason");
         FollowRuntimeControl control = runtimeControls.get(
                 Objects.requireNonNull(companionUuid, "companionUuid"));
-        if (control != null) {
-            releaseSafely(control, reason);
-        }
+        return control == null || releaseSafely(control, reason);
     }
 
     /**

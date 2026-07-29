@@ -17,8 +17,13 @@ final class OwnerFollowChainTestHarness {
     final OwnerFollowChain chain;
 
     OwnerFollowChainTestHarness(OwnerFollowChain.Snapshot snapshot) {
+        this(snapshot, FollowConfig.defaults());
+    }
+
+    OwnerFollowChainTestHarness(
+            OwnerFollowChain.Snapshot snapshot, FollowConfig config) {
         access = new FakeAccess(snapshot);
-        chain = new OwnerFollowChain(access, factory, halt);
+        chain = new OwnerFollowChain(access, factory, halt, config);
     }
 
     static FollowState enabled() {

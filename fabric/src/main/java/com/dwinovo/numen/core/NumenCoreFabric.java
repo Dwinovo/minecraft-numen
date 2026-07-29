@@ -3,6 +3,8 @@ package com.dwinovo.numen.core;
 import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
 import com.dwinovo.numen.core.pathing.cache.PathCaches;
+import com.dwinovo.numen.core.follow.FollowCommands;
+import com.dwinovo.numen.core.follow.FollowConfig;
 import com.dwinovo.numen.core.follow.FollowReleaseReason;
 import com.dwinovo.numen.core.follow.FollowService;
 import com.dwinovo.numen.core.task.ScanBlocksJob;
@@ -39,7 +41,10 @@ public class NumenCoreFabric implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(PathDebugRenderer::serverTick);
         // Debug verbs merged into the /numen root registered by the engine mod.
         CommandRegistrationCallback.EVENT.register(
-                (dispatcher, registryAccess, environment) -> DebugCommands.register(dispatcher));
+                (dispatcher, registryAccess, environment) -> {
+                    DebugCommands.register(dispatcher);
+                    FollowCommands.register(dispatcher, FollowConfig.current());
+                });
 
         Constants.LOG.info("numen-core initialised on Fabric.");
     }

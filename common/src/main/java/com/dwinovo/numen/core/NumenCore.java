@@ -12,6 +12,8 @@ import com.dwinovo.numen.network.payload.ExecuteToolPayload;
 import com.dwinovo.numen.network.payload.TaskResultPayload;
 import com.dwinovo.numen.task.CompanionTaskFactory;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
+import com.dwinovo.numen.core.follow.FollowConfig;
+import com.dwinovo.numen.core.follow.FollowOwnerTool;
 import com.dwinovo.numen.core.follow.FollowReleaseReason;
 import com.dwinovo.numen.core.follow.FollowService;
 import com.dwinovo.numen.core.task.BuildCompanionTask;
@@ -70,10 +72,11 @@ public final class NumenCore {
     public static void init() {
         if (initialised) return;
         initialised = true;
+        FollowConfig followConfig = FollowConfig.current();
         registerFollowLifecycle();
-        registerTools();
+        registerTools(followConfig);
         registerTaskRunners();
-        registerChains();
+        registerChains(followConfig);
         registerReflexes();
         // Enable the autonomous survival chains (auto-eat / mob-defense / unstuck /
         // MLG). SurvivalConfig's own default is OFF — the safe state a bare library
@@ -106,7 +109,7 @@ public final class NumenCore {
      * 把 core 的五条生存本能链插进引擎的竞价调度(链登记口)。运输包与
      * 生命周期对接已随排程机器归引擎,不再是 core 的事。
      */
-    private static void registerChains() {
+    private static void registerChains(FollowConfig followConfig) {
         com.dwinovo.numen.task.BrainChains.register(10,
                 bodyLog -> new com.dwinovo.numen.core.task.chain.UnstuckChain());
         com.dwinovo.numen.task.BrainChains.register(20,
@@ -118,7 +121,8 @@ public final class NumenCore {
         com.dwinovo.numen.task.BrainChains.register(50,
                 com.dwinovo.numen.core.task.chain.BreathChain::new);
         com.dwinovo.numen.task.BrainChains.register(60,
-                bodyLog -> new com.dwinovo.numen.core.follow.OwnerFollowChain());
+                bodyLog -> new com.dwinovo.numen.core.follow.OwnerFollowChain(
+                        followConfig));
     }
 
     /**
@@ -131,10 +135,11 @@ public final class NumenCore {
         com.dwinovo.numen.core.task.reflex.CoreReflexes.registerAll();
     }
 
-    private static void registerTools() {
+    private static void registerTools(FollowConfig followConfig) {
 
         // Registration ORDER is preserved (backends with prompt-caching keyed off
         // the tool list cache stably across requests).
+        ToolRegistry.register(new FollowOwnerTool(followConfig));
         ToolRegistry.register(new com.dwinovo.numen.core.tools.MoveToTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.MeleeAttackTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.RangedAttackTool());
