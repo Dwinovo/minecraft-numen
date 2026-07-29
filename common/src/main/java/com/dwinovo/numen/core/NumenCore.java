@@ -92,6 +92,8 @@ public final class NumenCore {
                 com.dwinovo.numen.core.task.chain.MLGChain::new);
         com.dwinovo.numen.task.BrainChains.register(50,
                 com.dwinovo.numen.core.task.chain.BreathChain::new);
+        com.dwinovo.numen.task.BrainChains.register(60,
+                bodyLog -> new com.dwinovo.numen.core.follow.OwnerFollowChain());
     }
 
     /**
