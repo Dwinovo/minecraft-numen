@@ -36,7 +36,7 @@ public final class FollowStateStore extends SavedData {
     private static final String KEY_START_DISTANCE = "startDistanceOverride";
 
     private final Map<UUID, FollowState> states;
-    private final transient Map<UUID, FollowRuntimeControl> runtimeControls;
+    private final transient Map<UUID, RuntimeBinding> runtimeControls;
 
     FollowStateStore() {
         this.states = new HashMap<>();
@@ -226,23 +226,39 @@ public final class FollowStateStore extends SavedData {
      * new binding.
      */
     public void bindRuntime(UUID companionUuid, FollowRuntimeControl control) {
+        bindRuntime(companionUuid, control, control);
+    }
+
+    /**
+     * Binds a runtime to the concrete companion-body generation that owns it.
+     * The identity is compared by reference, never by UUID or value equality.
+     */
+    public void bindRuntime(
+            UUID companionUuid,
+            Object lifecycleIdentity,
+            FollowRuntimeControl control) {
         Objects.requireNonNull(companionUuid, "companionUuid");
+        Objects.requireNonNull(lifecycleIdentity, "lifecycleIdentity");
         Objects.requireNonNull(control, "control");
         if (!companionUuid.equals(control.companionUuid())) {
             throw new IllegalArgumentException(
                     "runtime control companion UUID does not match binding key");
         }
 
-        FollowRuntimeControl previous = runtimeControls.put(companionUuid, control);
-        if (previous == null || previous == control) {
+        RuntimeBinding replacement =
+                new RuntimeBinding(lifecycleIdentity, control);
+        RuntimeBinding previous =
+                runtimeControls.put(companionUuid, replacement);
+        if (previous == null || previous.control() == control) {
             return;
         }
-        releaseSafely(previous, FollowReleaseReason.RUNTIME_REPLACED);
+        releaseSafely(previous.control(), FollowReleaseReason.RUNTIME_REPLACED);
     }
 
     public Optional<FollowRuntimeControl> runtimeControl(UUID companionUuid) {
         return Optional.ofNullable(runtimeControls.get(
-                Objects.requireNonNull(companionUuid, "companionUuid")));
+                        Objects.requireNonNull(companionUuid, "companionUuid")))
+                .map(RuntimeBinding::control);
     }
 
     public Optional<FollowRuntimeSnapshot> runtimeSnapshot(
@@ -256,22 +272,30 @@ public final class FollowStateStore extends SavedData {
      */
     public boolean releaseRuntime(UUID companionUuid, FollowReleaseReason reason) {
         Objects.requireNonNull(reason, "reason");
-        FollowRuntimeControl control = runtimeControls.get(
+        RuntimeBinding binding = runtimeControls.get(
                 Objects.requireNonNull(companionUuid, "companionUuid"));
-        return control == null || releaseSafely(control, reason);
+        return binding == null || releaseSafely(binding.control(), reason);
     }
 
     /**
-     * Removes the binding before release so release callbacks cannot observe a
-     * stale registered runtime.
+     * Removes the binding before release only when the callback carries the
+     * concrete body or runtime identity that owns the current generation.
+     * Stale callbacks for an older body/control sharing the same UUID are no-ops.
      */
-    public void removeRuntime(UUID companionUuid, FollowReleaseReason reason) {
+    public void removeRuntime(
+            UUID companionUuid,
+            Object expectedIdentity,
+            FollowReleaseReason reason) {
+        Objects.requireNonNull(expectedIdentity, "expectedIdentity");
         Objects.requireNonNull(reason, "reason");
-        FollowRuntimeControl control = runtimeControls.remove(
-                Objects.requireNonNull(companionUuid, "companionUuid"));
-        if (control != null) {
-            releaseSafely(control, reason);
+        UUID checkedUuid =
+                Objects.requireNonNull(companionUuid, "companionUuid");
+        RuntimeBinding current = runtimeControls.get(checkedUuid);
+        if (current == null || !current.matches(expectedIdentity)) {
+            return;
         }
+        runtimeControls.remove(checkedUuid);
+        releaseSafely(current.control(), reason);
     }
 
     /**
@@ -282,7 +306,9 @@ public final class FollowStateStore extends SavedData {
      */
     public int releaseAllRuntime(FollowReleaseReason reason) {
         Objects.requireNonNull(reason, "reason");
-        List<FollowRuntimeControl> controls = List.copyOf(runtimeControls.values());
+        List<FollowRuntimeControl> controls = runtimeControls.values().stream()
+                .map(RuntimeBinding::control)
+                .toList();
         runtimeControls.clear();
         int failures = 0;
         for (FollowRuntimeControl control : controls) {
@@ -295,6 +321,21 @@ public final class FollowStateStore extends SavedData {
 
     int runtimeControlCount() {
         return runtimeControls.size();
+    }
+
+    private record RuntimeBinding(
+            Object lifecycleIdentity,
+            FollowRuntimeControl control) {
+
+        private RuntimeBinding {
+            Objects.requireNonNull(lifecycleIdentity, "lifecycleIdentity");
+            Objects.requireNonNull(control, "control");
+        }
+
+        private boolean matches(Object expectedIdentity) {
+            return lifecycleIdentity == expectedIdentity
+                    || control == expectedIdentity;
+        }
     }
 
     private static boolean releaseSafely(

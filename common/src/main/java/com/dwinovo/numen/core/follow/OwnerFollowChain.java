@@ -264,6 +264,9 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
         }
         FollowStateStore store = FollowStateStore.get(server);
         if (companionUuid.equals(boundCompanionUuid) && store == boundStore) {
+            if (boundCompanion != companion) {
+                store.bindRuntime(companionUuid, companion, this);
+            }
             boundCompanion = companion;
             return;
         }
@@ -272,7 +275,8 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
             UUID previousUuid = boundCompanionUuid;
             try {
                 boundStore.removeRuntime(
-                        previousUuid, FollowReleaseReason.RUNTIME_REPLACED);
+                        previousUuid, this,
+                        FollowReleaseReason.RUNTIME_REPLACED);
             } finally {
                 if (previousUuid.equals(terminalCompanionUuid)) {
                     terminalCompanionUuid = null;
@@ -283,7 +287,7 @@ public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
         boundCompanionUuid = companionUuid;
         boundCompanion = companion;
         boundStore = store;
-        store.bindRuntime(companionUuid, this);
+        store.bindRuntime(companionUuid, companion, this);
     }
 
     private void observe(Snapshot snapshot) {

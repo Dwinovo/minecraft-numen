@@ -101,7 +101,7 @@ public final class NumenCore {
             NumenPlayer companion, FollowReleaseReason reason) {
         MinecraftServer server = companion.level().getServer();
         if (server != null) {
-            FollowService.removeRuntime(server, companion.getUUID(), reason);
+            FollowService.removeRuntime(server, companion, reason);
         }
     }
 

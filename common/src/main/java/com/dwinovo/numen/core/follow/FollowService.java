@@ -31,12 +31,18 @@ public final class FollowService {
     }
 
     public static void removeRuntime(
-            MinecraftServer server, UUID companionUuid, FollowReleaseReason reason) {
+            MinecraftServer server,
+            NumenPlayer companion,
+            FollowReleaseReason reason) {
         MinecraftServer checkedServer = requireServer(server);
-        UUID checkedUuid = requireUuid(companionUuid);
+        NumenPlayer checkedCompanion =
+                Objects.requireNonNull(companion, "companion");
         FollowReleaseReason checkedReason = requireReason(reason);
         FollowStateStore.get(checkedServer)
-                .removeRuntime(checkedUuid, checkedReason);
+                .removeRuntime(
+                        checkedCompanion.getUUID(),
+                        checkedCompanion,
+                        checkedReason);
     }
 
     public static int releaseAllRuntime(

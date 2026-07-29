@@ -93,7 +93,7 @@ class FollowStateStoreRuntimeControlTest {
                 assertTrue(store.runtimeControl(control.companionUuid()).isEmpty());
         store.bindRuntime(control.companionUuid(), control);
 
-        store.removeRuntime(control.companionUuid(),
+        store.removeRuntime(control.companionUuid(), control,
                 FollowReleaseReason.COMPANION_REMOVED);
 
         assertEquals(0, store.runtimeControlCount());
@@ -106,7 +106,8 @@ class FollowStateStoreRuntimeControlTest {
         UUID missing = UUID.randomUUID();
 
         store.releaseRuntime(missing, FollowReleaseReason.FOLLOW_DISABLED);
-        store.removeRuntime(missing, FollowReleaseReason.COMPANION_REMOVED);
+        store.removeRuntime(
+                missing, new Object(), FollowReleaseReason.COMPANION_REMOVED);
 
         assertEquals(0, store.runtimeControlCount());
         assertFalse(store.isDirty());
@@ -157,7 +158,7 @@ class FollowStateStoreRuntimeControlTest {
         store.bindRuntime(replacement.companionUuid(), replacement);
         store.releaseRuntime(replacement.companionUuid(),
                 FollowReleaseReason.SCHEDULER_INTERRUPT);
-        store.removeRuntime(replacement.companionUuid(),
+        store.removeRuntime(replacement.companionUuid(), replacement,
                 FollowReleaseReason.COMPANION_REMOVED);
         store.releaseAllRuntime(FollowReleaseReason.SERVER_STOPPING);
 
@@ -234,9 +235,9 @@ class FollowStateStoreRuntimeControlTest {
         FakeControl control = new FakeControl(UUID.randomUUID());
         store.bindRuntime(control.companionUuid(), control);
 
-        store.removeRuntime(control.companionUuid(),
+        store.removeRuntime(control.companionUuid(), control,
                 FollowReleaseReason.COMPANION_DEATH);
-        store.removeRuntime(control.companionUuid(),
+        store.removeRuntime(control.companionUuid(), control,
                 FollowReleaseReason.COMPANION_REMOVED);
 
         assertEquals(List.of(FollowReleaseReason.COMPANION_DEATH), control.reasons);
@@ -250,7 +251,8 @@ class FollowStateStoreRuntimeControlTest {
         FakeControl oldControl = new FakeControl(uuid);
         FakeControl respawnedControl = new FakeControl(uuid);
         store.bindRuntime(uuid, oldControl);
-        store.removeRuntime(uuid, FollowReleaseReason.COMPANION_DEATH);
+        store.removeRuntime(
+                uuid, oldControl, FollowReleaseReason.COMPANION_DEATH);
 
         store.bindRuntime(uuid, respawnedControl);
 

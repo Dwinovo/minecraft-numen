@@ -61,7 +61,7 @@ class FollowRuntimeContractsTest {
                         null, null, FollowReleaseReason.FOLLOW_DISABLED));
         assertThrows(NullPointerException.class,
                 () -> FollowService.removeRuntime(
-                        null, UUID.randomUUID(), null));
+                        null, null, null));
         assertThrows(NullPointerException.class,
                 () -> FollowService.runtimeSnapshot(
                         null, null, 0L));
