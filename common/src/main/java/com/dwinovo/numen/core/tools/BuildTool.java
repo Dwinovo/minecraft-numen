@@ -38,7 +38,7 @@ public final class BuildTool implements NumenTool {
     private static final long MIN_TIMEOUT_TICKS = 60 * 20;
     private static final long TICKS_PER_BLOCK = 20 * 20;
 
-    private record Args(List<OpSpec> ops, Boolean replace_existing, Integer layer_height) {}
+    private record Args(List<OpSpec> ops, Boolean replace_existing) {}
     private record OpSpec(String op, String block_id, Boolean hollow,
                           Integer x, Integer y, Integer z,
                           Integer x1, Integer y1, Integer z1,
@@ -69,8 +69,11 @@ public final class BuildTool implements NumenTool {
                 + "sprinkles the block over plane y1 within x1,z1..x2,z2 at optional `density` 0-1 (default "
                 + "0.25) — flowers, grass, mushrooms. block_id minecraft:air CLEARS (drops harvest normally; "
                 + "liquids always left untouched). Compose whole buildings like stacking toy bricks in ONE call, "
-                + "up to 4096 cells. The task walks, climbs and bridges bottom-up layer by layer. Materials are "
-                + "NOT required or consumed for now (free build mode) — never refuse a build for lack of blocks. "
+                + "up to 4096 cells. She walks to the site once, then works inside it, placing cells in batches "
+                + "from the ground up. MATERIALS: in creative she builds freely; in survival every cell consumes "
+                + "1 matching item from her inventory and the job is refused up front with an itemized shortfall "
+                + "if she is short — treat that as an invitation to go gather together, not as an error, and "
+                + "never promise the player a survival build costs nothing. "
                 + "For prebuilt structure files use the blueprint tool. BACKGROUND: after acceptance wait for "
                 + "task_finished; never resend while running or after status=done.";
     }
@@ -125,12 +128,6 @@ public final class BuildTool implements NumenTool {
         rootProps.put("replace_existing", Map.of(
                 "type", "boolean",
                 "description", "Optional, default true. Clear wrong non-protected blocks at requested cells."));
-        rootProps.put("layer_height", Map.of(
-                "type", "integer",
-                "description", "Optional. Explicit vertical layer step (1-16) builds bottom-up in slices of"
-                        + " that height. Default 0 = auto: structures taller than 2 blocks build in 1-block"
-                        + " layers (the body always works from atop the finished part); flat or low"
-                        + " structures place freely."));
 
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("type", "object");
@@ -179,16 +176,12 @@ public final class BuildTool implements NumenTool {
                     + " cells, exceeding " + MAX_TOTAL_CELLS + "; split it into multiple calls");
         }
         boolean replaceExisting = parsed.replace_existing() == null || parsed.replace_existing();
-        int layerHeight = parsed.layer_height() == null ? 0 : parsed.layer_height();
-        if (layerHeight < 0 || layerHeight > 16) {
-            throw new IllegalArgumentException("layer_height must be between 0 and 16");
-        }
         long timeout = Math.max(MIN_TIMEOUT_TICKS, (long) targets.size() * TICKS_PER_BLOCK);
         // 材料记账随能力画像:免耗材(创造)想建就建;否则消耗背包,开工前
-        // 由任务预检并逐项报缺(见 BuildCompanionTask 的 preflight)。
+        // 由任务预检并逐项报缺(见 BuildCompanionTask 的 checkMaterials)。
         boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
-                ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting, layerHeight,
+                ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting,
                 consume), reply);
     }
 

@@ -21,25 +21,27 @@ public final class BuildTaskRecord extends TaskRecord {
 
     public final List<Target> targets;
     public final boolean replaceExisting;
-    public final int layerHeight;
-    /** 是否消耗背包材料(蓝图施工暂以免材料模式运行,材料记账后续接入)。 */
+    /** 是否消耗背包材料:随能力画像而定(创造免耗材,生存逐格真扣)。 */
     public final boolean consumeMaterials;
 
     private int placed;
     private int broken;
     private int completed;
 
+    // 注:曾有 layerHeight(分层施工的层高门)。施工模型改为"低层优先的确定
+    // 顺序 + 分遍补漏"之后,层高不再有任何裁决作用,留着就是个调了不起作用
+    // 的旋钮——比缺一个功能更糟,故一并撤除。
+
     public BuildTaskRecord(String toolCallId, long deadlineGameTime,
-                           List<Target> targets, boolean replaceExisting, int layerHeight) {
-        this(toolCallId, deadlineGameTime, targets, replaceExisting, layerHeight, true);
+                           List<Target> targets, boolean replaceExisting) {
+        this(toolCallId, deadlineGameTime, targets, replaceExisting, true);
     }
 
     public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
-                           boolean replaceExisting, int layerHeight, boolean consumeMaterials) {
+                           boolean replaceExisting, boolean consumeMaterials) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.targets = List.copyOf(targets);
         this.replaceExisting = replaceExisting;
-        this.layerHeight = layerHeight;
         this.consumeMaterials = consumeMaterials;
     }
 
@@ -67,6 +69,14 @@ public final class BuildTaskRecord extends TaskRecord {
         this.completed = completed;
     }
 
+    /**
+     * {@code task_status} 的进度面:<b>只报进度,不报状况</b>。
+     *
+     * <p>进度是"还剩多少"——单调、有分母、幂等,拉多少次都是同一个答案。状况是
+     * "出了什么事"(有人在拆、材料见底)——离散、有时效、错过就没了,该走事件
+     * 队列推给她,不该等人来问。两者混在一格里,进度会变得不可预测,状况会丢掉
+     * 时序,而且只有轮询才拿得到——偏偏状况最不该等人问。
+     */
     @Override
     public String describe() {
         return TOOL_NAME + " " + completed + "/" + targets.size();
@@ -82,6 +92,14 @@ public final class BuildTaskRecord extends TaskRecord {
 
         public Target {
             desiredState = Objects.requireNonNull(desiredState, "desiredState");
+            // 建出来的树叶就是"手放树叶":persistent 归一为 true,否则自然树的
+            // 蓝图照放会当场腐烂,放一片烂一片永远建不完
+            if (desiredState.hasProperty(
+                    net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT)) {
+                desiredState = desiredState.setValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT,
+                        true);
+            }
             item = Objects.requireNonNull(item, "item");
             pos = Objects.requireNonNull(pos, "pos").immutable();
             if (facing != null && facingOf(desiredState) == null) {

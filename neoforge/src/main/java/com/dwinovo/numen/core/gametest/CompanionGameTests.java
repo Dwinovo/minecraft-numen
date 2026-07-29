@@ -244,7 +244,7 @@ public class CompanionGameTests {
         var ctx = TaskDispatch.ctx("gametest-build", companion);
         long deadline = ctx.deadline(Math.max(1200L, targets.size() * 400L));
         TaskDispatch.dispatchAsync(companion,
-                new BuildTaskRecord(ctx.toolCallId(), deadline, targets, true, 0), reply -> {});
+                new BuildTaskRecord(ctx.toolCallId(), deadline, targets, true), reply -> {});
 
         List<BlockPos> cells = targets.stream().map(BuildTaskRecord.Target::pos).toList();
         helper.succeedWhen(() -> {
@@ -353,7 +353,7 @@ public class CompanionGameTests {
         var ctx = TaskDispatch.ctx("gametest-cottage", companion);
         long deadline = ctx.deadline(Math.max(2400L, targets.size() * 400L));
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
-                targets, true, 0, false), reply -> {});
+                targets, true, false), reply -> {});
 
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target target : targets) {
@@ -390,7 +390,7 @@ public class CompanionGameTests {
 
     /**
      * 经典蓝图:运行时从原版资源里取雪屋顶屋(igloo/top,7x5x8——雪墙、冰窗、
-     * 木门、床、火把、熔炉、工作台俱全),写成 config/numen/blueprints 下的 .nbt,
+     * 木门、床、火把、熔炉、工作台俱全),写成 schematics 目录下的 .nbt,
      * 再经 BlueprintStore 展开成建造任务。覆盖 .nbt 读取、精确状态落位(门/床双格、
      * 火把贴附)、骨架先行贴附后置的阶段序,以及免材料模式。
      */
@@ -421,7 +421,7 @@ public class CompanionGameTests {
         var ctx = TaskDispatch.ctx("gametest-blueprint", companion);
         long deadline = ctx.deadline(Math.max(2400L, loaded.targets().size() * 400L));
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
-                loaded.targets(), true, 0, false), reply -> {});
+                loaded.targets(), true, false), reply -> {});
 
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target target : loaded.targets()) {
@@ -578,7 +578,7 @@ public class CompanionGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-cbuild", companion);
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, true, 0, false), reply -> {});
+                ctx.deadline(3600L), targets, true, false), reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
@@ -603,7 +603,7 @@ public class CompanionGameTests {
         var ctx = TaskDispatch.ctx("gametest-sbuild-broke", companion);
         // dispatchAsync 的回调只回"已受理"收条;预检失败落在任务记录的终态上
         BuildTaskRecord record = new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, true, 0, true);
+                ctx.deadline(3600L), targets, true, true);
         TaskDispatch.dispatchAsync(companion, record, reply -> {});
         helper.succeedWhen(() -> {
             var result = record.getResult();
@@ -760,12 +760,12 @@ public class CompanionGameTests {
      * 终极实战:创造同伴(免材料+自动脚手架)把 5859 格的日式小屋从图纸
      * 盖到世界里,逐格对账(液体格已被管线跳过,不在目标集内)。
      *
-     * <p>【站位专项试金石——当前已知不过,注解封存】实测停在 2335/5859:
-     * 第四层起大量格子"到场但放置门不放行",触发 30s 停滞保险丝。这正是
-     * 真实世界"高层打转"的可重复复现;站位专项开工时恢复下面这行注解,
-     * 它转绿即专项完工。
+     * <p>整栋房子的验收条件是逐格全中,不是"盖了大半"。它同时压着施工模型的
+     * 三个要害:低层先行的顺序、支撑还没长出来时的分遍推迟、以及她自己站过的
+     * 格子最终也得补上。
      */
-    // @GameTest(template = "floor52", timeoutTicks = 100000, batch = "numen_cottage_jp")
+    // 时限给得远远宽于实际用时。考的是"能不能盖完",不是"多快盖完"。
+    @GameTest(template = "floor52", timeoutTicks = 400000, batch = "numen_cottage_jp")
     public static void build_japanese_cottage(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         copyCottageFixture(level);
@@ -775,7 +775,7 @@ public class CompanionGameTests {
                 level, "japanese_cottage", anchor, 0);
         var ctx = TaskDispatch.ctx("gametest-jp-cottage", companion);
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(95000L), loaded.targets(), true, 0, false), reply -> {});
+                ctx.deadline(95000L), loaded.targets(), true, false), reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : loaded.targets()) {
                 helper.assertTrue(t.matches(level.getBlockState(t.pos())),
@@ -840,7 +840,7 @@ public class CompanionGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild", companion);
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, true, 0, true), reply -> {});
+                ctx.deadline(3600L), targets, true, true), reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),

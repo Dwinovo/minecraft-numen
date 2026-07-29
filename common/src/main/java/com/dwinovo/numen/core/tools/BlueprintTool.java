@@ -37,13 +37,18 @@ public final class BlueprintTool implements NumenTool {
 
     @Override
     public String description() {
-        return "Work with structure blueprint files in config/numen/blueprints (.nbt exported from structure "
-                + "blocks, or .snbt text). action=list shows available blueprints with sizes — call this first. "
+        return "Work with structure blueprint files in the server's schematics/ folder — the conventional "
+                + "location, so anything the player already downloaded is available without moving files. "
+                + "Formats: .litematic, .schem, .nbt (structure block export), .snbt (text). "
+                + "action=list shows available blueprints with sizes — call this first. "
                 + "action=build constructs one whole file: give `file` (name without extension), anchor `x`,`y`,`z` "
                 + "= the LOWEST corner (min x/y/z) where the structure will stand, and optional clockwise "
-                + "`rotation` 0/90/180/270. The task walks the site and places every block bottom-up, exact states "
-                + "included (stairs facing, doors, beds); explicit air cells CLEAR terrain; liquids are skipped. "
-                + "Materials are not consumed yet. Pick a flat, clear area big enough for the size from list. "
+                + "`rotation` 0/90/180/270. She walks to the site once, then works inside it, placing cells in "
+                + "batches from the ground up with exact states (stairs facing, doors, beds); explicit air cells "
+                + "CLEAR terrain; liquids are skipped. MATERIALS: creative builds freely; in survival every cell "
+                + "consumes 1 matching item and the job is refused up front with an itemized shortfall — treat "
+                + "that as an invitation to gather together, not as an error. "
+                + "Pick a flat, clear area big enough for the size from list. "
                 + "For freeform construction use the build tool instead. BACKGROUND (build action): wait for "
                 + "task_finished; never resend while running.";
     }
@@ -85,7 +90,7 @@ public final class BlueprintTool implements NumenTool {
                 out.add(entry);
             }
             String message = out.isEmpty()
-                    ? "no blueprints yet; put .nbt or .snbt structure files into config/numen/blueprints"
+                    ? "no blueprints yet; drop .litematic / .schem / .nbt files into the schematics folder"
                     : out.size() + " blueprint(s) available";
             reply.accept(TaskResult.ok(message, Map.of("blueprints", out)).toJson());
             return;
@@ -110,6 +115,6 @@ public final class BlueprintTool implements NumenTool {
         boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), loaded.targets(),
-                true, 0, consume), reply);
+                true, consume), reply);
     }
 }

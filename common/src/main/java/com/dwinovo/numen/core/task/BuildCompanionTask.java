@@ -1,20 +1,16 @@
 package com.dwinovo.numen.core.task;
 
-import com.dwinovo.numen.core.act.BlockDigger;
-import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.execute.PathExecutor;
 import com.dwinovo.numen.core.pathing.execute.AimProcessor;
+import com.dwinovo.numen.core.pathing.execute.PathExecutor;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
-import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.movements.BuildPlacementRegistry;
 import com.dwinovo.numen.core.pathing.exec.PlayerNav;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
-import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -26,8 +22,11 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.particles.BlockParticleOption;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
@@ -35,14 +34,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.ClipContext;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.LiquidBlock;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
@@ -55,70 +55,125 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Multi-block construction task that owns planning, clearing, placement, and material choice. */
+/**
+ * 多格建造任务:赴工地、在工地里施工、逐批落位。
+ *
+ * <p><b>施工模型</b>——同伴走到工地,然后在工地范围内一批一批地把方块落进世界,
+ * 伴随朝向、挥手、粒子与音效。她不逐格走到每个方块旁边,也不需要"够得着"。
+ *
+ * <p>这是刻意的产品选择,不是偷懒。逐格走位是<b>客户端自动化模组</b>的生存约束
+ * ——它必须让服务端看起来像有人在按键。我们是服务端模组,从来不需要骗谁;为那条
+ * 约束付出的代价(站位求解、落脚点重试、视线射线、臂展判定、脚手架自救)全是
+ * 为不存在的问题写的,并且把"高层够不着"变成了盖不完房子的硬天花板。
+ *
+ * <p>保留下来的是真正属于我们的东西:生存模式逐格扣料、清障掉落、期望状态精确
+ * 落位、以及"支撑还没长出来就先放着,下一遍再来"的分遍推进。
+ */
 public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord>
         implements BuildPlacementRegistry.Provider, PlayerNav.ContextProvider {
 
     private static final AimProcessor AIM = new AimProcessor();
     private static final double WALK_SPEED = 1.0;
-    private static final int MAX_NO_SHOT_TICKS = 20;
-    private static final int POST_BREAK_PLACE_DELAY_TICKS = 5;
-    private static final int LOCAL_ACTION_RADIUS = 5;
-    private static final double DISTANCE_TRIM_SQR = 200.0;
-    /** Give up (rather than spin to the deadline) if no cell completes for this long. */
-    private static final int STALL_LIMIT_TICKS = 30 * 20;
-    /** 每次放置后的间隔刻:施工有节奏感,也天然限制每 tick 的世界写入量。 */
-    private static final int PLACE_INTERVAL_TICKS = 2;
-    /** 工完场清:建成后走回开工时的落脚点再报成功——站在成品屋顶上收工,交付
-     *  物完好但人挂在高处,下一个指令还得先救人。回撤沿用本任务的成本上下文
-     *  (挖已建对的格子有重罚金),借道破坏由近旁修补随行回填;这里是回撤的
-     *  时限,走不回去就原地交付,不为收尾赖掉一个成功的任务。 */
-    private static final Direction[] PLACE_GOAL_FACES = {
-            Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST, Direction.DOWN
-    };
+
+    /** 赴工地的时限:走不到就地开工,绝不因为路不通而不干活。 */
+    private static final int TRAVEL_BUDGET_TICKS = 30 * 20;
+    /** 落位批次间隔(刻)。 */
+    private static final int BATCH_INTERVAL_TICKS = 2;
+    /** 免耗材(创造)每批格数——快,但仍看得见一层层长出来。 */
+    private static final int CELLS_PER_BATCH_FREE = 24;
+    /** 生存每批格数——慢一档,时间随格数走,盖房子该有分量。 */
+    private static final int CELLS_PER_BATCH_SURVIVAL = 4;
+    /** 挥臂间隔:与原版挥臂动画一轮的长度对齐。 */
+    private static final int SWING_PERIOD_TICKS = 6;
+    /** 手到落点那道粒子的采样点数。 */
+    private static final int CONJURE_TRAIL_SAMPLES = 6;
+    /** 一层砌完后停下端详的刻数——匀速是机器,有起伏才是人。 */
+    private static final int LAYER_PAUSE_TICKS = 18;
+    /** 巡视路线离工地包围盒的外扩格数。 */
+    private static final int SITE_MARGIN = 2;
+    /** 挑落脚点时往前看多少格,决定她该站到哪一侧去。 */
+    private static final int WANDER_LOOKAHEAD_CELLS = 120;
+    /** 换个地方站:让她绕着工地动起来,而不是钉在原地。 */
+    private static final int WANDER_INTERVAL_TICKS = 4 * 20;
+    /** 单次挪窝的步行时限。 */
+    private static final int WANDER_WALK_TICKS = 40;
+    /** 连续几遍零进展才升级处置。 */
+    private static final int MAX_BARREN_PASSES = 3;
+    /** 每批最多冒几处粒子——整栋房子逐格发粒子会把客户端打垮。 */
+    private static final int PARTICLE_BUDGET_PER_BATCH = 3;
+
+    /**
+     * 写入标志:{@code UPDATE_CLIENTS}(同步给客户端)+ {@code UPDATE_KNOWN_SHAPE}
+     * (跳过形状重算),<b>不含</b> {@code UPDATE_NEIGHBORS}。
+     *
+     * <p>这是整个施工能不能照图落地的分水岭。默认的 {@code 3} 会通知邻块并触发
+     * 形状重算,于是原版立刻拿它自己的规则复核我们刚写下的每一格:靠在非泥土
+     * 方块上的粉红花瓣被判无效弹掉、楼梯与栅栏的连接态被按邻居重写、悬空的贴附
+     * 方块整批消失。图纸里本来就有原版放不出来的格(社区图纸尤其常见——保存时
+     * 的世界和落位时的世界不是一回事),按 {@code 3} 写就是逐格送去被否决。
+     *
+     * <p>所以这里不走通知链路:<b>图纸怎么画就怎么落</b>,不让世界中途改我们的
+     * 稿。光照仍由区块自己维护,不会盖出一栋黑房子。
+     *
+     * <p>代价是建成后邻块不联动(红石不自动初始化)。对一栋房子来说这是划算的:
+     * 少了它房子盖不完整,有了它只是红石要玩家碰一下。
+     */
+    private static final int PLACE_FLAGS =
+            net.minecraft.world.level.block.Block.UPDATE_CLIENTS
+                    | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE;
+
+    private enum Phase { TRAVEL, WORK }
 
     private final Map<Long, BuildTaskRecord.Target> targetByPos = new LinkedHashMap<>();
-    private final BlockDigger digger;
-    private final Set<BlockPos> noSupport = new HashSet<>();
-
-    private Set<BlockPos> incorrectPositions;
-    private LongOpenHashSet observedCompleted;
-    private int minY;
-    private int maxY;
-    private int layerTop;
-    private boolean providerRegistered;
-    private BuildTaskRecord.Target activeBreak;
-    /** 开工时的落脚点——建成后的回撤目的地。 */
-    private BlockPos noShotPos;
-    private int noShotTicks;
-    private int placeDelayTicks;
-    private int stallTicks;
-    private int highWaterCompleted;
-    /** 本遍施工的确定性顺序(蛇形逐层;骨架在前、贴附在后)。null = 待重建。 */
-    private List<BuildTaskRecord.Target> passOrder;
-    /** 游标:passOrder 中下一个要处理的下标。 */
-    private int cursor;
-    /** 本遍里放弃的格子(寻路不达/到场仍看不见/缺料),遍末统一裁决。 */
-    private final LongOpenHashSet passSkipped = new LongOpenHashSet();
+    /** 施工期寻路垫出来的非目标方块,收工时一并撤掉。 */
+    private final LinkedHashSet<BlockPos> scaffold = new LinkedHashSet<>();
     /** 本遍缺料统计(遍末报告用)。 */
     private final Map<Item, Integer> passMissing = new LinkedHashMap<>();
-    /** 遍起点的完成数,用于判定"整遍零进展"。 */
-    private int passStartCompleted = -1;
-    /** 连续零进展的遍数;达到上限才判"真不可达"。 */
-    private int zeroProgressPasses;
-    private static final int MAX_ZERO_PROGRESS_PASSES = 3;
-    /** 本遍构建时的施工层顶,层推进后遍作废重排。 */
-    private int passLayerTop = Integer.MIN_VALUE;
-    /** 当前导航针对的游标格(换格重建导航)。 */
-    private BlockPos navTargetCell;
-    /** 施工期寻路放置的非目标格(脚手架/垫柱残料),交付前拆除。尽力而为:
-     *  够不着的放弃,不为清扫赖掉一个成功的任务。 */
-    private final LinkedHashSet<BlockPos> scaffoldDebt = new LinkedHashSet<>();
+
+    private LongOpenHashSet observedCompleted;
+    private boolean providerRegistered;
+    private Phase phase = Phase.TRAVEL;
+    private int travelTicks;
+
+    /** 工地包围盒(全体目标格的最小/最大角)。 */
+    private BlockPos siteMin;
+    private BlockPos siteMax;
+
+    /** 本遍施工顺序:低层先、层内清障→骨架→贴附、蛇形走位。 */
+    private List<BuildTaskRecord.Target> order = List.of();
+    private int cursor;
+    private int batchTicks;
+    private int swingCooldown;
+    /** 已砌好又被外力弄没的格数(收工时用来解释"为什么磨了这么久")。 */
+    private int damagedCells;
+    private int passStartCompleted;
+    private int barrenPasses;
+    /**
+     * 暂停落位的刻数,两处用它:
+     *
+     * <p>其一是零进展遍后的冷却。一遍全是"放不下去"时会在同一 tick 内跑完(每格
+     * 都不耗预算),三遍连着翻完只要三刻——她根本来不及从压着的格子上挪开,就被
+     * 判成推不动了。裁决必须等身体真的动过。
+     *
+     * <p>其二是砌完一层后的停顿。恒定输出像打印机;停一拍、把刚砌好的那层扫一眼
+     * 再继续,才有人在干活的样子。
+     */
+    private int workPause;
+    /** 上一批落位所在的层,用来发现"翻过一层了"。 */
+    private int lastLayerY = Integer.MIN_VALUE;
+    /** 当前该不该蹲(由落位批次的高度决定,跨 tick 保持)。 */
+    private boolean crouching;
+
+    /** 挪窝状态。 */
+    private List<Vec3> wanderPoints = List.of();
+    private int wanderIndex;
+    private int wanderTicks;
+    private Vec3 wanderTarget;
+
     private String note = "done";
 
     public BuildCompanionTask(NumenPlayer player, BuildTaskRecord record) {
         super(player, record);
-        this.digger = new BlockDigger(player);
         for (BuildTaskRecord.Target target : record.targets) {
             targetByPos.put(target.pos().asLong(), target);
         }
@@ -130,41 +185,113 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 生存记账的开工盘料:把还没达标的实体格按物品汇总,背包(全格)不够
-     * 就逐项报缺——模型拿到的是"先去筹什么、各差多少",不是一句干瘪的
-     * 材料不足。免耗材画像(consumeMaterials=false,创造)不盘。拆除格与
-     * 液体格不费料;脚手架用的是寻路层的真实方块,不在此账内。
+     * 生存记账的开工盘料:把还没达标的实体格按物品汇总,背包不够就逐项报缺——
+     * 模型拿到的是"先去筹什么、各差多少",不是一句干瘪的材料不足。免耗材画像
+     * (创造)不盘。拆除格与液体格不费料。
      */
     private Precondition.Failure checkMaterials() {
         if (!r.consumeMaterials) {
             return null;
         }
-        java.util.Map<Item, Integer> need = new java.util.LinkedHashMap<>();
+        Map<Item, Integer> shortfall = shortfallAgainstInventory(remainingNeed());
+        if (shortfall.isEmpty()) {
+            return null;
+        }
+        return new Precondition.Failure(
+                "not enough materials yet — " + summarizeShortfall(shortfall)
+                        + ". Survival mode consumes 1 item per cell; tell the player what the big-ticket"
+                        + " items are and offer to gather or craft them together.",
+                FailureType.NO_MATERIAL);
+    }
+
+    /**
+     * 此刻还需要的材料:按物品汇总所有<b>尚未达标且要花料</b>的格。
+     *
+     * <p>开工前置与中途报缺共用这一个统计口径,所以玩家听到的永远是同一个
+     * 问题的答案——"从现在起还要凑什么"。以前中途报的是"本遍缺了什么",
+     * 那是过程量,玩家拿它没法决定去采多少。
+     */
+    private Map<Item, Integer> remainingNeed() {
+        Map<Item, Integer> need = new LinkedHashMap<>();
         for (BuildTaskRecord.Target target : r.targets) {
-            if (isAirTarget(target)) continue;
-            BlockState desired = target.desiredState();
-            if (desired != null && desired.getBlock() instanceof LiquidBlock) continue;
+            if (!costsMaterial(target)) continue;
             if (target.matches(player.level().getBlockState(target.pos()))) continue;
             need.merge(target.item(), 1, Integer::sum);
         }
-        StringBuilder missing = new StringBuilder();
+        return need;
+    }
+
+    /**
+     * 这一格要不要花一件材料——盘料与扣料的<b>唯一真源</b>。
+     *
+     * <p>清空格与液体格不费料。双格方块(门、床、高草、向日葵)在图纸里是上下
+     * 两格、各带一个同样的物品,逐格计费就会一扇门吃掉两扇门的料:玩家明明按
+     * 清单备齐了,建到一半却说不够。只让"下半"计费,上半随之而生。
+     */
+    private boolean costsMaterial(BuildTaskRecord.Target target) {
+        if (isAirTarget(target)) {
+            return false;
+        }
+        BlockState desired = target.desiredState();
+        if (desired == null || desired.getBlock() instanceof LiquidBlock) {
+            return false;
+        }
+        if (desired.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                && desired.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER) {
+            return false;
+        }
+        if (desired.hasProperty(BlockStateProperties.BED_PART)
+                && desired.getValue(BlockStateProperties.BED_PART) == BedPart.HEAD) {
+            return false;
+        }
+        return true;
+    }
+
+    /** 需求减去背包现货 = 还差多少。 */
+    private Map<Item, Integer> shortfallAgainstInventory(Map<Item, Integer> need) {
+        Map<Item, Integer> shortfall = new LinkedHashMap<>();
         for (var e : need.entrySet()) {
             int have = PlayerInv.count(player.getInventory(), e.getKey());
             if (have < e.getValue()) {
-                if (missing.length() > 0) missing.append(", ");
-                missing.append(net.minecraft.core.registries.BuiltInRegistries.ITEM
-                                .getKey(e.getKey()).getPath())
-                        .append(" ×").append(e.getValue() - have)
-                        .append(" (have ").append(have).append("/").append(e.getValue()).append(")");
+                shortfall.put(e.getKey(), e.getValue() - have);
             }
         }
-        if (missing.length() > 0) {
-            return new Precondition.Failure(
-                    "not enough materials to start building — missing: " + missing
-                            + ". Survival mode consumes 1 item per cell; gather or craft these first.",
-                    FailureType.NO_MATERIAL);
+        return shortfall;
+    }
+
+    /** 报缺料时最多点名几种。 */
+    private static final int MISSING_ITEMS_LISTED = 8;
+
+    /**
+     * 缺料清单:按缺口从大到小点名前几种,其余只报种类数与总件数。
+     *
+     * <p>一栋社区图纸能缺一百五十多种材料,全列出来是几千字符——玩家读不完,
+     * 模型的上下文也白烧掉一大块,而真正决定"先去干什么"的永远是排头那几样。
+     */
+    private static String summarizeShortfall(Map<Item, Integer> shortfall) {
+        List<Map.Entry<Item, Integer>> sorted = new ArrayList<>(shortfall.entrySet());
+        sorted.sort(Map.Entry.<Item, Integer>comparingByValue().reversed());
+        StringBuilder out = new StringBuilder();
+        int listed = Math.min(MISSING_ITEMS_LISTED, sorted.size());
+        for (int i = 0; i < listed; i++) {
+            if (i > 0) out.append(", ");
+            out.append(label(sorted.get(i).getKey())).append(" x").append(sorted.get(i).getValue());
         }
-        return null;
+        if (sorted.size() > listed) {
+            int restKinds = sorted.size() - listed;
+            int restCount = 0;
+            for (int i = listed; i < sorted.size(); i++) {
+                restCount += sorted.get(i).getValue();
+            }
+            out.append(", and ").append(restKinds).append(" more kinds (")
+                    .append(restCount).append(" items)");
+        }
+        int total = 0;
+        for (int v : shortfall.values()) {
+            total += v;
+        }
+        out.append("; ").append(total).append(" items short in total");
+        return out.toString();
     }
 
     private Precondition.Failure checkExistingBlocks() {
@@ -183,318 +310,685 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     @Override
     protected void onStart() {
-        minY = r.targets.stream().mapToInt(t -> t.pos().getY()).min().orElse(playerFeet().getY());
-        maxY = r.targets.stream().mapToInt(t -> t.pos().getY()).max().orElse(minY);
-        layerTop = usesLayers() ? Math.min(maxY, minY + layerHeightEffective() - 1) : maxY;
-        incorrectPositions = null;
         observedCompleted = new LongOpenHashSet();
-        stallTicks = 0;
+        computeSite();
+        computeWanderPoints();
         registerProvider();
         updateCompleted();
-        highWaterCompleted = r.completed();
-        advanceFinishedLayers();
+        rebuildOrder();
+        passStartCompleted = r.completed();
+        phase = Phase.TRAVEL;
     }
 
     @Override
     protected TaskState onTick() {
-        // SNEAK 每 tick 重新决策:默认站立,仅放置、及破坏时若上一 tick 仍在蹲才按下——
-        // 避免搭完/动作间残留蹲姿(输入为持久状态,不像客户端 force-state 会自动清零)。
-        boolean wasSneaking = player.isShiftKeyDown();
-        player.setShiftKeyDown(false);
+        // 蹲姿由施工分支决定并保持:落位只在批次刻发生,若每 tick 复位成站立,
+        // 中间那些刻就会把她弹起来,看起来是在抖而不是在蹲着贴边放。
+        player.setShiftKeyDown(phase == Phase.WORK && crouching);
         registerProvider();
         updateCompleted();
-        tickPlaceDelay();
-        // 收寻路放置回执:非目标格入残料账(目标格是正品,不算)
-        for (BlockPos placed : BuildPlacementRegistry.drainScaffold(player)) {
-            if (targetByPos.get(placed.asLong()) == null) {
-                scaffoldDebt.add(placed);
-            }
-        }
+        drainScaffold();
+
         if (r.completed() >= r.targets.size()) {
-            BuildTaskRecord.Target debt = nextScaffoldDebt();
-            if (debt == null) {
-                note = "all requested cells match";
-                return TaskState.SUCCESS;
-            }
-            // 工完场清:交付前拆掉自己垫的脚手架残料(复用破拆通路)
-            if (canInterruptPath() && MovementHelper.reachableAimPoint(player, debt.pos()) != null) {
-                if (nav != null) {
-                    nav.pause();
-                }
-                activeBreak = debt;
-                return tickBreak(wasSneaking);
-            }
-            return driveNavTo(debt, true);
+            return finish();
         }
-        // 停滞检测:以"完成格数"为进展信号(放/清可空转,门那种放了又清也不算进展),
-        // 连续 STALL_LIMIT_TICKS 无新完成就优雅失败退出,别空转到 deadline。
-        if (r.completed() > highWaterCompleted) {
-            highWaterCompleted = r.completed();
-            stallTicks = 0;
-        } else if (r.completed() >= r.targets.size()) {
-            stallTicks = 0;   // 结构已齐,残料清扫阶段不算停滞(有自己的放弃路径)
-        } else if (nav != null && nav.planningInFlight()) {
-            // 身体站着等异步搜索返回:不是停滞,是规划器在飞——这些刻不计入
-            // 停滞预算(与任务 deadline 的冻结同一原则)。
-        } else if (++stallTicks >= STALL_LIMIT_TICKS) {
-            com.dwinovo.numen.Constants.LOG.info(
-                    "[numen-task] build STALL-FUSE completed={}/{} feet={} note={}",
-                    r.completed(), r.targets.size(), player.blockPosition().toShortString(), note);
-            fail("stalled: no build progress for " + (STALL_LIMIT_TICKS / 20) + "s ("
-                    + note + "); completed " + r.completed() + "/" + r.targets.size(),
-                    FailureType.NO_PATH);
-            return TaskState.FAILED;
-        }
-        advanceFinishedLayers();
-        if (!recalc()) {
-            updateCompleted();
-            if (r.completed() >= r.targets.size()) {
-                note = "all requested cells match";
-                return TaskState.SUCCESS;
-            }
-            return TaskState.RUNNING;
-        }
-        trimIncorrectPositions();
-
-        // —— 游标流水线:确定性顺序(蛇形逐层,骨架先、贴附后),一次盯一格 ——
-        // 到位判据是"臂展内 + 眼到格心一条诚实射线"。看得见就转头挥手放,看不见
-        // 就寻路换位;到场仍不行的格子跳过,遍末统一裁决——像玩家一样承认够不着,
-        // 绝不原地转头等待一个永远不会命中的角度。
-        if (activeBreak != null) {
-            if (!canInterruptPath()) {
-                activeBreak = null;
-                digger.cancel();
-                return TaskState.RUNNING;
-            }
-            if (nav != null) {
-                nav.pause();
-            }
-            return tickBreak(wasSneaking);
-        }
-
-        ensurePassOrder();
-        BuildTaskRecord.Target cur = advanceCursor();
-        if (cur == null) {
-            return endOfPass();
-        }
-
-        BlockState curState = player.level().getBlockState(cur.pos());
-        if (needsBreak(cur) && !curState.isAir() && !(curState.getBlock() instanceof LiquidBlock)) {
-            // 先清后放:格里有错块。够得着就地清,够不着走过去。
-            if (canInterruptPath() && MovementHelper.reachableAimPoint(player, cur.pos()) != null) {
-                if (nav != null) {
-                    nav.pause();
-                }
-                activeBreak = cur;
-                return tickBreak(wasSneaking);
-            }
-            return driveNavTo(cur, true);
-        }
-
-        if (!isAirTarget(cur)) {
-            if (r.consumeMaterials && !hasItem(cur.item(), true)) {
-                passMissing.merge(cur.item(), 1, Integer::sum);
-                skipCell(cur);
-                return TaskState.RUNNING;
-            }
-            if (placeDelayTicks == 0 && canWorkOn(cur)) {
-                if (nav != null) {
-                    nav.pause();
-                }
-                placeCursorCell(cur);
-                return TaskState.RUNNING;
-            }
-            if (placeDelayTicks > 0 && canWorkOn(cur)) {
-                return TaskState.RUNNING;   // 落定间隔:站着等一两刻,不折返
-            }
-            return driveNavTo(cur, false);
-        }
-
-        // 空气目标且已是空气/流体:交给 updateCompleted 判定,推进游标
-        markObserved(cur, cur.matches(curState));
-        return TaskState.RUNNING;
+        return switch (phase) {
+            case TRAVEL -> tickTravel();
+            case WORK -> tickWork();
+        };
     }
 
     // ------------------------------------------------------------------
-    // 游标流水线
+    // 一、赴工地
     // ------------------------------------------------------------------
 
-    /** 重建本遍顺序:活动层内目标,骨架(实心)在前、贴附(火把/门这类非实心)
-     *  在后;组内蛇形——y 升序,z 升序,x 按 z 的奇偶折返(牛耕式,人不用来回
-     *  跑对角)。确定性顺序没有"智能选点"可坏,也让断点续建成为可能。 */
-    private void ensurePassOrder() {
-        if (passOrder != null && passLayerTop == layerTop) {
-            return;
+    /**
+     * 走到工地跟前。整个任务里唯一一次寻路——之后落位不再依赖走位,所以这一段
+     * 走成什么样都不影响能不能盖完:到了就开工,没到、走不通、超时,一样开工。
+     */
+    private TaskState tickTravel() {
+        if (nav == null) {
+            NavGoal goal = siteApproachGoal();
+            nav = PlayerNav.to(player, () -> new GoalCompiler.Compiled(goal, LongSets.emptySet(), null, false),
+                    WALK_SPEED, () -> false, this);
+            nav.setHighlights(this::pendingPositions);
         }
-        List<BuildTaskRecord.Target> solids = new ArrayList<>();
-        List<BuildTaskRecord.Target> decor = new ArrayList<>();
-        for (BuildTaskRecord.Target target : r.targets) {
-            if (usesLayers() && target.pos().getY() > layerTop) {
-                continue;
+        return switch (nav.tick()) {
+            case ARRIVED, FAILED -> {
+                beginWork();
+                yield TaskState.RUNNING;
             }
-            if (isAirTarget(target) || isSolidish(target.desiredState())) {
-                solids.add(target);
-            } else {
-                decor.add(target);
+            case RUNNING -> {
+                // 预算只计"正在往那儿走"的刻;搜索在飞的刻是规划器的墙钟延迟,
+                // 在高 tps 的无头测试里折算尤其离谱,不计入。
+                if (!nav.planningInFlight() && ++travelTicks > TRAVEL_BUDGET_TICKS) {
+                    com.dwinovo.numen.core.Constants.LOG.debug(
+                            "[numen-build] 赴工地超时,就地开工 feet={} 工地={}",
+                            player.blockPosition().toShortString(), siteMin.toShortString());
+                    beginWork();
+                }
+                yield TaskState.RUNNING;
             }
-        }
-        Comparator<BuildTaskRecord.Target> snake = Comparator
-                .comparingInt((BuildTaskRecord.Target t) -> t.pos().getY())
-                .thenComparingInt(t -> t.pos().getZ())
-                .thenComparingInt(t -> (t.pos().getZ() & 1) == 0 ? t.pos().getX() : -t.pos().getX());
-        solids.sort(snake);
-        decor.sort(snake);
-        solids.addAll(decor);
-        passOrder = solids;
-        passLayerTop = layerTop;
-        cursor = 0;
-        passSkipped.clear();
-        passMissing.clear();
-        passStartCompleted = r.completed();
+        };
     }
 
-    /** 骨架块:有碰撞体的都算;贴附物(火把、门、床、作物、地毯…)后置。 */
-    private static boolean isSolidish(BlockState state) {
-        return !state.getCollisionShape(net.minecraft.world.level.EmptyBlockGetter.INSTANCE,
-                BlockPos.ZERO).isEmpty();
+    private void beginWork() {
+        stopNav();
+        InputDriver.halt(player);
+        phase = Phase.WORK;
+        batchTicks = 0;
+        wanderTicks = 0;
+        wanderTarget = null;
     }
 
-    /** 游标推进:跳过已正确与本遍已放弃的格子,返回下一个待处理目标。 */
-    private BuildTaskRecord.Target advanceCursor() {
-        while (passOrder != null && cursor < passOrder.size()) {
-            BuildTaskRecord.Target target = passOrder.get(cursor);
-            if (passSkipped.contains(target.pos().asLong())) {
-                cursor++;
-                continue;
-            }
-            BlockState now = player.level().getBlockState(target.pos());
-            if (target.matches(now)
-                    || target.desiredState().getBlock() instanceof LiquidBlock
-                    || (isAirTarget(target) && now.getBlock() instanceof LiquidBlock)) {
-                // 与对账同口径:液体目标与"清空遇液体"跳过;固体目标淹水照放
-                markObserved(target, true);
-                cursor++;
-                continue;
-            }
-            return target;
-        }
-        return null;
+    /**
+     * 赴工地 = 走到巡视路线的<b>起点</b>,而不是"离工地中心多远以内"。后者的
+     * 半径圈把工地内部整个包含在内,她很可能在场内就算到位,一开工就压住格子。
+     */
+    private NavGoal siteApproachGoal() {
+        Vec3 first = wanderPoints.isEmpty()
+                ? Vec3.atBottomCenterOf(siteMin.offset(-SITE_MARGIN, 0, -SITE_MARGIN))
+                : wanderPoints.get(0);
+        return NavGoal.nearGround(BlockPos.containing(first), 2.0);
     }
 
-    /** 放弃当前游标格(本遍内不再回头),游标前移;残料格同时销账(留着就留着,
-     *  清扫是尽力而为)。 */
-    private void skipCell(BuildTaskRecord.Target target) {
-        passSkipped.add(target.pos().asLong());
-        scaffoldDebt.remove(target.pos());
-        dropNav();
-    }
+    // ------------------------------------------------------------------
+    // 二、施工
+    // ------------------------------------------------------------------
 
-    /** 下一个待拆残料:已经变空的顺手销账;返回合成的空气目标(走破拆通路)。 */
-    private BuildTaskRecord.Target nextScaffoldDebt() {
-        var it = scaffoldDebt.iterator();
-        while (it.hasNext()) {
-            BlockPos pos = it.next();
-            BlockState state = player.level().getBlockState(pos);
-            if (state.isAir() || state.getBlock() instanceof LiquidBlock) {
-                it.remove();
-                continue;
-            }
-            return new BuildTaskRecord.Target(Blocks.AIR, net.minecraft.world.item.Items.AIR, pos,
-                    "scaffold-cleanup", null, null, null);
-        }
-        return null;
-    }
-
-    /** 一遍扫完:全部就位 → 顶部下一 tick 进回撤;有剩且整遍零进展 → 先试跳层,
-     *  不能跳就快速教学失败报进度(玩家没材料/够不着也盖不完房子);有进展 → 开
-     *  下一遍(补漏/重试)。 */
-    private TaskState endOfPass() {
-        updateCompleted();
-        if (r.completed() >= r.targets.size()) {
-            passOrder = null;
+    private TaskState tickWork() {
+        tickWander();
+        if (workPause > 0) {
+            workPause--;
             return TaskState.RUNNING;
         }
-        boolean progressed = r.completed() > passStartCompleted;
-        if (!progressed) {
-            // 单遍零进展未必是真不可达:并发搜索抢预算的瞬时枯竭也长这样。
-            // 连续几遍都颗粒无收才认输——重试一遍的代价极低(已正确格秒过)。
-            if (++zeroProgressPasses < MAX_ZERO_PROGRESS_PASSES) {
-                passOrder = null;
-                return TaskState.RUNNING;
-            }
-            String reason = passFailureReason();
-            if (skipFailedLayer(reason)) {
-                zeroProgressPasses = 0;
-                passOrder = null;
-                return TaskState.RUNNING;
-            }
-            fail(reason + "; completed " + r.completed() + "/" + r.targets.size(),
-                    passMissing.isEmpty() ? FailureType.NO_PATH : FailureType.NO_MATERIAL);
-            return TaskState.FAILED;
+        if (++batchTicks < BATCH_INTERVAL_TICKS) {
+            return TaskState.RUNNING;
         }
-        zeroProgressPasses = 0;
-        passOrder = null;
+        batchTicks = 0;
+        return runBatch();
+    }
+
+    /**
+     * 落一批。一次 tick 最多跨一个遍界——遍末的裁决(缺料/强行落位/收工)必须
+     * 各自独立成一刻,不然零进展的遍会在同一 tick 里连着翻,把裁决糊成一团。
+     */
+    private TaskState runBatch() {
+        int budget = cellsPerBatch();
+        List<BlockPos> touched = new ArrayList<>();
+        BlockState sample = null;
+        while (budget > 0 && cursor < order.size()) {
+            BuildTaskRecord.Target target = order.get(cursor++);
+            BlockState placed = processCell(target);
+            if (placed != null) {
+                budget--;
+                touched.add(target.pos());
+                sample = placed;
+            }
+        }
+        if (!touched.isEmpty()) {
+            performWork(touched, sample);
+            // 翻过一层就停一拍:把刚砌好的这层扫一眼再往上。恒定输出是打印机,
+            // 有起伏才像人在干活——这一拍不改变任何结果,只改变观感。
+            int layer = touched.get(0).getY();
+            if (lastLayerY != Integer.MIN_VALUE && layer != lastLayerY) {
+                workPause = LAYER_PAUSE_TICKS;
+            }
+            lastLayerY = layer;
+        }
+        if (cursor >= order.size()) {
+            return endPass();
+        }
         return TaskState.RUNNING;
     }
 
-    private String passFailureReason() {
-        if (!passMissing.isEmpty()) {
-            List<String> parts = new ArrayList<>();
-            for (Map.Entry<Item, Integer> entry : passMissing.entrySet()) {
-                parts.add(label(entry.getKey()) + " x" + entry.getValue());
-            }
-            return "missing building materials: " + String.join(", ", parts);
-        }
-        if (!passSkipped.isEmpty()) {
-            return passSkipped.size() + " build cell(s) stayed out of reach or sight";
-        }
-        return "no build cell could be worked on this pass";
-    }
-
-    /** 就位判据(workable 唯一真源):臂展内、眼到格心一条诚实射线不被挡、且放
-     *  下去的方块不与任何实体(包括自己)相撞。三个条件都随身位变化,统一在这
-     *  里判——导航的到达谓词与放置分支共用,谁也不会跟谁打架:站在目标格里时
-     *  这里为假,导航自然驱动"站到旁边去"。无状态一问一答,没有收敛过程,也就
-     *  没有"永远转不到位"这类病。 */
-    private boolean canWorkOn(BuildTaskRecord.Target target) {
+    /**
+     * 处理一格。
+     *
+     * @return 落位后的期望状态(有产出);null = 本遍先放下(已达标/缺料/她自己
+     *         正站在这格里)
+     */
+    private BlockState processCell(BuildTaskRecord.Target target) {
         BlockPos pos = target.pos();
-        Vec3 eye = player.getEyePosition();
-        Vec3 center = Vec3.atCenterOf(pos);
-        if (eye.distanceToSqr(center) > MovementHelper.blockReachDistance(player)
-                * MovementHelper.blockReachDistance(player)) {
-            return false;
+        BlockState current = player.level().getBlockState(pos);
+        if (target.matches(current)) {
+            markObserved(target, true);
+            return null;
         }
-        if (blockedByEntity(pos, target.desiredState())
-                || !placementPlausible(pos, target.desiredState())) {
-            return false;
+        BlockState desired = target.desiredState();
+        if (desired != null && desired.getBlock() instanceof LiquidBlock) {
+            return null;   // 液体格不承接(排水/布水都不做,先绕开)
         }
-        BlockHitResult hit = player.level().clip(new ClipContext(eye, center,
-                ClipContext.Block.COLLIDER, ClipContext.Fluid.NONE, player));
-        return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(pos);
-    }
 
-    /** 放下去:转头看一眼(动画,不做判定)、挥手、按期望状态写入世界、扣料。
-     *  写入用 setBlock 而不是模拟右键——朝向敏感方块(楼梯/原木轴向)一次准确
-     *  落位;玩家看到的真实是走过来、看着那里、方块出现、材料减少。 */
-    private void placeCursorCell(BuildTaskRecord.Target target) {
-        applySteppedAim(Vec3.atCenterOf(target.pos()));
-        player.swing(InteractionHand.MAIN_HAND);
-        int slot = r.consumeMaterials ? findSlot(target.item(), true) : -1;
-        if (slot >= 0) {
-            player.holdInHand(slot);
+        boolean occupied = !current.isAir() && !(current.getBlock() instanceof LiquidBlock);
+        if (occupied) {
+            if (!r.replaceExisting) {
+                return null;   // 开工前置已挡过;半途冒出来的占位不打断整栋楼
+            }
+            clear(pos);
+            if (isAirTarget(target)) {
+                markObserved(target, true);
+                return desired;
+            }
+            current = player.level().getBlockState(pos);
         }
-        player.level().setBlock(target.pos(), target.desiredState(), 3);
-        if (r.consumeMaterials) {
+        if (isAirTarget(target)) {
+            markObserved(target, current.isAir() || current.getBlock() instanceof LiquidBlock);
+            return null;
+        }
+
+        // 谁都不豁免——包括她自己:身体占着的格子这遍先放下,下一遍她已经挪开了。
+        // 这是唯一保留的放置前置条件,防的是把方块塞进活物身体里这类真事故。
+        if (blockedByEntity(pos, desired)) {
+            return null;
+        }
+        boolean pays = r.consumeMaterials && costsMaterial(target);
+        if (pays && !hasItem(target.item(), true)) {
+            // 【事件挂点】本遍第一次缺料 —— {@code passMissing.isEmpty()} 恰好就是
+            // 那一次边沿,不必另记状态去重。要推给她时在此 GameEvents.emit,
+            // 前提是先在 GameEvents.Kind 里登记一个词(那是 numen-api 的改动)。
+            passMissing.merge(target.item(), 1, Integer::sum);
+            return null;
+        }
+
+        player.level().setBlock(pos, desired, PLACE_FLAGS);
+        if (pays) {
             consumeOne(target.item());
         }
         r.placedOne();
-        noSupport.clear();
         markObserved(target, true);
-        placeDelayTicks = PLACE_INTERVAL_TICKS;
-        dropNav();
+        return desired;
     }
 
-    /** 从背包扣掉一个该物品(主手优先已由 holdInHand 保证展示,扣哪格无所谓)。 */
+    /**
+     * 清掉挡路的方块:生存掉落物品(她清出来的木头该归玩家),免耗材不掉。
+     * 破坏特效走原版 levelEvent,音效与碎屑与玩家自己挖一模一样。
+     */
+    private void clear(BlockPos pos) {
+        var level = player.level();
+        BlockState state = level.getBlockState(pos);
+        if (state.isAir()) {
+            return;
+        }
+        if (r.consumeMaterials) {
+            net.minecraft.world.level.block.Block.dropResources(
+                    state, level, pos, level.getBlockEntity(pos), player, player.getMainHandItem());
+        }
+        level.levelEvent(2001, pos, net.minecraft.world.level.block.Block.getId(state));
+        level.setBlock(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), PLACE_FLAGS);
+        r.brokeOne();
+    }
+
+    /**
+     * 演出:朝这一批的中心转头、举起对应方块、挥手,方块碎屑与落位声。
+     * 粒子按批限量——整栋房子逐格发粒子会把客户端打垮。
+     */
+    private void performWork(List<BlockPos> touched, BlockState sample) {
+        Vec3 centre = Vec3.ZERO;
+        for (BlockPos pos : touched) {
+            centre = centre.add(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+        }
+        centre = centre.scale(1.0 / touched.size());
+        applySteppedAim(centre);
+        // 低处蹲下、高处站直:所有人都知道贴边放方块要蹲,这是玩家最熟的建造姿势。
+        crouching = centre.y < player.getY() + 0.6;
+        // 挥手按动画节拍走,不按落位节拍。原版一轮挥臂约 6 刻,而落位每 2 刻一批
+        // ——每批都触发就是每秒十下,手臂永远画不完一个来回,看起来是抽搐不是干活。
+        boolean swung = --swingCooldown <= 0;
+        if (swung) {
+            player.swing(InteractionHand.MAIN_HAND);
+            swingCooldown = SWING_PERIOD_TICKS;
+        }
+        if (sample != null) {
+            int slot = findSlot(sample.getBlock().asItem(), true);
+            if (slot >= 0) {
+                player.holdInHand(slot);
+            }
+        }
+        if (!(player.level() instanceof ServerLevel level) || sample == null) {
+            return;
+        }
+        if (swung) {
+            emitConjureTrail(level, centre);
+        }
+        int spouts = Math.min(PARTICLE_BUDGET_PER_BATCH, touched.size());
+        int step = Math.max(1, touched.size() / spouts);
+        for (int i = 0; i < touched.size(); i += step) {
+            BlockPos pos = touched.get(i);
+            level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, sample),
+                    pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
+                    4, 0.28, 0.28, 0.28, 0.0);
+        }
+        var sound = sample.getSoundType().getPlaceSound();
+        BlockPos at = touched.get(touched.size() / 2);
+        level.playSound(null, at, sound, SoundSource.BLOCKS, 0.7f, 0.9f + player.getRandom().nextFloat() * 0.2f);
+    }
+
+    /**
+     * 从她手上飞向落点的一道粒子。
+     *
+     * <p>方块凭空出现、她在旁边挥手——这两件事之间原本没有任何可见的联系,看着
+     * 就像作弊。把因果画出来之后,隔空落位才读得成手艺而不是开挂。一次挥臂一道,
+     * 跟着挥臂节拍走,不会刷屏。
+     */
+    private void emitConjureTrail(ServerLevel level, Vec3 to) {
+        Vec3 from = player.getEyePosition().add(player.getLookAngle().scale(0.6)).add(0, -0.3, 0);
+        Vec3 step = to.subtract(from).scale(1.0 / (CONJURE_TRAIL_SAMPLES + 1));
+        for (int i = 1; i <= CONJURE_TRAIL_SAMPLES; i++) {
+            Vec3 p = from.add(step.scale(i));
+            level.sendParticles(ParticleTypes.END_ROD, p.x, p.y, p.z, 1, 0.0, 0.0, 0.0, 0.0);
+        }
+    }
+
+    /**
+     * 一遍扫完的裁决。有进展就开下一遍(补漏);零进展先挪窝重试(剩下的多半
+     * 正压在她自己脚下),连着几遍颗粒无收才认账——缺料是邀请,不是错误。
+     */
+    private TaskState endPass() {
+        updateCompleted();
+        if (r.completed() >= r.targets.size()) {
+            return finish();
+        }
+        boolean progressed = r.completed() > passStartCompleted;
+        com.dwinovo.numen.core.Constants.LOG.debug(
+                "[numen-build] 收遍 {}/{} 本遍+{} 缺料{} 零进展遍{}",
+                r.completed(), r.targets.size(), r.completed() - passStartCompleted,
+                passMissing.size(), barrenPasses);
+        if (progressed) {
+            barrenPasses = 0;
+        } else if (++barrenPasses >= MAX_BARREN_PASSES) {
+            if (!passMissing.isEmpty()) {
+                fail(missingReason() + "; built " + r.completed() + "/" + r.targets.size()
+                        + " so far", FailureType.NO_MATERIAL);
+                return TaskState.FAILED;
+            }
+            // 挪了窝也补不上:留案再交代。盖不完就是盖不完,不粉饰成成功。
+            dumpOutstanding();
+            fail(diagnoseOutstanding() + "; built " + r.completed() + "/" + r.targets.size(),
+                    FailureType.NO_PATH);
+            return TaskState.FAILED;
+        }
+        // 零进展往往是她自己站在剩下的格子里:立刻挪窝,并且把下一遍压后到
+        // 她走完这一程之后——不给身体挪开的时间就连翻三遍,判的是假的死局。
+        if (!progressed) {
+            wanderTarget = null;
+            wanderTicks = WANDER_INTERVAL_TICKS;
+            workPause = WANDER_WALK_TICKS + 20;
+        }
+        rebuildOrder();
+        passStartCompleted = r.completed();
+        passMissing.clear();
+        return TaskState.RUNNING;
+    }
+
+    /**
+     * 收不了尾时的留案:缺格按层分布 + 逐条实例(期望/实际/立得住吗/被谁占着)。
+     * 盖不完的病因只有两类——世界拒收,或者她自己压着——两者的修法完全不同,
+     * 不该靠单个失败样本去猜。
+     */
+    private void dumpOutstanding() {
+        Map<Integer, Integer> byLayer = new java.util.TreeMap<>();
+        List<BuildTaskRecord.Target> examples = new ArrayList<>();
+        for (BuildTaskRecord.Target target : r.targets) {
+            if (target.matches(player.level().getBlockState(target.pos()))) continue;
+            byLayer.merge(target.pos().getY(), 1, Integer::sum);
+            if (examples.size() < 12) {
+                examples.add(target);
+            }
+        }
+        com.dwinovo.numen.Constants.LOG.info(
+                "[numen-build] 收不了尾 {}/{} feet={} 缺格分层={}",
+                r.completed(), r.targets.size(), player.blockPosition().toShortString(), byLayer);
+        for (BuildTaskRecord.Target target : examples) {
+            BlockPos pos = target.pos();
+            BlockState desired = target.desiredState();
+            com.dwinovo.numen.Constants.LOG.info(
+                    "[numen-build] 缺 {} 期望={} 实际={} 立得住={} 占身={} 有料={}",
+                    pos.toShortString(), desired, player.level().getBlockState(pos),
+                    desired.canSurvive(player.level(), pos), blockedByEntity(pos, desired),
+                    !r.consumeMaterials || hasItem(target.item(), true));
+        }
+    }
+
+    /**
+     * 收不了尾时的病因分类。
+     *
+     * <p>剩下的格子放不下去只有四种可能,而玩家的应对完全不同:让占着的人挪开、
+     * 让拆的人住手、去补材料、或者认下图纸里原版不允许的那几格。以前四种都归成
+     * 一句 "could not be placed" —— 判据其实早就算出来了,只是没送到人面前。
+     * 裁决做了却不交代理由,和没裁决一样难用。
+     */
+    private String diagnoseOutstanding() {
+        int occupied = 0;
+        int unsupported = 0;
+        int broke = 0;
+        BlockPos sample = null;
+        for (BuildTaskRecord.Target target : r.targets) {
+            BlockPos pos = target.pos();
+            if (target.matches(player.level().getBlockState(pos))) {
+                continue;
+            }
+            if (sample == null) {
+                sample = pos;
+            }
+            BlockState desired = target.desiredState();
+            if (blockedByEntity(pos, desired)) {
+                occupied++;
+            } else if (!desired.canSurvive(player.level(), pos)) {
+                unsupported++;
+            } else {
+                broke++;
+            }
+        }
+        int missing = r.targets.size() - r.completed();
+        List<String> parts = new ArrayList<>();
+        if (occupied > 0) {
+            parts.add(occupied + " blocked by someone standing there — ask them to step aside");
+        }
+        if (unsupported > 0) {
+            parts.add(unsupported + " that vanilla physics will not hold at that spot"
+                    + " (the blueprint asks for something impossible there)");
+        }
+        if (broke > 0) {
+            parts.add(broke + " that would not stay put"
+                    + (damagedCells > 0 ? " — something kept breaking the finished work" : ""));
+        }
+        return missing + " cell(s) unbuilt at " + (sample == null ? "?" : sample.toShortString())
+                + (parts.isEmpty() ? "" : ": " + String.join("; ", parts));
+    }
+
+    private String missingReason() {
+        return "we ran out of materials — " + summarizeShortfall(passMissing)
+                + "; gather these and ask me to carry on";
+    }
+
+    /** 收工:撤掉自己垫的脚手架,放一把庆祝的粒子。 */
+    private TaskState finish() {
+        for (BlockPos pos : scaffold) {
+            if (targetByPos.containsKey(pos.asLong())) continue;
+            BlockState state = player.level().getBlockState(pos);
+            if (!state.isAir() && !(state.getBlock() instanceof LiquidBlock)) {
+                player.level().destroyBlock(pos, r.consumeMaterials);
+            }
+        }
+        scaffold.clear();
+        if (player.level() instanceof ServerLevel level) {
+            level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
+                    (siteMin.getX() + siteMax.getX()) / 2.0 + 0.5,
+                    siteMax.getY() + 1.0,
+                    (siteMin.getZ() + siteMax.getZ()) / 2.0 + 0.5,
+                    24, (siteMax.getX() - siteMin.getX()) / 3.0 + 1.0, 1.0,
+                    (siteMax.getZ() - siteMin.getZ()) / 3.0 + 1.0, 0.0);
+        }
+        InputDriver.halt(player);
+        if (r.completed() >= r.targets.size()) {
+            note = "all requested cells match";
+        }
+        return TaskState.SUCCESS;
+    }
+
+    // ------------------------------------------------------------------
+    // 三、在工地里动起来
+    // ------------------------------------------------------------------
+
+    /**
+     * 挪窝。用直接步进而不是寻路——施工期间起一次 A* 既慢又可能顺手挖填,
+     * 而"她在工地里走动"这件事根本不需要精确到达:走得到就走到,走不到换一个。
+     */
+    private void tickWander() {
+        if (wanderPoints.isEmpty()) {
+            return;
+        }
+        if (wanderTarget == null) {
+            if (++wanderTicks < WANDER_INTERVAL_TICKS) {
+                return;
+            }
+            wanderTicks = 0;
+            wanderTarget = nextWanderPoint();
+            return;
+        }
+        // 到没到只看水平距离:落脚点的 y 取的是工地底面,外沿地形起伏时
+        // 三维距离可能永远不满足,她会一路顶着走满时限。
+        double dx = player.getX() - wanderTarget.x;
+        double dz = player.getZ() - wanderTarget.z;
+        if (++wanderTicks > WANDER_WALK_TICKS || dx * dx + dz * dz < 1.5) {
+            wanderTarget = null;
+            wanderTicks = 0;
+            InputDriver.halt(player);
+            return;
+        }
+        InputDriver.stepToward(player, wanderTarget, false);
+    }
+
+    /**
+     * 下一个落脚点:选离<b>接下来要盖的那一片</b>最近的外沿点。
+     *
+     * <p>这是"看起来在干活"与"看起来在遛弯"的分界。匀速绕圈时,她的走位和她的
+     * 产出是两条毫不相干的动画,叠在一起人一眼就看得出是假的。施工顺序是低层
+     * 优先、层内蛇形,接下来几十格在空间上本就连成一片;把落脚点绑到那一片,
+     * 她就会自然地沿着正在砌的那面墙挪,盖完东墙走到南边——同样是绕外圈,
+     * 但因果对上了。
+     */
+    private Vec3 nextWanderPoint() {
+        if (wanderPoints.isEmpty()) {
+            return null;
+        }
+        Vec3 focus = upcomingFocus();
+        if (focus == null) {
+            return wanderPoints.get(wanderIndex++ % wanderPoints.size());
+        }
+        Vec3 best = wanderPoints.get(0);
+        double bestDist = Double.MAX_VALUE;
+        for (Vec3 point : wanderPoints) {
+            double dx = point.x - focus.x;
+            double dz = point.z - focus.z;
+            double d = dx * dx + dz * dz;
+            if (d < bestDist) {
+                bestDist = d;
+                best = point;
+            }
+        }
+        return best;
+    }
+
+    /** 接下来一小段要盖的格子的水平重心;没有待建格则 null。 */
+    private Vec3 upcomingFocus() {
+        int end = Math.min(order.size(), cursor + WANDER_LOOKAHEAD_CELLS);
+        double x = 0;
+        double z = 0;
+        int n = 0;
+        for (int i = cursor; i < end; i++) {
+            BlockPos pos = order.get(i).pos();
+            x += pos.getX();
+            z += pos.getZ();
+            n++;
+        }
+        return n == 0 ? null : new Vec3(x / n + 0.5, siteMin.getY(), z / n + 0.5);
+    }
+
+    /**
+     * 巡视路线:绕工地包围盒<b>外沿</b>一圈,按顺时针顺序排点。
+     *
+     * <p>她隔空落位,本来就没有理由进场。站进去唯一的后果是把自己压着的那一格
+     * 锁死——身体占格是放置的硬前置(不能把方块塞进活物身体里),而她自己又不
+     * 知道该往哪让。实测就栽在这里:1275/1276,差的正是她脚上那一格。
+     *
+     * <p>让她始终在场外,这一整类失败就不存在了,不需要任何"挪窝解锁"的补救。
+     * 观感上也更像那么回事——绕着工地巡场,而不是站在半成品里面。
+     */
+    private void computeWanderPoints() {
+        int x0 = siteMin.getX() - SITE_MARGIN;
+        int x1 = siteMax.getX() + SITE_MARGIN;
+        int z0 = siteMin.getZ() - SITE_MARGIN;
+        int z1 = siteMax.getZ() + SITE_MARGIN;
+        // 步长随工地大小走:小屋子也要绕出几个点,大宅不至于绕出上百个
+        int span = Math.max(x1 - x0, z1 - z0);
+        int stride = Math.max(3, span / 8);
+        double y = siteMin.getY();
+        List<Vec3> points = new ArrayList<>();
+        for (int x = x0; x <= x1; x += stride) points.add(new Vec3(x + 0.5, y, z0 + 0.5));
+        for (int z = z0; z <= z1; z += stride) points.add(new Vec3(x1 + 0.5, y, z + 0.5));
+        for (int x = x1; x >= x0; x -= stride) points.add(new Vec3(x + 0.5, y, z1 + 0.5));
+        for (int z = z1; z >= z0; z -= stride) points.add(new Vec3(x0 + 0.5, y, z + 0.5));
+        wanderPoints = List.copyOf(points);
+    }
+
+    // ------------------------------------------------------------------
+    // 施工顺序与工地
+    // ------------------------------------------------------------------
+
+    private void computeSite() {
+        int minX = Integer.MAX_VALUE;
+        int minY = Integer.MAX_VALUE;
+        int minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE;
+        int maxY = Integer.MIN_VALUE;
+        int maxZ = Integer.MIN_VALUE;
+        for (BuildTaskRecord.Target target : r.targets) {
+            BlockPos pos = target.pos();
+            minX = Math.min(minX, pos.getX());
+            minY = Math.min(minY, pos.getY());
+            minZ = Math.min(minZ, pos.getZ());
+            maxX = Math.max(maxX, pos.getX());
+            maxY = Math.max(maxY, pos.getY());
+            maxZ = Math.max(maxZ, pos.getZ());
+        }
+        if (minX > maxX) {
+            BlockPos feet = playerFeet();
+            siteMin = feet;
+            siteMax = feet;
+            return;
+        }
+        siteMin = new BlockPos(minX, minY, minZ);
+        siteMax = new BlockPos(maxX, maxY, maxZ);
+    }
+
+    /**
+     * 重排本遍顺序:只收还没达标的格。低层在前(下面盖好了上面才有依托),
+     * 层内先清障、再骨架、最后贴附;同类蛇形走位(牛耕式),顺序完全确定
+     * ——没有"智能选点"可坏,断点续建也就成立。
+     */
+    private void rebuildOrder() {
+        List<BuildTaskRecord.Target> pending = new ArrayList<>();
+        for (BuildTaskRecord.Target target : r.targets) {
+            if (!target.matches(player.level().getBlockState(target.pos()))) {
+                pending.add(target);
+            }
+        }
+        pending.sort(Comparator
+                .comparingInt((BuildTaskRecord.Target t) -> t.pos().getY())
+                .thenComparingInt(BuildCompanionTask::stage)
+                .thenComparingInt(t -> t.pos().getZ())
+                .thenComparingInt(t -> (t.pos().getZ() & 1) == 0 ? t.pos().getX() : -t.pos().getX()));
+        order = pending;
+        cursor = 0;
+    }
+
+    /** 层内阶段:清障 0 → 骨架 1 → 贴附 2。 */
+    private static int stage(BuildTaskRecord.Target target) {
+        if (isAirTarget(target)) {
+            return 0;
+        }
+        BlockState state = target.desiredState();
+        return state != null && state.isCollisionShapeFullBlock(net.minecraft.world.level.EmptyBlockGetter.INSTANCE,
+                BlockPos.ZERO) ? 1 : 2;
+    }
+
+    private int cellsPerBatch() {
+        return r.consumeMaterials ? CELLS_PER_BATCH_SURVIVAL : CELLS_PER_BATCH_FREE;
+    }
+
+    private List<BlockPos> pendingPositions() {
+        List<BlockPos> out = new ArrayList<>();
+        for (int i = cursor; i < order.size() && out.size() < 64; i++) {
+            out.add(order.get(i).pos());
+        }
+        return out;
+    }
+
+    private void drainScaffold() {
+        for (BlockPos placed : BuildPlacementRegistry.drainScaffold(player)) {
+            if (!targetByPos.containsKey(placed.asLong())) {
+                scaffold.add(placed);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 判据与账目
+    // ------------------------------------------------------------------
+
+    /**
+     * 谁都不豁免——包括同伴自己:身体占着/正落进的格子不可放置。
+     *
+     * <p>自己的身体用直接几何判交,不走实体分区索引——假人在索引里会漏检
+     * (法医快照抓到过"双脚站在目标格里却放行",随后往自己身上落方块把自己
+     * 封进树叶)。我在哪儿,不需要问索引。
+     */
+    private boolean blockedByEntity(BlockPos pos, BlockState state) {
+        VoxelShape shape = state.getCollisionShape(player.level(), pos, CollisionContext.of(player));
+        if (shape.isEmpty()) {
+            return false;
+        }
+        VoxelShape placed = shape.move(pos.getX(), pos.getY(), pos.getZ());
+        AABB body = player.getBoundingBox();
+        for (AABB piece : placed.toAabbs()) {
+            if (piece.intersects(body)) {
+                return true;
+            }
+        }
+        return !player.level().isUnobstructed(player, placed);
+    }
+
+    private void markObserved(BuildTaskRecord.Target target, boolean completed) {
+        if (observedCompleted == null) {
+            observedCompleted = new LongOpenHashSet();
+        }
+        if (completed) {
+            observedCompleted.add(target.pos().asLong());
+        } else {
+            observedCompleted.remove(target.pos().asLong());
+        }
+    }
+
+    private void updateCompleted() {
+        if (observedCompleted == null) {
+            observedCompleted = new LongOpenHashSet();
+        }
+        int completed = 0;
+        BlockGetter view = LoadedOnlyView.of(player.level());
+        LoadedOnlyView loadedView = view instanceof LoadedOnlyView v ? v : null;
+        for (BuildTaskRecord.Target target : r.targets) {
+            BlockPos pos = target.pos();
+            boolean loaded = loadedView == null || loadedView.isLoaded(pos.getX(), pos.getZ());
+            if (loaded) {
+                BlockState observed = view.getBlockState(pos);
+                if (target.matches(observed)
+                        || target.desiredState().getBlock() instanceof LiquidBlock
+                        || (isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {
+                    // 液体口径:不放液体目标、清空型目标不排水——这两类跳过豁免;
+                    // 固体目标被液体淹着不豁免,照放,方块直接顶掉水(原版语义)
+                    observedCompleted.add(pos.asLong());
+                    completed++;
+                } else if (observedCompleted.remove(pos.asLong())) {
+                    // 曾经达标、现在不达标:只可能是外力(玩家拆、苦力怕炸、
+                    // 水火漫过来)。下一遍重排会把它收回队列自动补上;这里只记账,
+                    // 收尾时随结果一并交代。
+                    //
+                    // 【事件挂点】自家的活正在被拆 —— 典型的"有时效、错过就没了"。
+                    // {@code observedCompleted.remove} 返回真恰好是那一次边沿。
+                    // 收件箱对"有后台任务在跑"的事件是立刻开轮的,正合这一类:
+                    // 墙正在被拆,不该等她下次想起来问进度才知道。
+                    damagedCells++;
+                }
+            } else if (observedCompleted.contains(pos.asLong())) {
+                completed++;
+            }
+        }
+        r.completed(completed);
+    }
+
+    /** 从背包扣掉一个该物品。 */
     private void consumeOne(Item item) {
         if (player.hasInfiniteMaterials()) {
             return;   // 任务中途被切成免耗材画像:记账即刻停手,别扣真方块
@@ -509,627 +1003,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
     }
 
-    /** 为游标格开车:换格即换导航;到场仍干不了活或寻路失败,跳过该格——
-     *  绝不留在原地空等。 */
-    private TaskState driveNavTo(BuildTaskRecord.Target target, boolean forBreak) {
-        if (nav == null || !target.pos().equals(navTargetCell)) {
-            dropNav();
-            navTargetCell = target.pos();
-            NavGoal goal = forBreak ? breakGoal(target.pos()) : placementGoal(target);
-            nav = PlayerNav.to(player, () -> new GoalCompiler.Compiled(goal, protectedCells(), null, false),
-                    WALK_SPEED, () -> canWorkOn(target), this);
-            nav.setHighlights(this::activePositions);
-        }
-        return switch (nav.tick()) {
-            case RUNNING -> TaskState.RUNNING;
-            case ARRIVED -> {
-                if (!canWorkOn(target)
-                        && (forBreak ? MovementHelper.reachableAimPoint(player, target.pos()) == null : true)) {
-                    // 站位目标满足了,活还是干不了(视线/臂展不达)——认输换下一格
-                    skipCell(target);
-                }
-                dropNav();
-                yield TaskState.RUNNING;
-            }
-            case FAILED -> {
-                com.dwinovo.numen.Constants.LOG.info(
-                        "[numen-task] build cell unreachable ({}): {} cell={}",
-                        nav.failType(), nav.failReason(), target.pos().toShortString());
-                skipCell(target);
-                yield TaskState.RUNNING;
-            }
-        };
-    }
-
-    private void dropNav() {
-        navTargetCell = null;
-        stopNav();
-    }
-
-    private TaskState tickBreak(boolean wasSneaking) {
-        BuildTaskRecord.Target target = activeBreak;
-        BlockState state = player.level().getBlockState(target.pos());
-        if (target.matches(state) || state.isAir() || state.getBlock() instanceof LiquidBlock) {
-            markObserved(target, target.matches(state));
-            activeBreak = null;
-            digger.cancel();
-            return TaskState.RUNNING;
-        }
-        if (!r.replaceExisting) {
-            fail("target " + target.shortPos() + " is occupied and replacement is disabled",
-                    FailureType.TARGET_LOST);
-            return TaskState.FAILED;
-        }
-        Vec3 aim = MovementHelper.reachableAimPoint(player, target.pos());
-        if (aim == null) {
-            activeBreak = null;
-            digger.cancel();
-            return TaskState.RUNNING;
-        }
-        if (wasSneaking) {
-            // 破坏时保持上一 tick 的蹲姿:眼高在放置(蹲)↔破坏之间不跳变,
-            // 目标块不会因半格眼高差瞬时脱离射线可达而反复打空。
-            player.setShiftKeyDown(true);
-        }
-        if (!readyToBreak(target.pos(), aim)) {
-            applySteppedAim(aim);
-            return TaskState.RUNNING;
-        }
-        if (!safeToBreak(target.pos())) {
-            fail("clearing " + target.shortPos() + " would break a protected block",
-                    FailureType.HAZARD);
-            return TaskState.FAILED;
-        }
-        switch (digger.digTargetStep(target.pos())) {
-            case BROKE_TARGET -> {
-                r.brokeOne();
-                markObserved(target, false);
-                activeBreak = null;
-                placeDelayTicks = POST_BREAK_PLACE_DELAY_TICKS;
-                clearNoShot();
-            }
-            case BROKE_OCCLUDER -> {
-                r.brokeOne();
-                placeDelayTicks = POST_BREAK_PLACE_DELAY_TICKS;
-                clearNoShot();
-            }
-            case NO_SHOT -> {
-                if (target.pos().equals(noShotPos)) {
-                    if (++noShotTicks >= MAX_NO_SHOT_TICKS) {
-                        activeBreak = null;
-                        digger.cancel();
-                        clearNoShot();
-                        fail("could not keep a clear line to clear " + target.shortPos()
-                                + "; completed " + r.completed() + "/" + r.targets.size(),
-                                FailureType.OCCLUDED);
-                        return TaskState.FAILED;
-                    }
-                } else {
-                    noShotPos = target.pos();
-                    noShotTicks = 1;
-                }
-            }
-            case PROGRESSING -> clearNoShot();
-        }
-        return TaskState.RUNNING;
-    }
-
-    private boolean canInterruptPath() {
-        return player.onGround() && (nav == null || nav.isSafeToCancel());
-    }
-
-    private GoalCompiler.Compiled buildCompiled() {
-        BuildPlan plan = assemblePlan(false);
-        if (!plan.hasGoal()) {
-            plan = assemblePlan(true);
-        }
-        NavGoal goal = plan.goal(this);
-        if (goal == null) {
-            return null;
-        }
-        return new GoalCompiler.Compiled(goal, protectedCells(), null, false);
-    }
-
-    private BuildPlan assemblePlan(boolean wholeInventory) {
-        BuildPlan plan = new BuildPlan();
-        Set<Item> available = availableItems(wholeInventory);
-        if (incorrectPositions == null) {
-            return plan;
-        }
-        List<BlockPos> outOfBounds = new ArrayList<>();
-        List<BuildTaskRecord.Target> completed = new ArrayList<>();
-        for (BlockPos pos : incorrectPositions) {
-            BuildTaskRecord.Target target = targetAt(pos);
-            if (target == null || (usesLayers() && target.pos().getY() > layerTop)) {
-                outOfBounds.add(pos);
-                continue;
-            }
-            BlockState state = player.level().getBlockState(pos);
-            if (target.matches(state)) {
-                // 遍历中不动 incorrectPositions,命中格先记下,循环后统一登记(避免并发改集合)。
-                completed.add(target);
-                continue;
-            }
-            if (state.getBlock() instanceof LiquidBlock) {
-                if (!MovementHelper.possiblyFlowing(state)) {
-                    plan.sourceLiquids.add(pos);
-                } else {
-                    plan.flowingLiquids.add(pos);
-                }
-            } else if (isAirTarget(target)) {
-                if (r.replaceExisting) {
-                    plan.breakable.add(target);
-                }
-            } else if (!state.isAir() && r.replaceExisting) {
-                plan.breakable.add(target);
-            } else if (isReplaceable(pos, state)) {
-                if (noSupport.contains(pos)) {
-                    // 支撑面失败单列,交给 failNoWork 的 noSupport 分支诊断。
-                } else if (available.contains(target.item())
-                        && canCreateDesiredState(target)) {
-                    // 有料且能产期望态即计 placeable(不查 canSurvive,缺支撑面的格留给放置搜索);
-                    plan.placeable.add(target);
-                } else {
-                    // 没有该物品或无法从背包产出期望态才算缺料(二分,不静默丢目标)。
-                    plan.missing.merge(target.item(), 1, Integer::sum);
-                }
-            } else if (r.replaceExisting) {
-                plan.breakable.add(target);
-            }
-        }
-        incorrectPositions.removeAll(outOfBounds);
-        for (BuildTaskRecord.Target done : completed) {
-            markObserved(done, true);
-        }
-        return plan;
-    }
-
-    private LongSet protectedCells() {
-        return LongSets.emptySet();
-    }
-
-    private NavGoal placementGoal(BuildTaskRecord.Target target) {
-        BlockPos pos = target.pos();
-        if (!player.level().getBlockState(pos).isAir()) {
-            return goalPlace(pos);
-        }
-        for (Direction facing : PLACE_GOAL_FACES) {
-            BlockPos against = pos.relative(facing);
-            // 只按世界几何选目标形状,不掺任何随身位变化的谓词(身体正压着目标格
-            // 之类的事交执行期 canWorkOn):站位目标必须编译稳定,否则一次恰好
-            // 站在格上的取样会把目标劣化成"站上未建格的正上方"这种不可能任务。
-            if (MovementHelper.canPlaceAgainst(player.level(), against)) {
-                return goalAdjacent(pos, against);
-            }
-        }
-        return goalPlace(pos);
-    }
-
-    private NavGoal breakGoal(BlockPos pos) {
-        NavSettings settings = NavSettings.get();
-        if (settings.breakFromAbove && settings.goalBreakFromAbove
-                && player.level().getBlockState(pos.above()).isAir()
-                && player.level().getBlockState(pos.above(2)).isAir()) {
-            return new JankyGoal(goalBreak(pos), goalBreakFromAbove(pos));
-        }
-        return goalBreak(pos);
-    }
-
-    private NavGoal goalBreak(BlockPos target) {
-        BlockPos t = target.immutable();
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                if (feet.getY() > t.getY()) {
-                    return false;
-                }
-                return getToBlockMembership(t, feet);
-            }
-
-            @Override public double heuristic(BlockPos from) {
-                return Math.max(0.0, NavGoal.pointBound(t, from)
-                        - NavGoal.COST_HEURISTIC - NavGoal.JUMP_ONE_BLOCK);
-            }
-
-            @Override public BlockPos center() {
-                return t;
-            }
-        };
-    }
-
-    private NavGoal goalBreakFromAbove(BlockPos target) {
-        BlockPos t = target.above().immutable();
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                if (feet.getY() > t.getY() || feet.equals(t)) {
-                    return false;
-                }
-                return getToBlockMembership(t, feet);
-            }
-
-            @Override public double heuristic(BlockPos from) {
-                return Math.max(0.0, NavGoal.pointBound(t, from)
-                        - NavGoal.COST_HEURISTIC - NavGoal.JUMP_ONE_BLOCK);
-            }
-
-            @Override public BlockPos center() {
-                return t;
-            }
-        };
-    }
-
-    private NavGoal goalAdjacent(BlockPos target, BlockPos no) {
-        BlockPos t = target.immutable();
-        BlockPos excluded = no.immutable();
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                if (feet.equals(t) || feet.equals(excluded)) {
-                    return false;
-                }
-                if (feet.getY() == t.getY() + 1
-                        && Math.abs(feet.getX() - t.getX()) + Math.abs(feet.getZ() - t.getZ()) <= 1) {
-                    // 站在旁边高一格、朝脚边的洞里放——玩家补地板的标准姿势
-                    return true;
-                }
-                if (feet.getY() < t.getY() - 1) {
-                    return false;
-                }
-                return getToBlockMembership(t, feet);
-            }
-
-            @Override public double heuristic(BlockPos from) {
-                return t.getY() * 100.0 + Math.max(0.0, NavGoal.pointBound(t, from)
-                        - NavGoal.COST_HEURISTIC - NavGoal.JUMP_ONE_BLOCK);
-            }
-
-            @Override public BlockPos center() {
-                return t;
-            }
-        };
-    }
-
-    private NavGoal goalPlace(BlockPos placeAt) {
-        BlockPos t = placeAt.above().immutable();
-        return new NavGoal() {
-            @Override public boolean isAt(BlockPos feet) {
-                return feet.equals(t);
-            }
-
-            @Override public double heuristic(BlockPos from) {
-                return t.getY() * 100.0 + NavGoal.pointBound(t, from);
-            }
-
-            @Override public BlockPos center() {
-                return t;
-            }
-        };
-    }
-
-    private static boolean getToBlockMembership(BlockPos target, BlockPos feet) {
-        int dx = Math.abs(feet.getX() - target.getX());
-        int dz = Math.abs(feet.getZ() - target.getZ());
-        int dy = feet.getY() - target.getY();
-        int bodyDy = dy < 0 ? dy + 1 : dy;
-        return dx + dz + Math.abs(bodyDy) <= 1;
-    }
-
-    private TaskState failNoWork() {
-        BuildPlan plan = assemblePlan(true);
-        if (!plan.missing.isEmpty()) {
-            List<String> parts = new ArrayList<>();
-            for (Map.Entry<Item, Integer> entry : plan.missing.entrySet()) {
-                parts.add(label(entry.getKey()) + " x" + entry.getValue());
-            }
-            String message = "missing building materials: " + String.join(", ", parts);
-            if (skipFailedLayer(message)) {
-                return TaskState.RUNNING;
-            }
-            note = message;
-            return TaskState.RUNNING;
-        }
-        if (!plan.flowingLiquids.isEmpty()) {
-            String message = "flowing liquid blocks build cell at " + plan.flowingLiquids.get(0).toShortString();
-            if (skipFailedLayer(message)) {
-                return TaskState.RUNNING;
-            }
-            note = message;
-            return TaskState.RUNNING;
-        }
-        if (!noSupport.isEmpty()) {
-            noSupport.clear();
-            String message = "no usable support face for a build cell";
-            if (skipFailedLayer(message)) {
-                return TaskState.RUNNING;
-            }
-            note = message;
-            return TaskState.RUNNING;
-        }
-        String message = "no reachable build cell is currently available";
-        if (skipFailedLayer(message)) {
-            return TaskState.RUNNING;
-        }
-        note = message;
-        return TaskState.RUNNING;
-    }
-
-    private boolean skipFailedLayer(String reason) {
-        if (!usesLayers() || !NavSettings.get().skipFailedLayers || layerTop >= maxY) {
-            return false;
-        }
-        int skippedTop = layerTop;
-        layerTop = Math.min(maxY, layerTop + layerHeightEffective());
-        incorrectPositions = null;
-        stopNav();
-        noSupport.clear();
-        placeDelayTicks = 0;
-        clearNoShot();
-        note = "skipped layer ending at " + skippedTop + ": " + reason;
-        return true;
-    }
-
-    private boolean recalc() {
-        if (incorrectPositions == null) {
-            fullRecalc();
-            return !incorrectPositions.isEmpty();
-        }
-        recalcNearby();
-        if (incorrectPositions.isEmpty()) {
-            fullRecalc();
-        }
-        return !incorrectPositions.isEmpty();
-    }
-
-    private void recalcNearby() {
-        BlockPos center = playerFeet();
-        int radius = scanRadius();
-        for (int dx = -radius; dx <= radius; dx++) {
-            for (int dy = -radius; dy <= radius; dy++) {
-                for (int dz = -radius; dz <= radius; dz++) {
-                    BlockPos pos = center.offset(dx, dy, dz);
-                    BuildTaskRecord.Target target = targetAt(pos);
-                    if (target == null || (usesLayers() && target.pos().getY() > layerTop)) {
-                        continue;
-                    }
-                    markObserved(target, target.matches(player.level().getBlockState(target.pos())));
-                }
-            }
-        }
-    }
-
-    private void fullRecalc() {
-        incorrectPositions = new LinkedHashSet<>();
-        BlockGetter view = LoadedOnlyView.of(player.level());
-        LoadedOnlyView loadedView = view instanceof LoadedOnlyView v ? v : null;
-        for (BuildTaskRecord.Target target : activeLayerTargets()) {
-            BlockPos pos = target.pos();
-            boolean loaded = loadedView == null || loadedView.isLoaded(pos.getX(), pos.getZ());
-            if (loaded) {
-                BlockState state = view.getBlockState(pos);
-                if (target.matches(state)) {
-                    observedCompleted.add(pos.asLong());
-                } else {
-                    incorrectPositions.add(pos);
-                    observedCompleted.remove(pos.asLong());
-                }
-                if (incorrectPositions.size() > incorrectLimit()) {
-                    return;
-                }
-            } else if (!observedCompleted.contains(pos.asLong())) {
-                incorrectPositions.add(pos);
-                if (incorrectPositions.size() > incorrectLimit()) {
-                    return;
-                }
-            }
-        }
-    }
-
-    private void markObserved(BuildTaskRecord.Target target, boolean completed) {
-        if (completed) {
-            noSupport.clear();
-        }
-        if (observedCompleted == null) {
-            observedCompleted = new LongOpenHashSet();
-        }
-        if (completed) {
-            observedCompleted.add(target.pos().asLong());
-            if (incorrectPositions != null) {
-                incorrectPositions.remove(target.pos());
-            }
-        } else {
-            observedCompleted.remove(target.pos().asLong());
-            if (incorrectPositions != null && (!usesLayers() || target.pos().getY() <= layerTop)) {
-                incorrectPositions.add(target.pos());
-            }
-        }
-    }
-
-    private void trimIncorrectPositions() {
-        if (incorrectPositions == null || incorrectPositions.isEmpty() || !NavSettings.get().distanceTrim) {
-            return;
-        }
-        Set<BlockPos> copy = new LinkedHashSet<>(incorrectPositions);
-        BlockPos feet = playerFeet();
-        copy.removeIf(pos -> pos.distSqr(feet) > DISTANCE_TRIM_SQR);
-        if (!copy.isEmpty()) {
-            incorrectPositions = copy;
-        }
-    }
-
-    private int scanRadius() {
-        return Math.max(0, NavSettings.get().builderTickScanRadius);
-    }
-
-    private BlockPos breakFromAboveProtectedSupport() {
-        BlockPos start = nav == null
-                ? com.dwinovo.numen.core.pathing.moves.Movement.pathStart(player)
-                : nav.pathStart();
-        return start.below();
-    }
-
-    private int incorrectLimit() {
-        return Math.max(1, NavSettings.get().incorrectSize);
-    }
-
-    private void advanceFinishedLayers() {
-        if (!usesLayers()) {
-            return;
-        }
-        while (layerTop < maxY && layerComplete()) {
-            layerTop = Math.min(maxY, layerTop + layerHeightEffective());
-            incorrectPositions = null;
-            stopNav();
-            noSupport.clear();
-        }
-    }
-
-    private boolean layerComplete() {
-        BlockGetter view = LoadedOnlyView.of(player.level());
-        LoadedOnlyView loadedView = view instanceof LoadedOnlyView v ? v : null;
-        for (BuildTaskRecord.Target target : r.targets) {
-            if (target.pos().getY() > layerTop) {
-                continue;
-            }
-            BlockPos pos = target.pos();
-            boolean loaded = loadedView == null || loadedView.isLoaded(pos.getX(), pos.getZ());
-            if (loaded) {
-                boolean completed = target.matches(view.getBlockState(pos));
-                markObserved(target, completed);
-                if (!completed) {
-                    return false;
-                }
-            } else if (observedCompleted == null || !observedCompleted.contains(pos.asLong())) {
-                return false;
-            }
-        }
-        return true;
-    }
-    private List<BuildTaskRecord.Target> activeLayerTargets() {
-        List<BuildTaskRecord.Target> out = new ArrayList<>();
-        for (BuildTaskRecord.Target target : r.targets) {
-            if (!usesLayers() || target.pos().getY() <= layerTop) {
-                out.add(target);
-            }
-        }
-        out.sort(Comparator
-                .comparingInt((BuildTaskRecord.Target t) -> t.pos().getY())
-                .thenComparingDouble(t -> t.pos().distSqr(playerFeet())));
-        return out;
-    }
-
-    private List<BlockPos> activePositions() {
-        List<BlockPos> out = new ArrayList<>();
-        if (incorrectPositions != null) {
-            out.addAll(incorrectPositions);
-            return out;
-        }
-        for (BuildTaskRecord.Target target : activeLayerTargets()) {
-            if (!target.matches(player.level().getBlockState(target.pos()))) {
-                out.add(target.pos());
-            }
-        }
-        return out;
-    }
-
-    private BuildTaskRecord.Target targetAt(BlockPos pos) {
-        BuildTaskRecord.Target target = targetByPos.get(pos.asLong());
-        return target != null && (!usesLayers() || target.pos().getY() <= layerTop) ? target : null;
-    }
-
-    private boolean isIncorrect(BuildTaskRecord.Target target) {
-        return incorrectPositions == null || incorrectPositions.contains(target.pos());
-    }
-
-    /** 生效分层高:显式传参优先;未传(0)时,高于两格的结构自动按 1 格层
-     *  自底向上推进——自由顺序建高结构,身体必须穿透已建成的部分去够低处的
-     *  格子,和自己的作品抢同一空间(拆补拉锯的几何根源);逐层让身体始终站
-     *  在施工面上方。矮结构(≤2 格高)无此问题,维持整体一次成型。 */
-    private int layerHeightEffective() {
-        if (r.layerHeight > 0) {
-            return r.layerHeight;
-        }
-        return (maxY - minY + 1) > 2 ? 1 : 0;
-    }
-
-    private boolean usesLayers() {
-        return layerHeightEffective() > 0;
-    }
-
-    private boolean placementPossible(BuildTaskRecord.Target target) {
-        BlockState state = target.desiredState();
-        return state.canSurvive(player.level(), target.pos())
-                && canCreateDesiredState(target);
-    }
-
-    /** setBlock 直写期望状态,凡持有对应物品即视为可产出。 */
-    private boolean canCreateDesiredState(BuildTaskRecord.Target target) {
-        return hasItem(target.item(), true);
-    }
-
-    private int inventoryScanLimit(boolean wholeInventory) {
-        return wholeInventory && NavSettings.get().allowInventory
-                ? Math.min(36, player.getInventory().items.size())
-                : Math.min(9, player.getInventory().items.size());
-    }
-    private Double aimY(BuildTaskRecord.Target target) {
-        return target.topHalf() == null
-                ? null
-                : target.pos().getY() + (target.topHalf() ? 0.72 : 0.28);
-    }
-
-    private boolean lowerBlocked(BuildTaskRecord.Target target) {
-        BlockPos below = target.pos().below();
-        BlockPos below2 = target.pos().below(2);
-        return incompleteTargetAt(below) || incompleteTargetAt(below2);
-    }
-
-    private boolean incompleteTargetAt(BlockPos pos) {
-        BuildTaskRecord.Target target = targetByPos.get(pos.asLong());
-        return target != null && (!usesLayers() || target.pos().getY() <= layerTop)
-                && !target.matches(player.level().getBlockState(target.pos()));
-    }
-
-    private boolean needsBreak(BuildTaskRecord.Target target) {
-        BlockState state = player.level().getBlockState(target.pos());
-        return !(state.getBlock() instanceof LiquidBlock)
-                && !target.matches(state)
-                && (isAirTarget(target) || !state.isAir());
-    }
-
     private static boolean isAirTarget(BuildTaskRecord.Target target) {
-        return target.block() == Blocks.AIR;
-    }
-
-    private boolean isReplaceable(BlockPos pos) {
-        return isReplaceable(pos, player.level().getBlockState(pos));
+        return target.block() == net.minecraft.world.level.block.Blocks.AIR;
     }
 
     private boolean isReplaceable(BlockPos pos, BlockState state) {
         return MovementHelper.isReplaceable(pos.getX(), pos.getY(), pos.getZ(), state,
-                ChunkLoadedTest.ALWAYS);
+                com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest.ALWAYS);
     }
 
-    private boolean safeToBreak(BlockPos pos) {
-        BuildTaskRecord.Target target = targetByPos.get(pos.asLong());
-        BlockState state = player.level().getBlockState(pos);
-        if (target != null && target.matches(state)) {
-            return false;
-        }
-        return !BlockHelper.shouldAvoidBreaking(player.level(), pos);
-    }
-
-    private boolean placementPlausible(BlockPos pos, BlockState state) {
-        Level level = player.level();
-        VoxelShape shape = state.getCollisionShape(level, pos);
-        return shape.isEmpty() || level.isUnobstructed(null,
-                shape.move(pos.getX(), pos.getY(), pos.getZ()));
-    }
-    /** 谁都不豁免——包括同伴自己:身体占着/正落进的格子不可放置。放置对自己
-     *  身体让路,是"挖开脚下想下去、又立刻把方块补回自己脚底"这类自我拉扯的
-     *  物理性防线,不需要任何显式停火状态。 */
-    private boolean blockedByEntity(BlockPos pos, BlockState state) {
-        VoxelShape shape = state.getCollisionShape(player.level(), pos);
-        return !shape.isEmpty() && !player.level().isUnobstructed(null,
-                shape.move(pos.getX(), pos.getY(), pos.getZ()));
-    }
     private boolean hasItem(Item item) {
         return mainInventoryCount(item) > 0;
     }
@@ -1188,20 +1070,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return -1;
     }
 
-    private Set<Item> availableItems(boolean wholeInventory) {
-        Set<Item> items = new HashSet<>();
-        for (BuildTaskRecord.Target target : r.targets) {
-            if (hasItem(target.item(), wholeInventory)) {
-                items.add(target.item());
-            }
-        }
-        return items;
-    }
-
     private Set<BlockState> availableStates(boolean wholeInventory) {
         Set<BlockState> states = new HashSet<>();
         Inventory inventory = player.getInventory();
-        int limit = wholeInventory && NavSettings.get().allowInventory ? Math.min(36, inventory.items.size()) : 9;
+        int limit = wholeInventory && NavSettings.get().allowInventory
+                ? Math.min(36, inventory.items.size()) : 9;
         for (int i = 0; i < limit; i++) {
             addAvailableState(states, inventory.getItem(i));
         }
@@ -1225,80 +1098,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
     }
 
-    private Map<Long, BuildTaskRecord.Target> activeTargetMap() {
-        Map<Long, BuildTaskRecord.Target> out = new LinkedHashMap<>();
-        for (BuildTaskRecord.Target target : activeLayerTargets()) {
-            out.put(target.pos().asLong(), target);
-        }
-        return out;
-    }
-
-    private void updateCompleted() {
-        if (observedCompleted == null) {
-            observedCompleted = new LongOpenHashSet();
-        }
-        int completed = 0;
-        BlockGetter view = LoadedOnlyView.of(player.level());
-        LoadedOnlyView loadedView = view instanceof LoadedOnlyView v ? v : null;
-        for (BuildTaskRecord.Target target : r.targets) {
-            BlockPos pos = target.pos();
-            boolean loaded = loadedView == null || loadedView.isLoaded(pos.getX(), pos.getZ());
-            if (loaded) {
-                BlockState observed = view.getBlockState(pos);
-                if (target.matches(observed)
-                        || target.desiredState().getBlock() instanceof LiquidBlock
-                        || (isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {
-                    // 液体口径:不放液体目标、清空型目标不排水——这两类跳过豁免;
-                    // 固体目标被液体淹着不豁免,照放,方块直接顶掉水(原版语义)
-                    observedCompleted.add(pos.asLong());
-                    completed++;
-                } else if (observedCompleted.remove(pos.asLong())) {
-                    com.dwinovo.numen.Constants.LOG.debug(
-                            "[numen-task] build cell LOST {} (now {})",
-                            pos.toShortString(), view.getBlockState(pos).getBlock());
-                }
-            } else if (observedCompleted.contains(pos.asLong())) {
-                completed++;
-            }
-        }
-        r.completed(completed);
-    }
-
-    private void clearNoShot() {
-        noShotPos = null;
-        noShotTicks = 0;
-    }
-
-    private boolean readyToBreak(BlockPos pos, Vec3 aim) {
-        return currentCrosshairHits(pos) || rotationReady(aim);
-    }
-
-    private boolean currentCrosshairHits(BlockPos pos) {
-        HitResult raw = player.pick(MovementHelper.blockReachDistance(player), 1.0f, false);
-        return raw instanceof BlockHitResult hit
-                && hit.getType() == HitResult.Type.BLOCK
-                && hit.getBlockPos().equals(pos);
-    }
-
-    private static Vec3 direction(float yaw, float pitch) {
-        double yawRad = Math.toRadians(yaw);
-        double pitchRad = Math.toRadians(pitch);
-        double cosPitch = Math.cos(pitchRad);
-        return new Vec3(-Math.sin(yawRad) * cosPitch, -Math.sin(pitchRad), Math.cos(yawRad) * cosPitch);
-    }
-
-    private boolean rotationReady(Vec3 point) {
-        Vec3 eye = player.getEyePosition();
-        return rotationReady(MovementHelper.yawTo(eye, point), MovementHelper.pitchTo(eye, point));
-    }
-
-    private boolean rotationReady(Float yaw, Float pitch) {
-        if (yaw == null || pitch == null) {
-            return false;
-        }
-        return Math.abs(AimProcessor.normalizeDelta(player.getYRot() - yaw)) < 0.01f
-                && Math.abs(player.getXRot() - pitch) < 0.01f;
-    }
+    // ------------------------------------------------------------------
+    // 朝向与寻路桥接
+    // ------------------------------------------------------------------
 
     private void applySteppedAim(Vec3 point) {
         Vec3 eye = player.getEyePosition();
@@ -1311,17 +1113,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         player.setYHeadRot(next.yaw());
         player.setXRot(next.pitch());
     }
+
     private BlockPos playerFeet() {
         return PathExecutor.playerFeet(player);
-    }
-
-
-
-
-    private void tickPlaceDelay() {
-        if (placeDelayTicks > 0) {
-            placeDelayTicks--;
-        }
     }
 
     private void registerProvider() {
@@ -1338,13 +1132,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
     }
 
+    private Map<Long, BuildTaskRecord.Target> activeTargetMap() {
+        return targetByPos;
+    }
+
     @Override
     public BlockState desiredState(BlockPos placeAt) {
         BuildTaskRecord.Target target = targetByPos.get(placeAt.asLong());
-        if (target == null || (usesLayers() && target.pos().getY() > layerTop)) {
-            return null;
-        }
-        if (isAirTarget(target)) {
+        if (target == null || isAirTarget(target)) {
             return null;
         }
         if (target.matches(player.level().getBlockState(target.pos()))) {
@@ -1379,6 +1174,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     public void suspend() {
         super.suspend();
         unregisterProvider();
+        InputDriver.halt(player);
     }
 
     @Override
@@ -1390,10 +1186,18 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected void cleanup() {
         super.cleanup();
         unregisterProvider();
-        digger.cancel();
+        InputDriver.halt(player);
         player.setShiftKeyDown(false);
     }
 
+    /**
+     * 收尾结算,随 {@code task_finished} 送达:<b>这一趟活总共发生了什么</b>。
+     *
+     * <p>与 {@code task_status} 的分工——那边只答"还剩多少",这边答"办完了没、
+     * 办成什么样"。施工中的即时状况属于第三条路(事件队列),不塞进这两处。
+     *
+     * <p>只陈述事实。她要不要跟玩家提、怎么提、用什么语言,是她的事。
+     */
     @Override
     protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
@@ -1401,8 +1205,18 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         data.put("completed", r.completed());
         data.put("placed", r.placed());
         data.put("cleared", r.broken());
-        data.put("layer_top", layerTop);
-        data.put("layered", usesLayers());
+        data.put("site_min", siteMin == null ? "-" : siteMin.toShortString());
+        data.put("site_max", siteMax == null ? "-" : siteMax.toShortString());
+        if (damagedCells > 0) {
+            // 施工期间被外力拆毁又补回去的格数。她盖得慢或反复返工,原因在这儿。
+            data.put("destroyed_while_building", damagedCells);
+        }
+        if (r.consumeMaterials) {
+            Map<Item, Integer> shortfall = shortfallAgainstInventory(remainingNeed());
+            if (!shortfall.isEmpty()) {
+                data.put("still_short", summarizeShortfall(shortfall));
+            }
+        }
         return data;
     }
 
@@ -1410,6 +1224,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected String successMessage() {
         return "built " + r.completed() + "/" + r.targets.size()
                 + " block(s); placed " + r.placed() + ", cleared " + r.broken()
+                + (damagedCells > 0
+                        ? "; " + damagedCells + " finished cell(s) were destroyed mid-build by "
+                                + "something outside the job and had to be redone"
+                        : "")
                 + " (" + note + ")";
     }
 
@@ -1426,85 +1244,5 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     private static String label(Item item) {
         return net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item).getPath();
-    }
-
-    private static final class JankyGoal implements NavGoal {
-        private final NavGoal primary;
-        private final NavGoal fallback;
-
-        JankyGoal(NavGoal primary, NavGoal fallback) {
-            this.primary = primary;
-            this.fallback = fallback;
-        }
-
-        @Override public boolean isAt(BlockPos feet) {
-            return primary.isAt(feet) || fallback.isAt(feet);
-        }
-
-        @Override public double heuristic(BlockPos from) {
-            return primary.heuristic(from);
-        }
-
-        @Override public BlockPos center() {
-            return primary.center();
-        }
-    }
-
-
-    private static final class BuildPlan {
-        private final List<BuildTaskRecord.Target> placeable = new ArrayList<>();
-        private final List<BuildTaskRecord.Target> breakable = new ArrayList<>();
-        private final List<BlockPos> sourceLiquids = new ArrayList<>();
-        private final List<BlockPos> flowingLiquids = new ArrayList<>();
-        private final Map<Item, Integer> missing = new LinkedHashMap<>();
-
-        boolean hasGoal() {
-            return !placeable.isEmpty() || !breakable.isEmpty() || !sourceLiquids.isEmpty();
-        }
-
-        List<BuildTaskRecord.Target> targets() {
-            List<BuildTaskRecord.Target> out = new ArrayList<>(placeable.size() + breakable.size());
-            out.addAll(placeable);
-            out.addAll(breakable);
-            return out;
-        }
-
-        private boolean hasPlaceable(BlockPos pos) {
-            for (BuildTaskRecord.Target target : placeable) {
-                if (target.pos().equals(pos)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        NavGoal goal(BuildCompanionTask task) {
-            List<NavGoal> toPlace = new ArrayList<>();
-            for (BuildTaskRecord.Target target : placeable) {
-                if (!hasPlaceable(target.pos().below()) && !hasPlaceable(target.pos().below(2))) {
-                    toPlace.add(task.placementGoal(target));
-                }
-            }
-            for (BlockPos liquid : sourceLiquids) {
-                // 源液体格用无 y 加权的精确目标(站到其上方格),填液优先级不被 y*100 压过。
-                toPlace.add(NavGoal.exact(liquid.above()));
-            }
-            List<NavGoal> toBreak = new ArrayList<>();
-            for (BuildTaskRecord.Target target : breakable) {
-                toBreak.add(task.breakGoal(target.pos()));
-            }
-            if (!toPlace.isEmpty()) {
-                NavGoal primary = toPlace.size() == 1 ? toPlace.get(0) : NavGoal.composite(toPlace);
-                if (toBreak.isEmpty()) {
-                    return primary;
-                }
-                NavGoal fallback = toBreak.size() == 1 ? toBreak.get(0) : NavGoal.composite(toBreak);
-                return new JankyGoal(primary, fallback);
-            }
-            if (toBreak.isEmpty()) {
-                return null;
-            }
-            return toBreak.size() == 1 ? toBreak.get(0) : NavGoal.composite(toBreak);
-        }
     }
 }
