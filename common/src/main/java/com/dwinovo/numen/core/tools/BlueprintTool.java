@@ -26,9 +26,9 @@ public final class BlueprintTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private static final long MIN_TIMEOUT_TICKS = 2 * 60 * 20;
-    /** 时限:按最慢一档(生存每刻 2 格)留几倍余量,外加赴工地的行程。 */
-    private static final long TICKS_PER_CELL = 4;
     private static final long TRAVEL_ALLOWANCE_TICKS = 40 * 20;
+    /** 施工预计时长之上再留的余量(挪窝、翻层停顿、零进展重试都吃这笔)。 */
+    private static final double TIMEOUT_SLACK = 1.6;
 
     private record Args(String action, String file, Integer x, Integer y, Integer z, Integer rotation) {}
 
@@ -116,10 +116,10 @@ public final class BlueprintTool implements NumenTool {
         if (loaded.targets().isEmpty()) {
             throw new IllegalArgumentException("blueprint " + a.file() + " contains no buildable cells");
         }
-        long timeout = Math.max(MIN_TIMEOUT_TICKS,
-                TRAVEL_ALLOWANCE_TICKS + (long) loaded.targets().size() * TICKS_PER_CELL);
         // 材料记账随能力画像(同 build 工具):免耗材想建就建,否则消耗并预检报缺。
         boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
+        long timeout = Math.max(MIN_TIMEOUT_TICKS,
+                BuildTool.timeoutTicksFor(loaded.targets().size(), consume));
         // allowPartial:整幢图纸一趟运不完是常态,分段施工 + 精确续建
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), loaded.targets(),

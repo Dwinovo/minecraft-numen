@@ -1041,14 +1041,35 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 BlockPos.ZERO) ? 1 : 2;
     }
 
+    /**
+     * 这一趟的落位速率(开工时算一次,全程恒定)。
+     *
+     * <p>目标时长封顶、速率由格数除出来:小工程走下限速率,自然比封顶短;大工程
+     * 一开始就更快,总时长收敛到封顶值。不是"越盖越快",也没有到点强制收工。
+     */
+    public static double paceFor(int cellCount, boolean consumeMaterials) {
+        int cells = Math.max(1, cellCount);
+        return consumeMaterials
+                ? Math.max(SURVIVAL_MIN_RATE, cells / SURVIVAL_TARGET_TICKS)
+                : Math.min(FREE_MAX_RATE, cells / FREE_TARGET_TICKS);
+    }
+
+    /**
+     * 施工预计要多少刻——派发方据此定时限。
+     *
+     * <p>必须和 {@link #paceFor} 用同一个公式算,不能各拍各的:此前时限按"每格
+     * 固定几刻"估,而我把"每秒两格"错记成了"每刻两格",于是最慢档的真实开销
+     * (每格十刻)被低估了二十倍,五百格的生存建筑会在盖到一半时被判超时——而
+     * 一千四百格以下走的都是这个下限速率,也就是大多数房子。
+     */
+    public static long estimatedTicks(int cellCount, boolean consumeMaterials) {
+        return (long) Math.ceil(Math.max(1, cellCount) / paceFor(cellCount, consumeMaterials));
+    }
+
     /** 按格数和目标时长定这一趟的速率(开工时算一次)。 */
     private void computePace() {
         int cells = Math.max(1, r.targets.size());
-        if (r.consumeMaterials) {
-            cellsPerTick = Math.max(SURVIVAL_MIN_RATE, cells / SURVIVAL_TARGET_TICKS);
-        } else {
-            cellsPerTick = Math.min(FREE_MAX_RATE, cells / FREE_TARGET_TICKS);
-        }
+        cellsPerTick = paceFor(cells, r.consumeMaterials);
         com.dwinovo.numen.core.Constants.LOG.debug(
                 "[numen-build] 节奏 {} 格,{} 格/秒,预计 {} 秒",
                 cells, String.format("%.1f", cellsPerTick * 20),

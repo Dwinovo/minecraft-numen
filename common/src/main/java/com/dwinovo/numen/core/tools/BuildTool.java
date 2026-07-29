@@ -42,15 +42,24 @@ public final class BuildTool implements NumenTool {
      * 就必须给够后者。
      */
     private static final int MAX_TOTAL_CELLS = 16384;
-    /**
-     * 时限:按最慢的一档(生存每刻 2 格)再留几倍余量,外加赴工地的行程。
-     *
-     * <p>此前是每格 20 秒——一万六千格算出来九十多小时,这个数已经不表达任何
-     * 东西了。它是"逐格走到方块旁边再放"那个旧模型的遗留。
-     */
-    private static final long TICKS_PER_CELL = 4;
     private static final long MIN_TIMEOUT_TICKS = 60 * 20;
     private static final long TRAVEL_ALLOWANCE_TICKS = 40 * 20;
+    /** 施工预计时长之上再留的余量(挪窝、翻层停顿、零进展重试都吃这笔)。 */
+    private static final double TIMEOUT_SLACK = 1.6;
+
+    /**
+     * 施工时限:赴工地的行程 + 施工预计时长再留一截余量。
+     *
+     * <p>预计时长必须问施工层要,不能在这里另估一套。此前这里按"每格固定几刻"
+     * 拍了个数,而生存最慢档实际是每格十刻——差二十倍,五百格的房子会在盖到一半
+     * 时被判超时。两处各拍各的迟早再犯,所以公式只有一处真源。
+     */
+    public static long timeoutTicksFor(int cellCount, boolean consumeMaterials) {
+        long build = com.dwinovo.numen.core.task.BuildCompanionTask
+                .estimatedTicks(cellCount, consumeMaterials);
+        return Math.max(MIN_TIMEOUT_TICKS,
+                TRAVEL_ALLOWANCE_TICKS + (long) (build * TIMEOUT_SLACK));
+    }
 
     private record Args(List<OpSpec> ops, Boolean replace_existing) {}
     private record OpSpec(String op, String block_id, Boolean hollow,
@@ -238,11 +247,10 @@ public final class BuildTool implements NumenTool {
                     + " cells, exceeding " + MAX_TOTAL_CELLS + "; split it into multiple calls");
         }
         boolean replaceExisting = parsed.replace_existing() == null || parsed.replace_existing();
-        long timeout = Math.max(MIN_TIMEOUT_TICKS,
-                TRAVEL_ALLOWANCE_TICKS + (long) targets.size() * TICKS_PER_CELL);
         // 材料记账随能力画像:免耗材(创造)想建就建;否则消耗背包,开工前
         // 由任务预检并逐项报缺(见 BuildCompanionTask 的 checkMaterials)。
         boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
+        long timeout = timeoutTicksFor(targets.size(), consume);
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting,
                 consume), reply);

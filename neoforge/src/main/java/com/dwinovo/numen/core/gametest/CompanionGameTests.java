@@ -482,6 +482,33 @@ public class CompanionGameTests {
     }
 
     /**
+     * 施工时限必须够用完。
+     *
+     * <p>时限一度是按"每格固定几刻"估的,而生存最慢档实际是每格十刻——差二十倍,
+     * 五百格的房子会在盖到一半时被判超时,而一千四百格以下走的都是这个下限速率,
+     * 也就是大多数房子。派发层与施工层<b>必须共用同一个速率公式</b>,各拍各的
+     * 就会重演。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void build_deadline_covers_pace(GameTestHelper helper) {
+        for (int cells : new int[]{50, 500, 1440, 5859, 16384}) {
+            for (boolean survival : new boolean[]{true, false}) {
+                long need = com.dwinovo.numen.core.task.BuildCompanionTask
+                        .estimatedTicks(cells, survival);
+                long budget = com.dwinovo.numen.core.tools.BuildTool.timeoutTicksFor(cells, survival);
+                helper.assertTrue(budget > need,
+                        "deadline must exceed the build itself: " + cells + " cells, survival="
+                                + survival + ", needs " + need + " ticks but budget is " + budget);
+            }
+        }
+        // 生存封顶:再大的工程也收敛到目标时长,不会无限拉长
+        long huge = com.dwinovo.numen.core.task.BuildCompanionTask.estimatedTicks(16384, true);
+        helper.assertTrue(huge <= 12 * 60 * 20 + 20,
+                "survival pace should cap total duration at the target, got " + huge + " ticks");
+        helper.succeed();
+    }
+
+    /**
      * 守则驱动的中世纪小屋(12x10x8):形状打底(圆石地基、橡木板空心墙、楼梯
      * 砌的斜屋顶——出檐一格、山墙填实、脊线压半砖)+ 精确格修饰(原木角柱 axis=y、
      * 南面 1x2 门洞、玻璃窗、屋内火把),后写覆盖先写——与 build 工具的混排语义
