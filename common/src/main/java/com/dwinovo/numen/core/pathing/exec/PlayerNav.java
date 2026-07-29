@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.pathing.exec;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -74,7 +75,7 @@ public final class PlayerNav {
      * 物理),这里把它路由成疾跑门:speed &lt; 1.0 表示"慢速",本导航
      * 的每个 tick 里禁疾跑(见 {@link #tick} 的 allowSprint 包夹)。
      */
-    private final boolean sprintAllowed;
+    private final BooleanSupplier sprintAllowed;
 
     /** 段规划状态机:搜索派发、段执行、无缝接段、失败自动重搜全在其内。 */
     private final PathingCore core;
@@ -157,6 +158,21 @@ public final class PlayerNav {
         return new PlayerNav(player, speed, reached, compiled, true, contextProvider);
     }
 
+    /**
+     * Revalidating navigation with an additional, per-navigation dynamic sprint
+     * permission. The legacy speed gate still applies.
+     */
+    public static PlayerNav toRevalidating(
+            NumenPlayer player,
+            Supplier<GoalCompiler.Compiled> compiled,
+            double speed,
+            BooleanSupplier reached,
+            ContextProvider contextProvider,
+            BooleanSupplier sprintAllowed) {
+        return new PlayerNav(player, speed, reached, compiled, true, contextProvider,
+                combinedSprintGate(speed, sprintAllowed));
+    }
+
     /** 持续跟随一个实时实体,每 tick 用实体当前脚位重新校验目标。 */
     public static PlayerNav followEntity(NumenPlayer player, Supplier<? extends Entity> entitySupplier,
                                          double followRadius, double speed, BooleanSupplier reached) {
@@ -210,9 +226,17 @@ public final class PlayerNav {
     private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
                       Supplier<GoalCompiler.Compiled> compiledSupplier,
                       boolean revalidateGoalEachTick, ContextProvider contextProvider) {
+        this(player, speed, reached, compiledSupplier, revalidateGoalEachTick,
+                contextProvider, legacySprintGate(speed));
+    }
+
+    private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,
+                      Supplier<GoalCompiler.Compiled> compiledSupplier,
+                      boolean revalidateGoalEachTick, ContextProvider contextProvider,
+                      BooleanSupplier sprintAllowed) {
         this.player = player;
         this.compiledSupplier = compiledSupplier;
-        this.sprintAllowed = speed >= 1.0;
+        this.sprintAllowed = Objects.requireNonNull(sprintAllowed, "sprintAllowed");
         this.reached = reached;
         this.contextProvider = contextProvider == null ? ContextProvider.DEFAULT : contextProvider;
         this.revalidateGoalEachTick = revalidateGoalEachTick;
@@ -346,14 +370,30 @@ public final class PlayerNav {
      * 不影响别的同伴。
      */
     private void withSprintGate(Runnable body) {
+        withSprintGate(sprintAllowed, body);
+    }
+
+    static void withSprintGate(BooleanSupplier sprintAllowed, Runnable body) {
+        Objects.requireNonNull(sprintAllowed, "sprintAllowed");
+        Objects.requireNonNull(body, "body");
         NavSettings settings = NavSettings.get();
         boolean saved = settings.allowSprint;
-        settings.allowSprint = saved && sprintAllowed;
+        settings.allowSprint = saved && sprintAllowed.getAsBoolean();
         try {
             body.run();
         } finally {
             settings.allowSprint = saved;
         }
+    }
+
+    static BooleanSupplier legacySprintGate(double speed) {
+        return () -> speed >= 1.0;
+    }
+
+    static BooleanSupplier combinedSprintGate(
+            double speed, BooleanSupplier sprintAllowed) {
+        Objects.requireNonNull(sprintAllowed, "sprintAllowed");
+        return () -> speed >= 1.0 && sprintAllowed.getAsBoolean();
     }
 
     /**
@@ -463,5 +503,4 @@ public final class PlayerNav {
         player.setShiftKeyDown(false);
     }
 }
-
 

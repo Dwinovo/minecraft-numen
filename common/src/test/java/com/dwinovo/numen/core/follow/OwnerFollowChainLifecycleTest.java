@@ -301,7 +301,8 @@ class OwnerFollowChainLifecycleTest {
                 NumenPlayer companion,
                 Supplier<GoalCompiler.Compiled> goal,
                 BooleanSupplier reached,
-                PlayerNav.ContextProvider contextProvider) {
+                PlayerNav.ContextProvider contextProvider,
+                BooleanSupplier sprintAllowed) {
             creates++;
             navigation.goal = goal;
             navigation.reached = reached;

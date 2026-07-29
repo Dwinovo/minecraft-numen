@@ -15,15 +15,26 @@ import net.minecraft.server.level.ServerPlayer;
 /**
  * Lowest-priority, per-companion owner following.
  *
- * <p>The chain retains only its hysteresis latch and one navigation handle.
- * Owner resolution remains live: eligibility, winning ticks, the dynamic goal,
- * and the arrival predicate all resolve the companion's current owner again.
+ * <p>The chain retains per-companion transient runtime state and at most one
+ * navigation handle. Owner resolution remains live: eligibility, winning
+ * ticks, the dynamic goal, and the arrival predicate all resolve the
+ * companion's current owner again.
  */
 public final class OwnerFollowChain implements TaskChain {
 
-    public static final float PRIORITY = -2.0f;
-    public static final double DEFAULT_STOP_DISTANCE = 3.0;
-    public static final double DEFAULT_START_DISTANCE = 5.5;
+    public static final float PRIORITY = FollowDecisions.PRIORITY;
+    public static final double DEFAULT_STOP_DISTANCE =
+            FollowDecisions.DEFAULT_STOP_DISTANCE;
+    public static final double DEFAULT_START_DISTANCE =
+            FollowDecisions.DEFAULT_START_DISTANCE;
+    public static final double DEFAULT_SPRINT_DISTANCE =
+            FollowDecisions.DEFAULT_SPRINT_DISTANCE;
+    public static final double DEFAULT_CATCH_UP_DISTANCE =
+            FollowDecisions.DEFAULT_CATCH_UP_DISTANCE;
+    public static final double DEFAULT_LOST_DISTANCE =
+            FollowDecisions.DEFAULT_LOST_DISTANCE;
+    public static final long FAILED_COOLDOWN_TICKS =
+            FollowDecisions.FAILED_COOLDOWN_TICKS;
     public static final int REGISTRATION_ORDER = 60;
 
     private static final double NAV_SPEED = 1.0;
@@ -33,7 +44,12 @@ public final class OwnerFollowChain implements TaskChain {
     private final HaltAction haltAction;
 
     private Navigation navigation;
+    private FollowRuntimeState runtimeState = FollowRuntimeState.DISABLED;
+    private FollowWaitingReason waitingReason = FollowWaitingReason.NONE;
     private boolean following;
+    private boolean sprintAllowed;
+    private boolean catchingUp;
+    private long failedUntilTick = FollowDecisions.NO_FAILED_COOLDOWN;
 
     public OwnerFollowChain() {
         this(new LiveFollowAccess(), OwnerFollowChain::createPlayerNavigation, InputDriver::halt);
@@ -48,15 +64,17 @@ public final class OwnerFollowChain implements TaskChain {
 
     @Override
     public float getPriority(NumenPlayer companion) {
-        Decision decision = decide(followAccess.snapshot(companion), following);
-        following = decision.following();
+        Decision decision = decide(
+                followAccess.snapshot(companion), following, failedUntilTick);
+        apply(decision);
         return decision.priority();
     }
 
     @Override
     public void tick(NumenPlayer companion) {
-        Decision decision = decide(followAccess.snapshot(companion), following);
-        following = decision.following();
+        Snapshot snapshot = followAccess.snapshot(companion);
+        Decision decision = decide(snapshot, following, failedUntilTick);
+        apply(decision);
         if (!decision.active()) {
             releaseControl(companion);
             return;
@@ -69,7 +87,8 @@ public final class OwnerFollowChain implements TaskChain {
             BooleanSupplier reached =
                     () -> followAccess.isWithinStopDistance(companion, stopDistance);
             navigation = navigationFactory.create(
-                    companion, goal, reached, FollowContextProvider.INSTANCE);
+                    companion, goal, reached, FollowContextProvider.INSTANCE,
+                    () -> sprintAllowed);
         }
 
         PlayerNav.Status status = navigation.tick();
@@ -78,14 +97,18 @@ public final class OwnerFollowChain implements TaskChain {
         }
 
         if (status == PlayerNav.Status.ARRIVED) {
-            Decision arrival = decide(followAccess.snapshot(companion), following);
-            following = arrival.following();
+            Decision arrival = decide(
+                    followAccess.snapshot(companion), following, failedUntilTick);
+            apply(arrival);
             if (!arrival.active()) {
                 releaseControl(companion);
             }
             return;
         }
-        releaseControl(companion);
+        if (status == PlayerNav.Status.FAILED) {
+            releaseControl(companion);
+            apply(failedAt(decision, snapshot.gameTime()));
+        }
     }
 
     @Override
@@ -113,54 +136,37 @@ public final class OwnerFollowChain implements TaskChain {
                 haltAction.halt(companion);
             } finally {
                 navigation = null;
+                sprintAllowed = false;
+                catchingUp = false;
             }
         }
     }
 
     static Decision decide(Snapshot snapshot, boolean wasFollowing) {
-        Distances distances = resolveDistances(
-                snapshot.state().stopDistanceOverride(),
-                snapshot.state().startDistanceOverride());
+        return decide(snapshot, wasFollowing, FollowDecisions.NO_FAILED_COOLDOWN);
+    }
 
-        if (!snapshot.companionValid()
-                || !snapshot.state().enabled()
-                || snapshot.state().manualPaused()
-                || !snapshot.ownerUuidPresent()
-                || !snapshot.ownerOnline()
-                || !snapshot.ownerValid()
-                || !snapshot.sameLevel()
-                || !Double.isFinite(snapshot.distance())) {
-            return new Decision(Float.NEGATIVE_INFINITY, false, distances);
-        }
+    static Decision decide(
+            Snapshot snapshot, boolean wasFollowing, long failedUntilTick) {
+        FollowDecisions.Result result = FollowDecisions.decide(
+                toInput(snapshot), wasFollowing, failedUntilTick);
+        return fromResult(result);
+    }
 
-        boolean nowFollowing;
-        if (snapshot.distance() <= distances.stop()) {
-            nowFollowing = false;
-        } else if (snapshot.distance() >= distances.start()) {
-            nowFollowing = true;
-        } else {
-            nowFollowing = wasFollowing;
-        }
-        return new Decision(nowFollowing ? PRIORITY : Float.NEGATIVE_INFINITY,
-                nowFollowing, distances);
+    static Decision failedAt(Decision previous, long currentTick) {
+        return fromResult(FollowDecisions.failedAt(toResult(previous), currentTick));
     }
 
     static Distances resolveDistances(Double stopOverride, Double startOverride) {
-        if (stopOverride == null || startOverride == null
-                || !Double.isFinite(stopOverride) || !Double.isFinite(startOverride)
-                || stopOverride <= 0.0 || startOverride <= 0.0
-                || stopOverride >= startOverride) {
-            return new Distances(DEFAULT_STOP_DISTANCE, DEFAULT_START_DISTANCE);
-        }
-        return new Distances(stopOverride, startOverride);
+        FollowDecisions.Distances distances =
+                FollowDecisions.resolveDistances(stopOverride, startOverride);
+        return new Distances(distances.stop(), distances.start());
     }
 
     static double distance3d(double firstX, double firstY, double firstZ,
                              double secondX, double secondY, double secondZ) {
-        double dx = secondX - firstX;
-        double dy = secondY - firstY;
-        double dz = secondZ - firstZ;
-        return Math.sqrt(dx * dx + dy * dy + dz * dz);
+        return FollowDecisions.distance3d(
+                firstX, firstY, firstZ, secondX, secondY, secondZ);
     }
 
     static GoalCompiler.Compiled compileNearGoal(
@@ -172,13 +178,32 @@ public final class OwnerFollowChain implements TaskChain {
         return navigation != null;
     }
 
+    RuntimeView runtimeView() {
+        return new RuntimeView(runtimeState, waitingReason, following,
+                sprintAllowed, catchingUp, failedUntilTick, navigation != null);
+    }
+
+    long remainingCooldownTicks(long currentTick) {
+        return FollowDecisions.remainingCooldownTicks(failedUntilTick, currentTick);
+    }
+
+    private void apply(Decision decision) {
+        runtimeState = decision.runtimeState();
+        waitingReason = decision.waitingReason();
+        following = decision.following();
+        sprintAllowed = decision.sprintAllowed();
+        catchingUp = decision.catchingUp();
+        failedUntilTick = decision.failedUntilTick();
+    }
+
     private static Navigation createPlayerNavigation(
             NumenPlayer companion,
             Supplier<GoalCompiler.Compiled> goal,
             BooleanSupplier reached,
-            PlayerNav.ContextProvider contextProvider) {
+            PlayerNav.ContextProvider contextProvider,
+            BooleanSupplier sprintAllowed) {
         PlayerNav playerNav = PlayerNav.toRevalidating(
-                companion, goal, NAV_SPEED, reached, contextProvider);
+                companion, goal, NAV_SPEED, reached, contextProvider, sprintAllowed);
         return new Navigation() {
             @Override
             public PlayerNav.Status tick() {
@@ -194,7 +219,16 @@ public final class OwnerFollowChain implements TaskChain {
 
     record Distances(double stop, double start) {}
 
-    record Decision(float priority, boolean following, Distances distances) {
+    record Decision(
+            float priority,
+            boolean following,
+            Distances distances,
+            FollowRuntimeState runtimeState,
+            FollowWaitingReason waitingReason,
+            boolean sprintAllowed,
+            boolean catchingUp,
+            long failedUntilTick) {
+
         boolean active() {
             return priority == PRIORITY;
         }
@@ -207,12 +241,29 @@ public final class OwnerFollowChain implements TaskChain {
             boolean ownerOnline,
             boolean ownerValid,
             boolean sameLevel,
-            double distance) {
+            double distance,
+            long gameTime) {
 
         Snapshot {
             Objects.requireNonNull(state, "state");
         }
+
+        Snapshot(FollowState state, boolean companionValid, boolean ownerUuidPresent,
+                 boolean ownerOnline, boolean ownerValid, boolean sameLevel,
+                 double distance) {
+            this(state, companionValid, ownerUuidPresent, ownerOnline, ownerValid,
+                    sameLevel, distance, 0L);
+        }
     }
+
+    record RuntimeView(
+            FollowRuntimeState runtimeState,
+            FollowWaitingReason waitingReason,
+            boolean following,
+            boolean sprintAllowed,
+            boolean catchingUp,
+            long failedUntilTick,
+            boolean navigationActive) {}
 
     interface FollowAccess {
         Snapshot snapshot(NumenPlayer companion);
@@ -224,7 +275,8 @@ public final class OwnerFollowChain implements TaskChain {
 
     interface NavigationFactory {
         Navigation create(NumenPlayer companion, Supplier<GoalCompiler.Compiled> goal,
-                          BooleanSupplier reached, PlayerNav.ContextProvider contextProvider);
+                          BooleanSupplier reached, PlayerNav.ContextProvider contextProvider,
+                          BooleanSupplier sprintAllowed);
     }
 
     interface Navigation {
@@ -247,12 +299,13 @@ public final class OwnerFollowChain implements TaskChain {
                 return unavailable(companionValid, false);
             }
 
+            long gameTime = companion.level().getGameTime();
             FollowState state = FollowStateStore.get(companion.level().getServer())
                     .getOrDefault(companion.getUUID());
             boolean ownerUuidPresent = companion.getOwnerUuid() != null;
             if (!companionValid || !ownerUuidPresent) {
                 return new Snapshot(state, companionValid, ownerUuidPresent,
-                        false, false, false, Double.NaN);
+                        false, false, false, Double.NaN, gameTime);
             }
 
             ServerPlayer owner = companion.resolveOwnerPlayer();
@@ -264,7 +317,7 @@ public final class OwnerFollowChain implements TaskChain {
                             owner.getX(), owner.getY(), owner.getZ())
                     : Double.NaN;
             return new Snapshot(state, companionValid, ownerUuidPresent,
-                    ownerOnline, ownerValid, sameLevel, distance);
+                    ownerOnline, ownerValid, sameLevel, distance, gameTime);
         }
 
         @Override
@@ -299,5 +352,47 @@ public final class OwnerFollowChain implements TaskChain {
             }
             return owner;
         }
+    }
+
+    private static FollowDecisions.Input toInput(Snapshot snapshot) {
+        FollowState state = snapshot.state();
+        return new FollowDecisions.Input(
+                state.enabled(),
+                state.manualPaused(),
+                snapshot.companionValid(),
+                snapshot.ownerUuidPresent(),
+                snapshot.ownerOnline(),
+                snapshot.ownerValid(),
+                snapshot.sameLevel(),
+                snapshot.distance(),
+                state.stopDistanceOverride(),
+                state.startDistanceOverride(),
+                snapshot.gameTime());
+    }
+
+    private static Decision fromResult(FollowDecisions.Result result) {
+        FollowDecisions.Distances resolved = result.distances();
+        return new Decision(
+                result.priority(),
+                result.following(),
+                new Distances(resolved.stop(), resolved.start()),
+                result.runtimeState(),
+                result.waitingReason(),
+                result.sprintAllowed(),
+                result.catchingUp(),
+                result.failedUntilTick());
+    }
+
+    private static FollowDecisions.Result toResult(Decision decision) {
+        Distances distances = decision.distances();
+        return new FollowDecisions.Result(
+                decision.runtimeState(),
+                decision.waitingReason(),
+                decision.priority(),
+                decision.following(),
+                decision.sprintAllowed(),
+                decision.catchingUp(),
+                decision.failedUntilTick(),
+                new FollowDecisions.Distances(distances.stop(), distances.start()));
     }
 }
