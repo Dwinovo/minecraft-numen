@@ -70,6 +70,9 @@ public final class PathExecutor {
     private int ticksOnCurrent;
     /** 距上次真实推进(移动完成/重定位/活跃挖掘)的 tick 数,liveness 信号。 */
     private int ticksSinceProgress;
+    /** 身位连续不在路径任何合法位上的刻数;超限即取消重算。 */
+    private int ticksNotInValid;
+    private static final int MAX_TICKS_NOT_IN_VALID = 20;
     /** 单次 onTick 内递归推进次数守卫:回退扫/SUCCESS 推进后递归 onTick
      * 可能在某 movement 的 SUCCESS 判定与 validPositions 不自洽时空转
      * 爆栈。超过路径长度即判定为病态循环,取消而非继续递归。 */
@@ -194,6 +197,26 @@ public final class PathExecutor {
                 onTick0();
                 return false;
             }
+            // 前后都对不上:身位不在这条路径的任何合法位里。动作的前提就是"人在
+            // 起点",前提破了硬撑没有意义——只会耗满超时再重规划,期间人一动不动。
+            // 台阶/楼梯把她自动抬高一格、蹭偏一格就足以造成这种脱节,而日式小屋
+            // 满地是楼梯,越往高层越密。给一点宽限(可能只是瞬时越界),超了就
+            // 取消,让规划器按她实际所在的位置重新算。
+            // 裁决必须和动作自己的合法性判定同源:脚下那格没支撑时(站在柱顶
+            // 边沿之类),搜索用的是旁边那格作"假起点",动作也认这个假起点。
+            // 只按 feet 判就比动作自己更严,会把本来健康的路径一条条掐掉。
+            if (movement.getValidPositions().contains(Movement.pathStart(player))) {
+                ticksNotInValid = 0;
+            } else if (++ticksNotInValid > MAX_TICKS_NOT_IN_VALID) {
+                Constants.LOG.info(
+                        "[numen-path] 身位脱离路径 {} 刻(身位{} 应在{}),取消重算",
+                        ticksNotInValid, feet.toShortString(),
+                        movement.getSrc().toShortString());
+                cancel("身位 " + feet.toShortString() + " 不在路径任何合法位上");
+                return false;
+            }
+        } else {
+            ticksNotInValid = 0;
         }
         double distFromPath = closestPathPosDist();
         if (possiblyOffPath(distFromPath, MAX_DIST_FROM_PATH)) {
@@ -320,8 +343,18 @@ public final class PathExecutor {
             }
             if (ticksOnCurrent > timedOutAt(currentMovementOriginalCostEstimate,
                     NavSettings.get().movementTimeoutTicks)) {
-                Constants.LOG.debug("移动耗时 {} tick,超出估价 {} 太多,取消",
-                        ticksOnCurrent, currentMovementOriginalCostEstimate);
+                // 卡死的动作必须留声:类型、起讫、四邻实况、身位一次性摊开。
+                // 动作卡住是寻路故障里最常见的一类,而它以前只在 debug 级留痕,
+                // 发布态不落盘——线上出问题只能靠猜。这条 INFO 是排障的第一现场。
+                Constants.LOG.info(
+                        "[numen-path] 动作卡死 {} 耗时{}刻(估价{}) 无进展{}刻 身位{} 精确({}) "
+                                + "起点格={} 终点格={} 终点上={} 终点下={}",
+                        describe(movement), ticksOnCurrent,
+                        (int) (double) currentMovementOriginalCostEstimate, ticksSinceProgress,
+                        playerFeet(player).toShortString(),
+                        String.format("%.2f,%.2f,%.2f", player.getX(), player.getY(), player.getZ()),
+                        blockName(movement.getSrc()), blockName(movement.getDest()),
+                        blockName(movement.getDest().above()), blockName(movement.getDest().below()));
                 cancel(describe(movement) + " 卡住:耗时 " + ticksOnCurrent
                         + " tick,远超估价 " + (int) (double) currentMovementOriginalCostEstimate);
                 return true;
@@ -814,6 +847,12 @@ public final class PathExecutor {
         ticksSinceProgress = 0;
     }
 
+    /** 方块的短名(排障日志用)。 */
+    private String blockName(BlockPos pos) {
+        return player.level().getBlockState(pos).getBlock()
+                .builtInRegistryHolder().key().location().getPath();
+    }
+
     /** 移动的人话描述(失败原因素材):类型 + 起讫格。 */
     private static String describe(Movement movement) {
         return movement.getClass().getSimpleName()
@@ -908,6 +947,27 @@ public final class PathExecutor {
     }
 
     /** 距上次真实推进(移动完成/重定位/活跃挖掘)的 tick 数。 */
+    /** 卡在哪一步、哪种动作上(排障用):第几步/共几步 + 动作类型 + 起讫 + 无进展刻。 */
+    public String progressSummary() {
+        if (pathPosition >= path.movements().size()) {
+            return pathPosition + "/" + path.length() + " 已走完";
+        }
+        Movement m = path.movements().get(pathPosition);
+        var view = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
+        StringBuilder toBreak = new StringBuilder();
+        for (BlockPos p : m.toBreak(view)) {
+            toBreak.append(p.toShortString()).append('=')
+                    .append(player.level().getBlockState(p).getBlock().builtInRegistryHolder()
+                            .key().location().getPath()).append(' ');
+        }
+        return pathPosition + "/" + path.length() + " " + m.getClass().getSimpleName()
+                + " " + m.getSrc().toShortString() + "->" + m.getDest().toShortString()
+                + " 无进展" + ticksSinceProgress + "刻 身位" + playerFeet(player).toShortString()
+                + " 起点格=" + blockName(m.getSrc()) + " 起点下=" + blockName(m.getSrc().below())
+                + " 终点格=" + blockName(m.getDest())
+                + " 待挖[" + toBreak.toString().trim() + "]";
+    }
+
     public int ticksSinceProgress() {
         return ticksSinceProgress;
     }

@@ -195,6 +195,15 @@ public class MovementAscend extends Movement {
                 + xAxis * Math.abs((dest.getZ() + 0.5) - player.getZ());
 
         double lateralMotion = xAxis * player.getDeltaMovement().z + zAxis * player.getDeltaMovement().x;
+        if (player.tickCount % 10 == 0) {
+            // 上台阶的四道闸门逐值:卡在这一步时外面只看到"人不动",全靠猜
+            com.dwinovo.numen.core.Constants.LOG.debug(
+                    "[numen-ascend] src={} dest={} 身位={} 前距={} 侧偏={} 横漂={} 头顶通={} 在地={} 踩={}",
+                    src.toShortString(), dest.toShortString(), feet.toShortString(),
+                    String.format("%.2f", flatDistToNext), String.format("%.2f", sideDist),
+                    String.format("%.3f", lateralMotion), headBonkClear(), player.onGround(),
+                    jumpingOnto.getBlock().builtInRegistryHolder().key().location().getPath());
+        }
         if (Math.abs(lateralMotion) > 0.1) {
             return state; // 横向还在漂,先走正再跳
         }

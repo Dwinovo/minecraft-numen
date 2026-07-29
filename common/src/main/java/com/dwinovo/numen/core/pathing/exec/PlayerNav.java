@@ -474,6 +474,11 @@ public final class PlayerNav {
      * 折算成任务超时(tick 越快于真实时间,这笔折算越离谱,无上限 tick 的
      * 测试服上足以在首次搜索返回前烧光整个预算)。
      */
+    /** 搜索结论分布摘要,转发自内核(排障日志用)。 */
+    public String outcomeSummary() {
+        return core.outcomeSummary();
+    }
+
     public boolean planningInFlight() {
         return core.hasInProgressSearch() && core.getCurrent() == null;
     }

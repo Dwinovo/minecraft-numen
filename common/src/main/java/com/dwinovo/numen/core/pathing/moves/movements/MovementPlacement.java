@@ -194,17 +194,27 @@ final class MovementPlacement {
         return PlaceResult.NO_OPTION;
     }
 
+    // 选料只有一个出口:先按图纸挑精确材料(施工中的格子值得放对),挑不出就
+    // 退回通用垫路料。两条路最终都落到 selectThrowaway——免耗材画像的自动补料
+    // 那只手就长在那里,于是"背包空着也能垫路"对两条路同时成立。
+    //
+    // 这条汇流是必需的,不是顺手:规划器按画像位认定"有料可垫",执行器若在某
+    // 条支路上选不出料就报 UNREACHABLE,两边对同一动作各执一词,而重新规划的
+    // 输入分毫未变——必然算出同一条路、再次夭折,规划器与执行器能对着掐到天
+    // 荒地老。可行性判据必须只有一处真源。
     static boolean selectForLocation(ServerPlayer player, BlockPos placeAt, boolean select) {
-        if (BuildPlacementRegistry.hasTarget(player, placeAt)) {
-            return BuildPlacementRegistry.selectForLocation(player, placeAt, select);
+        if (BuildPlacementRegistry.hasTarget(player, placeAt)
+                && BuildPlacementRegistry.selectForLocation(player, placeAt, select)) {
+            return true;
         }
         return selectThrowaway(player, select);
     }
 
     static boolean selectForLocation(ServerPlayer player, BlockPos placeAt, BlockHitResult hit,
                                      float yaw, float pitch, boolean select) {
-        if (BuildPlacementRegistry.hasTarget(player, placeAt)) {
-            return BuildPlacementRegistry.selectForLocation(player, placeAt, hit, yaw, pitch, select);
+        if (BuildPlacementRegistry.hasTarget(player, placeAt)
+                && BuildPlacementRegistry.selectForLocation(player, placeAt, hit, yaw, pitch, select)) {
+            return true;
         }
         return selectThrowaway(player, select);
     }

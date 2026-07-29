@@ -213,6 +213,15 @@ public class MovementPillar extends Movement {
                 state.setInput(Input.JUMP, true); // 从下半砖上够梯子得先跳
             }
             MovementHelper.moveTowards(player, state, against);
+            if (player.tickCount % 10 == 0) {
+                // 爬梯分支以前整段没有留声,卡在这里时外面只看到"垫柱毫无动静"。
+                com.dwinovo.numen.core.Constants.LOG.debug(
+                        "[numen-pillar] 爬梯 src={} 贴面={} 身位={} y={} 竖速={} 攀附={}",
+                        src.toShortString(), against.toShortString(),
+                        feet(player).toShortString(), String.format("%.2f", player.getY()),
+                        String.format("%.3f", player.getDeltaMovement().y),
+                        player.onClimbable());
+            }
             return state;
         } else {
             // 垫柱:先把耗材拿到手
@@ -220,15 +229,28 @@ public class MovementPillar extends Movement {
                 return state.setStatus(MovementStatus.UNREACHABLE);
             }
 
-            // 高过目标或还没跳起时按潜行:先蹲一 tick 再右键,放置更稳
-            state.setInput(Input.SNEAK,
-                    player.getY() > dest.getY() || player.getY() < src.getY() + 0.2);
-
             double diffX = player.getX() - (dest.getX() + 0.5);
             double diffZ = player.getZ() - (dest.getZ() + 0.5);
             double dist = Math.sqrt(diffX * diffX + diffZ * diffZ);
             double flatMotion = Math.sqrt(player.getDeltaMovement().x * player.getDeltaMovement().x
                     + player.getDeltaMovement().z * player.getDeltaMovement().z);
+
+            // 潜行只在它真正管用的两个时刻按下:落砖那一刻(高过目标,蹲住别踩空)
+            // 和已经站到柱心上等起跳时。走位阶段绝不蹲——潜行把移速砍到三成,
+            // 视角又是逐帧步进的,蹲着找柱心会变成绕着柱心打转:半径恒定在 0.24
+            // 不收敛,于是 dist 永远大于 0.17,跳跃分支永远轮不到,而"还没跳起来"
+            // 又永远成立,三者首尾相接自锁死。潜行是为放置服务的,不是为走路。
+            // 蹲姿要在放置窗口打开之前就位:蹲是"请求"了要下一刻才真正生效(姿态
+            // 在 aiStep 里更新),而窗口本身只有跳跃顶点附近几刻。若等"已高过目标"
+            // 才请求下蹲,生效时人往往已经越过或跌出窗口,三条件永远凑不齐——命中
+            // 全靠运气。上升途中接近目标高度就先蹲好,窗口一开即可落砖。
+            boolean risingIntoWindow = player.getDeltaMovement().y > 0.0
+                    && player.getY() > dest.getY() - 0.5;
+            state.setInput(Input.SNEAK,
+                    player.getY() > dest.getY()
+                            || risingIntoWindow
+                            || (dist <= 0.17 && player.getY() < src.getY() + 0.2));
+
             if (dist > 0.17) { // 需小于潜行边缘保护的 0.2,留余量
                 // 偏出中心(可能被卡):完整看向放置点走回去
                 state.setInput(Input.MOVE_FORWARD, true);
@@ -260,27 +282,31 @@ public class MovementPillar extends Movement {
                     if (crouched && looking && highEnough) {
                         // 已蹲稳、看准、跳够高度:放块
                         state.setInput(Input.CLICK_RIGHT, true);
-                        com.dwinovo.numen.core.Constants.LOG.debug(
+                        com.dwinovo.numen.core.Constants.LOG.info(
                                 "[numen-pillar] 放置尝试 src={} y={} sneak={} dist={}",
                                 src.toShortString(),
                                 String.format("%.2f", player.getY()), player.isShiftKeyDown(),
                                 String.format("%.2f", dist));
                     } else if (player.tickCount % 10 == 0) {
                         // 插桩:跳搭三条件逐值(500ms 限频)——之前这里全哑,只能猜
-                        com.dwinovo.numen.core.Constants.LOG.debug(
-                                "[numen-pillar] 未就绪 src={} 蹲={} 看准={} 高度够={} y={} dy={} dist={} 手持格选中={}",
+                        com.dwinovo.numen.core.Constants.LOG.info(
+                                "[numen-pillar] 未就绪 src={} 蹲={} 看准={} 高度够={} y={} dy={} dist={} "
+                                        + "横速={} 在地={} 请求跳={} 竖速={} 手持={}",
                                 src.toShortString(), crouched, looking, highEnough,
                                 String.format("%.2f", player.getY()),
                                 String.format("%.2f", player.getY() - dest.getY()),
                                 String.format("%.2f", dist),
-                                player.getInventory().selected);
+                                String.format("%.3f", flatMotion), player.onGround(),
+                                state.getInputStates().getOrDefault(Input.JUMP, false),
+                                String.format("%.3f", player.getDeltaMovement().y),
+                                player.getMainHandItem().getItem());
                     }
                 }
             }
         }
 
         if (feet(player).equals(dest) && blockIsThere) {
-            com.dwinovo.numen.core.Constants.LOG.debug(
+            com.dwinovo.numen.core.Constants.LOG.info(
                     "[numen-pillar] 垫柱成功 src={} feet={}", src.toShortString(),
                     feet(player).toShortString());
             return state.setStatus(MovementStatus.SUCCESS);

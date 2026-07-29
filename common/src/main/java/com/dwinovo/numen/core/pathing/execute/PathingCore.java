@@ -48,6 +48,15 @@ public final class PathingCore {
 
     private PathExecutor current;
     private PathExecutor next;
+    /** 连续丢弃孤儿首段的容忍次数;超出即判首段失败,交上层裁决。 */
+    private static final int MAX_ORPHAN_DISCARDS = 3;
+    private int orphanDiscards;
+    /** 连续"采纳即夭折且未挪窝"的路段容忍数;超出即判首段失败。 */
+    private static final int MAX_STERILE_SEGMENTS = 4;
+    private int sterileSegments;
+    private int dispatches;
+    private final java.util.TreeMap<String, Integer> outcomes = new java.util.TreeMap<>();
+
     private SearchHandle inProgress;
     /** 在飞搜索的 A* 展开起点(句柄不携带,提交时在此记录)。 */
     private BlockPos inProgressStart;
@@ -191,6 +200,12 @@ public final class PathingCore {
         return inProgress != null;
     }
 
+    /** 本内核迄今的搜索结论分布(排障用:分辨"搜不到路"与"只搜到半程")。 */
+    public String outcomeSummary() {
+        return dispatches + "派/" + outcomes
+                + " 段[" + (current == null ? "无" : current.progressSummary()) + "]";
+    }
+
     /** 在飞搜索此刻的最优部分路径;无在飞搜索或暂无候选时为空。 */
     public Optional<NavPath> inProgressBestPath() {
         return inProgress == null ? Optional.empty() : inProgress.bestPathSoFar();
@@ -270,13 +285,16 @@ public final class PathingCore {
         if (current == null) {
             return;
         }
+        BlockPos feetBefore = PathExecutor.playerFeet(player);
         safeToCancel = current.onTick();
         if (current.failed() || current.finished()) {
+            noteSegmentEnd(current, feetBefore);
             current = null;
             BlockPos feet = PathExecutor.playerFeet(player);
             if (goal == null || goal.isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
                 Constants.LOG.debug("已到达目标");
                 next = null;
+                sterileSegments = 0;
                 return;
             }
             if (next != null && !next.getPath().positions().contains(feet)
@@ -363,8 +381,49 @@ public final class PathingCore {
             realStart = feet;
         }
         inProgressStart = start;
+        dispatches++;
         inProgress = dispatcher.submit(realStart, start, goal, context, favoring,
                 primaryTimeout, failureTimeout);
+    }
+
+    /**
+     * 空转段记账:一个路段被采纳后当刻夭折、身位一步没挪,就是"规划器算得出、
+     * 执行器不认账"——两边对同一动作的可行性判断不一致。重新规划的输入完全
+     * 没变,必然算出同一条路,于是规划器与执行器可以对着掐到天荒地老。
+     *
+     * <p>这个循环整个发生在 {@code core.tick()} 内部:路段生于此刻、死于此刻,
+     * 外层每次看到的都是"无段",PlayerNav 那套"上一刻有段、这一刻没了"的执行
+     * 失败记账因此从不触发——静默活锁。连续空转够数即按首段失败上报,让上层
+     * 去跳格,和孤儿段同一原则:任何结局都必须收敛出裁决。
+     */
+    private void noteSegmentEnd(PathExecutor segment, BlockPos feetBefore) {
+        if (!segment.failed() || !PathExecutor.playerFeet(player).equals(feetBefore)) {
+            sterileSegments = 0;   // 走动过、或正常收尾:不是空转
+            return;
+        }
+        if (++sterileSegments < MAX_STERILE_SEGMENTS) {
+            return;
+        }
+        Constants.LOG.info(
+                "[numen-path] 连续 {} 个路段被采纳即夭折且身位未动(段长 {},因由 {}),"
+                        + "判首段失败——规划器与执行器对同一动作判断不一致",
+                sterileSegments, segment.getPath().length(), segment.failureCause());
+        sterileSegments = 0;
+        calcFailedLastTick = true;
+    }
+
+    /** 搜索结论分类计数(INFO 级定期摊开):重派活锁靠这张表定位——派了多少次、
+     *  每种结论各多少,一眼看出刻数被哪条分支吞掉。原有分支日志全是 debug 级,
+     *  发布态不落盘,查线上问题时等于没有。 */
+    private void countOutcome(String kind) {
+        outcomes.merge(kind, 1, Integer::sum);
+        if (dispatches % 128 != 0) {
+            return;
+        }
+        Constants.LOG.info("[numen-path-outcome] 派发{} 结论{} 目标={} 身位={} 段={}",
+                dispatches, outcomes, goal,
+                PathExecutor.playerFeet(player).toShortString(),
+                current == null ? "无" : current.getPath().length());
     }
 
     /** 收割在飞搜索:首段须包含假起点(否则是孤儿段),接续段须首尾相接。 */
@@ -382,24 +441,50 @@ public final class PathingCore {
         if (current == null) {
             if (executor.isPresent()) {
                 if (executor.get().getPath().positions().contains(expectedSegmentStart)) {
+                    orphanDiscards = 0;
                     current = executor.get();
+                    countOutcome("首段采纳:" + result.getType() + "x"
+                            + executor.get().getPath().length());
                 } else {
-                    Constants.LOG.debug("丢弃起点不符的孤儿路径段");
+                    countOutcome("孤儿段");
+                    // 孤儿段必须记账:丢弃既不产生可走的段、也不产生裁决,而上层
+                    // 见"无段且无在飞搜索"就重新派发——静默丢弃 = 每秒数百次的
+                    // 重派活锁,身体一步不走,任务层永远等不到失败结论。连续丢够
+                    // 就是这个起点搜不出能走的路,按首段失败上报,让上层去跳格。
+                    if (++orphanDiscards >= MAX_ORPHAN_DISCARDS) {
+                        Constants.LOG.info(
+                                "[numen-path] 连续 {} 次孤儿段:起点 {} 不在结果路径上"
+                                        + "(路径起点 {},长 {}),判首段失败",
+                                orphanDiscards, expectedSegmentStart,
+                                executor.get().getPath().getSrc(),
+                                executor.get().getPath().length());
+                        orphanDiscards = 0;
+                        calcFailedLastTick = true;
+                    } else {
+                        Constants.LOG.debug("丢弃起点不符的孤儿路径段");
+                    }
                 }
-            } else if (result.getType() != PathCalcResult.Type.CANCELLATION
-                    && result.getType() != PathCalcResult.Type.EXCEPTION) {
-                Constants.LOG.debug("首段计算失败");
-                calcFailedLastTick = true;
+            } else {
+                countOutcome("无路径:" + result.getType());
+                if (result.getType() != PathCalcResult.Type.CANCELLATION
+                        && result.getType() != PathCalcResult.Type.EXCEPTION) {
+                    Constants.LOG.debug("首段计算失败");
+                    orphanDiscards = 0;
+                    calcFailedLastTick = true;
+                }
             }
         } else {
             if (next == null) {
                 if (executor.isPresent()) {
                     if (executor.get().getPath().getSrc().equals(current.getPath().getDest())) {
                         next = executor.get();
+                        countOutcome("接续采纳:" + result.getType());
                     } else {
+                        countOutcome("接续不接");
                         Constants.LOG.debug("丢弃起点与当前段终点不接的接续段");
                     }
                 } else {
+                    countOutcome("接续无路径");
                     Constants.LOG.debug("接续段计算失败");
                 }
             } else {

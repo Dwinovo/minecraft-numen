@@ -189,6 +189,9 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * {@link #onTick()} pair this with {@code return TaskState.FAILED;}.
      */
     protected void fail(String why, FailureType t) {
+        // 终局必须留声:任务凭什么收场是排障的第一现场,不能只活在返回值里
+        com.dwinovo.numen.core.Constants.LOG.info("[numen-task] {} FAILED({}) {}",
+                getClass().getSimpleName(), t, why);
         this.doneReason = why;
         this.failType = t;
         this.pendingTerminal = TaskState.FAILED;
