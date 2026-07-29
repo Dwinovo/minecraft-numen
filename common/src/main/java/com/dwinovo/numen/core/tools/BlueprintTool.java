@@ -26,7 +26,9 @@ public final class BlueprintTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private static final long MIN_TIMEOUT_TICKS = 2 * 60 * 20;
-    private static final long TICKS_PER_BLOCK = 12 * 20;
+    /** 时限:按最慢一档(生存每刻 2 格)留几倍余量,外加赴工地的行程。 */
+    private static final long TICKS_PER_CELL = 4;
+    private static final long TRAVEL_ALLOWANCE_TICKS = 40 * 20;
 
     private record Args(String action, String file, Integer x, Integer y, Integer z, Integer rotation) {}
 
@@ -45,9 +47,13 @@ public final class BlueprintTool implements NumenTool {
                 + "= the LOWEST corner (min x/y/z) where the structure will stand, and optional clockwise "
                 + "`rotation` 0/90/180/270. She walks to the site once, then works inside it, placing cells in "
                 + "batches from the ground up with exact states (stairs facing, doors, beds); explicit air cells "
-                + "CLEAR terrain; liquids are skipped. MATERIALS: creative builds freely; in survival every cell "
-                + "consumes 1 matching item and the job is refused up front with an itemized shortfall — treat "
-                + "that as an invitation to gather together, not as an error. "
+                + "CLEAR terrain; liquids are skipped. MATERIALS & RESUMING: creative builds freely. In survival "
+                + "every cell consumes 1 matching item, and a whole building will NOT fit in one inventory — so "
+                + "she builds as far as her stock goes, then stops and reports what is still needed. That is "
+                + "normal, not a failure: restock her and send THE SAME CALL AGAIN (same file, anchor, rotation) "
+                + "and she carries on from exactly where she stopped, because finished cells are skipped "
+                + "automatically. Expect several supply runs for a large structure, and say so to the player "
+                + "instead of promising one trip. "
                 + "Pick a flat, clear area big enough for the size from list. "
                 + "For freeform construction use the build tool instead. BACKGROUND (build action): wait for "
                 + "task_finished; never resend while running.";
@@ -110,11 +116,13 @@ public final class BlueprintTool implements NumenTool {
         if (loaded.targets().isEmpty()) {
             throw new IllegalArgumentException("blueprint " + a.file() + " contains no buildable cells");
         }
-        long timeout = Math.max(MIN_TIMEOUT_TICKS, loaded.targets().size() * TICKS_PER_BLOCK);
+        long timeout = Math.max(MIN_TIMEOUT_TICKS,
+                TRAVEL_ALLOWANCE_TICKS + (long) loaded.targets().size() * TICKS_PER_CELL);
         // 材料记账随能力画像(同 build 工具):免耗材想建就建,否则消耗并预检报缺。
         boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
+        // allowPartial:整幢图纸一趟运不完是常态,分段施工 + 精确续建
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), loaded.targets(),
-                true, consume), reply);
+                true, consume, true), reply);
     }
 }

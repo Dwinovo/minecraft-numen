@@ -285,8 +285,205 @@ public class CompanionGameTests {
     }
 
     /**
-     * 守则驱动的中世纪小屋(12x10x8):形状打底(圆石地基、橡木板空心墙、逐层
-     * 收分的实心屋顶层——山墙天然填实;出檐待仰放站位落地后恢复)+ 精确格修饰(原木角柱 axis=y、
+     * 分段施工 + 精确续建:料只给一半,建到没料;补齐后<b>原样再发一次同一个调用</b>,
+     * 从断点接上,最终逐格全中。
+     *
+     * <p>这是整幢图纸能不能盖的前提。满背包顶天两千来块,而一栋房子几千格、上百
+     * 种方块——<b>一趟本来就运不完</b>,"料不齐就整批拒绝"等于大房子永远开不了工。
+     *
+     * <p>之所以分段不留废墟:待建集每一遍都从"图纸与世界当下的差集"重算,已经建
+     * 对的格自动跳过。计划不需要存——<b>世界本身就是进度</b>。这条一旦坏掉,续建
+     * 会变成在旧墙上叠新墙,所以必须有回归锁。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void survival_build_resumes_after_restock(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_hauler", new BlockPos(2, 2, 2), false);
+
+        List<BuildTaskRecord.Target> targets = new ArrayList<>();
+        for (int x = 6; x <= 10; x++) {
+            for (int z = 6; z <= 10; z++) {
+                targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
+                        helper.absolutePos(new BlockPos(x, 2, z)), "cobblestone", null, null, null));
+            }
+        }
+        final int total = targets.size();          // 25 格
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 9));   // 只够一小半
+
+        java.util.function.Consumer<String> go = tag -> {
+            var ctx = TaskDispatch.ctx(tag, companion);
+            TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+                    ctx.deadline(4000L), targets, true, true, true), reply -> {});
+        };
+        go.accept("gametest-resume-1");
+
+        java.util.concurrent.atomic.AtomicBoolean restocked =
+                new java.util.concurrent.atomic.AtomicBoolean(false);
+        helper.succeedWhen(() -> {
+            int built = 0;
+            for (BuildTaskRecord.Target t : targets) {
+                if (t.matches(level.getBlockState(t.pos()))) built++;
+            }
+            if (!restocked.get()) {
+                // 等第一趟自己停下来(车道空了),再看它到底建了多少
+                helper.assertTrue(com.dwinovo.numen.task.CompanionTickDispatcher
+                                .asyncTaskFor(companion.getUUID()) == null,
+                        "first run still going");
+                helper.assertTrue(built > 0 && built < total,
+                        "first run should stop part-way on 9 cobblestone, built " + built + "/" + total);
+                companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 32));
+                restocked.set(true);
+                go.accept("gametest-resume-2");
+                helper.fail("restocked; waiting for the second run");
+            }
+            helper.assertTrue(built == total,
+                    "restocked repeat must finish the job, built " + built + "/" + total);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 屋顶几何:楼梯朝向、屋脊走向、出檐、山墙、脊盖——纯展开器断言,不进世界。
+     *
+     * <p>楼梯朝向是整个屋顶最容易做反的一处,而做反了不会报错、只会难看,所以
+     * 必须有回归锁:<b>facing 指向上坡方向,也就是指向屋脊</b>。屋脊沿长轴——
+     * 收分收错轴的话,越长的房子顶得越离谱。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void roof_geometry(GameTestHelper helper) {
+        // 底面 20 长(x) × 8 宽(z):脊必须沿 x,坡向 z
+        var cells = com.dwinovo.numen.core.tools.BuildTool.roofCells(
+                0, 100, 0, 19, 7, "minecraft:oak_stairs", "gable", "straight", 1, 0, null,
+                "minecraft:oak_planks", "minecraft:oak_slab", true);
+        java.util.Map<BlockPos, BuildTaskRecord.Target> byPos = new java.util.HashMap<>();
+        for (BuildTaskRecord.Target t : cells) {
+            byPos.put(t.pos(), t);
+        }
+        // 出檐 1:底层从 z=-1 起、到 z=8 止
+        BuildTaskRecord.Target low = byPos.get(new BlockPos(5, 100, -1));
+        BuildTaskRecord.Target high = byPos.get(new BlockPos(5, 100, 8));
+        helper.assertTrue(low != null && high != null, "roof: overhang=1 did not extend the base rect");
+
+        var facing = net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING;
+        helper.assertTrue(low.desiredState().hasProperty(facing),
+                "roof: slope course is not made of stairs");
+        // 低 z 侧上坡朝 +z(south),高 z 侧上坡朝 -z(north)——两侧对着爬向屋脊
+        helper.assertTrue(low.desiredState().getValue(facing) == net.minecraft.core.Direction.SOUTH,
+                "roof: low-z slope must face the ridge (south), got "
+                        + low.desiredState().getValue(facing));
+        helper.assertTrue(high.desiredState().getValue(facing) == net.minecraft.core.Direction.NORTH,
+                "roof: high-z slope must face the ridge (north), got "
+                        + high.desiredState().getValue(facing));
+        // 脊沿长轴:坡面每升一层向内收一格,x 方向自始至终跑满
+        helper.assertTrue(byPos.containsKey(new BlockPos(0, 100, -1))
+                        && byPos.containsKey(new BlockPos(19, 100, -1)),
+                "roof: ridge must run along the longer axis, so the eave spans the full length");
+        helper.assertTrue(byPos.containsKey(new BlockPos(5, 101, 0)),
+                "roof: second course did not step inward by one");
+        // 脊盖与山墙都在
+        boolean hasSlab = cells.stream().anyMatch(t -> t.desiredState().getBlock() == Blocks.OAK_SLAB);
+        boolean hasGable = cells.stream().anyMatch(t -> t.desiredState().getBlock() == Blocks.OAK_PLANKS);
+        helper.assertTrue(hasSlab, "roof: ridge_block never placed");
+        helper.assertTrue(hasGable, "roof: gable_block never filled the ends");
+        helper.succeed();
+    }
+
+    /**
+     * 四坡顶(庑殿/hip)与举架曲线(concave)。
+     *
+     * <p>举架是东亚屋面读起来是"曲"而不是"阶梯金字塔"的原因:清式一律从檐口的
+     * 五举(0.5)起步,越往脊越陡,脊步不超过十举。翻成方块就是<b>檐口一层收两格、
+     * 脊部一层收一格</b>——所以同样的跨度,凹曲屋面的层数明显少于直线屋面,而且
+     * 头两层的收分必然大于 1。这两条都是可测的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void roof_hip_and_concave(GameTestHelper helper) {
+        // ── 四坡:四面都收,没有山墙,四角是垂脊 ──
+        var hip = com.dwinovo.numen.core.tools.BuildTool.roofCells(
+                0, 200, 0, 10, 10, "minecraft:oak_stairs", "hip", "straight", 0, 0, null,
+                null, "minecraft:oak_planks", true);
+        java.util.Map<BlockPos, BuildTaskRecord.Target> byPos = new java.util.HashMap<>();
+        for (BuildTaskRecord.Target t : hip) byPos.put(t.pos(), t);
+        var facing = net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING;
+        // 四条边各自朝内爬
+        helper.assertTrue(byPos.get(new BlockPos(5, 200, 0)).desiredState().getValue(facing)
+                        == net.minecraft.core.Direction.SOUTH, "hip: -z edge must climb south");
+        helper.assertTrue(byPos.get(new BlockPos(5, 200, 10)).desiredState().getValue(facing)
+                        == net.minecraft.core.Direction.NORTH, "hip: +z edge must climb north");
+        helper.assertTrue(byPos.get(new BlockPos(0, 200, 5)).desiredState().getValue(facing)
+                        == net.minecraft.core.Direction.EAST, "hip: -x edge must climb east");
+        helper.assertTrue(byPos.get(new BlockPos(10, 200, 5)).desiredState().getValue(facing)
+                        == net.minecraft.core.Direction.WEST, "hip: +x edge must climb west");
+        // 角上两坡相撞:给了 ridge_block 就用它当垂脊,不能留一块朝向随便的楼梯
+        helper.assertTrue(byPos.get(new BlockPos(0, 200, 0)).desiredState().getBlock()
+                        == Blocks.OAK_PLANKS,
+                "hip: corner must use the ridge block, got "
+                        + byPos.get(new BlockPos(0, 200, 0)).desiredState());
+        // 方形底面收到一点(攒尖)
+        helper.assertTrue(byPos.containsKey(new BlockPos(5, 205, 5)),
+                "hip on a square footprint must converge to a point");
+
+        // ── 举架:同跨度下凹曲比直线矮,且头两层收分大于 1 ──
+        int span = 16;
+        var straight = com.dwinovo.numen.core.tools.BuildTool.roofCells(
+                0, 300, 0, 30, span, "minecraft:oak_stairs", "gable", "straight", 0, 0, null,
+                null, null, true);
+        var concave = com.dwinovo.numen.core.tools.BuildTool.roofCells(
+                0, 300, 0, 30, span, "minecraft:oak_stairs", "gable", "concave", 0, 0, null,
+                null, null, true);
+        int hStraight = straight.stream().mapToInt(t -> t.pos().getY()).max().orElse(0);
+        int hConcave = concave.stream().mapToInt(t -> t.pos().getY()).max().orElse(0);
+        helper.assertTrue(hConcave < hStraight,
+                "concave roof should be lower than a straight one over the same span, got "
+                        + hConcave + " vs " + hStraight);
+        // 檐口那两层是缓坡:第二层的坡脚必然离檐口 2 格开外
+        java.util.Set<BlockPos> cc = new java.util.HashSet<>();
+        for (BuildTaskRecord.Target t : concave) cc.add(t.pos());
+        helper.assertTrue(cc.contains(new BlockPos(15, 300, 0)) && cc.contains(new BlockPos(15, 301, 2)),
+                "concave roof must start shallow — the second course should step in by 2, not 1");
+
+        // ── 歇山:下四坡、上双坡 ──
+        var xieshan = com.dwinovo.numen.core.tools.BuildTool.roofCells(
+                0, 400, 0, 16, 12, "minecraft:oak_stairs", "half_hip", "straight", 0, 0, null,
+                "minecraft:oak_planks", null, true);
+        java.util.Set<BlockPos> xs = new java.util.HashSet<>();
+        for (BuildTaskRecord.Target t : xieshan) xs.add(t.pos());
+        // 底层四面都有坡(四坡段)
+        helper.assertTrue(xs.contains(new BlockPos(0, 400, 6)) && xs.contains(new BlockPos(16, 400, 6)),
+                "half_hip: the lower section must slope on the short sides too");
+        // 上段变双坡:某一层开始,x 两端不再收(脊沿 x 跑满)
+        boolean gableAbove = xieshan.stream().anyMatch(t ->
+                t.desiredState().getBlock() == Blocks.OAK_PLANKS);
+        helper.assertTrue(gableAbove, "half_hip: upper section must have filled gable ends");
+
+        // ── 单坡:只有一个方向有坡,另一侧不收 ──
+        var shed = com.dwinovo.numen.core.tools.BuildTool.roofCells(
+                0, 500, 0, 10, 6, "minecraft:oak_stairs", "shed", "straight", 0, 0, null,
+                null, null, true);
+        int shedMinZ = shed.stream().mapToInt(t -> t.pos().getZ()).min().orElse(-1);
+        int shedMaxZ = shed.stream().mapToInt(t -> t.pos().getZ()).max().orElse(-1);
+        int lowY = shed.stream().filter(t -> t.pos().getZ() == shedMinZ)
+                .mapToInt(t -> t.pos().getY()).max().orElse(0);
+        int highY = shed.stream().filter(t -> t.pos().getZ() == shedMaxZ)
+                .mapToInt(t -> t.pos().getY()).max().orElse(0);
+        helper.assertTrue(highY > lowY,
+                "shed: the roof must rise from one edge to the other, got " + lowY + " -> " + highY);
+
+        // ── 不对称双坡:脊偏心,两侧坡长不等 ──
+        var salt = com.dwinovo.numen.core.tools.BuildTool.roofCells(
+                0, 600, 0, 20, 12, "minecraft:oak_stairs", "saltbox", "straight", 0, 0, 4,
+                null, null, true);
+        int peakY = salt.stream().mapToInt(t -> t.pos().getY()).max().orElse(0);
+        var peakZ = salt.stream().filter(t -> t.pos().getY() == peakY)
+                .mapToInt(t -> t.pos().getZ()).min().orElse(-1);
+        helper.assertTrue(peakZ > 0 && peakZ < 6,
+                "saltbox: ridge_offset=4 should put the peak near z=4, got " + peakZ);
+        helper.succeed();
+    }
+
+    /**
+     * 守则驱动的中世纪小屋(12x10x8):形状打底(圆石地基、橡木板空心墙、楼梯
+     * 砌的斜屋顶——出檐一格、山墙填实、脊线压半砖)+ 精确格修饰(原木角柱 axis=y、
      * 南面 1x2 门洞、玻璃窗、屋内火把),后写覆盖先写——与 build 工具的混排语义
      * 完全一致,免材料模式。
      */
@@ -323,9 +520,12 @@ public class CompanionGameTests {
         // 2) 墙体:walls 周界墙 y3-5(3 高,整墙地面臂展可及)(无顶底面——地板只有地基那一层,守则单层地板铁律)
         ordered.addAll(vol.apply("minecraft:oak_planks",
                 com.dwinovo.numen.core.tools.BuildTool.shapeCells("walls", false, 4, 3, 5, 15, 5, 14, null, null)));
-        // 3) 屋顶:roof 原语一笔成型(长轴为脊逐层收分,山墙填实,兼作天花板)
-        ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("roof", false, 4, 6, 5, 15, null, 14, null, null)));
+        // 3) 屋顶:楼梯砌斜面、脊沿长轴、山墙填实、出檐一格
+        BlockPos roofA = helper.absolutePos(new BlockPos(4, 6, 5));
+        BlockPos roofB = helper.absolutePos(new BlockPos(15, 6, 14));
+        ordered.addAll(com.dwinovo.numen.core.tools.BuildTool.roofCells(
+                roofA.getX(), roofA.getY(), roofA.getZ(), roofB.getX(), roofB.getZ(),
+                "minecraft:oak_stairs", "gable", "straight", 1, 0, null, "minecraft:oak_planks", "minecraft:oak_slab", true));
         // 4) 细节(后写覆盖先写):四角原木柱、南门洞 1x2、四扇玻璃窗、屋内火把
         for (int[] c : new int[][]{{4, 5}, {15, 5}, {4, 14}, {15, 14}}) {
             for (int y = 3; y <= 5; y++) {

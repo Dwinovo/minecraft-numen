@@ -77,12 +77,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /** 赴工地的时限:走不到就地开工,绝不因为路不通而不干活。 */
     private static final int TRAVEL_BUDGET_TICKS = 30 * 20;
-    /** 落位批次间隔(刻)。 */
-    private static final int BATCH_INTERVAL_TICKS = 2;
-    /** 免耗材(创造)每批格数——快,但仍看得见一层层长出来。 */
-    private static final int CELLS_PER_BATCH_FREE = 24;
-    /** 生存每批格数——慢一档,时间随格数走,盖房子该有分量。 */
-    private static final int CELLS_PER_BATCH_SURVIVAL = 4;
+    /**
+     * 施工节奏:由<b>目标总时长</b>反推速率,再夹在上下限之间。
+     *
+     * <p>固定速率两头不讨好:定成"每秒两格"的手感,小屋四分钟正好,五千多格的
+     * 大屋要盖四十九分钟;定快了小屋一眨眼就没了。改成先给一个总时长目标,速率
+     * 由格数除出来——不管盖多大,时长都可预期,而且都有戏看。
+     */
+    private static final double SURVIVAL_MIN_RATE = 2.0 / 20.0;    // 每秒 2 格,慢的那一头
+    private static final double SURVIVAL_TARGET_TICKS = 12 * 60 * 20;   // 再大也不超过 12 分钟
+    private static final double FREE_MAX_RATE = 100.0 / 20.0;      // 创造快,但不瞬移
+    private static final double FREE_TARGET_TICKS = 25 * 20;       // 再小也演满 25 秒
+    /** 单刻落位硬上限:再快也不能一刻塞几百格,那是卡顿不是建造。 */
+    private static final int MAX_CELLS_PER_TICK = 8;
     /** 挥臂间隔:与原版挥臂动画一轮的长度对齐。 */
     private static final int SWING_PERIOD_TICKS = 6;
     /** 手到落点那道粒子的采样点数。 */
@@ -141,8 +148,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /** 本遍施工顺序:低层先、层内清障→骨架→贴附、蛇形走位。 */
     private List<BuildTaskRecord.Target> order = List.of();
-    private int cursor;
-    private int batchTicks;
+    /** 当前层在 order 里的区间,以及本层已经轮到过的格。 */
+    private int layerStart;
+    private int layerEnd;
+    private int layerCursor;
+    private final LongOpenHashSet placedThisLayer = new LongOpenHashSet();
+    /** 每刻该落几格(可以是小数),以及攒下来的落位信用。 */
+    private double cellsPerTick;
+    private double placeCredit;
     private int swingCooldown;
     /** 已砌好又被外力弄没的格数(收工时用来解释"为什么磨了这么久")。 */
     private int damagedCells;
@@ -185,22 +198,38 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 生存记账的开工盘料:把还没达标的实体格按物品汇总,背包不够就逐项报缺——
-     * 模型拿到的是"先去筹什么、各差多少",不是一句干瘪的材料不足。免耗材画像
-     * (创造)不盘。拆除格与液体格不费料。
+     * 开工盘料:料不齐<b>整批拒绝,一格不动</b>。
+     *
+     * <p>试过放行"能盖多少盖多少",撤了。盖一半停下来的后果比拒绝严重得多:
+     * 半栋房子杵在原地,而续建要靠模型重发一模一样的指令——它多半发不一样,
+     * 于是新旧两版叠在同一片地基上。<b>拒绝是原子的,半成品不是。</b>
+     *
+     * <p>真正该改的不在这里:她把一栋房子拆成五次调用,盘料只盘到当前这一批,
+     * 于是墙砌完了才发现屋顶的料不够。整栋一次规划,这道门就只会响一次。
      */
     private Precondition.Failure checkMaterials() {
         if (!r.consumeMaterials) {
             return null;
         }
-        Map<Item, Integer> shortfall = shortfallAgainstInventory(remainingNeed());
+        Map<Item, Integer> need = remainingNeed();
+        Map<Item, Integer> shortfall = shortfallAgainstInventory(need);
         if (shortfall.isEmpty()) {
             return null;
         }
+        if (r.allowPartial) {
+            // 整幢图纸一趟本来就运不完:能开工就开工,补给跑几趟是常态而不是错误。
+            // 只有一格都买不起时才拦——那才是真的开不了工。
+            for (Item item : need.keySet()) {
+                if (hasItem(item, true)) {
+                    return null;
+                }
+            }
+        }
         return new Precondition.Failure(
                 "not enough materials yet — " + summarizeShortfall(shortfall)
-                        + ". Survival mode consumes 1 item per cell; tell the player what the big-ticket"
-                        + " items are and offer to gather or craft them together.",
+                        + ". Nothing was placed. Survival mode consumes 1 item per cell; gather these, "
+                        + "then send the SAME call again — anything already standing is skipped, so a "
+                        + "restocked repeat picks up exactly where this left off.",
                 FailureType.NO_MATERIAL);
     }
 
@@ -316,6 +345,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         registerProvider();
         updateCompleted();
         rebuildOrder();
+        computePace();
         passStartCompleted = r.completed();
         phase = Phase.TRAVEL;
     }
@@ -349,7 +379,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private TaskState tickTravel() {
         if (nav == null) {
             NavGoal goal = siteApproachGoal();
-            nav = PlayerNav.to(player, () -> new GoalCompiler.Compiled(goal, LongSets.emptySet(), null, false),
+            nav = PlayerNav.to(player,
+                    () -> new GoalCompiler.Compiled(goal, protectedCells(), null, false),
                     WALK_SPEED, () -> false, this);
             nav.setHighlights(this::pendingPositions);
         }
@@ -376,7 +407,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         stopNav();
         InputDriver.halt(player);
         phase = Phase.WORK;
-        batchTicks = 0;
+        placeCredit = 0;
         wanderTicks = 0;
         wanderTarget = null;
     }
@@ -402,43 +433,96 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             workPause--;
             return TaskState.RUNNING;
         }
-        if (++batchTicks < BATCH_INTERVAL_TICKS) {
+        // 速率可以小于每刻一格,所以用信用累积而不是"每 N 刻放一批":
+        // 生存慢到每十刻一格时,每一格都自成一批,节奏自然就散开了。
+        placeCredit += cellsPerTick;
+        int budget = (int) Math.min(placeCredit, MAX_CELLS_PER_TICK);
+        if (budget <= 0) {
             return TaskState.RUNNING;
         }
-        batchTicks = 0;
-        return runBatch();
+        return runBatch(budget);
     }
 
     /**
-     * 落一批。一次 tick 最多跨一个遍界——遍末的裁决(缺料/强行落位/收工)必须
-     * 各自独立成一刻,不然零进展的遍会在同一 tick 里连着翻,把裁决糊成一团。
+     * 落一批:在<b>当前最低的未完成层</b>里,挑离她最近的几格。
+     *
+     * <p>顺序仍然低层优先(上面的东西得有底下的东西撑着),但层内不再是固定的
+     * 蛇形——而是跟着她的位置走。以前落位顺序和她在哪毫无关系,于是观感是"她在
+     * 那边溜达,方块在这边冒出来":两条互不相干的动画叠在一起,一眼就假。绑上
+     * 之后,她走到东墙东墙就长,绕到南边南边接着长。<b>因果对上,比加多少粒子
+     * 都管用。</b>
      */
-    private TaskState runBatch() {
-        int budget = cellsPerBatch();
+    private TaskState runBatch(int budget) {
         List<BlockPos> touched = new ArrayList<>();
         BlockState sample = null;
-        while (budget > 0 && cursor < order.size()) {
-            BuildTaskRecord.Target target = order.get(cursor++);
+        while (budget > 0) {
+            BuildTaskRecord.Target target = nearestPendingInLayer();
+            if (target == null) {
+                break;
+            }
             BlockState placed = processCell(target);
+            layerCursor++;   // 无论成败都推进,免得同一格被反复挑中空转
             if (placed != null) {
                 budget--;
+                placeCredit -= 1.0;
                 touched.add(target.pos());
                 sample = placed;
             }
         }
         if (!touched.isEmpty()) {
             performWork(touched, sample);
-            // 翻过一层就停一拍:把刚砌好的这层扫一眼再往上。恒定输出是打印机,
-            // 有起伏才像人在干活——这一拍不改变任何结果,只改变观感。
-            int layer = touched.get(0).getY();
-            if (lastLayerY != Integer.MIN_VALUE && layer != lastLayerY) {
-                workPause = LAYER_PAUSE_TICKS;
-            }
-            lastLayerY = layer;
         }
-        if (cursor >= order.size()) {
+        if (layerCursor >= layerEnd) {
+            return advanceLayer();
+        }
+        return TaskState.RUNNING;
+    }
+
+    /**
+     * 当前层里离她最近的一格待建。
+     *
+     * <p>{@code layerCursor} 只用来保证"这一层每格都轮到过一次",不决定顺序;
+     * 真正的顺序由距离决定,所以她走到哪里哪里就长。
+     */
+    private BuildTaskRecord.Target nearestPendingInLayer() {
+        BuildTaskRecord.Target best = null;
+        double bestDist = Double.MAX_VALUE;
+        Vec3 me = player.position();
+        for (int i = layerStart; i < layerEnd; i++) {
+            BuildTaskRecord.Target t = order.get(i);
+            if (placedThisLayer.contains(t.pos().asLong())) {
+                continue;
+            }
+            double dx = t.pos().getX() + 0.5 - me.x;
+            double dz = t.pos().getZ() + 0.5 - me.z;
+            double d = dx * dx + dz * dz;
+            if (d < bestDist) {
+                bestDist = d;
+                best = t;
+            }
+        }
+        if (best != null) {
+            placedThisLayer.add(best.pos().asLong());
+        }
+        return best;
+    }
+
+    /** 这一层扫完了:翻到下一层,或者本遍到顶收遍。 */
+    private TaskState advanceLayer() {
+        // 翻层停一拍,把刚砌好的这层扫一眼。恒定输出是打印机,有起伏才像人在干活。
+        workPause = LAYER_PAUSE_TICKS;
+        placedThisLayer.clear();
+        layerStart = layerEnd;
+        layerCursor = layerStart;
+        if (layerStart >= order.size()) {
             return endPass();
         }
+        int y = order.get(layerStart).pos().getY();
+        int end = layerStart;
+        while (end < order.size() && order.get(end).pos().getY() == y) {
+            end++;
+        }
+        layerEnd = end;
         return TaskState.RUNNING;
     }
 
@@ -598,8 +682,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             barrenPasses = 0;
         } else if (++barrenPasses >= MAX_BARREN_PASSES) {
             if (!passMissing.isEmpty()) {
-                fail(missingReason() + "; built " + r.completed() + "/" + r.targets.size()
-                        + " so far", FailureType.NO_MATERIAL);
+                // 先报干了多少,再报还差什么——玩家要的是"还要凑多少才能收工",
+                // 不是一句材料不足。已经砌好的部分留在世界里,不回滚。
+                fail("built " + r.completed() + "/" + r.targets.size()
+                        + " and ran out — " + missingReason(), FailureType.NO_MATERIAL);
                 return TaskState.FAILED;
             }
             // 挪了窝也补不上:留案再交代。盖不完就是盖不完,不粉饰成成功。
@@ -697,9 +783,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 + (parts.isEmpty() ? "" : ": " + String.join("; ", parts));
     }
 
+    /** 还差什么才能收工——按此刻的剩余需求算,不是本遍的过程量。 */
     private String missingReason() {
-        return "we ran out of materials — " + summarizeShortfall(passMissing)
-                + "; gather these and ask me to carry on";
+        Map<Item, Integer> shortfall = shortfallAgainstInventory(remainingNeed());
+        if (shortfall.isEmpty()) {
+            shortfall = passMissing;   // 期间被人补过料的边缘情形,退回本遍统计
+        }
+        return "still needs " + summarizeShortfall(shortfall)
+                + ". Everything already standing stays; restock and send the SAME call again to carry "
+                + "on from exactly here — finished cells are skipped automatically.";
     }
 
     /** 收工:撤掉自己垫的脚手架,放一把庆祝的粒子。 */
@@ -747,17 +839,29 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             wanderTarget = nextWanderPoint();
             return;
         }
-        // 到没到只看水平距离:落脚点的 y 取的是工地底面,外沿地形起伏时
-        // 三维距离可能永远不满足,她会一路顶着走满时限。
-        double dx = player.getX() - wanderTarget.x;
-        double dz = player.getZ() - wanderTarget.z;
-        if (++wanderTicks > WANDER_WALK_TICKS || dx * dx + dz * dz < 1.5) {
+        // 走位交给寻路,不是朝目标推移动输入。直线步进遇到墙、树、坎就一路顶着
+        // 走满时限——实测就是"蹭着建筑边卡住"的那个样子。巡视点之间只有几格,
+        // 起一次 A* 的代价很低,而避障是它天生就会的事。
+        if (nav == null) {
+            Vec3 dest = wanderTarget;
+            nav = PlayerNav.to(player,
+                    () -> new GoalCompiler.Compiled(
+                            NavGoal.nearGround(BlockPos.containing(dest), 1.5),
+                            protectedCells(), null, false),
+                    WALK_SPEED, () -> false, this);
+        }
+        boolean done = switch (nav.tick()) {
+            case ARRIVED, FAILED -> true;
+            case RUNNING -> !nav.planningInFlight() && ++wanderTicks > WANDER_WALK_TICKS;
+        };
+        if (done) {
+            stopNav();
+            InputDriver.halt(player);
             wanderTarget = null;
             wanderTicks = 0;
-            InputDriver.halt(player);
-            return;
+            // 到一个点就停一拍看一眼,再去下一个——不是站四秒走两秒
+            workPause = Math.max(workPause, LAYER_PAUSE_TICKS);
         }
-        InputDriver.stepToward(player, wanderTarget, false);
     }
 
     /**
@@ -791,16 +895,18 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return best;
     }
 
-    /** 接下来一小段要盖的格子的水平重心;没有待建格则 null。 */
+    /** 当前这一层还没建的部分的水平重心;没有待建格则 null。 */
     private Vec3 upcomingFocus() {
-        int end = Math.min(order.size(), cursor + WANDER_LOOKAHEAD_CELLS);
         double x = 0;
         double z = 0;
         int n = 0;
-        for (int i = cursor; i < end; i++) {
-            BlockPos pos = order.get(i).pos();
-            x += pos.getX();
-            z += pos.getZ();
+        for (int i = layerStart; i < layerEnd && n < WANDER_LOOKAHEAD_CELLS; i++) {
+            BuildTaskRecord.Target t = order.get(i);
+            if (placedThisLayer.contains(t.pos().asLong())) {
+                continue;
+            }
+            x += t.pos().getX();
+            z += t.pos().getZ();
             n++;
         }
         return n == 0 ? null : new Vec3(x / n + 0.5, siteMin.getY(), z / n + 0.5);
@@ -881,7 +987,48 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 .thenComparingInt(t -> t.pos().getZ())
                 .thenComparingInt(t -> (t.pos().getZ() & 1) == 0 ? t.pos().getX() : -t.pos().getX()));
         order = pending;
-        cursor = 0;
+        resetLayerWindow();
+    }
+
+    /**
+     * 寻路对工地格的双重禁令:<b>不许拆、不许占</b>。
+     *
+     * <p>不许拆——否则她会为了抄近路把自己刚砌好的墙打个洞穿过去,一边建一边拆。
+     * 不许占——否则寻路会拿垫柱材料把某个目标格填上,那格从此和图纸对不上,还得
+     * 先拆再放。
+     */
+    private LongSet protectedCells() {
+        if (siteCells == null) {
+            siteCells = new LongOpenHashSet(targetByPos.keySet());
+        }
+        return siteCells;
+    }
+
+    private LongOpenHashSet siteCells;
+
+    /** 把工地格并进寻路收到的禁令集——两条禁令对本任务起的每一次寻路都生效。 */
+    private LongSet union(LongSet other) {
+        if (other == null || other.isEmpty()) {
+            return protectedCells();
+        }
+        LongOpenHashSet merged = new LongOpenHashSet(protectedCells());
+        merged.addAll(other);
+        return merged;
+    }
+
+    /** 把层窗口对准 order 里最低的那一层。 */
+    private void resetLayerWindow() {
+        placedThisLayer.clear();
+        layerStart = 0;
+        layerCursor = 0;
+        layerEnd = 0;
+        if (order.isEmpty()) {
+            return;
+        }
+        int y = order.get(0).pos().getY();
+        while (layerEnd < order.size() && order.get(layerEnd).pos().getY() == y) {
+            layerEnd++;
+        }
     }
 
     /** 层内阶段:清障 0 → 骨架 1 → 贴附 2。 */
@@ -894,13 +1041,23 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 BlockPos.ZERO) ? 1 : 2;
     }
 
-    private int cellsPerBatch() {
-        return r.consumeMaterials ? CELLS_PER_BATCH_SURVIVAL : CELLS_PER_BATCH_FREE;
+    /** 按格数和目标时长定这一趟的速率(开工时算一次)。 */
+    private void computePace() {
+        int cells = Math.max(1, r.targets.size());
+        if (r.consumeMaterials) {
+            cellsPerTick = Math.max(SURVIVAL_MIN_RATE, cells / SURVIVAL_TARGET_TICKS);
+        } else {
+            cellsPerTick = Math.min(FREE_MAX_RATE, cells / FREE_TARGET_TICKS);
+        }
+        com.dwinovo.numen.core.Constants.LOG.debug(
+                "[numen-build] 节奏 {} 格,{} 格/秒,预计 {} 秒",
+                cells, String.format("%.1f", cellsPerTick * 20),
+                (int) (cells / cellsPerTick / 20));
     }
 
     private List<BlockPos> pendingPositions() {
         List<BlockPos> out = new ArrayList<>();
-        for (int i = cursor; i < order.size() && out.size() < 64; i++) {
+        for (int i = layerStart; i < order.size() && out.size() < 64; i++) {
             out.add(order.get(i).pos());
         }
         return out;
@@ -1156,7 +1313,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     @Override
     public CalculationContext forSearch(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
-        return ContextFactory.forSearch(player, sacred, deniedPlace,
+        return ContextFactory.forSearch(player, union(sacred), union(deniedPlace),
                 (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
                         p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true),
                         r.replaceExisting));
@@ -1164,7 +1321,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     @Override
     public CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
-        return ContextFactory.forExecution(player, sacred, deniedPlace,
+        return ContextFactory.forExecution(player, union(sacred), union(deniedPlace),
                 (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
                         p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true),
                         r.replaceExisting));

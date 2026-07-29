@@ -1,0 +1,128 @@
+package com.dwinovo.numen.core.tools;
+
+import com.dwinovo.numen.agent.tool.ToolArgs;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 加权调色板:一条指令的方块参数可以是一族方块,而不是单一方块。
+ *
+ * <p>一整面同色的墙是"一眼假"的头号来源。真实建筑的表面从来不是纯色——石墙里
+ * 掺苔石与裂石,木墙里掺原木与去皮木。把混搭做进原语层,每一处平面自动带质感,
+ * 不必让模型逐格去想,也不必把一面墙拆成十几条指令。
+ *
+ * <p>写法:{@code "stone_bricks*8, mossy_stone_bricks, cracked_stone_bricks"}。
+ * 省略权重即为 1;只写一种就退化成从前的单方块行为。
+ *
+ * <p>取样按<b>位置哈希</b>,不用随机数发生器:同一格永远取到同一个方块。于是
+ * 预览与施工一致、重跑一致、断点续建也一致——这三件事任缺其一,玩家看到的房子
+ * 就会和确认过的那张不是同一栋。
+ */
+public final class BuildPalette {
+
+    /** 单项:方块 + 对应物品 + 权重。 */
+    public record Entry(Block block, Item item, String label, int weight) {}
+
+    private final List<Entry> entries;
+    private final int totalWeight;
+
+    private BuildPalette(List<Entry> entries) {
+        this.entries = List.copyOf(entries);
+        int sum = 0;
+        for (Entry e : entries) {
+            sum += e.weight();
+        }
+        this.totalWeight = Math.max(1, sum);
+    }
+
+    /**
+     * 解析方块参数。
+     *
+     * @param spec {@code "oak_planks"} 或 {@code "stone*8, mossy_cobblestone*2, cobblestone"}
+     */
+    public static BuildPalette parse(String spec) {
+        if (spec == null || spec.isBlank()) {
+            throw new IllegalArgumentException("block_id must not be empty");
+        }
+        List<Entry> entries = new ArrayList<>();
+        for (String part : spec.split(",")) {
+            String token = part.trim();
+            if (token.isEmpty()) {
+                continue;
+            }
+            int weight = 1;
+            int star = token.lastIndexOf('*');
+            if (star > 0) {
+                String tail = token.substring(star + 1).trim();
+                try {
+                    weight = Math.max(1, Integer.parseInt(tail));
+                    token = token.substring(0, star).trim();
+                } catch (NumberFormatException ignored) {
+                    // 不是权重后缀(方块名里本来就带星号的情形),整段当方块名
+                }
+            }
+            entries.add(toEntry(token, weight));
+        }
+        if (entries.isEmpty()) {
+            throw new IllegalArgumentException("block_id must name at least one block");
+        }
+        return new BuildPalette(entries);
+    }
+
+    private static Entry toEntry(String id, int weight) {
+        Item item = ToolArgs.parseItem(id);
+        Block block;
+        if (item == Items.AIR) {
+            block = Blocks.AIR;
+        } else if (item instanceof BlockItem blockItem) {
+            block = blockItem.getBlock();
+        } else {
+            throw new IllegalArgumentException(id + " is not a placeable block");
+        }
+        String label = id.contains(":") ? id.split(":", 2)[1] : id;
+        return new Entry(block, item, label, weight);
+    }
+
+    /** 只有一种方块吗——单色时可以跳过逐格取样。 */
+    public boolean isSingle() {
+        return entries.size() == 1;
+    }
+
+    public Entry first() {
+        return entries.get(0);
+    }
+
+    /**
+     * 取这一格该用哪个方块。
+     *
+     * <p>位置哈希而非随机数:调色板的意义是"看起来自然",不是"每次都不同"。
+     * 每次都不同反而是灾难——玩家点头确认的那张预览和最终盖出来的会是两栋房子。
+     */
+    public Entry pick(BlockPos pos) {
+        if (entries.size() == 1) {
+            return entries.get(0);
+        }
+        long h = pos.getX() * 341873128712L
+                + pos.getY() * 1971648029L
+                + pos.getZ() * 132897987541L;
+        h ^= h >>> 29;
+        h *= 0xff51afd7ed558ccdL;
+        h ^= h >>> 32;
+        int roll = (int) Math.floorMod(h, totalWeight);
+        for (Entry e : entries) {
+            roll -= e.weight();
+            if (roll < 0) {
+                return e;
+            }
+        }
+        return entries.get(entries.size() - 1);
+    }
+}

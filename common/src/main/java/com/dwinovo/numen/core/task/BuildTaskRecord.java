@@ -23,6 +23,18 @@ public final class BuildTaskRecord extends TaskRecord {
     public final boolean replaceExisting;
     /** 是否消耗背包材料:随能力画像而定(创造免耗材,生存逐格真扣)。 */
     public final boolean consumeMaterials;
+    /**
+     * 料不齐时允许分段施工:<b>能建多少建多少</b>,收工报还差什么。
+     *
+     * <p>按调用入口分,不一刀切。小活(手写格集)背包装得下,整批拒绝的原子性
+     * 更值钱——半成品比没开工糟。整幢图纸装不下:满背包 36 格顶天两千来块,而
+     * 一栋房子上百种方块、几千格,<b>一趟本来就运不完</b>,拒绝等于永远开不了工。
+     *
+     * <p>分段之所以不留废墟,是因为续建是精确的:每一遍的待建集都从"图纸与世界
+     * 当下的差集"重算,已经建对的格自动跳过。补齐材料后原样再发一次同一个调用,
+     * 就从断点接上——不需要记住计划,因为世界本身就是计划的进度。
+     */
+    public final boolean allowPartial;
 
     private int placed;
     private int broken;
@@ -34,15 +46,21 @@ public final class BuildTaskRecord extends TaskRecord {
 
     public BuildTaskRecord(String toolCallId, long deadlineGameTime,
                            List<Target> targets, boolean replaceExisting) {
-        this(toolCallId, deadlineGameTime, targets, replaceExisting, true);
+        this(toolCallId, deadlineGameTime, targets, replaceExisting, true, false);
     }
 
     public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
                            boolean replaceExisting, boolean consumeMaterials) {
+        this(toolCallId, deadlineGameTime, targets, replaceExisting, consumeMaterials, false);
+    }
+
+    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
+                           boolean replaceExisting, boolean consumeMaterials, boolean allowPartial) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.targets = List.copyOf(targets);
         this.replaceExisting = replaceExisting;
         this.consumeMaterials = consumeMaterials;
+        this.allowPartial = allowPartial;
     }
 
     public int placed() {
