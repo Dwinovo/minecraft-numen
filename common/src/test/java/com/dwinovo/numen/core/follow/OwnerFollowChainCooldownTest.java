@@ -19,7 +19,7 @@ class OwnerFollowChainCooldownTest {
     void failedNavigationSetsDeadlineFromSnapshotGameTime() {
         OwnerFollowChainTestHarness harness = failedAt(50L);
 
-        OwnerFollowChain.RuntimeView view = harness.chain.runtimeView();
+        FollowRuntimeSnapshot view = harness.chain.runtimeView();
         assertEquals(FollowRuntimeState.FAILED_COOLDOWN, view.runtimeState());
         assertEquals(FollowWaitingReason.NONE, view.waitingReason());
         assertEquals(150L, view.failedUntilTick());
@@ -130,7 +130,7 @@ class OwnerFollowChainCooldownTest {
 
         harness.chain.onInterrupt(null);
 
-        OwnerFollowChain.RuntimeView view = harness.chain.runtimeView();
+        FollowRuntimeSnapshot view = harness.chain.runtimeView();
         assertEquals(FollowRuntimeState.FOLLOWING, view.runtimeState());
         assertTrue(view.following());
         assertFalse(view.sprintAllowed());
@@ -183,7 +183,7 @@ class OwnerFollowChainCooldownTest {
 
         harness.chain.getPriority(null);
 
-        OwnerFollowChain.RuntimeView view = harness.chain.runtimeView();
+        FollowRuntimeSnapshot view = harness.chain.runtimeView();
         assertEquals(FollowRuntimeState.WAITING_FOR_OWNER, view.runtimeState());
         assertEquals(FollowWaitingReason.OWNER_TOO_FAR, view.waitingReason());
         assertNotEquals(FollowRuntimeState.FAILED_COOLDOWN, view.runtimeState());

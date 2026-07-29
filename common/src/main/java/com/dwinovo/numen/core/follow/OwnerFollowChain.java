@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.follow;
 
 import java.util.Objects;
+import java.util.UUID;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
@@ -11,6 +12,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskChain;
 
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 
 /**
  * Lowest-priority, per-companion owner following.
@@ -20,7 +22,7 @@ import net.minecraft.server.level.ServerPlayer;
  * ticks, the dynamic goal, and the arrival predicate all resolve the
  * companion's current owner again.
  */
-public final class OwnerFollowChain implements TaskChain {
+public final class OwnerFollowChain implements TaskChain, FollowRuntimeControl {
 
     public static final float PRIORITY = FollowDecisions.PRIORITY;
     public static final double DEFAULT_STOP_DISTANCE =
@@ -50,6 +52,11 @@ public final class OwnerFollowChain implements TaskChain {
     private boolean sprintAllowed;
     private boolean catchingUp;
     private long failedUntilTick = FollowDecisions.NO_FAILED_COOLDOWN;
+    private long lastObservedGameTime;
+    private transient UUID boundCompanionUuid;
+    private transient UUID terminalCompanionUuid;
+    private transient NumenPlayer boundCompanion;
+    private transient FollowStateStore boundStore;
 
     public OwnerFollowChain() {
         this(new LiveFollowAccess(), OwnerFollowChain::createPlayerNavigation, InputDriver::halt);
@@ -64,19 +71,23 @@ public final class OwnerFollowChain implements TaskChain {
 
     @Override
     public float getPriority(NumenPlayer companion) {
-        Decision decision = decide(
-                followAccess.snapshot(companion), following, failedUntilTick);
+        ensureBound(companion);
+        Snapshot snapshot = followAccess.snapshot(companion);
+        observe(snapshot);
+        Decision decision = decide(snapshot, following, failedUntilTick);
         apply(decision);
         return decision.priority();
     }
 
     @Override
     public void tick(NumenPlayer companion) {
+        ensureBound(companion);
         Snapshot snapshot = followAccess.snapshot(companion);
+        observe(snapshot);
         Decision decision = decide(snapshot, following, failedUntilTick);
         apply(decision);
         if (!decision.active()) {
-            releaseControl(companion);
+            releaseControl(inactiveReason(snapshot), companion, true);
             return;
         }
 
@@ -97,23 +108,25 @@ public final class OwnerFollowChain implements TaskChain {
         }
 
         if (status == PlayerNav.Status.ARRIVED) {
-            Decision arrival = decide(
-                    followAccess.snapshot(companion), following, failedUntilTick);
+            Snapshot arrivalSnapshot = followAccess.snapshot(companion);
+            observe(arrivalSnapshot);
+            Decision arrival = decide(arrivalSnapshot, following, failedUntilTick);
             apply(arrival);
             if (!arrival.active()) {
-                releaseControl(companion);
+                releaseControl(inactiveReason(arrivalSnapshot), companion, true);
             }
             return;
         }
         if (status == PlayerNav.Status.FAILED) {
-            releaseControl(companion);
+            releaseControl(
+                    FollowReleaseReason.INTERNAL_STATE_CHANGE, companion, true);
             apply(failedAt(decision, snapshot.gameTime()));
         }
     }
 
     @Override
     public void onInterrupt(NumenPlayer companion) {
-        releaseControl(companion);
+        releaseControl(FollowReleaseReason.SCHEDULER_INTERRUPT, companion, true);
     }
 
     @Override
@@ -121,25 +134,157 @@ public final class OwnerFollowChain implements TaskChain {
         return "owner_follow";
     }
 
+    @Override
+    public UUID companionUuid() {
+        return boundCompanionUuid;
+    }
+
+    @Override
+    public void release(FollowReleaseReason reason) {
+        releaseControl(Objects.requireNonNull(reason, "reason"), null, false);
+    }
+
+    @Override
+    public FollowRuntimeSnapshot snapshot(long currentGameTime) {
+        return new FollowRuntimeSnapshot(
+                runtimeState,
+                waitingReason,
+                following,
+                navigation != null,
+                sprintAllowed,
+                catchingUp,
+                failedUntilTick,
+                FollowDecisions.remainingCooldownTicks(
+                        failedUntilTick, currentGameTime));
+    }
+
     /**
-     * Idempotently relinquishes both pathing and movement input. The hysteresis
-     * latch is intentionally retained across scheduler pre-emption.
+     * Idempotently relinquishes pathing and movement input, then applies the
+     * reason-specific transient-state policy. It never changes persistent
+     * {@link FollowState}.
      */
-    private void releaseControl(NumenPlayer companion) {
+    private void releaseControl(
+            FollowReleaseReason reason,
+            NumenPlayer immediateCompanion,
+            boolean haltWithoutBoundForSchedulerCall) {
         Navigation active = navigation;
+        NumenPlayer haltTarget =
+                immediateCompanion != null ? immediateCompanion : boundCompanion;
+        RuntimeException failure = null;
         try {
             if (active != null) {
                 active.stop();
             }
+        } catch (RuntimeException exception) {
+            failure = exception;
+        }
+        try {
+            if (haltTarget != null || haltWithoutBoundForSchedulerCall) {
+                haltAction.halt(haltTarget);
+            }
+        } catch (RuntimeException exception) {
+            if (failure == null) {
+                failure = exception;
+            } else {
+                failure.addSuppressed(exception);
+            }
         } finally {
-            try {
-                haltAction.halt(companion);
-            } finally {
-                navigation = null;
-                sprintAllowed = false;
-                catchingUp = false;
+            navigation = null;
+            sprintAllowed = false;
+            catchingUp = false;
+        }
+
+        applyReleaseState(reason);
+        if (failure != null) {
+            throw failure;
+        }
+    }
+
+    private void applyReleaseState(FollowReleaseReason reason) {
+        switch (reason) {
+            case SCHEDULER_INTERRUPT, INTERNAL_STATE_CHANGE -> {
+                // Preserve the Stage 4 hysteresis latch and failure deadline.
+            }
+            case FOLLOW_DISABLED -> resetRuntime(
+                    FollowRuntimeState.DISABLED, FollowWaitingReason.NONE, false);
+            case MANUAL_PAUSE -> resetRuntime(
+                    FollowRuntimeState.MANUALLY_PAUSED, FollowWaitingReason.NONE, false);
+            case COMPANION_DEATH, COMPANION_REMOVED -> {
+                resetRuntime(FollowRuntimeState.WAITING_FOR_OWNER,
+                        FollowWaitingReason.COMPANION_NOT_ACTIVE, true);
+            }
+            case SERVER_STOPPING, RUNTIME_REPLACED -> {
+                resetRuntime(FollowRuntimeState.DISABLED,
+                        FollowWaitingReason.NONE, true);
             }
         }
+    }
+
+    private void resetRuntime(
+            FollowRuntimeState newState,
+            FollowWaitingReason newWaitingReason,
+            boolean terminateBinding) {
+        runtimeState = newState;
+        waitingReason = newWaitingReason;
+        following = false;
+        failedUntilTick = FollowDecisions.NO_FAILED_COOLDOWN;
+        if (terminateBinding) {
+            terminalCompanionUuid = boundCompanionUuid;
+            boundCompanionUuid = null;
+            boundCompanion = null;
+            boundStore = null;
+        }
+    }
+
+    private void ensureBound(NumenPlayer companion) {
+        if (companion == null || companion.isRemoved() || !companion.isAlive()) {
+            return;
+        }
+        MinecraftServer server = companion.level().getServer();
+        if (server == null) {
+            return;
+        }
+
+        UUID companionUuid = companion.getUUID();
+        if (companionUuid.equals(terminalCompanionUuid)) {
+            return;
+        }
+        FollowStateStore store = FollowStateStore.get(server);
+        if (companionUuid.equals(boundCompanionUuid) && store == boundStore) {
+            boundCompanion = companion;
+            return;
+        }
+
+        if (boundCompanionUuid != null && boundStore != null) {
+            UUID previousUuid = boundCompanionUuid;
+            try {
+                boundStore.removeRuntime(
+                        previousUuid, FollowReleaseReason.RUNTIME_REPLACED);
+            } finally {
+                if (previousUuid.equals(terminalCompanionUuid)) {
+                    terminalCompanionUuid = null;
+                }
+            }
+        }
+
+        boundCompanionUuid = companionUuid;
+        boundCompanion = companion;
+        boundStore = store;
+        store.bindRuntime(companionUuid, this);
+    }
+
+    private void observe(Snapshot snapshot) {
+        lastObservedGameTime = snapshot.gameTime();
+    }
+
+    private static FollowReleaseReason inactiveReason(Snapshot snapshot) {
+        if (!snapshot.state().enabled()) {
+            return FollowReleaseReason.FOLLOW_DISABLED;
+        }
+        if (snapshot.state().manualPaused()) {
+            return FollowReleaseReason.MANUAL_PAUSE;
+        }
+        return FollowReleaseReason.INTERNAL_STATE_CHANGE;
     }
 
     static Decision decide(Snapshot snapshot, boolean wasFollowing) {
@@ -178,9 +323,8 @@ public final class OwnerFollowChain implements TaskChain {
         return navigation != null;
     }
 
-    RuntimeView runtimeView() {
-        return new RuntimeView(runtimeState, waitingReason, following,
-                sprintAllowed, catchingUp, failedUntilTick, navigation != null);
+    FollowRuntimeSnapshot runtimeView() {
+        return snapshot(lastObservedGameTime);
     }
 
     long remainingCooldownTicks(long currentTick) {
@@ -255,15 +399,6 @@ public final class OwnerFollowChain implements TaskChain {
                     sameLevel, distance, 0L);
         }
     }
-
-    record RuntimeView(
-            FollowRuntimeState runtimeState,
-            FollowWaitingReason waitingReason,
-            boolean following,
-            boolean sprintAllowed,
-            boolean catchingUp,
-            long failedUntilTick,
-            boolean navigationActive) {}
 
     interface FollowAccess {
         Snapshot snapshot(NumenPlayer companion);

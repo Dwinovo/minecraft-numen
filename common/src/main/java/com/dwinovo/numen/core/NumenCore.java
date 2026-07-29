@@ -12,6 +12,8 @@ import com.dwinovo.numen.network.payload.ExecuteToolPayload;
 import com.dwinovo.numen.network.payload.TaskResultPayload;
 import com.dwinovo.numen.task.CompanionTaskFactory;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
+import com.dwinovo.numen.core.follow.FollowReleaseReason;
+import com.dwinovo.numen.core.follow.FollowService;
 import com.dwinovo.numen.core.task.BuildCompanionTask;
 import com.dwinovo.numen.core.task.BuildTaskRecord;
 import com.dwinovo.numen.core.task.CollectItemsTaskGoal;
@@ -38,6 +40,9 @@ import com.dwinovo.numen.core.task.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MineCompanionTask;
 import com.dwinovo.numen.core.task.MoveToCompanionTask;
 import com.dwinovo.numen.core.task.MoveToTaskRecord;
+import com.dwinovo.numen.entity.NumenPlayer;
+
+import net.minecraft.server.MinecraftServer;
 
 /**
  * Loader-agnostic init for the {@code numen-core} tool pack — the worked example
@@ -65,6 +70,7 @@ public final class NumenCore {
     public static void init() {
         if (initialised) return;
         initialised = true;
+        registerFollowLifecycle();
         registerTools();
         registerTaskRunners();
         registerChains();
@@ -75,6 +81,25 @@ public final class NumenCore {
         com.dwinovo.numen.core.task.SurvivalConfig.setEnabled(true);
         Constants.LOG.info("[numen-core] registered {} tool(s), {} task type(s); survival chains enabled",
                 ToolRegistry.size(), CompanionTaskFactory.size());
+    }
+
+    /**
+     * Releases the transient runtime before the API removes the companion body.
+     * Persistent follow intent is deliberately untouched.
+     */
+    private static void registerFollowLifecycle() {
+        CompanionLifecycle.onDeath(companion ->
+                removeFollowRuntime(companion, FollowReleaseReason.COMPANION_DEATH));
+        CompanionLifecycle.onRemove(companion ->
+                removeFollowRuntime(companion, FollowReleaseReason.COMPANION_REMOVED));
+    }
+
+    private static void removeFollowRuntime(
+            NumenPlayer companion, FollowReleaseReason reason) {
+        MinecraftServer server = companion.level().getServer();
+        if (server != null) {
+            FollowService.removeRuntime(server, companion.getUUID(), reason);
+        }
     }
 
     /**

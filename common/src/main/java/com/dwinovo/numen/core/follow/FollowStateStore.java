@@ -2,9 +2,13 @@ package com.dwinovo.numen.core.follow;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.dwinovo.numen.core.Constants;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -32,13 +36,16 @@ public final class FollowStateStore extends SavedData {
     private static final String KEY_START_DISTANCE = "startDistanceOverride";
 
     private final Map<UUID, FollowState> states;
+    private final transient Map<UUID, FollowRuntimeControl> runtimeControls;
 
     FollowStateStore() {
         this.states = new HashMap<>();
+        this.runtimeControls = new HashMap<>();
     }
 
     private FollowStateStore(Map<UUID, FollowState> states) {
         this.states = new HashMap<>(states);
+        this.runtimeControls = new HashMap<>();
     }
 
     public static FollowStateStore get(MinecraftServer server) {
@@ -185,6 +192,99 @@ public final class FollowStateStore extends SavedData {
     public void remove(UUID companionUuid) {
         if (states.remove(companionUuid) != null) {
             setDirty();
+        }
+    }
+
+    /**
+     * Binds the currently live runtime for a companion. Rebinding the same
+     * object is a no-op. A replacement becomes visible before the displaced
+     * runtime is released, so a callback from the old runtime cannot remove the
+     * new binding.
+     */
+    public void bindRuntime(UUID companionUuid, FollowRuntimeControl control) {
+        Objects.requireNonNull(companionUuid, "companionUuid");
+        Objects.requireNonNull(control, "control");
+        if (!companionUuid.equals(control.companionUuid())) {
+            throw new IllegalArgumentException(
+                    "runtime control companion UUID does not match binding key");
+        }
+
+        FollowRuntimeControl previous = runtimeControls.put(companionUuid, control);
+        if (previous == null || previous == control) {
+            return;
+        }
+        releaseSafely(previous, FollowReleaseReason.RUNTIME_REPLACED);
+    }
+
+    public Optional<FollowRuntimeControl> runtimeControl(UUID companionUuid) {
+        return Optional.ofNullable(runtimeControls.get(
+                Objects.requireNonNull(companionUuid, "companionUuid")));
+    }
+
+    public Optional<FollowRuntimeSnapshot> runtimeSnapshot(
+            UUID companionUuid, long currentGameTime) {
+        return runtimeControl(companionUuid)
+                .map(control -> control.snapshot(currentGameTime));
+    }
+
+    /**
+     * Releases movement while retaining the runtime binding for later resume.
+     */
+    public void releaseRuntime(UUID companionUuid, FollowReleaseReason reason) {
+        Objects.requireNonNull(reason, "reason");
+        FollowRuntimeControl control = runtimeControls.get(
+                Objects.requireNonNull(companionUuid, "companionUuid"));
+        if (control != null) {
+            releaseSafely(control, reason);
+        }
+    }
+
+    /**
+     * Removes the binding before release so release callbacks cannot observe a
+     * stale registered runtime.
+     */
+    public void removeRuntime(UUID companionUuid, FollowReleaseReason reason) {
+        Objects.requireNonNull(reason, "reason");
+        FollowRuntimeControl control = runtimeControls.remove(
+                Objects.requireNonNull(companionUuid, "companionUuid"));
+        if (control != null) {
+            releaseSafely(control, reason);
+        }
+    }
+
+    /**
+     * Clears all bindings before releasing a stable copy. One faulty runtime
+     * cannot prevent the others from relinquishing control.
+     *
+     * @return number of runtime releases that threw
+     */
+    public int releaseAllRuntime(FollowReleaseReason reason) {
+        Objects.requireNonNull(reason, "reason");
+        List<FollowRuntimeControl> controls = List.copyOf(runtimeControls.values());
+        runtimeControls.clear();
+        int failures = 0;
+        for (FollowRuntimeControl control : controls) {
+            if (!releaseSafely(control, reason)) {
+                failures++;
+            }
+        }
+        return failures;
+    }
+
+    int runtimeControlCount() {
+        return runtimeControls.size();
+    }
+
+    private static boolean releaseSafely(
+            FollowRuntimeControl control, FollowReleaseReason reason) {
+        try {
+            control.release(reason);
+            return true;
+        } catch (RuntimeException exception) {
+            Constants.LOG.error(
+                    "[owner-follow] failed to release a transient runtime for {}",
+                    reason, exception);
+            return false;
         }
     }
 }

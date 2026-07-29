@@ -23,7 +23,7 @@ class OwnerFollowChainRuntimeTest {
     void newChainStartsDisabledWithNoWaitingReasonOrNavigation() {
         OwnerFollowChain chain = new OwnerFollowChain();
 
-        OwnerFollowChain.RuntimeView view = chain.runtimeView();
+        FollowRuntimeSnapshot view = chain.runtimeView();
 
         assertEquals(FollowRuntimeState.DISABLED, view.runtimeState());
         assertEquals(FollowWaitingReason.NONE, view.waitingReason());
@@ -41,7 +41,7 @@ class OwnerFollowChainRuntimeTest {
 
         harness.chain.tick(null);
 
-        OwnerFollowChain.RuntimeView view = harness.chain.runtimeView();
+        FollowRuntimeSnapshot view = harness.chain.runtimeView();
         assertEquals(FollowRuntimeState.FOLLOWING, view.runtimeState());
         assertEquals(FollowWaitingReason.NONE, view.waitingReason());
         assertTrue(view.following());
@@ -102,7 +102,7 @@ class OwnerFollowChainRuntimeTest {
 
         harness.chain.tick(null);
 
-        OwnerFollowChain.RuntimeView view = harness.chain.runtimeView();
+        FollowRuntimeSnapshot view = harness.chain.runtimeView();
         assertEquals(FollowRuntimeState.FOLLOWING, view.runtimeState());
         assertTrue(view.sprintAllowed());
         assertTrue(view.catchingUp());
@@ -119,7 +119,7 @@ class OwnerFollowChainRuntimeTest {
         harness.access.snapshot = activeAt(64.0, 11L);
         harness.chain.tick(null);
 
-        OwnerFollowChain.RuntimeView view = harness.chain.runtimeView();
+        FollowRuntimeSnapshot view = harness.chain.runtimeView();
         assertEquals(FollowRuntimeState.WAITING_FOR_OWNER, view.runtimeState());
         assertEquals(FollowWaitingReason.OWNER_TOO_FAR, view.waitingReason());
         assertEquals(1, navigation.stops);
@@ -140,7 +140,7 @@ class OwnerFollowChainRuntimeTest {
 
         harness.chain.tick(null);
 
-        OwnerFollowChain.RuntimeView view = harness.chain.runtimeView();
+        FollowRuntimeSnapshot view = harness.chain.runtimeView();
         assertEquals(FollowRuntimeState.WAITING_FOR_OWNER, view.runtimeState());
         assertEquals(FollowWaitingReason.OWNER_OFFLINE, view.waitingReason());
         assertEquals(1, navigation.stops);
