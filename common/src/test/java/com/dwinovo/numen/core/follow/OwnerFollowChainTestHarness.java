@@ -96,6 +96,7 @@ final class OwnerFollowChainTestHarness {
             FakeNavigation navigation = new FakeNavigation(nextStatus);
             navigation.goal = goal;
             navigation.reached = reached;
+            navigation.contextProvider = contextProvider;
             navigation.sprintAllowed = sprintAllowed;
             created.add(navigation);
             this.contextProvider = contextProvider;
@@ -113,8 +114,11 @@ final class OwnerFollowChainTestHarness {
         int ticks;
         int stops;
         Runnable onTick = () -> {};
+        Runnable onStop = () -> {};
+        boolean throwOnStop;
         Supplier<GoalCompiler.Compiled> goal;
         BooleanSupplier reached;
+        PlayerNav.ContextProvider contextProvider;
         BooleanSupplier sprintAllowed;
 
         FakeNavigation(PlayerNav.Status status) {
@@ -131,15 +135,23 @@ final class OwnerFollowChainTestHarness {
         @Override
         public void stop() {
             stops++;
+            onStop.run();
+            if (throwOnStop) {
+                throw new IllegalStateException("deliberate navigation stop failure");
+            }
         }
     }
 
     static final class FakeHalt implements OwnerFollowChain.HaltAction {
         int calls;
+        boolean throwOnHalt;
 
         @Override
         public void halt(NumenPlayer companion) {
             calls++;
+            if (throwOnHalt) {
+                throw new IllegalStateException("deliberate input halt failure");
+            }
         }
     }
 }
