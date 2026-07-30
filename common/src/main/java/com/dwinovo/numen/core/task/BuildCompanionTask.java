@@ -368,7 +368,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** 背包里有几件满足这一笔要求的东西——口径由这笔要求自己说。 */
     private int countMatching(BuildTaskRecord.CellNeed need) {
         Inventory inventory = player.getInventory();
-        int limit = Math.min(36, inventory.items.size());
+        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
         int n = 0;
         for (int i = 0; i < limit; i++) {
             ItemStack stack = inventory.getItem(i);
@@ -385,7 +385,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return;
         }
         Inventory inventory = player.getInventory();
-        int limit = Math.min(36, inventory.items.size());
+        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
         for (int i = 0; i < limit; i++) {
             ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty() && need.matches(stack)) {
@@ -1797,7 +1797,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return;   // 任务中途被切成免耗材画像:记账即刻停手,别扣真方块
         }
         Inventory inventory = player.getInventory();
-        int limit = Math.min(36, inventory.items.size());   // 与存量口径同源
+        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());   // 与存量口径同源
         for (int i = 0; i < limit; i++) {
             ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty() && stack.is(item)) {
@@ -1965,7 +1965,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private int strictCount(ItemStack want) {
         Inventory inventory = player.getInventory();
-        int limit = Math.min(36, inventory.items.size());
+        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
         int n = 0;
         for (int i = 0; i < limit; i++) {
             ItemStack stack = inventory.getItem(i);
@@ -1982,7 +1982,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return true;
         }
         Inventory inventory = player.getInventory();
-        int limit = Math.min(36, inventory.items.size());
+        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
         for (int i = 0; i < limit; i++) {
             ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, want)) {
@@ -2028,21 +2028,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     private int mainInventoryCount(Item item) {
-        Inventory inventory = player.getInventory();
-        int count = 0;
-        int limit = Math.min(36, inventory.items.size());
-        for (int i = 0; i < limit; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && stack.is(item)) {
-                count += stack.getCount();
-            }
-        }
-        return count;
+        return PlayerInv.buildableCount(player.getInventory(), item);
     }
 
     private int findMainInventorySlot(Item item) {
         Inventory inventory = player.getInventory();
-        int limit = Math.min(36, inventory.items.size());
+        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
         for (int i = 9; i < limit; i++) {
             ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty() && stack.is(item)) {
@@ -2056,7 +2047,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         Set<BlockState> states = new HashSet<>();
         Inventory inventory = player.getInventory();
         int limit = wholeInventory && NavSettings.get().allowInventory
-                ? Math.min(36, inventory.items.size()) : 9;
+                ? Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size()) : 9;
         for (int i = 0; i < limit; i++) {
             addAvailableState(states, inventory.getItem(i));
         }

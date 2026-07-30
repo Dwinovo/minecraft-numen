@@ -1403,6 +1403,41 @@ public class CompanionGameTests {
     }
 
     /**
+     * 报价数背包和施工数背包必须是<b>同一个口径</b>——副手上那叠料不算数。
+     *
+     * <p>这个分岔犯过两次,症状一模一样:一整叠木板放在副手,数 41 格(含盔甲栏与副手)
+     * 的那一方说"料够了",数 36 格的那一方每格都判缺料。第一次是在开工预检与逐格闸门
+     * 之间,第二次是在 {@code blueprint_read} 的报价与施工之间——玩家看着手里那叠木板,
+     * 而我们两张嘴说两样话,他没法判断该信谁。
+     *
+     * <p>所以口径定义在一个地方({@code PlayerInv.BUILDABLE_SLOTS}),两边都调它。这条
+     * 用例钉的就是"同源"本身:同一个背包状态,两个函数必须给同一个数。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void quote_and_gate_count_the_same_slots(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_offhand", new BlockPos(1, 2, 1), false);
+        var inv = companion.getInventory();
+
+        // 主背包里 5 块,副手里 64 块
+        inv.add(new ItemStack(Items.SPRUCE_PLANKS, 5));
+        inv.offhand.set(0, new ItemStack(Items.SPRUCE_PLANKS, 64));
+
+        int whole = com.dwinovo.numen.core.task.PlayerInv.count(inv, Items.SPRUCE_PLANKS);
+        int buildable = com.dwinovo.numen.core.task.PlayerInv
+                .buildableCount(inv, Items.SPRUCE_PLANKS);
+
+        helper.assertTrue(whole == 69,
+                "the whole-inventory count should see the offhand stack too, got " + whole);
+        helper.assertTrue(buildable == 5,
+                "but building may only spend the 36 main slots — she does not strip her own"
+                        + " offhand to lay bricks; got " + buildable);
+        helper.assertTrue(whole != buildable,
+                "if these two ever agree this test has stopped proving anything —"
+                        + " the offhand stack must actually be in play");
+        helper.succeed();
+    }
+
+    /**
      * 干着干着断料,要<b>当场</b>认账,不是溜达一圈再说。
      *
      * <p>判据从过程量换成状态量之前,这里是这样的:判"干不下去了"用的是"一遍走完没有

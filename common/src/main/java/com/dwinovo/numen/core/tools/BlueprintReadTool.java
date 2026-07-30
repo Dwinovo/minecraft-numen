@@ -153,17 +153,17 @@ public final class BlueprintReadTool implements NumenTool {
                     + " (liquids, or blocks with no item to pay with — she will not build these)");
         }
         data.put("materials", summarize(cost));
+        // 这两项和 materials 一样出 map 而不是拼好的字符串:模型要拿它们做算术(还差
+        // 几件、够不够),给字符串等于逼它先解析我们的排版。同一份数据两种形状,是给
+        // 自己找的麻烦。
         if (!extra.isEmpty()) {
             // 一格多件的那些(带花的花盆是盆加花两件),单列出来才对得上实扣
-            List<String> parts = new ArrayList<>();
-            extra.forEach((name, n) -> parts.add(name + " x" + n));
-            data.put("materials_for_multi_item_cells", String.join(", ", parts));
+            data.put("materials_for_multi_item_cells", extra);
         }
         if (!exact.isEmpty()) {
-            List<String> parts = new ArrayList<>();
-            exact.forEach((name, n) -> parts.add(name + " x" + n));
-            data.put("materials_needing_an_exact_match", String.join(", ", parts)
-                    + " — same patterns / enchantments / contents, not just the same kind of item");
+            data.put("materials_needing_an_exact_match", exact);
+            data.put("exact_match_means",
+                    "same patterns / enchantments / contents, not just the same kind of item");
         }
         data.put("layer_profile", layerProfile(byLayer));
 
@@ -183,7 +183,9 @@ public final class BlueprintReadTool implements NumenTool {
             } else {
                 Map<Item, Integer> shortOf = new LinkedHashMap<>();
                 for (var e : remaining.entrySet()) {
-                    int have = PlayerInv.count(companion.getInventory(), e.getKey());
+                    // 和逐格闸门、实扣同源的 36 格口径。用 41 格的那个会让报价说"料够了"
+                    // 而施工每格都判缺料——副手上那叠木板正是这么骗过报价的。
+                    int have = PlayerInv.buildableCount(companion.getInventory(), e.getKey());
                     if (have < e.getValue()) {
                         shortOf.put(e.getKey(), e.getValue() - have);
                     }
