@@ -1145,6 +1145,182 @@ public class CompanionGameTests {
         helper.succeed();
     }
 
+    /**
+     * 同一份任务派<b>两次</b>,第二次必须什么都不做——这是"重发同一个调用就是续建"这句
+     * 承诺的唯一证据。
+     *
+     * <p>我们把这句话写进了工具描述、教给了模型:缺料就补料、然后<b>重发一模一样的调用</b>,
+     * 已经立着的部分自动跳过。整条路上有四个地方会把它变成谎言:方块的幂等靠逐格拿世界
+     * 当对照(这条最稳),而<b>摆设是实体</b>——没有"已经在那儿了吗"这一步,建完再发一次
+     * 就多一份,同一面墙上两个展示框叠在一起;主动跳过的格若被算成待办,第二遍会去重放;
+     * 双格方块的次半若还在目标集里,第二遍又会触发一次代建;精确料(带花纹的旗、框里那把
+     * 剑)的比对若和第一遍不同源,第二遍会再收一次钱。
+     *
+     * <p>判据设计成<b>会花钱就会露馅</b>:生存同伴,每种料只给"够一遍 + 恰好多一件"。
+     * 第二遍只要动了任何一格、生成了任何一只摆设,多出来那一件就会被扣掉;而如果它连
+     * 多的那件都不够(比如重放了两格),任务会直接以缺料失败。第二份任务的
+     * {@code placed()} 与 {@code broken()} 都必须是 0——不是"结果看起来一样",而是
+     * <b>一次动作都没发生</b>。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_blueprint")
+    public static void blueprint_second_run_changes_nothing(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+
+        BlockState bedFoot = Blocks.RED_BED.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
+                        net.minecraft.world.level.block.state.properties.BedPart.FOOT)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties
+                        .HORIZONTAL_FACING, net.minecraft.core.Direction.NORTH);
+        BlockState bedHead = bedFoot.setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
+                net.minecraft.world.level.block.state.properties.BedPart.HEAD);
+
+        var root = new net.minecraft.nbt.CompoundTag();
+        var size = new net.minecraft.nbt.ListTag();
+        size.add(net.minecraft.nbt.IntTag.valueOf(4));
+        size.add(net.minecraft.nbt.IntTag.valueOf(2));
+        size.add(net.minecraft.nbt.IntTag.valueOf(4));
+        root.put("size", size);
+        var palette = new net.minecraft.nbt.ListTag();
+        for (BlockState s : List.of(Blocks.STONE.defaultBlockState(), bedHead, bedFoot)) {
+            palette.add(net.minecraft.nbt.NbtUtils.writeBlockState(s));
+        }
+        root.put("palette", palette);
+        var blocks = new net.minecraft.nbt.ListTag();
+        blocks.add(cellTag(0, 0, 0, 0));
+        blocks.add(cellTag(0, 0, 1, 0));
+        blocks.add(cellTag(0, 0, 2, 0));   // 挂展示框的那面墙
+        blocks.add(cellTag(2, 0, 0, 1));   // 床头(朝北,z 更小)——加载期该被剔掉
+        blocks.add(cellTag(2, 0, 1, 2));   // 床脚
+        root.put("blocks", blocks);
+
+        // 展示框挂在 (0,0,2) 那块石头的南面,框里一颗钻石;盔甲架立在院里
+        var frameNbt = new net.minecraft.nbt.CompoundTag();
+        frameNbt.putString("id", "minecraft:item_frame");
+        frameNbt.putByte("Facing", (byte) net.minecraft.core.Direction.SOUTH.get3DDataValue());
+        var held = new net.minecraft.nbt.CompoundTag();
+        held.putString("id", "minecraft:diamond");
+        held.putInt("count", 1);
+        frameNbt.put("Item", held);
+        var standNbt = new net.minecraft.nbt.CompoundTag();
+        standNbt.putString("id", "minecraft:armor_stand");
+        var entities = new net.minecraft.nbt.ListTag();
+        entities.add(entityTag(0.5, 0.5, 3.5, frameNbt));
+        entities.add(entityTag(3.5, 0.0, 3.5, standNbt));
+        root.put("entities", entities);
+        net.minecraft.nbt.NbtIo.writeCompressed(root,
+                com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer())
+                        .resolve("fixture_twice.nbt"));
+
+        BlockPos anchor = helper.absolutePos(new BlockPos(4, 2, 4));
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                level, "fixture_twice", anchor, 0);
+        helper.assertTrue(loaded.targets().size() == 4,
+                "three stones and one bed foot — the bed head is built by its foot, got "
+                        + loaded.targets().size());
+
+        // 生存同伴:每种料给"够一遍 + 恰好多一件"。第二遍动一下就会吃掉多的那件。
+        NumenPlayer companion = spawnAt(helper, "gametest_twice", new BlockPos(1, 2, 1), false);
+        record Give(net.minecraft.world.item.Item item, int forOnePass) {}
+        List<Give> supplies = List.of(
+                new Give(Items.STONE, 3),
+                new Give(Items.RED_BED, 1),
+                new Give(Items.ITEM_FRAME, 1),
+                new Give(Items.ARMOR_STAND, 1),
+                new Give(Items.DIAMOND, 1));
+        for (Give g : supplies) {
+            companion.getInventory().add(new ItemStack(g.item(), g.forOnePass() + 1));
+        }
+
+        var ctx = TaskDispatch.ctx("gametest-twice-1", companion);
+        var first = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(3000L), loaded.targets(),
+                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, true, true,
+                loaded.blockEntityData(), loaded.entities());
+        first.cellNeeds(loaded.cellNeeds());
+        TaskDispatch.dispatchAsync(companion, first, reply -> {});
+
+        var second = new BuildTaskRecord[1];
+        net.minecraft.world.phys.AABB site = new net.minecraft.world.phys.AABB(
+                anchor.getX() - 2, anchor.getY() - 2, anchor.getZ() - 2,
+                anchor.getX() + 6, anchor.getY() + 4, anchor.getZ() + 6);
+
+        helper.startSequence()
+                // 第一遍:逐格对上,两只摆设都在
+                .thenWaitUntil(() -> {
+                    for (BuildTaskRecord.Target t : loaded.targets()) {
+                        helper.assertTrue(t.matches(level.getBlockState(t.pos())),
+                                "first run has not finished " + t.pos().toShortString()
+                                        + " (want " + t.desiredState() + ")");
+                    }
+                    helper.assertTrue(level.getEntities(
+                                    net.minecraft.world.entity.EntityType.ITEM_FRAME,
+                                    site, e -> true).size() == 1,
+                            "first run should hang exactly one item frame");
+                    helper.assertTrue(level.getEntities(
+                                    net.minecraft.world.entity.EntityType.ARMOR_STAND,
+                                    site, e -> true).size() == 1,
+                            "first run should place exactly one armour stand");
+                })
+                // 床头是床脚的落位回调造出来的,不是我们放的——它也得真的在
+                .thenExecute(() -> helper.assertTrue(
+                        level.getBlockState(anchor.offset(2, 0, 0)).is(Blocks.RED_BED),
+                        "the bed head must exist even though it was never a target cell"))
+                // 第一遍是真的在生存模式下逐格砌出来的,不是本来就在那儿
+                .thenExecute(() -> helper.assertTrue(
+                        first.placed() == loaded.targets().size(),
+                        "the first run should have placed all " + loaded.targets().size()
+                                + " cells itself, got " + first.placed()))
+                // 派第二次:同一份目标集、同一份摆设
+                .thenExecute(() -> {
+                    var ctx2 = TaskDispatch.ctx("gametest-twice-2", companion);
+                    second[0] = new BuildTaskRecord(ctx2.toolCallId(), ctx2.deadline(3000L),
+                            loaded.targets(), com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY,
+                            true, true, true, loaded.blockEntityData(), loaded.entities());
+                    second[0].cellNeeds(loaded.cellNeeds());
+                    TaskDispatch.dispatchAsync(companion, second[0], reply -> {});
+                })
+                .thenIdle(60)
+                .thenExecute(() -> {
+                    // 先证明第二份任务<b>真的跑了</b>。派发若被静默拒掉(比如上一个任务还
+                    // 占着),下面那些 0 会全部成立而什么都没测到——那是最坏的一种绿。
+                    helper.assertTrue(second[0].completed() == loaded.targets().size(),
+                            "the second run must have actually executed and seen all "
+                                    + loaded.targets().size() + " cells as already done, but its"
+                                    + " completed count is " + second[0].completed()
+                                    + " — if it is 0 the dispatch never happened and this whole"
+                                    + " test proves nothing");
+                    // 一次动作都没发生:不是"结果看起来一样"
+                    helper.assertTrue(second[0].placed() == 0,
+                            "the second run placed " + second[0].placed()
+                                    + " cell(s); resending the same call must be a no-op");
+                    helper.assertTrue(second[0].broken() == 0,
+                            "the second run broke " + second[0].broken() + " block(s)");
+                    // 摆设没多出来——这一条没有幂等检查的话必然翻倍
+                    helper.assertTrue(level.getEntities(
+                                    net.minecraft.world.entity.EntityType.ITEM_FRAME,
+                                    site, e -> true).size() == 1,
+                            "a second run must not hang a second item frame on the same wall");
+                    helper.assertTrue(level.getEntities(
+                                    net.minecraft.world.entity.EntityType.ARMOR_STAND,
+                                    site, e -> true).size() == 1,
+                            "a second run must not place a second armour stand");
+                    // 多留的那一件料还在:第二遍一分钱没花
+                    for (Give g : supplies) {
+                        int left = 0;
+                        for (int i = 0; i < 36; i++) {
+                            ItemStack stack = companion.getInventory().getItem(i);
+                            if (!stack.isEmpty() && stack.is(g.item())) {
+                                left += stack.getCount();
+                            }
+                        }
+                        helper.assertTrue(left == 1,
+                                "one spare " + g.item() + " was set aside; the second run should"
+                                        + " have spent nothing, but " + left + " remain");
+                    }
+                })
+                .thenSucceed();
+    }
+
     /** 结构 NBT 的一只实体:{pos:[x,y,z], blockPos:[..], nbt:{...}}。 */
     private static net.minecraft.nbt.CompoundTag entityTag(double x, double y, double z,
                                                            net.minecraft.nbt.CompoundTag nbt) {
