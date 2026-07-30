@@ -48,6 +48,7 @@ final class BlueprintFormats {
         int maxX = Integer.MIN_VALUE;
         int maxY = Integer.MIN_VALUE;
         int maxZ = Integer.MIN_VALUE;
+        ListTag entities = new ListTag();
         List<CompoundTag> regionTags = new ArrayList<>();
         for (String key : regions.getAllKeys()) {
             CompoundTag region = regions.getCompound(key);
@@ -89,6 +90,16 @@ final class BlueprintFormats {
                 be.remove("z");
                 regionData.put(key, be);
             }
+            for (Tag t : region.getList("Entities", Tag.TAG_COMPOUND)) {
+                CompoundTag e = ((CompoundTag) t).copy();
+                ListTag at = e.getList("Pos", Tag.TAG_DOUBLE);
+                if (at.size() != 3) {
+                    continue;
+                }
+                e.remove("Pos");
+                entities.add(entityCell(at.getDouble(0) - minX, at.getDouble(1) - minY,
+                        at.getDouble(2) - minZ, e));
+            }
             long volume = (long) abs[0] * abs[1] * abs[2];
             for (long i = 0; i < volume; i++) {
                 int idx = unpack(packed, bits, i);
@@ -102,7 +113,7 @@ final class BlueprintFormats {
                         paletteBase + idx, regionData.get(key3(x, y, z))));
             }
         }
-        return assemble(maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1, palette, blocks);
+        return assemble(maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1, palette, blocks, entities);
     }
 
     /** 区域最小角:负尺寸表示向负方向延伸(min = pos + size + 1)。 */
@@ -177,6 +188,23 @@ final class BlueprintFormats {
             }
             beData.put(key3(at[0], at[1], at[2]), data);
         }
+        ListTag entities = new ListTag();
+        for (Tag t : root.getList("Entities", Tag.TAG_COMPOUND)) {
+            CompoundTag e = (CompoundTag) t;
+            ListTag at = e.getList("Pos", Tag.TAG_DOUBLE);
+            if (at.size() != 3) {
+                continue;
+            }
+            CompoundTag data = e.contains("Data", Tag.TAG_COMPOUND)
+                    ? e.getCompound("Data").copy()
+                    : e.copy();
+            data.remove("Pos");
+            data.remove("Id");
+            if (e.contains("Id", Tag.TAG_STRING)) {
+                data.putString("id", e.getString("Id"));
+            }
+            entities.add(entityCell(at.getDouble(0), at.getDouble(1), at.getDouble(2), data));
+        }
         CompoundTag paletteMap = blocksHolder.getCompound("Palette");
         int maxId = -1;
         for (String key : paletteMap.getAllKeys()) {
@@ -222,7 +250,7 @@ final class BlueprintFormats {
             int y = (int) (i / ((long) width * length));
             blocks.add(cell(x, y, z, remap[id], beData.get(key3(x, y, z))));
         }
-        return assemble(width, height, length, palette, blocks);
+        return assemble(width, height, length, palette, blocks, entities);
     }
 
     /** {@code "ns:block[k=v,k2=v2]"} → 原版调色板复合标签 {Name, Properties}。
@@ -272,7 +300,34 @@ final class BlueprintFormats {
         return cell;
     }
 
+    /**
+     * 一只实体 → 原版结构格式的条目({@code pos} 双精度相对坐标 + {@code nbt})。
+     *
+     * <p>只收展示框、盔甲架、画这类"摆设":它们是建筑的一部分。活物不收——图纸里
+     * 存着的牛马村民不是设计,照搬等于凭空造生物。
+     */
+    private static CompoundTag entityCell(double x, double y, double z, CompoundTag nbt) {
+        CompoundTag out = new CompoundTag();
+        ListTag pos = new ListTag();
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(x));
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(y));
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(z));
+        out.put("pos", pos);
+        ListTag blockPos = new ListTag();
+        blockPos.add(IntTag.valueOf((int) Math.floor(x)));
+        blockPos.add(IntTag.valueOf((int) Math.floor(y)));
+        blockPos.add(IntTag.valueOf((int) Math.floor(z)));
+        out.put("blockPos", blockPos);
+        out.put("nbt", nbt);
+        return out;
+    }
+
     private static CompoundTag assemble(int sx, int sy, int sz, ListTag palette, ListTag blocks) {
+        return assemble(sx, sy, sz, palette, blocks, new ListTag());
+    }
+
+    private static CompoundTag assemble(int sx, int sy, int sz, ListTag palette, ListTag blocks,
+                                        ListTag entities) {
         CompoundTag out = new CompoundTag();
         ListTag size = new ListTag();
         size.add(IntTag.valueOf(sx));
@@ -281,6 +336,7 @@ final class BlueprintFormats {
         out.put("size", size);
         out.put("palette", palette);
         out.put("blocks", blocks);
+        out.put("entities", entities);
         return out;
     }
 }

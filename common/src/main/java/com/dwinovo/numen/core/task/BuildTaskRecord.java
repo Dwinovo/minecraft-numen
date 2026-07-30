@@ -56,6 +56,14 @@ public final class BuildTaskRecord extends TaskRecord {
      * 挪位。带方向语义的方块实体数据(比如活塞头指向)本来就该由方块状态承载。
      */
     public final Map<Long, CompoundTag> blockEntityData;
+    /**
+     * 待生成的摆设实体:展示框、盔甲架、画。
+     *
+     * <p>它们不是方块,进不了 {@code targets},但拆了这栋房子就不完整——钉在墙上的
+     * 画、立在院里的盔甲架都是设计的一部分。整栋盖完之后一次生成:实体要挂在墙上,
+     * 墙得先有。
+     */
+    public final List<EntitySpawn> entities;
 
     private int placed;
     private int broken;
@@ -93,7 +101,16 @@ public final class BuildTaskRecord extends TaskRecord {
                            ReplaceMode replaceMode, boolean replaceExisting,
                            boolean consumeMaterials, boolean allowPartial,
                            Map<Long, CompoundTag> blockEntityData) {
+        this(toolCallId, deadlineGameTime, targets, replaceMode, replaceExisting,
+                consumeMaterials, allowPartial, blockEntityData, List.of());
+    }
+
+    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
+                           ReplaceMode replaceMode, boolean replaceExisting,
+                           boolean consumeMaterials, boolean allowPartial,
+                           Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
+        this.entities = List.copyOf(entities);
         this.targets = List.copyOf(targets);
         this.replaceMode = replaceMode;
         this.replaceExisting = replaceExisting;
@@ -138,6 +155,11 @@ public final class BuildTaskRecord extends TaskRecord {
     public String describe() {
         return TOOL_NAME + " " + completed + "/" + targets.size();
     }
+
+    /** 一只待生成的摆设实体:落位点、图纸旋转、剥干净的 NBT。 */
+    public record EntitySpawn(double x, double y, double z,
+                              net.minecraft.world.level.block.Rotation rotation,
+                              CompoundTag nbt) {}
 
     public record Target(BlockState desiredState, Item item, BlockPos pos, String label,
                          Direction facing, Direction.Axis axis, Boolean topHalf) {

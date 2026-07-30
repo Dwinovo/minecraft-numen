@@ -115,6 +115,36 @@ public final class BuildStates {
     }
 
     /**
+     * 图纸里的实体,哪些算建筑的一部分——同样是白名单。
+     *
+     * <p>只收<b>摆设</b>:展示框、盔甲架、画。它们钉在墙上、立在院里,拆了这栋房子
+     * 就不完整。活物不收——图纸里存着的牛马村民不是设计,照搬等于凭空造生物;矿车、
+     * 船同理,那是玩家自己的东西。
+     *
+     * <p>而且只收<b>躯壳</b>:展示框里的物品、盔甲架身上的装备一律剥掉,理由和容器
+     * 内容一样——图纸是文件,照搬里面的东西就是凭空造物品。玩家自己往框里放东西,
+     * 那一步本来就该是他的。
+     *
+     * @return 可以生成的那部分;不收返回 null
+     */
+    public static net.minecraft.nbt.CompoundTag safeEntityData(net.minecraft.nbt.CompoundTag data) {
+        if (data == null || !data.contains("id")) {
+            return null;
+        }
+        String id = data.getString("id");
+        if (!id.equals("minecraft:item_frame") && !id.equals("minecraft:glow_item_frame")
+                && !id.equals("minecraft:armor_stand") && !id.equals("minecraft:painting")) {
+            return null;
+        }
+        net.minecraft.nbt.CompoundTag out = data.copy();
+        // 躯壳留下,身上的东西剥掉
+        for (String carried : new String[]{"Item", "Items", "ArmorItems", "HandItems", "equipment"}) {
+            out.remove(carried);
+        }
+        return out;
+    }
+
+    /**
      * 这一格能不能建;不能建的话,<b>说清为什么</b>。
      *
      * @return null = 可以建;否则是给模型看的一句话

@@ -35,6 +35,7 @@ import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.LiquidBlock;
+import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -785,6 +786,60 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /** 收工:撤掉自己垫的脚手架,放一把庆祝的粒子。 */
+    /**
+     * 收工时把图纸里的摆设实体生成出来:展示框、盔甲架、画。
+     *
+     * <p>放在最后一步,因为它们要挂在墙上、立在地上——墙和地得先有。躯壳照生,身上
+     * 的东西已经在加载时剥掉了(见 {@code BuildStates#safeEntityData}),所以这里
+     * 不涉及任何物品。
+     */
+    private void spawnFixtures() {
+        if (r.entities.isEmpty() || !(player.level() instanceof ServerLevel level)) {
+            return;
+        }
+        for (BuildTaskRecord.EntitySpawn spawn : r.entities) {
+            try {
+                var created = net.minecraft.world.entity.EntityType.create(spawn.nbt(), level);
+                if (created.isEmpty()) {
+                    continue;
+                }
+                var entity = created.get();
+                // 挂画与展示框的朝向存在自己的 NBT 里(facing / TileX,Y,Z),这里只把
+                // 朝向按图纸旋转转过去;旋转过的图纸里挂件可能仍需人工校一下朝向
+                entity.moveTo(spawn.x(), spawn.y(), spawn.z(),
+                        entity.rotate(spawn.rotation()), entity.getXRot());
+                entity.setUUID(java.util.UUID.randomUUID());   // 同一张图纸建两遍不能撞 UUID
+                level.addFreshEntity(entity);
+            } catch (RuntimeException ignored) {
+                // 一只摆设生成失败不该让整栋楼算失败
+            }
+        }
+    }
+
+    /**
+     * 收工时给紧贴工地外围一圈的水重排一次流体 tick。
+     *
+     * <p>我们落位不带邻居更新——那是为了不让原版中途改写图纸(见 {@code PLACE_FLAGS})
+     * ,但代价是<b>周围的水不知道世界变了</b>:在湖里砌一道墙,两侧的水停在过期状态;
+     * 把水下的一块石头清掉,那个洞不会自己被水填上。踢一脚只需要在外壳上做,内部
+     * 全是刚放好的方块。
+     *
+     * <p>只在"连带清空"那档做:低档位不清场,挖不出会漏水的空腔。
+     */
+    private void nudgeSurroundingWater() {
+        if (r.replaceMode != ReplaceMode.REPLACE_EMPTY
+                || !(player.level() instanceof ServerLevel level)) {
+            return;
+        }
+        BlockPos.betweenClosedStream(siteMin.offset(-1, -1, -1), siteMax.offset(1, 1, 1))
+                .filter(pos -> pos.getX() < siteMin.getX() || pos.getX() > siteMax.getX()
+                        || pos.getY() < siteMin.getY() || pos.getY() > siteMax.getY()
+                        || pos.getZ() < siteMin.getZ() || pos.getZ() > siteMax.getZ())
+                .filter(pos -> level.isLoaded(pos) && level.getFluidState(pos).is(Fluids.WATER))
+                .forEach(pos -> level.scheduleTick(pos.immutable(), Fluids.WATER,
+                        Fluids.WATER.getTickDelay(level)));
+    }
+
     private TaskState finish() {
         for (BlockPos pos : scaffold) {
             if (targetByPos.containsKey(pos.asLong())) continue;
@@ -794,6 +849,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         scaffold.clear();
+        spawnFixtures();
+        nudgeSurroundingWater();
         if (player.level() instanceof ServerLevel level) {
             level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
                     (siteMin.getX() + siteMax.getX()) / 2.0 + 0.5,

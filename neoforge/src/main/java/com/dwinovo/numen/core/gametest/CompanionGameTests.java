@@ -425,7 +425,7 @@ public class CompanionGameTests {
     /**
      * 图纸带来的方块实体数据只搬装饰性的那部分,<b>容器内容一律不搬</b>。
      *
-     * <p>两个方向都得钉住。搬:告示牌的字、旗帜的花纹——不搬的话社区图纸建出来是
+     * <p>方块实体与实体走同一条线,两个方向都得钉住。搬:告示牌的字、旗帜的花纹——不搬的话社区图纸建出来是
      * 一屋子白板,外形全对内容全丢,玩家一眼看得出来。不搬:箱子里的东西——图纸是
      * 文件,可以任意编辑、可以从网上下载,照搬容器内容意味着一张塞满钻石的图纸
      * 建出来就是白送。这不是保守,是这条线必须画在这里。
@@ -458,6 +458,25 @@ public class CompanionGameTests {
         helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
                         Blocks.CHEST.defaultBlockState(), chestData) == null,
                 "a blueprint full of diamonds must not print diamonds");
+
+        // 实体同一条线:摆设收躯壳,活物不收,身上的东西剥掉
+        var frame = new net.minecraft.nbt.CompoundTag();
+        frame.putString("id", "minecraft:item_frame");
+        frame.putByte("Facing", (byte) 3);
+        var held = new net.minecraft.nbt.CompoundTag();
+        held.putString("id", "minecraft:diamond_sword");
+        held.putInt("count", 1);
+        frame.put("Item", held);
+        var keptFrame = com.dwinovo.numen.core.task.BuildStates.safeEntityData(frame);
+        helper.assertTrue(keptFrame != null && keptFrame.contains("Facing"),
+                "an item frame is part of the building; its shell must be spawned");
+        helper.assertTrue(keptFrame != null && !keptFrame.contains("Item"),
+                "but what hangs in it is an item — a blueprint must not hand out a diamond sword");
+
+        var cow = new net.minecraft.nbt.CompoundTag();
+        cow.putString("id", "minecraft:cow");
+        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeEntityData(cow) == null,
+                "a cow stored in a blueprint is not a design; copying it conjures livestock");
 
         // 再在世界里走一遍:旗帜的花纹要真的落到方块实体上
         ServerLevel level = helper.getLevel();

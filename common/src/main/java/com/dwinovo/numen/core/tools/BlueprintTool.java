@@ -125,6 +125,6 @@ public final class BlueprintTool implements NumenTool {
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), loaded.targets(),
                 com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, consume, true,
-                loaded.blockEntityData()), reply);
+                loaded.blockEntityData(), loaded.entities()), reply);
     }
 }

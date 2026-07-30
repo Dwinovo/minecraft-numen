@@ -50,9 +50,10 @@ public final class BlueprintStore {
     /** 单张蓝图的格数上限(防误载巨图把任务撑爆)。 */
     private static final int MAX_CELLS = 32768;
 
-    /** 展开结果:目标格集 + 旋转后的占地尺寸 + 方块实体数据(按位置索引)。 */
+    /** 展开结果:目标格集 + 旋转后的占地尺寸 + 方块实体数据 + 待生成的摆设实体。 */
     public record Loaded(List<BuildTaskRecord.Target> targets, Vec3i size,
-                         java.util.Map<Long, CompoundTag> blockEntityData) {}
+                         java.util.Map<Long, CompoundTag> blockEntityData,
+                         List<BuildTaskRecord.EntitySpawn> entities) {}
 
     /** 支持的图纸扩展名。 */
     private static final List<String> EXTENSIONS = List.of(".nbt", ".snbt", ".litematic", ".schem");
@@ -183,8 +184,35 @@ public final class BlueprintStore {
                 }
             }
         }
+        // 摆设实体(展示框、盔甲架、画):随图纸一起旋转,躯壳照生,身上的东西剥掉
+        List<BuildTaskRecord.EntitySpawn> spawns = new ArrayList<>();
+        for (Tag t : tag.getList("entities", Tag.TAG_COMPOUND)) {
+            CompoundTag e = (CompoundTag) t;
+            CompoundTag safe = com.dwinovo.numen.core.task.BuildStates
+                    .safeEntityData(e.getCompound("nbt"));
+            if (safe == null) {
+                continue;
+            }
+            ListTag at = e.getList("pos", Tag.TAG_DOUBLE);
+            if (at.size() != 3) {
+                continue;
+            }
+            double ex = at.getDouble(0);
+            double ey = at.getDouble(1);
+            double ez = at.getDouble(2);
+            double rx;
+            double rz;
+            switch (quarters) {
+                case 1 -> { rx = sz - ez; rz = ex; }
+                case 2 -> { rx = sx - ex; rz = sz - ez; }
+                case 3 -> { rx = ez; rz = sx - ex; }
+                default -> { rx = ex; rz = ez; }
+            }
+            spawns.add(new BuildTaskRecord.EntitySpawn(
+                    anchor.getX() + rx, anchor.getY() + ey, anchor.getZ() + rz, rotation, safe));
+        }
         Vec3i size = (quarters % 2 == 0) ? new Vec3i(sx, sy, sz) : new Vec3i(sz, sy, sx);
-        return new Loaded(targets, size, beData);
+        return new Loaded(targets, size, beData, spawns);
     }
 
     private static CompoundTag readTag(MinecraftServer server, String name) {
