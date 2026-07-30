@@ -203,13 +203,17 @@ public final class BlueprintStore {
             // 洞穴藤蔓答发光浆果、竹笋答竹子、连枝的瓜藤答瓜种。此前这里靠一张十三行
             // 的对照表,每行都是被咬过一次才补上的,而且只认原版——模组的作物一个都不认。
             BlockState placed = com.dwinovo.numen.core.task.BuildStates.normalize(state);
+            BlockPos world = anchor.offset(rx, y, rz);
+            // 探针给<b>这一格自己的坐标</b>,不是锚点。给锚点的话所有格共用同一个探针点,
+            // 而方块自述里有几种会去读那一格的方块实体——续建时锚点格本身就立着图纸放的
+            // 东西,一面红旗就能把整张图纸的记账物品带偏。(带方块实体的方块已经在
+            // materialItem 里整体不问了,这里是第二道:探针点本来就该是本格。)
             var payItem = com.dwinovo.numen.core.task.BuildStates
-                    .materialItem(placed, level, anchor);
+                    .materialItem(placed, level, world);
             if (payItem == net.minecraft.world.item.Items.AIR && !placed.isAir()) {
                 dropped++;
                 continue;
             }
-            BlockPos world = anchor.offset(rx, y, rz);
             // 同坐标后写覆盖先写:方块实体数据与逐格料单要跟着一起清,否则存活的那一条
             // 会串上前一条的数据(一块空白告示牌顶着别人的字)
             beData.remove(world.asLong());
@@ -230,7 +234,7 @@ public final class BlueprintStore {
             // 这一格要几叠料:带花的花盆是盆加花两件,带花纹的旗帜是一叠但要组件一致。
             // 一格一件是特例而不是通则,这张料单整个盖过默认的"一件本方块的物品"。
             var cellNeeds = com.dwinovo.numen.core.task.BuildStates
-                    .cellNeeds(placed, safe, level, anchor, level.registryAccess());
+                    .cellNeeds(placed, safe, level, world, level.registryAccess());
             if (!cellNeeds.isEmpty()) {
                 needs.put(world.asLong(), cellNeeds);
             }

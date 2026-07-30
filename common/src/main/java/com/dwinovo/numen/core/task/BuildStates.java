@@ -157,15 +157,23 @@ public final class BuildStates {
         if (override != null) {
             return override;
         }
-        if (level != null) {
+        // 带方块实体的方块<b>不问</b>。它们的自述会去读 {@code pos} 那一格<b>世界里</b>的
+        // 方块实体,而那一格此刻放的不是图纸里这块——旗帜、陶罐、潜影盒都是这样。后果很
+        // 具体:探针那一格恰好立着一面红旗,图纸里所有素白旗的记账物品就全变成红旗,
+        // 预检索要红旗、逐格闸门查红旗、实扣扣红旗,而落位放的是白旗。
+        //
+        // 别处解决这个问题靠养一个一次性世界(那里没有别人的方块实体);我们没有,那就
+        // 只问答案与世界无关的那些方块。花盆、竹笋、瓜藤、藤蔓段都不带方块实体,所以
+        // 该拿到的答案一个都没少;带方块实体的那些本来也不靠这条路(旗帜走的是
+        // {@link #strictItem},读的是图纸自己那份数据)。
+        if (level != null && !state.hasBlockEntity()) {
             try {
                 var picked = state.getBlock().getCloneItemStack(level, pos, state);
                 if (!picked.isEmpty()) {
                     return picked.getItem();
                 }
             } catch (RuntimeException ignored) {
-                // 个别方块的自述会去读方块实体,而那一格此刻未必真的是它。问不出来
-                // 就退回下面那条,不该让一格坏掉整张图纸
+                // 问不出来就退回下面那条,不该让一格坏掉整张图纸
             }
         }
         return state.getBlock().asItem();
@@ -325,9 +333,9 @@ public final class BuildStates {
         net.minecraft.nbt.CompoundTag out = data.copy();
         // 身上带的东西:组件按白名单剥一遍,<b>就地改掉这份 NBT</b>。
         //
-        // 这一步必须落在数据本身上,不能只落在计价上。参照实现是"计价用剥过的那一叠、
-        // 落位用图纸原始的那一份"——两份不等就是个口子:文件里塞一个装满钻石的潜影盒,
-        // 按剥过的算只收一个空盒,而放进框里的是满的。收什么放什么,这一条不让。
+        // 落在数据本身上而不是只落在计价上——计价与落位读同一份,账才是平的。别处是在
+        // 图纸加载时把展示框里的物品和盔甲架每个装备槽原地换成剥过的版本,同一个做法,
+        // 只是我们的落点在这份 NBT 上而不是在实体对象上。
         sanitizePayload(out, registries);
         // 挂件(展示框、画)的<b>锚点</b>是一个绝对方块坐标(TileX/TileY/TileZ),存在
         // 自己的 NBT 里,而不是由位置推出来的。不改它的话:实体读档时把锚点设成导出

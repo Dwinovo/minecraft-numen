@@ -642,6 +642,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private BuildTaskRecord.Target nearestPendingInLayer() {
         BuildTaskRecord.Target best = null;
+        int bestStage = Integer.MAX_VALUE;
         double bestDist = Double.MAX_VALUE;
         Vec3 me = player.position();
         for (int i = layerStart; i < layerEnd; i++) {
@@ -649,10 +650,21 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (placedThisLayer.contains(t.pos().asLong())) {
                 continue;
             }
+            // 层内先按 stage 分档,同档之内才比远近。此前这里只比远近,于是
+            // BUILD_ORDER 后面那几个比较键对<b>实际落位顺序</b>一个都不起作用——
+            // 排序只决定了层窗口怎么切,层内谁先谁后完全由脚下的距离决定,而
+            // stage 那句"先清障、再骨架、最后贴附"的注释与代码早就不符了。
+            // 调了不起作用的旋钮比缺一个功能更糟,所以要么让它生效,要么撤掉;这里
+            // 让它生效:走位的自然感留在同一档之内,档与档之间按该有的先后来。
+            int stage = stage(t);
+            if (stage > bestStage) {
+                continue;
+            }
             double dx = t.pos().getX() + 0.5 - me.x;
             double dz = t.pos().getZ() + 0.5 - me.z;
             double d = dx * dx + dz * dz;
-            if (d < bestDist) {
+            if (stage < bestStage || d < bestDist) {
+                bestStage = stage;
                 bestDist = d;
                 best = t;
             }
@@ -714,6 +726,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (blockedByEntity(pos, desired)) {
             // 谁都不豁免——包括她自己:身体占着的格子这遍先放下,下一遍她已经挪开了。
             // 防的是把方块塞进活物身体里这类真事故。
+            return null;
+        }
+        // 让路档位与方块实体保护要在<b>动手前复查</b>,不能只在遍首排队时查过一次。
+        // 一遍可能跑好几分钟:玩家在这期间往目标格放了个箱子,而队列是几分钟前排的,
+        // 于是下面那句 clear 会把它挖掉。生存模式带方块实体掉落所以东西不至于消失,
+        // 但"带方块实体的方块一律不动"这句承诺就破了——而那是我们自己写进工具描述、
+        // 也是玩家唯一能依赖的保证。
+        if (blockedByMode(target) || hopeless(target)) {
             return null;
         }
         // 一格不一定只花一件(双层砖两件、雪层按层数),盘点与实扣共用同一个件数
