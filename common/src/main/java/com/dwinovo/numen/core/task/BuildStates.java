@@ -66,6 +66,11 @@ public final class BuildStates {
         if (state.hasProperty(BlockStateProperties.STAGE)) {
             state = state.setValue(BlockStateProperties.STAGE, 0);
         }
+        // 洞穴藤蔓结不结果同理,而且这一条是白送:一格花一颗发光浆果,玩家伸手一摘
+        // 把那颗原样收回、藤蔓还留着——一整面二百格的藤蔓墙造价为零。
+        if (state.hasProperty(BlockStateProperties.BERRIES)) {
+            state = state.setValue(BlockStateProperties.BERRIES, false);
+        }
         // 含水是从周围的水推出来的,不是作者定的——照抄等于凭空造水,而我们连
         // 主动放水都不做
         if (state.hasProperty(BlockStateProperties.WATERLOGGED)) {
@@ -81,6 +86,33 @@ public final class BuildStates {
             state = state.setValue(BlockStateProperties.PERSISTENT, true);
         }
         return state;
+    }
+
+    /**
+     * 这是双格方块的<b>次半</b>吗——床头、门/高草的上半。
+     *
+     * <p>次半不进目标集,由主半的 {@code setPlacedBy} 自己造出来。理由是床:床的两半
+     * 同 y,施工顺序按 z 递增,facing=north 时<b>床头先落位</b>,而
+     * {@code BedBlock#setPlacedBy} 会往 {@code pos.relative(facing)} 再写一块床头——
+     * 那一格在目标集之外,不记账、不算脚手架、收工不清。一张床收一件料,世界里留下
+     * 三块床方块;若那一格恰好是已砌好的内墙(床头贴墙是最常见的摆法),它被覆写,
+     * 下一遍又判成"被拆了"重建,来回死转。
+     *
+     * <p>门和高草不会出这事(另一半恒在正上方,按 y 排序主半必先落位),但一并剔除
+     * 更省事,也让分母诚实:次半从来不是我们放的,不该占一格待办。
+     */
+    public static boolean isSecondaryHalf(BlockState state) {
+        if (state == null) {
+            return false;
+        }
+        if (state.hasProperty(BlockStateProperties.BED_PART)
+                && state.getValue(BlockStateProperties.BED_PART)
+                        == net.minecraft.world.level.block.state.properties.BedPart.HEAD) {
+            return true;
+        }
+        return state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                && state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                        == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER;
     }
 
     /**
@@ -223,13 +255,16 @@ public final class BuildStates {
         for (String carried : new String[]{"Item", "Items", "ArmorItems", "HandItems", "equipment"}) {
             out.remove(carried);
         }
-        // 挂件(展示框、画)的<b>锚点</b>是一个绝对方块坐标,存在自己的 NBT 里,
-        // 而不是由位置推出来的。不改它的话:实体读档时把锚点设成导出世界那个坐标,
-        // 挂件每 100 刻自查一次"我挂的那面墙还在吗"——查的是源世界的坐标。那儿是空
-        // 的就五秒后掉落(玩家付了一个展示框,墙上什么也没有,地上多个掉落物);
-        // 那儿恰好有方块就留着,但下次区块重载会把它<b>瞬移回源世界坐标</b>。
-        // 这几个键在这里删掉,由落位方自己写。
-        for (String anchor : new String[]{"block_pos", "TileX", "TileY", "TileZ"}) {
+        // 挂件(展示框、画)的<b>锚点</b>是一个绝对方块坐标(TileX/TileY/TileZ),存在
+        // 自己的 NBT 里,而不是由位置推出来的。不改它的话:实体读档时把锚点设成导出
+        // 世界那个坐标,挂件每 100 刻自查一次"我挂的那面墙还在吗"——查的是源世界的
+        // 坐标。那儿是空的就五秒后掉落(玩家付了一个展示框,墙上什么也没有,地上多个
+        // 掉落物);那儿恰好有方块就留着,但下次区块重载会把它<b>瞬移回源世界坐标</b>。
+        //
+        // <p>{@code Pos} 一并删掉,由落位方连锚点一起写:读档时锚点要过一道
+        // <b>16 格闸门</b>(锚点离 Pos 太远就判成坏档,丢掉锚点),两个值必须同源。
+        // 位置留在这儿只会是导出世界的坐标,而锚点是落位坐标,差的正是搬迁距离。
+        for (String anchor : new String[]{"Pos", "TileX", "TileY", "TileZ"}) {
             out.remove(anchor);
         }
         return out;

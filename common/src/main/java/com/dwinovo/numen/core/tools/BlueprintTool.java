@@ -122,9 +122,12 @@ public final class BlueprintTool implements NumenTool {
         long timeout = Math.max(MIN_TIMEOUT_TICKS,
                 BuildTool.timeoutTicksFor(loaded.targets().size(), consume));
         // allowPartial:整幢图纸一趟运不完是常态,分段施工 + 精确续建
-        dispatchAsync(companion, new BuildTaskRecord(toolCallId,
+        BuildTaskRecord record = new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), loaded.targets(),
                 com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, consume, true,
-                loaded.blockEntityData(), loaded.entities()), reply);
+                loaded.blockEntityData(), loaded.entities());
+        // 加载时掉的格随任务一起交代:掉格必须有账,否则回执会拿剩下的格数当全部
+        record.droppedAtLoad(loaded.dropped());
+        dispatchAsync(companion, record, reply);
     }
 }

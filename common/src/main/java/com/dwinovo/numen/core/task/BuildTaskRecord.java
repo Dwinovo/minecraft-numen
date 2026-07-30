@@ -82,6 +82,7 @@ public final class BuildTaskRecord extends TaskRecord {
     private int placed;
     private int broken;
     private int completed;
+    private int droppedAtLoad;
 
     // 注:曾有 layerHeight(分层施工的层高门)。施工模型改为"低层优先的确定
     // 顺序 + 分遍补漏"之后,层高不再有任何裁决作用,留着就是个调了不起作用
@@ -141,6 +142,21 @@ public final class BuildTaskRecord extends TaskRecord {
         this.consumeMaterials = consumeMaterials;
         this.allowPartial = allowPartial;
         this.blockEntityData = Map.copyOf(blockEntityData);
+    }
+
+    /**
+     * 加载图纸时就落不了地、根本没进目标集的格数(流体、活塞头、推不出物品的方块)。
+     *
+     * <p>要单独记一笔并交代出去,理由和"跳过的格从分母去掉"是同一条:一张一千格的
+     * 图纸掉了二百格,若这二百格连目标集都没进,任务会理直气壮地报"八百格全部达标",
+     * 而设计缺了五分之一,没有一个字提到过。加载期的掉格也是掉格。
+     */
+    public int droppedAtLoad() {
+        return droppedAtLoad;
+    }
+
+    public void droppedAtLoad(int count) {
+        this.droppedAtLoad = count;
     }
 
     public int placed() {

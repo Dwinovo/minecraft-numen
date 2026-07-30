@@ -107,7 +107,10 @@ public final class BlueprintReadTool implements NumenTool {
             // 按清单备齐了照样建到一半停下(双层砖一格两件就是这么漏掉的)
             cost.merge(t.item(), t.materialCount(), Integer::sum);
             if (anchored) {
-                if (t.matches(level.getBlockState(t.pos()))) {
+                // 只读已加载区块:报价要扫全图纸,用 level.getBlockState 会把图纸覆盖的
+                // 所有区块现场同步生成一遍——远处锚点报一次价就是一次可见卡顿
+                if (t.matches(com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(level)
+                        .getBlockState(t.pos()))) {
                     placed++;
                 } else {
                     remaining.merge(t.item(), t.materialCount(), Integer::sum);
@@ -122,6 +125,12 @@ public final class BlueprintReadTool implements NumenTool {
         data.put("cells_costing_materials", sum(cost));
         if (clears > 0) {
             data.put("cells_that_only_clear", clears);
+        }
+        if (loaded.dropped() > 0) {
+            // 掉格要在<b>报价这一步</b>就说清:模型正是在这里决定要不要建、缺什么料。
+            // 不说的话它拿到的格数就是"全部",而设计已经缺了一块,谁都不知道。
+            data.put("cells_dropped", loaded.dropped()
+                    + " (liquids, or blocks with no item to pay with — she will not build these)");
         }
         data.put("materials", summarize(cost));
         data.put("layer_profile", layerProfile(byLayer));

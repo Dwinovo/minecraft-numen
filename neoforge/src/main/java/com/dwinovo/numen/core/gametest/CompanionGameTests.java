@@ -615,7 +615,233 @@ public class CompanionGameTests {
         helper.assertTrue(leaves.desiredState().getValue(
                         net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT),
                 "placed leaves are hand-placed leaves; without this they rot as fast as she builds");
+
+        // 蜂巢的蜜、洞穴藤蔓的果、龟蛋的孵化进度:三条都是"照抄就白送"。藤蔓那条
+        // 最直接——一格花一颗发光浆果,玩家伸手一摘把那颗原样收回、藤蔓还留着。
+        BlockState honeyed = Blocks.BEE_NEST.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_HONEY, 5);
+        var nest = new BuildTaskRecord.Target(honeyed, Items.BEE_NEST, BlockPos.ZERO, "nest",
+                null, null, null);
+        helper.assertTrue(nest.desiredState().getValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_HONEY) == 0,
+                "stored honey is runtime state; copying it lets the player shear free honeycomb");
+
+        BlockState berried = Blocks.CAVE_VINES.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.BERRIES, true);
+        var vine = new BuildTaskRecord.Target(berried, Items.GLOW_BERRIES, BlockPos.ZERO, "vine",
+                null, null, null);
+        helper.assertTrue(!vine.desiredState().getValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.BERRIES),
+                "a berried cave vine hands the berry straight back — the whole wall would be free");
         helper.succeed();
+    }
+
+    /**
+     * 双格方块的<b>次半</b>不进目标集,由主半自己造出来。
+     *
+     * <p>床是这条规则的由来。床的两半同 y,施工顺序在同高时按 z 递增,facing=north
+     * 时<b>床头先落位</b>——而床的 {@code setPlacedBy} 会往"朝向再往外一格"再写一块
+     * 床头,那一格在目标集之外:不记账、不算脚手架、收工不清。一张床收一件料,世界里
+     * 留下三块床方块。若那一格恰好是已砌好的内墙(床头贴墙是最常见的摆法),它被覆写,
+     * 下一遍判成"被拆了"重建,来回死转,只被零进展遍上限兜住。
+     *
+     * <p>所以判据落在加载期:次半从来不是我们放的,不该占一格待办,也不该占分母。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    public static void blueprint_secondary_halves_are_not_targets(GameTestHelper helper)
+            throws Exception {
+        ServerLevel level = helper.getLevel();
+        BlockState foot = Blocks.RED_BED.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
+                        net.minecraft.world.level.block.state.properties.BedPart.FOOT)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties
+                        .HORIZONTAL_FACING, net.minecraft.core.Direction.NORTH);
+        BlockState head = foot.setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
+                net.minecraft.world.level.block.state.properties.BedPart.HEAD);
+        BlockState lower = Blocks.OAK_DOOR.defaultBlockState();
+        BlockState upper = lower.setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER);
+
+        // 一张四格的图纸:床脚 + 床头 + 门下半 + 门上半
+        var root = new net.minecraft.nbt.CompoundTag();
+        var size = new net.minecraft.nbt.ListTag();
+        size.add(net.minecraft.nbt.IntTag.valueOf(3));
+        size.add(net.minecraft.nbt.IntTag.valueOf(2));
+        size.add(net.minecraft.nbt.IntTag.valueOf(3));
+        root.put("size", size);
+        var palette = new net.minecraft.nbt.ListTag();
+        for (BlockState s : java.util.List.of(foot, head, lower, upper)) {
+            palette.add(net.minecraft.nbt.NbtUtils.writeBlockState(s));
+        }
+        root.put("palette", palette);
+        var blocks = new net.minecraft.nbt.ListTag();
+        blocks.add(cellTag(0, 0, 1, 0));   // 床脚 @ z=1
+        blocks.add(cellTag(0, 0, 0, 1));   // 床头 @ z=0(朝北,z 更小,会先落位)
+        blocks.add(cellTag(2, 0, 0, 2));   // 门下半
+        blocks.add(cellTag(2, 1, 0, 3));   // 门上半
+        root.put("blocks", blocks);
+        var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_halves.nbt"));
+
+        BlockPos anchor = helper.absolutePos(new BlockPos(2, 2, 2));
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                level, "fixture_halves", anchor, 0);
+        helper.assertTrue(loaded.targets().size() == 2,
+                "only the primary halves belong in the target set, got "
+                        + loaded.targets().size() + " cells");
+        for (var t : loaded.targets()) {
+            helper.assertTrue(!com.dwinovo.numen.core.task.BuildStates
+                            .isSecondaryHalf(t.desiredState()),
+                    "a bed head / upper door half must never be a target: " + t.desiredState());
+        }
+        // 次半不算掉格:它是被主半代建的,不是缺了一块设计
+        helper.assertTrue(loaded.dropped() == 0,
+                "secondary halves are built by their primary, not dropped: " + loaded.dropped());
+        // 料还是一张床一件、一扇门一件——次半本来就记 0 件,剔掉不改报价
+        int beds = 0;
+        int doors = 0;
+        for (var t : loaded.targets()) {
+            if (t.item() == Items.RED_BED) beds += t.materialCount();
+            if (t.item() == Items.OAK_DOOR) doors += t.materialCount();
+        }
+        helper.assertTrue(beds == 1 && doors == 1,
+                "one bed and one door, got bed x" + beds + " door x" + doors);
+        helper.succeed();
+    }
+
+    /**
+     * 图纸里的摆设真的挂上了墙——<b>锚点这条路必须走通,而它有一道 16 格闸门</b>。
+     *
+     * <p>挂件(展示框、画)钉在哪面墙上,是它自己 NBT 里的一个绝对方块坐标,不是由
+     * 位置推出来的。读档时这个锚点要过一道校验:锚点离实体位置超过 16 格就判成坏档、
+     * 丢掉不用——而丢掉之后重算碰撞箱会拿一个空坐标去算中心点,当场抛异常,这只摆设
+     * 静默消失,只在日志里留一行。所以位置与锚点<b>必须同源写入</b>,只写一个不行。
+     *
+     * <p>这条只能在游戏里验:纯函数层看不出闸门,拼出来的 NBT 看着完全正确。测试
+     * 故意把源世界的锚点写成十万格开外——加载器该把它连位置一起剥掉,由落位方按落位
+     * 坐标重写。剥漏了或者重写漏了,这里就一只摆设都看不见。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 1200, batch = "numen_build")
+    public static void blueprint_fixtures_hang_where_they_belong(GameTestHelper helper)
+            throws Exception {
+        ServerLevel level = helper.getLevel();
+        var root = new net.minecraft.nbt.CompoundTag();
+        var size = new net.minecraft.nbt.ListTag();
+        size.add(net.minecraft.nbt.IntTag.valueOf(3));
+        size.add(net.minecraft.nbt.IntTag.valueOf(2));
+        size.add(net.minecraft.nbt.IntTag.valueOf(3));
+        root.put("size", size);
+        var palette = new net.minecraft.nbt.ListTag();
+        palette.add(net.minecraft.nbt.NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        root.put("palette", palette);
+        var blocks = new net.minecraft.nbt.ListTag();
+        blocks.add(cellTag(1, 0, 1, 0));   // 挂展示框的那面墙
+        root.put("blocks", blocks);
+
+        // 展示框挂在 (1,0,1) 这块石头的南面,所以它自己在 (1,0,2)
+        var frame = new net.minecraft.nbt.CompoundTag();
+        frame.putString("id", "minecraft:item_frame");
+        frame.putByte("Facing", (byte) net.minecraft.core.Direction.SOUTH.get3DDataValue());
+        // 源世界的锚点与位置:十万格开外。两个键都该被剥掉重写
+        frame.putInt("TileX", 100000);
+        frame.putInt("TileY", 64);
+        frame.putInt("TileZ", 100000);
+        var strayPos = new net.minecraft.nbt.ListTag();
+        strayPos.add(net.minecraft.nbt.DoubleTag.valueOf(100000.5));
+        strayPos.add(net.minecraft.nbt.DoubleTag.valueOf(64.5));
+        strayPos.add(net.minecraft.nbt.DoubleTag.valueOf(100000.5));
+        frame.put("Pos", strayPos);
+        // 框里的物品:必须被剥掉,图纸不能凭空造钻石
+        var loot = new net.minecraft.nbt.CompoundTag();
+        loot.putString("id", "minecraft:diamond");
+        loot.putInt("count", 1);
+        frame.put("Item", loot);
+
+        var stand = new net.minecraft.nbt.CompoundTag();
+        stand.putString("id", "minecraft:armor_stand");
+        var strayStand = new net.minecraft.nbt.ListTag();
+        strayStand.add(net.minecraft.nbt.DoubleTag.valueOf(100000.5));
+        strayStand.add(net.minecraft.nbt.DoubleTag.valueOf(64.0));
+        strayStand.add(net.minecraft.nbt.DoubleTag.valueOf(100000.5));
+        stand.put("Pos", strayStand);
+
+        var entities = new net.minecraft.nbt.ListTag();
+        entities.add(entityTag(1.5, 0.5, 2.5, frame));
+        entities.add(entityTag(2.5, 0.0, 2.5, stand));
+        root.put("entities", entities);
+        var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_hangers.nbt"));
+
+        BlockPos anchor = helper.absolutePos(new BlockPos(4, 2, 4));
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                level, "fixture_hangers", anchor, 0);
+        helper.assertTrue(loaded.entities().size() == 2,
+                "expected the frame and the stand to load, got " + loaded.entities().size());
+        for (var spawn : loaded.entities()) {
+            helper.assertTrue(!spawn.nbt().contains("Item"),
+                    "what a frame carries must never ride in from a file — that is free diamonds");
+            helper.assertTrue(!spawn.nbt().contains("TileX") && !spawn.nbt().contains("Pos"),
+                    "the source world's anchor and position must be stripped, not carried over");
+        }
+
+        NumenPlayer companion = spawnAt(helper, "gametest_hanger", new BlockPos(1, 2, 1), true);
+        var ctx = TaskDispatch.ctx("gametest-fixtures", companion);
+        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+                ctx.deadline(1000L), loaded.targets(),
+                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, false, true,
+                loaded.blockEntityData(), loaded.entities()), reply -> {});
+
+        Vec3 want = new Vec3(anchor.getX() + 1.5, anchor.getY() + 0.5, anchor.getZ() + 2.5);
+        net.minecraft.world.phys.AABB near = new net.minecraft.world.phys.AABB(
+                want.x - 2, want.y - 2, want.z - 2, want.x + 2, want.y + 2, want.z + 2);
+        helper.succeedWhen(() -> {
+            var frames = level.getEntities(
+                    net.minecraft.world.entity.EntityType.ITEM_FRAME, near, e -> true);
+            helper.assertTrue(!frames.isEmpty(),
+                    "the item frame never made it onto the wall — its anchor was rejected"
+                            + " and it vanished without a trace");
+            var hung = frames.get(0);
+            helper.assertTrue(hung.getItem().isEmpty(),
+                    "the frame must come up empty; a blueprint cannot hand out its contents");
+            helper.assertTrue(hung.position().distanceTo(want) < 1.5,
+                    "the frame hung at " + hung.position() + " but belongs at " + want);
+            var stands = level.getEntities(
+                    net.minecraft.world.entity.EntityType.ARMOR_STAND, near, e -> true);
+            helper.assertTrue(!stands.isEmpty(), "the armour stand never got placed");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 结构 NBT 的一只实体:{pos:[x,y,z], blockPos:[..], nbt:{...}}。 */
+    private static net.minecraft.nbt.CompoundTag entityTag(double x, double y, double z,
+                                                           net.minecraft.nbt.CompoundTag nbt) {
+        var out = new net.minecraft.nbt.CompoundTag();
+        var pos = new net.minecraft.nbt.ListTag();
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(x));
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(y));
+        pos.add(net.minecraft.nbt.DoubleTag.valueOf(z));
+        out.put("pos", pos);
+        var block = new net.minecraft.nbt.ListTag();
+        block.add(net.minecraft.nbt.IntTag.valueOf((int) Math.floor(x)));
+        block.add(net.minecraft.nbt.IntTag.valueOf((int) Math.floor(y)));
+        block.add(net.minecraft.nbt.IntTag.valueOf((int) Math.floor(z)));
+        out.put("blockPos", block);
+        out.put("nbt", nbt);
+        return out;
+    }
+
+    /** 结构 NBT 的一格:{pos:[x,y,z], state:i}。 */
+    private static net.minecraft.nbt.CompoundTag cellTag(int x, int y, int z, int state) {
+        var cell = new net.minecraft.nbt.CompoundTag();
+        var pos = new net.minecraft.nbt.ListTag();
+        pos.add(net.minecraft.nbt.IntTag.valueOf(x));
+        pos.add(net.minecraft.nbt.IntTag.valueOf(y));
+        pos.add(net.minecraft.nbt.IntTag.valueOf(z));
+        cell.put("pos", pos);
+        cell.putInt("state", state);
+        return cell;
     }
 
     /**
@@ -918,18 +1144,18 @@ public class CompanionGameTests {
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
                 level, "japanese_cottage", anchor, 0);
 
-        // 清点:与实扣共用同一个件数函数。一格不是恒定一件——两个方向都有:
-        // 门/床的上半与清空格是 0 件,双层砖一格 2 件。这栋图纸两种都有,所以
-        // 两边都要真的被走到,否则这条测试只是在测"1 == 1"。
+        // 清点:与实扣共用同一个件数函数。一格不是恒定一件,而双格方块一件也不是
+        // "两格各一件"——这栋图纸里两种都有,所以两边都要真的被走到,否则这条测试
+        // 只是在测"1 == 1"。
         java.util.Map<net.minecraft.world.item.Item, Integer> quoted = new java.util.LinkedHashMap<>();
-        int free = 0;
         int multi = 0;
+        int beds = 0;
         for (BuildTaskRecord.Target t : loaded.targets()) {
+            if (t.desiredState().is(Blocks.RED_BED)) {
+                beds++;
+            }
             int n = t.materialCount();
             if (n == 0) {
-                if (!t.desiredState().isAir()) {
-                    free++;
-                }
                 continue;
             }
             if (n > 1) {
@@ -939,10 +1165,18 @@ public class CompanionGameTests {
         }
         int quotedItems = quoted.values().stream().mapToInt(Integer::intValue).sum();
         helper.assertTrue(quotedItems > 0, "quote came out empty");
-        helper.assertTrue(free > 0,
-                "this blueprint has doors/beds — their upper halves must not be quoted twice");
         helper.assertTrue(multi > 0,
                 "this blueprint has double slabs — a cell that is two slabs must be quoted as two");
+        // 双格方块一件料一张床:次半根本不在目标集里,所以格数与件数天然相等。
+        // 此前是"两半都在集里、次半记 0 件"凑出来的,那条路上床头会先落位,而床的
+        // 落位回调会往目标集之外再写一块床头——一件料换三块床方块。
+        helper.assertTrue(beds > 0, "this cottage has beds; the fixture must still contain them");
+        helper.assertTrue(quoted.get(Items.RED_BED) != null && quoted.get(Items.RED_BED) == beds,
+                "one bed item per bed: " + beds + " bed cell(s) but "
+                        + quoted.get(Items.RED_BED) + " item(s) quoted");
+        helper.assertTrue(loaded.targets().stream().noneMatch(t -> com.dwinovo.numen.core.task
+                        .BuildStates.isSecondaryHalf(t.desiredState())),
+                "no secondary half belongs in the target set");
 
         // 按层分布:必须逐层可分辨,否则"去掉二楼"这类要求无从下手
         java.util.Map<Integer, Integer> byLayer = new java.util.TreeMap<>();
@@ -1484,9 +1718,16 @@ public class CompanionGameTests {
         helper.succeed();
     }
 
-    /** 真实社区图纸解码:日式小屋(40×23×45,负 z 尺寸区域、379 项调色板
-     *  9bit 跨 long 位流)。Litematica 元数据 TotalBlocks=5859 当金标准,
-     *  解码格数必须分毫不差。 */
+    /**
+     * 真实社区图纸解码:日式小屋(40×23×45,负 z 尺寸区域、379 项调色板
+     * 9bit 跨 long 位流)。{@code .litematic} 元数据 TotalBlocks=5859 当金标准。
+     *
+     * <p>目标格是 5857 而不是 5859:这栋图纸里有<b>两张床</b>,床头不进目标集,
+     * 由床脚的落位回调自己造出来。两张床都朝北,而朝北时床头的 z 更小——照原来两半
+     * 都排进去的做法,床头会先落位,而床的落位回调会往"朝向再往外一格"再写一块床头,
+     * 那一格在目标集之外:一件料换三块床方块,还可能覆写掉已砌好的内墙。所以这个
+     * 差额不是解码丢了格,恰恰是它没丢:{@code 5857 + 2 == TotalBlocks}。
+     */
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void blueprint_japanese_cottage_decode(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
@@ -1496,9 +1737,16 @@ public class CompanionGameTests {
         helper.assertTrue(loaded.size().getX() == 40 && loaded.size().getY() == 23
                         && loaded.size().getZ() == 45,
                 "cottage size mismatch: " + loaded.size());
-        helper.assertTrue(loaded.targets().size() == 5859,
-                "cottage decode: expect 5859 cells (litematica TotalBlocks), got "
-                        + loaded.targets().size());
+        // 5857 个目标格 + 2 个由床脚代建的床头 = TotalBlocks 5859
+        helper.assertTrue(loaded.targets().size() == 5857,
+                "cottage decode: expect 5857 target cells (TotalBlocks 5859 minus the two bed"
+                        + " heads their feet build), got " + loaded.targets().size());
+        helper.assertTrue(loaded.dropped() == 0,
+                "nothing in this cottage should be dropped outright, got " + loaded.dropped());
+        // 床头是被代建的,不是缺了一块设计——目标集里一个都不该有
+        helper.assertTrue(loaded.targets().stream().noneMatch(t -> com.dwinovo.numen.core.task
+                        .BuildStates.isSecondaryHalf(t.desiredState())),
+                "a bed head must never be its own target cell");
         helper.succeed();
     }
 
