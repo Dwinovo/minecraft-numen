@@ -156,6 +156,12 @@ public final class BuildStates {
         if (state.is(Blocks.STRUCTURE_VOID) || state.is(Blocks.JIGSAW) || state.is(Blocks.STRUCTURE_BLOCK)) {
             return "structure tooling blocks are not part of a building";
         }
+        // 活塞头与移动中的活塞是活塞自己伸出去的产物,不是能摆的东西。我们在
+        // normalize 里已经把 EXTENDED 归一成收回,照放一个头就是一块无主的孤块。
+        if (state.getBlock() instanceof net.minecraft.world.level.block.piston.PistonHeadBlock
+                || state.getBlock() instanceof net.minecraft.world.level.block.piston.MovingPistonBlock) {
+            return "a piston head belongs to an extended piston, not to a build";
+        }
         if (state.getBlock() instanceof LiquidBlock) {
             // 能力边界,得说是边界:回一句"未知方块"的话,名字明明是对的,模型只会
             // 以为自己拼错了,换个写法再试一遍

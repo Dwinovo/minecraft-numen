@@ -523,8 +523,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (desired != null && desired.getBlock() instanceof LiquidBlock) {
             return null;   // 流体不承接:布水与排水都不做
         }
-        if (unbreakableAt(pos, desired)) {
-            return null;   // 基岩、末地传送门框架这类砸不动的:一辈子也清不掉,别耗着
+        if (!player.level().isLoaded(pos)) {
+            return null;   // 区块这一刻没加载:临时状况,下一遍再来(不算注定动不了)
         }
 
         boolean occupied = !current.isAir() && !(current.getBlock() instanceof LiquidBlock);
@@ -1034,7 +1034,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         List<BuildTaskRecord.Target> pending = new ArrayList<>();
         for (BuildTaskRecord.Target target : r.targets) {
             if (!target.matches(player.level().getBlockState(target.pos()))
-                    && !blockedByMode(target)) {
+                    && !blockedByMode(target) && !hopeless(target)) {
                 pending.add(target);
             }
         }
@@ -1235,6 +1235,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 BlockState observed = view.getBlockState(pos);
                 if (target.matches(observed)
                         || blockedByMode(target)
+                        || hopeless(target)
                         || target.desiredState().getBlock() instanceof LiquidBlock
                         || (isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {
                     // 液体口径:不放液体目标、清空型目标也不排水——这两类跳过豁免;
@@ -1335,6 +1336,21 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private boolean blockedByMode(BuildTaskRecord.Target target) {
         BlockState current = player.level().getBlockState(target.pos());
         return !r.replaceMode.allows(current, target.desiredState());
+    }
+
+    /**
+     * 这一格<b>注定</b>动不了吗——世界边界之外,或者砸不动的东西挡着。
+     *
+     * <p>和"这一刻放不下去"要分开:后者(区块没加载、她自己站在那格里、材料没到)
+     * 下一遍就可能变,该留在待建集里;前者从第一遍起就不会变,留着只会让整栋楼
+     * 每一遍都为它重排一次顺序、重试一次,一直耗到超时。
+     */
+    private boolean hopeless(BuildTaskRecord.Target target) {
+        BlockPos pos = target.pos();
+        if (!player.level().getWorldBorder().isWithinBounds(pos)) {
+            return true;
+        }
+        return unbreakableAt(pos, target.desiredState());
     }
 
     /**
