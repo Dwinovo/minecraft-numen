@@ -1,6 +1,8 @@
 package com.dwinovo.numen.core.mixin;
 
 import com.dwinovo.numen.core.chat.EntityPromptContract;
+import com.dwinovo.numen.core.chat.ClientInventoryPromptContext;
+import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.network.payload.SpeakingStatePayload;
 import com.dwinovo.numen.platform.Services;
 import java.util.UUID;
@@ -24,10 +26,18 @@ public abstract class EntityAgentLoopPromptMixin {
     @Unique private int numen$agentTurnHeartbeatTicks;
     @Unique private boolean numen$agentTurnLeaseActive;
     @Unique private boolean numen$lastSpeakingObserved;
+    @Unique private ClientInventoryPromptContext numen$inventoryPromptContext;
 
     @Inject(method = "composeSystemPrompt", at = @At("RETURN"), cancellable = true)
-    private void numen$useRegisteredToolNames(CallbackInfoReturnable<String> callback) {
-        callback.setReturnValue(EntityPromptContract.apply(callback.getReturnValue()));
+    private void numen$augmentSystemPrompt(CallbackInfoReturnable<String> callback) {
+        if (this.numen$inventoryPromptContext == null) {
+            this.numen$inventoryPromptContext = new ClientInventoryPromptContext();
+        }
+        String inventory = this.numen$inventoryPromptContext.refresh(
+            this.entityUuid,
+            ClientNumenLookup.resolve(this.entityUuid)
+        );
+        callback.setReturnValue(EntityPromptContract.apply(callback.getReturnValue()) + inventory);
     }
 
     @Inject(method = "clientTick", at = @At("TAIL"))

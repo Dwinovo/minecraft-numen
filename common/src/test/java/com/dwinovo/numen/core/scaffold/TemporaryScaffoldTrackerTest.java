@@ -36,25 +36,25 @@ public final class TemporaryScaffoldTrackerTest {
     }
 
     @Test
-    void onlyPillarsEnterAutomaticCleanupWhileRoutesReportWhyTheyStay() {
+    void everyNavigationRoleEntersCurrentWorldSafetyEvaluation() {
         UUID companion = UUID.fromString("dd6be974-bc87-4a22-a5a6-8d5047be7170");
         TemporaryScaffoldTracker.clear(companion);
         place(companion, 4, 70, 8, NavigationPlacementRole.PILLAR, 200L);
         place(companion, 5, 70, 8, NavigationPlacementRole.BRIDGE, 201L);
+        place(companion, 6, 70, 8, NavigationPlacementRole.STEP, 202L);
+        place(companion, 7, 70, 8, NavigationPlacementRole.ROUTE, 203L);
 
         var reclaimable = TemporaryScaffoldLedger.topmostReclaimableEntries(companion);
-        require(reclaimable.size() == 1, "only disposable vertical support may auto-clean");
+        require(reclaimable.size() == 4, "every temporary navigation role must receive a live safety recheck");
         require(
-            reclaimable.getFirst().role() == NavigationPlacementRole.PILLAR,
-            "a navigation bridge must not enter pillar-style cleanup"
+            reclaimable.stream().map(TemporaryScaffoldLedger.Entry::role).collect(java.util.stream.Collectors.toSet())
+                .equals(java.util.Set.of(NavigationPlacementRole.values())),
+            "historical bridge, step, and route labels must not permanently suppress cleanup"
         );
-        var bridgeReport = TemporaryScaffoldLedger.reports(companion).stream()
-            .filter(report -> report.role() == NavigationPlacementRole.BRIDGE)
-            .findFirst()
-            .orElseThrow();
         require(
-            bridgeReport.reason().equals("preserved_navigation_bridge"),
-            "a preserved bridge must report why it was not reclaimed"
+            TemporaryScaffoldLedger.reports(companion).stream()
+                .allMatch(report -> report.reason().equals("pending_safety_recheck")),
+            "all temporary roles must wait for the same current-world safety decision"
         );
         TemporaryScaffoldTracker.clear(companion);
     }

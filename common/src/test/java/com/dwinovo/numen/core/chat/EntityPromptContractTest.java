@@ -2,8 +2,6 @@ package com.dwinovo.numen.core.chat;
 
 import org.junit.jupiter.api.Test;
 
-import com.dwinovo.numen.core.chat.EntityPromptContract;
-
 public final class EntityPromptContractTest {
     @Test
     void verifiedRuntimeBehavior() {
@@ -31,6 +29,12 @@ public final class EntityPromptContractTest {
         require(
             amended.contains("Never substitute goto plus interact_at"),
             "coordinate-by-coordinate mining routes must be rejected"
+        );
+        require(
+            normalized.toLowerCase().contains("temporary scaffolds")
+                && normalized.toLowerCase().contains("call reclaim_temporary_scaffolds")
+                && normalized.toLowerCase().contains("never call mine"),
+            "temporary scaffold cleanup must use its coordinate ledger instead of type-based mining"
         );
         require(
             normalized.contains("remove armor") && normalized.contains("head, chest, legs, and feet"),
@@ -108,6 +112,24 @@ public final class EntityPromptContractTest {
                 && normalized.contains("recovery policy selects it")
                 && normalized.contains("Naming the exact item does not override this safety rule"),
             "generic eating must preserve risky and emergency consumables"
+        );
+        require(
+            normalized.contains("minecraft:potion[instant_health]")
+                && normalized.contains("minecraft:potion[regeneration]")
+                && normalized.contains("Never use eat_item for splash_potion or lingering_potion"),
+            "healing potion prompts must expose exact safe effects without treating throwable potions as drinks"
+        );
+        require(
+            normalized.contains("Automatic recovery uses it only when the recovery policy selects a safe cleanse")
+                && normalized.contains("owner explicitly asks you to drink milk")
+                && normalized.contains("even when no harmful effect is active"),
+            "automatic milk use must stay conservative while an explicit owner request remains allowed"
+        );
+        require(
+            normalized.contains("totem of undying is not food")
+                && normalized.contains("automatically equips it")
+                && normalized.contains("restores the previous offhand"),
+            "the prompt must describe the bounded emergency totem reflex"
         );
     }
 

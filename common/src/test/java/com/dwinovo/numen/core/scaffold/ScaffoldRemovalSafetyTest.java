@@ -7,7 +7,7 @@ import com.dwinovo.numen.core.scaffold.ScaffoldRemovalSafety.Action;
 
 public final class ScaffoldRemovalSafetyTest {
     @Test
-    void verifiedRuntimeBehavior() {
+    void preservesRealCrossingsAndReclaimsIsolatedSupports() {
         var supportingOverLava = ScaffoldRemovalSafety.evaluate(
             new ScaffoldRemovalSafety.Context(
                 true,
@@ -18,7 +18,8 @@ public final class ScaffoldRemovalSafetyTest {
                 true,
                 4,
                 false,
-                true
+                true,
+                0
             )
         );
         require(supportingOverLava.action() == Action.KEEP, "support over lava must remain");
@@ -37,7 +38,8 @@ public final class ScaffoldRemovalSafetyTest {
                 false,
                 1,
                 false,
-                true
+                true,
+                0
             )
         );
         require(requiredByPath.action() == Action.KEEP, "active path support must remain");
@@ -56,7 +58,8 @@ public final class ScaffoldRemovalSafetyTest {
                 false,
                 0,
                 false,
-                true
+                true,
+                0
             )
         );
         require(changedByWorld.action() == Action.FORGET, "changed coordinates must never be mined");
@@ -75,7 +78,8 @@ public final class ScaffoldRemovalSafetyTest {
                 false,
                 0,
                 false,
-                false
+                false,
+                0
             )
         );
         require(unloaded.action() == Action.KEEP, "unloaded chunk must be retried later");
@@ -94,7 +98,8 @@ public final class ScaffoldRemovalSafetyTest {
                 false,
                 2,
                 true,
-                true
+                true,
+                0
             )
         );
         require(onlyRetreat.action() == Action.KEEP, "only known retreat must remain");
@@ -103,7 +108,7 @@ public final class ScaffoldRemovalSafetyTest {
             "retreat preservation needs an explicit reason: " + onlyRetreat.reason()
         );
 
-        var dangerousDrop = ScaffoldRemovalSafety.evaluate(
+        var isolatedHighScaffold = ScaffoldRemovalSafety.evaluate(
             new ScaffoldRemovalSafety.Context(
                 true,
                 true,
@@ -113,13 +118,88 @@ public final class ScaffoldRemovalSafetyTest {
                 false,
                 6,
                 false,
-                true
+                true,
+                0
             )
         );
-        require(dangerousDrop.action() == Action.KEEP, "unsafe fall must remain bridged");
         require(
-            dangerousDrop.reason().equals("unsafe_fall_below"),
-            "unsafe fall needs an explicit reason: " + dangerousDrop.reason()
+            isolatedHighScaffold.action() == Action.REMOVE,
+            "an isolated high scaffold cannot make the companion fall once it is no longer in use"
+        );
+        require(
+            isolatedHighScaffold.reason().equals("safe_to_remove"),
+            "an unused isolated scaffold must be reclaimed: " + isolatedHighScaffold.reason()
+        );
+
+        var lavaBridge = ScaffoldRemovalSafety.evaluate(
+            new ScaffoldRemovalSafety.Context(
+                true,
+                true,
+                false,
+                false,
+                true,
+                true,
+                1,
+                false,
+                true,
+                2
+            )
+        );
+        require(lavaBridge.action() == Action.KEEP, "a real bridge over lava must remain");
+        require(
+            lavaBridge.reason().equals("useful_walkable_crossing"),
+            "a real lava bridge needs a geometric preservation reason: " + lavaBridge.reason()
+        );
+
+        var waterBridge = ScaffoldRemovalSafety.evaluate(
+            new ScaffoldRemovalSafety.Context(
+                true,
+                true,
+                false,
+                false,
+                true,
+                false,
+                0,
+                false,
+                true,
+                2
+            )
+        );
+        require(waterBridge.action() == Action.KEEP, "a real bridge over water must remain");
+
+        var ravineBridge = ScaffoldRemovalSafety.evaluate(
+            new ScaffoldRemovalSafety.Context(
+                true,
+                true,
+                false,
+                false,
+                true,
+                false,
+                6,
+                false,
+                true,
+                2
+            )
+        );
+        require(ravineBridge.action() == Action.KEEP, "a real bridge across a ravine must remain");
+
+        var redundantGroundPath = ScaffoldRemovalSafety.evaluate(
+            new ScaffoldRemovalSafety.Context(
+                true,
+                true,
+                false,
+                false,
+                true,
+                false,
+                1,
+                false,
+                true,
+                2
+            )
+        );
+        require(
+            redundantGroundPath.action() == Action.REMOVE,
+            "two adjacent walkable sides alone must not preserve a redundant block over safe ground"
         );
 
         var safelyOutOfReach = new ScaffoldRemovalSafety.Context(
@@ -131,7 +211,8 @@ public final class ScaffoldRemovalSafetyTest {
             false,
             1,
             false,
-            false
+            false,
+            0
         );
         require(
             ScaffoldRemovalSafety.canNavigateForRemoval(safelyOutOfReach),
@@ -147,11 +228,29 @@ public final class ScaffoldRemovalSafetyTest {
             false,
             1,
             false,
-            false
+            false,
+            0
         );
         require(
             !ScaffoldRemovalSafety.canNavigateForRemoval(unreachableButRequiredByPath),
             "navigation must not reclaim a block required by an active path"
+        );
+
+        var outOfReachLavaBridge = new ScaffoldRemovalSafety.Context(
+            true,
+            true,
+            false,
+            false,
+            true,
+            true,
+            0,
+            false,
+            false,
+            2
+        );
+        require(
+            !ScaffoldRemovalSafety.canNavigateForRemoval(outOfReachLavaBridge),
+            "cleanup navigation must not approach a genuine lava bridge in order to dismantle it"
         );
     }
 

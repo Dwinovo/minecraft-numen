@@ -41,7 +41,14 @@ public final class TemporaryScaffoldController {
     private static final int RETREAT_VERTICAL_RANGE = 4;
     private static final double RETREAT_SPEED = 1.0D;
     private static final double STABLE_CLEANUP_REACH_SQUARED = 3.5D * 3.5D;
+    private static final Direction[] HORIZONTAL_DIRECTIONS = {
+        Direction.NORTH,
+        Direction.SOUTH,
+        Direction.WEST,
+        Direction.EAST
+    };
     private static final Map<UUID, CleanupState> STATES = new HashMap<>();
+    private static final Set<UUID> EXPLICIT_CLEANUPS = new HashSet<>();
 
     private record Landing(boolean known, boolean hazardous, int fallDistance) {
     }
@@ -113,6 +120,62 @@ public final class TemporaryScaffoldController {
             pause(player);
             return;
         }
+
+        tickCleanup(player);
+    }
+
+    public static void beginExplicit(NumenPlayer player) {
+        UUID id = player.getUUID();
+        pause(player);
+        EXPLICIT_CLEANUPS.add(id);
+        CleanupState state = STATES.get(id);
+        if (state != null) {
+            state.nextRetryAt = 0L;
+            state.noShotCount = 0;
+        }
+    }
+
+    public static void tickExplicit(NumenPlayer player) {
+        if (!isExplicitCleanupActive(player)) {
+            beginExplicit(player);
+        }
+        tickCleanup(player);
+    }
+
+    public static void endExplicit(NumenPlayer player) {
+        EXPLICIT_CLEANUPS.remove(player.getUUID());
+        pause(player);
+    }
+
+    public static boolean isExplicitCleanupActive(NumenPlayer player) {
+        return EXPLICIT_CLEANUPS.contains(player.getUUID());
+    }
+
+    public static boolean hasActionableCleanup(NumenPlayer player) {
+        List<TemporaryScaffoldLedger.Entry> entries = TemporaryScaffoldLedger.entries(
+            player.getUUID()
+        );
+        if (entries.isEmpty()) {
+            return false;
+        }
+        if (isStandingOnTemporaryScaffold(player)) {
+            return true;
+        }
+        for (TemporaryScaffoldLedger.Entry entry : entries) {
+            if (!entry.role().automaticallyReclaimable()) {
+                continue;
+            }
+            ScaffoldRemovalSafety.Context context = removalContext(player, entry);
+            ScaffoldRemovalSafety.Decision decision = ScaffoldRemovalSafety.evaluate(context);
+            if (decision.action() != ScaffoldRemovalSafety.Action.KEEP
+                || ScaffoldRemovalSafety.canNavigateForRemoval(context)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void tickCleanup(NumenPlayer player) {
 
         UUID id = player.getUUID();
         List<TemporaryScaffoldLedger.Entry> entries = TemporaryScaffoldLedger.entries(id);
@@ -222,6 +285,7 @@ public final class TemporaryScaffoldController {
 
     public static void shutdown(NumenPlayer player) {
         UUID companionId = player.getUUID();
+        EXPLICIT_CLEANUPS.remove(companionId);
         CleanupState state = STATES.remove(companionId);
         if (state != null) {
             cancelState(state);
@@ -267,6 +331,8 @@ public final class TemporaryScaffoldController {
             case "landing_not_known" -> "the landing below cannot be determined safely";
             case "hazard_below" -> "lava, fire, powder snow, void, or another hazard is below";
             case "unsafe_fall_below" -> "removal would open an unsafe fall";
+            case "useful_walkable_crossing" ->
+                "removing it would break a useful bridge across an unsafe gap";
             case "currently_out_of_reach" -> "the exact block is not currently within stable reach";
             case "no_exact_shot" -> "no exact unobstructed mining ray is available";
             case "occluded_exact_target_not_mined" -> "another block occludes it and was not mined";
@@ -307,7 +373,7 @@ public final class TemporaryScaffoldController {
         boolean loaded = sameDimension && level.isLoaded(pos);
         if (!loaded) {
             return new ScaffoldRemovalSafety.Context(
-                false, true, false, false, false, false, 0, false, false
+                false, true, false, false, false, false, 0, false, false, 0
             );
         }
 
@@ -315,6 +381,8 @@ public final class TemporaryScaffoldController {
         boolean supportsPlayer = PathExecutor.playerFeet(player).below().equals(pos);
         boolean requiredByPath = requiredByActivePath(player, pos);
         Landing landing = landingAfterRemoval(level, pos);
+        String previousBlockId = entry.previousBlockId();
+        boolean replacedFluid = isFluidBlockId(previousBlockId);
         boolean onlyRetreat = isLikelyOnlyRetreat(player, entry);
         boolean reachable = exactReachable(player, pos);
         return new ScaffoldRemovalSafety.Context(
@@ -323,11 +391,63 @@ public final class TemporaryScaffoldController {
             supportsPlayer,
             requiredByPath,
             landing.known(),
-            landing.hazardous(),
-            landing.fallDistance(),
+            landing.hazardous() || "minecraft:lava".equals(previousBlockId),
+            replacedFluid ? 0 : landing.fallDistance(),
             onlyRetreat,
-            reachable
+            reachable,
+            walkableConnectionCount(level, pos)
         );
+    }
+
+    private static boolean isFluidBlockId(String blockId) {
+        return "minecraft:water".equals(blockId)
+            || "minecraft:lava".equals(blockId)
+            || "minecraft:bubble_column".equals(blockId);
+    }
+
+    private static int walkableConnectionCount(ServerLevel level, BlockPos support) {
+        int connections = 0;
+        for (Direction direction : HORIZONTAL_DIRECTIONS) {
+            if (hasWalkableContinuation(level, support, direction)) {
+                connections++;
+            }
+        }
+        return connections;
+    }
+
+    private static boolean hasWalkableContinuation(
+        ServerLevel level,
+        BlockPos support,
+        Direction direction
+    ) {
+        for (int dy = -1; dy <= 1; dy++) {
+            BlockPos feet = support.relative(direction).offset(0, dy, 0).above();
+            if (isSafeWalkableFeet(level, feet)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isSafeWalkableFeet(ServerLevel level, BlockPos feet) {
+        BlockPos head = feet.above();
+        BlockPos support = feet.below();
+        if (!level.isLoaded(feet)
+            || !level.isLoaded(head)
+            || !level.isLoaded(support)
+            || !BlockHelper.canWalkThrough(level, feet)
+            || !BlockHelper.canWalkThrough(level, head)
+            || !BlockHelper.isStandable(level, feet)
+            || BlockHelper.isHazard(level, support)) {
+            return false;
+        }
+        BlockState feetState = level.getBlockState(feet);
+        BlockState headState = level.getBlockState(head);
+        BlockState supportState = level.getBlockState(support);
+        return feetState.getFluidState().isEmpty()
+            && headState.getFluidState().isEmpty()
+            && !supportState.getFluidState().is(FluidTags.LAVA)
+            && !isHazard(supportState);
     }
 
     private static void startCleanupNavigation(
@@ -496,11 +616,6 @@ public final class TemporaryScaffoldController {
         List<TemporaryScaffoldLedger.Entry> entries
     ) {
         ServerLevel level = player.level();
-        BlockPos head = feet.above();
-        BlockPos support = feet.below();
-        if (!level.isLoaded(feet) || !level.isLoaded(head) || !level.isLoaded(support)) {
-            return false;
-        }
         String dimensionId = level.dimension().identifier().toString();
         boolean temporaryColumn = entries.stream().anyMatch(entry ->
             entry.role().automaticallyReclaimable()
@@ -508,20 +623,7 @@ public final class TemporaryScaffoldController {
                 && entry.x() == feet.getX()
                 && entry.z() == feet.getZ()
         );
-        if (temporaryColumn
-            || !BlockHelper.canWalkThrough(level, feet)
-            || !BlockHelper.canWalkThrough(level, head)
-            || !BlockHelper.isStandable(level, feet)
-            || BlockHelper.isHazard(level, support)) {
-            return false;
-        }
-        BlockState feetState = level.getBlockState(feet);
-        BlockState headState = level.getBlockState(head);
-        BlockState supportState = level.getBlockState(support);
-        return feetState.getFluidState().isEmpty()
-            && headState.getFluidState().isEmpty()
-            && !supportState.getFluidState().is(FluidTags.LAVA)
-            && !isHazard(supportState);
+        return !temporaryColumn && isSafeWalkableFeet(level, feet);
     }
 
     private static boolean reachedRetreatTarget(NumenPlayer player, BlockPos target) {

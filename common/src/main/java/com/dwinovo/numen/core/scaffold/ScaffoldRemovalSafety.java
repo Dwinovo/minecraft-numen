@@ -17,7 +17,8 @@ public final class ScaffoldRemovalSafety {
         boolean hazardousLanding,
         int fallDistance,
         boolean onlyKnownRetreat,
-        boolean reachableForRemoval
+        boolean reachableForRemoval,
+        int walkableConnections
     ) {
     }
 
@@ -46,14 +47,14 @@ public final class ScaffoldRemovalSafety {
         if (!context.landingKnown()) {
             return new Decision(Action.KEEP, "landing_not_known");
         }
-        if (context.hazardousLanding()) {
-            return new Decision(Action.KEEP, "hazard_below");
-        }
-        if (context.fallDistance() > 3) {
-            return new Decision(Action.KEEP, "unsafe_fall_below");
-        }
         if (context.onlyKnownRetreat()) {
             return new Decision(Action.KEEP, "only_known_retreat");
+        }
+        if (context.walkableConnections() >= 2
+            && (context.hazardousLanding()
+                || context.fallDistance() == 0
+                || context.fallDistance() > 1)) {
+            return new Decision(Action.KEEP, "useful_walkable_crossing");
         }
         if (!context.reachableForRemoval()) {
             return new Decision(Action.KEEP, "currently_out_of_reach");
@@ -74,7 +75,8 @@ public final class ScaffoldRemovalSafety {
             context.hazardousLanding(),
             context.fallDistance(),
             context.onlyKnownRetreat(),
-            true
+            true,
+            context.walkableConnections()
         );
         return evaluate(fromReachableStance).action() == Action.REMOVE;
     }

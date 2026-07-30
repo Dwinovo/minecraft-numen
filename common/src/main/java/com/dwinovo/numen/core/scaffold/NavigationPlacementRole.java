@@ -3,9 +3,9 @@ package com.dwinovo.numen.core.scaffold;
 /** Semantic purpose supplied by the navigation movement that places a block. */
 public enum NavigationPlacementRole {
     PILLAR(true),
-    BRIDGE(false),
-    STEP(false),
-    ROUTE(false);
+    BRIDGE(true),
+    STEP(true),
+    ROUTE(true);
 
     private final boolean automaticallyReclaimable;
 

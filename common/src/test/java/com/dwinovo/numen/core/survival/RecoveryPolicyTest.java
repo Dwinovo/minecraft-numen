@@ -100,6 +100,67 @@ public final class RecoveryPolicyTest {
             alreadyRegenerating.mode(),
             "an adequate regeneration effect must prevent another healing item from being wasted"
         );
+
+        RecoveryPolicy.Decision regenerationOnly = RecoveryPolicy.decide(
+            state(20, 20.0f, 6.0f, true, false),
+            List.of(RecoveryPolicy.Candidate.healing(
+                13,
+                RecoveryPolicy.Kind.REGENERATION,
+                8.0f
+            ))
+        );
+        equal(
+            13,
+            regenerationOnly.slot(),
+            "a drinkable regeneration potion must remain a valid active-healing choice"
+        );
+
+        RecoveryPolicy.Decision hungryInjured = RecoveryPolicy.decide(
+            state(16, 0.0f, 14.0f, true, false),
+            List.of(RecoveryPolicy.Candidate.food(14, RecoveryPolicy.Value.ORDINARY, 4, 4.8f))
+        );
+        equal(
+            RecoveryPolicy.Mode.NATURAL_REGEN,
+            hungryInjured.mode(),
+            "an injured companion below vanilla's regeneration hunger threshold must eat"
+        );
+    }
+
+    @Test
+    void cleansesOngoingDamageWithoutErasingTheCriticalHealingOrder() {
+        RecoveryPolicy.Decision cleanse = RecoveryPolicy.decide(
+            stateWithCleanse(20, 5.0f, 16.0f),
+            List.of(RecoveryPolicy.Candidate.cleansing(20))
+        );
+        equal(RecoveryPolicy.Mode.CLEANSE, cleanse.mode(), "recommended cleansing must select milk");
+        equal(20, cleanse.slot(), "the selected milk slot must not affect food ordering");
+
+        RecoveryPolicy.Decision cleanseBeforeRegeneration = RecoveryPolicy.decide(
+            stateWithCleanse(20, 5.0f, 6.0f),
+            List.of(
+                RecoveryPolicy.Candidate.healing(21, RecoveryPolicy.Kind.REGENERATION, 8.0f),
+                RecoveryPolicy.Candidate.cleansing(22)
+            )
+        );
+        equal(
+            RecoveryPolicy.Mode.CLEANSE,
+            cleanseBeforeRegeneration.mode(),
+            "milk must clear ongoing damage before a regeneration effect that milk would erase"
+        );
+
+        RecoveryPolicy.Decision instantBeforeCleanse = RecoveryPolicy.decide(
+            stateWithCleanse(20, 5.0f, 4.0f),
+            List.of(
+                RecoveryPolicy.Candidate.healing(23, RecoveryPolicy.Kind.INSTANT_HEALTH, 4.0f),
+                RecoveryPolicy.Candidate.cleansing(24)
+            )
+        );
+        equal(
+            RecoveryPolicy.Mode.ACTIVE_HEALING,
+            instantBeforeCleanse.mode(),
+            "at two hearts instant health must land before the slower milk cleanse"
+        );
+        equal(23, instantBeforeCleanse.slot(), "critical instant health must retain first action");
     }
 
     @Test
@@ -150,6 +211,22 @@ public final class RecoveryPolicyTest {
             20.0f,
             naturalRegeneration,
             regenerationActive
+        );
+    }
+
+    private static RecoveryPolicy.State stateWithCleanse(
+        int food,
+        float saturation,
+        float health
+    ) {
+        return new RecoveryPolicy.State(
+            food,
+            saturation,
+            health,
+            20.0f,
+            true,
+            false,
+            true
         );
     }
 

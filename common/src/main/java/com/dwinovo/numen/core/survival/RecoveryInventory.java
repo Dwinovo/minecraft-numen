@@ -29,17 +29,34 @@ public final class RecoveryInventory {
         return RecoveryPolicy.decide(state(player), candidates(player.getInventory()));
     }
 
+    public static int selectedRequestedSlot(NumenPlayer player, Item requestedItem) {
+        Inventory inventory = player.getInventory();
+        if (requestedItem != Items.POTION) {
+            return firstSlot(inventory, requestedItem);
+        }
+
+        RecoveryPolicy.Decision decision = decide(player);
+        int slot = decision.slot();
+        boolean expectedMode = decision.mode() == RecoveryPolicy.Mode.ACTIVE_HEALING;
+        return expectedMode
+            && slot >= 0
+            && slot < inventory.getContainerSize()
+            && inventory.getItem(slot).is(requestedItem)
+                ? slot
+                : -1;
+    }
+
     public static String requestedUseRefusal(NumenPlayer player, Item requestedItem) {
         Inventory inventory = player.getInventory();
-        int requestedSlot = -1;
-        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
-            if (inventory.getItem(slot).is(requestedItem)) {
-                requestedSlot = slot;
-                break;
-            }
-        }
+        int requestedSlot = firstSlot(inventory, requestedItem);
         if (requestedSlot < 0) {
             return null;
+        }
+
+        if (requestedItem == Items.POTION) {
+            return selectedRequestedSlot(player, requestedItem) >= 0
+                ? null
+                : "kept potion: no safe healing potion is currently selected by the recovery policy";
         }
 
         List<RecoveryPolicy.Candidate> candidates = candidates(inventory);
@@ -69,8 +86,18 @@ public final class RecoveryInventory {
         };
     }
 
+    private static int firstSlot(Inventory inventory, Item item) {
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            if (inventory.getItem(slot).is(item)) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
     private static RecoveryPolicy.State state(NumenPlayer player) {
         FoodData food = player.getFoodData();
+        RecoveryEffects.Snapshot effects = RecoveryEffects.inspect(player);
         MobEffectInstance regeneration = player.getEffect(MobEffects.REGENERATION);
         boolean regenerationActive = regeneration != null
             && (regeneration.isInfiniteDuration()
@@ -81,7 +108,8 @@ public final class RecoveryInventory {
             player.getHealth(),
             player.getMaxHealth(),
             player.level().getGameRules().get(GameRules.NATURAL_HEALTH_REGENERATION),
-            regenerationActive
+            regenerationActive,
+            effects.cleanseRecommended()
         );
     }
 
@@ -110,6 +138,10 @@ public final class RecoveryInventory {
                         16.0f
                     )
                 );
+                continue;
+            }
+            if (stack.is(Items.MILK_BUCKET)) {
+                candidates.add(RecoveryPolicy.Candidate.cleansing(slot));
                 continue;
             }
             if (stack.is(Items.POTION)) {

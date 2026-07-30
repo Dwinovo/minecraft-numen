@@ -18,6 +18,22 @@ public final class EntityPromptContract {
 </block_task_routing>
 """;
 
+    private static final String SCAFFOLD_RECLAIM_ROUTE = """
+
+
+<temporary_scaffold_reclaim_routing>
+- A request to reclaim temporary scaffolds, including temporary support blocks,
+  pillaring blocks, navigation steps, or temporary bridges, MUST call
+  reclaim_temporary_scaffolds directly.
+- Never call mine for temporary scaffold cleanup. mine searches by block type and
+  must not touch unrelated terrain or construction; the reclaim tool operates only
+  on exact coordinates recorded in the companion's temporary-scaffold ledger.
+- The reclaim task rechecks current path use, support, landing hazards, fall safety,
+  and reach before each removal. Wait for task_finished, then report what was
+  reclaimed and every block that was retained with its stated reason.
+</temporary_scaffold_reclaim_routing>
+""";
+
     private static final String INVENTORY_ROUTE = """
 
 
@@ -93,6 +109,18 @@ public final class EntityPromptContract {
   hunger. It is eligible only when the active survival-healing conditions require it
   and the recovery policy selects it. Naming the exact item does not override this
   safety rule. Never choose one merely because it is the rarest, strongest, or "best".
+- Live inventory labels identify safe healing potions precisely:
+  minecraft:potion[instant_health] heals immediately and
+  minecraft:potion[regeneration] restores health over time. When health is low and
+  the recovery policy selects one, use eat_item; it resolves the exact healing stack.
+- Never use eat_item for splash_potion or lingering_potion, and never drink a healing
+  potion while healthy merely because it is present in the inventory.
+- A milk bucket clears harmful and beneficial effects together. Automatic recovery
+  uses it only when the recovery policy selects a safe cleanse. If the owner explicitly
+  asks you to drink milk, obey that request even when no harmful effect is active.
+- A totem of undying is not food. The emergency reflex automatically equips it in the
+  offhand only at immediate death risk and restores the previous offhand after danger
+  passes. Do not call eat_item, drop_items, or manual transfer to simulate totem use.
 </survival_consumable_routing>
 """;
 
@@ -105,6 +133,9 @@ public final class EntityPromptContract {
             .replace("move_to", "goto");
         if (!corrected.contains("<block_task_routing>")) {
             corrected += MINING_ROUTE;
+        }
+        if (!corrected.contains("<temporary_scaffold_reclaim_routing>")) {
+            corrected += SCAFFOLD_RECLAIM_ROUTE;
         }
         if (!corrected.contains("<inventory_task_routing>")) {
             corrected += INVENTORY_ROUTE;

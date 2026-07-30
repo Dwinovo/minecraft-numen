@@ -20,6 +20,9 @@ public abstract class CompanionBrainScaffoldCleanupMixin {
 
     @Inject(method = "tick", at = @At("TAIL"))
     private void numen$cleanupTemporaryScaffolds(NumenPlayer player, CallbackInfo callback) {
+        if (TemporaryScaffoldController.isExplicitCleanupActive(player)) {
+            return;
+        }
         boolean chainBlocksCleanup = ScaffoldCleanupGate.chainBlocksCleanup(
             this.running != null,
             this.running instanceof SpeakingLookChain
