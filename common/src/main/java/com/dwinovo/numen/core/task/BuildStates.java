@@ -216,27 +216,82 @@ public final class BuildStates {
         if (!state.is(com.dwinovo.numen.core.init.InitTag.SAFE_BLOCK_ENTITY_DATA)) {
             return null;
         }
+        // 硬底线用<b>原版自己的判据</b>:{@code BlockEntity#onlyOpCanSetNbt()}。命令方块、
+        // 结构方块、拼图方块都在这一档——原版正是拿它决定"这份 NBT 能不能由非管理员设置",
+        // 而我们的处境一模一样:图纸是文件,谁都能编辑。
+        //
+        // 此前这里是我列的一张十一个键的黑名单(Items/LootTable/Command……)。黑名单是
+        // 开放集合,每来一个新方块实体就得被咬一次;而这个问题原版早就回答过了。
         net.minecraft.nbt.CompoundTag out = data.copy();
         // 坐标由落位方按落位点重写,存的那份是导出世界的
         for (String positional : new String[]{"x", "y", "z"}) {
             out.remove(positional);
         }
-        // 硬底线:装着东西的键一概不过,<b>数据包也降不了这一条</b>。
+        // 牌子这一支要在底线<b>之前</b>:牌子自己就是"只有管理员能设 NBT"的那一档
+        // (原版怕的正是有人往牌子上挂命令),所以底线会把它一并毙掉。牌子的字是我们
+        // 唯一真想搬的东西,所以单独过一道自己的检查后放行。
         //
-        // 参照实现读的是世界里活着的方块实体,里面不可能有外来键;我们读的是<b>文件</b>
-        // ——手改一张图纸就能往一块牌子上塞一个 Items。牌子自己会忽略它,但"哪些方块实体
-        // 会读哪些键"是个开放集合,赌它永远不读不是我们该赌的。
-        //
-        // 这一道是黑名单,和"白名单优于黑名单"不冲突:白名单在标签那一层管方块,这一层
-        // 是个地板——管理员往标签里加了容器,那是他的决定,而"图纸不印物品"不是决定,
-        // 是这个功能的边界。
-        for (String carried : new String[]{
-                "Items", "Item", "Book", "RecordItem", "Bees",
-                "Lock", "LootTable", "LootTableSeed",
-                "SpawnData", "SpawnPotentials", "Command"}) {
-            out.remove(carried);
+        // 检查的是<b>点击事件</b>:牌子的文本能挂 clickEvent,而 clickEvent 能跑命令。
+        // 图纸里一块写着"点我领奖"的牌子就是一个可执行的口子。带事件的整份丢掉——不是
+        // 只丢那一行,因为我们无从判断哪一行是作者的本意。带物品的牌子(某些模组的)同理。
+        if (state.is(net.minecraft.tags.BlockTags.ALL_SIGNS)) {
+            if (out.contains("front_item") || out.contains("back_item")) {
+                return null;
+            }
+            for (String side : new String[]{"front_text", "back_text"}) {
+                net.minecraft.nbt.CompoundTag text = out.getCompound(side);
+                if (!text.contains("messages", net.minecraft.nbt.Tag.TAG_LIST)) {
+                    continue;
+                }
+                for (net.minecraft.nbt.Tag line
+                        : text.getList("messages", net.minecraft.nbt.Tag.TAG_STRING)) {
+                    if (hasClickEvent(line.getAsString())) {
+                        return null;
+                    }
+                }
+            }
+            return out.isEmpty() || (out.size() == 1 && out.contains("id")) ? null : out;
+        }
+        if (opOnlyNbt(state)) {
+            return null;
         }
         return out.isEmpty() || (out.size() == 1 && out.contains("id")) ? null : out;
+    }
+
+    /** 这种方块实体的 NBT 只有管理员能设置吗——命令方块、结构方块、拼图方块那一档。 */
+    private static boolean opOnlyNbt(BlockState state) {
+        if (!(state.getBlock() instanceof net.minecraft.world.level.block.EntityBlock holder)) {
+            return false;
+        }
+        try {
+            var be = holder.newBlockEntity(net.minecraft.core.BlockPos.ZERO, state);
+            return be != null && be.onlyOpCanSetNbt();
+        } catch (RuntimeException e) {
+            return true;   // 造不出来就当它不安全
+        }
+    }
+
+    /** 这段文本组件里有点击事件吗(递归看子组件)——有就是个能跑命令的口子。 */
+    private static boolean hasClickEvent(String json) {
+        try {
+            var component = net.minecraft.network.chat.Component.Serializer.fromJson(
+                    json.isEmpty() ? "\"\"" : json, net.minecraft.core.RegistryAccess.EMPTY);
+            return component != null && hasClickEvent(component);
+        } catch (RuntimeException e) {
+            return true;   // 读不懂的文本按有事件处理
+        }
+    }
+
+    private static boolean hasClickEvent(net.minecraft.network.chat.Component component) {
+        if (component.getStyle() != null && component.getStyle().getClickEvent() != null) {
+            return true;
+        }
+        for (var sibling : component.getSiblings()) {
+            if (hasClickEvent(sibling)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -256,7 +311,9 @@ public final class BuildStates {
      *
      * @return 可以生成的那部分;不收返回 null
      */
-    public static net.minecraft.nbt.CompoundTag safeEntityData(net.minecraft.nbt.CompoundTag data) {
+    public static net.minecraft.nbt.CompoundTag safeEntityData(
+            net.minecraft.nbt.CompoundTag data,
+            net.minecraft.core.HolderLookup.Provider registries) {
         if (data == null || !data.contains("id")) {
             return null;
         }
@@ -266,6 +323,12 @@ public final class BuildStates {
             return null;
         }
         net.minecraft.nbt.CompoundTag out = data.copy();
+        // 身上带的东西:组件按白名单剥一遍,<b>就地改掉这份 NBT</b>。
+        //
+        // 这一步必须落在数据本身上,不能只落在计价上。参照实现是"计价用剥过的那一叠、
+        // 落位用图纸原始的那一份"——两份不等就是个口子:文件里塞一个装满钻石的潜影盒,
+        // 按剥过的算只收一个空盒,而放进框里的是满的。收什么放什么,这一条不让。
+        sanitizePayload(out, registries);
         // 挂件(展示框、画)的<b>锚点</b>是一个绝对方块坐标(TileX/TileY/TileZ),存在
         // 自己的 NBT 里,而不是由位置推出来的。不改它的话:实体读档时把锚点设成导出
         // 世界那个坐标,挂件每 100 刻自查一次"我挂的那面墙还在吗"——查的是源世界的
@@ -319,6 +382,36 @@ public final class BuildStates {
         return out;
     }
 
+    /**
+     * 组件白名单:一件物品身上<b>只有这四样</b>可以随图纸走——附魔、药水成分、耐久、
+     * 自定义名。其余一概剥掉。
+     *
+     * <p>为什么是白名单:组件是开放集合(容器内容、捆绑包内容、方块实体数据、上膛的弹药、
+     * 自定义数据……还有模组自己加的)。列"哪些危险"每来一个新组件就漏一次;列"哪些安全"
+     * 一次定完,此后任何新组件自动落在安全的一侧。这四样的共性是<b>它们不装东西</b>。
+     */
+    public static boolean unsafeItemComponent(
+            net.minecraft.core.component.DataComponentType<?> type) {
+        return !(type.equals(net.minecraft.core.component.DataComponents.ENCHANTMENTS)
+                || type.equals(net.minecraft.core.component.DataComponents.POTION_CONTENTS)
+                || type.equals(net.minecraft.core.component.DataComponents.DAMAGE)
+                || type.equals(net.minecraft.core.component.DataComponents.CUSTOM_NAME));
+    }
+
+    /** 剥掉不安全的组件,只留白名单那四样。 */
+    public static net.minecraft.world.item.ItemStack withUnsafeComponentsDiscarded(
+            net.minecraft.world.item.ItemStack stack) {
+        if (stack.getComponentsPatch().isEmpty()) {
+            return stack;
+        }
+        net.minecraft.world.item.ItemStack copy = stack.copy();
+        stack.getComponents().stream()
+                .filter(c -> unsafeItemComponent(c.type()))
+                .map(net.minecraft.core.component.TypedDataComponent::type)
+                .forEach(copy::remove);
+        return copy;
+    }
+
     private static void addStack(List<net.minecraft.world.item.ItemStack> out,
                                  net.minecraft.nbt.CompoundTag tag,
                                  net.minecraft.core.HolderLookup.Provider registries) {
@@ -326,8 +419,46 @@ public final class BuildStates {
             return;   // 空槽位
         }
         net.minecraft.world.item.ItemStack.parse(registries, tag)
+                .map(BuildStates::withUnsafeComponentsDiscarded)
                 .filter(s -> !s.isEmpty())
                 .ifPresent(out::add);
+    }
+
+    /** 把载荷里每一叠的组件按白名单剥一遍,就地写回——计价和落位读的因此是同一份。 */
+    private static void sanitizePayload(net.minecraft.nbt.CompoundTag data,
+                                        net.minecraft.core.HolderLookup.Provider registries) {
+        for (String key : PAYLOAD_KEYS) {
+            net.minecraft.nbt.Tag tag = data.get(key);
+            if (tag instanceof net.minecraft.nbt.CompoundTag one) {
+                net.minecraft.nbt.Tag fixed = sanitizeItemTag(one, registries);
+                if (fixed == null) {
+                    data.remove(key);
+                } else {
+                    data.put(key, fixed);
+                }
+            } else if (tag instanceof net.minecraft.nbt.ListTag many) {
+                // 槽位顺序有意义(四甲两手),空槽位留成空复合标签占位
+                net.minecraft.nbt.ListTag rebuilt = new net.minecraft.nbt.ListTag();
+                for (net.minecraft.nbt.Tag slot : many) {
+                    net.minecraft.nbt.Tag fixed = slot instanceof net.minecraft.nbt.CompoundTag c
+                            ? sanitizeItemTag(c, registries) : null;
+                    rebuilt.add(fixed == null ? new net.minecraft.nbt.CompoundTag() : fixed);
+                }
+                data.put(key, rebuilt);
+            }
+        }
+    }
+
+    private static net.minecraft.nbt.Tag sanitizeItemTag(
+            net.minecraft.nbt.CompoundTag tag,
+            net.minecraft.core.HolderLookup.Provider registries) {
+        if (tag.isEmpty()) {
+            return null;
+        }
+        var cleaned = net.minecraft.world.item.ItemStack.parse(registries, tag)
+                .map(BuildStates::withUnsafeComponentsDiscarded)
+                .filter(s -> !s.isEmpty());
+        return cleaned.isEmpty() ? null : cleaned.get().save(registries);
     }
 
     /** 把摆设身上带的东西整个拿掉——付不起的时候用,框空着比框里凭空多件东西好。 */

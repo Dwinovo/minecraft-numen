@@ -240,7 +240,7 @@ public final class BlueprintStore {
         for (Tag t : tag.getList("entities", Tag.TAG_COMPOUND)) {
             CompoundTag e = (CompoundTag) t;
             CompoundTag safe = com.dwinovo.numen.core.task.BuildStates
-                    .safeEntityData(e.getCompound("nbt"));
+                    .safeEntityData(e.getCompound("nbt"), level.registryAccess());
             if (safe == null) {
                 continue;
             }

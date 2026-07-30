@@ -440,13 +440,19 @@ public class CompanionGameTests {
         var front = new net.minecraft.nbt.CompoundTag();
         front.putBoolean("has_glowing_text", false);
         signData.put("front_text", front);
-        signData.put("Items", new net.minecraft.nbt.ListTag());
         var keptSign = com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
                 Blocks.OAK_SIGN.defaultBlockState(), signData);
         helper.assertTrue(keptSign != null && keptSign.contains("front_text"),
                 "a sign's text is the whole point of carrying its data");
-        helper.assertTrue(keptSign != null && !keptSign.contains("Items"),
-                "nothing outside the whitelist may ride along, not even on a sign");
+        // 牌子上真正要防的是<b>能执行的东西</b>,不是无意义的外来键:一块牌子上塞个 Items
+        // 谁都读不到,而一个 clickEvent 能跑命令。逐个威胁按名检查(见
+        // safe_block_entity_data_is_a_datapack_tag),而不是拉一张"外来键"黑名单——
+        // 那张名单是开放集合,每来一个新方块实体就得被咬一次。
+        var signWithItem = signData.copy();
+        signWithItem.put("front_item", new net.minecraft.nbt.CompoundTag());
+        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+                        Blocks.OAK_SIGN.defaultBlockState(), signWithItem) == null,
+                "a sign that holds an itemstack (some mods add this) carries goods, so it is out");
 
         var chestData = new net.minecraft.nbt.CompoundTag();
         chestData.putString("id", "minecraft:chest");
@@ -471,7 +477,8 @@ public class CompanionGameTests {
         held.putString("id", "minecraft:diamond_sword");
         held.putInt("count", 1);
         frame.put("Item", held);
-        var keptFrame = com.dwinovo.numen.core.task.BuildStates.safeEntityData(frame);
+        var keptFrame = com.dwinovo.numen.core.task.BuildStates.safeEntityData(
+                frame, helper.getLevel().registryAccess());
         helper.assertTrue(keptFrame != null && keptFrame.contains("Facing"),
                 "an item frame is part of the building; its shell must be spawned");
         helper.assertTrue(keptFrame != null && keptFrame.contains("Item"),
@@ -482,7 +489,8 @@ public class CompanionGameTests {
 
         var cow = new net.minecraft.nbt.CompoundTag();
         cow.putString("id", "minecraft:cow");
-        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeEntityData(cow) == null,
+        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeEntityData(
+                        cow, helper.getLevel().registryAccess()) == null,
                 "a cow stored in a blueprint is not a design; copying it conjures livestock");
 
         // 再在世界里走一遍:旗帜的花纹要真的落到方块实体上
@@ -1038,21 +1046,102 @@ public class CompanionGameTests {
                     "outside the tag nothing rides along, not one key: " + outside);
         }
 
-        // 硬底线:标签之内也不许夹带装着东西的键
-        var sign = new net.minecraft.nbt.CompoundTag();
-        sign.putString("id", "minecraft:oak_sign");
-        sign.put("front_text", new net.minecraft.nbt.CompoundTag());
-        sign.put("Items", new net.minecraft.nbt.ListTag());
-        sign.putString("LootTable", "minecraft:chests/end_city_treasure");
-        sign.putString("Command", "/give @s diamond 64");
-        var kept = com.dwinovo.numen.core.task.BuildStates
-                .safeBlockEntityData(Blocks.OAK_SIGN.defaultBlockState(), sign);
-        helper.assertTrue(kept != null && kept.contains("front_text"),
-                "the sign's own text is what we came for");
-        for (String smuggled : List.of("Items", "LootTable", "Command")) {
-            helper.assertTrue(!kept.contains(smuggled),
-                    smuggled + " must never ride along — a blueprint is a file anyone can edit");
+        // 硬底线用原版自己的判据:只有管理员能设置 NBT 的那一档,一律不搬。命令方块、
+        // 结构方块、拼图方块都在里面,而且不必我们列名单——原版正是拿这个标志决定
+        // "这份 NBT 能不能由非管理员设置",我们的处境一模一样:图纸是文件,谁都能编辑。
+        for (net.minecraft.world.level.block.Block opOnly : List.of(
+                Blocks.COMMAND_BLOCK, Blocks.CHAIN_COMMAND_BLOCK, Blocks.REPEATING_COMMAND_BLOCK,
+                Blocks.STRUCTURE_BLOCK, Blocks.JIGSAW)) {
+            var data = new net.minecraft.nbt.CompoundTag();
+            data.putString("Command", "/give @s diamond 64");
+            helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+                            opOnly.defaultBlockState(), data) == null,
+                    opOnly + " sets NBT only for operators; a blueprint must never carry it");
         }
+
+        // 牌子的文本可以挂点击事件,而点击事件能跑命令——带事件的整份丢掉。图纸里一块
+        // 写着"点我领奖"的牌子就是一个可执行的口子,而我们无从判断哪一行是作者的本意。
+        var trapped = new net.minecraft.nbt.CompoundTag();
+        trapped.putString("id", "minecraft:oak_sign");
+        var front = new net.minecraft.nbt.CompoundTag();
+        var lines = new net.minecraft.nbt.ListTag();
+        lines.add(net.minecraft.nbt.StringTag.valueOf(
+                "{\"text\":\"click me\",\"clickEvent\":"
+                        + "{\"action\":\"run_command\",\"value\":\"/give @s diamond 64\"}}"));
+        front.put("messages", lines);
+        trapped.put("front_text", front);
+        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+                        Blocks.OAK_SIGN.defaultBlockState(), trapped) == null,
+                "a sign whose text carries a clickEvent is an executable hole, not decoration");
+
+        // 干净的牌子照搬
+        var plain = new net.minecraft.nbt.CompoundTag();
+        plain.putString("id", "minecraft:oak_sign");
+        var text = new net.minecraft.nbt.CompoundTag();
+        var plainLines = new net.minecraft.nbt.ListTag();
+        plainLines.add(net.minecraft.nbt.StringTag.valueOf("\"welcome home\""));
+        text.put("messages", plainLines);
+        plain.put("front_text", text);
+        var kept = com.dwinovo.numen.core.task.BuildStates
+                .safeBlockEntityData(Blocks.OAK_SIGN.defaultBlockState(), plain);
+        helper.assertTrue(kept != null && kept.contains("front_text"),
+                "plain sign text is the whole point of carrying this data");
+        helper.succeed();
+    }
+
+    /**
+     * 一件物品身上只有<b>四样</b>组件可以随图纸走:附魔、药水成分、耐久、自定义名。
+     *
+     * <p>白名单而非黑名单,因为组件是开放集合——容器内容、捆绑包内容、方块实体数据、
+     * 上膛的弹药、自定义数据,还有模组自己加的。列"哪些危险"每来一个新组件就漏一次;
+     * 列"哪些安全"一次定完。这四样的共性是<b>它们不装东西</b>。
+     *
+     * <p>还要钉住一条更要紧的:剥要剥在<b>数据本身</b>上,不是只剥在计价上。只剥计价那
+     * 一边、落位照放原始那一份,就等于文件里塞一个装满钻石的潜影盒 → 按空盒收料 → 放进
+     * 框里是满的。收什么放什么。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    public static void only_four_item_components_ride_along(GameTestHelper helper) {
+        var registries = helper.getLevel().registryAccess();
+
+        // 一个装了东西的潜影盒挂在展示框里
+        var box = new net.minecraft.nbt.CompoundTag();
+        box.putString("id", "minecraft:shulker_box");
+        box.putInt("count", 1);
+        var components = new net.minecraft.nbt.CompoundTag();
+        var contents = new net.minecraft.nbt.ListTag();
+        var diamond = new net.minecraft.nbt.CompoundTag();
+        diamond.putString("id", "minecraft:diamond");
+        diamond.putInt("count", 64);
+        var slot = new net.minecraft.nbt.CompoundTag();
+        slot.putInt("slot", 0);
+        slot.put("item", diamond);
+        contents.add(slot);
+        components.put("minecraft:container", contents);
+        components.putString("minecraft:custom_name", "\"Loot Box\"");
+        box.put("components", components);
+
+        var frame = new net.minecraft.nbt.CompoundTag();
+        frame.putString("id", "minecraft:item_frame");
+        frame.put("Item", box);
+
+        var safe = com.dwinovo.numen.core.task.BuildStates.safeEntityData(frame, registries);
+        helper.assertTrue(safe != null, "the frame itself is part of the building");
+        // 剥在数据本身上:落位读的这份里已经没有那箱钻石了
+        var carriedNbt = safe.getCompound("Item").getCompound("components");
+        helper.assertTrue(!carriedNbt.contains("minecraft:container"),
+                "a container component must be stripped from the DATA, not just from the price"
+                        + " — otherwise the frame goes up holding 64 diamonds nobody paid for");
+        helper.assertTrue(carriedNbt.contains("minecraft:custom_name"),
+                "a custom name carries nothing, so it stays");
+
+        // 计价那一边读的是同一份
+        var priced = com.dwinovo.numen.core.task.BuildStates.payloadStacks(safe, registries);
+        helper.assertTrue(priced.size() == 1 && priced.get(0).is(Items.SHULKER_BOX),
+                "the frame's contents are one shulker box to pay for, got " + priced);
+        helper.assertTrue(priced.get(0).get(
+                        net.minecraft.core.component.DataComponents.CONTAINER) == null,
+                "and it is an empty one — charge and placement must read the same stack");
         helper.succeed();
     }
 
