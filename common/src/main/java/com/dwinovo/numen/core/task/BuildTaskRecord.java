@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.task.TaskRecord;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
@@ -12,6 +13,7 @@ import net.minecraft.world.level.block.state.properties.Half;
 import net.minecraft.world.level.block.state.properties.SlabType;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /** Typed descriptor for a bounded multi-block construction job. */
@@ -20,6 +22,15 @@ public final class BuildTaskRecord extends TaskRecord {
     public static final String TOOL_NAME = "build";
 
     public final List<Target> targets;
+    /**
+     * 目标格上已经有东西时怎么办(四档见 {@link ReplaceMode})。
+     *
+     * <p>工具层现在只发两种:让路的走 {@link ReplaceMode#REPLACE_EMPTY}(顶掉挡路的,
+     * 并把图纸里的空气格当清空指令),不让路的走 {@code replaceExisting=false} 那条
+     * <b>开工前置</b>——那不是这四档里的任何一档:它是整单拒绝,不是逐格跳过。
+     * 中间两档已经实现并受测,等图纸层把档位开放给玩家时直接可用。
+     */
+    public final ReplaceMode replaceMode;
     public final boolean replaceExisting;
     /** 是否消耗背包材料:随能力画像而定(创造免耗材,生存逐格真扣)。 */
     public final boolean consumeMaterials;
@@ -35,6 +46,16 @@ public final class BuildTaskRecord extends TaskRecord {
      * 就从断点接上——不需要记住计划,因为世界本身就是计划的进度。
      */
     public final boolean allowPartial;
+    /**
+     * 方块实体数据,按目标格位置索引:箱子里的东西、告示牌的字、旗帜的花纹。
+     *
+     * <p>放在边表而不是 {@code Target} 里,因为它只有图纸才有,而且只有极少数格
+     * 用得上——为它给每一格都加一个字段,是让百分之一的情形去改百分之百的构造点。
+     *
+     * <p>不做旋转:图纸转 90° 时方块的朝向会跟着转,但箱子里第 3 格的物品不该跟着
+     * 挪位。带方向语义的方块实体数据(比如活塞头指向)本来就该由方块状态承载。
+     */
+    public final Map<Long, CompoundTag> blockEntityData;
 
     private int placed;
     private int broken;
@@ -56,11 +77,29 @@ public final class BuildTaskRecord extends TaskRecord {
 
     public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
                            boolean replaceExisting, boolean consumeMaterials, boolean allowPartial) {
+        this(toolCallId, deadlineGameTime, targets,
+                replaceExisting ? ReplaceMode.REPLACE_EMPTY : ReplaceMode.DONT_REPLACE,
+                replaceExisting, consumeMaterials, allowPartial);
+    }
+
+    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
+                           ReplaceMode replaceMode, boolean replaceExisting,
+                           boolean consumeMaterials, boolean allowPartial) {
+        this(toolCallId, deadlineGameTime, targets, replaceMode, replaceExisting,
+                consumeMaterials, allowPartial, Map.of());
+    }
+
+    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
+                           ReplaceMode replaceMode, boolean replaceExisting,
+                           boolean consumeMaterials, boolean allowPartial,
+                           Map<Long, CompoundTag> blockEntityData) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.targets = List.copyOf(targets);
+        this.replaceMode = replaceMode;
         this.replaceExisting = replaceExisting;
         this.consumeMaterials = consumeMaterials;
         this.allowPartial = allowPartial;
+        this.blockEntityData = Map.copyOf(blockEntityData);
     }
 
     public int placed() {
@@ -110,14 +149,10 @@ public final class BuildTaskRecord extends TaskRecord {
 
         public Target {
             desiredState = Objects.requireNonNull(desiredState, "desiredState");
-            // 建出来的树叶就是"手放树叶":persistent 归一为 true,否则自然树的
-            // 蓝图照放会当场腐烂,放一片烂一片永远建不完
-            if (desiredState.hasProperty(
-                    net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT)) {
-                desiredState = desiredState.setValue(
-                        net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT,
-                        true);
-            }
+            // 归一在这一处做完:每一个目标格无论从工具还是从图纸来,都必须过这道口,
+            // 所以运行态(作物生长阶段、含水、活塞伸出、堆肥进度、锅里装的东西)
+            // 在这里一次清干净,而不是让每条入口各清各的。
+            desiredState = BuildStates.normalize(desiredState);
             item = Objects.requireNonNull(item, "item");
             pos = Objects.requireNonNull(pos, "pos").immutable();
             if (facing != null && facingOf(desiredState) == null) {
@@ -139,6 +174,62 @@ public final class BuildTaskRecord extends TaskRecord {
 
         public Block block() {
             return desiredState.getBlock();
+        }
+
+        /**
+         * 这一格要花<b>几件</b>材料——盘点、报价与实扣的唯一真源。
+         *
+         * <p>清空格与液体格不费料。双格方块(门、床、高草、向日葵)在图纸里是上下
+         * 两格、各带一个同样的物品,逐格计费就会一扇门吃掉两扇门的料,所以只让
+         * "下半"计费,上半随之而生。
+         *
+         * <p>反过来也有一格要<b>多件</b>的:双层砖是两块半砖摞出来的,雪层、海龟蛋、
+         * 海泡菜按层数/个数算。此前这里是个布尔量"要不要花一件",一格恒定一件——
+         * 而屋面把双层砖当立面用,约三成屋面格子因此少报一件。清单与实扣不同源的
+         * 后果和门那件事一模一样,只是方向相反:玩家按清单备齐了,照样建到一半停下。
+         */
+        public int materialCount() {
+            if (desiredState == null || desiredState.isAir()) {
+                return 0;
+            }
+            if (desiredState.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
+                return 0;
+            }
+            if (desiredState.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                    && desiredState.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                    == net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER) {
+                return 0;
+            }
+            if (desiredState.hasProperty(BlockStateProperties.BED_PART)
+                    && desiredState.getValue(BlockStateProperties.BED_PART)
+                    == net.minecraft.world.level.block.state.properties.BedPart.HEAD) {
+                return 0;
+            }
+            if (desiredState.hasProperty(BlockStateProperties.SLAB_TYPE)
+                    && desiredState.getValue(BlockStateProperties.SLAB_TYPE)
+                    == net.minecraft.world.level.block.state.properties.SlabType.DOUBLE) {
+                return 2;
+            }
+            if (desiredState.getBlock() instanceof net.minecraft.world.level.block.SnowLayerBlock) {
+                return desiredState.getValue(BlockStateProperties.LAYERS);
+            }
+            if (desiredState.getBlock() instanceof net.minecraft.world.level.block.TurtleEggBlock) {
+                return desiredState.getValue(BlockStateProperties.EGGS);
+            }
+            if (desiredState.getBlock() instanceof net.minecraft.world.level.block.SeaPickleBlock) {
+                return desiredState.getValue(BlockStateProperties.PICKLES);
+            }
+            // 高草与大蕨类没有自己的方块物品,是两株矮的长成的(替代料见 BuildPalette)
+            if (desiredState.is(net.minecraft.world.level.block.Blocks.TALL_GRASS)
+                    || desiredState.is(net.minecraft.world.level.block.Blocks.LARGE_FERN)) {
+                return 2;
+            }
+            return 1;
+        }
+
+        /** 要不要花料——{@link #materialCount()} 的派生问法,不另立判据。 */
+        public boolean costsMaterial() {
+            return materialCount() > 0;
         }
 
         public boolean matches(BlockState state) {
