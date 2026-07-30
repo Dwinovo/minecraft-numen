@@ -73,6 +73,48 @@ public final class BuildStates {
     }
 
     /**
+     * 图纸带来的方块实体数据,哪些可以照搬——<b>白名单</b>。
+     *
+     * <p>只有<b>装饰性</b>的才搬:告示牌的字、旗帜的花纹、陶罐的纹样。容器里的东西
+     * 一律不搬,而这不是保守,是必须:图纸是文件,可以任意编辑、可以从网上下载。
+     * 照搬容器内容意味着一张塞满钻石的图纸建出来就是白送——那不是"还原了作者的
+     * 设计",那是凭空造物品。同理刷怪笼的刷怪数据、战利品表、命令方块的命令,
+     * 都不是"这栋房子长什么样"的一部分。
+     *
+     * <p>用白名单而不是黑名单,和对账那张"作者属性"名单同一个道理:黑名单是开放
+     * 集合,每来一个新方块就可能带一个新的危险字段,只能被咬一次补一条;白名单
+     * 是封闭集合,一次定完,此后任何新方块都自动落在安全的一侧。
+     *
+     * @return 可以照搬的那部分;没有可搬的返回 null
+     */
+    public static net.minecraft.nbt.CompoundTag safeBlockEntityData(
+            BlockState state, net.minecraft.nbt.CompoundTag data) {
+        if (state == null || data == null || data.isEmpty()) {
+            return null;
+        }
+        List<String> keep;
+        if (state.is(net.minecraft.tags.BlockTags.ALL_SIGNS)) {
+            keep = List.of("front_text", "back_text", "is_waxed");
+        } else if (state.is(net.minecraft.tags.BlockTags.BANNERS)) {
+            keep = List.of("patterns");
+        } else if (state.is(Blocks.DECORATED_POT)) {
+            keep = List.of("sherds");
+        } else {
+            return null;
+        }
+        net.minecraft.nbt.CompoundTag out = new net.minecraft.nbt.CompoundTag();
+        if (data.contains("id")) {
+            out.putString("id", data.getString("id"));
+        }
+        for (String key : keep) {
+            if (data.contains(key)) {
+                out.put(key, data.get(key).copy());
+            }
+        }
+        return out.size() <= 1 ? null : out;   // 只剩一个 id 等于没数据
+    }
+
+    /**
      * 这一格能不能建;不能建的话,<b>说清为什么</b>。
      *
      * @return null = 可以建;否则是给模型看的一句话

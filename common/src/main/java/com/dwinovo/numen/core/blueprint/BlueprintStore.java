@@ -173,9 +173,14 @@ public final class BlueprintStore {
             targets.add(new BuildTaskRecord.Target(state, state.getBlock().asItem(), world,
                     state.getBlock().builtInRegistryHolder().key().location().getPath(),
                     null, null, null));
-            // 方块实体数据顺着同一条管线走:箱子里的东西、告示牌的字、旗帜的花纹
+            // 方块实体数据只搬装饰性的那部分(告示牌的字、旗帜的花纹、陶罐的纹样);
+            // 容器内容一律不搬——图纸是文件,照搬等于凭空造物品
             if (cell.contains("nbt", Tag.TAG_COMPOUND)) {
-                beData.put(world.asLong(), cell.getCompound("nbt").copy());
+                CompoundTag safe = com.dwinovo.numen.core.task.BuildStates
+                        .safeBlockEntityData(state, cell.getCompound("nbt"));
+                if (safe != null) {
+                    beData.put(world.asLong(), safe);
+                }
             }
         }
         Vec3i size = (quarters % 2 == 0) ? new Vec3i(sx, sy, sz) : new Vec3i(sz, sy, sx);

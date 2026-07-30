@@ -423,45 +423,72 @@ public class CompanionGameTests {
     }
 
     /**
-     * 图纸带来的方块实体数据必须真的装进去:箱子里的东西、告示牌的字、旗帜的花纹。
+     * 图纸带来的方块实体数据只搬装饰性的那部分,<b>容器内容一律不搬</b>。
      *
-     * <p>不装的话,社区图纸建出来是一屋子空箱子和白板告示牌——外形全对,内容全丢,
-     * 而这是玩家一眼就看得出来的那种丢。
+     * <p>两个方向都得钉住。搬:告示牌的字、旗帜的花纹——不搬的话社区图纸建出来是
+     * 一屋子白板,外形全对内容全丢,玩家一眼看得出来。不搬:箱子里的东西——图纸是
+     * 文件,可以任意编辑、可以从网上下载,照搬容器内容意味着一张塞满钻石的图纸
+     * 建出来就是白送。这不是保守,是这条线必须画在这里。
      */
     @GameTest(template = "floor16", timeoutTicks = 1400, batch = "numen_build")
     public static void blueprint_block_entity_contents_survive(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = spawnAt(helper, "gametest_chest", new BlockPos(2, 2, 2), true);
-        BlockPos chest = helper.absolutePos(new BlockPos(7, 2, 7));
+        // 白名单先在纯函数层验:同一份数据,告示牌留字、箱子什么都不留
+        var signData = new net.minecraft.nbt.CompoundTag();
+        signData.putString("id", "minecraft:oak_sign");
+        var front = new net.minecraft.nbt.CompoundTag();
+        front.putBoolean("has_glowing_text", false);
+        signData.put("front_text", front);
+        signData.put("Items", new net.minecraft.nbt.ListTag());
+        var keptSign = com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+                Blocks.OAK_SIGN.defaultBlockState(), signData);
+        helper.assertTrue(keptSign != null && keptSign.contains("front_text"),
+                "a sign's text is the whole point of carrying its data");
+        helper.assertTrue(keptSign != null && !keptSign.contains("Items"),
+                "nothing outside the whitelist may ride along, not even on a sign");
 
-        net.minecraft.nbt.CompoundTag stack = new net.minecraft.nbt.CompoundTag();
+        var chestData = new net.minecraft.nbt.CompoundTag();
+        chestData.putString("id", "minecraft:chest");
+        var stack = new net.minecraft.nbt.CompoundTag();
         stack.putByte("Slot", (byte) 0);
         stack.putString("id", "minecraft:diamond");
-        stack.putInt("count", 5);
-        net.minecraft.nbt.ListTag items = new net.minecraft.nbt.ListTag();
+        stack.putInt("count", 64);
+        var items = new net.minecraft.nbt.ListTag();
         items.add(stack);
-        net.minecraft.nbt.CompoundTag data = new net.minecraft.nbt.CompoundTag();
-        data.putString("id", "minecraft:chest");
-        data.put("Items", items);
+        chestData.put("Items", items);
+        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+                        Blocks.CHEST.defaultBlockState(), chestData) == null,
+                "a blueprint full of diamonds must not print diamonds");
 
-        var targets = List.of(new BuildTaskRecord.Target(Blocks.CHEST, Items.CHEST, chest, "chest",
-                net.minecraft.core.Direction.NORTH, null, null));
+        // 再在世界里走一遍:旗帜的花纹要真的落到方块实体上
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_banner", new BlockPos(2, 2, 2), true);
+        BlockPos at = helper.absolutePos(new BlockPos(7, 2, 7));
+        var patterns = new net.minecraft.nbt.ListTag();
+        var one = new net.minecraft.nbt.CompoundTag();
+        one.putString("color", "red");
+        one.putString("pattern", "minecraft:stripe_top");
+        patterns.add(one);
+        var bannerData = new net.minecraft.nbt.CompoundTag();
+        bannerData.putString("id", "minecraft:banner");
+        bannerData.put("patterns", patterns);
+
+        var targets = List.of(new BuildTaskRecord.Target(Blocks.WHITE_BANNER, Items.WHITE_BANNER,
+                at, "banner", null, null, null));
         var ctx = TaskDispatch.ctx("gametest-be", companion);
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(4000L), targets,
                 com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, false, false,
-                java.util.Map.of(chest.asLong(), data)), reply -> {});
+                java.util.Map.of(at.asLong(), bannerData)), reply -> {});
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(level.getBlockState(chest).is(Blocks.CHEST),
-                    "the chest itself is not placed yet");
-            var be = level.getBlockEntity(chest);
-            helper.assertTrue(be instanceof net.minecraft.world.Container,
-                    "chest has no container block entity");
-            var container = (net.minecraft.world.Container) be;
-            var got = container.getItem(0);
-            helper.assertTrue(got.is(Items.DIAMOND) && got.getCount() == 5,
-                    "the blueprint's chest contents must survive placement; slot 0 holds " + got);
+            helper.assertTrue(level.getBlockState(at).is(Blocks.WHITE_BANNER),
+                    "the banner itself is not placed yet");
+            var be = level.getBlockEntity(at);
+            helper.assertTrue(be instanceof net.minecraft.world.level.block.entity.BannerBlockEntity,
+                    "banner has no block entity");
+            var saved = be.saveWithoutMetadata(level.registryAccess());
+            helper.assertTrue(saved.contains("patterns"),
+                    "the blueprint's banner pattern must survive placement, got " + saved);
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
