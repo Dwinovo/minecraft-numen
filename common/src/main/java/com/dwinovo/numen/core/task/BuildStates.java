@@ -208,12 +208,16 @@ public final class BuildStates {
         }
         List<String> keep;
         if (state.is(net.minecraft.tags.BlockTags.ALL_SIGNS)) {
+            // 牌子上的字是纯文本,玩家自己也是白写的,搬过来不产出任何东西
             keep = List.of("front_text", "back_text", "is_waxed");
         } else if (state.is(net.minecraft.tags.BlockTags.BANNERS)) {
+            // 花纹搬,但料按<b>带花纹的那面旗帜</b>收(见 strictItem):织布机的活
+            // 不能白送
             keep = List.of("patterns");
-        } else if (state.is(Blocks.DECORATED_POT)) {
-            keep = List.of("sherds");
         } else {
+            // 陶罐的纹样不搬。碎片是刷沙刷砾石考古刷出来的稀有掉落,一只四片碎片的
+            // 罐子收一件普通陶罐的料就是白送四件稀有物;而按组件精确收料又意味着玩家
+            // 得先有一只一模一样的罐子——那还不如让他自己拼。摆一只素罐,纹样留给人。
             return null;
         }
         net.minecraft.nbt.CompoundTag out = new net.minecraft.nbt.CompoundTag();
@@ -235,9 +239,13 @@ public final class BuildStates {
      * 就不完整。活物不收——图纸里存着的牛马村民不是设计,照搬等于凭空造生物;矿车、
      * 船同理,那是玩家自己的东西。
      *
-     * <p>而且只收<b>躯壳</b>:展示框里的物品、盔甲架身上的装备一律剥掉,理由和容器
-     * 内容一样——图纸是文件,照搬里面的东西就是凭空造物品。玩家自己往框里放东西,
-     * 那一步本来就该是他的。
+     * <p>身上带的东西<b>照搬,但要照原样付钱</b>:展示框里那把剑、盔甲架身上那套甲,
+     * 按<b>组件完全一致</b>的口径计价(见 {@link #payloadStacks})。这条口径是关键——
+     * 若只按物品类型收料,玩家交一把白剑就能换来文件里那把"锋利 255 的剑",漏就漏在
+     * 这里,而不在于要不要收料。组件全等之后账是平的:交什么得什么。
+     *
+     * <p>而且<b>收什么就放什么</b>:计价用的那一叠和最终放进框里的必须是同一叠。只从
+     * 计价那边剥掉一部分、落位照原样放,等于自己开一个口子。
      *
      * @return 可以生成的那部分;不收返回 null
      */
@@ -251,10 +259,6 @@ public final class BuildStates {
             return null;
         }
         net.minecraft.nbt.CompoundTag out = data.copy();
-        // 躯壳留下,身上的东西剥掉
-        for (String carried : new String[]{"Item", "Items", "ArmorItems", "HandItems", "equipment"}) {
-            out.remove(carried);
-        }
         // 挂件(展示框、画)的<b>锚点</b>是一个绝对方块坐标(TileX/TileY/TileZ),存在
         // 自己的 NBT 里,而不是由位置推出来的。不改它的话:实体读档时把锚点设成导出
         // 世界那个坐标,挂件每 100 刻自查一次"我挂的那面墙还在吗"——查的是源世界的
@@ -268,6 +272,100 @@ public final class BuildStates {
             out.remove(anchor);
         }
         return out;
+    }
+
+    /** 摆设身上可能带东西的那几个键。展示框一格,盔甲架四甲两手。 */
+    private static final List<String> PAYLOAD_KEYS =
+            List.of("Item", "ArmorItems", "HandItems", "equipment");
+
+    /**
+     * 这只摆设身上带的东西,要按哪几叠物品计价——每一叠都<b>组件全等</b>地收。
+     *
+     * <p>不剥、不归一、不打折:收进来的这一叠就是最终放进框里的那一叠。想省事的做法是
+     * "只按物品类型收料",那就等于把文件里的附魔白送出去;另一种想省事的做法是"计价
+     * 时剥掉一部分组件、落位照原样放",那是自己开的口子。两条都不走。
+     *
+     * <p>代价说清:玩家得<b>正好有</b>那件东西才装得上。文件里是一把锋利五的剑,他手里
+     * 那把白剑不算。装不上就空着框、如实报一笔——不是静默少一件。
+     *
+     * @return 要收的那些叠(空的槽位不计);没有返回空表
+     */
+    public static List<net.minecraft.world.item.ItemStack> payloadStacks(
+            net.minecraft.nbt.CompoundTag data,
+            net.minecraft.core.HolderLookup.Provider registries) {
+        if (data == null) {
+            return List.of();
+        }
+        List<net.minecraft.world.item.ItemStack> out = new java.util.ArrayList<>();
+        for (String key : PAYLOAD_KEYS) {
+            net.minecraft.nbt.Tag tag = data.get(key);
+            if (tag instanceof net.minecraft.nbt.CompoundTag one) {
+                addStack(out, one, registries);
+            } else if (tag instanceof net.minecraft.nbt.ListTag many) {
+                for (net.minecraft.nbt.Tag slot : many) {
+                    if (slot instanceof net.minecraft.nbt.CompoundTag c) {
+                        addStack(out, c, registries);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    private static void addStack(List<net.minecraft.world.item.ItemStack> out,
+                                 net.minecraft.nbt.CompoundTag tag,
+                                 net.minecraft.core.HolderLookup.Provider registries) {
+        if (tag.isEmpty()) {
+            return;   // 空槽位
+        }
+        net.minecraft.world.item.ItemStack.parse(registries, tag)
+                .filter(s -> !s.isEmpty())
+                .ifPresent(out::add);
+    }
+
+    /** 把摆设身上带的东西整个拿掉——付不起的时候用,框空着比框里凭空多件东西好。 */
+    public static void stripPayload(net.minecraft.nbt.CompoundTag data) {
+        if (data == null) {
+            return;
+        }
+        for (String key : PAYLOAD_KEYS) {
+            data.remove(key);
+        }
+    }
+
+    /**
+     * 这一格的料要不要按<b>组件全等</b>收——旗帜是唯一一种。
+     *
+     * <p>旗帜的花纹我们照搬(它是设计的一部分),而花纹是玩家在织布机上一层层染出来的
+     * 活。按一面白旗收料就是把那份活白送。所以收的是<b>带着这些花纹的那面旗帜本身</b>。
+     *
+     * <p>做法是把物品拼成一段 NBT 交给原版自己的编解码器去读,而不是手搭组件:方块实体
+     * 里那份 {@code patterns} 和物品上那个花纹组件本来就是同一套编码,借道过去必然一致,
+     * 手搭迟早会在某个版本上错位。
+     *
+     * @return 要精确收的那一叠;这一格不需要精确返回 null
+     */
+    public static net.minecraft.world.item.ItemStack strictItem(
+            BlockState state, net.minecraft.nbt.CompoundTag safeData,
+            net.minecraft.core.HolderLookup.Provider registries) {
+        if (state == null || safeData == null || !state.is(net.minecraft.tags.BlockTags.BANNERS)
+                || !safeData.contains("patterns")) {
+            return null;
+        }
+        net.minecraft.world.item.Item item = state.getBlock().asItem();
+        if (item == net.minecraft.world.item.Items.AIR) {
+            return null;
+        }
+        net.minecraft.nbt.CompoundTag itemTag = new net.minecraft.nbt.CompoundTag();
+        itemTag.putString("id", net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getKey(item).toString());
+        itemTag.putInt("count", 1);
+        net.minecraft.nbt.CompoundTag components = new net.minecraft.nbt.CompoundTag();
+        components.put("minecraft:banner_patterns", safeData.get("patterns").copy());
+        itemTag.put("components", components);
+        return net.minecraft.world.item.ItemStack.parse(registries, itemTag)
+                .filter(s -> !s.isEmpty())
+                .orElse(null);
     }
 
     /**

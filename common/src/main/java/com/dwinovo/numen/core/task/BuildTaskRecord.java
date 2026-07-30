@@ -83,6 +83,7 @@ public final class BuildTaskRecord extends TaskRecord {
     private int broken;
     private int completed;
     private int droppedAtLoad;
+    private Map<Long, net.minecraft.world.item.ItemStack> strictItems = Map.of();
 
     // 注:曾有 layerHeight(分层施工的层高门)。施工模型改为"低层优先的确定
     // 顺序 + 分遍补漏"之后,层高不再有任何裁决作用,留着就是个调了不起作用
@@ -159,6 +160,21 @@ public final class BuildTaskRecord extends TaskRecord {
         this.droppedAtLoad = count;
     }
 
+    /**
+     * 按位置索引的<b>精确材料要求</b>:这一格收的不是"一面旗子",而是"带着这些花纹的
+     * 那面旗子",组件必须完全一致。
+     *
+     * <p>放在边表而不是 {@code Target} 里,理由和方块实体数据一样:只有极少数格用得上,
+     * 为它给每一个构造点加一个字段是让百分之一的情形去改百分之百的代码。
+     */
+    public Map<Long, net.minecraft.world.item.ItemStack> strictItems() {
+        return strictItems;
+    }
+
+    public void strictItems(Map<Long, net.minecraft.world.item.ItemStack> items) {
+        this.strictItems = Map.copyOf(items);
+    }
+
     public int placed() {
         return placed;
     }
@@ -218,6 +234,17 @@ public final class BuildTaskRecord extends TaskRecord {
                 case "minecraft:painting" -> net.minecraft.world.item.Items.PAINTING;
                 default -> net.minecraft.world.item.Items.AIR;
             };
+        }
+
+        /**
+         * 这只摆设身上带的东西要收哪几叠——每一叠按<b>组件全等</b>收。
+         *
+         * <p>躯壳一件料,身上的东西另算:框白送而框里的剑也白送,那就是凭空造物品;
+         * 框收料而框里的剑不给,玩家又会觉得图纸没还原。收什么放什么,账才是平的。
+         */
+        public java.util.List<net.minecraft.world.item.ItemStack> payload(
+                net.minecraft.core.HolderLookup.Provider registries) {
+            return BuildStates.payloadStacks(nbt, registries);
         }
     }
 

@@ -60,6 +60,7 @@ public final class BlueprintStore {
     public record Loaded(List<BuildTaskRecord.Target> targets, Vec3i size,
                          java.util.Map<Long, CompoundTag> blockEntityData,
                          List<BuildTaskRecord.EntitySpawn> entities,
+                         java.util.Map<Long, net.minecraft.world.item.ItemStack> strictItems,
                          int dropped) {}
 
     /** 支持的图纸扩展名。 */
@@ -162,6 +163,7 @@ public final class BlueprintStore {
         // 收场,病因指错方向。工具入口本来就是这么去重的,这条入口漏了。
         java.util.LinkedHashMap<Long, BuildTaskRecord.Target> byPos = new java.util.LinkedHashMap<>();
         java.util.Map<Long, CompoundTag> beData = new java.util.HashMap<>();
+        java.util.Map<Long, net.minecraft.world.item.ItemStack> strict = new java.util.HashMap<>();
         int dropped = 0;
         for (int i = 0; i < blocks.size(); i++) {
             CompoundTag cell = blocks.getCompound(i);
@@ -203,9 +205,10 @@ public final class BlueprintStore {
                 continue;
             }
             BlockPos world = anchor.offset(rx, y, rz);
-            // 同坐标后写覆盖先写:方块实体数据要跟着一起清,否则存活的那一条会串上
-            // 前一条的数据(一块空白告示牌顶着别人的字)
+            // 同坐标后写覆盖先写:方块实体数据与精确料要跟着一起清,否则存活的那一条
+            // 会串上前一条的数据(一块空白告示牌顶着别人的字)
             beData.remove(world.asLong());
+            strict.remove(world.asLong());
             byPos.put(world.asLong(), new BuildTaskRecord.Target(state, payItem, world,
                     state.getBlock().builtInRegistryHolder().key().location().getPath(),
                     null, null, null));
@@ -216,6 +219,13 @@ public final class BlueprintStore {
                         .safeBlockEntityData(state, cell.getCompound("nbt"));
                 if (safe != null) {
                     beData.put(world.asLong(), safe);
+                    // 旗帜的花纹搬过来了,料就得按"带着这些花纹的那面旗帜"收——花纹是
+                    // 玩家在织布机上一层层染出来的活,按一面白旗收料等于把那份活白送
+                    var exact = com.dwinovo.numen.core.task.BuildStates
+                            .strictItem(state, safe, level.registryAccess());
+                    if (exact != null) {
+                        strict.put(world.asLong(), exact);
+                    }
                 }
             }
         }
@@ -248,7 +258,7 @@ public final class BlueprintStore {
         }
         List<BuildTaskRecord.Target> targets = new ArrayList<>(byPos.values());
         Vec3i size = (quarters % 2 == 0) ? new Vec3i(sx, sy, sz) : new Vec3i(sz, sy, sx);
-        return new Loaded(targets, size, beData, spawns, dropped);
+        return new Loaded(targets, size, beData, spawns, strict, dropped);
     }
 
     private static CompoundTag readTag(MinecraftServer server, String name) {

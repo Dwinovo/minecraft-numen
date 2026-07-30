@@ -459,7 +459,9 @@ public class CompanionGameTests {
                         Blocks.CHEST.defaultBlockState(), chestData) == null,
                 "a blueprint full of diamonds must not print diamonds");
 
-        // 实体同一条线:摆设收躯壳,活物不收,身上的东西剥掉
+        // 实体同一条线,但结论不同:摆设收躯壳,活物不收,而身上带的东西<b>照搬照收</b>
+        // ——按组件全等收料,交什么得什么。剥掉是另一种不诚实:图纸摆好的武器架建出来
+        // 空着,而玩家也没省下什么。
         var frame = new net.minecraft.nbt.CompoundTag();
         frame.putString("id", "minecraft:item_frame");
         frame.putByte("Facing", (byte) 3);
@@ -470,8 +472,11 @@ public class CompanionGameTests {
         var keptFrame = com.dwinovo.numen.core.task.BuildStates.safeEntityData(frame);
         helper.assertTrue(keptFrame != null && keptFrame.contains("Facing"),
                 "an item frame is part of the building; its shell must be spawned");
-        helper.assertTrue(keptFrame != null && !keptFrame.contains("Item"),
-                "but what hangs in it is an item — a blueprint must not hand out a diamond sword");
+        helper.assertTrue(keptFrame != null && keptFrame.contains("Item"),
+                "what hangs in it stays — but it becomes a requirement for that exact item");
+        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates
+                        .payloadStacks(keptFrame, helper.getLevel().registryAccess()).size() == 1,
+                "and that requirement has to be readable, or nobody ever gets charged for it");
 
         var cow = new net.minecraft.nbt.CompoundTag();
         cow.putString("id", "minecraft:cow");
@@ -780,12 +785,15 @@ public class CompanionGameTests {
         helper.assertTrue(loaded.entities().size() == 2,
                 "expected the frame and the stand to load, got " + loaded.entities().size());
         for (var spawn : loaded.entities()) {
-            helper.assertTrue(!spawn.nbt().contains("Item"),
-                    "what a frame carries must never ride in from a file — that is free diamonds");
             helper.assertTrue(!spawn.nbt().contains("TileX") && !spawn.nbt().contains("Pos"),
                     "the source world's anchor and position must be stripped, not carried over");
         }
-
+        // 框里那颗钻石不白送,也不静默丢掉:它变成一笔"要一模一样那件东西"的料
+        var carried = loaded.entities().stream()
+                .flatMap(s -> s.payload(level.registryAccess()).stream()).toList();
+        helper.assertTrue(carried.size() == 1 && carried.get(0).is(Items.DIAMOND),
+                "the frame's diamond must show up as a material requirement, got " + carried);
+        // 免耗材同伴不付料,所以框里那颗钻石照放——收什么放什么,这一档收的是零
         NumenPlayer companion = spawnAt(helper, "gametest_hanger", new BlockPos(1, 2, 1), true);
         var ctx = TaskDispatch.ctx("gametest-fixtures", companion);
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
@@ -803,8 +811,9 @@ public class CompanionGameTests {
                     "the item frame never made it onto the wall — its anchor was rejected"
                             + " and it vanished without a trace");
             var hung = frames.get(0);
-            helper.assertTrue(hung.getItem().isEmpty(),
-                    "the frame must come up empty; a blueprint cannot hand out its contents");
+            helper.assertTrue(hung.getItem().is(Items.DIAMOND),
+                    "this companion pays nothing, so the frame keeps what the blueprint had in it;"
+                            + " a paying one must own that exact item instead");
             helper.assertTrue(hung.position().distanceTo(want) < 1.5,
                     "the frame hung at " + hung.position() + " but belongs at " + want);
             var stands = level.getEntities(
@@ -812,6 +821,83 @@ public class CompanionGameTests {
             helper.assertTrue(!stands.isEmpty(), "the armour stand never got placed");
             CompanionFactory.despawn(level.getServer(), companion);
         });
+    }
+
+    /**
+     * 图纸带来的"手工活"不能白送:旗帜的花纹按<b>带花纹的那面旗帜</b>收料,陶罐的
+     * 纹样干脆不搬。
+     *
+     * <p>这一族的判据必须是<b>组件全等</b>而不是物品类型。按类型收的话,一面白旗就能
+     * 换来文件里那面绣了六层的旗——花纹是玩家在织布机上一层层染出来的活,那份活就这么
+     * 没了。同一个道理往下推,陶罐的纹样碎片是刷沙刷砾石考古刷出来的稀有掉落,四片碎片
+     * 收一件普通陶罐的料更离谱;而按组件精确收又要求玩家先有一只一模一样的罐子——那还
+     * 不如让他自己拼,所以纹样这一项不搬,摆一只素罐。
+     *
+     * <p>牌子上的字照搬:那是纯文本,玩家自己写也是白写的,搬过来不产出任何东西。
+     * 三者的差别不在"是不是装饰",而在<b>还原它等不等于凭空产出</b>。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    public static void blueprint_handiwork_is_not_free(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var registries = level.registryAccess();
+
+        // 一面绣了花纹的旗帜:方块实体里那份 patterns 该原样进白名单
+        var patterns = new net.minecraft.nbt.ListTag();
+        var layer = new net.minecraft.nbt.CompoundTag();
+        layer.putString("pattern", "minecraft:stripe_top");
+        layer.putString("color", "red");
+        patterns.add(layer);
+        var bannerData = new net.minecraft.nbt.CompoundTag();
+        bannerData.putString("id", "minecraft:banner");
+        bannerData.put("patterns", patterns);
+
+        BlockState banner = Blocks.WHITE_BANNER.defaultBlockState();
+        var safeBanner = com.dwinovo.numen.core.task.BuildStates
+                .safeBlockEntityData(banner, bannerData);
+        helper.assertTrue(safeBanner != null && safeBanner.contains("patterns"),
+                "a banner's patterns are part of the design and must be carried over");
+
+        // 而料要收的是"带着这些花纹的那面旗帜",不是一面白旗
+        var exact = com.dwinovo.numen.core.task.BuildStates
+                .strictItem(banner, safeBanner, registries);
+        helper.assertTrue(exact != null && exact.is(Items.WHITE_BANNER),
+                "the requirement should be a white banner stack, got " + exact);
+        helper.assertTrue(!net.minecraft.world.item.ItemStack.isSameItemSameComponents(
+                        exact, new net.minecraft.world.item.ItemStack(Items.WHITE_BANNER)),
+                "a plain white banner must NOT satisfy it — that hands out the loom work for free");
+        helper.assertTrue(net.minecraft.world.item.ItemStack.isSameItem(
+                        exact, new net.minecraft.world.item.ItemStack(Items.WHITE_BANNER)),
+                "it is still a white banner by type; only the components differ");
+
+        // 陶罐的纹样不搬:碎片是稀有掉落,还原它就是凭空产出
+        var potData = new net.minecraft.nbt.CompoundTag();
+        potData.putString("id", "minecraft:decorated_pot");
+        var sherds = new net.minecraft.nbt.ListTag();
+        sherds.add(net.minecraft.nbt.StringTag.valueOf("minecraft:heart_pottery_sherd"));
+        potData.put("sherds", sherds);
+        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+                        Blocks.DECORATED_POT.defaultBlockState(), potData) == null,
+                "pottery sherds are rare archaeology drops; a blueprint must not conjure them");
+
+        // 牌子上的字照搬——纯文本,还原它不产出任何东西
+        var signData = new net.minecraft.nbt.CompoundTag();
+        signData.putString("id", "minecraft:oak_sign");
+        signData.put("front_text", new net.minecraft.nbt.CompoundTag());
+        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+                        Blocks.OAK_SIGN.defaultBlockState(), signData) != null,
+                "sign text is free to write by hand, so carrying it over conjures nothing");
+
+        // 摆设身上带的东西读得出来,且组件跟着来
+        var frame = new net.minecraft.nbt.CompoundTag();
+        frame.putString("id", "minecraft:item_frame");
+        var sword = new net.minecraft.nbt.CompoundTag();
+        sword.putString("id", "minecraft:diamond_sword");
+        sword.putInt("count", 1);
+        frame.put("Item", sword);
+        var carried = com.dwinovo.numen.core.task.BuildStates.payloadStacks(frame, registries);
+        helper.assertTrue(carried.size() == 1 && carried.get(0).is(Items.DIAMOND_SWORD),
+                "what a frame carries must be read out as its own requirement, got " + carried);
+        helper.succeed();
     }
 
     /** 结构 NBT 的一只实体:{pos:[x,y,z], blockPos:[..], nbt:{...}}。 */

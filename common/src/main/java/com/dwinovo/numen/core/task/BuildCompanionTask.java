@@ -178,6 +178,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private int skippedCells;
     /** 收工时因缺料没能生成的摆设数——不记的话它们会静默消失而任务照报成功。 */
     private int skippedFixtures;
+    /** 摆设生成了,但身上带的东西没付起——框空着挂上去了,同样得交代。 */
+    private int skippedPayloads;
     private int passStartCompleted;
     private int barrenPasses;
     /**
@@ -232,7 +234,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         Map<Item, Integer> need = remainingNeed();
         Map<Item, Integer> shortfall = shortfallAgainstInventory(need);
-        if (shortfall.isEmpty()) {
+        List<ItemStack> exactShort = strictShortfall(remainingStrict());
+        if (shortfall.isEmpty() && exactShort.isEmpty()) {
             return null;
         }
         if (r.allowPartial) {
@@ -245,7 +248,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         return new Precondition.Failure(
-                "not enough materials yet — " + summarizeShortfall(shortfall)
+                "not enough materials yet — " + summarizeShortfall(shortfall, exactShort)
                         + ". Nothing was placed. Survival mode consumes 1 item per cell; gather these, "
                         + "then send the SAME call again — anything already standing is skipped, so a "
                         + "restocked repeat picks up exactly where this left off.",
@@ -263,6 +266,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         Map<Item, Integer> need = new LinkedHashMap<>();
         for (BuildTaskRecord.Target target : r.targets) {
             if (!costsMaterial(target)) continue;
+            if (strictFor(target) != null) continue;   // 这一格走精确清单,不能两边都算
             if (target.matches(peek(target.pos()))) continue;
             // 我们不会去动的格子不该进清单。此前这里的过滤比完工统计那处少两条,
             // 于是同一张回执上能同时出现"built 812/812"和"还差 chest x2":报价
@@ -278,6 +282,69 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         return need;
+    }
+
+    /**
+     * 这一格要不要按<b>组件全等</b>收料——旗帜是唯一一种。
+     *
+     * <p>按物品类型收料对普通方块是对的(哪一块橡木板都一样),对旗帜是错的:花纹是
+     * 玩家在织布机上一层层染出来的活,收一面白旗、给一面绣好的,等于把那份活白送。
+     */
+    private ItemStack strictFor(BuildTaskRecord.Target target) {
+        return r.strictItems().isEmpty() ? null : r.strictItems().get(target.pos().asLong());
+    }
+
+    /**
+     * 还需要哪些<b>精确</b>料:旗帜的花纹、摆设身上带的东西。
+     *
+     * <p>和 {@link #remainingNeed} 分成两张单子,因为口径不同——那张按物品类型合并,
+     * 这张必须一叠一叠地看。两张单子上的格子互不重叠(见 {@code strictFor} 那道过滤),
+     * 所以合起来正好是"从现在起还要凑什么",不会重复索要。
+     */
+    private List<ItemStack> remainingStrict() {
+        List<ItemStack> out = new ArrayList<>();
+        for (BuildTaskRecord.Target target : r.targets) {
+            ItemStack exact = strictFor(target);
+            if (exact == null || !costsMaterial(target)) continue;
+            if (target.matches(peek(target.pos()))) continue;
+            if (blockedByMode(target) || hopeless(target)) continue;
+            out.add(exact);
+        }
+        for (BuildTaskRecord.EntitySpawn spawn : r.entities) {
+            if (!fixtureAlreadyThere(spawn)) {
+                out.addAll(spawn.payload(player.level().registryAccess()));
+            }
+        }
+        return out;
+    }
+
+    /** 精确料的缺口:哪几叠凑不齐,缺几件就列几条。 */
+    private List<ItemStack> strictShortfall(List<ItemStack> needs) {
+        List<ItemStack> kinds = new ArrayList<>();
+        List<Integer> counts = new ArrayList<>();
+        for (ItemStack want : needs) {
+            int at = -1;
+            for (int i = 0; i < kinds.size(); i++) {
+                if (ItemStack.isSameItemSameComponents(kinds.get(i), want)) {
+                    at = i;
+                    break;
+                }
+            }
+            if (at < 0) {
+                kinds.add(want);
+                counts.add(1);
+            } else {
+                counts.set(at, counts.get(at) + 1);
+            }
+        }
+        List<ItemStack> missing = new ArrayList<>();
+        for (int i = 0; i < kinds.size(); i++) {
+            int have = strictCount(kinds.get(i));
+            for (int k = have; k < counts.get(i); k++) {
+                missing.add(kinds.get(i));
+            }
+        }
+        return missing;
     }
 
     /** 计费判据在 {@link BuildTaskRecord.Target#costsMaterial()}——盘点工具与这里共用。 */
@@ -310,6 +377,31 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * <p>一栋社区图纸能缺一百五十多种材料,全列出来是几千字符——玩家读不完,
      * 模型的上下文也白烧掉一大块,而真正决定"先去干什么"的永远是排头那几样。
      */
+    /**
+     * 缺料清单,含<b>精确</b>那一档。
+     *
+     * <p>精确料要单独点名并说明"要一模一样的那件":只报一句"还差 white_banner x1",
+     * 而玩家手里明明有一面白旗,他会以为是我们数错了——真正缺的是带着图纸那套花纹的
+     * 那面旗。判据严到哪里,话就得说到哪里。
+     */
+    private static String summarizeShortfall(Map<Item, Integer> shortfall, List<ItemStack> exact) {
+        String bulk = shortfall.isEmpty() ? "" : summarizeShortfall(shortfall);
+        if (exact.isEmpty()) {
+            return bulk.isEmpty() ? "nothing" : bulk;
+        }
+        Map<String, Integer> byName = new LinkedHashMap<>();
+        for (ItemStack stack : exact) {
+            byName.merge(stack.getHoverName().getString(), 1, Integer::sum);
+        }
+        List<String> parts = new ArrayList<>();
+        for (var e : byName.entrySet()) {
+            parts.add(e.getKey() + " x" + e.getValue());
+        }
+        String tail = "exactly these (same enchantments / patterns / contents, not just the same"
+                + " kind of item): " + String.join(", ", parts);
+        return bulk.isEmpty() ? tail : bulk + "; and " + tail;
+    }
+
     private static String summarizeShortfall(Map<Item, Integer> shortfall) {
         List<Map.Entry<Item, Integer>> sorted = new ArrayList<>(shortfall.entrySet());
         sorted.sort(Map.Entry.<Item, Integer>comparingByValue().reversed());
@@ -582,7 +674,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         // 一格不一定只花一件(双层砖两件、雪层按层数),盘点与实扣共用同一个件数
         int cost = r.consumeMaterials && costsMaterial(target) ? target.materialCount() : 0;
-        if (cost > 0 && !hasItems(target.item(), cost, true)) {
+        // 旗帜这类按组件全等收料的格走另一道闸门:手里那面白旗不算数
+        ItemStack exact = strictFor(target);
+        if (cost > 0 && exact != null) {
+            if (strictCount(exact) < cost) {
+                passMissing.merge(target.item(), cost, Integer::sum);
+                return null;
+            }
+        } else if (cost > 0 && !hasItems(target.item(), cost, true)) {
             // 【事件挂点】本遍第一次缺料 —— {@code passMissing.isEmpty()} 恰好就是
             // 那一次边沿,不必另记状态去重。要推给她时在此 GameEvents.emit,
             // 前提是先在 GameEvents.Kind 里登记一个词(那是 numen-api 的改动)。
@@ -626,13 +725,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 兜住异常——这条回调本是给"玩家手持物品放置"设计的,我们没有那个上下文,
         // 个别方块会在里面自己炸掉,而那不该让整栋楼停工。
         try {
+            // 回调拿到的是"她手里那件东西"。精确料的格子要给那一叠真货(带花纹的旗帜),
+            // 不是一件同名的白货——回调会从里面读组件。
             desired.getBlock().setPlacedBy(player.level(), pos, desired, player,
-                    new ItemStack(target.item()));
+                    exact != null ? exact.copy() : new ItemStack(target.item()));
         } catch (RuntimeException ignored) {
             // 放置本身已经成功,回调失败只影响那一格的附加数据
         }
         for (int k = 0; k < cost; k++) {
-            consumeOne(target.item());
+            if (exact != null) {
+                consumeStrict(exact);
+            } else {
+                consumeOne(target.item());
+            }
         }
         r.placedOne();
         markObserved(target, true);
@@ -855,10 +960,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** 还差什么才能收工——按此刻的剩余需求算,不是本遍的过程量。 */
     private String missingReason() {
         Map<Item, Integer> shortfall = shortfallAgainstInventory(remainingNeed());
-        if (shortfall.isEmpty()) {
+        List<ItemStack> exact = strictShortfall(remainingStrict());
+        if (shortfall.isEmpty() && exact.isEmpty()) {
             shortfall = passMissing;   // 期间被人补过料的边缘情形,退回本遍统计
         }
-        return "still needs " + summarizeShortfall(shortfall)
+        return "still needs " + summarizeShortfall(shortfall, exact)
                 + ". Everything already standing stays; restock and send the SAME call again to carry "
                 + "on from exactly here — finished cells are skipped automatically.";
     }
@@ -887,11 +993,27 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     skippedFixtures++;
                     continue;
                 }
+                // 身上带的东西另算,而且按组件全等收:框里那把锋利五的剑,得他真有一把
+                // 才装得上。收什么放什么——付不起就整个拿掉,框空着挂上去,如实记一笔。
+                var carried = spawn.payload(level.registryAccess());
+                boolean paidCarried = true;
+                if (r.consumeMaterials) {
+                    for (ItemStack want : carried) {
+                        if (strictCount(want) < 1) {
+                            paidCarried = false;
+                            break;
+                        }
+                    }
+                }
                 // 挂件的锚点必须在读档<b>之前</b>写好:它是绝对坐标,读档时就定了,
                 // moveTo 改不到它(那只改视觉位置)。旋转过的图纸里挂件朝向也存在
                 // NBT 里,一并按图纸转过去——直接调 HangingEntity.rotate() 会改朝向
                 // 字段却不重算碰撞箱,两者当场脱钩。
                 var nbt = spawn.nbt().copy();
+                if (!paidCarried) {
+                    com.dwinovo.numen.core.task.BuildStates.stripPayload(nbt);
+                    skippedPayloads += carried.size();
+                }
                 boolean hangs = !"minecraft:armor_stand".equals(nbt.getString("id"));
                 // 位置与锚点同源写入。读档时锚点要过一道 16 格闸门:锚点离 Pos 超过
                 // 16 格就被判成坏档丢掉,而丢掉之后重算碰撞箱会拿一个 null 坐标去算
@@ -932,6 +1054,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 level.addFreshEntity(entity);
                 if (pays) {
                     consumeOne(spawn.item());
+                }
+                if (paidCarried && r.consumeMaterials) {
+                    for (ItemStack want : carried) {
+                        consumeStrict(want);
+                    }
                 }
             } catch (RuntimeException ignored) {
                 // 一只摆设生成失败不该让整栋楼算失败
@@ -1019,6 +1146,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (skippedFixtures > 0) {
                 notes.add("short " + skippedFixtures + " fixture(s) (item frames / armour stands"
                         + " / paintings)");
+            }
+            if (skippedPayloads > 0) {
+                notes.add(skippedPayloads + " item(s) the blueprint had in its frames / on its"
+                        + " armour stands were left out — those need the exact same item"
+                        + " (enchantments and all), so they went up empty");
             }
             note = notes.isEmpty() ? "all requested cells match" : String.join("; ", notes);
         }
@@ -1645,6 +1777,42 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return pos.above();
         }
         return null;
+    }
+
+    /**
+     * 背包里有几件<b>和这一叠完全一样</b>的东西——组件也要一致。
+     *
+     * <p>用原版自己那个"同物品同组件"判据,不另立一套近似判据:少比一个组件,就等于
+     * 拿一把白剑换走文件里那把锋利五的剑。
+     */
+    private int strictCount(ItemStack want) {
+        Inventory inventory = player.getInventory();
+        int limit = Math.min(36, inventory.items.size());
+        int n = 0;
+        for (int i = 0; i < limit; i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (!stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, want)) {
+                n += stack.getCount();
+            }
+        }
+        return n;
+    }
+
+    /** 从背包扣掉一件和这一叠完全一样的东西。 */
+    private boolean consumeStrict(ItemStack want) {
+        if (player.hasInfiniteMaterials()) {
+            return true;
+        }
+        Inventory inventory = player.getInventory();
+        int limit = Math.min(36, inventory.items.size());
+        for (int i = 0; i < limit; i++) {
+            ItemStack stack = inventory.getItem(i);
+            if (!stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, want)) {
+                stack.shrink(1);
+                return true;
+            }
+        }
+        return false;
     }
 
     /** 够不够 {@code count} 件——双层砖那种一格吃两件的格子要问这个。 */

@@ -97,10 +97,26 @@ public final class BlueprintReadTool implements NumenTool {
         int clears = 0;
         Map<Item, Integer> remaining = new LinkedHashMap<>();
         int baseY = loaded.targets().stream().mapToInt(t -> t.pos().getY()).min().orElse(0);
+        // 按组件全等收料的那些格(旗帜的花纹)与摆设身上带的东西,要单独点名:报价
+        // 说一句"white_banner x3"而实际要的是三面绣好花纹的旗,玩家按报价备齐了照样
+        // 一格都放不下去。判据严到哪里,报价就得说到哪里——这是同一个口径问题。
+        Map<String, Integer> exact = new LinkedHashMap<>();
+        for (var stack : loaded.strictItems().values()) {
+            exact.merge(stack.getHoverName().getString(), 1, Integer::sum);
+        }
+        for (var spawn : loaded.entities()) {
+            for (var stack : spawn.payload(level.registryAccess())) {
+                exact.merge(stack.getHoverName().getString(), 1, Integer::sum);
+            }
+        }
         for (BuildTaskRecord.Target t : loaded.targets()) {
             byLayer.merge(t.pos().getY() - baseY, 1, Integer::sum);
             if (!t.costsMaterial()) {
                 clears++;
+                continue;
+            }
+            // 精确料的格不进普通清单,否则同一面旗帜会被索要两次
+            if (loaded.strictItems().containsKey(t.pos().asLong())) {
                 continue;
             }
             // 件数问 Target 要,不在这里另数一遍:清单与实扣一旦不同源,玩家
@@ -133,6 +149,12 @@ public final class BlueprintReadTool implements NumenTool {
                     + " (liquids, or blocks with no item to pay with — she will not build these)");
         }
         data.put("materials", summarize(cost));
+        if (!exact.isEmpty()) {
+            List<String> parts = new ArrayList<>();
+            exact.forEach((name, n) -> parts.add(name + " x" + n));
+            data.put("materials_needing_an_exact_match", String.join(", ", parts)
+                    + " — same patterns / enchantments / contents, not just the same kind of item");
+        }
         data.put("layer_profile", layerProfile(byLayer));
 
         StringBuilder msg = new StringBuilder();
