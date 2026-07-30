@@ -50,8 +50,9 @@ public final class BlueprintStore {
     /** 单张蓝图的格数上限(防误载巨图把任务撑爆)。 */
     private static final int MAX_CELLS = 32768;
 
-    /** 展开结果:目标格集 + 旋转后的占地尺寸。 */
-    public record Loaded(List<BuildTaskRecord.Target> targets, Vec3i size) {}
+    /** 展开结果:目标格集 + 旋转后的占地尺寸 + 方块实体数据(按位置索引)。 */
+    public record Loaded(List<BuildTaskRecord.Target> targets, Vec3i size,
+                         java.util.Map<Long, CompoundTag> blockEntityData) {}
 
     /** 支持的图纸扩展名。 */
     private static final List<String> EXTENSIONS = List.of(".nbt", ".snbt", ".litematic", ".schem");
@@ -148,6 +149,7 @@ public final class BlueprintStore {
         }
         int quarters = Math.floorMod(rotationQuarters, 4);
         List<BuildTaskRecord.Target> targets = new ArrayList<>(blocks.size());
+        java.util.Map<Long, CompoundTag> beData = new java.util.HashMap<>();
         for (int i = 0; i < blocks.size(); i++) {
             CompoundTag cell = blocks.getCompound(i);
             ListTag pos = cell.getList("pos", Tag.TAG_INT);
@@ -155,12 +157,9 @@ public final class BlueprintStore {
             int y = pos.getInt(1);
             int z = pos.getInt(2);
             BlockState state = palette.get(cell.getInt("state"));
-            if (state.is(Blocks.STRUCTURE_VOID) || state.is(Blocks.JIGSAW)
-                    || state.is(Blocks.STRUCTURE_BLOCK)) {
-                continue;   // 结构工装块不是建筑的一部分
-            }
-            if (state.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
-                continue;   // 液体格暂不承接(排水/布水都不做,先绕开)
+            // 能不能建走同一个判据(工具入口那边拿它当拒绝理由,这边拿它当跳过条件)
+            if (com.dwinovo.numen.core.task.BuildStates.unbuildableReason(state) != null) {
+                continue;
             }
             int rx;
             int rz;
@@ -174,9 +173,13 @@ public final class BlueprintStore {
             targets.add(new BuildTaskRecord.Target(state, state.getBlock().asItem(), world,
                     state.getBlock().builtInRegistryHolder().key().location().getPath(),
                     null, null, null));
+            // 方块实体数据顺着同一条管线走:箱子里的东西、告示牌的字、旗帜的花纹
+            if (cell.contains("nbt", Tag.TAG_COMPOUND)) {
+                beData.put(world.asLong(), cell.getCompound("nbt").copy());
+            }
         }
         Vec3i size = (quarters % 2 == 0) ? new Vec3i(sx, sy, sz) : new Vec3i(sz, sy, sx);
-        return new Loaded(targets, size);
+        return new Loaded(targets, size, beData);
     }
 
     private static CompoundTag readTag(MinecraftServer server, String name) {

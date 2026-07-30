@@ -245,35 +245,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         for (BuildTaskRecord.Target target : r.targets) {
             if (!costsMaterial(target)) continue;
             if (target.matches(player.level().getBlockState(target.pos()))) continue;
-            need.merge(target.item(), 1, Integer::sum);
+            need.merge(target.item(), target.materialCount(), Integer::sum);
         }
         return need;
     }
 
-    /**
-     * 这一格要不要花一件材料——盘料与扣料的<b>唯一真源</b>。
-     *
-     * <p>清空格与液体格不费料。双格方块(门、床、高草、向日葵)在图纸里是上下
-     * 两格、各带一个同样的物品,逐格计费就会一扇门吃掉两扇门的料:玩家明明按
-     * 清单备齐了,建到一半却说不够。只让"下半"计费,上半随之而生。
-     */
+    /** 计费判据在 {@link BuildTaskRecord.Target#costsMaterial()}——盘点工具与这里共用。 */
     private boolean costsMaterial(BuildTaskRecord.Target target) {
-        if (isAirTarget(target)) {
-            return false;
-        }
-        BlockState desired = target.desiredState();
-        if (desired == null || desired.getBlock() instanceof LiquidBlock) {
-            return false;
-        }
-        if (desired.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
-                && desired.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER) {
-            return false;
-        }
-        if (desired.hasProperty(BlockStateProperties.BED_PART)
-                && desired.getValue(BlockStateProperties.BED_PART) == BedPart.HEAD) {
-            return false;
-        }
-        return true;
+        return !isAirTarget(target) && target.costsMaterial();
     }
 
     /** 需求减去背包现货 = 还差多少。 */
@@ -541,14 +520,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         BlockState desired = target.desiredState();
         if (desired != null && desired.getBlock() instanceof LiquidBlock) {
-            return null;   // 液体格不承接(排水/布水都不做,先绕开)
+            return null;   // 流体不承接:布水与排水都不做
+        }
+        if (unbreakableAt(pos, desired)) {
+            return null;   // 基岩、末地传送门框架这类砸不动的:一辈子也清不掉,别耗着
         }
 
         boolean occupied = !current.isAir() && !(current.getBlock() instanceof LiquidBlock);
         if (occupied) {
-            if (!r.replaceExisting) {
-                return null;   // 开工前置已挡过;半途冒出来的占位不打断整栋楼
-            }
             clear(pos);
             if (isAirTarget(target)) {
                 markObserved(target, true);
@@ -566,17 +545,28 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (blockedByEntity(pos, desired)) {
             return null;
         }
-        boolean pays = r.consumeMaterials && costsMaterial(target);
-        if (pays && !hasItem(target.item(), true)) {
+        // 一格不一定只花一件(双层砖两件、雪层按层数),盘点与实扣共用同一个件数
+        int cost = r.consumeMaterials && costsMaterial(target) ? target.materialCount() : 0;
+        if (cost > 0 && !hasItems(target.item(), cost, true)) {
             // 【事件挂点】本遍第一次缺料 —— {@code passMissing.isEmpty()} 恰好就是
             // 那一次边沿,不必另记状态去重。要推给她时在此 GameEvents.emit,
             // 前提是先在 GameEvents.Kind 里登记一个词(那是 numen-api 的改动)。
-            passMissing.merge(target.item(), 1, Integer::sum);
+            passMissing.merge(target.item(), cost, Integer::sum);
             return null;
         }
 
         player.level().setBlock(pos, desired, PLACE_FLAGS);
-        if (pays) {
+        applyBlockEntityData(pos, desired);
+        // 放完给方块一次"我被放下了"的回调:命名牌、告示牌、部分方块实体靠它初始化。
+        // 兜住异常——这条回调本是给"玩家手持物品放置"设计的,我们没有那个上下文,
+        // 个别方块会在里面自己炸掉,而那不该让整栋楼停工。
+        try {
+            desired.getBlock().setPlacedBy(player.level(), pos, desired, player,
+                    new ItemStack(target.item()));
+        } catch (RuntimeException ignored) {
+            // 放置本身已经成功,回调失败只影响那一格的附加数据
+        }
+        for (int k = 0; k < cost; k++) {
             consumeOne(target.item());
         }
         r.placedOne();
@@ -973,21 +963,66 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 重排本遍顺序:只收还没达标的格。低层在前(下面盖好了上面才有依托),
      * 层内先清障、再骨架、最后贴附;同类蛇形走位(牛耕式),顺序完全确定
      * ——没有"智能选点"可坏,断点续建也就成立。
+     *
+     * <p><b>贴附件整体推到第二趟</b>,排在所有层之后。火把、告示牌、梯子、地毯、
+     * 花草、铁轨、红石、压力板、按钮、挂灯这些东西都要依托别的方块才站得住,而
+     * 骨架是逐层长起来的:主趟走到某一层时,它上面的支撑还不存在。同一格反复
+     * "放下去—掉下来—再放"不但白费工,还会让完工判定在原地打转。
+     *
+     * <p>所以主趟只砌立得住的东西,一层一层从下往上;骨架全部立好之后再回头走
+     * 一趟,专门贴这些细软件。多走一趟不亏:她本来就是当着玩家的面一层层砌上去
+     * 的,收尾时再绕一圈挂灯摆花,恰好是这活儿该有的样子。
      */
     private void rebuildOrder() {
         List<BuildTaskRecord.Target> pending = new ArrayList<>();
         for (BuildTaskRecord.Target target : r.targets) {
-            if (!target.matches(player.level().getBlockState(target.pos()))) {
+            if (!target.matches(player.level().getBlockState(target.pos()))
+                    && !blockedByMode(target)) {
                 pending.add(target);
             }
         }
-        pending.sort(Comparator
-                .comparingInt((BuildTaskRecord.Target t) -> t.pos().getY())
-                .thenComparingInt(BuildCompanionTask::stage)
-                .thenComparingInt(t -> t.pos().getZ())
-                .thenComparingInt(t -> (t.pos().getZ() & 1) == 0 ? t.pos().getX() : -t.pos().getX()));
+        pending.sort(BUILD_ORDER);
         order = pending;
         resetLayerWindow();
+    }
+
+    /** 施工顺序的唯一定义(公开是为了让测试直接钉住它,而不是靠副作用间接猜)。 */
+    public static final Comparator<BuildTaskRecord.Target> BUILD_ORDER = Comparator
+            .comparingInt((BuildTaskRecord.Target t) -> needsSupport(t.desiredState()) ? 1 : 0)
+            .thenComparingInt(t -> t.pos().getY())
+            .thenComparingInt(BuildCompanionTask::stage)
+            .thenComparingInt(t -> t.pos().getZ())
+            .thenComparingInt(t -> (t.pos().getZ() & 1) == 0 ? t.pos().getX() : -t.pos().getX());
+
+    /**
+     * 这一格立不立得住:要依托别的方块的算<b>贴附件</b>,推到第二趟。
+     *
+     * <p>按方块类型判,不按"能不能存活"现场试——现场试要有支撑才知道答案,而主趟
+     * 正是支撑还没长出来的时候。类型是封闭集合,一次列完;"能不能存活"是开放的,
+     * 每来一个新方块就得被咬一次。
+     */
+    public static boolean needsSupport(BlockState state) {
+        if (state == null) {
+            return false;
+        }
+        if (state.hasProperty(BlockStateProperties.HANGING)) {
+            return true;   // 挂着的灯笼与告示牌
+        }
+        var b = state.getBlock();
+        return b instanceof net.minecraft.world.level.block.LadderBlock
+                || b instanceof net.minecraft.world.level.block.BaseTorchBlock
+                || b instanceof net.minecraft.world.level.block.SignBlock
+                || b instanceof net.minecraft.world.level.block.BasePressurePlateBlock
+                || b instanceof net.minecraft.world.level.block.BaseRailBlock
+                || b instanceof net.minecraft.world.level.block.DiodeBlock
+                || b instanceof net.minecraft.world.level.block.RedStoneWireBlock
+                || b instanceof net.minecraft.world.level.block.CarpetBlock
+                || b instanceof net.minecraft.world.level.block.BushBlock
+                || b instanceof net.minecraft.world.level.block.FlowerPotBlock
+                || b instanceof net.minecraft.world.level.block.SnowLayerBlock
+                // 按钮、拉杆这类贴面件;砂轮同属这一族但它自己立得住
+                || (b instanceof net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock
+                        && !(b instanceof net.minecraft.world.level.block.GrindstoneBlock));
     }
 
     /**
@@ -1142,9 +1177,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (loaded) {
                 BlockState observed = view.getBlockState(pos);
                 if (target.matches(observed)
+                        || blockedByMode(target)
                         || target.desiredState().getBlock() instanceof LiquidBlock
                         || (isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {
-                    // 液体口径:不放液体目标、清空型目标不排水——这两类跳过豁免;
+                    // 液体口径:不放液体目标、清空型目标也不排水——这两类跳过豁免;
                     // 固体目标被液体淹着不豁免,照放,方块直接顶掉水(原版语义)
                     observedCompleted.add(pos.asLong());
                     completed++;
@@ -1195,18 +1231,101 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     private boolean hasItem(Item item, boolean wholeInventory) {
-        return wholeInventory && NavSettings.get().allowInventory ? hasItem(item) : hasItemOnHotbar(item);
+        return hasItems(item, 1, wholeInventory);
+    }
+
+    /**
+     * 把图纸带来的方块实体数据装进刚放好的那一格:箱子里的东西、告示牌的字、
+     * 旗帜的花纹、书架上的书。
+     *
+     * <p>不装的话,社区图纸建出来是一屋子空箱子和白板告示牌——外形对了,内容全丢,
+     * 而这是玩家一眼就能看出来的那种丢。
+     *
+     * <p>坐标要覆写成落位点:图纸里存的是导出时的世界坐标,原样加载会让方块实体
+     * 认为自己在别处。
+     */
+    private void applyBlockEntityData(BlockPos pos, BlockState placed) {
+        if (r.blockEntityData.isEmpty() || !placed.hasBlockEntity()) {
+            return;
+        }
+        var data = r.blockEntityData.get(pos.asLong());
+        if (data == null) {
+            return;
+        }
+        var be = player.level().getBlockEntity(pos);
+        if (be == null) {
+            return;
+        }
+        try {
+            var copy = data.copy();
+            copy.putInt("x", pos.getX());
+            copy.putInt("y", pos.getY());
+            copy.putInt("z", pos.getZ());
+            be.loadWithComponents(copy, player.level().registryAccess());
+            be.setChanged();
+        } catch (RuntimeException ignored) {
+            // 数据坏了只影响这一格的内容,方块本身已经放好了,不该让整栋楼停工
+        }
+    }
+
+    /**
+     * 这一格本档不让动吗——让路的判定只有这一处。
+     *
+     * <p>不让动的格子<b>不进待建集、也算作了结</b>。若只是"放的时候跳过",它每一遍
+     * 都会重新排进顺序、每一遍都放不下去,整栋楼陪着它重试到超时,而那一格从第一遍
+     * 起就已经注定动不了。
+     */
+    private boolean blockedByMode(BuildTaskRecord.Target target) {
+        BlockState current = player.level().getBlockState(target.pos());
+        return !r.replaceMode.allows(current, target.desiredState());
+    }
+
+    /**
+     * 这一格砸不动吗——基岩、末地传送门框架这类 {@code destroySpeed == -1} 的东西。
+     *
+     * <p>不判的话她会对着基岩一遍遍地清、一遍遍地失败,直到超时。<b>双格方块要连
+     * 它的另一半一起查</b>:床的另一半在朝向那一格,门与高草的另一半在正上方——
+     * 只查自己那一格,会出现"下半放下去了、上半卡在基岩里"的半截货。
+     */
+    private boolean unbreakableAt(BlockPos pos, BlockState desired) {
+        var level = player.level();
+        if (level.getBlockState(pos).getDestroySpeed(level, pos) == -1) {
+            return true;
+        }
+        BlockPos other = null;
+        if (desired != null && desired.hasProperty(BlockStateProperties.BED_PART)
+                && desired.getValue(BlockStateProperties.BED_PART) == BedPart.FOOT
+                && desired.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
+            other = pos.relative(desired.getValue(BlockStateProperties.HORIZONTAL_FACING));
+        } else if (desired != null && desired.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                && desired.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.LOWER) {
+            other = pos.above();
+        }
+        return other != null && level.getBlockState(other).getDestroySpeed(level, other) == -1;
+    }
+
+    /** 够不够 {@code count} 件——双层砖那种一格吃两件的格子要问这个。 */
+    private boolean hasItems(Item item, int count, boolean wholeInventory) {
+        if (wholeInventory && NavSettings.get().allowInventory) {
+            return mainInventoryCount(item) >= count;
+        }
+        return hotbarCount(item) >= count;
     }
 
     private boolean hasItemOnHotbar(Item item) {
+        return hotbarCount(item) > 0;
+    }
+
+    private int hotbarCount(Item item) {
         Inventory inventory = player.getInventory();
+        int n = 0;
         for (int i = 0; i < 9; i++) {
             ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty() && stack.is(item)) {
-                return true;
+                n += stack.getCount();
             }
         }
-        return false;
+        return n;
     }
 
     private int findSlot(Item item, boolean wholeInventory) {

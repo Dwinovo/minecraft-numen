@@ -42,12 +42,13 @@ public final class BlueprintTool implements NumenTool {
         return "Work with structure blueprint files in the server's schematics/ folder — the conventional "
                 + "location, so anything the player already downloaded is available without moving files. "
                 + "Formats: .litematic, .schem, .nbt (structure block export), .snbt (text). "
-                + "action=list shows available blueprints with sizes — call this first. "
+                + "action=list shows available blueprints with sizes — call this first, then "
+                + "`blueprint_read` on the one you like to see what it costs before you promise anything. "
                 + "action=build constructs one whole file: give `file` (name without extension), anchor `x`,`y`,`z` "
                 + "= the LOWEST corner (min x/y/z) where the structure will stand, and optional clockwise "
                 + "`rotation` 0/90/180/270. She walks to the site once, then works inside it, placing cells in "
                 + "batches from the ground up with exact states (stairs facing, doors, beds); explicit air cells "
-                + "CLEAR terrain; liquids are skipped. MATERIALS & RESUMING: creative builds freely. In survival "
+                + "CLEAR terrain; liquid cells are skipped. MATERIALS & RESUMING: creative builds freely. In survival "
                 + "every cell consumes 1 matching item, and a whole building will NOT fit in one inventory — so "
                 + "she builds as far as her stock goes, then stops and reports what is still needed. That is "
                 + "normal, not a failure: restock her and send THE SAME CALL AGAIN (same file, anchor, rotation) "
@@ -123,6 +124,7 @@ public final class BlueprintTool implements NumenTool {
         // allowPartial:整幢图纸一趟运不完是常态,分段施工 + 精确续建
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), loaded.targets(),
-                true, consume, true), reply);
+                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, consume, true,
+                loaded.blockEntityData()), reply);
     }
 }

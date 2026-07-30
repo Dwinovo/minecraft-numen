@@ -6,7 +6,9 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 社区图纸格式 → 原版结构 NBT 形态(size + palette + blocks)的转换器。
@@ -76,6 +78,17 @@ final class BlueprintFormats {
             long[] packed = region.getLongArray("BlockStates");
             int bits = Math.max(2, 32 - Integer.numberOfLeadingZeros(
                     Math.max(1, regionPalette.size() - 1)));
+            // 方块实体数据(箱子里的东西、告示牌的字、旗帜花纹)按区域内坐标索引,
+            // 出格时挂到对应的格上——不带它,社区图纸里的箱子告示牌全是空的
+            Map<Long, CompoundTag> regionData = new HashMap<>();
+            for (Tag t : region.getList("TileEntities", Tag.TAG_COMPOUND)) {
+                CompoundTag be = ((CompoundTag) t).copy();
+                long key = key3(be.getInt("x"), be.getInt("y"), be.getInt("z"));
+                be.remove("x");
+                be.remove("y");
+                be.remove("z");
+                regionData.put(key, be);
+            }
             long volume = (long) abs[0] * abs[1] * abs[2];
             for (long i = 0; i < volume; i++) {
                 int idx = unpack(packed, bits, i);
@@ -86,7 +99,7 @@ final class BlueprintFormats {
                 int z = (int) ((i / abs[0]) % abs[2]);
                 int y = (int) (i / ((long) abs[0] * abs[2]));
                 blocks.add(cell(min[0] + x - minX, min[1] + y - minY, min[2] + z - minZ,
-                        paletteBase + idx));
+                        paletteBase + idx, regionData.get(key3(x, y, z))));
             }
         }
         return assemble(maxX - minX + 1, maxY - minY + 1, maxZ - minZ + 1, palette, blocks);
@@ -143,6 +156,27 @@ final class BlueprintFormats {
         if (width == 0 || height == 0 || length == 0) {
             throw new IllegalArgumentException("schem has zero dimension");
         }
+        // 方块实体数据:v3 在 Blocks.BlockEntities,v2 平铺在根
+        Map<Long, CompoundTag> beData = new HashMap<>();
+        ListTag beList = blocksHolder.contains("BlockEntities", Tag.TAG_LIST)
+                ? blocksHolder.getList("BlockEntities", Tag.TAG_COMPOUND)
+                : root.getList("BlockEntities", Tag.TAG_COMPOUND);
+        for (Tag t : beList) {
+            CompoundTag be = (CompoundTag) t;
+            int[] at = be.getIntArray("Pos");
+            if (at.length != 3) {
+                continue;
+            }
+            CompoundTag data = be.contains("Data", Tag.TAG_COMPOUND)
+                    ? be.getCompound("Data").copy()   // v3
+                    : be.copy();                      // v2:数据就在这一层
+            data.remove("Pos");
+            data.remove("Id");
+            if (be.contains("Id", Tag.TAG_STRING)) {
+                data.putString("id", be.getString("Id"));
+            }
+            beData.put(key3(at[0], at[1], at[2]), data);
+        }
         CompoundTag paletteMap = blocksHolder.getCompound("Palette");
         int maxId = -1;
         for (String key : paletteMap.getAllKeys()) {
@@ -186,7 +220,7 @@ final class BlueprintFormats {
             int x = (int) (i % width);
             int z = (int) ((i / width) % length);
             int y = (int) (i / ((long) width * length));
-            blocks.add(cell(x, y, z, remap[id]));
+            blocks.add(cell(x, y, z, remap[id], beData.get(key3(x, y, z))));
         }
         return assemble(width, height, length, palette, blocks);
     }
@@ -215,7 +249,16 @@ final class BlueprintFormats {
 
     // ------------------------------------------------------------------
 
+    /** 三维坐标压成一个键——两种格式都要按坐标去认方块实体。 */
+    private static long key3(int x, int y, int z) {
+        return ((long) (x & 0xFFFFF) << 42) | ((long) (y & 0x1FFFFF) << 21) | (z & 0x1FFFFF);
+    }
+
     private static CompoundTag cell(int x, int y, int z, int stateIndex) {
+        return cell(x, y, z, stateIndex, null);
+    }
+
+    private static CompoundTag cell(int x, int y, int z, int stateIndex, CompoundTag data) {
         CompoundTag cell = new CompoundTag();
         ListTag pos = new ListTag();
         pos.add(IntTag.valueOf(x));
@@ -223,6 +266,9 @@ final class BlueprintFormats {
         pos.add(IntTag.valueOf(z));
         cell.put("pos", pos);
         cell.putInt("state", stateIndex);
+        if (data != null && !data.isEmpty()) {
+            cell.put("nbt", data);   // 原版结构格式里方块实体数据就挂在这个键上
+        }
         return cell;
     }
 
