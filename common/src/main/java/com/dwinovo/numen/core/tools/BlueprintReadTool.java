@@ -35,8 +35,8 @@ import java.util.function.Consumer;
 public final class BlueprintReadTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    /** 点名几种材料。一栋房子能有一百五十多种,全列出来玩家读不完、上下文也白烧。 */
-    private static final int LISTED = 10;
+    /** 一句话概览里点名几种,其余只报个数——完整清单在 data 里,那才是拿去采集的。 */
+    private static final int NAMED_IN_HEADLINE = 5;
     /** 按层分布最多报几层,再多就分桶。 */
     private static final int MAX_LAYERS = 24;
 
@@ -205,25 +205,25 @@ public final class BlueprintReadTool implements NumenTool {
         return n;
     }
 
-    /** 按数量降序点名前几种,其余汇总——清单要能行动,不是倾倒。 */
+    /**
+     * 按数量降序<b>列全</b>——这张单子是拿去采集的,截断了就没法用。
+     *
+     * <p>此前只列前十种。日式小屋有 169 种方块,模型看到十种加一句"还有 159 种"——那个
+     * 数字回答不了"我该去挖什么"。全量列出来约 5KB,而这是模型<b>建之前主动调、只调一次</b>
+     * 的工具,正是该花这点 token 的地方。
+     *
+     * <p>真正该截断的是<b>施工中途</b>的缺料回执:那个是不请自来、而且会反复出现的。
+     * 两者的区别不在长短,在<b>谁在什么时候要它</b>。
+     */
     private static Map<String, Object> summarize(Map<Item, Integer> counts) {
         List<Map.Entry<Item, Integer>> sorted = new ArrayList<>(counts.entrySet());
         sorted.sort(Map.Entry.<Item, Integer>comparingByValue().reversed());
         Map<String, Object> out = new LinkedHashMap<>();
-        Map<String, Integer> top = new LinkedHashMap<>();
-        int listed = Math.min(LISTED, sorted.size());
-        for (int i = 0; i < listed; i++) {
-            top.put(label(sorted.get(i).getKey()), sorted.get(i).getValue());
+        Map<String, Integer> all = new LinkedHashMap<>();
+        for (var e : sorted) {
+            all.put(label(e.getKey()), e.getValue());
         }
-        out.put("top", top);
-        if (sorted.size() > listed) {
-            int restItems = 0;
-            for (int i = listed; i < sorted.size(); i++) {
-                restItems += sorted.get(i).getValue();
-            }
-            out.put("other_kinds", sorted.size() - listed);
-            out.put("other_items", restItems);
-        }
+        out.put("items", all);
         out.put("total_items", sum(counts));
         out.put("total_kinds", counts.size());
         return out;
@@ -233,7 +233,7 @@ public final class BlueprintReadTool implements NumenTool {
         List<Map.Entry<Item, Integer>> sorted = new ArrayList<>(counts.entrySet());
         sorted.sort(Map.Entry.<Item, Integer>comparingByValue().reversed());
         List<String> parts = new ArrayList<>();
-        int listed = Math.min(5, sorted.size());
+        int listed = Math.min(NAMED_IN_HEADLINE, sorted.size());
         for (int i = 0; i < listed; i++) {
             parts.add(label(sorted.get(i).getKey()) + " x" + sorted.get(i).getValue());
         }

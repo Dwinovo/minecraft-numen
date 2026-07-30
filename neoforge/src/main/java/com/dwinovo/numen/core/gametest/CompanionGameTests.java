@@ -1403,6 +1403,62 @@ public class CompanionGameTests {
     }
 
     /**
+     * 干着干着断料,要<b>当场</b>认账,不是溜达一圈再说。
+     *
+     * <p>判据从过程量换成状态量之前,这里是这样的:判"干不下去了"用的是"一遍走完没有
+     * 进展",而那是个过程量,时间分辨率就是一遍。于是断料之后她要把剩下的层一层层空翻
+     * 过去(每层 18 刻的演出停顿)、收遍再挪窝等 60 刻,还要连着三遍才认账——一栋剩二十层
+     * 的房子就是一分钟。而"她付不起剩下任何一格"这个结论,在第一次付不起的那一刻就已经
+     * 成立了。
+     *
+     * <p>这条用例把两件事一起钉住:失败要快(给一个远大于"当场"、又远小于旧路径的刻数
+     * 上限),以及失败的理由要对(NO_MATERIAL,而不是被拖成超时或"她站不住")。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_blueprint")
+    public static void running_out_of_materials_is_reported_at_once(GameTestHelper helper)
+            throws Exception {
+        ServerLevel level = helper.getLevel();
+        writeSmallHouse(level, "fixture_starve");
+        BlockPos anchor = helper.absolutePos(new BlockPos(4, 2, 4));
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                level, "fixture_starve", anchor, 0);
+
+        NumenPlayer companion = spawnAt(helper, "gametest_starve", new BlockPos(1, 2, 1), false);
+        // 两块石头:够砌两格,然后就彻底断了(床、展示框、盔甲架一件料都没有)
+        companion.getInventory().add(new ItemStack(Items.STONE, 2));
+
+        var ctx = TaskDispatch.ctx("gametest-starve", companion);
+        var rec = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(6000L), loaded.targets(),
+                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, true, true,
+                loaded.blockEntityData(), loaded.entities());
+        rec.cellNeeds(loaded.cellNeeds());
+        TaskDispatch.dispatchAsync(companion, rec, reply -> {});
+
+        long[] startTick = {level.getGameTime()};
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(rec.placed() >= 2,
+                        "she should lay the two stones she has, placed=" + rec.placed()))
+                .thenExecute(() -> startTick[0] = level.getGameTime())
+                .thenWaitUntil(() -> helper.assertTrue(
+                        rec.getState() == com.dwinovo.numen.task.TaskState.FAILED,
+                        "the task should have given up by now, state=" + rec.getState()))
+                .thenExecute(() -> {
+                    long spent = level.getGameTime() - startTick[0];
+                    // 旧路径是 (剩余层数×18 + 60) × 3;这栋只剩两层也要 200+ 刻,
+                    // 而当场认账是个位数。给 120 刻的上限:远松于"当场",远严于旧路径。
+                    helper.assertTrue(spent <= 120,
+                            "running out should be reported at once, but it took " + spent
+                                    + " ticks after the last placeable cell — she was wandering");
+                    // 理由要对:是"料没了",不是被拖成超时、也不是"她站不住"
+                    String said = rec.getResult() == null ? "" : rec.getResult().message();
+                    helper.assertTrue(said.contains("ran out") && said.contains("still needs"),
+                            "the reason must be materials and must say what to gather, got: "
+                                    + said);
+                })
+                .thenSucceed();
+    }
+
+    /**
      * 续建那两条用例共用的小图纸:三块石头一面墙 + 一张朝北的床(两半都在文件里) +
      * 一个挂在墙上的展示框(框里一颗钻石) + 一个盔甲架。
      *

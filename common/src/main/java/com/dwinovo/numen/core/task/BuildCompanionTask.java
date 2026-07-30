@@ -183,6 +183,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private int passStartCompleted;
     private int barrenPasses;
     /**
+     * 本遍已经证明<b>付不起剩下任何一格</b>——缺料这件事在这一刻就成立了,不必走完这遍。
+     *
+     * <p>此前判"干不下去了"用的是"一遍走完没有进展",那是个<b>过程量</b>,时间分辨率
+     * 就是一遍;而"她付不起剩下任何一格"是个<b>状态量</b>,在她第一次付不起的那一刻
+     * 就已经成立。用过程量推断状态量必然慢一拍,而那一拍里所有的演出停顿(每层 18 刻、
+     * 收遍 60 刻)都在为一个早就成立的结论排队——玩家看到的是她溜达一分钟才说没料。
+     */
+    private boolean passStarved;
+    /** 本层开始时已落位的格数——演出停顿要"这一层真砌了东西"才付。 */
+    private int layerStartPlaced;
+    /**
      * 暂停落位的刻数,两处用它:
      *
      * <p>其一是零进展遍后的冷却。一遍全是"放不下去"时会在同一 tick 内跑完(每格
@@ -456,13 +467,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             out.append(label(sorted.get(i).getKey())).append(" x").append(sorted.get(i).getValue());
         }
         if (sorted.size() > listed) {
+            // 中途回执是不请自来、而且会反复出现的,所以这里保持截断。但只给一个数字
+            // 等于给了个死胡同——指出哪里能拿到全量单子,才叫交代完。
             int restKinds = sorted.size() - listed;
             int restCount = 0;
             for (int i = listed; i < sorted.size(); i++) {
                 restCount += sorted.get(i).getValue();
             }
             out.append(", and ").append(restKinds).append(" more kinds (")
-                    .append(restCount).append(" items)");
+                    .append(restCount).append(" items) — `blueprint_read` lists every one");
         }
         int total = 0;
         for (int v : shortfall.values()) {
@@ -624,9 +637,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 touched.add(target.pos());
                 sample = placed;
             }
+            if (passStarved) {
+                break;   // 剩下一格都付不起,别再往下翻了
+            }
         }
         if (!touched.isEmpty()) {
             performWork(touched, sample);
+        }
+        // 付不起剩下任何一格:当场收遍。走完剩下的层不会改变结论,只会让玩家多等
+        // (每层还有 18 刻的演出停顿),而结论在第一次付不起的那一刻就已经成立了。
+        if (passStarved) {
+            return endPass();
         }
         if (layerCursor >= layerEnd) {
             return advanceLayer();
@@ -678,7 +699,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** 这一层扫完了:翻到下一层,或者本遍到顶收遍。 */
     private TaskState advanceLayer() {
         // 翻层停一拍,把刚砌好的这层扫一眼。恒定输出是打印机,有起伏才像人在干活。
-        workPause = LAYER_PAUSE_TICKS;
+        //
+        // 但这一拍要<b>这一层真砌了东西</b>才付:一格没砌的层没什么可扫的,那个停顿就
+        // 只是在没干活的时候继续计费。缺料时她会把剩下的层一层层空翻过去,每层白停
+        // 18 刻——玩家看到的是她慢悠悠溜达,而她其实早就干不下去了。
+        if (r.placed() > layerStartPlaced) {
+            workPause = LAYER_PAUSE_TICKS;
+        }
+        layerStartPlaced = r.placed();
         placedThisLayer.clear();
         layerStart = layerEnd;
         layerCursor = layerStart;
@@ -743,15 +771,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (cost > 0 && !needs.isEmpty()) {
             for (BuildTaskRecord.CellNeed need : needs) {
                 if (countMatching(need) < 1) {
-                    passMissing.merge(need.stack().getItem(), 1, Integer::sum);
+                    noteShortage(need.stack().getItem(), 1);
                     return null;
                 }
             }
         } else if (cost > 0 && !hasItems(target.item(), cost, true)) {
-            // 【事件挂点】本遍第一次缺料 —— {@code passMissing.isEmpty()} 恰好就是
-            // 那一次边沿,不必另记状态去重。要推给她时在此 GameEvents.emit,
-            // 前提是先在 GameEvents.Kind 里登记一个词(那是 numen-api 的改动)。
-            passMissing.merge(target.item(), cost, Integer::sum);
+            noteShortage(target.item(), cost);
             return null;
         }
 
@@ -812,6 +837,65 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         r.placedOne();
         markObserved(target, true);
         return desired;
+    }
+
+    /**
+     * 记一笔缺料,并在<b>本遍第一次</b>缺料时判断这一遍是不是已经死了。
+     *
+     * <p>{@code passMissing.isEmpty()} 恰好是那一次边沿,不必另记状态去重。
+     * (【事件挂点】要把"她没料了"推给她时也在这里 emit,前提是先在 GameEvents.Kind
+     * 里登记一个词——那是 numen-api 的改动。)
+     *
+     * <p>判据是<b>状态量</b>:剩下的待建格里,还有没有哪怕一格是她此刻付得起的。有——
+     * 这一遍还能推进,照常走;一格都没有——这一遍已经证明是死的,不必再把剩下的层空翻
+     * 一遍(每层还要停 18 刻),更不必等三个零进展遍。
+     *
+     * <p>只在缺料的边沿上算一次,不是每格算:全表扫一遍是 O(格数),和收遍时本来就要做的
+     * 全量重扫同一个量级,而且"能付得起一格"通常在头几格就命中并提前退出——真正走完全表的
+     * 情形恰好就是我们要下的那个结论。
+     */
+    private void noteShortage(Item item, int count) {
+        boolean firstShortageThisPass = passMissing.isEmpty();
+        passMissing.merge(item, count, Integer::sum);
+        if (firstShortageThisPass && !passStarved && !canStillAffordAnyPendingCell()) {
+            passStarved = true;
+        }
+    }
+
+    /**
+     * 剩下的待建格里,还有没有哪怕一格是她此刻付得起的。
+     *
+     * <p>逐格问而不是拿"总需求 vs 背包"的聚合缺口来推:聚合缺口回答的是"全部建完还差
+     * 多少",而这里要回答的是"还能不能再放下一格"。两者不等价——她可能凑不齐整栋楼,
+     * 却还能砌十堵墙,那时候停下来是错的。
+     */
+    private boolean canStillAffordAnyPendingCell() {
+        for (BuildTaskRecord.Target target : r.targets) {
+            if (target.matches(peek(target.pos()))) continue;
+            if (blockedByMode(target) || hopeless(target)) continue;
+            int cost = r.consumeMaterials && costsMaterial(target) ? target.materialCount() : 0;
+            if (cost <= 0) {
+                return true;   // 不花料的格(清空格)永远付得起
+            }
+            var needs = needsFor(target);
+            if (needs.isEmpty()) {
+                if (hasItems(target.item(), cost, true)) {
+                    return true;
+                }
+            } else {
+                boolean affordable = true;
+                for (BuildTaskRecord.CellNeed need : needs) {
+                    if (countMatching(need) < 1) {
+                        affordable = false;
+                        break;
+                    }
+                }
+                if (affordable) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -919,13 +1003,26 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         boolean progressed = r.completed() > passStartCompleted;
         com.dwinovo.numen.core.Constants.LOG.debug(
-                "[numen-build] 收遍 {}/{} 本遍+{} 缺料{} 零进展遍{}",
+                "[numen-build] 收遍 {}/{} 本遍+{} 缺料{} 零进展遍{} 断料{}",
                 r.completed(), r.targets.size(), r.completed() - passStartCompleted,
-                passMissing.size(), barrenPasses);
+                passMissing.size(), barrenPasses, passStarved);
+        // 断料:不重试、不挪窝。判据的分野是"这个恢复动作能不能改变卡住的原因"——
+        // 挪窝能把她的身体从格子里挪开,却改变不了背包里的任何东西。为一个改不了的
+        // 原因重试三遍,每遍还带 60 刻的挪窝和每层 18 刻的停顿,就是纯粹在耗玩家的
+        // 时间;而回执本来就写着"补料后重发同一调用",重发很便宜。
+        //
+        // 注意这里不看 progressed:本遍砌了二十格然后断料,和一格没砌就断料,对玩家
+        // 是同一件事——她现在动不了了,而且再等下去也不会变。
+        if (passStarved) {
+            fail("built " + r.completed() + "/" + r.targets.size()
+                    + " and ran out — " + missingReason(), FailureType.NO_MATERIAL);
+            return TaskState.FAILED;
+        }
         if (progressed) {
             barrenPasses = 0;
         } else if (++barrenPasses >= MAX_BARREN_PASSES) {
             if (!passMissing.isEmpty()) {
+                // 有格子缺料、但不是断料(别的格还付得起,只是这一遍恰好没推进)。
                 // 先报干了多少,再报还差什么——玩家要的是"还要凑多少才能收工",
                 // 不是一句材料不足。已经砌好的部分留在世界里,不回滚。
                 fail("built " + r.completed() + "/" + r.targets.size()
@@ -938,8 +1035,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     FailureType.NO_PATH);
             return TaskState.FAILED;
         }
-        // 零进展往往是她自己站在剩下的格子里:立刻挪窝,并且把下一遍压后到
-        // 她走完这一程之后——不给身体挪开的时间就连翻三遍,判的是假的死局。
+        // 零进展而且不是断料:那多半是她自己站在剩下的格子里。这时候挪窝是对症的
+        // ——身体挪开,格子就能放——所以给它三遍和走完一程的时间。
         if (!progressed) {
             wanderTarget = null;
             wanderTicks = WANDER_INTERVAL_TICKS;
@@ -948,6 +1045,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         rebuildOrder();
         passStartCompleted = r.completed();
         passMissing.clear();
+        passStarved = false;   // 下一遍重新判:期间玩家可能补过料
         return TaskState.RUNNING;
     }
 
@@ -1485,6 +1583,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** 把层窗口对准 order 里最低的那一层。 */
     private void resetLayerWindow() {
         placedThisLayer.clear();
+        layerStartPlaced = r.placed();   // 新一层的起点,演出停顿按它判"这层干活了没"
         layerStart = 0;
         layerCursor = 0;
         layerEnd = 0;
