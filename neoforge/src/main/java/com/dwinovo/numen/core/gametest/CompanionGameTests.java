@@ -1165,53 +1165,7 @@ public class CompanionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_blueprint")
     public static void blueprint_second_run_changes_nothing(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
-
-        BlockState bedFoot = Blocks.RED_BED.defaultBlockState()
-                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
-                        net.minecraft.world.level.block.state.properties.BedPart.FOOT)
-                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties
-                        .HORIZONTAL_FACING, net.minecraft.core.Direction.NORTH);
-        BlockState bedHead = bedFoot.setValue(
-                net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
-                net.minecraft.world.level.block.state.properties.BedPart.HEAD);
-
-        var root = new net.minecraft.nbt.CompoundTag();
-        var size = new net.minecraft.nbt.ListTag();
-        size.add(net.minecraft.nbt.IntTag.valueOf(4));
-        size.add(net.minecraft.nbt.IntTag.valueOf(2));
-        size.add(net.minecraft.nbt.IntTag.valueOf(4));
-        root.put("size", size);
-        var palette = new net.minecraft.nbt.ListTag();
-        for (BlockState s : List.of(Blocks.STONE.defaultBlockState(), bedHead, bedFoot)) {
-            palette.add(net.minecraft.nbt.NbtUtils.writeBlockState(s));
-        }
-        root.put("palette", palette);
-        var blocks = new net.minecraft.nbt.ListTag();
-        blocks.add(cellTag(0, 0, 0, 0));
-        blocks.add(cellTag(0, 0, 1, 0));
-        blocks.add(cellTag(0, 0, 2, 0));   // 挂展示框的那面墙
-        blocks.add(cellTag(2, 0, 0, 1));   // 床头(朝北,z 更小)——加载期该被剔掉
-        blocks.add(cellTag(2, 0, 1, 2));   // 床脚
-        root.put("blocks", blocks);
-
-        // 展示框挂在 (0,0,2) 那块石头的南面,框里一颗钻石;盔甲架立在院里
-        var frameNbt = new net.minecraft.nbt.CompoundTag();
-        frameNbt.putString("id", "minecraft:item_frame");
-        frameNbt.putByte("Facing", (byte) net.minecraft.core.Direction.SOUTH.get3DDataValue());
-        var held = new net.minecraft.nbt.CompoundTag();
-        held.putString("id", "minecraft:diamond");
-        held.putInt("count", 1);
-        frameNbt.put("Item", held);
-        var standNbt = new net.minecraft.nbt.CompoundTag();
-        standNbt.putString("id", "minecraft:armor_stand");
-        var entities = new net.minecraft.nbt.ListTag();
-        entities.add(entityTag(0.5, 0.5, 3.5, frameNbt));
-        entities.add(entityTag(3.5, 0.0, 3.5, standNbt));
-        root.put("entities", entities);
-        net.minecraft.nbt.NbtIo.writeCompressed(root,
-                com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer())
-                        .resolve("fixture_twice.nbt"));
-
+        writeSmallHouse(level, "fixture_twice");
         BlockPos anchor = helper.absolutePos(new BlockPos(4, 2, 4));
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
                 level, "fixture_twice", anchor, 0);
@@ -1319,6 +1273,188 @@ public class CompanionGameTests {
                     }
                 })
                 .thenSucceed();
+    }
+
+    /**
+     * <b>半途缺料 → 补料 → 重发同一个调用 → 从断点接上</b>。这是玩家真会走的那条路。
+     *
+     * <p>上一条用例测的是"全建完再重发",那时世界里每一格都已达标,判定简单。这一条难在
+     * 中途停下的那个状态:世界里<b>一半达标一半没有</b>,而任务已经失败退出。第二次派发要
+     * 从这个混合状态里正确地认出"哪些还欠着",而这条路上每个记账口径都会被考一遍——预检
+     * 的报缺、逐格闸门、实扣、以及跳过格与待办格混在一起时的分母。
+     *
+     * <p>判据是<b>总账</b>:给的料 = 报价 + 每种各一件备用。两遍跑完之后,备用的那一件
+     * 必须一件不少地还在——多扣一件说明重放了格子,少建一格说明续建漏了。中间还要断言
+     * 第一遍<b>真的停在了半途</b>(建了但没建完),否则这条用例退化成上一条。
+     *
+     * <p>顺带压住一个曾经的真事故:第一遍失败退出时摆设不该生成(它们在收工那一步),
+     * 而第二遍补上之后必须各只有一只。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 12000, batch = "numen_blueprint")
+    public static void blueprint_restock_and_resend_continues(GameTestHelper helper)
+            throws Exception {
+        ServerLevel level = helper.getLevel();
+        writeSmallHouse(level, "fixture_partial");
+        BlockPos anchor = helper.absolutePos(new BlockPos(4, 2, 4));
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                level, "fixture_partial", anchor, 0);
+
+        NumenPlayer companion = spawnAt(helper, "gametest_restock", new BlockPos(1, 2, 1), false);
+        // 第一批只给两块石头——够砌墙的一部分,床与摆设一件料都没有
+        companion.getInventory().add(new ItemStack(Items.STONE, 2));
+
+        var ctx = TaskDispatch.ctx("gametest-restock-1", companion);
+        var first = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(6000L), loaded.targets(),
+                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, true, true,
+                loaded.blockEntityData(), loaded.entities());
+        first.cellNeeds(loaded.cellNeeds());
+        // 注:dispatchAsync 的 reply 是<b>派发受理</b>回执("已受理,后台执行中"),不是
+        // 最终结果——拿它当完工信号会立刻通过而什么都没等到。用进度本身当信号。
+        TaskDispatch.dispatchAsync(companion, first, reply -> {});
+
+        var second = new BuildTaskRecord[1];
+        net.minecraft.world.phys.AABB site = new net.minecraft.world.phys.AABB(
+                anchor.getX() - 2, anchor.getY() - 2, anchor.getZ() - 2,
+                anchor.getX() + 6, anchor.getY() + 4, anchor.getZ() + 6);
+
+        helper.startSequence()
+                // 她把手上两块石头砌出去
+                .thenWaitUntil(() -> helper.assertTrue(first.placed() >= 2,
+                        "she should lay the two stones she has, placed=" + first.placed()))
+                // 再等三个零进展遍走完(每遍之间有挪窝冷却),任务缺料失败退出
+                .thenIdle(400)
+                .thenExecute(() -> {
+                    // 停在半途:砌了东西,但没砌完——否则这条用例退化成上一条
+                    helper.assertTrue(first.placed() == 2,
+                            "with two stones exactly two cells should be laid, got "
+                                    + first.placed());
+                    long done = loaded.targets().stream()
+                            .filter(t -> t.matches(level.getBlockState(t.pos()))).count();
+                    helper.assertTrue(done == 2,
+                            "exactly two of the " + loaded.targets().size()
+                                    + " cells should be standing, got " + done);
+                    // 收工那一步没跑,所以摆设一只都还没有
+                    helper.assertTrue(level.getEntities(
+                                    net.minecraft.world.entity.EntityType.ITEM_FRAME,
+                                    site, e -> true).isEmpty(),
+                            "a run that ran out of materials must not have spawned fixtures yet");
+                    helper.assertTrue(level.getEntities(
+                                    net.minecraft.world.entity.EntityType.ARMOR_STAND,
+                                    site, e -> true).isEmpty(),
+                            "nor the armour stand");
+                })
+                // 补料:剩下的报价 + 每种各一件备用。重发一模一样的调用。
+                .thenExecute(() -> {
+                    companion.getInventory().add(new ItemStack(Items.STONE, 1 + 1));
+                    companion.getInventory().add(new ItemStack(Items.RED_BED, 1 + 1));
+                    companion.getInventory().add(new ItemStack(Items.ITEM_FRAME, 1 + 1));
+                    companion.getInventory().add(new ItemStack(Items.ARMOR_STAND, 1 + 1));
+                    companion.getInventory().add(new ItemStack(Items.DIAMOND, 1 + 1));
+                    var ctx2 = TaskDispatch.ctx("gametest-restock-2", companion);
+                    second[0] = new BuildTaskRecord(ctx2.toolCallId(), ctx2.deadline(6000L),
+                            loaded.targets(), com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY,
+                            true, true, true, loaded.blockEntityData(), loaded.entities());
+                    second[0].cellNeeds(loaded.cellNeeds());
+                    TaskDispatch.dispatchAsync(companion, second[0], reply -> {});
+                })
+                // 第二遍把剩下的补齐
+                .thenWaitUntil(() -> {
+                    for (BuildTaskRecord.Target t : loaded.targets()) {
+                        helper.assertTrue(t.matches(level.getBlockState(t.pos())),
+                                "restocked run has not finished " + t.pos().toShortString());
+                    }
+                    helper.assertTrue(level.getEntities(
+                                    net.minecraft.world.entity.EntityType.ITEM_FRAME,
+                                    site, e -> true).size() == 1,
+                            "the restocked run should hang the item frame");
+                    helper.assertTrue(level.getEntities(
+                                    net.minecraft.world.entity.EntityType.ARMOR_STAND,
+                                    site, e -> true).size() == 1,
+                            "the restocked run should place the armour stand");
+                })
+                .thenIdle(20)
+                .thenExecute(() -> {
+                    // 第二遍只补了欠的那两格,没重放已经立着的
+                    helper.assertTrue(second[0].placed() == 2,
+                            "the restocked run should only owe two cells, but it placed "
+                                    + second[0].placed() + " — it re-laid work that was already up");
+                    helper.assertTrue(second[0].broken() == 0,
+                            "and it should not have broken anything, got " + second[0].broken());
+                    // 床头由床脚代建,从来不是目标格
+                    helper.assertTrue(level.getBlockState(anchor.offset(2, 0, 0)).is(Blocks.RED_BED),
+                            "the bed head must be there, built by its foot");
+                    // 总账:每种料的备用那一件必须一件不少
+                    for (net.minecraft.world.item.Item item : List.of(
+                            Items.STONE, Items.RED_BED, Items.ITEM_FRAME,
+                            Items.ARMOR_STAND, Items.DIAMOND)) {
+                        int left = 0;
+                        for (int i = 0; i < 36; i++) {
+                            ItemStack stack = companion.getInventory().getItem(i);
+                            if (!stack.isEmpty() && stack.is(item)) {
+                                left += stack.getCount();
+                            }
+                        }
+                        helper.assertTrue(left == 1,
+                                "across both runs the total spent must equal the quote: one spare "
+                                        + item + " was set aside but " + left + " remain");
+                    }
+                })
+                .thenSucceed();
+    }
+
+    /**
+     * 续建那两条用例共用的小图纸:三块石头一面墙 + 一张朝北的床(两半都在文件里) +
+     * 一个挂在墙上的展示框(框里一颗钻石) + 一个盔甲架。
+     *
+     * <p>特意把四类难处凑在四格里:双格方块的次半、按组件全等收的载荷、要依托墙面的挂件、
+     * 以及要计料的躯壳。报价是 3 石 + 1 床 + 1 展示框 + 1 盔甲架 + 1 钻石。
+     */
+    private static void writeSmallHouse(ServerLevel level, String name) throws Exception {
+        BlockState bedFoot = Blocks.RED_BED.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
+                        net.minecraft.world.level.block.state.properties.BedPart.FOOT)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties
+                        .HORIZONTAL_FACING, net.minecraft.core.Direction.NORTH);
+        BlockState bedHead = bedFoot.setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
+                net.minecraft.world.level.block.state.properties.BedPart.HEAD);
+
+        var root = new net.minecraft.nbt.CompoundTag();
+        var size = new net.minecraft.nbt.ListTag();
+        size.add(net.minecraft.nbt.IntTag.valueOf(4));
+        size.add(net.minecraft.nbt.IntTag.valueOf(2));
+        size.add(net.minecraft.nbt.IntTag.valueOf(4));
+        root.put("size", size);
+        var palette = new net.minecraft.nbt.ListTag();
+        for (BlockState s : List.of(Blocks.STONE.defaultBlockState(), bedHead, bedFoot)) {
+            palette.add(net.minecraft.nbt.NbtUtils.writeBlockState(s));
+        }
+        root.put("palette", palette);
+        var blocks = new net.minecraft.nbt.ListTag();
+        blocks.add(cellTag(0, 0, 0, 0));
+        blocks.add(cellTag(0, 0, 1, 0));
+        blocks.add(cellTag(0, 0, 2, 0));   // 挂展示框的那面墙
+        blocks.add(cellTag(2, 0, 0, 1));   // 床头(朝北,z 更小)——加载期该被剔掉
+        blocks.add(cellTag(2, 0, 1, 2));   // 床脚
+        root.put("blocks", blocks);
+
+        // 展示框挂在 (0,0,2) 那块石头的南面,框里一颗钻石;盔甲架立在院里
+        var frameNbt = new net.minecraft.nbt.CompoundTag();
+        frameNbt.putString("id", "minecraft:item_frame");
+        frameNbt.putByte("Facing", (byte) net.minecraft.core.Direction.SOUTH.get3DDataValue());
+        var held = new net.minecraft.nbt.CompoundTag();
+        held.putString("id", "minecraft:diamond");
+        held.putInt("count", 1);
+        frameNbt.put("Item", held);
+        var standNbt = new net.minecraft.nbt.CompoundTag();
+        standNbt.putString("id", "minecraft:armor_stand");
+        var entities = new net.minecraft.nbt.ListTag();
+        entities.add(entityTag(0.5, 0.5, 3.5, frameNbt));
+        entities.add(entityTag(3.5, 0.0, 3.5, standNbt));
+        root.put("entities", entities);
+        net.minecraft.nbt.NbtIo.writeCompressed(root,
+                com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer())
+                        .resolve(name + ".nbt"));
     }
 
     /** 结构 NBT 的一只实体:{pos:[x,y,z], blockPos:[..], nbt:{...}}。 */
