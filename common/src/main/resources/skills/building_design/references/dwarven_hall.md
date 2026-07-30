@@ -9,7 +9,7 @@ gold used as structure rather than trim.
 ## Materials
 - **rock**: deepslate, cobbled_deepslate, polished_deepslate, stone, andesite,
   tuff — mix heavily; a hall of one stone reads as a texture, not a mountain
-- **worked masonry**: deepslate_bricks, polished_deepslate_bricks,
+- **worked masonry**: deepslate_bricks, cracked_deepslate_bricks, deepslate_tiles,
   chiseled_deepslate, stone_bricks
 - **metal**: gold_block, raw_gold_block, copper_block, iron_block — inlaid in
   bands and around portals

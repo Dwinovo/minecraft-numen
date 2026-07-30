@@ -12,16 +12,32 @@ not get to pick freely.
   clearly structural
 - **walls**: gray_concrete, stone_bricks, smooth_stone; the wall is infill, the
   columns carry the eye
-- **roof**: gold_block / yellow_terracotta / yellow_concrete for the highest
-  rank; green_concrete or dark tile for lesser buildings
+- **roof**: this is where most attempts go wrong. The historic glazed tile was
+  imperial yellow, but **gold_block reads as treasure, not as a roof** — it is
+  too bright, too flat and too obviously metal. What actually works is a
+  weathered, textured surface. One combination that holds up on a hand-built
+  hall, band by band:
+  - tiles `stone_brick_slab` — grey, textured, and it takes the light well
+  - ridges `dark_prismarine` — deep blue-green, clearly darker than the tile, so
+    the crest and the four diagonals read from across the courtyard
+  - eave band `waxed_oxidized_cut_copper_slab` — one course of verdigris right
+    around the edge
+  - soffit `oak_slab*5, jungle_slab*4, spruce_slab*2` — three woods mixed, seen
+    from under the deep eave
+  Substitutes that work in the same slots: deepslate_tiles or gray_concrete for
+  grey tile, warped_planks for an unusual teal. Reserve any yellow for a finial
+  one block big, never a whole roof plane.
 - **brackets and beams**: dark_oak_log, spruce_planks
 - **paving**: stone, andesite, polished_andesite in a regular grid
 - **light**: paired lanterns flanking every doorway
 
 ## Proportions
 - an odd number of bays across the front (3, 5, 7); the centre bay is the door
-- roof rise 0.5–0.7 of half-span, with a slight **concave sag** toward the eave
+- roof rise 0.6–0.75 of half-span — measured off hand-built halls, and the
+  generator's `concave` curve already lands there
 - eaves overhang 2–3, deeper at the corners
+- rafter ends every 2 cells along the eave, which is the spacing the slope itself
+  uses
 - platform base 1–2 above the courtyard, with a central stair or ramp
 
 ## Signature moves

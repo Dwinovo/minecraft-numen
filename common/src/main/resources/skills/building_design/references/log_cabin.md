@@ -10,7 +10,7 @@ machined, it stops being a cabin.
 - **walls**: spruce_log, oak_log, stripped_spruce_log — horizontal, and mix two
   log types so the courses vary
 - **corners**: the same logs, extended 1 past the corner (see below)
-- **roof**: spruce_stairs, dark_oak_stairs; moss_block or grass_block for a sod
+- **roof**: spruce_slab, dark_oak_slab; moss_block or grass_block for a sod
   roof; hay_block for thatch
 - **chimney**: cobblestone, mossy_cobblestone, stone — rough, mixed
 - **floor / porch**: spruce_planks, stripped_spruce_wood

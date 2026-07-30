@@ -10,7 +10,7 @@ the architecture's job.
 - **walls**: spruce_planks, oak_planks, stripped_oak_wood — horizontal boards,
   weathered, mixed tones
 - **frame / posts**: oak_log, spruce_log — thin, holding up the porch roof
-- **roof** (behind the false front): spruce_stairs, gray_concrete
+- **roof** (behind the false front): spruce_slab, gray_concrete
 - **boardwalk**: oak_planks, spruce_slab
 - **street**: dirt_path, coarse_dirt, gravel — never paved
 - **light**: lantern on the porch posts

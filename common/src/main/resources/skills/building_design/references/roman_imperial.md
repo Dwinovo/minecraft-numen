@@ -12,7 +12,7 @@ applied to an arched wall that does the actual work.
 - **brick facing**: bricks, mud_bricks — Roman concrete was brick-faced
 - **columns and trim**: quartz_pillar, smooth_quartz, chiseled_stone_bricks
 - **arches**: stone_brick_stairs, smooth_stone_slab
-- **roof / dome**: terracotta, brick_stairs; copper for a verdigris dome
+- **roof / dome**: terracotta, brick_slab; copper for a verdigris dome
 - **floor**: polished_andesite and calcite in alternating panels for mosaic
 - **light**: braziers, lanterns on the arcade piers
 

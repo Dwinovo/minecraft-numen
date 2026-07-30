@@ -10,7 +10,7 @@ the interest lies entirely in proportion and light rather than colour.
 - **columns**: quartz_pillar, smooth_quartz, calcite — fluted if you can imply it
 - **walls and entablature**: smooth_quartz, quartz_block, bone_block, calcite
 - **steps and platform**: smooth_stone, polished_diorite, quartz_stairs
-- **roof**: smooth_quartz_slab, quartz_stairs — very shallow
+- **roof**: smooth_quartz_slab, quartz_slab — very shallow
 - **accent**: gold_block only in tiny quantities; blue or red for painted trim,
   historically correct and rarely expected
 - **light**: braziers of campfire at the steps

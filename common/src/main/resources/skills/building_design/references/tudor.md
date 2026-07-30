@@ -11,7 +11,7 @@ brick towers. The frame is still structural, it is just also bragging.
 - **infill**: white_concrete, bone_block, smooth_quartz, white_terracotta —
   bright white against the dark timber is the whole look
 - **brick** (chimney, base): bricks, mud_bricks, nether_bricks for a darker red
-- **roof**: dark_oak_stairs, deepslate_tiles; steep and often multi-gabled
+- **roof**: dark_oak_slab, deepslate_tiles; steep and often multi-gabled
 - **glass**: glass_pane in tight grids, sometimes with a leaded diamond feel
 - **light**: lantern on iron brackets by the door
 

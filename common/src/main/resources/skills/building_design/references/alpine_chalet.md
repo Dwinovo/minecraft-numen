@@ -9,7 +9,7 @@ timber sits on top, and the sunny side gets a long balcony with a carved rail.
 - **ground floor**: stone, cobblestone, andesite, deepslate — solid and cold
 - **upper walls**: spruce_planks, dark_oak_planks, stripped_spruce_log — warm,
   horizontal boarding
-- **roof**: spruce_stairs, dark_oak_stairs; sometimes stone slabs weighing it
+- **roof**: spruce_slab, dark_oak_slab; sometimes stone slabs weighing it
   down
 - **beams and rails**: spruce_log, spruce_fence, dark_oak_fence
 - **light**: lantern under the eave, warm and generous

@@ -9,7 +9,7 @@ are outdoors: terraces, courtyards, shaded loggias.
 ## Materials
 - **walls**: white_concrete, smooth_quartz, bone_block, calcite, white_terracotta
   — mix two or three so the whitewash looks applied rather than printed
-- **roof**: terracotta, brick_stairs, granite_stairs — warm orange-red, shallow
+- **roof**: terracotta, brick_slab, granite_slab — warm orange-red, shallow
 - **trim / arches**: smooth_quartz_stairs, quartz_slab
 - **floor and terrace**: terracotta, polished_andesite, stone
 - **planting**: azalea, flowering_azalea, vines over the terrace, potted plants

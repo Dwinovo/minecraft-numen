@@ -12,7 +12,7 @@ like a castle.
   cracked_stone_bricks — mix at least three; a uniform wall reads as a texture
   swatch, not masonry
 - **trim and crenellations**: stone_brick_stairs, stone_brick_slab, stone_brick_wall
-- **roofs** (tower caps): dark_oak_stairs, deepslate_tiles, blackstone
+- **roofs** (tower caps): dark_oak_slab, deepslate_tiles, blackstone
 - **timber** (hoardings, gates, floors): dark_oak_planks, oak_log
 - **light**: torch and lantern on the wall walk; campfire in the ward
 - **accent**: banners on the keep and above the gate

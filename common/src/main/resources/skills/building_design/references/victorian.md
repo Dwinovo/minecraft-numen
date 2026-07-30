@@ -11,7 +11,7 @@ three or more shades on one house.
   purple_terracotta, brown_terracotta — Victorians painted boldly and in
   multiple colours per house
 - **trim**: white_concrete, bone_block picked out against the body colour
-- **roof**: dark_oak_stairs, deepslate_tiles, or patterned bands of two stairs
+- **roof**: dark_oak_slab, deepslate_tiles, or patterned bands of two stairs
 - **porch**: oak_fence posts, oak_stairs, trapdoors as fretwork brackets
 - **windows**: glass_pane in tall narrow openings, bay windows projecting 1
 - **light**: lantern by the door, warm interior glow

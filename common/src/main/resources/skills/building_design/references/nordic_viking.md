@@ -9,7 +9,7 @@ structure itself: dragon heads on the gable ends, patterned stave doors.
 ## Materials
 - **walls / staves**: spruce_planks, dark_oak_planks, stripped_spruce_log —
   vertical boards, not horizontal courses
-- **roof**: spruce_stairs, dark_oak_stairs for shingle; grass_block or moss_block
+- **roof**: spruce_slab, dark_oak_slab for shingle; grass_block or moss_block
   for a turf roof, which is very much in period
 - **base**: cobblestone, andesite, mossy_cobblestone — a low stone footing
 - **posts**: oak_log, spruce_log — heavy and few

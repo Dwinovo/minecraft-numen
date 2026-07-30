@@ -10,7 +10,7 @@ clutter — fences, troughs, stacked hay, a well.
 - **barn walls**: red_concrete, red_terracotta, spruce_planks, dark_oak_planks
   — the painted red barn is a real and very readable choice
 - **house walls**: white_concrete, bone_block, oak_planks
-- **roof**: dark_oak_stairs, spruce_stairs, deepslate_tiles; hay_block on the
+- **roof**: dark_oak_slab, spruce_slab, deepslate_tiles; hay_block on the
   smaller sheds
 - **trim / frame**: white_concrete against red, or stripped_oak_log
 - **ground**: dirt_path, coarse_dirt, gravel, farmland — the yard is not paved

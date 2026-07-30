@@ -11,7 +11,7 @@ exterior, pale interior, is the classic pairing.
   black_concrete — vertical boards, often stained near-black
 - **interior / soffits**: stripped_birch_wood, stripped_oak_wood, birch_planks —
   pale and warm
-- **roof**: dark_oak_stairs, deepslate_tiles, gray_concrete — same colour as the
+- **roof**: dark_oak_slab, deepslate_tiles, gray_concrete — same colour as the
   walls, so the whole form reads as one shape
 - **glass**: large panes, minimal frames
 - **light**: lantern; warm, low, and plentiful

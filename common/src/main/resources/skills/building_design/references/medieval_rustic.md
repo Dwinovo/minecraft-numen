@@ -11,7 +11,7 @@ larger than the walls holding it up.
 - **infill**: white_terracotta, bone_block, clay, smooth_quartz for daub
 - **base course**: cobblestone, mossy_cobblestone, stone — mix heavily so it
   looks laid by hand, never one flat colour
-- **roof**: dark_oak_stairs or spruce_stairs for shingle; hay_block for thatch
+- **roof**: dark_oak_slab or spruce_slab for shingle; hay_block for thatch
 - **light**: torch, lantern on a fence post, campfire in the yard
 - **accent**: barrels, a woodpile, a cart — clutter belongs to this style
 

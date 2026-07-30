@@ -9,7 +9,7 @@ something you would rather not identify.
 ## Materials
 - **walls**: dark_oak_planks, spruce_planks, stripped_dark_oak_log — dark and
   patched; mix in a couple of mismatched planks
-- **roof**: dark_oak_stairs, dried_kelp_block, hay_block — rotting thatch
+- **roof**: dark_oak_slab, dried_kelp_block, hay_block — rotting thatch
 - **stilts**: oak_log, dark_oak_log, sometimes at visibly different angles
 - **chimney**: cobblestone, mossy_cobblestone, cracked_stone_bricks — leaning
 - **light**: soul_lantern, soul_campfire, candles, redstone_torch — sickly and
