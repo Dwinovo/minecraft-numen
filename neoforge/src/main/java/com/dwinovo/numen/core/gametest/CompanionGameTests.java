@@ -4,6 +4,7 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.tools.BlockActionTools;
 import com.dwinovo.numen.core.task.BuildTaskRecord;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayList;
 import com.dwinovo.numen.core.tools.MovementTools;
 import com.dwinovo.numen.entity.CompanionFactory;
@@ -343,141 +344,629 @@ public class CompanionGameTests {
     }
 
     /**
-     * 屋顶几何:楼梯朝向、屋脊走向、出檐、山墙、脊盖——纯展开器断言,不进世界。
+     * {@code air} 要能清空,液体要<b>说清是能力边界</b>,一格几件料要算准。
      *
-     * <p>楼梯朝向是整个屋顶最容易做反的一处,而做反了不会报错、只会难看,所以
-     * 必须有回归锁:<b>facing 指向上坡方向,也就是指向屋脊</b>。屋脊沿长轴——
-     * 收分收错轴的话,越长的房子顶得越离谱。
+     * <p>这三条都是实测账单逼出来的:60 次 build 调用被拒 22 次,其中 15 次
+     * {@code unknown item: air}、3 次 {@code unknown item: water}。根子是 block_id
+     * 走了物品注册表——那个入口把 AIR 当未知物品拒掉(对吃/丢/取是对的),于是两处
+     * {@code if (item == AIR)} 的分支成了永远到不了的死代码,而工具描述里白纸黑字
+     * 写着 air 能清空。模型照文档写、被拒、换个写法再被拒,一次建造烧掉四轮往返。
+     *
+     * <p>液体则相反:那是真的不做,所以错误信息必须说是边界,不能回一句"未知方块"
+     * ——名字明明是对的,模型只会以为自己拼错了。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void roof_geometry(GameTestHelper helper) {
-        // 底面 20 长(x) × 8 宽(z):脊必须沿 x,坡向 z
-        var cells = com.dwinovo.numen.core.tools.BuildTool.roofCells(
-                0, 100, 0, 19, 7, "minecraft:oak_stairs", "gable", "straight", 1, 0, null,
-                "minecraft:oak_planks", "minecraft:oak_slab", true);
-        java.util.Map<BlockPos, BuildTaskRecord.Target> byPos = new java.util.HashMap<>();
-        for (BuildTaskRecord.Target t : cells) {
-            byPos.put(t.pos(), t);
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void build_block_ids_and_material_counts(GameTestHelper helper) {
+        for (String id : new String[]{"air", "minecraft:air", "dirt_path", "farmland", "tall_grass"}) {
+            com.dwinovo.numen.core.tools.BuildPalette.parse(id);
         }
-        // 出檐 1:底层从 z=-1 起、到 z=8 止
-        BuildTaskRecord.Target low = byPos.get(new BlockPos(5, 100, -1));
-        BuildTaskRecord.Target high = byPos.get(new BlockPos(5, 100, 8));
-        helper.assertTrue(low != null && high != null, "roof: overhang=1 did not extend the base rect");
+        for (String liquid : new String[]{"water", "minecraft:water", "lava"}) {
+            String msg = "";
+            try {
+                com.dwinovo.numen.core.tools.BuildPalette.parse(liquid);
+            } catch (IllegalArgumentException e) {
+                msg = String.valueOf(e.getMessage());
+            }
+            helper.assertTrue(msg.contains("liquid"),
+                    liquid + " must be refused as a capability boundary, not as a bad name; got \"" + msg + "\"");
+        }
+        String stateMsg = "";
+        try {
+            com.dwinovo.numen.core.tools.BuildPalette.parse("spruce_stairs[facing=south]");
+        } catch (IllegalArgumentException e) {
+            stateMsg = String.valueOf(e.getMessage());
+        }
+        helper.assertTrue(stateMsg.contains("properties"),
+                "inline block states must be rejected with a message pointing at `properties`");
 
-        var facing = net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING;
-        helper.assertTrue(low.desiredState().hasProperty(facing),
-                "roof: slope course is not made of stairs");
-        // 低 z 侧上坡朝 +z(south),高 z 侧上坡朝 -z(north)——两侧对着爬向屋脊
-        helper.assertTrue(low.desiredState().getValue(facing) == net.minecraft.core.Direction.SOUTH,
-                "roof: low-z slope must face the ridge (south), got "
-                        + low.desiredState().getValue(facing));
-        helper.assertTrue(high.desiredState().getValue(facing) == net.minecraft.core.Direction.NORTH,
-                "roof: high-z slope must face the ridge (north), got "
-                        + high.desiredState().getValue(facing));
-        // 脊沿长轴:坡面每升一层向内收一格,x 方向自始至终跑满
-        helper.assertTrue(byPos.containsKey(new BlockPos(0, 100, -1))
-                        && byPos.containsKey(new BlockPos(19, 100, -1)),
-                "roof: ridge must run along the longer axis, so the eave spans the full length");
-        helper.assertTrue(byPos.containsKey(new BlockPos(5, 101, 0)),
-                "roof: second course did not step inward by one");
-        // 脊盖与山墙都在
-        boolean hasSlab = cells.stream().anyMatch(t -> t.desiredState().getBlock() == Blocks.OAK_SLAB);
-        boolean hasGable = cells.stream().anyMatch(t -> t.desiredState().getBlock() == Blocks.OAK_PLANKS);
-        helper.assertTrue(hasSlab, "roof: ridge_block never placed");
-        helper.assertTrue(hasGable, "roof: gable_block never filled the ends");
+        // 没有自己物品的方块要拿替代料算账,否则文档里教的 dirt_path 根本放不下去
+        helper.assertTrue(com.dwinovo.numen.core.tools.BuildPalette.parse("dirt_path")
+                        .pick(BlockPos.ZERO).item() == Items.DIRT,
+                "dirt_path has no item of its own; it must be billed as dirt");
+
+        // 一格几件料:双层砖是两块半砖摞出来的,门/床的上半不重复计
+        record Case(BlockState state, int want, String why) {}
+        var slab = Blocks.STONE_BRICK_SLAB;
+        for (Case c : List.of(
+                new Case(slab.defaultBlockState().setValue(
+                        net.minecraft.world.level.block.SlabBlock.TYPE,
+                        net.minecraft.world.level.block.state.properties.SlabType.DOUBLE), 2,
+                        "a double slab is two slabs"),
+                new Case(slab.defaultBlockState(), 1, "a single slab is one"),
+                new Case(Blocks.STONE.defaultBlockState(), 1, "a plain block is one"),
+                new Case(Blocks.SNOW.defaultBlockState().setValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.LAYERS, 5), 5,
+                        "snow is billed per layer"),
+                new Case(Blocks.TALL_GRASS.defaultBlockState(), 2,
+                        "tall grass is two short grass"),
+                new Case(Blocks.WATER.defaultBlockState(), 0, "liquids cost nothing"),
+                new Case(Blocks.AIR.defaultBlockState(), 0, "clearing costs nothing"))) {
+            var t = new BuildTaskRecord.Target(c.state(), Items.STONE, BlockPos.ZERO, "x",
+                    null, null, null);
+            helper.assertTrue(t.materialCount() == c.want(),
+                    c.why() + " — expected " + c.want() + ", got " + t.materialCount());
+        }
+
+        // 贴附件整体推到第二趟:骨架先立完,再回头挂灯摆花
+        List<BuildTaskRecord.Target> mixed = new ArrayList<>(List.of(
+                new BuildTaskRecord.Target(Blocks.TORCH.defaultBlockState(), Items.TORCH,
+                        new BlockPos(1, 1, 0), "torch", null, null, null),
+                new BuildTaskRecord.Target(Blocks.RED_CARPET.defaultBlockState(), Items.RED_CARPET,
+                        new BlockPos(2, 1, 0), "carpet", null, null, null),
+                new BuildTaskRecord.Target(Blocks.STONE, Items.STONE,
+                        new BlockPos(0, 9, 0), "stone", null, null, null)));
+        mixed.sort(com.dwinovo.numen.core.task.BuildCompanionTask.BUILD_ORDER);
+        helper.assertTrue(mixed.get(0).desiredState().getBlock() == Blocks.STONE,
+                "everything that stands on its own goes first, even nine layers up; got "
+                        + mixed.stream().map(BuildTaskRecord.Target::label).toList());
         helper.succeed();
     }
 
     /**
-     * 四坡顶(庑殿/hip)与举架曲线(concave)。
+     * 图纸带来的方块实体数据必须真的装进去:箱子里的东西、告示牌的字、旗帜的花纹。
      *
-     * <p>举架是东亚屋面读起来是"曲"而不是"阶梯金字塔"的原因:清式一律从檐口的
-     * 五举(0.5)起步,越往脊越陡,脊步不超过十举。翻成方块就是<b>檐口一层收两格、
-     * 脊部一层收一格</b>——所以同样的跨度,凹曲屋面的层数明显少于直线屋面,而且
-     * 头两层的收分必然大于 1。这两条都是可测的。
+     * <p>不装的话,社区图纸建出来是一屋子空箱子和白板告示牌——外形全对,内容全丢,
+     * 而这是玩家一眼就看得出来的那种丢。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 1400, batch = "numen_build")
+    public static void blueprint_block_entity_contents_survive(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_chest", new BlockPos(2, 2, 2), true);
+        BlockPos chest = helper.absolutePos(new BlockPos(7, 2, 7));
+
+        net.minecraft.nbt.CompoundTag stack = new net.minecraft.nbt.CompoundTag();
+        stack.putByte("Slot", (byte) 0);
+        stack.putString("id", "minecraft:diamond");
+        stack.putInt("count", 5);
+        net.minecraft.nbt.ListTag items = new net.minecraft.nbt.ListTag();
+        items.add(stack);
+        net.minecraft.nbt.CompoundTag data = new net.minecraft.nbt.CompoundTag();
+        data.putString("id", "minecraft:chest");
+        data.put("Items", items);
+
+        var targets = List.of(new BuildTaskRecord.Target(Blocks.CHEST, Items.CHEST, chest, "chest",
+                net.minecraft.core.Direction.NORTH, null, null));
+        var ctx = TaskDispatch.ctx("gametest-be", companion);
+        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+                ctx.deadline(4000L), targets,
+                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, false, false,
+                java.util.Map.of(chest.asLong(), data)), reply -> {});
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(level.getBlockState(chest).is(Blocks.CHEST),
+                    "the chest itself is not placed yet");
+            var be = level.getBlockEntity(chest);
+            helper.assertTrue(be instanceof net.minecraft.world.Container,
+                    "chest has no container block entity");
+            var container = (net.minecraft.world.Container) be;
+            var got = container.getItem(0);
+            helper.assertTrue(got.is(Items.DIAMOND) && got.getCount() == 5,
+                    "the blueprint's chest contents must survive placement; slot 0 holds " + got);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 让路的四档:每一档让到什么程度。
+     *
+     * <p>当前工具层只发最高和最低两档,中间两档走不到——<b>正因为走不到才要测</b>,
+     * 不然等图纸层把档位开放给玩家时,它们已经烂了而没人知道。
+     *
+     * <p>"软"用 {@code canBeReplaced()} 判(草、花、雪层、火):原版自己判断"能不能
+     * 直接盖上去"用的就是它,不必另立一套近似判据。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void roof_hip_and_concave(GameTestHelper helper) {
-        // ── 四坡:四面都收,没有山墙,四角是垂脊 ──
-        var hip = com.dwinovo.numen.core.tools.BuildTool.roofCells(
-                0, 200, 0, 10, 10, "minecraft:oak_stairs", "hip", "straight", 0, 0, null,
-                null, "minecraft:oak_planks", true);
-        java.util.Map<BlockPos, BuildTaskRecord.Target> byPos = new java.util.HashMap<>();
-        for (BuildTaskRecord.Target t : hip) byPos.put(t.pos(), t);
-        var facing = net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING;
-        // 四条边各自朝内爬
-        helper.assertTrue(byPos.get(new BlockPos(5, 200, 0)).desiredState().getValue(facing)
-                        == net.minecraft.core.Direction.SOUTH, "hip: -z edge must climb south");
-        helper.assertTrue(byPos.get(new BlockPos(5, 200, 10)).desiredState().getValue(facing)
-                        == net.minecraft.core.Direction.NORTH, "hip: +z edge must climb north");
-        helper.assertTrue(byPos.get(new BlockPos(0, 200, 5)).desiredState().getValue(facing)
-                        == net.minecraft.core.Direction.EAST, "hip: -x edge must climb east");
-        helper.assertTrue(byPos.get(new BlockPos(10, 200, 5)).desiredState().getValue(facing)
-                        == net.minecraft.core.Direction.WEST, "hip: +x edge must climb west");
-        // 角上两坡相撞:给了 ridge_block 就用它当垂脊,不能留一块朝向随便的楼梯
-        helper.assertTrue(byPos.get(new BlockPos(0, 200, 0)).desiredState().getBlock()
-                        == Blocks.OAK_PLANKS,
-                "hip: corner must use the ridge block, got "
-                        + byPos.get(new BlockPos(0, 200, 0)).desiredState());
-        // 方形底面收到一点(攒尖)
-        helper.assertTrue(byPos.containsKey(new BlockPos(5, 205, 5)),
-                "hip on a square footprint must converge to a point");
+    public static void replace_modes_let_through_what_they_say(GameTestHelper helper) {
+        BlockState air = Blocks.AIR.defaultBlockState();
+        BlockState soft = Blocks.SHORT_GRASS.defaultBlockState();
+        BlockState solid = Blocks.STONE.defaultBlockState();
+        BlockState torch = Blocks.TORCH.defaultBlockState();
 
-        // ── 举架:同跨度下凹曲比直线矮,且头两层收分大于 1 ──
-        int span = 16;
-        var straight = com.dwinovo.numen.core.tools.BuildTool.roofCells(
-                0, 300, 0, 30, span, "minecraft:oak_stairs", "gable", "straight", 0, 0, null,
-                null, null, true);
-        var concave = com.dwinovo.numen.core.tools.BuildTool.roofCells(
-                0, 300, 0, 30, span, "minecraft:oak_stairs", "gable", "concave", 0, 0, null,
-                null, null, true);
-        int hStraight = straight.stream().mapToInt(t -> t.pos().getY()).max().orElse(0);
-        int hConcave = concave.stream().mapToInt(t -> t.pos().getY()).max().orElse(0);
-        helper.assertTrue(hConcave < hStraight,
-                "concave roof should be lower than a straight one over the same span, got "
-                        + hConcave + " vs " + hStraight);
-        // 檐口那两层是缓坡:第二层的坡脚必然离檐口 2 格开外
-        java.util.Set<BlockPos> cc = new java.util.HashSet<>();
-        for (BuildTaskRecord.Target t : concave) cc.add(t.pos());
-        helper.assertTrue(cc.contains(new BlockPos(15, 300, 0)) && cc.contains(new BlockPos(15, 301, 2)),
-                "concave roof must start shallow — the second course should step in by 2, not 1");
+        record Row(com.dwinovo.numen.core.task.ReplaceMode mode, BlockState current,
+                   BlockState desired, boolean want, String why) {}
+        for (Row row : List.of(
+                // 最低档:只往空地和软方块上补,既有建筑一格不碰,也不清空
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.DONT_REPLACE, air, solid, true,
+                        "empty ground is always fair game"),
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.DONT_REPLACE, soft, solid, true,
+                        "grass is replaceable, vanilla lets you build straight over it"),
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.DONT_REPLACE, solid, solid, false,
+                        "this mode exists so an existing building is never touched"),
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.DONT_REPLACE, solid, air, false,
+                        "no mode below the top one clears anything"),
+                // 中档:实心可以压实心,但细软件不能顶掉墙
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_SOLID, solid, solid, true,
+                        "structure may push through structure"),
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_SOLID, solid, torch, false,
+                        "a torch must not knock out a wall"),
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_SOLID, soft, torch, true,
+                        "but it may go where there was only grass"),
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_SOLID, solid, air, false,
+                        "still no clearing"),
+                // 高档:挡路的一律顶掉,但空气格只当"不管这一格"
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_ANY, solid, torch, true,
+                        "anything in the way gives way"),
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_ANY, solid, air, false,
+                        "an air cell here means 'leave this one alone', not 'dig it out'"),
+                // 顶档:连该空的地方也挖空
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, solid, air, true,
+                        "this is the mode where an air cell is a dig order"),
+                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, solid, torch, true,
+                        "and everything else gives way too"))) {
+            boolean got = row.mode().allows(row.current(), row.desired());
+            helper.assertTrue(got == row.want(), row.mode() + ": " + row.why()
+                    + " — expected " + row.want() + ", got " + got);
+        }
+        helper.succeed();
+    }
 
-        // ── 歇山:下四坡、上双坡 ──
-        var xieshan = com.dwinovo.numen.core.tools.BuildTool.roofCells(
-                0, 400, 0, 16, 12, "minecraft:oak_stairs", "half_hip", "straight", 0, 0, null,
-                "minecraft:oak_planks", null, true);
-        java.util.Set<BlockPos> xs = new java.util.HashSet<>();
-        for (BuildTaskRecord.Target t : xieshan) xs.add(t.pos());
-        // 底层四面都有坡(四坡段)
-        helper.assertTrue(xs.contains(new BlockPos(0, 400, 6)) && xs.contains(new BlockPos(16, 400, 6)),
-                "half_hip: the lower section must slope on the short sides too");
-        // 上段变双坡:某一层开始,x 两端不再收(脊沿 x 跑满)
-        boolean gableAbove = xieshan.stream().anyMatch(t ->
-                t.desiredState().getBlock() == Blocks.OAK_PLANKS);
-        helper.assertTrue(gableAbove, "half_hip: upper section must have filled gable ends");
+    /**
+     * 图纸里的<b>运行态</b>不能照抄进世界。
+     *
+     * <p>图纸是某个世界某一刻的快照,里面混着大量世界自己算出来的东西:作物长到第
+     * 几节、方块含不含水、活塞伸没伸出去、堆肥桶攒了多少、锅里装的什么。照字面摆
+     * 下去就会凭空长出一片熟麦子、凭空造出水来、摆一口装着岩浆的锅。
+     *
+     * <p>判据和 {@code BuildValidity} 那张"作者属性"白名单是同一条的两面:那边管
+     * 比对时忽略什么,这边管落位前清掉什么。所以归一必须在<b>每个目标格都要过的
+     * 那道口</b>上做一次,而不是让工具入口和图纸入口各清各的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void blueprint_runtime_state_is_normalized(GameTestHelper helper) {
+        BlockState ripe = Blocks.WHEAT.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.AGE_7, 7);
+        BlockState wet = Blocks.OAK_STAIRS.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED, true);
+        BlockState full = Blocks.COMPOSTER.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_COMPOSTER, 5);
 
-        // ── 单坡:只有一个方向有坡,另一侧不收 ──
-        var shed = com.dwinovo.numen.core.tools.BuildTool.roofCells(
-                0, 500, 0, 10, 6, "minecraft:oak_stairs", "shed", "straight", 0, 0, null,
-                null, null, true);
-        int shedMinZ = shed.stream().mapToInt(t -> t.pos().getZ()).min().orElse(-1);
-        int shedMaxZ = shed.stream().mapToInt(t -> t.pos().getZ()).max().orElse(-1);
-        int lowY = shed.stream().filter(t -> t.pos().getZ() == shedMinZ)
+        var wheat = new BuildTaskRecord.Target(ripe, Items.WHEAT_SEEDS, BlockPos.ZERO, "wheat",
+                null, null, null);
+        helper.assertTrue(wheat.desiredState().getValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.AGE_7) == 0,
+                "a blueprint's ripe wheat must be planted as a seedling, not conjured fully grown");
+
+        var stair = new BuildTaskRecord.Target(wet, Items.OAK_STAIRS, BlockPos.ZERO, "stair",
+                null, null, null);
+        helper.assertTrue(!stair.desiredState().getValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED),
+                "waterlogging is derived from the water around a block; copying it conjures water"
+                        + " out of nothing, and she does not place water at all");
+
+        var composter = new BuildTaskRecord.Target(full, Items.COMPOSTER, BlockPos.ZERO, "composter",
+                null, null, null);
+        helper.assertTrue(composter.desiredState().getValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_COMPOSTER) == 0,
+                "how full a composter is, is runtime state — it must be placed empty");
+
+        var cauldron = new BuildTaskRecord.Target(Blocks.LAVA_CAULDRON.defaultBlockState(),
+                Items.CAULDRON, BlockPos.ZERO, "cauldron", null, null, null);
+        helper.assertTrue(cauldron.desiredState().is(Blocks.CAULDRON),
+                "a cauldron's contents are runtime state; a blueprint must not hand out free lava");
+
+        var leaves = new BuildTaskRecord.Target(Blocks.OAK_LEAVES.defaultBlockState(),
+                Items.OAK_LEAVES, BlockPos.ZERO, "leaves", null, null, null);
+        helper.assertTrue(leaves.desiredState().getValue(
+                        net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT),
+                "placed leaves are hand-placed leaves; without this they rot as fast as she builds");
+        helper.succeed();
+    }
+
+    /**
+     * skill 文档里点名的每一个方块都必须真的存在。
+     *
+     * <p>文档是<b>喂给模型的词汇表</b>:写错一个名字,模型就会照着吐一个无效的
+     * block_id,而那一格不会报错、只会缺一块。四十份风格文件、上百个方块名从来
+     * 没有人验过,而改一次屋顶用料就顺手把十四份文件里的 {@code _stairs} 换成了
+     * {@code _slab}——{@code stone_bricks → stone_brick_slab} 这种去复数的名字
+     * 靠手改必然漏。
+     *
+     * <p>判据是注册表本身,不另立一份清单:反引号里凡是带下划线的小写词,要么在
+     * 方块/物品注册表里查得到,要么是我们自己的词汇(op 名、参数名、方块状态键、
+     * 形制名)。两边都不是就是错字。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void skill_docs_name_real_blocks(GameTestHelper helper) {
+        // 我们自己的词汇:工具、op、参数、状态键、形制名。它们和方块名共用反引号,
+        // 但不该去注册表里找。
+        java.util.Set<String> ours = java.util.Set.of(
+                "block_id", "roof_shape", "roof_curve", "corner_lift", "gable_block",
+                "ridge_block", "eave_block", "soffit_block", "ridge_offset", "set_door",
+                "replace_existing", "load_skill", "task_status", "task_finished",
+                "building_design", "blueprint_read", "half_hip", "signal_fire",
+                "short_grass", "dirt_path", "coarse_dirt", "flower_pot", "decorated_pot",
+                "x1", "y1", "z1", "x2", "y2", "z2");
+        java.util.List<String> bad = new java.util.ArrayList<>();
+        int checked = 0;
+        try {
+            var url = CompanionGameTests.class.getClassLoader()
+                    .getResource("skills/building_design/SKILL.md");
+            helper.assertTrue(url != null, "skill resources are not on the classpath");
+            java.nio.file.Path root = java.nio.file.Path.of(url.toURI()).getParent();
+            java.util.List<java.nio.file.Path> docs;
+            try (var walk = java.nio.file.Files.walk(root)) {
+                docs = walk.filter(p -> p.toString().endsWith(".md")).toList();
+            }
+            helper.assertTrue(docs.size() >= 40,
+                    "expected the style reference set, found only " + docs.size() + " doc(s)");
+            // 风格文件名也在反引号里(正文那份索引),它们是文档名不是方块名。
+            // 用实际存在的文件当判据,顺带把索引里指向不存在文件的错字也一起抓了。
+            java.util.Set<String> docNames = new java.util.HashSet<>();
+            for (java.nio.file.Path doc : docs) {
+                String n = doc.getFileName().toString();
+                docNames.add(n.substring(0, n.length() - 3));
+            }
+            var token = java.util.regex.Pattern.compile("`([^`]+)`");
+            var ident = java.util.regex.Pattern.compile("[a-z][a-z0-9_]*");
+            for (java.nio.file.Path doc : docs) {
+                java.util.List<String> words = new java.util.ArrayList<>();
+                // 反引号里的(SKILL.md 用这种写法)
+                var m = token.matcher(java.nio.file.Files.readString(doc));
+                while (m.find()) {
+                    String body = m.group(1);
+                    if (body.indexOf('*') >= 0) {
+                        continue;   // 通配写法(stripped_*_log)与调色权重(oak_slab*5)
+                    }
+                    var w = ident.matcher(body);
+                    while (w.find()) {
+                        words.add(w.group());
+                    }
+                }
+                // 材料槽的裸列(风格文件用这种写法):`- **roof**: a, b, c — 说明`。
+                // 只收"整块就是一个词"的项,带空格的是散文不是方块名。
+                for (String line : java.nio.file.Files.readAllLines(doc)) {
+                    if (!line.startsWith("- **") || !line.contains("**:")) {
+                        continue;
+                    }
+                    String list = line.substring(line.indexOf("**:") + 3);
+                    for (String sep : new String[]{"—", ";", "("}) {
+                        int cut = list.indexOf(sep);
+                        if (cut >= 0) {
+                            list = list.substring(0, cut);
+                        }
+                    }
+                    for (String chunk : list.split("[,/]")) {
+                        String t = chunk.trim();
+                        if (!t.isEmpty() && t.indexOf(' ') < 0) {
+                            words.add(t);
+                        }
+                    }
+                }
+                for (String word : words) {
+                    if (word.indexOf('_') < 0 || ours.contains(word) || docNames.contains(word)) {
+                        continue;
+                    }
+                    checked++;
+                    var id = net.minecraft.resources.ResourceLocation.tryParse("minecraft:" + word);
+                    boolean known = id != null
+                            && (net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(id)
+                            || net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(id));
+                    if (!known) {
+                        bad.add(doc.getFileName() + ": " + word);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            throw new AssertionError("could not lint the skill docs: " + e, e);
+        }
+        helper.assertTrue(bad.isEmpty(), "skill docs name " + bad.size()
+                + " block(s) that do not exist: " + bad);
+        helper.assertTrue(checked > 200,
+                "the lint matched only " + checked + " block names — the extractor is broken");
+        helper.succeed();
+    }
+
+    /** 屋顶展开的简写——参数多,测试里只关心形状和料。 */
+    private static java.util.List<BuildTaskRecord.Target> roof(
+            int x1, int y1, int z1, int x2, int z2,
+            String material, String shape, String curve, String ridge, String gable) {
+        return com.dwinovo.numen.core.tools.BuildTool.roofCells(x1, y1, z1, x2, z2,
+                material, shape, curve, 0, 0, gable, ridge, null, null, true);
+    }
+
+    /** 一格屋面的顶面高度,以半砖计(相对 y0)——半砖三态各占多高的唯一算法。 */
+    private static int topHalves(BuildTaskRecord.Target t, int y0) {
+        var state = t.desiredState();
+        int y = t.pos().getY() - y0;
+        if (state.getBlock() instanceof net.minecraft.world.level.block.SlabBlock) {
+            return state.getValue(
+                    net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
+                    == net.minecraft.world.level.block.state.properties.SlabType.BOTTOM
+                    ? 2 * y + 1 : 2 * y + 2;
+        }
+        return 2 * y + 2;
+    }
+
+    /**
+     * 屋面砌法:从四栋手工中式建筑(悬山、歇山、庑殿、攒尖)逐格量出来的三条铁律。
+     *
+     * <p>这三条不是推的,是量的,所以值得钉成断言:
+     * <ol>
+     *   <li><b>坡面用半砖,不用楼梯。</b>四栋里半砖比楼梯多 6~43 倍,坡面上一块
+     *       楼梯都没有——楼梯只出现在斗拱和宝顶那种细节上。</li>
+     *   <li><b>顶面每格升半格,而且只用 bottom / double 两态</b>(檐口那一圈例外,
+     *       用 top 收薄边)。此前这里用"bottom + top",顶面轮廓一样,但 top 半砖
+     *       底下那半格是空的——从底下看是一排悬空的砖,山面还能看见缺口。</li>
+     *   <li><b>屋顶高 ≈ 0.6~0.75 × 半跨。</b>举架平均每格抬 1.2 个半砖:檐口五举
+     *       抬一个,脊步十举抬两个。抬太少是个平台,抬太多是金字塔。</li>
+     * </ol>
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void roof_slab_technique(GameTestHelper helper) {
+        int y0 = 100;
+        int halfSpan = 8;
+        var cells = roof(0, y0, 0, 25, 2 * halfSpan, "minecraft:stone_brick_slab",
+                "xuanshan", null, null, null);
+
+        long stairs = cells.stream().filter(t ->
+                t.desiredState().getBlock() instanceof net.minecraft.world.level.block.StairBlock).count();
+        helper.assertTrue(stairs == 0,
+                "the slope must be laid in slabs, not stairs; found " + stairs + " stair cell(s)");
+
+        var TYPE = net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE;
+        for (BuildTaskRecord.Target t : cells) {
+            if (!(t.desiredState().getBlock() instanceof net.minecraft.world.level.block.SlabBlock)) {
+                continue;
+            }
+            boolean atEave = Math.min(t.pos().getZ(), 2 * halfSpan - t.pos().getZ()) == 0;
+            helper.assertTrue(
+                    atEave || t.desiredState().getValue(TYPE)
+                            != net.minecraft.world.level.block.state.properties.SlabType.TOP,
+                    "a TOP slab away from the eave leaves a half-block void underneath, at " + t.pos());
+        }
+
+        // 沿坡向逐格量顶面:必须一路上行,每格抬一到两个半砖,不许平、不许跳。
+        // 只量到脊那一格之前——脊本身是压在屋面之上的实心块,高出来是设计。
+        int[] top = new int[2 * halfSpan + 1];
+        for (BuildTaskRecord.Target t : cells) {
+            if (t.pos().getX() == 12
+                    && t.desiredState().getBlock() instanceof net.minecraft.world.level.block.SlabBlock) {
+                top[t.pos().getZ()] = Math.max(top[t.pos().getZ()], topHalves(t, y0));
+            }
+        }
+        for (int z = 1; z < halfSpan; z++) {
+            int step = top[z] - top[z - 1];
+            helper.assertTrue(step >= 1 && step <= 2,
+                    "the roof surface must climb 1-2 half-blocks per cell; got " + step
+                            + " between z=" + (z - 1) + " and z=" + z);
+        }
+        double blocks = top[halfSpan - 1] / 2.0;
+        helper.assertTrue(blocks >= 0.45 * halfSpan && blocks <= 0.85 * halfSpan,
+                "roof height should be 0.6-0.75 of the half-span (" + halfSpan + "), got " + blocks);
+        helper.succeed();
+    }
+
+    /**
+     * 脊:必须<b>高出屋面</b>,而且庑殿/攒尖的四条垂脊是<b>一格宽的正 45° 对角线</b>。
+     *
+     * <p>存档里量到的垂脊是从檐角一路爬到顶的连续对角线,一格宽,异色。此前这里
+     * 只在角上放一个疙瘩,又把正脊嵌进最后一层里齐平——所以四坡顶怎么调都不像
+     * 中式,而这两处恰恰是最认得出的一笔。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void roof_ridges_stand_proud(GameTestHelper helper) {
+        int y0 = 200;
+        int bx = 20;
+        int bz = 12;
+        int reach = bz / 2;
+        var cells = roof(0, y0, 0, bx, bz, "minecraft:stone_brick_slab",
+                "wudian", null, "minecraft:dark_prismarine", null);
+        java.util.Map<Long, java.util.List<BuildTaskRecord.Target>> byColumn = new java.util.HashMap<>();
+        for (BuildTaskRecord.Target t : cells) {
+            byColumn.computeIfAbsent((long) t.pos().getX() * 1000L + t.pos().getZ(),
+                    k -> new java.util.ArrayList<>()).add(t);
+        }
+        // 四条垂脊:到两边檐口等距的那条对角线,每一格都得是脊料
+        for (int k = 0; k < reach; k++) {
+            for (int[] c : new int[][]{{k, k}, {bx - k, k}, {k, bz - k}, {bx - k, bz - k}}) {
+                var col = byColumn.get((long) c[0] * 1000L + c[1]);
+                helper.assertTrue(col != null && col.stream().anyMatch(t ->
+                                t.desiredState().getBlock() == Blocks.DARK_PRISMARINE),
+                        "wudian: the hip ridge must run the whole diagonal; missing at ("
+                                + c[0] + "," + c[1] + ")");
+            }
+        }
+        // 脊压在瓦面之上:同一列里脊料必须比瓦面高
+        var mid = byColumn.get((long) (bx / 2) * 1000L + reach);
+        helper.assertTrue(mid != null, "wudian: no cells on the ridge line");
+        int crest = mid.stream().filter(t -> t.desiredState().getBlock() == Blocks.DARK_PRISMARINE)
+                .mapToInt(t -> t.pos().getY()).max().orElse(Integer.MIN_VALUE);
+        int tiles = mid.stream()
+                .filter(t -> t.desiredState().getBlock() instanceof net.minecraft.world.level.block.SlabBlock)
+                .mapToInt(t -> t.pos().getY()).max().orElse(Integer.MIN_VALUE);
+        helper.assertTrue(crest > tiles,
+                "the crest must stand proud of the tiles, crest y=" + crest + " tiles y=" + tiles);
+
+        // 悬山没有垂脊,两端换成博风板——同样是异色一条,走在山面边缘
+        var gable = roof(0, 300, 0, bx, bz, "minecraft:stone_brick_slab",
+                "xuanshan", null, "minecraft:dark_prismarine", "minecraft:oak_planks");
+        for (int z = 1; z < bz; z++) {
+            final int zz = z;
+            helper.assertTrue(gable.stream().anyMatch(t -> t.pos().getX() == 0 && t.pos().getZ() == zz
+                            && t.desiredState().getBlock() == Blocks.DARK_PRISMARINE),
+                    "xuanshan: the bargeboard must run the whole raking edge; missing at z=" + z);
+        }
+        helper.assertTrue(gable.stream().anyMatch(t -> t.desiredState().getBlock() == Blocks.OAK_PLANKS),
+                "xuanshan: gable_block must fill the triangular end walls");
+        helper.succeed();
+    }
+
+    /**
+     * 歇山下段四坡、上段双坡;单坡一路倒向一侧。
+     *
+     * <p>歇山的判据是<b>上下两段的收法不同</b>:下段短边也收(四坡),上段短边
+     * 不再收(脊沿长轴跑满)。曾经这里上段把举架曲线重新从五举起算,结果腰以上
+     * 反而比檐口还缓——真实歇山恰恰相反,所以顺带锁住"上段更陡"。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void roof_xieshan_and_shed(GameTestHelper helper) {
+        int y0 = 400;
+        int bx = 16;
+        int bz = 12;
+        var xieshan = roof(0, y0, 0, bx, bz, "minecraft:stone_brick_slab",
+                "xieshan", null, "minecraft:dark_prismarine", "minecraft:oak_planks");
+        // 歇山的判据在<b>横着走</b>:沿脊向(x)从端头往里走,下段短边也收,所以
+        // 高度一路上升;走过腰线以后短边不再收,高度就此打住,余下的坡全交给长边。
+        // 檐口那一圈本来就是平的(那是屋檐,不是坡),所以要在中跨取样。
+        int[] alongRidge = new int[bx + 1];
+        for (BuildTaskRecord.Target t : xieshan) {
+            if (t.pos().getZ() == bz / 2
+                    && t.desiredState().getBlock() instanceof net.minecraft.world.level.block.SlabBlock) {
+                alongRidge[t.pos().getX()] = Math.max(alongRidge[t.pos().getX()], topHalves(t, y0));
+            }
+        }
+        helper.assertTrue(alongRidge[1] > alongRidge[0],
+                "xieshan: the lower section must slope on the short sides too, got a flat end");
+        helper.assertTrue(alongRidge[bx / 2] == alongRidge[bx / 2 - 1],
+                "xieshan: above the break the short sides must stop rising — that plateau IS the ridge; got "
+                        + alongRidge[bx / 2 - 1] + " -> " + alongRidge[bx / 2]);
+        helper.assertTrue(xieshan.stream().anyMatch(t ->
+                        t.desiredState().getBlock() == Blocks.OAK_PLANKS),
+                "xieshan: the upper section needs its decorated gable panel");
+
+        // 单坡:一路从低边升到高边,没有第二坡
+        var shed = roof(0, 500, 0, bx, bz, "minecraft:stone_brick_slab", "shed", null, null, null);
+        int lowY = shed.stream().filter(t -> t.pos().getZ() == 0)
                 .mapToInt(t -> t.pos().getY()).max().orElse(0);
-        int highY = shed.stream().filter(t -> t.pos().getZ() == shedMaxZ)
+        int highY = shed.stream().filter(t -> t.pos().getZ() == bz)
                 .mapToInt(t -> t.pos().getY()).max().orElse(0);
         helper.assertTrue(highY > lowY,
                 "shed: the roof must rise from one edge to the other, got " + lowY + " -> " + highY);
+        helper.succeed();
+    }
 
-        // ── 不对称双坡:脊偏心,两侧坡长不等 ──
-        var salt = com.dwinovo.numen.core.tools.BuildTool.roofCells(
-                0, 600, 0, 20, 12, "minecraft:oak_stairs", "saltbox", "straight", 0, 0, 4,
-                null, null, true);
-        int peakY = salt.stream().mapToInt(t -> t.pos().getY()).max().orElse(0);
-        var peakZ = salt.stream().filter(t -> t.pos().getY() == peakY)
-                .mapToInt(t -> t.pos().getZ()).min().orElse(-1);
-        helper.assertTrue(peakZ > 0 && peakZ < 6,
-                "saltbox: ridge_offset=4 should put the peak near z=4, got " + peakZ);
+
+    /**
+     * 读图纸:尺寸、用料、按层分布,不动世界一格;而且<b>清点口径必须与实扣口径
+     * 一致</b>。
+     *
+     * <p>双格方块在图纸里是上下两格、各带一个同样的物品。清单若逐格计费,一扇门
+     * 就报成两扇门的料——玩家按清单备齐了,建到一半照样停下。两处判据同源
+     * ({@code Target.costsMaterial}),这条用例就是那份同源的证据。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_blueprint")
+    public static void blueprint_read_matches_what_gets_spent(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        copyCottageFixture(level);
+        BlockPos anchor = helper.absolutePos(new BlockPos(0, 2, 0));
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                level, "japanese_cottage", anchor, 0);
+
+        // 清点:与实扣共用同一个件数函数。一格不是恒定一件——两个方向都有:
+        // 门/床的上半与清空格是 0 件,双层砖一格 2 件。这栋图纸两种都有,所以
+        // 两边都要真的被走到,否则这条测试只是在测"1 == 1"。
+        java.util.Map<net.minecraft.world.item.Item, Integer> quoted = new java.util.LinkedHashMap<>();
+        int free = 0;
+        int multi = 0;
+        for (BuildTaskRecord.Target t : loaded.targets()) {
+            int n = t.materialCount();
+            if (n == 0) {
+                if (!t.desiredState().isAir()) {
+                    free++;
+                }
+                continue;
+            }
+            if (n > 1) {
+                multi++;
+            }
+            quoted.merge(t.item(), n, Integer::sum);
+        }
+        int quotedItems = quoted.values().stream().mapToInt(Integer::intValue).sum();
+        helper.assertTrue(quotedItems > 0, "quote came out empty");
+        helper.assertTrue(free > 0,
+                "this blueprint has doors/beds — their upper halves must not be quoted twice");
+        helper.assertTrue(multi > 0,
+                "this blueprint has double slabs — a cell that is two slabs must be quoted as two");
+
+        // 按层分布:必须逐层可分辨,否则"去掉二楼"这类要求无从下手
+        java.util.Map<Integer, Integer> byLayer = new java.util.TreeMap<>();
+        int baseY = loaded.targets().stream().mapToInt(t -> t.pos().getY()).min().orElse(0);
+        for (BuildTaskRecord.Target t : loaded.targets()) {
+            byLayer.merge(t.pos().getY() - baseY, 1, Integer::sum);
+        }
+        helper.assertTrue(byLayer.size() >= 20,
+                "layer profile should resolve every storey of a 23-tall blueprint, got " + byLayer.size());
+        helper.assertTrue(byLayer.get(0) != null && byLayer.get(0) > 1000,
+                "the ground layer of this cottage is a full footprint slab; got " + byLayer.get(0));
+        helper.succeed();
+    }
+
+    /**
+     * 每一种屋顶都必须<b>盖满自己的底面</b>,而且<b>顶上那格不能是楼梯</b>。
+     *
+     * <p>这两条是逐个剖面看出来的病,留成断言才不会再犯:
+     * <ul>
+     *   <li>坡面一层要横跨两格,而一层只铺一圈坡料——两层之间就夹着一整圈谁都没铺
+     *       的格子,庑殿和歇山的檐口有一条环形通缝,从外面直接看进屋架。"每个底面
+     *       格子的那一竖列里至少有一块料"正好抓这个。</li>
+     *   <li>两坡在脊上对头相撞,那里再铺楼梯就只封住一侧,另一半是竖直缺口。
+     *       "最高那层没有楼梯"正好抓这个。</li>
+     * </ul>
+     *
+     * <p>顺带把别名也跑一遍:{@code gable/hip/half_hip/pyramid} 是四种正名的西式
+     * 叫法,走的必须是同一套引擎,不能有一个名字漏挂。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    public static void roof_leaves_no_hole(GameTestHelper helper) {
+        String[][] cases = {
+                {"xuanshan", "straight"}, {"xuanshan", "concave"}, {"gable", "concave"},
+                {"wudian", "straight"}, {"wudian", "concave"}, {"hip", "concave"},
+                {"xieshan", "straight"}, {"xieshan", "concave"}, {"half_hip", "concave"},
+                {"zuanjian", "concave"}, {"pyramid", "concave"},
+                {"shed", "straight"}, {"shed", "concave"},
+        };
+        for (String[] c : cases) {
+            int x2 = 12;
+            boolean square = "zuanjian".equals(c[0]) || "pyramid".equals(c[0]);
+            int z2 = square ? 12 : 8;
+            var cells = com.dwinovo.numen.core.tools.BuildTool.roofCells(
+                    0, 100, 0, x2, z2, "minecraft:stone_brick_slab", c[0], c[1], 0, 0,
+                    "minecraft:oak_planks", "minecraft:dark_prismarine",
+                    "minecraft:waxed_oxidized_cut_copper_slab", "minecraft:spruce_slab", true);
+            String what = c[0] + "/" + c[1];
+            java.util.Set<Long> columns = new java.util.HashSet<>();
+            int maxY = 100;
+            for (BuildTaskRecord.Target t : cells) {
+                columns.add((long) t.pos().getX() * 1000L + t.pos().getZ());
+                maxY = Math.max(maxY, t.pos().getY());
+            }
+            for (int x = 0; x <= x2; x++) {
+                for (int z = 0; z <= z2; z++) {
+                    helper.assertTrue(columns.contains((long) x * 1000L + z),
+                            what + " leaves column (" + x + "," + z + ") uncovered");
+                }
+            }
+            // 单坡没有脊:高边顶着墙,不存在"对面那道坡"可漏,顶上是楼梯正合适
+            boolean hasRidge = !"shed".equals(c[0]);
+            for (BuildTaskRecord.Target t : cells) {
+                if (hasRidge && t.pos().getY() == maxY) {
+                    helper.assertTrue(
+                            !(t.desiredState().getBlock() instanceof net.minecraft.world.level.block.StairBlock),
+                            what + " caps its ridge at (" + t.pos().getX() + "," + t.pos().getZ()
+                                    + ") with a stair, leaving the far half open");
+                }
+            }
+        }
         helper.succeed();
     }
 
@@ -547,12 +1036,13 @@ public class CompanionGameTests {
         // 2) 墙体:walls 周界墙 y3-5(3 高,整墙地面臂展可及)(无顶底面——地板只有地基那一层,守则单层地板铁律)
         ordered.addAll(vol.apply("minecraft:oak_planks",
                 com.dwinovo.numen.core.tools.BuildTool.shapeCells("walls", false, 4, 3, 5, 15, 5, 14, null, null)));
-        // 3) 屋顶:楼梯砌斜面、脊沿长轴、山墙填实、出檐一格
+        // 3) 屋顶:半砖砌斜面、脊沿长轴、山墙填实、博风板、出檐一格
         BlockPos roofA = helper.absolutePos(new BlockPos(4, 6, 5));
         BlockPos roofB = helper.absolutePos(new BlockPos(15, 6, 14));
         ordered.addAll(com.dwinovo.numen.core.tools.BuildTool.roofCells(
                 roofA.getX(), roofA.getY(), roofA.getZ(), roofB.getX(), roofB.getZ(),
-                "minecraft:oak_stairs", "gable", "straight", 1, 0, null, "minecraft:oak_planks", "minecraft:oak_slab", true));
+                "minecraft:oak_slab", "xuanshan", "concave", 1, 0,
+                "minecraft:oak_planks", "minecraft:spruce_slab", null, null, true));
         // 4) 细节(后写覆盖先写):四角原木柱、南门洞 1x2、四扇玻璃窗、屋内火把
         for (int[] c : new int[][]{{4, 5}, {15, 5}, {4, 14}, {15, 14}}) {
             for (int y = 3; y <= 5; y++) {
