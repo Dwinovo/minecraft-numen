@@ -203,30 +203,40 @@ public final class BuildStates {
         if (state == null || data == null || data.isEmpty()) {
             return null;
         }
-        List<String> keep;
-        if (state.is(net.minecraft.tags.BlockTags.ALL_SIGNS)) {
-            // 牌子上的字是纯文本,玩家自己也是白写的,搬过来不产出任何东西
-            keep = List.of("front_text", "back_text", "is_waxed");
-        } else if (state.is(net.minecraft.tags.BlockTags.BANNERS)) {
-            // 花纹搬,但料按<b>带花纹的那面旗帜</b>收(见 strictItem):织布机的活
-            // 不能白送
-            keep = List.of("patterns");
-        } else {
-            // 陶罐的纹样不搬。碎片是刷沙刷砾石考古刷出来的稀有掉落,一只四片碎片的
-            // 罐子收一件普通陶罐的料就是白送四件稀有物;而按组件精确收料又意味着玩家
-            // 得先有一只一模一样的罐子——那还不如让他自己拼。摆一只素罐,纹样留给人。
+        // 判据是<b>数据包标签</b>,不是代码里的一串 if。标签本身就是那句授权:
+        // 在里面 = 这种方块的数据可以随图纸走。默认只有牌子和旗帜。
+        //
+        // 用标签而不是写死,是为了让整合包能声明自己那些装饰性方块实体也安全——写死的
+        // 话他们只能来改我们的代码。代价是这条授权真的有效力:往标签里加一个容器,图纸
+        // 就能印出里面的东西。那是数据包作者的决定,得是知情的决定。
+        //
+        // 陶罐没进这个标签。纹样碎片是刷沙刷砾石考古刷出来的稀有掉落,一只四片碎片的
+        // 罐子收一件普通陶罐的料就是白送四件稀有物;而按组件精确收又要求玩家先有一只
+        // 一模一样的罐子——那还不如让他自己拼。摆一只素罐,纹样留给人。
+        if (!state.is(com.dwinovo.numen.core.init.InitTag.SAFE_BLOCK_ENTITY_DATA)) {
             return null;
         }
-        net.minecraft.nbt.CompoundTag out = new net.minecraft.nbt.CompoundTag();
-        if (data.contains("id")) {
-            out.putString("id", data.getString("id"));
+        net.minecraft.nbt.CompoundTag out = data.copy();
+        // 坐标由落位方按落位点重写,存的那份是导出世界的
+        for (String positional : new String[]{"x", "y", "z"}) {
+            out.remove(positional);
         }
-        for (String key : keep) {
-            if (data.contains(key)) {
-                out.put(key, data.get(key).copy());
-            }
+        // 硬底线:装着东西的键一概不过,<b>数据包也降不了这一条</b>。
+        //
+        // 参照实现读的是世界里活着的方块实体,里面不可能有外来键;我们读的是<b>文件</b>
+        // ——手改一张图纸就能往一块牌子上塞一个 Items。牌子自己会忽略它,但"哪些方块实体
+        // 会读哪些键"是个开放集合,赌它永远不读不是我们该赌的。
+        //
+        // 这一道是黑名单,和"白名单优于黑名单"不冲突:白名单在标签那一层管方块,这一层
+        // 是个地板——管理员往标签里加了容器,那是他的决定,而"图纸不印物品"不是决定,
+        // 是这个功能的边界。
+        for (String carried : new String[]{
+                "Items", "Item", "Book", "RecordItem", "Bees",
+                "Lock", "LootTable", "LootTableSeed",
+                "SpawnData", "SpawnPotentials", "Command"}) {
+            out.remove(carried);
         }
-        return out.size() <= 1 ? null : out;   // 只剩一个 id 等于没数据
+        return out.isEmpty() || (out.size() == 1 && out.contains("id")) ? null : out;
     }
 
     /**

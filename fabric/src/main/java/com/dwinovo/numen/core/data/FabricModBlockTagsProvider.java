@@ -20,7 +20,7 @@ public final class FabricModBlockTagsProvider extends FabricTagProvider.BlockTag
     protected void addTags(HolderLookup.Provider provider) {
         ModBlockTagData.addBlockTags(key -> {
             var b = getOrCreateTagBuilder(key);
-            return ModItemTagData.appender(v -> b.add(v));
+            return ModItemTagData.appender(v -> b.add(v), t -> b.addTag(t));
         });
     }
 }

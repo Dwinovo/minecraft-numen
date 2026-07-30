@@ -996,6 +996,66 @@ public class CompanionGameTests {
         helper.succeed();
     }
 
+    /**
+     * 哪些方块的方块实体数据可以随图纸走,判据是<b>数据包标签</b>,不是代码里的 if。
+     *
+     * <p>标签本身就是那句授权,所以整合包能声明自己那些装饰性方块实体也安全,而不必来改
+     * 我们的代码。这条测试要钉住三件事:标签真的被加载了(不是空的)、默认只放牌子和旗帜
+     * 进来、以及<b>标签之外一律不搬</b>——判据只有这一处,不许再有第二处偷偷放行。
+     *
+     * <p>还要钉住那道硬底线:装着东西的键一概不过,数据包也降不了。参照实现读的是世界里
+     * 活着的方块实体,里面不可能有外来键;我们读的是文件,手改一张图纸就能往一块牌子上塞
+     * 一个 Items。牌子自己会忽略它,但"哪些方块实体读哪些键"是开放集合,不该赌。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    public static void safe_block_entity_data_is_a_datapack_tag(GameTestHelper helper) {
+        var tag = com.dwinovo.numen.core.init.InitTag.SAFE_BLOCK_ENTITY_DATA;
+
+        // 标签真的加载了。空标签会让"什么都不搬"看起来像通过,而那是最坏的假绿
+        helper.assertTrue(Blocks.OAK_SIGN.defaultBlockState().is(tag),
+                "the safe-block-entity-data tag is missing or empty — datagen did not run?");
+        helper.assertTrue(Blocks.OAK_WALL_SIGN.defaultBlockState().is(tag)
+                        && Blocks.OAK_HANGING_SIGN.defaultBlockState().is(tag),
+                "naming #minecraft:all_signs must cover wall and hanging signs too — that is"
+                        + " the point of referencing the vanilla tag instead of listing members");
+        helper.assertTrue(Blocks.WHITE_BANNER.defaultBlockState().is(tag)
+                        && Blocks.WHITE_WALL_BANNER.defaultBlockState().is(tag),
+                "banners carry their patterns, and the tag must cover wall banners as well");
+
+        // 标签之外一律不搬,而且判据只有这一处
+        for (net.minecraft.world.level.block.Block outside : List.of(
+                Blocks.CHEST, Blocks.TRAPPED_CHEST, Blocks.BARREL, Blocks.FURNACE,
+                Blocks.SHULKER_BOX, Blocks.HOPPER, Blocks.DISPENSER, Blocks.BREWING_STAND,
+                Blocks.LECTERN, Blocks.JUKEBOX, Blocks.BEEHIVE, Blocks.SPAWNER,
+                Blocks.DECORATED_POT, Blocks.COMMAND_BLOCK)) {
+            helper.assertTrue(!outside.defaultBlockState().is(tag),
+                    outside + " must not be in the safe tag by default");
+            var data = new net.minecraft.nbt.CompoundTag();
+            data.putString("id", "minecraft:whatever");
+            data.putString("anything", "at all");
+            helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+                            outside.defaultBlockState(), data) == null,
+                    "outside the tag nothing rides along, not one key: " + outside);
+        }
+
+        // 硬底线:标签之内也不许夹带装着东西的键
+        var sign = new net.minecraft.nbt.CompoundTag();
+        sign.putString("id", "minecraft:oak_sign");
+        sign.put("front_text", new net.minecraft.nbt.CompoundTag());
+        sign.put("Items", new net.minecraft.nbt.ListTag());
+        sign.putString("LootTable", "minecraft:chests/end_city_treasure");
+        sign.putString("Command", "/give @s diamond 64");
+        var kept = com.dwinovo.numen.core.task.BuildStates
+                .safeBlockEntityData(Blocks.OAK_SIGN.defaultBlockState(), sign);
+        helper.assertTrue(kept != null && kept.contains("front_text"),
+                "the sign's own text is what we came for");
+        for (String smuggled : List.of("Items", "LootTable", "Command")) {
+            helper.assertTrue(!kept.contains(smuggled),
+                    smuggled + " must never ride along — a blueprint is a file anyone can edit");
+        }
+        helper.succeed();
+    }
+
     /** 结构 NBT 的一只实体:{pos:[x,y,z], blockPos:[..], nbt:{...}}。 */
     private static net.minecraft.nbt.CompoundTag entityTag(double x, double y, double z,
                                                            net.minecraft.nbt.CompoundTag nbt) {
