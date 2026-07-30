@@ -554,17 +554,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private BlockState processCell(BuildTaskRecord.Target target) {
         BlockPos pos = target.pos();
-        BlockState current = player.level().getBlockState(pos);
-        if (target.matches(current)) {
-            markObserved(target, true);
-            return null;
-        }
         BlockState desired = target.desiredState();
         if (desired != null && desired.getBlock() instanceof LiquidBlock) {
             return null;   // 流体不承接:布水与排水都不做
         }
+        // 加载判定要在读取<b>之前</b>:反过来的话第一句 getBlockState 就已经把区块
+        // 同步生成出来了,后面这句永远为真,等于没判。
         if (!player.level().isLoaded(pos)) {
             return null;   // 区块这一刻没加载:临时状况,下一遍再来(不算注定动不了)
+        }
+        BlockState current = player.level().getBlockState(pos);
+        if (target.matches(current)) {
+            markObserved(target, true);
+            return null;
         }
 
         boolean occupied = !current.isAir() && !(current.getBlock() instanceof LiquidBlock);
@@ -611,10 +613,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 放完给方块一次"我被放下了"的回调:命名牌、告示牌、部分方块实体靠它初始化。
         //
         // <p>这一句和上面 PLACE_FLAGS 那段是有张力的:那段刻意不走通知链路,而这条
-        // 回调会把一部分邻居更新引回来——门/床/高草的 setPlacedBy 自己用带更新的
-        // 方式写另一半,活塞的会去判断该不该伸出。这是<b>知情的取舍</b>:另一半反正
-        // 也在图纸里、状态一致,轮到它时比对已成立直接短路;活塞伸出是原版该有的
-        // 行为(我们只禁止把活塞头当建材单独摆)。写在这里是为了让下一个排查
+        // 回调会把一部分邻居更新引回来——门/床/高草的 setPlacedBy 自己用带更新的方式
+        // 写另一半,活塞的会去判断该不该伸出。这是<b>知情的取舍</b>:双格方块的另一半
+        // 本来就该由这条回调来造,所以次半根本不进目标集(见
+        // {@code BuildStates#isSecondaryHalf})。曾经的做法是两半都进集、次半记 0 件,
+        // 靠"轮到它时比对已成立直接短路"兜着——那条推理对门成立(另一半恒在正上方,
+        // 按 y 排序主半必先落位),对床不成立:床的两半同 y,朝北时床头的 z 更小会先
+        // 落位,而床的回调写的是"朝向再往外一格",那一格在目标集之外。活塞伸出是原版
+        // 该有的行为(我们只禁止把活塞头当建材单独摆)。写在这里是为了让下一个排查
         // "为什么某些格被改写"的人不必先怀疑 PLACE_FLAGS 失效。
         //
         // 兜住异常——这条回调本是给"玩家手持物品放置"设计的,我们没有那个上下文,
