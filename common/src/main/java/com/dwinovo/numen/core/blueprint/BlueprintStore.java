@@ -171,7 +171,14 @@ public final class BlueprintStore {
             int x = pos.getInt(0);
             int y = pos.getInt(1);
             int z = pos.getInt(2);
-            BlockState state = palette.get(cell.getInt("state"));
+            // 调色板下标来自文件,越界就是文件坏了——跳过这一格并记一笔,而不是让一个
+            // 数组越界从工具调用里抛出去。整张图纸都坏的话下面 targets 为空,报错自然。
+            int paletteIndex = cell.getInt("state");
+            if (paletteIndex < 0 || paletteIndex >= palette.size()) {
+                dropped++;
+                continue;
+            }
+            BlockState state = palette.get(paletteIndex);
             // 能不能建走同一个判据(工具入口那边拿它当拒绝理由,这边拿它当跳过条件)
             if (com.dwinovo.numen.core.task.BuildStates.unbuildableReason(state) != null) {
                 dropped++;

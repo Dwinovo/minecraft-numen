@@ -32,6 +32,19 @@ final class BlueprintFormats {
 
     private BlueprintFormats() {}
 
+    /**
+     * 单个区域的<b>包围盒体积</b>上限(256³)。
+     *
+     * <p>这不是格数上限(那个在 {@code BlueprintStore.MAX_CELLS}),是遍历上限。区域尺寸
+     * 直接来自文件,而文件是玩家目录里可以任意编辑、也可能下载到一半就断的东西:一个声明
+     * 100000³ 的区域会让下面那个循环转上一万亿次——服务端不是崩,是<b>整个冻住</b>,而冻住
+     * 比崩更难查(没有崩溃报告,只有"服务器没反应了")。
+     *
+     * <p>256³ 对真实图纸绰绰有余:量过的日式小屋是 40×23×45,骏马马厩是 52×35×54,
+     * 都在这个数的百分之一以内。
+     */
+    private static final long MAX_REGION_VOLUME = 256L * 256L * 256L;
+
     // ------------------------------------------------------------------
     // .litematic
     // ------------------------------------------------------------------
@@ -101,6 +114,11 @@ final class BlueprintFormats {
                         at.getDouble(2) - minZ, e));
             }
             long volume = (long) abs[0] * abs[1] * abs[2];
+            if (volume > MAX_REGION_VOLUME) {
+                throw new IllegalArgumentException("litematic region is " + abs[0] + "x" + abs[1]
+                        + "x" + abs[2] + " — that is beyond anything buildable and usually means"
+                        + " the file is corrupt or was downloaded incompletely");
+            }
             for (long i = 0; i < volume; i++) {
                 int idx = unpack(packed, bits, i);
                 if (idx >= regionPalette.size() || isAir[idx]) {
@@ -166,6 +184,11 @@ final class BlueprintFormats {
         int length = root.getShort("Length") & 0xFFFF;
         if (width == 0 || height == 0 || length == 0) {
             throw new IllegalArgumentException("schem has zero dimension");
+        }
+        if ((long) width * height * length > MAX_REGION_VOLUME) {
+            throw new IllegalArgumentException("schem is " + width + "x" + height + "x" + length
+                    + " — that is beyond anything buildable and usually means the file is corrupt"
+                    + " or was downloaded incompletely");
         }
         // 方块实体数据:v3 在 Blocks.BlockEntities,v2 平铺在根
         Map<Long, CompoundTag> beData = new HashMap<>();

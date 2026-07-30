@@ -1457,6 +1457,86 @@ public class CompanionGameTests {
                         .resolve(name + ".nbt"));
     }
 
+    /**
+     * 坏掉的图纸要<b>干净地报错</b>,不能崩、也不能把服务端冻住。
+     *
+     * <p>图纸是玩家目录里的文件:可以手改、可以从网上下载、可以下到一半断线。解码器面对
+     * 的是不可信输入,而它跑在服务端主线程上。两类事故各防一条:
+     * <ul>
+     *   <li><b>越界</b>——调色板下标指向不存在的项。裸下标会抛数组越界,一路冒到工具调用
+     *       之外。改成跳过那一格并计入掉格。</li>
+     *   <li><b>冻死</b>——区域尺寸直接来自文件。声明 100000³ 的话遍历要转上万亿次,服务端
+     *       不是崩而是<b>整个没反应</b>,而那比崩更难查:没有崩溃报告,只有"服务器卡住了"。
+     *       所以遍历有独立于格数的体积上限。</li>
+     * </ul>
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_blueprint")
+    public static void corrupt_blueprints_fail_cleanly(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
+        BlockPos anchor = helper.absolutePos(new BlockPos(2, 2, 2));
+
+        // 一、调色板下标越界:三格里有两格指向不存在的调色板项
+        var root = new net.minecraft.nbt.CompoundTag();
+        var size = new net.minecraft.nbt.ListTag();
+        for (int n : new int[]{3, 1, 3}) {
+            size.add(net.minecraft.nbt.IntTag.valueOf(n));
+        }
+        root.put("size", size);
+        var palette = new net.minecraft.nbt.ListTag();
+        palette.add(net.minecraft.nbt.NbtUtils.writeBlockState(Blocks.STONE.defaultBlockState()));
+        root.put("palette", palette);
+        var blocks = new net.minecraft.nbt.ListTag();
+        blocks.add(cellTag(0, 0, 0, 0));      // 好的
+        blocks.add(cellTag(1, 0, 0, 7));      // 越界
+        blocks.add(cellTag(2, 0, 0, -1));     // 负下标
+        root.put("blocks", blocks);
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_badindex.nbt"));
+
+        var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                level, "fixture_badindex", anchor, 0);
+        helper.assertTrue(loaded.targets().size() == 1,
+                "the one good cell should survive, got " + loaded.targets().size());
+        helper.assertTrue(loaded.dropped() == 2,
+                "and the two broken ones must be counted as dropped, got " + loaded.dropped());
+
+        // 二、体积炸弹:一个声明得离谱的 litematic 区域
+        var lite = new net.minecraft.nbt.CompoundTag();
+        var regions = new net.minecraft.nbt.CompoundTag();
+        var region = new net.minecraft.nbt.CompoundTag();
+        var pos = new net.minecraft.nbt.CompoundTag();
+        pos.putInt("x", 0);
+        pos.putInt("y", 0);
+        pos.putInt("z", 0);
+        region.put("Position", pos);
+        var rsize = new net.minecraft.nbt.CompoundTag();
+        rsize.putInt("x", 100000);
+        rsize.putInt("y", 100000);
+        rsize.putInt("z", 100000);
+        region.put("Size", rsize);
+        var rpal = new net.minecraft.nbt.ListTag();
+        var airEntry = new net.minecraft.nbt.CompoundTag();
+        airEntry.putString("Name", "minecraft:air");
+        rpal.add(airEntry);
+        region.put("BlockStatePalette", rpal);
+        region.putLongArray("BlockStates", new long[]{0L});
+        regions.put("bomb", region);
+        lite.put("Regions", regions);
+        net.minecraft.nbt.NbtIo.writeCompressed(lite, dir.resolve("fixture_bomb.litematic"));
+
+        boolean refused = false;
+        try {
+            com.dwinovo.numen.core.blueprint.BlueprintStore.load(
+                    level, "fixture_bomb", anchor, 0);
+        } catch (IllegalArgumentException e) {
+            // 判据是"说人话地拒绝",不是"没有卡住"——后者测不出来(卡住就是超时)
+            refused = e.getMessage() != null && e.getMessage().contains("corrupt");
+        }
+        helper.assertTrue(refused,
+                "a region declaring 100000^3 must be refused with a readable reason, not walked");
+        helper.succeed();
+    }
+
     /** 结构 NBT 的一只实体:{pos:[x,y,z], blockPos:[..], nbt:{...}}。 */
     private static net.minecraft.nbt.CompoundTag entityTag(double x, double y, double z,
                                                            net.minecraft.nbt.CompoundTag nbt) {

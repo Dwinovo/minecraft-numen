@@ -829,8 +829,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return;
         }
         if (r.consumeMaterials) {
-            net.minecraft.world.level.block.Block.dropResources(
-                    state, level, pos, level.getBlockEntity(pos), player, player.getMainHandItem());
+            try {
+                net.minecraft.world.level.block.Block.dropResources(
+                        state, level, pos, level.getBlockEntity(pos), player,
+                        player.getMainHandItem());
+            } catch (RuntimeException e) {
+                // 掉落要跑战利品表,而战利品表是数据包能改的东西——模组或整合包的一张
+                // 坏表不该让整栋楼停在这一格。清障本身照做:少掉一件东西是遗憾,清不掉
+                // 就永远建不下去。
+                com.dwinovo.numen.core.Constants.LOG.warn(
+                        "[numen-build] {} 的掉落结算失败,方块照清", state, e);
+            }
         }
         level.levelEvent(2001, pos, net.minecraft.world.level.block.Block.getId(state));
         level.setBlock(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), PLACE_FLAGS);
