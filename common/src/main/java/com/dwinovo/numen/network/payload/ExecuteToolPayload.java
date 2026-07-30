@@ -139,9 +139,18 @@ public record ExecuteToolPayload(UUID entityUuid,
         }
     }
 
+    /**
+     * 被拒时<b>连参数一起打全</b>。
+     *
+     * <p>调用成功时参数是截断记录的(200 字),对成功的调用够用;但一旦被拒,
+     * 事后要判"模型到底发了什么"就只剩一句错误原因。实测排查建造失败时就卡在
+     * 这里:知道被拒了二十二次,却没法从日志还原是哪一条 op 写错——只能靠错误
+     * 信息倒推。失败是稀有事件,把这一条打全不会淹没日志。
+     */
     public static void replyError(ServerPlayer player, ExecuteToolPayload p, String message) {
-        Constants.LOG.warn("[numen-net] ✗ execute_tool rejected from {}: tool={} id={} reason={}",
-                player.getName().getString(), p.toolName(), p.toolCallId(), message);
+        Constants.LOG.warn("[numen-net] ✗ execute_tool rejected from {}: tool={} id={} reason={} args={}",
+                player.getName().getString(), p.toolName(), p.toolCallId(), message,
+                p.argumentsJson());
         String json = TaskResult.fail(message).toJson();
         com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(player,
                 new TaskResultPayload(p.entityUuid(), p.toolCallId(), json));
