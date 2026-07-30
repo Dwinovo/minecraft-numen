@@ -83,7 +83,7 @@ public final class BuildTaskRecord extends TaskRecord {
     private int broken;
     private int completed;
     private int droppedAtLoad;
-    private Map<Long, net.minecraft.world.item.ItemStack> strictItems = Map.of();
+    private Map<Long, java.util.List<CellNeed>> cellNeeds = Map.of();
 
     // 注:曾有 layerHeight(分层施工的层高门)。施工模型改为"低层优先的确定
     // 顺序 + 分遍补漏"之后,层高不再有任何裁决作用,留着就是个调了不起作用
@@ -161,18 +161,41 @@ public final class BuildTaskRecord extends TaskRecord {
     }
 
     /**
-     * 按位置索引的<b>精确材料要求</b>:这一格收的不是"一面旗子",而是"带着这些花纹的
-     * 那面旗子",组件必须完全一致。
+     * 一格要的一叠料。
      *
-     * <p>放在边表而不是 {@code Target} 里,理由和方块实体数据一样:只有极少数格用得上,
-     * 为它给每一个构造点加一个字段是让百分之一的情形去改百分之百的代码。
+     * <p>两种口径合在一条路上,因为它们回答的是同一个问题——"这一格该收什么":
+     * <ul>
+     *   <li>{@code exact = false}:按物品类型收。哪一块橡木板都一样。</li>
+     *   <li>{@code exact = true}:组件也要一致。带花纹的旗帜、框里那把附魔剑,
+     *       少比一个组件就等于把手工活白送。</li>
+     * </ul>
      */
-    public Map<Long, net.minecraft.world.item.ItemStack> strictItems() {
-        return strictItems;
+    public record CellNeed(net.minecraft.world.item.ItemStack stack, boolean exact) {
+        public boolean matches(net.minecraft.world.item.ItemStack other) {
+            return exact
+                    ? net.minecraft.world.item.ItemStack.isSameItemSameComponents(stack, other)
+                    : other.is(stack.getItem());
+        }
     }
 
-    public void strictItems(Map<Long, net.minecraft.world.item.ItemStack> items) {
-        this.strictItems = Map.copyOf(items);
+    /**
+     * 按位置索引的<b>逐格料单</b>:这一格不是"一件某物",而是这几叠。
+     *
+     * <p>一格一件是特例而不是通则,这一点容易想反。带花的花盆是<b>花盆加那株花两件
+     * 东西</b>——正因如此它没有自己的物品,而"按方块的物品收一件"这条路在这里没有答案。
+     * 通行的做法之一是就此整格丢掉(建出来院子里少二十一个花盆);另一条是老老实实收
+     * 两件。后者才对。旗帜是同一条路的另一头:一叠,但要求组件一致。
+     *
+     * <p>这张表<b>整个盖过</b>默认的"{@code item() × materialCount()}"。放在边表而不是
+     * {@code Target} 里,理由和方块实体数据一样:只有极少数格用得上,为它给每一个构造点
+     * 加一个字段是让百分之一的情形去改百分之百的代码。
+     */
+    public Map<Long, java.util.List<CellNeed>> cellNeeds() {
+        return cellNeeds;
+    }
+
+    public void cellNeeds(Map<Long, java.util.List<CellNeed>> needs) {
+        this.cellNeeds = Map.copyOf(needs);
     }
 
     public int placed() {
@@ -346,11 +369,9 @@ public final class BuildTaskRecord extends TaskRecord {
                 }
                 return Math.max(1, faces);
             }
-            // 高草与大蕨类没有自己的方块物品,是两株矮的长成的(替代料见 BuildPalette)
-            if (desiredState.is(net.minecraft.world.level.block.Blocks.TALL_GRASS)
-                    || desiredState.is(net.minecraft.world.level.block.Blocks.LARGE_FERN)) {
-                return 2;
-            }
+            // 注:高草与大蕨类曾按"两株矮的"算两件。那是旧版本的事实——现在
+            // tall_grass / large_fern 自己就是物品,方块自述给的正是它,一格一件。
+            // 沿用旧口径会让玩家按清单备双份,而多出来的那一半永远用不掉。
             return 1;
         }
 

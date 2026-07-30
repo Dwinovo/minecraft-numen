@@ -60,7 +60,7 @@ public final class BlueprintStore {
     public record Loaded(List<BuildTaskRecord.Target> targets, Vec3i size,
                          java.util.Map<Long, CompoundTag> blockEntityData,
                          List<BuildTaskRecord.EntitySpawn> entities,
-                         java.util.Map<Long, net.minecraft.world.item.ItemStack> strictItems,
+                         java.util.Map<Long, List<BuildTaskRecord.CellNeed>> cellNeeds,
                          int dropped) {}
 
     /** 支持的图纸扩展名。 */
@@ -163,7 +163,7 @@ public final class BlueprintStore {
         // 收场,病因指错方向。工具入口本来就是这么去重的,这条入口漏了。
         java.util.LinkedHashMap<Long, BuildTaskRecord.Target> byPos = new java.util.LinkedHashMap<>();
         java.util.Map<Long, CompoundTag> beData = new java.util.HashMap<>();
-        java.util.Map<Long, net.minecraft.world.item.ItemStack> strict = new java.util.HashMap<>();
+        java.util.Map<Long, List<BuildTaskRecord.CellNeed>> needs = new java.util.HashMap<>();
         int dropped = 0;
         for (int i = 0; i < blocks.size(); i++) {
             CompoundTag cell = blocks.getCompound(i);
@@ -198,35 +198,41 @@ public final class BlueprintStore {
             // 记账物品要按<b>归一后</b>的方块查:装着水的炼药锅归一成空锅,而
             // water_cauldron 自己没有物品。按原始态查的话它是空气,整格被丢掉——
             // 而归一那条锅的规则本来就是专为救这一类写的。带蜡烛的蛋糕同理。
+            //
+            // 而且是<b>问方块自己</b>(中键取方块那条路),不查写死的表:小麦答种子、
+            // 洞穴藤蔓答发光浆果、竹笋答竹子、连枝的瓜藤答瓜种。此前这里靠一张十三行
+            // 的对照表,每行都是被咬过一次才补上的,而且只认原版——模组的作物一个都不认。
             BlockState placed = com.dwinovo.numen.core.task.BuildStates.normalize(state);
-            var payItem = com.dwinovo.numen.core.task.BuildStates.materialItem(placed.getBlock());
+            var payItem = com.dwinovo.numen.core.task.BuildStates
+                    .materialItem(placed, level, anchor);
             if (payItem == net.minecraft.world.item.Items.AIR && !placed.isAir()) {
                 dropped++;
                 continue;
             }
             BlockPos world = anchor.offset(rx, y, rz);
-            // 同坐标后写覆盖先写:方块实体数据与精确料要跟着一起清,否则存活的那一条
+            // 同坐标后写覆盖先写:方块实体数据与逐格料单要跟着一起清,否则存活的那一条
             // 会串上前一条的数据(一块空白告示牌顶着别人的字)
             beData.remove(world.asLong());
-            strict.remove(world.asLong());
+            needs.remove(world.asLong());
             byPos.put(world.asLong(), new BuildTaskRecord.Target(state, payItem, world,
                     state.getBlock().builtInRegistryHolder().key().location().getPath(),
                     null, null, null));
-            // 方块实体数据只搬装饰性的那部分(告示牌的字、旗帜的花纹、陶罐的纹样);
-            // 容器内容一律不搬——图纸是文件,照搬等于凭空造物品
+            // 方块实体数据只搬装饰性的那部分(告示牌的字、旗帜的花纹);容器内容一律
+            // 不搬——图纸是文件,照搬等于凭空造物品
+            CompoundTag safe = null;
             if (cell.contains("nbt", Tag.TAG_COMPOUND)) {
-                CompoundTag safe = com.dwinovo.numen.core.task.BuildStates
+                safe = com.dwinovo.numen.core.task.BuildStates
                         .safeBlockEntityData(state, cell.getCompound("nbt"));
                 if (safe != null) {
                     beData.put(world.asLong(), safe);
-                    // 旗帜的花纹搬过来了,料就得按"带着这些花纹的那面旗帜"收——花纹是
-                    // 玩家在织布机上一层层染出来的活,按一面白旗收料等于把那份活白送
-                    var exact = com.dwinovo.numen.core.task.BuildStates
-                            .strictItem(state, safe, level.registryAccess());
-                    if (exact != null) {
-                        strict.put(world.asLong(), exact);
-                    }
                 }
+            }
+            // 这一格要几叠料:带花的花盆是盆加花两件,带花纹的旗帜是一叠但要组件一致。
+            // 一格一件是特例而不是通则,这张料单整个盖过默认的"一件本方块的物品"。
+            var cellNeeds = com.dwinovo.numen.core.task.BuildStates
+                    .cellNeeds(placed, safe, level, anchor, level.registryAccess());
+            if (!cellNeeds.isEmpty()) {
+                needs.put(world.asLong(), cellNeeds);
             }
         }
         // 摆设实体(展示框、盔甲架、画):随图纸一起旋转,躯壳照生,身上的东西剥掉
@@ -258,7 +264,7 @@ public final class BlueprintStore {
         }
         List<BuildTaskRecord.Target> targets = new ArrayList<>(byPos.values());
         Vec3i size = (quarters % 2 == 0) ? new Vec3i(sx, sy, sz) : new Vec3i(sz, sy, sx);
-        return new Loaded(targets, size, beData, spawns, strict, dropped);
+        return new Loaded(targets, size, beData, spawns, needs, dropped);
     }
 
     private static CompoundTag readTag(MinecraftServer server, String name) {

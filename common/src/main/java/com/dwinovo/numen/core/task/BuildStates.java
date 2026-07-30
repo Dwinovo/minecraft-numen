@@ -26,12 +26,6 @@ public final class BuildStates {
 
     private BuildStates() {}
 
-    /** 各种"长到第几阶段"。作物、竹子、海带、可可、甘蔗都在这一族里。 */
-    private static final List<Property<Integer>> AGES = List.of(
-            BlockStateProperties.AGE_1, BlockStateProperties.AGE_2, BlockStateProperties.AGE_3,
-            BlockStateProperties.AGE_4, BlockStateProperties.AGE_5, BlockStateProperties.AGE_7,
-            BlockStateProperties.AGE_15, BlockStateProperties.AGE_25);
-
     /**
      * 落位前的归一。同一份状态,建造与图纸走同一条。
      *
@@ -49,9 +43,13 @@ public final class BuildStates {
         if (state.is(BlockTags.CAULDRONS)) {
             return Blocks.CAULDRON.defaultBlockState();
         }
-        for (Property<Integer> age : AGES) {
-            if (state.hasProperty(age)) {
-                state = state.setValue(age, 0);
+        // 生长阶段:按<b>属性名</b>认,不认那八个具体常量。原版有 AGE_1 到 AGE_25 八个
+        // 不同上限的版本,模组还会定义自己的——列常量意味着每来一个新上限就漏一次,而
+        // 名字叫 "age" 的整数属性就是生长阶段,这一点原版与模组是一致的。
+        for (Property<?> p : state.getProperties()) {
+            if (p instanceof net.minecraft.world.level.block.state.properties.IntegerProperty age
+                    && "age".equals(age.getName())) {
+                state = state.setValue(age, java.util.Collections.min(age.getPossibleValues()));
                 break;   // 一块方块只会有一种 age
             }
         }
@@ -130,60 +128,59 @@ public final class BuildStates {
      */
     public static net.minecraft.world.item.Item materialItem(
             net.minecraft.world.level.block.Block block) {
+        net.minecraft.world.item.Item override = overrideItem(block);
+        return override != null ? override : block.asItem();
+    }
+
+    /**
+     * 这个方块该按哪件物品记账——<b>先问方块自己,问不出来才查表</b>。
+     *
+     * <p>"问方块自己"就是中键取方块那条路({@code getCloneItemStack})。它是原版给每个
+     * 方块留的自述接口:小麦答种子、洞穴藤蔓答发光浆果、竹笋答竹子、连枝的瓜藤答瓜种、
+     * 带花的花盆答盆里那株花。这些答案我们此前是一行一行写死的——十三行,每行都是被咬过
+     * 一次才补上的,而且只覆盖原版:模组的作物、模组的藤蔓一个都不认。问方块自己就没有
+     * 这个问题,新方块自动有答案。
+     *
+     * <p>表只留<b>方块自述给不出正确答案</b>的那种。耕地与土径就是:它们的自述是耕地和
+     * 土径本身(这两件物品确实存在),但人手上没有"一块耕地"——那是拿锄头在土上刨出来的,
+     * 所以按土算。这一档是真特例,不是懒。
+     *
+     * @param level 用来问方块的世界;为 null 时退回方块自己的物品(工具入口没有世界)
+     */
+    public static net.minecraft.world.item.Item materialItem(
+            BlockState state, net.minecraft.world.level.LevelReader level,
+            net.minecraft.core.BlockPos pos) {
+        if (state == null) {
+            return net.minecraft.world.item.Items.AIR;
+        }
+        net.minecraft.world.item.Item override = overrideItem(state.getBlock());
+        if (override != null) {
+            return override;
+        }
+        if (level != null) {
+            try {
+                var picked = state.getBlock().getCloneItemStack(level, pos, state);
+                if (!picked.isEmpty()) {
+                    return picked.getItem();
+                }
+            } catch (RuntimeException ignored) {
+                // 个别方块的自述会去读方块实体,而那一格此刻未必真的是它。问不出来
+                // 就退回下面那条,不该让一格坏掉整张图纸
+            }
+        }
+        return state.getBlock().asItem();
+    }
+
+    /** 方块自述给不出正确答案的那几种——真特例,不是懒。 */
+    private static net.minecraft.world.item.Item overrideItem(
+            net.minecraft.world.level.block.Block block) {
+        // 耕地与土径是拿锄/锹在土上加工出来的。它们自述的是自己(那两件物品存在),
+        // 但人手上没有"一块耕地"可放。
         if (block instanceof net.minecraft.world.level.block.FarmBlock
                 || block instanceof net.minecraft.world.level.block.DirtPathBlock) {
             return net.minecraft.world.item.Items.DIRT;
         }
-        // 花盆:带花的那些没有自己的物品。按空盆记账,盆里那株算搭头——一株樹苗
-        // 值不了什么,而整格丢掉就是院子里少了二十一个花盆,那是看得见的。
-        if (block instanceof net.minecraft.world.level.block.FlowerPotBlock) {
-            return net.minecraft.world.item.Items.FLOWER_POT;
-        }
-        // 作物与藤蔓类:方块态没有物品,种下去的是种子/果实。归一已经把生长阶段
-        // 清成 0,所以这里给的正是"刚种下"该花的那件东西。
-        if (block == Blocks.WHEAT) {
-            return net.minecraft.world.item.Items.WHEAT_SEEDS;
-        }
-        if (block == Blocks.CARROTS) {
-            return net.minecraft.world.item.Items.CARROT;
-        }
-        if (block == Blocks.POTATOES) {
-            return net.minecraft.world.item.Items.POTATO;
-        }
-        if (block == Blocks.BEETROOTS) {
-            return net.minecraft.world.item.Items.BEETROOT_SEEDS;
-        }
-        if (block == Blocks.MELON_STEM || block == Blocks.ATTACHED_MELON_STEM) {
-            return net.minecraft.world.item.Items.MELON_SEEDS;
-        }
-        if (block == Blocks.PUMPKIN_STEM || block == Blocks.ATTACHED_PUMPKIN_STEM) {
-            return net.minecraft.world.item.Items.PUMPKIN_SEEDS;
-        }
-        if (block == Blocks.CAVE_VINES || block == Blocks.CAVE_VINES_PLANT) {
-            return net.minecraft.world.item.Items.GLOW_BERRIES;
-        }
-        if (block == Blocks.SWEET_BERRY_BUSH) {
-            return net.minecraft.world.item.Items.SWEET_BERRIES;
-        }
-        if (block == Blocks.BAMBOO_SAPLING) {
-            return net.minecraft.world.item.Items.BAMBOO;
-        }
-        if (block == Blocks.KELP_PLANT) {
-            return net.minecraft.world.item.Items.KELP;
-        }
-        if (block == Blocks.TRIPWIRE) {
-            return net.minecraft.world.item.Items.STRING;
-        }
-        if (block == Blocks.REDSTONE_WIRE) {
-            return net.minecraft.world.item.Items.REDSTONE;
-        }
-        if (block == Blocks.TALL_GRASS) {
-            return net.minecraft.world.item.Items.SHORT_GRASS;
-        }
-        if (block == Blocks.LARGE_FERN) {
-            return net.minecraft.world.item.Items.FERN;
-        }
-        return block.asItem();
+        return null;
     }
 
     /**
@@ -331,6 +328,47 @@ public final class BuildStates {
         for (String key : PAYLOAD_KEYS) {
             data.remove(key);
         }
+    }
+
+    /**
+     * 这一格要收<b>哪几叠</b>料——空表示走默认的"一件本方块的物品"。
+     *
+     * <p>一格一件是特例而不是通则。带花的花盆就是<b>花盆加那株花两件东西</b>,正因如此
+     * 它没有自己的物品;而"按方块的物品收一件"这条路在这里根本没有答案——那件物品是空气。
+     * 通行做法之一是就此整格丢掉,建出来院子里少二十一个花盆而无人知晓;另一条是老老实实
+     * 收两件。后者才对,而且它不是特殊照顾,是把"一格可以要几叠料"这件事本来的形状还给它。
+     *
+     * <p>旗帜是同一条路的另一头:一叠,但要求组件一致(花纹是织布机上一层层染出来的活)。
+     *
+     * @return 这一格的料单;空表示没有特殊要求
+     */
+    public static List<BuildTaskRecord.CellNeed> cellNeeds(
+            BlockState state, net.minecraft.nbt.CompoundTag safeData,
+            net.minecraft.world.level.LevelReader level, net.minecraft.core.BlockPos probe,
+            net.minecraft.core.HolderLookup.Provider registries) {
+        if (state == null) {
+            return List.of();
+        }
+        // 带花的花盆:盆一件,花一件。盆里那株是什么,问方块自己——中键取方块给的正是
+        // 那株植物。不写死一张"哪个盆装哪种花"的对照表(那张表在别处是二十多行的
+        // switch),模组的花盆也照样认。
+        if (state.getBlock() instanceof net.minecraft.world.level.block.FlowerPotBlock pot
+                && pot.getPotted() != Blocks.AIR) {
+            net.minecraft.world.item.Item plant = materialItem(state, level, probe);
+            if (plant == net.minecraft.world.item.Items.AIR) {
+                plant = pot.getPotted().asItem();
+            }
+            if (plant == net.minecraft.world.item.Items.AIR
+                    || plant == net.minecraft.world.item.Items.FLOWER_POT) {
+                return List.of();   // 空盆,或者问不出盆里是什么:按一件盆走默认口径
+            }
+            return List.of(
+                    new BuildTaskRecord.CellNeed(new net.minecraft.world.item.ItemStack(
+                            net.minecraft.world.item.Items.FLOWER_POT), false),
+                    new BuildTaskRecord.CellNeed(new net.minecraft.world.item.ItemStack(plant), false));
+        }
+        net.minecraft.world.item.ItemStack exact = strictItem(state, safeData, registries);
+        return exact == null ? List.of() : List.of(new BuildTaskRecord.CellNeed(exact, true));
     }
 
     /**

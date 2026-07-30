@@ -100,9 +100,13 @@ public final class BlueprintReadTool implements NumenTool {
         // 按组件全等收料的那些格(旗帜的花纹)与摆设身上带的东西,要单独点名:报价
         // 说一句"white_banner x3"而实际要的是三面绣好花纹的旗,玩家按报价备齐了照样
         // 一格都放不下去。判据严到哪里,报价就得说到哪里——这是同一个口径问题。
+        Map<String, Integer> extra = new LinkedHashMap<>();
         Map<String, Integer> exact = new LinkedHashMap<>();
-        for (var stack : loaded.strictItems().values()) {
-            exact.merge(stack.getHoverName().getString(), 1, Integer::sum);
+        for (var list : loaded.cellNeeds().values()) {
+            for (var need : list) {
+                (need.exact() ? exact : extra)
+                        .merge(need.stack().getHoverName().getString(), 1, Integer::sum);
+            }
         }
         for (var spawn : loaded.entities()) {
             for (var stack : spawn.payload(level.registryAccess())) {
@@ -115,8 +119,8 @@ public final class BlueprintReadTool implements NumenTool {
                 clears++;
                 continue;
             }
-            // 精确料的格不进普通清单,否则同一面旗帜会被索要两次
-            if (loaded.strictItems().containsKey(t.pos().asLong())) {
+            // 有料单的格不进普通清单,否则同一面旗帜/同一个花盆会被索要两次
+            if (loaded.cellNeeds().containsKey(t.pos().asLong())) {
                 continue;
             }
             // 件数问 Target 要,不在这里另数一遍:清单与实扣一旦不同源,玩家
@@ -149,6 +153,12 @@ public final class BlueprintReadTool implements NumenTool {
                     + " (liquids, or blocks with no item to pay with — she will not build these)");
         }
         data.put("materials", summarize(cost));
+        if (!extra.isEmpty()) {
+            // 一格多件的那些(带花的花盆是盆加花两件),单列出来才对得上实扣
+            List<String> parts = new ArrayList<>();
+            extra.forEach((name, n) -> parts.add(name + " x" + n));
+            data.put("materials_for_multi_item_cells", String.join(", ", parts));
+        }
         if (!exact.isEmpty()) {
             List<String> parts = new ArrayList<>();
             exact.forEach((name, n) -> parts.add(name + " x" + n));

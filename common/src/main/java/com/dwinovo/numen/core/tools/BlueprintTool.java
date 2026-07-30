@@ -128,8 +128,8 @@ public final class BlueprintTool implements NumenTool {
                 loaded.blockEntityData(), loaded.entities());
         // 加载时掉的格随任务一起交代:掉格必须有账,否则回执会拿剩下的格数当全部
         record.droppedAtLoad(loaded.dropped());
-        // 旗帜这类按组件全等收料的格
-        record.strictItems(loaded.strictItems());
+        // 逐格料单:带花的花盆收盆加花两件,带花纹的旗帜收一叠但要组件一致
+        record.cellNeeds(loaded.cellNeeds());
         dispatchAsync(companion, record, reply);
     }
 }
