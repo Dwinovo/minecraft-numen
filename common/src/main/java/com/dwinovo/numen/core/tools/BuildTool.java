@@ -16,9 +16,12 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.SlabBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.block.state.properties.SlabType;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -69,8 +72,8 @@ public final class BuildTool implements NumenTool {
                           Integer radius, Integer height, Double density,
                           String facing, String axis, String half,
                           Integer overhang, String gable_block, String ridge_block,
+                          String eave_block, String soffit_block,
                           String roof_shape, String roof_curve, Integer corner_lift,
-                          Integer ridge_offset,
                           Map<String, String> properties) {}
     private record BlockSpec(String block_id, int x, int y, int z,
                              String facing, String axis, String half,
@@ -90,18 +93,23 @@ public final class BuildTool implements NumenTool {
                 + "corners x1,y1,z1..x2,y2,z2 (hollow = outer shell); `walls` vertical perimeter ring only, NO "
                 + "top/bottom face — the right primitive for wall rings; `line` two points; `cylinder` bottom-"
                 + "center x1,y1,z1 + radius + height (hollow = tube); `sphere` center + radius (hollow = shell); "
-                + "`roof` over base rect x1,y1,z1..x2,z2 — give a STAIRS block as block_id and it lays real "
-                + "sloped courses (ridge along the longer axis, stair facing handled for you), plus optional "
-                + "`overhang` 0-3 eaves, `gable_block` to fill the triangular ends, `ridge_block` to cap the "
-                + "peak, `hollow` (default true, leaves attic space); `set_door` a full door at x,y,z (lower "
+                + "`roof` over base rect x1,y1,z1..x2,z2 — give a SLAB block as block_id (stone_brick_slab, "
+                + "deepslate_tile_slab, spruce_slab...) and it lays a real tiled slope: the surface climbs HALF "
+                + "a block per cell so there are no full-block steps, shallow at the eaves and steepening toward "
+                + "the ridge. Slabs, not stairs, are what a good roof is made of. Then `roof_shape` (xuanshan / "
+                + "wudian / xieshan / zuanjian / shed), `overhang` 1-4, `ridge_block` for the ridges that stand "
+                + "proud of the tiles, `eave_block` for the drip band around the edge, `gable_block` for the end "
+                + "walls, `soffit_block` for the underside, `corner_lift` for upturned corners, `hollow` "
+                + "(default true, leaves attic space); `set_door` a full door at x,y,z (lower "
                 + "half) with `facing`; `scatter` sprinkles the block over plane y1 within x1,z1..x2,z2 at "
                 + "optional `density` 0-1 (default 0.25) — flowers, grass, mushrooms. "
                 + "PALETTES: any block_id may name a weighted MIX instead of one block — "
                 + "\"stone_bricks*8, mossy_stone_bricks*2, cracked_stone_bricks\" — and each cell picks one "
                 + "deterministically. A flat single-colour surface is the number one thing that makes a build "
                 + "look fake, so mix 10-20% of a weathered variant into every large wall, floor and roof. "
-                + "block_id minecraft:air CLEARS (drops harvest normally; "
-                + "liquids always left untouched). Compose whole buildings like stacking toy bricks in ONE call, "
+                + "block_id `air` CLEARS the cell (drops harvest normally). Liquids are NOT handled: leave "
+                + "water and lava out of the ops — dig the basin and let the player pour it. "
+                + "Compose whole buildings like stacking toy bricks in ONE call, "
                 + "up to 16384 cells — enough for a whole house, so use it. She walks to the site once, then "
                 + "works inside it, placing cells in batches "
                 + "from the ground up. MATERIALS: in creative she builds freely. In survival every cell consumes "
@@ -133,44 +141,69 @@ public final class BuildTool implements NumenTool {
                 "description", "roof: eaves extending past the walls, 0-4. 1-2 reads far better than 0; "
                         + "East Asian roofs want 2-4."));
         props.put("roof_shape", enumSchema(
-                "roof: gable = two slopes with a ridge along the longer axis (Western gable, Chinese "
-                        + "xuanshan/yingshan). hip = four slopes, no gable ends (Western hip, Chinese wudian, "
-                        + "the highest rank — save it for the grandest hall on a site). pyramid = hip on a "
-                        + "square footprint meeting at a point (towers, gazebos, Chinese zanjian). "
-                        + "half_hip = four slopes below, a gable with two gable-ends above (Chinese xieshan, "
-                        + "Western Dutch gable) — second in rank and the most ornate silhouette. "
-                        + "shed = a single slope one way (lean-tos, porches, factory wings, anything added on). "
-                        + "saltbox = asymmetric gable, ridge off-centre, one short steep slope and one long "
-                        + "shallow one — reads as a house that was extended. Default gable.",
-                "gable", "hip", "pyramid", "half_hip", "shed", "saltbox"));
-        props.put("ridge_offset", Map.of("type", "integer",
-                "description", "saltbox only: how far the ridge sits from the low edge, in blocks. "
-                        + "Default is a third of the span; smaller makes the front slope steeper."));
+                "roof: xuanshan (alias gable) = two slopes with a ridge along the longer axis, the two ends "
+                        + "closed by a bargeboard; the everyday roof, Chinese and Western alike. "
+                        + "wudian (alias hip) = four slopes with four diagonal hip ridges and no gable ends — "
+                        + "the highest rank, save it for the grandest hall on a site. "
+                        + "zuanjian (alias pyramid) = the four slopes meet at a point, for a square footprint: "
+                        + "towers, gazebos, pavilions. "
+                        + "xieshan (alias half_hip) = four slopes below, a gable with two decorated ends above; "
+                        + "second in rank and the most ornate silhouette. "
+                        + "shed = a single slope one way, for lean-tos, porches and anything added on. "
+                        + "Default xuanshan.",
+                "xuanshan", "wudian", "xieshan", "zuanjian", "shed",
+                "gable", "hip", "half_hip", "pyramid"));
         props.put("roof_curve", enumSchema(
-                "roof: straight = constant pitch, the Western default. concave = shallow at the eaves and "
-                        + "steepening toward the ridge, which is what makes East Asian roofs read as curved "
-                        + "rather than as a stepped pyramid. Use concave for any Chinese, Japanese or Korean "
-                        + "building. Default straight.",
-                "straight", "concave"));
+                "roof: concave (default) = shallow at the eaves and steepening toward the ridge. This is the "
+                        + "real profile of a tiled roof, East Asian or otherwise, and it is what stops a roof "
+                        + "reading as a stepped pyramid. straight = constant 1:1 pitch; only ask for it when you "
+                        + "specifically want a steep, hard, Gothic or Alpine silhouette.",
+                "concave", "straight"));
         props.put("corner_lift", Map.of("type", "integer",
                 "description", "roof: flick the four eave corners upward by this many blocks, 0-3. The "
                         + "upturned corner is the single most recognisable feature of East Asian roofs; "
                         + "leave it 0 for Western ones."));
         props.put("gable_block", Map.of("type", "string",
-                "description", "roof: block (or mix) filling the triangular ends. Omit and they stay open."));
+                "description", "roof: block (or mix) filling the end walls — the triangle under a xuanshan "
+                        + "slope, or the decorated panel of a xieshan. Omit and they stay open."));
         props.put("ridge_block", Map.of("type", "string",
-                "description", "roof: block (or mix) capping the peak line, e.g. a slab."));
+                "description", "roof: block (or mix) for the RIDGES, which stand proud of the tiles — the "
+                        + "crest along the top, the four diagonal hip ridges of a wudian/zanjian, and the "
+                        + "bargeboards of a xuanshan. Pick something that contrasts with the roof: this one "
+                        + "line is most of what makes a roof read as designed rather than extruded."));
+        props.put("eave_block", Map.of("type", "string",
+                "description", "roof: block (or mix) for the outermost course only — the drip band running "
+                        + "right around the edge. A single contrasting ring (copper, dark prismarine, a "
+                        + "different wood) does an enormous amount of work for one block of width."));
+        props.put("soffit_block", Map.of("type", "string",
+                "description", "roof: block (or mix) for a second skin one block under the tiles, following "
+                        + "the same slope. This is what the roof looks like FROM BELOW and from an open gable; "
+                        + "without it the underside is bare half-slabs and the roof reads as a shell. Costs "
+                        + "roughly as many cells again, so skip it on roofs nobody will stand under."));
         props.put("x", Map.of("type", "integer", "description", "set/set_door: cell x."));
         props.put("y", Map.of("type", "integer", "description", "set/set_door: cell y (door lower half)."));
         props.put("z", Map.of("type", "integer", "description", "set/set_door: cell z."));
-        props.put("x1", Map.of("type", "integer"));
-        props.put("y1", Map.of("type", "integer"));
-        props.put("z1", Map.of("type", "integer"));
-        props.put("x2", Map.of("type", "integer"));
-        props.put("y2", Map.of("type", "integer"));
-        props.put("z2", Map.of("type", "integer"));
-        props.put("radius", Map.of("type", "integer"));
-        props.put("height", Map.of("type", "integer"));
+        // 哪个 op 要哪几个坐标,此前一个字都没写,模型只能从散文里猜——实测就撞出
+        // 过 "y2 is required"。每一条都点名用它的 op。
+        props.put("x1", Map.of("type", "integer",
+                "description", "First corner X. box/walls/line/scatter: the rect. cylinder: bottom "
+                        + "centre. sphere: centre. roof: base rect."));
+        props.put("y1", Map.of("type", "integer",
+                "description", "First corner Y. cylinder: bottom level. scatter: the single plane it "
+                        + "sprinkles on. roof: the level the eaves sit at."));
+        props.put("z1", Map.of("type", "integer", "description", "First corner Z — see x1."));
+        props.put("x2", Map.of("type", "integer",
+                "description", "Opposite corner X. Needed by box/walls/line/scatter/roof."));
+        props.put("y2", Map.of("type", "integer",
+                "description", "Opposite corner Y — REQUIRED by box, walls and line, which are "
+                        + "volumes. NOT used by scatter (one plane, y1) or roof (height is derived "
+                        + "from the span)."));
+        props.put("z2", Map.of("type", "integer",
+                "description", "Opposite corner Z. Needed by box/walls/line/scatter/roof."));
+        props.put("radius", Map.of("type", "integer",
+                "description", "cylinder/sphere only: radius in blocks."));
+        props.put("height", Map.of("type", "integer",
+                "description", "cylinder only: height in blocks, upward from y1."));
         props.put("density", Map.of("type", "number",
                 "description", "scatter: fraction of cells to fill, 0-1, default 0.25."));
         props.put("facing", enumSchema("set: block facing; set_door: which way the door faces.",
@@ -294,31 +327,45 @@ public final class BuildTool implements NumenTool {
     }
 
     /**
-     * 屋顶:楼梯砌的斜面 + 出檐 + 山墙 + 屋脊。
+     * 屋顶:半砖三态砌出的连续坡面 + 垂脊 + 正脊 + 檐口。
      *
-     * <p>此前是"底面矩形逐层收分的实心层"——那不是屋顶,是阶梯状的实心土堆,
-     * 而且收分收在长轴上,屋脊横着架在短边方向,越长的房子越离谱。生成的建筑
-     * "一眼假",一多半是顶上这一坨。
+     * <p>做法是从四栋手工中式建筑(悬山、歇山、庑殿、攒尖)里逐格量出来的,不是推的。
+     * 三条量出来的事实决定了整个引擎:
      *
-     * <p>现在按真实砌法:<b>屋脊沿长轴</b>,坡向短轴;斜面用楼梯方块,朝向指向
-     * 上坡方向(即指向屋脊);两端三角山墙填实;脊线单独压一层;可出檐。
+     * <ol>
+     *   <li><b>坡面主料是半砖,不是楼梯。</b>四栋里半砖比楼梯多 6~43 倍,而且
+     *       bottom/top/double 三态的占比四栋几乎一致(37/27/35)。砌法是同一个
+     *       高度上<b>下半砖当踏面、双层砖当立面</b>交替,顶面每格升半格,连一级
+     *       整块的台阶都没有。此前这里是"下半砖 + 上半砖",顶面轮廓一样,但上半砖
+     *       底下那半格是空的——从底下看是一排悬空的砖。</li>
+     *   <li><b>举架量的是每格的抬升,不是每层的收分。</b>量出来的顶面高度序列是
+     *       每格抬一个半砖(五举),接近脊时抬两个(十举),平均 1.2,即屋顶高
+     *       ≈ 0.6 × 半跨。所以这里<b>按每格到檐口的距离直接定高度</b>,不再逐层
+     *       收分——四条垂脊(到两边檐口等距的那条对角线)也就自然落出来了,而逐层
+     *       收分的写法必须另外拼角,拼一次错一次。</li>
+     *   <li><b>脊高出屋面,不齐平。</b>四栋的脊都是异色实心块压在瓦面之上:庑殿、
+     *       攒尖的四条垂脊是一格宽的正 45° 对角线,悬山两端是外探的博风板,正脊
+     *       再高出两格。此前脊是嵌进最后一层里的,所以四坡顶怎么调都不像中式。</li>
+     * </ol>
      *
-     * <p>楼梯朝向这条是从真实手工建筑的图纸里量出来的,不是推的:同一片斜面
-     * 每升高一格、坡向坐标加一格,而 facing 始终不变且指向屋脊。
+     * <p>结构定死,换料换风格:石砖 + 铜是中式,深板岩 + 深色橡木是哥特,陶瓦是
+     * 地中海。所以每一个结构件都单独收一个 palette 参数。
      */
     private static List<BuildTaskRecord.Target> expandRoof(OpSpec spec, BuildPalette palette) {
         return roofCells(spec.x1(), spec.y1(), spec.z1(), req(spec.x2(), "x2"), req(spec.z2(), "z2"),
                 spec.block_id(), spec.roof_shape(), spec.roof_curve(),
-                spec.overhang(), spec.corner_lift(), spec.ridge_offset(),
-                spec.gable_block(), spec.ridge_block(), spec.hollow());
+                spec.overhang(), spec.corner_lift(),
+                spec.gable_block(), spec.ridge_block(), spec.eave_block(), spec.soffit_block(),
+                spec.hollow());
     }
 
-    /** 屋顶展开(公开静态,测试直接验几何与朝向)。 */
+    /** 屋顶展开(公开静态,测试直接验几何)。 */
     public static List<BuildTaskRecord.Target> roofCells(
             int x1, int y1, int z1, int x2, int z2,
             String material, String shapeArg, String curveArg,
-            Integer overhangArg, Integer cornerLiftArg, Integer ridgeOffsetArg,
-            String gableSpec, String ridgeSpec, Boolean hollowArg) {
+            Integer overhangArg, Integer cornerLiftArg,
+            String gableSpec, String ridgeSpec, String eaveSpec, String soffitSpec,
+            Boolean hollowArg) {
         BuildPalette palette = BuildPalette.parse(material);
         int ax = Math.min(x1, x2);
         int bx = Math.max(x1, x2);
@@ -331,29 +378,90 @@ public final class BuildTool implements NumenTool {
         az -= overhang;
         bz += overhang;
 
-        String shape = shapeArg == null ? "gable" : shapeArg;
-        boolean concave = "concave".equals(curveArg);
+        String shape = shapeArg == null ? "xuanshan" : shapeArg;
+        // 举架曲线是默认。直坡要明确要求——量过的四栋没有一栋是直的,而直坡正是
+        // "看着像金字塔"的那个样子。
+        boolean concave = !"straight".equals(curveArg);
         int cornerLift = cornerLiftArg == null ? 0 : Math.max(0, Math.min(3, cornerLiftArg));
         BuildPalette gable = gableSpec == null ? null : BuildPalette.parse(gableSpec);
         BuildPalette ridge = ridgeSpec == null ? null : BuildPalette.parse(ridgeSpec);
-        boolean hollow = hollowArg == null || hollowArg;   // 屋顶默认中空,给阁楼留地方
+        BuildPalette eave = eaveSpec == null ? null : BuildPalette.parse(eaveSpec);
+        BuildPalette soffit = soffitSpec == null ? null : BuildPalette.parse(soffitSpec);
+        boolean hollow = hollowArg == null || hollowArg;
+
+        boolean hip = switch (shape) {
+            case "wudian", "hip", "zuanjian", "zanjian", "pyramid" -> true;
+            default -> false;
+        };
+        boolean xieshan = "xieshan".equals(shape) || "half_hip".equals(shape);
+        boolean shed = "shed".equals(shape);
+        if (!hip && !xieshan && !shed && !"xuanshan".equals(shape) && !"gable".equals(shape)) {
+            throw new IllegalArgumentException("roof shape must be xuanshan/gable, wudian/hip, "
+                    + "xieshan/half_hip, zuanjian/pyramid or shed");
+        }
+
+        boolean ridgeAlongX = (bx - ax) >= (bz - az);
+        int slopeSpan = ridgeAlongX ? (bz - az) : (bx - ax);
+        // 单坡一整片倒向一侧,走全跨;其余是两坡对开,各走半跨
+        int reach = shed ? slopeSpan : slopeSpan / 2;
+        int[] h = surfaceHalves(reach, concave);
+        // 歇山下段四坡约占四成,上段转双坡带山花
+        int brk = xieshan ? Math.max(1, reach * 2 / 5) : 0;
 
         Map<Long, BuildTaskRecord.Target> out = new LinkedHashMap<>();
-        switch (shape) {
-            case "hip", "pyramid" -> hipCourses(out, palette, ridge, ax, bx, az, bz, y0,
-                    concave, hollow);
-            case "gable" -> gableCourses(out, palette, gable, ridge, ax, bx, az, bz, y0,
-                    concave, hollow);
-            case "half_hip" -> halfHipCourses(out, palette, gable, ridge, ax, bx, az, bz, y0,
-                    concave, hollow);
-            case "shed" -> shedCourses(out, palette, gable, ax, bx, az, bz, y0, concave);
-            case "saltbox" -> saltboxCourses(out, palette, gable, ridge, ax, bx, az, bz, y0,
-                    ridgeOffsetArg, hollow);
-            default -> throw new IllegalArgumentException(
-                    "roof shape must be gable, hip, pyramid, half_hip, shed or saltbox");
+        for (int x = ax; x <= bx; x++) {
+            for (int z = az; z <= bz; z++) {
+                int dSlope = ridgeAlongX ? Math.min(z - az, bz - z) : Math.min(x - ax, bx - x);
+                int dEnd = ridgeAlongX ? Math.min(x - ax, bx - x) : Math.min(z - az, bz - z);
+                int d;
+                if (shed) {
+                    d = ridgeAlongX ? (z - az) : (x - ax);
+                } else if (hip) {
+                    d = Math.min(dSlope, dEnd);
+                } else if (xieshan) {
+                    d = dEnd < brk ? Math.min(dSlope, dEnd) : dSlope;
+                } else {
+                    d = dSlope;
+                }
+                d = Math.min(d, h.length - 1);
+                int halves = h[d];
+
+                boolean lip = d == 0;
+                skinCell(out, lip && eave != null ? eave : palette, x, z, y0, halves, lip);
+                if (soffit != null && !lip) {
+                    soffitCell(out, soffit, x, z, y0, halves);
+                }
+                if (!hollow) {
+                    fillUnder(out, palette, x, z, y0, halves);
+                }
+
+                // 山花:悬山两端的三角墙;歇山在腰线那一列,坡面在那里有个竖直落差。
+                // 必须在压脊之前填,否则脊会被这里的实心块盖掉。
+                if (gable != null && !shed && !hip) {
+                    int faceTop = (halves - 1) / 2;
+                    int faceBottom = xieshan
+                            ? (dEnd == brk ? h[Math.min(dSlope, brk - 1)] / 2 : faceTop)
+                            : (dEnd == 0 ? 0 : faceTop);
+                    for (int gy = faceBottom; gy < faceTop; gy++) {
+                        putSolidAt(out, gable, new BlockPos(x, y0 + gy, z), false);
+                    }
+                }
+
+                BuildPalette spine = ridge != null ? ridge : palette;
+                // 垂脊:四坡到两边檐口等距的那条正 45° 对角线。悬山没有垂脊,两端
+                // 改作博风板——同样是异色一条,只是走在山面的边缘。
+                boolean hipSpine = (hip || (xieshan && dEnd < brk)) && dSlope == dEnd && d < reach;
+                boolean barge = !hip && !shed && dEnd == 0;
+                if (hipSpine || barge) {
+                    putProud(out, spine, x, z, y0, halves, 1);
+                }
+                if (!shed && d >= reach) {
+                    putProud(out, spine, x, z, y0, halves, 2);
+                }
+            }
         }
         if (cornerLift > 0) {
-            liftEaveCorners(out, palette, ax, bx, az, bz, y0, cornerLift);
+            liftEaveCorners(out, ridge != null ? ridge : palette, ax, bx, az, bz, y0, cornerLift);
         }
         if (out.isEmpty()) {
             throw new IllegalArgumentException("roof resolved to zero cells");
@@ -362,282 +470,120 @@ public final class BuildTool implements NumenTool {
     }
 
     /**
-     * 每一层坡面往里收多少格。
+     * 举架:从檐口往脊,每格屋面的顶面到多高(以<b>半砖</b>计)。
      *
-     * <p>直线屋面每层收 1,坡度恒为 1:1——这就是"看起来又硬又像金字塔"的来源。
-     * 东亚屋面不是直的:<b>檐口缓、越往脊越陡</b>,凹成一条曲线。清式《工程做法》
-     * 的举架把这条曲线量化成了每步的举高比:一律从檐口的 0.5 起("五举拿头"),
-     * 逐步加陡,脊步不超过 0.9~1.0。
+     * <p>清式《工程做法》的举架把东亚屋面那条凹曲线量化成逐步加陡的举高比:檐口起于
+     * "五举"(0.5),脊步收到"十举"(1.0)。翻成方块就是<b>每格抬升几个半砖</b>:
+     * 五举抬一个,十举抬两个。
      *
-     * <p>翻成方块就是每层的收分不同:坡度 0.5 时一层收两格,接近 1.0 时一层收
-     * 一格。收分序列一算,曲线就出来了。
+     * <p>存档里量出来的顶面序列(悬山,半跨 13)是
+     * {@code 4,4,5,6,7,8,9,10,11,12,14,15,17}——前段每格抬一,近脊抬二,平均 1.2,
+     * 也就是屋顶高 ≈ 0.6 × 半跨。下面这条 {@code 1 + 0.6f²} 的抬升量累出来正是这个
+     * 数,而且中段会自然出现一二相间,和量到的一样。
+     *
+     * <p>第一格单独低一档:那是檐口的薄唇({@code skinCell} 的 thin 分支)。存档里
+     * 四栋都用上半砖收边,檐口因此是薄的、利的,不是一刀切齐的墩子。
      */
-    private static int[] courseInsets(int halfSpan, boolean concave) {
-        List<Integer> insets = new ArrayList<>();
-        if (!concave) {
-            for (int i = 0; i <= halfSpan; i++) {
-                insets.add(i);
-            }
-        } else {
-            double inset = 0.0;
-            int last = -1;
-            while (inset <= halfSpan + 0.001) {
-                int step = (int) Math.round(inset);
-                if (step > last) {
-                    insets.add(step);
-                    last = step;
-                }
-                double f = halfSpan <= 0 ? 1.0 : Math.min(1.0, inset / halfSpan);
-                inset += 1.0 / (0.5 + 0.5 * f);   // 五举 → 十举,步长 2.0 → 1.0
-            }
+    private static int[] surfaceHalves(int reach, boolean concave) {
+        int n = Math.max(1, reach) + 1;
+        int[] h = new int[n];
+        double acc = 1.0;
+        int cur = 1;
+        for (int k = 0; k < n; k++) {
+            double f = reach <= 0 ? 1.0 : (double) k / reach;
+            acc += concave ? 1.0 + 0.6 * f * f : 2.0;
+            cur = Math.max(cur + 1, (int) Math.round(acc));
+            h[k] = cur;
         }
-        int[] out = new int[insets.size()];
-        for (int i = 0; i < out.length; i++) {
-            out[i] = insets.get(i);
-        }
-        return out;
-    }
-
-    /** 双坡(悬山/硬山/gable):脊沿长轴,坡向短轴,两端三角山墙可填。 */
-    private static void gableCourses(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                     BuildPalette gable, BuildPalette ridge,
-                                     int ax, int bx, int az, int bz, int y0,
-                                     boolean concave, boolean hollow) {
-        boolean ridgeAlongX = (bx - ax) >= (bz - az);
-        int spanLo = ridgeAlongX ? az : ax;
-        int spanHi = ridgeAlongX ? bz : bx;
-        int runLo = ridgeAlongX ? ax : az;
-        int runHi = ridgeAlongX ? bx : bz;
-        int[] insets = courseInsets((spanHi - spanLo) / 2, concave);
-        for (int c = 0; c < insets.length; c++) {
-            int lo = spanLo + insets[c];
-            int hi = spanHi - insets[c];
-            if (lo > hi) {
-                break;
-            }
-            int y = y0 + c;
-            boolean top = c == insets.length - 1;
-            for (int run = runLo; run <= runHi; run++) {
-                putStair(out, palette, ridgeAlongX, run, y, lo,
-                        ridgeAlongX ? Direction.SOUTH : Direction.EAST);
-                if (hi != lo) {
-                    putStair(out, palette, ridgeAlongX, run, y, hi,
-                            ridgeAlongX ? Direction.NORTH : Direction.WEST);
-                }
-                if (!hollow) {
-                    for (int mid = lo + 1; mid < hi; mid++) {
-                        putSolid(out, palette, ridgeAlongX, run, y, mid);
-                    }
-                }
-                if (top && ridge != null) {
-                    for (int mid = lo; mid <= hi; mid++) {
-                        putSolid(out, ridge, ridgeAlongX, run, y + 1, mid);
-                    }
-                }
-            }
-            if (gable != null) {
-                for (int mid = lo; mid <= hi; mid++) {
-                    for (int gy = y0; gy < y; gy++) {
-                        putSolid(out, gable, ridgeAlongX, runLo, gy, mid);
-                        putSolid(out, gable, ridgeAlongX, runHi, gy, mid);
-                    }
-                }
-            }
-        }
+        return h;
     }
 
     /**
-     * 四坡(庑殿/hip;方形底面即攒尖 pyramid):四面都收,没有山墙。
+     * 屋面一格。顶面高度以半砖计:<b>偶数用双层砖</b>(占满整格,当立面),
+     * <b>奇数用下半砖</b>(占下半格,当踏面)。两者交替,顶面每格升半格,底下不留空。
      *
-     * <p>四条戗脊交汇的角上两个坡面撞在一起,楼梯朝哪边都不对——那里放实心块,
-     * 正好读成垂脊。
+     * <p>{@code thin} 是檐口那一格,改用上半砖:顶面同高但只有半格厚,檐口收成一道
+     * 薄边。存档里四栋的檐口都是这么收的。
      */
-    private static void hipCourses(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                   BuildPalette ridge, int ax, int bx, int az, int bz, int y0,
-                                   boolean concave, boolean hollow) {
-        int halfSpan = Math.min(bx - ax, bz - az) / 2;
-        int[] insets = courseInsets(halfSpan, concave);
-        for (int c = 0; c < insets.length; c++) {
-            if (!hipCourse(out, palette, ridge, ax, bx, az, bz, y0, insets[c], c, hollow)) {
-                break;
-            }
-            if (c == insets.length - 1 && ridge != null) {
-                int i = insets[c];
-                for (int x = ax + i; x <= bx - i; x++) {
-                    for (int z = az + i; z <= bz - i; z++) {
-                        putSolidAt(out, ridge, new BlockPos(x, y0 + c + 1, z), false);
-                    }
-                }
-            }
-        }
-    }
-
-    /** 四坡的一层。@return false = 已经收没了 */
-    private static boolean hipCourse(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                     BuildPalette ridge, int ax, int bx, int az, int bz,
-                                     int y0, int inset, int course, boolean hollow) {
-        int lx = ax + inset;
-        int hx = bx - inset;
-        int lz = az + inset;
-        int hz = bz - inset;
-        if (lx > hx || lz > hz) {
-            return false;
-        }
-        int y = y0 + course;
-        for (int x = lx; x <= hx; x++) {
-            putStairAt(out, palette, new BlockPos(x, y, lz), Direction.SOUTH);
-            putStairAt(out, palette, new BlockPos(x, y, hz), Direction.NORTH);
-        }
-        for (int z = lz; z <= hz; z++) {
-            putStairAt(out, palette, new BlockPos(lx, y, z), Direction.EAST);
-            putStairAt(out, palette, new BlockPos(hx, y, z), Direction.WEST);
-        }
-        // 四角:两个坡面在这里相撞,楼梯朝哪边都是错的(没有斜向楼梯)。给了
-        // ridge_block 就用它当垂脊——那正是真实屋顶在这条棱上的做法;没给就退回
-        // 主材,并让朝向跟着 z 向坡走,至少四个角一致,不会各朝各的。
-        BuildPalette hipPal = ridge != null ? ridge : palette;
-        putHipCorner(out, hipPal, new BlockPos(lx, y, lz), Direction.SOUTH);
-        putHipCorner(out, hipPal, new BlockPos(hx, y, lz), Direction.SOUTH);
-        putHipCorner(out, hipPal, new BlockPos(lx, y, hz), Direction.NORTH);
-        putHipCorner(out, hipPal, new BlockPos(hx, y, hz), Direction.NORTH);
-        if (!hollow) {
-            for (int x = lx + 1; x < hx; x++) {
-                for (int z = lz + 1; z < hz; z++) {
-                    putSolidAt(out, palette, new BlockPos(x, y, z), false);
-                }
-            }
-        }
-        return true;
-    }
-
-    /**
-     * 歇山(half_hip):下部四坡、上部双坡带两面山花。
-     *
-     * <p>中式等级仅次于庑殿,也是西方 Dutch gable 的东方本家。做法就是把两种坡
-     * 面上下拼起来:先四面收几层,再在收窄后的矩形上起一个双坡。上段自然比下段
-     * 陡——因为跨度小了曲线重新起算——这恰好就是歇山该有的样子。
-     */
-    private static void halfHipCourses(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                       BuildPalette gable, BuildPalette ridge,
-                                       int ax, int bx, int az, int bz, int y0,
-                                       boolean concave, boolean hollow) {
-        int halfSpan = Math.min(bx - ax, bz - az) / 2;
-        int[] insets = courseInsets(halfSpan, concave);
-        int hipCount = Math.max(1, insets.length * 2 / 5);   // 下部四坡约占四成
-        hipCount = Math.min(hipCount, Math.max(1, insets.length - 2));
-        for (int c = 0; c < hipCount; c++) {
-            hipCourse(out, palette, ridge, ax, bx, az, bz, y0, insets[c], c, hollow);
-        }
-        int i = insets[hipCount - 1];
-        int nax = ax + i;
-        int nbx = bx - i;
-        int naz = az + i;
-        int nbz = bz - i;
-        if (nax > nbx || naz > nbz) {
+    private static void skinCell(Map<Long, BuildTaskRecord.Target> out, BuildPalette pal,
+                                 int x, int z, int y0, int halves, boolean thin) {
+        BlockPos pos = new BlockPos(x, y0 + (halves - 1) / 2, z);
+        BuildPalette.Entry e = pal.pick(pos);
+        Block slab = slabFor(e.block());
+        if (slab == null) {
+            // 给的料推不出半砖(原木、玻璃之类),照整块砌:糙一点,但不漏
+            out.put(pos.asLong(), new BuildTaskRecord.Target(e.block(), e.item(), pos, e.label(),
+                    null, null, null));
             return;
         }
-        gableCourses(out, palette, gable, ridge, nax, nbx, naz, nbz, y0 + hipCount,
-                concave, hollow);
+        putSlabAt(out, pos, slab,
+                thin ? SlabType.TOP : (halves % 2 == 1 ? SlabType.BOTTOM : SlabType.DOUBLE));
     }
 
     /**
-     * 单坡(shed / skillion):一整片斜面倒向一侧。
+     * 望板:瓦面底下的第二层皮,顶面恒比瓦面低一格,而且<b>实心一格厚</b>——半格处用
+     * "上半砖 + 下半砖"两块拼齐。
      *
-     * <p>棚屋、披屋、厂房侧翼,以及贴着主体加建的那一坨。屋面就是一条斜线沿长轴
-     * 扫出来的平面,两端的三角侧墙可以用 gable_block 填实。
+     * <p>存档里四栋都有这一层(瓦面石砖、望板木)。没有它,从屋里往上看就是一排半砖
+     * 的背面和一格格的空档,屋顶是个壳;有了它,屋里屋外都是一道光滑斜面。
      */
-    private static void shedCourses(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                    BuildPalette gable, int ax, int bx, int az, int bz, int y0,
-                                    boolean concave) {
-        boolean runAlongX = (bx - ax) >= (bz - az);
-        int spanLo = runAlongX ? az : ax;
-        int spanHi = runAlongX ? bz : bx;
-        int runLo = runAlongX ? ax : az;
-        int runHi = runAlongX ? bx : bz;
-        int[] insets = courseInsets(spanHi - spanLo, concave);
-        for (int c = 0; c < insets.length; c++) {
-            int span = spanLo + insets[c];
-            if (span > spanHi) {
-                break;
-            }
-            int y = y0 + c;
-            for (int run = runLo; run <= runHi; run++) {
-                putStair(out, palette, runAlongX, run, y, span,
-                        runAlongX ? Direction.SOUTH : Direction.EAST);
-            }
-            if (gable != null) {
-                for (int gy = y0; gy < y; gy++) {
-                    putSolid(out, gable, runAlongX, runLo, gy, span);
-                    putSolid(out, gable, runAlongX, runHi, gy, span);
-                }
-            }
+    private static void soffitCell(Map<Long, BuildTaskRecord.Target> out, BuildPalette pal,
+                                   int x, int z, int y0, int halves) {
+        int s = halves - 2;
+        if (s < 1) {
+            return;
+        }
+        int y = y0 + (s - 1) / 2;
+        BuildPalette.Entry e = pal.pick(new BlockPos(x, y, z));
+        Block slab = slabFor(e.block());
+        if (slab == null) {
+            putSolidAt(out, pal, new BlockPos(x, y, z), false);
+            return;
+        }
+        if (s % 2 == 0) {
+            putSlabAt(out, new BlockPos(x, y, z), slab, SlabType.DOUBLE);
+        } else {
+            putSlabAt(out, new BlockPos(x, y, z), slab, SlabType.BOTTOM);
+            putSlabAt(out, new BlockPos(x, y - 1, z), slab, SlabType.TOP);
         }
     }
 
     /**
-     * 不对称双坡(saltbox):脊线偏心,一坡短而陡、一坡长而缓。
+     * 脊:压在屋面之上的异色实心块,{@code n} 格高。
      *
-     * <p>形成的原因是后来加建——原本的双坡屋在背面接出一间,屋面顺势拉长。所以
-     * 它天生带一种"这栋房子有历史"的味道,新英格兰殖民地民居的标志。
+     * <p>{@code y0 + halves / 2} 这一格正好骑在顶面上:顶面落在整格时(halves 偶)
+     * 它整格露在外面,落在半格时(halves 奇)它盖掉那块半砖、把顶面抬到整格。所以
+     * 坡面走到哪一档,脊都是明确高出来的一条,不会时隐时现。
      */
-    private static void saltboxCourses(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                       BuildPalette gable, BuildPalette ridge,
-                                       int ax, int bx, int az, int bz, int y0,
-                                       Integer ridgeOffsetArg, boolean hollow) {
-        boolean ridgeAlongX = (bx - ax) >= (bz - az);
-        int spanLo = ridgeAlongX ? az : ax;
-        int spanHi = ridgeAlongX ? bz : bx;
-        int runLo = ridgeAlongX ? ax : az;
-        int runHi = ridgeAlongX ? bx : bz;
-        int span = spanHi - spanLo;
-        int shortRun = ridgeOffsetArg != null
-                ? Math.max(1, Math.min(span - 1, ridgeOffsetArg))
-                : Math.max(1, span / 3);
-        int longRun = span - shortRun;
-        int height = shortRun;                       // 短坡走 1:1,长坡自然放缓
-        for (int c = 0; c <= height; c++) {
-            int y = y0 + c;
-            int lo = spanLo + c;
-            int hi = spanHi - (int) Math.round((double) longRun * c / Math.max(1, height));
-            if (lo > hi) {
-                break;
+    private static void putProud(Map<Long, BuildTaskRecord.Target> out, BuildPalette pal,
+                                 int x, int z, int y0, int halves, int n) {
+        for (int k = 0; k < n; k++) {
+            BlockPos pos = new BlockPos(x, y0 + halves / 2 + k, z);
+            BuildPalette.Entry e = pal.pick(pos);
+            if (e.block() instanceof SlabBlock) {
+                // 脊料常常也是半砖(没给 ridge_block 时就直接是屋面主料)。半砖的
+                // 默认状态是下半砖,照放就是一条悬空的半砖;脊必须实心,所以铺双层。
+                putSlabAt(out, pos, e.block(), SlabType.DOUBLE);
+            } else {
+                putSolidAt(out, pal, pos, true);
             }
-            boolean top = c == height;
-            for (int run = runLo; run <= runHi; run++) {
-                putStair(out, palette, ridgeAlongX, run, y, lo,
-                        ridgeAlongX ? Direction.SOUTH : Direction.EAST);
-                if (hi != lo) {
-                    putStair(out, palette, ridgeAlongX, run, y, hi,
-                            ridgeAlongX ? Direction.NORTH : Direction.WEST);
-                }
-                if (!hollow) {
-                    for (int mid = lo + 1; mid < hi; mid++) {
-                        putSolid(out, palette, ridgeAlongX, run, y, mid);
-                    }
-                }
-                if (top && ridge != null) {
-                    for (int mid = lo; mid <= hi; mid++) {
-                        putSolid(out, ridge, ridgeAlongX, run, y + 1, mid);
-                    }
-                }
-            }
-            if (gable != null) {
-                for (int mid = lo; mid <= hi; mid++) {
-                    for (int gy = y0; gy < y; gy++) {
-                        putSolid(out, gable, ridgeAlongX, runLo, gy, mid);
-                        putSolid(out, gable, ridgeAlongX, runHi, gy, mid);
-                    }
-                }
-            }
+        }
+    }
+
+    /** 不留阁楼时把屋面底下填实。 */
+    private static void fillUnder(Map<Long, BuildTaskRecord.Target> out, BuildPalette pal,
+                                  int x, int z, int y0, int halves) {
+        for (int y = y0; y < y0 + (halves - 1) / 2; y++) {
+            putSolidAt(out, pal, new BlockPos(x, y, z), false);
         }
     }
 
     /**
      * 檐角起翘(飞檐):四个檐角往上挑起来。
      *
-     * <p>这是东亚屋顶最认得出的一笔——尖角一挑,整片屋面就"活"了。做法是在檐口
-     * 那一层的四角往上叠几格,并把紧挨着角的两格也抬一格,让翘起来的是一条弧,
-     * 不是四根柱子。
+     * <p>这是东亚屋顶最认得出的一笔——尖角一挑,整片屋面就"活"了。做法是在檐口那一层
+     * 的四角往上叠几格,并把紧挨着角的两格也抬一格,让翘起来的是一条弧,不是四根柱子。
+     * 用脊料,因为翘角本来就是垂脊的末端。
      */
     private static void liftEaveCorners(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
                                         int ax, int bx, int az, int bz, int y0, int lift) {
@@ -645,8 +591,8 @@ public final class BuildTool implements NumenTool {
         for (int[] c : corners) {
             int cx = c[0];
             int cz = c[1];
-            for (int h = 1; h <= lift; h++) {
-                putSolidAt(out, palette, new BlockPos(cx, y0 + h, cz), false);
+            for (int k = 1; k <= lift; k++) {
+                putSolidAt(out, palette, new BlockPos(cx, y0 + k, cz), true);
             }
             if (lift >= 2) {
                 int inx = cx == ax ? 1 : -1;
@@ -657,15 +603,49 @@ public final class BuildTool implements NumenTool {
         }
     }
 
-    /** 垂脊上的一格:能实心就实心,只有楼梯可用时至少让四角朝向一致。 */
-    private static void putHipCorner(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                     BlockPos pos, Direction fallbackFacing) {
-        BuildPalette.Entry e = palette.pick(pos);
-        if (e.block() instanceof net.minecraft.world.level.block.StairBlock) {
-            putStairAt(out, palette, pos, fallbackFacing);
-        } else {
-            putSolidAt(out, palette, pos, true);
+    /**
+     * 从给的料推它的半砖——屋面主料是半砖,而模型给过来的可能是整块、楼梯或木板。
+     *
+     * <p>{@code stone_bricks → stone_brick_slab} 这类要去掉复数才对得上,所以按几条
+     * 命名规律依次试,而不是硬拼一个后缀。推不出就退回整块砌。
+     */
+    private static Block slabFor(Block block) {
+        if (block instanceof SlabBlock) {
+            return block;
         }
+        var id = BuiltInRegistries.BLOCK.getKey(block);
+        if (id == null) {
+            return null;
+        }
+        String p = id.getPath();
+        List<String> tries = new ArrayList<>();
+        for (String suf : new String[]{"_stairs", "_planks", "_wall"}) {
+            if (p.endsWith(suf)) {
+                tries.add(p.substring(0, p.length() - suf.length()) + "_slab");
+            }
+        }
+        if (p.endsWith("s")) {
+            tries.add(p.substring(0, p.length() - 1) + "_slab");
+        }
+        tries.add(p + "_slab");
+        for (String t : tries) {
+            Block b = BuiltInRegistries.BLOCK.get(
+                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(id.getNamespace(), t));
+            if (b instanceof SlabBlock) {
+                return b;
+            }
+        }
+        return null;
+    }
+
+    private static void putSlabAt(Map<Long, BuildTaskRecord.Target> out, BlockPos pos,
+                                  Block slab, SlabType type) {
+        BlockState state = slab.defaultBlockState().setValue(SlabBlock.TYPE, type);
+        // topHalf 是状态的镜像,不是自由字段:双层砖没有上下之分,那里必须是 null,
+        // 否则 Target 自己的一致性校验当场拒收(它按同一条规则反推)。
+        Boolean topHalf = type == SlabType.DOUBLE ? null : type == SlabType.TOP;
+        out.put(pos.asLong(), new BuildTaskRecord.Target(state, slab.asItem(), pos,
+                BuiltInRegistries.BLOCK.getKey(slab).getPath(), null, null, topHalf));
     }
 
     private static void putStairAt(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
@@ -692,30 +672,6 @@ public final class BuildTool implements NumenTool {
         } else {
             out.putIfAbsent(pos.asLong(), t);
         }
-    }
-
-    private static void putStair(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                 boolean ridgeAlongX, int run, int y, int span, Direction facing) {
-        BlockPos pos = ridgeAlongX ? new BlockPos(run, y, span) : new BlockPos(span, y, run);
-        BuildPalette.Entry e = palette.pick(pos);
-        if (e.block() instanceof net.minecraft.world.level.block.StairBlock) {
-            BlockState state = e.block().defaultBlockState()
-                    .setValue(net.minecraft.world.level.block.StairBlock.FACING, facing);
-            out.put(pos.asLong(), new BuildTaskRecord.Target(state, e.item(), pos, e.label(),
-                    facing, null, null));
-        } else {
-            // 给的不是楼梯就照实心放——不替玩家改主意,只是没有斜面而已
-            out.put(pos.asLong(),
-                    new BuildTaskRecord.Target(e.block(), e.item(), pos, e.label(), null, null, null));
-        }
-    }
-
-    private static void putSolid(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                 boolean ridgeAlongX, int run, int y, int span) {
-        BlockPos pos = ridgeAlongX ? new BlockPos(run, y, span) : new BlockPos(span, y, run);
-        BuildPalette.Entry e = palette.pick(pos);
-        out.putIfAbsent(pos.asLong(),
-                new BuildTaskRecord.Target(e.block(), e.item(), pos, e.label(), null, null, null));
     }
 
     /** 整扇门:下半 + 上半两格,朝向正确,一笔成型——半格错位的卡门病从原语层消灭。 */
@@ -784,15 +740,11 @@ public final class BuildTool implements NumenTool {
             if (spec == null || spec.block_id() == null || spec.block_id().isBlank()) {
                 throw new IllegalArgumentException("each block needs block_id, x, y and z");
             }
-            Item item = ToolArgs.parseItem(spec.block_id());
-            net.minecraft.world.level.block.Block block;
-            if (item == Items.AIR) {
-                block = Blocks.AIR;
-            } else if (item instanceof BlockItem blockItem) {
-                block = blockItem.getBlock();
-            } else {
-                throw new IllegalArgumentException(spec.block_id() + " is not a placeable block");
-            }
+            // 与调色板同一处解析:按方块查、air 与水合法、岩浆挡掉。此前这里另抄
+            // 了一遍 ToolArgs.parseItem + if(AIR) 的写法,而那个 AIR 分支永远到不了。
+            BuildPalette.Entry resolved = BuildPalette.resolve(spec.block_id(), 1);
+            Item item = resolved.item();
+            net.minecraft.world.level.block.Block block = resolved.block();
             BlockPos pos = new BlockPos(spec.x(), spec.y(), spec.z());
             if (!seen.add(pos)) {
                 throw new IllegalArgumentException("duplicate build cell " + pos.toShortString());
