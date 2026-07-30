@@ -900,6 +900,93 @@ public class CompanionGameTests {
         helper.succeed();
     }
 
+    /**
+     * 材料记账上<b>有意</b>不随大流的那几行,钉成断言。
+     *
+     * <p>"没有自己的物品"这件事,通行做法是整格丢掉——方块的 {@code asItem()} 是空气,
+     * 那一格就不进清单也不放。这条规则对水和活塞头是对的,对<b>带花的花盆和作物</b>是
+     * 错的:用户那栋日式小屋里有二十一个花盆加一片小麦胡萝卜,按那条规则建出来就少了
+     * 这些,而院子里少二十一个花盆是一眼就看得见的。我们改成按"种下去该花的那件东西"
+     * 计价(空盆、种子、果实),多建二十二格。
+     *
+     * <p>反方向也有:一格四根蜡烛、贴三面的藤蔓,通行做法是收一件。那是白送。我们按
+     * 根数与面数收。
+     *
+     * <p>两个方向合起来是同一条判据:<b>一格该收多少,取决于人手工要花多少</b>,不取决于
+     * 那个方块的 {@code asItem()} 恰好是什么。这条测试的意义不是"证明我们对",是把这几行
+     * 分歧写在明处——哪天有人照通行做法"修正"回去,得先来改这里的字。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    public static void material_accounting_divergences_are_deliberate(GameTestHelper helper) {
+        // 一、真正没有自己的物品的那几族。通行做法是整格丢掉——方块的 asItem 是空气,
+        // 那一格既不进材料清单也不放。这一档才是分歧所在:我们替料建出来。
+        record Sub(net.minecraft.world.level.block.Block block,
+                   net.minecraft.world.item.Item pay, String what) {}
+        for (Sub s : List.of(
+                new Sub(Blocks.POTTED_OAK_SAPLING, Items.FLOWER_POT, "a potted sapling"),
+                new Sub(Blocks.POTTED_CACTUS, Items.FLOWER_POT, "a potted cactus"),
+                new Sub(Blocks.KELP_PLANT, Items.KELP, "kelp"),
+                new Sub(Blocks.BAMBOO_SAPLING, Items.BAMBOO, "a bamboo shoot"),
+                new Sub(Blocks.ATTACHED_PUMPKIN_STEM, Items.PUMPKIN_SEEDS, "an attached pumpkin stem"),
+                new Sub(Blocks.ATTACHED_MELON_STEM, Items.MELON_SEEDS, "an attached melon stem"),
+                new Sub(Blocks.CAVE_VINES_PLANT, Items.GLOW_BERRIES, "a cave vine plant"))) {
+            helper.assertTrue(s.block().asItem() == Items.AIR,
+                    s.what() + " is expected to have no item of its own (got " + s.block().asItem()
+                            + "); if that ever changes, this row can go");
+            helper.assertTrue(com.dwinovo.numen.core.task.BuildStates
+                            .materialItem(s.block()) == s.pay(),
+                    s.what() + " must be paid for with " + s.pay() + ", not dropped from the design");
+        }
+
+        // 一之二、反过来的一档:原版自己的方块→物品映射本来就对,我们<b>不</b>另立一套。
+        // 这几行不是分歧,列在这里是为了钉住"没有无谓的自创口径"——替料表里每多一行,
+        // 就多一处会和原版走散的地方,而走散是没人会发现的那种错。
+        for (net.minecraft.world.level.block.Block b : List.of(
+                Blocks.WHEAT, Blocks.CARROTS, Blocks.POTATOES, Blocks.BEETROOTS,
+                Blocks.CAVE_VINES, Blocks.SWEET_BERRY_BUSH, Blocks.MELON_STEM,
+                Blocks.TRIPWIRE, Blocks.REDSTONE_WIRE, Blocks.POWDER_SNOW)) {
+            helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.materialItem(b)
+                            == b.asItem(),
+                    b + ": vanilla already maps this to " + b.asItem()
+                            + ", so we must not invent a second answer");
+        }
+
+        // 二、耕地与土径是在土上加工出来的,算土(这一行是通行做法,一致)
+        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates
+                        .materialItem(Blocks.FARMLAND) == Items.DIRT
+                && com.dwinovo.numen.core.task.BuildStates
+                        .materialItem(Blocks.DIRT_PATH) == Items.DIRT,
+                "farmland and dirt path are worked from dirt");
+
+        // 三、一格不止一件:这几行按"人手工要花多少"收,不按一件收
+        record Many(BlockState state, net.minecraft.world.item.Item pay, int count, String what) {}
+        BlockState fourCandles = Blocks.CANDLE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties
+                        .CANDLES, 4);
+        BlockState threeFacedVine = Blocks.VINE.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.NORTH, true)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST, true)
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.UP, true);
+        BlockState doubleSlab = Blocks.STONE_SLAB.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE,
+                        net.minecraft.world.level.block.state.properties.SlabType.DOUBLE);
+        BlockState fiveSnow = Blocks.SNOW.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.LAYERS, 5);
+        for (Many m : List.of(
+                new Many(fourCandles, Items.CANDLE, 4, "four candles in one cell cost four candles"),
+                new Many(threeFacedVine, Items.VINE, 3, "vines on three faces cost three"),
+                new Many(doubleSlab, Items.STONE_SLAB, 2, "a double slab is two slabs"),
+                new Many(fiveSnow, Items.SNOW, 5, "five snow layers cost five"),
+                new Many(Blocks.TALL_GRASS.defaultBlockState(), Items.SHORT_GRASS, 2,
+                        "tall grass is two blades"))) {
+            var target = new BuildTaskRecord.Target(m.state(), m.pay(), BlockPos.ZERO,
+                    "x", null, null, null);
+            helper.assertTrue(target.materialCount() == m.count(),
+                    m.what() + " — got " + target.materialCount());
+        }
+        helper.succeed();
+    }
+
     /** 结构 NBT 的一只实体:{pos:[x,y,z], blockPos:[..], nbt:{...}}。 */
     private static net.minecraft.nbt.CompoundTag entityTag(double x, double y, double z,
                                                            net.minecraft.nbt.CompoundTag nbt) {
