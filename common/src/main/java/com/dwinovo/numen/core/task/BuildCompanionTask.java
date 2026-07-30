@@ -31,6 +31,7 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
@@ -247,6 +248,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (!costsMaterial(target)) continue;
             if (target.matches(player.level().getBlockState(target.pos()))) continue;
             need.merge(target.item(), target.materialCount(), Integer::sum);
+        }
+        // 摆设实体也要料:它们不是目标格,但同样是玩家得掏出来的东西
+        for (BuildTaskRecord.EntitySpawn spawn : r.entities) {
+            if (spawn.item() != Items.AIR && !fixtureAlreadyThere(spawn)) {
+                need.merge(spawn.item(), 1, Integer::sum);
+            }
         }
         return need;
     }
@@ -799,6 +806,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
         for (BuildTaskRecord.EntitySpawn spawn : r.entities) {
             try {
+                if (fixtureAlreadyThere(spawn)) {
+                    continue;   // 重发同一个调用是续建,不该再生成一份
+                }
+                boolean pays = r.consumeMaterials && spawn.item() != Items.AIR;
+                if (pays && !hasItems(spawn.item(), 1, true)) {
+                    passMissing.merge(spawn.item(), 1, Integer::sum);
+                    continue;
+                }
                 var created = net.minecraft.world.entity.EntityType.create(spawn.nbt(), level);
                 if (created.isEmpty()) {
                     continue;
@@ -810,10 +825,33 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                         entity.rotate(spawn.rotation()), entity.getXRot());
                 entity.setUUID(java.util.UUID.randomUUID());   // 同一张图纸建两遍不能撞 UUID
                 level.addFreshEntity(entity);
+                if (pays) {
+                    consumeOne(spawn.item());
+                }
             } catch (RuntimeException ignored) {
                 // 一只摆设生成失败不该让整栋楼算失败
             }
         }
+    }
+
+    /**
+     * 这只摆设已经在那儿了吗——<b>实体的幂等靠这一步</b>。
+     *
+     * <p>方块能安全重发,是因为我们逐格拿世界当进度对照;而"重发同一个调用就是续建"
+     * 正是我们写进工具描述、教给模型的做法。实体没有这一步的话,建完再发一次就多出
+     * 一份摆设——同一面墙上两个展示框叠在一起。
+     */
+    private boolean fixtureAlreadyThere(BuildTaskRecord.EntitySpawn spawn) {
+        if (!(player.level() instanceof ServerLevel level)) {
+            return false;
+        }
+        var type = net.minecraft.world.entity.EntityType.by(spawn.nbt());
+        if (type.isEmpty()) {
+            return false;
+        }
+        AABB box = new AABB(spawn.x() - 0.5, spawn.y() - 0.5, spawn.z() - 0.5,
+                spawn.x() + 0.5, spawn.y() + 0.5, spawn.z() + 0.5);
+        return !level.getEntities(type.get(), box, e -> true).isEmpty();
     }
 
     /**
@@ -1334,8 +1372,22 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 起就已经注定动不了。
      */
     private boolean blockedByMode(BuildTaskRecord.Target target) {
-        BlockState current = player.level().getBlockState(target.pos());
-        return !r.replaceMode.allows(current, target.desiredState());
+        BlockPos pos = target.pos();
+        BlockState current = player.level().getBlockState(pos);
+        if (!r.replaceMode.allows(current, target.desiredState())) {
+            return true;
+        }
+        // 玩家的箱子不能被一堵墙盖掉。让路的档位管"石头挡路要不要顶掉",这一条
+        // 管"带方块实体的方块要不要动"——少砌一格墙是遗憾,清掉一箱子东西是事故。
+        if (r.replaceBlockEntities || current.isAir()) {
+            return false;
+        }
+        if (current.hasBlockEntity() && !target.matches(current)) {
+            return true;
+        }
+        // 双格方块连另一半一起看:任一半压着方块实体就都不动
+        BlockPos other = otherHalfOf(pos, target.desiredState());
+        return other != null && player.level().getBlockState(other).hasBlockEntity();
     }
 
     /**
@@ -1365,16 +1417,30 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (level.getBlockState(pos).getDestroySpeed(level, pos) == -1) {
             return true;
         }
-        BlockPos other = null;
-        if (desired != null && desired.hasProperty(BlockStateProperties.BED_PART)
+        BlockPos other = otherHalfOf(pos, desired);
+        return other != null && level.getBlockState(other).getDestroySpeed(level, other) == -1;
+    }
+
+    /**
+     * 双格方块的另一半在哪:床看朝向那一格,门与高草看正上方。
+     *
+     * <p>只查自己那一格,会出现"下半放下去了、上半卡在基岩里"或者"下半盖住了玩家
+     * 箱子的上半"这类半截货,所以砸不动与箱子保护两处都要连它一起看。
+     */
+    private static BlockPos otherHalfOf(BlockPos pos, BlockState desired) {
+        if (desired == null) {
+            return null;
+        }
+        if (desired.hasProperty(BlockStateProperties.BED_PART)
                 && desired.getValue(BlockStateProperties.BED_PART) == BedPart.FOOT
                 && desired.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
-            other = pos.relative(desired.getValue(BlockStateProperties.HORIZONTAL_FACING));
-        } else if (desired != null && desired.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
-                && desired.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.LOWER) {
-            other = pos.above();
+            return pos.relative(desired.getValue(BlockStateProperties.HORIZONTAL_FACING));
         }
-        return other != null && level.getBlockState(other).getDestroySpeed(level, other) == -1;
+        if (desired.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
+                && desired.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.LOWER) {
+            return pos.above();
+        }
+        return null;
     }
 
     /** 够不够 {@code count} 件——双层砖那种一格吃两件的格子要问这个。 */

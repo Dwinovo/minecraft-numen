@@ -31,6 +31,16 @@ public final class BuildTaskRecord extends TaskRecord {
      * 中间两档已经实现并受测,等图纸层把档位开放给玩家时直接可用。
      */
     public final ReplaceMode replaceMode;
+    /**
+     * 允许盖掉<b>带方块实体</b>的方块吗——默认不允许。
+     *
+     * <p>箱子、木桶、熔炉、告示牌、酿造台都带方块实体,而它们往里装着玩家的东西。
+     * 让路的档位管的是"石头挡路要不要顶掉",这一条管的是"玩家的箱子要不要动",
+     * 两件事的答案不该绑在一起:少砌一格墙是遗憾,清掉一箱子东西是事故。
+     *
+     * <p>双格方块要连另一半一起看:床的另一半、门的上半,任一半带方块实体就都不动。
+     */
+    public final boolean replaceBlockEntities;
     public final boolean replaceExisting;
     /** 是否消耗背包材料:随能力画像而定(创造免耗材,生存逐格真扣)。 */
     public final boolean consumeMaterials;
@@ -110,6 +120,7 @@ public final class BuildTaskRecord extends TaskRecord {
                            boolean consumeMaterials, boolean allowPartial,
                            Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
+        this.replaceBlockEntities = false;
         this.entities = List.copyOf(entities);
         this.targets = List.copyOf(targets);
         this.replaceMode = replaceMode;
@@ -159,7 +170,27 @@ public final class BuildTaskRecord extends TaskRecord {
     /** 一只待生成的摆设实体:落位点、图纸旋转、剥干净的 NBT。 */
     public record EntitySpawn(double x, double y, double z,
                               net.minecraft.world.level.block.Rotation rotation,
-                              CompoundTag nbt) {}
+                              CompoundTag nbt) {
+
+        /**
+         * 这只摆设要花哪件材料。
+         *
+         * <p>摆设不能免费:一张带五十个盔甲架的图纸凭空给五十个盔甲架,和"框里的剑
+         * 不给"是自相矛盾的——框白送而框里的东西要玩家自己放,说不通。白名单只有
+         * 四种,所以这里是个封闭的对照表,不必去猜。
+         *
+         * @return 对应物品;不在白名单里返回空气(不该出现)
+         */
+        public Item item() {
+            return switch (nbt.getString("id")) {
+                case "minecraft:item_frame" -> net.minecraft.world.item.Items.ITEM_FRAME;
+                case "minecraft:glow_item_frame" -> net.minecraft.world.item.Items.GLOW_ITEM_FRAME;
+                case "minecraft:armor_stand" -> net.minecraft.world.item.Items.ARMOR_STAND;
+                case "minecraft:painting" -> net.minecraft.world.item.Items.PAINTING;
+                default -> net.minecraft.world.item.Items.AIR;
+            };
+        }
+    }
 
     public record Target(BlockState desiredState, Item item, BlockPos pos, String label,
                          Direction facing, Direction.Axis axis, Boolean topHalf) {
