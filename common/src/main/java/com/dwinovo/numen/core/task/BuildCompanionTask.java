@@ -161,6 +161,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private int swingCooldown;
     /** 已砌好又被外力弄没的格数(收工时用来解释"为什么磨了这么久")。 */
     private int damagedCells;
+    /**
+     * 本遍决定<b>不去动</b>的格数:让路档位不许、玩家的箱子压着、基岩挡着、边界之外。
+     *
+     * <p>它们既不算完成也不算待办——算完成就是说谎(那一格根本没动),算待办就永远
+     * 收不了工(它们从第一遍起就不会变)。所以单独一个数,收工时如实交代。
+     */
+    private int skippedCells;
+    /** 收工时因缺料没能生成的摆设数——不记的话它们会静默消失而任务照报成功。 */
+    private int skippedFixtures;
     private int passStartCompleted;
     private int barrenPasses;
     /**
@@ -247,6 +256,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         for (BuildTaskRecord.Target target : r.targets) {
             if (!costsMaterial(target)) continue;
             if (target.matches(player.level().getBlockState(target.pos()))) continue;
+            // 我们不会去动的格子不该进清单。此前这里的过滤比完工统计那处少两条,
+            // 于是同一张回执上能同时出现"built 812/812"和"还差 chest x2":报价
+            // 索要的是永远不会被放置的格子的材料,开工前还会让玩家先去凑一堆
+            // 她压根不打算放的方块。
+            if (blockedByMode(target) || hopeless(target)) continue;
             need.merge(target.item(), target.materialCount(), Integer::sum);
         }
         // 摆设实体也要料:它们不是目标格,但同样是玩家得掏出来的东西
@@ -267,7 +281,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private Map<Item, Integer> shortfallAgainstInventory(Map<Item, Integer> need) {
         Map<Item, Integer> shortfall = new LinkedHashMap<>();
         for (var e : need.entrySet()) {
-            int have = PlayerInv.count(player.getInventory(), e.getKey());
+            // 存量只算 36 格主背包,和逐格闸门、实扣共用同一个口径。此前预检用的是
+            // 41 格(含盔甲与副手)、闸门用 36 格:一整叠木板放在副手时,预检数得到、
+            // 开工放行,而每一格都判缺料,三个零进展遍后以缺料失败,报的 shortfall
+            // 还是空的——玩家看着手里那叠木板一头雾水。
+            int have = mainInventoryCount(e.getKey());
             if (have < e.getValue()) {
                 shortfall.put(e.getKey(), e.getValue() - have);
             }
@@ -346,7 +364,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         updateCompleted();
         drainScaffold();
 
-        if (r.completed() >= r.targets.size()) {
+        if (r.completed() + skippedCells >= r.targets.size()) {
             return finish();
         }
         return switch (phase) {
@@ -535,22 +553,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
 
         boolean occupied = !current.isAir() && !(current.getBlock() instanceof LiquidBlock);
-        if (occupied) {
-            clear(pos);
-            if (isAirTarget(target)) {
-                markObserved(target, true);
-                return desired;
-            }
-            current = player.level().getBlockState(pos);
-        }
-        if (isAirTarget(target)) {
-            markObserved(target, current.isAir() || current.getBlock() instanceof LiquidBlock);
-            return null;
-        }
 
-        // 谁都不豁免——包括她自己:身体占着的格子这遍先放下,下一遍她已经挪开了。
-        // 这是唯一保留的放置前置条件,防的是把方块塞进活物身体里这类真事故。
+        // 先过完所有门禁,再动手破坏。此前顺序是反的:先 clear 掉挡路的方块,再去
+        // 检查活物占位与材料——于是"目标砖用完了"这种最常见的情形下,她会把玩家的
+        // 草坪挖出一条沟,然后一格墙都没砌。她自己站在那格里时更糟:脚下先被挖空。
+        // 破坏是不可撤销的,所以它必须是这一格的最后一道动作,不是第一道。
         if (blockedByEntity(pos, desired)) {
+            // 谁都不豁免——包括她自己:身体占着的格子这遍先放下,下一遍她已经挪开了。
+            // 防的是把方块塞进活物身体里这类真事故。
             return null;
         }
         // 一格不一定只花一件(双层砖两件、雪层按层数),盘点与实扣共用同一个件数
@@ -563,9 +573,29 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return null;
         }
 
+        if (occupied) {
+            clear(pos);
+            if (isAirTarget(target)) {
+                markObserved(target, true);
+                return desired;
+            }
+        }
+        if (isAirTarget(target)) {
+            markObserved(target, current.isAir() || current.getBlock() instanceof LiquidBlock);
+            return null;
+        }
+
         player.level().setBlock(pos, desired, PLACE_FLAGS);
         applyBlockEntityData(pos, desired);
         // 放完给方块一次"我被放下了"的回调:命名牌、告示牌、部分方块实体靠它初始化。
+        //
+        // <p>这一句和上面 PLACE_FLAGS 那段是有张力的:那段刻意不走通知链路,而这条
+        // 回调会把一部分邻居更新引回来——门/床/高草的 setPlacedBy 自己用带更新的
+        // 方式写另一半,活塞的会去判断该不该伸出。这是<b>知情的取舍</b>:另一半反正
+        // 也在图纸里、状态一致,轮到它时比对已成立直接短路;活塞伸出是原版该有的
+        // 行为(我们只禁止把活塞头当建材单独摆)。写在这里是为了让下一个排查
+        // "为什么某些格被改写"的人不必先怀疑 PLACE_FLAGS 失效。
+        //
         // 兜住异常——这条回调本是给"玩家手持物品放置"设计的,我们没有那个上下文,
         // 个别方块会在里面自己炸掉,而那不该让整栋楼停工。
         try {
@@ -584,6 +614,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /**
      * 清掉挡路的方块:生存掉落物品(她清出来的木头该归玩家),免耗材不掉。
+     *
+     * <p>掉落按主手物品结算,而主手此刻拿的是<b>正在砌的那个方块</b>(演出需要),
+     * 不是镐。所以石头与矿石这一类清了不掉东西——"归玩家"只在不需要工具的方块上
+     * 成立。要让它全成立就得在清障前临时换成镐,那会和演出打架,故此处照实记下。
      * 破坏特效走原版 levelEvent,音效与碎屑与玩家自己挖一模一样。
      */
     private void clear(BlockPos pos) {
@@ -668,7 +702,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private TaskState endPass() {
         updateCompleted();
-        if (r.completed() >= r.targets.size()) {
+        if (r.completed() + skippedCells >= r.targets.size()) {
             return finish();
         }
         boolean progressed = r.completed() > passStartCompleted;
@@ -811,18 +845,33 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 }
                 boolean pays = r.consumeMaterials && spawn.item() != Items.AIR;
                 if (pays && !hasItems(spawn.item(), 1, true)) {
-                    passMissing.merge(spawn.item(), 1, Integer::sum);
+                    // 这一步在 finish() 里,passMissing 此后没人读——不记一笔的话
+                    // 摆设静默消失而任务照报成功。
+                    skippedFixtures++;
                     continue;
                 }
-                var created = net.minecraft.world.entity.EntityType.create(spawn.nbt(), level);
+                // 挂件的锚点必须在读档<b>之前</b>写好:它是绝对坐标,读档时就定了,
+                // moveTo 改不到它(那只改视觉位置)。旋转过的图纸里挂件朝向也存在
+                // NBT 里,一并按图纸转过去——直接调 entity.rotate() 会改朝向字段却
+                // 不重算碰撞箱,两者当场脱钩。
+                var nbt = spawn.nbt().copy();
+                BlockPos anchor = BlockPos.containing(spawn.x(), spawn.y(), spawn.z());
+                nbt.putInt("TileX", anchor.getX());
+                nbt.putInt("TileY", anchor.getY());
+                nbt.putInt("TileZ", anchor.getZ());
+                nbt.put("block_pos", net.minecraft.nbt.NbtUtils.writeBlockPos(anchor));
+                if (nbt.contains("facing")) {
+                    Direction facing = Direction.from2DDataValue(nbt.getByte("facing"));
+                    nbt.putByte("facing", (byte) spawn.rotation().rotate(facing).get2DDataValue());
+                }
+                var created = net.minecraft.world.entity.EntityType.create(nbt, level);
                 if (created.isEmpty()) {
                     continue;
                 }
                 var entity = created.get();
                 // 挂画与展示框的朝向存在自己的 NBT 里(facing / TileX,Y,Z),这里只把
                 // 朝向按图纸旋转转过去;旋转过的图纸里挂件可能仍需人工校一下朝向
-                entity.moveTo(spawn.x(), spawn.y(), spawn.z(),
-                        entity.rotate(spawn.rotation()), entity.getXRot());
+                entity.moveTo(spawn.x(), spawn.y(), spawn.z(), entity.getYRot(), entity.getXRot());
                 entity.setUUID(java.util.UUID.randomUUID());   // 同一张图纸建两遍不能撞 UUID
                 level.addFreshEntity(entity);
                 if (pays) {
@@ -898,8 +947,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     (siteMax.getZ() - siteMin.getZ()) / 3.0 + 1.0, 0.0);
         }
         InputDriver.halt(player);
-        if (r.completed() >= r.targets.size()) {
-            note = "all requested cells match";
+        if (r.completed() + skippedCells >= r.targets.size()) {
+            if (skippedFixtures > 0) {
+                note = "short " + skippedFixtures + " fixture(s) (item frames / armour stands"
+                        + " / paintings); everything else is up";
+            } else {
+                note = skippedCells > 0
+                    // 不说"全对上了"——有格子我们主动没动,得说清有几格、为什么
+                    ? "left " + skippedCells + " cell(s) alone: something with contents was "
+                            + "already there, or the spot cannot be built on"
+                        : "all requested cells match";
+            }
         }
         return TaskState.SUCCESS;
     }
@@ -1095,6 +1153,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * <p>按方块类型判,不按"能不能存活"现场试——现场试要有支撑才知道答案,而主趟
      * 正是支撑还没长出来的时候。类型是封闭集合,一次列完;"能不能存活"是开放的,
      * 每来一个新方块就得被咬一次。
+     *
+     * <p>花草(BushBlock)、花盆、雪层这三类是特意加进来的:我们是<b>分遍</b>推进的
+     * 慢速施工,一格放不下去要等到下一遍,来回几次就是几十秒;宁可一开始就把它们
+     * 放到最后一趟。地毯用 CarpetBlock 而不是只管羊毛地毯,苔藓地毯同样要依托。
      */
     public static boolean needsSupport(BlockState state) {
         if (state == null) {
@@ -1264,6 +1326,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             observedCompleted = new LongOpenHashSet();
         }
         int completed = 0;
+        skippedCells = 0;
         BlockGetter view = LoadedOnlyView.of(player.level());
         LoadedOnlyView loadedView = view instanceof LoadedOnlyView v ? v : null;
         for (BuildTaskRecord.Target target : r.targets) {
@@ -1272,14 +1335,24 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (loaded) {
                 BlockState observed = view.getBlockState(pos);
                 if (target.matches(observed)
-                        || blockedByMode(target)
-                        || hopeless(target)
                         || target.desiredState().getBlock() instanceof LiquidBlock
                         || (isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {
                     // 液体口径:不放液体目标、清空型目标也不排水——这两类跳过豁免;
                     // 固体目标被液体淹着不豁免,照放,方块直接顶掉水(原版语义)
                     observedCompleted.add(pos.asLong());
                     completed++;
+                } else if (blockedByMode(target) || hopeless(target)) {
+                    // 注意:这一支要在 damagedCells 之前。玩家把挡路的箱子搬走时,
+                    // 这一格会从"不去动"变成"待办",若走下面那支就会被记成
+                    // "已砌好又被拆了"——而它从头到尾没被建过。
+                    // 这一格我们不会去动:让路的档位不许、玩家的箱子压在那儿、
+                    // 基岩挡着、或者在世界边界之外。它<b>不算建好了</b>——从分母里
+                    // 去掉,单独记一笔。此前是塞进分子冒充完成,于是一栋盖在既有
+                    // 村民房上的图纸能报出"built 812/812(all requested cells
+                    // match)",而床、箱子、营火那七格根本没动过。分母法不会说谎,
+                    // 分子法一定说谎。
+                    skippedCells++;
+                    observedCompleted.remove(pos.asLong());
                 } else if (observedCompleted.remove(pos.asLong())) {
                     // 曾经达标、现在不达标:只可能是外力(玩家拆、苦力怕炸、
                     // 水火漫过来)。下一遍重排会把它收回队列自动补上;这里只记账,
@@ -1304,7 +1377,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return;   // 任务中途被切成免耗材画像:记账即刻停手,别扣真方块
         }
         Inventory inventory = player.getInventory();
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
+        int limit = Math.min(36, inventory.items.size());   // 与存量口径同源
+        for (int i = 0; i < limit; i++) {
             ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty() && stack.is(item)) {
                 stack.shrink(1);
@@ -1320,10 +1394,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private boolean isReplaceable(BlockPos pos, BlockState state) {
         return MovementHelper.isReplaceable(pos.getX(), pos.getY(), pos.getZ(), state,
                 com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest.ALWAYS);
-    }
-
-    private boolean hasItem(Item item) {
-        return mainInventoryCount(item) > 0;
     }
 
     private boolean hasItem(Item item, boolean wholeInventory) {
@@ -1359,6 +1429,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             copy.putInt("z", pos.getZ());
             be.loadWithComponents(copy, player.level().registryAccess());
             be.setChanged();
+            // setChanged 只把区块标脏,不发同步包;而 PLACE_FLAGS 那一包在装数据
+            // <b>之前</b>就已经发出去了,里面还没有方块实体的载荷。不补这一下,
+            // 告示牌的字、旗帜的花纹在客户端是空白的,要等区块重载才出现——正是
+            // 这段代码本来要解决的那个症状。
+            player.level().sendBlockUpdated(pos, placed, placed,
+                    net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
         } catch (RuntimeException ignored) {
             // 数据坏了只影响这一格的内容,方块本身已经放好了,不该让整栋楼停工
         }
@@ -1449,10 +1525,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return mainInventoryCount(item) >= count;
         }
         return hotbarCount(item) >= count;
-    }
-
-    private boolean hasItemOnHotbar(Item item) {
-        return hotbarCount(item) > 0;
     }
 
     private int hotbarCount(Item item) {

@@ -117,37 +117,12 @@ public final class BuildPalette {
         if (no != null) {
             throw new IllegalArgumentException(trimmed + " — " + no);
         }
-        Item item = substituteItem(block);
+        Item item = com.dwinovo.numen.core.task.BuildStates.materialItem(block);
         if (item == Items.AIR && block != Blocks.AIR) {
             throw new IllegalArgumentException(trimmed + " is not a placeable block");
         }
         String label = trimmed.contains(":") ? trimmed.split(":", 2)[1] : trimmed;
         return new Entry(block, item, label, weight);
-    }
-
-    /**
-     * 有些方块没有自己的物品,得拿别的料去做出来。
-     *
-     * <p>耕地和土径是用锄/锹在土上加工出来的,清单上算<b>土</b>;高草与大蕨类没有
-     * 自己的方块物品,是两株矮的长成的,清单上算两株矮的(件数在
-     * {@code Target#materialCount} 里)。
-     *
-     * <p>不列这张表的后果很实在:{@code dirt_path} 是我们自己在装饰指南里教模型铺
-     * 小径用的料,而它 {@code asItem()} 是空气——模型照文档写,工具回一句"不是可
-     * 放置方块"。
-     */
-    private static Item substituteItem(Block block) {
-        if (block instanceof net.minecraft.world.level.block.FarmBlock
-                || block instanceof net.minecraft.world.level.block.DirtPathBlock) {
-            return Items.DIRT;
-        }
-        if (block == Blocks.TALL_GRASS) {
-            return Items.SHORT_GRASS;
-        }
-        if (block == Blocks.LARGE_FERN) {
-            return Items.FERN;
-        }
-        return block.asItem();
     }
 
     /** 只有一种方块吗——单色时可以跳过逐格取样。 */

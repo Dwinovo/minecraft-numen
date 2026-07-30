@@ -55,6 +55,17 @@ public final class BuildStates {
                 break;   // 一块方块只会有一种 age
             }
         }
+        // 蜂巢里攒的蜜是运行态,而且是凭空产出:照抄一个 honey_level=5 的蜂巢,
+        // 玩家拿剪刀直接剪出三个蜂巢。孵化进度同理会提前刷出海龟。
+        if (state.hasProperty(BlockStateProperties.LEVEL_HONEY)) {
+            state = state.setValue(BlockStateProperties.LEVEL_HONEY, 0);
+        }
+        if (state.hasProperty(BlockStateProperties.HATCH)) {
+            state = state.setValue(BlockStateProperties.HATCH, 0);
+        }
+        if (state.hasProperty(BlockStateProperties.STAGE)) {
+            state = state.setValue(BlockStateProperties.STAGE, 0);
+        }
         // 含水是从周围的水推出来的,不是作者定的——照抄等于凭空造水,而我们连
         // 主动放水都不做
         if (state.hasProperty(BlockStateProperties.WATERLOGGED)) {
@@ -70,6 +81,77 @@ public final class BuildStates {
             state = state.setValue(BlockStateProperties.PERSISTENT, true);
         }
         return state;
+    }
+
+    /**
+     * 这个方块该按<b>哪件物品</b>记账——有些方块没有自己的物品,得拿别的料去做。
+     *
+     * <p>耕地和土径是用锄/锹在土上加工出来的,算土;高草与大蕨类没有自己的方块物品,
+     * 是两株矮的长成的,算矮的那个(件数在 {@code Target#materialCount})。
+     *
+     * <p>这张表必须两条入口共用。此前它只挂在工具那条入口上,图纸那条直接取
+     * {@code asItem()}——于是含耕地或土径的社区图纸,目标格的物品是空气:预检永远
+     * 数不到、逐格闸门永远过不去,最后报"还差 air x37"。而 {@code dirt_path} 正是
+     * 我们自己在装饰指南里教着用的料。
+     *
+     * @return 记账用的物品;推不出返回空气(调用方据此整格跳过)
+     */
+    public static net.minecraft.world.item.Item materialItem(
+            net.minecraft.world.level.block.Block block) {
+        if (block instanceof net.minecraft.world.level.block.FarmBlock
+                || block instanceof net.minecraft.world.level.block.DirtPathBlock) {
+            return net.minecraft.world.item.Items.DIRT;
+        }
+        // 花盆:带花的那些没有自己的物品。按空盆记账,盆里那株算搭头——一株樹苗
+        // 值不了什么,而整格丢掉就是院子里少了二十一个花盆,那是看得见的。
+        if (block instanceof net.minecraft.world.level.block.FlowerPotBlock) {
+            return net.minecraft.world.item.Items.FLOWER_POT;
+        }
+        // 作物与藤蔓类:方块态没有物品,种下去的是种子/果实。归一已经把生长阶段
+        // 清成 0,所以这里给的正是"刚种下"该花的那件东西。
+        if (block == Blocks.WHEAT) {
+            return net.minecraft.world.item.Items.WHEAT_SEEDS;
+        }
+        if (block == Blocks.CARROTS) {
+            return net.minecraft.world.item.Items.CARROT;
+        }
+        if (block == Blocks.POTATOES) {
+            return net.minecraft.world.item.Items.POTATO;
+        }
+        if (block == Blocks.BEETROOTS) {
+            return net.minecraft.world.item.Items.BEETROOT_SEEDS;
+        }
+        if (block == Blocks.MELON_STEM || block == Blocks.ATTACHED_MELON_STEM) {
+            return net.minecraft.world.item.Items.MELON_SEEDS;
+        }
+        if (block == Blocks.PUMPKIN_STEM || block == Blocks.ATTACHED_PUMPKIN_STEM) {
+            return net.minecraft.world.item.Items.PUMPKIN_SEEDS;
+        }
+        if (block == Blocks.CAVE_VINES || block == Blocks.CAVE_VINES_PLANT) {
+            return net.minecraft.world.item.Items.GLOW_BERRIES;
+        }
+        if (block == Blocks.SWEET_BERRY_BUSH) {
+            return net.minecraft.world.item.Items.SWEET_BERRIES;
+        }
+        if (block == Blocks.BAMBOO_SAPLING) {
+            return net.minecraft.world.item.Items.BAMBOO;
+        }
+        if (block == Blocks.KELP_PLANT) {
+            return net.minecraft.world.item.Items.KELP;
+        }
+        if (block == Blocks.TRIPWIRE) {
+            return net.minecraft.world.item.Items.STRING;
+        }
+        if (block == Blocks.REDSTONE_WIRE) {
+            return net.minecraft.world.item.Items.REDSTONE;
+        }
+        if (block == Blocks.TALL_GRASS) {
+            return net.minecraft.world.item.Items.SHORT_GRASS;
+        }
+        if (block == Blocks.LARGE_FERN) {
+            return net.minecraft.world.item.Items.FERN;
+        }
+        return block.asItem();
     }
 
     /**
@@ -140,6 +222,15 @@ public final class BuildStates {
         // 躯壳留下,身上的东西剥掉
         for (String carried : new String[]{"Item", "Items", "ArmorItems", "HandItems", "equipment"}) {
             out.remove(carried);
+        }
+        // 挂件(展示框、画)的<b>锚点</b>是一个绝对方块坐标,存在自己的 NBT 里,
+        // 而不是由位置推出来的。不改它的话:实体读档时把锚点设成导出世界那个坐标,
+        // 挂件每 100 刻自查一次"我挂的那面墙还在吗"——查的是源世界的坐标。那儿是空
+        // 的就五秒后掉落(玩家付了一个展示框,墙上什么也没有,地上多个掉落物);
+        // 那儿恰好有方块就留着,但下次区块重载会把它<b>瞬移回源世界坐标</b>。
+        // 这几个键在这里删掉,由落位方自己写。
+        for (String anchor : new String[]{"block_pos", "TileX", "TileY", "TileZ"}) {
+            out.remove(anchor);
         }
         return out;
     }

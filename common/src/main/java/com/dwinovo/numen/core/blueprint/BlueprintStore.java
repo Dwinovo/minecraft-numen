@@ -149,7 +149,11 @@ public final class BlueprintStore {
                     + " cells, exceeding the " + MAX_CELLS + " cap");
         }
         int quarters = Math.floorMod(rotationQuarters, 4);
-        List<BuildTaskRecord.Target> targets = new ArrayList<>(blocks.size());
+        // 按位置去重:多区域的 litematic 可以在同一世界坐标给出两条(常见于一个
+        // 区域填空气、另一个填墙)。不去重的话 targetByPos 只留最后一条而 targets
+        // 两条都在——报价翻倍、分母虚高,而且必有一条永远对不上,最后以"她站不住"
+        // 收场,病因指错方向。工具入口本来就是这么去重的,这条入口漏了。
+        java.util.LinkedHashMap<Long, BuildTaskRecord.Target> byPos = new java.util.LinkedHashMap<>();
         java.util.Map<Long, CompoundTag> beData = new java.util.HashMap<>();
         for (int i = 0; i < blocks.size(); i++) {
             CompoundTag cell = blocks.getCompound(i);
@@ -170,8 +174,15 @@ public final class BlueprintStore {
                 case 3 -> { rx = z; rz = sx - 1 - x; }
                 default -> { rx = x; rz = z; }
             }
+            // 记账用的物品与工具那条入口共用同一张表(耕地/土径算土,高草算矮草)。
+            // 推不出物品的方块(带花的花盆之类)整格跳过——留着只会是一个永远付不起
+            // 的格子:预检数不到空气,逐格闸门也过不去,最后报"还差 air x37"。
+            var payItem = com.dwinovo.numen.core.task.BuildStates.materialItem(state.getBlock());
+            if (payItem == net.minecraft.world.item.Items.AIR && !state.isAir()) {
+                continue;
+            }
             BlockPos world = anchor.offset(rx, y, rz);
-            targets.add(new BuildTaskRecord.Target(state, state.getBlock().asItem(), world,
+            byPos.put(world.asLong(), new BuildTaskRecord.Target(state, payItem, world,
                     state.getBlock().builtInRegistryHolder().key().location().getPath(),
                     null, null, null));
             // 方块实体数据只搬装饰性的那部分(告示牌的字、旗帜的花纹、陶罐的纹样);
@@ -211,6 +222,7 @@ public final class BlueprintStore {
             spawns.add(new BuildTaskRecord.EntitySpawn(
                     anchor.getX() + rx, anchor.getY() + ey, anchor.getZ() + rz, rotation, safe));
         }
+        List<BuildTaskRecord.Target> targets = new ArrayList<>(byPos.values());
         Vec3i size = (quarters % 2 == 0) ? new Vec3i(sx, sy, sz) : new Vec3i(sz, sy, sx);
         return new Loaded(targets, size, beData, spawns);
     }

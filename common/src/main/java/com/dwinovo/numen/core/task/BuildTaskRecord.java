@@ -39,6 +39,10 @@ public final class BuildTaskRecord extends TaskRecord {
      * 两件事的答案不该绑在一起:少砌一格墙是遗憾,清掉一箱子东西是事故。
      *
      * <p>双格方块要连另一半一起看:床的另一半、门的上半,任一半带方块实体就都不动。
+     *
+     * <p>与让路的中间两档一样,当前两条工具入口都发 {@code false}(保护),开放给
+     * 玩家是后面版本的事。留成构造参数而不是硬编码的常量,是为了别把一个恒假的
+     * 分支伪装成可配开关——读代码的人会以为它有别的取值。
      */
     public final boolean replaceBlockEntities;
     public final boolean replaceExisting;
@@ -119,8 +123,17 @@ public final class BuildTaskRecord extends TaskRecord {
                            ReplaceMode replaceMode, boolean replaceExisting,
                            boolean consumeMaterials, boolean allowPartial,
                            Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities) {
+        this(toolCallId, deadlineGameTime, targets, replaceMode, replaceExisting,
+                consumeMaterials, allowPartial, blockEntityData, entities, false);
+    }
+
+    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
+                           ReplaceMode replaceMode, boolean replaceExisting,
+                           boolean consumeMaterials, boolean allowPartial,
+                           Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities,
+                           boolean replaceBlockEntities) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
-        this.replaceBlockEntities = false;
+        this.replaceBlockEntities = replaceBlockEntities;
         this.entities = List.copyOf(entities);
         this.targets = List.copyOf(targets);
         this.replaceMode = replaceMode;
@@ -271,6 +284,24 @@ public final class BuildTaskRecord extends TaskRecord {
             }
             if (desiredState.getBlock() instanceof net.minecraft.world.level.block.SeaPickleBlock) {
                 return desiredState.getValue(BlockStateProperties.PICKLES);
+            }
+            // 一格四根蜡烛就是四根:少收三根等于白送三根
+            if (desiredState.hasProperty(BlockStateProperties.CANDLES)) {
+                return desiredState.getValue(BlockStateProperties.CANDLES);
+            }
+            // 藤蔓与发光地衣按贴了几个面算:一格贴三面是三份料
+            if (desiredState.is(net.minecraft.world.level.block.Blocks.VINE)
+                    || desiredState.is(net.minecraft.world.level.block.Blocks.GLOW_LICHEN)) {
+                int faces = 0;
+                for (var side : new net.minecraft.world.level.block.state.properties.BooleanProperty[]{
+                        BlockStateProperties.NORTH, BlockStateProperties.EAST,
+                        BlockStateProperties.SOUTH, BlockStateProperties.WEST,
+                        BlockStateProperties.UP, BlockStateProperties.DOWN}) {
+                    if (desiredState.hasProperty(side) && desiredState.getValue(side)) {
+                        faces++;
+                    }
+                }
+                return Math.max(1, faces);
             }
             // 高草与大蕨类没有自己的方块物品,是两株矮的长成的(替代料见 BuildPalette)
             if (desiredState.is(net.minecraft.world.level.block.Blocks.TALL_GRASS)
