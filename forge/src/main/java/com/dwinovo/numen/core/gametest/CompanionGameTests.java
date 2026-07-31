@@ -27,7 +27,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * 同伴行为的游戏内自动化用例(无头 gameTestServer 运行,{@code gradlew :forge:runGameTestServer}):
+ * 同伴行为的游戏内自动化用例(无头 gameTestServer 运行,{@code gradlew :forge:GameTestServer}):
  * 在结构模板圈出的场地里,用真实的生成路径拉起同伴、经真实任务队列下发指令,按 tick 轮询断言
  * 世界状态——退出码 = 失败用例数,可直接进 CI。
  *
@@ -502,13 +502,11 @@ public class CompanionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_banner", new BlockPos(2, 2, 2), true);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 7));
         var patterns = new net.minecraft.nbt.ListTag();
-        var one = new net.minecraft.nbt.CompoundTag();
-        one.putString("color", "red");
-        one.putString("pattern", "minecraft:stripe_top");
-        patterns.add(one);
+        patterns.add(bannerLayer(net.minecraft.world.level.block.entity.BannerPatterns.STRIPE_TOP,
+                net.minecraft.world.item.DyeColor.RED));
         var bannerData = new net.minecraft.nbt.CompoundTag();
         bannerData.putString("id", "minecraft:banner");
-        bannerData.put("patterns", patterns);
+        bannerData.put("Patterns", patterns);
 
         var targets = List.of(new BuildTaskRecord.Target(Blocks.WHITE_BANNER, Items.WHITE_BANNER,
                 at, "banner", null, null, null));
@@ -525,7 +523,7 @@ public class CompanionGameTests {
             helper.assertTrue(be instanceof net.minecraft.world.level.block.entity.BannerBlockEntity,
                     "banner has no block entity");
             var saved = be.saveWithoutMetadata();
-            helper.assertTrue(saved.contains("patterns"),
+            helper.assertTrue(saved.contains("Patterns"),
                     "the blueprint's banner pattern must survive placement, got " + saved);
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -857,18 +855,16 @@ public class CompanionGameTests {
 
         // 一面绣了花纹的旗帜:方块实体里那份 patterns 该原样进白名单
         var patterns = new net.minecraft.nbt.ListTag();
-        var layer = new net.minecraft.nbt.CompoundTag();
-        layer.putString("pattern", "minecraft:stripe_top");
-        layer.putString("color", "red");
-        patterns.add(layer);
+        patterns.add(bannerLayer(net.minecraft.world.level.block.entity.BannerPatterns.STRIPE_TOP,
+                net.minecraft.world.item.DyeColor.RED));
         var bannerData = new net.minecraft.nbt.CompoundTag();
         bannerData.putString("id", "minecraft:banner");
-        bannerData.put("patterns", patterns);
+        bannerData.put("Patterns", patterns);
 
         BlockState banner = Blocks.WHITE_BANNER.defaultBlockState();
         var safeBanner = com.dwinovo.numen.core.task.BuildStates
                 .safeBlockEntityData(banner, bannerData);
-        helper.assertTrue(safeBanner != null && safeBanner.contains("patterns"),
+        helper.assertTrue(safeBanner != null && safeBanner.contains("Patterns"),
                 "a banner's patterns are part of the design and must be carried over");
 
         // 而料要收的是"带着这些花纹的那面旗帜",不是一面白旗
@@ -2682,4 +2678,23 @@ public class CompanionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /**
+     * 本版本的旗帜方块实体数据:花纹在 {@code Patterns} 下,每层是
+     * {@code Color}(染料序号)+ {@code Pattern}(花纹的短哈希名)。
+     *
+     * <p>短哈希名与染料序号都<b>问注册表要</b>,不在测试里写死一张对照表——
+     * 名字随版本变,注册表不会。
+     */
+    private static net.minecraft.nbt.CompoundTag bannerLayer(
+            net.minecraft.resources.ResourceKey<
+                    net.minecraft.world.level.block.entity.BannerPattern> pattern,
+            net.minecraft.world.item.DyeColor color) {
+        var layer = new net.minecraft.nbt.CompoundTag();
+        layer.putString("Pattern", net.minecraft.core.registries.BuiltInRegistries.BANNER_PATTERN
+                .get(pattern).getHashname());
+        layer.putInt("Color", color.getId());
+        return layer;
+    }
+
 }
