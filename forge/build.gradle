@@ -87,6 +87,22 @@ tasks.matching { it.name == 'GameTestServer' }.configureEach {
                 'sync-chunk-writes=false',
         ].join('\n') + '\n'
         new File(runDir, 'eula.txt').text = 'eula=true\n'
+
+        // 用例模板放进存档的 generated 目录。本代的 gametest 模板一律问
+        // StructureTemplateManager 要,它认三个来源:资源包、存档 generated 目录,
+        // 以及"测试模板目录"——而最后那个只在 SharedConstants.IS_RUNNING_IN_IDE
+        // 为真时才登记,无头跑批里它是假的,于是 numen:floor16 一个都找不到。
+        // 上一代 StructureUtils 自己从测试模板目录读盘,不看这个开关,所以没这一出。
+        //
+        // 走 generated 目录而不是塞进 src/main/resources:模板是测试夹具,不该跟着
+        // 发布包进玩家的数据包命名空间。这里只喂跑批用的那份存档。
+        def genDir = new File(runDir, 'world/generated/numen/structures')
+        genDir.mkdirs()
+        file('gameteststructures').listFiles()?.each { f ->
+            if (f.name.endsWith('.nbt')) {
+                new File(genDir, f.name).bytes = f.bytes
+            }
+        }
     }
 }
 
