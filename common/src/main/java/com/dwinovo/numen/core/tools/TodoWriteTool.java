@@ -25,7 +25,7 @@ public final class TodoWriteTool implements NumenTool {
     @Override
     public String description() {
         return """
-                Maintain a structured todo list for multi-step work (3+ distinct steps or several sub-tasks); skip it for single actions and chit-chat. Each call replaces the whole list. Keep exactly ONE item in_progress while work remains; mark completed only after the work is actually done (never on intent), in real time rather than batched; if blocked, keep it in_progress and add a follow-up describing the blocker.""";
+                Maintain the durable active plan for multi-step work (3+ distinct physical phases or several sub-tasks); skip single actions and chit-chat. Call it BEFORE the first physical step, then immediately after every verified result/task_finished to mark the finished phase and advance exactly ONE item to in_progress. Each call replaces the whole list. Never reset completed items on "continue/resume", never mark work complete on intent/dispatch, and never leave a just-completed background step in_progress. If blocked, keep it in_progress and add a concrete recovery item.""";
     }
 
     @Override

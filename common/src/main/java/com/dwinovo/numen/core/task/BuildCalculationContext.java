@@ -23,7 +23,6 @@ final class BuildCalculationContext extends CalculationContext {
     private final Map<Long, BuildTaskRecord.Target> activeTargets;
     private final Set<BlockState> availableStates;
     private final boolean replaceExisting;
-
     BuildCalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                             boolean safeForThreadedUse, LongSet sacred, LongSet deniedPlace,
                             Map<Long, BuildTaskRecord.Target> activeTargets,
@@ -89,7 +88,18 @@ final class BuildCalculationContext extends CalculationContext {
         BuildTaskRecord.Target target = activeTargets.get(key);
         if (target != null) {
             if (target.matches(current)) {
-                return NavSettings.get().breakCorrectBlockPenaltyMultiplier;
+                // 施工期拆已建对的格子收重罚:只有被自己的作品困住(封顶后人在
+                // 屋里、门窗未通)这类无路可走的处境才值得付——玩家也是拆一块
+                // 出去再补上。补墙由下一遍施工完成;游标模型没有即时回填反射,
+                // 不存在逐 tick 拆补拉锯。交付后的过路(回撤)按普通格子计价。
+                //
+                // 罚金必须是"贵得不会顺手拆",而不是"贵到活路等于没有":逐层
+                // 上盖时她本来就站在自己盖的楼板底下,唯一的出路就是拆一块钻
+                // 出去。定价过高时 A* 宁可绕远,而屋里根本没有那么多远可绕,
+                // 于是搜不出任何出路,只能返回半程路径让她原地打转——实测整栋
+                // 房子就卡死在这里。取值参照:圆石徒手约十余刻,乘 8 约合绕行
+                // 百格,足以让任何真实通路胜出,又不至于把"拆一块"排除在外。
+                return 8.0;
             }
             return replaceExisting ? 1.0 : COST_INF;
         }
