@@ -61,6 +61,35 @@ minecraft.runs.configureEach {
     property 'numen.gametest.structures', file('gameteststructures').absolutePath
 }
 
+// 跑批世界必须是<b>超平坦</b>,而且每次从头生成。
+//
+// 本 loader 的无头跑批入口是普通专用服务器,不建世界就默认开一个正常主世界:
+// 用例场地被埋在深板岩里,四周还散布着天然矿脉。而用例里"种四块金矿石然后
+// 让她挖掉"这类断言默认场地周围没有同种方块——搜索半径一撑开就够到天然矿,
+// 免耗材画像又允许垫柱上行,于是同伴垫着方块爬五十格去挖别人的矿,种下的
+// 那四块一块没动。高版本的跑批入口自带超平坦世界,不会碰到这一出。
+//
+// 这里把世界配平,而不是去改用例:场地悬空、没有天然矿、没有结构,断言才
+// 是在测它自己声称要测的东西。level.dat 会记住生成器,所以旧世界一并删掉。
+tasks.matching { it.name == 'GameTestServer' }.configureEach {
+    doFirst {
+        def runDir = file('runs/gametestserver')
+        runDir.mkdirs()
+        delete fileTree(dir: new File(runDir, 'world'))
+        new File(runDir, 'server.properties').text = [
+                'level-type=minecraft\\:flat',
+                'generate-structures=false',
+                'level-seed=numen',
+                'spawn-monsters=false',
+                'spawn-npcs=false',
+                'spawn-animals=false',
+                'online-mode=false',
+                'sync-chunk-writes=false',
+        ].join('\n') + '\n'
+        new File(runDir, 'eula.txt').text = 'eula=true\n'
+    }
+}
+
 // Package this module's own datagen output (`./gradlew :forge:Data` writes it there).
 sourceSets.main.resources.srcDir 'src/generated/resources'
 sourceSets.main.resources.exclude '.cache/**'
