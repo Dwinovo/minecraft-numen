@@ -89,6 +89,24 @@ class ProtectionPinsTest {
         Field foodData = Player.class.getDeclaredField("foodData");
         foodData.setAccessible(true);
         foodData.set(p, new FoodData());
+        // 能力位与血量:成本函数现在也读这两样(免耗材画像恒有耗材、无饥饿画像
+        // 不受饱食度门限,落差上限按血量反推),空壳里它们都是 null。和背包、饥饿
+        // 数据一样按真实对象注进去,断言本身一个字没动。
+        Field abilities = Player.class.getDeclaredField("abilities");
+        abilities.setAccessible(true);
+        abilities.set(p, new net.minecraft.world.entity.player.Abilities());   // 默认生存画像
+        Field entityData = net.minecraft.world.entity.Entity.class.getDeclaredField("entityData");
+        entityData.setAccessible(true);
+        net.minecraft.network.syncher.SynchedEntityData synched =
+                new net.minecraft.network.syncher.SynchedEntityData(p);
+        Field healthId = net.minecraft.world.entity.LivingEntity.class
+                .getDeclaredField("DATA_HEALTH_ID");
+        healthId.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        net.minecraft.network.syncher.EntityDataAccessor<Float> healthKey =
+                (net.minecraft.network.syncher.EntityDataAccessor<Float>) healthId.get(null);
+        synched.define(healthKey, 20.0f);
+        entityData.set(p, synched);   // 满血
         p.getInventory().items.set(0, new ItemStack(Items.DIRT));
         return p;
     }

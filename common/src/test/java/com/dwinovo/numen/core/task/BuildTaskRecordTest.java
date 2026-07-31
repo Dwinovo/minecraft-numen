@@ -117,6 +117,24 @@ class BuildTaskRecordTest {
         Field foodData = Player.class.getDeclaredField("foodData");
         foodData.setAccessible(true);
         foodData.set(p, new FoodData());
+        // 能力位与血量:成本函数现在也读这两样(免耗材画像恒有耗材、无饥饿画像
+        // 不受饱食度门限,落差上限按血量反推),空壳里它们都是 null。和背包、饥饿
+        // 数据一样按真实对象注进去,断言本身一个字没动。
+        Field abilities = Player.class.getDeclaredField("abilities");
+        abilities.setAccessible(true);
+        abilities.set(p, new net.minecraft.world.entity.player.Abilities());   // 默认生存画像
+        Field entityData = net.minecraft.world.entity.Entity.class.getDeclaredField("entityData");
+        entityData.setAccessible(true);
+        net.minecraft.network.syncher.SynchedEntityData synched =
+                new net.minecraft.network.syncher.SynchedEntityData(p);
+        Field healthId = net.minecraft.world.entity.LivingEntity.class
+                .getDeclaredField("DATA_HEALTH_ID");
+        healthId.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        net.minecraft.network.syncher.EntityDataAccessor<Float> healthKey =
+                (net.minecraft.network.syncher.EntityDataAccessor<Float>) healthId.get(null);
+        synched.define(healthKey, 20.0f);
+        entityData.set(p, synched);   // 满血
         p.getInventory().items.set(0, new net.minecraft.world.item.ItemStack(Blocks.OBSIDIAN.asItem()));
         return p;
     }
@@ -156,7 +174,13 @@ class BuildTaskRecordTest {
                 Blocks.OAK_STAIRS.asItem(), BlockPos.ZERO, "oak_stairs", Direction.NORTH, null, null);
 
         assertTrue(target.matches(desired));
-        assertFalse(target.matches(desired.setValue(BlockStateProperties.WATERLOGGED, true)));
+        // 朝向是作者定的姿态,逐项比对
+        assertFalse(target.matches(
+                desired.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)));
+        // 含水不是:它由周围的水推出来,对账口径里属于世界自己算的那一类。
+        // 楼梯放好后旁边淹了水就判"没建对",只会拆了重放、再被淹,来回死转。
+        assertTrue(target.matches(desired.setValue(BlockStateProperties.WATERLOGGED, true)),
+                "waterlogged is derived, not authored — it must not fail the reconciliation");
     }
 
     @Test
@@ -187,13 +211,16 @@ class BuildTaskRecordTest {
     void buildIgnoreDirectionDoesNotIgnoreUnlistedProperties() {
         assumeTrue(booted, "Minecraft 引导不可用,跳过建造规则钉桩");
         NavSettings.get().buildIgnoreDirection = true;
-        BlockState desired = Blocks.OAK_STAIRS.defaultBlockState()
-                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH)
-                .setValue(BlockStateProperties.WATERLOGGED, false);
+        // 半砖的上下半是作者定的姿态,但不在"朝向"那一组里:buildIgnoreDirection
+        // 放过的只有朝向,别的作者属性照比。(此前这里拿含水当反例,而含水本就是
+        // 世界算出来的派生属性,对账口径里两边都不看。)
+        BlockState desired = Blocks.SMOOTH_STONE_SLAB.defaultBlockState()
+                .setValue(BlockStateProperties.SLAB_TYPE, SlabType.BOTTOM);
         BuildTaskRecord.Target target = new BuildTaskRecord.Target(desired,
-                Blocks.OAK_STAIRS.asItem(), BlockPos.ZERO, "oak_stairs", null, null, null);
+                Blocks.SMOOTH_STONE_SLAB.asItem(), BlockPos.ZERO, "smooth_stone_slab",
+                null, null, null);
 
-        assertFalse(target.matches(desired.setValue(BlockStateProperties.WATERLOGGED, true)));
+        assertFalse(target.matches(desired.setValue(BlockStateProperties.SLAB_TYPE, SlabType.TOP)));
     }
 
     @Test
@@ -229,7 +256,10 @@ class BuildTaskRecordTest {
 
         assertEquals(0.0, ctx.costOfPlacingAt(pos.getX(), pos.getY(), pos.getZ(),
                 Blocks.AIR.defaultBlockState()));
-        assertEquals(NavSettings.get().breakCorrectBlockPenaltyMultiplier,
+        // 拆已经建对的格子收固定重罚 8×:贵得不会顺手拆,又没贵到"活路等于没有"
+        // ——逐层上盖时她本来就站在自己盖的楼板底下,唯一的出路就是拆一块钻出去,
+        // 定价过高时 A* 只会搜不出任何出路、原地打转。
+        assertEquals(8.0,
                 ctx.breakCostMultiplierAt(pos.getX(), pos.getY(), pos.getZ(),
                         Blocks.OBSIDIAN.defaultBlockState()));
         assertEquals(1.0, ctx.breakCostMultiplierAt(pos.getX(), pos.getY(), pos.getZ(),
