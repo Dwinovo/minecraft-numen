@@ -43,14 +43,26 @@ minecraft {
             taskName 'Data'
             mods { modDataRun { source sourceSets.main } }
         }
+        gameTestServer {
+            workingDirectory file('runs/gametestserver')
+            ideaModule "${rootProject.name}.${project.name}.main"
+            taskName 'GameTestServer'
+            mods { modGameTestServerRun { source sourceSets.main } }
+            property 'mixin.env.disableRefMap', 'true'
+            // 只跑本模组命名空间下的用例,别把原版那几百个也拖进来。
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
     }
 }
 
-// Package the Fabric module's datagen output: both loaders' tag providers wrap the same
-// common ModBlockTagData/ModItemTagData, so the JSON is identical. Booting :forge:Data would
-// drag the whole mod set (incl. numen_api) into the FG6 dev runtime, which fg.deobf cannot
-// resolve from our raw maven - one :fabric:runDatagen feeds both jars instead.
-sourceSets.main.resources.srcDir '../fabric/src/generated/resources'
+// 所有运行配置都指向仓库内的 SNBT 模板目录:无头跑批用,开发客户端里
+// /test run <用例> 现场围观也用(见 CompanionGameTests 静态块)。
+minecraft.runs.configureEach {
+    property 'numen.gametest.structures', file('gameteststructures').absolutePath
+}
+
+// Package this module's own datagen output (`./gradlew :forge:Data` writes it there).
+sourceSets.main.resources.srcDir 'src/generated/resources'
 sourceSets.main.resources.exclude '.cache/**'
 
 // Bundle numen-api into core's Forge jar (Jar-in-Jar).
@@ -68,6 +80,16 @@ dependencies {
     // loader attribute resolves). compileOnly: the api classes are provided at
     // runtime by the bundled numen-api mod, not by core's own jar.
     compileOnly "com.dwinovo.numen:numen-api-forge-1.20.2:0.0.8-SNAPSHOT"
+    // Dev-runtime copy of the engine mod: core's mods.toml marks numen_api as a
+    // mandatory dependency, so FML refuses to boot any run (incl. the Data run and the
+    // gametest server) without it on the classpath. fg.deobf remaps the published SRG jar
+    // back to the official names the dev runtime uses. transitive=false: the api's
+    // published metadata carries its own dev-mapped forge dependency
+    // (net.minecraftforge:forge:*_mapped_official_*), which no repo can serve —
+    // the loader is already on the classpath here anyway.
+    runtimeOnly fg.deobf("com.dwinovo.numen:numen-api-forge-1.20.2:0.0.8-SNAPSHOT") {
+        transitive = false
+    }
     // Bundle the Forge build of the api into META-INF/jarjar/ so one file ships both mods.
     // transitive=false: only the api jar is nested — its Forge/Minecraft deps are provided
     // by the loader at runtime and must NOT be embedded (that would bloat the jar to ~94MB).
