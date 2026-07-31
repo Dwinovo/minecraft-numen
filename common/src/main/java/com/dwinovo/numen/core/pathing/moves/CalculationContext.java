@@ -75,6 +75,7 @@ public class CalculationContext {
     public int minFallHeight;
     public int maxFallHeightNoWater;
     public final int maxFallHeightBucket;
+    public final double fallDamageCostPerPoint;
     /** 水中行走单格成本(水下速附魔按系数折向平走速度)。 */
     public final double waterWalkSpeed;
     public final double breakBlockAdditionalCost;
@@ -117,11 +118,18 @@ public class CalculationContext {
         this.sacred = sacred;
         this.deniedPlace = deniedPlace;
         this.toolSet = new ToolSet(player);
-        this.hasThrowaway = settings.allowPlace && hasGenericThrowaway(player, settings);
+        // 免耗材画像(创造)恒有耗材:执行层选料时会自动补一组(伸手进创造
+        // 物品栏的代码版),规划器因此敢想所有需要垫方块的路线——不然空手
+        // 创造同伴会挖坑出不来(离目标 2 格报 NO-PATH)。
+        this.hasThrowaway = settings.allowPlace && (hasGenericThrowaway(player, settings)
+                || com.dwinovo.numen.core.task.WorkProfile.of(player).freeMaterials());
         this.hasWaterBucket = settings.allowWaterBucketFall
                 && hotbarHasWaterBucket(player)
                 && player.level().dimension() != Level.NETHER;
-        this.canSprint = settings.allowSprint && player.getFoodData().getFoodLevel() > 6;
+        // 无饥饿画像(创造)不受饱食度门限——否则 food≤6 时被切创造会永久锁死疾跑
+        this.canSprint = settings.allowSprint
+                && (!com.dwinovo.numen.core.task.WorkProfile.of(player).hasHunger()
+                        || player.getFoodData().getFoodLevel() > 6);
         this.placeBlockCost = settings.blockPlacementPenalty;
         this.allowBreak = settings.allowBreak;
         this.allowBreakAnyway = List.copyOf(settings.allowBreakAnyway());
@@ -136,8 +144,13 @@ public class CalculationContext {
         this.allowDiagonalAscend = settings.allowDiagonalAscend;
         this.allowDownward = settings.allowDownward;
         this.minFallHeight = 3;
-        this.maxFallHeightNoWater = settings.maxFallHeightNoWater;
+        // 落差上限不写死:摔不死的高度都可以是路,只是疼。原版摔伤 = 高度-3(半心/格),
+        // 按当前血量留 3 颗心(6 点)保命余量反推可承受高度;设置值兜底为下限。
+        int survivableFall = 3 + Math.max(0, (int) ((player.getHealth() - 6.0f) / 1.0f));
+        this.maxFallHeightNoWater = Math.min(12,
+                Math.max(settings.maxFallHeightNoWater, survivableFall));
         this.maxFallHeightBucket = settings.maxFallHeightBucket;
+        this.fallDamageCostPerPoint = settings.fallDamageCostPerPoint;
         this.waterWalkSpeed = computeWaterWalkSpeed(player);
         this.breakBlockAdditionalCost = settings.blockBreakAdditionalPenalty;
         this.backtrackCostFavoringCoefficient = settings.backtrackCostFavoringCoefficient;

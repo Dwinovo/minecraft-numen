@@ -101,6 +101,7 @@ final class MovementPlacement {
     static PlaceResult attemptToPlaceABlock(MovementState state, ServerPlayer player,
                                             BlockPos placeAt, boolean preferDown, boolean wouldSneak,
                                             float currentYaw, float currentPitch) {
+        BuildPlacementRegistry.recordScaffold(player, placeAt);
         Level level = player.level();
         double reach = NavSettings.get().blockReachDistance;
         Vec3 eye = eyePosition(player, wouldSneak);
@@ -193,20 +194,43 @@ final class MovementPlacement {
         return PlaceResult.NO_OPTION;
     }
 
+    // 选料只有一个出口:先按图纸挑精确材料(施工中的格子值得放对),挑不出就
+    // 退回通用垫路料。两条路最终都落到 selectThrowaway——免耗材画像的自动补料
+    // 那只手就长在那里,于是"背包空着也能垫路"对两条路同时成立。
+    //
+    // 这条汇流是必需的,不是顺手:规划器按画像位认定"有料可垫",执行器若在某
+    // 条支路上选不出料就报 UNREACHABLE,两边对同一动作各执一词,而重新规划的
+    // 输入分毫未变——必然算出同一条路、再次夭折,规划器与执行器能对着掐到天
+    // 荒地老。可行性判据必须只有一处真源。
     static boolean selectForLocation(ServerPlayer player, BlockPos placeAt, boolean select) {
-        if (BuildPlacementRegistry.hasTarget(player, placeAt)) {
-            return BuildPlacementRegistry.selectForLocation(player, placeAt, select);
+        if (BuildPlacementRegistry.hasTarget(player, placeAt)
+                && BuildPlacementRegistry.selectForLocation(player, placeAt, select)) {
+            return true;
         }
         return selectThrowaway(player, select);
     }
 
     static boolean selectForLocation(ServerPlayer player, BlockPos placeAt, BlockHitResult hit,
                                      float yaw, float pitch, boolean select) {
-        if (BuildPlacementRegistry.hasTarget(player, placeAt)) {
-            return BuildPlacementRegistry.selectForLocation(player, placeAt, hit, yaw, pitch, select);
+        if (BuildPlacementRegistry.hasTarget(player, placeAt)
+                && BuildPlacementRegistry.selectForLocation(player, placeAt, hit, yaw, pitch, select)) {
+            return true;
         }
         return selectThrowaway(player, select);
     }
+    /** 全背包+副手里是否已有任一耗材(自动补货前的查重)。 */
+    private static boolean hasAnyThrowaway(ServerPlayer player, List<Item> acceptable) {
+        Inventory inv = player.getInventory();
+        for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (!s.isEmpty() && acceptable.contains(s.getItem())) {
+                return true;
+            }
+        }
+        ItemStack off = player.getOffhandItem();
+        return !off.isEmpty() && acceptable.contains(off.getItem());
+    }
+
     /** 方块碰撞形状上按 (mx,my,mz) 比例取点;空形状退回满格方块。 */
     private static Vec3 shapePoint(Level level, BlockPos pos, double mx, double my, double mz) {
         net.minecraft.world.phys.shapes.VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
@@ -234,6 +258,17 @@ final class MovementPlacement {
         List<Item> acceptable = NavSettings.get().acceptableThrowawayItems();
         Inventory inventory = player.getInventory();
         boolean allowInventory = NavSettings.get().allowInventory;
+        // 免耗材画像的"伸手进创造物品栏":背包连一块耗材都没有时自动补一组
+        // 泥土——原版创造玩家放置也得先手持方块,真人是从创造栏抓,假玩家
+        // 没有那个 GUI,这里就是那只手。生存画像不进此分支。
+        if (player.getAbilities().instabuild && !hasAnyThrowaway(player, acceptable)) {
+            ItemStack restock = new ItemStack(net.minecraft.world.item.Items.DIRT, 64);
+            if (!inventory.add(restock)) {
+                return false;   // 背包满还没耗材:罕见,按无料处理
+            }
+            com.dwinovo.numen.core.Constants.LOG.debug(
+                    "[numen-place] 免耗材画像自动补脚手架泥土 ×64");
+        }
         for (Item item : acceptable) {
             for (int i = 0; i < 9; i++) {
                 ItemStack stack = inventory.getItem(i);

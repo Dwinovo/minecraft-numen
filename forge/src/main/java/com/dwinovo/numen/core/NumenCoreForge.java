@@ -34,6 +34,9 @@ public class NumenCoreForge {
         MinecraftForge.EVENT_BUS.addListener(NumenCoreForge::onServerTickPost);
         // Release pathfinding chunk-ref snapshots when the server stops (don't pin an old world).
         MinecraftForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> PathCaches.dropAll());
+        // Drop the shared target-block index with the world it describes.
+        MinecraftForge.EVENT_BUS.addListener(
+                (ServerStoppedEvent e) -> com.dwinovo.numen.core.scan.TargetIndex.dropAll());
         // Debug verbs merged into the /numen root registered by the engine mod.
         MinecraftForge.EVENT_BUS.addListener((net.minecraftforge.event.RegisterCommandsEvent e) ->
                 com.dwinovo.numen.core.debug.DebugCommands.register(e.getDispatcher()));
@@ -65,6 +68,8 @@ public class NumenCoreForge {
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         ScanBlocksJob.tick(server);
         PathCaches.serverTick(server);
+        // Periodic eviction sweep for the target-block index (entries of unloaded chunks).
+        com.dwinovo.numen.core.scan.TargetIndex.serverTick(server);
         // Debug particles for pathing state, sent only to players with debug on.
         com.dwinovo.numen.core.debug.PathDebugRenderer.serverTick(server);
     }
