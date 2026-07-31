@@ -31,20 +31,27 @@ import java.util.UUID;
  * 在结构模板圈出的场地里,用真实的生成路径拉起同伴、经真实任务队列下发指令,按 tick 轮询断言
  * 世界状态——退出码 = 失败用例数,可直接进 CI。
  *
- * <p>结构模板以 SNBT 文本存于仓库 {@code forge/gameteststructures/}(运行配置经系统属性
- * {@code numen.gametest.structures} 指路),不提交二进制 .nbt。注意两件事:模板必须是
- * gametest 的"打包" SNBT 形态(palette 为字符串、方块表叫 {@code data}——裸结构 NBT 形态
- * 会被 {@code NbtUtils.unpackStructureTemplate} 静默丢弃,一块不放);且模板方块落位在
- * {@code 测试原点+1+rel},而 {@link GameTestHelper#absolutePos} 只加 {@code rel}——引用
- * 模板内 rel y 的格子时要再 +1。
+ * <p>结构模板以 SNBT 文本存于仓库 {@code forge/gameteststructures/},同目录另存一份同名
+ * {@code .nbt}(由 SNBT 经 {@code NbtUtils.snbtToStructure} 转出,SNBT 仍是可读的真源)。
+ * 本代模板一律问 {@code StructureTemplateManager} 要,它认三个来源:资源包、存档的
+ * {@code generated} 目录、以及"测试模板目录"——而最后那个只在
+ * {@code SharedConstants.IS_RUNNING_IN_IDE} 为真时才登记,无头跑批里它是假的。所以跑批前
+ * 由 {@code build.gradle} 把 {@code .nbt} 喂进存档的 {@code generated/numen/structures/}
+ * (永远登记的那个来源)。系统属性 {@code numen.gametest.structures} 仍然指着这个目录,
+ * 但已只用于本类自己按路径读夹具(如日式小屋图纸),不再是模板的加载入口。
+ *
+ * <p>注意两件事:SNBT 必须是 gametest 的"打包"形态(palette 为字符串、方块表叫
+ * {@code data}——裸结构 NBT 形态会被 {@code NbtUtils.unpackStructureTemplate} 静默丢弃,
+ * 一块不放);且模板方块落位在 {@code 测试原点+1+rel},而 {@link GameTestHelper#absolutePos}
+ * 只加 {@code rel}——引用模板内 rel y 的格子时要再 +1。
  *
  * <p><b>模板名为什么写成 {@code numen:xxx}</b>:本代加载器把批次名与模板名交给同一套
  * 前缀逻辑——{@link GameTestHolder} 的值会同时前缀到两者上。批次名<b>必须</b>带上这个前缀,
  * 无头跑批靠 {@code forge.enabledGameTestNamespaces} 按批次名前缀筛选,不带就一个用例都不跑;
- * 而模板名一旦被前缀成 {@code numen.floor16},就会去找 {@code numen.floor16.snbt} 这个并不
- * 存在的文件。加载器对<b>含冒号</b>的模板名直接按原样当完整路径用、跳过前缀,取其
- * {@code ResourceLocation} 的 path 段找文件——写成 {@code numen:floor16} 正好一次满足两边:
- * 批次照常前缀,模板落回 {@code floor16.snbt}。
+ * 而模板名一旦被前缀成 {@code numen.floor16},当成 {@code ResourceLocation} 解析就是
+ * {@code minecraft:numen.floor16},根本不存在。加载器对<b>含冒号</b>的模板名直接按原样当
+ * 完整路径用、跳过前缀——写成 {@code numen:floor16} 正好一次满足两边:批次照常前缀,模板
+ * 解析成 {@code numen:floor16},落到 {@code generated/numen/structures/floor16.nbt}。
  */
 @GameTestHolder(Constants.MOD_ID)
 public class CompanionGameTests {
