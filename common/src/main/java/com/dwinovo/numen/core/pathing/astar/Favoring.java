@@ -39,8 +39,7 @@ public final class Favoring {
 
     /**
      * 带规避球的构造:先按 backtrack 折扣建表,再把每个规避球叠乘进去
-     * (球内已有值乘以 coefficient)。对应 Baritone Favoring(ctx, previous,
-     * context) 的双源构造。
+     * (球内已有值乘以 coefficient)——回溯折扣与规避惩罚两个来源合成一张表。
      */
     public Favoring(NavPath previous, CalculationContext context, List<Avoidance> avoidances) {
         this(previous, context.backtrackCostFavoringCoefficient);
