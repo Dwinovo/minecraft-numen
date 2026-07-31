@@ -50,7 +50,22 @@ minecraft {
             // names too, so skipping the refmap makes them apply directly.
             property 'mixin.env.disableRefMap', 'true'
         }
+        gameTestServer {
+            workingDirectory file('runs/gametestserver')
+            ideaModule "${rootProject.name}.${project.name}.main"
+            taskName 'GameTestServer'
+            mods { modGameTestServerRun { source sourceSets.main } }
+            property 'mixin.env.disableRefMap', 'true'
+            // 只跑本模组命名空间下的用例,别把原版那几百个也拖进来。
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
     }
+}
+
+// 所有运行配置都指向仓库内的 SNBT 模板目录:无头跑批用,开发客户端里
+// /test run <用例> 现场围观也用(见 CompanionGameTests 静态块)。
+minecraft.runs.configureEach {
+    property 'numen.gametest.structures', file('gameteststructures').absolutePath
 }
 
 // Package this module's own datagen output (`./gradlew :forge:Data` writes it there).

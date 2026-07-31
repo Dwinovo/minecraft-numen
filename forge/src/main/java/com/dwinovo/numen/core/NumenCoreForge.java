@@ -31,6 +31,13 @@ public class NumenCoreForge {
     public NumenCoreForge() {
         NumenCore.init();
 
+        // 游戏内用例的注册走<b>模组总线</b>,不是游戏总线:Forge 1.20.1 不像高版本
+        // 那样扫描 @GameTestHolder 自动收集,得在 RegisterGameTestsEvent 里把持有
+        // 类交出去。跑批时由 -Dforge.enabledGameTestNamespaces 决定跑不跑。
+        net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get().getModEventBus()
+                .addListener((net.minecraftforge.event.RegisterGameTestsEvent e) ->
+                        e.register(com.dwinovo.numen.core.gametest.CompanionGameTests.class));
+
         MinecraftForge.EVENT_BUS.addListener(NumenCoreForge::onServerTickPost);
         // Release pathfinding chunk-ref snapshots when the server stops (don't pin an old world).
         MinecraftForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> PathCaches.dropAll());
