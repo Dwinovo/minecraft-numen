@@ -33,8 +33,24 @@ public final class BuildPlacementRegistry {
     }
 
     private static final Map<ServerPlayer, Provider> PROVIDERS = new WeakHashMap<>();
+    /** 施工期寻路放置过的格子回执(仅登记了 Provider 的玩家记录;任务逐 tick 领走)。 */
+    private static final Map<ServerPlayer, java.util.Set<BlockPos>> SCAFFOLD = new WeakHashMap<>();
 
     private BuildPlacementRegistry() {}
+
+    /** 寻路准备在该格放置(脚手架/垫柱/搭桥):给建造任务留回执,交付前清残料用。 */
+    public static void recordScaffold(ServerPlayer player, BlockPos placeAt) {
+        if (!PROVIDERS.containsKey(player)) {
+            return;   // 无建造任务在册:挖矿等场景的搭桥不记账,防集合无界生长
+        }
+        SCAFFOLD.computeIfAbsent(player, k -> new java.util.LinkedHashSet<>()).add(placeAt.immutable());
+    }
+
+    /** 领走该玩家累计的放置回执(领后清空)。 */
+    public static java.util.Set<BlockPos> drainScaffold(ServerPlayer player) {
+        java.util.Set<BlockPos> out = SCAFFOLD.remove(player);
+        return out == null ? java.util.Set.of() : out;
+    }
 
     public static void register(ServerPlayer player, Provider provider) {
         PROVIDERS.put(player, provider);

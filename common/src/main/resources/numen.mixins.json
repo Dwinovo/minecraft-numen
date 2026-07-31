@@ -5,7 +5,8 @@
   "compatibilityLevel": "JAVA_17",
   "refmap": "numen.refmap.json",
   "mixins": [
-    "FishingHookAccessor"
+    "FishingHookAccessor",
+    "ServerLevelBlockChangeMixin"
   ],
   "client": [],
   "server": [],

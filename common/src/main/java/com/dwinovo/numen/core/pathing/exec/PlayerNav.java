@@ -14,6 +14,7 @@ import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.pathing.util.NavProfiler;
 import com.dwinovo.numen.core.task.FailureType;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -157,6 +158,12 @@ public final class PlayerNav {
         return new PlayerNav(player, speed, reached, compiled, true, contextProvider);
     }
 
+    /** 同上,用缺省搜索/执行上下文。 */
+    public static PlayerNav toRevalidating(NumenPlayer player, Supplier<GoalCompiler.Compiled> compiled,
+                                           double speed, BooleanSupplier reached) {
+        return new PlayerNav(player, speed, reached, compiled, true);
+    }
+
     /** 持续跟随一个实时实体,每 tick 用实体当前脚位重新校验目标。 */
     public static PlayerNav followEntity(NumenPlayer player, Supplier<? extends Entity> entitySupplier,
                                          double followRadius, double speed, BooleanSupplier reached) {
@@ -249,7 +256,11 @@ public final class PlayerNav {
         CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace);
     }
 
+    /** ARRIVED-IN-PLACE 已打点(边沿去重)。 */
+    private boolean arrivedInPlaceLogged;
+
     public Status tick() {
+        NavProfiler.tickFrame();
         if (reached.getAsBoolean()) {
             return Status.ARRIVED;
         }
@@ -263,7 +274,9 @@ public final class PlayerNav {
         }
 
         // goal 与 sacred 一体拉取——两者是同一份契约
+        long tCompile = NavProfiler.begin();
         GoalCompiler.Compiled compiled = compiledSupplier.get();
+        NavProfiler.end("goal.compile", tCompile);
         if (compiled == null) {
             return fail(FailureType.TARGET_LOST, "target lost");
         }
@@ -294,6 +307,7 @@ public final class PlayerNav {
         }
 
         PathExecutor before = core.getCurrent();
+        long tExec = NavProfiler.begin();
         withSprintGate(() -> {
             // 状态机空闲(初次、或结果被判孤儿丢弃)时(重新)下发目标;
             // setGoalAndPath 已在目标内/已有段/已有在飞搜索时自会不派发
@@ -303,6 +317,7 @@ public final class PlayerNav {
             }
             core.tick();
         });
+        NavProfiler.end("core.tick", tExec);
 
         // 首段搜索失败:验尸并终局。裁定前再问一次 caller 谓词——本 tick
         // 身体可能已挪进满足位,ARRIVED 优先于失败结论
@@ -329,10 +344,15 @@ public final class PlayerNav {
             BlockPos feet = PathExecutor.playerFeet(player);
             if (engineGoal.isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
                 searchSatisfied = true;
-                Constants.LOG.info(
-                        "[numen-path] ARRIVED-IN-PLACE feet={} goal-center={} —— 搜索目标在脚下"
-                                + "即满足,钉稳结论交任务层裁决",
-                        feet.toShortString(), plannedCenter.toShortString());
+                if (!arrivedInPlaceLogged) {
+                    // 只在进入边沿打一次:任务层反复重建导航时,同一驻留会逐 tick 重进
+                    // 这个分支,连续打点是日志洪水
+                    arrivedInPlaceLogged = true;
+                    Constants.LOG.info(
+                            "[numen-path] ARRIVED-IN-PLACE feet={} goal-center={} —— 搜索目标在脚下"
+                                    + "即满足,钉稳结论交任务层裁决",
+                            feet.toShortString(), plannedCenter.toShortString());
+                }
                 return Status.ARRIVED;
             }
         }
@@ -448,6 +468,28 @@ public final class PlayerNav {
         return current == null ? 0 : current.ticksSinceProgress();
     }
 
+    /**
+     * 规划器在飞且当前无路段在执行——身体站着等异步搜索返回。任务层用它
+     * 冻结任务 deadline:deadline 度量的是身体干活的刻,搜索的墙钟延迟不该
+     * 折算成任务超时(tick 越快于真实时间,这笔折算越离谱,无上限 tick 的
+     * 测试服上足以在首次搜索返回前烧光整个预算)。
+     */
+    /** 搜索结论分布摘要,转发自内核(排障日志用)。 */
+    public String outcomeSummary() {
+        return core.outcomeSummary();
+    }
+
+    public boolean planningInFlight() {
+        return core.hasInProgressSearch() && core.getCurrent() == null;
+    }
+
+    /** 当前执行路段计划挖开的格子集(无路段时为空集)。任务层的世界修复
+     *  逻辑对这些格子让行:同一具身体不能一边为走路挖它、一边把它填回去。 */
+    public java.util.Set<BlockPos> plannedBreaks() {
+        PathExecutor current = core.getCurrent();
+        return current == null ? java.util.Set.of() : current.toBreak();
+    }
+
     /** 调试覆盖层格集(如整片矿区)。可视化未接回,暂为空壳。 */
     public void setHighlights(Supplier<List<BlockPos>> highlights) {
         this.highlights = highlights;
@@ -460,6 +502,16 @@ public final class PlayerNav {
         core.forceCancel();
         InputDriver.halt(player);
         // 垫柱逐 tick 按着潜行,路径终止时没有别人替它松——这里兜底
+        player.setShiftKeyDown(false);
+    }
+
+    /**
+     * 本 tick 原地站住:清移动输入、松潜行,但目标、当前路径段与在飞搜索全部保留,
+     * 下一次 {@link #tick()} 从当前状态续跑——不产生任何冷启动搜索。身体必须静止的
+     * 就地作业(如站桩挖掘)期间逐 tick 调用;与 {@link #stop()}(终局释放)互不替代。
+     */
+    public void pause() {
+        InputDriver.halt(player);
         player.setShiftKeyDown(false);
     }
 }

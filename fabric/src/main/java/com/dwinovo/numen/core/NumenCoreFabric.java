@@ -29,6 +29,9 @@ public class NumenCoreFabric implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(PathCaches::serverTick);
         // Release those chunk references when the server stops (don't pin an old world's chunks).
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> PathCaches.dropAll());
+        // Target-block index: periodic eviction of unloaded-chunk entries + drop with the world.
+        ServerTickEvents.END_SERVER_TICK.register(com.dwinovo.numen.core.scan.TargetIndex::serverTick);
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> com.dwinovo.numen.core.scan.TargetIndex.dropAll());
         // Debug particles for pathing state, sent only to players with debug on.
         ServerTickEvents.END_SERVER_TICK.register(PathDebugRenderer::serverTick);
         // Debug verbs merged into the /numen root registered by the engine mod.

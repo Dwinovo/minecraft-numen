@@ -91,6 +91,7 @@ public abstract class AbstractNodeCostSearch {
             throw new IllegalStateException("搜索器一次性,不可复用");
         }
         cancelRequested = false;
+        long tSearch = com.dwinovo.numen.core.pathing.util.NavProfiler.begin();
         try {
             NavPath path = calculate0(primaryTimeout, failureTimeout)
                     .map(NavPath::postProcess).orElse(null);
@@ -113,6 +114,7 @@ public abstract class AbstractNodeCostSearch {
         } finally {
             // 无论 calculate0 是否抛异常都封存本实例
             isFinished = true;
+            com.dwinovo.numen.core.pathing.util.NavProfiler.recordSearch(tSearch);
         }
     }
 
