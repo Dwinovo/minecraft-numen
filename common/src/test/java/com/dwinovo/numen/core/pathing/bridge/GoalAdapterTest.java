@@ -226,7 +226,8 @@ class GoalAdapterTest {
         GoalCompiler.Compiled mine = GoalCompiler.mineField(
                 List.of(GoalCompiler.Stance.at(T, 1)), List.of(T.offset(2, 0, 2)));
         assertInstanceOf(GoalComposite.class, mine.engineGoal());
-        assertTrue(mine.sacred().contains(T.asLong()));
+        // 挖矿目标不设神圣:站位本身常在目标柱子里,禁止路过砍掉会让站位不可达
+        assertTrue(mine.sacred().isEmpty());
         // 成员判定与旧词表目标一致(矿柱带 + 掉落物邻域)
         assertSameMembership(mine.goal(), mine.engineGoal());
     }
