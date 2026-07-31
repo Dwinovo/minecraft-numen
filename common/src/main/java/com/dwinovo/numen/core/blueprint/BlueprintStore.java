@@ -7,6 +7,7 @@ import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
@@ -285,7 +286,7 @@ public final class BlueprintStore {
             Path schem = base.resolve(name + ".schem");
             try {
                 if (Files.exists(nbt)) {
-                    return NbtIo.readCompressed(nbt.toFile());
+                    return NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap());
                 }
                 if (Files.exists(snbt)) {
                     return NbtUtils.snbtToStructure(Files.readString(snbt));
@@ -293,11 +294,11 @@ public final class BlueprintStore {
                 // 社区格式:读出 gzip NBT 后转成原版结构形态,下游管线无感
                 if (Files.exists(litematic)) {
                     return BlueprintFormats.fromLitematic(
-                            NbtIo.readCompressed(litematic.toFile()));
+                            NbtIo.readCompressed(litematic, NbtAccounter.unlimitedHeap()));
                 }
                 if (Files.exists(schem)) {
                     return BlueprintFormats.fromSchem(
-                            NbtIo.readCompressed(schem.toFile()));
+                            NbtIo.readCompressed(schem, NbtAccounter.unlimitedHeap()));
                 }
             } catch (Exception e) {
                 throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);
