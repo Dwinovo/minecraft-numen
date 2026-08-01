@@ -19,8 +19,10 @@ public final class FabricModItemTagsProvider extends FabricTagsProvider.ItemTags
     @Override
     protected void addTags(HolderLookup.Provider provider) {
         ModItemTagData.addItemTags(key -> {
+            // 1.21.8:getOrCreateTagBuilder → valueLookupBuilder。
             var b = valueLookupBuilder(key);
-            return ModItemTagData.appender(v -> b.add(v));
+            // 与方块那侧同理:引用外部标签要跳过 Fabric 的 provider 归属校验
+            return ModItemTagData.appender(v -> b.add(v), t -> b.forceAddTag(t));
         });
     }
 }
