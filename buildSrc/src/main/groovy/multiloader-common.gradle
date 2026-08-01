@@ -115,19 +115,36 @@ processResources {
 tasks.register('apiJar', Jar) {
     archiveClassifier = 'api'
     from sourceSets.main.output
-    // public API surface (see the package-info of each)
+    // public API surface (see the package-info of each). This list is the
+    // contract of record — kept in lockstep with what numen-core actually
+    // compiles against, so building core against the :api jar always works.
     include 'com/dwinovo/numen/api/**'             // @Internal marker + api meta
-    include 'com/dwinovo/numen/agent/tool/api/**'  // @NumenAction authoring surface
-    include 'com/dwinovo/numen/agent/tool/**'      // tool contract + registration
-    include 'com/dwinovo/numen/task/**'            // world-action task contract
+    include 'com/dwinovo/numen/agent/tool/api/**'  // per-call tool context
+    include 'com/dwinovo/numen/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
+    include 'com/dwinovo/numen/task/**'            // task contract + the registration points a pack drives
     include 'com/dwinovo/numen/entity/NumenPlayer*.class'   // the body a tool acts on
+    include 'com/dwinovo/numen/entity/InputDriver*.class'   // ...and its input surface (look/press keys)
     include 'com/dwinovo/numen/entity/package-info.class'
+    include 'com/dwinovo/numen/agent/skill/SkillRegistry*.class' // ship-skills-with-your-jar entry
+    include 'com/dwinovo/numen/agent/skill/SkillInfo*.class'
+    include 'com/dwinovo/numen/platform/Services*.class'          // cross-loader SPI locator
+    include 'com/dwinovo/numen/platform/services/**'              // (block caps for storage inspection)
+    // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们连同
+    // ServerToolTransport 本该迁去 core 自己的网络层,迁移前先如实纳入契约
+    include 'com/dwinovo/numen/network/payload/PathDebugPayload*.class'
+    include 'com/dwinovo/numen/network/payload/ClientUiActionPayload*.class'
     // drop the @Internal stragglers sitting inside those API packages
     exclude 'com/dwinovo/numen/agent/tool/ToolInvocation*.class'
     exclude 'com/dwinovo/numen/agent/tool/ClientToolContext*.class'
+    // scheduler internals: implementation of the task machine, not its contract
     exclude 'com/dwinovo/numen/task/TaskQueue*.class'
-    exclude 'com/dwinovo/numen/task/CompanionTickDispatcher*.class'
     exclude 'com/dwinovo/numen/task/UnsupportedCompanionTask*.class'
+    exclude 'com/dwinovo/numen/task/CompanionBrain*.class'
+    exclude 'com/dwinovo/numen/task/ChainScheduler*.class'
+    exclude 'com/dwinovo/numen/task/LlmTaskChain*.class'
+    exclude 'com/dwinovo/numen/task/TaskSessionHooks*.class'
+    exclude 'com/dwinovo/numen/task/HandPinRelease*.class'
+    exclude 'com/dwinovo/numen/task/chain/**'
 }
 
 publishing {

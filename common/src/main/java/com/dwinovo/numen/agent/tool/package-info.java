@@ -7,10 +7,11 @@
  * {@link ToolCall#complete} when the result is ready. The engine is a scheduler,
  * not an executor.
  *
- * <p>The ergonomic {@code @NumenAction} annotations and {@code ToolSchema} live
- * next door in {@code agent.tool.api}; the reflective adapter that turns an
- * annotated method into a {@link NumenTool}, and any server-side task execution,
- * ship in the tool pack ({@code numen-core}) — not in the engine.
+ * <p>Also public: {@link Schema} (the JSON-schema builder every tool's
+ * {@code parameterSchema} uses) and {@link ToolArgs} (shared argument-parsing
+ * helpers). The per-call {@code ToolContext} lives next door in
+ * {@code agent.tool.api}; any server-side task execution ships in the tool pack
+ * ({@code numen-core}) — not in the engine.
  *
  * <p>Internal members ({@link com.dwinovo.numen.api.Internal @Internal}):
  * {@link ToolInvocation} (the scheduler's per-call unit) and
