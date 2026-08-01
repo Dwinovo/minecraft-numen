@@ -1,18 +1,14 @@
 package com.dwinovo.numen.core.task;
-import com.dwinovo.numen.core.PlayerInv;
-import com.dwinovo.numen.core.FailureType;
 
+import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.execute.AimProcessor;
-import com.dwinovo.numen.core.pathing.execute.PathExecutor;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.movements.BuildPlacementRegistry;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -21,43 +17,20 @@ import com.dwinovo.numen.task.TaskState;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
-import net.minecraft.core.particles.BlockParticleOption;
-import net.minecraft.core.particles.ParticleTypes;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.item.context.BlockPlaceContext;
-import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.LiquidBlock;
-import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BedPart;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
-import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * 多格建造任务:赴工地、在工地里施工、逐批落位。
@@ -72,32 +45,21 @@ import java.util.Set;
  *
  * <p>保留下来的是真正属于我们的东西:生存模式逐格扣料、清障掉落、期望状态精确
  * 落位、以及"支撑还没长出来就先放着,下一遍再来"的分遍推进。
+ *
+ * <p><b>分工</b>——本类只持有施工的调度状态机(相位、遍、层窗口、落位循环)与
+ * 轮扫对账;单格判据在 {@link BuildCellRules},背包口径在 {@link BuildInventory},
+ * 材料账本在 {@link BuildLedger},摆设与善后在 {@link BuildFixtures},演出在
+ * {@link BuildShowmanship},顺序与节奏的纯函数在 {@link BuildOrder}。
  */
 public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRecord>
         implements BuildPlacementRegistry.Provider, PlayerNav.ContextProvider {
 
-    private static final AimProcessor AIM = new AimProcessor();
     private static final double WALK_SPEED = 1.0;
 
     /** 赴工地的时限:走不到就地开工,绝不因为路不通而不干活。 */
     private static final int TRAVEL_BUDGET_TICKS = 30 * 20;
-    /**
-     * 施工节奏:由<b>目标总时长</b>反推速率,再夹在上下限之间。
-     *
-     * <p>固定速率两头不讨好:定成"每秒两格"的手感,小屋四分钟正好,五千多格的
-     * 大屋要盖四十九分钟;定快了小屋一眨眼就没了。改成先给一个总时长目标,速率
-     * 由格数除出来——不管盖多大,时长都可预期,而且都有戏看。
-     */
-    private static final double SURVIVAL_MIN_RATE = 2.0 / 20.0;    // 每秒 2 格,慢的那一头
-    private static final double SURVIVAL_TARGET_TICKS = 12 * 60 * 20;   // 再大也不超过 12 分钟
-    private static final double FREE_MAX_RATE = 100.0 / 20.0;      // 创造快,但不瞬移
-    private static final double FREE_TARGET_TICKS = 25 * 20;       // 再小也演满 25 秒
     /** 单刻落位硬上限:再快也不能一刻塞几百格,那是卡顿不是建造。 */
     private static final int MAX_CELLS_PER_TICK = 8;
-    /** 挥臂间隔:与原版挥臂动画一轮的长度对齐。 */
-    private static final int SWING_PERIOD_TICKS = 6;
-    /** 手到落点那道粒子的采样点数。 */
-    private static final int CONJURE_TRAIL_SAMPLES = 6;
     /** 一层砌完后停下端详的刻数——匀速是机器,有起伏才是人。 */
     private static final int LAYER_PAUSE_TICKS = 18;
     /** 巡视路线离工地包围盒的外扩格数。 */
@@ -110,8 +72,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private static final int WANDER_WALK_TICKS = 40;
     /** 连续几遍零进展才升级处置。 */
     private static final int MAX_BARREN_PASSES = 3;
-    /** 每批最多冒几处粒子——整栋房子逐格发粒子会把客户端打垮。 */
-    private static final int PARTICLE_BUDGET_PER_BATCH = 3;
 
     /**
      * 写入标志:{@code UPDATE_CLIENTS}(同步给客户端)+ {@code UPDATE_KNOWN_SHAPE}
@@ -134,6 +94,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                     | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE;
 
     private enum Phase { TRAVEL, WORK }
+
+    private final BuildCellRules rules;
+    private final BuildInventory inv;
+    private final BuildFixtures fixtures;
+    private final BuildLedger ledger;
+    private final BuildShowmanship show;
 
     private final Map<Long, BuildTaskRecord.Target> targetByPos = new LinkedHashMap<>();
     /** 施工期寻路垫出来的非目标方块,收工时一并撤掉。 */
@@ -160,7 +126,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /** 每刻该落几格(可以是小数),以及攒下来的落位信用。 */
     private double cellsPerTick;
     private double placeCredit;
-    private int swingCooldown;
     /** 已砌好又被外力弄没的格数(收工时用来解释"为什么磨了这么久")。 */
     private int damagedCells;
     /**
@@ -178,10 +143,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private LongOpenHashSet skippedPos = new LongOpenHashSet();
     /** {@code skippedPos.size()} 的缓存——判完工在热路径上,不必每次问集合。 */
     private int skippedCells;
-    /** 收工时因缺料没能生成的摆设数——不记的话它们会静默消失而任务照报成功。 */
-    private int skippedFixtures;
-    /** 摆设生成了,但身上带的东西没付起——框空着挂上去了,同样得交代。 */
-    private int skippedPayloads;
     private int passStartCompleted;
     private int barrenPasses;
     /**
@@ -206,10 +167,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 再继续,才有人在干活的样子。
      */
     private int workPause;
-    /** 上一批落位所在的层,用来发现"翻过一层了"。 */
-    private int lastLayerY = Integer.MIN_VALUE;
-    /** 当前该不该蹲(由落位批次的高度决定,跨 tick 保持)。 */
-    private boolean crouching;
 
     /** 挪窝状态。 */
     private List<Vec3> wanderPoints = List.of();
@@ -221,6 +178,11 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     public BuildCompanionTask(NumenPlayer player, BuildTaskRecord record) {
         super(player, record);
+        this.rules = new BuildCellRules(player, record);
+        this.inv = new BuildInventory(player);
+        this.fixtures = new BuildFixtures(player, record, inv);
+        this.ledger = new BuildLedger(player, record, rules, inv, fixtures);
+        this.show = new BuildShowmanship(player, inv);
         for (BuildTaskRecord.Target target : record.targets) {
             targetByPos.put(target.pos().asLong(), target);
         }
@@ -245,9 +207,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (!r.consumeMaterials) {
             return null;
         }
-        Map<Item, Integer> need = remainingNeed();
-        Map<Item, Integer> shortfall = shortfallAgainstInventory(need);
-        List<BuildTaskRecord.CellNeed> exactShort = needShortfall(remainingCellNeeds());
+        Map<Item, Integer> need = ledger.remainingNeed();
+        Map<Item, Integer> shortfall = ledger.shortfallAgainstInventory(need);
+        List<BuildTaskRecord.CellNeed> exactShort = ledger.needShortfall(ledger.remainingCellNeeds());
         if (shortfall.isEmpty() && exactShort.isEmpty()) {
             return null;
         }
@@ -255,236 +217,17 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             // 整幢图纸一趟本来就运不完:能开工就开工,补给跑几趟是常态而不是错误。
             // 只有一格都买不起时才拦——那才是真的开不了工。
             for (Item item : need.keySet()) {
-                if (hasItem(item, true)) {
+                if (inv.hasItem(item, true)) {
                     return null;
                 }
             }
         }
         return new Precondition.Failure(
-                "not enough materials yet — " + summarizeShortfall(shortfall, exactShort)
+                "not enough materials yet — " + BuildLedger.summarizeShortfall(shortfall, exactShort)
                         + ". Nothing was placed. Survival mode consumes 1 item per cell; gather these, "
                         + "then send the SAME call again — anything already standing is skipped, so a "
                         + "restocked repeat picks up exactly where this left off.",
                 FailureType.NO_MATERIAL);
-    }
-
-    /**
-     * 此刻还需要的材料:按物品汇总所有<b>尚未达标且要花料</b>的格。
-     *
-     * <p>开工前置与中途报缺共用这一个统计口径,所以玩家听到的永远是同一个
-     * 问题的答案——"从现在起还要凑什么"。以前中途报的是"本遍缺了什么",
-     * 那是过程量,玩家拿它没法决定去采多少。
-     */
-    private Map<Item, Integer> remainingNeed() {
-        Map<Item, Integer> need = new LinkedHashMap<>();
-        for (BuildTaskRecord.Target target : r.targets) {
-            if (!costsMaterial(target)) continue;
-            if (!needsFor(target).isEmpty()) continue;   // 这一格走料单,不能两边都算
-            if (target.matches(peek(target.pos()))) continue;
-            // 我们不会去动的格子不该进清单。此前这里的过滤比完工统计那处少两条,
-            // 于是同一张回执上能同时出现"built 812/812"和"还差 chest x2":报价
-            // 索要的是永远不会被放置的格子的材料,开工前还会让玩家先去凑一堆
-            // 她压根不打算放的方块。
-            if (blockedByMode(target) || hopeless(target)) continue;
-            need.merge(target.item(), target.materialCount(), Integer::sum);
-        }
-        // 摆设实体也要料:它们不是目标格,但同样是玩家得掏出来的东西
-        for (BuildTaskRecord.EntitySpawn spawn : r.entities) {
-            if (spawn.item() != Items.AIR && !fixtureAlreadyThere(spawn)) {
-                need.merge(spawn.item(), 1, Integer::sum);
-            }
-        }
-        return need;
-    }
-
-    /**
-     * 这一格的料单——空表示走默认的"一件本方块的物品 × 件数"。
-     *
-     * <p>一格一件是特例而不是通则:带花的花盆是盆加花两件,带花纹的旗帜是一叠但要求
-     * 组件一致。这张单子整个盖过默认口径。
-     */
-    private List<BuildTaskRecord.CellNeed> needsFor(BuildTaskRecord.Target target) {
-        if (r.cellNeeds().isEmpty()) {
-            return List.of();
-        }
-        var found = r.cellNeeds().get(target.pos().asLong());
-        return found == null ? List.of() : found;
-    }
-
-    /**
-     * 还需要哪些<b>精确</b>料:旗帜的花纹、摆设身上带的东西。
-     *
-     * <p>和 {@link #remainingNeed} 分成两张单子,因为口径不同——那张按物品类型合并,
-     * 这张必须一叠一叠地看。两张单子上的格子互不重叠(见 {@code strictFor} 那道过滤),
-     * 所以合起来正好是"从现在起还要凑什么",不会重复索要。
-     */
-    private List<BuildTaskRecord.CellNeed> remainingCellNeeds() {
-        List<BuildTaskRecord.CellNeed> out = new ArrayList<>();
-        for (BuildTaskRecord.Target target : r.targets) {
-            var needs = needsFor(target);
-            if (needs.isEmpty() || !costsMaterial(target)) continue;
-            if (target.matches(peek(target.pos()))) continue;
-            if (blockedByMode(target) || hopeless(target)) continue;
-            out.addAll(needs);
-        }
-        for (BuildTaskRecord.EntitySpawn spawn : r.entities) {
-            if (!fixtureAlreadyThere(spawn)) {
-                for (ItemStack carried : spawn.payload(player.level().registryAccess())) {
-                    out.add(new BuildTaskRecord.CellNeed(carried, true));
-                }
-            }
-        }
-        return out;
-    }
-
-    /** 逐格料单的缺口:哪几叠凑不齐,缺几件就列几条。 */
-    private List<BuildTaskRecord.CellNeed> needShortfall(List<BuildTaskRecord.CellNeed> needs) {
-        List<BuildTaskRecord.CellNeed> kinds = new ArrayList<>();
-        List<Integer> counts = new ArrayList<>();
-        for (BuildTaskRecord.CellNeed want : needs) {
-            int at = -1;
-            for (int i = 0; i < kinds.size(); i++) {
-                // 同一档口径才算同一种:按类型收的和按组件收的不能合并
-                if (kinds.get(i).exact() == want.exact() && kinds.get(i).matches(want.stack())) {
-                    at = i;
-                    break;
-                }
-            }
-            if (at < 0) {
-                kinds.add(want);
-                counts.add(1);
-            } else {
-                counts.set(at, counts.get(at) + 1);
-            }
-        }
-        List<BuildTaskRecord.CellNeed> missing = new ArrayList<>();
-        for (int i = 0; i < kinds.size(); i++) {
-            int have = countMatching(kinds.get(i));
-            for (int k = have; k < counts.get(i); k++) {
-                missing.add(kinds.get(i));
-            }
-        }
-        return missing;
-    }
-
-    /** 背包里有几件满足这一笔要求的东西——口径由这笔要求自己说。 */
-    private int countMatching(BuildTaskRecord.CellNeed need) {
-        Inventory inventory = player.getInventory();
-        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
-        int n = 0;
-        for (int i = 0; i < limit; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && need.matches(stack)) {
-                n += stack.getCount();
-            }
-        }
-        return n;
-    }
-
-    /** 从背包扣掉一件满足这一笔要求的东西。 */
-    private void consumeMatching(BuildTaskRecord.CellNeed need) {
-        if (player.hasInfiniteMaterials()) {
-            return;
-        }
-        Inventory inventory = player.getInventory();
-        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
-        for (int i = 0; i < limit; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && need.matches(stack)) {
-                stack.shrink(1);
-                return;
-            }
-        }
-    }
-
-    /** 计费判据在 {@link BuildTaskRecord.Target#costsMaterial()}——盘点工具与这里共用。 */
-    private boolean costsMaterial(BuildTaskRecord.Target target) {
-        return !isAirTarget(target) && target.costsMaterial();
-    }
-
-    /** 需求减去背包现货 = 还差多少。 */
-    private Map<Item, Integer> shortfallAgainstInventory(Map<Item, Integer> need) {
-        Map<Item, Integer> shortfall = new LinkedHashMap<>();
-        for (var e : need.entrySet()) {
-            // 存量只算 36 格主背包,和逐格闸门、实扣共用同一个口径。此前预检用的是
-            // 41 格(含盔甲与副手)、闸门用 36 格:一整叠木板放在副手时,预检数得到、
-            // 开工放行,而每一格都判缺料,三个零进展遍后以缺料失败,报的 shortfall
-            // 还是空的——玩家看着手里那叠木板一头雾水。
-            int have = mainInventoryCount(e.getKey());
-            if (have < e.getValue()) {
-                shortfall.put(e.getKey(), e.getValue() - have);
-            }
-        }
-        return shortfall;
-    }
-
-    /** 报缺料时最多点名几种。 */
-    private static final int MISSING_ITEMS_LISTED = 8;
-
-    /**
-     * 缺料清单:按缺口从大到小点名前几种,其余只报种类数与总件数。
-     *
-     * <p>一栋社区图纸能缺一百五十多种材料,全列出来是几千字符——玩家读不完,
-     * 模型的上下文也白烧掉一大块,而真正决定"先去干什么"的永远是排头那几样。
-     */
-    /**
-     * 缺料清单,含<b>精确</b>那一档。
-     *
-     * <p>精确料要单独点名并说明"要一模一样的那件":只报一句"还差 white_banner x1",
-     * 而玩家手里明明有一面白旗,他会以为是我们数错了——真正缺的是带着图纸那套花纹的
-     * 那面旗。判据严到哪里,话就得说到哪里。
-     */
-    private static String summarizeShortfall(Map<Item, Integer> shortfall,
-                                             List<BuildTaskRecord.CellNeed> extra) {
-        String bulk = shortfall.isEmpty() ? "" : summarizeShortfall(shortfall);
-        if (extra.isEmpty()) {
-            return bulk.isEmpty() ? "nothing" : bulk;
-        }
-        // 两档分开说:按类型收的照常点名,按组件收的要讲清"要一模一样的那件"
-        Map<String, Integer> plain = new LinkedHashMap<>();
-        Map<String, Integer> byName = new LinkedHashMap<>();
-        for (BuildTaskRecord.CellNeed need : extra) {
-            (need.exact() ? byName : plain)
-                    .merge(need.stack().getHoverName().getString(), 1, Integer::sum);
-        }
-        List<String> parts = new ArrayList<>();
-        plain.forEach((name, n) -> parts.add(name + " x" + n));
-        if (!byName.isEmpty()) {
-            List<String> exactParts = new ArrayList<>();
-            byName.forEach((name, n) -> exactParts.add(name + " x" + n));
-            parts.add("and exactly these (same enchantments / patterns / contents, not just the"
-                    + " same kind of item): " + String.join(", ", exactParts));
-        }
-        String tail = String.join(", ", parts);
-        return bulk.isEmpty() ? tail : bulk + "; " + tail;
-    }
-
-    private static String summarizeShortfall(Map<Item, Integer> shortfall) {
-        List<Map.Entry<Item, Integer>> sorted = new ArrayList<>(shortfall.entrySet());
-        sorted.sort(Map.Entry.<Item, Integer>comparingByValue().reversed());
-        StringBuilder out = new StringBuilder();
-        int listed = Math.min(MISSING_ITEMS_LISTED, sorted.size());
-        for (int i = 0; i < listed; i++) {
-            if (i > 0) out.append(", ");
-            out.append(label(sorted.get(i).getKey())).append(" x").append(sorted.get(i).getValue());
-        }
-        if (sorted.size() > listed) {
-            // 中途回执是不请自来、而且会反复出现的,所以这里保持截断。但只给一个数字
-            // 等于给了个死胡同——指出哪里能拿到全量单子,才叫交代完。
-            int restKinds = sorted.size() - listed;
-            int restCount = 0;
-            for (int i = listed; i < sorted.size(); i++) {
-                restCount += sorted.get(i).getValue();
-            }
-            out.append(", and ").append(restKinds).append(" more kinds (")
-                    .append(restCount).append(" items) — `blueprint_read` lists every one");
-        }
-        int total = 0;
-        for (int v : shortfall.values()) {
-            total += v;
-        }
-        out.append("; ").append(total).append(" items short in total");
-        return out.toString();
     }
 
     private Precondition.Failure checkExistingBlocks() {
@@ -492,8 +235,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return null;
         }
         for (BuildTaskRecord.Target target : r.targets) {
-            BlockState state = peek(target.pos());
-            if (!target.matches(state) && (isAirTarget(target) || !isReplaceable(target.pos(), state))) {
+            BlockState state = rules.peek(target.pos());
+            if (!target.matches(state)
+                    && (BuildCellRules.isAirTarget(target) || !isReplaceable(target.pos(), state))) {
                 return new Precondition.Failure("target " + target.shortPos()
                         + " is occupied; enable replacement or clear it first", FailureType.TARGET_LOST);
             }
@@ -519,7 +263,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected TaskState onTick() {
         // 蹲姿由施工分支决定并保持:落位只在批次刻发生,若每 tick 复位成站立,
         // 中间那些刻就会把她弹起来,看起来是在抖而不是在蹲着贴边放。
-        player.setShiftKeyDown(phase == Phase.WORK && crouching);
+        player.setShiftKeyDown(phase == Phase.WORK && show.crouching());
         registerProvider();
         updateCompleted();
         drainScaffold();
@@ -643,7 +387,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         if (!touched.isEmpty()) {
-            performWork(touched, sample);
+            show.performWork(touched, sample);
         }
         // 付不起剩下任何一格:当场收遍。走完剩下的层不会改变结论,只会让玩家多等
         // (每层还有 18 刻的演出停顿),而结论在第一次付不起的那一刻就已经成立了。
@@ -672,13 +416,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (placedThisLayer.contains(t.pos().asLong())) {
                 continue;
             }
-            // 层内先按 stage 分档,同档之内才比远近。此前这里只比远近,于是
-            // BUILD_ORDER 后面那几个比较键对<b>实际落位顺序</b>一个都不起作用——
-            // 排序只决定了层窗口怎么切,层内谁先谁后完全由脚下的距离决定,而
-            // stage 那句"先清障、再骨架、最后贴附"的注释与代码早就不符了。
-            // 调了不起作用的旋钮比缺一个功能更糟,所以要么让它生效,要么撤掉;这里
-            // 让它生效:走位的自然感留在同一档之内,档与档之间按该有的先后来。
-            int stage = stage(t);
+            // 层内先按 stage 分档,同档之内才比远近——"先清障、再骨架、最后贴附"
+            // 的先后要真起作用;走位的自然感留在同一档之内。
+            int stage = BuildOrder.stage(t);
             if (stage > bestStage) {
                 continue;
             }
@@ -752,7 +492,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 检查活物占位与材料——于是"目标砖用完了"这种最常见的情形下,她会把玩家的
         // 草坪挖出一条沟,然后一格墙都没砌。她自己站在那格里时更糟:脚下先被挖空。
         // 破坏是不可撤销的,所以它必须是这一格的最后一道动作,不是第一道。
-        if (blockedByEntity(pos, desired)) {
+        if (rules.blockedByEntity(pos, desired)) {
             // 谁都不豁免——包括她自己:身体占着的格子这遍先放下,下一遍她已经挪开了。
             // 防的是把方块塞进活物身体里这类真事故。
             return null;
@@ -762,33 +502,33 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 于是下面那句 clear 会把它挖掉。生存模式带方块实体掉落所以东西不至于消失,
         // 但"带方块实体的方块一律不动"这句承诺就破了——而那是我们自己写进工具描述、
         // 也是玩家唯一能依赖的保证。
-        if (blockedByMode(target) || hopeless(target)) {
+        if (rules.blockedByMode(target) || rules.hopeless(target)) {
             return null;
         }
         // 一格不一定只花一件(双层砖两件、雪层按层数),盘点与实扣共用同一个件数
-        int cost = r.consumeMaterials && costsMaterial(target) ? target.materialCount() : 0;
+        int cost = r.consumeMaterials && rules.costsMaterial(target) ? target.materialCount() : 0;
         // 有料单的格走另一道闸门:花盆要盆和花两件都在,旗帜要那面绣好的才算数
-        List<BuildTaskRecord.CellNeed> needs = needsFor(target);
+        List<BuildTaskRecord.CellNeed> needs = ledger.needsFor(target);
         if (cost > 0 && !needs.isEmpty()) {
             for (BuildTaskRecord.CellNeed need : needs) {
-                if (countMatching(need) < 1) {
+                if (inv.countMatching(need) < 1) {
                     noteShortage(need.stack().getItem(), 1);
                     return null;
                 }
             }
-        } else if (cost > 0 && !hasItems(target.item(), cost, true)) {
+        } else if (cost > 0 && !inv.hasItems(target.item(), cost, true)) {
             noteShortage(target.item(), cost);
             return null;
         }
 
         if (occupied) {
             clear(pos);
-            if (isAirTarget(target)) {
+            if (BuildCellRules.isAirTarget(target)) {
                 markObserved(target, true);
                 return desired;
             }
         }
-        if (isAirTarget(target)) {
+        if (BuildCellRules.isAirTarget(target)) {
             markObserved(target, current.isAir() || current.getBlock() instanceof LiquidBlock);
             return null;
         }
@@ -827,12 +567,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (!needs.isEmpty()) {
             if (cost > 0) {
                 for (BuildTaskRecord.CellNeed need : needs) {
-                    consumeMatching(need);
+                    inv.consumeMatching(need);
                 }
             }
         } else {
             for (int k = 0; k < cost; k++) {
-                consumeOne(target.item());
+                inv.consumeOne(target.item());
             }
         }
         r.placedOne();
@@ -850,10 +590,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * <p>判据是<b>状态量</b>:剩下的待建格里,还有没有哪怕一格是她此刻付得起的。有——
      * 这一遍还能推进,照常走;一格都没有——这一遍已经证明是死的,不必再把剩下的层空翻
      * 一遍(每层还要停 18 刻),更不必等三个零进展遍。
-     *
-     * <p>只在缺料的边沿上算一次,不是每格算:全表扫一遍是 O(格数),和收遍时本来就要做的
-     * 全量重扫同一个量级,而且"能付得起一格"通常在头几格就命中并提前退出——真正走完全表的
-     * 情形恰好就是我们要下的那个结论。
      */
     private void noteShortage(Item item, int count) {
         boolean firstShortageThisPass = passMissing.isEmpty();
@@ -872,21 +608,21 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private boolean canStillAffordAnyPendingCell() {
         for (BuildTaskRecord.Target target : r.targets) {
-            if (target.matches(peek(target.pos()))) continue;
-            if (blockedByMode(target) || hopeless(target)) continue;
-            int cost = r.consumeMaterials && costsMaterial(target) ? target.materialCount() : 0;
+            if (target.matches(rules.peek(target.pos()))) continue;
+            if (rules.blockedByMode(target) || rules.hopeless(target)) continue;
+            int cost = r.consumeMaterials && rules.costsMaterial(target) ? target.materialCount() : 0;
             if (cost <= 0) {
                 return true;   // 不花料的格(清空格)永远付得起
             }
-            var needs = needsFor(target);
+            var needs = ledger.needsFor(target);
             if (needs.isEmpty()) {
-                if (hasItems(target.item(), cost, true)) {
+                if (inv.hasItems(target.item(), cost, true)) {
                     return true;
                 }
             } else {
                 boolean affordable = true;
                 for (BuildTaskRecord.CellNeed need : needs) {
-                    if (countMatching(need) < 1) {
+                    if (inv.countMatching(need) < 1) {
                         affordable = false;
                         break;
                     }
@@ -932,67 +668,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 演出:朝这一批的中心转头、举起对应方块、挥手,方块碎屑与落位声。
-     * 粒子按批限量——整栋房子逐格发粒子会把客户端打垮。
-     */
-    private void performWork(List<BlockPos> touched, BlockState sample) {
-        Vec3 centre = Vec3.ZERO;
-        for (BlockPos pos : touched) {
-            centre = centre.add(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-        }
-        centre = centre.scale(1.0 / touched.size());
-        applySteppedAim(centre);
-        // 低处蹲下、高处站直:所有人都知道贴边放方块要蹲,这是玩家最熟的建造姿势。
-        crouching = centre.y < player.getY() + 0.6;
-        // 挥手按动画节拍走,不按落位节拍。原版一轮挥臂约 6 刻,而落位每 2 刻一批
-        // ——每批都触发就是每秒十下,手臂永远画不完一个来回,看起来是抽搐不是干活。
-        boolean swung = --swingCooldown <= 0;
-        if (swung) {
-            player.swing(InteractionHand.MAIN_HAND);
-            swingCooldown = SWING_PERIOD_TICKS;
-        }
-        if (sample != null) {
-            int slot = findSlot(sample.getBlock().asItem(), true);
-            if (slot >= 0) {
-                player.holdInHand(slot);
-            }
-        }
-        if (!(player.level() instanceof ServerLevel level) || sample == null) {
-            return;
-        }
-        if (swung) {
-            emitConjureTrail(level, centre);
-        }
-        int spouts = Math.min(PARTICLE_BUDGET_PER_BATCH, touched.size());
-        int step = Math.max(1, touched.size() / spouts);
-        for (int i = 0; i < touched.size(); i += step) {
-            BlockPos pos = touched.get(i);
-            level.sendParticles(new BlockParticleOption(ParticleTypes.BLOCK, sample),
-                    pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
-                    4, 0.28, 0.28, 0.28, 0.0);
-        }
-        var sound = sample.getSoundType().getPlaceSound();
-        BlockPos at = touched.get(touched.size() / 2);
-        level.playSound(null, at, sound, SoundSource.BLOCKS, 0.7f, 0.9f + player.getRandom().nextFloat() * 0.2f);
-    }
-
-    /**
-     * 从她手上飞向落点的一道粒子。
-     *
-     * <p>方块凭空出现、她在旁边挥手——这两件事之间原本没有任何可见的联系,看着
-     * 就像作弊。把因果画出来之后,隔空落位才读得成手艺而不是开挂。一次挥臂一道,
-     * 跟着挥臂节拍走,不会刷屏。
-     */
-    private void emitConjureTrail(ServerLevel level, Vec3 to) {
-        Vec3 from = player.getEyePosition().add(player.getLookAngle().scale(0.6)).add(0, -0.3, 0);
-        Vec3 step = to.subtract(from).scale(1.0 / (CONJURE_TRAIL_SAMPLES + 1));
-        for (int i = 1; i <= CONJURE_TRAIL_SAMPLES; i++) {
-            Vec3 p = from.add(step.scale(i));
-            level.sendParticles(ParticleTypes.END_ROD, p.x, p.y, p.z, 1, 0.0, 0.0, 0.0, 0.0);
-        }
-    }
-
-    /**
      * 一遍扫完的裁决。有进展就开下一遍(补漏);零进展先挪窝重试(剩下的多半
      * 正压在她自己脚下),连着几遍颗粒无收才认账——缺料是邀请,不是错误。
      */
@@ -1016,7 +691,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 是同一件事——她现在动不了了,而且再等下去也不会变。
         if (passStarved) {
             fail("built " + r.completed() + "/" + r.targets.size()
-                    + " and ran out — " + missingReason(), FailureType.NO_MATERIAL);
+                    + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL);
             return TaskState.FAILED;
         }
         if (progressed) {
@@ -1027,7 +702,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 // 先报干了多少,再报还差什么——玩家要的是"还要凑多少才能收工",
                 // 不是一句材料不足。已经砌好的部分留在世界里,不回滚。
                 fail("built " + r.completed() + "/" + r.targets.size()
-                        + " and ran out — " + missingReason(), FailureType.NO_MATERIAL);
+                        + " and ran out — " + ledger.missingReason(passMissing), FailureType.NO_MATERIAL);
                 return TaskState.FAILED;
             }
             // 挪了窝也补不上:留案再交代。盖不完就是盖不完,不粉饰成成功。
@@ -1059,7 +734,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         Map<Integer, Integer> byLayer = new java.util.TreeMap<>();
         List<BuildTaskRecord.Target> examples = new ArrayList<>();
         for (BuildTaskRecord.Target target : r.targets) {
-            if (target.matches(peek(target.pos()))) continue;
+            if (target.matches(rules.peek(target.pos()))) continue;
             // 主动不去动的格不算"缺格":它们不在分母里,更不该在留案里冒充病灶
             if (skippedPos.contains(target.pos().asLong())) continue;
             byLayer.merge(target.pos().getY(), 1, Integer::sum);
@@ -1075,9 +750,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             BlockState desired = target.desiredState();
             com.dwinovo.numen.core.Constants.LOG.info(
                     "[numen-build] 缺 {} 期望={} 实际={} 立得住={} 占身={} 有料={}",
-                    pos.toShortString(), desired, peek(pos),
-                    desired.canSurvive(player.level(), pos), blockedByEntity(pos, desired),
-                    !r.consumeMaterials || hasItem(target.item(), true));
+                    pos.toShortString(), desired, rules.peek(pos),
+                    desired.canSurvive(player.level(), pos), rules.blockedByEntity(pos, desired),
+                    !r.consumeMaterials || inv.hasItem(target.item(), true));
         }
     }
 
@@ -1096,7 +771,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         BlockPos sample = null;
         for (BuildTaskRecord.Target target : r.targets) {
             BlockPos pos = target.pos();
-            if (target.matches(peek(pos))) {
+            if (target.matches(rules.peek(pos))) {
                 continue;
             }
             // 主动不去动的格不参与病因分类。不排掉的话,玩家箱子压着的那七格
@@ -1109,7 +784,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 sample = pos;
             }
             BlockState desired = target.desiredState();
-            if (blockedByEntity(pos, desired)) {
+            if (rules.blockedByEntity(pos, desired)) {
                 occupied++;
             } else if (!desired.canSurvive(player.level(), pos)) {
                 unsupported++;
@@ -1135,159 +810,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 + (parts.isEmpty() ? "" : ": " + String.join("; ", parts));
     }
 
-    /** 还差什么才能收工——按此刻的剩余需求算,不是本遍的过程量。 */
-    private String missingReason() {
-        Map<Item, Integer> shortfall = shortfallAgainstInventory(remainingNeed());
-        List<BuildTaskRecord.CellNeed> exact = needShortfall(remainingCellNeeds());
-        if (shortfall.isEmpty() && exact.isEmpty()) {
-            shortfall = passMissing;   // 期间被人补过料的边缘情形,退回本遍统计
-        }
-        return "still needs " + summarizeShortfall(shortfall, exact)
-                + ". Everything already standing stays; restock and send the SAME call again to carry "
-                + "on from exactly here — finished cells are skipped automatically.";
-    }
-
-    /** 收工:撤掉自己垫的脚手架,放一把庆祝的粒子。 */
-    /**
-     * 收工时把图纸里的摆设实体生成出来:展示框、盔甲架、画。
-     *
-     * <p>放在最后一步,因为它们要挂在墙上、立在地上——墙和地得先有。躯壳照生,身上
-     * 的东西已经在加载时剥掉了(见 {@code BuildStates#safeEntityData}),所以这里
-     * 不涉及任何物品。
-     */
-    private void spawnFixtures() {
-        if (r.entities.isEmpty() || !(player.level() instanceof ServerLevel level)) {
-            return;
-        }
-        for (BuildTaskRecord.EntitySpawn spawn : r.entities) {
-            try {
-                if (fixtureAlreadyThere(spawn)) {
-                    continue;   // 重发同一个调用是续建,不该再生成一份
-                }
-                boolean pays = r.consumeMaterials && spawn.item() != Items.AIR;
-                if (pays && !hasItems(spawn.item(), 1, true)) {
-                    // 这一步在 finish() 里,passMissing 此后没人读——不记一笔的话
-                    // 摆设静默消失而任务照报成功。
-                    skippedFixtures++;
-                    continue;
-                }
-                // 身上带的东西另算,而且按组件全等收:框里那把锋利五的剑,得他真有一把
-                // 才装得上。收什么放什么——付不起就整个拿掉,框空着挂上去,如实记一笔。
-                var carried = spawn.payload(level.registryAccess());
-                boolean paidCarried = true;
-                if (r.consumeMaterials) {
-                    for (ItemStack want : carried) {
-                        if (strictCount(want) < 1) {
-                            paidCarried = false;
-                            break;
-                        }
-                    }
-                }
-                // 挂件的锚点必须在读档<b>之前</b>写好:它是绝对坐标,读档时就定了,
-                // moveTo 改不到它(那只改视觉位置)。旋转过的图纸里挂件朝向也存在
-                // NBT 里,一并按图纸转过去——直接调 HangingEntity.rotate() 会改朝向
-                // 字段却不重算碰撞箱,两者当场脱钩。
-                var nbt = spawn.nbt().copy();
-                if (!paidCarried) {
-                    com.dwinovo.numen.core.task.BuildStates.stripPayload(nbt);
-                    skippedPayloads += carried.size();
-                }
-                boolean hangs = !"minecraft:armor_stand".equals(nbt.getString("id"));
-                // 位置与锚点同源写入。读档时锚点要过一道 16 格闸门:锚点离 Pos 超过
-                // 16 格就被判成坏档丢掉,而丢掉之后重算碰撞箱会拿一个 null 坐标去算
-                // 中心点,当场 NPE、这只摆设静默消失。加载器把两个键都删了,所以这里
-                // 一起补上,闸门看到的是同一个点。
-                net.minecraft.nbt.ListTag at = new net.minecraft.nbt.ListTag();
-                at.add(net.minecraft.nbt.DoubleTag.valueOf(spawn.x()));
-                at.add(net.minecraft.nbt.DoubleTag.valueOf(spawn.y()));
-                at.add(net.minecraft.nbt.DoubleTag.valueOf(spawn.z()));
-                nbt.put("Pos", at);
-                if (hangs) {
-                    BlockPos anchor = BlockPos.containing(spawn.x(), spawn.y(), spawn.z());
-                    nbt.putInt("TileX", anchor.getX());
-                    nbt.putInt("TileY", anchor.getY());
-                    nbt.putInt("TileZ", anchor.getZ());
-                }
-                // 朝向是两套键名两套编码,不是一套:画存小写 facing、按水平四向编码;
-                // 展示框存大写 Facing、按六向编码(它能挂在天花板和地板上)。混用的
-                // 后果是一半的墙面展示框转向错误,随后立不住掉落。
-                if (nbt.contains("facing")) {
-                    Direction facing = Direction.from2DDataValue(nbt.getByte("facing"));
-                    nbt.putByte("facing", (byte) spawn.rotation().rotate(facing).get2DDataValue());
-                }
-                if (nbt.contains("Facing")) {
-                    Direction facing = Direction.from3DDataValue(nbt.getByte("Facing"));
-                    nbt.putByte("Facing", (byte) spawn.rotation().rotate(facing).get3DDataValue());
-                }
-                var created = net.minecraft.world.entity.EntityType.create(nbt, level);
-                if (created.isEmpty()) {
-                    continue;
-                }
-                var entity = created.get();
-                // 挂件的朝向已经在 NBT 里转好了;盔甲架不是挂件,它的朝向只有偏航角,
-                // 走基类那个纯函数版的 rotate(只返回旋转后的偏航角,不改任何字段)。
-                float yaw = hangs ? entity.getYRot() : entity.rotate(spawn.rotation());
-                entity.moveTo(spawn.x(), spawn.y(), spawn.z(), yaw, entity.getXRot());
-                entity.setUUID(java.util.UUID.randomUUID());   // 同一张图纸建两遍不能撞 UUID
-                level.addFreshEntity(entity);
-                if (pays) {
-                    consumeOne(spawn.item());
-                }
-                if (paidCarried && r.consumeMaterials) {
-                    for (ItemStack want : carried) {
-                        consumeStrict(want);
-                    }
-                }
-            } catch (RuntimeException ignored) {
-                // 一只摆设生成失败不该让整栋楼算失败
-            }
-        }
-    }
-
-    /**
-     * 这只摆设已经在那儿了吗——<b>实体的幂等靠这一步</b>。
-     *
-     * <p>方块能安全重发,是因为我们逐格拿世界当进度对照;而"重发同一个调用就是续建"
-     * 正是我们写进工具描述、教给模型的做法。实体没有这一步的话,建完再发一次就多出
-     * 一份摆设——同一面墙上两个展示框叠在一起。
-     */
-    private boolean fixtureAlreadyThere(BuildTaskRecord.EntitySpawn spawn) {
-        if (!(player.level() instanceof ServerLevel level)) {
-            return false;
-        }
-        var type = net.minecraft.world.entity.EntityType.by(spawn.nbt());
-        if (type.isEmpty()) {
-            return false;
-        }
-        AABB box = new AABB(spawn.x() - 0.5, spawn.y() - 0.5, spawn.z() - 0.5,
-                spawn.x() + 0.5, spawn.y() + 0.5, spawn.z() + 0.5);
-        return !level.getEntities(type.get(), box, e -> true).isEmpty();
-    }
-
-    /**
-     * 收工时给紧贴工地外围一圈的水重排一次流体 tick。
-     *
-     * <p>我们落位不带邻居更新——那是为了不让原版中途改写图纸(见 {@code PLACE_FLAGS})
-     * ,但代价是<b>周围的水不知道世界变了</b>:在湖里砌一道墙,两侧的水停在过期状态;
-     * 把水下的一块石头清掉,那个洞不会自己被水填上。踢一脚只需要在外壳上做,内部
-     * 全是刚放好的方块。
-     *
-     * <p>只在"连带清空"那档做:低档位不清场,挖不出会漏水的空腔。
-     */
-    private void nudgeSurroundingWater() {
-        if (r.replaceMode != ReplaceMode.REPLACE_EMPTY
-                || !(player.level() instanceof ServerLevel level)) {
-            return;
-        }
-        BlockPos.betweenClosedStream(siteMin.offset(-1, -1, -1), siteMax.offset(1, 1, 1))
-                .filter(pos -> pos.getX() < siteMin.getX() || pos.getX() > siteMax.getX()
-                        || pos.getY() < siteMin.getY() || pos.getY() > siteMax.getY()
-                        || pos.getZ() < siteMin.getZ() || pos.getZ() > siteMax.getZ())
-                .filter(pos -> level.isLoaded(pos) && level.getFluidState(pos).is(Fluids.WATER))
-                .forEach(pos -> level.scheduleTick(pos.immutable(), Fluids.WATER,
-                        Fluids.WATER.getTickDelay(level)));
-    }
-
+    /** 收工:撤掉自己垫的脚手架、生成摆设、外围补水,放一把庆祝的粒子。 */
     private TaskState finish() {
         for (BlockPos pos : scaffold) {
             if (targetByPos.containsKey(pos.asLong())) continue;
@@ -1297,16 +820,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         scaffold.clear();
-        spawnFixtures();
-        nudgeSurroundingWater();
-        if (player.level() instanceof ServerLevel level) {
-            level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
-                    (siteMin.getX() + siteMax.getX()) / 2.0 + 0.5,
-                    siteMax.getY() + 1.0,
-                    (siteMin.getZ() + siteMax.getZ()) / 2.0 + 0.5,
-                    24, (siteMax.getX() - siteMin.getX()) / 3.0 + 1.0, 1.0,
-                    (siteMax.getZ() - siteMin.getZ()) / 3.0 + 1.0, 0.0);
-        }
+        fixtures.spawnAll();
+        fixtures.nudgeSurroundingWater(siteMin, siteMax);
+        show.celebrate(siteMin, siteMax);
         InputDriver.halt(player);
         if (r.completed() + skippedCells >= r.targets.size()) {
             // 三种交代要并列,不能互相吃掉:此前 skippedFixtures 一非零就只报摆设,
@@ -1321,12 +837,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 notes.add(r.droppedAtLoad() + " cell(s) of the blueprint were dropped on load"
                         + " (liquids, or blocks with no item to pay with)");
             }
-            if (skippedFixtures > 0) {
-                notes.add("short " + skippedFixtures + " fixture(s) (item frames / armour stands"
+            if (fixtures.skippedFixtures() > 0) {
+                notes.add("short " + fixtures.skippedFixtures() + " fixture(s) (item frames / armour stands"
                         + " / paintings)");
             }
-            if (skippedPayloads > 0) {
-                notes.add(skippedPayloads + " item(s) the blueprint had in its frames / on its"
+            if (fixtures.skippedPayloads() > 0) {
+                notes.add(fixtures.skippedPayloads() + " item(s) the blueprint had in its frames / on its"
                         + " armour stands were left out — those need the exact same item"
                         + " (enchantments and all), so they went up empty");
             }
@@ -1340,8 +856,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     // ------------------------------------------------------------------
 
     /**
-     * 挪窝。用直接步进而不是寻路——施工期间起一次 A* 既慢又可能顺手挖填,
-     * 而"她在工地里走动"这件事根本不需要精确到达:走得到就走到,走不到换一个。
+     * 挪窝。走位交给寻路——巡视点之间只有几格,起一次 A* 的代价很低,而避障是
+     * 它天生就会的事;直线步进遇到墙、树、坎就一路顶着走满时限。
      */
     private void tickWander() {
         if (wanderPoints.isEmpty()) {
@@ -1355,9 +871,6 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             wanderTarget = nextWanderPoint();
             return;
         }
-        // 走位交给寻路,不是朝目标推移动输入。直线步进遇到墙、树、坎就一路顶着
-        // 走满时限——实测就是"蹭着建筑边卡住"的那个样子。巡视点之间只有几格,
-        // 起一次 A* 的代价很低,而避障是它天生就会的事。
         if (nav == null) {
             Vec3 dest = wanderTarget;
             nav = PlayerNav.to(player,
@@ -1383,11 +896,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /**
      * 下一个落脚点:选离<b>接下来要盖的那一片</b>最近的外沿点。
      *
-     * <p>这是"看起来在干活"与"看起来在遛弯"的分界。匀速绕圈时,她的走位和她的
-     * 产出是两条毫不相干的动画,叠在一起人一眼就看得出是假的。施工顺序是低层
-     * 优先、层内蛇形,接下来几十格在空间上本就连成一片;把落脚点绑到那一片,
-     * 她就会自然地沿着正在砌的那面墙挪,盖完东墙走到南边——同样是绕外圈,
-     * 但因果对上了。
+     * <p>这是"看起来在干活"与"看起来在遛弯"的分界。施工顺序是低层优先、层内蛇形,
+     * 接下来几十格在空间上本就连成一片;把落脚点绑到那一片,她就会自然地沿着正在
+     * 砌的那面墙挪——同样是绕外圈,但因果对上了。
      */
     private Vec3 nextWanderPoint() {
         if (wanderPoints.isEmpty()) {
@@ -1476,7 +987,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             maxZ = Math.max(maxZ, pos.getZ());
         }
         if (minX > maxX) {
-            BlockPos feet = playerFeet();
+            BlockPos feet = com.dwinovo.numen.core.pathing.execute.PathExecutor.playerFeet(player);
             siteMin = feet;
             siteMax = feet;
             return;
@@ -1490,69 +1001,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 层内先清障、再骨架、最后贴附;同类蛇形走位(牛耕式),顺序完全确定
      * ——没有"智能选点"可坏,断点续建也就成立。
      *
-     * <p><b>贴附件整体推到第二趟</b>,排在所有层之后。火把、告示牌、梯子、地毯、
-     * 花草、铁轨、红石、压力板、按钮、挂灯这些东西都要依托别的方块才站得住,而
-     * 骨架是逐层长起来的:主趟走到某一层时,它上面的支撑还不存在。同一格反复
-     * "放下去—掉下来—再放"不但白费工,还会让完工判定在原地打转。
-     *
-     * <p>所以主趟只砌立得住的东西,一层一层从下往上;骨架全部立好之后再回头走
-     * 一趟,专门贴这些细软件。多走一趟不亏:她本来就是当着玩家的面一层层砌上去
-     * 的,收尾时再绕一圈挂灯摆花,恰好是这活儿该有的样子。
+     * <p><b>贴附件整体推到第二趟</b>,排在所有层之后(见 {@link BuildOrder})。
      */
     private void rebuildOrder() {
         List<BuildTaskRecord.Target> pending = new ArrayList<>();
         for (BuildTaskRecord.Target target : r.targets) {
-            if (!target.matches(peek(target.pos()))
-                    && !blockedByMode(target) && !hopeless(target)) {
+            if (!target.matches(rules.peek(target.pos()))
+                    && !rules.blockedByMode(target) && !rules.hopeless(target)) {
                 pending.add(target);
             }
         }
-        pending.sort(BUILD_ORDER);
+        pending.sort(BuildOrder.BUILD_ORDER);
         order = pending;
         resetLayerWindow();
-    }
-
-    /** 施工顺序的唯一定义(公开是为了让测试直接钉住它,而不是靠副作用间接猜)。 */
-    public static final Comparator<BuildTaskRecord.Target> BUILD_ORDER = Comparator
-            .comparingInt((BuildTaskRecord.Target t) -> needsSupport(t.desiredState()) ? 1 : 0)
-            .thenComparingInt(t -> t.pos().getY())
-            .thenComparingInt(BuildCompanionTask::stage)
-            .thenComparingInt(t -> t.pos().getZ())
-            .thenComparingInt(t -> (t.pos().getZ() & 1) == 0 ? t.pos().getX() : -t.pos().getX());
-
-    /**
-     * 这一格立不立得住:要依托别的方块的算<b>贴附件</b>,推到第二趟。
-     *
-     * <p>按方块类型判,不按"能不能存活"现场试——现场试要有支撑才知道答案,而主趟
-     * 正是支撑还没长出来的时候。类型是封闭集合,一次列完;"能不能存活"是开放的,
-     * 每来一个新方块就得被咬一次。
-     *
-     * <p>花草(BushBlock)、花盆、雪层这三类是特意加进来的:我们是<b>分遍</b>推进的
-     * 慢速施工,一格放不下去要等到下一遍,来回几次就是几十秒;宁可一开始就把它们
-     * 放到最后一趟。地毯用 CarpetBlock 而不是只管羊毛地毯,苔藓地毯同样要依托。
-     */
-    public static boolean needsSupport(BlockState state) {
-        if (state == null) {
-            return false;
-        }
-        if (state.hasProperty(BlockStateProperties.HANGING)) {
-            return true;   // 挂着的灯笼与告示牌
-        }
-        var b = state.getBlock();
-        return b instanceof net.minecraft.world.level.block.LadderBlock
-                || b instanceof net.minecraft.world.level.block.BaseTorchBlock
-                || b instanceof net.minecraft.world.level.block.SignBlock
-                || b instanceof net.minecraft.world.level.block.BasePressurePlateBlock
-                || b instanceof net.minecraft.world.level.block.BaseRailBlock
-                || b instanceof net.minecraft.world.level.block.DiodeBlock
-                || b instanceof net.minecraft.world.level.block.RedStoneWireBlock
-                || b instanceof net.minecraft.world.level.block.CarpetBlock
-                || b instanceof net.minecraft.world.level.block.BushBlock
-                || b instanceof net.minecraft.world.level.block.FlowerPotBlock
-                || b instanceof net.minecraft.world.level.block.SnowLayerBlock
-                // 按钮、拉杆这类贴面件;砂轮同属这一族但它自己立得住
-                || (b instanceof net.minecraft.world.level.block.FaceAttachedHorizontalDirectionalBlock
-                        && !(b instanceof net.minecraft.world.level.block.GrindstoneBlock));
     }
 
     /**
@@ -1597,57 +1058,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
     }
 
-    /** 层内阶段:清障 0 → 骨架 1 → 贴附 2。 */
-    private static int stage(BuildTaskRecord.Target target) {
-        if (isAirTarget(target)) {
-            return 0;
-        }
-        BlockState state = target.desiredState();
-        return state != null && state.isCollisionShapeFullBlock(net.minecraft.world.level.EmptyBlockGetter.INSTANCE,
-                BlockPos.ZERO) ? 1 : 2;
-    }
-
-    /**
-     * 这一趟的落位速率(开工时算一次,全程恒定)。
-     *
-     * <p>目标时长封顶、速率由格数除出来:小工程走下限速率,自然比封顶短;大工程
-     * 一开始就更快,总时长收敛到封顶值。不是"越盖越快",也没有到点强制收工。
-     */
-    public static double paceFor(int cellCount, boolean consumeMaterials) {
-        int cells = Math.max(1, cellCount);
-        return consumeMaterials
-                ? Math.max(SURVIVAL_MIN_RATE, cells / SURVIVAL_TARGET_TICKS)
-                : Math.min(FREE_MAX_RATE, cells / FREE_TARGET_TICKS);
-    }
-
-    /**
-     * 施工预计要多少刻——派发方据此定时限。
-     *
-     * <p>必须和 {@link #paceFor} 用同一个公式算,不能各拍各的:此前时限按"每格
-     * 固定几刻"估,而我把"每秒两格"错记成了"每刻两格",于是最慢档的真实开销
-     * (每格十刻)被低估了二十倍,五百格的生存建筑会在盖到一半时被判超时——而
-     * 一千四百格以下走的都是这个下限速率,也就是大多数房子。
-     */
-    public static long estimatedTicks(int cellCount, boolean consumeMaterials) {
-        return (long) Math.ceil(Math.max(1, cellCount) / paceFor(cellCount, consumeMaterials));
-    }
-
     /** 按格数和目标时长定这一趟的速率(开工时算一次)。 */
     private void computePace() {
         int cells = Math.max(1, r.targets.size());
-        cellsPerTick = paceFor(cells, r.consumeMaterials);
+        cellsPerTick = BuildOrder.paceFor(cells, r.consumeMaterials);
         com.dwinovo.numen.core.Constants.LOG.debug(
                 "[numen-build] 节奏 {} 格,{} 格/秒,预计 {} 秒",
                 cells, String.format("%.1f", cellsPerTick * 20),
                 (int) (cells / cellsPerTick / 20));
-    }
-
-    private List<BlockPos> pendingPositions() {
-        List<BlockPos> out = new ArrayList<>();
-        for (int i = layerStart; i < order.size() && out.size() < 64; i++) {
-            out.add(order.get(i).pos());
-        }
-        return out;
     }
 
     private void drainScaffold() {
@@ -1659,30 +1077,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     // ------------------------------------------------------------------
-    // 判据与账目
+    // 对账
     // ------------------------------------------------------------------
-
-    /**
-     * 谁都不豁免——包括同伴自己:身体占着/正落进的格子不可放置。
-     *
-     * <p>自己的身体用直接几何判交,不走实体分区索引——假人在索引里会漏检
-     * (法医快照抓到过"双脚站在目标格里却放行",随后往自己身上落方块把自己
-     * 封进树叶)。我在哪儿,不需要问索引。
-     */
-    private boolean blockedByEntity(BlockPos pos, BlockState state) {
-        VoxelShape shape = state.getCollisionShape(player.level(), pos, CollisionContext.of(player));
-        if (shape.isEmpty()) {
-            return false;
-        }
-        VoxelShape placed = shape.move(pos.getX(), pos.getY(), pos.getZ());
-        AABB body = player.getBoundingBox();
-        for (AABB piece : placed.toAabbs()) {
-            if (piece.intersects(body)) {
-                return true;
-            }
-        }
-        return !player.level().isUnobstructed(player, placed);
-    }
 
     private void markObserved(BuildTaskRecord.Target target, boolean completed) {
         if (observedCompleted == null) {
@@ -1756,12 +1152,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             BlockState observed = view.getBlockState(pos);
             if (target.matches(observed)
                     || target.desiredState().getBlock() instanceof LiquidBlock
-                    || (isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {
+                    || (BuildCellRules.isAirTarget(target) && observed.getBlock() instanceof LiquidBlock)) {
                 // 液体口径:不放液体目标、清空型目标也不排水——这两类跳过豁免;
                 // 固体目标被液体淹着不豁免,照放,方块直接顶掉水(原版语义)
                 observedCompleted.add(key);
                 skippedPos.remove(key);
-            } else if (blockedByMode(target) || hopeless(target)) {
+            } else if (rules.blockedByMode(target) || rules.hopeless(target)) {
                 // 注意:这一支要在 damagedCells 之前。玩家把挡路的箱子搬走时,
                 // 这一格会从"不去动"变成"待办",若走下面那支就会被记成
                 // "已砌好又被拆了"——而它从头到尾没被建过。
@@ -1792,33 +1188,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         r.completed(observedCompleted.size());
     }
 
-    /** 从背包扣掉一个该物品。 */
-    private void consumeOne(Item item) {
-        if (player.hasInfiniteMaterials()) {
-            return;   // 任务中途被切成免耗材画像:记账即刻停手,别扣真方块
-        }
-        Inventory inventory = player.getInventory();
-        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());   // 与存量口径同源
-        for (int i = 0; i < limit; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && stack.is(item)) {
-                stack.shrink(1);
-                return;
-            }
-        }
-    }
-
-    private static boolean isAirTarget(BuildTaskRecord.Target target) {
-        return target.block() == net.minecraft.world.level.block.Blocks.AIR;
-    }
-
     private boolean isReplaceable(BlockPos pos, BlockState state) {
         return MovementHelper.isReplaceable(pos.getX(), pos.getY(), pos.getZ(), state,
                 com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest.ALWAYS);
-    }
-
-    private boolean hasItem(Item item, boolean wholeInventory) {
-        return hasItems(item, 1, wholeInventory);
     }
 
     /**
@@ -1861,236 +1233,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
     }
 
-    /**
-     * 这一格本档不让动吗——让路的判定只有这一处。
-     *
-     * <p>不让动的格子<b>不进待建集、也算作了结</b>。若只是"放的时候跳过",它每一遍
-     * 都会重新排进顺序、每一遍都放不下去,整栋楼陪着它重试到超时,而那一格从第一遍
-     * 起就已经注定动不了。
-     */
-    /**
-     * 只读已加载区块的取态——未加载处当空气。
-     *
-     * <p>{@code level.getBlockState} 在服务端会<b>同步生成区块</b>(它内部要的是 FULL
-     * 状态,拿不到就现场生成)。判定这一族的读点要么在开工前置上(盘料得扫全图纸),
-     * 要么在每刻的热路径上——一个远处锚点就能让她把图纸覆盖的所有区块现场生成一遍,
-     * 玩家看到的是一次可见卡顿。轮扫那处本来就用的是钳制视图,这几处得跟上同一条纪律,
-     * 否则六个读点里只挡住了一个。
-     */
-    private BlockState peek(BlockPos pos) {
-        return LoadedOnlyView.of(player.level()).getBlockState(pos);
-    }
-
-    private boolean blockedByMode(BuildTaskRecord.Target target) {
-        BlockPos pos = target.pos();
-        BlockState current = peek(pos);
-        if (!r.replaceMode.allows(current, target.desiredState())) {
-            return true;
-        }
-        // 玩家的箱子不能被一堵墙盖掉。让路的档位管"石头挡路要不要顶掉",这一条
-        // 管"带方块实体的方块要不要动"——少砌一格墙是遗憾,清掉一箱子东西是事故。
-        if (r.replaceBlockEntities || current.isAir()) {
-            return false;
-        }
-        if (current.hasBlockEntity() && !target.matches(current)) {
-            return true;
-        }
-        // 双格方块连另一半一起看:任一半压着方块实体就都不动
-        BlockPos other = otherHalfOf(pos, target.desiredState());
-        return other != null && peek(other).hasBlockEntity();
-    }
-
-    /**
-     * 这一格<b>注定</b>动不了吗——世界边界之外,或者砸不动的东西挡着。
-     *
-     * <p>和"这一刻放不下去"要分开:后者(区块没加载、她自己站在那格里、材料没到)
-     * 下一遍就可能变,该留在待建集里;前者从第一遍起就不会变,留着只会让整栋楼
-     * 每一遍都为它重排一次顺序、重试一次,一直耗到超时。
-     */
-    private boolean hopeless(BuildTaskRecord.Target target) {
-        BlockPos pos = target.pos();
-        if (!player.level().getWorldBorder().isWithinBounds(pos)) {
-            return true;
-        }
-        // 出了建造高度就是写不进去:setBlock 直接返回假、世界毫无变化。留在待办里的
-        // 后果是每遍白扣一件料——那一格永远对不上,而扣料照扣。
-        if (player.level().isOutsideBuildHeight(pos)) {
-            return true;
-        }
-        return unbreakableAt(pos, target.desiredState());
-    }
-
-    /**
-     * 这一格砸不动吗——基岩、末地传送门框架这类 {@code destroySpeed == -1} 的东西。
-     *
-     * <p>不判的话她会对着基岩一遍遍地清、一遍遍地失败,直到超时。<b>双格方块要连
-     * 它的另一半一起查</b>:床的另一半在朝向那一格,门与高草的另一半在正上方——
-     * 只查自己那一格,会出现"下半放下去了、上半卡在基岩里"的半截货。
-     */
-    private boolean unbreakableAt(BlockPos pos, BlockState desired) {
-        var level = player.level();
-        if (peek(pos).getDestroySpeed(level, pos) == -1) {
-            return true;
-        }
-        BlockPos other = otherHalfOf(pos, desired);
-        return other != null && peek(other).getDestroySpeed(level, other) == -1;
-    }
-
-    /**
-     * 双格方块的另一半在哪:床看朝向那一格,门与高草看正上方。
-     *
-     * <p>只查自己那一格,会出现"下半放下去了、上半卡在基岩里"或者"下半盖住了玩家
-     * 箱子的上半"这类半截货,所以砸不动与箱子保护两处都要连它一起看。
-     */
-    private static BlockPos otherHalfOf(BlockPos pos, BlockState desired) {
-        if (desired == null) {
-            return null;
-        }
-        if (desired.hasProperty(BlockStateProperties.BED_PART)
-                && desired.getValue(BlockStateProperties.BED_PART) == BedPart.FOOT
-                && desired.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) {
-            return pos.relative(desired.getValue(BlockStateProperties.HORIZONTAL_FACING));
-        }
-        if (desired.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)
-                && desired.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.LOWER) {
-            return pos.above();
-        }
-        return null;
-    }
-
-    /**
-     * 背包里有几件<b>和这一叠完全一样</b>的东西——组件也要一致。
-     *
-     * <p>用原版自己那个"同物品同组件"判据,不另立一套近似判据:少比一个组件,就等于
-     * 拿一把白剑换走文件里那把锋利五的剑。
-     */
-    private int strictCount(ItemStack want) {
-        Inventory inventory = player.getInventory();
-        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
-        int n = 0;
-        for (int i = 0; i < limit; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, want)) {
-                n += stack.getCount();
-            }
-        }
-        return n;
-    }
-
-    /** 从背包扣掉一件和这一叠完全一样的东西。 */
-    private boolean consumeStrict(ItemStack want) {
-        if (player.hasInfiniteMaterials()) {
-            return true;
-        }
-        Inventory inventory = player.getInventory();
-        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
-        for (int i = 0; i < limit; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, want)) {
-                stack.shrink(1);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** 够不够 {@code count} 件——双层砖那种一格吃两件的格子要问这个。 */
-    private boolean hasItems(Item item, int count, boolean wholeInventory) {
-        if (wholeInventory && NavSettings.get().allowInventory) {
-            return mainInventoryCount(item) >= count;
-        }
-        return hotbarCount(item) >= count;
-    }
-
-    private int hotbarCount(Item item) {
-        Inventory inventory = player.getInventory();
-        int n = 0;
-        for (int i = 0; i < 9; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && stack.is(item)) {
-                n += stack.getCount();
-            }
-        }
-        return n;
-    }
-
-    private int findSlot(Item item, boolean wholeInventory) {
-        Inventory inventory = player.getInventory();
-        for (int i = 0; i < 9; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && stack.is(item)) {
-                return i;
-            }
-        }
-        if (wholeInventory && NavSettings.get().allowInventory) {
-            return findMainInventorySlot(item);
-        }
-        return -1;
-    }
-
-    private int mainInventoryCount(Item item) {
-        return PlayerInv.buildableCount(player.getInventory(), item);
-    }
-
-    private int findMainInventorySlot(Item item) {
-        Inventory inventory = player.getInventory();
-        int limit = Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
-        for (int i = 9; i < limit; i++) {
-            ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && stack.is(item)) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    private Set<BlockState> availableStates(boolean wholeInventory) {
-        Set<BlockState> states = new HashSet<>();
-        Inventory inventory = player.getInventory();
-        int limit = wholeInventory && NavSettings.get().allowInventory
-                ? Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size()) : 9;
-        for (int i = 0; i < limit; i++) {
-            addAvailableState(states, inventory.getItem(i));
-        }
-        return states;
-    }
-
-    private void addAvailableState(Set<BlockState> states, ItemStack stack) {
-        if (stack.isEmpty() || !(stack.getItem() instanceof BlockItem blockItem)) {
-            return;
-        }
-        try {
-            BlockPos feet = playerFeet();
-            BlockHitResult hit = new BlockHitResult(player.position(), Direction.UP, feet, false);
-            BlockState state = blockItem.getBlock().getStateForPlacement(new BlockPlaceContext(new UseOnContext(
-                    player.level(), player, InteractionHand.MAIN_HAND, stack, hit) {}));
-            if (state != null) {
-                states.add(state);
-            }
-        } catch (RuntimeException e) {
-            states.add(blockItem.getBlock().defaultBlockState());
-        }
-    }
-
     // ------------------------------------------------------------------
-    // 朝向与寻路桥接
+    // 寻路桥接
     // ------------------------------------------------------------------
-
-    private void applySteppedAim(Vec3 point) {
-        Vec3 eye = player.getEyePosition();
-        applySteppedAim(MovementHelper.yawTo(eye, point), MovementHelper.pitchTo(eye, point));
-    }
-
-    private void applySteppedAim(float yaw, float pitch) {
-        AimProcessor.Rotation next = AIM.step(player.getYRot(), player.getXRot(), yaw, pitch);
-        player.setYRot(next.yaw());
-        player.setYHeadRot(next.yaw());
-        player.setXRot(next.pitch());
-    }
-
-    private BlockPos playerFeet() {
-        return PathExecutor.playerFeet(player);
-    }
 
     private void registerProvider() {
         if (!providerRegistered) {
@@ -2106,14 +1251,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
     }
 
-    private Map<Long, BuildTaskRecord.Target> activeTargetMap() {
-        return targetByPos;
-    }
-
     @Override
     public BlockState desiredState(BlockPos placeAt) {
         BuildTaskRecord.Target target = targetByPos.get(placeAt.asLong());
-        if (target == null || isAirTarget(target)) {
+        if (target == null || BuildCellRules.isAirTarget(target)) {
             return null;
         }
         if (target.matches(player.level().getBlockState(target.pos()))) {
@@ -2132,7 +1273,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     public CalculationContext forSearch(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
         return ContextFactory.forSearch(player, union(sacred), union(deniedPlace),
                 (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
-                        p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true),
+                        p, view, loaded, safe, s, denied, targetByPos, inv.availableStates(true),
                         r.replaceExisting));
     }
 
@@ -2140,7 +1281,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     public CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
         return ContextFactory.forExecution(player, union(sacred), union(deniedPlace),
                 (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
-                        p, view, loaded, safe, s, denied, activeTargetMap(), availableStates(true),
+                        p, view, loaded, safe, s, denied, targetByPos, inv.availableStates(true),
                         r.replaceExisting));
     }
 
@@ -2186,9 +1327,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             data.put("destroyed_while_building", damagedCells);
         }
         if (r.consumeMaterials) {
-            Map<Item, Integer> shortfall = shortfallAgainstInventory(remainingNeed());
+            Map<Item, Integer> shortfall = ledger.shortfallAgainstInventory(ledger.remainingNeed());
             if (!shortfall.isEmpty()) {
-                data.put("still_short", summarizeShortfall(shortfall));
+                data.put("still_short", BuildLedger.summarizeShortfall(shortfall));
             }
         }
         return data;
@@ -2214,9 +1355,5 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     @Override
     protected String cancelledMessage() {
         return "build interrupted after " + r.completed() + "/" + r.targets.size() + " block(s)";
-    }
-
-    private static String label(Item item) {
-        return net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item).getPath();
     }
 }

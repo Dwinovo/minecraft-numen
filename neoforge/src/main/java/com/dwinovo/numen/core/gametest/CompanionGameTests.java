@@ -417,7 +417,7 @@ public class CompanionGameTests {
                         new BlockPos(2, 1, 0), "carpet", null, null, null),
                 new BuildTaskRecord.Target(Blocks.STONE, Items.STONE,
                         new BlockPos(0, 9, 0), "stone", null, null, null)));
-        mixed.sort(com.dwinovo.numen.core.task.BuildCompanionTask.BUILD_ORDER);
+        mixed.sort(com.dwinovo.numen.core.task.BuildOrder.BUILD_ORDER);
         helper.assertTrue(mixed.get(0).desiredState().getBlock() == Blocks.STONE,
                 "everything that stands on its own goes first, even nine layers up; got "
                         + mixed.stream().map(BuildTaskRecord.Target::label).toList());
@@ -2076,7 +2076,7 @@ public class CompanionGameTests {
     public static void build_deadline_covers_pace(GameTestHelper helper) {
         for (int cells : new int[]{50, 500, 1440, 5859, 16384}) {
             for (boolean survival : new boolean[]{true, false}) {
-                long need = com.dwinovo.numen.core.task.BuildCompanionTask
+                long need = com.dwinovo.numen.core.task.BuildOrder
                         .estimatedTicks(cells, survival);
                 long budget = com.dwinovo.numen.core.tools.BuildTool.timeoutTicksFor(cells, survival);
                 helper.assertTrue(budget > need,
@@ -2085,7 +2085,7 @@ public class CompanionGameTests {
             }
         }
         // 生存封顶:再大的工程也收敛到目标时长,不会无限拉长
-        long huge = com.dwinovo.numen.core.task.BuildCompanionTask.estimatedTicks(16384, true);
+        long huge = com.dwinovo.numen.core.task.BuildOrder.estimatedTicks(16384, true);
         helper.assertTrue(huge <= 12 * 60 * 20 + 20,
                 "survival pace should cap total duration at the target, got " + huge + " ticks");
         helper.succeed();

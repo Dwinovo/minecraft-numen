@@ -57,7 +57,7 @@ public final class BuildTool implements NumenTool {
      * 时被判超时。两处各拍各的迟早再犯,所以公式只有一处真源。
      */
     public static long timeoutTicksFor(int cellCount, boolean consumeMaterials) {
-        long build = com.dwinovo.numen.core.task.BuildCompanionTask
+        long build = com.dwinovo.numen.core.task.BuildOrder
                 .estimatedTicks(cellCount, consumeMaterials);
         return Math.max(MIN_TIMEOUT_TICKS,
                 TRAVEL_ALLOWANCE_TICKS + (long) (build * TIMEOUT_SLACK));
