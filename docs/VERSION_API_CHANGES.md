@@ -480,6 +480,79 @@ Path.of(NumenCoreNeoForge.class.getResource("/skills").toURI())   // 防御式 t
 
 （残留清点:本档 api 清 14 个旧文件/贴图、core 清 51 个旧 0.0.x 引擎类。）
 
+### 0.1.1 功能面移植追加(1.21.8 的十二个提交搬到 1.21.10 时新碰到的)
+
+前两档的整套适配(gametest 数据驱动、CompoundTag Optional 化、Inventory 私有化、
+snapTo、ItemStack.CODEC、ComponentSerialization、TagValueInput 桥、ClientInput.moveVector、
+ServerLevel.updatePOIOnBlockStateChange)在本档**原样成立,一处未动**;
+47 条用例方法体与 8 个批次一字未改,common 230 单测全绿。本档新增的只有下面几条。
+
+**渲染换成提交式管线** ❗(api：`MixinLivingEntityRenderer`、`SpeechBubbleRenderer`)
+——头顶气泡走的就是实体渲染尾部，本档整条通道换了形状：
+```java
+// 挂载点:即时绘制 → 提交式
+LivingEntityRenderer.render(S, PoseStack, MultiBufferSource, int)
+    → LivingEntityRenderer.submit(S, PoseStack, SubmitNodeCollector, CameraRenderState)
+// 玩家渲染状态改名(同一个包)
+PlayerRenderState → AvatarRenderState        // .id 字段仍在,取本体的写法不变
+// 几何:不再直取 VertexConsumer
+buffers.getBuffer(RenderType.text(tex)) → collector.submitCustomGeometry(poseStack, RenderType.text(tex),
+        (PoseStack.Pose pose, VertexConsumer vc) -> { ... })   // 回调内用 vc.addVertex(pose, x, y, z)
+//   注:提交时内部已 pose.copy(),回调是延后执行的,因此参与计算的局部变量要 final
+// 文字:
+font.drawInBatch(str, x, y, color, shadow, matrix, buffers, mode, bg, light)
+    → collector.submitText(poseStack, x, y, FormattedCharSequence, shadow, Font.DisplayMode,
+                              light, color, bgColor, outlineColor)   // 字符串要先 forward(s, Style.EMPTY)
+// 相机朝向:广告牌旋转的来源换人
+mc.getEntityRenderDispatcher().cameraOrientation() → CameraRenderState.orientation
+//   (submit 的末位入参就是它;原版名牌 NameTagFeatureRenderer 用的也是这一个)
+```
+
+**Screen 输入事件化的补漏** (api：`CompanionChatScreen`、`CompanionWheelScreen`、`NumenScreen`)
+——上一档基线只改了 `keyPressed` / `mouseClicked`，本档新搬来的两个屏又碰到两个：
+```java
+keyReleased(int keyCode, int scanCode, int modifiers) → keyReleased(KeyEvent event)
+KeyMapping.matches(int keyCode, int scanCode)         → KeyMapping.matches(KeyEvent event)
+```
+`SafeUi` 护栏与新签名合并时，拆出来的 `mouseClickedInner` 也要改成收
+`(MouseButtonEvent, boolean)` 并在方法开头取局部 `mouseX/mouseY/button`，
+`super.mouseClicked` 要把 `event` 与 `doubleClick` 一并透传——否则模态屏的按钮收不到点击。
+
+**`TicketType` 二度变形** ❗(api：`CompanionChunkLoader`)——1.21.5 刚把它改成 record，
+1.21.9 又把「是否入档 + 用途」合并成一个位图：
+```java
+new TicketType(timeout, /*persist*/ false, TicketType.TicketUse.LOADING_AND_SIMULATION)
+    → new TicketType(timeout, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION)
+// 位:PERSIST=1 LOADING=2 SIMULATION=4 KEEP_DIMENSION_ACTIVE=8 CAN_EXPIRE_IF_UNLOADED=16
+// 不置 PERSIST 即不入档,与旧代 persist=false 逐字等价;addTicketWithRadius 未变。
+```
+
+**窗口句柄不再是 `long`** (api：`CompanionWheelScreen` 的物理按键采样)：
+```java
+mc.getWindow().getWindow()            → mc.getWindow().handle()
+InputConstants.isKeyDown(long, int)   → InputConstants.isKeyDown(Window, int)
+// GLFW.glfwGetMouseButton 仍收 long,传 window.handle()
+```
+
+**`Entity.getServer()` 删除** ❗(core：`BlueprintTool`)——拿服务器统一走世界：
+```java
+companion.getServer() → companion.level().getServer()
+```
+这一条在主仓其余地方本就是 `level().getServer()` 写法，只有新搬下来的蓝图工具用了旧写法。
+
+**api 构件坐标**：本档基线的三个 `build.gradle` artifactId **本来就是** `numen-api-*-1.21.10`
+(上一档那个 common 指着 1.21.5 的坑未复现)，只需把三处版本号提到 `0.0.8-SNAPSHOT`。
+即便如此也要逐个看——错了不报错。
+
+**结构模板 DataVersion 不硬盖**：`.snbt` 仍留 4189，`readStructure` 会走
+`DataFixTypes.STRUCTURE.updateToCurrentVersion` 正向修到本代；硬盖反而跳过修数据器。
+
+### 只在真机客户端才能目视验证的部分
+头顶气泡换到提交式管线后的**实际观感**(层次先后、小方尾位置、文字与底图的 z 关系、
+与名牌的相对位置)、转盘的物理按键接管与不断步、GUI 圆角 SDF 的渲染结果、
+快捷对话/语音三件套的手感——编译、mixin 目标(已 javap 逐条核对描述符)、datagen、
+gametest、单测都覆盖不到，只能开客户端看。
+
 ## 1.21.10 → 1.21.11
 
 构建旋钮:MC `1.21.11` / range `[1.21.11, 1.22)` / NeoForm `1.21.11-20251209.172050` /
