@@ -38,20 +38,32 @@ public final class ModItemTagData {
         Appender<T> tag(TagKey<T> key);
     }
 
-    /** Minimal fluent sink — only the {@code .add(T)} chaining the tag lists use. */
-    @FunctionalInterface
+    /**
+     * Minimal fluent sink — the {@code .add(T)} chaining the tag lists use, plus
+     * {@code .addTag} for referencing another tag ({@code #minecraft:banners} and
+     * friends). Naming a vanilla tag beats copying its current members: the
+     * members change between versions, the tag's meaning does not.
+     */
     public interface Appender<T> {
         Appender<T> add(T value);
+
+        Appender<T> addTag(TagKey<T> tag);
     }
 
-    /** Adapt a native MC tag builder's {@code add} to an {@link Appender}; loaders pass
-     *  {@code v -> nativeBuilder.add(v)} (an explicit lambda, not a method ref, to dodge
-     *  the {@code add(T)} vs {@code add(T...)} overload ambiguity). */
-    public static <T> Appender<T> appender(Consumer<T> add) {
+    /** Adapt a native MC tag builder to an {@link Appender}; loaders pass explicit
+     *  lambdas (not method refs) to dodge the {@code add(T)} vs {@code add(T...)}
+     *  overload ambiguity. */
+    public static <T> Appender<T> appender(Consumer<T> add, Consumer<TagKey<T>> addTag) {
         return new Appender<>() {
             @Override
             public Appender<T> add(T value) {
                 add.accept(value);
+                return this;
+            }
+
+            @Override
+            public Appender<T> addTag(TagKey<T> tag) {
+                addTag.accept(tag);
                 return this;
             }
         };
