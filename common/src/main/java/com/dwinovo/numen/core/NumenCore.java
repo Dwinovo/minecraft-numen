@@ -1,17 +1,7 @@
 package com.dwinovo.numen.core;
 
-import com.dwinovo.numen.task.TaskRecord;
-import com.dwinovo.numen.task.CompanionTask;
-
-import com.dwinovo.numen.agent.tool.ServerToolTransport;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
-import com.dwinovo.numen.entity.CompanionLifecycle;
-import com.dwinovo.numen.platform.Services;
-import com.dwinovo.numen.network.payload.CancelTasksPayload;
-import com.dwinovo.numen.network.payload.ExecuteToolPayload;
-import com.dwinovo.numen.network.payload.TaskResultPayload;
 import com.dwinovo.numen.task.CompanionTaskFactory;
-import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.core.task.BuildCompanionTask;
 import com.dwinovo.numen.core.task.BuildTaskRecord;
 import com.dwinovo.numen.core.task.CollectItemsTaskGoal;

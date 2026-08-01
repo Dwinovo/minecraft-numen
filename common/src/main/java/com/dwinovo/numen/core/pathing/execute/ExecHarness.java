@@ -225,7 +225,7 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
                     digger.digStep(cur);
                 } else {
                     if (!hit.getBlockPos().equals(cur)) {
-                        com.dwinovo.numen.Constants.LOG.debug("[numen-path] exec dig {} ({})",
+                        com.dwinovo.numen.core.Constants.LOG.debug("[numen-path] exec dig {} ({})",
                                 hit.getBlockPos().toShortString(),
                                 player.level().getBlockState(hit.getBlockPos()).getBlock());
                     }

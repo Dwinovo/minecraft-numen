@@ -3,17 +3,18 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.task.TaskChain;
 
 /**
- * The single gate that keeps the autonomous survival layer (auto-eat, fight-back,
- * flee, unstuck, MLG fall-save) dormant by default. Every survival chain's
- * {@code getPriority} FIRST consults {@link #enabled()} and returns
- * {@link Float#NEGATIVE_INFINITY} when it is off — so with the default-off gate the
- * four survival chains never beat {@link TaskChain#LLM_BASE_PRIORITY} and the
- * scheduler behaves exactly as it did before the layer existed (only
- * {@link LlmTaskChain} ever wins). A later stage flips this on; nothing here does.
+ * The single gate for the autonomous survival layer (auto-eat, fight-back,
+ * flee, unstuck, MLG fall-save). Every survival chain's {@code getPriority}
+ * FIRST consults {@link #enabled()} and returns
+ * {@link Float#NEGATIVE_INFINITY} when it is off — so with the gate off the
+ * survival chains never beat {@link TaskChain#LLM_BASE_PRIORITY} and the
+ * scheduler behaves as if the layer didn't exist. The field's own default is
+ * OFF (the safe state a bare library build ships with); the tool pack flips it
+ * on explicitly in {@code NumenCore.init()}.
  *
  * <p>Deliberately a plain static flag, not a per-companion setting: the layer is
- * enabled globally for the whole build once it graduates. {@code volatile} because
- * a config/command thread may flip it while the server tick thread reads it.
+ * enabled globally for the whole build. {@code volatile} because a
+ * config/command thread may flip it while the server tick thread reads it.
  */
 public final class SurvivalConfig {
 

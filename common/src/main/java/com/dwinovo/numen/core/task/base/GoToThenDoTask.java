@@ -102,7 +102,7 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
                 }
                 dudTicks = 0;
                 stopNav();
-                com.dwinovo.numen.Constants.LOG.info(
+                com.dwinovo.numen.core.Constants.LOG.info(
                         "[numen-task] STANCE_DUD {} feet={} — nav arrived, reached() still"
                                 + " false after {} ticks; routing the recovery ladder",
                         getClass().getSimpleName(), player.blockPosition().toShortString(),

@@ -200,7 +200,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         }
         runQuery();
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
-        com.dwinovo.numen.Constants.LOG.info(
+        com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] mine start targets={} count={} feet={} firstQuery={} hit(s)",
                 r.label, r.count, player.blockPosition().toShortString(),
                 knownOres.size());
@@ -304,18 +304,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                         // [ANCHOR arrived-dud] the EVENT (first stuck tick) logs at INFO; the rest of a
                         // 5-9 tick streak goes to debug so a routine blip can't spam the release log.
                         if (arrivedDudTicks == 1) {
-                            com.dwinovo.numen.Constants.LOG.info(
+                            com.dwinovo.numen.core.Constants.LOG.info(
                                     "[numen-task] mine ARRIVED-dud feet={} nearestOre={} — re-evaluating (not blacklisting)",
                                     player.blockPosition().toShortString(), nearestOreInfo());
                         } else {
-                            com.dwinovo.numen.Constants.LOG.debug(
+                            com.dwinovo.numen.core.Constants.LOG.debug(
                                     "[numen-task] mine ARRIVED-dud feet={} streak={}/{} nearestOre={}",
                                     player.blockPosition().toShortString(), arrivedDudTicks, MAX_ARRIVED_DUD,
                                     nearestOreInfo());
                         }
                         if (arrivedDudTicks >= MAX_ARRIVED_DUD) {
                             // [ANCHOR arrived-dud-giveup] persisted too long → last-resort blacklist.
-                            com.dwinovo.numen.Constants.LOG.info(
+                            com.dwinovo.numen.core.Constants.LOG.info(
                                     "[numen-task] mine ARRIVED-dud persisted {} ticks — blacklisting nearest as last resort",
                                     arrivedDudTicks);
                             blacklistNearest();
@@ -331,7 +331,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 }
                 case FAILED -> {
                     // [ANCHOR nav-failed] genuine no-path to the ore field → blacklist the nearest as presumed unreachable.
-                    com.dwinovo.numen.Constants.LOG.info(
+                    com.dwinovo.numen.core.Constants.LOG.info(
                             "[numen-task] mine nav failed ({}): {} | nearestOre={}",
                             nav.failType(), nav.failReason(), nearestOreInfo());
                     blacklistNearest();
@@ -760,7 +760,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         TargetIndex.Result res = TargetIndex.query(sl, player.blockPosition(), r.targets,
                 MAX_ORES, QUERY_MAX_CHUNK_RADIUS, QUERY_BUILD_BUDGET);
         lastQueryComplete = res.complete();
-        com.dwinovo.numen.Constants.LOG.debug(
+        com.dwinovo.numen.core.Constants.LOG.debug(
                 "[numen-task] mine query feet={} raw={} complete={} known(before merge)={}",
                 player.blockPosition().toShortString(), res.hits().size(), res.complete(),
                 knownOres.size());
@@ -842,7 +842,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 .ifPresent(p -> {
                     blacklist.add(p.immutable());
                     knownOres.remove(p);
-                    com.dwinovo.numen.Constants.LOG.info(
+                    com.dwinovo.numen.core.Constants.LOG.info(
                             "[numen-task] mine blacklisted {} (feet={}, {} target(s) left,"
                                     + " {} blacklisted)",
                             p.toShortString(), feet.toShortString(), knownOres.size(),

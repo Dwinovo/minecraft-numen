@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task;
 
-import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;

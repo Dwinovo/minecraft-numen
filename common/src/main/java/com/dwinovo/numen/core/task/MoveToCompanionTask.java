@@ -116,7 +116,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             r.extendDeadlineTo(player.level().getGameTime() + findExtra);
             leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
             kickFindScan();
-            com.dwinovo.numen.Constants.LOG.info(
+            com.dwinovo.numen.core.Constants.LOG.info(
                     "[numen-task] goto start kind=FIND block={}", r.block);
             return;
         }
@@ -135,7 +135,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         nav = r.kind == MoveToTaskRecord.Kind.BLOCK
                 ? PlayerNav.to(player, this::blockCompiled, WALK_SPEED, this::reached)
                 : PlayerNav.toGoal(player, this::goal, WALK_SPEED, this::reached);
-        com.dwinovo.numen.Constants.LOG.info(
+        com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] goto start kind={} target={},{},{} solid={}",
                 r.kind, bx, by, bz,
                 r.kind == MoveToTaskRecord.Kind.BLOCK && targetCellSolid());

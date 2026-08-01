@@ -1065,13 +1065,13 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
                 examples.add(target);
             }
         }
-        com.dwinovo.numen.Constants.LOG.info(
+        com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-build] 收不了尾 {}/{} feet={} 缺格分层={}",
                 r.completed(), r.targets.size(), player.blockPosition().toShortString(), byLayer);
         for (BuildTaskRecord.Target target : examples) {
             BlockPos pos = target.pos();
             BlockState desired = target.desiredState();
-            com.dwinovo.numen.Constants.LOG.info(
+            com.dwinovo.numen.core.Constants.LOG.info(
                     "[numen-build] 缺 {} 期望={} 实际={} 立得住={} 占身={} 有料={}",
                     pos.toShortString(), desired, peek(pos),
                     desired.canSurvive(player.level(), pos), blockedByEntity(pos, desired),
