@@ -209,6 +209,96 @@ MobEffects.DIG_SLOWDOWN → MobEffects.MINING_FATIGUE
 **（api 仓）`DynamicTexture` 构造器** ❗ — 新增调试名首参：`new DynamicTexture(img)` →
 `new DynamicTexture(() -> "label", img)`（`SkinTextures`）。
 
+### 0.1.1 功能面移植追加（1.21.4 的十个提交搬到 1.21.5 时新碰到的）
+
+**gametest 整套改数据驱动** ❗❗ — 本档最大的一刀，注解入口<b>全部删除</b>：
+`@GameTest` / `@BeforeBatch` / `net.neoforged.neoforge.gametest.@GameTestHolder` /
+`@PrefixGameTestTemplate` 都没了。用例改成 `minecraft:test_instance` 注册表里的条目
+（结构、超时、环境收进 `TestData`），批次前置改成"测试环境"`TestEnvironmentDefinition.setup`。
+移植办法（见 `core/gametest/` 四个新文件）：
+```
+自带 @NumenTest(template/timeoutTicks/batch) 注解  ← 与旧 @GameTest 同形状，用例方法一字不改
+NumenTestInstance extends GameTestInstance         ← 直接持有方法引用
+NumenTestEnvironment implements TestEnvironmentDefinition  ← 旧 @BeforeBatch 的"和平+正午"
+NumenGameTests：反射扫注解 → NeoForge 的 RegisterGameTestsEvent 登记实例与环境
+```
+坑一：**不能用原版 `FunctionGameTestInstance`**——它按 `Registries.TEST_FUNCTION` 取用例体，
+而该注册表在 `BuiltInRegistries` 引导时（`BuiltinTestFunctions::bootstrap` 一次跑完所有
+loader）就冻结了，模组加载轮不上。
+坑二：`TEST_INSTANCE` / `TEST_ENVIRONMENT` 在 `SYNCHRONIZED_REGISTRIES` 里，自定义实例
+类型与环境类型的 `MapCodec` 必须经 `DeferredRegister` 注册进 `TEST_INSTANCE_TYPE` /
+`TEST_ENVIRONMENT_DEFINITION_TYPE`，否则同步给客户端时找不到类型。
+坑三：`GameTestHelper` 的断言/失败消息由 `String` 改成 `Component`
+（`assertTrue(boolean, Component)`、`fail(Component)`）；`StructureUtils.testStructuresDir`
+由 `String` 改成 `Path`。
+**未变**：`absolutePos` 仍以 `getTestOrigin()` 为基准（与 1.21.4 同），所以 1.21.4 那套
+"模板底部垫一层空气"的约定原样沿用，用例坐标一字不改；SNBT 模板照旧从
+`testStructuresDir` 按 `ResourceLocation.getPath()` 取，命名空间不参与寻址。
+模板里的 `DataVersion` 仍是 4189（1.21.4）——**向上移植不必重新盖版本号**，
+`readStructure` 会走 `DataFixTypes.STRUCTURE.updateToCurrentVersion` 正向修到 4325
+（1.21.5 的 `SharedConstants.WORLD_VERSION`）；反倒是硬盖成 4325 会跳过修数据器。
+
+**`CompoundTag` / `ListTag` 读取全面 Optional 化** ❗（`BlueprintFormats`、`BlueprintStore`、
+`BuildStates`、`BuildTaskRecord`、`BuildCompanionTask`）：
+```java
+tag.getInt(k)      → Optional<Integer>；要值用 tag.getIntOr(k, 默认)
+tag.getCompound(k) → Optional<CompoundTag>；要值用 getCompoundOrEmpty(k)
+tag.getList(k, 类型) → getList(k) 返 Optional<ListTag>；要值用 getListOrEmpty(k)（不再按元素类型筛）
+tag.contains(k, TAG_X) → 没了，改判 tag.getX(k).isPresent()（缺键与类型不符同样是 empty，判据等价）
+tag.getAllKeys()   → keySet()
+Tag.getAsString()  → asString() 返 Optional<String>
+ListTag.getInt(i)/getDouble(i) → getIntOr(i, 默认)/getDoubleOr(i, 默认)
+```
+**坑**：`getListOrEmpty` 不筛元素类型，旧代 `for (Tag t : getList(k, TAG_COMPOUND))` 直接强转
+会 CCE，逐个 `instanceof` 挡一手（或用 `compoundStream()`）。
+
+**`Inventory` 主背包列表私有化** ❗ — `inv.items` → `inv.getNonEquipmentItems()`；
+副手 `inv.offhand.set(0, s)` → `inv.setItem(Inventory.SLOT_OFFHAND, s)`。
+
+**`Entity.moveTo` → `snapTo`** ❗（同签名同语义；`CompanionFactory`、图纸实体落位）。
+
+**`ServerLevel.onBlockStateChange` → `updatePOIOnBlockStateChange`** ❗❗ — 纯改名，签名与
+`Level.setBlock` / `WorldGenRegion.setBlock` 两处调用点一字未动。**这条只在运行期炸**
+（mixin 找不到目标 → `InvalidInjectionException`，编译期毫无征兆），跑一次 datagen 就能抓到。
+
+**（api 仓）`TicketType` 改成不带泛型的 record** ❗ — `TicketType.create(名, 比较器, 超时)` 没了，
+改 `new TicketType(超时, 是否入档, TicketUse)`；`chunkSource.addRegionTicket(型,pos,半径,值)` →
+`addTicketWithRadius(型,pos,半径)`。票级算法两代一致（`ChunkLevel.byStatus(FULL) - 半径`），
+重复添加同型同级票据照旧 `resetTicksLeft()`。`persist=false` 的票不入档
+（`TicketStorage.packTickets` 只序列化 persist 的），因此**无需**注册进
+`BuiltInRegistries.TICKET_TYPE`。
+
+**（api 仓）`ClientInput` 两个冲量字段并成 `protected Vec2 moveVector`** ❗ —
+`leftImpulse`/`forwardImpulse` 没了，包外写不进。转盘喂输入改成：屏幕算出向量返回、
+`MixinKeyboardInput`（它继承 `ClientInput`）落盘。向量算法照抄原版 `KeyboardInput.tick`：
+两轴冲量各取 ±1/0 后整体 `normalized()`。
+**未变**：`PlayerRenderState.id` 还在（从 `EntityRenderState` 挪到了 `PlayerRenderState`，
+`LivingEntityRenderer.render` 的 mixin 先 `instanceof PlayerRenderState` 再取 `id`，照旧可用）；
+`ChatComponent.allMessages` / `refreshTrimmedMessages` 名字不变。
+
+**（api 仓）`CompoundTag.getInt` 同样 Optional 化**（`CompanionFactory` 读 `playerGameType`）。
+
+### 用例夹具的两处版本相关调整（都<b>只在运行期</b>现形）
+
+**点击事件序列化换形状** ❗（`safe_block_entity_data_is_a_datapack_tag`）：
+```
+Style 里的键名  clickEvent → click_event
+run_command 的参数  value → command
+// 旧写法 {"text":"x","clickEvent":{"action":"run_command","value":"/give ..."}}
+// 本代   {"text":"x","click_event":{"action":"run_command","command":"/give ..."}}
+```
+**坑**：旧形状不会解码失败，只是事件当未知字段被丢掉——组件照常解析成功、
+`getStyle().getClickEvent()` 返回 null。于是"带点击事件的牌子必须拒收"这条用例
+**以"没检测到威胁"的形式变红**；判据本身（读的是解析后的 `Style`）一行都不用改。
+
+**随机刻必须停摆** ❗（`build_japanese_cottage`，本代新加）——把
+`RULE_RANDOMTICKING` 设为 0，与"和平 + 正午"同属排除环境随机性：
+日式小屋图纸里有 163 格草方块，盖上屋顶后随机刻把它们退化成泥土，而验收要的是
+「5857 格<b>同时</b>就位」的那一瞬——先落的草在最后一格落定前就已退化，那一瞬
+永远不会到来。表现为跑满 400000 tick 超时，报 `cottage cell mismatch ... 
+want=grass_block got=dirt`。停掉随机刻后同一条用例 **10 秒**跑完，
+说明建造本身既快且全对，退化纯属环境噪声。
+
 ## 1.21.5 → 1.21.8
 <!-- 约 24 文件 -->
 _待移植时填写_
