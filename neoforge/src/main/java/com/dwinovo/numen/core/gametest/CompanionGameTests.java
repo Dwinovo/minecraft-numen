@@ -279,7 +279,7 @@ public class CompanionGameTests {
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
     public static void build_shape_cylinder(GameTestHelper helper) {
         BlockPos center = new BlockPos(10, 2, 10);
-        List<BlockPos> rel = com.dwinovo.numen.core.tools.BuildTool.shapeCells(
+        List<BlockPos> rel = com.dwinovo.numen.core.build.BuildShapes.shapeCells(
                 "cylinder", true, center.getX(), center.getY(), center.getZ(),
                 null, null, null, 3, 4);
         runBuildCase(helper, "gametest_mason2", rel, 2);
@@ -358,12 +358,12 @@ public class CompanionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
     public static void build_block_ids_and_material_counts(GameTestHelper helper) {
         for (String id : new String[]{"air", "minecraft:air", "dirt_path", "farmland", "tall_grass"}) {
-            com.dwinovo.numen.core.tools.BuildPalette.parse(id);
+            com.dwinovo.numen.core.build.BuildPalette.parse(id);
         }
         for (String liquid : new String[]{"water", "minecraft:water", "lava"}) {
             String msg = "";
             try {
-                com.dwinovo.numen.core.tools.BuildPalette.parse(liquid);
+                com.dwinovo.numen.core.build.BuildPalette.parse(liquid);
             } catch (IllegalArgumentException e) {
                 msg = String.valueOf(e.getMessage());
             }
@@ -372,7 +372,7 @@ public class CompanionGameTests {
         }
         String stateMsg = "";
         try {
-            com.dwinovo.numen.core.tools.BuildPalette.parse("spruce_stairs[facing=south]");
+            com.dwinovo.numen.core.build.BuildPalette.parse("spruce_stairs[facing=south]");
         } catch (IllegalArgumentException e) {
             stateMsg = String.valueOf(e.getMessage());
         }
@@ -380,7 +380,7 @@ public class CompanionGameTests {
                 "inline block states must be rejected with a message pointing at `properties`");
 
         // 没有自己物品的方块要拿替代料算账,否则文档里教的 dirt_path 根本放不下去
-        helper.assertTrue(com.dwinovo.numen.core.tools.BuildPalette.parse("dirt_path")
+        helper.assertTrue(com.dwinovo.numen.core.build.BuildPalette.parse("dirt_path")
                         .pick(BlockPos.ZERO).item() == Items.DIRT,
                 "dirt_path has no item of its own; it must be billed as dirt");
 
@@ -1766,7 +1766,7 @@ public class CompanionGameTests {
     private static java.util.List<BuildTaskRecord.Target> roof(
             int x1, int y1, int z1, int x2, int z2,
             String material, String shape, String curve, String ridge, String gable) {
-        return com.dwinovo.numen.core.tools.BuildTool.roofCells(x1, y1, z1, x2, z2,
+        return com.dwinovo.numen.core.build.BuildShapes.roofCells(x1, y1, z1, x2, z2,
                 material, shape, curve, 0, 0, gable, ridge, null, null, true);
     }
 
@@ -2033,7 +2033,7 @@ public class CompanionGameTests {
             int x2 = 12;
             boolean square = "zuanjian".equals(c[0]) || "pyramid".equals(c[0]);
             int z2 = square ? 12 : 8;
-            var cells = com.dwinovo.numen.core.tools.BuildTool.roofCells(
+            var cells = com.dwinovo.numen.core.build.BuildShapes.roofCells(
                     0, 100, 0, x2, z2, "minecraft:stone_brick_slab", c[0], c[1], 0, 0,
                     "minecraft:oak_planks", "minecraft:dark_prismarine",
                     "minecraft:waxed_oxidized_cut_copper_slab", "minecraft:spruce_slab", true);
@@ -2121,19 +2121,19 @@ public class CompanionGameTests {
                     }
                     return out;
                 };
-        var shape = com.dwinovo.numen.core.tools.BuildTool.class;   // shapeCells 静态引用可读性别名
+        var shape = com.dwinovo.numen.core.build.BuildShapes.class;   // shapeCells 静态引用可读性别名
 
         List<BuildTaskRecord.Target> ordered = new ArrayList<>();
         // 1) 地基:圆石 12x1x10
         ordered.addAll(vol.apply("minecraft:cobblestone",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("box", false, 4, 2, 5, 15, 2, 14, null, null)));
+                com.dwinovo.numen.core.build.BuildShapes.shapeCells("box", false, 4, 2, 5, 15, 2, 14, null, null)));
         // 2) 墙体:walls 周界墙 y3-5(3 高,整墙地面臂展可及)(无顶底面——地板只有地基那一层,守则单层地板铁律)
         ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.tools.BuildTool.shapeCells("walls", false, 4, 3, 5, 15, 5, 14, null, null)));
+                com.dwinovo.numen.core.build.BuildShapes.shapeCells("walls", false, 4, 3, 5, 15, 5, 14, null, null)));
         // 3) 屋顶:半砖砌斜面、脊沿长轴、山墙填实、博风板、出檐一格
         BlockPos roofA = helper.absolutePos(new BlockPos(4, 6, 5));
         BlockPos roofB = helper.absolutePos(new BlockPos(15, 6, 14));
-        ordered.addAll(com.dwinovo.numen.core.tools.BuildTool.roofCells(
+        ordered.addAll(com.dwinovo.numen.core.build.BuildShapes.roofCells(
                 roofA.getX(), roofA.getY(), roofA.getZ(), roofB.getX(), roofB.getZ(),
                 "minecraft:oak_slab", "xuanshan", "concave", 1, 0,
                 "minecraft:oak_planks", "minecraft:spruce_slab", null, null, true));
