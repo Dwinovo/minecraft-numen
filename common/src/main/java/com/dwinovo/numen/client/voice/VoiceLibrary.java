@@ -1,20 +1,10 @@
 package com.dwinovo.numen.client.voice;
 
-import com.dwinovo.numen.Constants;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
+import com.dwinovo.numen.client.data.JsonLibrary;
 import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -50,7 +40,7 @@ import java.util.UUID;
  *   <li>{@code volume} — 0.0–2.0,缺省 1.0(&gt;1 扩大可听半径,响度上限仍是 1)。</li>
  * </ul>
  */
-public final class VoiceLibrary {
+public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
 
     /** 四种后端的标识串(存储与表单下拉共用)。未知值按 openai 兜底。 */
     public static final String BACKEND_OPENAI = "openai";
@@ -95,25 +85,19 @@ public final class VoiceLibrary {
         }
     }
 
-    private static final Gson PRETTY = new GsonBuilder().setPrettyPrinting().create();
     private static VoiceLibrary instance;
 
-    private final Path file;
     private boolean enabled;
-    private final Map<String, Entry> entries = new LinkedHashMap<>();
-    private final Map<String, String> assignments = new LinkedHashMap<>();
 
     /** 测试可直接用临时路径构造;游戏内走 {@link #instance()}。 */
     VoiceLibrary(Path file) {
-        this.file = file;
+        super(file);
         load();
     }
 
     public static VoiceLibrary instance() {
         if (instance == null) {
-            Path dir = net.minecraft.client.Minecraft.getInstance().gameDirectory.toPath()
-                    .resolve("config").resolve("numen");
-            instance = new VoiceLibrary(dir.resolve("voice.json"));
+            instance = new VoiceLibrary(configDir().resolve("voice.json"));
         }
         return instance;
     }
@@ -133,64 +117,31 @@ public final class VoiceLibrary {
 
     // ---- entries ----
 
-    public List<Entry> list() {
-        return new ArrayList<>(entries.values());
-    }
-
-    public Entry get(String id) {
-        return id == null ? null : entries.get(id);
-    }
-
     /** 新建声线——只有名字必填,其余可空;持久化并返回。 */
     public Entry create(String name, String backend, String url, String apiKey, String groupId,
                         String model, String voice, String refAudio, String promptText,
                         String textLang, float volume) {
-        String id = "voice_" + Long.toHexString(System.currentTimeMillis()) + "_" + entries.size();
-        Entry e = new Entry(id, name, backend, url, apiKey, groupId, model, voice,
+        Entry e = new Entry(freshId("voice"), name, backend, url, apiKey, groupId, model, voice,
                 refAudio, promptText, textLang, clampVolume(volume));
-        entries.put(id, e);
-        save();
+        putAndSave(e);
         return e;
     }
 
     public void update(Entry e) {
         if (e == null || !entries.containsKey(e.id())) return;
-        entries.put(e.id(), new Entry(e.id(), e.name(), e.backend(), e.url(), e.apiKey(),
+        putAndSave(new Entry(e.id(), e.name(), e.backend(), e.url(), e.apiKey(),
                 e.groupId(), e.model(), e.voice(), e.refAudio(), e.promptText(), e.textLang(),
                 clampVolume(e.volume())));
-        save();
-    }
-
-    /** 删除声线。指向它的绑定保持原样(悬空绑定 {@link #resolve} 得 null = 静音),与模型配置库同语义。 */
-    public void remove(String id) {
-        if (entries.remove(id) != null) save();
-    }
-
-    // ---- per-companion assignment (uuid → entry id) ----
-
-    /** 这个同伴绑定的声线条目 id,或 null(未绑定 / null 同伴)。 */
-    public String assignedEntry(UUID companion) {
-        return companion == null ? null : assignments.get(companion.toString());
-    }
-
-    /** 给同伴绑定声线({@code entryId} null/blank = 解绑静音)并持久化。 */
-    public void assign(UUID companion, String entryId) {
-        if (companion == null) return;
-        if (entryId == null || entryId.isBlank()) {
-            assignments.remove(companion.toString());
-        } else {
-            assignments.put(companion.toString(), entryId);
-        }
-        save();
     }
 
     /**
      * 语音管线的唯一入口:这个同伴此刻应该用哪条声线。全局开关关闭、
      * 未绑定、或绑定指向已删除的条目,都返回 null(= 静音)。
+     * 删除声线时指向它的绑定保持原样(悬空绑定得 null = 静音),与模型配置库同语义。
      */
     public Entry resolve(UUID companion) {
         if (!enabled || companion == null) return null;
-        return get(assignments.get(companion.toString()));
+        return get(assignedEntry(companion));
     }
 
     // ---- pending summon assignment (same mechanism as PersonaLibrary.pendSummon:
@@ -209,90 +160,70 @@ public final class VoiceLibrary {
         return PENDING_SUMMON.remove(name);
     }
 
-    // ---- persistence ----
+    // ---- persistence hooks ----
 
-    private void load() {
-        entries.clear();
-        assignments.clear();
-        enabled = true;   // 缺省开——玩家配好声线就该出声,关闭是显式选择
-        if (!Files.exists(file)) {
-            return;   // 全新安装:tab 从空开始,玩家自己创建
-        }
-        try {
-            JsonObject root = JsonParser.parseString(
-                    Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
-            enabled = !root.has("enabled") || root.get("enabled").getAsBoolean();
-            if (root.has("entries") && root.get("entries").isJsonArray()) {
-                for (JsonElement el : root.getAsJsonArray("entries")) {
-                    if (!el.isJsonObject()) continue;
-                    JsonObject o = el.getAsJsonObject();
-                    Entry e = new Entry(str(o, "id"), str(o, "name"), str(o, "backend"),
-                            str(o, "url"), str(o, "api_key"), str(o, "group_id"),
-                            str(o, "model"), str(o, "voice"),
-                            str(o, "ref_audio"), str(o, "prompt_text"), str(o, "text_lang"),
-                            clampVolume(o.has("volume") ? o.get("volume").getAsFloat() : 1.0f));
-                    if (e.id() != null && !e.id().isBlank()) entries.put(e.id(), e);
-                }
-            }
-            if (root.has("assignments") && root.get("assignments").isJsonObject()) {
-                for (var kv : root.getAsJsonObject("assignments").entrySet()) {
-                    if (kv.getValue().isJsonPrimitive()) {
-                        assignments.put(kv.getKey(), kv.getValue().getAsString());
-                    }
-                }
-            }
-        } catch (RuntimeException | IOException ex) {
-            Constants.LOG.warn("[numen-voice] unreadable {} — starting empty ({})",
-                    file, ex.getMessage());
-            entries.clear();
-            assignments.clear();
-            enabled = false;
-        }
+    @Override
+    protected String logTag() {
+        return "numen-voice";
     }
 
-    private void save() {
-        JsonArray arr = new JsonArray();
-        for (Entry e : entries.values()) {
-            JsonObject o = new JsonObject();
-            o.addProperty("id", e.id());
-            o.addProperty("name", e.name());
-            if (nb(e.backend())) o.addProperty("backend", e.backend());
-            if (nb(e.url())) o.addProperty("url", e.url());
-            if (nb(e.apiKey())) o.addProperty("api_key", e.apiKey());
-            if (nb(e.groupId())) o.addProperty("group_id", e.groupId());
-            if (nb(e.model())) o.addProperty("model", e.model());
-            if (nb(e.voice())) o.addProperty("voice", e.voice());
-            if (nb(e.refAudio())) o.addProperty("ref_audio", e.refAudio());
-            if (nb(e.promptText())) o.addProperty("prompt_text", e.promptText());
-            if (nb(e.textLang())) o.addProperty("text_lang", e.textLang());
-            o.addProperty("volume", e.volume());
-            arr.add(o);
-        }
-        JsonObject root = new JsonObject();
+    @Override
+    protected String idOf(Entry e) {
+        return e.id();
+    }
+
+    @Override
+    protected Entry readEntry(JsonObject o) {
+        return new Entry(str(o, "id"), str(o, "name"), str(o, "backend"),
+                str(o, "url"), str(o, "api_key"), str(o, "group_id"),
+                str(o, "model"), str(o, "voice"),
+                str(o, "ref_audio"), str(o, "prompt_text"), str(o, "text_lang"),
+                clampVolume(o.has("volume") ? o.get("volume").getAsFloat() : 1.0f));
+    }
+
+    @Override
+    protected JsonObject writeEntry(Entry e) {
+        JsonObject o = new JsonObject();
+        o.addProperty("id", e.id());
+        o.addProperty("name", e.name());
+        if (nb(e.backend())) o.addProperty("backend", e.backend());
+        if (nb(e.url())) o.addProperty("url", e.url());
+        if (nb(e.apiKey())) o.addProperty("api_key", e.apiKey());
+        if (nb(e.groupId())) o.addProperty("group_id", e.groupId());
+        if (nb(e.model())) o.addProperty("model", e.model());
+        if (nb(e.voice())) o.addProperty("voice", e.voice());
+        if (nb(e.refAudio())) o.addProperty("ref_audio", e.refAudio());
+        if (nb(e.promptText())) o.addProperty("prompt_text", e.promptText());
+        if (nb(e.textLang())) o.addProperty("text_lang", e.textLang());
+        o.addProperty("volume", e.volume());
+        return o;
+    }
+
+    @Override
+    protected void readExtra(JsonObject root) {
+        enabled = !root.has("enabled") || root.get("enabled").getAsBoolean();
+        readAssignments(root);
+    }
+
+    @Override
+    protected void writeExtra(JsonObject root) {
         root.addProperty("enabled", enabled);
-        root.add("entries", arr);
-        JsonObject assign = new JsonObject();
-        assignments.forEach(assign::addProperty);
-        root.add("assignments", assign);
-        try {
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, PRETTY.toJson(root), StandardCharsets.UTF_8);
-        } catch (IOException ex) {
-            Constants.LOG.warn("[numen-voice] can't save {}: {}", file, ex.getMessage());
-        }
+        writeAssignments(root);
+    }
+
+    @Override
+    protected void resetExtra() {
+        enabled = true;   // 缺省开——玩家配好声线就该出声,关闭是显式选择
+    }
+
+    @Override
+    protected void resetOnCorrupt() {
+        enabled = false;   // 坏文件不出声:宁静音,不拿半截配置乱合成
     }
 
     /** 音量夹到 0–2(NaN → 1);GUI 表单与加载路径共用。 */
     public static float clampVolume(float v) {
         if (Float.isNaN(v)) return 1.0f;
         return Math.max(0f, Math.min(2f, v));
-    }
-
-    private static String str(JsonObject o, String key) {
-        return o.has(key) && o.get(key).isJsonPrimitive() ? o.get(key).getAsString() : "";
-    }
-
-    private static boolean nb(String s) {
-        return s != null && !s.isBlank();
     }
 }
