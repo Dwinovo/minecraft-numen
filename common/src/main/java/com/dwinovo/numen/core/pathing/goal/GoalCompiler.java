@@ -133,23 +133,28 @@ public final class GoalCompiler {
 
     /**
      * A whole mining objective in one search: composite of per-ore stances
-     * (plus a loose member per nearby drop, so the same walk collects them),
-     * with EVERY ore cell sacred — the route gets the body to the ore; digging
-     * it is the task's job, with the task's bookkeeping. A path may not consume
-     * the objective on the way past.
+     * (plus a loose member per nearby drop, so the same walk collects them).
+     *
+     * <p>Target cells are deliberately NOT sacred — the route is allowed to chop a
+     * target on the way past. A stance often sits inside the target's own column
+     * (a tree trunk: "feet at/under the log" IS a log cell), so forbidding the
+     * path from breaking targets makes every stance of an untouched trunk
+     * unsatisfiable and the search burns its whole budget on a goal it can never
+     * reach — then blacklists a perfectly minable block as "no path". An en-route
+     * break loses nothing: the cell leaves knownOres on the next prune, its drop
+     * is collected by the drop members, and progress counts inventory, not dig
+     * events.
      */
     public static Compiled mineField(List<Stance> stances, List<BlockPos> drops) {
         List<NavGoal> members = new ArrayList<>(stances.size() + drops.size());
-        LongSet sacred = new LongOpenHashSet(stances.size());
         for (Stance s : stances) {
             members.add(NavGoal.mineColumn(s.stanceBase(), s.maxBelow()));
-            sacred.add(s.ore().asLong());
         }
         for (BlockPos drop : drops) {
-            members.add(NavGoal.exact(drop));     // items, not blocks — nothing sacred
+            members.add(NavGoal.exact(drop));     // items, not blocks
         }
         NavGoal goal = NavGoal.composite(members);
-        return new Compiled(goal, sacred, ArrivalSpec.standOn(goal));
+        return new Compiled(goal, LongSets.emptySet(), ArrivalSpec.standOn(goal));
     }
 
     /**
