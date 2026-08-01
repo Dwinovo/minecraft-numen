@@ -4,7 +4,7 @@ import com.dwinovo.numen.task.TaskState;
 
 /**
  * Structured "why did it fail" category, threaded up out of the pathing/placement
- * substrate ({@code PlayerNav}, {@code PlaceManeuver}, {@code Interaction},
+ * substrate ({@code PlayerNav}, {@code Interaction},
  * {@code BlockDigger}) so the reactive task layer can BRANCH on the cause instead
  * of string-matching a human-readable reason.
  *
