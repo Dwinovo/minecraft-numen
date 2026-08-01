@@ -25,7 +25,7 @@ public final class ModItemTagsProvider extends ItemTagsProvider {
     protected void addTags(HolderLookup.Provider provider) {
         ModItemTagData.addItemTags(key -> {
             var b = tag(key);
-            return ModItemTagData.appender(v -> b.add(v));
+            return ModItemTagData.appender(v -> b.add(v), t -> b.addTag(t));
         });
     }
 }
