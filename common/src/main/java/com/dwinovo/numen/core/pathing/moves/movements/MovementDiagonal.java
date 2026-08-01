@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.Set;
 
@@ -241,7 +242,7 @@ public class MovementDiagonal extends Movement {
         if (sprint()) {
             state.setInput(Input.SPRINT, true);
         }
-        MovementHelper.moveTowards(player, state, dest);
+        AimGeometry.moveTowards(player, state, dest);
         return state;
     }
 

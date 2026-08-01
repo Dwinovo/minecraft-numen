@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.Set;
 
@@ -176,7 +177,7 @@ public class MovementAscend extends Movement {
             }
             return state;
         }
-        MovementHelper.moveTowards(player, state, dest);
+        AimGeometry.moveTowards(player, state, dest);
         if (MovementHelper.isBottomSlab(jumpingOnto)
                 && !MovementHelper.isBottomSlab(level.getBlockState(src.below()))) {
             return state; // 从整块走进下半砖不用跳

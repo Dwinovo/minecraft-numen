@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.execute;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.EnumMap;
 
@@ -93,18 +94,18 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         Vec3 aimPoint = reachableAimPoint(pos);
         if (aimPoint != null) {
             state.setTarget(new MovementState.MovementTarget(
-                    MovementHelper.yawTo(eye, aimPoint),
-                    MovementHelper.pitchTo(eye, aimPoint), true));
+                    AimGeometry.yawTo(eye, aimPoint),
+                    AimGeometry.pitchTo(eye, aimPoint), true));
             if (isLookingAt(pos) || isFacingTarget(state.getTarget())) {
                 state.setInput(Input.CLICK_LEFT, true);
             }
         } else {
             // 完全不可视:瞄整格中心强按左键——实际挖到的是准星命中的
             // 遮挡物(左键落地始终以准星射线为准)
-            Vec3 center = MovementHelper.blockCenter(pos);
+            Vec3 center = AimGeometry.blockCenter(pos);
             state.setTarget(new MovementState.MovementTarget(
-                    MovementHelper.yawTo(eye, center),
-                    MovementHelper.pitchTo(eye, center), true));
+                    AimGeometry.yawTo(eye, center),
+                    AimGeometry.pitchTo(eye, center), true));
             state.setInput(Input.CLICK_LEFT, true);
         }
     }
@@ -359,7 +360,7 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     private BlockHitResult clipAlongView() {
         Vec3 eye = player.getEyePosition();
         Vec3 end = eye.add(player.getViewVector(1.0f)
-                .scale(MovementHelper.blockReachDistance(player)));
+                .scale(AimGeometry.blockReachDistance(player)));
         return player.level().clip(new ClipContext(
                 eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
     }
@@ -369,7 +370,7 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
      * 全部被挡返回 null。
      */
     private Vec3 reachableAimPoint(BlockPos pos) {
-        return MovementHelper.reachableAimPoint(player, pos);
+        return AimGeometry.reachableAimPoint(player, pos);
     }
 
     // ==================== 换手 / 备货 ====================

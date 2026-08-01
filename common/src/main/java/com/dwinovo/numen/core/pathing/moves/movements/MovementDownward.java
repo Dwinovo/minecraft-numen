@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.Set;
 
@@ -86,7 +87,7 @@ public class MovementDownward extends Movement {
         if (numTicks++ < 10 && ab < 0.2) {
             return state; // 前 10 tick 且没漂出中心:自由落体,不碰按键
         }
-        MovementHelper.moveTowards(player, state, positionsToBreak[0]);
+        AimGeometry.moveTowards(player, state, positionsToBreak[0]);
         return state;
     }
 }

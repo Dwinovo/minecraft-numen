@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.task;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import com.dwinovo.numen.core.pathing.execute.AimProcessor;
-import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.BlockParticleOption;
@@ -123,8 +123,8 @@ final class BuildShowmanship {
     /** 视角按 AimProcessor 的像素量化步进转向目标点(和寻路同一套转头手感)。 */
     private void applySteppedAim(Vec3 point) {
         Vec3 eye = player.getEyePosition();
-        float yaw = MovementHelper.yawTo(eye, point);
-        float pitch = MovementHelper.pitchTo(eye, point);
+        float yaw = AimGeometry.yawTo(eye, point);
+        float pitch = AimGeometry.pitchTo(eye, point);
         AimProcessor.Rotation next = AIM.step(player.getYRot(), player.getXRot(), yaw, pitch);
         player.setYRot(next.yaw());
         player.setYHeadRot(next.yaw());

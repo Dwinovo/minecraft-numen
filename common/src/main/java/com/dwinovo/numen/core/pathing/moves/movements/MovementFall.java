@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -77,8 +78,8 @@ public class MovementFall extends Movement {
         Level level = player.level();
         BlockPos feet = feet(player);
         Vec3 eye = player.getEyePosition();
-        Vec3 destCenter = MovementHelper.blockCenter(dest);
-        float toDestYaw = MovementHelper.yawTo(eye, destCenter);
+        Vec3 destCenter = AimGeometry.blockCenter(dest);
+        float toDestYaw = AimGeometry.yawTo(eye, destCenter);
         boolean forcedRotation = false;
         BlockState destState = level.getBlockState(dest);
         boolean isWater = destState.getFluidState().getType() instanceof WaterFluid;
@@ -101,7 +102,7 @@ public class MovementFall extends Movement {
         }
         if (!forcedRotation) {
             state.setTarget(new MovementState.MovementTarget(toDestYaw,
-                    MovementHelper.pitchTo(eye, destCenter), false));
+                    AimGeometry.pitchTo(eye, destCenter), false));
         }
         if (feet.equals(dest) && (player.getY() - feet.getY() < 0.094 || isWater)) { // 睡莲容差
             if (isWater) {
@@ -149,8 +150,8 @@ public class MovementFall extends Movement {
             Vec3 destCenterOffset = new Vec3(destCenter.x + 0.125 * avoid.getX(),
                     destCenter.y, destCenter.z + 0.125 * avoid.getZ());
             state.setTarget(new MovementState.MovementTarget(
-                    MovementHelper.yawTo(eye, destCenterOffset),
-                    MovementHelper.pitchTo(eye, destCenterOffset), false));
+                    AimGeometry.yawTo(eye, destCenterOffset),
+                    AimGeometry.pitchTo(eye, destCenterOffset), false));
         }
         return state;
     }

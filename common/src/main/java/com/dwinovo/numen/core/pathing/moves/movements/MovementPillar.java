@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.Set;
 
@@ -175,10 +176,10 @@ public class MovementPillar extends Movement {
         if (MovementHelper.isWater(fromDown)
                 && MovementHelper.isWater(level.getBlockState(dest))) {
             // 水柱:看向上方目标中心保持居中上浮(上浮强跳由基类通用规则按)
-            Vec3 destCenter = MovementHelper.blockCenter(dest);
+            Vec3 destCenter = AimGeometry.blockCenter(dest);
             state.setTarget(new MovementState.MovementTarget(
-                    MovementHelper.yawTo(eye, destCenter),
-                    MovementHelper.pitchTo(eye, destCenter), false));
+                    AimGeometry.yawTo(eye, destCenter),
+                    AimGeometry.pitchTo(eye, destCenter), false));
             if (Math.abs(player.getX() - destCenter.x) > 0.2
                     || Math.abs(player.getZ() - destCenter.z) > 0.2) {
                 state.setInput(Input.MOVE_FORWARD, true);
@@ -190,8 +191,8 @@ public class MovementPillar extends Movement {
         }
         boolean ladder = fromDown.getBlock() == Blocks.LADDER || fromDown.getBlock() == Blocks.VINE;
         boolean vine = fromDown.getBlock() == Blocks.VINE;
-        Vec3 placeCenter = MovementHelper.blockCenter(positionToPlace);
-        float placePitch = MovementHelper.pitchTo(eye, placeCenter);
+        Vec3 placeCenter = AimGeometry.blockCenter(positionToPlace);
+        float placePitch = AimGeometry.pitchTo(eye, placeCenter);
         if (!ladder) {
             // 只压 pitch 看向脚下放置点,yaw 保持current(垫柱不需要转身)
             state.setTarget(new MovementState.MovementTarget(player.getYRot(), placePitch, true));
@@ -212,7 +213,7 @@ public class MovementPillar extends Movement {
             if (MovementHelper.isBottomSlab(level.getBlockState(src.below()))) {
                 state.setInput(Input.JUMP, true); // 从下半砖上够梯子得先跳
             }
-            MovementHelper.moveTowards(player, state, against);
+            AimGeometry.moveTowards(player, state, against);
             if (player.tickCount % 10 == 0) {
                 // 爬梯分支以前整段没有留声,卡在这里时外面只看到"垫柱毫无动静"。
                 com.dwinovo.numen.core.Constants.LOG.debug(
@@ -255,7 +256,7 @@ public class MovementPillar extends Movement {
                 // 偏出中心(可能被卡):完整看向放置点走回去
                 state.setInput(Input.MOVE_FORWARD, true);
                 state.setTarget(new MovementState.MovementTarget(
-                        MovementHelper.yawTo(eye, placeCenter), placePitch, true));
+                        AimGeometry.yawTo(eye, placeCenter), placePitch, true));
             } else if (flatMotion < 0.05) {
                 // 横速稳了才跳;到高度就松跳
                 state.setInput(Input.JUMP, player.getY() < dest.getY());
@@ -266,11 +267,11 @@ public class MovementPillar extends Movement {
                 if (!(frState.getBlock() instanceof AirBlock || frState.canBeReplaced())) {
                     // 出发格有不可替换的杂物:射线可视时才改看向它;跳着挖
                     // 慢五倍,停跳,按左键打掉
-                    Vec3 aim = MovementHelper.reachableAimPoint(player, src);
+                    Vec3 aim = AimGeometry.reachableAimPoint(player, src);
                     if (aim != null) {
                         state.setTarget(new MovementState.MovementTarget(
-                                MovementHelper.yawTo(eye, aim),
-                                MovementHelper.pitchTo(eye, aim), true));
+                                AimGeometry.yawTo(eye, aim),
+                                AimGeometry.pitchTo(eye, aim), true));
                     }
                     state.setInput(Input.JUMP, false);
                     state.setInput(Input.CLICK_LEFT, true);

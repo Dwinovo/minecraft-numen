@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.Set;
 
@@ -193,7 +194,7 @@ public class MovementTraverse extends Movement {
                 return state;
             }
             // yaw 对准终点中心,pitch 沿用挖掘目标;两格都是整方块/空气时用固定俯角
-            float yawToDest = MovementHelper.yawTo(player.getEyePosition(), MovementHelper.blockCenter(dest));
+            float yawToDest = AimGeometry.yawTo(player.getEyePosition(), AimGeometry.blockCenter(dest));
             float pitchToBreak = state.getTarget().getPitch();
             if (MovementHelper.isBlockNormalCube(pb0)
                     || (pb0.getBlock() instanceof AirBlock
@@ -219,10 +220,10 @@ public class MovementTraverse extends Movement {
                             && !MovementHelper.isDoorPassable(level, dest, src));
             boolean canOpen = !(pb0.getBlock() == Blocks.IRON_DOOR || pb1.getBlock() == Blocks.IRON_DOOR);
             if (notPassable && canOpen) {
-                Vec3 center = MovementHelper.blockCenter(positionsToBreak[0]);
+                Vec3 center = AimGeometry.blockCenter(positionsToBreak[0]);
                 return state.setTarget(new MovementState.MovementTarget(
-                                MovementHelper.yawTo(player.getEyePosition(), center),
-                                MovementHelper.pitchTo(player.getEyePosition(), center), true))
+                                AimGeometry.yawTo(player.getEyePosition(), center),
+                                AimGeometry.pitchTo(player.getEyePosition(), center), true))
                         .setInput(Input.CLICK_RIGHT, true);
             }
         }
@@ -236,11 +237,11 @@ public class MovementTraverse extends Movement {
                             ? positionsToBreak[1]
                             : null;
             if (blocked != null) {
-                Vec3 aim = MovementHelper.reachableAimPoint(player, blocked);
+                Vec3 aim = AimGeometry.reachableAimPoint(player, blocked);
                 if (aim != null) {
                     return state.setTarget(new MovementState.MovementTarget(
-                                    MovementHelper.yawTo(player.getEyePosition(), aim),
-                                    MovementHelper.pitchTo(player.getEyePosition(), aim), true))
+                                    AimGeometry.yawTo(player.getEyePosition(), aim),
+                                    AimGeometry.pitchTo(player.getEyePosition(), aim), true))
                             .setInput(Input.CLICK_RIGHT, true);
                 }
             }
@@ -298,7 +299,7 @@ public class MovementTraverse extends Movement {
                     return state.setStatus(MovementStatus.UNREACHABLE);
                 }
             }
-            MovementHelper.moveTowards(player, state, against);
+            AimGeometry.moveTowards(player, state, against);
             return state;
         } else {
             // 搭桥执行:桥块不在(或被挖掉了),现场放
@@ -309,7 +310,7 @@ public class MovementTraverse extends Movement {
                 double dist = Math.max(Math.abs(dest.getX() + 0.5 - player.getX()),
                         Math.abs(dest.getZ() + 0.5 - player.getZ()));
                 if (dist < 0.85) { // 0.5 + 0.3 + 容差
-                    MovementHelper.moveTowards(player, state, dest);
+                    AimGeometry.moveTowards(player, state, dest);
                     return state.setInput(Input.MOVE_FORWARD, false)
                             .setInput(Input.MOVE_BACK, true);
                 }
@@ -333,8 +334,8 @@ public class MovementTraverse extends Movement {
                 case ATTEMPTING: {
                     if (dist1 > 0.83) {
                         // 还没贴上去,放置目标又在正前方时才敢继续前进
-                        float yaw = MovementHelper.yawTo(player.getEyePosition(),
-                                MovementHelper.blockCenter(dest));
+                        float yaw = AimGeometry.yawTo(player.getEyePosition(),
+                                AimGeometry.blockCenter(dest));
                         if (Math.abs(state.getTarget().getYaw() - yaw) < 0.1) {
                             return state.setInput(Input.MOVE_FORWARD, true);
                         }
@@ -354,18 +355,18 @@ public class MovementTraverse extends Movement {
                 double faceZ = (dest.getZ() + src.getZ() + 1.0) * 0.5;
                 Vec3 face = new Vec3(faceX, faceY, faceZ);
                 BlockPos goalLook = src.below(); // 刚离开的脚下块,就贴它
-                float facePitch = MovementHelper.pitchTo(player.getEyePosition(), face);
+                float facePitch = AimGeometry.pitchTo(player.getEyePosition(), face);
                 double dist2 = Math.max(Math.abs(player.getX() - faceX),
                         Math.abs(player.getZ() - faceZ));
                 if (dist2 < 0.29) {
                     // 贴面太近瞄不到,反向 yaw 倒退拉开距离
-                    float yaw = MovementHelper.yawTo(MovementHelper.blockCenter(dest),
+                    float yaw = AimGeometry.yawTo(AimGeometry.blockCenter(dest),
                             player.getEyePosition());
                     state.setTarget(new MovementState.MovementTarget(yaw, facePitch, true));
                     state.setInput(Input.MOVE_BACK, true);
                 } else {
                     state.setTarget(new MovementState.MovementTarget(
-                            MovementHelper.yawTo(player.getEyePosition(), face), facePitch, true));
+                            AimGeometry.yawTo(player.getEyePosition(), face), facePitch, true));
                 }
                 if (MovementPlacement.isLookingAt(player, goalLook)) {
                     return state.setInput(Input.CLICK_RIGHT, true);
@@ -376,7 +377,7 @@ public class MovementTraverse extends Movement {
                 }
                 return state;
             }
-            MovementHelper.moveTowards(player, state, positionsToBreak[0]);
+            AimGeometry.moveTowards(player, state, positionsToBreak[0]);
             return state;
         }
     }

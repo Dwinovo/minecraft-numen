@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.Set;
 
@@ -232,7 +233,7 @@ public class MovementDescend extends Movement {
             // 稳走:瞄 src→dest 的 0.83 处,不看满 dest,防冲过
             double aimX = (src.getX() + 0.5) * 0.17 + (dest.getX() + 0.5) * 0.83;
             double aimZ = (src.getZ() + 0.5) * 0.17 + (dest.getZ() + 0.5) * 0.83;
-            float yaw = MovementHelper.yawTo(player.getEyePosition(),
+            float yaw = AimGeometry.yawTo(player.getEyePosition(),
                     new Vec3(aimX, dest.getY(), aimZ));
             state.setTarget(new MovementState.MovementTarget(yaw, player.getXRot(), false))
                     .setInput(Input.MOVE_FORWARD, true);
@@ -247,9 +248,9 @@ public class MovementDescend extends Movement {
         if (!feet.equals(dest) || ab > 0.25) {
             if (numTicks++ < 20 && fromStart < 1.25) {
                 // 前 20 tick 冲过冲点加速离沿
-                MovementHelper.moveTowards(player, state, fakeDest);
+                AimGeometry.moveTowards(player, state, fakeDest);
             } else {
-                MovementHelper.moveTowards(player, state, dest);
+                AimGeometry.moveTowards(player, state, dest);
             }
         }
         return state;

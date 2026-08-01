@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -254,7 +255,7 @@ public class MovementParkour extends Movement {
         if (dist >= 4 || ascend) {
             state.setInput(Input.SPRINT, true);
         }
-        MovementHelper.moveTowards(player, state, dest);
+        AimGeometry.moveTowards(player, state, dest);
         if (feet.equals(dest)) {
             Block d = player.level().getBlockState(dest).getBlock();
             if (d == Blocks.VINE || d == Blocks.LADDER) {
@@ -290,9 +291,9 @@ public class MovementParkour extends Movement {
                 // 走偏了:松开疾跑,退回起跳线重来
                 state.setInput(Input.SPRINT, false);
                 if (feet.equals(src.relative(direction, -1))) {
-                    MovementHelper.moveTowards(player, state, src);
+                    AimGeometry.moveTowards(player, state, src);
                 } else {
-                    MovementHelper.moveTowards(player, state, src.relative(direction, -1));
+                    AimGeometry.moveTowards(player, state, src.relative(direction, -1));
                 }
             }
         }

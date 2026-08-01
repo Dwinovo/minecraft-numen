@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.act;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import com.dwinovo.numen.entity.InputDriver;
 
@@ -279,7 +280,7 @@ public final class BlockDigger {
     private BlockHitResult reachableHit(BlockPos pos) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = com.dwinovo.numen.core.pathing.moves.MovementHelper.blockReachDistance(player);
+        double reach = com.dwinovo.numen.core.pathing.moves.AimGeometry.blockReachDistance(player);
         BlockState state = level.getBlockState(pos);
         VoxelShape shape = state.getShape(level, pos);
         if (shape.isEmpty()) {
@@ -288,7 +289,7 @@ public final class BlockDigger {
         // Collision-shape centre first (empty collision → whole-cell centre),
         // then the six face centres on the outline shape.
         Vec3[] aims = {
-                com.dwinovo.numen.core.pathing.moves.MovementHelper.collisionCenter(level, pos, state),
+                com.dwinovo.numen.core.pathing.moves.AimGeometry.collisionCenter(level, pos, state),
                 offsetOn(pos, shape, 0.5, 0.0, 0.5),
                 offsetOn(pos, shape, 0.5, 1.0, 0.5),
                 offsetOn(pos, shape, 0.5, 0.5, 0.0),
@@ -319,7 +320,7 @@ public final class BlockDigger {
     private BlockHitResult centerRaycast(BlockPos target) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = com.dwinovo.numen.core.pathing.moves.MovementHelper.blockReachDistance(player);
+        double reach = com.dwinovo.numen.core.pathing.moves.AimGeometry.blockReachDistance(player);
         Vec3 center = Vec3.atCenterOf(target);
         Vec3 dir = center.subtract(eye);
         if (dir.lengthSqr() < 1.0e-8) {

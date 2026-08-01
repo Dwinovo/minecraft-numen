@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.List;
 
@@ -114,8 +115,8 @@ final class MovementPlacement {
         // 时回退到方块碰撞形状的六面心,用 peek 后的实际转角做 raytrace。
         for (double[] off : FACE_OFFSETS) {
             Vec3 aim = shapePoint(level, placeAt, off[0], off[1], off[2]);
-            float yaw = MovementHelper.yawTo(eye, aim);
-            float pitch = MovementHelper.pitchTo(eye, aim);
+            float yaw = AimGeometry.yawTo(eye, aim);
+            float pitch = AimGeometry.pitchTo(eye, aim);
             com.dwinovo.numen.core.pathing.execute.AimProcessor.Rotation peek =
                     AIM.step(currentYaw, currentPitch, yaw, pitch);
             BlockHitResult hit = rayTrace(player, eye, peek.yaw(), peek.pitch(), reach);
@@ -143,8 +144,8 @@ final class MovementPlacement {
             double faceY = (placeAt.getY() + against.getY() + 0.5) * 0.5;
             double faceZ = (placeAt.getZ() + against.getZ() + 1.0) * 0.5;
             Vec3 face = new Vec3(faceX, faceY, faceZ);
-            float yaw = MovementHelper.yawTo(eye, face);
-            float pitch = MovementHelper.pitchTo(eye, face);
+            float yaw = AimGeometry.yawTo(eye, face);
+            float pitch = AimGeometry.pitchTo(eye, face);
             // 转速受限:把理想目标转角折算成这一 tick 头实际能转到哪再 raytrace
             com.dwinovo.numen.core.pathing.execute.AimProcessor.Rotation peek =
                     AIM.step(currentYaw, currentPitch, yaw, pitch);

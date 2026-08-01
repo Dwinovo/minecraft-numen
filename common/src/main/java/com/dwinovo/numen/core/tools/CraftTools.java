@@ -2,7 +2,8 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.core.PlayerInv;
-import com.dwinovo.numen.entity.InputDriver;
+import com.dwinovo.numen.core.act.Interaction;
+import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.core.BlockPos;
@@ -156,9 +157,11 @@ public final class CraftTools {
                 return TaskResult.fail(name + "'s recipe needs a grid larger than 3x3 (modded station) — "
                         + "interact_at that station and use inspect_gui + transfer instead.").toJson();
             }
-            BlockPos table = nearestTable(level, self, (int) Math.ceil(REACH), 3, REACH);
+            BlockPos table = BlockScanner.nearestBlock(level, self.blockPosition(),
+                    self.getEyePosition(), (int) Math.ceil(REACH), 3, REACH, Blocks.CRAFTING_TABLE);
             if (table == null) {
-                BlockPos hintPos = nearestTable(level, self, HINT_H, HINT_V, Double.MAX_VALUE);
+                BlockPos hintPos = BlockScanner.nearestBlock(level, self.blockPosition(),
+                        self.getEyePosition(), HINT_H, HINT_V, Double.MAX_VALUE, Blocks.CRAFTING_TABLE);
                 return TaskResult.fail(name + " is a 3x3 recipe — it needs a crafting table within reach "
                         + "(~4 blocks). " + (hintPos != null
                                 ? "Nearest one is at " + hintPos.getX() + "," + hintPos.getY() + ","
@@ -166,10 +169,11 @@ public final class CraftTools {
                                 : "None within " + HINT_H + " blocks — craft a crafting_table (4 planks, "
                                         + "fits your own 2x2) and place_block it, then craft again.")).toJson();
             }
-            InputDriver.lookAt(self, Vec3.atCenterOf(table));
-            BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(table), Direction.UP, table, false);
-            self.gameMode.useItemOn(self, level, self.getItemInHand(InteractionHand.MAIN_HAND),
-                    InteractionHand.MAIN_HAND, hit);
+            // 开台走 act 的按键原语:看向、右键、挥手都是身体动作,不归工具层手搓。
+            // 预解析命中(不走射线)保持既有语义——门禁是"够得着",不是"看得见"。
+            Interaction.useBlock(self,
+                    new BlockHitResult(Vec3.atCenterOf(table), Direction.UP, table, false),
+                    InteractionHand.MAIN_HAND).tick();
             Grid opened = findGrid(self.containerMenu);
             if (self.containerMenu == self.inventoryMenu || opened == null
                     || !fits(chosen.recipe(), opened.w(), opened.h())) {
@@ -177,7 +181,6 @@ public final class CraftTools {
                         + table.getY() + "," + table.getZ()
                         + " but no crafting menu opened (blocked, or another mod overrides it).").toJson();
             }
-            self.swing(InteractionHand.MAIN_HAND);
             menu = self.containerMenu;
             grid = opened;
             openedTable = true;
@@ -533,23 +536,4 @@ public final class CraftTools {
         return false;
     }
 
-    /** Nearest vanilla crafting table within the box and {@code maxDist} of the eyes, or null. */
-    private static BlockPos nearestTable(ServerLevel level, NumenPlayer self, int hr, int vr,
-                                         double maxDist) {
-        BlockPos base = self.blockPosition();
-        Vec3 eye = self.getEyePosition();
-        BlockPos best = null;
-        double bestD = maxDist * maxDist;
-        for (BlockPos p : BlockPos.betweenClosed(base.offset(-hr, -vr, -hr), base.offset(hr, vr, hr))) {
-            if (!level.getBlockState(p).is(Blocks.CRAFTING_TABLE)) {
-                continue;
-            }
-            double d = eye.distanceToSqr(Vec3.atCenterOf(p));
-            if (d < bestD) {
-                bestD = d;
-                best = p.immutable();
-            }
-        }
-        return best;
-    }
 }

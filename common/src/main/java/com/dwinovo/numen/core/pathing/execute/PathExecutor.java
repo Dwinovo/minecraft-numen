@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.execute;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -672,8 +673,8 @@ public final class PathExecutor {
                 harness.clearAllKeys();
                 Vec3 eye = player.getEyePosition();
                 harness.applyRotation(new MovementState.MovementTarget(
-                        MovementHelper.yawTo(eye, overrideTarget),
-                        MovementHelper.pitchTo(eye, overrideTarget), false));
+                        AimGeometry.yawTo(eye, overrideTarget),
+                        AimGeometry.pitchTo(eye, overrideTarget), false));
                 harness.forceKey(Input.MOVE_FORWARD, true);
                 return true;
             }
