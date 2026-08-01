@@ -115,6 +115,9 @@ processResources {
 tasks.register('apiJar', Jar) {
     archiveClassifier = 'api'
     from sourceSets.main.output
+    // common 的公共 API 有两个住在客户端源码集的门(NumenGateway/NumenActuator);
+    // 加载器模块没有 client 源码集,懒取空集
+    from({ def c = sourceSets.findByName('client'); c != null ? c.output : [] })
     // public API surface (see the package-info of each). This list is the
     // contract of record — kept in lockstep with what numen-core actually
     // compiles against, so building core against the :api jar always works.

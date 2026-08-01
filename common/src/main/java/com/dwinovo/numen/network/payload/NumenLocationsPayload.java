@@ -1,7 +1,6 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.client.data.ClientNumenLocations;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -82,10 +81,6 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */
     public static void handle(NumenLocationsPayload p) {
-        long now = System.currentTimeMillis();
-        for (Snapshot s : p.snapshots()) {
-            ClientNumenLocations.update(s.uuid(), new ClientNumenLocations.Snapshot(
-                    s.found(), s.loaded(), s.x(), s.y(), s.z(), s.dimension(), s.hp(), s.maxHp(), now));
-        }
+        com.dwinovo.numen.network.ClientPayloadSink.locations.accept(p);
     }
 }

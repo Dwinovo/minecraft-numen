@@ -1,7 +1,6 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -37,8 +36,6 @@ public record NumenRespawnPayload(UUID entityUuid, String cause) implements Cust
     /** Client-side handler. Runs on the client main thread (network layer arranges that).
      *  getOrCreate (not get): after a logout the loop may not exist yet — make it so the death event lands. */
     public static void handle(NumenRespawnPayload p) {
-        Constants.LOG.info("[numen-net] numen_respawn entity={} ({}) — resuming loop", p.entityUuid(), p.cause());
-        com.dwinovo.numen.client.agent.ClientDeaths.clear(p.entityUuid());
-        AgentLoopRegistry.getOrCreate(p.entityUuid()).onRespawned(p.cause());
+        com.dwinovo.numen.network.ClientPayloadSink.respawn.accept(p);
     }
 }

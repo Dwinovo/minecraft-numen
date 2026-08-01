@@ -1,7 +1,6 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -49,11 +48,6 @@ public record NumenDeathPayload(UUID entityUuid, String cause, long respawnDelay
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */
     public static void handle(NumenDeathPayload p) {
-        Constants.LOG.info("[numen-net] numen_death entity={} ({}) — suspending loop", p.entityUuid(), p.cause());
-        AgentLoopRegistry.get(p.entityUuid()).ifPresent(loop -> loop.onEntityDied(p.cause()));
-        // Keep it in the roster (marked dead) so the HUD / rail can show the respawn countdown;
-        // it goes live again on NumenRespawnPayload.
-        com.dwinovo.numen.client.agent.ClientDeaths.markDead(
-                p.entityUuid(), System.currentTimeMillis() + p.respawnDelayMs());
+        com.dwinovo.numen.network.ClientPayloadSink.death.accept(p);
     }
 }

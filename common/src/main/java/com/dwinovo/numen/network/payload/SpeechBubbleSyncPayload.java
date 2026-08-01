@@ -34,6 +34,6 @@ public record SpeechBubbleSyncPayload(UUID entityUuid, byte kind, String text) i
 
     /** Client main thread. */
     public static void handle(SpeechBubbleSyncPayload p) {
-        com.dwinovo.numen.client.hud.SpeechBubbles.apply(p.entityUuid(), p.kind(), p.text());
+        com.dwinovo.numen.network.ClientPayloadSink.speechBubble.accept(p);
     }
 }

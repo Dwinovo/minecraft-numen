@@ -12,11 +12,25 @@ neoForge {
     }
 }
 
+// 客户端专属源码集(issue #9):src/client/java 只被客户端消费,主源码集
+// 的 classpath 上物理上没有这些类——服务端代码引用客户端类从"运行时才炸"
+// 变成"import 就编译不过"。
+sourceSets {
+    client {
+        compileClasspath += sourceSets.main.compileClasspath
+        compileClasspath += sourceSets.main.output
+    }
+}
+neoForge.addModdingDependenciesTo(sourceSets.client)
+
 dependencies {
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
     compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
     annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+    // 客户端 mixin 迁到 client 源码集,注解在编译它时也要在场
+    clientCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    clientCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -28,6 +42,10 @@ configurations {
         canBeResolved = false
         canBeConsumed = true
     }
+    commonClientJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
     commonResources {
         canBeResolved = false
         canBeConsumed = true
@@ -36,6 +54,7 @@ configurations {
 
 artifacts {
     commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonClientJava sourceSets.client.java.sourceDirectories.singleFile
     commonResources sourceSets.main.resources.sourceDirectories.singleFile
 }
 
@@ -62,6 +81,9 @@ sourceSets {
     test {
         compileClasspath += sourceSets.main.compileClasspath
         runtimeClasspath += sourceSets.main.runtimeClasspath
+        // 声线库/分句器等客户端类的 headless 测试要看得见 client 源码集
+        compileClasspath += sourceSets.client.output
+        runtimeClasspath += sourceSets.client.output
     }
 }
 

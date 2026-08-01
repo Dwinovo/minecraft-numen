@@ -1,7 +1,6 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.client.data.ClientNumenInventory;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -43,7 +42,6 @@ public record NumenInventoryPayload(UUID uuid, boolean loaded, List<ItemStack> i
 
     /** Client main thread. */
     public static void handle(NumenInventoryPayload p) {
-        ClientNumenInventory.update(p.uuid(), new ClientNumenInventory.Snapshot(
-                p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(), System.currentTimeMillis()));
+        com.dwinovo.numen.network.ClientPayloadSink.inventory.accept(p);
     }
 }

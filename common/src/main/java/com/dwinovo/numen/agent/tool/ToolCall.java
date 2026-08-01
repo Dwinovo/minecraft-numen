@@ -37,10 +37,10 @@ public final class ToolCall {
     private final String id;
     private final String toolName;
     private final String rawArgs;
-    private final ClientToolContext ctx;
+    private final ToolAnchor ctx;
     private final Consumer<String> completion;   // the single "done" sink
 
-    public ToolCall(String id, String toolName, String rawArgs, ClientToolContext ctx,
+    public ToolCall(String id, String toolName, String rawArgs, ToolAnchor ctx,
                     Consumer<String> completion) {
         this.id = id;
         this.toolName = toolName;
@@ -54,8 +54,8 @@ public final class ToolCall {
 
     public String toolName() { return toolName; }
 
-    /** Live entity / world handle for client-side tools. Entity may be {@code null} (out of view). */
-    public ClientToolContext ctx() { return ctx; }
+    /** 调用锚点:服务端只读 UUID;客户端实现另携带实体(可能已卸载为 null)。 */
+    public ToolAnchor ctx() { return ctx; }
 
     /** Raw argument JSON string exactly as the model emitted it. */
     public String rawArgs() { return rawArgs; }

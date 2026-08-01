@@ -35,12 +35,6 @@ public record ClientUiActionPayload(Action action) implements CustomPacketPayloa
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */
     public static void handle(ClientUiActionPayload p) {
-        switch (p.action()) {
-            case OPEN_SETTINGS -> com.dwinovo.numen.client.screen.SettingsScreen.open(null);
-            case RESET_LOOPS -> com.dwinovo.numen.client.agent.AgentLoopRegistry.clear();
-            case DEBUG_TEXT_ON -> com.dwinovo.numen.client.chat.ChatDisplayFilters.set(
-                    new com.dwinovo.numen.client.chat.DebugChatDisplayFilter());
-            case DEBUG_TEXT_OFF -> com.dwinovo.numen.client.chat.ChatDisplayFilters.set(null);
-        }
+        com.dwinovo.numen.network.ClientPayloadSink.uiAction.accept(p);
     }
 }

@@ -15,7 +15,7 @@ import java.util.UUID;
  * perception tools must check and surface a clean failure rather than NPE.
  */
 @com.dwinovo.numen.api.Internal
-public record ClientToolContext(AbstractClientPlayer entity, UUID entityUuid) {
+public record ClientToolContext(AbstractClientPlayer entity, UUID entityUuid) implements ToolAnchor {
 
     /** The body's own perspective is the scan centre / inventory anchor. */
     public LivingEntity anchor() {

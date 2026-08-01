@@ -24,6 +24,8 @@ import java.nio.file.Path;
 public class NumenNeoForgeClient {
 
     public NumenNeoForgeClient(IEventBus modBus) {
+        // 下行 payload 的处理体住在客户端源码集,先挂进主源码集的挂点
+        com.dwinovo.numen.client.ClientPayloadHandlers.install();
         // MCP client: connect to external MCP servers in config/numen/mcp_clients.json
         // and register their tools for the built-in brain. Config dir from FML (no
         // Minecraft instance needed this early).

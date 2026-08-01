@@ -6,6 +6,9 @@ configurations {
     commonJava{
         canBeResolved = true
     }
+    commonClientJava{
+        canBeResolved = true
+    }
     commonResources{
         canBeResolved = true
     }
@@ -19,12 +22,18 @@ dependencies {
         }
     }
     commonJava project(path: ':common', configuration: 'commonJava')
+    commonClientJava project(path: ':common', configuration: 'commonClientJava')
     commonResources project(path: ':common', configuration: 'commonResources')
 }
 
+// 加载器把 common 的主源码与客户端源码一起编进自己的 jar:分源码集的
+// 保护发生在 common 的编译期(主源码集看不见客户端类),发行 jar 照旧
+// 全量——服务端不会去加载客户端类,因为主源码集里已经没有任何引用。
 tasks.named('compileJava', JavaCompile) {
     dependsOn(configurations.commonJava)
     source(configurations.commonJava)
+    dependsOn(configurations.commonClientJava)
+    source(configurations.commonClientJava)
 }
 
 processResources {
@@ -35,11 +44,15 @@ processResources {
 tasks.named('javadoc', Javadoc).configure {
     dependsOn(configurations.commonJava)
     source(configurations.commonJava)
+    dependsOn(configurations.commonClientJava)
+    source(configurations.commonClientJava)
 }
 
 tasks.named('sourcesJar', Jar) {
     dependsOn(configurations.commonJava)
     from(configurations.commonJava)
+    dependsOn(configurations.commonClientJava)
+    from(configurations.commonClientJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
 }

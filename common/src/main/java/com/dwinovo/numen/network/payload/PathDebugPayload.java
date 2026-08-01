@@ -76,6 +76,6 @@ public record PathDebugPayload(UUID companionId,
 
     /** Client-side handler (client main thread): stash for the frame renderer. */
     public static void handle(PathDebugPayload p) {
-        com.dwinovo.numen.client.debug.PathDebugState.accept(p);
+        com.dwinovo.numen.network.ClientPayloadSink.pathDebug.accept(p);
     }
 }

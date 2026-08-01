@@ -1,7 +1,6 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
@@ -39,6 +38,6 @@ public record NumenEventPayload(UUID entityUuid, String xml, boolean principal) 
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */
     public static void handle(NumenEventPayload p) {
-        AgentLoopRegistry.get(p.entityUuid()).ifPresent(loop -> loop.pushEvent(p.xml(), p.principal()));
+        com.dwinovo.numen.network.ClientPayloadSink.event.accept(p);
     }
 }
