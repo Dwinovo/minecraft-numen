@@ -6,6 +6,7 @@ import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.Moves;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
@@ -72,8 +73,11 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         // 循环前取样全部设置:计算中途改设置不改变本次搜索的行为
         int pathingMaxChunkBorderFetch = NavSettings.get().pathingMaxChunkBorderFetch;
         double minimumImprovement = NavSettings.get().minimumImprovementRepropagation ? MIN_IMPROVEMENT : 0;
+        // 节点硬上限:与时间预算同为循环出口,谁先到谁停。命中后落到下方 bestSoFar(...) 返回,
+        // 与超时收尾完全一致(有可用半程即 SEGMENT,否则 FAILURE)。见 NavSettings#maxNodesPerSearch。
+        int maxNodes = NavSettings.get().maxNodesPerSearch;
         Moves[] allMoves = Moves.values();
-        while (!openSet.isEmpty() && numEmptyChunk < pathingMaxChunkBorderFetch && !cancelRequested) {
+        while (!openSet.isEmpty() && numNodes < maxNodes && numEmptyChunk < pathingMaxChunkBorderFetch && !cancelRequested) {
             if ((numNodes & (timeCheckInterval - 1)) == 0) { // 每 64 节点查一次墙钟(约半毫秒)
                 long now = System.currentTimeMillis();
                 if (now - failureTimeoutTime >= 0 || (!failing && now - primaryTimeoutTime >= 0)) {
@@ -161,6 +165,18 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         }
         if (cancelRequested) {
             return Optional.empty();
+        }
+        if (NavSettings.get().profile) {
+            // Why did the loop stop? nodeCap = hit maxNodesPerSearch (gave up early — cap may be too low
+            // for this terrain); exhausted = openSet emptied (genuinely no reachable path); timeout = time
+            // budget; chunkBorder = ran into unloaded chunks. failing=true means no usable partial found
+            // (this returns a FAILURE); failing=false means a best partial segment is returned.
+            String reason = numNodes >= maxNodes ? "nodeCap"
+                    : numEmptyChunk >= pathingMaxChunkBorderFetch ? "chunkBorder"
+                    : openSet.isEmpty() ? "exhausted"
+                    : "timeout";
+            Constants.LOG.info("[nav-search] stop reason={} nodes={}/{} failing={} goal={}",
+                    reason, numNodes, maxNodes, failing, goal);
         }
         return bestSoFar(true, numNodes);
     }

@@ -175,11 +175,14 @@ public class MovementDescend extends Movement {
                 return false; // 落半砖判定飘忽且额外摔伤
             }
             if (reachedMinimum && unprotectedFallHeight <= context.maxFallHeightNoWater + 1) {
-                // fallHeight=4 时落点上格恰好低三格,是无水上限
+                // fallHeight=4 时落点上格恰好低三格,是无水上限。
+                // 硬着陆按原版伤害(净坠-3,每格 1 点)计痛感罚金:摔不死的高度
+                // 仍是路,但有无伤走法(楼梯、逐级下)时代价表会自动让位。
+                int fallDamage = Math.max(0, (unprotectedFallHeight - 1) - 3);
                 res.x = destX;
                 res.y = newY + 1;
                 res.z = destZ;
-                res.cost = tentativeCost;
+                res.cost = tentativeCost + fallDamage * context.fallDamageCostPerPoint;
                 return false;
             }
             if (reachedMinimum && context.hasWaterBucket
