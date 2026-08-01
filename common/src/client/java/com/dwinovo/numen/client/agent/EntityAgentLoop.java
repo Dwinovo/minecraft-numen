@@ -181,21 +181,10 @@ public final class EntityAgentLoop {
      */
     private final ToolDispatcher dispatcher;
 
-    /**
-     * 本同伴的流式语音管线,懒创建：首次在声线库里 resolve 到这个 UUID 的
-     * 绑定时才 new。未绑定 = 永远 null = 零开销。
-     * 见 {@link com.dwinovo.numen.client.voice.VoicePipeline}。
-     */
-    private com.dwinovo.numen.client.voice.VoicePipeline voice;
-
     /** A summarization call is in flight; blocks normal turns until it lands. */
     private boolean compacting = false;
     /** Context size of the last request as the API counted it (0 = unknown yet). */
     private int lastPromptTokens = 0;
-    /** 本同伴累计消耗的 token(每次请求的 total 之和,含压缩调用),持久化于
-     *  conversations/&lt;uuid&gt;.stats.json。计费口径:每次请求都全量计费 prompt,
-     *  所以按请求 total 累加才是真实开销。 */
-    private long totalTokensUsed = 0;
     /** Consecutive compaction failures — circuit breaker for the auto path. */
     private int compactFailures = 0;
 
@@ -231,6 +220,10 @@ public final class EntityAgentLoop {
      */
     private final List<ConvoState.Msg> display = new ArrayList<>();
 
+    /** 表现层(打字机/气泡/说话位/语音)与 token 台账,回合机之外的两件事。 */
+    private final TurnPresenter presenter;
+    private final TokenLedger tokens;
+
     EntityAgentLoop(UUID entityUuid) {
         this.entityUuid = entityUuid;
         Path numenRoot = Minecraft.getInstance().gameDirectory.toPath()
@@ -256,6 +249,12 @@ public final class EntityAgentLoop {
                 return resolveEntity();
             }
         });
+        this.presenter = new TurnPresenter(entityUuid,
+                () -> awaitingLlmResponse,
+                () -> awaitingLlmResponse || dispatcher.busy(),
+                () -> turnGeneration,
+                () -> personaName);
+        this.tokens = new TokenLedger(entityUuid);
         restoreFromDisk();
     }
 
@@ -287,45 +286,8 @@ public final class EntityAgentLoop {
         return Math.min(100, Math.round(lastPromptTokens * 100f / Math.max(1, modelWindow())));
     }
 
-    /** 本同伴累计消耗的 token(跨会话持久化)。 */
-    public long totalTokensUsed() {
-        return totalTokensUsed;
-    }
-
-    private java.nio.file.Path statsFile() {
-        return Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config").resolve("numen").resolve("conversations")
-                .resolve(entityUuid + ".stats.json");
-    }
-
-    private void loadStats() {
-        try {
-            java.nio.file.Path f = statsFile();
-            if (!java.nio.file.Files.isRegularFile(f)) return;
-            JsonObject o = com.google.gson.JsonParser.parseString(
-                    java.nio.file.Files.readString(f, java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject();
-            if (o.has("totalTokens")) totalTokensUsed = Math.max(0, o.get("totalTokens").getAsLong());
-        } catch (java.io.IOException | RuntimeException ex) {
-            Constants.LOG.warn("[numen-entity#{}] token 统计读取失败: {}", entityUuid, ex.toString());
-        }
-    }
-
-    /** 累加一次请求的计费等效 tokens 并写穿到 stats 文件(文件极小,每回合一写)。 */
-    private void addTokens(long total) {
-        if (total <= 0) return;
-        totalTokensUsed += total;
-        try {
-            java.nio.file.Path f = statsFile();
-            java.nio.file.Files.createDirectories(f.getParent());
-            java.nio.file.Files.writeString(f, "{\"totalTokens\":" + totalTokensUsed + "}",
-                    java.nio.charset.StandardCharsets.UTF_8);
-        } catch (java.io.IOException ex) {
-            Constants.LOG.warn("[numen-entity#{}] token 统计写盘失败: {}", entityUuid, ex.toString());
-        }
-    }
-
     private void restoreFromDisk() {
-        loadStats();
+        tokens.load();
         log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
         ConvoLog.PersonaState p = log.loadCurrentPersona();   // independent of history — a persona may be set before any chat
         if (p != null && p.text() != null && !p.text().isBlank()) {
@@ -355,6 +317,16 @@ public final class EntityAgentLoop {
     }
 
     public UUID entityUuid() { return entityUuid; }
+
+    /** Live partial of the in-flight assistant reply ("" when idle) — GUI typewriter source. */
+    public String livePartial() {
+        return presenter.livePartial();
+    }
+
+    /** 本同伴累计消耗的 token(跨会话持久化)。 */
+    public long totalTokensUsed() {
+        return tokens.total();
+    }
     public ConvoState convo() { return convo; }
 
     /** Read-only physical transcript for the GUI (see {@link #display}). */
@@ -366,30 +338,6 @@ public final class EntityAgentLoop {
      *  next protocol-valid splice point — the GUI renders these as pending. */
     public List<String> queuedPrompts() {
         return inbox.snapshot();
-    }
-
-    /** 在飞回复的已到 content 增量(流式打字机的数据源)。主线程读写:chunk 在
-     *  HTTP 线程到达后经 {@code Minecraft.execute} 蹦回来追加,代际不符直接丢;
-     *  回复落库/打断/死亡时清空——committed 消息接管显示,永不双份。 */
-    private final StringBuilder livePartial = new StringBuilder();
-
-    /** Live partial of the in-flight assistant reply ("" when idle) — GUI typewriter source. */
-    public String livePartial() {
-        return livePartial.toString();
-    }
-
-    /** onChunk 接线:content delta 直通 UI 的 live-partial,原始 chunk 原样继续喂语音。 */
-    private java.util.function.Consumer<JsonObject> tapForUi(
-            int gen, java.util.function.Consumer<JsonObject> voiceSink) {
-        return chunk -> {
-            String delta = com.dwinovo.numen.client.voice.VoicePipeline.extractContentDelta(chunk);
-            if (delta != null && !delta.isEmpty()) {
-                Minecraft.getInstance().execute(() -> {
-                    if (gen == turnGeneration) livePartial.append(delta);
-                });
-            }
-            if (voiceSink != null) voiceSink.accept(chunk);
-        };
     }
 
     /** Owner typed a prompt in the chat GUI. */
@@ -421,108 +369,7 @@ public final class EntityAgentLoop {
     /** Driven once per client tick (see {@code AgentLoopRegistry.tickAll}) — backstop timeout. */
     public void clientTick() {
         dispatcher.tick();
-        if (voice != null) voice.tick();
-        syncSpeakingState();
-        streamToChat();
-    }
-
-    /** 上次刷进聊天框流式行的文本(变了才重刷,不逐 tick 折腾聊天框)。 */
-    private String lastStreamedPartial = "";
-
-    /** 聊天框的打字机:在飞回复逐 tick 长出来——不开面板也能实时看她说话。 */
-    private void streamToChat() {
-        if (!awaitingLlmResponse || livePartial.length() == 0) {
-            return;
-        }
-        String filtered = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
-                .filterAssistantMessage(livePartial.toString());
-        if (filtered.isBlank() || filtered.equals(lastStreamedPartial)) {
-            return;
-        }
-        lastStreamedPartial = filtered;
-        com.dwinovo.numen.client.chat.ChatLines.streaming(entityUuid, speakerName(), filtered);
-    }
-
-    /** 流式行收尾:摘掉在飞行(定格行由各分支自己补)。 */
-    private void finishStreamLine() {
-        if (!lastStreamedPartial.isEmpty()) {
-            lastStreamedPartial = "";
-            com.dwinovo.numen.client.chat.ChatLines.streamingDone(entityUuid);
-        }
-    }
-
-    /** 说话人显示名:人设名优先,否则花名册名。 */
-    private String speakerName() {
-        return personaName != null && !personaName.isBlank()
-                ? personaName
-                : String.valueOf(com.dwinovo.numen.client.agent.NumenRoster.instance()
-                        .name(entityUuid));
-    }
-
-    /** 上次发给服务端的说话状态(翻转才发包,不逐 tick 刷)。 */
-    private boolean lastSpeakingSent;
-
-    /** 大脑在输出(思考/生成/跑工具/语音在播)→ 告诉身体,好在说话期间注视主人。 */
-    private void syncSpeakingState() {
-        // 退出游戏的最后几个 client tick 里连接已拆——此时发包会在
-        // PacketDistributor.sendToServer 里 NPE 崩掉客户端。断线期不发,
-        // 状态留在 lastSpeakingSent 里,重连后首次翻转自然补上。
-        if (net.minecraft.client.Minecraft.getInstance().getConnection() == null) {
-            return;
-        }
-        boolean speaking = awaitingLlmResponse || dispatcher.busy()
-                || (voice != null && voice.isSpeaking());
-        if (speaking != lastSpeakingSent) {
-            lastSpeakingSent = speaking;
-            com.dwinovo.numen.platform.Services.NETWORK.sendToServer(
-                    new com.dwinovo.numen.network.payload.SpeakingStatePayload(entityUuid, speaking));
-        }
-    }
-
-    /**
-     * 头顶气泡上报:思考中/正文/收起。服务端校验主人身份后转发给同伴
-     * 附近的所有玩家(含主人自己——不做本地特例,单一路径)。断线期不发,
-     * 气泡本来就是会话态。
-     */
-    private void reportBubble(byte kind, String text) {
-        if (net.minecraft.client.Minecraft.getInstance().getConnection() == null) {
-            return;
-        }
-        String capped = text == null ? "" : truncate(text,
-                com.dwinovo.numen.network.payload.SpeechBubblePayload.MAX_TEXT / 2 - 4);
-        com.dwinovo.numen.platform.Services.NETWORK.sendToServer(
-                new com.dwinovo.numen.network.payload.SpeechBubblePayload(entityUuid, kind, capped));
-    }
-
-    // ---- streaming voice (TTS) ----
-
-    /**
-     * 一次 LLM 分发的语音接线：chunk 回调 + 收尾动作打包。语音未配置时是
-     * {@link #SILENT_VOICE}（sink 为 null、finish 是空操作）,chatStreaming
-     * 收到 null onChunk 与从前完全一样。
-     */
-    private record VoiceTurn(java.util.function.Consumer<JsonObject> sink, Runnable finish) {}
-
-    private static final VoiceTurn SILENT_VOICE = new VoiceTurn(null, () -> {});
-
-    /**
-     * 为即将发出的 chat 请求开启一轮语音（若该同伴绑定了声线）。每次分发都
-     * 重新 resolve——声线库/绑定的编辑下一轮生效;开新轮会打断上一轮还在
-     * 播的残句（新内容优先,与打断语义一致）。
-     */
-    private VoiceTurn beginVoiceTurn() {
-        com.dwinovo.numen.client.voice.VoiceLibrary.Entry cfg =
-                com.dwinovo.numen.client.voice.VoiceLibrary.instance().resolve(entityUuid);
-        if (cfg == null) {
-            if (voice != null) voice.interrupt();   // 总开关关闭/解绑:静音存量队列
-            return SILENT_VOICE;
-        }
-        if (voice == null) {
-            voice = new com.dwinovo.numen.client.voice.VoicePipeline(entityUuid);
-        }
-        final var vp = voice;
-        final int vgen = vp.beginTurn(cfg);
-        return new VoiceTurn(vp.chunkSink(vgen), () -> vp.endTurn(vgen));
+        presenter.tick();
     }
 
     /**
@@ -616,9 +463,9 @@ public final class EntityAgentLoop {
     public void abort() {
         // 语音无条件先闭嘴:不管打断的是在飞的 turn 还是排队的 prompt,
         // 主人按下 Stop 时还在播/待播的语音都不该继续。
-        if (voice != null) voice.interrupt();
+        presenter.interruptVoice();
         // 头顶的思考/残句气泡同理随打断收起
-        reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+        presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
         if (isBusy()) {
             // Priority 1: stop the running turn, in-flight compaction, or a body background task.
             // Responses are generation-stamped, so any in-flight one is discarded.
@@ -627,8 +474,8 @@ public final class EntityAgentLoop {
             boolean wasBackgroundTask = currentTask != null;
             awaitingLlmResponse = false;
             compacting = false;
-            livePartial.setLength(0);   // 半截打字随打断作废
-            finishStreamLine();
+            presenter.clearPartial();   // 半截打字随打断作废
+            presenter.finishStreamLine();
 
             // Synthesize cancelled results for EVERY outstanding call (in flight AND
             // still-queued) so the assistant(tool_calls) message keeps matching tool
@@ -715,14 +562,14 @@ public final class EntityAgentLoop {
         // restored on respawn. The body is gone, so its tool results will never arrive — we'll synth
         // them at respawn instead.
         deathCause = cause;
-        if (voice != null) voice.interrupt();   // 尸体不说话:停播 + 清队列
+        presenter.interruptVoice();   // 尸体不说话:停播 + 清队列
         // Resolve at respawn: every outstanding call (in flight + still queued) — all
         // are listed in the assistant message, so all need results.
         deathInterruptedCalls = dispatcher.cancelAndDrain();
         turnGeneration++;          // discard any in-flight LLM response (halt output)
         awaitingLlmResponse = false;
         compacting = false;
-        livePartial.setLength(0);
+        presenter.clearPartial();
         inbox.clearAll();
         dead = true;
         Constants.LOG.info("[numen-entity#{}] body died ({}) — loop frozen ({} call(s) in flight)",
@@ -989,8 +836,8 @@ public final class EntityAgentLoop {
         if (problem != null) {
             Constants.LOG.warn("[numen-entity#{}] can't start turn: {}", entityUuid, problem);
             // 配置问题不能静默:快捷键用户不开面板,聊天栏警示行是唯一出口
-            com.dwinovo.numen.client.chat.ChatLines.notice(speakerName(), truncate(problem, 160));
-            reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+            com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(), truncate(problem, 160));
+            presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
             turnPause = AgentTurnPause.BLOCKED;
             return;
         }
@@ -1028,11 +875,11 @@ public final class EntityAgentLoop {
         // Capture the current generation; if the owner interrupts before this
         // call resolves, handleResponse sees the mismatch and discards it.
         final int gen = turnGeneration;
-        final VoiceTurn vt = beginVoiceTurn();
-        livePartial.setLength(0);
+        final TurnPresenter.VoiceTurn vt = presenter.beginVoiceTurn();
+        presenter.clearPartial();
         // 头顶挂思考气泡:从发出请求到回应落地的整个空窗都有反馈
-        reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
-        client().chatStreaming(snapshot, tools, systemPrompt, tapForUi(gen, vt.sink()))
+        presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
+        client().chatStreaming(snapshot, tools, systemPrompt, presenter.tapForUi(gen, vt.sink()))
                 .whenComplete((res, err) -> {
                     vt.finish().run();
                     bounceBackToMain(gen, res, err);
@@ -1095,7 +942,7 @@ public final class EntityAgentLoop {
             return;
         }
 
-        addTokens(res.freshTokens());   // 压缩调用同样烧 token,计入累计
+        tokens.add(res.freshTokens());   // 压缩调用同样烧 token,计入累计
         String wrapped = SUMMARY_HEADER + summary.strip();
         // The summary is lossy, but the very next prompt is usually a follow-up
         // to the model's LAST reply ("那第三点展开讲讲") — so that reply crosses
@@ -1274,13 +1121,13 @@ public final class EntityAgentLoop {
         // The failed turn is over. Any fresh turn started now or by a later wake event gets its own
         // one-retry allowance rather than inheriting the exhausted budget from this turn.
         turnRetried = false;
-        reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+        presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
         // 失败必须让主人看见——沉进日志就是"已读不回"
         String why = lastTurnError == null ? "连接中断" : lastTurnError;
         lastTurnError = null;
-        com.dwinovo.numen.client.chat.ChatLines.notice(speakerName(),
+        com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(),
                 "这次没连上(" + truncate(why, 90) + ")——稍后再试一句,详情见日志");
-        com.dwinovo.numen.client.hud.TalkHint.flash(speakerName() + " 连接出错——详情看聊天栏", 3500);
+        com.dwinovo.numen.client.hud.TalkHint.flash(presenter.speakerName() + " 连接出错——详情看聊天栏", 3500);
         if (inbox.isEmpty()) {
             turnPause = AgentTurnPause.RECOVERABLE_FAILURE;
             return;
@@ -1312,8 +1159,8 @@ public final class EntityAgentLoop {
             return;
         }
         awaitingLlmResponse = false;
-        livePartial.setLength(0);   // committed 消息(下方 addAssistant)接管显示
-        finishStreamLine();         // 聊天框在飞行同步摘掉(定格行随分支落地)
+        presenter.clearPartial();   // committed 消息(下方 addAssistant)接管显示
+        presenter.finishStreamLine();         // 聊天框在飞行同步摘掉(定格行随分支落地)
 
         // World is unloading (owner quit / disconnected): the client→server channel is gone, so a
         // dispatched ExecuteToolPayload would NPE in the platform sender. Drop this turn quietly.
@@ -1337,11 +1184,11 @@ public final class EntityAgentLoop {
                 Constants.LOG.info("[numen-entity#{}] re-running failed turn once", entityUuid);
                 awaitingLlmResponse = true;
                 final int gen2 = turnGeneration;
-                final VoiceTurn vt2 = beginVoiceTurn();   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
-                livePartial.setLength(0);                 // 失败那次的半截文字同理作废
-                reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
+                final TurnPresenter.VoiceTurn vt2 = presenter.beginVoiceTurn();   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
+                presenter.clearPartial();                 // 失败那次的半截文字同理作废
+                presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
                 client().chatStreaming(modelContextSnapshot(), ToolRegistry.all(),
-                                composeSystemPrompt(), tapForUi(gen2, vt2.sink()))
+                                composeSystemPrompt(), presenter.tapForUi(gen2, vt2.sink()))
                         .whenComplete((r2, e2) -> {
                             vt2.finish().run();
                             bounceBackToMain(gen2, r2, e2);
@@ -1364,7 +1211,7 @@ public final class EntityAgentLoop {
         if (res.promptTokens() > 0) {
             lastPromptTokens = res.promptTokens();
         }
-        addTokens(res.freshTokens());
+        tokens.add(res.freshTokens());
 
         convo.addAssistant(turn);
 
@@ -1379,18 +1226,18 @@ public final class EntityAgentLoop {
                 String shown = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
                         .filterAssistantMessage(turn.content());
                 if (!shown.isBlank()) {
-                    reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, shown);
-                    com.dwinovo.numen.client.chat.ChatLines.companion(speakerName(), shown);
+                    presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, shown);
+                    com.dwinovo.numen.client.chat.ChatLines.companion(presenter.speakerName(), shown);
                 } else {
-                    reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+                    presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
                 }
             } else {
                 // 模型交了白卷(无工具调用、正文为空,部分后端偶发)——不能无声
                 // 咽下变成"已读不回",给主人一条透明的提示
                 Constants.LOG.info("[numen-entity#{}] assistant (final, empty content)", entityUuid);
-                reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+                presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
                 com.dwinovo.numen.client.hud.TalkHint.flash(
-                        speakerName() + " 想了想,什么也没说——再问一句试试", 3500);
+                        presenter.speakerName() + " 想了想,什么也没说——再问一句试试", 3500);
             }
             convo.resetTurnCount();
             // A prompt that arrived during this final turn was buffered; now that
@@ -1405,10 +1252,10 @@ public final class EntityAgentLoop {
         String aside = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
                 .filterAssistantMessage(turn.content() == null ? "" : turn.content());
         if (!aside.isBlank()) {
-            reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, aside);
-            com.dwinovo.numen.client.chat.ChatLines.companion(speakerName(), aside);
+            presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, aside);
+            com.dwinovo.numen.client.chat.ChatLines.companion(presenter.speakerName(), aside);
         } else {
-            reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_SETTLE, "");
+            presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_SETTLE, "");
         }
 
         // Hand this turn's calls to the dispatcher — it runs them serially and
