@@ -24,7 +24,7 @@ import net.minecraft.world.phys.AABB;
  *
  * <p>球内成本乘以系数:节点落在球内时 actionCost *= coefficient。多个球
  * 叠乘(球内同时有生物与刷怪笼时乘两次)。蜘蛛在白天光照高时不算威胁;
- * 末影人未激怒、僵尸猪灵未被打过的不算威胁——与 Baritone Avoidance 同。
+ * 末影人未激怒、僵尸猪灵未被打过的不算威胁。
  */
 public final class Avoidance {
 

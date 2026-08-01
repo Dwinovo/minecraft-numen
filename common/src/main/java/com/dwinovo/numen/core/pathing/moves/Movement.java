@@ -205,7 +205,7 @@ public abstract class Movement {
      */
     public MovementStatus update() {
         // 强制关闭飞行能力:寻路执行期走地面物理(跳跃/下落),不被外部
-        // 置真的飞行状态干扰(对应 Baritone Movement.java:124)
+        // 置真的飞行状态干扰
         player.getAbilities().flying = false;
         currentState = updateState(currentState);
         BlockPos feet = feet(player);
@@ -215,7 +215,7 @@ public abstract class Movement {
         }
         if (player.isInWall()) {
             // 卡墙自救:先换上对当前准星命中方块最优的工具再按左键,
-            // 破墙速度不拖(对应 Baritone Movement.java:129-132)
+            // 破墙速度不拖
             BlockState hitState = crosshairBlockState();
             if (hitState != null && player instanceof com.dwinovo.numen.entity.NumenPlayer np) {
                 com.dwinovo.numen.core.task.base.ToolSelect.holdBestTool(np, hitState);
