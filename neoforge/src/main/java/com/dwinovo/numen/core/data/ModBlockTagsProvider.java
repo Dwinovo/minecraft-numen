@@ -21,7 +21,7 @@ public final class ModBlockTagsProvider extends BlockTagsProvider {
     protected void addTags(HolderLookup.Provider provider) {
         ModBlockTagData.addBlockTags(key -> {
             var b = tag(key);
-            return ModItemTagData.appender(v -> b.add(v));
+            return ModItemTagData.appender(v -> b.add(v), t -> b.addTag(t));
         });
     }
 }

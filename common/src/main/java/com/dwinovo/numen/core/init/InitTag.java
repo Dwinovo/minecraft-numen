@@ -51,6 +51,24 @@ public final class InitTag {
      */
     public static final TagKey<Block> DO_NOT_BREAK = block("do_not_break");
 
+    /**
+     * Blocks whose block-entity data a blueprint may carry into the world — sign
+     * text, banner patterns, and whatever a pack chooses to add.
+     *
+     * <p>The tag <b>is</b> the authorisation. A blueprint is a file: editable,
+     * downloadable. Copying a chest's contents out of one would print items from
+     * nothing, so nothing is copied unless it is named here. Being a datapack tag
+     * rather than a list in code means a pack that adds decorative block entities
+     * can declare them safe without touching the mod — but it also means adding a
+     * container here lets blueprints print its contents. That is the pack author's
+     * call to make, deliberately, and it should be made knowing that.
+     *
+     * <p>Named vanilla tags are preferred over listing members: {@code
+     * #minecraft:banners} keeps meaning "banners" across versions. See
+     * {@code data/numen/tags/block/safe_block_entity_data.json}.
+     */
+    public static final TagKey<Block> SAFE_BLOCK_ENTITY_DATA = block("safe_block_entity_data");
+
     private InitTag() {}
 
     private static TagKey<Item> item(String name) {
