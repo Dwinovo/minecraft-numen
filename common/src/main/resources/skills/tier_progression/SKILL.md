@@ -29,7 +29,7 @@ The same rule gates navigation: **`goto` only digs through blocks your held tool
 | Iron pickaxe | diamond, gold, redstone | 3 iron ingots + 2 sticks |
 | Diamond pickaxe | obsidian | 3 diamonds + 2 sticks |
 
-## Where ores live (1.21+ worldgen)
+## Where ores live (1.18+ worldgen)
 
 Below Y 0 every ore is its **deepslate variant** — always pass both ids to `mine` / `scan_blocks` (e.g. `diamond_ore` *and* `deepslate_diamond_ore`).
 
