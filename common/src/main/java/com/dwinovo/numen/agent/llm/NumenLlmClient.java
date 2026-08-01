@@ -3,15 +3,13 @@ package com.dwinovo.numen.agent.llm;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.http.HttpLlmTransport;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
-import com.dwinovo.numen.agent.provider.DashScopeProvider;
+import com.dwinovo.numen.agent.model.ModelRegistry;
 import com.dwinovo.numen.agent.provider.DeepSeekProvider;
 import com.dwinovo.numen.agent.provider.LlmProvider;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
-import com.dwinovo.numen.agent.provider.MinimaxProvider;
 import com.dwinovo.numen.agent.provider.MoonshotProvider;
 import com.dwinovo.numen.agent.provider.OpenAIProvider;
 import com.dwinovo.numen.agent.provider.StreamAccumulator;
-import com.dwinovo.numen.agent.provider.VolcengineProvider;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.platform.services.INumenConfig;
@@ -260,39 +258,37 @@ public final class NumenLlmClient {
     /**
      * Map a config {@code provider} string to a concrete {@link LlmProvider}.
      *
-     * <p>Accepted ids match LiteLLM's provider names plus a few Chinese
-     * aliases that users naturally type:
-     * <ul>
-     *   <li>{@code openai} (default fallback)</li>
-     *   <li>{@code deepseek} — DeepSeek (V4 / R1 family)</li>
-     *   <li>{@code moonshot} / {@code kimi} — Moonshot AI (Kimi)</li>
-     *   <li>{@code minimax} — MiniMax (abab / M-series)</li>
-     *   <li>{@code volcengine} / {@code doubao} / {@code ark} — Doubao via Volcengine Ark</li>
-     *   <li>{@code dashscope} / {@code qwen} / {@code tongyi} / {@code aliyun} — DashScope (Qwen)</li>
-     * </ul>
+     * <p>Only backends with genuine behavioural differences get a subclass
+     * (DeepSeek's cache billing, Moonshot's {@code reasoning_content}
+     * fallback). Every other site — zhipu, siliconflow, minimax, volcengine,
+     * dashscope, gemini, grok, "+ add site" customs — is a plain
+     * OpenAI-compatible endpoint whose name and default base URL come from
+     * {@code numen_models.json} ({@link ModelRegistry}), the single source
+     * the settings UI reads too. A few aliases users naturally type resolve
+     * first ({@code kimi}, {@code doubao}/{@code ark}, {@code qwen}/
+     * {@code tongyi}/{@code aliyun}, {@code glm}, {@code silicon}).
      * Unknown values fall back to {@code openai} with a warning log.
      */
     public static LlmProvider pickProvider(String name) {
         if (name == null) return new OpenAIProvider();
-        return switch (name.toLowerCase()) {
-            case DeepSeekProvider.NAME -> new DeepSeekProvider();
-            case MoonshotProvider.NAME, "kimi" -> new MoonshotProvider();
-            case MinimaxProvider.NAME -> new MinimaxProvider();
-            case VolcengineProvider.NAME, "doubao", "ark" -> new VolcengineProvider();
-            case DashScopeProvider.NAME, "qwen", "tongyi", "aliyun" -> new DashScopeProvider();
-            case com.dwinovo.numen.agent.provider.ZhipuProvider.NAME, "glm" ->
-                    new com.dwinovo.numen.agent.provider.ZhipuProvider();
-            case com.dwinovo.numen.agent.provider.SiliconFlowProvider.NAME, "silicon" ->
-                    new com.dwinovo.numen.agent.provider.SiliconFlowProvider();
-            case OpenAIProvider.NAME, "openai-compatible" -> new OpenAIProvider();
-            // Any other registered site (Gemini, Grok, "+ add site" customs) is OpenAI-compatible — use the
-            // base adapter silently; only a genuinely unknown id (typo) warns.
-            default -> {
-                if (!com.dwinovo.numen.agent.model.ModelRegistry.has(name)) {
-                    Constants.LOG.warn("[numen-llm] unknown provider '{}', falling back to openai", name);
-                }
-                yield new OpenAIProvider();
-            }
+        String id = switch (name.toLowerCase()) {
+            case "kimi" -> MoonshotProvider.NAME;
+            case "doubao", "ark" -> "volcengine";
+            case "qwen", "tongyi", "aliyun" -> "dashscope";
+            case "glm" -> "zhipu";
+            case "silicon" -> "siliconflow";
+            case "openai-compatible" -> OpenAIProvider.NAME;
+            default -> name.toLowerCase();
         };
+        if (id.equals(DeepSeekProvider.NAME)) return new DeepSeekProvider();
+        if (id.equals(MoonshotProvider.NAME)) return new MoonshotProvider();
+        if (id.equals(OpenAIProvider.NAME)) return new OpenAIProvider();
+        if (ModelRegistry.has(id)) {
+            String baseUrl = ModelRegistry.baseUrl(id);
+            return new OpenAIProvider(id,
+                    baseUrl == null || baseUrl.isBlank() ? OpenAIProvider.DEFAULT_BASE_URL : baseUrl);
+        }
+        Constants.LOG.warn("[numen-llm] unknown provider '{}', falling back to openai", name);
+        return new OpenAIProvider();
     }
 }

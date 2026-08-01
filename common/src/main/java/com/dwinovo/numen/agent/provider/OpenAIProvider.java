@@ -35,8 +35,27 @@ public class OpenAIProvider implements LlmProvider {
 
     private static final Gson GSON = new Gson();
 
-    @Override public String name() { return NAME; }
-    @Override public String defaultBaseUrl() { return DEFAULT_BASE_URL; }
+    private final String name;
+    private final String defaultBaseUrl;
+
+    public OpenAIProvider() {
+        this(NAME, DEFAULT_BASE_URL);
+    }
+
+    /**
+     * 纯 OpenAI 兼容后端只差站点名与缺省端点——用这个构造按站点参数化,
+     * 不必再为每个站点新建子类。站点名与端点的真源是
+     * {@code numen_models.json}({@code ModelRegistry});只有真有行为差异
+     * 的后端(DeepSeek 的缓存计费、Moonshot 的 reasoning_content 兜底)
+     * 才配一个子类。
+     */
+    public OpenAIProvider(String name, String defaultBaseUrl) {
+        this.name = name;
+        this.defaultBaseUrl = defaultBaseUrl;
+    }
+
+    @Override public String name() { return name; }
+    @Override public String defaultBaseUrl() { return defaultBaseUrl; }
 
     @Override
     public JsonObject buildUserMessage(String content) {
