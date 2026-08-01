@@ -553,7 +553,7 @@ companion.getServer() → companion.level().getServer()
 快捷对话/语音三件套的手感——编译、mixin 目标(已 javap 逐条核对描述符)、datagen、
 gametest、单测都覆盖不到，只能开客户端看。
 
-## 1.21.10 → 1.21.11
+## 1.21.10 → 1.21.11 ✓（已验证，双 loader 编译 + 出包 + datagen + 230 单测 + 47 条游戏内用例全绿）
 
 构建旋钮:MC `1.21.11` / range `[1.21.11, 1.22)` / NeoForm `1.21.11-20251209.172050` /
 Fabric `0.139.5+1.21.11` / NeoForge `21.11.42`。
@@ -587,6 +587,70 @@ net.minecraft.world.entity.vehicle.Boat            → vehicle.boat.Boat        
 - authlib 9 无感沿用;GuiRenderState/RoundRect$State 本档接口面零变化;AT/AW 目标字段未改名。
 
 (残留清点:本档 api 清 14 个旧文件/贴图、core 清 51 个旧 0.0.x 引擎类——与 1.21.10 档同集合。)
+
+### 0.1.1 功能面移植追加(1.21.10 的十三个提交搬到 1.21.11 时新碰到的)
+
+前四档的整套适配在本档**原样成立,一处未动**——提交式渲染管线(`LivingEntityRenderer.submit`
+四参签名、`AvatarRenderState`、`submitCustomGeometry`/`submitText`、`CameraRenderState.orientation`)、
+Screen 输入事件化、`TicketType` 位图、`Window.handle()`、`Entity.getServer()` 已删、
+gametest 数据驱动、`CompoundTag` Optional 化、`TagValueInput` 桥、`ClientInput.moveVector`、
+`ServerLevel.updatePOIOnBlockStateChange`。47 条用例方法体与 8 个批次一字未改,
+common 230 单测全绿。本档新增的只有下面三条。
+
+**玩家权限等级换成权限集** ❗(api：`NumenScreen`、`SummonRequestPayload`)
+——`Player.hasPermissions(int)` 整个删除,op 等级换成新包 `net.minecraft.server.permissions`
+的权限对象:
+```java
+player.hasPermissions(2)
+    → player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER)
+// PermissionLevel: MODERATORS(1)/GAMEMASTERS(2)/ADMINS(3)/OWNERS(4),常量在 Permissions 里一一对应;
+// 原版 Player.canUseGameMasterBlocks() 本身就是 instabuild && COMMANDS_GAMEMASTER,等价关系由它坐实。
+// 判据语义不变:创造档召唤仍是「有 gamemode 权限 或 主人本人在创造」才放行。
+```
+
+**游戏规则迁包 + 规则对象化** ❗(core：`NumenTestEnvironment`)
+——批次前置里停随机刻的那一句:
+```java
+net.minecraft.world.level.GameRules → net.minecraft.world.level.gamerules.GameRules
+GameRules.RULE_RANDOMTICKING(GameRules.Key<IntegerValue>) → GameRules.RANDOM_TICK_SPEED(GameRule<Integer>)
+level.getGameRules().getRule(RULE).set(0, server) → level.getGameRules().set(RULE, 0, server)
+// 取值侧 getInt(RULE) → get(RULE)。语义逐字等价,随机刻照停。
+```
+这一条不停摆就会重演 1.21.8 那个坑:图纸里的草方块被随机刻退化成泥土,
+「所有格同时就位」的那一瞬永远不到来,用例跑满超时。
+
+**大改名波及新搬下来的文件**(机械替换,共 10 个文件)——本档基线已把老文件改完,
+新搬来的 0.1.1 文件还是旧写法:
+```java
+// ResourceLocation → Identifier:TakeItemsTool / BuildPalette / BuildTool /
+//   CompanionGameTests / NumenGameTests(core),SpeechBubbleRenderer / ItemsView /
+//   SpeechBubblePayload / SpeechBubbleSyncPayload(api)
+// ResourceKey.location() → identifier():BlueprintStore / PathExecutor×2 / MovementAscend
+//   (都是 block.builtInRegistryHolder().key().xxx().getPath() 这一串)
+// RenderType.text(tex) → RenderTypes.text(tex):SpeechBubbleRenderer(移包+复数化)
+```
+`SkillRegistry` 的 `info.location()` 是自有 record 访问器(返回 `Path`),**不要**跟着替换。
+
+**HUD 图层的取舍**:基线 1.21.11 注册的 `numen_toasts` 图层在 0.1.1 里已随
+`NumenToasts` 一起去掉,`registerGuiLayers` 改注册 `talk_hint`(准星指着同伴时的对话提示)。
+cherry-pick 会报 modify/delete 冲突,按 0.1.1 删掉即可。
+
+**api 构件坐标**:本档基线三个 `build.gradle` 的六处 artifactId **本来就是**
+`numen-api-{common,fabric,neoforge}-1.21.11`,只需把版本号提到 `0.0.8-SNAPSHOT`。
+即便如此也要逐个看——错了不报错。
+
+**技能包版本口径**:`skills/tier_progression/SKILL.md` 的
+`## Where ores live (1.21+ worldgen)` 在本分支成立,无须改。
+
+**结构模板 DataVersion 不硬盖**:`.snbt` 仍留 4189,`readStructure` 会走
+`DataFixTypes.STRUCTURE.updateToCurrentVersion` 正向修到本代;硬盖反而跳过修数据器。
+
+### 只在真机客户端才能目视验证的部分
+与上一档同一份清单,且本档未再动渲染代码:头顶气泡的实际观感(层次先后、小方尾位置、
+文字与底图的 z 关系、与名牌的相对位置)、转盘的物理按键接管与不断步、GUI 圆角 SDF
+的渲染结果、快捷对话/语音三件套的手感,以及本档新改的**创造档下拉的可点/置灰**
+(权限判据换实现后,面板上那个下拉是否按预期灰掉)——编译、mixin 目标(已逐条核对)、
+datagen、gametest、单测都覆盖不到,只能开客户端看。
 
 ## 1.21.11 → 26.1.2 ✓（0.0.9 全量对齐;跨版本纪元的大跳:渲染第四震 + Java 25 + Fabric 原生 loom）
 
