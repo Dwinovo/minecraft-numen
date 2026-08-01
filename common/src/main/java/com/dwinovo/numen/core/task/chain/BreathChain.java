@@ -5,6 +5,7 @@ import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.task.SurvivalConfig;
+import com.dwinovo.numen.core.task.WorkProfile;
 import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -60,6 +61,10 @@ public final class BreathChain implements TaskChain, com.dwinovo.numen.task.refl
     /** One trapped-diary line per episode, written the moment the search comes up
      *  empty — while there is still air left for the cognition layer to act on. */
     private boolean trappedNoted;
+    /** 无畏画像的入水计时(不扣氧,改按持续没顶时间触发漂浮)。 */
+    private int submergedTicks;
+    /** 没顶多久后开始上浮——对齐生存端低氧窗口的量级(300-240=60 tick,3 秒)。 */
+    private static final int FEARLESS_FLOAT_DELAY_TICKS = 60;
 
     public BreathChain() {
         this(null);
@@ -75,8 +80,24 @@ public final class BreathChain implements TaskChain, com.dwinovo.numen.task.refl
         if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
             return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
         }
-        float p = SurvivalDecisions.breathPriority(
-                companion.isEyeInFluid(FluidTags.WATER), companion.getAirSupply());
+        // 无畏画像(创造)不扣氧气,airSupply 恒满——但这条链是假玩家唯一的
+        // 漂浮本能,不能跟着休眠(否则闲置沉底就永远留在水底)。改按
+        // "眼在水下持续 N tick"触发,窗口对齐生存的低氧阈值。
+        float p;
+        if (WorkProfile.of(companion).fearless()) {
+            if (companion.isEyeInFluid(FluidTags.WATER)) {
+                submergedTicks++;
+            } else {
+                submergedTicks = 0;
+            }
+            p = submergedTicks > FEARLESS_FLOAT_DELAY_TICKS
+                    ? SurvivalDecisions.breathPriority(true, 0)
+                    : SurvivalDecisions.DORMANT;
+        } else {
+            submergedTicks = 0;
+            p = SurvivalDecisions.breathPriority(
+                    companion.isEyeInFluid(FluidTags.WATER), companion.getAirSupply());
+        }
         if (p == SurvivalDecisions.DORMANT && episodeActive) {
             noteEpisode(companion);   // head just cleared the water — close the episode
         }
