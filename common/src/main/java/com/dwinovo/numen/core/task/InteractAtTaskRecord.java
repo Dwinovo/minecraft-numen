@@ -28,15 +28,15 @@ public final class InteractAtTaskRecord extends TaskRecord {
 
     public static final String TOOL_NAME = "interact_at";
 
-    public enum Button { LEFT, RIGHT }   // left = attack, right = use
+    
 
-    public final Button button;
+    public final MouseButton button;
     public final BlockPos aim;     // null → current facing (in-air use)
     public final int holdTicks;
     public final Item item;        // null → use whatever is already in hand; else equip this first
 
     public InteractAtTaskRecord(String toolCallId, long deadlineGameTime,
-                                Button button, BlockPos aim, int holdTicks, Item item) {
+                                MouseButton button, BlockPos aim, int holdTicks, Item item) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.button = button;
         this.aim = aim != null ? aim.immutable() : null;
@@ -66,7 +66,7 @@ public final class InteractAtTaskRecord extends TaskRecord {
 
     @Override
     public String describe() {
-        return TOOL_NAME + " " + (button == Button.LEFT ? "left" : "right")
+        return TOOL_NAME + " " + (button == MouseButton.LEFT ? "left" : "right")
                 + (item != null ? " " + BuiltInRegistries.ITEM.getKey(item).getPath() : "")
                 + (aim != null ? " @" + aim.getX() + "," + aim.getY() + "," + aim.getZ() : " (forward)")
                 + (holdTicks != 0 ? " hold=" + holdTicks : "");

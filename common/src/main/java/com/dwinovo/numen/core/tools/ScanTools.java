@@ -7,12 +7,9 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -34,7 +31,7 @@ int radius,
 List<String> block_ids,
             NumenPlayer self, Consumer<String> reply) {
         int r = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
-        Set<Block> targets = readBlockIds(block_ids);
+        Set<Block> targets = ToolParse.parseBlocks(block_ids);
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("no valid block_ids provided");
         }
@@ -85,15 +82,4 @@ List<String> block_ids,
         return root.toString();
     }
 
-    private static Set<Block> readBlockIds(List<String> ids) {
-        Set<Block> out = new HashSet<>();
-        for (String raw : ids) {
-            if (raw == null) continue;
-            ResourceLocation id = ResourceLocation.tryParse(raw);
-            if (id == null) continue;
-            Block b = BuiltInRegistries.BLOCK.get(id);
-            if (b != null && b != Blocks.AIR) out.add(b);
-        }
-        return out;
-    }
 }

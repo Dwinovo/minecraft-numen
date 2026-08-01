@@ -144,12 +144,7 @@ public final class BuildPalette {
         if (entries.size() == 1) {
             return entries.get(0);
         }
-        long h = pos.getX() * 341873128712L
-                + pos.getY() * 1971648029L
-                + pos.getZ() * 132897987541L;
-        h ^= h >>> 29;
-        h *= 0xff51afd7ed558ccdL;
-        h ^= h >>> 32;
+        long h = positionHash(pos.getX(), pos.getY(), pos.getZ());
         int roll = (int) Math.floorMod(h, totalWeight);
         for (Entry e : entries) {
             roll -= e.weight();
@@ -158,5 +153,21 @@ public final class BuildPalette {
             }
         }
         return entries.get(entries.size() - 1);
+    }
+
+    /**
+     * 建造域共用的确定性位置哈希(murmur 尾混合)。调色板选料与 scatter
+     * 撒点都以"确定性"为卖点(预览与施工一致、重跑一致、断点续建一致),
+     * 此前两处共享魔数却各写一套混合步骤——将来一处改了另一处没改,
+     * 表现就是预览和成品不一致。混合器只此一份。
+     */
+    public static long positionHash(int x, int y, int z) {
+        long h = x * 341873128712L
+                + y * 1971648029L
+                + z * 132897987541L;
+        h ^= h >>> 29;
+        h *= 0xff51afd7ed558ccdL;
+        h ^= h >>> 32;
+        return h;
     }
 }

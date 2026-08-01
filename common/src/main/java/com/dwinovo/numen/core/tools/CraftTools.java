@@ -494,19 +494,12 @@ public final class CraftTools {
             if (src < 0) {
                 break;
             }
-            menu.clicked(src, 0, ClickType.PICKUP, self);            // grab a source stack
-            int carry = menu.getCarried().getCount();
-            if (carry <= 0) {
-                break;
-            }
-            int put = Math.min(carry, n - placed);
-            for (int k = 0; k < put; k++) {
-                menu.clicked(cellIdx, 1, ClickType.PICKUP, self);    // drop ONE into the cell
-            }
-            if (!menu.getCarried().isEmpty()) {
-                menu.clicked(src, 0, ClickType.PICKUP, self);        // return the remainder
-            }
+            int before = placed;
+            MenuOps.dripInto(menu, self, src, cellIdx, n - placed);
             placed = menu.slots.get(cellIdx).getItem().getCount();
+            if (placed <= before) {
+                break;   // 这一轮没放进任何东西(抓空/拒收),别空转
+            }
         }
         return placed;
     }

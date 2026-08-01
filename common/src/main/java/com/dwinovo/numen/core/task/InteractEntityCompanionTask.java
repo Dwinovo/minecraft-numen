@@ -98,7 +98,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         // the target slipped away before we could touch it.
         if (entity == null || !entity.isAlive()) {
             if (acted) {
-                successMsg = r.button == InteractEntityTaskRecord.Button.LEFT
+                successMsg = r.button == MouseButton.LEFT
                         ? "defeated " + name() : "done with " + name();
                 return TaskState.SUCCESS;
             }
@@ -190,7 +190,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     }
 
     private Interaction.Button button() {
-        return r.button == InteractEntityTaskRecord.Button.LEFT
+        return r.button == MouseButton.LEFT
                 ? Interaction.Button.ATTACK : Interaction.Button.USE;
     }
 
@@ -211,7 +211,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     }
 
     private String describeDone() {
-        String verb = r.button == InteractEntityTaskRecord.Button.LEFT ? "attacked" : "interacted with";
+        String verb = r.button == MouseButton.LEFT ? "attacked" : "interacted with";
         return verb + " " + name();
     }
 
@@ -225,7 +225,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     @Override
     protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
-        data.put("button", r.button == InteractEntityTaskRecord.Button.LEFT ? "left" : "right");
+        data.put("button", r.button == MouseButton.LEFT ? "left" : "right");
         data.put("entity_id", r.entityId);
         return data;
     }

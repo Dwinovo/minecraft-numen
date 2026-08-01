@@ -6,14 +6,12 @@ import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.task.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.InteractEntityTaskRecord;
 import com.dwinovo.numen.core.task.MineBlockTaskRecord;
+import com.dwinovo.numen.core.task.MouseButton;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -37,7 +35,7 @@ public final class BlockActionTools {
     private static final long INTERACT_ENTITY_TIMEOUT_TICKS = 60 * 20;
 
     public TaskRecord autoMine(List<String> block_ids, int count, ToolContext ctx) {
-        Set<Block> targets = readBlockIds(block_ids);
+        Set<Block> targets = ToolParse.parseBlocks(block_ids);
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("block_ids contained no valid block ids");
         }
@@ -46,18 +44,6 @@ public final class BlockActionTools {
         long timeout = Math.max(MIN_TIMEOUT_TICKS, (long) clampedCount * TICKS_PER_BLOCK);
         long deadline = ctx.deadline(timeout);
         return new MineBlockTaskRecord(ctx.toolCallId(), deadline, targets, clampedCount, label);
-    }
-
-    private static Set<Block> readBlockIds(List<String> blockIds) {
-        Set<Block> out = new LinkedHashSet<>();
-        for (String el : blockIds) {
-            if (el == null) continue;
-            ResourceLocation id = ResourceLocation.tryParse(el);
-            if (id == null) continue;
-            Block b = BuiltInRegistries.BLOCK.get(id);
-            if (b != null && b != Blocks.AIR) out.add(b);
-        }
-        return out;
     }
 
     /** Short label for messages: the first target's path (e.g. "iron_ore"), "+N" if more. */
@@ -75,7 +61,7 @@ Integer z,
 Integer hold_ticks,
 String item_id,
             ToolContext ctx) {
-        InteractAtTaskRecord.Button buttonVal = readAtButton(button);
+        MouseButton buttonVal = ToolParse.parseButton(button);
         int holdTicks = hold_ticks == null ? 0 : hold_ticks;
 
         BlockPos aim = null;
@@ -94,40 +80,16 @@ String item_id,
         return new InteractAtTaskRecord(ctx.toolCallId(), ctx.deadline(INTERACT_AT_TIMEOUT_TICKS), buttonVal, aim, holdTicks, item);
     }
 
-    private static InteractAtTaskRecord.Button readAtButton(String button) {
-        if (button == null) {
-            throw new IllegalArgumentException("missing required argument: button");
-        }
-        return switch (button) {
-            case "left" -> InteractAtTaskRecord.Button.LEFT;
-            case "right" -> InteractAtTaskRecord.Button.RIGHT;
-            default -> throw new IllegalArgumentException(
-                    "button must be 'left' or 'right', got: " + button);
-        };
-    }
-
     public TaskRecord interactEntity(
 String button,
 int entity_id,
 Integer hold_ticks,
 String item_id,
             ToolContext ctx) {
-        InteractEntityTaskRecord.Button buttonVal = readEntityButton(button);
+        MouseButton buttonVal = ToolParse.parseButton(button);
         int holdTicks = hold_ticks == null ? 0 : hold_ticks;
         return new InteractEntityTaskRecord(ctx.toolCallId(), ctx.deadline(INTERACT_ENTITY_TIMEOUT_TICKS), buttonVal, entity_id, holdTicks,
                 item_id == null ? null : ToolArgs.parseItem(item_id));
-    }
-
-    private static InteractEntityTaskRecord.Button readEntityButton(String button) {
-        if (button == null) {
-            throw new IllegalArgumentException("missing required argument: button");
-        }
-        return switch (button) {
-            case "left" -> InteractEntityTaskRecord.Button.LEFT;
-            case "right" -> InteractEntityTaskRecord.Button.RIGHT;
-            default -> throw new IllegalArgumentException(
-                    "button must be 'left' or 'right', got: " + button);
-        };
     }
 }
 

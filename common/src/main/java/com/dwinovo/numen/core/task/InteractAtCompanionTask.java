@@ -159,7 +159,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     private Interaction.Button button() {
-        return r.button == InteractAtTaskRecord.Button.LEFT
+        return r.button == MouseButton.LEFT
                 ? Interaction.Button.ATTACK : Interaction.Button.USE;
     }
 
@@ -173,7 +173,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     private String describeDone() {
-        String verb = r.button == InteractAtTaskRecord.Button.LEFT ? "left-clicked" : "right-clicked";
+        String verb = r.button == MouseButton.LEFT ? "left-clicked" : "right-clicked";
         return verb + (r.aim != null ? " " + aimLabel() : " (forward)");
     }
 
@@ -187,7 +187,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     @Override
     protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
-        data.put("button", r.button == InteractAtTaskRecord.Button.LEFT ? "left" : "right");
+        data.put("button", r.button == MouseButton.LEFT ? "left" : "right");
         if (r.aim != null) {
             data.put("x", r.aim.getX());
             data.put("y", r.aim.getY());

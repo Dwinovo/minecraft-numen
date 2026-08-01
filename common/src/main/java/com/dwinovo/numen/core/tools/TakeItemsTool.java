@@ -8,10 +8,8 @@ import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
 import java.util.Map;
 import java.util.function.Consumer;
@@ -61,9 +59,10 @@ public final class TakeItemsTool implements NumenTool {
             reply.accept(GSON.toJson(out));
             return;
         }
-        ResourceLocation id = ResourceLocation.tryParse(a.item_id() == null ? "" : a.item_id());
-        Item item = id == null ? Items.AIR : BuiltInRegistries.ITEM.get(id);
-        if (item == Items.AIR || (id != null && !BuiltInRegistries.ITEM.containsKey(id))) {
+        Item item;
+        try {
+            item = com.dwinovo.numen.agent.tool.ToolArgs.parseItem(a.item_id() == null ? "" : a.item_id());
+        } catch (IllegalArgumentException bad) {
             out.addProperty("success", false);
             out.addProperty("message", "unknown item id: " + a.item_id());
             reply.accept(GSON.toJson(out));

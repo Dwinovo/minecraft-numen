@@ -115,11 +115,7 @@ List<Move> moves,
 
         if (exact) {
             int want = Math.min(count, fromBefore.getCount());
-            menu.clicked(from, 0, ClickType.PICKUP, entity);          // grab the stack
-            for (int i = 0; i < want; i++) {
-                menu.clicked(to, 1, ClickType.PICKUP, entity);        // drop ONE (merges / fills)
-            }
-            menu.clicked(from, 0, ClickType.PICKUP, entity);          // return the remainder
+            MenuOps.dripInto(menu, entity, from, to, want);
         } else {
             menu.clicked(from, 0, ClickType.PICKUP, entity);          // grab the stack
             menu.clicked(to, 0, ClickType.PICKUP, entity);            // place / merge / swap

@@ -699,8 +699,7 @@ public final class BuildTool implements NumenTool {
         List<BlockPos> out = new ArrayList<>();
         for (int x = ax; x <= bx; x++) {
             for (int z = az; z <= bz; z++) {
-                long h = x * 341873128712L + z * 132897987541L;
-                h ^= h >>> 27;
+                long h = BuildPalette.positionHash(x, 0, z);
                 if (Math.floorMod(h, 1000) < (long) (d * 1000)) {
                     out.add(new BlockPos(x, y, z));
                 }

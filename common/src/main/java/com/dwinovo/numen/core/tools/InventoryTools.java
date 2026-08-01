@@ -11,7 +11,6 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.Items;
 
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -68,14 +67,7 @@ String slot,
     public TaskRecord eatItem(
 String item_id,
             ToolContext ctx) {
-        ResourceLocation id = ResourceLocation.tryParse(item_id);
-        if (id == null) {
-            throw new IllegalArgumentException("item_id is not a valid id: " + item_id);
-        }
-        Item item = BuiltInRegistries.ITEM.get(id);
-        if (item == null || item == Items.AIR) {
-            throw new IllegalArgumentException("unknown item: " + id);
-        }
+        Item item = ToolArgs.parseItem(item_id);
         String label = BuiltInRegistries.ITEM.getKey(item).getPath();
         return new EatItemTaskRecord(ctx.toolCallId(), ctx.deadline(EAT_TIMEOUT_TICKS), item, label);
     }
