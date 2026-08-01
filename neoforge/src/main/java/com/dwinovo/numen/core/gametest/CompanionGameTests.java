@@ -440,7 +440,7 @@ public class CompanionGameTests {
         var front = new net.minecraft.nbt.CompoundTag();
         front.putBoolean("has_glowing_text", false);
         signData.put("front_text", front);
-        var keptSign = com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+        var keptSign = com.dwinovo.numen.core.build.BlueprintSafety.safeBlockEntityData(
                 Blocks.OAK_SIGN.defaultBlockState(), signData);
         helper.assertTrue(keptSign != null && keptSign.contains("front_text"),
                 "a sign's text is the whole point of carrying its data");
@@ -450,7 +450,7 @@ public class CompanionGameTests {
         // 那张名单是开放集合,每来一个新方块实体就得被咬一次。
         var signWithItem = signData.copy();
         signWithItem.put("front_item", new net.minecraft.nbt.CompoundTag());
-        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+        helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeBlockEntityData(
                         Blocks.OAK_SIGN.defaultBlockState(), signWithItem) == null,
                 "a sign that holds an itemstack (some mods add this) carries goods, so it is out");
 
@@ -463,7 +463,7 @@ public class CompanionGameTests {
         var items = new net.minecraft.nbt.ListTag();
         items.add(stack);
         chestData.put("Items", items);
-        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+        helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeBlockEntityData(
                         Blocks.CHEST.defaultBlockState(), chestData) == null,
                 "a blueprint full of diamonds must not print diamonds");
 
@@ -477,19 +477,19 @@ public class CompanionGameTests {
         held.putString("id", "minecraft:diamond_sword");
         held.putInt("count", 1);
         frame.put("Item", held);
-        var keptFrame = com.dwinovo.numen.core.task.BuildStates.safeEntityData(
+        var keptFrame = com.dwinovo.numen.core.build.BlueprintSafety.safeEntityData(
                 frame, helper.getLevel().registryAccess());
         helper.assertTrue(keptFrame != null && keptFrame.contains("Facing"),
                 "an item frame is part of the building; its shell must be spawned");
         helper.assertTrue(keptFrame != null && keptFrame.contains("Item"),
                 "what hangs in it stays — but it becomes a requirement for that exact item");
-        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates
+        helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety
                         .payloadStacks(keptFrame, helper.getLevel().registryAccess()).size() == 1,
                 "and that requirement has to be readable, or nobody ever gets charged for it");
 
         var cow = new net.minecraft.nbt.CompoundTag();
         cow.putString("id", "minecraft:cow");
-        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeEntityData(
+        helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeEntityData(
                         cow, helper.getLevel().registryAccess()) == null,
                 "a cow stored in a blueprint is not a design; copying it conjures livestock");
 
@@ -707,7 +707,7 @@ public class CompanionGameTests {
                 "only the primary halves belong in the target set, got "
                         + loaded.targets().size() + " cells");
         for (var t : loaded.targets()) {
-            helper.assertTrue(!com.dwinovo.numen.core.task.BuildStates
+            helper.assertTrue(!com.dwinovo.numen.core.build.BuildStates
                             .isSecondaryHalf(t.desiredState()),
                     "a bed head / upper door half must never be a target: " + t.desiredState());
         }
@@ -862,13 +862,13 @@ public class CompanionGameTests {
         bannerData.put("patterns", patterns);
 
         BlockState banner = Blocks.WHITE_BANNER.defaultBlockState();
-        var safeBanner = com.dwinovo.numen.core.task.BuildStates
+        var safeBanner = com.dwinovo.numen.core.build.BlueprintSafety
                 .safeBlockEntityData(banner, bannerData);
         helper.assertTrue(safeBanner != null && safeBanner.contains("patterns"),
                 "a banner's patterns are part of the design and must be carried over");
 
         // 而料要收的是"带着这些花纹的那面旗帜",不是一面白旗
-        var exact = com.dwinovo.numen.core.task.BuildStates
+        var exact = com.dwinovo.numen.core.build.BuildStates
                 .strictItem(banner, safeBanner, registries);
         helper.assertTrue(exact != null && exact.is(Items.WHITE_BANNER),
                 "the requirement should be a white banner stack, got " + exact);
@@ -885,7 +885,7 @@ public class CompanionGameTests {
         var sherds = new net.minecraft.nbt.ListTag();
         sherds.add(net.minecraft.nbt.StringTag.valueOf("minecraft:heart_pottery_sherd"));
         potData.put("sherds", sherds);
-        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+        helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeBlockEntityData(
                         Blocks.DECORATED_POT.defaultBlockState(), potData) == null,
                 "pottery sherds are rare archaeology drops; a blueprint must not conjure them");
 
@@ -893,7 +893,7 @@ public class CompanionGameTests {
         var signData = new net.minecraft.nbt.CompoundTag();
         signData.putString("id", "minecraft:oak_sign");
         signData.put("front_text", new net.minecraft.nbt.CompoundTag());
-        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+        helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeBlockEntityData(
                         Blocks.OAK_SIGN.defaultBlockState(), signData) != null,
                 "sign text is free to write by hand, so carrying it over conjures nothing");
 
@@ -904,7 +904,7 @@ public class CompanionGameTests {
         sword.putString("id", "minecraft:diamond_sword");
         sword.putInt("count", 1);
         frame.put("Item", sword);
-        var carried = com.dwinovo.numen.core.task.BuildStates.payloadStacks(frame, registries);
+        var carried = com.dwinovo.numen.core.build.BlueprintSafety.payloadStacks(frame, registries);
         helper.assertTrue(carried.size() == 1 && carried.get(0).is(Items.DIAMOND_SWORD),
                 "what a frame carries must be read out as its own requirement, got " + carried);
         helper.succeed();
@@ -957,7 +957,7 @@ public class CompanionGameTests {
                 new Ask(Blocks.TALL_GRASS, Items.TALL_GRASS, "tall grass"),
                 new Ask(Blocks.LARGE_FERN, Items.LARGE_FERN, "a large fern"))) {
             BlockState state = s.block().defaultBlockState();
-            helper.assertTrue(com.dwinovo.numen.core.task.BuildStates
+            helper.assertTrue(com.dwinovo.numen.core.build.BuildStates
                             .materialItem(state, level, probe) == s.pay(),
                     s.what() + " should cost " + s.pay() + " — and that answer must come from"
                             + " asking the block, not from a table of ours");
@@ -969,7 +969,7 @@ public class CompanionGameTests {
             helper.assertTrue(b.asItem() != Items.DIRT,
                     b + " self-reports " + b.asItem() + "; if that ever became dirt,"
                             + " this override could go");
-            helper.assertTrue(com.dwinovo.numen.core.task.BuildStates
+            helper.assertTrue(com.dwinovo.numen.core.build.BuildStates
                             .materialItem(b.defaultBlockState(), level, probe) == Items.DIRT,
                     b + " is worked from dirt by hand, so dirt is what it costs");
         }
@@ -1041,7 +1041,7 @@ public class CompanionGameTests {
             var data = new net.minecraft.nbt.CompoundTag();
             data.putString("id", "minecraft:whatever");
             data.putString("anything", "at all");
-            helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+            helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeBlockEntityData(
                             outside.defaultBlockState(), data) == null,
                     "outside the tag nothing rides along, not one key: " + outside);
         }
@@ -1054,7 +1054,7 @@ public class CompanionGameTests {
                 Blocks.STRUCTURE_BLOCK, Blocks.JIGSAW)) {
             var data = new net.minecraft.nbt.CompoundTag();
             data.putString("Command", "/give @s diamond 64");
-            helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+            helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeBlockEntityData(
                             opOnly.defaultBlockState(), data) == null,
                     opOnly + " sets NBT only for operators; a blueprint must never carry it");
         }
@@ -1070,7 +1070,7 @@ public class CompanionGameTests {
                         + "{\"action\":\"run_command\",\"value\":\"/give @s diamond 64\"}}"));
         front.put("messages", lines);
         trapped.put("front_text", front);
-        helper.assertTrue(com.dwinovo.numen.core.task.BuildStates.safeBlockEntityData(
+        helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeBlockEntityData(
                         Blocks.OAK_SIGN.defaultBlockState(), trapped) == null,
                 "a sign whose text carries a clickEvent is an executable hole, not decoration");
 
@@ -1082,7 +1082,7 @@ public class CompanionGameTests {
         plainLines.add(net.minecraft.nbt.StringTag.valueOf("\"welcome home\""));
         text.put("messages", plainLines);
         plain.put("front_text", text);
-        var kept = com.dwinovo.numen.core.task.BuildStates
+        var kept = com.dwinovo.numen.core.build.BlueprintSafety
                 .safeBlockEntityData(Blocks.OAK_SIGN.defaultBlockState(), plain);
         helper.assertTrue(kept != null && kept.contains("front_text"),
                 "plain sign text is the whole point of carrying this data");
@@ -1125,7 +1125,7 @@ public class CompanionGameTests {
         frame.putString("id", "minecraft:item_frame");
         frame.put("Item", box);
 
-        var safe = com.dwinovo.numen.core.task.BuildStates.safeEntityData(frame, registries);
+        var safe = com.dwinovo.numen.core.build.BlueprintSafety.safeEntityData(frame, registries);
         helper.assertTrue(safe != null, "the frame itself is part of the building");
         // 剥在数据本身上:落位读的这份里已经没有那箱钻石了
         var carriedNbt = safe.getCompound("Item").getCompound("components");
@@ -1136,7 +1136,7 @@ public class CompanionGameTests {
                 "a custom name carries nothing, so it stays");
 
         // 计价那一边读的是同一份
-        var priced = com.dwinovo.numen.core.task.BuildStates.payloadStacks(safe, registries);
+        var priced = com.dwinovo.numen.core.build.BlueprintSafety.payloadStacks(safe, registries);
         helper.assertTrue(priced.size() == 1 && priced.get(0).is(Items.SHULKER_BOX),
                 "the frame's contents are one shulker box to pay for, got " + priced);
         helper.assertTrue(priced.get(0).get(
@@ -1988,7 +1988,7 @@ public class CompanionGameTests {
         helper.assertTrue(quoted.get(Items.RED_BED) != null && quoted.get(Items.RED_BED) == beds,
                 "one bed item per bed: " + beds + " bed cell(s) but "
                         + quoted.get(Items.RED_BED) + " item(s) quoted");
-        helper.assertTrue(loaded.targets().stream().noneMatch(t -> com.dwinovo.numen.core.task
+        helper.assertTrue(loaded.targets().stream().noneMatch(t -> com.dwinovo.numen.core.build
                         .BuildStates.isSecondaryHalf(t.desiredState())),
                 "no secondary half belongs in the target set");
 
@@ -2558,7 +2558,7 @@ public class CompanionGameTests {
         helper.assertTrue(loaded.dropped() == 0,
                 "nothing in this cottage should be dropped outright, got " + loaded.dropped());
         // 床头是被代建的,不是缺了一块设计——目标集里一个都不该有
-        helper.assertTrue(loaded.targets().stream().noneMatch(t -> com.dwinovo.numen.core.task
+        helper.assertTrue(loaded.targets().stream().noneMatch(t -> com.dwinovo.numen.core.build
                         .BuildStates.isSecondaryHalf(t.desiredState())),
                 "a bed head must never be its own target cell");
         helper.succeed();

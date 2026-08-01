@@ -93,7 +93,7 @@ public final class BuildPalette {
      * 其中 18 次就是 air 与 water。
      *
      * <p>能不能建这件事本身不在这里判——它和图纸入口共用
-     * {@link com.dwinovo.numen.core.task.BuildStates#unbuildableReason};这边把它
+     * {@link com.dwinovo.numen.core.build.BuildStates#unbuildableReason};这边把它
      * 当拒绝理由抛出去,那边把它当跳过条件。两处各判各的迟早会分叉。
      */
     public static Entry resolve(String id, int weight) {
@@ -112,12 +112,12 @@ public final class BuildPalette {
         }
         Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(rl);
         // 能不能建走同一个判据(图纸入口那边拿它当跳过条件,这边拿它当拒绝理由)
-        String no = com.dwinovo.numen.core.task.BuildStates
+        String no = com.dwinovo.numen.core.build.BuildStates
                 .unbuildableReason(block.defaultBlockState());
         if (no != null) {
             throw new IllegalArgumentException(trimmed + " — " + no);
         }
-        Item item = com.dwinovo.numen.core.task.BuildStates.materialItem(block);
+        Item item = com.dwinovo.numen.core.build.BuildStates.materialItem(block);
         if (item == Items.AIR && block != Blocks.AIR) {
             throw new IllegalArgumentException(trimmed + " is not a placeable block");
         }

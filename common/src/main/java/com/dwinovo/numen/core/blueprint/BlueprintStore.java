@@ -180,14 +180,14 @@ public final class BlueprintStore {
             }
             BlockState state = palette.get(paletteIndex);
             // 能不能建走同一个判据(工具入口那边拿它当拒绝理由,这边拿它当跳过条件)
-            if (com.dwinovo.numen.core.task.BuildStates.unbuildableReason(state) != null) {
+            if (com.dwinovo.numen.core.build.BuildStates.unbuildableReason(state) != null) {
                 dropped++;
                 continue;
             }
             // 双格方块的次半不进目标集:主半的 setPlacedBy 自己会造它。不剔的话床头
             // 可能先于床脚落位,而床的那一步会往<b>目标集之外</b>再写一块床头——一件料
             // 换三块床方块,且可能覆写掉已砌好的内墙,来回重建死转。这不算掉格。
-            if (com.dwinovo.numen.core.task.BuildStates.isSecondaryHalf(state)) {
+            if (com.dwinovo.numen.core.build.BuildStates.isSecondaryHalf(state)) {
                 continue;
             }
             int rx;
@@ -209,13 +209,13 @@ public final class BlueprintStore {
             // 而且是<b>问方块自己</b>(中键取方块那条路),不查写死的表:小麦答种子、
             // 洞穴藤蔓答发光浆果、竹笋答竹子、连枝的瓜藤答瓜种。此前这里靠一张十三行
             // 的对照表,每行都是被咬过一次才补上的,而且只认原版——模组的作物一个都不认。
-            BlockState placed = com.dwinovo.numen.core.task.BuildStates.normalize(state);
+            BlockState placed = com.dwinovo.numen.core.build.BuildStates.normalize(state);
             BlockPos world = anchor.offset(rx, y, rz);
             // 探针给<b>这一格自己的坐标</b>,不是锚点。给锚点的话所有格共用同一个探针点,
             // 而方块自述里有几种会去读那一格的方块实体——续建时锚点格本身就立着图纸放的
             // 东西,一面红旗就能把整张图纸的记账物品带偏。(带方块实体的方块已经在
             // materialItem 里整体不问了,这里是第二道:探针点本来就该是本格。)
-            var payItem = com.dwinovo.numen.core.task.BuildStates
+            var payItem = com.dwinovo.numen.core.build.BuildStates
                     .materialItem(placed, level, world);
             if (payItem == net.minecraft.world.item.Items.AIR && !placed.isAir()) {
                 dropped++;
@@ -232,7 +232,7 @@ public final class BlueprintStore {
             // 不搬——图纸是文件,照搬等于凭空造物品
             CompoundTag safe = null;
             if (cell.contains("nbt", Tag.TAG_COMPOUND)) {
-                safe = com.dwinovo.numen.core.task.BuildStates
+                safe = com.dwinovo.numen.core.build.BlueprintSafety
                         .safeBlockEntityData(state, cell.getCompound("nbt"));
                 if (safe != null) {
                     beData.put(world.asLong(), safe);
@@ -240,7 +240,7 @@ public final class BlueprintStore {
             }
             // 这一格要几叠料:带花的花盆是盆加花两件,带花纹的旗帜是一叠但要组件一致。
             // 一格一件是特例而不是通则,这张料单整个盖过默认的"一件本方块的物品"。
-            var cellNeeds = com.dwinovo.numen.core.task.BuildStates
+            var cellNeeds = com.dwinovo.numen.core.build.BuildStates
                     .cellNeeds(placed, safe, level, world, level.registryAccess());
             if (!cellNeeds.isEmpty()) {
                 needs.put(world.asLong(), cellNeeds);
@@ -250,7 +250,7 @@ public final class BlueprintStore {
         List<BuildTaskRecord.EntitySpawn> spawns = new ArrayList<>();
         for (Tag t : tag.getList("entities", Tag.TAG_COMPOUND)) {
             CompoundTag e = (CompoundTag) t;
-            CompoundTag safe = com.dwinovo.numen.core.task.BuildStates
+            CompoundTag safe = com.dwinovo.numen.core.build.BlueprintSafety
                     .safeEntityData(e.getCompound("nbt"), level.registryAccess());
             if (safe == null) {
                 continue;

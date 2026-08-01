@@ -268,7 +268,7 @@ public final class BuildTaskRecord extends TaskRecord {
          */
         public java.util.List<net.minecraft.world.item.ItemStack> payload(
                 net.minecraft.core.HolderLookup.Provider registries) {
-            return BuildStates.payloadStacks(nbt, registries);
+            return com.dwinovo.numen.core.build.BlueprintSafety.payloadStacks(nbt, registries);
         }
     }
 
@@ -285,7 +285,7 @@ public final class BuildTaskRecord extends TaskRecord {
             // 归一在这一处做完:每一个目标格无论从工具还是从图纸来,都必须过这道口,
             // 所以运行态(作物生长阶段、含水、活塞伸出、堆肥进度、锅里装的东西)
             // 在这里一次清干净,而不是让每条入口各清各的。
-            desiredState = BuildStates.normalize(desiredState);
+            desiredState = com.dwinovo.numen.core.build.BuildStates.normalize(desiredState);
             item = Objects.requireNonNull(item, "item");
             pos = Objects.requireNonNull(pos, "pos").immutable();
             if (facing != null && facingOf(desiredState) == null) {

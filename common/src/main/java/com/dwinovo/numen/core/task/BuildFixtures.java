@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.task;
 
+import com.dwinovo.numen.core.build.BlueprintSafety;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -78,7 +79,7 @@ final class BuildFixtures {
                 // 字段却不重算碰撞箱,两者当场脱钩。
                 var nbt = spawn.nbt().copy();
                 if (!paidCarried) {
-                    BuildStates.stripPayload(nbt);
+                    BlueprintSafety.stripPayload(nbt);
                     skippedPayloads += carried.size();
                 }
                 boolean hangs = !"minecraft:armor_stand".equals(nbt.getString("id"));
