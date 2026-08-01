@@ -299,7 +299,7 @@ run_command 的参数  value → command
 want=grass_block got=dirt`。停掉随机刻后同一条用例 **10 秒**跑完，
 说明建造本身既快且全对，退化纯属环境噪声。
 
-## 1.21.5 → 1.21.8 ✓（已验证，双 loader 编译 + 出包 + 222 测试全绿）
+## 1.21.5 → 1.21.8 ✓（已验证，双 loader 编译 + 出包 + datagen + 230 单测 + 47 条游戏内用例全绿）
 
 **跨过 1.21.6/1.21.7**，含 1.21.6 的 GUI 深绘制 + IO 大改。构建旋钮：MC `1.21.8` / range `[1.21.8, 1.21.9)` /
 NeoForm `1.21.8-20250717.133445` / Fabric `0.136.1+1.21.8` / NeoForge `21.8.47`。
@@ -358,6 +358,61 @@ extends net.minecraft.data.tags.ItemTagsProvider + 空 block-tag lookup
 `git checkout <src> -- .` 不删除目标分支独有文件——替换后必须
 `comm -23 <(git ls-tree -r HEAD --name-only|sort) <(git ls-tree -r <src> --name-only|sort)`
 清点并 `git rm` 残留(本档 api 清了 14 个、core 清了 47 个旧 0.0.x 文件)。
+
+### 0.1.1 功能面移植追加(1.21.5 的十一个提交搬到 1.21.8 时新碰到的)
+
+上一档的整套适配(gametest 数据驱动、CompoundTag Optional 化、Inventory 私有化、
+snapTo、TicketType record、ClientInput moveVector)在本档**原样成立,一处未动**;
+47 条用例方法体与 8 个批次一字未改。本档新增的只有下面几条。
+
+**`ItemStack.parse` / `ItemStack.save` 双双删除** ❗(`BuildStates`)——这对便捷方法没了,
+读写改直接用它们自己的实现,语义一字不差:
+```java
+ItemStack.parse(registries, tag)
+    → ItemStack.CODEC.parse(registries.createSerializationContext(NbtOps.INSTANCE), tag)
+              .resultOrPartial()                       // 旧方法内部就是这句(外加一行日志)
+stack.save(registries)
+    → ItemStack.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), stack)
+              .getOrThrow()                            // 空叠不允许编码,调用点先 filter 非空
+```
+
+**`Component.Serializer` 整个内部类删除** ❗(`BuildStates.hasClickEvent`)——文本组件的
+JSON 解码统一走 codec:
+```java
+Component.Serializer.fromJson(json, RegistryAccess.EMPTY)   // 返回 @Nullable MutableComponent
+    → ComponentSerialization.CODEC.parse(
+          RegistryAccess.EMPTY.createSerializationContext(JsonOps.INSTANCE),
+          JsonParser.parseString(json)).result()
+```
+**判据方向要留意**:这是"告示牌带点击事件就拒收"的安全判据,解不出来必须当作"有事件"
+(拒收)。旧代靠 `fromJson` 抛 `JsonParseException` 走 catch 落到 true;新代 codec 不抛异常、
+只返回失败的 `DataResult`,所以要显式 `if (component == null) return true;` 把这条路补回来
+——漏了就变成"解析失败 = 安全",安全判据整个反过来。
+
+**`CompoundTag` → `ValueInput` 的桥** ❗(`BuildCompanionTask`,摆设落位与方块实体装数据)
+——1.21.6 的 IO 重构把实体/方块实体的**读取入口**也换了,手上是 NBT 时要现包一层:
+```java
+EntityType.create(CompoundTag, level, reason) → EntityType.create(ValueInput, level, reason)
+EntityType.by(CompoundTag)                    → EntityType.by(ValueInput)
+be.loadWithComponents(CompoundTag, RegistryAccess) → be.loadWithComponents(ValueInput)
+// 桥:TagValueInput.create(ProblemReporter.DISCARDING, registries, tag)
+//    (反向是 TagValueOutput.createWithContext(...).buildResult())
+```
+
+**api 构件坐标:主仓 `common/build.gradle` 指着上一档的 artifactId** ❗——1.21.8 分支的
+基线里 fabric/neoforge 已经是 `numen-api-*-1.21.8`,唯独 common 还留着
+`numen-api-common-1.21.5`。上一档发过这个坐标,所以它能解析、也**照样编译得过**
+(实测:本档改回 1.21.5 依旧 BUILD SUCCESSFUL)——主仓 common 恰好没碰到两代之间
+签名有别的那几个 api 方法。也正因为如此它**毫无征兆**:编译不报错、跑测试不报错,
+主仓 common 却是拿另一代 MC 编出来的 api 类在编译,哪天用到 `NumenPlayer` 存档一类
+1.21.6 改过签名的成员就会突然炸,而且看不出跟坐标有关。三个 build.gradle 的
+artifactId 要逐个核对,不是只核对版本号。
+
+### 只在真机客户端才能目视验证的部分
+本档 api 侧的 GUI 深绘制(RoundRect 的 SDF 顶点属性化、圆角/描边/裁剪的实际观感、
+人设编辑框的圆角底与聚焦环、轮盘的缩放与呼吸动画)与头顶气泡的位姿,
+编译、mixin 目标(已 javap 逐条核对描述符)、datagen、gametest 都覆盖不到,
+只能开客户端看。
 
 ## 1.21.8 → 1.21.10 ✓（已验证，双 loader 编译 + 出包 + 222 测试全绿；跳过 1.21.9）
 
