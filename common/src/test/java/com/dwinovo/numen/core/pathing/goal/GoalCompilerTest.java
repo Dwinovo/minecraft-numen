@@ -66,15 +66,19 @@ class GoalCompilerTest {
     }
 
     @Test
-    void mineFieldMakesEveryOreSacredButNotDrops() {
+    void mineFieldKeepsNothingSacredSoEveryStanceStaysReachable() {
         BlockPos ore2 = T.east(4);
         BlockPos drop = T.north(2);
         GoalCompiler.Compiled c = GoalCompiler.mineField(
                 List.of(GoalCompiler.Stance.at(T, 2), GoalCompiler.Stance.at(ore2, 0)),
                 List.of(drop));
-        assertTrue(c.sacred().contains(T.asLong()));
-        assertTrue(c.sacred().contains(ore2.asLong()));
-        assertEquals(2, c.sacred().size(), "drops are items, not sacred blocks");
+        // 目标格<b>不</b>设为神圣：站位常常就落在目标自己那根柱子里（树干就是
+        // “脚站在原木那一格”），禁止路过砸掉会让每个站位都不可达，搜索烧光预算
+        // 后反把一块本来能挖的方块拉黑。路过砸掉不亏：那一格下一轮剪枝就出表，
+        // 掉落物由掉落成员收走，进度算的是背包不是挖了几下。
+        assertTrue(c.sacred().isEmpty(),
+                "no target cell may be sacred — a stance inside the target's own column"
+                        + " would become unsatisfiable");
         assertTrue(c.goal().isAt(T.below()), "stance band member satisfies");
         assertTrue(c.goal().isAt(ore2), "exact stance member satisfies");
         assertFalse(c.goal().isAt(ore2.below()), "maxBelow=0 stance rejects one-below");
@@ -82,13 +86,12 @@ class GoalCompilerTest {
     }
 
     @Test
-    void shiftedStanceProtectsTheOreNotTheBase() {
-        // A run's top block anchors its stance one lower — the SACRED cell must
-        // still be the ore itself, while the feet band hangs from the base.
+    void shiftedStanceHangsTheFeetBandFromTheBase() {
+        // A run's top block anchors its stance one lower — the feet band hangs
+        // from the base, and nothing is fenced off from the route.
         GoalCompiler.Compiled c = GoalCompiler.mineField(
                 List.of(new GoalCompiler.Stance(T, T.below(), 1)), List.of());
-        assertTrue(c.sacred().contains(T.asLong()), "ore is sacred");
-        assertFalse(c.sacred().contains(T.below().asLong()), "stance base is not");
+        assertTrue(c.sacred().isEmpty(), "neither the ore nor its stance base is fenced off");
         assertTrue(c.goal().isAt(T.below()), "band top = base");
         assertTrue(c.goal().isAt(T.below(2)), "band floor = base-1");
         assertFalse(c.goal().isAt(T), "the ore cell itself is not a stance here");
