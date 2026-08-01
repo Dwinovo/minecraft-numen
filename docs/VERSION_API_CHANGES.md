@@ -718,3 +718,149 @@ ItemStack 构造时抛 "Components not bound yet" —— 引导后调
 
 (残留清点:本档 api 清 14 个旧文件/贴图、core 清 51 个旧 0.0.x 引擎类——与 1.21.10 档同集合;
 两仓 README/CI 等主分支身份文件与 1.21.11 同路径,树替换直接覆盖为新版,无需单独保留。)
+
+### 0.1.1 功能面移植追加(1.21.11 的十四个提交搬到 26.1.2 时新碰到的)
+
+前五档的整套适配在本档**原样成立**——提交式渲染管线、Screen 输入事件化、`TicketType`
+位图、`Window.handle()`、`Entity.getServer()` 已删、gametest 数据驱动、`CompoundTag`
+Optional 化、`TagValueInput` 桥、`ClientInput.moveVector`、`ServerLevel.updatePOIOnBlockStateChange`、
+以及上一档新摸出来的**玩家权限集**与**游戏规则迁包/规则对象化**(那句停随机刻的
+`getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0, server)` 一字未改就编过)。
+47 条用例方法体与 8 个批次一字未改。本档新增的是下面这些。
+
+**聊天 API 改名 + 加行入口换名**(api:`ChatLines`、`ChatComponentAccessor`)
+```java
+net.minecraft.client.GuiMessage → net.minecraft.client.multiplayer.chat.GuiMessage
+ChatComponent.addMessage(Component) 整个删除 → addClientSystemMessage(Component)
+// 私有的 allMessages 字段与 refreshTrimmedMessages() 都还在,摘行手术照做。
+```
+⚠ **流式打字机效果的前提要重新确认**:旧代靠"加行后取 `allMessages.get(0)`"拿到刚
+插入的那一行。26.1 的加行链路是 `addClientSystemMessage → addMessage → addMessageToQueue`,
+而 `addMessageToQueue` 第一句就是 `allMessages.addFirst(msg)` —— 新行仍落 0 位,
+取句柄的写法继续成立(已逐条读字节码确认,不是想当然)。
+
+**渲染状态提取波及新搬下来的文件**(机械替换,api 4 个文件)——本档基线已把老文件
+改完,新搬来的 0.1.1 文件还是旧写法:
+```java
+// GuiGraphics → GuiGraphicsExtractor:CompanionChatScreen / CompanionWheelScreen /
+//   TalkHint / ItemsView
+Screen.render → extractRenderState;renderBackground → extractBackground
+widget.render(…) → widget.extractRenderState(…)
+g.drawString → g.text;g.renderItem → g.item;g.renderItemDecorations → g.itemDecorations
+PlayerFaceRenderer.draw → PlayerFaceExtractor.extractRenderState
+InventoryScreen.renderEntityInInventoryFollowsMouse → extractEntityInInventoryFollowsMouse
+net.minecraft.client.renderer.state.CameraRenderState → …state.level.CameraRenderState
+//   ↑ SpeechBubbleRenderer 的签名与 MixinLivingEntityRenderer 的 method 描述符都要跟
+```
+
+**Fabric 客户端入口三处**(api:`NumenFabricClient`)
+```java
+KeyBindingHelper.registerKeyBinding → KeyMappingHelper.registerKeyMapping   // 新增的三个键
+HudRenderCallback.EVENT.register(...)                                        // 快捷对话提醒
+  → rendering.v1.hud.HudElementRegistry.addLast(Identifier, HudElement)
+rendering.v1.world.WorldRenderEvents.BEFORE_DEBUG_RENDER
+  → rendering.v1.level.LevelRenderEvents.BEFORE_GIZMOS
+```
+另:0.1.1 删掉了 `NumenToasts`,基线注册的 `numen_toasts` 图层要一并撤掉,
+换成注册 `talk_hint`(neoforge 侧同理,`RegisterGuiLayersEvent`)。
+
+**`ChunkPos` 收口**(api `CompanionChunkLoader`、core `MineCompanionTask`/`CachedNavView`)
+```java
+pos.toLong() → pos.pack()         // 实例方法
+ChunkPos.asLong(BlockPos) → pack(BlockPos)
+pos.x / pos.z 私有化 → pos.x() / pos.z()
+```
+
+**方块类改名**(core:`BuildStates`)——`FarmBlock → FarmlandBlock`。
+
+**基线的 `getValues()` 适配被 0.1.1 自己抹掉**(core:`BuildValidity`)
+——基线为了绕开 `StateHolder.getValues()` 改返回 `Stream<Property.Value>`,把对账改成
+遍历 `getProperties()`。而 0.1.1 把对账整个换成了**白名单**(只比 `AUTHORED_PROPERTIES`
+里那十几个作者姿态位,逐个 `hasProperty` + `getValue`),既不碰 `getValues()` 也不碰
+`getProperties()`,版本中立。冲突处直接取 0.1.1 那一侧,基线的适配连同注释一并作废。
+
+### ⚠ gametest:测试环境泛型化 + 时刻迁世界时钟 ❗
+```java
+TestEnvironmentDefinition → TestEnvironmentDefinition<SavedDataType>
+  setup(ServerLevel) 由 void 改为返回 SavedDataType;新增 teardown(ServerLevel, SavedDataType)
+  // 注册面同步泛型化:DeferredRegister<MapCodec<? extends TestEnvironmentDefinition<?>>>、
+  //   Holder<TestEnvironmentDefinition<?>>、TestData<Holder<TestEnvironmentDefinition<?>>>
+ServerLevel.setDayTime(int) 整个删除 → 世界时钟(WorldClock / ServerClockManager):
+  level.dimensionTypeRegistration().value().defaultClock()
+       .ifPresent(clock -> level.clockManager().setTotalTicks(clock, 6000));
+```
+`teardown` **刻意留空**(存档类型取 `Unit`)。26.1 给的是"批次收尾还原现场"的能力,
+但这三样前置的本意就是整轮压住环境随机性——尤其随机刻:批间还原成 3,上一批留在
+世界里的草方块会在下一批的 setup 重新压住之前退化成泥土,正是这套前置要防的那个坑。
+
+### ⚠ gametest:测试结构目录由平铺改成资源包布局 ❗
+1.21.11 的 `StructureUtils.testStructuresDir` 走 `FileUtil.createPathToResource(dir, id.getPath(), ".snbt")`
+——**平铺**,命名空间不参与,`gameteststructures/floor20.snbt` 即可。26.1 把它拆成
+`testStructuresSourceDir`(读)/ `testStructuresTargetDir`(写),并且读侧走
+`DirectoryTemplateSource(dir, PackType.SERVER_DATA, FileToIdConverter("structure", ".snbt"))`
+——即**当成资源包根目录**解析:
+```
+gameteststructures/data/numen/structure/floor20.snbt      ← 26.1 布局
+gameteststructures/floor20.snbt                            ← 1.21.11 布局
+```
+不改布局的后果是 47 条用例全数 `Failed to place test structure ... on tick 0`(在 tick 0
+就全灭,不是超时)。图纸夹具 `japanese_cottage.litematic` 是按路径直接读的,不走模板
+系统,仍留在 `gameteststructures/` 根下。
+
+⚠ **跑失败之后必须清 `neoforge/runs/gametestserver/`**。上面那次"模板找不到"的失败留下了
+一个世界存档,之后在它上面重跑会把区块系统拖进死亡螺旋:堆里堆到 286 万个 `ChunkHolder`
+与 4890 万条排队的 `ChunkTaskDispatcher` 任务(jcmd 直方图实测),服务端主线程卡死在
+`DistanceManager.runAllUpdates → LoadingChunkTracker.runDistanceUpdates`,最后 OOM
+(8G 堆撑满;换 14G 也只是多撑几分钟)。**这不是代码问题**——票据一侧逐行比对过两代的
+`TicketType`(record 形参与 5 个 flag 完全一致)、`TicketStorage.addTicketWithRadius`
+(仍是 `ChunkLevel.byStatus(FULL) - radius`)、`purgeStaleTickets` / `canTicketExpire`
+与 `ChunkHolder.isReadyForSaving`,**四处逐字相同**;`ChunkPos.pack(BlockPos)` 也确认仍
+做 block→section 换算。清掉 run 目录后,默认堆、12 秒跑完 48 条全绿,与 1.21.11 的 19 秒同档。
+
+**结构模板 DataVersion 4189 本档仍然可用**:`.snbt` 原样保留 4189 未硬盖,
+`readStructure` 的 `DataFixTypes.STRUCTURE.updateToCurrentVersion` 正向修到 26.1.2,
+47 条用例全绿即为实证。
+
+### ⚠ 单测夹具:组件绑定的上下文必须带数据包注册表 ❗
+基线给 `McTestComponents.bindAll()` 的上下文是
+`RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY)` ——**只有静态注册表**。
+但防火物品的初始化器要查 `damage_type` 里的 `minecraft:is_fire` 标签,而 `damage_type`
+是数据包注册表,静态注册表里根本没有,`HolderGetter.Provider.getOrThrow(TagKey)` 直接抛
+`Missing tag`。抛出后被 `@BeforeAll` 的 catch 吞掉,`booted` 留在 false,**5 个测试类
+共 35 条用例被 assumeTrue 静默跳过**(报告不红,只是没跑——其中就有本次移植专门对回
+0.1.1 口径的那几条建造断言)。
+```java
+RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY)
+  → net.minecraft.data.registries.VanillaRegistries.createLookup()
+```
+它把静态注册表与全部数据包注册表的引导内容合成一份 provider,且对**任何**标签一律
+给空标签集(`RegistrySetBuilder` 的 datagen 语义:标签来自数据文件,引导期本就没有)。
+标签查得到、内容为空,组件照常绑定,也不写死任何注册表清单。改完 230 条单测由
+"195 跑 / 35 跳"变成 230 全跑全绿。
+
+### 未发生的预警项
+- **NeoForge loader 9 静态化没有兑现**:`FMLLoader.getCurrent()` 在 26.1.2.50-beta 仍在,
+  neoforge 侧本次移植零改动;
+- **Java 25 只是环境级**:`mixin` 的 `compatibilityLevel` 保持 `JAVA_21` 即可(两仓的
+  mixins.json 都没动),gametest server 起得来即为实证——`required: true` +
+  `defaultRequire: 1` 下,mixin 找不到目标会直接崩服;
+- 权限集与游戏规则两条(上一档的新坑)在本档由基线与 0.1.1 代码天然对齐,未再动。
+
+### 版本口径与不迁项
+- `skills/tier_progression/SKILL.md` 的 `## Where ores live` 由 `1.21+` 改成
+  `1.21+ / 26.x` —— 逐条对过 26.1.2 的 `OrePlacements`,分布与 1.21 完全一致
+  (煤 triangle(0,192)、铁 triangle(-24,56) 与 triangle(80,384)、钻石
+  triangle(aboveBottom ±80)),**数字不动,只动口径**;
+- `gradle.properties` 的版本号故意不迁(主仓留 `0.1.0`,api 提到 `0.0.8-SNAPSHOT`)。
+
+### 只在真机客户端才能目视验证的部分
+与上一档同一份清单,且本档在渲染语义上只做了签名/包名的机械替换,没有改绘制逻辑:
+头顶气泡的实际观感(层次先后、小方尾位置、文字与底图的 z 关系、与名牌的相对位置)、
+转盘的物理按键接管与不断步、GUI 圆角 SDF 的渲染结果、快捷对话/语音三件套的手感、
+创造档下拉的可点/置灰。本档另加两项**因为换了 API 才需要重看**的:
+- **HUD 图层换成 `HudElementRegistry.addLast`** 之后,快捷对话提醒的绘制层级与位置
+  (相对准星、相对其它 HUD 元素)是否与旧的 `HudRenderCallback` 一致;
+- **调试线换挂 `LevelRenderEvents.BEFORE_GIZMOS`** 之后,寻路调试覆盖层的深度关系
+  (是否仍被方块正确遮挡)是否与旧的 `BEFORE_DEBUG_RENDER` 一致。
+
+编译、mixin 目标、datagen、gametest、单测都覆盖不到这些,只能开客户端看。
