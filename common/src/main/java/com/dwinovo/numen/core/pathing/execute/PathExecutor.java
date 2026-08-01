@@ -21,17 +21,11 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
-import com.dwinovo.numen.core.pathing.moves.movements.MovementAscend;
-import com.dwinovo.numen.core.pathing.moves.movements.MovementDescend;
-import com.dwinovo.numen.core.pathing.moves.movements.MovementDiagonal;
 import com.dwinovo.numen.core.pathing.moves.movements.MovementFall;
-import com.dwinovo.numen.core.pathing.moves.movements.MovementParkour;
-import com.dwinovo.numen.core.pathing.moves.movements.MovementTraverse;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Vec3i;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 
@@ -95,6 +89,8 @@ public final class PathExecutor {
     /** 取消原因(失败验尸与放弃判定的素材);未失败时为 null。 */
     private String failureCause;
     private boolean sprintNextTick;
+    /** 疾跑裁决(纯决策);副作用在 onTick0 的一处统一施加。 */
+    private final SprintPolicy sprint;
 
     public PathExecutor(NavPath path, NumenPlayer player, ExecHarness harness,
                         Supplier<CalculationContext> contextSupplier,
@@ -106,6 +102,7 @@ public final class PathExecutor {
         this.contextSupplier = contextSupplier;
         this.inProgressBestPath = inProgressBestPath;
         this.loadedTest = loadedTest;
+        this.sprint = new SprintPolicy(path, player, contextSupplier);
         this.pathPosition = 0;
     }
 
@@ -331,7 +328,32 @@ public final class PathExecutor {
             onTick0();
             return true;
         } else {
-            sprintNextTick = shouldSprintNextTick();
+            // 先没收移动原语请求的 SPRINT 键(疾跑由执行器直接写实体状态,
+            // 不靠按键),把请求作为事实交给策略;裁决的全部副作用在此统一施加。
+            boolean sprintRequested = harness.isKeyRequested(Input.SPRINT);
+            harness.forceKey(Input.SPRINT, false);
+            SprintPolicy.Decision d = sprint.decide(pathPosition, sprintRequested);
+            if (d.skipTo() >= 0) {
+                pathPosition = d.skipTo();
+                onChangeInPathPosition();
+                onTick0();
+            }
+            if (d.jumpUp()) {
+                harness.forceKey(Input.JUMP, true);
+            }
+            if (d.jumpDown()) {
+                harness.forceKey(Input.JUMP, false);
+            }
+            if (d.steer() != null) {
+                // 疾跑冲下坡不减速:清键、直接压目标视线与前进
+                harness.clearAllKeys();
+                Vec3 eye = player.getEyePosition();
+                harness.applyRotation(new MovementState.MovementTarget(
+                        AimGeometry.yawTo(eye, d.steer()),
+                        AimGeometry.pitchTo(eye, d.steer()), false));
+                harness.forceKey(Input.MOVE_FORWARD, true);
+            }
+            sprintNextTick = d.sprint();
             if (!sprintNextTick) {
                 player.setSprinting(false); // 松开按键不会自动停疾跑
             }
@@ -547,278 +569,6 @@ public final class PathExecutor {
         pathPosition = index;
         harness.clearAllKeys();
         return true;
-    }
-
-    // ==================== 疾跑决策 ====================
-
-    /**
-     * 疾跑整体决策。先没收移动原语请求的 SPRINT 键(疾跑由执行器
-     * 直接写实体状态,不靠按键),再按当前移动类型与前后文判定。
-     */
-    private boolean shouldSprintNextTick() {
-        boolean requested = harness.isKeyRequested(Input.SPRINT);
-        harness.forceKey(Input.SPRINT, false);
-
-        // 与成本模型同判据:允许疾跑且饥饿值足够
-        if (!(NavSettings.get().allowSprint
-                && (!com.dwinovo.numen.core.WorkProfile.of(player).hasHunger()
-                        || player.getFoodData().getFoodLevel() > 6))) {
-            return false;
-        }
-        Movement current = path.movements().get(pathPosition);
-
-        // 平走→上台直跳:跳过平走那步,原地起跳直接冲上去
-        if (current instanceof MovementTraverse traverse && pathPosition < path.length() - 3) {
-            Movement next = path.movements().get(pathPosition + 1);
-            if (next instanceof MovementAscend ascend
-                    && sprintableAscend(traverse, ascend, path.movements().get(pathPosition + 2))) {
-                if (skipNow(current)) {
-                    Constants.LOG.debug("跳过平走,直跳上台");
-                    pathPosition++;
-                    onChangeInPathPosition();
-                    onTick0();
-                    harness.forceKey(Input.JUMP, true);
-                    return true;
-                }
-            }
-        }
-
-        if (requested) {
-            return true;
-        }
-
-        // 下降与上升不自行请求疾跑(它们不知道后面接什么),在此按前后文补
-        if (current instanceof MovementDescend descend) {
-            if (pathPosition < path.length() - 2) {
-                Movement next = path.movements().get(pathPosition + 1);
-                CalculationContext context = contextSupplier.get();
-                if (MovementHelper.canUseFrostWalker(context, context.get(next.getDest().below()))) {
-                    // 霜行者只在贴地跨过方块边缘时结冰,可能冲过头;下一步
-                    // 同向平走/跑酷时强制慢速直进(跑酷且有耗材可放置替代除外)
-                    if (next instanceof MovementTraverse || next instanceof MovementParkour) {
-                        boolean couldPlaceInstead = NavSettings.get().allowPlace
-                                && context.hasThrowaway && next instanceof MovementParkour;
-                        boolean sameFlatDirection =
-                                !current.getDirection().above().offset(next.getDirection()).equals(BlockPos.ZERO)
-                                && current.getDirection().above().cross(next.getDirection()).equals(BlockPos.ZERO);
-                        if (sameFlatDirection && !couldPlaceInstead) {
-                            descend.forceSafeMode();
-                        }
-                    }
-                }
-            }
-            if (descend.safeMode() && !descend.skipToAscend()) {
-                return false; // 冲下去不安全
-            }
-            if (pathPosition < path.length() - 2) {
-                Movement next = path.movements().get(pathPosition + 1);
-                if (next instanceof MovementAscend
-                        && current.getDirection().above().equals(next.getDirection().below())) {
-                    // V 形:同向下降接上升,直接跳到上升步冲过去
-                    pathPosition++;
-                    onChangeInPathPosition();
-                    onTick0();
-                    Constants.LOG.debug("V 形谷,跳过下降直接上升");
-                    return true;
-                }
-                if (canSprintFromDescendInto(current, next)) {
-                    if (next instanceof MovementDescend && pathPosition < path.length() - 3) {
-                        Movement nextNext = path.movements().get(pathPosition + 2);
-                        if (nextNext instanceof MovementDescend
-                                && !canSprintFromDescendInto(next, nextNext)) {
-                            return false; // 连锁下降的下一环接不上,别开冲
-                        }
-                    }
-                    if (playerFeet(player).equals(current.getDest())) {
-                        pathPosition++;
-                        onChangeInPathPosition();
-                        onTick0();
-                    }
-                    return true;
-                }
-            }
-        }
-        if (current instanceof MovementAscend && pathPosition != 0) {
-            Movement prev = path.movements().get(pathPosition - 1);
-            if (prev instanceof MovementDescend
-                    && prev.getDirection().above().equals(current.getDirection().below())) {
-                // V 形谷底:动量还在,高度够了就松跳直接冲上去
-                BlockPos center = current.getSrc().above();
-                // 0.07 的余量吸收农田/灵魂沙顶面的矮一截
-                if (player.position().y >= center.getY() - 0.07) {
-                    harness.forceKey(Input.JUMP, false);
-                    return true;
-                }
-            }
-            if (pathPosition < path.length() - 2 && prev instanceof MovementTraverse traverse
-                    && sprintableAscend(traverse, (MovementAscend) current,
-                            path.movements().get(pathPosition + 1))) {
-                return true;
-            }
-        }
-        if (current instanceof MovementFall fall) {
-            Vec3 overrideTarget = overrideFallTarget(fall);
-            if (overrideTarget != null) {
-                BlockPos fallDest = overrideFallDest(fall);
-                if (!path.positions().contains(fallDest)) {
-                    throw new IllegalStateException("坠落前越落点 " + fallDest + " 不在路径上");
-                }
-                if (playerFeet(player).equals(fallDest)) {
-                    pathPosition = path.positions().indexOf(fallDest);
-                    onChangeInPathPosition();
-                    onTick0();
-                    return true;
-                }
-                // 疾跑冲下坡不减速:清键、直接压目标视线与前进
-                harness.clearAllKeys();
-                Vec3 eye = player.getEyePosition();
-                harness.applyRotation(new MovementState.MovementTarget(
-                        AimGeometry.yawTo(eye, overrideTarget),
-                        AimGeometry.pitchTo(eye, overrideTarget), false));
-                harness.forceKey(Input.MOVE_FORWARD, true);
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * 坠落前越:落差 ≤3 且无待挖块时,向后收集 ≤2 个同向平走,整柱
-     * 通透且各落脚可站 → 把目标点押到扩展终点略前(len−0.4),冲刺
-     * 直接飞过去。返回扩展的瞄准点;不可前越返回 null。
-     */
-    private Vec3 overrideFallTarget(MovementFall movement) {
-        int extension = overrideFallExtension(movement);
-        if (extension == 0) {
-            return null;
-        }
-        Vec3i dir = movement.getDirection();
-        Vec3i flatDir = new Vec3i(dir.getX(), 0, dir.getZ());
-        double len = extension - 0.4;
-        BlockPos dest = movement.getDest();
-        return new Vec3(flatDir.getX() * len + dest.getX() + 0.5,
-                dest.getY(),
-                flatDir.getZ() * len + dest.getZ() + 0.5);
-    }
-
-    /** 坠落前越的扩展落点(路径上真实存在的格位)。 */
-    private BlockPos overrideFallDest(MovementFall movement) {
-        int extension = overrideFallExtension(movement);
-        Vec3i dir = movement.getDirection();
-        return movement.getDest().offset(dir.getX() * extension, 0, dir.getZ() * extension);
-    }
-
-    /** 前越可扩展的同向平走步数(0 = 不可前越)。 */
-    private int overrideFallExtension(MovementFall movement) {
-        Vec3i dir = movement.getDirection();
-        if (dir.getY() < -3) {
-            return 0;
-        }
-        var level = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
-        if (!movement.toBreak(level).isEmpty()) {
-            return 0;
-        }
-        Vec3i flatDir = new Vec3i(dir.getX(), 0, dir.getZ());
-        int i;
-        outer:
-        for (i = pathPosition + 1; i < path.length() - 1 && i < pathPosition + 3; i++) {
-            Movement next = path.movements().get(i);
-            if (!(next instanceof MovementTraverse)) {
-                break;
-            }
-            if (!flatDir.equals(next.getDirection())) {
-                break;
-            }
-            for (int y = next.getDest().getY(); y <= movement.getSrc().getY() + 1; y++) {
-                BlockPos chk = new BlockPos(next.getDest().getX(), y, next.getDest().getZ());
-                if (!MovementHelper.fullyPassable(level, chk)) {
-                    break outer;
-                }
-            }
-            if (!MovementHelper.canWalkOn(level, next.getDest().below())) {
-                break;
-            }
-        }
-        i--;
-        return i - pathPosition;
-    }
-
-    /** 平走→上台直跳的起跳时机:已对中,且身后头顶通透或已走出足够远。 */
-    private boolean skipNow(Movement current) {
-        double offTarget = Math.abs(current.getDirection().getX()
-                        * (current.getSrc().getZ() + 0.5 - player.position().z))
-                + Math.abs(current.getDirection().getZ()
-                        * (current.getSrc().getX() + 0.5 - player.position().x));
-        if (offTarget > 0.1) {
-            return false;
-        }
-        BlockPos headBonk = current.getSrc().subtract(current.getDirection()).above(2);
-        if (MovementHelper.fullyPassable(player.level(), headBonk)) {
-            return true;
-        }
-        // 身后头顶不通:再走出 0.8 才敢跳(免得起跳磕头)
-        double flatDist = Math.abs(current.getDirection().getX()
-                        * (headBonk.getX() + 0.5 - player.position().x))
-                + Math.abs(current.getDirection().getZ()
-                        * (headBonk.getZ() + 0.5 - player.position().z));
-        return flatDist > 0.8;
-    }
-
-    /**
-     * 平走接上升可否直跳疾跑:同向共线、两个落脚都可站、上升无待挖块、
-     * 起跳柱与前柱三格全通透、头顶两处无危险格。
-     */
-    private boolean sprintableAscend(MovementTraverse current, MovementAscend next, Movement nextNext) {
-        if (!NavSettings.get().sprintAscends) {
-            return false;
-        }
-        if (!current.getDirection().equals(next.getDirection().below())) {
-            return false;
-        }
-        if (nextNext.getDirection().getX() != next.getDirection().getX()
-                || nextNext.getDirection().getZ() != next.getDirection().getZ()) {
-            return false;
-        }
-        var level = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
-        if (!MovementHelper.canWalkOn(level, current.getDest().below())) {
-            return false;
-        }
-        if (!MovementHelper.canWalkOn(level, next.getDest().below())) {
-            return false;
-        }
-        if (!next.toBreak(level).isEmpty()) {
-            return false;
-        }
-        for (int x = 0; x < 2; x++) {
-            for (int y = 0; y < 3; y++) {
-                BlockPos chk = current.getSrc().above(y);
-                if (x == 1) {
-                    chk = chk.offset(current.getDirection());
-                }
-                if (!MovementHelper.fullyPassable(level, chk)) {
-                    return false;
-                }
-            }
-        }
-        if (MovementHelper.avoidWalkingInto(level.getBlockState(current.getSrc().above(3)))) {
-            return false;
-        }
-        return !MovementHelper.avoidWalkingInto(level.getBlockState(next.getDest().above(2)));
-    }
-
-    /** 下降可否疾跑冲进下一步:同向下降恒可;落点前方可站时同向平走/对角亦可。 */
-    private boolean canSprintFromDescendInto(Movement current, Movement next) {
-        if (next instanceof MovementDescend && next.getDirection().equals(current.getDirection())) {
-            return true;
-        }
-        if (!MovementHelper.canWalkOn(player.level(),
-                current.getDest().offset(current.getDirection()))) {
-            return false;
-        }
-        if (next instanceof MovementTraverse && next.getDirection().equals(current.getDirection())) {
-            return true;
-        }
-        return next instanceof MovementDiagonal && NavSettings.get().allowOvershootDiagonalDescend;
     }
 
     // ==================== 备货 / 状态迁移 ====================
