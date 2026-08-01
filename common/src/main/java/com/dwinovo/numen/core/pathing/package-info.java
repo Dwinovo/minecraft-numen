@@ -12,8 +12,9 @@
  *       ({@code ToolSet})与八类移动原语的计价+逐 tick 状态机。</li>
  *   <li>{@code astar/} —— 搜索器:二叉堆开集、系数分档的部分路径候选、
  *       favoring 折扣、路径装配(截尾/拼接/裁剪)。</li>
- *   <li>{@code execute/} —— 执行层:段规划状态机({@code PathingCore})、
- *       单段逐移动驱动({@code PathExecutor})、输入/视角落地
+ *   <li>{@code execute/} —— 执行层:对外正门 {@code PlayerNav} 三态合同、
+ *       段规划状态机({@code PathingCore})、单段逐移动驱动
+ *       ({@code PathExecutor})、输入/视角落地
  *       ({@code ExecHarness}/{@code AimProcessor})。</li>
  *   <li>{@code bridge/} —— 服务端接线:快照上下文工厂、共享池异步搜索
  *       调度、任务层目标词表到内核目标族的映射。</li>
@@ -22,15 +23,16 @@
  *   <li>{@code calc/} —— 任务层词表与共享 worker 池:{@code NavGoal}
  *       (任务层目标接口)与 {@code PathPlannerPool}。</li>
  *   <li>{@code goal/} —— 意图契约层:{@code GoalCompiler} 把任务意图
- *       编译成 goal + sacred + 到达原料的完整导航契约。</li>
- *   <li>{@code exec/} —— 对外正门:{@code PlayerNav} 三态合同。</li>
+ *       编译成 goal + sacred 的完整导航契约。</li>
  *   <li>{@code settings/} —— 全部旋钮({@code NavSettings})。</li>
  *   <li>{@code util/} —— 方块谓词库({@code BlockHelper})与离线可答的
  *       方块实体视图接口({@code BlockEntityAware})。</li>
  * </ul>
  *
- * <p>对外契约:任务层只经 {@code exec.PlayerNav} + {@code goal.GoalCompiler}
- * (以及自定义目标用的 {@code calc.NavGoal} 词表)使用本包;其余包均为
- * 内部实现,不承诺稳定。
+ * <p>对外契约(目标态):任务层只经 {@code execute.PlayerNav} +
+ * {@code goal.GoalCompiler}(以及自定义目标用的 {@code calc.NavGoal} 词表)
+ * 使用本包;其余包均为内部实现,不承诺稳定。现状尚有任务层/工具层对
+ * moves/settings/bridge/cache/execute 内部类的直接引用,收束是 0.1.2
+ * 边界工作的一部分——新代码不得再添新的穿透。
  */
 package com.dwinovo.numen.core.pathing;

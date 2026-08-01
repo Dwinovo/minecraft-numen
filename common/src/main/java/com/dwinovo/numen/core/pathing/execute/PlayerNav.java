@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.pathing.exec;
+package com.dwinovo.numen.core.pathing.execute;
 
 import java.util.List;
 import java.util.function.BooleanSupplier;

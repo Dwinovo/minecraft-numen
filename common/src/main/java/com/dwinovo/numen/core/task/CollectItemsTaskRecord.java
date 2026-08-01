@@ -7,7 +7,7 @@ import java.util.Set;
 
 /**
  * Typed task descriptor for the {@code collect_items} tool: "walk around and
- * pick up dropped items nearby". The goal ({@link CollectItemsTaskGoal}) scans
+ * pick up dropped items nearby". The goal ({@link CollectItemsCompanionTask}) scans
  * for {@code ItemEntity}s within the radius, walks to each with the pathfinder
  * (the entity auto-absorbs items it gets close to), and repeats until none
  * remain. An optional {@link #filter} restricts to specific item types; empty

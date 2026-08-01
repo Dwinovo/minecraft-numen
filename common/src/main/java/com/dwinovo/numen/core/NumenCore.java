@@ -4,7 +4,7 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.task.CompanionTaskFactory;
 import com.dwinovo.numen.core.task.BuildCompanionTask;
 import com.dwinovo.numen.core.task.BuildTaskRecord;
-import com.dwinovo.numen.core.task.CollectItemsTaskGoal;
+import com.dwinovo.numen.core.task.CollectItemsCompanionTask;
 import com.dwinovo.numen.core.task.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.DropCompanionTask;
 import com.dwinovo.numen.core.task.DropItemsTaskRecord;
@@ -22,9 +22,9 @@ import com.dwinovo.numen.core.task.InteractAtCompanionTask;
 import com.dwinovo.numen.core.task.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.InteractEntityCompanionTask;
 import com.dwinovo.numen.core.task.InteractEntityTaskRecord;
-import com.dwinovo.numen.core.task.LocateBiomeTaskGoal;
+import com.dwinovo.numen.core.task.LocateBiomeCompanionTask;
 import com.dwinovo.numen.core.task.LocateBiomeTaskRecord;
-import com.dwinovo.numen.core.task.LocateStructureTaskGoal;
+import com.dwinovo.numen.core.task.LocateStructureCompanionTask;
 import com.dwinovo.numen.core.task.LocateStructureTaskRecord;
 import com.dwinovo.numen.core.task.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MineCompanionTask;
@@ -145,12 +145,12 @@ public final class NumenCore {
         CompanionTaskFactory.register(EatItemTaskRecord.class, (p, r) -> new EatCompanionTask(p, r));
         CompanionTaskFactory.register(MeleeAttackTaskRecord.class, (p, r) -> new MeleeAttackCompanionTask(p, r));
         CompanionTaskFactory.register(RangedAttackTaskRecord.class, (p, r) -> new RangedAttackCompanionTask(p, r));
-        CompanionTaskFactory.register(CollectItemsTaskRecord.class, (p, r) -> new CollectItemsTaskGoal(p, r));
+        CompanionTaskFactory.register(CollectItemsTaskRecord.class, (p, r) -> new CollectItemsCompanionTask(p, r));
         CompanionTaskFactory.register(FishTaskRecord.class, (p, r) -> new FishCompanionTask(p, r));
         CompanionTaskFactory.register(BuildTaskRecord.class, (p, r) -> new BuildCompanionTask(p, r));
         CompanionTaskFactory.register(InteractAtTaskRecord.class, (p, r) -> new InteractAtCompanionTask(p, r));
         CompanionTaskFactory.register(InteractEntityTaskRecord.class, (p, r) -> new InteractEntityCompanionTask(p, r));
-        CompanionTaskFactory.register(LocateStructureTaskRecord.class, (p, r) -> new LocateStructureTaskGoal(p, r));
-        CompanionTaskFactory.register(LocateBiomeTaskRecord.class, (p, r) -> new LocateBiomeTaskGoal(p, r));
+        CompanionTaskFactory.register(LocateStructureTaskRecord.class, (p, r) -> new LocateStructureCompanionTask(p, r));
+        CompanionTaskFactory.register(LocateBiomeTaskRecord.class, (p, r) -> new LocateBiomeCompanionTask(p, r));
     }
 }

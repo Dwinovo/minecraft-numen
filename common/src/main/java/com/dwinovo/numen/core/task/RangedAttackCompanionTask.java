@@ -3,7 +3,7 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.act.Ballistics;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.exec.PlayerNav;
+import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;

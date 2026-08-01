@@ -3,7 +3,7 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.exec.PlayerNav;
+import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.TargetSet;
 import net.minecraft.core.BlockPos;
@@ -31,7 +31,7 @@ import java.util.Map;
  *              reach the spot without picking it up (skip), then re-SCAN.
  * </pre>
  */
-public final class CollectItemsTaskGoal extends AbstractCompanionTask<CollectItemsTaskRecord> {
+public final class CollectItemsCompanionTask extends AbstractCompanionTask<CollectItemsTaskRecord> {
 
     private enum Phase { SCAN, APPROACH }
 
@@ -45,7 +45,7 @@ public final class CollectItemsTaskGoal extends AbstractCompanionTask<CollectIte
     /** Item-entity ids we reached but couldn't absorb, so SCAN won't loop on them. */
     private final TargetSet<ItemEntity> skipped = new TargetSet<>(ItemEntity::getId);
 
-    public CollectItemsTaskGoal(NumenPlayer player, CollectItemsTaskRecord record) {
+    public CollectItemsCompanionTask(NumenPlayer player, CollectItemsTaskRecord record) {
         super(player, record);
     }
 

@@ -6,7 +6,7 @@ import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.act.Interaction;
-import com.dwinovo.numen.core.pathing.exec.PlayerNav;
+import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.base.ToolSelect;

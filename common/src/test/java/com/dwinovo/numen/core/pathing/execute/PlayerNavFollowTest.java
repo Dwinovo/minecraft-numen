@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.pathing.exec;
+package com.dwinovo.numen.core.pathing.execute;
 
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import net.minecraft.core.BlockPos;

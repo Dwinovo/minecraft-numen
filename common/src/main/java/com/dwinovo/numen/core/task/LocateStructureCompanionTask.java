@@ -57,7 +57,7 @@ import java.util.Optional;
  * </ul>
  * Worst case the answer takes a handful of ticks instead of hitching one.
  */
-public final class LocateStructureTaskGoal extends AbstractCompanionTask<LocateStructureTaskRecord> {
+public final class LocateStructureCompanionTask extends AbstractCompanionTask<LocateStructureTaskRecord> {
 
     /**
      * Search radius in placement-region RINGS, exactly vanilla /locate's
@@ -110,7 +110,7 @@ public final class LocateStructureTaskGoal extends AbstractCompanionTask<LocateS
     private double bestDistSqr = Double.MAX_VALUE;
     private String failReason = "not on a server level";
 
-    public LocateStructureTaskGoal(NumenPlayer player, LocateStructureTaskRecord record) {
+    public LocateStructureCompanionTask(NumenPlayer player, LocateStructureTaskRecord record) {
         super(player, record);
     }
 

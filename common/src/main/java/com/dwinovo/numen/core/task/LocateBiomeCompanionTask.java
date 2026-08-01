@@ -46,7 +46,7 @@ import java.util.function.Predicate;
  * reach is 10k with the same 64-block grid. Worst-case full miss ≈ 40k samples
  * ≈ 160 budgeted ticks ≈ 8s, far under the task deadline.
  */
-public final class LocateBiomeTaskGoal extends AbstractCompanionTask<LocateBiomeTaskRecord> {
+public final class LocateBiomeCompanionTask extends AbstractCompanionTask<LocateBiomeTaskRecord> {
 
     /** Sample grid pitch — NC's default (16 × biome size 4). Vanilla /locate uses 32. */
     private static final int SAMPLE_STEP_BLOCKS = 64;
@@ -65,7 +65,7 @@ public final class LocateBiomeTaskGoal extends AbstractCompanionTask<LocateBiome
     private BlockPos best;
     private String failReason = "not on a server level";
 
-    public LocateBiomeTaskGoal(NumenPlayer player, LocateBiomeTaskRecord record) {
+    public LocateBiomeCompanionTask(NumenPlayer player, LocateBiomeTaskRecord record) {
         super(player, record);
     }
 

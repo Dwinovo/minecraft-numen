@@ -10,7 +10,7 @@ import java.util.function.Supplier;
 /**
  * The shared worker pool that runs A* searches off the server tick thread.
  * One pool for ALL companions — 100 companions don't spawn 100 threads. Each
- * {@link com.dwinovo.numen.core.pathing.exec.PlayerNav} submits its search here and polls the returned
+ * {@link com.dwinovo.numen.core.pathing.execute.PlayerNav} submits its search here and polls the returned
  * future each tick.
  *
  * <h2>Sizing: bounded, CPU-friendly</h2>
