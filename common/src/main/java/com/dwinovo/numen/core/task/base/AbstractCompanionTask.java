@@ -104,7 +104,13 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
                 return;
             }
         }
-        onStart();
+        try {
+            onStart();
+        } catch (RuntimeException e) {
+            crashed("start", e);
+            r.setState(TaskState.FAILED);
+            return;
+        }
         // A terminal parked DURING start (a fail(...) or succeed() from onStart — the
         // one-shot tasks do their whole job there) is stamped on the record NOW, so
         // the dispatcher finalizes it in the same tick it started. Without this, the
@@ -119,7 +125,43 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     @Override
     public final TaskState tick() {
         if (pendingTerminal != null) return pendingTerminal;
-        return onTick();
+        // 规划器在飞、身体没有路段可走的等待刻,不烧任务预算:deadline 度量
+        // 的是身体干活的刻,异步搜索的墙钟延迟不是任务的错(与调度层被生存
+        // 链抢占时的 freezeTick 同一原则)。正常 tick 速率下一次搜索只有几刻,
+        // 这里几乎不动;tick 远快于真实时间时(如不限速的测试服),没有这道
+        // 冻结,任务会在第一次搜索返回前就被判 TIMEOUT。
+        if (nav != null && nav.planningInFlight()) {
+            r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
+        }
+        try {
+            return onTick();
+        } catch (RuntimeException e) {
+            crashed("tick", e);
+            return TaskState.FAILED;
+        }
+    }
+
+    /**
+     * 任务自己抛异常时的收场:<b>这一个任务失败,而不是整个服务端崩掉</b>。
+     *
+     * <p>任务每刻跑在服务端主循环里,上面那层是 {@code record.setState(task.tick())}
+     * ——没有保护。而任务干的事天然是碰运气的:建造每刻要对最多八格<b>任意</b>方块调用
+     * 原版回调,矿工要碰任意方块实体,图纸来自玩家目录里可以任意编辑的文件。任何一处
+     * 抛出去都会变成一次"Ticking entity"崩服,玩家丢的是整个存档的这一次游玩,而起因
+     * 只是一格方块。
+     *
+     * <p>所以在框架这一层收口,不在每个任务里各写各的:一个任务失败是可交代的
+     * (模型收到失败原因、玩家看到已经砌好的部分),崩服不是。异常连同任务名一起进
+     * 日志——吞掉症状而不留证据,是比崩溃更难查的病。
+     */
+    private void crashed(String phase, RuntimeException e) {
+        com.dwinovo.numen.core.Constants.LOG.error(
+                "[numen-task] {} 在 {} 阶段抛出异常,本任务判失败(服务端不受影响)",
+                getClass().getSimpleName(), phase, e);
+        fail("the task hit an internal error and stopped: " + e.getClass().getSimpleName()
+                + (e.getMessage() == null ? "" : " — " + e.getMessage())
+                + ". Anything already built stays; this is a bug worth reporting.",
+                FailureType.INTERNAL);
     }
 
     @Override
@@ -181,6 +223,9 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * {@link #onTick()} pair this with {@code return TaskState.FAILED;}.
      */
     protected void fail(String why, FailureType t) {
+        // 终局必须留声:任务凭什么收场是排障的第一现场,不能只活在返回值里
+        com.dwinovo.numen.core.Constants.LOG.info("[numen-task] {} FAILED({}) {}",
+                getClass().getSimpleName(), t, why);
         this.doneReason = why;
         this.failType = t;
         this.pendingTerminal = TaskState.FAILED;
