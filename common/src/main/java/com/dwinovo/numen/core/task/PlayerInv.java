@@ -16,10 +16,33 @@ public final class PlayerInv {
 
     private PlayerInv() {}
 
-    /** Total count of {@code item} across the whole inventory. */
+    /**
+     * 建造能动用的格数:快捷栏 + 主背包,<b>不含盔甲栏与副手</b>。
+     *
+     * <p>建造那一族(报价、逐格闸门、实扣)必须共用这一个数,而不是各写各的循环。这条
+     * 口径分岔过两次,症状一模一样:一整叠木板放在副手,数 41 格的那一方说"料够了",
+     * 数 36 格的那一方每格都判缺料——玩家看着手里那叠木板,而我们两张嘴说两样话。
+     *
+     * <p>为什么是 36 而不是 41:盔甲是穿在身上的,副手是她另一只手里握着的东西(演出要
+     * 用),都不是"备料"。把它们算进可用材料,等于说她会拆自己的胸甲去砌墙。
+     */
+    public static final int BUILDABLE_SLOTS = 36;
+
+    /** Total count of {@code item} across the whole inventory (armor + offhand included). */
     public static int count(Inventory inv, Item item) {
         int n = 0;
         for (int i = 0; i < inv.getContainerSize(); i++) {
+            ItemStack s = inv.getItem(i);
+            if (!s.isEmpty() && s.is(item)) n += s.getCount();
+        }
+        return n;
+    }
+
+    /** 建造口径的存量:只数 {@link #BUILDABLE_SLOTS} 格。报价与实扣共用这一个。 */
+    public static int buildableCount(Inventory inv, Item item) {
+        int limit = Math.min(BUILDABLE_SLOTS, inv.getNonEquipmentItems().size());
+        int n = 0;
+        for (int i = 0; i < limit; i++) {
             ItemStack s = inv.getItem(i);
             if (!s.isEmpty() && s.is(item)) n += s.getCount();
         }
