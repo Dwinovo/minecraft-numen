@@ -68,7 +68,52 @@ class ThrowawaySelectionTest {
         Field foodData = Player.class.getDeclaredField("foodData");
         foodData.setAccessible(true);
         foodData.set(p, new FoodData());
+        // 能力位与血量:成本函数现在也读这两样(免耗材画像恒有耗材、无饥饿画像
+        // 不受饱食度门限,落差上限按血量反推),空壳里它们都是 null。和背包、饥饿
+        // 数据一样按真实对象注进去,断言本身一个字没动。
+        Field abilities = Player.class.getDeclaredField("abilities");
+        abilities.setAccessible(true);
+        abilities.set(p, new net.minecraft.world.entity.player.Abilities());   // 默认生存画像
+        Field entityData = net.minecraft.world.entity.Entity.class.getDeclaredField("entityData");
+        entityData.setAccessible(true);
+        // 1.21.x 的 SynchedEntityData 改由 Builder 组装，build() 会校验「每个 id 都已定义」
+        // ——只塞血量一项会当场抛。所以照 Entity 构造器的原样把定义表补全：基类那八项
+        // 写死在构造器里（不在 defineSynchedData 内），其余交给各层的 defineSynchedData
+        // （那几个实现都是纯粹的 builder.define，不碰实例状态）。拿到的就是真实定义表。
+        net.minecraft.network.syncher.SynchedEntityData.Builder builder =
+                new net.minecraft.network.syncher.SynchedEntityData.Builder(p);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_SHARED_FLAGS_ID"),
+                (byte) 0);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_AIR_SUPPLY_ID"),
+                net.minecraft.world.entity.Entity.TOTAL_AIR_SUPPLY);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_CUSTOM_NAME_VISIBLE"),
+                false);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_CUSTOM_NAME"),
+                java.util.Optional.<net.minecraft.network.chat.Component>empty());
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_SILENT"), false);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_NO_GRAVITY"), false);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_POSE"),
+                net.minecraft.world.entity.Pose.STANDING);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_TICKS_FROZEN"), 0);
+        java.lang.reflect.Method defineSynched = net.minecraft.world.entity.Entity.class
+                .getDeclaredMethod("defineSynchedData",
+                        net.minecraft.network.syncher.SynchedEntityData.Builder.class);
+        defineSynched.setAccessible(true);
+        defineSynched.invoke(p, builder);
+        net.minecraft.network.syncher.SynchedEntityData synched = builder.build();
+        entityData.set(p, synched);
+        synched.set(dataKey(net.minecraft.world.entity.LivingEntity.class, "DATA_HEALTH_ID"),
+                20.0f);   // 满血
         return p;
+    }
+
+    /** 取原版某个同步数据键（全是私有静态字段）。 */
+    @SuppressWarnings("unchecked")
+    private static <T> net.minecraft.network.syncher.EntityDataAccessor<T> dataKey(
+            Class<?> owner, String field) throws Exception {
+        Field f = owner.getDeclaredField(field);
+        f.setAccessible(true);
+        return (net.minecraft.network.syncher.EntityDataAccessor<T>) f.get(null);
     }
 
     @BeforeEach
