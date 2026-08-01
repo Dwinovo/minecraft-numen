@@ -27,13 +27,14 @@ public final class MoveToTool implements NumenTool {
     @Override
     public String description() {
         return """
-                Travel anywhere. Full pathfinding: digs through, bridges gaps, pillars up, swims, auto-equips the right tool. Anything breakable is a route (no tool = slow punching, still works). Which fields you fill IS your intent — fill exactly one pattern:
-                • x+z — go to a place. Y resolves to the surface. Your default for "go there".
-                • block — e.g. block:'crafting_table'. Finds the nearest one and stops RIGHT BESIDE it, never damaging it. Always use this for a chest/station/ore you intend to use; you arrive in reach, interact directly.
-                • x+y+z — stand EXACTLY in that cell, digging out whatever occupies it. Never aim this at a block you want to keep.
+                Travel to ONE new destination with full terrain pathfinding: digs through, bridges gaps, pillars up, swims, and auto-equips tools. Which fields you fill IS your intent — fill exactly one pattern:
+                • x+z — go to a place. Y resolves to the surface. This is the DEFAULT for exploration or "go there"; omit y.
+                • block — e.g. block:'minecraft:crafting_table'. Finds the nearest one and stops RIGHT BESIDE it, never damaging it. Use this for a chest/station/block you intend to interact with.
+                • x+y+z — stand EXACTLY in that cell, digging out whatever occupies it. Use only when the exact feet cell matters; never aim it at a block you want to keep.
                 • y — climb/descend to that elevation.
-                Background task: returns task_id now, arrival comes as a task_finished event with the final position. Timed out mid-journey? Re-send the same call to continue.""";
+                BACKGROUND: a successful call means movement is already running. Do not call goto again or launch another body action while <current_task> exists; wait for matching task_finished. status=done means that destination is complete, so advance the plan and never resend identical coordinates. Only status=timeout permits the same call to resume.""";
     }
+
 
     @Override
     public Map<String, Object> parameterSchema() {
