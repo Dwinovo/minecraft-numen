@@ -77,6 +77,9 @@ public final class PathCaches {
      * is automatic — the old level falls out of the active set and ages out, the new one is rebuilt.
      */
     public static void serverTick(MinecraftServer server) {
+        // Tick-interval pulse for the profiler: this hook runs EVERY server tick on every loader,
+        // so gap measurements never mistake a task-idle stretch for a slow tick.
+        com.dwinovo.numen.core.pathing.util.NavProfiler.serverTickPulse();
         Map<ServerLevel, List<BlockPos>> byLevel = new HashMap<>();
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p instanceof NumenPlayer && p.level() instanceof ServerLevel sl) {

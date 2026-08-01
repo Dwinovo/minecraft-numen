@@ -2,12 +2,12 @@ package com.dwinovo.numen.core.scan;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -43,6 +43,19 @@ public final class BlockScanner {
     private static final int MAX_COLLECT = 8_192;
 
     private BlockScanner() {}
+
+    /**
+     * The fully-loaded chunk at ({@code cx},{@code cz}), or {@code null} if it isn't loaded — a pure
+     * cache read via {@link net.minecraft.server.level.ServerChunkCache#getChunkNow} that <b>never</b>
+     * forces a load, generates, or bounces to the main thread. A synchronous/off-tick scan must never
+     * drive chunk loading (that path can block the server thread on chunk I/O); long-range perception
+     * over unloaded terrain is {@code ScanBlocksJob}'s budgeted job.
+     */
+    private static ChunkAccess loadedChunk(Level level, int cx, int cz) {
+        return level instanceof ServerLevel serverLevel
+                ? serverLevel.getChunkSource().getChunkNow(cx, cz)
+                : null;
+    }
 
     /** One match: world position, its state, and Euclidean distance from the search centre. */
     public record Hit(BlockPos pos, BlockState state, double distance) {}
@@ -80,7 +93,7 @@ public final class BlockScanner {
                 // to mean up to 49 sync loads inside one tick. Long-range
                 // perception over unloaded terrain is ScanBlocksJob's job,
                 // which loads under the global per-tick budget.
-                ChunkAccess chunk = level.getChunk(cx, cz, ChunkStatus.FULL, false);
+                ChunkAccess chunk = loadedChunk(level, cx, cz);
                 if (chunk == null) continue;
                 for (int sy = minSectionY; sy <= maxSectionY; sy++) {
                     scanChunkSection(level, chunk, cx, sy, cz, center, radius, radiusSq, filter, matches);
@@ -107,7 +120,7 @@ public final class BlockScanner {
         List<ChunkAccess> chunks = new ArrayList<>();
         for (int cx = minChunkX; cx <= maxChunkX; cx++) {
             for (int cz = minChunkZ; cz <= maxChunkZ; cz++) {
-                ChunkAccess chunk = level.getChunk(cx, cz, ChunkStatus.FULL, false);
+                ChunkAccess chunk = loadedChunk(level, cx, cz);
                 if (chunk != null) chunks.add(chunk);
             }
         }
@@ -176,8 +189,7 @@ public final class BlockScanner {
                 for (int zoff = -reach; zoff <= reach; zoff++) {
                     if (xoff * xoff + zoff * zoff != ringSq) continue;
                     hasLattice = true;
-                    ChunkAccess chunk = level.getChunk(
-                            centerChunkX + xoff, centerChunkZ + zoff, ChunkStatus.FULL, false);
+                    ChunkAccess chunk = loadedChunk(level, centerChunkX + xoff, centerChunkZ + zoff);
                     if (chunk != null) ring.add(chunk);
                 }
             }
@@ -206,8 +218,14 @@ public final class BlockScanner {
                 .sorted(Comparator.comparingInt(y -> Math.abs(y - playerSection)))
                 .mapToInt(Integer::intValue).toArray();
         int maxRadiusSq = maxChunkRadius * maxChunkRadius;
+        // 收集硬顶:环序天然由近及远,最先入表的就是最近的一批;超过 4×max 的部分
+        // 反正会被调用方的距离裁剪丢弃,继续扫只是给主线程的合并/校验层制造成千上万
+        // 条注定扔掉的条目(地表下令挖深层矿时"同层提前收工"永不触发,没有这个顶,
+        // 一轮扫描能带回整个加载区的全部矿位)。
+        int hardCap = max * 4;
         List<Hit> res = new ArrayList<>();
         boolean foundWithinY = false;
+        outer:
         for (int ringSq = 0; ringSq < cap.rings().size(); ringSq++) {
             for (ChunkAccess chunk : cap.rings().get(ringSq)) {
                 try {
@@ -217,6 +235,9 @@ public final class BlockScanner {
                     }
                 } catch (Throwable concurrentPaletteRead) {
                     // 主线程改了这个 chunk 的调色板:本轮跳过。
+                }
+                if (res.size() >= hardCap) {
+                    break outer;
                 }
             }
             if (res.size() >= max
