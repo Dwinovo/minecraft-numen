@@ -38,6 +38,12 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
     @Override
     protected List<Precondition> preconditions() {
         return List.of(
+                // 无饥饿画像(创造)下:吃的动作会执行但食物不扣、饥饿不涨,
+                // 事后一切判定都失真——直接如实拒绝,别让模型收到"already full"的假诊断。
+                () -> WorkProfile.of(player).hasHunger() ? null
+                        : new Precondition.Failure(
+                                "creative mode has no hunger — eating is unnecessary; kept the "
+                                        + r.label, FailureType.UNKNOWN),
                 () -> PlayerInv.count(player.getInventory(), r.item) > 0 ? null
                         : new Precondition.Failure("no " + r.label + " in inventory to eat",
                                 FailureType.NO_MATERIAL),
