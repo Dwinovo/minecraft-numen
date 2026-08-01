@@ -123,8 +123,55 @@ class BuildTaskRecordTest {
         Field foodData = Player.class.getDeclaredField("foodData");
         foodData.setAccessible(true);
         foodData.set(p, new FoodData());
-        p.getInventory().getNonEquipmentItems().set(0, new net.minecraft.world.item.ItemStack(Blocks.OBSIDIAN.asItem()));
+        // 能力位与血量:成本函数现在也读这两样(免耗材画像恒有耗材、无饥饿画像
+        // 不受饱食度门限,落差上限按血量反推),空壳里它们都是 null。和背包、饥饿
+        // 数据一样按真实对象注进去,断言本身一个字没动。
+        Field abilities = Player.class.getDeclaredField("abilities");
+        abilities.setAccessible(true);
+        abilities.set(p, new net.minecraft.world.entity.player.Abilities());   // 默认生存画像
+        Field entityData = net.minecraft.world.entity.Entity.class.getDeclaredField("entityData");
+        entityData.setAccessible(true);
+        // 1.21.x 的 SynchedEntityData 改由 Builder 组装，build() 会校验「每个 id 都已定义」
+        // ——只塞血量一项会当场抛。所以照 Entity 构造器的原样把定义表补全：基类那八项
+        // 写死在构造器里（不在 defineSynchedData 内），其余交给各层的 defineSynchedData
+        // （那几个实现都是纯粹的 builder.define，不碰实例状态）。拿到的就是真实定义表。
+        net.minecraft.network.syncher.SynchedEntityData.Builder builder =
+                new net.minecraft.network.syncher.SynchedEntityData.Builder(p);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_SHARED_FLAGS_ID"),
+                (byte) 0);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_AIR_SUPPLY_ID"),
+                net.minecraft.world.entity.Entity.TOTAL_AIR_SUPPLY);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_CUSTOM_NAME_VISIBLE"),
+                false);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_CUSTOM_NAME"),
+                java.util.Optional.<net.minecraft.network.chat.Component>empty());
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_SILENT"), false);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_NO_GRAVITY"), false);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_POSE"),
+                net.minecraft.world.entity.Pose.STANDING);
+        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_TICKS_FROZEN"), 0);
+        java.lang.reflect.Method defineSynched = net.minecraft.world.entity.Entity.class
+                .getDeclaredMethod("defineSynchedData",
+                        net.minecraft.network.syncher.SynchedEntityData.Builder.class);
+        defineSynched.setAccessible(true);
+        defineSynched.invoke(p, builder);
+        net.minecraft.network.syncher.SynchedEntityData synched = builder.build();
+        entityData.set(p, synched);
+        synched.set(dataKey(net.minecraft.world.entity.LivingEntity.class, "DATA_HEALTH_ID"),
+                20.0f);   // 满血
+        // 1.21.5:主背包列表私有化,items → getNonEquipmentItems()
+        p.getInventory().getNonEquipmentItems()
+                .set(0, new net.minecraft.world.item.ItemStack(Blocks.OBSIDIAN.asItem()));
         return p;
+    }
+
+    /** 取原版某个同步数据键（全是私有静态字段）。 */
+    @SuppressWarnings("unchecked")
+    private static <T> net.minecraft.network.syncher.EntityDataAccessor<T> dataKey(
+            Class<?> owner, String field) throws Exception {
+        Field f = owner.getDeclaredField(field);
+        f.setAccessible(true);
+        return (net.minecraft.network.syncher.EntityDataAccessor<T>) f.get(null);
     }
 
     @Test
@@ -162,7 +209,13 @@ class BuildTaskRecordTest {
                 Blocks.OAK_STAIRS.asItem(), BlockPos.ZERO, "oak_stairs", Direction.NORTH, null, null);
 
         assertTrue(target.matches(desired));
-        assertFalse(target.matches(desired.setValue(BlockStateProperties.WATERLOGGED, true)));
+        // 朝向是作者定的姿态，逐项比对
+        assertFalse(target.matches(
+                desired.setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)));
+        // 含水不是：它由周围的水推出来，对账口径里属于世界自己算的那一类。
+        // 楼梯放好后旁边淹了水就判“没建对”，只会拆了重放、再被淹，来回死转。
+        assertTrue(target.matches(desired.setValue(BlockStateProperties.WATERLOGGED, true)),
+                "waterlogged is derived, not authored — it must not fail the reconciliation");
     }
 
     @Test
@@ -193,13 +246,16 @@ class BuildTaskRecordTest {
     void buildIgnoreDirectionDoesNotIgnoreUnlistedProperties() {
         assumeTrue(booted, "Minecraft 引导不可用,跳过建造规则钉桩");
         NavSettings.get().buildIgnoreDirection = true;
-        BlockState desired = Blocks.OAK_STAIRS.defaultBlockState()
-                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH)
-                .setValue(BlockStateProperties.WATERLOGGED, false);
+        // 半砖的上下半是作者定的姿态，但不在“朝向”那一组里：buildIgnoreDirection
+        // 放过的只有朝向，别的作者属性照比。（此前这里拿含水当反例，而含水本就是
+        // 世界算出来的派生属性，对账口径里两边都不看。）
+        BlockState desired = Blocks.SMOOTH_STONE_SLAB.defaultBlockState()
+                .setValue(BlockStateProperties.SLAB_TYPE, SlabType.BOTTOM);
         BuildTaskRecord.Target target = new BuildTaskRecord.Target(desired,
-                Blocks.OAK_STAIRS.asItem(), BlockPos.ZERO, "oak_stairs", null, null, null);
+                Blocks.SMOOTH_STONE_SLAB.asItem(), BlockPos.ZERO, "smooth_stone_slab",
+                null, null, null);
 
-        assertFalse(target.matches(desired.setValue(BlockStateProperties.WATERLOGGED, true)));
+        assertFalse(target.matches(desired.setValue(BlockStateProperties.SLAB_TYPE, SlabType.TOP)));
     }
 
     @Test
@@ -235,7 +291,10 @@ class BuildTaskRecordTest {
 
         assertEquals(0.0, ctx.costOfPlacingAt(pos.getX(), pos.getY(), pos.getZ(),
                 Blocks.AIR.defaultBlockState()));
-        assertEquals(NavSettings.get().breakCorrectBlockPenaltyMultiplier,
+        // 拆已经建对的格子收固定重罚 8×：贵得不会顺手拆，又没贵到“活路等于没有”
+        // ——逐层上盖时她本来就站在自己盖的楼板底下，唯一的出路就是拆一块钻出去，
+        // 定价过高时 A* 只会搜不出任何出路、原地打转。
+        assertEquals(8.0,
                 ctx.breakCostMultiplierAt(pos.getX(), pos.getY(), pos.getZ(),
                         Blocks.OBSIDIAN.defaultBlockState()));
         assertEquals(1.0, ctx.breakCostMultiplierAt(pos.getX(), pos.getY(), pos.getZ(),
