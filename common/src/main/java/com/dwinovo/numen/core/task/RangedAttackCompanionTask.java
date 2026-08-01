@@ -1,11 +1,11 @@
 package com.dwinovo.numen.core.task;
-import com.dwinovo.numen.core.FailureType;
 
 import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Ballistics;
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.core.task.base.AbstractCombatTask;
+import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskState;
@@ -18,20 +18,16 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.phys.Vec3;
 
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /** Runtime-id ranged attack task for bow and crossbow combat. */
-public final class RangedAttackCompanionTask extends AbstractCompanionTask<RangedAttackTaskRecord> {
+public final class RangedAttackCompanionTask
+        extends AbstractCombatTask<Entity, RangedAttackTaskRecord> {
 
     private enum WeaponKind { BOW, CROSSBOW }
 
     private record WeaponChoice(int slot, ItemStack stack, WeaponKind kind, boolean charged) {}
-
 
     private static final double CHASE_SPEED = 1.1;
     private static final double MAX_FIRING_RANGE = 32.0;
@@ -53,11 +49,7 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
     private static final int MAX_MISFIRES = 2;
     private static final double AIM_THRESHOLD_DEGREES = 1.5;
 
-    private final Map<Integer, Integer> navFailures = new HashMap<>();
-
-    private Entity target;
     private Shot shot;
-    private boolean backingOff;
     private double followRadius;
     private int misfires;
     private int lastNoWindowLogTick = -1000;
@@ -67,14 +59,34 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
     }
 
     @Override
-    protected List<com.dwinovo.numen.core.task.base.Precondition> preconditions() {
+    protected double chaseSpeed() {
+        return CHASE_SPEED;
+    }
+
+    @Override
+    protected int maxApproachFailures() {
+        return MAX_APPROACH_FAILURES;
+    }
+
+    @Override
+    protected void onTargetCleared() {
+        abortShot();
+    }
+
+    @Override
+    protected String targetNoun() {
+        return "ranged targets";
+    }
+
+    @Override
+    protected List<Precondition> preconditions() {
         return List.of(
                 () -> findRangedWeapon() >= 0 ? null
-                        : new com.dwinovo.numen.core.task.base.Precondition.Failure(
+                        : new Precondition.Failure(
                                 "you need a bow or crossbow before ranged_attack can start",
                                 FailureType.WRONG_TOOL),
                 () -> hasAmmoOrChargedCrossbow() ? null
-                        : new com.dwinovo.numen.core.task.base.Precondition.Failure(
+                        : new Precondition.Failure(
                                 "you have no arrows for ranged_attack", FailureType.NO_MATERIAL));
     }
 
@@ -84,7 +96,9 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
 
         validateCurrentTarget();
         Entity selected = selectTarget();
-        if (selected == null) return finishCombat();
+        if (selected == null) {
+            return finishCombat("none of the requested entity ids could be destroyed with ranged_attack");
+        }
         if (selected != target) {
             stopActiveNav();
             abortShot();
@@ -99,7 +113,7 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
         ServerLevel level = (ServerLevel) player.level();
         Entity current = level.getEntity(target.getId());
         if (isDestroyed(target, current)) {
-            r.destroyed(target.getId());
+            r.completed(target.getId());
             clearTarget();
         } else if (current != target || target.isRemoved()) {
             r.lost(target.getId());
@@ -110,7 +124,7 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
     private boolean isDestroyed(Entity previous, Entity current) {
         if (previous instanceof LivingEntity living && living.isDeadOrDying()) return true;
         if (current instanceof LivingEntity living && living.isDeadOrDying()) return true;
-        return previous.isRemoved() && r.shots(previous.getId()) > 0;
+        return previous.isRemoved() && r.strikes(previous.getId()) > 0;
     }
 
     private Entity selectTarget() {
@@ -124,7 +138,7 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
                 continue;
             }
             if (entity instanceof LivingEntity living && living.isDeadOrDying()) {
-                r.destroyed(id);
+                r.completed(id);
                 continue;
             }
             if (entity.isRemoved()) {
@@ -139,24 +153,17 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
         return best;
     }
 
-    private TaskState finishCombat() {
-        InputDriver.halt(player);
-        if (!r.destroyed().isEmpty()) return TaskState.SUCCESS;
-        fail("none of the requested entity ids could be destroyed with ranged_attack", FailureType.TARGET_LOST);
-        return TaskState.FAILED;
-    }
-
     private TaskState tickTarget() {
         if (!hasAmmoOrChargedCrossbow()) {
             abortShot();
             stopActiveNav();
-            if (!r.destroyed().isEmpty()) return TaskState.SUCCESS;
+            if (!r.completed().isEmpty()) return TaskState.SUCCESS;
             fail("ranged_attack stopped because there are no arrows left", FailureType.NO_MATERIAL);
             return TaskState.FAILED;
         }
         if (tooCloseTo(target, minRangeFor(target))) {
             abortShot();
-            return backOffTarget(minRangeFor(target));
+            return backOffTarget(minRangeFor(target) + 1.0);
         }
 
         WeaponChoice choice = chooseRangedWeapon();
@@ -172,9 +179,8 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
             return chaseTarget();
         }
 
-
         stopActiveNav();
-        navFailures.remove(target.getId());
+        forgiveApproachFailures(target.getId());
         return fireAtTarget(choice, aim);
     }
 
@@ -220,7 +226,7 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
     }
 
     private TaskState chaseTarget() {
-        if (backingOff) stopActiveNav();
+        if (isBackingOff()) stopActiveNav();
         if (nav == null) {
             nav = PlayerNav.followEntity(player, () -> target, followRadius, CHASE_SPEED,
                     () -> target == null || target.isRemoved() || hasCurrentShotWindow());
@@ -243,26 +249,6 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
         return TaskState.RUNNING;
     }
 
-    private TaskState backOffTarget(double minRange) {
-        if (!backingOff) {
-            stopNav();
-            backingOff = true;
-            nav = PlayerNav.toGoal(player,
-                    () -> target == null || target.isRemoved() ? null
-                            : NavGoal.runAway(target.blockPosition(), player.blockPosition().getY()),
-                    CHASE_SPEED,
-                    () -> target == null || target.isRemoved() || !tooCloseTo(target, minRange + 1.0));
-        }
-        switch (nav.tick()) {
-            case RUNNING -> { return TaskState.RUNNING; }
-            case ARRIVED, FAILED -> {
-                stopActiveNav();
-                return TaskState.RUNNING;
-            }
-        }
-        return TaskState.RUNNING;
-    }
-
     private void reduceFollowRadiusOrNoteFailure() {
         if (target == null) return;
         double min = minRangeFor(target) + 1.0;
@@ -271,11 +257,7 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
             followRadius = next;
             return;
         }
-        int failures = navFailures.merge(target.getId(), 1, Integer::sum);
-        if (failures >= MAX_APPROACH_FAILURES) {
-            r.unreachable(target.getId());
-            clearTarget();
-        }
+        noteApproachFailure(target.getId());
     }
 
     private boolean hasCurrentShotWindow() {
@@ -283,7 +265,6 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
         return target != null && choice != null && !tooCloseTo(target, minRangeFor(target))
                 && aimFor(target, choice) != null;
     }
-
 
     private Ballistics.Aim aimFor(Entity entity, WeaponChoice choice) {
         double velocity = projectileVelocity(choice);
@@ -318,21 +299,12 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
         return Math.max(minRange + 1.0, MAX_FIRING_RANGE - 8.0);
     }
 
-    static int compareTargetKeys(double distanceA, int idA, double distanceB, int idB) {
-        int byDistance = Double.compare(distanceA, distanceB);
-        return byDistance != 0 ? byDistance : Integer.compare(idA, idB);
-    }
-
     static boolean canRelease(double angleDegrees, int heldTicks, int releaseTicks) {
         return angleDegrees <= AIM_THRESHOLD_DEGREES && heldTicks >= releaseTicks;
     }
 
     private boolean aimReady(Ballistics.Aim aim) {
         return Ballistics.angleDegrees(player.getViewVector(1.0f), aim.direction()) <= AIM_THRESHOLD_DEGREES;
-    }
-
-    private boolean tooCloseTo(Entity entity, double minRange) {
-        return player.distanceToSqr(entity) < minRange * minRange;
     }
 
     private double minRangeFor(Entity entity) {
@@ -391,18 +363,6 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
             }
         }
         return null;
-    }
-
-
-    private void clearTarget() {
-        target = null;
-        stopActiveNav();
-        abortShot();
-    }
-
-    private void stopActiveNav() {
-        stopNav();
-        backingOff = false;
     }
 
     private void abortShot() {
@@ -490,7 +450,7 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
         private void markFired(Ballistics.Aim aim) {
             fired = true;
             if (target != null) {
-                r.shot(target.getId());
+                r.strike(target.getId());
                 Constants.LOG.debug("[numen-ranged] shot target={} weapon={} held={} dist={} eta={}",
                         target.getId(), kind, held, player.distanceTo(target), Math.ceil(aim.travelTicks()));
             }
@@ -506,17 +466,6 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
         }
     }
 
-    private Map<Integer, Map<String, Object>> combatByEntity() {
-        Map<Integer, Map<String, Object>> data = new LinkedHashMap<>();
-        for (int id : r.entityIds) {
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("status", r.status(id));
-            entry.put("shots", r.shots(id));
-            data.put(id, entry);
-        }
-        return data;
-    }
-
     @Override
     protected void cleanup() {
         abortShot();
@@ -524,37 +473,4 @@ public final class RangedAttackCompanionTask extends AbstractCompanionTask<Range
         player.setShiftKeyDown(false);
         super.cleanup();
     }
-
-    @Override
-    protected Map<String, Object> resultData() {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("requested_entity_ids", r.entityIds);
-        data.put("destroyed_entity_ids", r.destroyed());
-        data.put("lost_entity_ids", r.lost());
-        data.put("unreachable_entity_ids", r.unreachable());
-        data.put("shots", r.shots());
-        data.put("combat_by_entity", combatByEntity());
-        return data;
-    }
-
-    @Override
-    protected String successMessage() {
-        int incomplete = r.lost().size() + r.unreachable().size();
-        return "destroyed " + r.destroyed().size() + "/" + r.entityIds.size()
-                + " requested ranged targets"
-                + (incomplete == 0 ? "" : " (" + incomplete + " targets could not be completed)");
-    }
-
-    @Override
-    protected String timeoutMessage() {
-        return "ranged_attack timed out after destroying " + r.destroyed().size()
-                + "/" + r.entityIds.size();
-    }
-
-    @Override
-    protected String cancelledMessage() {
-        return "ranged_attack interrupted after destroying " + r.destroyed().size()
-                + "/" + r.entityIds.size();
-    }
 }
-

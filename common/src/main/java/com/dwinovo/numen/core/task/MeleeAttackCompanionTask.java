@@ -1,10 +1,10 @@
 package com.dwinovo.numen.core.task;
-import com.dwinovo.numen.core.FailureType;
 
+import com.dwinovo.numen.core.act.ToolSelect;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
-import com.dwinovo.numen.core.act.ToolSelect;
+import com.dwinovo.numen.core.task.base.AbstractCombatTask;
+import com.dwinovo.numen.core.task.base.DropTracker;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskState;
@@ -23,7 +23,6 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -36,7 +35,8 @@ import java.util.Set;
  * native cooldown-gated hit once in reach, then walk over drops before the next
  * target is selected.
  */
-public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeAttackTaskRecord> {
+public final class MeleeAttackCompanionTask
+        extends AbstractCombatTask<LivingEntity, MeleeAttackTaskRecord> {
 
     private enum Phase { COMBAT, LOOT }
 
@@ -47,15 +47,10 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
     private static final float ATTACK_READY = 0.99f;
 
     private Phase phase = Phase.COMBAT;
-    private LivingEntity target;
     private Vec3 lastTargetPosition;
-    private boolean backingOff;
-    private final Map<Integer, Integer> navFailures = new HashMap<>();
 
     private final Map<Item, Integer> inventoryBaseline = new HashMap<>();
-    private final Set<Integer> preexistingDrops = new HashSet<>();
-    private final Map<Integer, Integer> preexistingDropCounts = new HashMap<>();
-    private final Set<Integer> trackedDrops = new HashSet<>();
+    private final DropTracker drops = new DropTracker();
     private final Set<Integer> skippedDrops = new HashSet<>();
     private BlockPos deathPosition;
     private long anticipatedUntil;
@@ -64,6 +59,16 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
 
     public MeleeAttackCompanionTask(NumenPlayer player, MeleeAttackTaskRecord record) {
         super(player, record);
+    }
+
+    @Override
+    protected double chaseSpeed() {
+        return CHASE_SPEED;
+    }
+
+    @Override
+    protected int maxApproachFailures() {
+        return MAX_APPROACH_FAILURES;
     }
 
     @Override
@@ -79,7 +84,7 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
         if (target != null) {
             Entity current = ((ServerLevel) player.level()).getEntity(target.getId());
             if (target.isDeadOrDying()) {
-                r.defeated(target.getId());
+                r.completed(target.getId());
                 beginLoot();
                 return TaskState.RUNNING;
             }
@@ -90,20 +95,15 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
         }
 
         LivingEntity selected = selectTarget();
-        if (selected == null) return finishCombat();
+        if (selected == null) {
+            return finishCombat("none of the requested entity ids could be defeated");
+        }
         if (selected != target) {
             stopActiveNav();
             target = selected;
             lastTargetPosition = selected.position();
         }
         return tickTarget();
-    }
-
-    private TaskState finishCombat() {
-        InputDriver.halt(player);
-        if (!r.defeated().isEmpty()) return TaskState.SUCCESS;
-        fail("none of the requested entity ids could be defeated", FailureType.TARGET_LOST);
-        return TaskState.FAILED;
     }
 
     private LivingEntity selectTarget() {
@@ -117,7 +117,7 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
                 continue;
             }
             if (living.isDeadOrDying()) {
-                r.defeated(id);
+                r.completed(id);
                 continue;
             }
             if (living.isRemoved()) {
@@ -133,7 +133,8 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
 
     private TaskState tickTarget() {
         lastTargetPosition = target.position();
-        rememberExistingDrops(lastTargetPosition);
+        drops.rememberExisting(player.level(),
+                new AABB(lastTargetPosition, lastTargetPosition).inflate(LOOT_RADIUS));
 
         double reach = entityReachRange();
         double maintainDistance = approachRadius(reach);
@@ -145,7 +146,7 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
         }
 
         stopActiveNav();
-        navFailures.remove(target.getId());
+        forgiveApproachFailures(target.getId());
         InputDriver.halt(player);
         if (player.isUsingItem()) return TaskState.RUNNING;
         ItemStack heldBefore = player.getMainHandItem();
@@ -162,12 +163,12 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
         player.setSprinting(false);
         player.attack(target);
         player.swing(InteractionHand.MAIN_HAND);
-        r.hit(target.getId());
+        r.strike(target.getId());
         return TaskState.RUNNING;
     }
 
     private TaskState chaseTarget(double maintainDistance) {
-        if (backingOff) stopActiveNav();
+        if (isBackingOff()) stopActiveNav();
         if (nav == null) {
             nav = PlayerNav.followEntity(player, () -> target, maintainDistance, CHASE_SPEED,
                     () -> target == null || target.isRemoved());
@@ -185,40 +186,6 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
             }
         }
         return TaskState.RUNNING;
-    }
-
-    private TaskState backOffTarget(double maintainDistance) {
-        if (!backingOff) {
-            stopNav();
-            backingOff = true;
-            nav = PlayerNav.toGoal(player,
-                    () -> target == null || target.isRemoved() ? null
-                            : NavGoal.runAway(target.blockPosition(), player.blockPosition().getY()),
-                    CHASE_SPEED,
-                    () -> target == null || target.isRemoved()
-                            || !tooCloseTo(target, maintainDistance));
-        }
-        switch (nav.tick()) {
-            case RUNNING -> { return TaskState.RUNNING; }
-            case ARRIVED, FAILED -> {
-                stopActiveNav();
-                return TaskState.RUNNING;
-            }
-        }
-        return TaskState.RUNNING;
-    }
-
-    private void noteApproachFailure(int id) {
-        int failures = navFailures.merge(id, 1, Integer::sum);
-        if (failures >= MAX_APPROACH_FAILURES) {
-            r.unreachable(id);
-            clearTarget();
-        }
-    }
-
-    static int compareTargetKeys(double distanceA, int idA, double distanceB, int idB) {
-        int byDistance = Double.compare(distanceA, distanceB);
-        return byDistance != 0 ? byDistance : Integer.compare(idA, idB);
     }
 
     static double effectiveEntityReach(double nativeRange) {
@@ -249,24 +216,12 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
                 player.getAttackStrengthScale(0.0f) >= ATTACK_READY);
     }
 
-    private boolean tooCloseTo(LivingEntity entity, double maintainDistance) {
-        return isWithinEntityReach(player.distanceToSqr(entity), maintainDistance);
-    }
-
     private boolean isInReach(LivingEntity entity, double reach) {
         return isWithinEntityReach(player.distanceToSqr(entity), reach);
     }
 
     private double entityReachRange() {
-        return effectiveEntityReach(interactionRange());
-    }
-
-    private void rememberExistingDrops(Vec3 around) {
-        AABB box = new AABB(around, around).inflate(LOOT_RADIUS);
-        for (ItemEntity item : player.level().getEntitiesOfClass(ItemEntity.class, box)) {
-            preexistingDrops.add(item.getId());
-            preexistingDropCounts.put(item.getId(), item.getItem().getCount());
-        }
+        return effectiveEntityReach(player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE));
     }
 
     private void beginLoot() {
@@ -275,7 +230,7 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
         deathPosition = BlockPos.containing(lastTargetPosition != null
                 ? lastTargetPosition : target.position());
         anticipatedUntil = player.level().getGameTime() + DROP_LOITER_TICKS;
-        trackedDrops.clear();
+        drops.resetTracking();
         skippedDrops.clear();
         lootApproachFailures = 0;
         target = null;
@@ -283,17 +238,19 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
     }
 
     private TaskState tickLoot() {
-        scanNewDrops();
+        ServerLevel level = (ServerLevel) player.level();
+        if (deathPosition != null) {
+            drops.discover(level, new AABB(deathPosition).inflate(LOOT_RADIUS));
+        }
         long now = player.level().getGameTime();
         if (now <= anticipatedUntil) {
             InputDriver.halt(player);
             return TaskState.RUNNING;
         }
-        pruneDrops();
+        drops.prune(level);
         if (liveDrops().isEmpty()) {
             stopActiveNav();
-            preexistingDrops.clear();
-            preexistingDropCounts.clear();
+            drops.clear();
             phase = Phase.COMBAT;
             deathPosition = null;
             return TaskState.RUNNING;
@@ -305,7 +262,7 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
             case RUNNING -> { }
             case ARRIVED, FAILED -> {
                 if (++lootApproachFailures >= 2) {
-                    nearestLiveDrop().ifPresent(item -> {
+                    drops.nearest(level, player, skippedDrops).ifPresent(item -> {
                         if (skippedDrops.add(item.getId())) unreachableDropCount++;
                     });
                     lootApproachFailures = 0;
@@ -316,39 +273,8 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
         return TaskState.RUNNING;
     }
 
-    private void scanNewDrops() {
-        if (deathPosition == null) return;
-        AABB box = new AABB(deathPosition).inflate(LOOT_RADIUS);
-        for (ItemEntity item : player.level().getEntitiesOfClass(ItemEntity.class, box)) {
-            int id = item.getId();
-            if (!preexistingDrops.contains(id)
-                    || item.getItem().getCount() > preexistingDropCounts.getOrDefault(id, 0)) {
-                trackedDrops.add(id);
-            }
-        }
-    }
-
-    private void pruneDrops() {
-        trackedDrops.removeIf(id -> {
-            Entity entity = ((ServerLevel) player.level()).getEntity(id);
-            return !(entity instanceof ItemEntity) || entity.isRemoved();
-        });
-    }
-
     private List<ItemEntity> liveDrops() {
-        List<ItemEntity> out = new ArrayList<>();
-        ServerLevel level = (ServerLevel) player.level();
-        for (int id : trackedDrops) {
-            Entity entity = level.getEntity(id);
-            if (entity instanceof ItemEntity item && !item.isRemoved() && !skippedDrops.contains(id)) {
-                out.add(item);
-            }
-        }
-        return out;
-    }
-
-    private java.util.Optional<ItemEntity> nearestLiveDrop() {
-        return liveDrops().stream().min(Comparator.comparingDouble(player::distanceToSqr));
+        return drops.live((ServerLevel) player.level(), skippedDrops);
     }
 
     private NavGoal lootGoal() {
@@ -356,20 +282,6 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
                 .map(item -> NavGoal.near(item.blockPosition(), 1.0))
                 .toList();
         return goals.isEmpty() ? NavGoal.exact(player.blockPosition()) : NavGoal.composite(goals);
-    }
-
-    private double interactionRange() {
-        return player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE);
-    }
-
-    private void clearTarget() {
-        target = null;
-        stopActiveNav();
-    }
-
-    private void stopActiveNav() {
-        stopNav();
-        backingOff = false;
     }
 
     private void snapshotInventory(Map<Item, Integer> out) {
@@ -398,46 +310,16 @@ public final class MeleeAttackCompanionTask extends AbstractCompanionTask<MeleeA
         super.cleanup();
     }
 
-    private Map<Integer, Map<String, Object>> combatByEntity() {
-        Map<Integer, Map<String, Object>> data = new LinkedHashMap<>();
-        for (int id : r.entityIds) {
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("status", r.status(id));
-            entry.put("hits", r.hits(id));
-            data.put(id, entry);
-        }
-        return data;
-    }
-
     @Override
     protected Map<String, Object> resultData() {
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("requested_entity_ids", r.entityIds);
-        data.put("defeated_entity_ids", r.defeated());
-        data.put("lost_entity_ids", r.lost());
-        data.put("unreachable_entity_ids", r.unreachable());
-        data.put("hits", r.hits());
-        data.put("combat_by_entity", combatByEntity());
+        Map<String, Object> data = super.resultData();
         data.put("loot_gained", lootGained());
         data.put("unreachable_drop_count", unreachableDropCount);
         return data;
     }
 
     @Override
-    protected String successMessage() {
-        int incomplete = r.lost().size() + r.unreachable().size();
-        return "defeated " + r.defeated().size() + "/" + r.entityIds.size()
-                + " requested entities, collected " + lootGained()
-                + (incomplete == 0 ? "" : " (" + incomplete + " targets could not be completed)");
-    }
-
-    @Override protected String timeoutMessage() {
-        return "melee_attack timed out after defeating " + r.defeated().size()
-                + "/" + r.entityIds.size() + ", collected " + lootGained();
-    }
-
-    @Override protected String cancelledMessage() {
-        return "melee_attack interrupted after defeating " + r.defeated().size()
-                + "/" + r.entityIds.size() + ", collected " + lootGained();
+    protected String successExtra() {
+        return ", collected " + lootGained();
     }
 }

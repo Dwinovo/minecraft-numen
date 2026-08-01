@@ -12,6 +12,7 @@ import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskState;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -21,6 +22,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -70,10 +72,11 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     private final Set<BlockPos> rejectedStances = new HashSet<>();
     private final Set<BlockPos> rejectedTargets = new HashSet<>();
-    /** Item ids that existed before the reel, so nearby clutter is not claimed as this catch. */
-    private final Set<Integer> preReelItems = new HashSet<>();
-    /** Exact ItemEntity instances spawned by the successful vanilla reel. */
-    private final Map<Integer, ItemEntity> caughtLoot = new HashMap<>();
+    /** 本次收线的战果簿记:先快照现场旧物,差集出的新掉落才算这一竿的。 */
+    private final com.dwinovo.numen.core.task.base.DropTracker caught =
+            new com.dwinovo.numen.core.task.base.DropTracker();
+    /** 判定够不着而放弃的战果 id(留在地上,不再追)。 */
+    private final Set<Integer> abandonedLoot = new HashSet<>();
 
     private Phase phase = Phase.POSITION;
     private BlockPos stance;
@@ -301,10 +304,10 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
      */
     private TaskState collectCaughtLoot() {
         phaseTicks++;
-        if (phaseTicks <= LOOT_DISCOVERY_TICKS) discoverCaughtLoot();
+        if (phaseTicks <= LOOT_DISCOVERY_TICKS) caught.discover(player.level(), lootBox());
 
         if (phaseTicks >= LOOT_COLLECTION_TIMEOUT) {
-            int remaining = (int) caughtLoot.values().stream().filter(e -> !e.isRemoved()).count();
+            int remaining = liveCaught().size();
             fail("reeled in fishing loot but timed out while retrieving " + remaining
                     + " dropped loot item(s)", FailureType.NO_PATH);
             return TaskState.FAILED;
@@ -314,14 +317,13 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         // still-moving entity makes the body step off the bank to "meet" a catch
         // that would have arrived by itself. Hold the known-safe stance briefly;
         // genuine stranded loot is still path-found after this grace period.
-        boolean returningLoot = caughtLoot.values().stream().anyMatch(e -> !e.isRemoved());
+        boolean returningLoot = !liveCaught().isEmpty();
         if (returningLoot && phaseTicks <= LOOT_RETURN_GRACE_TICKS) {
             return TaskState.RUNNING;
         }
 
         if (lootTarget != null) {
             if (lootTarget.isRemoved()) {
-                caughtLoot.remove(lootTarget.getId());
                 lootTarget = null;
                 lootCloseTicks = 0;
                 stopNav();
@@ -349,11 +351,9 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
             }
         }
 
-        caughtLoot.entrySet().removeIf(e -> e.getValue().isRemoved());
-        lootTarget = caughtLoot.values().stream()
-                .filter(e -> !e.isRemoved())
-                .min(Comparator.comparingDouble(player::distanceToSqr))
-                .orElse(null);
+        ServerLevel level = (ServerLevel) player.level();
+        caught.prune(level);
+        lootTarget = caught.nearest(level, player, abandonedLoot).orElse(null);
         if (lootTarget != null) {
             stopNav();
             return TaskState.RUNNING;
@@ -374,34 +374,32 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     }
 
     private void beginLootCollection() {
-        preReelItems.clear();
-        caughtLoot.clear();
+        caught.clear();
+        abandonedLoot.clear();
         lootTarget = null;
         lootCloseTicks = 0;
         unreachableLoot = 0;
-        for (ItemEntity item : nearbyItems()) preReelItems.add(item.getId());
+        caught.rememberExisting(player.level(), lootBox());
 
         reelIn();
         phase = Phase.COLLECT;
         phaseTicks = 0;
         stopNav();
-        discoverCaughtLoot();
+        caught.discover(player.level(), lootBox());
     }
 
-    /** Find only entities introduced by the reel, never unrelated ground clutter. */
-    private void discoverCaughtLoot() {
-        for (ItemEntity item : nearbyItems()) {
-            if (!preReelItems.contains(item.getId())) caughtLoot.putIfAbsent(item.getId(), item);
-        }
+    /** 收线战果的搜索范围:落点可能被岸坡/台阶截在几格外。 */
+    private AABB lootBox() {
+        return player.getBoundingBox().inflate(LOOT_SEARCH_RADIUS);
     }
 
-    private List<ItemEntity> nearbyItems() {
-        return player.level().getEntitiesOfClass(ItemEntity.class,
-                player.getBoundingBox().inflate(LOOT_SEARCH_RADIUS), item -> !item.isRemoved());
+    /** 仍在世且未被放弃的本竿战果。 */
+    private List<ItemEntity> liveCaught() {
+        return caught.live((ServerLevel) player.level(), abandonedLoot);
     }
 
     private void abandonLootTarget() {
-        if (lootTarget != null) caughtLoot.remove(lootTarget.getId());
+        if (lootTarget != null) abandonedLoot.add(lootTarget.getId());
         unreachableLoot++;
         lootTarget = null;
         lootCloseTicks = 0;
@@ -409,8 +407,8 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     }
 
     private void clearLootTracking() {
-        preReelItems.clear();
-        caughtLoot.clear();
+        caught.clear();
+        abandonedLoot.clear();
         lootTarget = null;
         lootCloseTicks = 0;
         unreachableLoot = 0;
