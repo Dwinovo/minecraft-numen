@@ -4,7 +4,7 @@ import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
-import com.dwinovo.numen.core.task.base.ToolSelect;
+import com.dwinovo.numen.core.act.ToolSelect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;

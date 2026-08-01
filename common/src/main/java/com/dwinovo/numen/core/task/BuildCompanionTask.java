@@ -1,4 +1,6 @@
 package com.dwinovo.numen.core.task;
+import com.dwinovo.numen.core.PlayerInv;
+import com.dwinovo.numen.core.FailureType;
 
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;

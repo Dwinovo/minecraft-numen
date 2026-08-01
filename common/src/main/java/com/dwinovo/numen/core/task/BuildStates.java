@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.task;
+import com.dwinovo.numen.core.build.BuildValidity;
 
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.Blocks;

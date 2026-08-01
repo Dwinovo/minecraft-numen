@@ -281,7 +281,7 @@ public final class BuildTool implements NumenTool {
         boolean replaceExisting = parsed.replace_existing() == null || parsed.replace_existing();
         // 材料记账随能力画像:免耗材(创造)想建就建;否则消耗背包,开工前
         // 由任务预检并逐项报缺(见 BuildCompanionTask 的 checkMaterials)。
-        boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
+        boolean consume = !com.dwinovo.numen.core.WorkProfile.of(companion).freeMaterials();
         long timeout = timeoutTicksFor(targets.size(), consume);
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting,

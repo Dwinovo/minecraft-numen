@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core;
 
 import net.minecraft.server.level.ServerPlayer;
 

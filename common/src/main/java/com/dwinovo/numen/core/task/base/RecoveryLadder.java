@@ -3,7 +3,7 @@ package com.dwinovo.numen.core.task.base;
 import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.task.CompanionTask;
-import com.dwinovo.numen.core.task.FailureType;
+import com.dwinovo.numen.core.FailureType;
 
 import java.util.List;
 import java.util.Set;

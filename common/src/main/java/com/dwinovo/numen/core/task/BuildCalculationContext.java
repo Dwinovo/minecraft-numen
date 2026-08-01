@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.task;
+import com.dwinovo.numen.core.build.BuildValidity;
 
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;

@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.pathing.moves.movements;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.task.BuildValidity;
+import com.dwinovo.numen.core.build.BuildValidity;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;

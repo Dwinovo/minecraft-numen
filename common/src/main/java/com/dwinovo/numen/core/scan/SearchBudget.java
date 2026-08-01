@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.scan;
 
 import net.minecraft.server.MinecraftServer;
 
@@ -24,7 +24,7 @@ import net.minecraft.server.MinecraftServer;
  * uses {@link MinecraftServer#getTickCount()} (monotonic, unaffected by
  * {@code /tick freeze}) to reset the pool exactly once per server tick.
  */
-final class SearchBudget {
+public final class SearchBudget {
 
     /** Cached presence checks are cheap; this caps loop work across ALL searches. */
     private static final int MAX_CHECKS_PER_TICK = 128;
@@ -59,7 +59,7 @@ final class SearchBudget {
     private SearchBudget() {}
 
     /** Reset the pool when the server tick has advanced. Call before consuming. */
-    static void refresh(MinecraftServer server) {
+    public static void refresh(MinecraftServer server) {
         int now = server.getTickCount();
         if (now != stampTick) {
             resetForTick(now);
@@ -67,7 +67,7 @@ final class SearchBudget {
     }
 
     /** The actual pool reset; also the test seam (no MinecraftServer needed). */
-    static void resetForTick(int tick) {
+    public static void resetForTick(int tick) {
         stampTick = tick;
         checksLeft = MAX_CHECKS_PER_TICK;
         loadsLeft = MAX_CHUNK_LOADS_PER_TICK;
@@ -77,28 +77,28 @@ final class SearchBudget {
     }
 
     /** Take one section-scan permit (one 16³ section); false = resume next tick. */
-    static boolean trySectionScan() {
+    public static boolean trySectionScan() {
         if (sectionScansLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
         sectionScansLeft--;
         return true;
     }
 
     /** Take one biome-sample permit; false = pool drained, resume next tick. */
-    static boolean tryBiomeSample() {
+    public static boolean tryBiomeSample() {
         if (biomeSamplesLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
         biomeSamplesLeft--;
         return true;
     }
 
     /** Take one candidate-check permit; false = pool drained, resume next tick. */
-    static boolean tryCheck() {
+    public static boolean tryCheck() {
         if (checksLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
         checksLeft--;
         return true;
     }
 
     /** Take one chunk-load permit (the expensive op); false = resume next tick. */
-    static boolean tryChunkLoad() {
+    public static boolean tryChunkLoad() {
         if (loadsLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
         loadsLeft--;
         return true;

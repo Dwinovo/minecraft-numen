@@ -5,7 +5,7 @@ import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
 import com.dwinovo.numen.core.pathing.cache.PathCaches;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
-import com.dwinovo.numen.core.task.ScanBlocksJob;
+import com.dwinovo.numen.core.scan.ScanBlocksJob;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;

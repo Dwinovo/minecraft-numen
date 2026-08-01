@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.scan.BlockScanner;
-import com.dwinovo.numen.core.task.ScanBlocksJob;
+import com.dwinovo.numen.core.scan.ScanBlocksJob;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;

@@ -337,8 +337,7 @@ public final class BlockHelper {
      * hazard. Returns {@code null} when breaking releases no flow.
      *
      * <p>The single source of truth for "breaking this unleashes a fluid",
-     * shared by the A* break cost ({@link #breakWouldCreateFlow}) and the
-     * miner's teach gate ({@code BlockMiningProgress.fluidBreakHazard}) so
+     * consulted by the A* break cost ({@link #breakWouldCreateFlow}) so
      * "safe to route through" and "safe to mine on purpose" never disagree.
      */
     public static Direction fluidReleasedByBreaking(BlockGetter level, BlockPos pos) {

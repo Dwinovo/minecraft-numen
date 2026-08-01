@@ -4,7 +4,7 @@ import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.task.CompanionTask;
-import com.dwinovo.numen.core.task.FailureType;
+import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.Suspendable;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskState;

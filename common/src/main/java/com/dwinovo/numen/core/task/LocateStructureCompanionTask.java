@@ -1,4 +1,7 @@
 package com.dwinovo.numen.core.task;
+import com.dwinovo.numen.core.scan.SearchBudget;
+import com.dwinovo.numen.core.scan.RingSpiral;
+import com.dwinovo.numen.core.FailureType;
 
 import com.dwinovo.numen.task.TaskState;
 

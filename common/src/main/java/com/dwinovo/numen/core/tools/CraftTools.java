@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
-import com.dwinovo.numen.core.task.PlayerInv;
+import com.dwinovo.numen.core.PlayerInv;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;

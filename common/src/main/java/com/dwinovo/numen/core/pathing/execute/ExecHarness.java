@@ -87,7 +87,7 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         dirty = true;
         // 每 tick 按意图格选最优工具(遮挡回退挖到别的方块时仍持意图格
         // 的工具;实际落地的挖掘不再改选)
-        com.dwinovo.numen.core.task.base.ToolSelect.holdBestTool(
+        com.dwinovo.numen.core.act.ToolSelect.holdBestTool(
                 player, player.level().getBlockState(pos));
         Vec3 eye = player.getEyePosition();
         Vec3 aimPoint = reachableAimPoint(pos);

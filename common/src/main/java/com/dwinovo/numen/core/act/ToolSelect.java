@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task.base;
+package com.dwinovo.numen.core.act;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.component.DataComponents;

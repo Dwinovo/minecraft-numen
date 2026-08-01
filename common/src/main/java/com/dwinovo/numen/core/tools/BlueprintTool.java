@@ -115,7 +115,7 @@ public final class BlueprintTool implements NumenTool {
             throw new IllegalArgumentException("blueprint " + a.file() + " contains no buildable cells");
         }
         // 材料记账随能力画像(同 build 工具):免耗材想建就建,否则消耗并预检报缺。
-        boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
+        boolean consume = !com.dwinovo.numen.core.WorkProfile.of(companion).freeMaterials();
         long timeout = Math.max(MIN_TIMEOUT_TICKS,
                 BuildTool.timeoutTicksFor(loaded.targets().size(), consume));
         // allowPartial:整幢图纸一趟运不完是常态,分段施工 + 精确续建

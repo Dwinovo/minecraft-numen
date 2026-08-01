@@ -1422,8 +1422,8 @@ public class CompanionGameTests {
         inv.add(new ItemStack(Items.SPRUCE_PLANKS, 5));
         inv.offhand.set(0, new ItemStack(Items.SPRUCE_PLANKS, 64));
 
-        int whole = com.dwinovo.numen.core.task.PlayerInv.count(inv, Items.SPRUCE_PLANKS);
-        int buildable = com.dwinovo.numen.core.task.PlayerInv
+        int whole = com.dwinovo.numen.core.PlayerInv.count(inv, Items.SPRUCE_PLANKS);
+        int buildable = com.dwinovo.numen.core.PlayerInv
                 .buildableCount(inv, Items.SPRUCE_PLANKS);
 
         helper.assertTrue(whole == 69,

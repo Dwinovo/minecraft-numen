@@ -3,7 +3,7 @@ package com.dwinovo.numen.core;
 import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
 import com.dwinovo.numen.core.pathing.cache.PathCaches;
-import com.dwinovo.numen.core.task.ScanBlocksJob;
+import com.dwinovo.numen.core.scan.ScanBlocksJob;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;

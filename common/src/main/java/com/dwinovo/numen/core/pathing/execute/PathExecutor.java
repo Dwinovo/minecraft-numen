@@ -560,7 +560,7 @@ public final class PathExecutor {
 
         // 与成本模型同判据:允许疾跑且饥饿值足够
         if (!(NavSettings.get().allowSprint
-                && (!com.dwinovo.numen.core.task.WorkProfile.of(player).hasHunger()
+                && (!com.dwinovo.numen.core.WorkProfile.of(player).hasHunger()
                         || player.getFoodData().getFoodLevel() > 6))) {
             return false;
         }

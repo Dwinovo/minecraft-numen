@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core;
 
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;

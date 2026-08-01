@@ -9,7 +9,7 @@ import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.task.TaskChain;
-import com.dwinovo.numen.core.task.base.ToolSelect;
+import com.dwinovo.numen.core.act.ToolSelect;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
 import com.dwinovo.numen.entity.NumenPlayer;

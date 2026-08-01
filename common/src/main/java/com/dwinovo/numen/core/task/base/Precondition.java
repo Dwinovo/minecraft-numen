@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.base;
 
-import com.dwinovo.numen.core.task.FailureType;
+import com.dwinovo.numen.core.FailureType;
 
 /**
  * A cheap, side-effect-free "can this task even begin?" gate, checked once by

@@ -124,13 +124,13 @@ public class CalculationContext {
         // 物品栏的代码版),规划器因此敢想所有需要垫方块的路线——不然空手
         // 创造同伴会挖坑出不来(离目标 2 格报 NO-PATH)。
         this.hasThrowaway = settings.allowPlace && (hasGenericThrowaway(player, settings)
-                || com.dwinovo.numen.core.task.WorkProfile.of(player).freeMaterials());
+                || com.dwinovo.numen.core.WorkProfile.of(player).freeMaterials());
         this.hasWaterBucket = settings.allowWaterBucketFall
                 && hotbarHasWaterBucket(player)
                 && player.level().dimension() != Level.NETHER;
         // 无饥饿画像(创造)不受饱食度门限——否则 food≤6 时被切创造会永久锁死疾跑
         this.canSprint = settings.allowSprint
-                && (!com.dwinovo.numen.core.task.WorkProfile.of(player).hasHunger()
+                && (!com.dwinovo.numen.core.WorkProfile.of(player).hasHunger()
                         || player.getFoodData().getFoodLevel() > 6);
         this.placeBlockCost = settings.blockPlacementPenalty;
         this.allowBreak = settings.allowBreak;

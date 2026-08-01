@@ -1,7 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.task.BlockMiningProgress;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
@@ -25,6 +24,9 @@ import net.minecraft.world.phys.Vec3;
  * name / description / schema and delegate here.
  */
 public final class PerceptionTools {
+
+    /** Vanilla {@code block_interaction_range} for players is 4.5. */
+    private static final double REACH_SQR = 4.5 * 4.5;
 
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() carries Mojang's
                                      // "deprecated for override" marker, not phased out.
@@ -67,8 +69,8 @@ int z,
         if (!state.isAir() && hardness >= 0) {
             float toolSpeed = hand.getDestroySpeed(state);
             if (toolSpeed <= 0.0F) toolSpeed = 1.0F;
-            // Same vanilla rule as BlockMiningProgress — block that doesn't
-            // require correct tool always uses fast divisor.
+            // Vanilla rule: a block that doesn't require the correct tool
+            // always uses the fast divisor.
             boolean fast = !needsTool || handIsRightTool;
             float divisor = fast ? 30.0F : 100.0F;
             int ticks = hardness == 0.0F
@@ -80,7 +82,7 @@ int z,
         Vec3 center = Vec3.atCenterOf(pos);
         double distSqr = self.distanceToSqr(center);
         root.addProperty("distance_to_me", Math.sqrt(distSqr));
-        root.addProperty("in_reach", distSqr <= BlockMiningProgress.REACH_SQR);
+        root.addProperty("in_reach", distSqr <= REACH_SQR);
 
         return root.toString();
     }

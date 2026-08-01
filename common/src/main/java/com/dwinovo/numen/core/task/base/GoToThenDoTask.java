@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.task.base;
 
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.task.FailureType;
+import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.NumenPlayer;
