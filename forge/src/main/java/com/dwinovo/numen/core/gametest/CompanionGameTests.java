@@ -2299,6 +2299,55 @@ public class CompanionGameTests {
         });
     }
 
+    /** A latched dig that temporarily loses its real reach must re-plan instead of blacklisting. */
+    @GameTest(template = "floor20", timeoutTicks = 2000, batch = "numen_mine_recovery")
+    public static void mine_no_shot_replans_before_blacklisting(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 10));
+        BlockPos ore = helper.absolutePos(new BlockPos(6, 2, 10));
+        level.setBlockAndUpdate(ore, Blocks.DIAMOND_ORE.defaultBlockState());
+
+        NumenPlayer companion = spawnAt(helper, "gametest_recovery_miner",
+                new BlockPos(2, 2, 10), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        TaskRecord record = new BlockActionTools().autoMine(
+                List.of("minecraft:diamond_ore"), 1,
+                TaskDispatch.ctx("gametest-recovery-mine", companion));
+        TaskDispatch.dispatchAsync(companion, record, reply -> {});
+
+        double[] originalReach = {
+                com.dwinovo.numen.core.pathing.settings.NavSettings.get().blockReachDistance
+        };
+        boolean[] sawStalledFirstAttempt = {false};
+        helper.startSequence()
+                // Let the exposed ore enter BlockDigger, then shrink only the real dig reach.
+                // HEAD's separate 4.5-block precheck keeps returning true and blacklists after
+                // NO_SHOT; the fixed task waits, re-plans, walks closer, and resumes.
+                .thenIdle(4)
+                .thenExecute(() -> com.dwinovo.numen.core.pathing.settings.NavSettings.get()
+                        .blockReachDistance = 1.5)
+                .thenIdle(12)
+                .thenExecute(() -> sawStalledFirstAttempt[0] =
+                        !level.getBlockState(ore).isAir()
+                                && companion.blockPosition().equals(spawn))
+                .thenIdle(400)
+                // Restore the process-global setting before any assertion can fail.
+                .thenExecute(() -> com.dwinovo.numen.core.pathing.settings.NavSettings.get()
+                        .blockReachDistance = originalReach[0])
+                .thenExecute(() -> {
+            helper.assertTrue(sawStalledFirstAttempt[0],
+                    "the first dig did not remain stalled during the reduced-reach window");
+            helper.assertTrue(!companion.blockPosition().equals(spawn),
+                    "the miner never moved closer after the bounded NO_SHOT re-plan");
+            helper.assertTrue(level.getBlockState(ore).isAir(),
+                    "the recoverable diamond ore was permanently abandoned");
+            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) >= 1,
+                    "the recovered dig did not collect its diamond");
+            CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
     // ==================== 能力画像用例(生存 / 创造 分道)====================
 
     /** 画像批次前置:和平难度 + 正午。 */

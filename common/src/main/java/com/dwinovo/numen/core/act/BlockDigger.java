@@ -135,7 +135,7 @@ public final class BlockDigger {
         // occluder: aim at the target's centre and break whatever the
         // crosshair actually hits, opening the way, instead of holding forever for a clear angle.
         // One guard: never grind a do_not_break / container block as the occluder.
-        BlockHitResult hit = reachableHit(target);
+        BlockHitResult hit = findReachableHit(target);
         BlockPos effective = target;
         if (hit == null) {
             BlockHitResult center = centerRaycast(target);
@@ -165,7 +165,7 @@ public final class BlockDigger {
             InputDriver.halt(player);
             return DigResult.PROGRESSING;
         }
-        BlockHitResult hit = reachableHit(target);
+        BlockHitResult hit = findReachableHit(target);
         InputDriver.halt(player);
         if (hit == null) {
             return DigResult.NO_SHOT;
@@ -271,12 +271,13 @@ public final class BlockDigger {
 
     /**
      * The first point ON {@code pos} the eye can
-     * actually raycast to — the block's shape centre first, then its six face centres. The
+     * actually raycast to — the block's shape centre first, then its six face centres. This is
+     * a pure query: it does not aim, select a tool, or change the current dig. The
      * returned {@link BlockHitResult} carries the exact aim point ({@code getLocation}) AND
      * the face the ray hits ({@code getDirection}), so the dig looks at the real interaction
      * face like a player would. {@code null} if nothing on the block is in line of sight.
      */
-    private BlockHitResult reachableHit(BlockPos pos) {
+    public BlockHitResult findReachableHit(BlockPos pos) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
         double reach = com.dwinovo.numen.core.pathing.moves.MovementHelper.blockReachDistance(player);
@@ -311,9 +312,9 @@ public final class BlockDigger {
 
     /**
      * A single ray from the eye to {@code target}'s shape centre — the break-the-occluder
-     * fallback when {@link #reachableHit} finds no clear face: the ray lands on the
+     * fallback when {@link #findReachableHit} finds no clear face: the ray lands on the
      * occluder (a leaf / a tight overhead), and we break THAT to open the way. Null on a miss / out
-     * of reach. ({@link #reachableHit} already tries the centre first, so if that hit the target it
+     * of reach. ({@link #findReachableHit} already tries the centre first, so if that hit the target it
      * would have returned it; reaching here means the centre ray hits something else.)
      */
     private BlockHitResult centerRaycast(BlockPos target) {

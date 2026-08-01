@@ -17,23 +17,16 @@ import com.dwinovo.numen.core.scan.TargetIndex;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -58,13 +51,12 @@ import java.util.Set;
  *       stands (centre or an exposed face, within block reach, unobstructed) is
  *       broken on the spot, nearest first, auto-switching to the best tool — no
  *       pathing, and never the block the body stands on.</li>
- *   <li><b>composite goal</b> — otherwise head for the whole ore field at once:
- *       one A* search over {@link NavGoal#composite} of {@link NavGoal#mine}
- *       stances, so it walks to the CLOSEST reachable ore (not greedy-nearest,
- *       which is often the walled-in one).</li>
- *   <li><b>blacklist</b> — when the path search fails, blacklist the nearest ore
- *       (presumed unreachable) and retry, so one walled-in ore can't stall the
- *       whole task.</li>
+ *   <li><b>owned navigation target</b> — otherwise select one ore stance or drop,
+ *       record its kind and position, and keep that ownership through navigation
+ *       so a failure can never be charged to a different member.</li>
+ *   <li><b>bounded recovery</b> — an arrival without a usable hit, or a dig
+ *       without a shot, gets one delayed re-plan before the affected member is
+ *       blacklisted.</li>
  *   <li><b>branch mine</b> — when no ore is known, head outward holding the
  *       y-level ({@link NavGoal#runAway}) to dig fresh tunnel and expose more,
  *       bounded by {@link #MAX_BRANCH_TICKS}.</li>
@@ -89,7 +81,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** 单次查询允许就地构建的 section 数上限——冷区域在几次查询内渐进变热,不压 tick
      *  (实测 64 时首窗峰 ~3.1ms,48 把单次查询的最坏构建成本压进 ~2.5ms)。 */
     private static final int QUERY_BUILD_BUDGET = 48;
-    private static final double REACH_SQR = 4.5 * 4.5;
     private static final double MINE_SPEED = 1.0;
     /** Give up branch-mining after this many ticks with no ore found (~30 s). */
     private static final int MAX_BRANCH_TICKS = 600;
@@ -100,23 +91,20 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * companion the player expects to stay nearby. Flip this to enable the opt-in
      * explore mode (the bounded branch-mine below). */
     private static final boolean EXPLORE_FOR_BLOCKS = false;
-    /** Consecutive {@code NO_SHOT} dig ticks on ONE ore before it is blacklisted —
-     *  the reach test said it was workable, but no shot ever materialises (aim
-     *  quantisation, a lip over the stance). Without this the dig could
-     *  grind forever waiting for a shot that never comes. */
-    private static final int MAX_NO_SHOT_TICKS = 20;
-    /** Consecutive ARRIVED-but-nothing-reachable-in-place ticks tolerated before the nearest ore is
-     *  blacklisted as a LAST resort. Below this the loop just re-evaluates (rescan / re-nav) instead of
-     *  discarding a possibly-fine ore — blacklisting belongs to genuinely failed paths, not arrivals.
-     *  ~2 s gives the periodic rescan several chances to re-stance first. */
-    private static final int MAX_ARRIVED_DUD = 40;
+    /** One second to let arrival/aim settle before a single bounded re-plan. A second
+     *  failed window gives up the exact attempted target, never an inferred neighbour. */
+    private static final int RECOVERY_WINDOW_TICKS = 20;
+    private static final int MAX_RECOVERY_REPATHS = 1;
     /** How long a just-broken target's cell stays a walk-over goal (ticks) — the drop
      *  takes a moment to spawn, and without this window the body sprints for the next
      *  ore before the item pops and leaves it behind. */
     private static final int DROP_LOITER_TICKS = 5;
 
     private final List<BlockPos> knownOres = new ArrayList<>();
+    /** Ore targets proven unreachable for this task. */
     private final Set<BlockPos> blacklist = new HashSet<>();
+    /** Failed walk-over goals are tracked separately so they never inflate ore failures. */
+    private final Set<BlockPos> dropBlacklist = new HashSet<>();
     /** Targets pruned because no carried tool harvests them (force=false only) — kept so the
      *  terminal failure can name the tool problem instead of reporting an empty field. */
     private final Set<BlockPos> unharvestable = new HashSet<>();
@@ -146,11 +134,16 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private long lastQueryChunk = Long.MIN_VALUE;
     private int branchTicks;
     private String progressNote = "done";
-    /** The ore currently returning {@code NO_SHOT}, and for how many consecutive ticks. */
-    private BlockPos noShotPos;
-    private int noShotTicks;
-    /** Consecutive ARRIVED-dud ticks (arrived at a stance but nothing mineable in place). */
-    private int arrivedDudTicks;
+    /** Intent target stays latched while BlockDigger may temporarily clear an occluder. */
+    private BlockPos miningTarget;
+    /** Exact business member owned by the active navigation, never inferred after failure. */
+    private MineNavigationAttempt navigationAttempt;
+    /** Business member being evaluated after its navigation reported ARRIVED. */
+    private MineNavigationAttempt arrivedAttempt;
+    private final MineTargetRecovery noShotRecovery =
+            new MineTargetRecovery(RECOVERY_WINDOW_TICKS, MAX_RECOVERY_REPATHS);
+    private final MineTargetRecovery arrivedRecovery =
+            new MineTargetRecovery(RECOVERY_WINDOW_TICKS, MAX_RECOVERY_REPATHS);
     /** 上一次索引查询是否覆盖完整(构建预算未耗尽)。false = 冷区域仍在渐进构建,
      *  终局判定("附近没有目标")必须等它为 true 才能下。 */
     private boolean lastQueryComplete;
@@ -231,17 +224,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         maybeQuery();
         NavProfiler.end("mine.upkeep", tUpkeep);
 
-        // 0) Continue an in-progress dig, locked onto its block (no re-selection)
-        //    until it breaks or drifts out of reach.
-        BlockPos digging = digger.current();
-        if (digging != null) {
-            if (level.getBlockState(digging).isAir() || !reachable(digging)) {
+        // 0) Continue the intent target, not digger.current(): the latter may temporarily
+        //    be a safe occluder that BlockDigger is clearing on the target's behalf.
+        if (miningTarget != null) {
+            if (!knownOres.contains(miningTarget)
+                    || level.getBlockState(miningTarget).isAir()) {
                 digger.cancel();
+                discardCurrentBusinessTarget();
             } else {
                 if (nav != null) {
                     nav.pause();   // stand still for the dig; goal/path/in-flight search stay warm
                 }
-                mineProgress(digging);
+                mineProgress(miningTarget);
                 return TaskState.RUNNING;
             }
         }
@@ -254,7 +248,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         //    a tree gets mined from beside, never by digging under it.
         BlockPos reachable = reachableTarget();
         if (reachable != null) {
-            arrivedDudTicks = 0;   // mining in place = progress; the dud streak only counts consecutive stuck ticks
+            arrivedRecovery.clear();
+            if (!reachable.equals(noShotRecovery.target())) {
+                noShotRecovery.clear();
+            }
+            navigationAttempt = null;
+            arrivedAttempt = null;
             // Mine in place with the nav merely PAUSED (inputs cleared each tick), never torn down:
             // the goal, current path segment, and any in-flight search stay warm, so when this dig
             // ends navigation resumes where it left off instead of cold-starting a fresh A* — that
@@ -267,26 +266,23 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             return TaskState.RUNNING;
         }
 
-        // 2) Head for the ore field + nearby drops (GoalComposite), arriving when a
-        //    shaft opens up; drops are collected by walking over them (native pickup).
+        // 2) Head for the ore field and nearby drops, arriving when a shaft opens up;
+        //    drops are collected by walking over them (native pickup).
         if (!knownOres.isEmpty() || !drops.isEmpty()) {
             branchTicks = 0;
-            if (nav == null || navIsBranch) {
+            if ((navigationAttempt != null && !navigationTargetValid(navigationAttempt))
+                    || (arrivedAttempt != null && !navigationTargetValid(arrivedAttempt))) {
+                discardCurrentBusinessTarget();
                 stopNav();
-                // Compiled front door: one composite over every known ore's stance plus nearby
-                // drops. The route MAY chop a target on the way past — an en-route break is
-                // progress (prune drops the cell, the drop members collect the item, and the
-                // tally counts inventory); see GoalCompiler.mineField.
-                // Revalidating: the ore field changes every few ticks (mined cells pruned,
-                // rescans merging, blacklists trimming), so hand the freshly compiled goal to
-                // the engine EVERY tick — the current segment is kept unless its destination
-                // is no longer accepted by the new goal (then it soft-cancels and re-plans),
-                // and standing in a stance whose ore just got mined out resumes navigation
-                // instead of reporting a stale arrival.
-                nav = PlayerNav.toRevalidating(player, this::oreFieldCompiled, MINE_SPEED,
-                        () -> reachableTarget() != null);
-                nav.setHighlights(() -> new ArrayList<>(knownOres));   // box every known target
-                navIsBranch = false;
+            }
+            if (nav == null || navIsBranch
+                    || (navigationAttempt == null && arrivedAttempt == null)) {
+                MineNavigationAttempt next = selectNavigationTarget();
+                if (next == null) {
+                    stopNav();
+                    return TaskState.RUNNING;
+                }
+                startNavigation(next);
             }
             switch (nav.tick()) {
                 case RUNNING -> { return TaskState.RUNNING; }
@@ -295,47 +291,53 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     // pauses the nav and digs. Only clear inputs here (pause), never tear the nav down:
                     // teardown would throw away the goal + any in-flight search and force a cold restart.
                     nav.pause();
-                    // Arrived at the stance goal but nothing is actually hittable from here (occluded,
-                    // or the target sits beyond reach above and we can't stand any closer).
-                    // Don't discard a possibly-fine ore for that: re-evaluate (rescan / re-nav) and only
-                    // if the body stays stuck arriving-but-never-mining for MAX_ARRIVED_DUD ticks
-                    // blacklist the nearest as a last resort, so a single dud can't strand good targets.
-                    if (reachableTarget() == null && !knownOres.isEmpty()) {
-                        arrivedDudTicks++;
-                        // [ANCHOR arrived-dud] the EVENT (first stuck tick) logs at INFO; the rest of a
-                        // 5-9 tick streak goes to debug so a routine blip can't spam the release log.
-                        if (arrivedDudTicks == 1) {
-                            com.dwinovo.numen.Constants.LOG.info(
-                                    "[numen-task] mine ARRIVED-dud feet={} nearestOre={} — re-evaluating (not blacklisting)",
-                                    player.blockPosition().toShortString(), nearestOreInfo());
-                        } else {
-                            com.dwinovo.numen.Constants.LOG.debug(
-                                    "[numen-task] mine ARRIVED-dud feet={} streak={}/{} nearestOre={}",
-                                    player.blockPosition().toShortString(), arrivedDudTicks, MAX_ARRIVED_DUD,
-                                    nearestOreInfo());
+                    BlockPos hit = reachableTarget();
+                    if (hit != null) {
+                        arrivedRecovery.clear();   // next tick's in-place stage starts the dig
+                        navigationAttempt = null;
+                        arrivedAttempt = null;
+                    } else {
+                        MineNavigationAttempt arrived = arrivedAttempt;
+                        if (arrived == null) {
+                            arrived = navigationAttempt;
+                            navigationAttempt = null;
+                            arrivedAttempt = arrived;
                         }
-                        if (arrivedDudTicks >= MAX_ARRIVED_DUD) {
-                            // [ANCHOR arrived-dud-giveup] persisted too long → last-resort blacklist.
+                        if (arrived == null || !navigationTargetValid(arrived)) {
+                            discardCurrentBusinessTarget();
+                            stopNav();
+                            return TaskState.RUNNING;
+                        }
+                        MineTargetRecovery.Decision decision = arrivedRecovery.miss(arrived.pos());
+                        if (arrivedRecovery.ticks() == 1) {
                             com.dwinovo.numen.Constants.LOG.info(
-                                    "[numen-task] mine ARRIVED-dud persisted {} ticks — blacklisting nearest as last resort",
-                                    arrivedDudTicks);
-                            blacklistNearest();
-                            arrivedDudTicks = 0;
-                            // The nav sits in a satisfied-goal state pointed at the field we just trimmed;
-                            // drop it so next tick re-plans fresh against the remaining targets.
+                                    "[numen-task] mine ARRIVED-dud feet={} attempted={} kind={} repaths={} — waiting",
+                                    player.blockPosition().toShortString(), arrived.pos().toShortString(),
+                                    arrived.kind() == MineNavigationAttempt.Kind.ORE ? "ore" : "drop",
+                                    arrivedRecovery.repaths());
+                        }
+                        if (decision == MineTargetRecovery.Decision.REPATH) {
+                            com.dwinovo.numen.Constants.LOG.info(
+                                    "[numen-task] mine ARRIVED-dud attempted={} — bounded re-plan",
+                                    arrived.pos().toShortString());
+                            startNavigation(arrived);
+                        } else if (decision == MineTargetRecovery.Decision.GIVE_UP) {
+                            blacklistAttempt(arrived, "arrival never produced a reachable hit");
+                            discardCurrentBusinessTarget();
                             stopNav();
                         }
-                    } else {
-                        arrivedDudTicks = 0;   // made it minable, or list emptied — clear the streak
                     }
                     return TaskState.RUNNING;   // a reachable shaft is handled next tick
                 }
                 case FAILED -> {
-                    // [ANCHOR nav-failed] genuine no-path to the ore field → blacklist the nearest as presumed unreachable.
+                    MineNavigationAttempt failed = navigationAttempt;
                     com.dwinovo.numen.Constants.LOG.info(
-                            "[numen-task] mine nav failed ({}): {} | nearestOre={}",
-                            nav.failType(), nav.failReason(), nearestOreInfo());
-                    blacklistNearest();
+                            "[numen-task] mine nav failed ({}): {} | candidate={} kind={}",
+                            nav.failType(), nav.failReason(),
+                            failed == null ? "none" : failed.pos().toShortString(),
+                            failed == null ? "none" : failed.kind().name().toLowerCase());
+                    blacklistAttempt(failed, "navigation failed: " + nav.failType());
+                    discardCurrentBusinessTarget();
                     stopNav();
                     return TaskState.RUNNING;
                 }
@@ -388,22 +390,48 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     // ---- goals ----
 
-    /** The whole mining objective, compiled: a stance per ore + a walk-over member
-     *  per nearby drop — one A* search heads for the closest of either. The route
-     *  may chop targets en route; see {@link GoalCompiler#mineField}. */
-    private GoalCompiler.Compiled oreFieldCompiled() {
-        if (knownOres.isEmpty() && drops.isEmpty()) {
-            // Degenerate frame (targets vanished between ticks): stand where we are.
+    /** Compile only the business member owned by the active navigation attempt. */
+    private GoalCompiler.Compiled navigationGoalCompiled() {
+        MineNavigationAttempt attempt = navigationAttempt;
+        if (attempt == null || !navigationTargetValid(attempt)) {
             return GoalCompiler.standOn(player.blockPosition());
         }
-        CalculationContext ctx = ContextFactory.forExecution(player);
-        List<GoalCompiler.Stance> stances =
-                new ArrayList<>(knownOres.size());
-        for (BlockPos ore : knownOres) {
-            stances.add(coalesce(ctx, ore));
+        if (attempt.kind() == MineNavigationAttempt.Kind.DROP) {
+            return GoalCompiler.standOn(attempt.pos());
         }
-        return GoalCompiler.mineField(
-                stances, new ArrayList<>(drops));
+        CalculationContext ctx = ContextFactory.forExecution(player);
+        return GoalCompiler.mineField(List.of(coalesce(ctx, attempt.pos())), List.of());
+    }
+
+    private MineNavigationAttempt selectNavigationTarget() {
+        return MineNavigationAttempt.nearest(player.blockPosition(), knownOres, drops);
+    }
+
+    private boolean navigationTargetValid(MineNavigationAttempt attempt) {
+        if (attempt.kind() == MineNavigationAttempt.Kind.DROP) {
+            return drops.contains(attempt.pos());
+        }
+        BlockState state = player.level().getBlockState(attempt.pos());
+        return knownOres.contains(attempt.pos()) && !state.isAir()
+                && r.targets.contains(state.getBlock());
+    }
+
+    private void startNavigation(MineNavigationAttempt attempt) {
+        stopNav();
+        if (!navigationTargetValid(attempt)) {
+            discardCurrentBusinessTarget();
+            return;
+        }
+        // Preserve the spent budget only for the same valid ore's NO_SHOT re-plan.
+        if (attempt.kind() != MineNavigationAttempt.Kind.ORE
+                || !attempt.pos().equals(noShotRecovery.target())) {
+            noShotRecovery.clear();
+        }
+        navigationAttempt = attempt;
+        nav = PlayerNav.toRevalidating(player, this::navigationGoalCompiled, MINE_SPEED,
+                () -> reachableTarget() != null);
+        nav.setHighlights(() -> new ArrayList<>(knownOres));
+        navIsBranch = false;
     }
 
     /**
@@ -523,11 +551,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         for (ItemEntity ie : level.getEntitiesOfClass(ItemEntity.class, box)) {
             if (!dropItems.contains(ie.getItem().getItem())) continue;
             BlockPos p = ie.blockPosition();
-            if (blacklist.contains(p) || nearKnownOre(p)) continue;
+            if (dropBlacklist.contains(p) || nearKnownOre(p)) continue;
             out.add(p);
         }
         for (BlockPos p : anticipatedDrops.keySet()) {
-            if (blacklist.contains(p) || nearKnownOre(p)) continue;
+            if (dropBlacklist.contains(p) || nearKnownOre(p)) continue;
             out.add(p);
         }
         return out;
@@ -548,14 +576,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     /**
      * The in-place mining pick: the nearest known target the eyes can ACTUALLY hit from where the body
-     * stands right now ({@link #reachable}: centre + exposed face points, within block reach, nothing
+     * stands right now ({@link BlockDigger#findReachableHit}: centre + exposed face points, within block reach, nothing
      * solid in the way) — mined on the spot, no pathing. Column and height don't matter; hittability
      * does. The one hard exception is the support cell directly under the feet — never dig out our own
      * floor. Anything the eyes can't hit from here is left to the navigator (walk to a stance, pillar
      * up, etc.).
      */
     private BlockPos reachableTarget() {
-        if (!player.onGround()) return null;
         Level level = player.level();
         BlockPos feet = player.blockPosition();
         BlockPos support = feet.below();
@@ -569,64 +596,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 continue;
             }
             double d = ore.distSqr(feet.above());
-            if (d >= bestD || !reachable(ore)) {
+            if (d >= bestD || digger.findReachableHit(ore) == null) {
                 continue;
             }
             bestD = d;
             best = ore;
         }
         return best;
-    }
-
-    /** Face points of a block (each face centre, from its collision shape), tried when the block's own
-     *  centre is occluded — so a block whose centre is blocked but whose face is exposed still counts,
-     *  the way a real click can catch it at an angle. */
-    private static final Vec3[] BLOCK_FACE_POINTS = {
-            new Vec3(0.5, 0, 0.5), new Vec3(0.5, 1, 0.5),
-            new Vec3(0.5, 0.5, 0), new Vec3(0.5, 0.5, 1),
-            new Vec3(0, 0.5, 0.5), new Vec3(1, 0.5, 0.5),
-    };
-
-    /**
-     * Can the body reach {@code target} to break it from where it stands right now — an eye-line to the
-     * block (its centre first, then each exposed face point) within block-interaction range
-     * ({@link #REACH_SQR}) that nothing solid obstructs but the target itself. Reach is measured from the
-     * EYE, so an upward target is reachable as high as a standing body's eyes allow — not merely what its
-     * feet are next to — and a face-occluded block is still reachable via an exposed side.
-     */
-    private boolean reachable(BlockPos target) {
-        Vec3 eyes = player.getEyePosition();
-        if (reachableAt(eyes, target, Vec3.atCenterOf(target))) {
-            return true;
-        }
-        VoxelShape shape = player.level().getBlockState(target).getShape(player.level(), target);
-        if (shape.isEmpty()) {
-            shape = Shapes.block();
-        }
-        for (Vec3 m : BLOCK_FACE_POINTS) {
-            double xDiff = shape.min(Direction.Axis.X) * m.x + shape.max(Direction.Axis.X) * (1 - m.x);
-            double yDiff = shape.min(Direction.Axis.Y) * m.y + shape.max(Direction.Axis.Y) * (1 - m.y);
-            double zDiff = shape.min(Direction.Axis.Z) * m.z + shape.max(Direction.Axis.Z) * (1 - m.z);
-            if (reachableAt(eyes, target,
-                    new Vec3(target.getX() + xDiff, target.getY() + yDiff, target.getZ() + zDiff))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Is {@code point} within reach of {@code eyes}, and does an eye→point ray hit {@code target} first
-     *  (nothing solid in the way)? */
-    private boolean reachableAt(Vec3 eyes, BlockPos target, Vec3 point) {
-        if (eyes.distanceToSqr(point) > REACH_SQR) {
-            return false;
-        }
-        // OUTLINE (the selection shape), matching how a real click picks a block and what BlockDigger's
-        // own reach ray uses — so this gate and the actual dig never disagree about whether a block is
-        // hittable (a COLLIDER gate could green-light an ore the digger then can't draw a shot at).
-        BlockHitResult hit = player.level().clip(new ClipContext(
-                eyes, point, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
-        return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(target);
     }
 
     // ---- mining (progressive, tick-by-tick like a real player) ----
@@ -637,11 +613,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  the inventory each tick, not here — one block can yield several items, and the drops take a
      *  moment to be picked up.
      *
-     *  <p>Recovery: a PERSISTENT {@code NO_SHOT} (the ore passed the reach test but the dig
-     *  can never draw a shot at it) is counted, and after {@link #MAX_NO_SHOT_TICKS} the ore
-     *  is blacklisted and the loop moves on — matching how a failed path already blacklists
-     *  the nearest ore, instead of grinding forever waiting for a shot. */
+     *  <p>Recovery: persistent {@code NO_SHOT} gets one bounded re-plan before the exact
+     *  intent target is blacklisted. */
     private void mineProgress(BlockPos pos) {
+        miningTarget = pos.immutable();
         switch (digger.digStep(pos)) {
             case BROKE_TARGET -> {
                 knownOres.remove(pos);
@@ -651,29 +626,34 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     anticipatedDrops.put(pos.immutable(),
                             player.level().getGameTime() + DROP_LOITER_TICKS);
                 }
-                clearNoShot();
+                discardCurrentBusinessTarget();
             }
             case NO_SHOT -> {
-                if (pos.equals(noShotPos)) {
-                    if (++noShotTicks >= MAX_NO_SHOT_TICKS) {
-                        blacklist.add(pos.immutable());
-                        knownOres.remove(pos);
-                        digger.cancel();   // release the in-progress-dig latch on this ore
-                        clearNoShot();
-                    }
-                } else {
-                    noShotPos = pos.immutable();
-                    noShotTicks = 1;
+                MineTargetRecovery.Decision decision = noShotRecovery.miss(pos);
+                if (decision == MineTargetRecovery.Decision.REPATH) {
+                    com.dwinovo.numen.Constants.LOG.info(
+                            "[numen-task] mine NO_SHOT target={} — cancelling dig and re-planning once",
+                            pos.toShortString());
+                    digger.cancel();
+                    miningTarget = null;
+                    arrivedRecovery.clear();
+                    startNavigation(new MineNavigationAttempt(
+                            pos, MineNavigationAttempt.Kind.ORE));
+                } else if (decision == MineTargetRecovery.Decision.GIVE_UP) {
+                    blacklistAttempt(new MineNavigationAttempt(
+                                    pos, MineNavigationAttempt.Kind.ORE),
+                            "no reachable dig hit after bounded re-plan");
+                    digger.cancel();
+                    discardCurrentBusinessTarget();
+                    stopNav();
                 }
             }
-            // PROGRESSING / BROKE_OCCLUDER — real progress; reset the stall counter.
-            default -> clearNoShot();
+            // PROGRESSING / BROKE_OCCLUDER — real progress; reset recovery.
+            default -> {
+                noShotRecovery.clear();
+                arrivedRecovery.clear();
+            }
         }
-    }
-
-    private void clearNoShot() {
-        noShotPos = null;
-        noShotTicks = 0;
     }
 
     // ---- item counting (progress = matching items held in the inventory) ----
@@ -811,45 +791,37 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         }
     }
 
-    /** Nearest known ore to the feet, or null — for the "near ore exists but heading far" diagnostics. */
-    private BlockPos nearestOre() {
-        BlockPos feet = player.blockPosition();
-        return knownOres.stream().min(Comparator.comparingDouble(feet::distSqr)).orElse(null);
-    }
-
-    /** Log-friendly nearest-ore descriptor (ASCII so it survives any log encoding):
-     *  "316,64,391 minecraft:oak_log dy=+0 dist=1.0" or "none". dy = ore.y - feet.y (spot "it's 4 up,
-     *  needs pillaring" vs "same level"); the block id spots a mis-handled type (vine/leaves/etc.). */
-    private String nearestOreInfo() {
-        BlockPos n = nearestOre();
-        if (n == null) {
-            return "none";
+    private void blacklistAttempt(MineNavigationAttempt attempt, String reason) {
+        if (attempt == null) return;
+        BlockPos pos = attempt.pos();
+        if (attempt.kind() == MineNavigationAttempt.Kind.ORE) {
+            BlockState state = player.level().getBlockState(pos);
+            if (!knownOres.contains(pos) || state.isAir()
+                    || !r.targets.contains(state.getBlock())) {
+                knownOres.remove(pos);   // vanished/changed is not a navigation failure
+                return;
+            }
+            attempt.recordFailure(blacklist, dropBlacklist);
+            knownOres.remove(pos);
+        } else {
+            if (!drops.contains(pos)) return;   // already picked up/despawned
+            attempt.recordFailure(blacklist, dropBlacklist);
+            drops.remove(pos);
         }
-        BlockPos feet = player.blockPosition();
-        String block = net.minecraft.core.registries.BuiltInRegistries.BLOCK
-                .getKey(player.level().getBlockState(n).getBlock()).toString();
-        int dy = n.getY() - feet.getY();
-        return n.toShortString() + " " + block + " dy=" + (dy >= 0 ? "+" + dy : dy)
-                + " dist=" + String.format("%.1f", Math.sqrt(feet.distSqr(n)));
+        com.dwinovo.numen.Constants.LOG.info(
+                "[numen-task] mine blacklisted {} kind={} reason={} (feet={}, {} ore(s) left,"
+                        + " {} ore(s) blacklisted)",
+                pos.toShortString(), attempt.kind().name().toLowerCase(), reason,
+                player.blockPosition().toShortString(), knownOres.size(), blacklist.size());
     }
 
-    private void blacklistNearest() {
-        BlockPos feet = player.blockPosition();
-        // 掉落物路过点与矿位同池:走不到的那个不管是矿还是掉落物都拉黑,
-        // 否则一个够不着的掉落物能让循环原地打转到超时。
-        List<BlockPos> pool = new ArrayList<>(knownOres);
-        pool.addAll(drops);
-        pool.stream()
-                .min(Comparator.comparingDouble(feet::distSqr))
-                .ifPresent(p -> {
-                    blacklist.add(p.immutable());
-                    knownOres.remove(p);
-                    com.dwinovo.numen.Constants.LOG.info(
-                            "[numen-task] mine blacklisted {} (feet={}, {} target(s) left,"
-                                    + " {} blacklisted)",
-                            p.toShortString(), feet.toShortString(), knownOres.size(),
-                            blacklist.size());
-                });
+    /** Forget all transient state owned by a business target that ended or became invalid. */
+    private void discardCurrentBusinessTarget() {
+        navigationAttempt = null;
+        arrivedAttempt = null;
+        miningTarget = null;
+        arrivedRecovery.clear();
+        noShotRecovery.clear();
     }
 
     /** Terminal "nothing gathered, no ore left to go for" failure, distinguishing a
@@ -880,11 +852,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return TaskState.FAILED;
     }
 
-    /** Stop the nav AND clear the branch-mode flag (extends the base's nav release). */
+    /** Stop the nav and clear branch-mode state. */
     @Override
     protected void stopNav() {
         super.stopNav();
         navIsBranch = false;
+        navigationAttempt = null;
+        arrivedAttempt = null;
     }
 
     @Override
@@ -894,6 +868,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // clears its lingering goal boxes. Then release the dig + the index registration.
         super.cleanup();
         digger.cancel();
+        discardCurrentBusinessTarget();
         if (player.level() instanceof ServerLevel sl) {
             TargetIndex.unregister(sl, r.targets);
         }
