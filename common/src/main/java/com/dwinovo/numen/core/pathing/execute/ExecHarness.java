@@ -214,7 +214,23 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
             // 进行中的挖掘取消归零——遮挡消失后从头重挖,不续存进度
             BlockHitResult hit = pickAlongView();
             if (hit != null) {
-                digger.digStep(hit);
+                BlockPos cur = digger.current();
+                if (cur != null && !hit.getBlockPos().equals(cur)
+                        && hit.getBlockPos().distManhattan(cur) <= 2
+                        && !player.level().getBlockState(cur).isAir()) {
+                    // 挖掘目标迟滞:贴着棱线的射线会在相邻两格间抖动,而换靶即取消
+                    // 重挖——任由它抖,两格谁都永远挖不穿。已在挖的格子还实心、准星
+                    // 只是滑到紧邻格(仍看着原目标方向)时,继续挖原目标不换靶;挖穿
+                    // 或目标失效后自然跟随准星。
+                    digger.digStep(cur);
+                } else {
+                    if (!hit.getBlockPos().equals(cur)) {
+                        com.dwinovo.numen.Constants.LOG.debug("[numen-path] exec dig {} ({})",
+                                hit.getBlockPos().toShortString(),
+                                player.level().getBlockState(hit.getBlockPos()).getBlock());
+                    }
+                    digger.digStep(hit);
+                }
                 digTicked = true;
             } else if (digger.current() != null) {
                 digger.cancel();
