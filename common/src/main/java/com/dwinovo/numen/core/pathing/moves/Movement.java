@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.FallingBlockEntity;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -129,7 +130,12 @@ public abstract class Movement {
     public static BlockPos feet(ServerPlayer player) {
         BlockPos f = BlockPos.containing(
                 player.position().x, player.position().y + 0.1251, player.position().z);
-        if (player.level().getBlockState(f).getBlock() instanceof SlabBlock) {
+        BlockState at = player.level().getBlockState(f);
+        // 楼梯与半砖同理:踩在矮的那半格上时,实体 y 只比格底高半格,加完偏移
+        // 仍落在该格自身里,而寻路模型认定人站在它<b>上面</b>那一格。两把尺不
+        // 一致,执行器就会认为"人不在本动作的合法位上",前后重定位都对不上,
+        // 动作硬撑到超时——而这栋房子越往高层楼梯越密,正好卡在爬升的关口。
+        if (at.getBlock() instanceof SlabBlock || at.getBlock() instanceof StairBlock) {
             return f.above();
         }
         return f;

@@ -1,7 +1,6 @@
 package com.dwinovo.numen.core.pathing.cache;
 
 import com.dwinovo.numen.core.pathing.util.BlockEntityAware;
-import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.BlockGetter;
@@ -15,10 +14,19 @@ import net.minecraft.world.level.material.FluidState;
 
 /**
  * A {@link BlockGetter} over a {@link LoadedChunks} snapshot — the search-side world view.
- * Loaded chunk → read its LIVE section
- * palette; not in the snapshot (unloaded) → AIR (an optimistic miss). Reads are
- * memoized per search (each cell once), and
- * {@link com.dwinovo.numen.core.pathing.util.BlockHelper} reads it unchanged.
+ * Loaded chunk → read its LIVE section palette; not in the snapshot (unloaded) → AIR
+ * (an optimistic miss).
+ *
+ * <p><b>Caching is a single last-chunk pointer, not a per-cell memo.</b> A* expands locally, so consecutive block reads almost
+ * always land in the same chunk — {@link #prev} short-circuits those to a direct palette
+ * read with zero per-read allocation; only a chunk boundary costs one snapshot lookup.
+ * A per-position {@code Long2ObjectOpenHashMap} memo (the previous design) instead balloons
+ * to millions of entries over a multi-second search and repeatedly resizes, and the
+ * resulting GC churn stop-the-worlds the (integrated) server thread — every entity stutters
+ * in lockstep. The last-chunk cache has O(1) footprint and never allocates on the hot path.
+ *
+ * <p>Single-threaded per instance: one search runs on one worker, so the mutable
+ * {@link #prev} needs no synchronisation.
  */
 public final class CachedNavView implements BlockGetter, BlockEntityAware {
 
@@ -26,7 +34,9 @@ public final class CachedNavView implements BlockGetter, BlockEntityAware {
 
     private final LoadedChunks loaded;
     private final Level level;
-    private final Long2ObjectOpenHashMap<BlockState> memo = new Long2ObjectOpenHashMap<>();
+
+    /** Last chunk read from — see class doc. Only ever holds a snapshot chunk (or null). */
+    private LevelChunk prev;
 
     public CachedNavView(LoadedChunks loaded, Level level) {
         this.loaded = loaded;
@@ -35,14 +45,7 @@ public final class CachedNavView implements BlockGetter, BlockEntityAware {
 
     @Override
     public BlockState getBlockState(BlockPos pos) {
-        long key = pos.asLong();
-        BlockState cached = memo.get(key);
-        if (cached != null) {
-            return cached;
-        }
-        BlockState state = read(pos.getX(), pos.getY(), pos.getZ());
-        memo.put(key, state);
-        return state;
+        return read(pos.getX(), pos.getY(), pos.getZ());
     }
 
     /** Was the chunk containing block-column ({@code blockX},{@code blockZ}) captured in the
@@ -56,7 +59,16 @@ public final class CachedNavView implements BlockGetter, BlockEntityAware {
         if (y < level.getMinY() || y >= level.getMinY() + level.getHeight()) {
             return AIR;
         }
-        LevelChunk chunk = loaded.at(SectionPos.blockToSectionCoord(x), SectionPos.blockToSectionCoord(z));
+        int chunkX = SectionPos.blockToSectionCoord(x);
+        int chunkZ = SectionPos.blockToSectionCoord(z);
+        // Great cache locality: A* expands locally, so reads usually land in the same chunk as the previous one.
+        LevelChunk chunk = prev;
+        if (chunk == null || chunk.getPos().x != chunkX || chunk.getPos().z != chunkZ) {
+            chunk = loaded.at(chunkX, chunkZ);
+            if (chunk != null) {
+                prev = chunk;   // cache hits only; unloaded stays a cheap re-miss
+            }
+        }
         if (chunk == null) {
             return AIR;   // unloaded / outside the snapshot — optimistic miss → AIR
         }
