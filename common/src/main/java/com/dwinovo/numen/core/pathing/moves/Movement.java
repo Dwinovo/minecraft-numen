@@ -12,6 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.FallingBlockEntity;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.SlabBlock;
+import net.minecraft.world.level.block.StairBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
@@ -129,7 +130,12 @@ public abstract class Movement {
     public static BlockPos feet(ServerPlayer player) {
         BlockPos f = BlockPos.containing(
                 player.position().x, player.position().y + 0.1251, player.position().z);
-        if (player.level().getBlockState(f).getBlock() instanceof SlabBlock) {
+        BlockState at = player.level().getBlockState(f);
+        // 楼梯与半砖同理:踩在矮的那半格上时,实体 y 只比格底高半格,加完偏移
+        // 仍落在该格自身里,而寻路模型认定人站在它<b>上面</b>那一格。两把尺不
+        // 一致,执行器就会认为"人不在本动作的合法位上",前后重定位都对不上,
+        // 动作硬撑到超时——而这栋房子越往高层楼梯越密,正好卡在爬升的关口。
+        if (at.getBlock() instanceof SlabBlock || at.getBlock() instanceof StairBlock) {
             return f.above();
         }
         return f;
@@ -199,7 +205,7 @@ public abstract class Movement {
      */
     public MovementStatus update() {
         // 强制关闭飞行能力:寻路执行期走地面物理(跳跃/下落),不被外部
-        // 置真的飞行状态干扰(对应 Baritone Movement.java:124)
+        // 置真的飞行状态干扰
         player.getAbilities().flying = false;
         currentState = updateState(currentState);
         BlockPos feet = feet(player);
@@ -209,7 +215,7 @@ public abstract class Movement {
         }
         if (player.isInWall()) {
             // 卡墙自救:先换上对当前准星命中方块最优的工具再按左键,
-            // 破墙速度不拖(对应 Baritone Movement.java:129-132)
+            // 破墙速度不拖
             BlockState hitState = crosshairBlockState();
             if (hitState != null && player instanceof com.dwinovo.numen.entity.NumenPlayer np) {
                 com.dwinovo.numen.core.task.base.ToolSelect.holdBestTool(np, hitState);
