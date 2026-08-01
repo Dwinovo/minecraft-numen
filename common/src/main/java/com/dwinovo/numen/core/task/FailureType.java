@@ -65,6 +65,14 @@ public enum FailureType {
     TIMED_OUT,
     /** The record type had no registered runner. */
     UNSUPPORTED,
+    /**
+     * 任务自己抛了异常——<b>我们的 bug,不是世界的问题</b>。
+     *
+     * <p>单列一档而不是并进 {@link #UNKNOWN}:那一档的意思是"原因没归类",而这一档的
+     * 意思是"这里本不该发生"。两者对模型的含义完全不同——前者可以换个法子再试,后者
+     * 再试多少遍都一样,而且该被人看见。
+     */
+    INTERNAL,
     /** Cause not classified. */
     UNKNOWN;
 }

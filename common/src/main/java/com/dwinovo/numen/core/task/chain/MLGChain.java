@@ -5,6 +5,7 @@ import com.dwinovo.numen.task.reflex.Reflex;
 
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.task.SurvivalConfig;
+import com.dwinovo.numen.core.task.WorkProfile;
 import com.dwinovo.numen.task.TaskChain;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -61,6 +62,11 @@ public final class MLGChain implements TaskChain, com.dwinovo.numen.task.reflex.
         if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
         if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
             return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+        }
+        // 无畏画像(创造):摔不痛,救援毫无意义;而且创造下水桶永不清空,
+        // "倒完即停"的安全阀失效,触发只会一路撒水。整条链休眠。
+        if (WorkProfile.of(companion).fearless()) {
+            return SurvivalDecisions.DORMANT;
         }
         boolean canSave = waterBucketSlot(companion) >= 0 || softBlockSlot(companion) >= 0;
         return SurvivalDecisions.mlgPriority(companion.onGround(), companion.fallDistance, canSave);
