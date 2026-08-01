@@ -16,10 +16,10 @@ import java.util.Map;
  * 工具层全部共用,加载器对格式来源无感。
  *
  * <ul>
- *   <li>{@code .litematic}(Litematica):多区域,调色板即原版形状的
+ *   <li>{@code .litematic}:多区域,调色板即原版形状的
  *       {Name, Properties} 复合标签,方块索引是<b>跨 long 连续位流</b>
  *       (与区块存储"每 long 取整不跨界"不同),YZX 序;</li>
- *   <li>{@code .schem}(Sponge/WorldEdit v2/v3):调色板是
+ *   <li>{@code .schem}(v2/v3):调色板是
  *       {@code "ns:block[k=v]" → id} 映射,方块数据为 LEB128 varint 字节流,
  *       YZX 序(x 最快)。</li>
  * </ul>
@@ -156,7 +156,7 @@ final class BlueprintFormats {
                 Math.abs(size.getIntOr("z", 0))};
     }
 
-    /** Litematica 的跨 long 连续位流取值。 */
+    /** {@code .litematic} 的跨 long 连续位流取值。 */
     private static int unpack(long[] longs, int bits, long index) {
         long mask = (1L << bits) - 1;
         long startOffset = index * bits;
@@ -175,7 +175,7 @@ final class BlueprintFormats {
     }
 
     // ------------------------------------------------------------------
-    // .schem(Sponge v2 根级 / v3 嵌套 Schematic.Blocks)
+    // .schem(v2 根级 / v3 嵌套 Schematic.Blocks)
     // ------------------------------------------------------------------
 
     static CompoundTag fromSchem(CompoundTag rootIn) {
