@@ -18,11 +18,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Block-action tools authored on the {@link NumenAction} surface — the
- * world-action dogfood for construction and native interaction. Each method
- * validates its args and builds a {@link TaskRecord}; the {@link ToolContext}
- * carries the call id and deadline basis. Behaviour matches the hand-written
- * {@code NumenTool} classes they replace.
+ * Block-action tool implementations — the business half of {@code AutoMineTool},
+ * {@code InteractAtTool} and {@code InteractEntityTool}. Each method validates its
+ * args and builds a {@link TaskRecord}; the {@link ToolContext} carries the call
+ * id and deadline basis.
  */
 public final class BlockActionTools {
 

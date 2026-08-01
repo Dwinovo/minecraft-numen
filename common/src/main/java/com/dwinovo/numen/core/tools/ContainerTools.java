@@ -11,11 +11,9 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 
 /**
- * Container-GUI tools authored on the {@link NumenAction} surface. {@code transfer}
- * is the first object-array dogfood: its {@code moves} argument binds to a
- * {@code List<Move>}, the adapter deriving the array's item object schema from
- * the {@link Move} record's {@link Arg} components. Behaviour matches the
- * hand-written tool.
+ * Container-GUI tool implementation — the business half of {@code TransferTool}:
+ * {@code transfer} moves stacks between the open container menu and the backpack,
+ * one {@link Move} per slot-to-slot step.
  */
 public final class ContainerTools {
 

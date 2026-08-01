@@ -20,84 +20,11 @@ import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.phys.Vec3;
 
 /**
- * Perception tools authored on the {@link NumenAction} surface — the first
- * built-ins to dogfood the annotation/reflection path. Behaviour is identical
- * to the hand-written {@code NumenTool} classes they replace; only the wiring
- * (auto-derived schema, reflective invoke, entity injected by type) changed.
+ * Perception tool implementations — the business half of {@code InspectBlockTool},
+ * {@code GetOwnerStatusTool} and {@code GetWorldInfoTool}, which own the LLM-facing
+ * name / description / schema and delegate here.
  */
 public final class PerceptionTools {
-
-    public String getSelfStatus(NumenPlayer self) {
-        JsonObject root = new JsonObject();
-        root.addProperty("entity_id", self.getId());
-        root.addProperty("name", self.getName().getString());
-        root.addProperty("game_mode", self.gameMode.getGameModeForPlayer().getName());
-        root.addProperty("hp", self.getHealth());
-        root.addProperty("max_hp", self.getMaxHealth());
-        root.addProperty("hunger", self.getFoodData().getFoodLevel());
-        root.addProperty("saturation", self.getFoodData().getSaturationLevel());
-
-        JsonObject pos = new JsonObject();
-        pos.addProperty("x", self.getX());
-        pos.addProperty("y", self.getY());
-        pos.addProperty("z", self.getZ());
-        root.add("position", pos);
-
-        root.addProperty("dimension", self.level().dimension().location().toString());
-        root.addProperty("biome", self.level().getBiome(self.blockPosition())
-                .unwrapKey().map(k -> k.location().toString()).orElse("unknown"));
-        // Structures whose bounding box contains us right now (e.g. village, mineshaft).
-        JsonArray structures = new JsonArray();
-        if (self.level() instanceof ServerLevel sl) {
-            Registry<Structure> reg = sl.registryAccess().registryOrThrow(Registries.STRUCTURE);
-            for (Structure s : sl.structureManager().getAllStructuresAt(self.blockPosition()).keySet()) {
-                ResourceLocation key = reg.getKey(s);
-                if (key != null) structures.add(key.toString());
-            }
-        }
-        root.add("structures", structures);
-
-        // Equipment: hands + armor. Lives OUTSIDE the backpack container.
-        JsonObject equipment = new JsonObject();
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemStack s = self.getItemBySlot(slot);
-            if (s.isEmpty()) continue;
-            JsonObject o = new JsonObject();
-            o.addProperty("item", BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
-            if (s.getCount() > 1) o.addProperty("count", s.getCount());
-            equipment.add(slot.getName(), o);
-        }
-        root.add("equipment", equipment);
-
-        // Full backpack inventory (empty slots omitted).
-        var inv = self.getInventory();
-        JsonArray items = new JsonArray();
-        int used = 0;
-        for (int i = 0; i < inv.getContainerSize(); i++) {
-            ItemStack s = inv.getItem(i);
-            if (s.isEmpty()) continue;
-            used++;
-            JsonObject o = new JsonObject();
-            o.addProperty("slot", i);
-            o.addProperty("item", BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
-            o.addProperty("count", s.getCount());
-            items.add(o);
-        }
-        JsonObject inventory = new JsonObject();
-        inventory.add("items", items);
-        inventory.addProperty("slots_used", used);
-        inventory.addProperty("slots_total", inv.getContainerSize());
-        root.add("inventory", inventory);
-
-        // A player body has no AI attack-target; combat is task-driven.
-        root.add("target", JsonNull.INSTANCE);
-
-        root.addProperty("on_ground", self.onGround());
-        root.addProperty("in_water", self.isInWater());
-        root.addProperty("in_lava", self.isInLava());
-
-        return root.toString();
-    }
 
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() carries Mojang's
                                      // "deprecated for override" marker, not phased out.

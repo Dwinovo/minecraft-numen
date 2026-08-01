@@ -6,10 +6,10 @@ import com.dwinovo.numen.core.task.LocateBiomeTaskRecord;
 import com.dwinovo.numen.core.task.LocateStructureTaskRecord;
 
 /**
- * Locate tools authored on the {@link NumenAction} surface — the LLM-facing
- * faces of vanilla's {@code /locate structure} and {@code /locate biome}. Both
- * are world-actions: they return a {@link TaskRecord} the body's task queue runs
- * across ticks. Behaviour matches the hand-written {@code NumenTool} classes.
+ * Locate tool implementations — the business half of {@code LocateStructureTool}
+ * and {@code LocateBiomeTool}, mirroring vanilla's {@code /locate structure} and
+ * {@code /locate biome}. Both return a {@link TaskRecord} the body's task queue
+ * runs across ticks.
  */
 public final class LocateTools {
 

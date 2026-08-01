@@ -24,9 +24,7 @@ import java.util.List;
  *       the path);</li>
  *   <li>{@link Compiled#sacred()} — the cells the route itself must leave
  *       untouched (may neither break nor bury: the table it travels to use,
- *       the ore its task will mine);</li>
- *   <li>{@link Compiled#arrival()} — the body-level arrival ingredients the
- *       task's {@code reached} predicate builds on.</li>
+ *       the ore its task will mine).</li>
  * </ul>
  *
  * <p>The load-bearing entry is {@link #block}: the replacement for the old
@@ -50,23 +48,11 @@ public final class GoalCompiler {
      * @param sacred         {@link BlockPos#asLong()} keys of cells the route must not
      *                       break or bury (the {@code CalculationContext} domain);
      *                       empty when the intent has no block objective
-     * @param arrival        body-level arrival ingredients (see {@link ArrivalSpec})
-     * @param coarseEligible whether the goal is an APPROACH toward its center, so a
-     *                       coarse guidance field pointed at {@code goal.center()} makes
-     *                       sense (false for run-away/bare custom goals, whose center is
-     *                       what they flee or hold — a field toward it points backwards)
      */
-    public record Compiled(NavGoal goal, Goal engineGoal, LongSet sacred, ArrivalSpec arrival,
-                           boolean coarseEligible) {
+    public record Compiled(NavGoal goal, Goal engineGoal, LongSet sacred) {
         /** engineGoal 从 goal 经映射表派生(既有调用方签名不变)。 */
-        public Compiled(NavGoal goal, LongSet sacred, ArrivalSpec arrival,
-                        boolean coarseEligible) {
-            this(goal, GoalAdapter.toEngineGoal(goal), sacred, arrival, coarseEligible);
-        }
-
-        /** Compiler-made contracts are approach goals — coarse-eligible. */
-        public Compiled(NavGoal goal, LongSet sacred, ArrivalSpec arrival) {
-            this(goal, sacred, arrival, true);
+        public Compiled(NavGoal goal, LongSet sacred) {
+            this(goal, GoalAdapter.toEngineGoal(goal), sacred);
         }
     }
 
@@ -90,15 +76,13 @@ public final class GoalCompiler {
      */
     public static Compiled interact(BlockPos target) {
         BlockPos t = target.immutable();
-        return new Compiled(NavGoal.getToBlock(t), single(t), ArrivalSpec.interact(t));
+        return new Compiled(NavGoal.getToBlock(t), single(t));
     }
 
-    /** Occupy exactly this cell. Nothing sacred; arrival = grounded membership
-     *  of the same goal (one definition of "there"). */
+    /** Occupy exactly this cell. Nothing sacred. */
     public static Compiled standOn(BlockPos cell) {
         BlockPos c = cell.immutable();
-        NavGoal g = NavGoal.exact(c);
-        return new Compiled(g, LongSets.emptySet(), ArrivalSpec.standOn(g));
+        return new Compiled(NavGoal.exact(c), LongSets.emptySet());
     }
 
     /** Stand orthogonally beside {@code target} (a placement stance): the
@@ -106,7 +90,7 @@ public final class GoalCompiler {
      *  task is about to fill. */
     public static Compiled standAdjacent(BlockPos target) {
         BlockPos t = target.immutable();
-        return new Compiled(NavGoal.adjacent(t), single(t), ArrivalSpec.interact(t));
+        return new Compiled(NavGoal.adjacent(t), single(t));
     }
 
     /**
@@ -116,8 +100,7 @@ public final class GoalCompiler {
      */
     public static Compiled near(BlockPos center, double radius) {
         BlockPos c = center.immutable();
-        return new Compiled(NavGoal.nearGround(c, radius), LongSets.emptySet(),
-                ArrivalSpec.near(c, radius));
+        return new Compiled(NavGoal.nearGround(c, radius), LongSets.emptySet());
     }
 
     /** The {@code resolveBlockGoal} replacement: a walkable cell is a place to
@@ -153,8 +136,7 @@ public final class GoalCompiler {
         for (BlockPos drop : drops) {
             members.add(NavGoal.exact(drop));     // items, not blocks
         }
-        NavGoal goal = NavGoal.composite(members);
-        return new Compiled(goal, LongSets.emptySet(), ArrivalSpec.standOn(goal));
+        return new Compiled(NavGoal.composite(members), LongSets.emptySet());
     }
 
     /**
@@ -171,8 +153,7 @@ public final class GoalCompiler {
             members.add(NavGoal.getToBlock(t));
             sacred.add(t.asLong());
         }
-        NavGoal goal = NavGoal.composite(members);
-        return new Compiled(goal, sacred, ArrivalSpec.standOn(goal));
+        return new Compiled(NavGoal.composite(members), sacred);
     }
 
     private static LongSet single(BlockPos pos) {

@@ -100,12 +100,8 @@ public final class NavSettings {
     public boolean itemSaver = false;
     /** {@link #itemSaver} 的耐久阈值。 */
     public int itemSaverThreshold = 10;
-    /** 平速时优先精准采集工具。 */
-    public boolean preferSilkTouch = false;
     /** 自动切换最优工具。 */
     public boolean autoTool = true;
-    /** 破坏已完成建筑目标的成本乘数。 */
-    public double breakCorrectBlockPenaltyMultiplier = 10.0;
     /** 在建筑目标格临时放置错误方块的成本乘数。 */
     public double placeIncorrectBlockPenaltyMultiplier = 2.0;
     /** 建造时是否把任意非空气现有方块视为已可接受。 */
@@ -120,12 +116,6 @@ public final class NavSettings {
     public boolean goalBreakFromAbove = false;
     /** 分层建造中当前层没有可执行动作时是否跳到下一层。 */
     public boolean skipFailedLayers = false;
-    /** 建造任务一次全量重算最多保留的未完成目标数。 */
-    public int incorrectSize = 100;
-    /** 建造任务每 tick 在玩家附近重新检查的半径。 */
-    public int builderTickScanRadius = 5;
-    /** 是否只保留离玩家较近的未完成目标窗口。 */
-    public boolean distanceTrim = true;
     /** 受保护方块的挖掘速度乘数(0.1 即成本 ×10)。 */
     public double avoidBreakingMultiplier = 0.1;
     /** 启用生物/刷怪笼规避(默认关,关闭时 Favoring 不叠规避球)。 */
@@ -153,8 +143,6 @@ public final class NavSettings {
     public int pathingMapDefaultSize = 1024;
     /** 节点表负载因子。 */
     public float pathingMapLoadFactor = 0.75f;
-    /** 目标所在 chunk 未加载时把目标退化为 XZ 目标。 */
-    public boolean simplifyUnloadedYCoord = true;
     /** 首段搜索:找到可用部分路径后的预算(毫秒)。 */
     public long primaryTimeoutMS = 500;
     /** 首段搜索:毫无可用结果时烧满的预算(毫秒)。 */

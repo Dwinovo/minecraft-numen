@@ -549,9 +549,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         if (nav == null) {
             NavGoal goal = siteApproachGoal();
             nav = PlayerNav.to(player,
-                    () -> new GoalCompiler.Compiled(goal, protectedCells(), null, false),
+                    () -> new GoalCompiler.Compiled(goal, protectedCells()),
                     WALK_SPEED, () -> false, this);
-            nav.setHighlights(this::pendingPositions);
         }
         return switch (nav.tick()) {
             case ARRIVED, FAILED -> {
@@ -1362,7 +1361,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             nav = PlayerNav.to(player,
                     () -> new GoalCompiler.Compiled(
                             NavGoal.nearGround(BlockPos.containing(dest), 1.5),
-                            protectedCells(), null, false),
+                            protectedCells()),
                     WALK_SPEED, () -> false, this);
         }
         boolean done = switch (nav.tick()) {

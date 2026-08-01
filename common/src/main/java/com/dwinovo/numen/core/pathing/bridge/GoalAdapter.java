@@ -32,7 +32,7 @@ import net.minecraft.core.BlockPos;
  *       不退化为三维球——防"垫柱到目标旁悬空算到达"的几何回归)</li>
  *   <li>adjacent → {@link GoalGetToBlock}(成员集置换:同层正交贴邻
  *       保留,目标格本身与正下两格新增,y+1 的贴邻不再是成员;身体级
- *       到达仍由任务层 ArrivalSpec 把关)</li>
+ *       到达仍由任务层各自的 reached 谓词把关)</li>
  *   <li>getToBlock → {@link GoalGetToBlock}(成员判定逐格一致;启发式
  *       形状不同——旧词表减"一步+一跳"松量,内核按修正 y 差估价)</li>
  *   <li>composite → {@link GoalComposite}(成员递归映射)</li>

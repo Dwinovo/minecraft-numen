@@ -38,10 +38,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Query tools authored on the {@link NumenAction} surface — migrated faithfully
- * from the hand-written {@code NumenTool} classes they replace. Behaviour is
- * identical; only the wiring (auto-derived schema, reflective invoke, entity
- * injected by type) changed.
+ * Query tool implementations — the business half of {@code LookupRecipeTool},
+ * {@code ScanNearbyEntitiesTool} and {@code InspectBlockStorageTool}.
  */
 public final class QueryExtraTools {
 

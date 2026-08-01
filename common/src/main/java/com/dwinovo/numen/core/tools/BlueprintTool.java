@@ -26,9 +26,6 @@ public final class BlueprintTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
     private static final long MIN_TIMEOUT_TICKS = 2 * 60 * 20;
-    private static final long TRAVEL_ALLOWANCE_TICKS = 40 * 20;
-    /** 施工预计时长之上再留的余量(挪窝、翻层停顿、零进展重试都吃这笔)。 */
-    private static final double TIMEOUT_SLACK = 1.6;
 
     private record Args(String action, String file, Integer x, Integer y, Integer z, Integer rotation) {}
 

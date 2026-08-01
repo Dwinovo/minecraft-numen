@@ -19,9 +19,9 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * SAMPLE (raw-NumenTool style, no @NumenAction). A query tool: runs on the body
- * server-side and replies in place. No arguments → an empty schema. The body of
- * {@link #onServerCall} is just the perception logic; nothing reflective.
+ * A query tool: runs on the body server-side and replies in place. No arguments
+ * → an empty schema. The body of {@link #onServerCall} is just the perception
+ * logic.
  */
 public final class GetSelfStatusTool implements NumenTool {
 

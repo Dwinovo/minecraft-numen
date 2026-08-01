@@ -13,10 +13,8 @@ import net.minecraft.world.item.ItemStack;
 import java.util.List;
 
 /**
- * GUI tools authored on the {@link NumenAction} surface — read the open container
- * menu and close it. Behaviour is identical to the hand-written {@code NumenTool}
- * classes they replace; only the wiring (auto-derived schema, reflective invoke,
- * entity injected by type) changed.
+ * GUI tool implementations — the business half of {@code InspectGuiTool} and
+ * {@code CloseGuiTool}: read the open container menu and close it.
  */
 public final class GuiTools {
 

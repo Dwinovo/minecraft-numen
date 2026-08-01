@@ -10,16 +10,11 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Agent-side (client-local) tools authored on the {@link NumenAction} surface.
- * These run on the agent thread with no server body — the adapter infers LOCAL
- * because the method takes neither the live entity nor a reply callback and
- * returns its result directly.
+ * Agent-side (client-local) tool implementations — the business half of
+ * {@code LoadSkillTool} and {@code TodoWriteTool}. These run on the agent thread
+ * with no server body and return their result directly.
  */
 public final class AgentTools {
-
-    public String loadSkill(String name) {
-        return loadSkill(name, null);
-    }
 
     public String loadSkill(String name, String file) {
         SkillRegistry registry = SkillRegistry.instance();

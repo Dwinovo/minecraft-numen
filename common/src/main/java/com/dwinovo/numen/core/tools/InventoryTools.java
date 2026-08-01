@@ -18,12 +18,10 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Inventory-management tools authored on the {@link NumenAction} surface —
- * equip / eat / drop / collect / wait, migrated from the hand-written
- * {@code NumenTool} classes they replace. Each returns a {@link TaskRecord},
- * so the adapter ships it to the body and the task queue runs it; the
- * {@link ToolContext} carries the call id and deadline basis. Behaviour matches
- * the originals.
+ * Inventory-management tool implementations — the business half of
+ * {@code EquipItemTool} / {@code EatItemTool} / {@code DropItemsTool} /
+ * {@code CollectItemsTool}. Each returns a {@link TaskRecord} the body's task
+ * queue runs; the {@link ToolContext} carries the call id and deadline basis.
  */
 public final class InventoryTools {
 

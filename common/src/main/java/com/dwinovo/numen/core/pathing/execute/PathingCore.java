@@ -66,9 +66,6 @@ public final class PathingCore {
 
     /** 上一次 current.onTick() 的返回值(可安全中断)。 */
     private boolean safeToCancel = true;
-    private boolean pauseRequestedLastTick;
-    private boolean unpausedLastTick = true;
-    private boolean pausedThisTick;
     private boolean cancelRequested;
     private boolean calcFailedLastTick;
 
@@ -132,20 +129,6 @@ public final class PathingCore {
                 && !newGoal.isInGoal(dest.getX(), dest.getY(), dest.getZ());
     }
 
-    /** 请求暂停;下一 tick 在安全点生效(路径保留,isPathing 变 false)。 */
-    public void requestPause() {
-        pauseRequestedLastTick = true;
-    }
-
-    /** 安全时取消当前段(取消在飞搜索、清段、清键、停挖)。 */
-    public boolean cancelSegmentIfSafe() {
-        if (isSafeToCancel()) {
-            segmentCancel();
-            return true;
-        }
-        return false;
-    }
-
     /**
      * 软取消:取消在飞搜索、丢弃段,但不清键——身体保持惯性,下一
      * tick 的重规划无缝接手。不安全时只取消在飞搜索。
@@ -162,16 +145,9 @@ public final class PathingCore {
         cancelRequested = true;
     }
 
-    /** 全面取消:段取消(若安全)并放弃目标。 */
-    public boolean cancelEverything() {
-        boolean doIt = cancelSegmentIfSafe();
-        goal = null;
-        return doIt;
-    }
-
-    /** 是否正在沿路径行进(有段且本 tick 未暂停)。 */
+    /** 是否正在沿路径行进。 */
     public boolean isPathing() {
-        return current != null && !pausedThisTick;
+        return current != null;
     }
 
     /** 当前是否可安全中断(悬空放置、跑酷空中等时刻为 false)。 */
@@ -215,10 +191,6 @@ public final class PathingCore {
         return player;
     }
 
-    public ExecHarness harness() {
-        return harness;
-    }
-
     // ==================== 活跃实例注册表 ====================
 
     /** 每同伴最近一次 tick 过的内核(调试可视化等旁路消费者按此取用)。 */
@@ -243,26 +215,13 @@ public final class PathingCore {
         calcFailedLastTick = false;
         tickPath();
         harness.commitIfDirty();
-        if (current != null && !pausedThisTick) {
+        if (current != null) {
             player.setSprinting(current.isSprinting());
         }
     }
 
     private void tickPath() {
-        pausedThisTick = false;
         pollSearchResult();
-        // 暂停请求:安全点生效;首次进入暂停时清键停挖,此后静默保持
-        if (pauseRequestedLastTick && isSafeToCancel()) {
-            pauseRequestedLastTick = false;
-            if (unpausedLastTick) {
-                harness.clearAllKeys();
-                harness.stopBreaking();
-            }
-            unpausedLastTick = false;
-            pausedThisTick = true;
-            return;
-        }
-        unpausedLastTick = true;
         if (cancelRequested) {
             cancelRequested = false;
             harness.clearAllKeys();
@@ -518,19 +477,6 @@ public final class PathingCore {
         return Movement.pathStart(player);
     }
 
-    // ==================== 内部取消 ====================
-
-    private void segmentCancel() {
-        if (inProgress != null) {
-            inProgress.cancel();
-        }
-        if (current != null) {
-            current = null;
-            next = null;
-            harness.clearAllKeys();
-            harness.stopBreaking();
-        }
-    }
 
     /**
      * 无条件全停:取消在飞搜索、丢弃当前/下一段、放弃目标、清键停挖。

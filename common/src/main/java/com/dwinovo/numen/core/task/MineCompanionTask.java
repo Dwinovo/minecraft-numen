@@ -285,7 +285,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 // instead of reporting a stale arrival.
                 nav = PlayerNav.toRevalidating(player, this::oreFieldCompiled, MINE_SPEED,
                         () -> reachableTarget() != null);
-                nav.setHighlights(() -> new ArrayList<>(knownOres));   // box every known target
                 navIsBranch = false;
             }
             switch (nav.tick()) {
@@ -376,7 +375,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             stopNav();
             nav = PlayerNav.toGoal(player, () -> NavGoal.runAway(branchPoint, branchY),
                     MINE_SPEED, () -> false);
-            nav.setHighlights(() -> new ArrayList<>(knownOres));   // (empty while branch-exploring)
             navIsBranch = true;
         }
         switch (nav.tick()) {

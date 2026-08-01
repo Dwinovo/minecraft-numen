@@ -7,14 +7,13 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Headless mapping pins for {@link GoalCompiler}: each intent factory must
- * produce the right goal SHAPE, the right sacred set, and the right arrival
- * ingredients — together, from one place. Uses the pure
- * {@link GoalCompiler#block(boolean, BlockPos)} core (no {@code Level}).
+ * produce the right goal SHAPE and the right sacred set — together, from one
+ * place. Uses the pure {@link GoalCompiler#block(boolean, BlockPos)} core
+ * (no {@code Level}).
  */
 class GoalCompilerTest {
 
@@ -26,10 +25,6 @@ class GoalCompilerTest {
         assertTrue(c.goal().isAt(T), "exact membership at the cell");
         assertFalse(c.goal().isAt(T.north()), "no neighbour satisfies standOn");
         assertTrue(c.sacred().isEmpty(), "a place to stand is not a block to protect");
-        assertTrue(c.arrival().grounded());
-        assertNull(c.arrival().focus(), "membership arrival, no reach focus");
-        assertEquals(c.goal(), c.arrival().membership(),
-                "arrival membership IS the search goal — one definition of there");
     }
 
     @Test
@@ -39,10 +34,6 @@ class GoalCompilerTest {
         assertFalse(c.goal().isAt(T.above(2)), "no elevated cell satisfies — the pillaring pin");
         assertTrue(c.sacred().contains(T.asLong()), "the target itself is sacred");
         assertEquals(1, c.sacred().size());
-        assertEquals(T, c.arrival().focus());
-        assertEquals(ArrivalSpec.REACH * ArrivalSpec.REACH, c.arrival().reachSqr());
-        assertFalse(c.arrival().lineOfSight(), "LOS is opt-in, matching existing tasks");
-        assertTrue(c.arrival().grounded());
     }
 
     @Test
@@ -62,7 +53,6 @@ class GoalCompilerTest {
         assertFalse(c.goal().isAt(T.above(2)),
                 "vicinity intent must not admit the pillar-top cell");
         assertTrue(c.sacred().isEmpty());
-        assertFalse(c.arrival().grounded(), "chasing arrival has no ground term");
     }
 
     @Test

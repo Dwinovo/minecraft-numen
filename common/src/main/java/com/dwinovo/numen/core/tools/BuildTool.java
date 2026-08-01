@@ -35,7 +35,6 @@ import java.util.function.Consumer;
 public final class BuildTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private static final int MAX_BLOCKS = 512;
     /**
      * 一次调用展开后的总格数上限。
      *
@@ -298,7 +297,7 @@ public final class BuildTool implements NumenTool {
             if (spec.x() == null || spec.y() == null || spec.z() == null) {
                 throw new IllegalArgumentException("set needs x, y, z");
             }
-            return parseTargets(List.of(new BlockSpec(spec.block_id(), spec.x(), spec.y(), spec.z(),
+            return List.of(parseTarget(new BlockSpec(spec.block_id(), spec.x(), spec.y(), spec.z(),
                     spec.facing(), spec.axis(), spec.half(), spec.properties())));
         }
         if ("set_door".equals(spec.op())) {
@@ -648,20 +647,6 @@ public final class BuildTool implements NumenTool {
                 BuiltInRegistries.BLOCK.getKey(slab).getPath(), null, null, topHalf));
     }
 
-    private static void putStairAt(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
-                                   BlockPos pos, Direction facing) {
-        BuildPalette.Entry e = palette.pick(pos);
-        if (e.block() instanceof net.minecraft.world.level.block.StairBlock) {
-            BlockState state = e.block().defaultBlockState()
-                    .setValue(net.minecraft.world.level.block.StairBlock.FACING, facing);
-            out.put(pos.asLong(), new BuildTaskRecord.Target(state, e.item(), pos, e.label(),
-                    facing, null, null));
-        } else {
-            out.put(pos.asLong(),
-                    new BuildTaskRecord.Target(e.block(), e.item(), pos, e.label(), null, null, null));
-        }
-    }
-
     private static void putSolidAt(Map<Long, BuildTaskRecord.Target> out, BuildPalette palette,
                                    BlockPos pos, boolean overwrite) {
         BuildPalette.Entry e = palette.pick(pos);
@@ -727,49 +712,34 @@ public final class BuildTool implements NumenTool {
         return out;
     }
 
-    static List<BuildTaskRecord.Target> parseTargets(List<BlockSpec> blocks) {
-        if (blocks == null || blocks.isEmpty()) {
-            throw new IllegalArgumentException("blocks must contain at least one cell");
+    static BuildTaskRecord.Target parseTarget(BlockSpec spec) {
+        if (spec == null || spec.block_id() == null || spec.block_id().isBlank()) {
+            throw new IllegalArgumentException("each block needs block_id, x, y and z");
         }
-        if (blocks.size() > MAX_BLOCKS) {
-            throw new IllegalArgumentException("build accepts at most " + MAX_BLOCKS + " cells");
+        // 与调色板同一处解析:按方块查、air 与水合法、岩浆挡掉。此前这里另抄
+        // 了一遍 ToolArgs.parseItem + if(AIR) 的写法,而那个 AIR 分支永远到不了。
+        BuildPalette.Entry resolved = BuildPalette.resolve(spec.block_id(), 1);
+        Item item = resolved.item();
+        net.minecraft.world.level.block.Block block = resolved.block();
+        BlockPos pos = new BlockPos(spec.x(), spec.y(), spec.z());
+        Direction facing = opt(spec.facing()) == null ? null : Direction.byName(opt(spec.facing()));
+        if (opt(spec.facing()) != null && facing == null) {
+            throw new IllegalArgumentException("invalid facing: " + spec.facing());
         }
-        List<BuildTaskRecord.Target> targets = new ArrayList<>(blocks.size());
-        Set<BlockPos> seen = new LinkedHashSet<>();
-        for (BlockSpec spec : blocks) {
-            if (spec == null || spec.block_id() == null || spec.block_id().isBlank()) {
-                throw new IllegalArgumentException("each block needs block_id, x, y and z");
-            }
-            // 与调色板同一处解析:按方块查、air 与水合法、岩浆挡掉。此前这里另抄
-            // 了一遍 ToolArgs.parseItem + if(AIR) 的写法,而那个 AIR 分支永远到不了。
-            BuildPalette.Entry resolved = BuildPalette.resolve(spec.block_id(), 1);
-            Item item = resolved.item();
-            net.minecraft.world.level.block.Block block = resolved.block();
-            BlockPos pos = new BlockPos(spec.x(), spec.y(), spec.z());
-            if (!seen.add(pos)) {
-                throw new IllegalArgumentException("duplicate build cell " + pos.toShortString());
-            }
-            Direction facing = opt(spec.facing()) == null ? null : Direction.byName(opt(spec.facing()));
-            if (opt(spec.facing()) != null && facing == null) {
-                throw new IllegalArgumentException("invalid facing: " + spec.facing());
-            }
-            Direction.Axis axis = opt(spec.axis()) == null ? null : Direction.Axis.byName(opt(spec.axis()));
-            if (opt(spec.axis()) != null && axis == null) {
-                throw new IllegalArgumentException("invalid axis: " + spec.axis());
-            }
-            String half = opt(spec.half());
-            if (half != null && !half.equals("top") && !half.equals("bottom")) {
-                throw new IllegalArgumentException("invalid half: " + spec.half());
-            }
-            String label = BuiltInRegistries.BLOCK.getKey(block).getPath();
-            Boolean topHalf = half == null ? null : half.equals("top");
-            BlockState desiredState = applyProperties(
-                    new BuildTaskRecord.Target(block, item, pos, label,
-                            facing, axis, topHalf).desiredState(), spec.properties());
-            targets.add(new BuildTaskRecord.Target(desiredState, item, pos, label,
-                    facing, axis, topHalf));
+        Direction.Axis axis = opt(spec.axis()) == null ? null : Direction.Axis.byName(opt(spec.axis()));
+        if (opt(spec.axis()) != null && axis == null) {
+            throw new IllegalArgumentException("invalid axis: " + spec.axis());
         }
-        return List.copyOf(targets);
+        String half = opt(spec.half());
+        if (half != null && !half.equals("top") && !half.equals("bottom")) {
+            throw new IllegalArgumentException("invalid half: " + spec.half());
+        }
+        String label = BuiltInRegistries.BLOCK.getKey(block).getPath();
+        Boolean topHalf = half == null ? null : half.equals("top");
+        BlockState desiredState = applyProperties(
+                new BuildTaskRecord.Target(block, item, pos, label,
+                        facing, axis, topHalf).desiredState(), spec.properties());
+        return new BuildTaskRecord.Target(desiredState, item, pos, label, facing, axis, topHalf);
     }
 
 

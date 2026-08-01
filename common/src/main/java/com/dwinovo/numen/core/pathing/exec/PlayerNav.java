@@ -120,10 +120,6 @@ public final class PlayerNav {
     /** 最近一次搜索上下文(验尸文案的素材:有无脚手架耗材等)。 */
     private CalculationContext lastSearchContext;
 
-    /** 调试覆盖层钩子。可视化尚未接回,仅存引用(与旧行为一致的空壳)。 */
-    @SuppressWarnings("unused")
-    private Supplier<List<BlockPos>> highlights;
-
     /** 单格目标:按意图编译(可走格=站上去,占用格=贴脸即到,不吞噬目标)。 */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
         this(player, speed, reached, () -> GoalCompiler.block(player.level(), goal));
@@ -183,7 +179,7 @@ public final class PlayerNav {
         return () -> {
             NavGoal g = goals.get();
             return g == null ? null
-                    : new GoalCompiler.Compiled(g, LongSets.emptySet(), null, false);
+                    : new GoalCompiler.Compiled(g, LongSets.emptySet());
         };
     }
 
@@ -195,7 +191,7 @@ public final class PlayerNav {
             return null;
         }
         NavGoal goal = followEntityGoal(entity.blockPosition(), followRadius);
-        return new GoalCompiler.Compiled(goal, LongSets.emptySet(), null, false);
+        return new GoalCompiler.Compiled(goal, LongSets.emptySet());
     }
 
     static NavGoal followEntityGoal(BlockPos entityFeet, double followRadius) {
@@ -468,31 +464,19 @@ public final class PlayerNav {
         return current == null ? 0 : current.ticksSinceProgress();
     }
 
+    /** 搜索结论分布摘要,转发自内核(排障日志用)。 */
+    public String outcomeSummary() {
+        return core.outcomeSummary();
+    }
+
     /**
      * 规划器在飞且当前无路段在执行——身体站着等异步搜索返回。任务层用它
      * 冻结任务 deadline:deadline 度量的是身体干活的刻,搜索的墙钟延迟不该
      * 折算成任务超时(tick 越快于真实时间,这笔折算越离谱,无上限 tick 的
      * 测试服上足以在首次搜索返回前烧光整个预算)。
      */
-    /** 搜索结论分布摘要,转发自内核(排障日志用)。 */
-    public String outcomeSummary() {
-        return core.outcomeSummary();
-    }
-
     public boolean planningInFlight() {
         return core.hasInProgressSearch() && core.getCurrent() == null;
-    }
-
-    /** 当前执行路段计划挖开的格子集(无路段时为空集)。任务层的世界修复
-     *  逻辑对这些格子让行:同一具身体不能一边为走路挖它、一边把它填回去。 */
-    public java.util.Set<BlockPos> plannedBreaks() {
-        PathExecutor current = core.getCurrent();
-        return current == null ? java.util.Set.of() : current.toBreak();
-    }
-
-    /** 调试覆盖层格集(如整片矿区)。可视化未接回,暂为空壳。 */
-    public void setHighlights(Supplier<List<BlockPos>> highlights) {
-        this.highlights = highlights;
     }
 
     /** 停止导航:取消在飞搜索、丢段、清键停挖,并把身体停稳、松潜行。 */

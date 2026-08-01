@@ -481,10 +481,6 @@ public final class PathExecutor {
         return true;
     }
 
-    private double entityDistanceToCenter(BlockPos pos) {
-        return distanceToCenter(pos, player.getX(), player.getY(), player.getZ());
-    }
-
     /** 纯逻辑:玩家坐标到格位中心的 3D 距离。 */
     static double distanceToCenter(BlockPos pos, double px, double py, double pz) {
         double dx = pos.getX() + 0.5 - px;

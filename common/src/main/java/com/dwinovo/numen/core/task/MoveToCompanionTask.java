@@ -141,10 +141,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 r.kind == MoveToTaskRecord.Kind.BLOCK && targetCellSolid());
         // Highlight the ACTUAL requested cell (not the path's best-effort end) so the overlay
         // box sits on the real target — e.g. a BLOCK goal under/over water that the path can
-        // only approach to the surface. The goal itself is always rendered, not the plan's end.
-        if (r.kind == MoveToTaskRecord.Kind.BLOCK) {
-            nav.setHighlights(() -> java.util.List.of(blockTarget));
-        }
     }
 
     /** The navigation goal for this move's kind. */
@@ -266,7 +262,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     rebuildFindContract();
                     stopNav();
                     nav = PlayerNav.to(player, () -> findContract, WALK_SPEED, this::reached);
-                    nav.setHighlights(() -> java.util.List.copyOf(candidates));
                     yield TaskState.RUNNING;
                 }
                 // The planner can't get closer. In water, keep waiting while the body is
@@ -292,9 +287,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     stopNav();
                     NavGoal retry = nearRetryGoal();
                     nav = PlayerNav.toGoal(player, () -> retry, WALK_SPEED, this::closeEnoughToSucceed);
-                    if (r.kind == MoveToTaskRecord.Kind.BLOCK) {
-                        nav.setHighlights(() -> java.util.List.of(blockTarget));
-                    }
                     yield TaskState.RUNNING;
                 }
                 String also = nearRetried
@@ -379,7 +371,6 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         if (!candidates.isEmpty()) {
             rebuildFindContract();
             nav = PlayerNav.to(player, () -> findContract, WALK_SPEED, this::reached);
-            nav.setHighlights(() -> java.util.List.copyOf(candidates));
             return null;
         }
         if (findScan == null && findScanDrained) {
