@@ -121,8 +121,9 @@ public final class ProviderPanel {
                 ReasoningChoice.LEVEL_MEDIUM, i -> onEffortPicked(i)));
         effortPick.setBounds(rx + 86, ry, 78, NumenStyle.CONTROL_H);
 
+        // 页面级 Alert:右栏左右居中、垂直偏上悬浮。
         resultAlert = ui.add(new InlineAlert());
-        resultAlert.setBounds(rx, ry + 16, rw, Math.max(20, y + h - 20 - ry - 16));
+        resultAlert.setBounds(rx, y + 2, rw, 24);
         checkButton = ui.add(new Button(t("numen.gui.providers.check"),
                 Button.Style.ACCENT, this::runConnectivityCheck));
         checkButton.setBounds(rx + rw - 54, y + h - 16, 54, 15);
@@ -276,7 +277,7 @@ public final class ProviderPanel {
         checking = true;
         checkButton.setEnabled(false);
         checkButton.setLabel(t("numen.gui.providers.checking"));
-        resultAlert.clear();
+        resultAlert.show(InlineAlert.Severity.INFO, t("numen.gui.providers.checking"));
         LlmEndpoint ep = new LlmEndpoint(cfg.getProvider(), cfg.getModel(), cfg.getApiKey(),
                 cfg.getBaseUrl(), cfg.getProxy(), "auto");
         NumenLlmClient.forEndpoint(ep)
@@ -286,7 +287,8 @@ public final class ProviderPanel {
                     checkButton.setEnabled(true);
                     checkButton.setLabel(t("numen.gui.providers.check"));
                     if (error == null) {
-                        resultAlert.show(InlineAlert.Severity.SUCCESS, t("numen.gui.providers.check.ok"));
+                        resultAlert.show(InlineAlert.Severity.SUCCESS,
+                                t("numen.gui.providers.check.ok"), 2_500);
                     } else {
                         resultAlert.show(InlineAlert.Severity.ERROR, LlmErrorWords.classify(error));
                     }

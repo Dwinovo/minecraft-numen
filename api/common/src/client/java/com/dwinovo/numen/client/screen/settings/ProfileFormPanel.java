@@ -133,14 +133,14 @@ public final class ProfileFormPanel {
                 ReasoningChoice.LEVEL_MEDIUM, this::onEffortPicked));
         effortPick.setBounds(x + 86, ry, 78, NumenStyle.CONTROL_H);
 
-        // ✕ 在卡片右上角(通用关闭位);底行只留 [检测][保存]。
+        // ✕ 在卡片标题条右上角(内容区上方的标题带里,不与首行字段抢地)。
         Button close = ui.add(new Button("✕", Button.Style.NORMAL, onCancel));
-        close.setBounds(x + w - 15, y - 1, 15, NumenStyle.CONTROL_H);
+        close.setBounds(x + w - 13, y - 16, 13, 13);
 
         int by = y + h - 16;
-        // 检测结果驻留条:嵌在按钮行上方,不自动消失——修 key 时它一直看得见。
+        // 页面级 Alert:表单区左右居中、垂直偏上悬浮——操作结果的家(字段错误才内联)。
         resultAlert = ui.add(new InlineAlert());
-        resultAlert.setBounds(x, ry + 2, w, by - ry - 6);
+        resultAlert.setBounds(x, y + 2, w, 24);
         checkButton = ui.add(new Button(t("numen.gui.providers.check"),
                 Button.Style.NORMAL, this::runConnectivityCheck));
         checkButton.setBounds(x + w - 54 - 58, by, 54, 15);
@@ -312,7 +312,7 @@ public final class ProfileFormPanel {
         checking = true;
         checkButton.setEnabled(false);
         checkButton.setLabel(t("numen.gui.providers.checking"));
-        resultAlert.clear();
+        resultAlert.show(InlineAlert.Severity.INFO, t("numen.gui.providers.checking"));
         LlmEndpoint ep = new LlmEndpoint(draft.provider, draft.model, draft.apiKey,
                 draft.baseUrl, Services.CONFIG.getProxy(), "auto");
         NumenLlmClient.forEndpoint(ep)
@@ -322,7 +322,9 @@ public final class ProfileFormPanel {
                     checkButton.setEnabled(true);
                     checkButton.setLabel(t("numen.gui.providers.check"));
                     if (error == null) {
-                        resultAlert.show(InlineAlert.Severity.SUCCESS, t("numen.gui.providers.check.ok"));
+                        // 成功=知道了就行,2.5s 自动淡出;失败驻留到被下次操作替换。
+                        resultAlert.show(InlineAlert.Severity.SUCCESS,
+                                t("numen.gui.providers.check.ok"), 2_500);
                     } else {
                         resultAlert.show(InlineAlert.Severity.ERROR, LlmErrorWords.classify(error));
                     }

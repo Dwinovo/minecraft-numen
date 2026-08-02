@@ -9,23 +9,36 @@ import com.dwinovo.numen.client.ui.TextWrap;
 import java.util.List;
 
 /**
- * 页内驻留结果条——提示四层里的第②层:与当前操作相关的结果/状态,
- * 嵌在表单/面板内容流里,**不自动消失**(被下一次操作替换或显式清除)。
- * 检测结果住这里:用户正对着表单修 key,结果必须一直看得见。
- * 三色语义与 toast 同源(成功绿/警告黄/失败红,强色边+同系浅底)。
+ * 页面级 Alert:在给定区域内**左右居中、垂直偏上**悬浮的结果胶囊——
+ * 操作结果(检测中/成功/失败)的家。与字段错误分工明确:校验错误内联在
+ * 字段上,页面级结果浮在页面上部。宽度贴内容(胶囊,不是横幅),入场自
+ * 上方落下+渐显;可选自动消失(成功类知道了就行),错误默认驻留到被
+ * 下次操作替换。
  */
 public final class InlineAlert extends Widget {
 
-    public enum Severity { SUCCESS, WARNING, ERROR }
+    public enum Severity { INFO, SUCCESS, WARNING, ERROR }
+
+    private static final long ENTER_MS = 150;
+    private static final long EXIT_MS = 200;
 
     private Severity severity;
     private String message;
-    private List<String> lines;      // 懒排版缓存(依赖画布度量)
-    private long shownAtMs = -1;     // 首帧渐显起点
+    private List<String> lines;
+    private int pillW;
+    private long shownAtMs = -1;
+    /** ≤0 = 驻留;>0 = 显示这么久后自动淡出。 */
+    private long autoDismissMs;
 
+    /** 驻留展示(错误/检测中):被下次 show/clear 替换才消失。 */
     public void show(Severity severity, String message) {
+        show(severity, message, 0);
+    }
+
+    public void show(Severity severity, String message, long autoDismissMs) {
         this.severity = severity;
         this.message = message == null ? "" : message;
+        this.autoDismissMs = autoDismissMs;
         this.lines = null;
         this.shownAtMs = -1;
     }
@@ -41,33 +54,52 @@ public final class InlineAlert extends Widget {
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         if (message == null) return;
         if (lines == null) {
-            lines = TextWrap.wrap(message, w - NumenStyle.PAD * 2, s::textWidth, 2);
+            lines = TextWrap.wrap(message, w - NumenStyle.PAD * 4, s::textWidth, 2);
+            int textW = 0;
+            for (String line : lines) textW = Math.max(textW, s.textWidth(line));
+            pillW = textW + NumenStyle.PAD * 2;
             shownAtMs = nowMs;
         }
-        // 入场 150ms 渐显小上浮——出现要被注意到,但不抢打断。
-        float p = Animation.progress(nowMs - shownAtMs, 150);
-        float alphaF = Animation.easeOutCubic(p);
-        int rise = Math.round((1 - Animation.easeOutCubic(p)) * 4);
+        long elapsed = nowMs - shownAtMs;
+
+        float alphaF;
+        int drop;
+        if (autoDismissMs > 0 && elapsed > autoDismissMs) {
+            float pOut = Animation.progress(elapsed - autoDismissMs, EXIT_MS);
+            if (pOut >= 1f) {
+                clear();
+                return;
+            }
+            alphaF = 1f - Animation.easeInCubic(pOut);
+            drop = 0;
+        } else {
+            float pIn = Animation.progress(elapsed, ENTER_MS);
+            alphaF = Animation.easeOutCubic(pIn);
+            drop = -Math.round((1 - Animation.easeOutCubic(pIn)) * 4);   // 自上方落下
+        }
 
         int border = switch (severity) {
+            case INFO -> c.accent();
             case SUCCESS -> c.success();
             case WARNING -> c.warning();
             case ERROR -> c.danger();
         };
         int bg = switch (severity) {
+            case INFO -> c.sectionBg();
             case SUCCESS -> c.toastInfoBg();
             case WARNING -> c.toastWarnBg();
             case ERROR -> c.toastErrorBg();
         };
         int contentH = Math.max(1, lines.size()) * s.lineHeight() + NumenStyle.PAD;
-        int ay = y + (h - contentH) + rise;   // 底对齐给定区域(靠近按钮行)
-        s.fillRoundRect(x, ay, w, contentH, NumenStyle.RADIUS_CONTROL, alpha(border, alphaF));
-        s.fillRoundRect(x + 1, ay + 1, w - 2, contentH - 2,
+        int px = x + (w - pillW) / 2;      // 区域内左右居中
+        int py = y + drop;                 // 垂直偏上:宿主给的 y 即上部锚点
+        s.fillRoundRect(px, py, pillW, contentH, NumenStyle.RADIUS_CONTROL, alpha(border, alphaF));
+        s.fillRoundRect(px + 1, py + 1, pillW - 2, contentH - 2,
                 NumenStyle.RADIUS_CONTROL - 1, alpha(bg, alphaF));
         if (alphaF > 0.05f) {
-            int ty = ay + NumenStyle.PAD / 2 + 1;
+            int ty = py + NumenStyle.PAD / 2 + 1;
             for (String line : lines) {
-                s.drawText(line, x + NumenStyle.PAD, ty, alpha(c.toastText(), alphaF), false);
+                s.drawText(line, px + NumenStyle.PAD, ty, alpha(c.toastText(), alphaF), false);
                 ty += s.lineHeight();
             }
         }
