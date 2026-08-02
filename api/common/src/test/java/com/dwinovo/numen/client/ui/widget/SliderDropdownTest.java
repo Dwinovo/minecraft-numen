@@ -46,6 +46,31 @@ class SliderDropdownTest {
     }
 
     @Test
+    void popupRowsLimitedByViewportWithScrollThumb() {
+        UiRoot root = new UiRoot();
+        root.setViewportHeight(80);   // 下拉在 y=0,h=14;底缘剩 62px → 62/13=4 行
+        List<String> many = new java.util.ArrayList<>();
+        for (int i = 0; i < 20; i++) many.add("site" + i);
+        // 紧凑模式:收起态不画值文本,texts 里只剩弹层行,计数才纯净。
+        Dropdown dd = root.add(new Dropdown(many, 0, i -> {}).compact().popupWidth(80));
+        dd.setBounds(0, 0, 80, 14);
+
+        root.mouseClicked(5, 5, 0);
+        WidgetTestSupport.FakeSurface s = new WidgetTestSupport.FakeSurface();
+        root.render(s, WidgetTestSupport.C, -10, -10, 0);   // 首帧定行高
+        s.reset();
+        root.render(s, WidgetTestSupport.C, -10, -10, 0);
+        long popupRows = s.texts.stream().filter(t -> t.startsWith("site")).count();
+        assertTrue(popupRows <= 4, "弹层越出屏幕底缘: " + popupRows + " 行");
+
+        // 滚动后首行前进,仍不越界。
+        root.mouseScrolled(5, 20, -1);
+        s.reset();
+        root.render(s, WidgetTestSupport.C, -10, -10, 0);
+        assertTrue(s.texts.contains("site1") && !s.texts.contains("site0"));
+    }
+
+    @Test
     void dropdownPopupRendersAfterOtherWidgets() {
         UiRoot root = new UiRoot();
         Dropdown dd = root.add(new Dropdown(List.of("a", "b"), 0, i -> {}));
