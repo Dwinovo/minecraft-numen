@@ -74,10 +74,14 @@ public class NumenNeoForgeClient {
     }
 
     static void registerGuiLayers(net.neoforged.neoforge.client.event.RegisterGuiLayersEvent event) {
-        // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」。
+        // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」;
+        // toast 横幅同层(错误分类话术等,玩家不开面板也看得见)。
         event.registerAboveAll(
                 ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "talk_hint"),
                 (g, delta) -> com.dwinovo.numen.client.hud.TalkHint.render(g));
+        event.registerAboveAll(
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
+                (g, delta) -> com.dwinovo.numen.client.hud.NumenHudToasts.render(g));
     }
 
     static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {

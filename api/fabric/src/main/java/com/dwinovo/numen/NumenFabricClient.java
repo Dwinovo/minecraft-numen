@@ -77,9 +77,13 @@ public class NumenFabricClient implements ClientModInitializer {
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.TALK_COMPANION);
         KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.QUICK_VOICE);
 
-        // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」。
+        // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」;
+        // toast 横幅同层(错误分类话术等,玩家不开面板也看得见)。
         net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(
-                (g, delta) -> com.dwinovo.numen.client.hud.TalkHint.render(g));
+                (g, delta) -> {
+                    com.dwinovo.numen.client.hud.TalkHint.render(g);
+                    com.dwinovo.numen.client.hud.NumenHudToasts.render(g);
+                });
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {
                     com.dwinovo.numen.client.NumenKeys.tick();

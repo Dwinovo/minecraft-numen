@@ -85,12 +85,32 @@ final class TurnPresenter {
 
     /** onChunk 接线:content delta 直通 UI 的 live-partial,原始 chunk 原样继续喂语音。 */
     Consumer<JsonObject> tapForUi(int gen, Consumer<JsonObject> voiceSink) {
+        return tapForUi(gen, voiceSink, null);
+    }
+
+    /**
+     * 带思考流分接头的版本:reasoningDelta(provider 的方言解码)抽出的思考
+     * 增量喂头顶思考泡的本地流——主人能看见她在想什么,不只是省略号。
+     */
+    Consumer<JsonObject> tapForUi(int gen, Consumer<JsonObject> voiceSink,
+                                  java.util.function.Function<JsonObject, String> reasoningDelta) {
         return chunk -> {
             String delta = VoicePipeline.extractContentDelta(chunk);
             if (delta != null && !delta.isEmpty()) {
                 Minecraft.getInstance().execute(() -> {
                     if (gen == generation.getAsInt()) livePartial.append(delta);
                 });
+            }
+            if (reasoningDelta != null) {
+                String r = reasoningDelta.apply(chunk);
+                if (r != null && !r.isEmpty()) {
+                    Minecraft.getInstance().execute(() -> {
+                        if (gen == generation.getAsInt()) {
+                            com.dwinovo.numen.client.hud.SpeechBubbles
+                                    .appendLocalThinking(entityUuid, r);
+                        }
+                    });
+                }
             }
             if (voiceSink != null) voiceSink.accept(chunk);
         };

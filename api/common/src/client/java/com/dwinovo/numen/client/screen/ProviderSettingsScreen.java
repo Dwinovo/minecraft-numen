@@ -3,7 +3,6 @@ package com.dwinovo.numen.client.screen;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.llm.LlmEndpoint;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
-import com.dwinovo.numen.agent.http.LlmHttpException;
 import com.dwinovo.numen.agent.provider.LlmProvider;
 import com.dwinovo.numen.agent.provider.ProviderRegistry;
 import com.dwinovo.numen.client.ui.NumenTheme;
@@ -284,23 +283,11 @@ public final class ProviderSettingsScreen extends Screen {
                     if (error == null) {
                         toasts.push(NumenToasts.Severity.INFO, t("numen.gui.providers.check.ok"));
                     } else {
-                        toasts.push(NumenToasts.Severity.ERROR, classify(error));
+                        // 分类话术的唯一真源在 LlmErrorWords——与回合失败的播报同一张表。
+                        toasts.push(NumenToasts.Severity.ERROR,
+                                com.dwinovo.numen.client.agent.LlmErrorWords.classify(error));
                     }
                 });
-    }
-
-    /** 分类话术:说人话 + 说下一步;堆栈归日志(传输层已经记了)。 */
-    private static String classify(Throwable error) {
-        Throwable cause = error;
-        while (cause.getCause() != null && !(cause instanceof LlmHttpException)) cause = cause.getCause();
-        if (cause instanceof LlmHttpException http) {
-            if (http.isUnauthorized()) return t("numen.gui.providers.check.unauthorized");
-            if (http.statusCode() == 404) return t("numen.gui.providers.check.not_found");
-            if (http.isRateLimited()) return t("numen.gui.providers.check.rate_limited");
-            if (http.statusCode() >= 500) return t("numen.gui.providers.check.server_error");
-            return t("numen.gui.providers.check.bad_request") + " (HTTP " + http.statusCode() + ")";
-        }
-        return t("numen.gui.providers.check.network");
     }
 
     private static String t(String key) {

@@ -879,7 +879,9 @@ public final class EntityAgentLoop {
         presenter.clearPartial();
         // 头顶挂思考气泡:从发出请求到回应落地的整个空窗都有反馈
         presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
-        client().chatStreaming(snapshot, tools, systemPrompt, presenter.tapForUi(gen, vt.sink()))
+        NumenLlmClient llm = client();
+        llm.chatStreaming(snapshot, tools, systemPrompt,
+                        presenter.tapForUi(gen, vt.sink(), llm.provider()::extractReasoningDelta))
                 .whenComplete((res, err) -> {
                     vt.finish().run();
                     bounceBackToMain(gen, res, err);
@@ -1128,7 +1130,10 @@ public final class EntityAgentLoop {
         lastTurnError = null;
         com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(),
                 "这次没连上(" + truncate(why, 90) + ")——稍后再试一句,详情见日志");
-        com.dwinovo.numen.client.hud.TalkHint.flash(presenter.speakerName() + " 连接出错——详情看聊天栏", 3500);
+        // HUD toast:玩家多半没开面板(Y/V 快捷对话),这是唯一接得住他的通道。
+        com.dwinovo.numen.client.hud.NumenHudToasts.push(
+                com.dwinovo.numen.client.ui.NumenToasts.Severity.ERROR,
+                presenter.speakerName() + ": " + truncate(why, 90));
         if (inbox.isEmpty()) {
             turnPause = AgentTurnPause.RECOVERABLE_FAILURE;
             return;
@@ -1172,9 +1177,10 @@ public final class EntityAgentLoop {
         }
 
         if (err != null) {
-            lastTurnError = unwrap(err);
-            Constants.LOG.warn("[numen-entity#{}] LLM call failed: {}",
-                    entityUuid, lastTurnError);
+            // 面向主人的是分类人话;技术细节进日志(传输层还有全量)。
+            lastTurnError = LlmErrorWords.classify(err);
+            Constants.LOG.warn("[numen-entity#{}] LLM call failed: {} ({})",
+                    entityUuid, lastTurnError, unwrap(err));
             // MID-STREAM deaths (idle watchdog, connection reset after first tokens) are
             // outside the transport's retry scope — the SDKs surface them to the caller,
             // and the caller's standard answer is: discard the partial (never entered the
@@ -1188,8 +1194,10 @@ public final class EntityAgentLoop {
                 final TurnPresenter.VoiceTurn vt2 = presenter.beginVoiceTurn();   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
                 presenter.clearPartial();                 // 失败那次的半截文字同理作废
                 presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
-                client().chatStreaming(modelContextSnapshot(), ToolRegistry.all(),
-                                composeSystemPrompt(), presenter.tapForUi(gen2, vt2.sink()))
+                NumenLlmClient llm2 = client();
+                llm2.chatStreaming(modelContextSnapshot(), ToolRegistry.all(),
+                                composeSystemPrompt(),
+                                presenter.tapForUi(gen2, vt2.sink(), llm2.provider()::extractReasoningDelta))
                         .whenComplete((r2, e2) -> {
                             vt2.finish().run();
                             bounceBackToMain(gen2, r2, e2);

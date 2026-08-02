@@ -39,6 +39,9 @@ public final class SpeechBubbles {
      *  只收思考泡;TEXT 顶掉一切;CLEAR 收掉一切。 */
     public static void apply(UUID entityUuid, byte kind, String text) {
         if (entityUuid == null) return;
+        if (kind != SpeechBubblePayload.KIND_THINKING) {
+            LOCAL_THINKING.remove(entityUuid);   // 思考期结束(正文/收工/清场),流一并清
+        }
         if (kind == SpeechBubblePayload.KIND_CLEAR) {
             LIVE.remove(entityUuid);
             return;
@@ -65,6 +68,26 @@ public final class SpeechBubbles {
         }
         long life = Math.min(TEXT_LIFE_MAX_MS, TEXT_LIFE_BASE_MS + shown.length() * TEXT_LIFE_PER_CHAR_MS);
         LIVE.put(entityUuid, new Bubble(kind, shown, now, life));
+    }
+
+    // ---- 本地思考流(仅同伴主人本机可见,不走网络——逐 chunk 广播是流量灾难) ----
+
+    private static final Map<UUID, StringBuilder> LOCAL_THINKING = new HashMap<>();
+    /** 只留尾巴:气泡最多展示两行,存多了也是白存。 */
+    private static final int LOCAL_THINKING_CAP = 300;
+
+    /** 思考增量追加(客户端主线程;由回合的 chunk 回调经主线程投递)。 */
+    public static void appendLocalThinking(UUID entityUuid, String delta) {
+        if (entityUuid == null || delta == null || delta.isEmpty()) return;
+        StringBuilder sb = LOCAL_THINKING.computeIfAbsent(entityUuid, k -> new StringBuilder());
+        sb.append(delta);
+        if (sb.length() > LOCAL_THINKING_CAP) sb.delete(0, sb.length() - LOCAL_THINKING_CAP);
+    }
+
+    /** 当前思考流尾巴,没有则空串。 */
+    public static String localThinking(UUID entityUuid) {
+        StringBuilder sb = LOCAL_THINKING.get(entityUuid);
+        return sb == null ? "" : sb.toString();
     }
 
     /** 某实体此刻的活气泡;过期就地摘除返回 null。渲染方逐实体查询。 */

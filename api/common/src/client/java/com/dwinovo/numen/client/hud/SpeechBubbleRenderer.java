@@ -73,7 +73,7 @@ public final class SpeechBubbleRenderer {
         poseStack.translate(0, body.getBbHeight() + 0.95, 0);
         poseStack.mulPose(mc.getEntityRenderDispatcher().cameraOrientation());
         poseStack.scale(SCALE, -SCALE, SCALE);
-        drawBubble(poseStack, buffers, mc.font, bubble);
+        drawBubble(poseStack, buffers, mc.font, bubble, body.getUUID());
         poseStack.popPose();
     }
 
@@ -83,10 +83,10 @@ public final class SpeechBubbleRenderer {
      * <b>+z 朝观察者</b>:阴影垫底(0)、边框、填充逐层抬高,文字最前。
      */
     private static void drawBubble(PoseStack poseStack, MultiBufferSource buffers,
-                                   Font font, SpeechBubbles.Bubble bubble) {
+                                   Font font, SpeechBubbles.Bubble bubble, java.util.UUID uuid) {
         UiTheme th = UiTheme.current();
         List<String> lines = bubble.thinking()
-                ? List.of(thinkingDots())
+                ? thinkingLines(font, uuid)
                 : wrapToWidth(font, bubble.text(), MAX_WIDTH, MAX_LINES);
         if (lines.isEmpty()) {
             return;
@@ -129,6 +129,15 @@ public final class SpeechBubbleRenderer {
     }
 
     /** 思考中:三点脉冲,约 0.4s 一跳。 */
+    /** 思考泡的内容:有本地思考流就滚动展示尾巴(暗色沿用),没有退省略号动画。 */
+    private static List<String> thinkingLines(Font font, java.util.UUID uuid) {
+        String stream = SpeechBubbles.localThinking(uuid);
+        if (stream.isEmpty()) return List.of(thinkingDots());
+        String tail = stream.length() > 72 ? "…" + stream.substring(stream.length() - 72) : stream;
+        List<String> wrapped = wrapToWidth(font, tail.replace('\n', ' '), MAX_WIDTH, 2);
+        return wrapped.isEmpty() ? List.of(thinkingDots()) : wrapped;
+    }
+
     private static String thinkingDots() {
         int n = (int) (System.currentTimeMillis() / 400 % 3) + 1;
         return switch (n) {

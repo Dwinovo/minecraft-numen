@@ -692,6 +692,11 @@ public final class SettingsView {
     // ---- Provider section: the library of named LLM provider configs companions select from ----
 
     private void buildProviderListWidgets() {
+        // 新版全局设置屏(NumenUI)入口——逐区迁移期间新旧并存。
+        host.add(new SimpleButton(left() + panelW() - PAD - 64 - 90, secY0() - 2, 86, 14,
+                Component.translatable("numen.gui.providers.open_new"),
+                b -> com.dwinovo.numen.client.screen.ProviderSettingsScreen.open(
+                        net.minecraft.client.Minecraft.getInstance().screen)));
         host.add(new SimpleButton(left() + panelW() - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable(ModLanguageData.Keys.PROVIDER_ADD), b -> {
                     addingProvider = true; providerEditId = null;
