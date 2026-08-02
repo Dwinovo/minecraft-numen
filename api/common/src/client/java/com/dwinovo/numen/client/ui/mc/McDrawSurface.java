@@ -1,0 +1,50 @@
+package com.dwinovo.numen.client.ui.mc;
+
+import com.dwinovo.numen.client.ui.IDrawSurface;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphics;
+
+/**
+ * IDrawSurface 的 1.21.1 实现——本类是 NumenUI 在每个版本分支上唯一需要
+ * 重写的文件。保持薄:只做坐标与 API 形态的转译,不藏任何布局/状态逻辑。
+ */
+public final class McDrawSurface implements IDrawSurface {
+
+    private final GuiGraphics g;
+    private final Font font;
+
+    public McDrawSurface(GuiGraphics g, Font font) {
+        this.g = g;
+        this.font = font;
+    }
+
+    @Override
+    public void fillRect(int x, int y, int w, int h, int argb) {
+        g.fill(x, y, x + w, y + h, argb);
+    }
+
+    @Override
+    public void drawText(String text, int x, int y, int argb, boolean shadow) {
+        g.drawString(font, text, x, y, argb, shadow);
+    }
+
+    @Override
+    public int textWidth(String text) {
+        return font.width(text);
+    }
+
+    @Override
+    public int lineHeight() {
+        return font.lineHeight + 2;
+    }
+
+    @Override
+    public void pushScissor(int x, int y, int w, int h) {
+        g.enableScissor(x, y, x + w, y + h);
+    }
+
+    @Override
+    public void popScissor() {
+        g.disableScissor();
+    }
+}
