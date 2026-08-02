@@ -100,17 +100,17 @@ public final class NumenCore {
 
         // Registration ORDER is preserved (backends with prompt-caching keyed off
         // the tool list cache stably across requests).
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.MoveToTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.MeleeAttackTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.RangedAttackTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.job.MoveToTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.job.MeleeAttackTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.job.RangedAttackTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.act.LocateStructureTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.act.LocateBiomeTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.CollectItemsTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.FishTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.AutoMineTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.job.CollectItemsTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.job.FishTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.job.AutoMineTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.act.EquipItemTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.BuildTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.BlueprintTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.job.BuildTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.job.BlueprintTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.query.BlueprintReadTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.act.InteractAtTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.act.InteractEntityTool());

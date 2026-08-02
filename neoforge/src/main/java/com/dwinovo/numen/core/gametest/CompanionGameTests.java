@@ -2078,7 +2078,7 @@ public class CompanionGameTests {
             for (boolean survival : new boolean[]{true, false}) {
                 long need = com.dwinovo.numen.core.task.BuildOrder
                         .estimatedTicks(cells, survival);
-                long budget = com.dwinovo.numen.core.tools.BuildTool.timeoutTicksFor(cells, survival);
+                long budget = com.dwinovo.numen.core.tools.job.BuildTool.timeoutTicksFor(cells, survival);
                 helper.assertTrue(budget > need,
                         "deadline must exceed the build itself: " + cells + " cells, survival="
                                 + survival + ", needs " + need + " ticks but budget is " + budget);

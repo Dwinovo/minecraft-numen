@@ -1,4 +1,5 @@
-package com.dwinovo.numen.core.tools;
+package com.dwinovo.numen.core.tools.job;
+import com.dwinovo.numen.core.tools.CombatTools;
 
 import static com.dwinovo.numen.task.TaskDispatch.ctx;
 import static com.dwinovo.numen.task.TaskDispatch.dispatchAsync;
