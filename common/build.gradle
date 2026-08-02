@@ -149,3 +149,35 @@ tasks.register('toolBench', Test) {
         exceptionFormat = 'full'
     }
 }
+
+// 服务端安全门:主源码集不得引用 Minecraft 客户端类。源码集隔离挡得住
+// "引用我们自己的客户端类"(classpath 上没有,import 即编译错),但挡不住
+// 直接 import 原版客户端类——common 编译用的是合并的客户端 MC jar,
+// net.minecraft.client 永远在场。这道检查把缺口补上:出现即 fail,
+// 该代码应移入 src/client/java。
+tasks.register('checkServerSafe') {
+    group = 'verification'
+    description = 'Fail if src/main references Minecraft client-only classes.'
+    def srcDir = file('src/main/java')
+    inputs.dir(srcDir)
+    outputs.upToDateWhen { false }
+    doLast {
+        def offenders = []
+        srcDir.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+            if (!f.name.endsWith('.java')) return
+            int no = 0
+            f.eachLine('UTF-8') { line ->
+                no++
+                if (line.contains('net.minecraft.client') || line.contains('com.mojang.blaze3d')) {
+                    offenders << "${f}:${no}: ${line.trim()}"
+                }
+            }
+        }
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                    "src/main 引用了 Minecraft 客户端类(专用服务端上不存在,会 ClassNotFound)。\n"
+                    + "把这些代码移进 src/client/java:\n  " + offenders.join('\n  '))
+        }
+    }
+}
+tasks.named('check') { dependsOn 'checkServerSafe' }
