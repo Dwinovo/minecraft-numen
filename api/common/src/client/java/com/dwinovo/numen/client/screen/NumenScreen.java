@@ -60,10 +60,12 @@ public final class NumenScreen extends Screen {
     // ---- layout ----
     // 面板随窗口伸缩:下限=从前的固定尺寸(小窗口下与历史布局完全一致),
     // 上限挡住大屏上的无限变宽——行宽超过阅读舒适区就不再跟了。
+    // 原版式固定尺寸(箱子/工作台从不随窗口伸缩):大窗口下大面板稀内容,
+    // 字的视觉占比被稀释,"显小显散"。定尺=历史布局的原生尺寸,零回归。
     private static final int PANEL_MIN_W = 380;
     private static final int PANEL_MIN_H = 232;
-    private static final int PANEL_MAX_W = 520;
-    private static final int PANEL_MAX_H = 300;
+    private static final int PANEL_MAX_W = PANEL_MIN_W;
+    private static final int PANEL_MAX_H = PANEL_MIN_H;
     // Left companion rail (folded-in roster): one avatar per Numen, click to switch, + to summon.
     private static final int RAIL_W = 46;        // left rail column width (baked into the workspace sprite)
     private static final int RAIL_AV = 26;       // avatar tile size
