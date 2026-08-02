@@ -47,6 +47,8 @@ public interface LlmProvider {
     String THINKING_TYPE = "thinking-type";
     /** 布尔开关 {@code enable_thinking: true|false}。 */
     String THINKING_ENABLE_BOOL = "enable-bool";
+    /** token 预算型 {@code thinking: {type:"enabled", budget_tokens:N}}(力度映射为预算)。 */
+    String THINKING_BUDGET = "budget";
     /** 无开关:思考型号常开/不可控,任何力度都不发参数。 */
     String THINKING_NONE = "none";
 
@@ -131,6 +133,22 @@ public interface LlmProvider {
     }
 
     /**
+     * 鉴权头方言。缺省是 OpenAI 系的 {@code Authorization: Bearer};别的协议
+     * 覆写(如 {@code x-api-key} + 版本头)。per-endpoint 常量,传输层构造时取用。
+     */
+    default java.util.Map<String, String> authHeaders(String apiKey) {
+        return java.util.Map.of("Authorization", "Bearer " + (apiKey == null ? "" : apiKey));
+    }
+
+    /**
+     * 聊天端点在基址之后的路径段。URL 组合规则:基址若已以本路径结尾则不重复
+     * 追加,详见 {@code NumenLlmClient} 的组合逻辑。
+     */
+    default String chatPath() {
+        return "/chat/completions";
+    }
+
+    /**
      * 从一个 SSE chunk 里抽出思考文本增量(方言字段解码),没有则 null。
      * 供 UI 的实时思考流显示;累积后的权威去重版本在
      * {@link AssistantTurn#reasoning}(同流双字段的场合以累积侧的
@@ -166,6 +184,18 @@ public interface LlmProvider {
      * (rare) can override to false.
      */
     default boolean supportsStreaming() { return true; }
+
+    /**
+     * 在请求体上开启流式。缺省是 OpenAI 方言({@code stream:true} +
+     * {@code stream_options.include_usage});别的协议覆写成自己的形状——
+     * 对严格校验未知字段的后端,多发一个别家的字段就是 400。
+     */
+    default void applyStreaming(JsonObject body) {
+        body.addProperty("stream", true);
+        JsonObject streamOpts = new JsonObject();
+        streamOpts.addProperty("include_usage", true);
+        body.add("stream_options", streamOpts);
+    }
 
     /**
      * Apply one SSE chunk's JSON to the running {@link StreamAccumulator}.

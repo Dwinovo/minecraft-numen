@@ -75,9 +75,22 @@ public final class HttpLlmTransport {
 
     private final HttpClient client;
     private final java.util.Map<String, String> extraHeaders;
+    /** 鉴权头方言(x-api-key / Bearer ...),null = 传统 Bearer(用 postSse 的 apiKey 参数)。 */
+    private final java.util.Map<String, String> authHeaders;
 
     public HttpLlmTransport(String proxy, java.util.Map<String, String> extraHeaders) {
+        this(proxy, extraHeaders, null);
+    }
+
+    /**
+     * @param authHeaders 鉴权头方言,由 provider 给出({@code Authorization: Bearer}
+     *                    或 {@code x-api-key} + 版本头等)。非 null 时优先于
+     *                    {@code post/postSse} 的 apiKey 参数(后者仅为兼容保留)。
+     */
+    public HttpLlmTransport(String proxy, java.util.Map<String, String> extraHeaders,
+                            java.util.Map<String, String> authHeaders) {
         this.extraHeaders = extraHeaders == null ? java.util.Map.of() : extraHeaders;
+        this.authHeaders = authHeaders;
         HttpClient.Builder b = HttpClient.newBuilder()
                 .connectTimeout(CONNECT_TIMEOUT)
                 .followRedirects(HttpClient.Redirect.NORMAL);
@@ -272,8 +285,12 @@ public final class HttpLlmTransport {
                 .uri(URI.create(url))
                 .timeout(REQUEST_TIMEOUT);
         extraHeaders.forEach(b::header);   // per-site headers (e.g. OpenRouter Referer / Title)
-        return b.header("Authorization", "Bearer " + apiKey)
-                .header("Content-Type", "application/json; charset=utf-8")
+        if (authHeaders != null) {
+            authHeaders.forEach(b::header);            // provider 的鉴权方言
+        } else {
+            b.header("Authorization", "Bearer " + apiKey);  // 传统缺省
+        }
+        return b.header("Content-Type", "application/json; charset=utf-8")
                 .header("Accept", accept)
                 .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
                 .build();

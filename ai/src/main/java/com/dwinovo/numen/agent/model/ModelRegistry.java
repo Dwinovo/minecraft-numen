@@ -27,7 +27,7 @@ public final class ModelRegistry {
     public record Model(String id, int ctx, boolean reasoning) {}
     public record Provider(String id, String name, String baseUrl, boolean custom,
                            Map<String, String> headers, List<Model> models,
-                           String thinkingFormat) {}
+                           String thinkingFormat, String protocol) {}
 
     /** Fallback context window for an unknown model (e.g. a custom one). */
     public static final int DEFAULT_CTX = 64_000;
@@ -162,7 +162,8 @@ public final class ModelRegistry {
                         p.has("custom") && p.get("custom").getAsBoolean(),
                         Map.copyOf(headers),
                         List.copyOf(models),
-                        p.has("thinkingFormat") ? p.get("thinkingFormat").getAsString() : ""));
+                        p.has("thinkingFormat") ? p.get("thinkingFormat").getAsString() : "",
+                        p.has("protocol") ? p.get("protocol").getAsString() : ""));
             }
         } catch (Exception e) {
             AiLog.LOG.error("[numen] failed to parse models.json", e);
@@ -194,8 +195,12 @@ public final class ModelRegistry {
         return p == null ? "" : p.baseUrl();
     }
 
-    /** Map config aliases (kimi/doubao/qwen/glm/silicon) onto canonical registry ids. */
-    private static String canon(String id) {
+    /**
+     * 站点别名 → 规范 id 的**唯一真源**(kimi/doubao/qwen/glm/silicon 这些玩家
+     * 顺手会填的名字)。装配({@code NumenLlmClient.pickProvider})与本类的查询
+     * 都从这里走——别名表只此一张,别处不得复刻。
+     */
+    public static String canonicalId(String id) {
         if (id == null) return "openai";
         return switch (id.toLowerCase()) {
             case "kimi" -> "moonshot";
@@ -203,8 +208,13 @@ public final class ModelRegistry {
             case "qwen", "tongyi", "aliyun" -> "dashscope";
             case "glm" -> "zhipu";
             case "silicon" -> "siliconflow";
+            case "openai-compatible" -> "openai";
             default -> id.toLowerCase();
         };
+    }
+
+    private static String canon(String id) {
+        return canonicalId(id);
     }
 
     /** Custom request headers for a site (empty if none). */
@@ -217,6 +227,12 @@ public final class ModelRegistry {
     public static String thinkingFormat(String providerId) {
         Provider p = provider(providerId);
         return p == null ? "" : p.thinkingFormat();
+    }
+
+    /** 站点的线协议(空 = openai 兼容;{@code "anthropic"} = Anthropic Messages)。 */
+    public static String protocol(String providerId) {
+        Provider p = provider(providerId);
+        return p == null ? "" : p.protocol();
     }
 
     /** Context window for a (provider, model) pair, or {@link #DEFAULT_CTX} if unknown / custom. */

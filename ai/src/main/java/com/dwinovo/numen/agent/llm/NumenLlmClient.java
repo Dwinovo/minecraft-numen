@@ -4,6 +4,7 @@ import com.dwinovo.numen.ai.AiLog;
 import com.dwinovo.numen.agent.http.HttpLlmTransport;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.model.ModelRegistry;
+import com.dwinovo.numen.agent.provider.AnthropicProvider;
 import com.dwinovo.numen.agent.provider.DeepSeekProvider;
 import com.dwinovo.numen.agent.provider.IToolSpec;
 import com.dwinovo.numen.agent.provider.LlmProvider;
@@ -45,9 +46,6 @@ import java.util.function.Consumer;
  */
 public final class NumenLlmClient {
 
-    /** Suffix appended to base URLs that don't already end with it. */
-    private static final String CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
-
     private final HttpLlmTransport transport;
     private final LlmProvider provider;
     private final String fullUrl;
@@ -62,7 +60,8 @@ public final class NumenLlmClient {
         this.fullUrl = composeUrl(endpoint.baseUrl(), siteBase, provider);
         this.apiKey = endpoint.apiKey();
         this.transport = new HttpLlmTransport(endpoint.proxy(),
-                com.dwinovo.numen.agent.model.ModelRegistry.headers(endpoint.provider()));
+                com.dwinovo.numen.agent.model.ModelRegistry.headers(endpoint.provider()),
+                provider.authHeaders(endpoint.apiKey()));
         String configured = endpoint.model();
         this.model = (configured == null || configured.isBlank()) ? "gpt-5.4-mini" : configured;
         this.reasoningEffort = normalizeReasoning(endpoint.reasoningEffort());
@@ -71,18 +70,19 @@ public final class NumenLlmClient {
     }
 
     /**
-     * Compose the chat completions URL. Base URL precedence: an explicit per-config override wins;
+     * Compose the chat URL. Base URL precedence: an explicit per-config override wins;
      * else the site's registered base URL (from {@code numen_models.json} — so "+ add site" URLs and
      * adapter-less sites like Gemini/Grok actually take effect); else the adapter's hard-coded default.
-     * Then normalise: trim a trailing slash and append {@code /chat/completions} if absent.
+     * Then normalise: trim a trailing slash and append the provider's chat path
+     * ({@code /chat/completions} / {@code /messages}) if absent.
      */
     private static String composeUrl(String userBase, String siteBase, LlmProvider provider) {
         String base = nonBlank(userBase) ? userBase
                 : nonBlank(siteBase) ? siteBase
                 : provider.defaultBaseUrl();
         if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
-        if (base.endsWith(CHAT_COMPLETIONS_SUFFIX)) return base;
-        return base + CHAT_COMPLETIONS_SUFFIX;
+        if (base.endsWith(provider.chatPath())) return base;
+        return base + provider.chatPath();
     }
 
     /**
@@ -159,11 +159,8 @@ public final class NumenLlmClient {
             provider.applyReasoning(body, reasoningEffort);
         }
 
-        // -- 2. Enable streaming + usage reporting (both server-side flags).
-        body.addProperty("stream", true);
-        JsonObject streamOpts = new JsonObject();
-        streamOpts.addProperty("include_usage", true);
-        body.add("stream_options", streamOpts);
+        // -- 2. Enable streaming + usage reporting (protocol-dialect shape).
+        provider.applyStreaming(body);
 
         if (AiLog.LOG.isDebugEnabled()) {
             AiLog.LOG.debug("[numen-llm] chat start: provider={}, model={}, msgs={}, tools={}, system_prompt_chars={}",
@@ -248,27 +245,25 @@ public final class NumenLlmClient {
      * dashscope, gemini, grok, "+ add site" customs — is a plain
      * OpenAI-compatible endpoint whose name and default base URL come from
      * {@code numen_models.json} ({@link ModelRegistry}), the single source
-     * the settings UI reads too. A few aliases users naturally type resolve
-     * first ({@code kimi}, {@code doubao}/{@code ark}, {@code qwen}/
-     * {@code tongyi}/{@code aliyun}, {@code glm}, {@code silicon}).
+     * the settings UI reads too — base URL, thinking dialect, and wire
+     * protocol ({@code protocol:"anthropic"} rows get the Anthropic Messages
+     * adapter instead of the OpenAI-compat one). Alias resolution
+     * ({@code kimi}/{@code doubao}/{@code glm}/...) lives in
+     * {@link ModelRegistry#canonicalId} — the one and only alias table.
      * Unknown values fall back to {@code openai} with a warning log.
      */
     public static LlmProvider pickProvider(String name) {
-        if (name == null) return new OpenAIProvider();
-        String id = switch (name.toLowerCase()) {
-            case "kimi" -> MoonshotProvider.NAME;
-            case "doubao", "ark" -> "volcengine";
-            case "qwen", "tongyi", "aliyun" -> "dashscope";
-            case "glm" -> "zhipu";
-            case "silicon" -> "siliconflow";
-            case "openai-compatible" -> OpenAIProvider.NAME;
-            default -> name.toLowerCase();
-        };
+        String id = ModelRegistry.canonicalId(name);
         if (id.equals(DeepSeekProvider.NAME)) return new DeepSeekProvider();
         if (id.equals(MoonshotProvider.NAME)) return new MoonshotProvider();
         if (id.equals(OpenAIProvider.NAME)) return new OpenAIProvider();
         if (ModelRegistry.has(id)) {
             String baseUrl = ModelRegistry.baseUrl(id);
+            if ("anthropic".equals(ModelRegistry.protocol(id))) {
+                return new AnthropicProvider(id,
+                        baseUrl == null || baseUrl.isBlank() ? AnthropicProvider.DEFAULT_BASE_URL : baseUrl,
+                        ModelRegistry.thinkingFormat(id));
+            }
             return new OpenAIProvider(id,
                     baseUrl == null || baseUrl.isBlank() ? OpenAIProvider.DEFAULT_BASE_URL : baseUrl,
                     ModelRegistry.thinkingFormat(id));
