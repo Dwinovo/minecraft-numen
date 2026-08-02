@@ -2078,7 +2078,7 @@ public class CompanionGameTests {
             for (boolean survival : new boolean[]{true, false}) {
                 long need = com.dwinovo.numen.core.task.build.BuildOrder
                         .estimatedTicks(cells, survival);
-                long budget = com.dwinovo.numen.core.tools.job.BuildTool.timeoutTicksFor(cells, survival);
+                long budget = com.dwinovo.numen.core.tools.work.BuildTool.timeoutTicksFor(cells, survival);
                 helper.assertTrue(budget > need,
                         "deadline must exceed the build itself: " + cells + " cells, survival="
                                 + survival + ", needs " + need + " ticks but budget is " + budget);
@@ -2620,7 +2620,7 @@ public class CompanionGameTests {
         args.addProperty("count", 100);
         java.util.concurrent.atomic.AtomicReference<String> reply =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        new com.dwinovo.numen.core.tools.act.TakeItemsTool()
+        new com.dwinovo.numen.core.tools.inventory.TakeItemsTool()
                 .onServerCall("gametest-take", args, companion, reply::set);
         helper.succeedWhen(() -> {
             helper.assertTrue(reply.get() != null && reply.get().contains("\"success\":true"),
@@ -2641,7 +2641,7 @@ public class CompanionGameTests {
         args.addProperty("count", 10);
         java.util.concurrent.atomic.AtomicReference<String> reply =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        new com.dwinovo.numen.core.tools.act.TakeItemsTool()
+        new com.dwinovo.numen.core.tools.inventory.TakeItemsTool()
                 .onServerCall("gametest-take2", args, companion, reply::set);
         helper.succeedWhen(() -> {
             helper.assertTrue(reply.get() != null && reply.get().contains("\"success\":false"),
