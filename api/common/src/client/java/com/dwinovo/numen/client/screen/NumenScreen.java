@@ -731,6 +731,10 @@ public final class NumenScreen extends Screen {
                 && (settings.cancelModal() || settings.cancelForm())) {
             return true;
         }
+        // "连接"分区的内嵌 NumenUI 面板(输入框光标键/粘贴、下拉 Esc 收浮层)。
+        if (tab == Tab.SETTINGS && !summoning && settings.keyPressed(keyCode, modifiers)) {
+            return true;
+        }
         if (summoning) {
             if (k == 257 || k == 335) { doSummon(); return true; }    // Enter
             if (k == 256) { summoning = false; rebuild(); return true; } // Esc cancels (doesn't close panel)
@@ -741,6 +745,14 @@ public final class NumenScreen extends Screen {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean charTyped(char ch, int modifiers) {
+        if (tab == Tab.SETTINGS && !summoning && settings.charTyped(ch)) {
+            return true;
+        }
+        return super.charTyped(ch, modifiers);
     }
 
     private void doSummon() {

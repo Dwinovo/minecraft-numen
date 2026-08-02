@@ -70,7 +70,7 @@ public final class SettingsView {
      * {@link #MCP} 是"给同伴的大脑加外部工具"(我们当 client),{@link #BRAIN} 是"把同伴
      * 交给外面的大脑"(我们当 server),故在 UI 上按用户视角分成工具扩展/外接大脑两节。
      */
-    private enum Section { PROVIDER, PROXY, MCP, BRAIN, SKILLS, PERSONA, VOICE, SKIN, STT, THEME }
+    private enum Section { CONNECTION, PROVIDER, PROXY, MCP, BRAIN, SKILLS, PERSONA, VOICE, SKIN, STT, THEME }
 
     // ---- layout constants (mirror the screen's) ----
     private static final int PAD = 8;
@@ -91,7 +91,19 @@ public final class SettingsView {
     // ---- palette: re-read from the CURRENT theme on every public entry (theme switch = live) ----
     private int BORDER, ACCENT, TXT, TXT_MUTED, TXT_FAINT, CTA, FIELD, OK, RUN, FAIL;
 
-    private Section section = Section.PROVIDER;
+    private Section section = Section.CONNECTION;
+
+    // ---- "连接"分区:NumenUI ProviderPanel 内嵌(逐区换瓤的第一区) ----
+    private final com.dwinovo.numen.client.ui.NumenToasts viewToasts =
+            new com.dwinovo.numen.client.ui.NumenToasts();
+    private ProviderPanel connectionPanel;
+
+    private ProviderPanel connectionPanel() {
+        if (connectionPanel == null) {
+            connectionPanel = new ProviderPanel(viewToasts::push);
+        }
+        return connectionPanel;
+    }
     private int settingsScroll;   // first visible row of the section lists (wheel-scroll when long)
 
     // ---- model-config section state (mirrors the persona section) ----
@@ -413,6 +425,14 @@ public final class SettingsView {
     public void buildWidgets() {
         loadPalette();
         switch (section) {
+            case CONNECTION -> {
+                int cx = left() + PAD + NAV_W + 8;
+                int cy = secY0();
+                connectionPanel().build(cx, cy,
+                        left() + panelW() - PAD - cx,
+                        top() + panelH() - PAD - cy,
+                        top() + panelH() - 4);
+            }
             case SKILLS -> buildSkillsWidgets();
             case MCP -> {
                 if (mcpDeletePending != null) buildMcpDeleteConfirm();
@@ -692,11 +712,6 @@ public final class SettingsView {
     // ---- Provider section: the library of named LLM provider configs companions select from ----
 
     private void buildProviderListWidgets() {
-        // 新版全局设置屏(NumenUI)入口——逐区迁移期间新旧并存。
-        host.add(new SimpleButton(left() + panelW() - PAD - 64 - 90, secY0() - 2, 86, 14,
-                Component.translatable("numen.gui.providers.open_new"),
-                b -> com.dwinovo.numen.client.screen.ProviderSettingsScreen.open(
-                        net.minecraft.client.Minecraft.getInstance().screen)));
         host.add(new SimpleButton(left() + panelW() - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable(ModLanguageData.Keys.PROVIDER_ADD), b -> {
                     addingProvider = true; providerEditId = null;
@@ -1751,6 +1766,10 @@ public final class SettingsView {
                 6, th.surface(), th.surfaceBorder());
         renderSettingsNav(g, mouseX, mouseY);
         switch (section) {
+            case CONNECTION -> connectionPanel().render(
+                    new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    com.dwinovo.numen.client.ui.NumenTheme.DARK.colors(),
+                    mouseX, mouseY, net.minecraft.Util.getMillis());
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
             case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
@@ -1887,6 +1906,7 @@ public final class SettingsView {
     /** The config-hub left sub-nav + the divider. */
     private void renderSettingsNav(GuiGraphics g, int mouseX, int mouseY) {
         String[] labels = {
+                I18n.get("numen.settings.nav.connection"),
                 I18n.get(ModLanguageData.Keys.PROVIDER_TITLE), I18n.get("numen.settings.proxy"),
                 I18n.get("numen.settings.nav.mcp"), I18n.get("numen.settings.nav.brain"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona"),
@@ -2186,6 +2206,11 @@ public final class SettingsView {
         // 模态确认卡在场:面板内容只是背景,任何命中(子导航/主题行/列表行)都不放行
         // ——卡上的两颗按钮走 Screen 的 widget 通道,不经过这里。
         if (modalActive()) return false;
+        // "连接"分区:内容区事件整体交给内嵌面板(浮层打开时它优先吃掉一切)。
+        if (section == Section.CONNECTION
+                && connectionPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
         // Model-config form pickers get first pick (their open lists overlay the form).
         if (addingProvider && provProviderDropdown != null) {
             String before = provProviderDropdown.selectedId();
@@ -2381,6 +2406,9 @@ public final class SettingsView {
     /** Wheel pass 1 (before the rail/chat checks, mirroring the old order): open dropdown
      *  lists first, then the voice form's own scroll. */
     public boolean mouseScrolledEarly(double mx, double my, double sy) {
+        if (section == Section.CONNECTION && connectionPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
         for (Dropdown d : new Dropdown[]{provModelDropdown, voiceBackendDropdown, skinVariantDropdown}) {
             if (d != null && d.mouseScrolled(mx, my, sy)) return true;
         }
@@ -2416,8 +2444,24 @@ public final class SettingsView {
 
     /** Post-widget overlay pass: field placeholders (shadowless), the voice form's row labels,
      *  and the form dropdowns' open lists (drawn last so they sit above the fields). */
+    /** 键盘/字符输入:目前只有"连接"分区的内嵌面板需要(NumenUI 输入框)。 */
+    public boolean keyPressed(int keyCode, int modifiers) {
+        return section == Section.CONNECTION && connectionPanel().keyPressed(keyCode, modifiers);
+    }
+
+    public boolean charTyped(char ch) {
+        return section == Section.CONNECTION && connectionPanel().charTyped(ch);
+    }
+
     public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
+        // "连接"分区的 toast 画在最上层,右缘锚定设置面板右缘。
+        if (!viewToasts.isIdle()) {
+            viewToasts.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    left() + panelW() - 2,
+                    com.dwinovo.numen.client.ui.NumenTheme.DARK.colors(),
+                    net.minecraft.Util.getMillis());
+        }
         if (section == Section.PROVIDER && addingProvider) {
             placeholder(g, provKeyInput, "sk-…");
             placeholder(g, provBaseUrlInput, "https://… (OpenAI-compatible)");

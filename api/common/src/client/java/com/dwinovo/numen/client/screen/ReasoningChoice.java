@@ -5,19 +5,19 @@ package com.dwinovo.numen.client.screen;
  * 的映射。纯函数——UI 的取值语义在这里钉死并被测试覆盖:
  * 关闭→off;自动→auto;开启→取强度档(开关型方言强度无意义,固定 medium 档)。
  */
-final class ReasoningChoice {
+public final class ReasoningChoice {
 
-    static final int SWITCH_AUTO = 0;
-    static final int SWITCH_ON = 1;
-    static final int SWITCH_OFF = 2;
+    public static final int SWITCH_AUTO = 0;
+    public static final int SWITCH_ON = 1;
+    public static final int SWITCH_OFF = 2;
 
-    static final int LEVEL_LOW = 0;
-    static final int LEVEL_MEDIUM = 1;
-    static final int LEVEL_HIGH = 2;
+    public static final int LEVEL_LOW = 0;
+    public static final int LEVEL_MEDIUM = 1;
+    public static final int LEVEL_HIGH = 2;
 
     private ReasoningChoice() {}
 
-    static int switchIndex(String stored) {
+    public static int switchIndex(String stored) {
         if (stored == null) return SWITCH_AUTO;
         return switch (stored) {
             case "off" -> SWITCH_OFF;
@@ -26,7 +26,7 @@ final class ReasoningChoice {
         };
     }
 
-    static int levelIndex(String stored) {
+    public static int levelIndex(String stored) {
         if (stored == null) return LEVEL_MEDIUM;
         return switch (stored) {
             case "low" -> LEVEL_LOW;
@@ -35,7 +35,7 @@ final class ReasoningChoice {
         };
     }
 
-    static String compose(int switchIdx, int levelIdx) {
+    public static String compose(int switchIdx, int levelIdx) {
         return switch (switchIdx) {
             case SWITCH_OFF -> "off";
             case SWITCH_ON -> switch (levelIdx) {

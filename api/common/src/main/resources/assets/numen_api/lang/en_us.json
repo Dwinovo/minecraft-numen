@@ -243,5 +243,6 @@
   "numen.gui.providers.check.server_error": "Provider-side error — try again later",
   "numen.gui.providers.check.bad_request": "Request rejected",
   "numen.gui.providers.check.network": "Can't connect — check network, proxy, or base URL",
-  "numen.gui.providers.effort": "Reasoning effort"
+  "numen.gui.providers.effort": "Reasoning effort",
+  "numen.settings.nav.connection": "Connection"
 }
