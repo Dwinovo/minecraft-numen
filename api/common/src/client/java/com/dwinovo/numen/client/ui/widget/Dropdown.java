@@ -55,6 +55,11 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
 
     public int selectedIndex() { return selected; }
 
+    /** 程序性选中(不触发 onSelect)——用于控件间联动同步。 */
+    public void select(int index) {
+        this.selected = Math.max(0, Math.min(index, items.size() - 1));
+    }
+
     public String selectedItem() {
         return items.isEmpty() ? "" : items.get(selected);
     }

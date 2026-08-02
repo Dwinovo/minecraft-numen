@@ -133,9 +133,9 @@ public final class ProfileFormPanel {
                 ReasoningChoice.LEVEL_MEDIUM, this::onEffortPicked));
         effortPick.setBounds(x + 86, ry, 78, NumenStyle.CONTROL_H);
 
-        // ✕ 在卡片标题条右上角(内容区上方的标题带里,不与首行字段抢地)。
-        Button close = ui.add(new Button("✕", Button.Style.NORMAL, onCancel));
-        close.setBounds(x + w - 13, y - 16, 13, 13);
+        // ✕ 幽灵钮钉在卡片右上角落(cardX1-4-14, cardY0+4):平时无底,悬停浮浅底。
+        Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
+        close.setBounds(x + w - 8, y - 14, 14, 14);
 
         int by = y + h - 16;
         // 页面级 Alert:表单区左右居中、垂直偏上悬浮——操作结果的家(字段错误才内联)。
@@ -248,8 +248,6 @@ public final class ProfileFormPanel {
                     ReasoningChoice.switchIndex(draft.reasoningEffort));
             effortPick.setItems(List.of("low", "medium", "high"),
                     ReasoningChoice.levelIndex(draft.reasoningEffort));
-            effortPick.setEnabled(
-                    ReasoningChoice.switchIndex(draft.reasoningEffort) == ReasoningChoice.SWITCH_ON);
         }
     }
 
@@ -287,11 +285,12 @@ public final class ProfileFormPanel {
 
     private void onThinkingSwitched(int switchIdx) {
         draft.reasoningEffort = ReasoningChoice.compose(switchIdx, effortPick.selectedIndex());
-        effortPick.setEnabled(switchIdx == ReasoningChoice.SWITCH_ON);
     }
 
+    /** 点强度即隐含"开启"——不设前置锁,联动同步开关显示。 */
     private void onEffortPicked(int levelIdx) {
-        draft.reasoningEffort = ReasoningChoice.compose(thinkingSwitch.selectedIndex(), levelIdx);
+        draft.reasoningEffort = ReasoningChoice.compose(ReasoningChoice.SWITCH_ON, levelIdx);
+        thinkingSwitch.select(ReasoningChoice.SWITCH_ON);
     }
 
     private void save() {

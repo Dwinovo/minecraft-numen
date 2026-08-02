@@ -232,7 +232,6 @@ public final class ProviderPanel {
                     ReasoningChoice.switchIndex(stored));
             effortPick.setItems(List.of("low", "medium", "high"),
                     ReasoningChoice.levelIndex(stored));
-            effortPick.setEnabled(ReasoningChoice.switchIndex(stored) == ReasoningChoice.SWITCH_ON);
         }
     }
 
@@ -254,11 +253,12 @@ public final class ProviderPanel {
 
     private void onThinkingSwitched(int switchIdx) {
         saveReasoning(switchIdx, effortPick.selectedIndex());
-        effortPick.setEnabled(switchIdx == ReasoningChoice.SWITCH_ON);
     }
 
+    /** 点强度即隐含"开启"——不设前置锁,联动同步开关显示。 */
     private void onEffortPicked(int levelIdx) {
-        saveReasoning(thinkingSwitch.selectedIndex(), levelIdx);
+        saveReasoning(ReasoningChoice.SWITCH_ON, levelIdx);
+        thinkingSwitch.select(ReasoningChoice.SWITCH_ON);
     }
 
     private void saveReasoning(int switchIdx, int levelIdx) {
