@@ -45,17 +45,20 @@ class NumenToastsTest {
         toasts.push(NumenToasts.Severity.INFO, "second");
 
         // 状态从进入时刻起算满时长(跳表不快进)——按级联时刻逐帧推进。
+        // 入场首帧 alpha=0 不画文字(渐显),文字断言放在停留期。
         toasts.render(s, SCREEN_W, C, 0);                       // 滑入首帧
+        long tVisible = NumenToasts.SLIDE_MS + 1;
+        s.resetFrame();
+        toasts.render(s, SCREEN_W, C, tVisible);                 // 进入停留(计时起点 tVisible)
         assertEquals("first", s.texts.get(0));
 
-        long tVisible = NumenToasts.SLIDE_MS + 1;
-        toasts.render(s, SCREEN_W, C, tVisible);                 // 进入停留(计时起点 tVisible)
         long tSlideOut = tVisible + NumenToasts.VISIBLE_MAX_MS + 1;
         toasts.render(s, SCREEN_W, C, tSlideOut);                // 进入滑出(计时起点 tSlideOut)
-        s.resetFrame();
         toasts.render(s, SCREEN_W, C, tSlideOut + NumenToasts.SLIDE_MS + 1); // 滑出完成,current 清空
+        long tSecond = tSlideOut + NumenToasts.SLIDE_MS + 2;
+        toasts.render(s, SCREEN_W, C, tSecond);                  // 下一条滑入首帧
         s.resetFrame();
-        toasts.render(s, SCREEN_W, C, tSlideOut + NumenToasts.SLIDE_MS + 2); // 下一条上场
+        toasts.render(s, SCREEN_W, C, tSecond + NumenToasts.SLIDE_MS + 1);   // 下一条停留
         assertEquals("second", s.texts.get(0));
     }
 
