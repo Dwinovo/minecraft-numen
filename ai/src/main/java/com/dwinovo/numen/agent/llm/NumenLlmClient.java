@@ -53,6 +53,9 @@ public final class NumenLlmClient {
     private final String model;
     /** Reasoning effort: {@code auto}(send nothing) | {@code off}(明确关) | {@code low} | {@code medium} | {@code high}. */
     private final String reasoningEffort;
+    /** 玩家在用户文件里给该模型配的生成参数(null/0 = 不发,吃服务器默认)。 */
+    private final Double genTemperature;
+    private final int genMaxTokens;
 
     private NumenLlmClient(LlmEndpoint endpoint) {
         this.provider = pickProvider(endpoint.provider());
@@ -65,6 +68,9 @@ public final class NumenLlmClient {
         String configured = endpoint.model();
         this.model = (configured == null || configured.isBlank()) ? "gpt-5.4-mini" : configured;
         this.reasoningEffort = normalizeReasoning(endpoint.reasoningEffort());
+        ModelRegistry.Model registered = ModelRegistry.model(endpoint.provider(), this.model);
+        this.genTemperature = registered == null ? null : registered.temperature();
+        this.genMaxTokens = registered == null ? 0 : registered.maxTokens();
         AiLog.LOG.info("[numen-llm] client initialised: provider={}, model={}, url={}, streaming={}",
                 provider.name(), model, fullUrl, provider.supportsStreaming());
     }
@@ -152,6 +158,10 @@ public final class NumenLlmClient {
         }
         JsonArray toolList = provider.buildToolList(tools);
         JsonObject body = provider.buildRequestBody(model, systemPrompt, wire, toolList);
+
+        // -- 1a. 玩家配置的生成参数(temperature/max_tokens),opt-in 才上盘;
+        //        必须先于思考开关——预算类方言在 max_tokens 之上加码。
+        provider.applyGenerationParams(body, genTemperature, genMaxTokens);
 
         // -- 1b. Reasoning / deep-thinking: only when the user opted in (never on "auto"), so a
         //        non-reasoning model is never handed an unexpected parameter it would 400 on.

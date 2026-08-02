@@ -226,9 +226,10 @@ public class AnthropicProvider implements LlmProvider {
     }
 
     /**
-     * 力度 → 预算的映射({@code budget} 族)。开思考时把 {@code max_tokens}
-     * 抬到预算之上(协议要求预算必须小于输出上限)。{@code none} 族与
-     * {@code off} 不发 thinking 参数(缺省即不思考,无需显式 disabled)。
+     * 力度 → 预算的映射({@code budget} 族)。开思考时在当前 {@code max_tokens}
+     * (协议默认或玩家显式设置)之上加预算——协议要求预算必须小于输出上限,
+     * 加法保证玩家设的值仍然是"正文的上限"。{@code none} 族与 {@code off}
+     * 不发 thinking 参数(缺省即不思考,无需显式 disabled)。
      */
     @Override
     public void applyReasoning(JsonObject body, String effort) {
@@ -242,7 +243,8 @@ public class AnthropicProvider implements LlmProvider {
         thinking.addProperty("type", "enabled");
         thinking.addProperty("budget_tokens", budget);
         body.add("thinking", thinking);
-        body.addProperty("max_tokens", budget + BASE_MAX_TOKENS);
+        int current = body.has("max_tokens") ? body.get("max_tokens").getAsInt() : BASE_MAX_TOKENS;
+        body.addProperty("max_tokens", budget + current);
     }
 
     // ---- 入向:流式累积 ----

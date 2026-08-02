@@ -24,7 +24,9 @@ import java.util.Map;
  */
 public final class ModelRegistry {
 
-    public record Model(String id, int ctx, boolean reasoning) {}
+    /** {@code temperature} null = 不发(吃服务器默认);{@code maxTokens} 0 = 不发/协议默认。 */
+    public record Model(String id, int ctx, boolean reasoning,
+                        Double temperature, int maxTokens) {}
     public record Provider(String id, String name, String baseUrl, boolean custom,
                            Map<String, String> headers, List<Model> models,
                            String thinkingFormat, String protocol) {}
@@ -146,7 +148,9 @@ public final class ModelRegistry {
                         models.add(new Model(
                                 m.get("id").getAsString(),
                                 m.has("ctx") ? m.get("ctx").getAsInt() : DEFAULT_CTX,
-                                m.has("reasoning") && m.get("reasoning").getAsBoolean()));
+                                m.has("reasoning") && m.get("reasoning").getAsBoolean(),
+                                m.has("temperature") ? m.get("temperature").getAsDouble() : null,
+                                m.has("maxTokens") ? m.get("maxTokens").getAsInt() : 0));
                     }
                 }
                 Map<String, String> headers = new LinkedHashMap<>();
@@ -237,12 +241,18 @@ public final class ModelRegistry {
 
     /** Context window for a (provider, model) pair, or {@link #DEFAULT_CTX} if unknown / custom. */
     public static int contextWindow(String providerId, String modelId) {
+        Model m = model(providerId, modelId);
+        return m == null ? DEFAULT_CTX : m.ctx();
+    }
+
+    /** (provider, model) 的注册条目,查无(自定义/未收录)为 null。生成参数从这里取。 */
+    public static Model model(String providerId, String modelId) {
         Provider p = provider(providerId);
         if (p != null && modelId != null) {
             for (Model m : p.models()) {
-                if (m.id().equals(modelId)) return m.ctx();
+                if (m.id().equals(modelId)) return m;
             }
         }
-        return DEFAULT_CTX;
+        return null;
     }
 }

@@ -133,6 +133,18 @@ public interface LlmProvider {
     }
 
     /**
+     * 玩家配置的生成参数上盘。两大协议恰好同名({@code temperature} /
+     * {@code max_tokens}),缺省实现两家通吃;null/0 = 不发,吃服务器或协议
+     * 默认——参数只在玩家明确设置时才出现在线上(未知参数会被部分后端 400,
+     * 与思考开关同一条 opt-in 纪律)。调用时序在 {@code applyReasoning} 之前,
+     * 思考预算类方言可以在其上加码。
+     */
+    default void applyGenerationParams(JsonObject body, Double temperature, int maxTokens) {
+        if (temperature != null) body.addProperty("temperature", temperature);
+        if (maxTokens > 0) body.addProperty("max_tokens", maxTokens);
+    }
+
+    /**
      * 鉴权头方言。缺省是 OpenAI 系的 {@code Authorization: Bearer};别的协议
      * 覆写(如 {@code x-api-key} + 版本头)。per-endpoint 常量,传输层构造时取用。
      */
