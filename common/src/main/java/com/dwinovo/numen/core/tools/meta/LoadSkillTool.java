@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.tools.query;
+package com.dwinovo.numen.core.tools.meta;
 import com.dwinovo.numen.core.tools.AgentTools;
 
 import com.dwinovo.numen.agent.tool.NumenTool;

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.tools.query;
+package com.dwinovo.numen.core.tools.sense;
 import com.dwinovo.numen.core.tools.PerceptionTools;
 
 import com.dwinovo.numen.agent.tool.Schema;

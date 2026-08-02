@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.tools.query;
+package com.dwinovo.numen.core.tools.sense;
 import com.dwinovo.numen.core.tools.PerceptionTools;
 
 import com.dwinovo.numen.agent.tool.Schema;
@@ -9,21 +9,22 @@ import com.google.gson.JsonObject;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/** Query tool (raw NumenTool): read the current world state. */
-public final class GetWorldInfoTool implements NumenTool {
+/** Query tool (raw NumenTool): read the owner's current status. */
+public final class GetOwnerStatusTool implements NumenTool {
 
     private final PerceptionTools impl = new PerceptionTools();
 
     @Override
     public String name() {
-        return "get_world_info";
+        return "get_owner_status";
     }
 
     @Override
     public String description() {
-        return "Read the current world state: dimension, game-time tick counter, whether it's "
-                + "bright or dark outside (combat / spawn planning), and weather (clear / rain / "
-                + "thunder, affects sailing and combat). No arguments.";
+        return "Read your owner's current status: name, online state, HP, hunger, position, "
+                + "distance from you, and held item. Call before any 'follow', 'protect', or "
+                + "'rendezvous' decision. If the owner is offline the call returns online:false "
+                + "— default to autonomous mode until they return. No arguments.";
     }
 
     @Override
@@ -33,6 +34,6 @@ public final class GetWorldInfoTool implements NumenTool {
 
     @Override
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
-        reply.accept(impl.getWorldInfo(self));
+        reply.accept(impl.getOwnerStatus(self));
     }
 }
