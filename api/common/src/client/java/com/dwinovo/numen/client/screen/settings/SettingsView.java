@@ -79,7 +79,7 @@ public final class SettingsView {
     private static final int SET_SP = 33;     // form row pitch (5 rows + Save must fit)
     private static final int NAV_W = 74;      // left sub-nav column width
     private static final int NAV_SP = 20;     // sub-nav row pitch
-    private static final int LIST_ROW = 22;   // list row height
+    private static final int LIST_ROW = 24;   // list row height(两行内容 9+9 加呼吸,贴行显挤)
     private static final int TOG_W = 18, TOG_H = 10;
     private static final String CUSTOM_MODEL = "__custom__";
     /** 试听用的固定测试句(按当前表单参数就地合成)。 */
@@ -1057,7 +1057,7 @@ public final class SettingsView {
             else detail = nb(e.model()) ? e.model() : "?";
             String meta = (nb(e.backend()) ? e.backend() : "openai") + " · " + detail
                     + " · vol " + Math.round(e.volume() * 5.0f);
-            txt(g, Component.literal(clip(meta, w - 30 - (tx - x))), tx, ry + 11, TXT_FAINT);
+            txt(g, Component.literal(clip(meta, w - 30 - (tx - x))), tx, ry + 13, TXT_MUTED);
             txt(g, Component.literal("✎"), editX, ry + 6,
                     overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
             txt(g, Component.literal("✕"), delX, ry + 6,
@@ -1552,7 +1552,7 @@ public final class SettingsView {
                     ? ModLanguageData.Keys.SKIN_VARIANT_SLIM : ModLanguageData.Keys.SKIN_VARIANT_CLASSIC)
                     + " · " + I18n.get(e.signed() ? ModLanguageData.Keys.SKIN_SIGNED
                             : ModLanguageData.Keys.SKIN_UNSIGNED);
-            txt(g, Component.literal(clip(meta, w - 50)), tx, ry + 11, e.signed() ? TXT_FAINT : FAIL);
+            txt(g, Component.literal(clip(meta, w - 50)), tx, ry + 13, e.signed() ? TXT_MUTED : FAIL);
             txt(g, Component.literal("✎"), editX, ry + 6,
                     overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
             txt(g, Component.literal("✕"), delX, ry + 6,
@@ -1752,14 +1752,15 @@ public final class SettingsView {
             var e = list.get(i);
             int delX = x + w - 12, editX = x + w - 26;
             hoverRow(g, mouseX, mouseY, x, w, ry);
-            txt(g, Component.literal(e.name()), x, ry + 1, TXT);
+            txt(g, Component.literal(e.name()), x, ry + 2, TXT);
             String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
                     + (nb(e.model()) ? e.model() : "?")
                     + (nb(e.apiKey()) ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
-            txt(g, Component.literal(clip(meta, w - 30)), x, ry + 11, nb(e.apiKey()) ? TXT_FAINT : FAIL);
-            txt(g, Component.literal("✎"), editX, ry + 6,
+            // 元信息用次级色不用最淡档——这是内容不是装饰,淡到读不清等于没写。
+            txt(g, Component.literal(clip(meta, w - 30)), x, ry + 13, nb(e.apiKey()) ? TXT_MUTED : FAIL);
+            txt(g, Component.literal("✎"), editX, ry + 7,
                     overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
-            txt(g, Component.literal("✕"), delX, ry + 6,
+            txt(g, Component.literal("✕"), delX, ry + 7,
                     overDelete(mouseX, mouseY, delX, ry) ? FAIL : TXT_FAINT);
         }
     }
@@ -1867,7 +1868,7 @@ public final class SettingsView {
             Nb.border(g, x, dy, 5, 5, 1, BORDER);
             // name + meta line
             txt(g, Component.literal(h.name()), x + 10, ry + 1, TXT);
-            txt(g, Component.literal(mcpMeta(h)), x + 10, ry + 11, TXT_FAINT);
+            txt(g, Component.literal(mcpMeta(h)), x + 10, ry + 13, TXT_MUTED);
             // toggle + delete, right-aligned
             drawToggle(g, togX, ry + 5, h.toggledOn());
             boolean overDel = overDelete(mouseX, mouseY, delX, ry);
@@ -1950,7 +1951,7 @@ public final class SettingsView {
             hoverRow(g, mouseX, mouseY, x, w, ry);
             txt(g, Component.literal(s.name()), x, ry + 1, on ? TXT : TXT_FAINT);
             String desc = s.description() == null ? I18n.get("numen.skill.no_desc") : s.description();
-            txt(g, Component.literal(clip(desc, w - 26)), x, ry + 11, TXT_FAINT);
+            txt(g, Component.literal(clip(desc, w - 26)), x, ry + 13, TXT_MUTED);
             drawToggle(g, x + w - 20, ry + 5, on);
             if (overRow(mouseX, mouseY, x, w, ry) && !overToggle(mouseX, mouseY, x + w - 20, ry + 5)
                     && s.description() != null) {
@@ -2018,7 +2019,7 @@ public final class SettingsView {
             hoverRow(g, mouseX, mouseY, x, w, ry);
             txt(g, Component.literal(p.name()), x, ry + 1, TXT);
             String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
-            txt(g, Component.literal(clip(badge + p.text(), w - 30)), x, ry + 11, TXT_FAINT);
+            txt(g, Component.literal(clip(badge + p.text(), w - 30)), x, ry + 13, TXT_MUTED);
             if (p.preset()) {
                 txt(g, Component.literal("⧉"), delX, ry + 6,
                         overDelete(mouseX, mouseY, delX, ry) ? CTA : TXT_FAINT);
