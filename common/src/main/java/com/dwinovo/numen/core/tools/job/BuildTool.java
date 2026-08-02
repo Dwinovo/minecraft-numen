@@ -7,7 +7,7 @@ import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.core.build.BuildPalette;
 import com.dwinovo.numen.core.build.BuildShapes;
-import com.dwinovo.numen.core.task.BuildTaskRecord;
+import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -43,7 +43,7 @@ public final class BuildTool implements NumenTool {
      * 时被判超时。两处各拍各的迟早再犯,所以公式只有一处真源。
      */
     public static long timeoutTicksFor(int cellCount, boolean consumeMaterials) {
-        long build = com.dwinovo.numen.core.task.BuildOrder
+        long build = com.dwinovo.numen.core.task.build.BuildOrder
                 .estimatedTicks(cellCount, consumeMaterials);
         return Math.max(MIN_TIMEOUT_TICKS,
                 TRAVEL_ALLOWANCE_TICKS + (long) (build * TIMEOUT_SLACK));

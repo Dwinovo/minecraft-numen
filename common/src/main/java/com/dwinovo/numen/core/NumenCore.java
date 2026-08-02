@@ -2,8 +2,8 @@ package com.dwinovo.numen.core;
 
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.task.CompanionTaskFactory;
-import com.dwinovo.numen.core.task.BuildCompanionTask;
-import com.dwinovo.numen.core.task.BuildTaskRecord;
+import com.dwinovo.numen.core.task.build.BuildCompanionTask;
+import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 import com.dwinovo.numen.core.task.CollectItemsCompanionTask;
 import com.dwinovo.numen.core.task.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.DropCompanionTask;

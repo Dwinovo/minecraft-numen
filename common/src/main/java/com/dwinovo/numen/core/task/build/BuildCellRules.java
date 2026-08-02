@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.entity.NumenPlayer;

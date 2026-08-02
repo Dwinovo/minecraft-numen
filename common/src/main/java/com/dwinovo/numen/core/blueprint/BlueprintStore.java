@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.blueprint;
 
-import com.dwinovo.numen.core.task.BuildTaskRecord;
+import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Vec3i;

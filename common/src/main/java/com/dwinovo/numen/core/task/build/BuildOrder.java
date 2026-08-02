@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.build;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.EmptyBlockGetter;

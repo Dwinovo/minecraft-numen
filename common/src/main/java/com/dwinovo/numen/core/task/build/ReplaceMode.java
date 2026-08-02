@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.build;
 
 import net.minecraft.world.level.block.state.BlockState;
 

@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools.query;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.core.blueprint.BlueprintStore;
-import com.dwinovo.numen.core.task.BuildTaskRecord;
+import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 import com.dwinovo.numen.core.PlayerInv;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.entity.NumenPlayer;

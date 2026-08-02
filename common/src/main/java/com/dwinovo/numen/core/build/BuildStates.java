@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.build;
 
-import com.dwinovo.numen.core.task.BuildTaskRecord;
+import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.level.block.Blocks;

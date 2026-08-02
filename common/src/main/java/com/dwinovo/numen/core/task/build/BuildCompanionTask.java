@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;

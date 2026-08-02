@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.build;
 import com.dwinovo.numen.core.build.BuildValidity;
 
 import com.dwinovo.numen.task.TaskRecord;

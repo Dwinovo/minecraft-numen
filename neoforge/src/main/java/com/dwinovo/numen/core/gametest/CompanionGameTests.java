@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.tools.BlockActionTools;
-import com.dwinovo.numen.core.task.BuildTaskRecord;
+import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayList;
@@ -417,7 +417,7 @@ public class CompanionGameTests {
                         new BlockPos(2, 1, 0), "carpet", null, null, null),
                 new BuildTaskRecord.Target(Blocks.STONE, Items.STONE,
                         new BlockPos(0, 9, 0), "stone", null, null, null)));
-        mixed.sort(com.dwinovo.numen.core.task.BuildOrder.BUILD_ORDER);
+        mixed.sort(com.dwinovo.numen.core.task.build.BuildOrder.BUILD_ORDER);
         helper.assertTrue(mixed.get(0).desiredState().getBlock() == Blocks.STONE,
                 "everything that stands on its own goes first, even nine layers up; got "
                         + mixed.stream().map(BuildTaskRecord.Target::label).toList());
@@ -511,7 +511,7 @@ public class CompanionGameTests {
         var ctx = TaskDispatch.ctx("gametest-be", companion);
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(4000L), targets,
-                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, false, false,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, false, false,
                 java.util.Map.of(at.asLong(), bannerData)), reply -> {});
 
         helper.succeedWhen(() -> {
@@ -543,36 +543,36 @@ public class CompanionGameTests {
         BlockState solid = Blocks.STONE.defaultBlockState();
         BlockState torch = Blocks.TORCH.defaultBlockState();
 
-        record Row(com.dwinovo.numen.core.task.ReplaceMode mode, BlockState current,
+        record Row(com.dwinovo.numen.core.task.build.ReplaceMode mode, BlockState current,
                    BlockState desired, boolean want, String why) {}
         for (Row row : List.of(
                 // 最低档:只往空地和软方块上补,既有建筑一格不碰,也不清空
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.DONT_REPLACE, air, solid, true,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.DONT_REPLACE, air, solid, true,
                         "empty ground is always fair game"),
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.DONT_REPLACE, soft, solid, true,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.DONT_REPLACE, soft, solid, true,
                         "grass is replaceable, vanilla lets you build straight over it"),
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.DONT_REPLACE, solid, solid, false,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.DONT_REPLACE, solid, solid, false,
                         "this mode exists so an existing building is never touched"),
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.DONT_REPLACE, solid, air, false,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.DONT_REPLACE, solid, air, false,
                         "no mode below the top one clears anything"),
                 // 中档:实心可以压实心,但细软件不能顶掉墙
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_SOLID, solid, solid, true,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_SOLID, solid, solid, true,
                         "structure may push through structure"),
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_SOLID, solid, torch, false,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_SOLID, solid, torch, false,
                         "a torch must not knock out a wall"),
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_SOLID, soft, torch, true,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_SOLID, soft, torch, true,
                         "but it may go where there was only grass"),
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_SOLID, solid, air, false,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_SOLID, solid, air, false,
                         "still no clearing"),
                 // 高档:挡路的一律顶掉,但空气格只当"不管这一格"
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_ANY, solid, torch, true,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_ANY, solid, torch, true,
                         "anything in the way gives way"),
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_ANY, solid, air, false,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_ANY, solid, air, false,
                         "an air cell here means 'leave this one alone', not 'dig it out'"),
                 // 顶档:连该空的地方也挖空
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, solid, air, true,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, solid, air, true,
                         "this is the mode where an air cell is a dig order"),
-                new Row(com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, solid, torch, true,
+                new Row(com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, solid, torch, true,
                         "and everything else gives way too"))) {
             boolean got = row.mode().allows(row.current(), row.desired());
             helper.assertTrue(got == row.want(), row.mode() + ": " + row.why()
@@ -808,7 +808,7 @@ public class CompanionGameTests {
         var ctx = TaskDispatch.ctx("gametest-fixtures", companion);
         TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(1000L), loaded.targets(),
-                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, false, true,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, false, true,
                 loaded.blockEntityData(), loaded.entities()), reply -> {});
 
         Vec3 want = new Vec3(anchor.getX() + 1.5, anchor.getY() + 0.5, anchor.getZ() + 2.5);
@@ -1188,7 +1188,7 @@ public class CompanionGameTests {
 
         var ctx = TaskDispatch.ctx("gametest-twice-1", companion);
         var first = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(3000L), loaded.targets(),
-                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, true, true,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true, true,
                 loaded.blockEntityData(), loaded.entities());
         first.cellNeeds(loaded.cellNeeds());
         TaskDispatch.dispatchAsync(companion, first, reply -> {});
@@ -1228,7 +1228,7 @@ public class CompanionGameTests {
                 .thenExecute(() -> {
                     var ctx2 = TaskDispatch.ctx("gametest-twice-2", companion);
                     second[0] = new BuildTaskRecord(ctx2.toolCallId(), ctx2.deadline(3000L),
-                            loaded.targets(), com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY,
+                            loaded.targets(), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY,
                             true, true, true, loaded.blockEntityData(), loaded.entities());
                     second[0].cellNeeds(loaded.cellNeeds());
                     TaskDispatch.dispatchAsync(companion, second[0], reply -> {});
@@ -1305,7 +1305,7 @@ public class CompanionGameTests {
 
         var ctx = TaskDispatch.ctx("gametest-restock-1", companion);
         var first = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(6000L), loaded.targets(),
-                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, true, true,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true, true,
                 loaded.blockEntityData(), loaded.entities());
         first.cellNeeds(loaded.cellNeeds());
         // 注:dispatchAsync 的 reply 是<b>派发受理</b>回执("已受理,后台执行中"),不是
@@ -1352,7 +1352,7 @@ public class CompanionGameTests {
                     companion.getInventory().add(new ItemStack(Items.DIAMOND, 1 + 1));
                     var ctx2 = TaskDispatch.ctx("gametest-restock-2", companion);
                     second[0] = new BuildTaskRecord(ctx2.toolCallId(), ctx2.deadline(6000L),
-                            loaded.targets(), com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY,
+                            loaded.targets(), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY,
                             true, true, true, loaded.blockEntityData(), loaded.entities());
                     second[0].cellNeeds(loaded.cellNeeds());
                     TaskDispatch.dispatchAsync(companion, second[0], reply -> {});
@@ -1464,7 +1464,7 @@ public class CompanionGameTests {
 
         var ctx = TaskDispatch.ctx("gametest-starve", companion);
         var rec = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(6000L), loaded.targets(),
-                com.dwinovo.numen.core.task.ReplaceMode.REPLACE_EMPTY, true, true, true,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true, true,
                 loaded.blockEntityData(), loaded.entities());
         rec.cellNeeds(loaded.cellNeeds());
         TaskDispatch.dispatchAsync(companion, rec, reply -> {});
@@ -2076,7 +2076,7 @@ public class CompanionGameTests {
     public static void build_deadline_covers_pace(GameTestHelper helper) {
         for (int cells : new int[]{50, 500, 1440, 5859, 16384}) {
             for (boolean survival : new boolean[]{true, false}) {
-                long need = com.dwinovo.numen.core.task.BuildOrder
+                long need = com.dwinovo.numen.core.task.build.BuildOrder
                         .estimatedTicks(cells, survival);
                 long budget = com.dwinovo.numen.core.tools.job.BuildTool.timeoutTicksFor(cells, survival);
                 helper.assertTrue(budget > need,
@@ -2085,7 +2085,7 @@ public class CompanionGameTests {
             }
         }
         // 生存封顶:再大的工程也收敛到目标时长,不会无限拉长
-        long huge = com.dwinovo.numen.core.task.BuildOrder.estimatedTicks(16384, true);
+        long huge = com.dwinovo.numen.core.task.build.BuildOrder.estimatedTicks(16384, true);
         helper.assertTrue(huge <= 12 * 60 * 20 + 20,
                 "survival pace should cap total duration at the target, got " + huge + " ticks");
         helper.succeed();
