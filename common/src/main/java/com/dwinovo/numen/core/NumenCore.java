@@ -111,7 +111,7 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EquipItemTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.BuildTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.BlueprintTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.BlueprintReadTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.BlueprintReadTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractAtTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.InteractEntityTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.EatItemTool());
@@ -119,21 +119,21 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStopTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.DropItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.TakeItemsTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectGuiTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.InspectGuiTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.TransferTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.CloseGuiTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.GetSelfStatusTool());   // SAMPLE: raw NumenTool
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.GetOwnerStatusTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.LookupRecipeTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.GetSelfStatusTool());   // SAMPLE: raw NumenTool
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.GetOwnerStatusTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.LookupRecipeTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.CraftTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.ScanNearbyEntitiesTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.ScanBlocksTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.LookAroundTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectBlockTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.InspectBlockStorageTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.GetWorldInfoTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.TodoWriteTool());   // raw NumenTool
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.LoadSkillTool());   // raw NumenTool
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.ScanNearbyEntitiesTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.ScanBlocksTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.LookAroundTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.InspectBlockTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.InspectBlockStorageTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.GetWorldInfoTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.TodoWriteTool());   // raw NumenTool
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.query.LoadSkillTool());   // raw NumenTool
     }
 
 
