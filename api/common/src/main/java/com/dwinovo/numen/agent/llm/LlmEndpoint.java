@@ -1,7 +1,5 @@
 package com.dwinovo.numen.agent.llm;
 
-import com.dwinovo.numen.platform.services.INumenConfig;
-
 /**
  * Fully-resolved, immutable LLM connection parameters — the ONLY thing
  * {@link NumenLlmClient} depends on. Where the values came from (the global
@@ -13,15 +11,6 @@ import com.dwinovo.numen.platform.services.INumenConfig;
  */
 public record LlmEndpoint(String provider, String model, String apiKey,
                           String baseUrl, String proxy, String reasoningEffort) {
-
-    /** The endpoint the GLOBAL settings currently describe — resolved fresh on
-     *  every call, so a settings change takes effect on the next request with
-     *  no invalidation ceremony. */
-    public static LlmEndpoint fromGlobal(INumenConfig config) {
-        return new LlmEndpoint(
-                config.getProvider(), config.getModel(), config.getApiKey(),
-                config.getBaseUrl(), config.getProxy(), config.getReasoningEffort());
-    }
 
     public boolean hasApiKey() {
         return apiKey != null && !apiKey.isBlank();

@@ -15,6 +15,10 @@ public class CommonClass {
         Constants.LOG.info("[numen] common init on {} ({})",
                 Services.PLATFORM.getPlatformName(), Services.PLATFORM.getEnvironmentName());
 
+        // LLM 站点注册表是纯 JVM 层,不识平台配置目录——落点在引导期注入。
+        com.dwinovo.numen.agent.model.ModelRegistry.init(
+                Services.PLATFORM.getConfigDir().resolve("numen").resolve("models.json"));
+
         registerTools();
         wireTaskMachine();
     }

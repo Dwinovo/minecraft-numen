@@ -899,7 +899,8 @@ public final class EntityAgentLoop {
                     entityUuid, isBusy(), convo.snapshot().size());
             return;
         }
-        if (!NumenLlmClient.isConfigured()) return;
+        String apiKey = Services.CONFIG.getApiKey();
+        if (apiKey == null || apiKey.isBlank()) return;
         startCompaction(false);
     }
 

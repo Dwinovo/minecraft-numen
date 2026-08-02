@@ -1,7 +1,6 @@
 package com.dwinovo.numen.agent.model;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.platform.Services;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -32,9 +31,18 @@ public final class ModelRegistry {
     /** Fallback context window for an unknown model (e.g. a custom one). */
     public static final int DEFAULT_CTX = 64_000;
 
+    /** 用户可编辑文件的落点,引导期由宿主注入;未注入时只用内置默认(如 headless 测试)。 */
+    private static volatile Path userFile;
+
     private static volatile List<Provider> PROVIDERS = load();
 
     private ModelRegistry() {}
+
+    /** 宿主引导:注入用户文件落点并重载(首次会把内置默认播种到该文件供编辑)。 */
+    public static void init(Path modelsJson) {
+        userFile = modelsJson;
+        reload();
+    }
 
     /** Re-read the user file (after an edit / a site was added). */
     public static void reload() { PROVIDERS = load(); }
@@ -42,8 +50,12 @@ public final class ModelRegistry {
     /** Append a user-defined OpenAI-compatible site to {@code config/numen/models.json} and reload.
      *  Returns the new site id, or null on failure. */
     public static String addCustomSite(String name, String baseUrl, String modelId) {
+        Path file = userFile;
+        if (file == null) {
+            Constants.LOG.error("[numen] can't add custom site '{}': registry not initialised with a user file", name);
+            return null;
+        }
         try {
-            Path file = Services.PLATFORM.getConfigDir().resolve("numen").resolve("models.json");
             String json = Files.exists(file) ? Files.readString(file, StandardCharsets.UTF_8) : readBundled();
             com.google.gson.JsonObject root = JsonParser.parseString(json).getAsJsonObject();
             com.google.gson.JsonArray providers = root.getAsJsonArray("providers");
@@ -87,16 +99,18 @@ public final class ModelRegistry {
     private static List<Provider> load() {
         String bundled = readBundled();
         String json = bundled;
+        Path file = userFile;
         try {
-            Path file = Services.PLATFORM.getConfigDir().resolve("numen").resolve("models.json");
-            if (Files.exists(file)) {
-                json = Files.readString(file, StandardCharsets.UTF_8);   // user-authoritative
-            } else if (bundled != null) {
-                Files.createDirectories(file.getParent());
-                Files.writeString(file, bundled, StandardCharsets.UTF_8);  // seed for editing
+            if (file != null) {
+                if (Files.exists(file)) {
+                    json = Files.readString(file, StandardCharsets.UTF_8);   // user-authoritative
+                } else if (bundled != null) {
+                    Files.createDirectories(file.getParent());
+                    Files.writeString(file, bundled, StandardCharsets.UTF_8);  // seed for editing
+                }
             }
         } catch (Exception e) {
-            Constants.LOG.warn("[numen] couldn't read/seed config/numen/models.json, using bundled", e);
+            Constants.LOG.warn("[numen] couldn't read/seed {}, using bundled", file, e);
         }
         List<Provider> out = parse(json);
         if (out.isEmpty() && bundled != null && !bundled.equals(json)) {

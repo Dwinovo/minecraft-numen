@@ -1,6 +1,5 @@
 package com.dwinovo.numen.agent.provider;
 
-import com.dwinovo.numen.agent.tool.NumenTool;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -75,8 +74,8 @@ public interface LlmProvider {
      */
     JsonObject assistantToRequestMessage(AssistantTurn turn);
 
-    /** Build the {@code tools} array from our internal {@link NumenTool} registry. */
-    JsonArray buildToolList(Collection<NumenTool> tools);
+    /** Build the {@code tools} array from the registered {@link IToolSpec}s. */
+    JsonArray buildToolList(Collection<? extends IToolSpec> tools);
 
     /**
      * Assemble the full request body for one chat completion.

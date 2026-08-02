@@ -5,14 +5,12 @@ import com.dwinovo.numen.agent.http.HttpLlmTransport;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.model.ModelRegistry;
 import com.dwinovo.numen.agent.provider.DeepSeekProvider;
+import com.dwinovo.numen.agent.provider.IToolSpec;
 import com.dwinovo.numen.agent.provider.LlmProvider;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.provider.MoonshotProvider;
 import com.dwinovo.numen.agent.provider.OpenAIProvider;
 import com.dwinovo.numen.agent.provider.StreamAccumulator;
-import com.dwinovo.numen.agent.tool.NumenTool;
-import com.dwinovo.numen.platform.Services;
-import com.dwinovo.numen.platform.services.INumenConfig;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 
@@ -102,27 +100,12 @@ public final class NumenLlmClient {
     }
 
     /**
-     * The client for the CURRENT global settings — resolved fresh on every call, so
-     * a settings change simply resolves to a new endpoint (and thus a new cached
-     * client) on the next request. No invalidation ceremony required; {@link #reset()}
-     * survives only as a cache trim for the GUI's existing call site.
-     */
-    public static NumenLlmClient instance() {
-        return forEndpoint(LlmEndpoint.fromGlobal(Services.CONFIG));
-    }
-
-    public static boolean isConfigured() {
-        String key = Services.CONFIG.getApiKey();
-        return key != null && !key.isBlank();
-    }
-
-    /**
-     * Invalidate the cached singleton so the next {@link #instance()} call
-     * rebuilds from fresh config. Called by the settings GUI after the
+     * Drop every cached client so subsequent {@link #forEndpoint} calls rebuild
+     * from freshly-resolved endpoints. Called by the settings GUI after the
      * user changes provider / API key / model / base URL — lets players
      * switch backends without restarting the game.
      *
-     * <p>In-flight requests on the old instance complete with the old
+     * <p>In-flight requests on the old instances complete with the old
      * credentials (we don't try to cancel them); only subsequent calls
      * see the new config. Per-entity {@code ConvoState} is unaffected, so
      * conversations continue with the new backend.
@@ -155,7 +138,7 @@ public final class NumenLlmClient {
      *                       Receives the raw provider chunk JSON. May be null.
      */
     public CompletableFuture<ChatResult> chatStreaming(List<ConvoState.Msg> messages,
-                                                       Collection<NumenTool> tools,
+                                                       Collection<? extends IToolSpec> tools,
                                                        String systemPrompt,
                                                        Consumer<JsonObject> onChunk) {
         // -- 1. Build wire-format messages and tool list via provider.

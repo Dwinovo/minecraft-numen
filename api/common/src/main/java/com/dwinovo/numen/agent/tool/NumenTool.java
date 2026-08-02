@@ -1,14 +1,15 @@
 package com.dwinovo.numen.agent.tool;
 
+import com.dwinovo.numen.agent.provider.IToolSpec;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 
-import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * 工具的全部契约,一个接口没有第二个基类。绝大多数工具是<b>身体工具</b>
+ * 工具的全部契约。LLM 侧的描述面(name/description/parameterSchema)继承自
+ * 连接层的 {@link IToolSpec},执行面在本接口。绝大多数工具是<b>身体工具</b>
  * (动同伴的身体或读它的世界),那就是默认形态:什么都不覆写,调用自动
  * 发往服务端活体,你只实现 {@link #onServerCall}——当场回结果(查询),
  * 或经 {@code TaskDispatch.enqueue}/{@code dispatchAsync} 交给任务队列。
@@ -17,20 +18,7 @@ import java.util.function.Consumer;
  * 覆写 {@link #invoke(ToolCall)} 自便——引擎只认 invoke,对工具怎么干活
  * 保持全盲。
  */
-public interface NumenTool {
-
-    /** Tool name as the LLM sees it. {@code snake_case}. */
-    String name();
-
-    /**
-     * Description shown to the LLM — the single biggest lever on whether the model
-     * picks this tool correctly. Cover what it does, WHEN to use it (and when not),
-     * what each non-obvious parameter means, and any caveat.
-     */
-    String description();
-
-    /** JSON Schema (OpenAI tool-parameter dialect) for the tool's arguments. */
-    Map<String, Object> parameterSchema();
+public interface NumenTool extends IToolSpec {
 
     /**
      * Run this tool for one call — the engine's ONLY entry point. 默认实现是

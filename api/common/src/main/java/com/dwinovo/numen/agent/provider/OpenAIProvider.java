@@ -1,6 +1,5 @@
 package com.dwinovo.numen.agent.provider;
 
-import com.dwinovo.numen.agent.tool.NumenTool;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -106,9 +105,9 @@ public class OpenAIProvider implements LlmProvider {
     }
 
     @Override
-    public JsonArray buildToolList(Collection<NumenTool> tools) {
+    public JsonArray buildToolList(Collection<? extends IToolSpec> tools) {
         JsonArray arr = new JsonArray();
-        for (NumenTool t : tools) {
+        for (IToolSpec t : tools) {
             JsonObject fn = new JsonObject();
             fn.addProperty("name", t.name());
             fn.addProperty("description", t.description());
