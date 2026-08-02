@@ -10,6 +10,20 @@ import java.util.function.Consumer;
  * 调用点保持裸名):{@link #ctx} 造任务上下文,{@link #enqueue} 同步排队,
  * {@link #dispatchAsync} 异步受理。收口在此的还有"一具身体一件活"的占用
  * 闸门与拒绝话术。
+ *
+ * <h2>选道判据(工具作者的单一真源)</h2>
+ * <ul>
+ *   <li><b>不占身体</b>(纯查询/UI/外部服务)→ 不进任务系统,invoke 现场 complete;</li>
+ *   <li><b>占身体 + 有界短</b>(最坏情况几秒内保证干完,能写出不冤枉它的固定
+ *       deadline)→ {@link #enqueue}:回合挂起等结果——短到值得等;</li>
+ *   <li><b>占身体 + 无界</b>(时长取决于世界:路程/资源/敌人)→
+ *       {@link #dispatchAsync}:受理即回执,收尾走 task_finished 事件——
+ *       串行的工具派发器不能为一件几分钟的活冻结整个回合;</li>
+ *   <li><b>没有"干完"语义、只有"被停止"</b>(follow/站岗类常驻行为)→
+ *       根本不是任务:注册 TaskChain 参与竞价,工具只做装/卸链的开关。</li>
+ * </ul>
+ * 例外要在工具类注释里写明理由(如"语义是查询,但必须进服务端线程摸世界,
+ * 机制上走 enqueue")。
  */
 public final class TaskDispatch {
 
