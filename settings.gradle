@@ -22,11 +22,11 @@ plugins {
 
 // This should match the folder name of the project, or else IDEA may complain (see https://youtrack.jetbrains.com/issue/IDEA-317606)
 rootProject.name = 'Numen'
-// core 家族(模组本体)住根目录三模块;api 家族(引擎,曾是独立仓)住 api/ 子树。
-// 单一构建:core 直接以 project 依赖消费 api,不再经本地 maven 中转。
-include('common')
-include('fabric')
-include('neoforge')
+// 三兄弟布局:core/(模组本体)、api/(引擎,曾是独立仓)、ai/(LLM 连接层,纯 JVM)。
+// 单一构建:core 直接以 project 依赖消费 api,api 消费 ai,不经 maven 中转。
+include('core:common')
+include('core:fabric')
+include('core:neoforge')
 include('api:common')
 include('api:fabric')
 include('api:neoforge')
