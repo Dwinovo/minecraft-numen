@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.act;
-import com.dwinovo.numen.core.tools.ContainerTools;
+import com.dwinovo.numen.core.tools.ContainerOps;
 
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.agent.tool.NumenTool;
@@ -15,9 +15,9 @@ import java.util.function.Consumer;
 public final class TransferTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final ContainerTools impl = new ContainerTools();
+    private final ContainerOps impl = new ContainerOps();
 
-    private record Args(List<ContainerTools.Move> moves) {}
+    private record Args(List<ContainerOps.Move> moves) {}
 
     @Override
     public String name() {

@@ -49,7 +49,7 @@ import java.util.TreeSet;
  * reach is a refusal with the nearest table's coordinates (or "place one") — going
  * there is the planner's move, not this tool's.
  */
-public final class CraftTools {
+public final class CraftOps {
 
     /** Eye-to-block-center reach for using a crafting table without walking. */
     private static final double REACH = 4.5;
@@ -408,7 +408,7 @@ public final class CraftTools {
         Map<String, int[]> tally = new LinkedHashMap<>();       // desc -> [need]
         Map<String, Ingredient> rep = new LinkedHashMap<>();
         for (Ingredient ing : ings) {
-            String desc = QueryExtraTools.describeIngredient(ing);
+            String desc = QueryExtraOps.describeIngredient(ing);
             tally.computeIfAbsent(desc, k -> new int[1])[0]++;
             rep.putIfAbsent(desc, ing);
         }

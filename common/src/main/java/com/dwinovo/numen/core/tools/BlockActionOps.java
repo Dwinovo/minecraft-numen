@@ -21,7 +21,7 @@ import java.util.Set;
  * args and builds a {@link TaskRecord}; the {@link ToolContext} carries the call
  * id and deadline basis.
  */
-public final class BlockActionTools {
+public final class BlockActionOps {
 
     // mine budgets / bounds.
     private static final int MAX_COUNT = 256;

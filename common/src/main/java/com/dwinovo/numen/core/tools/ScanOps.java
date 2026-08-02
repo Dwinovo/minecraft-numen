@@ -20,7 +20,7 @@ import java.util.function.Consumer;
  * takes the live entity plus a reply {@link Consumer} and returns void — the
  * result arrives on a later tick through the callback.
  */
-public final class ScanTools {
+public final class ScanOps {
 
     private static final int MIN_RADIUS = 1;
     private static final int MAX_RADIUS = 192;

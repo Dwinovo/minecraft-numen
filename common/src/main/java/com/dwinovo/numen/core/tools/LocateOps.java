@@ -11,7 +11,7 @@ import com.dwinovo.numen.core.task.act.LocateStructureTaskRecord;
  * {@code /locate biome}. Both return a {@link TaskRecord} the body's task queue
  * runs across ticks.
  */
-public final class LocateTools {
+public final class LocateOps {
 
     private static final long TIMEOUT_TICKS = 30 * 20;
     private static final int MAX_ARG_LENGTH = 128;

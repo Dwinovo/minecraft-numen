@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.sense;
-import com.dwinovo.numen.core.tools.ScanTools;
+import com.dwinovo.numen.core.tools.ScanOps;
 
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.agent.tool.NumenTool;
@@ -19,7 +19,7 @@ import java.util.function.Consumer;
 public final class ScanBlocksTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final ScanTools impl = new ScanTools();
+    private final ScanOps impl = new ScanOps();
 
     private record Args(int radius, List<String> block_ids) {}
 

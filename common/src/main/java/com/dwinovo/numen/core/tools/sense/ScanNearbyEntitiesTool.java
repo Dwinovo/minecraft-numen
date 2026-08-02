@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.sense;
-import com.dwinovo.numen.core.tools.QueryExtraTools;
+import com.dwinovo.numen.core.tools.QueryExtraOps;
 
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.agent.tool.NumenTool;
@@ -14,7 +14,7 @@ import java.util.function.Consumer;
 public final class ScanNearbyEntitiesTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final QueryExtraTools impl = new QueryExtraTools();
+    private final QueryExtraOps impl = new QueryExtraOps();
 
     private record Args(double radius, String type_filter) {}
 

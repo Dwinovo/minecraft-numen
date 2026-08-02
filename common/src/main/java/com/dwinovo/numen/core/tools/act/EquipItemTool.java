@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.act;
-import com.dwinovo.numen.core.tools.InventoryTools;
+import com.dwinovo.numen.core.tools.InventoryOps;
 
 import static com.dwinovo.numen.task.TaskDispatch.*;
 
@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 public final class EquipItemTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final InventoryTools impl = new InventoryTools();
+    private final InventoryOps impl = new InventoryOps();
 
     private record Args(String item_id, String slot) {}
 

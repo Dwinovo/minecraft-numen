@@ -1,12 +1,12 @@
 package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.tools.BlockActionTools;
+import com.dwinovo.numen.core.tools.BlockActionOps;
 import com.dwinovo.numen.core.task.build.BuildTaskRecord;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import java.util.ArrayList;
-import com.dwinovo.numen.core.tools.MovementTools;
+import com.dwinovo.numen.core.tools.MovementOps;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskDispatch;
@@ -64,7 +64,7 @@ public class CompanionGameTests {
                 "gametest_scout", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
 
-        TaskRecord record = (TaskRecord) new MovementTools().moveTo(
+        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
                 (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
                 TaskDispatch.ctx("gametest-goto", companion));
         TaskDispatch.enqueue(companion, record, reply -> {});
@@ -108,7 +108,7 @@ public class CompanionGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_shutin", new BlockPos(3, 2, 3), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord record = (TaskRecord) new MovementTools().moveTo(
+        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
                 (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
                 TaskDispatch.ctx("gametest-door", companion));
         TaskDispatch.enqueue(companion, record, reply -> {});
@@ -156,7 +156,7 @@ public class CompanionGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_tunneler", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        TaskRecord record = new BlockActionTools().autoMine(
+        TaskRecord record = new BlockActionOps().autoMine(
                 List.of("minecraft:gold_ore"), 2, TaskDispatch.ctx("gametest-doormine", companion));
         TaskDispatch.dispatchAsync(companion, record, reply -> {});
 
@@ -195,7 +195,7 @@ public class CompanionGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
 
-        TaskRecord record = new BlockActionTools().autoMine(
+        TaskRecord record = new BlockActionOps().autoMine(
                 List.of("minecraft:spruce_log"), 8, TaskDispatch.ctx("gametest-mine", companion));
         TaskDispatch.dispatchAsync(companion, record, reply -> {});
 
@@ -2294,7 +2294,7 @@ public class CompanionGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
 
-        TaskRecord record = new BlockActionTools().autoMine(
+        TaskRecord record = new BlockActionOps().autoMine(
                 List.of("minecraft:deepslate_diamond_ore"), 2, TaskDispatch.ctx("gametest-mine", companion));
         TaskDispatch.dispatchAsync(companion, record, reply -> {});
 
@@ -2334,7 +2334,7 @@ public class CompanionGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord record = (TaskRecord) new MovementTools().moveTo(
+        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
                 (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
                 TaskDispatch.ctx("gametest-cgoto", companion));
         TaskDispatch.enqueue(companion, record, reply -> {});
@@ -2361,7 +2361,7 @@ public class CompanionGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_cminer", new BlockPos(2, 2, 2), true);
 
-        TaskRecord record = new BlockActionTools().autoMine(
+        TaskRecord record = new BlockActionOps().autoMine(
                 List.of("minecraft:gold_ore"), 4, TaskDispatch.ctx("gametest-cmine", companion));
         TaskDispatch.dispatchAsync(companion, record, reply -> {});
 
@@ -2450,7 +2450,7 @@ public class CompanionGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 3), true);
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        TaskRecord record = (TaskRecord) new MovementTools().moveTo(
+        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
                 (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
                 TaskDispatch.ctx("gametest-climb", companion));
         TaskDispatch.enqueue(companion, record, reply -> {});

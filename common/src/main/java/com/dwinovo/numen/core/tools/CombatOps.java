@@ -8,7 +8,7 @@ import com.dwinovo.numen.task.TaskRecord;
 import java.util.List;
 
 /** Creates the typed records for melee and ranged combat tasks. */
-public final class CombatTools {
+public final class CombatOps {
 
     public TaskRecord meleeAttack(List<Integer> entityIds, ToolContext ctx) {
         List<Integer> ids = normalizeEntityIds(entityIds);

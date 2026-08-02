@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.act;
-import com.dwinovo.numen.core.tools.CraftTools;
+import com.dwinovo.numen.core.tools.CraftOps;
 
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.agent.tool.NumenTool;
@@ -14,7 +14,7 @@ import java.util.function.Consumer;
 public final class CraftTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final CraftTools impl = new CraftTools();
+    private final CraftOps impl = new CraftOps();
 
     private record Args(String item_id, Integer count) {}
 

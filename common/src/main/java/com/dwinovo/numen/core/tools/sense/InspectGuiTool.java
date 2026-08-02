@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.sense;
-import com.dwinovo.numen.core.tools.GuiTools;
+import com.dwinovo.numen.core.tools.GuiOps;
 
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.agent.tool.NumenTool;
@@ -12,7 +12,7 @@ import java.util.function.Consumer;
 /** Query tool (raw NumenTool): look at the currently open GUI / inventory menu. */
 public final class InspectGuiTool implements NumenTool {
 
-    private final GuiTools impl = new GuiTools();
+    private final GuiOps impl = new GuiOps();
 
     @Override
     public String name() {

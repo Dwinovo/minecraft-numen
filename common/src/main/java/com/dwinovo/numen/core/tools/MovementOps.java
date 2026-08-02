@@ -10,7 +10,7 @@ import com.dwinovo.numen.core.task.move.MoveToTaskRecord;
  * {@link TaskRecord} the body's task queue runs (the {@link ToolContext}
  * carries the call id and deadline basis).
  */
-public final class MovementTools {
+public final class MovementOps {
 
     /** Base budget: 30 seconds at vanilla 20 tps (the goal extends it by distance at runtime). */
     private static final long DEFAULT_TIMEOUT_TICKS = 30 * 20;

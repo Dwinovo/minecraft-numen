@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
  * {@code LoadSkillTool} and {@code TodoWriteTool}. These run on the agent thread
  * with no server body and return their result directly.
  */
-public final class AgentTools {
+public final class AgentOps {
 
     public String loadSkill(String name, String file) {
         SkillRegistry registry = SkillRegistry.instance();
@@ -32,7 +32,7 @@ public final class AgentTools {
         if (maybe.isEmpty()) {
             String available = registry.all().stream()
                     .map(SkillInfo::name)
-                    .map(AgentTools::quote)
+                    .map(AgentOps::quote)
                     .collect(Collectors.joining(","));
             return "{\"success\":false,\"error\":\"unknown skill: " + escapeJson(name)
                     + "\",\"available\":[" + available + "]}";

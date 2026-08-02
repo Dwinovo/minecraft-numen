@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.act;
-import com.dwinovo.numen.core.tools.LocateTools;
+import com.dwinovo.numen.core.tools.LocateOps;
 
 import static com.dwinovo.numen.task.TaskDispatch.*;
 
@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 public final class LocateStructureTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final LocateTools impl = new LocateTools();
+    private final LocateOps impl = new LocateOps();
 
     private record Args(String structure) {}
 

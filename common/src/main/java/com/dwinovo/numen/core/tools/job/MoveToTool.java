@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.job;
-import com.dwinovo.numen.core.tools.MovementTools;
+import com.dwinovo.numen.core.tools.MovementOps;
 
 import static com.dwinovo.numen.task.TaskDispatch.*;
 
@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 public final class MoveToTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final MovementTools impl = new MovementTools();
+    private final MovementOps impl = new MovementOps();
 
     private record Args(Double x, Double y, Double z, String block) {}
 

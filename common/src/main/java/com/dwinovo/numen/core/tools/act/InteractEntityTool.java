@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.act;
-import com.dwinovo.numen.core.tools.BlockActionTools;
+import com.dwinovo.numen.core.tools.BlockActionOps;
 
 import static com.dwinovo.numen.task.TaskDispatch.*;
 
@@ -16,7 +16,7 @@ import java.util.function.Consumer;
 public final class InteractEntityTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final BlockActionTools impl = new BlockActionTools();
+    private final BlockActionOps impl = new BlockActionOps();
 
     private record Args(String button, int entity_id, Integer hold_ticks, String item_id) {}
 

@@ -3,8 +3,8 @@ package com.dwinovo.numen.core.debug;
 import java.util.Arrays;
 import java.util.List;
 
-import com.dwinovo.numen.core.tools.BlockActionTools;
-import com.dwinovo.numen.core.tools.MovementTools;
+import com.dwinovo.numen.core.tools.BlockActionOps;
+import com.dwinovo.numen.core.tools.MovementOps;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.platform.Services;
@@ -41,8 +41,8 @@ import net.minecraft.server.level.ServerPlayer;
  */
 public final class DebugCommands {
 
-    private static final MovementTools MOVEMENT_TOOLS = new MovementTools();
-    private static final BlockActionTools BLOCK_TOOLS = new BlockActionTools();
+    private static final MovementOps MOVEMENT_TOOLS = new MovementOps();
+    private static final BlockActionOps BLOCK_TOOLS = new BlockActionOps();
     /** mine 未给数量时的默认目标件数。 */
     private static final int DEFAULT_MINE_COUNT = 64;
 

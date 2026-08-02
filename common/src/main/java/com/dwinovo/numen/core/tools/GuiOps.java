@@ -16,7 +16,7 @@ import java.util.List;
  * GUI tool implementations — the business half of {@code InspectGuiTool} and
  * {@code CloseGuiTool}: read the open container menu and close it.
  */
-public final class GuiTools {
+public final class GuiOps {
 
     public String inspectGui(NumenPlayer self) {
         AbstractContainerMenu menu = self.containerMenu;

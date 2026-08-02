@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.sense;
-import com.dwinovo.numen.core.tools.PerceptionTools;
+import com.dwinovo.numen.core.tools.PerceptionOps;
 
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.agent.tool.NumenTool;
@@ -12,7 +12,7 @@ import java.util.function.Consumer;
 /** Query tool (raw NumenTool): read the current world state. */
 public final class GetWorldInfoTool implements NumenTool {
 
-    private final PerceptionTools impl = new PerceptionTools();
+    private final PerceptionOps impl = new PerceptionOps();
 
     @Override
     public String name() {

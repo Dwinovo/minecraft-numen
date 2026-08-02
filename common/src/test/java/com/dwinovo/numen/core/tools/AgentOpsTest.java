@@ -9,9 +9,9 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class AgentToolsTest {
+class AgentOpsTest {
 
-    private final AgentTools tools = new AgentTools();
+    private final AgentOps tools = new AgentOps();
 
     @Test
     void acceptsExactlyOneInProgressWhileWorkRemains() {
@@ -49,8 +49,8 @@ class AgentToolsTest {
                 tools.todowrite(List.of(todo(" ", "in_progress"))));
     }
 
-    private static AgentTools.Todo todo(String content, String status) {
-        return new AgentTools.Todo(content, status, "medium");
+    private static AgentOps.Todo todo(String content, String status) {
+        return new AgentOps.Todo(content, status, "medium");
     }
 
     private static boolean success(String json) {

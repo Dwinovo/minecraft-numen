@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.sense;
-import com.dwinovo.numen.core.tools.PerceptionTools;
+import com.dwinovo.numen.core.tools.PerceptionOps;
 
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.agent.tool.NumenTool;
@@ -14,7 +14,7 @@ import java.util.function.Consumer;
 public final class InspectBlockTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final PerceptionTools impl = new PerceptionTools();
+    private final PerceptionOps impl = new PerceptionOps();
 
     private record Args(int x, int y, int z) {}
 

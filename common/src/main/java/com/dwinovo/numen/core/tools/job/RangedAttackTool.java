@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.job;
-import com.dwinovo.numen.core.tools.CombatTools;
+import com.dwinovo.numen.core.tools.CombatOps;
 
 import static com.dwinovo.numen.task.TaskDispatch.ctx;
 import static com.dwinovo.numen.task.TaskDispatch.dispatchAsync;
@@ -17,7 +17,7 @@ import java.util.function.Consumer;
 /** Attack an explicit set of entities by runtime id with a bow or crossbow. */
 public final class RangedAttackTool implements NumenTool {
     private static final Gson GSON = new Gson();
-    private final CombatTools impl = new CombatTools();
+    private final CombatOps impl = new CombatOps();
 
     private record Args(List<Integer> entity_ids) {}
 

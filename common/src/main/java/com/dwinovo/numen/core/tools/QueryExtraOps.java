@@ -41,7 +41,7 @@ import java.util.stream.Collectors;
  * Query tool implementations — the business half of {@code LookupRecipeTool},
  * {@code ScanNearbyEntitiesTool} and {@code InspectBlockStorageTool}.
  */
-public final class QueryExtraTools {
+public final class QueryExtraOps {
 
     // ---- scan_nearby_entities ----
 

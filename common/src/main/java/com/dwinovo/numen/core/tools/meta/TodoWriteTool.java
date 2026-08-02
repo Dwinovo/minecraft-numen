@@ -1,5 +1,5 @@
 package com.dwinovo.numen.core.tools.meta;
-import com.dwinovo.numen.core.tools.AgentTools;
+import com.dwinovo.numen.core.tools.AgentOps;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
@@ -14,9 +14,9 @@ import java.util.Map;
 public final class TodoWriteTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
-    private final AgentTools impl = new AgentTools();
+    private final AgentOps impl = new AgentOps();
 
-    private record Args(List<AgentTools.Todo> todos) {}
+    private record Args(List<AgentOps.Todo> todos) {}
 
     @Override
     public String name() {

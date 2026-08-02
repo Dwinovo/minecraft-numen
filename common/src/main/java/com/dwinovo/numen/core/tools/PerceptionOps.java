@@ -23,7 +23,7 @@ import net.minecraft.world.phys.Vec3;
  * {@code GetOwnerStatusTool} and {@code GetWorldInfoTool}, which own the LLM-facing
  * name / description / schema and delegate here.
  */
-public final class PerceptionTools {
+public final class PerceptionOps {
 
     /** Vanilla {@code block_interaction_range} for players is 4.5. */
     private static final double REACH_SQR = 4.5 * 4.5;

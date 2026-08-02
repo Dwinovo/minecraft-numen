@@ -15,7 +15,7 @@ import java.util.List;
  * {@code transfer} moves stacks between the open container menu and the backpack,
  * one {@link Move} per slot-to-slot step.
  */
-public final class ContainerTools {
+public final class ContainerOps {
 
     /** One transfer; its @Arg components become the {@code moves} array item schema. */
     public record Move(
