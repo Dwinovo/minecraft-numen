@@ -1,6 +1,7 @@
 package com.dwinovo.numen.client.ui.widget;
 
 import com.dwinovo.numen.client.ui.IDrawSurface;
+import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 
 import java.util.List;
@@ -83,7 +84,7 @@ public final class ListView<T> extends Widget {
         if (max > 0) {   // 滚动条:轨道隐形,只画拇指
             int barH = Math.max(10, (int) ((double) h * h / (items.size() * rowHeight)));
             int barY = y + (int) ((h - barH) * (scrollY / max));
-            s.fillRoundRect(x + w - 2, barY, 2, barH, 1, c.divider());
+            s.fillRoundRect(x + w - NumenStyle.SCROLLBAR_W, barY, NumenStyle.SCROLLBAR_W, barH, NumenStyle.RADIUS_SMALL, c.divider());
         }
     }
 

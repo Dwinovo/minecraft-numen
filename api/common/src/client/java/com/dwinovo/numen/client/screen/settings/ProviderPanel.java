@@ -8,6 +8,7 @@ import com.dwinovo.numen.agent.provider.ProviderRegistry;
 import com.dwinovo.numen.client.agent.LlmErrorWords;
 import com.dwinovo.numen.client.screen.ReasoningChoice;
 import com.dwinovo.numen.client.ui.IDrawSurface;
+import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.ui.widget.Badge;
@@ -91,40 +92,40 @@ public final class ProviderPanel {
             cfg.setApiKey(v);
             cfg.save();
         }).masked(true));
-        keyField.setBounds(rx, ry, rw, 13);
-        ry += 18;
+        keyField.setBounds(rx, ry, rw, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
 
         ry = label(rx, ry, "numen.gui.settings.model");
         modelField = ui.add(new TextField(cfg.getModel(), v -> {
             cfg.setModel(v);
             cfg.save();
         }));
-        modelField.setBounds(rx, ry, rw - 17, 13);
+        modelField.setBounds(rx, ry, rw - 17, NumenStyle.CONTROL_H);
         modelPick = ui.add(new Dropdown(List.of(), 0, i -> onModelPicked()).compact().popupWidth(rw));
-        modelPick.setBounds(rx + rw - 15, ry, 15, 13);
-        ry += 18;
+        modelPick.setBounds(rx + rw - 15, ry, 15, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
 
         ry = label(rx, ry, "numen.gui.settings.base_url");
         baseUrlField = ui.add(new TextField(cfg.getBaseUrl(), v -> {
             cfg.setBaseUrl(v);
             cfg.save();
         }));
-        baseUrlField.setBounds(rx, ry, rw, 13);
-        ry += 18;
+        baseUrlField.setBounds(rx, ry, rw, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
 
         thinkingLabel = ui.add(new Label(t("numen.gui.providers.thinking"), Label.Role.MUTED));
         thinkingLabel.setBounds(rx, ry, 70, 9);
         effortLabel = ui.add(new Label(t("numen.gui.providers.effort"), Label.Role.MUTED));
         effortLabel.setBounds(rx + 86, ry, 80, 9);
-        ry += 10;
+        ry += NumenStyle.LABEL_PITCH;
         thinkingSwitch = ui.add(new Dropdown(List.of(
                 t("numen.gui.providers.thinking.auto"),
                 t("numen.gui.providers.thinking.on"),
                 t("numen.gui.providers.thinking.off")), 0, i -> onThinkingSwitched(i)));
-        thinkingSwitch.setBounds(rx, ry, 78, 13);
+        thinkingSwitch.setBounds(rx, ry, 78, NumenStyle.CONTROL_H);
         effortPick = ui.add(new Dropdown(List.of("low", "medium", "high"),
                 ReasoningChoice.LEVEL_MEDIUM, i -> onEffortPicked(i)));
-        effortPick.setBounds(rx + 86, ry, 78, 13);
+        effortPick.setBounds(rx + 86, ry, 78, NumenStyle.CONTROL_H);
 
         checkButton = ui.add(new Button(t("numen.gui.providers.check"),
                 Button.Style.ACCENT, this::runConnectivityCheck));
@@ -165,7 +166,7 @@ public final class ProviderPanel {
     private int label(int lx, int ly, String key) {
         Label l = ui.add(new Label(t(key), Label.Role.MUTED));
         l.setBounds(lx, ly, 120, 9);
-        return ly + 10;
+        return ly + NumenStyle.LABEL_PITCH;
     }
 
     private int indexOfSite(String providerId) {

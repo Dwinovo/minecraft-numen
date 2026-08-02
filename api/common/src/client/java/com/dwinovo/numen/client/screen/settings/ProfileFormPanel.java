@@ -8,6 +8,7 @@ import com.dwinovo.numen.agent.provider.ProviderRegistry;
 import com.dwinovo.numen.client.agent.LlmErrorWords;
 import com.dwinovo.numen.client.screen.ReasoningChoice;
 import com.dwinovo.numen.client.ui.IDrawSurface;
+import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.ui.widget.Button;
@@ -81,46 +82,46 @@ public final class ProfileFormPanel {
         int ry = y;
         ry = label(x, ry, "numen.provider.form_name");
         nameField = ui.add(new TextField(draft.name, v -> draft.name = v));
-        nameField.setBounds(x, ry, w, 13);
-        ry += 18;
+        nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
 
         ry = label(x, ry, "numen.provider.form_provider");
         List<String> siteNames = new ArrayList<>();
         for (ProviderRegistry.Provider p : sites) siteNames.add(p.name());
         sitePick = ui.add(new Dropdown(siteNames, indexOfSite(draft.provider), this::onSitePicked));
-        sitePick.setBounds(x, ry, w, 13);
-        ry += 18;
+        sitePick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
 
         ry = label(x, ry, "numen.gui.settings.api_key");
         keyField = ui.add(new TextField(draft.apiKey, v -> draft.apiKey = v).masked(true));
-        keyField.setBounds(x, ry, w, 13);
-        ry += 18;
+        keyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
 
         ry = label(x, ry, "numen.gui.settings.model");
         modelField = ui.add(new TextField(draft.model, v -> draft.model = v));
-        modelField.setBounds(x, ry, w - 17, 13);
+        modelField.setBounds(x, ry, w - 17, NumenStyle.CONTROL_H);
         modelPick = ui.add(new Dropdown(List.of(), 0, i -> onModelPicked()).compact().popupWidth(w));
-        modelPick.setBounds(x + w - 15, ry, 15, 13);
-        ry += 18;
+        modelPick.setBounds(x + w - 15, ry, 15, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
 
         ry = label(x, ry, "numen.gui.settings.base_url");
         baseUrlField = ui.add(new TextField(draft.baseUrl, v -> draft.baseUrl = v));
-        baseUrlField.setBounds(x, ry, w, 13);
-        ry += 18;
+        baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
 
         thinkingLabel = ui.add(new Label(t("numen.gui.providers.thinking"), Label.Role.MUTED));
         thinkingLabel.setBounds(x, ry, 70, 9);
         effortLabel = ui.add(new Label(t("numen.gui.providers.effort"), Label.Role.MUTED));
         effortLabel.setBounds(x + 86, ry, 80, 9);
-        ry += 10;
+        ry += NumenStyle.LABEL_PITCH;
         thinkingSwitch = ui.add(new Dropdown(List.of(
                 t("numen.gui.providers.thinking.auto"),
                 t("numen.gui.providers.thinking.on"),
                 t("numen.gui.providers.thinking.off")), 0, this::onThinkingSwitched));
-        thinkingSwitch.setBounds(x, ry, 78, 13);
+        thinkingSwitch.setBounds(x, ry, 78, NumenStyle.CONTROL_H);
         effortPick = ui.add(new Dropdown(List.of("low", "medium", "high"),
                 ReasoningChoice.LEVEL_MEDIUM, this::onEffortPicked));
-        effortPick.setBounds(x + 86, ry, 78, 13);
+        effortPick.setBounds(x + 86, ry, 78, NumenStyle.CONTROL_H);
 
         int by = y + h - 16;
         Button cancel = ui.add(new Button("✕", Button.Style.NORMAL, onCancel));
@@ -166,7 +167,7 @@ public final class ProfileFormPanel {
     private int label(int lx, int ly, String key) {
         Label l = ui.add(new Label(t(key), Label.Role.MUTED));
         l.setBounds(lx, ly, 140, 9);
-        return ly + 10;
+        return ly + NumenStyle.LABEL_PITCH;
     }
 
     private int indexOfSite(String providerId) {

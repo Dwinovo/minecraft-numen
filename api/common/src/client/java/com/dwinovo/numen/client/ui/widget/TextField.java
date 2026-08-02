@@ -2,6 +2,7 @@ package com.dwinovo.numen.client.ui.widget;
 
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.KeyCodes;
+import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 
 import java.util.function.Consumer;
@@ -57,7 +58,7 @@ public final class TextField extends Widget {
         int border = isFocused() ? c.accent() : c.inputBorder();
         s.fillRect(x, y + h - 1, w, 1, border);
 
-        int pad = 4;
+        int pad = NumenStyle.FIELD_PAD;
         int innerW = w - pad * 2;
         String display = masked ? "•".repeat(value.length()) : value.toString();
 

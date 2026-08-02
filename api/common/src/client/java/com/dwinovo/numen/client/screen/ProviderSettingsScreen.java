@@ -60,7 +60,7 @@ public final class ProviderSettingsScreen extends Screen {
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         renderBackground(g, mouseX, mouseY, partialTick);
         McDrawSurface s = new McDrawSurface(g, font);
-        s.fillRoundRect(panelX - 6, panelY - 6, panelW + 12, panelH + 12, 4, colors.panelBg());
+        s.fillRoundRect(panelX - 6, panelY - 6, panelW + 12, panelH + 12, com.dwinovo.numen.client.ui.NumenStyle.RADIUS_PANEL, colors.panelBg());
         s.drawText(title.getString(), panelX, panelY + 1, colors.textPrimary(), false);
         s.fillRect(panelX, panelY + 12, 18, 1, colors.accent());
         panel.render(s, colors, mouseX, mouseY, Util.getMillis());

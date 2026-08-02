@@ -1,6 +1,7 @@
 package com.dwinovo.numen.client.ui.widget;
 
 import com.dwinovo.numen.client.ui.IDrawSurface;
+import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 
 import java.util.List;
@@ -18,7 +19,7 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     private final IntConsumer onSelect;
     private boolean open;
     private int popupScroll;   // 弹层滚动(行数)
-    private static final int MAX_POPUP_ROWS = 8;
+    
 
     /** 紧凑模式:收起态只画箭头不画值(窄"选择器"用,值另有输入框承载)。 */
     private boolean compact;
@@ -60,12 +61,12 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
 
     public boolean isOpen() { return open; }
 
-    private int rowH(IDrawSurface s) { return s.lineHeight() + 4; }
+    private int rowH(IDrawSurface s) { return s.lineHeight() + NumenStyle.ROW_TEXT_PAD; }
 
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         boolean hovered = enabled && contains(mouseX, mouseY);
-        s.fillRoundRect(x, y, w, h, 3, hovered || open ? c.hover() : c.inputBg());
+        s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, hovered || open ? c.hover() : c.inputBg());
         if (!compact) {
             s.drawText(selectedItem(), x + 5, y + (h - s.lineHeight()) / 2 + 1,
                     enabled ? c.textPrimary() : c.textMuted(), false);
@@ -87,11 +88,11 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
 
     /** 弹层行数:条目数、行数上限、屏幕底缘剩余空间三者取最小(至少 3 行保可用)。 */
     private int popupRows() {
-        int byViewport = MAX_POPUP_ROWS;
+        int byViewport = NumenStyle.POPUP_MAX_ROWS;
         if (root != null && root.viewportHeight() != Integer.MAX_VALUE) {
             byViewport = Math.max(3, (root.viewportHeight() - (y + h) - 4) / Math.max(1, rowHCached));
         }
-        return Math.min(items.size(), Math.min(MAX_POPUP_ROWS, byViewport));
+        return Math.min(items.size(), Math.min(NumenStyle.POPUP_MAX_ROWS, byViewport));
     }
 
     private int maxPopupScroll() { return Math.max(0, items.size() - popupRows()); }
@@ -112,7 +113,7 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
         int py = y + h;
         int px = popupX();
         int pw = popupWidth();
-        s.fillRoundRect(px, py, pw, rows * rowHCached, 3, c.panelBg());
+        s.fillRoundRect(px, py, pw, rows * rowHCached, NumenStyle.RADIUS_CONTROL, c.panelBg());
         for (int r = 0; r < rows; r++) {
             int idx = popupScroll + r;
             if (idx >= items.size()) break;
@@ -128,7 +129,7 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
             int thumbH = Math.max(8, trackH * rows / items.size());
             int thumbY = py + (int) ((trackH - thumbH)
                     * (double) popupScroll / Math.max(1, maxPopupScroll()));
-            s.fillRoundRect(px + pw - 2, thumbY, 2, thumbH, 1, c.divider());
+            s.fillRoundRect(px + pw - NumenStyle.SCROLLBAR_W, thumbY, NumenStyle.SCROLLBAR_W, thumbH, NumenStyle.RADIUS_SMALL, c.divider());
         }
     }
 

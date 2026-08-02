@@ -1,6 +1,7 @@
 package com.dwinovo.numen.client.ui.widget;
 
 import com.dwinovo.numen.client.ui.IDrawSurface;
+import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 
 /** 按钮。Style 选语义色:普通/强调(主操作)/危险(删除类)。 */
@@ -28,9 +29,9 @@ public final class Button extends Widget {
             case DANGER -> c.danger();
             case NORMAL -> hovered ? c.hover() : c.sectionBg();
         };
-        if (hovered && style != Style.NORMAL) bg = brighten(bg);
+        if (hovered && style != Style.NORMAL) bg = NumenStyle.hoverBrighten(bg);
         if (!enabled) bg = c.sectionBg();
-        s.fillRoundRect(x, y, w, h, 3, bg);
+        s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, bg);
         int textColor = !enabled ? c.textMuted()
                 : style == Style.NORMAL ? c.textPrimary() : 0xFFFFFFFF;
         int tx = x + (w - s.textWidth(label)) / 2;
@@ -45,13 +46,4 @@ public final class Button extends Widget {
         return true;
     }
 
-    /** 悬停提亮:各通道向 255 走 15%。 */
-    private static int brighten(int argb) {
-        int a = argb & 0xFF000000;
-        int r = (argb >> 16) & 0xFF, g = (argb >> 8) & 0xFF, b = argb & 0xFF;
-        r += (255 - r) * 15 / 100;
-        g += (255 - g) * 15 / 100;
-        b += (255 - b) * 15 / 100;
-        return a | (r << 16) | (g << 8) | b;
-    }
 }

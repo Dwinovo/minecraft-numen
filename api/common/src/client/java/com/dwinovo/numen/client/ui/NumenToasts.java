@@ -35,7 +35,7 @@ public final class NumenToasts {
 
     // ---- 版式参数(像素,GUI 缩放坐标) ----
     static final int MARGIN = 6;
-    static final int PAD = 6;
+    static final int PAD = NumenStyle.PAD;
     static final int MAX_TEXT_WIDTH = 200;
     static final int MAX_LINES = 3;
 
@@ -118,7 +118,7 @@ public final class NumenToasts {
             case WARN -> c.toastWarnBg();
             case ERROR -> c.toastErrorBg();
         };
-        s.fillRoundRect(x, y, current.w, current.h, 4, bg);
+        s.fillRoundRect(x, y, current.w, current.h, NumenStyle.RADIUS_PANEL, bg);
         int ty = y + PAD;
         for (String line : current.lines) {
             s.drawText(line, x + PAD, ty, c.toastText(), false);
