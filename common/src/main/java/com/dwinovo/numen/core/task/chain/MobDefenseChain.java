@@ -5,11 +5,11 @@ import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.act.Interaction;
+import com.dwinovo.numen.core.motor.Interaction;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.task.TaskChain;
-import com.dwinovo.numen.core.act.ToolSelect;
+import com.dwinovo.numen.core.motor.ToolSelect;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
 import com.dwinovo.numen.entity.NumenPlayer;

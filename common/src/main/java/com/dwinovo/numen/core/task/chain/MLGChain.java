@@ -3,7 +3,7 @@ package com.dwinovo.numen.core.task.chain;
 import com.dwinovo.numen.task.BodyLog;
 import com.dwinovo.numen.task.reflex.Reflex;
 
-import com.dwinovo.numen.core.act.Interaction;
+import com.dwinovo.numen.core.motor.Interaction;
 import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.task.TaskChain;

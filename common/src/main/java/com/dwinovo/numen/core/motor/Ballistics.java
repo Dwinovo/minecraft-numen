@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.act;
+package com.dwinovo.numen.core.motor;
 
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.ProjectileUtil;
