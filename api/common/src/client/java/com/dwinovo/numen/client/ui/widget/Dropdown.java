@@ -85,7 +85,16 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
 
     // ---- 浮层通道 ----
 
-    private int popupRows() { return Math.min(items.size(), MAX_POPUP_ROWS); }
+    /** 弹层行数:条目数、行数上限、屏幕底缘剩余空间三者取最小(至少 3 行保可用)。 */
+    private int popupRows() {
+        int byViewport = MAX_POPUP_ROWS;
+        if (root != null && root.viewportHeight() != Integer.MAX_VALUE) {
+            byViewport = Math.max(3, (root.viewportHeight() - (y + h) - 4) / Math.max(1, rowHCached));
+        }
+        return Math.min(items.size(), Math.min(MAX_POPUP_ROWS, byViewport));
+    }
+
+    private int maxPopupScroll() { return Math.max(0, items.size() - popupRows()); }
 
     private boolean inPopup(double mx, double my) {
         return mx >= popupX() && mx < popupX() + popupWidth()
@@ -98,6 +107,7 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     @Override
     public void renderOverlay(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         rowHCached = rowH(s);
+        popupScroll = Math.min(popupScroll, maxPopupScroll());
         int rows = popupRows();
         int py = y + h;
         int px = popupX();
@@ -111,6 +121,14 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
             if (idx == selected) s.fillRect(px, ry, pw, rowHCached, c.selected());
             else if (hov) s.fillRect(px, ry, pw, rowHCached, c.hover());
             s.drawText(items.get(idx), px + 5, ry + 2, c.textPrimary(), false);
+        }
+        // 装不下全部条目时画滚动拇指——告诉玩家"下面还有,滚轮翻"。
+        if (items.size() > rows) {
+            int trackH = rows * rowHCached;
+            int thumbH = Math.max(8, trackH * rows / items.size());
+            int thumbY = py + (int) ((trackH - thumbH)
+                    * (double) popupScroll / Math.max(1, maxPopupScroll()));
+            s.fillRoundRect(px + pw - 2, thumbY, 2, thumbH, 1, c.divider());
         }
     }
 
@@ -131,8 +149,7 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     @Override
     public boolean overlayScrolled(double mx, double my, double delta) {
         if (!inPopup(mx, my)) return false;
-        popupScroll = Math.max(0, Math.min(popupScroll - (int) Math.signum(delta),
-                Math.max(0, items.size() - MAX_POPUP_ROWS)));
+        popupScroll = Math.max(0, Math.min(popupScroll - (int) Math.signum(delta), maxPopupScroll()));
         return true;
     }
 

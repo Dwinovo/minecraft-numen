@@ -30,6 +30,12 @@ public final class UiRoot {
 
     private Supplier<String> clipboardGet = () -> "";
     private Consumer<String> clipboardSet = s -> {};
+    /** GUI 缩放后的视口高(屏幕层 init/resize 时设置);浮层用它避免越出屏幕底缘。 */
+    private int viewportH = Integer.MAX_VALUE;
+
+    public void setViewportHeight(int h) { this.viewportH = h; }
+
+    public int viewportHeight() { return viewportH; }
 
     /** 浮层契约:打开状态的下拉弹层等,绘制在最后、事件在最先。 */
     public interface Overlay {

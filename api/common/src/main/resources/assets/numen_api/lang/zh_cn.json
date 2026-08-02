@@ -242,5 +242,6 @@
   "numen.gui.providers.check.rate_limited": "被限流了——稍等再试,或检查账户额度",
   "numen.gui.providers.check.server_error": "服务商侧故障——稍后再试",
   "numen.gui.providers.check.bad_request": "请求被拒",
-  "numen.gui.providers.check.network": "连不上——检查网络、代理或基址"
+  "numen.gui.providers.check.network": "连不上——检查网络、代理或基址",
+  "numen.gui.providers.effort": "推理强度"
 }

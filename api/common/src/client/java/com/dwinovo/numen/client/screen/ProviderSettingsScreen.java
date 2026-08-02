@@ -46,8 +46,8 @@ public final class ProviderSettingsScreen extends Screen {
     private List<ProviderRegistry.Provider> sites = List.of();
     private ListView<ProviderRegistry.Provider> siteList;
     private TextField keyField, baseUrlField, modelField;
-    private Dropdown modelPick, thinkingPick;
-    private Label siteTitle;
+    private Dropdown modelPick, thinkingSwitch, effortPick;
+    private Label siteTitle, thinkingLabel, effortLabel;
     private Button checkButton;
 
     /** 检测请求在飞时禁再点(结果回来经 toast,线程安全)。 */
@@ -69,6 +69,7 @@ public final class ProviderSettingsScreen extends Screen {
         ui.clear();
         ui.setClipboard(() -> minecraft.keyboardHandler.getClipboard(),
                 s -> minecraft.keyboardHandler.setClipboard(s));
+        ui.setViewportHeight(height);   // 下拉弹层据此不越出屏幕底缘
 
         panelW = Math.min(420, width - 20);
         panelH = Math.min(230, height - 20);
@@ -121,9 +122,20 @@ public final class ProviderSettingsScreen extends Screen {
         baseUrlField.setBounds(rx, y, rw, 14);
         y += 20;
 
-        y = label(rx, y, "numen.gui.providers.thinking");
-        thinkingPick = ui.add(new Dropdown(List.of(), 0, this::onThinkingPicked));
-        thinkingPick.setBounds(rx, y, 110, 14);
+        // 思考(开不开)与推理强度(开了多用力)分列两控件——语义不同不合流。
+        thinkingLabel = ui.add(new Label(t("numen.gui.providers.thinking"), Label.Role.MUTED));
+        thinkingLabel.setBounds(rx, y, 70, 9);
+        effortLabel = ui.add(new Label(t("numen.gui.providers.effort"), Label.Role.MUTED));
+        effortLabel.setBounds(rx + 90, y, 80, 9);
+        y += 10;
+        thinkingSwitch = ui.add(new Dropdown(List.of(
+                t("numen.gui.providers.thinking.auto"),
+                t("numen.gui.providers.thinking.on"),
+                t("numen.gui.providers.thinking.off")), 0, this::onThinkingSwitched));
+        thinkingSwitch.setBounds(rx, y, 80, 14);
+        effortPick = ui.add(new Dropdown(List.of("low", "medium", "high"),
+                ReasoningChoice.LEVEL_MEDIUM, this::onEffortPicked));
+        effortPick.setBounds(rx + 90, y, 80, 14);
 
         checkButton = ui.add(new Button(
                 Component.translatable("numen.gui.providers.check").getString(),
@@ -156,12 +168,20 @@ public final class ProviderSettingsScreen extends Screen {
                                ProviderRegistry.Provider site, int index,
                                int rowX, int rowY, int rowW, int rowH,
                                boolean selected, boolean hovered) {
-        if (selected) s.fillRect(rowX, rowY, rowW, rowH, c.selected());
-        else if (hovered) s.fillRect(rowX, rowY, rowW, rowH, c.hover());
-        s.drawText(site.name(), rowX + 4, rowY + 4, c.textPrimary(), false);
-        int bx = rowX + 8 + s.textWidth(site.name());
-        if ("anthropic".equals(site.protocol())) bx += Badge.draw(s, c, "A", bx, rowY + 3) + 2;
-        if (site.baseUrl().startsWith("http://localhost")) Badge.draw(s, c, t("numen.gui.providers.badge.local"), bx, rowY + 3);
+        if (selected) {
+            s.fillRect(rowX, rowY, rowW, rowH, c.selected());
+            s.fillRect(rowX, rowY, 2, rowH, c.accent());   // 选中行的 accent 侧条
+        } else if (hovered) {
+            s.fillRect(rowX, rowY, rowW, rowH, c.hover());
+        }
+        s.drawText(site.name(), rowX + 6, rowY + 4, c.textPrimary(), false);
+        int bx = rowX + 10 + s.textWidth(site.name());
+        if ("anthropic".equals(site.protocol())) {
+            bx += Badge.draw(s, "A", bx, rowY + 3, c.accent(), 0xFFFFFFFF) + 2;
+        }
+        if (site.baseUrl().startsWith("http://localhost")) {
+            Badge.draw(s, t("numen.gui.providers.badge.local"), bx, rowY + 3, c.success(), 0xFFFFFFFF);
+        }
     }
 
     private void onSiteSelected(int index) {
@@ -186,40 +206,28 @@ public final class ProviderSettingsScreen extends Screen {
 
         baseUrlField.placeholder(site.baseUrl());
 
-        // 思考控件按方言换形态:effort 系出力度档,开关系出三态,none 隐藏。
+        // 思考控件按方言换形态:none 全藏;开关型只出思考开关;
+        // 力度型(effort/effort-nested/budget)双控件,强度仅在"开启"时可用。
         String format = effectiveThinkingFormat(site);
-        INumenConfig cfg = Services.CONFIG;
-        String stored = cfg.getReasoningEffort() == null ? "auto" : cfg.getReasoningEffort();
-        switch (format) {
-            case LlmProvider.THINKING_NONE -> thinkingPick.setVisible(false);
-            case LlmProvider.THINKING_TYPE, LlmProvider.THINKING_ENABLE_BOOL -> {
-                thinkingPick.setVisible(true);
-                thinkingPick.setItems(List.of(
-                        t("numen.gui.providers.thinking.auto"),
-                        t("numen.gui.providers.thinking.on"),
-                        t("numen.gui.providers.thinking.off")),
-                        "off".equals(stored) ? 2 : isEffortOn(stored) ? 1 : 0);
-            }
-            default -> {   // effort / effort-nested / budget:力度档
-                thinkingPick.setVisible(true);
-                List<String> levels = List.of(
-                        t("numen.gui.providers.thinking.auto"),
-                        t("numen.gui.providers.thinking.off"),
-                        "low", "medium", "high");
-                int sel = switch (stored) {
-                    case "off" -> 1;
-                    case "low" -> 2;
-                    case "medium" -> 3;
-                    case "high" -> 4;
-                    default -> 0;
-                };
-                thinkingPick.setItems(levels, sel);
-            }
-        }
-    }
+        String stored = Services.CONFIG.getReasoningEffort();
+        boolean none = LlmProvider.THINKING_NONE.equals(format);
+        boolean toggleOnly = LlmProvider.THINKING_TYPE.equals(format)
+                || LlmProvider.THINKING_ENABLE_BOOL.equals(format);
 
-    private static boolean isEffortOn(String stored) {
-        return "low".equals(stored) || "medium".equals(stored) || "high".equals(stored);
+        thinkingLabel.setVisible(!none);
+        thinkingSwitch.setVisible(!none);
+        effortLabel.setVisible(!none && !toggleOnly);
+        effortPick.setVisible(!none && !toggleOnly);
+        if (!none) {
+            thinkingSwitch.setItems(List.of(
+                    t("numen.gui.providers.thinking.auto"),
+                    t("numen.gui.providers.thinking.on"),
+                    t("numen.gui.providers.thinking.off")),
+                    ReasoningChoice.switchIndex(stored));
+            effortPick.setItems(List.of("low", "medium", "high"),
+                    ReasoningChoice.levelIndex(stored));
+            effortPick.setEnabled(ReasoningChoice.switchIndex(stored) == ReasoningChoice.SWITCH_ON);
+        }
     }
 
     /** 站点行的方言;有子类的站点(deepseek/moonshot)行内未配时问装配后的 provider。 */
@@ -239,23 +247,18 @@ public final class ProviderSettingsScreen extends Screen {
         cfg.save();
     }
 
-    private void onThinkingPicked(int index) {
-        int idx = siteList.selectedIndex();
-        if (idx < 0) return;
-        String format = effectiveThinkingFormat(sites.get(idx));
-        String value = switch (format) {
-            case LlmProvider.THINKING_TYPE, LlmProvider.THINKING_ENABLE_BOOL ->
-                    index == 2 ? "off" : index == 1 ? "medium" : "auto";   // 开关系:开=medium 档
-            default -> switch (index) {
-                case 1 -> "off";
-                case 2 -> "low";
-                case 3 -> "medium";
-                case 4 -> "high";
-                default -> "auto";
-            };
-        };
+    private void onThinkingSwitched(int switchIdx) {
+        saveReasoning(switchIdx, effortPick.selectedIndex());
+        effortPick.setEnabled(switchIdx == ReasoningChoice.SWITCH_ON);
+    }
+
+    private void onEffortPicked(int levelIdx) {
+        saveReasoning(thinkingSwitch.selectedIndex(), levelIdx);
+    }
+
+    private void saveReasoning(int switchIdx, int levelIdx) {
         INumenConfig cfg = Services.CONFIG;
-        cfg.setReasoningEffort(value);
+        cfg.setReasoningEffort(ReasoningChoice.compose(switchIdx, levelIdx));
         cfg.save();
     }
 
@@ -312,6 +315,7 @@ public final class ProviderSettingsScreen extends Screen {
         McDrawSurface s = new McDrawSurface(g, font);
         s.fillRoundRect(panelX - 6, panelY - 6, panelW + 12, panelH + 12, 4, colors.panelBg());
         s.drawText(title.getString(), panelX, panelY + 2, colors.textPrimary(), false);
+        s.fillRect(panelX, panelY + 13, 18, 1, colors.accent());   // 标题 accent 短划
         s.fillRect(panelX + listW + 4, panelY + 18, 1, panelH - 18, colors.divider());
         ui.render(s, colors, mouseX, mouseY, Util.getMillis());
         toasts.render(s, width, colors, Util.getMillis());

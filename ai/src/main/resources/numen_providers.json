@@ -113,15 +113,15 @@
       ]
     },
     {
-      "id": "ollama", "name": "Ollama (本地)", "baseUrl": "http://localhost:11434/v1",
+      "id": "ollama", "name": "Ollama", "baseUrl": "http://localhost:11434/v1",
       "models": []
     },
     {
-      "id": "lmstudio", "name": "LM Studio (本地)", "baseUrl": "http://localhost:1234/v1",
+      "id": "lmstudio", "name": "LM Studio", "baseUrl": "http://localhost:1234/v1",
       "models": []
     },
     {
-      "id": "vllm", "name": "vLLM (本地)", "baseUrl": "http://localhost:8000/v1",
+      "id": "vllm", "name": "vLLM", "baseUrl": "http://localhost:8000/v1",
       "models": []
     }
   ]
