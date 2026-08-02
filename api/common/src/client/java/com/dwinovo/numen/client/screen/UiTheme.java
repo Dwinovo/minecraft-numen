@@ -52,9 +52,23 @@ public record UiTheme(
             0xFFE3A23A, 0xFF2A2012,
             0xFF4E7480, 0xFF577E3C, 0xFFA8731E, 0xFFA8533A);
 
-    public static final List<UiTheme> ALL = List.of(VANILLA, FORMAT, DIAMOND, COZY, WARM);
+    // 标准双主题:亮·黑字 / 暗·白字——干净高对比,对齐新版设置面板的观感;
+    // 上面五个带色相的老主题是"风味款",玩家自选。
+    public static final UiTheme LIGHT = new UiTheme("light", "Light",
+            0xFFEDEDF0, 0x12000000, 0xFF2A2A32, 0xFFF5F5F8, 0xFF3A3A44,
+            0xFF17171C, 0xFF4A4A55, 0xFFDFDFE4,
+            0xFF2F6FE0, 0xFFFFFFFF,
+            0xFF1C7C9C, 0xFF2E8E3E, 0xFFA8730E, 0xFFC0392B);
 
-    private static UiTheme current = WARM;
+    public static final UiTheme DARK = new UiTheme("dark", "Dark",
+            0xFF1E1F26, 0x30000000, 0xFF15161B, 0xFFEDEDEF, 0xFF0C0C10,
+            0xFFF0F1F4, 0xFFA9ADBB, 0xFF2A2C34,
+            0xFF5B9CFF, 0xFF10131A,
+            0xFF3FB6C6, 0xFF57AB5A, 0xFFC79432, 0xFFE5534B);
+
+    public static final List<UiTheme> ALL = List.of(LIGHT, DARK, VANILLA, FORMAT, DIAMOND, COZY, WARM);
+
+    private static UiTheme current = LIGHT;
 
     public static UiTheme current() { return current; }
 
@@ -62,34 +76,40 @@ public record UiTheme(
         for (UiTheme t : ALL) {
             if (t.id().equals(id)) { current = t; return; }
         }
-        current = FORMAT;
+        current = LIGHT;
     }
 
     // ---- derived tints: computed from the base palette so every preset gets the full
     // chat-app family (bubbles/chips/cards) without hand-tuning 5×10 extra colours.
     // The mix ratios were fitted to reproduce WARM's original hand-picked values. ----
 
+    /** 暗色地面判定:派生公式原按亮地面拟合,暗主题下混色方向要反过来。 */
+    private boolean isDark() {
+        int r = (ground >> 16) & 0xFF, g = (ground >> 8) & 0xFF, b = ground & 0xFF;
+        return (r * 3 + g * 6 + b) / 10 < 96;
+    }
+
     /** Faintest text tier (placeholders, pending items, empty-state hints). */
     public int faint() { return mix(textDim, field, 0.5f); }
     /** Muted on-band text (persona name after the companion name in the header). */
     public int onBandFaint() { return mix(onBand, band, 0.5f); }
     /** Companion bubble: pale card lifting off the ground. */
-    public int aiFill() { return mix(ground, 0xFFFFFFFF, 0.7f); }
-    public int aiBorder() { return mix(ground, border, 0.22f); }
+    public int aiFill() { return isDark() ? mix(ground, 0xFFFFFFFF, 0.12f) : mix(ground, 0xFFFFFFFF, 0.7f); }
+    public int aiBorder() { return isDark() ? mix(ground, 0xFFFFFFFF, 0.25f) : mix(ground, border, 0.22f); }
     /** Content surface: a page one step lighter than the ground — text sits on THIS,
      *  never on the raw dotted ground (the dots stay as ambient frame texture). */
-    public int surface() { return mix(ground, 0xFFFFFFFF, 0.38f); }
-    public int surfaceBorder() { return mix(ground, border, 0.14f); }
+    public int surface() { return isDark() ? mix(ground, 0xFFFFFFFF, 0.06f) : mix(ground, 0xFFFFFFFF, 0.38f); }
+    public int surfaceBorder() { return isDark() ? mix(ground, 0xFFFFFFFF, 0.18f) : mix(ground, border, 0.14f); }
     /** Owner bubble: the CTA warmth, desaturated for body text. */
-    public int ownFill() { return mix(cta, 0xFFFFFFFF, 0.4f); }
-    public int ownBorder() { return mix(cta, border, 0.15f); }
+    public int ownFill() { return isDark() ? mix(cta, 0xFF000000, 0.35f) : mix(cta, 0xFFFFFFFF, 0.4f); }
+    public int ownBorder() { return isDark() ? mix(cta, 0xFF000000, 0.55f) : mix(cta, border, 0.15f); }
     /** Queued prompt: a half-present owner bubble. */
     public int queuedFill() { return (ownFill() & 0xFFFFFF) | 0x80000000; }
     public int queuedBorder() { return (ownBorder() & 0xFFFFFF) | 0x80000000; }
-    /** Tool chip: translucent dark wash — status, not a message. */
-    public int chipFill() { return (border & 0xFFFFFF) | 0x22000000; }
-    /** Sidebar card (plan panel): a fainter wash of the same dark. */
-    public int cardFill() { return (border & 0xFFFFFF) | 0x16000000; }
+    /** Tool chip: translucent wash — status, not a message(暗主题下用亮色洗)。 */
+    public int chipFill() { return isDark() ? 0x28FFFFFF : (border & 0xFFFFFF) | 0x22000000; }
+    /** Sidebar card (plan panel): a fainter wash of the same tone. */
+    public int cardFill() { return isDark() ? 0x14FFFFFF : (border & 0xFFFFFF) | 0x16000000; }
 
     /** Per-channel RGB mix of {@code a} toward {@code b} by {@code t}; alpha forced opaque. */
     public static int mix(int a, int b, float t) {

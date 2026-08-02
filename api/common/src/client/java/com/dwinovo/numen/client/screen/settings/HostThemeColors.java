@@ -25,20 +25,28 @@ public final class HostThemeColors {
         return cached;
     }
 
+    private static boolean isDark(UiTheme th) {
+        int g = th.ground();
+        return (((g >> 16) & 0xFF) * 3 + ((g >> 8) & 0xFF) * 6 + (g & 0xFF)) / 10 < 96;
+    }
+
     private static NumenTheme.Colors bridge(UiTheme th) {
+        boolean dark = isDark(th);
         return new NumenTheme.Colors(
                 th.surface(),                          // panelBg(下拉弹层底=宿主纸面)
                 th.cardFill(), th.surfaceBorder(),     // sectionBg / divider
-                th.text(), th.textDim(), th.faint(),   // 文字三级
-                th.cta(), th.fail(), th.ok(),          // accent(金)/danger/success
+                th.text(), th.textDim(), th.faint(),   // 文字三级(跟主题——黑字是 LIGHT 主题的事)
+                th.cta(), th.fail(), th.ok(),          // accent/danger/success
                 th.field(), th.border(),               // 输入底/描边
                 th.chipFill(),                         // hover(半透明胶囊)
                 (th.cta() & 0xFFFFFF) | 0x30000000,    // selected:金色淡染,与宿主选中语言一致
                 th.field(), th.text(),                 // badge 底/字
                 th.aiFill(),                           // toast info(气泡同源)
-                mix(th.run(), 0xFFFFFFFF, 0.72f),      // toast warn:主题琥珀的浅调
-                mix(th.fail(), 0xFFFFFFFF, 0.72f),     // toast error:主题红的浅调
-                th.text());                            // toast 文字(宿主全系浅色纸面,深字可读)
+                dark ? mix(th.run(), 0xFF000000, 0.55f)   // toast warn:暗主题深调/亮主题浅调
+                     : mix(th.run(), 0xFFFFFFFF, 0.72f),
+                dark ? mix(th.fail(), 0xFF000000, 0.55f)  // toast error 同理
+                     : mix(th.fail(), 0xFFFFFFFF, 0.72f),
+                th.text());                            // toast 文字跟主题
     }
 
     private static int mix(int a, int b, float t) {
