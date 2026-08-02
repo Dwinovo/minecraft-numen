@@ -1,7 +1,8 @@
 package com.dwinovo.numen.client.screen.settings;
 
+import com.dwinovo.numen.agent.provider.ProviderRegistry;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
-import com.dwinovo.numen.agent.model.ModelRegistry;
+
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.screen.Dropdown;
@@ -719,7 +720,7 @@ public final class SettingsView {
         provProviderDropdown.setDropBottom(top() + panelH() - 2);
         // Model row: the provider's known models as a dropdown (+ 自定义 → free text),
         // free text only for custom providers.
-        ModelRegistry.Provider mp = ModelRegistry.provider(LlmProviders.normalize(wProvProvider));
+        ProviderRegistry.Provider mp = ProviderRegistry.provider(LlmProviders.normalize(wProvProvider));
         boolean providerCustom = mp != null && mp.custom();
         if (provCustomModel || providerCustom || mp == null || mp.models().isEmpty()) {
             provModelDropdown = null;
@@ -749,7 +750,7 @@ public final class SettingsView {
      *  the site's default URL and its first model, both still editable. */
     private void adaptToProvider(String providerId) {
         wProvProvider = providerId;
-        ModelRegistry.Provider mp = ModelRegistry.provider(LlmProviders.normalize(providerId));
+        ProviderRegistry.Provider mp = ProviderRegistry.provider(LlmProviders.normalize(providerId));
         provCustomModel = mp != null && mp.custom();
         wProvModel = (mp != null && !mp.models().isEmpty()) ? mp.models().get(0).id() : "";
         wProvBaseUrl = LlmProviders.byId(providerId).defaultBaseUrl();
@@ -799,9 +800,9 @@ public final class SettingsView {
         host.rebuild();
     }
 
-    private List<Dropdown.Item> modelItems(ModelRegistry.Provider mp) {
+    private List<Dropdown.Item> modelItems(ProviderRegistry.Provider mp) {
         List<Dropdown.Item> items = new ArrayList<>();
-        if (mp != null) for (ModelRegistry.Model m : mp.models()) items.add(new Dropdown.Item(m.id(), m.id()));
+        if (mp != null) for (ProviderRegistry.Model m : mp.models()) items.add(new Dropdown.Item(m.id(), m.id()));
         items.add(new Dropdown.Item(CUSTOM_MODEL, I18n.get("numen.settings.custom_model")));
         return items;
     }
@@ -1872,7 +1873,7 @@ public final class SettingsView {
         wProvKey = e.apiKey() == null ? "" : e.apiKey();
         wProvBaseUrl = e.baseUrl() == null ? "" : e.baseUrl();
         // The stored model may not be in the provider's known list — open in free-text then.
-        ModelRegistry.Provider mp = ModelRegistry.provider(LlmProviders.normalize(wProvProvider));
+        ProviderRegistry.Provider mp = ProviderRegistry.provider(LlmProviders.normalize(wProvProvider));
         provCustomModel = mp == null || mp.custom()
                 || mp.models().stream().noneMatch(m -> m.id().equals(wProvModel));
         host.rebuild();

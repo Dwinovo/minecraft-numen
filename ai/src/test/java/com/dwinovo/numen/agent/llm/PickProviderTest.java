@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * 站点名 → provider 实例的装配:别名解析、子类挑选、数据驱动站点的
- * 方言注入。跑在未注入用户文件的 headless 环境(内置 numen_models.json 兜底)。
+ * 方言注入。跑在未注入用户文件的 headless 环境(内置 numen_providers.json 兜底)。
  */
 class PickProviderTest {
 
@@ -29,7 +29,7 @@ class PickProviderTest {
 
     @Test
     void dataDrivenSitesCarryDialectFromRegistry() {
-        // numen_models.json 里配的 thinkingFormat 必须流到 provider 实例。
+        // numen_providers.json 里配的 thinkingFormat 必须流到 provider 实例。
         assertEquals(LlmProvider.THINKING_TYPE, pick("glm").thinkingFormat());
         assertEquals(LlmProvider.THINKING_ENABLE_BOOL, pick("qwen").thinkingFormat());
         assertEquals(LlmProvider.THINKING_ENABLE_BOOL, pick("siliconflow").thinkingFormat());
@@ -57,13 +57,13 @@ class PickProviderTest {
 
     @Test
     void aliasTableIsSingleSourced() {
-        // 别名唯一真源在 ModelRegistry.canonicalId;装配走同一张表。
+        // 别名唯一真源在 ProviderRegistry.canonicalId;装配走同一张表。
         assertEquals("openai",
-                com.dwinovo.numen.agent.model.ModelRegistry.canonicalId("openai-compatible"));
+                com.dwinovo.numen.agent.provider.ProviderRegistry.canonicalId("openai-compatible"));
         assertEquals("moonshot",
-                com.dwinovo.numen.agent.model.ModelRegistry.canonicalId("KIMI"));
+                com.dwinovo.numen.agent.provider.ProviderRegistry.canonicalId("KIMI"));
         assertEquals("openai",
-                com.dwinovo.numen.agent.model.ModelRegistry.canonicalId(null));
+                com.dwinovo.numen.agent.provider.ProviderRegistry.canonicalId(null));
     }
 
     @Test

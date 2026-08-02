@@ -1,13 +1,14 @@
 package com.dwinovo.numen.client.screen;
 
-import com.dwinovo.numen.agent.model.ModelRegistry;
 
+
+import com.dwinovo.numen.agent.provider.ProviderRegistry;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The LLM providers offered in the settings UI — derived from the {@link ModelRegistry} (bundled
- * {@code numen_models.json}) so adding a provider/model is a data edit, not code. Shared by the
+ * The LLM providers offered in the settings UI — derived from the {@link ProviderRegistry} (bundled
+ * {@code numen_providers.json}) so adding a provider/model is a data edit, not code. Shared by the
  * standalone {@link SettingsScreen} and the {@link NumenScreen} Settings tab.
  */
 public final class LlmProviders {
@@ -15,7 +16,7 @@ public final class LlmProviders {
     /** Every provider, live from the registry (so a newly-added site shows up immediately). */
     public static List<Option> all() {
         List<Option> out = new ArrayList<>();
-        for (ModelRegistry.Provider p : ModelRegistry.providers()) {
+        for (ProviderRegistry.Provider p : ProviderRegistry.providers()) {
             String defaultModel = p.models().isEmpty() ? "" : p.models().get(0).id();
             out.add(new Option(p.id(), p.name(), defaultModel, p.baseUrl()));
         }

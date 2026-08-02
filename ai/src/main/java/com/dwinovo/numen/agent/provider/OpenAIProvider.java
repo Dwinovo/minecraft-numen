@@ -49,7 +49,7 @@ public class OpenAIProvider implements LlmProvider {
     /**
      * 纯 OpenAI 兼容后端只差站点名、缺省端点与思考开关方言——用这个构造
      * 按站点参数化,不必再为每个站点新建子类。三者的真源是
-     * {@code numen_models.json}({@code ModelRegistry});只有真有行为差异
+     * {@code numen_providers.json}({@code ProviderRegistry});只有真有行为差异
      * 的后端(DeepSeek 的缓存计费、Moonshot 的 reasoning_content 兜底)
      * 才配一个子类。
      */

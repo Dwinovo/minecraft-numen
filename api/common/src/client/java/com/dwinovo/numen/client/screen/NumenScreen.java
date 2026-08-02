@@ -1,7 +1,7 @@
 package com.dwinovo.numen.client.screen;
 
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
-import com.dwinovo.numen.agent.model.ModelRegistry;
+
 import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.provider.AssistantTurn;

@@ -3,8 +3,8 @@
 // 同一份 numen-ai,provider 层的修复改一处全家族生效。
 //
 // 现住户:agent.http(传输:SSE 流式/重试退避/空闲看门狗)、agent.prompt(提示词)、
-// agent.provider(线格式适配 + IToolSpec 工具描述面)、agent.llm(客户端/会话
-// 状态/会话日志)、agent.model(站点注册表,用户文件落点由宿主引导期注入)。
+// agent.provider(线格式适配 + IToolSpec 工具描述面 + 站点注册表 ProviderRegistry,
+// 用户文件落点由宿主引导期注入)、agent.llm(客户端/会话状态/会话日志)。
 plugins {
     id 'java-library'
     id 'maven-publish'

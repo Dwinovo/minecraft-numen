@@ -1,4 +1,4 @@
-package com.dwinovo.numen.agent.model;
+package com.dwinovo.numen.agent.provider;
 
 import com.dwinovo.numen.ai.AiLog;
 import com.google.gson.JsonObject;
@@ -18,11 +18,11 @@ import java.util.Map;
  * custom headers, and a list of known models with their context window (tokens). Single source of truth
  * for the settings dropdowns and the per-model auto-compaction threshold.
  *
- * <p>USER-EDITABLE: on first load the bundled {@code /numen_models.json} is copied to
- * {@code config/numen/models.json}; thereafter that file is authoritative (edit it to add your own
+ * <p>USER-EDITABLE: on first load the bundled {@code /numen_providers.json} is copied to
+ * {@code config/numen/providers.json}; thereafter that file is authoritative (edit it to add your own
  * sites/models). A broken user file falls back to the bundled default.
  */
-public final class ModelRegistry {
+public final class ProviderRegistry {
 
     /** {@code temperature} null = 不发(吃服务器默认);{@code maxTokens} 0 = 不发/协议默认。 */
     public record Model(String id, int ctx, boolean reasoning,
@@ -39,7 +39,7 @@ public final class ModelRegistry {
 
     private static volatile List<Provider> PROVIDERS = load();
 
-    private ModelRegistry() {}
+    private ProviderRegistry() {}
 
     /** 宿主引导:注入用户文件落点并重载(首次会把内置默认播种到该文件供编辑)。 */
     public static void init(Path modelsJson) {
@@ -50,7 +50,7 @@ public final class ModelRegistry {
     /** Re-read the user file (after an edit / a site was added). */
     public static void reload() { PROVIDERS = load(); }
 
-    /** Append a user-defined OpenAI-compatible site to {@code config/numen/models.json} and reload.
+    /** Append a user-defined OpenAI-compatible site to {@code config/numen/providers.json} and reload.
      *  Returns the new site id, or null on failure. */
     public static String addCustomSite(String name, String baseUrl, String modelId) {
         Path file = userFile;
@@ -117,17 +117,17 @@ public final class ModelRegistry {
         }
         List<Provider> out = parse(json);
         if (out.isEmpty() && bundled != null && !bundled.equals(json)) {
-            AiLog.LOG.warn("[numen] user models.json yielded no sites, falling back to bundled");
+            AiLog.LOG.warn("[numen] user providers.json yielded no sites, falling back to bundled");
             out = parse(bundled);
         }
         return List.copyOf(out);
     }
 
     private static String readBundled() {
-        try (var in = ModelRegistry.class.getResourceAsStream("/numen_models.json")) {
+        try (var in = ProviderRegistry.class.getResourceAsStream("/numen_providers.json")) {
             return in == null ? null : new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            AiLog.LOG.error("[numen] numen_models.json not readable", e);
+            AiLog.LOG.error("[numen] numen_providers.json not readable", e);
             return null;
         }
     }
@@ -170,7 +170,7 @@ public final class ModelRegistry {
                         p.has("protocol") ? p.get("protocol").getAsString() : ""));
             }
         } catch (Exception e) {
-            AiLog.LOG.error("[numen] failed to parse models.json", e);
+            AiLog.LOG.error("[numen] failed to parse providers.json", e);
         }
         return out;
     }

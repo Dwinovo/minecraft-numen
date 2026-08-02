@@ -70,9 +70,9 @@ public final class EntityAgentLoop {
     // ---- context compaction (mirrors Claude Code's /compact machinery) ----
 
     /**
-     * The model context window now comes per-model from {@code ModelRegistry} (numen_models.json),
+     * The model context window now comes per-model from {@code ProviderRegistry} (numen_providers.json),
      * looked up from the configured provider+model at the auto-compaction gate; unknown/custom models
-     * fall back to {@code ModelRegistry.DEFAULT_CTX} (64k).
+     * fall back to {@code ProviderRegistry.DEFAULT_CTX} (64k).
      */
     /**
      * Headroom under the window at which auto-compaction fires (Claude Code's
@@ -274,7 +274,7 @@ public final class EntityAgentLoop {
      */
     /** 与自动压缩闸门同一口径的模型上下文窗口。 */
     private static int modelWindow() {
-        return com.dwinovo.numen.agent.model.ModelRegistry.contextWindow(
+        return com.dwinovo.numen.agent.provider.ProviderRegistry.contextWindow(
                 com.dwinovo.numen.client.screen.LlmProviders.normalize(
                         com.dwinovo.numen.platform.Services.CONFIG.getProvider()),
                 com.dwinovo.numen.platform.Services.CONFIG.getModel());

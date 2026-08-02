@@ -3,7 +3,8 @@ package com.dwinovo.numen.agent.llm;
 import com.dwinovo.numen.ai.AiLog;
 import com.dwinovo.numen.agent.http.HttpLlmTransport;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
-import com.dwinovo.numen.agent.model.ModelRegistry;
+import com.dwinovo.numen.agent.provider.ProviderRegistry;
+
 import com.dwinovo.numen.agent.provider.AnthropicProvider;
 import com.dwinovo.numen.agent.provider.DeepSeekProvider;
 import com.dwinovo.numen.agent.provider.IToolSpec;
@@ -59,16 +60,16 @@ public final class NumenLlmClient {
 
     private NumenLlmClient(LlmEndpoint endpoint) {
         this.provider = pickProvider(endpoint.provider());
-        String siteBase = com.dwinovo.numen.agent.model.ModelRegistry.baseUrl(endpoint.provider());
+        String siteBase = com.dwinovo.numen.agent.provider.ProviderRegistry.baseUrl(endpoint.provider());
         this.fullUrl = composeUrl(endpoint.baseUrl(), siteBase, provider);
         this.apiKey = endpoint.apiKey();
         this.transport = new HttpLlmTransport(endpoint.proxy(),
-                com.dwinovo.numen.agent.model.ModelRegistry.headers(endpoint.provider()),
+                com.dwinovo.numen.agent.provider.ProviderRegistry.headers(endpoint.provider()),
                 provider.authHeaders(endpoint.apiKey()));
         String configured = endpoint.model();
         this.model = (configured == null || configured.isBlank()) ? "gpt-5.4-mini" : configured;
         this.reasoningEffort = normalizeReasoning(endpoint.reasoningEffort());
-        ModelRegistry.Model registered = ModelRegistry.model(endpoint.provider(), this.model);
+        ProviderRegistry.Model registered = ProviderRegistry.model(endpoint.provider(), this.model);
         this.genTemperature = registered == null ? null : registered.temperature();
         this.genMaxTokens = registered == null ? 0 : registered.maxTokens();
         AiLog.LOG.info("[numen-llm] client initialised: provider={}, model={}, url={}, streaming={}",
@@ -77,7 +78,7 @@ public final class NumenLlmClient {
 
     /**
      * Compose the chat URL. Base URL precedence: an explicit per-config override wins;
-     * else the site's registered base URL (from {@code numen_models.json} — so "+ add site" URLs and
+     * else the site's registered base URL (from {@code numen_providers.json} — so "+ add site" URLs and
      * adapter-less sites like Gemini/Grok actually take effect); else the adapter's hard-coded default.
      * Then normalise: trim a trailing slash and append the provider's chat path
      * ({@code /chat/completions} / {@code /messages}) if absent.
@@ -254,29 +255,29 @@ public final class NumenLlmClient {
      * fallback). Every other site — zhipu, siliconflow, minimax, volcengine,
      * dashscope, gemini, grok, "+ add site" customs — is a plain
      * OpenAI-compatible endpoint whose name and default base URL come from
-     * {@code numen_models.json} ({@link ModelRegistry}), the single source
+     * {@code numen_providers.json} ({@link ProviderRegistry}), the single source
      * the settings UI reads too — base URL, thinking dialect, and wire
      * protocol ({@code protocol:"anthropic"} rows get the Anthropic Messages
      * adapter instead of the OpenAI-compat one). Alias resolution
      * ({@code kimi}/{@code doubao}/{@code glm}/...) lives in
-     * {@link ModelRegistry#canonicalId} — the one and only alias table.
+     * {@link ProviderRegistry#canonicalId} — the one and only alias table.
      * Unknown values fall back to {@code openai} with a warning log.
      */
     public static LlmProvider pickProvider(String name) {
-        String id = ModelRegistry.canonicalId(name);
+        String id = ProviderRegistry.canonicalId(name);
         if (id.equals(DeepSeekProvider.NAME)) return new DeepSeekProvider();
         if (id.equals(MoonshotProvider.NAME)) return new MoonshotProvider();
         if (id.equals(OpenAIProvider.NAME)) return new OpenAIProvider();
-        if (ModelRegistry.has(id)) {
-            String baseUrl = ModelRegistry.baseUrl(id);
-            if ("anthropic".equals(ModelRegistry.protocol(id))) {
+        if (ProviderRegistry.has(id)) {
+            String baseUrl = ProviderRegistry.baseUrl(id);
+            if ("anthropic".equals(ProviderRegistry.protocol(id))) {
                 return new AnthropicProvider(id,
                         baseUrl == null || baseUrl.isBlank() ? AnthropicProvider.DEFAULT_BASE_URL : baseUrl,
-                        ModelRegistry.thinkingFormat(id));
+                        ProviderRegistry.thinkingFormat(id));
             }
             return new OpenAIProvider(id,
                     baseUrl == null || baseUrl.isBlank() ? OpenAIProvider.DEFAULT_BASE_URL : baseUrl,
-                    ModelRegistry.thinkingFormat(id));
+                    ProviderRegistry.thinkingFormat(id));
         }
         AiLog.LOG.warn("[numen-llm] unknown provider '{}', falling back to openai", name);
         return new OpenAIProvider();

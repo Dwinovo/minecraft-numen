@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * Anthropic Messages 线协议的完整实现——与 {@link OpenAIProvider} 同级的
  * 第二协议。凡是暴露 Anthropic 兼容端点的站点(官方与兼容站)都由本类承载,
- * 站点差异照旧走数据({@code numen_models.json} 的 baseUrl/headers/
+ * 站点差异照旧走数据({@code numen_providers.json} 的 baseUrl/headers/
  * thinkingFormat),不为兼容站开子类。
  *
  * <h2>与 OpenAI 方言的关键分歧(逐条落在对应方法上)</h2>

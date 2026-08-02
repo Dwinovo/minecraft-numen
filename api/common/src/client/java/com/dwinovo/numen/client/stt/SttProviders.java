@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  * 语音输入 provider 注册表(TouhouLittleMaid 式思路,numen 原生实现,镜像
- * {@code ModelRegistry}):每个 provider 一个 OpenAI 兼容 base URL + 一组已知
+ * {@code ProviderRegistry}):每个 provider 一个 OpenAI 兼容 base URL + 一组已知
  * transcription 模型 id;{@code backend} 选实现(目前只有 {@code whisper-http}
  * 批量,未来加流式只加实现+一条数据)。UI 下拉与 {@link #fromConfig} 工厂共用。
  *
@@ -83,7 +83,7 @@ public final class SttProviders {
         };
     }
 
-    // ---- loading (mirror of ModelRegistry) ----
+    // ---- loading (mirror of ProviderRegistry) ----
 
     private static List<Option> load() {
         String bundled = readBundled();
