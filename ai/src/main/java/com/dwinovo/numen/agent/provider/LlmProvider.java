@@ -34,6 +34,22 @@ import java.util.List;
  */
 public interface LlmProvider {
 
+    // ---- 思考开关的方言家族(站点数据 thinkingFormat 字段的取值域) ----
+    //
+    // 按"开关长什么样"命名而非按厂商命名:同形方言共用一个 id,新站点只是
+    // 数据里选一个既有形态,不新增代码。
+
+    /** 顶层 {@code reasoning_effort: "low"|"medium"|"high"}(默认形态)。 */
+    String THINKING_EFFORT = "effort";
+    /** 嵌套 {@code reasoning: {effort: ...}}(聚合网关常用)。 */
+    String THINKING_EFFORT_NESTED = "effort-nested";
+    /** 对象开关 {@code thinking: {type: "enabled"|"disabled"}}。 */
+    String THINKING_TYPE = "thinking-type";
+    /** 布尔开关 {@code enable_thinking: true|false}。 */
+    String THINKING_ENABLE_BOOL = "enable-bool";
+    /** 无开关:思考型号常开/不可控,任何力度都不发参数。 */
+    String THINKING_NONE = "none";
+
     /** Stable id used in config (e.g. {@code "openai"}, {@code "deepseek"}). */
     String name();
 
@@ -101,13 +117,27 @@ public interface LlmProvider {
      * ({@code low}/{@code medium}/{@code high}), which OpenAI's o-series / GPT-5
      * and a growing set of OpenAI-compatible backends honour. Providers whose
      * backend uses a different knob (e.g. a {@code thinking} / {@code enable_thinking}
-     * object) can override this to translate.
+     * object) can override this to translate — see the {@code THINKING_*}
+     * dialect ids and {@code OpenAIProvider}'s data-driven translation.
      *
      * @param body   the request body to mutate in place
-     * @param effort one of {@code "low"}, {@code "medium"}, {@code "high"}
+     * @param effort {@code "low"}/{@code "medium"}/{@code "high"},或
+     *               {@code "off"}(明确关闭思考——只有带开关的方言能表达,
+     *               effort 形态的方言对 off 不发参数)
      */
     default void applyReasoning(JsonObject body, String effort) {
+        if ("off".equals(effort)) return;
         body.addProperty("reasoning_effort", effort);
+    }
+
+    /**
+     * 从一个 SSE chunk 里抽出思考文本增量(方言字段解码),没有则 null。
+     * 供 UI 的实时思考流显示;累积后的权威去重版本在
+     * {@link AssistantTurn#reasoning}(同流双字段的场合以累积侧的
+     * 字段锁定为准)。
+     */
+    default String extractReasoningDelta(JsonObject chunk) {
+        return null;
     }
 
     // ---- usage accounting ----

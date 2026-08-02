@@ -36,25 +36,64 @@ public class OpenAIProvider implements LlmProvider {
 
     private final String name;
     private final String defaultBaseUrl;
+    private final String thinkingFormat;
 
     public OpenAIProvider() {
         this(NAME, DEFAULT_BASE_URL);
     }
 
+    public OpenAIProvider(String name, String defaultBaseUrl) {
+        this(name, defaultBaseUrl, LlmProvider.THINKING_EFFORT);
+    }
+
     /**
-     * 纯 OpenAI 兼容后端只差站点名与缺省端点——用这个构造按站点参数化,
-     * 不必再为每个站点新建子类。站点名与端点的真源是
+     * 纯 OpenAI 兼容后端只差站点名、缺省端点与思考开关方言——用这个构造
+     * 按站点参数化,不必再为每个站点新建子类。三者的真源是
      * {@code numen_models.json}({@code ModelRegistry});只有真有行为差异
      * 的后端(DeepSeek 的缓存计费、Moonshot 的 reasoning_content 兜底)
      * 才配一个子类。
      */
-    public OpenAIProvider(String name, String defaultBaseUrl) {
+    public OpenAIProvider(String name, String defaultBaseUrl, String thinkingFormat) {
         this.name = name;
         this.defaultBaseUrl = defaultBaseUrl;
+        this.thinkingFormat = thinkingFormat == null || thinkingFormat.isBlank()
+                ? LlmProvider.THINKING_EFFORT : thinkingFormat;
     }
 
     @Override public String name() { return name; }
     @Override public String defaultBaseUrl() { return defaultBaseUrl; }
+
+    /** 本站思考开关的方言家族(见 {@code LlmProvider.THINKING_*})。 */
+    public String thinkingFormat() { return thinkingFormat; }
+
+    /**
+     * 力度 → 本站方言的翻译。{@code off} 只有带开关的方言能表达;effort
+     * 形态对 off 静默(没有"关"的线格式)。{@code none} 家族永不发参数——
+     * 思考型号常开/不可控的站点,多发只会 400 或被无视。
+     */
+    @Override
+    public void applyReasoning(JsonObject body, String effort) {
+        boolean off = "off".equals(effort);
+        switch (thinkingFormat) {
+            case LlmProvider.THINKING_NONE -> { }
+            case LlmProvider.THINKING_TYPE -> {
+                JsonObject t = new JsonObject();
+                t.addProperty("type", off ? "disabled" : "enabled");
+                body.add("thinking", t);
+            }
+            case LlmProvider.THINKING_ENABLE_BOOL -> body.addProperty("enable_thinking", !off);
+            case LlmProvider.THINKING_EFFORT_NESTED -> {
+                if (off) return;
+                JsonObject r = new JsonObject();
+                r.addProperty("effort", effort);
+                body.add("reasoning", r);
+            }
+            default -> {
+                if (off) return;
+                body.addProperty("reasoning_effort", effort);
+            }
+        }
+    }
 
     @Override
     public JsonObject buildUserMessage(String content) {
@@ -146,7 +185,12 @@ public class OpenAIProvider implements LlmProvider {
         String content = stringOrEmpty(msg.get("content"));
         List<LlmToolCall> toolCalls = parseToolCalls(msg);
         JsonObject extras = extractExtras(msg);
-        return new AssistantTurn(content, toolCalls, extras);
+        String reasoning = "";
+        for (String f : REASONING_FIELDS) {
+            String v = stringField(msg, f);
+            if (v != null && !v.isEmpty()) { reasoning = v; break; }
+        }
+        return new AssistantTurn(content, toolCalls, extras, reasoning);
     }
 
     /** Pull {@code choices[0].message} out of the response body. */
@@ -257,6 +301,13 @@ public class OpenAIProvider implements LlmProvider {
             acc.content.append(delta.get("content").getAsString());
         }
 
+        // 思考文本增量(方言字段,首个非空者锁定)——展示面累积;
+        // 同一字段照旧被 captureChunkExtras 收进 extras 走回传,两线并行。
+        String reasoningDelta = reasoningDelta(delta, acc);
+        if (reasoningDelta != null) {
+            acc.reasoning.append(reasoningDelta);
+        }
+
         // tool_calls fragments (sparse — each delta only carries what changed)
         if (delta.has("tool_calls") && delta.get("tool_calls").isJsonArray()) {
             for (JsonElement el : delta.getAsJsonArray("tool_calls")) {
@@ -285,10 +336,60 @@ public class OpenAIProvider implements LlmProvider {
         for (var e : delta.entrySet()) {
             if (STANDARD_DELTA_FIELDS.contains(e.getKey())) continue;
             var el = e.getValue();
-            if (el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()) {
+            if (el == null || el.isJsonNull()) continue;
+            if (el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()) {
                 acc.appendExtra(e.getKey(), el.getAsString());
+            } else {
+                // 非字符串型(如聚合网关的 reasoning_details 数组)也要保留:
+                // 数组逐块并入,其他末值胜。否则回传残缺,方言后端可能拒收。
+                acc.mergeExtraJson(e.getKey(), el);
             }
         }
+    }
+
+    /** 思考方言字段,按优先序;首个非空者在流内锁定(有的后端双字段同文,防重复计入)。 */
+    private static final List<String> REASONING_FIELDS =
+            List.of("reasoning_content", "reasoning", "reasoning_text");
+
+    /** 从 delta 抽思考增量;负责字段锁定语义。无思考返回 null。 */
+    protected String reasoningDelta(JsonObject delta, StreamAccumulator acc) {
+        if (acc.reasoningField != null) {
+            return stringField(delta, acc.reasoningField);
+        }
+        for (String f : REASONING_FIELDS) {
+            String v = stringField(delta, f);
+            if (v != null && !v.isEmpty()) {
+                acc.reasoningField = f;
+                return v;
+            }
+        }
+        return null;
+    }
+
+    private static String stringField(JsonObject o, String key) {
+        var el = o.get(key);
+        return el != null && el.isJsonPrimitive() && el.getAsJsonPrimitive().isString()
+                ? el.getAsString() : null;
+    }
+
+    /**
+     * 无状态版思考增量抽取(供 UI 实时流)。没有跨 chunk 的字段锁定,同流
+     * 双字段的极端场合可能重复;权威去重版本是累积后的
+     * {@link AssistantTurn#reasoning}。
+     */
+    @Override
+    public String extractReasoningDelta(JsonObject chunk) {
+        if (!chunk.has("choices") || !chunk.get("choices").isJsonArray()) return null;
+        JsonArray choices = chunk.getAsJsonArray("choices");
+        if (choices.isEmpty() || !choices.get(0).isJsonObject()) return null;
+        JsonObject choice = choices.get(0).getAsJsonObject();
+        if (!choice.has("delta") || !choice.get("delta").isJsonObject()) return null;
+        JsonObject delta = choice.getAsJsonObject("delta");
+        for (String f : REASONING_FIELDS) {
+            String v = stringField(delta, f);
+            if (v != null && !v.isEmpty()) return v;
+        }
+        return null;
     }
 
     /** Set of delta fields we treat as "standard" — subclasses use this for partition. */
@@ -329,8 +430,12 @@ public class OpenAIProvider implements LlmProvider {
         for (var e : acc.extraBuffers.entrySet()) {
             extras.addProperty(e.getKey(), e.getValue().toString());
         }
+        for (var e : acc.extraJson.entrySet()) {
+            if (!extras.has(e.getKey())) extras.add(e.getKey(), e.getValue());
+        }
 
-        return new AssistantTurn(acc.content.toString(), calls, extras);
+        return new AssistantTurn(acc.content.toString(), calls, extras,
+                acc.reasoning.toString());
     }
 
     private static String stringOrEmpty(JsonElement el) {

@@ -26,7 +26,8 @@ public final class ModelRegistry {
 
     public record Model(String id, int ctx, boolean reasoning) {}
     public record Provider(String id, String name, String baseUrl, boolean custom,
-                           Map<String, String> headers, List<Model> models) {}
+                           Map<String, String> headers, List<Model> models,
+                           String thinkingFormat) {}
 
     /** Fallback context window for an unknown model (e.g. a custom one). */
     public static final int DEFAULT_CTX = 64_000;
@@ -160,7 +161,8 @@ public final class ModelRegistry {
                         p.has("baseUrl") ? p.get("baseUrl").getAsString() : "",
                         p.has("custom") && p.get("custom").getAsBoolean(),
                         Map.copyOf(headers),
-                        List.copyOf(models)));
+                        List.copyOf(models),
+                        p.has("thinkingFormat") ? p.get("thinkingFormat").getAsString() : ""));
             }
         } catch (Exception e) {
             AiLog.LOG.error("[numen] failed to parse models.json", e);
@@ -209,6 +211,12 @@ public final class ModelRegistry {
     public static Map<String, String> headers(String providerId) {
         Provider p = provider(providerId);
         return p == null ? Map.of() : p.headers();
+    }
+
+    /** 站点的思考开关方言(空 = 默认 effort 形态,见 {@code LlmProvider.THINKING_*})。 */
+    public static String thinkingFormat(String providerId) {
+        Provider p = provider(providerId);
+        return p == null ? "" : p.thinkingFormat();
     }
 
     /** Context window for a (provider, model) pair, or {@link #DEFAULT_CTX} if unknown / custom. */

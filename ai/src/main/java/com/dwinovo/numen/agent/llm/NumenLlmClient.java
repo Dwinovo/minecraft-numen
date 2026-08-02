@@ -53,7 +53,7 @@ public final class NumenLlmClient {
     private final String fullUrl;
     private final String apiKey;
     private final String model;
-    /** Reasoning effort: {@code auto} (send nothing) | {@code low} | {@code medium} | {@code high}. */
+    /** Reasoning effort: {@code auto}(send nothing) | {@code off}(明确关) | {@code low} | {@code medium} | {@code high}. */
     private final String reasoningEffort;
 
     private NumenLlmClient(LlmEndpoint endpoint) {
@@ -216,11 +216,12 @@ public final class NumenLlmClient {
 
     private static boolean nonBlank(String s) { return s != null && !s.isBlank(); }
 
-    /** Coerce a stored reasoning value to auto/low/medium/high ("auto" = don't send the parameter). */
+    /** Coerce a stored reasoning value to auto/off/low/medium/high ("auto" = don't send the parameter,
+     *  "off" = 明确关闭思考——由 provider 按方言翻译,无开关的方言静默)。 */
     private static String normalizeReasoning(String v) {
         if (v == null) return "auto";
         return switch (v.trim().toLowerCase()) {
-            case "low", "medium", "high" -> v.trim().toLowerCase();
+            case "off", "low", "medium", "high" -> v.trim().toLowerCase();
             default -> "auto";
         };
     }
@@ -269,7 +270,8 @@ public final class NumenLlmClient {
         if (ModelRegistry.has(id)) {
             String baseUrl = ModelRegistry.baseUrl(id);
             return new OpenAIProvider(id,
-                    baseUrl == null || baseUrl.isBlank() ? OpenAIProvider.DEFAULT_BASE_URL : baseUrl);
+                    baseUrl == null || baseUrl.isBlank() ? OpenAIProvider.DEFAULT_BASE_URL : baseUrl,
+                    ModelRegistry.thinkingFormat(id));
         }
         AiLog.LOG.warn("[numen-llm] unknown provider '{}', falling back to openai", name);
         return new OpenAIProvider();

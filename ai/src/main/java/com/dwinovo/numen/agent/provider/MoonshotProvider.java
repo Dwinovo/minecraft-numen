@@ -30,6 +30,11 @@ public final class MoonshotProvider extends OpenAIProvider {
     public static final String NAME = "moonshot";
     public static final String DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
 
+    /** 思考型号(kimi-*-thinking)常开、无线上开关——方言定 none,力度不发参数。 */
+    public MoonshotProvider() {
+        super(NAME, DEFAULT_BASE_URL, LlmProvider.THINKING_NONE);
+    }
+
     @Override public String name() { return NAME; }
 
     @Override public String defaultBaseUrl() { return DEFAULT_BASE_URL; }

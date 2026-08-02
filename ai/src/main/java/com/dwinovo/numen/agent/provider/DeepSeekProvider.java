@@ -30,6 +30,10 @@ public final class DeepSeekProvider extends OpenAIProvider {
     public static final String NAME = "deepseek";
     public static final String DEFAULT_BASE_URL = "https://api.deepseek.com/beta";
 
+    public DeepSeekProvider() {
+        super(NAME, DEFAULT_BASE_URL, LlmProvider.THINKING_TYPE);
+    }
+
     @Override public String name() { return NAME; }
 
     @Override public String defaultBaseUrl() { return DEFAULT_BASE_URL; }
