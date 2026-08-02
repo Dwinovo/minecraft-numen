@@ -95,14 +95,12 @@ public final class SettingsView {
     private int rawMouseX = -10000, rawMouseY = -10000;
 
     // ---- 模型配置表单:NumenUI ProfileFormPanel(检测/思考/强度/toast/分类报错) ----
-    private final com.dwinovo.numen.client.ui.NumenToasts viewToasts =
-            new com.dwinovo.numen.client.ui.NumenToasts();
     private ProfileFormPanel providerForm;
     private ProfileFormPanel.Draft providerDraft = new ProfileFormPanel.Draft();
 
     private ProfileFormPanel providerForm() {
         if (providerForm == null) {
-            providerForm = new ProfileFormPanel(viewToasts::push,
+            providerForm = new ProfileFormPanel(
                     this::onProfileSave,
                     () -> { addingProvider = false; providerEditId = null; host.rebuild(); });
         }
@@ -2331,13 +2329,6 @@ public final class SettingsView {
 
     public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
-        // 表单 toast 落在表单卡内按钮行上方——用户视线正在那里,不拽去角落。
-        if (!viewToasts.isIdle()) {
-            viewToasts.renderAboveButtons(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    fRight(), fBottom() - 22,
-                    HostThemeColors.current(),
-                    net.minecraft.Util.getMillis());
-        }
         if (section == Section.PROXY) {
             placeholder(g, proxyIpInput, "127.0.0.1");
             placeholder(g, proxyPortInput, "7890");

@@ -10,10 +10,10 @@ import com.dwinovo.numen.client.screen.ReasoningChoice;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
-import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.ui.widget.Badge;
 import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.Dropdown;
+import com.dwinovo.numen.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.ListView;
 import com.dwinovo.numen.client.ui.widget.TextField;
@@ -37,13 +37,7 @@ import java.util.List;
  */
 public final class ProviderPanel {
 
-    /** toast 出口由宿主注入:各宿主画在自己的最上层。 */
-    public interface ToastSink {
-        void push(NumenToasts.Severity severity, String message);
-    }
-
     private final UiRoot ui = new UiRoot();
-    private final ToastSink toasts;
 
     private List<ProviderRegistry.Provider> sites = List.of();
     private ListView<ProviderRegistry.Provider> siteList;
@@ -51,12 +45,12 @@ public final class ProviderPanel {
     private Dropdown modelPick, thinkingSwitch, effortPick;
     private Label siteTitle, thinkingLabel, effortLabel;
     private Button checkButton;
+    private InlineAlert resultAlert;
     private volatile boolean checking;
 
     private int x, y, w, h, listW;
 
-    public ProviderPanel(ToastSink toasts) {
-        this.toasts = toasts;
+    public ProviderPanel() {
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
@@ -127,6 +121,8 @@ public final class ProviderPanel {
                 ReasoningChoice.LEVEL_MEDIUM, i -> onEffortPicked(i)));
         effortPick.setBounds(rx + 86, ry, 78, NumenStyle.CONTROL_H);
 
+        resultAlert = ui.add(new InlineAlert());
+        resultAlert.setBounds(rx, ry + 16, rw, Math.max(20, y + h - 20 - ry - 16));
         checkButton = ui.add(new Button(t("numen.gui.providers.check"),
                 Button.Style.ACCENT, this::runConnectivityCheck));
         checkButton.setBounds(rx + rw - 54, y + h - 16, 54, 15);
@@ -274,25 +270,27 @@ public final class ProviderPanel {
         if (checking) return;
         INumenConfig cfg = Services.CONFIG;
         if (cfg.getApiKey() == null || cfg.getApiKey().isBlank()) {
-            toasts.push(NumenToasts.Severity.WARN, t("numen.gui.providers.check.no_key"));
+            keyField.setError(t("numen.gui.inline.need_key"));
             return;
         }
         checking = true;
         checkButton.setEnabled(false);
-        toasts.push(NumenToasts.Severity.INFO, t("numen.gui.providers.check.running"));
+        checkButton.setLabel(t("numen.gui.providers.checking"));
+        resultAlert.clear();
         LlmEndpoint ep = new LlmEndpoint(cfg.getProvider(), cfg.getModel(), cfg.getApiKey(),
                 cfg.getBaseUrl(), cfg.getProxy(), "auto");
         NumenLlmClient.forEndpoint(ep)
                 .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "", null)
-                .whenComplete((result, error) -> {
+                .whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
                     checking = false;
                     checkButton.setEnabled(true);
+                    checkButton.setLabel(t("numen.gui.providers.check"));
                     if (error == null) {
-                        toasts.push(NumenToasts.Severity.INFO, t("numen.gui.providers.check.ok"));
+                        resultAlert.show(InlineAlert.Severity.SUCCESS, t("numen.gui.providers.check.ok"));
                     } else {
-                        toasts.push(NumenToasts.Severity.ERROR, LlmErrorWords.classify(error));
+                        resultAlert.show(InlineAlert.Severity.ERROR, LlmErrorWords.classify(error));
                     }
-                });
+                }));
     }
 
     private static String t(String key) {

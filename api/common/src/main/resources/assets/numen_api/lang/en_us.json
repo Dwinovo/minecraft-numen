@@ -245,5 +245,8 @@
   "numen.gui.providers.check.network": "Can't connect — check network, proxy, or base URL",
   "numen.gui.providers.effort": "Reasoning effort",
   "numen.settings.nav.connection": "Connection",
-  "numen.provider.form.need_name": "Name required — give this config a name"
+  "numen.provider.form.need_name": "Name required — give this config a name",
+  "numen.gui.inline.required": "Required",
+  "numen.gui.inline.need_key": "API key required",
+  "numen.gui.providers.checking": "Checking…"
 }

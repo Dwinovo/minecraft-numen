@@ -10,9 +10,9 @@ import com.dwinovo.numen.client.screen.ReasoningChoice;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
-import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.Dropdown;
+import com.dwinovo.numen.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
@@ -43,7 +43,6 @@ public final class ProfileFormPanel {
     }
 
     private final UiRoot ui = new UiRoot();
-    private final ProviderPanel.ToastSink toasts;
     private final Consumer<Draft> onSave;
     private final Runnable onCancel;
 
@@ -55,13 +54,13 @@ public final class ProfileFormPanel {
     private Button modelBackBtn;
     private Label thinkingLabel, effortLabel;
     private Button checkButton;
+    private InlineAlert resultAlert;
     private volatile boolean checking;
     /** 模型行双态:预设下拉(含"自定义…") ↔ 自由输入(▾ 可回预设)。 */
     private boolean customModel;
     private List<String> siteModelIds = List.of();
 
-    public ProfileFormPanel(ProviderPanel.ToastSink toasts, Consumer<Draft> onSave, Runnable onCancel) {
-        this.toasts = toasts;
+    public ProfileFormPanel(Consumer<Draft> onSave, Runnable onCancel) {
         this.onSave = onSave;
         this.onCancel = onCancel;
         Minecraft mc = Minecraft.getInstance();
@@ -139,6 +138,9 @@ public final class ProfileFormPanel {
         close.setBounds(x + w - 15, y - 1, 15, NumenStyle.CONTROL_H);
 
         int by = y + h - 16;
+        // 检测结果驻留条:嵌在按钮行上方,不自动消失——修 key 时它一直看得见。
+        resultAlert = ui.add(new InlineAlert());
+        resultAlert.setBounds(x, ry + 2, w, by - ry - 6);
         checkButton = ui.add(new Button(t("numen.gui.providers.check"),
                 Button.Style.NORMAL, this::runConnectivityCheck));
         checkButton.setBounds(x + w - 54 - 58, by, 54, 15);
@@ -294,7 +296,7 @@ public final class ProfileFormPanel {
 
     private void save() {
         if (draft.name == null || draft.name.isBlank()) {
-            toasts.push(NumenToasts.Severity.WARN, t("numen.provider.form.need_name"));
+            nameField.setError(t("numen.gui.inline.required"));   // 校验错误内联在错误发生处
             return;
         }
         onSave.accept(draft);
@@ -304,25 +306,27 @@ public final class ProfileFormPanel {
     private void runConnectivityCheck() {
         if (checking) return;
         if (draft.apiKey == null || draft.apiKey.isBlank()) {
-            toasts.push(NumenToasts.Severity.WARN, t("numen.gui.providers.check.no_key"));
+            keyField.setError(t("numen.gui.inline.need_key"));
             return;
         }
         checking = true;
         checkButton.setEnabled(false);
-        toasts.push(NumenToasts.Severity.INFO, t("numen.gui.providers.check.running"));
+        checkButton.setLabel(t("numen.gui.providers.checking"));
+        resultAlert.clear();
         LlmEndpoint ep = new LlmEndpoint(draft.provider, draft.model, draft.apiKey,
                 draft.baseUrl, Services.CONFIG.getProxy(), "auto");
         NumenLlmClient.forEndpoint(ep)
                 .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "", null)
-                .whenComplete((result, error) -> {
+                .whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
                     checking = false;
                     checkButton.setEnabled(true);
+                    checkButton.setLabel(t("numen.gui.providers.check"));
                     if (error == null) {
-                        toasts.push(NumenToasts.Severity.INFO, t("numen.gui.providers.check.ok"));
+                        resultAlert.show(InlineAlert.Severity.SUCCESS, t("numen.gui.providers.check.ok"));
                     } else {
-                        toasts.push(NumenToasts.Severity.ERROR, LlmErrorWords.classify(error));
+                        resultAlert.show(InlineAlert.Severity.ERROR, LlmErrorWords.classify(error));
                     }
-                });
+                }));
     }
 
     private static String t(String key) {

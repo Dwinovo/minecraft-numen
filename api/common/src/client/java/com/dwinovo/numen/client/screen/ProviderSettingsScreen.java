@@ -3,7 +3,6 @@ package com.dwinovo.numen.client.screen;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.client.screen.settings.ProviderPanel;
 import com.dwinovo.numen.client.ui.NumenTheme;
-import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.client.ui.widget.Button;
 import net.minecraft.Util;
@@ -13,16 +12,14 @@ import net.minecraft.network.chat.Component;
 
 /**
  * 提供商设置的独立屏(/numen 设置命令的门)——{@link ProviderPanel} 的薄壳:
- * 背景、标题、返回按钮、自己的 toast 实例,其余全是面板的瓤。同一个瓤也
+ * 背景、标题、返回按钮,其余全是面板的瓤(校验与检测结果均为面板内联)。同一个瓤也
  * 嵌在 G 面板的"连接"分区里。尺寸对标原版 GUI 的紧凑档,大屏不贪宽。
  */
 public final class ProviderSettingsScreen extends Screen {
 
     private final Screen parent;
-    private final NumenToasts toasts = new NumenToasts();
     private final NumenTheme.Colors colors = NumenTheme.DARK.colors();
-    private final ProviderPanel panel = new ProviderPanel(
-            (sev, msg) -> toastsPush(sev, msg));
+    private final ProviderPanel panel = new ProviderPanel();
 
     private com.dwinovo.numen.client.ui.widget.UiRoot shellUi;
     private int panelX, panelY, panelW, panelH;
@@ -30,10 +27,6 @@ public final class ProviderSettingsScreen extends Screen {
     public ProviderSettingsScreen(Screen parent) {
         super(Component.translatable("numen.gui.providers.title"));
         this.parent = parent;
-    }
-
-    private void toastsPush(NumenToasts.Severity sev, String msg) {
-        toasts.push(sev, msg);
     }
 
     public static void open(Screen parent) {
@@ -65,9 +58,6 @@ public final class ProviderSettingsScreen extends Screen {
         s.fillRect(panelX, panelY + 12, 18, 1, colors.accent());
         panel.render(s, colors, mouseX, mouseY, Util.getMillis());
         shellUi.render(s, colors, mouseX, mouseY, Util.getMillis());
-        // toast 落在面板内按钮行上方(检测按钮就在那),不弹屏幕角落。
-        toasts.renderAboveButtons(s, panelX + panelW - 2, panelY + panelH - 22,
-                colors, Util.getMillis());
     }
 
     @Override

@@ -245,5 +245,8 @@
   "numen.gui.providers.check.network": "连不上——检查网络、代理或基址",
   "numen.gui.providers.effort": "推理强度",
   "numen.settings.nav.connection": "连接",
-  "numen.provider.form.need_name": "名称还没填——给这份配置起个名字"
+  "numen.provider.form.need_name": "名称还没填——给这份配置起个名字",
+  "numen.gui.inline.required": "必填",
+  "numen.gui.inline.need_key": "请先填写密钥",
+  "numen.gui.providers.checking": "检测中…"
 }

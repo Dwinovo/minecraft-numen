@@ -19,6 +19,8 @@ public final class TextField extends Widget {
     private String placeholder = "";
     private boolean masked;
     private int cursor;
+    /** 内联校验错误:字段红边 + 标签行右侧红字,驻留到用户开始修改。 */
+    private String error;
     /** 视窗左缘对应的字符下标(水平滚动)。 */
     private int viewStart;
 
@@ -49,14 +51,28 @@ public final class TextField extends Widget {
 
     public int cursor() { return cursor; }
 
+    /** 标记校验错误(内联展示);用户一开始输入即自动清除——错误跟着修复走。 */
+    public void setError(String message) {
+        this.error = message == null || message.isBlank() ? null : message;
+    }
+
+    public void clearError() { this.error = null; }
+
+    public boolean hasError() { return error != null; }
+
     @Override
     public boolean focusable() { return true; }
 
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         s.fillRect(x, y, w, h, c.inputBg());
-        int border = isFocused() ? c.accent() : c.inputBorder();
-        s.fillRect(x, y + h - 1, w, 1, border);
+        int border = error != null ? c.danger() : isFocused() ? c.accent() : c.inputBorder();
+        s.fillRect(x, y + h - 1, w, error != null ? 2 : 1, border);
+        if (error != null) {
+            // 错误文案画在标签行右侧(字段正上方)——错误出现在错误发生的地方。
+            String msg = clipToWidth(s, error, w * 2 / 3);
+            s.drawText(msg, x + w - s.textWidth(msg), y - 10, c.danger(), false);
+        }
 
         int pad = NumenStyle.FIELD_PAD;
         int innerW = w - pad * 2;
@@ -166,6 +182,7 @@ public final class TextField extends Widget {
     }
 
     private void fireChange() {
+        error = null;   // 用户开始修改即撤下错误标记
         if (onChange != null) onChange.accept(value.toString());
     }
 }
