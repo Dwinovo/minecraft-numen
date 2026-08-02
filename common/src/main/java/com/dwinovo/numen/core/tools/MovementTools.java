@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.api.ToolContext;
 import com.dwinovo.numen.task.TaskRecord;
-import com.dwinovo.numen.core.task.MoveToTaskRecord;
+import com.dwinovo.numen.core.task.move.MoveToTaskRecord;
 
 /**
  * Movement tool implementation — the business half of {@code MoveToTool}

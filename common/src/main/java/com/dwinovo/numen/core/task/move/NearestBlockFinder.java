@@ -1,4 +1,5 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.move;
+import com.dwinovo.numen.core.task.mine.MineCompanionTask;
 
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;

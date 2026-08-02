@@ -5,7 +5,7 @@ import com.dwinovo.numen.agent.tool.api.ToolContext;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.core.task.act.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.act.InteractEntityTaskRecord;
-import com.dwinovo.numen.core.task.MineBlockTaskRecord;
+import com.dwinovo.numen.core.task.mine.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MouseButton;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;

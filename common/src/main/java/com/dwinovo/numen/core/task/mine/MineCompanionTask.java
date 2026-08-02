@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.mine;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.FailureType;
 
@@ -492,7 +492,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** 该目标格是否真挖得成:挖穿成本无穷(挖不动/被硬禁)、禁挖判定命中
      *  (冰/虫蚀/贴液体/悬空落沙邻格/世界边界)、或上下都被基岩封死的都不算。
      *  包内共享:goto 的 FIND 候选入册走同一道剪枝。 */
-    static boolean plausibleToBreak(CalculationContext ctx, BlockPos pos, BlockState state) {
+    public static boolean plausibleToBreak(CalculationContext ctx, BlockPos pos, BlockState state) {
         if (MovementHelper.getMiningDurationTicks(ctx, pos.getX(), pos.getY(), pos.getZ(),
                 state, true) >= ActionCosts.COST_INF) {
             return false;

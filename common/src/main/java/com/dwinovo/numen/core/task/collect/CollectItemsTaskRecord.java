@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.collect;
 
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.item.Item;

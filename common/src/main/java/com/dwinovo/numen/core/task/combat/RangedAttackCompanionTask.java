@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.combat;
 
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.FailureType;

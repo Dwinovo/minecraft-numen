@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.fish;
 
 import com.dwinovo.numen.task.TaskRecord;
 

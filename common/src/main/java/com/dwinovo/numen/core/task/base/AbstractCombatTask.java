@@ -3,7 +3,7 @@ package com.dwinovo.numen.core.task.base;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.task.CombatTaskRecord;
+import com.dwinovo.numen.core.task.combat.CombatTaskRecord;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskState;

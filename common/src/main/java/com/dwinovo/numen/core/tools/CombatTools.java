@@ -1,8 +1,8 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.api.ToolContext;
-import com.dwinovo.numen.core.task.MeleeAttackTaskRecord;
-import com.dwinovo.numen.core.task.RangedAttackTaskRecord;
+import com.dwinovo.numen.core.task.combat.MeleeAttackTaskRecord;
+import com.dwinovo.numen.core.task.combat.RangedAttackTaskRecord;
 import com.dwinovo.numen.task.TaskRecord;
 
 import java.util.List;

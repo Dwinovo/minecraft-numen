@@ -3,7 +3,7 @@ package com.dwinovo.numen.core.tools;
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.agent.tool.api.ToolContext;
 import com.dwinovo.numen.task.TaskRecord;
-import com.dwinovo.numen.core.task.CollectItemsTaskRecord;
+import com.dwinovo.numen.core.task.collect.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.act.DropItemsTaskRecord;
 import com.dwinovo.numen.core.task.act.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.act.EquipTaskRecord;

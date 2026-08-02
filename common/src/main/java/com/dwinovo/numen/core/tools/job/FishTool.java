@@ -5,7 +5,7 @@ import static com.dwinovo.numen.task.TaskDispatch.dispatchAsync;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.Schema;
-import com.dwinovo.numen.core.task.FishTaskRecord;
+import com.dwinovo.numen.core.task.fish.FishTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
