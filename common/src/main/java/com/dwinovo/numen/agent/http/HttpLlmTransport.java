@@ -351,8 +351,9 @@ public final class HttpLlmTransport {
         }
 
         @Override
-        public void onNext(String line) {
+        public void onNext(String rawLine) {
             lastActivityNanos.set(System.nanoTime());
+            String line = rawLine.replace("\r", "");
             if (line.isEmpty()) {
                 flushEvent();
             } else if (line.startsWith("data: ")) {
