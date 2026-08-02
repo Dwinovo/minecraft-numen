@@ -1,6 +1,6 @@
 package com.dwinovo.numen.agent.model;
 
-import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.ai.AiLog;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -52,7 +52,7 @@ public final class ModelRegistry {
     public static String addCustomSite(String name, String baseUrl, String modelId) {
         Path file = userFile;
         if (file == null) {
-            Constants.LOG.error("[numen] can't add custom site '{}': registry not initialised with a user file", name);
+            AiLog.LOG.error("[numen] can't add custom site '{}': registry not initialised with a user file", name);
             return null;
         }
         try {
@@ -78,7 +78,7 @@ public final class ModelRegistry {
             reload();
             return id;
         } catch (Exception e) {
-            Constants.LOG.error("[numen] failed to add custom site '{}'", name, e);
+            AiLog.LOG.error("[numen] failed to add custom site '{}'", name, e);
             return null;
         }
     }
@@ -110,11 +110,11 @@ public final class ModelRegistry {
                 }
             }
         } catch (Exception e) {
-            Constants.LOG.warn("[numen] couldn't read/seed {}, using bundled", file, e);
+            AiLog.LOG.warn("[numen] couldn't read/seed {}, using bundled", file, e);
         }
         List<Provider> out = parse(json);
         if (out.isEmpty() && bundled != null && !bundled.equals(json)) {
-            Constants.LOG.warn("[numen] user models.json yielded no sites, falling back to bundled");
+            AiLog.LOG.warn("[numen] user models.json yielded no sites, falling back to bundled");
             out = parse(bundled);
         }
         return List.copyOf(out);
@@ -124,7 +124,7 @@ public final class ModelRegistry {
         try (var in = ModelRegistry.class.getResourceAsStream("/numen_models.json")) {
             return in == null ? null : new String(in.readAllBytes(), StandardCharsets.UTF_8);
         } catch (Exception e) {
-            Constants.LOG.error("[numen] numen_models.json not readable", e);
+            AiLog.LOG.error("[numen] numen_models.json not readable", e);
             return null;
         }
     }
@@ -163,7 +163,7 @@ public final class ModelRegistry {
                         List.copyOf(models)));
             }
         } catch (Exception e) {
-            Constants.LOG.error("[numen] failed to parse models.json", e);
+            AiLog.LOG.error("[numen] failed to parse models.json", e);
         }
         return out;
     }

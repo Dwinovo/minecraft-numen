@@ -2,10 +2,9 @@
 // 零 numen-api 回引。这意味着它与 Minecraft 版本无关:十一个版本分支共用
 // 同一份 numen-ai,provider 层的修复改一处全家族生效。
 //
-// 现住户:agent.http(传输:SSE 流式/重试退避/空闲看门狗)、agent.prompt(提示词)。
-// 挂账(迁入前置条件):agent.llm/model/provider 仍在 api:common——它们牵着
-// NumenTool(签名含 NumenPlayer,MC 耦合)与 platform.Services;先做 ToolSpec
-// 纯接口与配置桥的解耦手术,再搬家。
+// 现住户:agent.http(传输:SSE 流式/重试退避/空闲看门狗)、agent.prompt(提示词)、
+// agent.provider(线格式适配 + IToolSpec 工具描述面)、agent.llm(客户端/会话
+// 状态/会话日志)、agent.model(站点注册表,用户文件落点由宿主引导期注入)。
 plugins {
     id 'java-library'
     id 'maven-publish'

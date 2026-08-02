@@ -15,6 +15,10 @@ configurations {
 }
 
 dependencies {
+    // 消费面契约:NumenTool 继承 ai 的 IToolSpec,编译期消费者(如 core 的
+    // loader 模块)需要看见 ai 的类型。发行 jar 已把 ai 的类平铺进来(见下方
+    // jar 块),运行时自含,这条声明只服务编译期与 pom 的如实陈述。
+    api project(':ai')
     compileOnly(project(':api:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
         attributes {

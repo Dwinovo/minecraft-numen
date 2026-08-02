@@ -1,6 +1,6 @@
 package com.dwinovo.numen.agent.llm;
 
-import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.ai.AiLog;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.google.gson.JsonArray;
@@ -151,7 +151,7 @@ public final class ConvoLog {
             Files.writeString(file, record + "\n", StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-convo] failed to append to {}: {}", file, ex.toString());
+            AiLog.LOG.warn("[numen-convo] failed to append to {}: {}", file, ex.toString());
         }
     }
 
@@ -172,7 +172,7 @@ public final class ConvoLog {
         try {
             Files.deleteIfExists(file);
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-convo] failed to delete {}: {}", file, ex.toString());
+            AiLog.LOG.warn("[numen-convo] failed to delete {}: {}", file, ex.toString());
         }
     }
 
@@ -219,10 +219,10 @@ public final class ConvoLog {
             Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
             moveInPlace(tmp, file);
-            Constants.LOG.info("[numen-convo] migrated {} to format v{}", file.getFileName(), FORMAT_VERSION);
+            AiLog.LOG.info("[numen-convo] migrated {} to format v{}", file.getFileName(), FORMAT_VERSION);
         } catch (Exception ex) {
             // Leave the original v1 file untouched — the reader still loads it. Retry next launch.
-            Constants.LOG.warn("[numen-convo] migration of {} failed, keeping v1 as-is: {}",
+            AiLog.LOG.warn("[numen-convo] migration of {} failed, keeping v1 as-is: {}",
                     file.getFileName(), ex.toString());
             try {
                 Files.deleteIfExists(tmp);
@@ -264,7 +264,7 @@ public final class ConvoLog {
                 if (line.isBlank()) continue;
                 JsonObject o = tryParse(line);
                 if (o == null) {
-                    Constants.LOG.warn("[numen-convo] skipping unparsable line in {}", file.getFileName());
+                    AiLog.LOG.warn("[numen-convo] skipping unparsable line in {}", file.getFileName());
                     continue;
                 }
                 String type = eventType(o);
@@ -286,7 +286,7 @@ public final class ConvoLog {
                 if (m != null) all.add(m);                       // unknown role → skip (forward-compat)
             }
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-convo] failed to read {}: {}", file, ex.toString());
+            AiLog.LOG.warn("[numen-convo] failed to read {}: {}", file, ex.toString());
             return List.of();
         }
         if (all.size() <= limit) return all;
@@ -298,7 +298,7 @@ public final class ConvoLog {
             start--;
         }
         List<ConvoState.Msg> tail = all.subList(start, all.size());
-        Constants.LOG.info("[numen-convo] loaded {}/{} msgs from {}",
+        AiLog.LOG.info("[numen-convo] loaded {}/{} msgs from {}",
                 tail.size(), all.size(), file.getFileName());
         return new ArrayList<>(tail);
     }
@@ -317,7 +317,7 @@ public final class ConvoLog {
                 if (line.isBlank()) continue;
                 JsonObject o = tryParse(line);
                 if (o == null) {
-                    Constants.LOG.warn("[numen-convo] skipping unparsable line in {}", file.getFileName());
+                    AiLog.LOG.warn("[numen-convo] skipping unparsable line in {}", file.getFileName());
                     continue;
                 }
                 String type = eventType(o);
@@ -331,7 +331,7 @@ public final class ConvoLog {
                 if (m != null) all.add(m);
             }
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-convo] failed to read {}: {}", file, ex.toString());
+            AiLog.LOG.warn("[numen-convo] failed to read {}: {}", file, ex.toString());
             return List.of();
         }
         if (all.size() <= limit) return all;
@@ -351,7 +351,7 @@ public final class ConvoLog {
                 }
             }
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-convo] failed to read persona from {}: {}", file, ex.toString());
+            AiLog.LOG.warn("[numen-convo] failed to read persona from {}: {}", file, ex.toString());
         }
         return current;
     }

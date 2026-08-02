@@ -1,6 +1,6 @@
 package com.dwinovo.numen.agent.llm;
 
-import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.ai.AiLog;
 import com.dwinovo.numen.agent.http.HttpLlmTransport;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.model.ModelRegistry;
@@ -66,7 +66,7 @@ public final class NumenLlmClient {
         String configured = endpoint.model();
         this.model = (configured == null || configured.isBlank()) ? "gpt-5.4-mini" : configured;
         this.reasoningEffort = normalizeReasoning(endpoint.reasoningEffort());
-        Constants.LOG.info("[numen-llm] client initialised: provider={}, model={}, url={}, streaming={}",
+        AiLog.LOG.info("[numen-llm] client initialised: provider={}, model={}, url={}, streaming={}",
                 provider.name(), model, fullUrl, provider.supportsStreaming());
     }
 
@@ -111,7 +111,7 @@ public final class NumenLlmClient {
      * conversations continue with the new backend.
      */
     public static void reset() {
-        Constants.LOG.info("[numen-llm] clearing {} cached client(s) (next calls rebuild from current config)",
+        AiLog.LOG.info("[numen-llm] clearing {} cached client(s) (next calls rebuild from current config)",
                 CLIENTS.size());
         CLIENTS.clear();
     }
@@ -165,8 +165,8 @@ public final class NumenLlmClient {
         streamOpts.addProperty("include_usage", true);
         body.add("stream_options", streamOpts);
 
-        if (Constants.LOG.isDebugEnabled()) {
-            Constants.LOG.debug("[numen-llm] chat start: provider={}, model={}, msgs={}, tools={}, system_prompt_chars={}",
+        if (AiLog.LOG.isDebugEnabled()) {
+            AiLog.LOG.debug("[numen-llm] chat start: provider={}, model={}, msgs={}, tools={}, system_prompt_chars={}",
                     provider.name(), model, wire.size(), toolList.size(),
                     systemPrompt == null ? 0 : systemPrompt.length());
         }
@@ -179,7 +179,7 @@ public final class NumenLlmClient {
                 provider.accumulateChunk(chunk, acc);
                 if (onChunk != null) onChunk.accept(chunk);
             } catch (RuntimeException ex) {
-                Constants.LOG.warn("[numen-llm] accumulator failed on chunk: {}", ex.getMessage());
+                AiLog.LOG.warn("[numen-llm] accumulator failed on chunk: {}", ex.getMessage());
             }
         }).thenApply(v -> {
             AssistantTurn turn = provider.finalizeStream(acc);
@@ -207,7 +207,7 @@ public final class NumenLlmClient {
         }
         String contentSnippet = turn.content().isEmpty() ? "<no text>"
                 : truncate(turn.content().replace('\n', ' '), 120);
-        Constants.LOG.info(
+        AiLog.LOG.info(
                 "[numen-llm] chat done in {}ms, chunks={}, tokens={}, finish={}, tool_calls=[{}], content=\"{}\"",
                 elapsedMs, acc.chunkCount, tokens,
                 acc.finishReason == null ? "?" : acc.finishReason,
@@ -271,7 +271,7 @@ public final class NumenLlmClient {
             return new OpenAIProvider(id,
                     baseUrl == null || baseUrl.isBlank() ? OpenAIProvider.DEFAULT_BASE_URL : baseUrl);
         }
-        Constants.LOG.warn("[numen-llm] unknown provider '{}', falling back to openai", name);
+        AiLog.LOG.warn("[numen-llm] unknown provider '{}', falling back to openai", name);
         return new OpenAIProvider();
     }
 }
