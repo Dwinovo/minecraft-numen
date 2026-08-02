@@ -90,7 +90,7 @@
   "numen.provider.form_name": "Name (required)",
   "numen.provider.form_provider": "Provider",
   "numen.provider.no_key": "no key",
-  "numen.provider.title": "Model Profiles",
+  "numen.provider.title": "Model Configs",
   "numen.respawn": "· reviving %ss",
   "numen.settings.add_site": "＋ Add site",
   "numen.settings.base_url": "Base URL",
@@ -244,5 +244,6 @@
   "numen.gui.providers.check.bad_request": "Request rejected",
   "numen.gui.providers.check.network": "Can't connect — check network, proxy, or base URL",
   "numen.gui.providers.effort": "Reasoning effort",
-  "numen.settings.nav.connection": "Connection"
+  "numen.settings.nav.connection": "Connection",
+  "numen.provider.form.need_name": "Name required — give this config a name"
 }

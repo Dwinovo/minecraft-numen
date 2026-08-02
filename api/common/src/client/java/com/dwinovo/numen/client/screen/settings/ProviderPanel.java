@@ -238,7 +238,7 @@ public final class ProviderPanel {
         }
     }
 
-    private static String effectiveThinkingFormat(ProviderRegistry.Provider site) {
+    static String effectiveThinkingFormat(ProviderRegistry.Provider site) {
         if (!site.thinkingFormat().isBlank()) return site.thinkingFormat();
         LlmProvider p = NumenLlmClient.pickProvider(site.id());
         if (p instanceof com.dwinovo.numen.agent.provider.OpenAIProvider oai) return oai.thinkingFormat();

@@ -90,7 +90,7 @@
   "numen.provider.form_name": "名称(必填)",
   "numen.provider.form_provider": "提供商",
   "numen.provider.no_key": "未填Key",
-  "numen.provider.title": "模型档案",
+  "numen.provider.title": "模型配置",
   "numen.respawn": "· 复活中 %ss",
   "numen.settings.add_site": "＋ 添加站点",
   "numen.settings.base_url": "Base URL",
@@ -244,5 +244,6 @@
   "numen.gui.providers.check.bad_request": "请求被拒",
   "numen.gui.providers.check.network": "连不上——检查网络、代理或基址",
   "numen.gui.providers.effort": "推理强度",
-  "numen.settings.nav.connection": "连接"
+  "numen.settings.nav.connection": "连接",
+  "numen.provider.form.need_name": "名称还没填——给这份配置起个名字"
 }

@@ -9,7 +9,6 @@ import com.dwinovo.numen.client.screen.Dropdown;
 import com.dwinovo.numen.client.screen.FlatEditBox;
 import com.dwinovo.numen.client.screen.LlmProviders;
 import com.dwinovo.numen.client.screen.Nb;
-import com.dwinovo.numen.client.screen.ProviderDropdown;
 import com.dwinovo.numen.client.screen.SimpleButton;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.data.ModLanguageData;
@@ -70,7 +69,7 @@ public final class SettingsView {
      * {@link #MCP} 是"给同伴的大脑加外部工具"(我们当 client),{@link #BRAIN} 是"把同伴
      * 交给外面的大脑"(我们当 server),故在 UI 上按用户视角分成工具扩展/外接大脑两节。
      */
-    private enum Section { CONNECTION, PROVIDER, PROXY, MCP, BRAIN, SKILLS, PERSONA, VOICE, SKIN, STT, THEME }
+    private enum Section { PROVIDER, PROXY, MCP, BRAIN, SKILLS, PERSONA, VOICE, SKIN, STT, THEME }
 
     // ---- layout constants (mirror the screen's) ----
     private static final int PAD = 8;
@@ -91,18 +90,36 @@ public final class SettingsView {
     // ---- palette: re-read from the CURRENT theme on every public entry (theme switch = live) ----
     private int BORDER, ACCENT, TXT, TXT_MUTED, TXT_FAINT, CTA, FIELD, OK, RUN, FAIL;
 
-    private Section section = Section.CONNECTION;
+    private Section section = Section.PROVIDER;
 
-    // ---- "连接"分区:NumenUI ProviderPanel 内嵌(逐区换瓤的第一区) ----
+    // ---- 模型配置表单:NumenUI ProfileFormPanel(检测/思考/强度/toast/分类报错) ----
     private final com.dwinovo.numen.client.ui.NumenToasts viewToasts =
             new com.dwinovo.numen.client.ui.NumenToasts();
-    private ProviderPanel connectionPanel;
+    private ProfileFormPanel providerForm;
+    private ProfileFormPanel.Draft providerDraft = new ProfileFormPanel.Draft();
 
-    private ProviderPanel connectionPanel() {
-        if (connectionPanel == null) {
-            connectionPanel = new ProviderPanel(viewToasts::push);
+    private ProfileFormPanel providerForm() {
+        if (providerForm == null) {
+            providerForm = new ProfileFormPanel(viewToasts::push,
+                    this::onProfileSave,
+                    () -> { addingProvider = false; providerEditId = null; host.rebuild(); });
         }
-        return connectionPanel;
+        return providerForm;
+    }
+
+    private void onProfileSave(ProfileFormPanel.Draft d) {
+        var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
+        if (providerEditId != null) {
+            lib.update(new com.dwinovo.numen.agent.llm.ProviderLibrary.Entry(
+                    providerEditId, d.name.trim(), d.provider, d.model.trim(),
+                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort));
+        } else {
+            lib.create(d.name.trim(), d.provider, d.model.trim(),
+                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort);
+        }
+        addingProvider = false;
+        providerEditId = null;
+        host.rebuild();
     }
     private int settingsScroll;   // first visible row of the section lists (wheel-scroll when long)
 
@@ -110,12 +127,6 @@ public final class SettingsView {
     private boolean addingProvider;
     private String providerEditId;
     private String providerDeletePending;
-    private String wProvName = "", wProvProvider = "", wProvModel = "", wProvKey = "", wProvBaseUrl = "";
-    private EditBox provNameInput, provModelInput, provKeyInput, provBaseUrlInput;
-    /** Form pickers: the provider catalog + the picked provider's model list. */
-    private ProviderDropdown provProviderDropdown;
-    private Dropdown provModelDropdown;
-    private boolean provCustomModel;
 
     // ---- voice section state (mirrors the model-config section: list / form / delete-confirm) ----
     private boolean addingVoice;
@@ -317,9 +328,6 @@ public final class SettingsView {
         mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
         personaNameInput = null;
         personaTextArea = null;
-        provNameInput = provModelInput = provKeyInput = provBaseUrlInput = null;
-        provProviderDropdown = null;
-        provModelDropdown = null;
         voiceNameInput = voiceUrlInput = voiceKeyInput = voiceGroupInput = voiceModelInput = null;
         voiceVoiceInput = voiceRefInput = voicePromptInput = voiceLangInput = voiceVolumeInput = null;
         voiceBackendDropdown = null;
@@ -425,14 +433,6 @@ public final class SettingsView {
     public void buildWidgets() {
         loadPalette();
         switch (section) {
-            case CONNECTION -> {
-                int cx = left() + PAD + NAV_W + 8;
-                int cy = secY0();
-                connectionPanel().build(cx, cy,
-                        left() + panelW() - PAD - cx,
-                        top() + panelH() - PAD - cy,
-                        top() + panelH() - 4);
-            }
             case SKILLS -> buildSkillsWidgets();
             case MCP -> {
                 if (mcpDeletePending != null) buildMcpDeleteConfirm();
@@ -446,7 +446,7 @@ public final class SettingsView {
             }
             case PROVIDER -> {
                 if (providerDeletePending != null) buildProviderDeleteConfirm();
-                else if (addingProvider) buildProviderForm();
+                else if (addingProvider) buildProviderFormNew();
                 else buildProviderListWidgets();
             }
             case VOICE -> {
@@ -715,76 +715,16 @@ public final class SettingsView {
         host.add(new SimpleButton(left() + panelW() - PAD - 64, secY0() - 2, 64, 14,
                 Component.translatable(ModLanguageData.Keys.PROVIDER_ADD), b -> {
                     addingProvider = true; providerEditId = null;
-                    wProvName = ""; wProvProvider = ""; wProvModel = ""; wProvKey = ""; wProvBaseUrl = "";
+                    providerDraft = new ProfileFormPanel.Draft();
                     host.rebuild();
                 }));
     }
 
-    /**
-     * The model-config form: 名称 → 提供商 (the live provider catalog, reused) →
-     * 模型 + Base URL, both ADAPTIVE to the picked provider (its model list / site
-     * default URL, editable) → API Key. Saving yields a complete config.
-     */
-    private void buildProviderForm() {
-        int x = fx(), w = fw();
-        int fy = fy0();
-        provNameInput = field(x, fy + 11, w, 48, wProvName);
-        // Provider picker — same catalog as everywhere else (built-ins + user sites),
-        // no "+add site" row here. Blank state (fresh form) starts on the first entry
-        // and adapts model/baseUrl to it.
-        if (wProvProvider == null || wProvProvider.isBlank()) {
-            adaptToProvider(LlmProviders.all().isEmpty() ? "" : LlmProviders.all().get(0).id());
-        }
-        provProviderDropdown = new ProviderDropdown(wProvProvider, false);
-        provProviderDropdown.setBounds(x, fy + 11 + SET_SP, w, 18);
-        provProviderDropdown.setDropBottom(top() + panelH() - 2);
-        // Model row: the provider's known models as a dropdown (+ 自定义 → free text),
-        // free text only for custom providers.
-        ProviderRegistry.Provider mp = ProviderRegistry.provider(LlmProviders.normalize(wProvProvider));
-        boolean providerCustom = mp != null && mp.custom();
-        if (provCustomModel || providerCustom || mp == null || mp.models().isEmpty()) {
-            provModelDropdown = null;
-            provModelInput = field(x, fy + 11 + 2 * SET_SP, providerCustom || mp == null ? w : w - 20, 128, wProvModel);
-            if (!providerCustom && mp != null && !mp.models().isEmpty()) {
-                host.add(new SimpleButton(x + w - 18, fy + 11 + 2 * SET_SP, 18, 18, Component.literal("▾"),
-                        b -> { preserveProviderForm(); provCustomModel = false; host.rebuild(); }));
-            }
-        } else {
-            provModelInput = null;
-            boolean known = mp.models().stream().anyMatch(m -> m.id().equals(wProvModel));
-            String sel = known ? wProvModel : mp.models().get(0).id();
-            provModelDropdown = new Dropdown(modelItems(mp), sel);
-            provModelDropdown.setBounds(x, fy + 11 + 2 * SET_SP, w, 18);
-            provModelDropdown.setDropBottom(top() + panelH() - 2);
-        }
-        provKeyInput = field(x, fy + 11 + 3 * SET_SP, w, 256, wProvKey);
-        provBaseUrlInput = field(x, fy + 11 + 4 * SET_SP, w, 256, wProvBaseUrl);
-        host.add(new SimpleButton(fRight() - 64, fBottom() - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> onSaveProvider()).primary());
-        host.add(new SimpleButton(fRight() - 64 - 22, fBottom() - 18, 18, 18,
-                Component.literal("✕"), b -> { addingProvider = false; providerEditId = null; host.rebuild(); }));
-        host.focus(provNameInput);
-    }
-
-    /** Provider changed (or fresh form): adapt model + Base URL to the pick —
-     *  the site's default URL and its first model, both still editable. */
-    private void adaptToProvider(String providerId) {
-        wProvProvider = providerId;
-        ProviderRegistry.Provider mp = ProviderRegistry.provider(LlmProviders.normalize(providerId));
-        provCustomModel = mp != null && mp.custom();
-        wProvModel = (mp != null && !mp.models().isEmpty()) ? mp.models().get(0).id() : "";
-        wProvBaseUrl = LlmProviders.byId(providerId).defaultBaseUrl();
-    }
-
-    /** Keep typed values across a rebuild (mirror of the persona/MCP form preserves). */
-    private void preserveProviderForm() {
-        if (provNameInput != null) wProvName = provNameInput.getValue();
-        if (provKeyInput != null) wProvKey = provKeyInput.getValue();
-        if (provBaseUrlInput != null) wProvBaseUrl = provBaseUrlInput.getValue();
-        if (provModelInput != null) wProvModel = provModelInput.getValue();
-        else if (provModelDropdown != null && !CUSTOM_MODEL.equals(provModelDropdown.selectedId())) {
-            wProvModel = provModelDropdown.selectedId();
-        }
+    /** 表单卡里的 NumenUI 表单(检测/思考/强度/toast 齐备);卡壳照旧 formModal。 */
+    private void buildProviderFormNew() {
+        providerForm().open(providerDraft);
+        providerForm().build(fx(), fy0(), fw(), fBottom() - fy0(),
+                top() + panelH() - 2);
     }
 
     private void buildProviderDeleteConfirm() {
@@ -793,38 +733,6 @@ public final class SettingsView {
             providerDeletePending = null;
             host.rebuild();
         });
-    }
-
-    private void onSaveProvider() {
-        String name = provNameInput.getValue().trim();
-        if (name.isEmpty()) { host.warnPulse(); return; }
-        var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
-        String provider = provProviderDropdown != null ? provProviderDropdown.selectedId() : wProvProvider;
-        String model = provModelInput != null ? provModelInput.getValue().trim()
-                : (provModelDropdown != null && !CUSTOM_MODEL.equals(provModelDropdown.selectedId())
-                        ? provModelDropdown.selectedId() : "");
-        String key = provKeyInput.getValue().trim();
-        String baseUrl = provBaseUrlInput.getValue().trim();
-        if (providerEditId != null) {
-            var old = lib.get(providerEditId);
-            lib.update(new com.dwinovo.numen.agent.llm.ProviderLibrary.Entry(
-                    providerEditId, name, provider, model, key, baseUrl,
-                    old != null ? old.reasoningEffort() : ""));
-        } else {
-            lib.create(name, provider, model, key, baseUrl, "");
-        }
-        addingProvider = false;
-        providerEditId = null;
-        provCustomModel = false;
-        wProvName = ""; wProvProvider = ""; wProvModel = ""; wProvKey = ""; wProvBaseUrl = "";
-        host.rebuild();
-    }
-
-    private List<Dropdown.Item> modelItems(ProviderRegistry.Provider mp) {
-        List<Dropdown.Item> items = new ArrayList<>();
-        if (mp != null) for (ProviderRegistry.Model m : mp.models()) items.add(new Dropdown.Item(m.id(), m.id()));
-        items.add(new Dropdown.Item(CUSTOM_MODEL, I18n.get("numen.settings.custom_model")));
-        return items;
     }
 
     // ---- Voice section: the library of named TTS voices companions bind to (mirrors the provider section) ----
@@ -1766,10 +1674,6 @@ public final class SettingsView {
                 6, th.surface(), th.surfaceBorder());
         renderSettingsNav(g, mouseX, mouseY);
         switch (section) {
-            case CONNECTION -> connectionPanel().render(
-                    new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(),
-                    mouseX, mouseY, net.minecraft.Util.getMillis());
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
             case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
@@ -1824,7 +1728,8 @@ public final class SettingsView {
             // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压在上面。
             renderProviderList(g, -10000, -10000);
             formModal(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE));
-            renderProviderForm(g);
+            providerForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
             return;
         }
         renderProviderList(g, mouseX, mouseY);
@@ -1859,16 +1764,6 @@ public final class SettingsView {
         }
     }
 
-    private void renderProviderForm(GuiGraphics g) {
-        int x = fx();
-        int fy = fy0();
-        txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_FORM_NAME), x, fy, TXT_MUTED);
-        txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_FORM_PROVIDER), x, fy + SET_SP, TXT_MUTED);
-        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_MODEL), x, fy + 2 * SET_SP, TXT_MUTED);
-        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_API_KEY), x, fy + 3 * SET_SP, TXT_MUTED);
-        txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_FORM_BASE_URL), x, fy + 4 * SET_SP, TXT_MUTED);
-    }
-
     private boolean providerClick(int mx, int my) {
         if (addingProvider || providerDeletePending != null) return false;
         int x = secX(), w = secW();
@@ -1891,22 +1786,19 @@ public final class SettingsView {
     private void beginEditProvider(com.dwinovo.numen.agent.llm.ProviderLibrary.Entry e) {
         addingProvider = true;
         providerEditId = e.id();
-        wProvName = e.name() == null ? "" : e.name();
-        wProvProvider = e.provider() == null ? "" : e.provider();
-        wProvModel = e.model() == null ? "" : e.model();
-        wProvKey = e.apiKey() == null ? "" : e.apiKey();
-        wProvBaseUrl = e.baseUrl() == null ? "" : e.baseUrl();
-        // The stored model may not be in the provider's known list — open in free-text then.
-        ProviderRegistry.Provider mp = ProviderRegistry.provider(LlmProviders.normalize(wProvProvider));
-        provCustomModel = mp == null || mp.custom()
-                || mp.models().stream().noneMatch(m -> m.id().equals(wProvModel));
+        providerDraft = new ProfileFormPanel.Draft();
+        providerDraft.name = e.name() == null ? "" : e.name();
+        providerDraft.provider = e.provider() == null ? "" : e.provider();
+        providerDraft.model = e.model() == null ? "" : e.model();
+        providerDraft.apiKey = e.apiKey() == null ? "" : e.apiKey();
+        providerDraft.baseUrl = e.baseUrl() == null ? "" : e.baseUrl();
+        providerDraft.reasoningEffort = e.reasoningEffort() == null ? "" : e.reasoningEffort();
         host.rebuild();
     }
 
     /** The config-hub left sub-nav + the divider. */
     private void renderSettingsNav(GuiGraphics g, int mouseX, int mouseY) {
         String[] labels = {
-                I18n.get("numen.settings.nav.connection"),
                 I18n.get(ModLanguageData.Keys.PROVIDER_TITLE), I18n.get("numen.settings.proxy"),
                 I18n.get("numen.settings.nav.mcp"), I18n.get("numen.settings.nav.brain"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona"),
@@ -2206,34 +2098,9 @@ public final class SettingsView {
         // 模态确认卡在场:面板内容只是背景,任何命中(子导航/主题行/列表行)都不放行
         // ——卡上的两颗按钮走 Screen 的 widget 通道,不经过这里。
         if (modalActive()) return false;
-        // "连接"分区:内容区事件整体交给内嵌面板(浮层打开时它优先吃掉一切)。
-        if (section == Section.CONNECTION
-                && connectionPanel().mouseClicked(mouseX, mouseY, 0)) {
-            return true;
-        }
-        // Model-config form pickers get first pick (their open lists overlay the form).
-        if (addingProvider && provProviderDropdown != null) {
-            String before = provProviderDropdown.selectedId();
-            if (provProviderDropdown.mouseClicked(mouseX, mouseY)) {
-                if (provModelDropdown != null) provModelDropdown.close();
-                String sel = provProviderDropdown.selectedId();
-                if (!sel.equals(before)) {         // provider changed → adapt model + Base URL
-                    preserveProviderForm();
-                    adaptToProvider(sel);
-                    host.rebuild();
-                }
-                return true;
-            }
-        }
-        if (addingProvider && provModelDropdown != null
-                && provModelDropdown.mouseClicked(mouseX, mouseY)) {
-            if (provProviderDropdown != null) provProviderDropdown.close();
-            if (CUSTOM_MODEL.equals(provModelDropdown.selectedId())) {   // 自定义… → free text
-                preserveProviderForm();
-                provCustomModel = true;
-                wProvModel = "";
-                host.rebuild();
-            }
+        // 模型配置表单(NumenUI):事件整体交给表单面板(浮层打开时它优先吃掉一切)。
+        if (section == Section.PROVIDER && addingProvider
+                && providerForm().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
         if (section == Section.STT && sttProviderDropdown != null) {
@@ -2406,13 +2273,13 @@ public final class SettingsView {
     /** Wheel pass 1 (before the rail/chat checks, mirroring the old order): open dropdown
      *  lists first, then the voice form's own scroll. */
     public boolean mouseScrolledEarly(double mx, double my, double sy) {
-        if (section == Section.CONNECTION && connectionPanel().mouseScrolled(mx, my, sy)) {
+        if (section == Section.PROVIDER && addingProvider
+                && providerForm().mouseScrolled(mx, my, sy)) {
             return true;
         }
-        for (Dropdown d : new Dropdown[]{provModelDropdown, voiceBackendDropdown, skinVariantDropdown}) {
+        for (Dropdown d : new Dropdown[]{voiceBackendDropdown, skinVariantDropdown}) {
             if (d != null && d.mouseScrolled(mx, my, sy)) return true;
         }
-        if (provProviderDropdown != null && provProviderDropdown.mouseScrolled(mx, my, sy)) return true;
         // 声线表单:滚轮上下滚整个表单(MiniMax 八行超出视口);命中区 = 表单卡。
         if (section == Section.VOICE
                 && addingVoice && mx >= cardX0() && maxVoiceFormScroll() > 0) {
@@ -2444,13 +2311,15 @@ public final class SettingsView {
 
     /** Post-widget overlay pass: field placeholders (shadowless), the voice form's row labels,
      *  and the form dropdowns' open lists (drawn last so they sit above the fields). */
-    /** 键盘/字符输入:目前只有"连接"分区的内嵌面板需要(NumenUI 输入框)。 */
+    /** 键盘/字符输入:目前只有模型配置表单的 NumenUI 输入框需要。 */
     public boolean keyPressed(int keyCode, int modifiers) {
-        return section == Section.CONNECTION && connectionPanel().keyPressed(keyCode, modifiers);
+        return section == Section.PROVIDER && addingProvider
+                && providerForm().keyPressed(keyCode, modifiers);
     }
 
     public boolean charTyped(char ch) {
-        return section == Section.CONNECTION && connectionPanel().charTyped(ch);
+        return section == Section.PROVIDER && addingProvider
+                && providerForm().charTyped(ch);
     }
 
     public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
@@ -2461,11 +2330,6 @@ public final class SettingsView {
                     left() + panelW() - 2,
                     HostThemeColors.current(),
                     net.minecraft.Util.getMillis());
-        }
-        if (section == Section.PROVIDER && addingProvider) {
-            placeholder(g, provKeyInput, "sk-…");
-            placeholder(g, provBaseUrlInput, "https://… (OpenAI-compatible)");
-            placeholder(g, provModelInput, "model id");
         }
         if (section == Section.PROXY) {
             placeholder(g, proxyIpInput, "127.0.0.1");
@@ -2518,16 +2382,6 @@ public final class SettingsView {
         if (section == Section.VOICE
                 && addingVoice && voiceBackendDropdown != null && voiceRowVisible(1)) {
             voiceBackendDropdown.render(g, font(), mouseX, mouseY);
-        }
-        // The model-config form's open dropdown lists must sit above the fields.
-        if (section == Section.PROVIDER && addingProvider) {
-            if (provModelDropdown != null && provProviderDropdown != null && provProviderDropdown.isOpen()) {
-                provModelDropdown.render(g, font(), mouseX, mouseY);
-                provProviderDropdown.render(g, font(), mouseX, mouseY);
-            } else {
-                if (provProviderDropdown != null) provProviderDropdown.render(g, font(), mouseX, mouseY);
-                if (provModelDropdown != null) provModelDropdown.render(g, font(), mouseX, mouseY);
-            }
         }
         if (section == Section.STT) {
             Dropdown[] sttDd = { sttProviderDropdown, sttModelDropdown, sttMicDropdown };
