@@ -1,5 +1,5 @@
 plugins {
-    id 'multiloader-common'
+    id 'api-common'
     id 'net.neoforged.moddev'
 }
 

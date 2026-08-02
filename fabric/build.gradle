@@ -9,11 +9,12 @@ dependencies {
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
-    // The numen-api engine, loaded as a mod dependency (resolved from the remote maven).
-    modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.8-SNAPSHOT"
+    // The numen-api engine, now a sibling loom project in this build. namedElements
+    // exposes the dev-mappings jar directly — no remap round-trip through a maven repo.
+    implementation project(path: ':api:fabric', configuration: 'namedElements')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get
     // both mods — exactly like including a library mod such as GeckoLib.
-    include "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.8-SNAPSHOT"
+    include project(':api:fabric')
 }
 
 loom {
