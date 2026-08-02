@@ -1,0 +1,26 @@
+Numen — Art & Assets license (All Rights Reserved)
+
+Copyright (c) 2026 Dwinovo. All rights reserved.
+
+This license applies to the project's art and visual/audio assets — including
+but not limited to GUI textures and sprites, the project logo, custom skins,
+sounds, and other resource-pack media (e.g. files under
+`*/src/main/resources/assets/numen/textures/` and any other Numen-original
+artwork), collectively the "Assets".
+
+The Assets are NOT covered by the LGPL-3.0 that governs the source code, nor by
+the MIT license that governs the public API. All rights to the Assets are
+reserved by the copyright holder. You may NOT copy, redistribute, modify, or
+use the Assets, in whole or in part, in any other project or product (free or
+commercial), except:
+
+  1. as they are distributed and used inside an unmodified official build of
+     Numen; or
+  2. with prior written permission from the copyright holder.
+
+The names "Numen" and "言出法随", and the project's branding, are reserved and
+may not be used to identify, advertise, or pass off derivative or third-party
+distributions as the official project.
+
+Asset license requests: open an issue at
+https://github.com/Dwinovo/minecraft-numen

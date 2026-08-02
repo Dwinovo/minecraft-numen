@@ -1,0 +1,170 @@
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+base {
+    archivesName = "${mod_id}-${project.name}-${minecraft_version}"
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+// Javadoc comments here are written for source readers; strict doclint
+// (HTML-escaping every & and <, mandatory @param) fights that without
+// adding value to a mod jar. Standard practice: turn it off.
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+// Source files contain UTF-8 (CJK comments/strings). Pin the compiler charset so the build
+// doesn't depend on the JDK/OS default — without this, a non-UTF-8 platform default (e.g. GBK on
+// Chinese Windows) misreads sources as "illegal character" errors.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    // Retain parameter names in bytecode so the @NumenAction tool layer can
+    // derive an argument's name from the method signature (reflection on
+    // Parameter.getName()), instead of forcing every @Arg to repeat the name.
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+    // https://docs.gradle.org/current/userguide/declaring_repositories.html#declaring_content_exclusively_found_in_one_repository
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Sponge'
+                url = 'https://repo.spongepowered.org/repository/maven-public'
+            }
+        }
+        filter { includeGroupAndSubgroups('org.spongepowered') }
+    }
+    maven {
+        name = 'BlameJared'
+        url = 'https://maven.blamejared.com'
+    }
+}
+
+sourcesJar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${mod_name}" }
+    }
+}
+
+jar {
+    from(rootProject.file('LICENSE')) {
+        rename { "${it}_${mod_name}" }
+    }
+
+    manifest {
+        attributes([
+                'Specification-Title'   : mod_name,
+                'Specification-Vendor'  : mod_author,
+                'Specification-Version' : project.jar.archiveVersion,
+                'Implementation-Title'  : project.name,
+                'Implementation-Version': project.jar.archiveVersion,
+                'Implementation-Vendor' : mod_author,
+                'Built-On-Minecraft'    : minecraft_version
+        ])
+    }
+}
+
+processResources {
+    var expandProps = [
+            'version'                      : version,
+            'group'                        : project.group, //Else we target the task's group.
+            'minecraft_version'            : minecraft_version,
+            'minecraft_version_range'      : minecraft_version_range,
+            'fabric_version'               : fabric_version,
+            'fabric_loader_version'        : fabric_loader_version,
+            'mod_name'                     : mod_name,
+            'mod_author'                   : mod_author,
+            'mod_id'                       : mod_id,
+            'license'                      : license,
+            'description'                  : project.description,
+            'neoforge_version'             : neoforge_version,
+            'neoforge_loader_version_range': neoforge_loader_version_range,
+            'credits'                      : credits,
+            'java_version'                 : java_version
+    ]
+
+    var jsonExpandProps = expandProps.collectEntries {
+        key, value -> [(key): value instanceof String ? value.replace("\n", "\\\\n") : value]
+    }
+
+    filesMatching(['META-INF/mods.toml', 'META-INF/neoforge.mods.toml']) {
+        expand expandProps
+    }
+
+    filesMatching(['pack.mcmeta', 'fabric.mod.json', '*.mixins.json']) {
+        expand jsonExpandProps
+    }
+
+    inputs.properties(expandProps)
+}
+
+// Slim "api" jar (classifier 'api'): only the public-API packages — the surface
+// tool packs build against — with the @Internal stragglers that live inside them
+// excluded. Addon devs compileOnly this small, stable jar; the full jar runs at
+// runtime. Mirrors Flywheel's flywheel-…-api, Create's :slim, and JEI's …-api.
+tasks.register('apiJar', Jar) {
+    archiveClassifier = 'api'
+    from sourceSets.main.output
+    // common 的公共 API 有两个住在客户端源码集的门(NumenGateway/NumenActuator);
+    // 加载器模块没有 client 源码集,懒取空集
+    from({ def c = sourceSets.findByName('client'); c != null ? c.output : [] })
+    // public API surface (see the package-info of each). This list is the
+    // contract of record — kept in lockstep with what numen-core actually
+    // compiles against, so building core against the :api jar always works.
+    include 'com/dwinovo/numen/api/**'             // @Internal marker + api meta
+    include 'com/dwinovo/numen/agent/tool/api/**'  // per-call tool context
+    include 'com/dwinovo/numen/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
+    include 'com/dwinovo/numen/task/**'            // task contract + the registration points a pack drives
+    include 'com/dwinovo/numen/entity/NumenPlayer*.class'   // the body a tool acts on
+    include 'com/dwinovo/numen/entity/InputDriver*.class'   // ...and its input surface (look/press keys)
+    include 'com/dwinovo/numen/entity/package-info.class'
+    include 'com/dwinovo/numen/agent/skill/SkillRegistry*.class' // ship-skills-with-your-jar entry
+    include 'com/dwinovo/numen/agent/skill/SkillInfo*.class'
+    include 'com/dwinovo/numen/platform/Services*.class'          // cross-loader SPI locator
+    include 'com/dwinovo/numen/platform/services/**'              // (block caps for storage inspection)
+    // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们连同
+    // ServerToolTransport 本该迁去 core 自己的网络层,迁移前先如实纳入契约
+    include 'com/dwinovo/numen/network/payload/PathDebugPayload*.class'
+    include 'com/dwinovo/numen/network/payload/ClientUiActionPayload*.class'
+    // drop the @Internal stragglers sitting inside those API packages
+    exclude 'com/dwinovo/numen/agent/tool/ToolInvocation*.class'
+    exclude 'com/dwinovo/numen/agent/tool/ClientToolContext*.class'
+    // scheduler internals: implementation of the task machine, not its contract
+    exclude 'com/dwinovo/numen/task/TaskQueue*.class'
+    exclude 'com/dwinovo/numen/task/UnsupportedCompanionTask*.class'
+    exclude 'com/dwinovo/numen/task/CompanionBrain*.class'
+    exclude 'com/dwinovo/numen/task/ChainScheduler*.class'
+    exclude 'com/dwinovo/numen/task/LlmTaskChain*.class'
+    exclude 'com/dwinovo/numen/task/TaskSessionHooks*.class'
+    exclude 'com/dwinovo/numen/task/HandPinRelease*.class'
+    exclude 'com/dwinovo/numen/task/chain/**'
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            // Distinct coordinates from numen-core (which keeps "numen-…"), so core can
+            // depend on the published api as a separate artifact.
+            artifactId = "numen-api-${project.name}-${minecraft_version}"
+            from components.java
+            artifact apiJar   // the slim :api classifier — addon devs compileOnly this
+        }
+    }
+    repositories {
+        maven {
+            name = 'localNumen'
+            // Local file repo by default; override with -Plocal_maven_url=... if needed.
+            url = uri(findProperty('local_maven_url') ?: 'file:///D:/01_Projects/numen-maven')
+        }
+    }
+}
