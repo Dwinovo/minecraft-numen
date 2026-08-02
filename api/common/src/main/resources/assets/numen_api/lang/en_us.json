@@ -228,7 +228,7 @@
   "numen.voice.warn_name": "Name is required",
   "numen.gui.providers.title": "Providers",
   "numen.gui.providers.open_new": "New UI (beta)",
-  "numen.gui.providers.thinking": "Thinking",
+  "numen.gui.providers.thinking": "Reasoning",
   "numen.gui.providers.thinking.auto": "Auto",
   "numen.gui.providers.thinking.on": "On",
   "numen.gui.providers.thinking.off": "Off",
