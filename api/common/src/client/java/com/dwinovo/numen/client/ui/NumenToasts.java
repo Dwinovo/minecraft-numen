@@ -70,11 +70,26 @@ public final class NumenToasts {
     }
 
     /**
-     * 每帧调用(渲染线程)。时间由调用方注入,本类不读钟——时序全部可测。
+     * 顶锚定渲染(HUD 场景:右上角滑入)。时间由调用方注入,本类不读钟。
      *
      * @param screenW GUI 缩放后的屏幕宽
      */
     public void render(IDrawSurface s, int screenW, NumenTheme.Colors c, long nowMs) {
+        renderAnchored(s, screenW - MARGIN, MARGIN, false, c, nowMs);
+    }
+
+    /**
+     * 底锚定渲染(表单/面板场景):toast 底边贴 {@code bottomY},右边贴
+     * {@code rightX}——结果就落在用户正在操作的按钮上方,不把视线拽去
+     * 屏幕角落。不是所有提示都该弹右上角。
+     */
+    public void renderAboveButtons(IDrawSurface s, int rightX, int bottomY,
+                                   NumenTheme.Colors c, long nowMs) {
+        renderAnchored(s, rightX, bottomY, true, c, nowMs);
+    }
+
+    private void renderAnchored(IDrawSurface s, int rightX, int anchorY, boolean bottomAnchored,
+                                NumenTheme.Colors c, long nowMs) {
         if (current == null) {
             current = queue.poll();
             if (current == null) return;
@@ -111,8 +126,8 @@ public final class NumenToasts {
                     Animation.progress(elapsed, SLIDE_MS)));
         };
 
-        int x = screenW - MARGIN - current.w + offset;
-        int y = MARGIN;
+        int x = rightX - current.w + offset;
+        int y = bottomAnchored ? anchorY - current.h : anchorY;
         int bg = switch (current.severity) {
             case INFO -> c.toastInfoBg();
             case WARN -> c.toastWarnBg();

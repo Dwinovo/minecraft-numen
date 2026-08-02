@@ -51,10 +51,14 @@ public final class ProfileFormPanel {
     private List<ProviderRegistry.Provider> sites = List.of();
 
     private TextField nameField, keyField, modelField, baseUrlField;
-    private Dropdown sitePick, modelPick, thinkingSwitch, effortPick;
+    private Dropdown sitePick, modelDropdown, thinkingSwitch, effortPick;
+    private Button modelBackBtn;
     private Label thinkingLabel, effortLabel;
     private Button checkButton;
     private volatile boolean checking;
+    /** 模型行双态:预设下拉(含"自定义…") ↔ 自由输入(▾ 可回预设)。 */
+    private boolean customModel;
+    private List<String> siteModelIds = List.of();
 
     public ProfileFormPanel(ProviderPanel.ToastSink toasts, Consumer<Draft> onSave, Runnable onCancel) {
         this.toasts = toasts;
@@ -70,7 +74,10 @@ public final class ProfileFormPanel {
         this.draft = d;
     }
 
+    private int formW;
+
     public void build(int x, int y, int w, int h, int viewportBottom) {
+        this.formW = w;
         ui.clear();
         ui.setViewportHeight(viewportBottom);
 
@@ -97,11 +104,15 @@ public final class ProfileFormPanel {
         keyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
+        // 模型行双态:有预设的站点默认整宽下拉(预设+自定义…);选"自定义…"
+        // 切换成输入框,▾ 按钮随时回预设。无预设的站点(本地/自建)直接输入框。
         ry = label(x, ry, "numen.gui.settings.model");
+        modelDropdown = ui.add(new Dropdown(List.of(), 0, this::onModelDropdownPicked));
+        modelDropdown.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         modelField = ui.add(new TextField(draft.model, v -> draft.model = v));
         modelField.setBounds(x, ry, w - 17, NumenStyle.CONTROL_H);
-        modelPick = ui.add(new Dropdown(List.of(), 0, i -> onModelPicked()).compact().popupWidth(w));
-        modelPick.setBounds(x + w - 15, ry, 15, NumenStyle.CONTROL_H);
+        modelBackBtn = ui.add(new Button("▾", Button.Style.NORMAL, this::onModelBackToPresets));
+        modelBackBtn.setBounds(x + w - 15, ry, 15, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         ry = label(x, ry, "numen.gui.settings.base_url");
@@ -205,10 +216,16 @@ public final class ProfileFormPanel {
         ProviderRegistry.Provider site = selectedSite();
         if (site == null) return;
 
-        List<String> modelIds = new ArrayList<>();
-        for (ProviderRegistry.Model m : site.models()) modelIds.add(m.id());
-        modelPick.setItems(modelIds, 0);
-        modelPick.setEnabled(!modelIds.isEmpty());
+        siteModelIds = new ArrayList<>();
+        for (ProviderRegistry.Model m : site.models()) siteModelIds.add(m.id());
+        // 编辑既有档案:存的模型不在预设里 → 以自定义态打开(旧表单同语义)。
+        customModel = !siteModelIds.isEmpty() && draft.model != null
+                && !draft.model.isBlank() && !siteModelIds.contains(draft.model);
+        List<String> items = new ArrayList<>(siteModelIds);
+        items.add(t("numen.settings.custom_model"));
+        int sel = Math.max(0, siteModelIds.indexOf(draft.model));
+        modelDropdown.setItems(items, customModel ? items.size() - 1 : sel);
+        refreshModelRow();
         baseUrlField.placeholder(site.baseUrl());
 
         String format = ProviderPanel.effectiveThinkingFormat(site);
@@ -232,9 +249,36 @@ public final class ProfileFormPanel {
         }
     }
 
-    private void onModelPicked() {
-        draft.model = modelPick.selectedItem();
+    /** 双态显隐:预设态整宽下拉;自定义态输入框+回预设按钮;无预设站点纯输入框。 */
+    private void refreshModelRow() {
+        boolean hasPresets = !siteModelIds.isEmpty();
+        modelDropdown.setVisible(hasPresets && !customModel);
+        modelField.setVisible(!hasPresets || customModel);
+        modelBackBtn.setVisible(hasPresets && customModel);
+        modelField.setBounds(modelField.x(), modelField.y(),
+                hasPresets && customModel ? formW - 17 : formW, NumenStyle.CONTROL_H);
+    }
+
+    private void onModelDropdownPicked(int index) {
+        if (index >= siteModelIds.size()) {           // 末项 = 自定义…
+            customModel = true;
+            draft.model = "";
+            modelField.setValue("");
+            refreshModelRow();
+            return;
+        }
+        draft.model = siteModelIds.get(index);
         modelField.setValue(draft.model);
+    }
+
+    private void onModelBackToPresets() {
+        customModel = false;
+        draft.model = siteModelIds.isEmpty() ? "" : siteModelIds.get(0);
+        modelField.setValue(draft.model);
+        List<String> items = new ArrayList<>(siteModelIds);
+        items.add(t("numen.settings.custom_model"));
+        modelDropdown.setItems(items, 0);
+        refreshModelRow();
     }
 
     private void onThinkingSwitched(int switchIdx) {

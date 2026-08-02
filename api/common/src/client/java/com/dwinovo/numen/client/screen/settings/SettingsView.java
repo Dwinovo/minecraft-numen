@@ -91,6 +91,8 @@ public final class SettingsView {
     private int BORDER, ACCENT, TXT, TXT_MUTED, TXT_FAINT, CTA, FIELD, OK, RUN, FAIL;
 
     private Section section = Section.PROVIDER;
+    /** 未被模态屏蔽的真实鼠标坐标(表单卡内的 NumenUI 悬停用)。 */
+    private int rawMouseX = -10000, rawMouseY = -10000;
 
     // ---- 模型配置表单:NumenUI ProfileFormPanel(检测/思考/强度/toast/分类报错) ----
     private final com.dwinovo.numen.client.ui.NumenToasts viewToasts =
@@ -1662,6 +1664,10 @@ public final class SettingsView {
         loadPalette();
         // 任一模态(确认卡/表单卡)在场时整体屏蔽悬停坐标——暗幕下的列表行/导航
         // 不该亮悬停底,MCP 行 tooltip 也不该浮到暗幕上。
+        // 但表单卡自己是活的:真实坐标另存一份,供卡内的 NumenUI 表单用
+        // (否则表单里的下拉/按钮悬停被误杀)。
+        rawMouseX = mouseX;
+        rawMouseY = mouseY;
         if (activeModalTitle() != null || formActive()) {
             mouseX = -10000;
             mouseY = -10000;
@@ -1729,7 +1735,7 @@ public final class SettingsView {
             renderProviderList(g, -10000, -10000);
             formModal(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE));
             providerForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
             return;
         }
         renderProviderList(g, mouseX, mouseY);
@@ -2325,10 +2331,10 @@ public final class SettingsView {
 
     public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
-        // "连接"分区的 toast 画在最上层,右缘锚定设置面板右缘。
+        // 表单 toast 落在表单卡内按钮行上方——用户视线正在那里,不拽去角落。
         if (!viewToasts.isIdle()) {
-            viewToasts.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    left() + panelW() - 2,
+            viewToasts.renderAboveButtons(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    fRight(), fBottom() - 22,
                     HostThemeColors.current(),
                     net.minecraft.Util.getMillis());
         }

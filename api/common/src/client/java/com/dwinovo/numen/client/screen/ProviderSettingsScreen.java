@@ -65,7 +65,9 @@ public final class ProviderSettingsScreen extends Screen {
         s.fillRect(panelX, panelY + 12, 18, 1, colors.accent());
         panel.render(s, colors, mouseX, mouseY, Util.getMillis());
         shellUi.render(s, colors, mouseX, mouseY, Util.getMillis());
-        toasts.render(s, width, colors, Util.getMillis());
+        // toast 落在面板内按钮行上方(检测按钮就在那),不弹屏幕角落。
+        toasts.renderAboveButtons(s, panelX + panelW - 2, panelY + panelH - 22,
+                colors, Util.getMillis());
     }
 
     @Override
