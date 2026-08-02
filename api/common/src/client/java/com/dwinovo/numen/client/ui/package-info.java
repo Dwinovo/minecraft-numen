@@ -12,5 +12,9 @@
  *
  * <p>控件基类待第一批具体控件(提供商分区)成形时再定形——先见血再定骨,
  * 不做投机抽象。
+ *
+ * <p><b>混住现状(挂账)</b>:本包还住着旧 SettingsView 时代的 MC 绘制助手
+ * (Anim/ConfirmModal/RoundRect/SafeUi),它们 import MC,不守上述纪律——
+ * 旧屏逐区退役时随之清退;新代码不得依赖它们。
  */
 package com.dwinovo.numen.client.ui;
