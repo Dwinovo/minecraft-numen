@@ -67,6 +67,10 @@ public final class SettingsScreen extends Screen {
         int footerY = top + CONTENT_HEIGHT - 18;
         int btnW = 60;
         int rightX = left + CONTENT_WIDTH - btnW;
+        // 新版提供商界面(NumenUI)的试用入口——逐区迁移期间新旧并存。
+        addRenderableWidget(new SimpleButton(left, footerY, 80, 18,
+                Component.translatable("numen.gui.providers.open_new"),
+                b -> ProviderSettingsScreen.open(this)));
         addRenderableWidget(new SimpleButton(rightX - btnW - 4, footerY, btnW, 18,
                 Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_CANCEL), b -> onClose()));
         addRenderableWidget(new SimpleButton(rightX, footerY, btnW, 18,

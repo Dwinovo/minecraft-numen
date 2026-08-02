@@ -225,5 +225,22 @@
   "numen.voice.test_ok": "✔ Playing",
   "numen.voice.test_running": "Synthesizing…",
   "numen.voice.title": "Voice",
-  "numen.voice.warn_name": "Name is required"
+  "numen.voice.warn_name": "Name is required",
+  "numen.gui.providers.title": "Providers",
+  "numen.gui.providers.open_new": "New UI (beta)",
+  "numen.gui.providers.thinking": "Thinking",
+  "numen.gui.providers.thinking.auto": "Auto",
+  "numen.gui.providers.thinking.on": "On",
+  "numen.gui.providers.thinking.off": "Off",
+  "numen.gui.providers.badge.local": "Local",
+  "numen.gui.providers.check": "Check",
+  "numen.gui.providers.check.no_key": "No API key yet — paste your key first",
+  "numen.gui.providers.check.running": "Checking connection…",
+  "numen.gui.providers.check.ok": "Connected — the model responded",
+  "numen.gui.providers.check.unauthorized": "Invalid key — check it's complete and belongs to this provider",
+  "numen.gui.providers.check.not_found": "Wrong base URL or model — check both",
+  "numen.gui.providers.check.rate_limited": "Rate limited — wait a bit or check your quota",
+  "numen.gui.providers.check.server_error": "Provider-side error — try again later",
+  "numen.gui.providers.check.bad_request": "Request rejected",
+  "numen.gui.providers.check.network": "Can't connect — check network, proxy, or base URL"
 }

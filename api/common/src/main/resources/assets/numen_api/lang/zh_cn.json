@@ -225,5 +225,22 @@
   "numen.voice.test_ok": "✔ 播放中",
   "numen.voice.test_running": "合成中…",
   "numen.voice.title": "语音",
-  "numen.voice.warn_name": "名称必填"
+  "numen.voice.warn_name": "名称必填",
+  "numen.gui.providers.title": "提供商",
+  "numen.gui.providers.open_new": "新版界面(试用)",
+  "numen.gui.providers.thinking": "思考",
+  "numen.gui.providers.thinking.auto": "自动",
+  "numen.gui.providers.thinking.on": "开启",
+  "numen.gui.providers.thinking.off": "关闭",
+  "numen.gui.providers.badge.local": "本地",
+  "numen.gui.providers.check": "检测",
+  "numen.gui.providers.check.no_key": "还没填 API Key——先把密钥贴进来再检测",
+  "numen.gui.providers.check.running": "正在连接服务商…",
+  "numen.gui.providers.check.ok": "连接成功,模型响应正常",
+  "numen.gui.providers.check.unauthorized": "密钥无效——检查 API Key 是否复制完整、是否属于这家服务商",
+  "numen.gui.providers.check.not_found": "基址或模型名不对——检查 Base URL 与模型 ID",
+  "numen.gui.providers.check.rate_limited": "被限流了——稍等再试,或检查账户额度",
+  "numen.gui.providers.check.server_error": "服务商侧故障——稍后再试",
+  "numen.gui.providers.check.bad_request": "请求被拒",
+  "numen.gui.providers.check.network": "连不上——检查网络、代理或基址"
 }

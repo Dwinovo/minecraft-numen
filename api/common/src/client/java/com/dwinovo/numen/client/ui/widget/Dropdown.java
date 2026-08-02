@@ -20,11 +20,31 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     private int popupScroll;   // 弹层滚动(行数)
     private static final int MAX_POPUP_ROWS = 8;
 
+    /** 紧凑模式:收起态只画箭头不画值(窄"选择器"用,值另有输入框承载)。 */
+    private boolean compact;
+
     public Dropdown(List<String> items, int selected, IntConsumer onSelect) {
         this.items = items;
         this.selected = Math.max(0, Math.min(selected, items.size() - 1));
         this.onSelect = onSelect;
     }
+
+    public Dropdown compact() {
+        this.compact = true;
+        return this;
+    }
+
+    /** 弹层宽度覆盖(默认与收起态同宽);弹层右缘对齐控件右缘,窄选择器不至于挤爆版面。 */
+    private int popupW;
+
+    public Dropdown popupWidth(int width) {
+        this.popupW = width;
+        return this;
+    }
+
+    private int popupWidth() { return popupW > 0 ? popupW : w; }
+
+    private int popupX() { return popupW > 0 ? x + w - popupW : x; }
 
     public void setItems(List<String> items, int selected) {
         this.items = items;
@@ -46,10 +66,12 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         boolean hovered = enabled && contains(mouseX, mouseY);
         s.fillRoundRect(x, y, w, h, 3, hovered || open ? c.hover() : c.inputBg());
-        String text = selectedItem();
-        s.drawText(text, x + 5, y + (h - s.lineHeight()) / 2 + 1,
-                enabled ? c.textPrimary() : c.textMuted(), false);
-        s.drawText(open ? "▲" : "▼", x + w - 11, y + (h - s.lineHeight()) / 2 + 1,
+        if (!compact) {
+            s.drawText(selectedItem(), x + 5, y + (h - s.lineHeight()) / 2 + 1,
+                    enabled ? c.textPrimary() : c.textMuted(), false);
+        }
+        int arrowX = compact ? x + (w - s.textWidth("▼")) / 2 : x + w - 11;
+        s.drawText(open ? "▲" : "▼", arrowX, y + (h - s.lineHeight()) / 2 + 1,
                 c.textMuted(), false);
     }
 
@@ -66,7 +88,8 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     private int popupRows() { return Math.min(items.size(), MAX_POPUP_ROWS); }
 
     private boolean inPopup(double mx, double my) {
-        return mx >= x && mx < x + w && my >= y + h && my < y + h + popupRows() * rowHCached;
+        return mx >= popupX() && mx < popupX() + popupWidth()
+                && my >= y + h && my < y + h + popupRows() * rowHCached;
     }
 
     /** 行高在渲染时缓存,事件处理无画布也能判命中。 */
@@ -77,15 +100,17 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
         rowHCached = rowH(s);
         int rows = popupRows();
         int py = y + h;
-        s.fillRoundRect(x, py, w, rows * rowHCached, 3, c.panelBg());
+        int px = popupX();
+        int pw = popupWidth();
+        s.fillRoundRect(px, py, pw, rows * rowHCached, 3, c.panelBg());
         for (int r = 0; r < rows; r++) {
             int idx = popupScroll + r;
             if (idx >= items.size()) break;
             int ry = py + r * rowHCached;
-            boolean hov = mouseX >= x && mouseX < x + w && mouseY >= ry && mouseY < ry + rowHCached;
-            if (idx == selected) s.fillRect(x, ry, w, rowHCached, c.selected());
-            else if (hov) s.fillRect(x, ry, w, rowHCached, c.hover());
-            s.drawText(items.get(idx), x + 5, ry + 2, c.textPrimary(), false);
+            boolean hov = mouseX >= px && mouseX < px + pw && mouseY >= ry && mouseY < ry + rowHCached;
+            if (idx == selected) s.fillRect(px, ry, pw, rowHCached, c.selected());
+            else if (hov) s.fillRect(px, ry, pw, rowHCached, c.hover());
+            s.drawText(items.get(idx), px + 5, ry + 2, c.textPrimary(), false);
         }
     }
 
