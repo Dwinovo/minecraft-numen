@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.act;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.PlayerInv;
 import com.dwinovo.numen.core.FailureType;

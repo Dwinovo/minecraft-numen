@@ -1,4 +1,6 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.act;
+import com.dwinovo.numen.core.task.IdSuggest;
+import com.dwinovo.numen.core.task.CompassUtil;
 import com.dwinovo.numen.core.scan.SearchBudget;
 import com.dwinovo.numen.core.scan.RingSpiral;
 import com.dwinovo.numen.core.FailureType;

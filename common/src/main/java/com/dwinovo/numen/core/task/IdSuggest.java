@@ -10,7 +10,7 @@ import java.util.stream.Stream;
  * monument, jungle_temple → jungle_pyramid) are one edit-distance lookup away
  * from self-healing instead of a dead "unknown structure".
  */
-final class IdSuggest {
+public final class IdSuggest {
 
     private IdSuggest() {}
 
@@ -19,7 +19,7 @@ final class IdSuggest {
      * nothing is plausibly close (threshold scales with input length, plus a
      * containment shortcut so {@code ocean_monument} finds {@code monument}).
      */
-    static String closest(Stream<ResourceLocation> candidates, String input) {
+    public static String closest(Stream<ResourceLocation> candidates, String input) {
         String want = pathOf(input);
         ResourceLocation best = null;
         int bestDist = Integer.MAX_VALUE;

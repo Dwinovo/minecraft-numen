@@ -6,11 +6,11 @@ package com.dwinovo.numen.core.task;
  * dominant axis is at least twice the other — "north-east" only when the
  * direction is meaningfully diagonal.
  */
-final class CompassUtil {
+public final class CompassUtil {
 
     private CompassUtil() {}
 
-    static String compass(int dx, int dz) {
+    public static String compass(int dx, int dz) {
         if (dx == 0 && dz == 0) return "here";
         String ns = dz < 0 ? "north" : (dz > 0 ? "south" : "");
         String ew = dx < 0 ? "west" : (dx > 0 ? "east" : "");

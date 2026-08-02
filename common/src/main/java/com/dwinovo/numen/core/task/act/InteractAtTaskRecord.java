@@ -1,4 +1,5 @@
-package com.dwinovo.numen.core.task;
+package com.dwinovo.numen.core.task.act;
+import com.dwinovo.numen.core.task.MouseButton;
 
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
