@@ -12,6 +12,21 @@ public final class Animation {
         return 1.0f - inv * inv * inv;
     }
 
+    /** 入场回弹:收尾轻微过冲再落位,比纯减速多一分活气(toast/弹层入场)。 */
+    public static float easeOutBack(float t) {
+        t = clamp01(t);
+        float c1 = 1.70158f;
+        float c3 = c1 + 1f;
+        float inv = t - 1f;
+        return 1f + c3 * inv * inv * inv + c1 * inv * inv;
+    }
+
+    /** 退场加速:慢起快走(离场不值得注目)。 */
+    public static float easeInCubic(float t) {
+        t = clamp01(t);
+        return t * t * t;
+    }
+
     /** 指数趋近 + 吸附:距目标小于 snapThreshold 时直接贴齐,避免永不到达的抖尾。 */
     public static float lerpTo(float current, float target, float speed, float snapThreshold) {
         float next = current + (target - current) * speed;

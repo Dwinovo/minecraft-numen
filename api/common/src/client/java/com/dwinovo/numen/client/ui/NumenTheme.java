@@ -12,7 +12,7 @@ public enum NumenTheme {
     public record Colors(
             int panelBg, int sectionBg, int divider,
             int textPrimary, int textSecondary, int textMuted,
-            int accent, int danger, int success,
+            int accent, int danger, int success, int warning,
             int inputBg, int inputBorder,
             int hover, int selected,
             int badgeBg, int badgeText,
@@ -23,19 +23,19 @@ public enum NumenTheme {
             case DARK -> new Colors(
                     0xF0191A20, 0xFF23242B, 0xFF383A44,
                     0xFFF0F1F4, 0xFFA9ADBB, 0xFF707585,
-                    0xFF5B9CFF, 0xFFE5534B, 0xFF4CBB5A,
+                    0xFF5B9CFF, 0xFFE5534B, 0xFF4CBB5A, 0xFFD9A23C,
                     0xFF272932, 0xFF414453,
                     0xFF2E313B, 0xFF35507F,
                     0xFF333644, 0xFFCDD2E0,
-                    0xF02A2D38, 0xF0574625, 0xF05C2B28, 0xFFF0F1F4);
+                    0xF0203528, 0xF038301C, 0xF03A2321, 0xFFF0F1F4);
             case LIGHT -> new Colors(
                     0xF0F4F4F6, 0xFFFFFFFF, 0xFFDDDDE2,
                     0xFF1E1E24, 0xFF55555E, 0xFF9090A0,
-                    0xFF3B78E7, 0xFFC7392F, 0xFF3E8E41,
+                    0xFF3B78E7, 0xFFC7392F, 0xFF3E8E41, 0xFFB98617,
                     0xFFECECEF, 0xFFCFCFD8,
                     0xFFE6E6EB, 0xFFBDD3F7,
                     0xFFE2E2E8, 0xFF3A3A44,
-                    0xF0FFFFFF, 0xF0FFF3D6, 0xF0FDE3E0, 0xFF1E1E24);
+                    0xF0E7F5EA, 0xF0FDF3D9, 0xF0FBE5E2, 0xFF1E1E24);
         };
     }
 }

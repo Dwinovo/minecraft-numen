@@ -116,29 +116,61 @@ public final class NumenToasts {
             return;
         }
 
-        // 滑动位移:完全收起 = 移出屏幕右缘(w + MARGIN)。
-        int hiddenOffset = current.w + MARGIN;
-        int offset = switch (state) {
-            case SLIDE_IN -> Math.round(hiddenOffset * (1 - Animation.easeOutCubic(
-                    Animation.progress(elapsed, SLIDE_MS))));
-            case VISIBLE -> 0;
-            case SLIDE_OUT -> Math.round(hiddenOffset * Animation.easeOutCubic(
-                    Animation.progress(elapsed, SLIDE_MS)));
+        // 动效:入场回弹落位+渐显,退场加速离场+渐隐。顶锚定横滑(HUD 右上),
+        // 底锚定纵浮(表单按钮上方,从下方 10px 浮起)——方向服从锚点语义。
+        float p = Animation.progress(elapsed, SLIDE_MS);
+        float alpha = switch (state) {
+            case SLIDE_IN -> Animation.easeOutCubic(p);
+            case VISIBLE -> 1f;
+            case SLIDE_OUT -> 1f - Animation.easeInCubic(p);
         };
+        int hiddenOffset = current.w + MARGIN;
+        int slideX = 0;
+        int riseY = 0;
+        if (bottomAnchored) {
+            riseY = switch (state) {
+                case SLIDE_IN -> Math.round((1 - Animation.easeOutBack(p)) * 10);
+                case VISIBLE -> 0;
+                case SLIDE_OUT -> -Math.round(Animation.easeInCubic(p) * 8);
+            };
+        } else {
+            slideX = switch (state) {
+                case SLIDE_IN -> Math.round(hiddenOffset * (1 - Animation.easeOutBack(p)));
+                case VISIBLE -> 0;
+                case SLIDE_OUT -> Math.round(hiddenOffset * Animation.easeInCubic(p));
+            };
+        }
 
-        int x = rightX - current.w + offset;
-        int y = bottomAnchored ? anchorY - current.h : anchorY;
+        int x = rightX - current.w + slideX;
+        int y = (bottomAnchored ? anchorY - current.h : anchorY) + riseY;
+        // 三色语义:正常绿、警告黄、失败红——边框用强色,底用同系浅调。
+        int border = switch (current.severity) {
+            case INFO -> c.success();
+            case WARN -> c.warning();
+            case ERROR -> c.danger();
+        };
         int bg = switch (current.severity) {
             case INFO -> c.toastInfoBg();
             case WARN -> c.toastWarnBg();
             case ERROR -> c.toastErrorBg();
         };
-        s.fillRoundRect(x, y, current.w, current.h, NumenStyle.RADIUS_PANEL, bg);
-        int ty = y + PAD;
-        for (String line : current.lines) {
-            s.drawText(line, x + PAD, ty, c.toastText(), false);
-            ty += s.lineHeight();
+        s.fillRoundRect(x, y, current.w, current.h, NumenStyle.RADIUS_PANEL, applyAlpha(border, alpha));
+        s.fillRoundRect(x + 1, y + 1, current.w - 2, current.h - 2,
+                NumenStyle.RADIUS_PANEL - 1, applyAlpha(bg, alpha));
+        if (alpha > 0.05f) {   // MC 字体渲染对极低 alpha 有怪癖,干脆不画
+            int textColor = applyAlpha(c.toastText(), alpha);
+            int ty = y + PAD;
+            for (String line : current.lines) {
+                s.drawText(line, x + PAD, ty, textColor, false);
+                ty += s.lineHeight();
+            }
         }
+    }
+
+    /** 颜色的 alpha 通道乘以 {@code a}(渐显渐隐)。 */
+    private static int applyAlpha(int argb, float a) {
+        int alpha = Math.round(((argb >>> 24) & 0xFF) * Math.max(0f, Math.min(1f, a)));
+        return (alpha << 24) | (argb & 0xFFFFFF);
     }
 
     /** 首帧排版一次:折行、量宽、按字数定停留时长,全部缓存进条目。 */

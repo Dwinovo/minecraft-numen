@@ -134,9 +134,11 @@ public final class ProfileFormPanel {
                 ReasoningChoice.LEVEL_MEDIUM, this::onEffortPicked));
         effortPick.setBounds(x + 86, ry, 78, NumenStyle.CONTROL_H);
 
+        // ✕ 在卡片右上角(通用关闭位);底行只留 [检测][保存]。
+        Button close = ui.add(new Button("✕", Button.Style.NORMAL, onCancel));
+        close.setBounds(x + w - 15, y - 1, 15, NumenStyle.CONTROL_H);
+
         int by = y + h - 16;
-        Button cancel = ui.add(new Button("✕", Button.Style.NORMAL, onCancel));
-        cancel.setBounds(x, by, 18, 15);
         checkButton = ui.add(new Button(t("numen.gui.providers.check"),
                 Button.Style.NORMAL, this::runConnectivityCheck));
         checkButton.setBounds(x + w - 54 - 58, by, 54, 15);
