@@ -1768,7 +1768,7 @@ public final class SettingsView {
         switch (section) {
             case CONNECTION -> connectionPanel().render(
                     new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    com.dwinovo.numen.client.ui.NumenTheme.DARK.colors(),
+                    HostThemeColors.current(),
                     mouseX, mouseY, net.minecraft.Util.getMillis());
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
@@ -2459,7 +2459,7 @@ public final class SettingsView {
         if (!viewToasts.isIdle()) {
             viewToasts.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                     left() + panelW() - 2,
-                    com.dwinovo.numen.client.ui.NumenTheme.DARK.colors(),
+                    HostThemeColors.current(),
                     net.minecraft.Util.getMillis());
         }
         if (section == Section.PROVIDER && addingProvider) {

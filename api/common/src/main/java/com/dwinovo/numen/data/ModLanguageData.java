@@ -327,7 +327,7 @@ public final class ModLanguageData {
         adder.add("numen.status.asleep", "asleep — chat to wake it.");
 
         // Model-config section
-        adder.add(Keys.PROVIDER_TITLE,          "Model Configs");
+        adder.add(Keys.PROVIDER_TITLE,          "Model Profiles");
         adder.add(Keys.PROVIDER_EMPTY,          "No model config yet — click New (top-right) to create one");
         adder.add(Keys.PROVIDER_ADD,            "New");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "Delete \"%s\"? Companions using it can't chat until rebound.");
@@ -572,7 +572,7 @@ public final class ModLanguageData {
         adder.add("numen.status.asleep", "休眠中 —— 对它说话唤醒。");
 
         // Model-config section
-        adder.add(Keys.PROVIDER_TITLE,          "模型配置");
+        adder.add(Keys.PROVIDER_TITLE,          "模型档案");
         adder.add(Keys.PROVIDER_EMPTY,          "还没有模型配置——点右上「新建」创建一条");
         adder.add(Keys.PROVIDER_ADD,            "新建");
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "删除「%s」?正在使用它的同伴将无法对话,直到重新绑定。");
