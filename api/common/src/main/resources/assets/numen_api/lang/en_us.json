@@ -251,5 +251,8 @@
   "numen.gui.providers.checking": "Checking…",
   "numen.gui.providers.effort.low": "Low",
   "numen.gui.providers.effort.medium": "Medium",
-  "numen.gui.providers.effort.high": "High"
+  "numen.gui.providers.effort.high": "High",
+  "numen.gui.providers.proxy": "Proxy (optional)",
+  "numen.gui.providers.proxy.hint": "host:port, blank = global",
+  "numen.gui.providers.proxy.global": "Global proxy"
 }

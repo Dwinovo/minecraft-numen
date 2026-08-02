@@ -39,7 +39,7 @@ public final class ProviderPanel {
 
     private List<ProviderRegistry.Provider> sites = List.of();
     private ListView<ProviderRegistry.Provider> siteList;
-    private TextField keyField, baseUrlField, modelField;
+    private TextField keyField, baseUrlField, modelField, proxyField;
     private Dropdown modelPick, thinkingPick;
     private Label siteTitle, thinkingLabel;
     private boolean thinkingToggleOnly;
@@ -104,6 +104,15 @@ public final class ProviderPanel {
             cfg.save();
         }));
         baseUrlField.setBounds(rx, ry, rw, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
+
+        // 全局代理(档案留空时的回退,皮肤上传等非 LLM 流量也走它)。
+        ry = label(rx, ry, "numen.gui.providers.proxy.global");
+        proxyField = ui.add(new TextField(cfg.getProxy(), v -> {
+            cfg.setProxy(v);
+            cfg.save();
+        }).placeholder("127.0.0.1:7890"));
+        proxyField.setBounds(rx, ry, rw, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         // 单一自适应思考控件(主流形态):力度型站点出 自动/关闭/低/中/高,

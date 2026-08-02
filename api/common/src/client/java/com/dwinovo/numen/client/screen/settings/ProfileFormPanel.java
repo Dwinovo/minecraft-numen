@@ -39,6 +39,7 @@ public final class ProfileFormPanel {
         public String apiKey = "";
         public String baseUrl = "";
         public String reasoningEffort = "";
+        public String proxy = "";
     }
 
     private final UiRoot ui = new UiRoot();
@@ -48,7 +49,7 @@ public final class ProfileFormPanel {
     private Draft draft = new Draft();
     private List<ProviderRegistry.Provider> sites = List.of();
 
-    private TextField nameField, keyField, modelField, baseUrlField;
+    private TextField nameField, keyField, modelField, baseUrlField, proxyField;
     private Dropdown sitePick, modelDropdown, thinkingPick;
     private Button modelBackBtn;
     private Label thinkingLabel;
@@ -117,6 +118,13 @@ public final class ProfileFormPanel {
         ry = label(x, ry, "numen.gui.settings.base_url");
         baseUrlField = ui.add(new TextField(draft.baseUrl, v -> draft.baseUrl = v));
         baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
+
+        // 代理按档案走:国内外站点常需不同走线,留空跟随全局(/numen 里设)。
+        ry = label(x, ry, "numen.gui.providers.proxy");
+        proxyField = ui.add(new TextField(draft.proxy, v -> draft.proxy = v)
+                .placeholder(t("numen.gui.providers.proxy.hint")));
+        proxyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         // 单一自适应思考控件(主流形态):力度型站点出 自动/关闭/低/中/高,
@@ -330,8 +338,10 @@ public final class ProfileFormPanel {
         checkButton.setEnabled(false);
         checkButton.setLabel(t("numen.gui.providers.checking"));
         resultAlert.show(InlineAlert.Severity.INFO, t("numen.gui.providers.checking"));
+        String proxy = draft.proxy != null && !draft.proxy.isBlank()
+                ? draft.proxy : Services.CONFIG.getProxy();
         LlmEndpoint ep = new LlmEndpoint(draft.provider, draft.model, draft.apiKey,
-                draft.baseUrl, Services.CONFIG.getProxy(), "auto");
+                draft.baseUrl, proxy, "auto");
         NumenLlmClient.forEndpoint(ep)
                 .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "", null)
                 .whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {

@@ -27,7 +27,8 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
      *  a companion tries to talk through it (error-driven guidance, no silent
      *  fallback of any kind). */
     public record Entry(String id, String name, String provider, String model,
-                        String apiKey, String baseUrl, String reasoningEffort) {}
+                        String apiKey, String baseUrl, String reasoningEffort,
+                        String proxy) {}
 
     private static ProviderLibrary instance;
 
@@ -46,23 +47,25 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
     /**
      * Resolve an entry id to connection parameters, verbatim — no fallback of any
      * kind. Unknown/deleted id → an empty endpoint, whose missing API key produces
-     * the same honest error a keyless entry does. Only the proxy comes from the
-     * global settings (a network-environment property, not a provider property).
+     * the same honest error a keyless entry does. Proxy is per-profile (国内外站点
+     * 常需不同的走线);留空跟随全局设置。
      */
     public LlmEndpoint resolve(String id) {
         Entry e = get(id);
         if (e == null) {
             return new LlmEndpoint("", "", "", "", Services.CONFIG.getProxy(), "");
         }
+        String proxy = e.proxy() != null && !e.proxy().isBlank()
+                ? e.proxy() : Services.CONFIG.getProxy();
         return new LlmEndpoint(e.provider(), e.model(), e.apiKey(),
-                e.baseUrl(), Services.CONFIG.getProxy(), e.reasoningEffort());
+                e.baseUrl(), proxy, e.reasoningEffort());
     }
 
     /** Create an entry — only the name is required; everything else may be blank. */
     public Entry create(String name, String provider, String model,
-                        String apiKey, String baseUrl, String reasoningEffort) {
+                        String apiKey, String baseUrl, String reasoningEffort, String proxy) {
         Entry e = new Entry(freshId("prov"), name, provider, model, apiKey, baseUrl,
-                reasoningEffort);
+                reasoningEffort, proxy);
         putAndSave(e);
         return e;
     }
@@ -104,7 +107,7 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
     protected Entry readEntry(JsonObject o) {
         return new Entry(strOrNull(o, "id"), strOrNull(o, "name"), strOrNull(o, "provider"),
                 strOrNull(o, "model"), strOrNull(o, "api_key"), strOrNull(o, "base_url"),
-                strOrNull(o, "reasoning_effort"));
+                strOrNull(o, "reasoning_effort"), strOrNull(o, "proxy"));
     }
 
     @Override
@@ -117,6 +120,7 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
         if (nb(e.apiKey())) o.addProperty("api_key", e.apiKey());
         if (nb(e.baseUrl())) o.addProperty("base_url", e.baseUrl());
         if (nb(e.reasoningEffort())) o.addProperty("reasoning_effort", e.reasoningEffort());
+        if (nb(e.proxy())) o.addProperty("proxy", e.proxy());
         return o;
     }
 

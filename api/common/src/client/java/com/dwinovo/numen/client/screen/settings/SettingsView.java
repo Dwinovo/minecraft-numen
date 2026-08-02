@@ -69,7 +69,7 @@ public final class SettingsView {
      * {@link #MCP} 是"给同伴的大脑加外部工具"(我们当 client),{@link #BRAIN} 是"把同伴
      * 交给外面的大脑"(我们当 server),故在 UI 上按用户视角分成工具扩展/外接大脑两节。
      */
-    private enum Section { PROVIDER, PROXY, MCP, BRAIN, SKILLS, PERSONA, VOICE, SKIN, STT, THEME }
+    private enum Section { PROVIDER, MCP, BRAIN, SKILLS, PERSONA, VOICE, SKIN, STT, THEME }
 
     // ---- layout constants (mirror the screen's) ----
     private static final int PAD = 8;
@@ -112,10 +112,10 @@ public final class SettingsView {
         if (providerEditId != null) {
             lib.update(new com.dwinovo.numen.agent.llm.ProviderLibrary.Entry(
                     providerEditId, d.name.trim(), d.provider, d.model.trim(),
-                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort));
+                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort, d.proxy.trim()));
         } else {
             lib.create(d.name.trim(), d.provider, d.model.trim(),
-                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort);
+                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort, d.proxy.trim());
         }
         addingProvider = false;
         providerEditId = null;
@@ -169,7 +169,6 @@ public final class SettingsView {
     private long skinMsgUntil;
 
     // ---- proxy section state (IP + port) ----
-    private EditBox proxyIpInput, proxyPortInput;
 
     // Persona library form state (mirrors the MCP add/edit/delete flow).
     private boolean addingPersona;
@@ -333,7 +332,6 @@ public final class SettingsView {
         voiceBackendDropdown = null;
         skinNameInput = null;
         skinVariantDropdown = null;
-        proxyIpInput = proxyPortInput = null;
     }
 
     private void selectSection(Section s) {
@@ -459,7 +457,6 @@ public final class SettingsView {
                 else if (addingSkin) buildSkinForm();
                 else buildSkinListWidgets();
             }
-            case PROXY -> buildProxyWidgets();
             case BRAIN -> buildBrainWidgets();
             case STT -> buildSttWidgets();
             case THEME -> { /* no widgets — plain click rows */ }
@@ -467,28 +464,6 @@ public final class SettingsView {
     }
 
     // ---- Proxy section: the global network proxy, its own tab (IP + port) ----
-
-    private void buildProxyWidgets() {
-        int x = secX(), w = secW();
-        int fy = secY0();
-        String cur = Services.CONFIG.getProxy() == null ? "" : Services.CONFIG.getProxy().trim();
-        String ip = "", port = "";
-        int colon = cur.lastIndexOf(':');
-        if (colon > 0) { ip = cur.substring(0, colon); port = cur.substring(colon + 1); }
-        else ip = cur;
-        // One row below the section title (only two rows here — space is plentiful).
-        proxyIpInput = field(x, fy + 25, w, 64, ip);
-        proxyPortInput = field(x, fy + 25 + SET_SP, w, 8, port);
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> {
-                    String i = proxyIpInput.getValue().trim();
-                    String p = proxyPortInput.getValue().trim();
-                    Services.CONFIG.setProxy(i.isEmpty() ? "" : (p.isEmpty() ? i : i + ":" + p));
-                    Services.CONFIG.save();
-                    NumenLlmClient.reset();
-                    savedFlashUntil = System.currentTimeMillis() + 1500;
-                }).primary());
-    }
 
     // ---- Voice input (STT) section: provider dropdown → prefilled base/model, mic dropdown ----
 
@@ -606,17 +581,6 @@ public final class SettingsView {
         txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_MODEL), x, fy + 14 + 2 * SET_SP, TXT_MUTED);
         txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_BASE_URL), x, fy + 14 + 3 * SET_SP, TXT_MUTED);
         txt(g, Component.translatable(ModLanguageData.Keys.STT_MICROPHONE), x, fy + 14 + 4 * SET_SP, TXT_MUTED);
-    }
-
-    private void renderProxySection(GuiGraphics g) {
-        int x = secX();
-        int fy = secY0();
-        txt(g, Component.translatable("numen.settings.proxy"), x, fy - 2, TXT);
-        txt(g, Component.translatable(ModLanguageData.Keys.SETTINGS_PROXY_IP), x, fy + 14, TXT_MUTED);
-        txt(g, Component.translatable(ModLanguageData.Keys.SETTINGS_PROXY_PORT), x, fy + 14 + SET_SP, TXT_MUTED);
-        if (savedFlashUntil > System.currentTimeMillis()) {
-            txt(g, Component.translatable("numen.settings.saved"), x, top() + panelH() - PAD - 14, OK);
-        }
     }
 
     // ---- External-brain section: 我们自己当 MCP 服务器,把同伴交给外面的 AI 驱动 ----
@@ -1684,7 +1648,6 @@ public final class SettingsView {
             case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
-            case PROXY -> renderProxySection(g);
             case BRAIN -> renderBrainSection(g, mouseX, mouseY);
             case STT -> renderSttSection(g);
             case THEME -> renderThemeSection(g, mouseX, mouseY);
@@ -1798,13 +1761,14 @@ public final class SettingsView {
         providerDraft.apiKey = e.apiKey() == null ? "" : e.apiKey();
         providerDraft.baseUrl = e.baseUrl() == null ? "" : e.baseUrl();
         providerDraft.reasoningEffort = e.reasoningEffort() == null ? "" : e.reasoningEffort();
+        providerDraft.proxy = e.proxy() == null ? "" : e.proxy();
         host.rebuild();
     }
 
     /** The config-hub left sub-nav + the divider. */
     private void renderSettingsNav(GuiGraphics g, int mouseX, int mouseY) {
         String[] labels = {
-                I18n.get(ModLanguageData.Keys.PROVIDER_TITLE), I18n.get("numen.settings.proxy"),
+                I18n.get(ModLanguageData.Keys.PROVIDER_TITLE),
                 I18n.get("numen.settings.nav.mcp"), I18n.get("numen.settings.nav.brain"),
                 I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona"),
                 I18n.get(ModLanguageData.Keys.VOICE_TITLE),
@@ -2329,10 +2293,6 @@ public final class SettingsView {
 
     public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
-        if (section == Section.PROXY) {
-            placeholder(g, proxyIpInput, "127.0.0.1");
-            placeholder(g, proxyPortInput, "7890");
-        }
         // 声线表单:模型配置同款——每行标题画在输入框上方,框内只留短示例占位。
         // 行序与 buildVoiceForm 的 switch 严格一致,随 voiceFormScroll 偏移。
         if (section == Section.VOICE && addingVoice) {
