@@ -6,7 +6,6 @@ import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.agent.provider.LlmProvider;
 import com.dwinovo.numen.agent.provider.ProviderRegistry;
 import com.dwinovo.numen.client.agent.LlmErrorWords;
-import com.dwinovo.numen.client.screen.ReasoningChoice;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
@@ -50,9 +49,10 @@ public final class ProfileFormPanel {
     private List<ProviderRegistry.Provider> sites = List.of();
 
     private TextField nameField, keyField, modelField, baseUrlField;
-    private Dropdown sitePick, modelDropdown, thinkingSwitch, effortPick;
+    private Dropdown sitePick, modelDropdown, thinkingPick;
     private Button modelBackBtn;
-    private Label thinkingLabel, effortLabel;
+    private Label thinkingLabel;
+    private boolean thinkingToggleOnly;
     private Button checkButton;
     private InlineAlert resultAlert;
     private volatile boolean checking;
@@ -119,19 +119,13 @@ public final class ProfileFormPanel {
         baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
+        // 单一自适应思考控件(主流形态):力度型站点出 自动/关闭/低/中/高,
+        // 开关型出 自动/开启/关闭,常开型隐藏——后端两参数的复杂度不泄漏给用户。
         thinkingLabel = ui.add(new Label(t("numen.gui.providers.thinking"), Label.Role.MUTED));
-        thinkingLabel.setBounds(x, ry, 70, 9);
-        effortLabel = ui.add(new Label(t("numen.gui.providers.effort"), Label.Role.MUTED));
-        effortLabel.setBounds(x + 86, ry, 80, 9);
+        thinkingLabel.setBounds(x, ry, 100, 9);
         ry += NumenStyle.LABEL_PITCH;
-        thinkingSwitch = ui.add(new Dropdown(List.of(
-                t("numen.gui.providers.thinking.auto"),
-                t("numen.gui.providers.thinking.on"),
-                t("numen.gui.providers.thinking.off")), 0, this::onThinkingSwitched));
-        thinkingSwitch.setBounds(x, ry, 78, NumenStyle.CONTROL_H);
-        effortPick = ui.add(new Dropdown(List.of("low", "medium", "high"),
-                ReasoningChoice.LEVEL_MEDIUM, this::onEffortPicked));
-        effortPick.setBounds(x + 86, ry, 78, NumenStyle.CONTROL_H);
+        thinkingPick = ui.add(new Dropdown(List.of(), 0, this::onThinkingPicked));
+        thinkingPick.setBounds(x, ry, 110, NumenStyle.CONTROL_H);
 
         // ✕ 幽灵钮钉在卡片右上角落(cardX1-4-14, cardY0+4):平时无底,悬停浮浅底。
         Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
@@ -237,17 +231,34 @@ public final class ProfileFormPanel {
         boolean toggleOnly = LlmProvider.THINKING_TYPE.equals(format)
                 || LlmProvider.THINKING_ENABLE_BOOL.equals(format);
         thinkingLabel.setVisible(!none);
-        thinkingSwitch.setVisible(!none);
-        effortLabel.setVisible(!none && !toggleOnly);
-        effortPick.setVisible(!none && !toggleOnly);
+        thinkingPick.setVisible(!none);
+        thinkingToggleOnly = toggleOnly;
         if (!none) {
-            thinkingSwitch.setItems(List.of(
-                    t("numen.gui.providers.thinking.auto"),
-                    t("numen.gui.providers.thinking.on"),
-                    t("numen.gui.providers.thinking.off")),
-                    ReasoningChoice.switchIndex(draft.reasoningEffort));
-            effortPick.setItems(List.of("low", "medium", "high"),
-                    ReasoningChoice.levelIndex(draft.reasoningEffort));
+            if (toggleOnly) {
+                thinkingPick.setItems(List.of(
+                        t("numen.gui.providers.thinking.auto"),
+                        t("numen.gui.providers.thinking.on"),
+                        t("numen.gui.providers.thinking.off")),
+                        switch (nz(draft.reasoningEffort)) {
+                            case "off" -> 2;
+                            case "low", "medium", "high" -> 1;
+                            default -> 0;
+                        });
+            } else {
+                thinkingPick.setItems(List.of(
+                        t("numen.gui.providers.thinking.auto"),
+                        t("numen.gui.providers.thinking.off"),
+                        t("numen.gui.providers.effort.low"),
+                        t("numen.gui.providers.effort.medium"),
+                        t("numen.gui.providers.effort.high")),
+                        switch (nz(draft.reasoningEffort)) {
+                            case "off" -> 1;
+                            case "low" -> 2;
+                            case "medium" -> 3;
+                            case "high" -> 4;
+                            default -> 0;
+                        });
+            }
         }
     }
 
@@ -283,15 +294,22 @@ public final class ProfileFormPanel {
         refreshModelRow();
     }
 
-    private void onThinkingSwitched(int switchIdx) {
-        draft.reasoningEffort = ReasoningChoice.compose(switchIdx, effortPick.selectedIndex());
+    private void onThinkingPicked(int index) {
+        draft.reasoningEffort = thinkingValue(thinkingToggleOnly, index);
     }
 
-    /** 点强度即隐含"开启"——不设前置锁,联动同步开关显示。 */
-    private void onEffortPicked(int levelIdx) {
-        draft.reasoningEffort = ReasoningChoice.compose(ReasoningChoice.SWITCH_ON, levelIdx);
-        thinkingSwitch.select(ReasoningChoice.SWITCH_ON);
+    /** 单控件选项下标 → 存储值(开关型的"开启"取 medium 档)。 */
+    static String thinkingValue(boolean toggleOnly, int index) {
+        if (toggleOnly) {
+            return switch (index) { case 1 -> "medium"; case 2 -> "off"; default -> "auto"; };
+        }
+        return switch (index) {
+            case 1 -> "off"; case 2 -> "low"; case 3 -> "medium"; case 4 -> "high";
+            default -> "auto";
+        };
     }
+
+    private static String nz(String s) { return s == null ? "" : s; }
 
     private void save() {
         if (draft.name == null || draft.name.isBlank()) {

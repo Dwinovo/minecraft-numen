@@ -6,7 +6,6 @@ import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.agent.provider.LlmProvider;
 import com.dwinovo.numen.agent.provider.ProviderRegistry;
 import com.dwinovo.numen.client.agent.LlmErrorWords;
-import com.dwinovo.numen.client.screen.ReasoningChoice;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
@@ -28,9 +27,8 @@ import java.util.List;
 
 /**
  * 提供商配置面板(NumenUI 复合组件)——**宿主无关**:给一块矩形就能活,
- * 独立设置屏与 G 面板的"连接"分区共用同一个瓤。宿主负责:边界与重建时机、
- * 事件转发、toast 落点(注入 {@link ToastSink}——嵌在 G 里时 HUD toast 会被
- * 面板挡住,必须投宿主自己的实例)。
+ * 独立设置屏(/numen)的瓤。宿主只负责边界与重建时机、事件转发;
+ * 校验错误内联在字段,操作结果走页面级 InlineAlert,均为面板自持。
  *
  * <p>布局自适应:左栏宽随总宽收缩(下限保名字可读),行距紧凑——G 面板
  * 尺寸对标原版 GUI,寸土寸金。
@@ -42,8 +40,9 @@ public final class ProviderPanel {
     private List<ProviderRegistry.Provider> sites = List.of();
     private ListView<ProviderRegistry.Provider> siteList;
     private TextField keyField, baseUrlField, modelField;
-    private Dropdown modelPick, thinkingSwitch, effortPick;
-    private Label siteTitle, thinkingLabel, effortLabel;
+    private Dropdown modelPick, thinkingPick;
+    private Label siteTitle, thinkingLabel;
+    private boolean thinkingToggleOnly;
     private Button checkButton;
     private InlineAlert resultAlert;
     private volatile boolean checking;
@@ -107,19 +106,13 @@ public final class ProviderPanel {
         baseUrlField.setBounds(rx, ry, rw, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
+        // 单一自适应思考控件(主流形态):力度型站点出 自动/关闭/低/中/高,
+        // 开关型出 自动/开启/关闭,常开型隐藏——后端两参数的复杂度不泄漏给用户。
         thinkingLabel = ui.add(new Label(t("numen.gui.providers.thinking"), Label.Role.MUTED));
-        thinkingLabel.setBounds(rx, ry, 70, 9);
-        effortLabel = ui.add(new Label(t("numen.gui.providers.effort"), Label.Role.MUTED));
-        effortLabel.setBounds(rx + 86, ry, 80, 9);
+        thinkingLabel.setBounds(rx, ry, 100, 9);
         ry += NumenStyle.LABEL_PITCH;
-        thinkingSwitch = ui.add(new Dropdown(List.of(
-                t("numen.gui.providers.thinking.auto"),
-                t("numen.gui.providers.thinking.on"),
-                t("numen.gui.providers.thinking.off")), 0, i -> onThinkingSwitched(i)));
-        thinkingSwitch.setBounds(rx, ry, 78, NumenStyle.CONTROL_H);
-        effortPick = ui.add(new Dropdown(List.of("low", "medium", "high"),
-                ReasoningChoice.LEVEL_MEDIUM, i -> onEffortPicked(i)));
-        effortPick.setBounds(rx + 86, ry, 78, NumenStyle.CONTROL_H);
+        thinkingPick = ui.add(new Dropdown(List.of(), 0, this::onThinkingPicked));
+        thinkingPick.setBounds(rx, ry, 110, NumenStyle.CONTROL_H);
 
         // 页面级 Alert:右栏左右居中、垂直偏上悬浮。
         resultAlert = ui.add(new InlineAlert());
@@ -221,17 +214,34 @@ public final class ProviderPanel {
         boolean toggleOnly = LlmProvider.THINKING_TYPE.equals(format)
                 || LlmProvider.THINKING_ENABLE_BOOL.equals(format);
         thinkingLabel.setVisible(!none);
-        thinkingSwitch.setVisible(!none);
-        effortLabel.setVisible(!none && !toggleOnly);
-        effortPick.setVisible(!none && !toggleOnly);
+        thinkingPick.setVisible(!none);
+        thinkingToggleOnly = toggleOnly;
         if (!none) {
-            thinkingSwitch.setItems(List.of(
-                    t("numen.gui.providers.thinking.auto"),
-                    t("numen.gui.providers.thinking.on"),
-                    t("numen.gui.providers.thinking.off")),
-                    ReasoningChoice.switchIndex(stored));
-            effortPick.setItems(List.of("low", "medium", "high"),
-                    ReasoningChoice.levelIndex(stored));
+            if (toggleOnly) {
+                thinkingPick.setItems(List.of(
+                        t("numen.gui.providers.thinking.auto"),
+                        t("numen.gui.providers.thinking.on"),
+                        t("numen.gui.providers.thinking.off")),
+                        switch (nz(stored)) {
+                            case "off" -> 2;
+                            case "low", "medium", "high" -> 1;
+                            default -> 0;
+                        });
+            } else {
+                thinkingPick.setItems(List.of(
+                        t("numen.gui.providers.thinking.auto"),
+                        t("numen.gui.providers.thinking.off"),
+                        t("numen.gui.providers.effort.low"),
+                        t("numen.gui.providers.effort.medium"),
+                        t("numen.gui.providers.effort.high")),
+                        switch (nz(stored)) {
+                            case "off" -> 1;
+                            case "low" -> 2;
+                            case "medium" -> 3;
+                            case "high" -> 4;
+                            default -> 0;
+                        });
+            }
         }
     }
 
@@ -251,21 +261,13 @@ public final class ProviderPanel {
         cfg.save();
     }
 
-    private void onThinkingSwitched(int switchIdx) {
-        saveReasoning(switchIdx, effortPick.selectedIndex());
-    }
-
-    /** 点强度即隐含"开启"——不设前置锁,联动同步开关显示。 */
-    private void onEffortPicked(int levelIdx) {
-        saveReasoning(ReasoningChoice.SWITCH_ON, levelIdx);
-        thinkingSwitch.select(ReasoningChoice.SWITCH_ON);
-    }
-
-    private void saveReasoning(int switchIdx, int levelIdx) {
+    private void onThinkingPicked(int index) {
         INumenConfig cfg = Services.CONFIG;
-        cfg.setReasoningEffort(ReasoningChoice.compose(switchIdx, levelIdx));
+        cfg.setReasoningEffort(ProfileFormPanel.thinkingValue(thinkingToggleOnly, index));
         cfg.save();
     }
+
+    private static String nz(String s) { return s == null ? "" : s; }
 
     private void runConnectivityCheck() {
         if (checking) return;

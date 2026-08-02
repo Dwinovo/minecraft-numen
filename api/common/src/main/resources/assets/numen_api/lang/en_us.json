@@ -248,5 +248,8 @@
   "numen.provider.form.need_name": "Name required — give this config a name",
   "numen.gui.inline.required": "Required",
   "numen.gui.inline.need_key": "API key required",
-  "numen.gui.providers.checking": "Checking…"
+  "numen.gui.providers.checking": "Checking…",
+  "numen.gui.providers.effort.low": "Low",
+  "numen.gui.providers.effort.medium": "Medium",
+  "numen.gui.providers.effort.high": "High"
 }
