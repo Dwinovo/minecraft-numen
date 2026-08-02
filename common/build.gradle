@@ -133,3 +133,36 @@ tasks.register('toolBench', Test) {
         exceptionFormat = 'full'
     }
 }
+
+// 服务端安全门:numen-core 的 common 全部是服务端代码(工具/任务/寻路/
+// 建造),客户端半边住在 numen-api。common 编译用的是合并的客户端 MC jar,
+// 手滑 import 一个 net.minecraft.client 编译器照样放行、专用服务端上
+// ClassNotFound——这道检查让它在构建期就 fail。将来真要在本仓写客户端
+// 代码,参照 numen-api 的做法建 src/client/java 源码集,而不是放进 main。
+tasks.register('checkServerSafe') {
+    group = 'verification'
+    description = 'Fail if src/main references Minecraft client-only classes.'
+    def srcDir = file('src/main/java')
+    inputs.dir(srcDir)
+    outputs.upToDateWhen { false }
+    doLast {
+        def offenders = []
+        srcDir.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+            if (!f.name.endsWith('.java')) return
+            int no = 0
+            f.eachLine('UTF-8') { line ->
+                no++
+                if (line.contains('net.minecraft.client') || line.contains('com.mojang.blaze3d')) {
+                    offenders << "${f}:${no}: ${line.trim()}"
+                }
+            }
+        }
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                    "src/main 引用了 Minecraft 客户端类(专用服务端上不存在,会 ClassNotFound)。\n"
+                    + "numen-core 的 common 应保持纯服务端;客户端功能归 numen-api:\n  "
+                    + offenders.join('\n  '))
+        }
+    }
+}
+tasks.named('check') { dependsOn 'checkServerSafe' }
