@@ -1,6 +1,6 @@
 package com.dwinovo.numen.agent.http;
 
-import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.ai.AiLog;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -98,10 +98,10 @@ public final class HttpLlmTransport {
             if (colon < 0) return null;
             String host = s.substring(0, colon);
             int port = Integer.parseInt(s.substring(colon + 1));
-            Constants.LOG.info("[numen-http] routing LLM calls through proxy {}:{}", host, port);
+            AiLog.LOG.info("[numen-http] routing LLM calls through proxy {}:{}", host, port);
             return java.net.ProxySelector.of(new java.net.InetSocketAddress(host, port));
         } catch (Exception e) {
-            Constants.LOG.warn("[numen-http] invalid proxy '{}' (expected host:port) — going direct", proxy);
+            AiLog.LOG.warn("[numen-http] invalid proxy '{}' (expected host:port) — going direct", proxy);
             return null;
         }
     }
@@ -114,7 +114,7 @@ public final class HttpLlmTransport {
         String requestId = nextRequestId();
         String bodyStr = body.toString();
         long t0 = System.nanoTime();
-        Constants.LOG.debug("[numen-http][{}] POST {} ({} bytes, buffered)",
+        AiLog.LOG.debug("[numen-http][{}] POST {} ({} bytes, buffered)",
                 requestId, url, bodyStr.length());
 
         HttpRequest request = baseRequest(url, apiKey, "application/json", bodyStr);
@@ -154,7 +154,7 @@ public final class HttpLlmTransport {
         AtomicLong chunkCount = new AtomicLong();
         AtomicLong lastActivityNanos = new AtomicLong(System.nanoTime());
         java.util.concurrent.atomic.AtomicBoolean idleKilled = new java.util.concurrent.atomic.AtomicBoolean();
-        Constants.LOG.debug("[numen-http][{}] POST {} ({} bytes, streaming)",
+        AiLog.LOG.debug("[numen-http][{}] POST {} ({} bytes, streaming)",
                 requestId, url, bodyStr.length());
 
         HttpRequest request = baseRequest(url, apiKey, "text/event-stream", bodyStr);
@@ -187,7 +187,7 @@ public final class HttpLlmTransport {
                 Throwable cause = ex instanceof java.util.concurrent.CompletionException && ex.getCause() != null
                         ? ex.getCause() : ex;
                 if (idleKilled.get()) {
-                    Constants.LOG.warn("[numen-http][{}] ✗ SSE idle >{}ms after {} chunks — killed",
+                    AiLog.LOG.warn("[numen-http][{}] ✗ SSE idle >{}ms after {} chunks — killed",
                             requestId, SSE_IDLE_TIMEOUT_MS, chunkCount.get());
                     cause = new java.io.IOException("SSE stream went silent for over "
                             + (SSE_IDLE_TIMEOUT_MS / 1000) + "s (half-dead connection)");
@@ -198,18 +198,18 @@ public final class HttpLlmTransport {
                     return retryAfterDelay(url, apiKey, body, chunkHandler, attempt,
                             computeBackoffMs(attempt), requestId, String.valueOf(cause));
                 }
-                Constants.LOG.warn("[numen-http][{}] ✗ {} in {}ms ({} chunks)",
+                AiLog.LOG.warn("[numen-http][{}] ✗ {} in {}ms ({} chunks)",
                         requestId, cause, elapsedMs, chunkCount.get());
                 return CompletableFuture.<Void>failedFuture(cause);
             }
             int status = resp.statusCode();
             if (status / 100 == 2) {
-                Constants.LOG.debug("[numen-http][{}] ✓ {} in {}ms, {} chunks",
+                AiLog.LOG.debug("[numen-http][{}] ✓ {} in {}ms, {} chunks",
                         requestId, status, elapsedMs, chunkCount.get());
                 return CompletableFuture.completedFuture((Void) null);
             }
             String body2 = resp.body() == null ? "" : resp.body();
-            Constants.LOG.warn("[numen-http][{}] ✗ {} in {}ms — body: {}",
+            AiLog.LOG.warn("[numen-http][{}] ✗ {} in {}ms — body: {}",
                     requestId, status, elapsedMs, truncate(body2, 500));
             if (attempt < MAX_RETRIES && shouldRetryStatus(status, resp.headers())) {
                 long delay = retryAfterMs(resp.headers())
@@ -225,7 +225,7 @@ public final class HttpLlmTransport {
     private CompletableFuture<Void> retryAfterDelay(String url, String apiKey, JsonObject body,
                                                     Consumer<JsonObject> chunkHandler, int attempt,
                                                     long delayMs, String requestId, String reason) {
-        Constants.LOG.warn("[numen-http][{}] retrying in {}ms (attempt {}/{}) — {}",
+        AiLog.LOG.warn("[numen-http][{}] retrying in {}ms (attempt {}/{}) — {}",
                 requestId, delayMs, attempt + 1, MAX_RETRIES, reason);
         return CompletableFuture.supplyAsync(
                         () -> postSseAttempt(url, apiKey, body, chunkHandler, attempt + 1),
@@ -285,11 +285,11 @@ public final class HttpLlmTransport {
         int status = resp.statusCode();
         String body = resp.body() == null ? "" : resp.body();
         if (status / 100 != 2) {
-            Constants.LOG.warn("[numen-http][{}] ✗ {} in {}ms — body: {}",
+            AiLog.LOG.warn("[numen-http][{}] ✗ {} in {}ms — body: {}",
                     requestId, status, elapsedMs, truncate(body, 500));
             return CompletableFuture.failedFuture(new LlmHttpException(status, body));
         }
-        Constants.LOG.debug("[numen-http][{}] ✓ {} in {}ms ({} bytes)",
+        AiLog.LOG.debug("[numen-http][{}] ✓ {} in {}ms ({} bytes)",
                 requestId, status, elapsedMs, body.length());
         try {
             JsonObject obj = JsonParser.parseString(body).getAsJsonObject();
@@ -369,7 +369,7 @@ public final class HttpLlmTransport {
 
         @Override
         public void onError(Throwable t) {
-            Constants.LOG.warn("[numen-http][{}] SSE stream error: {}",
+            AiLog.LOG.warn("[numen-http][{}] SSE stream error: {}",
                     requestId, t.getClass().getSimpleName() + ": " + t.getMessage());
             // Future will fail via the wrapping CompletableFuture.
         }
@@ -389,7 +389,7 @@ public final class HttpLlmTransport {
                 chunkCount.incrementAndGet();
                 handler.accept(obj);
             } catch (RuntimeException ex) {
-                Constants.LOG.warn("[numen-http][{}] ignoring malformed SSE chunk: {} (data: {})",
+                AiLog.LOG.warn("[numen-http][{}] ignoring malformed SSE chunk: {} (data: {})",
                         requestId, ex.getMessage(), truncate(data, 200));
             }
         }

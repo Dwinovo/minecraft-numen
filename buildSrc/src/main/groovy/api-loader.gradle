@@ -55,4 +55,11 @@ tasks.named('sourcesJar', Jar) {
     from(configurations.commonClientJava)
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
+    from({ project(':ai').sourceSets.main.allSource })
+}
+
+// numen-ai 的类平铺进加载器发行 jar——http/prompt 从 common 源码集迁去 ai
+// 模块后,加载器不再从源码把它们编进来,这里补回,发行 jar 内容与拆分前一致。
+tasks.named('jar', Jar) {
+    from({ project(':ai').sourceSets.main.output })
 }
