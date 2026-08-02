@@ -15,21 +15,12 @@ public class CommonClass {
         Constants.LOG.info("[numen] common init on {} ({})",
                 Services.PLATFORM.getPlatformName(), Services.PLATFORM.getEnvironmentName());
 
-        // LLM 站点注册表是纯 JVM 层,不识平台配置目录——落点在引导期注入。
-        // 用户文件曾叫 models.json(0.1.1 及以前),改名 providers.json 时无感迁移,
-        // 老玩家的自定义站点/改过的 ctx 一并带走。
+        // 老版本落盘格式的搬运先行——必须在任何消费方读盘之前。
         java.nio.file.Path numenDir = Services.PLATFORM.getConfigDir().resolve("numen");
-        java.nio.file.Path providersFile = numenDir.resolve("providers.json");
-        java.nio.file.Path legacyFile = numenDir.resolve("models.json");
-        try {
-            if (!java.nio.file.Files.exists(providersFile) && java.nio.file.Files.exists(legacyFile)) {
-                java.nio.file.Files.move(legacyFile, providersFile);
-                Constants.LOG.info("[numen] migrated config/numen/models.json -> providers.json");
-            }
-        } catch (Exception e) {
-            Constants.LOG.warn("[numen] couldn't migrate legacy models.json, starting fresh", e);
-        }
-        com.dwinovo.numen.agent.provider.ProviderRegistry.init(providersFile);
+        com.dwinovo.numen.config.ConfigMigrations.run(numenDir);
+
+        // LLM 站点注册表是纯 JVM 层,不识平台配置目录——落点在引导期注入。
+        com.dwinovo.numen.agent.provider.ProviderRegistry.init(numenDir.resolve("providers.json"));
 
         registerTools();
         wireTaskMachine();
