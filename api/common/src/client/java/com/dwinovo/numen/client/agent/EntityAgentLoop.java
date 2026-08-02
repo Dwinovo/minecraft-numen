@@ -1215,6 +1215,15 @@ public final class EntityAgentLoop {
             return;
         }
         AssistantTurn turn = res.turn();
+        // 全空 turn(HTTP 200 但既无内容也无工具调用——逐 chunk 解析全败或后端
+        // 抽风):与 null turn 同罪同罚,必须报错,不能思考泡一收就装无事发生。
+        if (!turn.hasToolCalls() && turn.content().isEmpty()) {
+            Constants.LOG.warn("[numen-entity#{}] LLM returned an empty turn (no content, no tool calls)",
+                    entityUuid);
+            lastTurnError = "服务端返回了空回应";
+            failTurnKeepQueue();
+            return;
+        }
         // True context size of the request we just made — the auto-compaction
         // signal. 0 when the backend sent no usage frame (then auto never fires).
         if (res.promptTokens() > 0) {
