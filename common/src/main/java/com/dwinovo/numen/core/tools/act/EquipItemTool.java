@@ -1,4 +1,5 @@
-package com.dwinovo.numen.core.tools;
+package com.dwinovo.numen.core.tools.act;
+import com.dwinovo.numen.core.tools.InventoryTools;
 
 import static com.dwinovo.numen.task.TaskDispatch.*;
 

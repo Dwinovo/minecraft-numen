@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.tools;
+package com.dwinovo.numen.core.tools.act;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.Schema;

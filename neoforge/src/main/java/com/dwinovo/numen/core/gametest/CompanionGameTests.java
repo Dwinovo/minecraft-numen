@@ -2620,7 +2620,7 @@ public class CompanionGameTests {
         args.addProperty("count", 100);
         java.util.concurrent.atomic.AtomicReference<String> reply =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        new com.dwinovo.numen.core.tools.TakeItemsTool()
+        new com.dwinovo.numen.core.tools.act.TakeItemsTool()
                 .onServerCall("gametest-take", args, companion, reply::set);
         helper.succeedWhen(() -> {
             helper.assertTrue(reply.get() != null && reply.get().contains("\"success\":true"),
@@ -2641,7 +2641,7 @@ public class CompanionGameTests {
         args.addProperty("count", 10);
         java.util.concurrent.atomic.AtomicReference<String> reply =
                 new java.util.concurrent.atomic.AtomicReference<>();
-        new com.dwinovo.numen.core.tools.TakeItemsTool()
+        new com.dwinovo.numen.core.tools.act.TakeItemsTool()
                 .onServerCall("gametest-take2", args, companion, reply::set);
         helper.succeedWhen(() -> {
             helper.assertTrue(reply.get() != null && reply.get().contains("\"success\":false"),
