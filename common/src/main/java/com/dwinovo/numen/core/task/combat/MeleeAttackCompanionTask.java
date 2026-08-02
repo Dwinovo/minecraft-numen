@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.task.combat;
 
-import com.dwinovo.numen.core.motor.ToolSelect;
+import com.dwinovo.numen.core.act.ToolSelect;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.base.AbstractCombatTask;

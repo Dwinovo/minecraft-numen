@@ -1,11 +1,11 @@
-package com.dwinovo.numen.core.motor;
+package com.dwinovo.numen.core.act;
 import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
-import com.dwinovo.numen.core.motor.ToolSelect;
+import com.dwinovo.numen.core.act.ToolSelect;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;

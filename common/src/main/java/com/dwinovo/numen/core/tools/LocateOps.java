@@ -2,8 +2,8 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.api.ToolContext;
 import com.dwinovo.numen.task.TaskRecord;
-import com.dwinovo.numen.core.task.act.LocateBiomeTaskRecord;
-import com.dwinovo.numen.core.task.act.LocateStructureTaskRecord;
+import com.dwinovo.numen.core.task.locate.LocateBiomeTaskRecord;
+import com.dwinovo.numen.core.task.locate.LocateStructureTaskRecord;
 
 /**
  * Locate tool implementations — the business half of {@code LocateStructureTool}

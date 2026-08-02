@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task.act;
+package com.dwinovo.numen.core.task.inventory;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.core.PlayerInv;
 import com.dwinovo.numen.core.FailureType;
@@ -6,7 +6,7 @@ import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.motor.Interaction;
+import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.component.DataComponents;

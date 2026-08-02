@@ -218,7 +218,7 @@ public abstract class Movement {
             // 破墙速度不拖
             BlockState hitState = crosshairBlockState();
             if (hitState != null && player instanceof com.dwinovo.numen.entity.NumenPlayer np) {
-                com.dwinovo.numen.core.motor.ToolSelect.holdBestTool(np, hitState);
+                com.dwinovo.numen.core.act.ToolSelect.holdBestTool(np, hitState);
             }
             currentState.setInput(Input.CLICK_LEFT, true);
         }

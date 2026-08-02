@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.ToolArgs;
 import com.dwinovo.numen.core.PlayerInv;
-import com.dwinovo.numen.core.motor.Interaction;
+import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;

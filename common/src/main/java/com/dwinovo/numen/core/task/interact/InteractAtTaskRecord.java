@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task.act;
+package com.dwinovo.numen.core.task.interact;
 import com.dwinovo.numen.core.task.MouseButton;
 
 import com.dwinovo.numen.task.TaskRecord;

@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.task.act;
+package com.dwinovo.numen.core.task.locate;
 import com.dwinovo.numen.core.task.IdSuggest;
 import com.dwinovo.numen.core.task.CompassUtil;
 import com.dwinovo.numen.core.scan.SearchBudget;

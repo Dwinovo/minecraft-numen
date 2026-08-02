@@ -1,4 +1,4 @@
-package com.dwinovo.numen.core.motor;
+package com.dwinovo.numen.core.act;
 
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;

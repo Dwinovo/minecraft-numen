@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.task.combat;
 
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.FailureType;
-import com.dwinovo.numen.core.motor.Ballistics;
+import com.dwinovo.numen.core.act.Ballistics;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.base.AbstractCombatTask;
 import com.dwinovo.numen.core.task.base.Precondition;
