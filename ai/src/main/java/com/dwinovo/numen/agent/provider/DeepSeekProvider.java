@@ -1,48 +1,33 @@
 package com.dwinovo.numen.agent.provider;
 
 /**
- * DeepSeek-flavour OpenAI provider. Strictly aligned with LiteLLM's
- * <a href="https://github.com/BerriAI/litellm/blob/main/litellm/llms/deepseek/chat/transformation.py">{@code DeepSeekChatConfig}</a>
- * reference implementation.
+ * DeepSeek 后端。
  *
- * <h2>What LiteLLM does for DeepSeek (and so do we)</h2>
+ * <h2>行为要点</h2>
  * <ol>
- *   <li><b>Endpoint:</b> defaults to {@code /beta/chat/completions} —
- *       LiteLLM's {@code _get_openai_compatible_provider_info} returns
- *       {@code https://api.deepseek.com/beta} as the base URL. The
- *       {@code /beta} prefix unlocks DeepSeek's prefix-completion family
- *       of features alongside standard chat completions.</li>
- *   <li><b>Inherits all message handling:</b> LiteLLM's class extends
- *       {@code OpenAIGPTConfig} and overrides nothing about response
- *       parsing or message reconstruction. Non-standard response fields
- *       (notably {@code reasoning_content} from V4 thinking mode) are
- *       preserved by the framework-level Pydantic mechanism, not by
- *       DeepSeek-specific code. Our equivalent is the
+ *   <li><b>基址:</b>默认 {@code https://api.deepseek.com/beta}——{@code /beta}
+ *       前缀在标准 chat completions 之外解锁前缀补全家族的特性。</li>
+ *   <li><b>消息处理全继承:</b>响应解析与消息重建不做任何覆写。非标响应
+ *       字段(如 V4 思考模式的 {@code reasoning_content})由
  *       {@link OpenAIProvider#extractExtras} / {@link OpenAIProvider#captureChunkExtras}
- *       default behaviour, which captures every unknown top-level field.</li>
+ *       的未知字段全量捕获保留,不需要 DeepSeek 专有代码。</li>
  * </ol>
  *
- * <h2>What LiteLLM does NOT do for DeepSeek (and neither do we now)</h2>
+ * <h2>有意不做</h2>
  * <ul>
- *   <li>No {@code fill_reasoning_content} safety net like the Moonshot
- *       provider has. LiteLLM bets the framework-level preservation is
- *       enough; we follow that bet.</li>
- *   <li>No content-list to string conversion is needed in our code path
- *       (we always emit content as a plain string from the agent layer).</li>
+ *   <li>不设 {@code reasoning_content} 缺失兜底(Moonshot 那样的注入):
+ *       字段级全量保留已足够,该字段缺失时后端也接受。</li>
+ *   <li>不做内容列表转字符串:agent 层始终以纯字符串发内容。</li>
  * </ul>
  *
- * <h2>Optional thinking-mode parameter</h2>
- * LiteLLM also maps user-supplied {@code thinking} / {@code reasoning_effort}
- * options to DeepSeek's {@code thinking: {type: "enabled"}} request body
- * field. We don't expose a config knob for this yet — V4 models default
- * to thinking mode anyway, so the field is redundant for the common case.
- * Add a config field + {@code buildRequestBody} override when a user needs
- * to force a specific mode.
+ * <h2>可选的思考模式参数</h2>
+ * DeepSeek 支持请求体 {@code thinking: {type: "enabled"}} 强制思考模式。
+ * V4 模型默认即思考模式,常见场景该字段冗余,暂不设配置旋钮;有用户要
+ * 强制指定时,加配置字段 + {@code buildRequestBody} 覆写即可。
  */
 public final class DeepSeekProvider extends OpenAIProvider {
 
     public static final String NAME = "deepseek";
-    /** LiteLLM default ({@code _get_openai_compatible_provider_info}). */
     public static final String DEFAULT_BASE_URL = "https://api.deepseek.com/beta";
 
     @Override public String name() { return NAME; }

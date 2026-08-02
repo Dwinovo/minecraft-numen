@@ -74,7 +74,7 @@ public final class NumenLlmClient {
      * Compose the chat completions URL. Base URL precedence: an explicit per-config override wins;
      * else the site's registered base URL (from {@code numen_models.json} — so "+ add site" URLs and
      * adapter-less sites like Gemini/Grok actually take effect); else the adapter's hard-coded default.
-     * Then, LiteLLM-style: trim a trailing slash and append {@code /chat/completions} if absent.
+     * Then normalise: trim a trailing slash and append {@code /chat/completions} if absent.
      */
     private static String composeUrl(String userBase, String siteBase, LlmProvider provider) {
         String base = nonBlank(userBase) ? userBase

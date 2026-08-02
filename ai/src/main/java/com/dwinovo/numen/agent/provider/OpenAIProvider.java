@@ -184,10 +184,8 @@ public class OpenAIProvider implements LlmProvider {
      * Capture every non-standard top-level field on the assistant message
      * into the extras bag, so it round-trips back on the next request.
      *
-     * <p>This is the framework-level behaviour LiteLLM achieves via Pydantic's
-     * {@code provider_specific_fields} on its OpenAI parent class — every
-     * unknown field on a response gets preserved automatically. With this
-     * baseline behaviour, OpenAI-compatible backend variants
+     * <p>Every unknown field on a response gets preserved automatically. With
+     * this baseline behaviour, OpenAI-compatible backend variants
      * ({@link DeepSeekProvider} for {@code reasoning_content}, future
      * providers for whatever they invent) don't need to override anything
      * to keep their extensions intact across turns.

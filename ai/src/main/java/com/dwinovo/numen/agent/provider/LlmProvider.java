@@ -39,11 +39,10 @@ public interface LlmProvider {
 
     /**
      * Default API base URL for this provider, used when the user leaves
-     * {@code config.baseUrl} empty. Matches LiteLLM's
-     * {@code _get_openai_compatible_provider_info} return value: includes the
-     * version / mode prefix ({@code /v1}, {@code /beta},
-     * {@code /compatible-mode/v1}, {@code /api/v3}, ...) but **excludes**
-     * the trailing {@code /chat/completions} path — that's appended by
+     * {@code config.baseUrl} empty. Includes the version / mode prefix
+     * ({@code /v1}, {@code /beta}, {@code /compatible-mode/v1},
+     * {@code /api/v3}, ...) but **excludes** the trailing
+     * {@code /chat/completions} path — that's appended by
      * {@code NumenLlmClient} during URL composition.
      *
      * <p>Examples per provider:

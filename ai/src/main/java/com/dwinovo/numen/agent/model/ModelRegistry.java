@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The LLM "sites" registry (TouhouLittleMaid-style): per site an OpenAI-compatible base URL, optional
+ * The LLM "sites" registry: per site an OpenAI-compatible base URL, optional
  * custom headers, and a list of known models with their context window (tokens). Single source of truth
  * for the settings dropdowns and the per-model auto-compaction threshold.
  *
