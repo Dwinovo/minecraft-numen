@@ -72,6 +72,20 @@ class NotificationWidgetsTest {
         assertTrue(s.texts.isEmpty());
     }
 
+    @Test
+    void successWithAutoDismissFadesOutAndClears() {
+        InlineAlert alert = new InlineAlert();
+        alert.setBounds(0, 0, 120, 24);
+        WidgetTestSupport.FakeSurface s = new WidgetTestSupport.FakeSurface();
+        alert.show(InlineAlert.Severity.SUCCESS, "连接成功", 2_500);
+        alert.render(s, WidgetTestSupport.C, 0, 0, 0);          // 首帧定排版
+        s.reset();
+        alert.render(s, WidgetTestSupport.C, 0, 0, 1_000);       // 显示期
+        assertTrue(s.texts.contains("连接成功"));
+        alert.render(s, WidgetTestSupport.C, 0, 0, 2_500 + 300); // 淡出结束
+        assertFalse(alert.isShowing(), "到时自动清场");
+    }
+
     // ---- ConfirmDialog 模态契约 ----
 
     private static class Fixture {
