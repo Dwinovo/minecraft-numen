@@ -36,7 +36,6 @@ public final class ModLanguageData {
         public static final String GUI_SETTINGS_API_KEY     = "numen.gui.settings.api_key";
         public static final String GUI_SETTINGS_MODEL       = "numen.gui.settings.model";
         public static final String GUI_SETTINGS_BASE_URL    = "numen.gui.settings.base_url";
-        public static final String GUI_SETTINGS_BASE_URL_HINT = "numen.gui.settings.base_url_hint";
         public static final String GUI_SETTINGS_SAVE        = "numen.gui.settings.save";
         public static final String GUI_SETTINGS_CANCEL      = "numen.gui.settings.cancel";
         public static final String GUI_SETTINGS_SAVED       = "numen.gui.settings.saved";
@@ -102,7 +101,6 @@ public final class ModLanguageData {
         public static final String SKIN_SIGNED          = "numen.skin.signed";
         public static final String SKIN_UNSIGNED        = "numen.skin.unsigned";
         public static final String SKIN_DELETE_CONFIRM  = "numen.skin.delete_confirm";
-        public static final String SUMMON_PROVIDER_EMPTY   = "numen.summon.provider_empty";
         public static final String SUMMON_CREATE           = "numen.summon.create";
         public static final String SUMMON_WARN_NAME        = "numen.summon.warn_name";
         public static final String SUMMON_WARN_PROVIDER    = "numen.summon.warn_provider";
@@ -172,7 +170,6 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_SETTINGS_API_KEY,       "API Key");
         adder.add(Keys.GUI_SETTINGS_MODEL,         "Model");
         adder.add(Keys.GUI_SETTINGS_BASE_URL,      "Base URL (optional)");
-        adder.add(Keys.GUI_SETTINGS_BASE_URL_HINT, "Leave empty to use provider default");
         adder.add(Keys.GUI_SETTINGS_SAVE,          "Save");
         adder.add(Keys.GUI_SETTINGS_CANCEL,        "Cancel");
         adder.add(Keys.GUI_SETTINGS_SAVED,         "Saved");
@@ -234,7 +231,7 @@ public final class ModLanguageData {
         adder.add("numen.persona.preset_badge", "Preset");
         adder.add("numen.persona.form_name", "Name");
         adder.add("numen.persona.form_text", "Persona");
-        adder.add("numen.persona.text_placeholder", "Describe this companion's personality, tone, backstory… (multi-line)");
+        adder.add("numen.persona.text_placeholder", "Personality, tone, background…");
         adder.add("numen.persona.delete_confirm", "Delete persona \"%s\"?");
         adder.add("numen.persona.default", "Default");
         adder.add("numen.summon.persona", "Persona: %s (click to change)");
@@ -299,14 +296,14 @@ public final class ModLanguageData {
         adder.add("numen.mcp.title", "Tool Extensions (MCP)");
         adder.add("numen.mcp.empty", "None · click ＋ Add (top-right)");
         adder.add("numen.mcp.add", "＋ Add");
-        adder.add("numen.mcp.type_http", "Type: HTTP (click to switch)");
-        adder.add("numen.mcp.type_stdio", "Type: stdio (click to switch)");
+        adder.add("numen.mcp.type_http", "HTTP");
+        adder.add("numen.mcp.type_stdio", "stdio");
         adder.add("numen.mcp.form_name", "Name");
         adder.add("numen.mcp.form_type", "Type");
         adder.add("numen.mcp.form_url", "URL");
-        adder.add("numen.mcp.form_command", "Command (space-separated)");
-        adder.add("numen.mcp.form_header", "Header (optional, e.g. Authorization: Bearer …; multiple with ;)");
-        adder.add("numen.mcp.form_env", "Env (optional, e.g. KEY=value; multiple with ;)");
+        adder.add("numen.mcp.form_command", "Command");
+        adder.add("numen.mcp.form_header", "Header (optional)");
+        adder.add("numen.mcp.form_env", "Env vars (optional)");
         adder.add("numen.mcp.delete_confirm", "Delete %s?");
         adder.add("numen.mcp.connected", "%1$s · %2$s tools");
         adder.add("numen.mcp.connecting", "%s · connecting…");
@@ -317,7 +314,6 @@ public final class ModLanguageData {
         adder.add("numen.skill.open_dir", "＋ Folder");
         adder.add("numen.skill.no_desc", "(no description)");
         adder.add("numen.summon.title", "Summon a companion");
-        adder.add("numen.summon.hint", "type a name · Enter to confirm · Esc to cancel");
         adder.add("numen.summon.name_hint", "New companion name…");
         adder.add("numen.dismiss.delete", "Delete");
         adder.add("numen.dismiss.title", "Delete companion \"%s\"?");
@@ -335,18 +331,18 @@ public final class ModLanguageData {
         adder.add(Keys.PROVIDER_NO_KEY,         "no key");
         adder.add(Keys.PROVIDER_FORM_NAME,      "Name (required)");
         adder.add(Keys.PROVIDER_FORM_PROVIDER,  "Provider");
-        adder.add(Keys.PROVIDER_FORM_BASE_URL,  "Base URL (adapts to provider, editable)");
+        adder.add(Keys.PROVIDER_FORM_BASE_URL,  "Base URL (optional)");
 
         // Proxy section
         adder.add(Keys.SETTINGS_PROXY_IP,   "IP (empty = direct)");
         adder.add(Keys.SETTINGS_PROXY_PORT, "Port");
 
         // Summon page
-        adder.add(Keys.SUMMON_NAME,             "Name (letters/digits/_; a premium player's name borrows their skin)");
-        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "e.g. Kyu — name a premium player to wear their skin");
+        adder.add(Keys.SUMMON_NAME,             "Name");
+        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "3-16 letters, digits or _");
         adder.add(Keys.SUMMON_PERSONA_LABEL,    "Persona");
         adder.add(Keys.SUMMON_PERSONA_NONE,     "None");
-        adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "Name must be 3–16 letters/digits/underscores (Minecraft naming rules)");
+        adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "Needs 3-16 letters, digits or _");
         adder.add(Keys.SUMMON_SKIN,             "Skin");
         adder.add(Keys.SUMMON_SKIN_DEFAULT,     "Default (by name)");
         adder.add(Keys.SKIN_TITLE,           "Skins");
@@ -358,8 +354,8 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_VARIANT_SLIM,    "Slim (thin arms)");
         adder.add(Keys.SKIN_DROP_HINT,       "Drag a skin png (64x64) into the game window");
         adder.add(Keys.SKIN_LOADED,          "Loaded %s ✓ — Save signs it via MineSkin");
-        adder.add(Keys.SKIN_PICK_FILE,       "Choose skin file (64x64 png)…");
-        adder.add(Keys.SKIN_KEEP_OLD,        "Keeping the current image (drag a new png to replace)");
+        adder.add(Keys.SKIN_PICK_FILE,       "Choose file…");
+        adder.add(Keys.SKIN_KEEP_OLD,        "Keeping the current image");
         adder.add(Keys.SKIN_SIGNING,         "Signing via MineSkin… (a few seconds)");
         adder.add(Keys.SKIN_SIGN_FAIL,       "Signing failed: %s");
         adder.add(Keys.SKIN_SIGN_OK,         "\"%s\" signed");
@@ -373,9 +369,8 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGNED,          "signed");
         adder.add(Keys.SKIN_UNSIGNED,        "not signed — edit & Save to retry");
         adder.add(Keys.SKIN_DELETE_CONFIRM,  "Delete skin \"%s\"?");
-        adder.add(Keys.SUMMON_PROVIDER_EMPTY,   " (empty — create one in Settings → Model Configs)");
         adder.add(Keys.SUMMON_CREATE,           "Create");
-        adder.add(Keys.SUMMON_WARN_NAME,        "Give your companion a name first");
+        adder.add(Keys.SUMMON_WARN_NAME,        "Name is required");
         adder.add(Keys.SUMMON_WARN_PROVIDER,    "No model configs — create one in Settings → Model Configs first");
 
         // Endpoint problems (chat warn line)
@@ -393,21 +388,21 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_BACKEND_SOVITS,  "GPT-SoVITS");
         adder.add(Keys.VOICE_BACKEND_MINIMAX, "MiniMax");
         adder.add(Keys.VOICE_BACKEND_FISH,    "Fish Audio");
-        adder.add(Keys.VOICE_FORM_URL,       "Service URL (prefilled per provider, editable)");
-        adder.add(Keys.VOICE_FORM_KEY_OPENAI,  "API Key (create in your provider's console)");
-        adder.add(Keys.VOICE_FORM_KEY_MINIMAX, "API Key (MiniMax console > Account > API keys)");
-        adder.add(Keys.VOICE_FORM_KEY_FISH,    "API Key (fish.audio > API credentials)");
-        adder.add(Keys.VOICE_FORM_MINIMAX_MODEL, "Model (blank = speech-02-turbo)");
-        adder.add(Keys.VOICE_FORM_MINIMAX_VOICE, "voice_id (copy from the Voices library)");
-        adder.add(Keys.VOICE_FORM_GROUP,     "GroupId (fill if API errors ask for it)");
-        adder.add(Keys.VOICE_FORM_REFERENCE, "Voice reference_id (paste the voice page URL or ID; blank = account default)");
-        adder.add(Keys.VOICE_FORM_FISH_MODEL, "Synthesis model (blank = default; s2.1-pro-free = free tier)");
+        adder.add(Keys.VOICE_FORM_URL,       "Service URL");
+        adder.add(Keys.VOICE_FORM_KEY_OPENAI,  "API Key");
+        adder.add(Keys.VOICE_FORM_KEY_MINIMAX, "API Key");
+        adder.add(Keys.VOICE_FORM_KEY_FISH,    "API Key");
+        adder.add(Keys.VOICE_FORM_MINIMAX_MODEL, "Model");
+        adder.add(Keys.VOICE_FORM_MINIMAX_VOICE, "voice_id");
+        adder.add(Keys.VOICE_FORM_GROUP,     "GroupId (optional)");
+        adder.add(Keys.VOICE_FORM_REFERENCE, "Voice ID");
+        adder.add(Keys.VOICE_FORM_FISH_MODEL, "Model");
         adder.add(Keys.VOICE_FORM_MODEL,     "TTS model id");
-        adder.add(Keys.VOICE_FORM_VOICE,     "Voice (format model:voice)");
-        adder.add(Keys.VOICE_FORM_REF,       "Reference audio path (on the GPT-SoVITS machine)");
-        adder.add(Keys.VOICE_FORM_PROMPT,    "Transcript of the reference audio");
-        adder.add(Keys.VOICE_FORM_LANG,      "Language (blank = zh)");
-        adder.add(Keys.VOICE_FORM_VOLUME,    "Volume 1–10 (default 5)");
+        adder.add(Keys.VOICE_FORM_VOICE,     "Voice");
+        adder.add(Keys.VOICE_FORM_REF,       "Reference audio path");
+        adder.add(Keys.VOICE_FORM_PROMPT,    "Reference transcript");
+        adder.add(Keys.VOICE_FORM_LANG,      "Language");
+        adder.add(Keys.VOICE_FORM_VOLUME,    "Volume");
         adder.add(Keys.VOICE_TEST,           "Preview");
         adder.add(Keys.VOICE_TEST_RUNNING,   "Synthesizing…");
         adder.add(Keys.VOICE_TEST_OK,        "✔ Playing");
@@ -425,7 +420,6 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_SETTINGS_API_KEY,       "API Key");
         adder.add(Keys.GUI_SETTINGS_MODEL,         "模型");
         adder.add(Keys.GUI_SETTINGS_BASE_URL,      "Base URL（可选）");
-        adder.add(Keys.GUI_SETTINGS_BASE_URL_HINT, "留空使用服务商默认地址");
         adder.add(Keys.GUI_SETTINGS_SAVE,          "保存");
         adder.add(Keys.GUI_SETTINGS_CANCEL,        "取消");
         adder.add(Keys.GUI_SETTINGS_SAVED,         "已保存");
@@ -483,7 +477,7 @@ public final class ModLanguageData {
         adder.add("numen.persona.preset_badge", "内置");
         adder.add("numen.persona.form_name", "名称");
         adder.add("numen.persona.form_text", "人设描述");
-        adder.add("numen.persona.text_placeholder", "描述这个同伴的性格、说话风格、背景…（可多行）");
+        adder.add("numen.persona.text_placeholder", "性格、说话风格、背景…");
         adder.add("numen.persona.delete_confirm", "删除人设「%s」？");
         adder.add("numen.persona.default", "默认");
         adder.add("numen.summon.persona", "人设：%s（点击切换）");
@@ -548,14 +542,14 @@ public final class ModLanguageData {
         adder.add("numen.mcp.title", "工具扩展 (MCP)");
         adder.add("numen.mcp.empty", "无 · 点右上「＋ 添加」");
         adder.add("numen.mcp.add", "＋ 添加");
-        adder.add("numen.mcp.type_http", "类型：HTTP（点击切换）");
-        adder.add("numen.mcp.type_stdio", "类型：stdio（点击切换）");
+        adder.add("numen.mcp.type_http", "HTTP");
+        adder.add("numen.mcp.type_stdio", "stdio");
         adder.add("numen.mcp.form_name", "名称");
         adder.add("numen.mcp.form_type", "类型");
         adder.add("numen.mcp.form_url", "URL");
-        adder.add("numen.mcp.form_command", "命令（空格分隔）");
-        adder.add("numen.mcp.form_header", "请求头（可选，如 Authorization: Bearer …；多个用 ; 分隔）");
-        adder.add("numen.mcp.form_env", "环境变量（可选，如 KEY=value；多个用 ; 分隔）");
+        adder.add("numen.mcp.form_command", "命令");
+        adder.add("numen.mcp.form_header", "请求头(可选)");
+        adder.add("numen.mcp.form_env", "环境变量(可选)");
         adder.add("numen.mcp.delete_confirm", "删除 %s？");
         adder.add("numen.mcp.connected", "%1$s · %2$s 工具");
         adder.add("numen.mcp.connecting", "%s · 连接中…");
@@ -566,7 +560,6 @@ public final class ModLanguageData {
         adder.add("numen.skill.open_dir", "＋ 目录");
         adder.add("numen.skill.no_desc", "(无描述)");
         adder.add("numen.summon.title", "召唤一个同伴");
-        adder.add("numen.summon.hint", "输入名字 · 回车确认 · Esc 取消");
         adder.add("numen.summon.name_hint", "新同伴名字…");
         adder.add("numen.dismiss.delete", "删除");
         adder.add("numen.dismiss.title", "删除同伴 \"%s\"？");
@@ -584,18 +577,18 @@ public final class ModLanguageData {
         adder.add(Keys.PROVIDER_NO_KEY,         "未填Key");
         adder.add(Keys.PROVIDER_FORM_NAME,      "名称(必填)");
         adder.add(Keys.PROVIDER_FORM_PROVIDER,  "提供商");
-        adder.add(Keys.PROVIDER_FORM_BASE_URL,  "Base URL(随提供商自适应,可改)");
+        adder.add(Keys.PROVIDER_FORM_BASE_URL,  "Base URL(可选)");
 
         // Proxy section
         adder.add(Keys.SETTINGS_PROXY_IP,   "IP(留空 = 直连)");
         adder.add(Keys.SETTINGS_PROXY_PORT, "端口");
 
         // Summon page
-        adder.add(Keys.SUMMON_NAME,             "名字(英文,填正版玩家名可穿它的皮肤)");
-        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "如 Kyu;填正版玩家名自动穿同名皮肤");
+        adder.add(Keys.SUMMON_NAME,             "名字");
+        adder.add(Keys.SUMMON_NAME_PLACEHOLDER, "3~16 位英文/数字/下划线");
         adder.add(Keys.SUMMON_PERSONA_LABEL,    "人设");
         adder.add(Keys.SUMMON_PERSONA_NONE,     "无");
-        adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "名字需为 3~16 位英文字母/数字/下划线(Minecraft 官方命名规则)");
+        adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "需 3~16 位英文/数字/下划线");
         adder.add(Keys.SUMMON_SKIN,             "皮肤");
         adder.add(Keys.SUMMON_SKIN_DEFAULT,     "默认(按名字)");
         adder.add(Keys.SKIN_TITLE,           "皮肤库");
@@ -607,8 +600,8 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_VARIANT_SLIM,    "纤细(瘦手臂)");
         adder.add(Keys.SKIN_DROP_HINT,       "把皮肤 png(64x64)直接拖进游戏窗口");
         adder.add(Keys.SKIN_LOADED,          "已加载 %s ✓——点保存经 MineSkin 签名");
-        adder.add(Keys.SKIN_PICK_FILE,       "选择皮肤文件(64x64 png)…");
-        adder.add(Keys.SKIN_KEEP_OLD,        "沿用当前图片(拖入新 png 可替换)");
+        adder.add(Keys.SKIN_PICK_FILE,       "选择文件…");
+        adder.add(Keys.SKIN_KEEP_OLD,        "沿用当前图片");
         adder.add(Keys.SKIN_SIGNING,         "MineSkin 签名中…(需要几秒)");
         adder.add(Keys.SKIN_SIGN_FAIL,       "签名失败: %s");
         adder.add(Keys.SKIN_SIGN_OK,         "「%s」签名成功");
@@ -622,9 +615,8 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGNED,          "已签名");
         adder.add(Keys.SKIN_UNSIGNED,        "未签名——编辑后保存可重试");
         adder.add(Keys.SKIN_DELETE_CONFIRM,  "删除皮肤「%s」?");
-        adder.add(Keys.SUMMON_PROVIDER_EMPTY,   "(空——到 设置 → 模型配置 新建)");
         adder.add(Keys.SUMMON_CREATE,           "创建");
-        adder.add(Keys.SUMMON_WARN_NAME,        "先给同伴起个名字");
+        adder.add(Keys.SUMMON_WARN_NAME,        "请填名字");
         adder.add(Keys.SUMMON_WARN_PROVIDER,    "模型配置为空,请先到 设置 → 模型配置 新建一条");
 
         // Endpoint problems (chat warn line)
@@ -642,21 +634,21 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_BACKEND_SOVITS,  "GPT-SoVITS");
         adder.add(Keys.VOICE_BACKEND_MINIMAX, "MiniMax");
         adder.add(Keys.VOICE_BACKEND_FISH,    "Fish Audio");
-        adder.add(Keys.VOICE_FORM_URL,       "服务地址(随提供商预填,可改)");
-        adder.add(Keys.VOICE_FORM_KEY_OPENAI,  "API Key(服务商控制台创建)");
-        adder.add(Keys.VOICE_FORM_KEY_MINIMAX, "API Key(MiniMax 平台>账户管理>接口密钥)");
-        adder.add(Keys.VOICE_FORM_KEY_FISH,    "API Key(fish.audio>API 凭证页创建)");
-        adder.add(Keys.VOICE_FORM_MINIMAX_MODEL, "模型(留空即 speech-02-turbo)");
-        adder.add(Keys.VOICE_FORM_MINIMAX_VOICE, "voice_id(平台音色库复制)");
-        adder.add(Keys.VOICE_FORM_GROUP,     "GroupId(接口报错要求时必填)");
-        adder.add(Keys.VOICE_FORM_REFERENCE, "声线 reference_id(可直接粘贴声线页网址;留空用账号默认)");
-        adder.add(Keys.VOICE_FORM_FISH_MODEL, "合成模型(留空用默认;s2.1-pro-free 为免费档)");
+        adder.add(Keys.VOICE_FORM_URL,       "服务地址");
+        adder.add(Keys.VOICE_FORM_KEY_OPENAI,  "API Key");
+        adder.add(Keys.VOICE_FORM_KEY_MINIMAX, "API Key");
+        adder.add(Keys.VOICE_FORM_KEY_FISH,    "API Key");
+        adder.add(Keys.VOICE_FORM_MINIMAX_MODEL, "模型");
+        adder.add(Keys.VOICE_FORM_MINIMAX_VOICE, "voice_id");
+        adder.add(Keys.VOICE_FORM_GROUP,     "GroupId(可选)");
+        adder.add(Keys.VOICE_FORM_REFERENCE, "音色 ID");
+        adder.add(Keys.VOICE_FORM_FISH_MODEL, "合成模型");
         adder.add(Keys.VOICE_FORM_MODEL,     "TTS 模型 id");
-        adder.add(Keys.VOICE_FORM_VOICE,     "音色(格式 模型:音色名)");
-        adder.add(Keys.VOICE_FORM_REF,       "参考音频路径(GPT-SoVITS 所在机器上)");
+        adder.add(Keys.VOICE_FORM_VOICE,     "音色");
+        adder.add(Keys.VOICE_FORM_REF,       "参考音频路径");
         adder.add(Keys.VOICE_FORM_PROMPT,    "参考音频的文本");
-        adder.add(Keys.VOICE_FORM_LANG,      "语言(留空默认 zh)");
-        adder.add(Keys.VOICE_FORM_VOLUME,    "音量 1~10(默认 5)");
+        adder.add(Keys.VOICE_FORM_LANG,      "语种");
+        adder.add(Keys.VOICE_FORM_VOLUME,    "音量");
         adder.add(Keys.VOICE_TEST,           "试听");
         adder.add(Keys.VOICE_TEST_RUNNING,   "合成中…");
         adder.add(Keys.VOICE_TEST_OK,        "✔ 播放中");

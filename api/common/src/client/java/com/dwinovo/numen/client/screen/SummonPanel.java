@@ -209,9 +209,6 @@ public final class SummonPanel {
                 Button.Style.ACCENT, this::submit));
         create.setBounds(bx + bw + gap, ry, bw, 16);
 
-        Label hint = ui.add(new Label(t("numen.summon.hint"), Label.Role.MUTED));
-        hint.setBounds(x, ry + 22, w, 9);
-
         ui.requestFocus(nameField);
     }
 
