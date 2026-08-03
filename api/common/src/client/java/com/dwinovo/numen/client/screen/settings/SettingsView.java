@@ -215,13 +215,10 @@ public final class SettingsView {
     private PersonaFormPanel personaForm;
     private PersonaFormPanel.Draft personaDraft = new PersonaFormPanel.Draft();
 
-    // MCP "add server" form
+    // ---- MCP 分区:NumenUI McpFormPanel + LibraryListPanel(行内启停/状态点/tooltip) ----
     private boolean addingMcp;
-    private boolean mcpStdio;                 // form type: false = http, true = stdio
-    private String wMcpName = "", wMcpTarget = "", wMcpHeader = "";
-    private EditBox mcpNameInput, mcpTargetInput, mcpHeaderInput;
-    private String mcpDeletePending;          // non-null = showing the delete-confirm bar for this server
-    private String mcpEditOriginal;           // non-null = the add-form is EDITING this server (replace on save)
+    private McpFormPanel mcpForm;
+    private McpFormPanel.Draft mcpDraft = new McpFormPanel.Draft();
 
     // ---- STT 分区:NumenUI SttPanel(服务商联动/模型双态/麦克风/保存回执) ----
     private SttPanel sttPanel;
@@ -283,7 +280,7 @@ public final class SettingsView {
         addingSkin = false;
         if (skinForm != null) skinForm.cancelPending();
         addingPersona = false; personaEditId = null;
-        addingMcp = false; mcpEditOriginal = null;
+        addingMcp = false;
         host.rebuild();
         return true;
     }
@@ -363,7 +360,6 @@ public final class SettingsView {
 
     /** Null every widget reference (the screen just cleared the actual widget lists). */
     public void clearWidgets() {
-        mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
     }
 
     private void selectSection(Section s) {
@@ -376,8 +372,6 @@ public final class SettingsView {
             PersonaLibrary.instance().reload();
         }
         addingMcp = false;
-        mcpDeletePending = null;
-        mcpEditOriginal = null;
         addingPersona = false;
         personaEditId = null;
         addingProvider = false;
@@ -392,46 +386,13 @@ public final class SettingsView {
 
     // ---- delete-confirm modal (shared by the five sections that can delete) ----
 
-    /** 当前待确认删除的标题(null = 无模态)。build 与 render 共用同一份文案,
-     *  ConfirmModal 的卡片几何(高度随换行数)才不会漂。 */
-    private Component activeModalTitle() {
-        if (mcpDeletePending != null) {
-            return Component.translatable("numen.mcp.delete_confirm", mcpDeletePending);
-        }
-        return null;
-    }
-
-    /** A delete-confirm modal is up — the screen blocks rail/tab/scroll interaction meanwhile. */
+    /** 旧删除确认模态已整体退役(各面板自带 ConfirmDialog 浮层);屏幕侧调用面保留。 */
     public boolean modalActive() {
-        return activeModalTitle() != null;
+        return false;
     }
 
-    /** Esc while a confirm modal is up: dismiss it (instead of closing the whole screen). */
     public boolean cancelModal() {
-        if (!modalActive()) return false;
-        clearDeletePending();
-        host.rebuild();
-        return true;
-    }
-
-    private void clearDeletePending() {
-        mcpDeletePending = null;
-    }
-
-    /** The confirm card's two buttons (widget pass draws them above the scrim):
-     *  Cancel left, destructive Delete right — positioned by the SAME box the render uses. */
-    private void buildConfirmButtons(Runnable onDelete) {
-        var box = com.dwinovo.numen.client.ui.ConfirmModal.box(font(), host.railX(),
-                left() + panelW(), top(), panelH(), activeModalTitle(), null);
-        int bw = com.dwinovo.numen.client.ui.ConfirmModal.BTN_W;
-        int gap = com.dwinovo.numen.client.ui.ConfirmModal.BTN_GAP;
-        int bx = box.x() + (box.w() - (bw * 2 + gap)) / 2;
-        host.add(new SimpleButton(bx, box.buttonY(), bw, com.dwinovo.numen.client.ui.ConfirmModal.BTN_H,
-                Component.translatable("numen.gui.settings.cancel"),
-                b -> { clearDeletePending(); host.rebuild(); }));
-        host.add(new SimpleButton(bx + bw + gap, box.buttonY(), bw,
-                com.dwinovo.numen.client.ui.ConfirmModal.BTN_H,
-                Component.translatable("numen.dismiss.delete"), b -> onDelete.run()).danger());
+        return false;
     }
 
     /** Dispatch widget building by the active section (skill/MCP lists render manually). */
@@ -440,9 +401,10 @@ public final class SettingsView {
         switch (section) {
             case SKILLS -> buildSkillsWidgets();
             case MCP -> {
-                if (mcpDeletePending != null) buildMcpDeleteConfirm();
-                else if (addingMcp) buildMcpForm();
-                else buildMcpListWidgets();
+                // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
+                mcpListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                        left(), top(), panelW(), panelH());
+                if (addingMcp) buildMcpForm();
             }
             case PERSONA -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
@@ -751,81 +713,86 @@ public final class SettingsView {
 
     // ---- MCP section ----
 
-    private void buildMcpDeleteConfirm() {
-        buildConfirmButtons(() -> {
-            com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(mcpDeletePending);
-            mcpDeletePending = null;
-            host.rebuild();
-        });
+    private LibraryListPanel<com.dwinovo.numen.mcp.client.McpClientManager.ServerHandle> mcpListPanel;
+
+    private LibraryListPanel<com.dwinovo.numen.mcp.client.McpClientManager.ServerHandle> mcpListPanel() {
+        if (mcpListPanel == null) {
+            mcpListPanel = new LibraryListPanel<>(
+                    "numen.mcp.title", "numen.mcp.add", "numen.mcp.empty",
+                    com.dwinovo.numen.mcp.client.McpClientManager::servers,
+                    h -> new LibraryListPanel.Row(h.name(), mcpMeta(h),
+                            h.status() == com.dwinovo.numen.mcp.client.McpClientManager.Status.FAILED, null),
+                    h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
+                    h -> com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(h.name()),
+                    () -> {
+                        addingMcp = true;
+                        mcpDraft = new McpFormPanel.Draft();
+                        host.rebuild();
+                    },
+                    h -> beginEditMcp(h.name()))
+                    .withRowIcon(8, (s, h, ix, iy, size) ->
+                            s.fillRoundRect(ix + 1, iy + 1, 6, 6, 3, mcpDotColor(h.status())))
+                    .withRowToggle(
+                            h -> h.toggledOn(),
+                            h -> {
+                                var st = h.status();
+                                // 连接中/已连接 → 关;禁用/失败 → (重)连(失败的点一下即重试)
+                                if (st == com.dwinovo.numen.mcp.client.McpClientManager.Status.CONNECTED
+                                        || st == com.dwinovo.numen.mcp.client.McpClientManager.Status.CONNECTING) {
+                                    com.dwinovo.numen.mcp.client.McpClientManager.disableServer(h.name());
+                                } else {
+                                    com.dwinovo.numen.mcp.client.McpClientManager.enableServer(h.name());
+                                }
+                            });
+        }
+        return mcpListPanel;
     }
 
-    private void buildMcpListWidgets() {
-        // "add server" affordance, top-right of the section.
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, secY0() - 2, 64, 14,
-                Component.translatable("numen.mcp.add"), b -> {
-                    addingMcp = true; mcpEditOriginal = null;                 // fresh add — not editing
-                    wMcpName = ""; wMcpTarget = ""; wMcpHeader = ""; mcpStdio = false;
-                    host.rebuild();
-                }));
-    }
-
-    /** The add-MCP-server form: name, type (http/stdio) toggle, and URL / command. */
+    /** 表单卡里的 NumenUI MCP 表单(类型切行/内联校验);卡壳照旧 formModal。 */
     private void buildMcpForm() {
-        int x = fx(), w = fw();
-        int fy = fy0();
-        mcpNameInput = field(x, fy + 11, w, 48, wMcpName);
-        // type toggle button (cycles http ↔ stdio; rebuild swaps the URL/command row)
-        host.add(new SimpleButton(x, fy + 34, w, 18,
-                Component.translatable(mcpStdio ? "numen.mcp.type_stdio" : "numen.mcp.type_http"),
-                b -> { preserveMcpForm(); mcpStdio = !mcpStdio; host.rebuild(); }));
-        mcpTargetInput = field(x, fy + 67, w, 512, wMcpTarget);
-        // 4th field: HTTP → request header(s) "Name: Value"; stdio → env "KEY=value" (';'-separated).
-        mcpHeaderInput = field(x, fy + 100, w, 1024, wMcpHeader);
-        // Save + Cancel
-        host.add(new SimpleButton(fRight() - 64, fBottom() - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> onSaveMcp()).primary());
-        host.add(new SimpleButton(fRight() - 64 - 22, fBottom() - 18, 18, 18,
-                Component.literal("✕"), b -> { addingMcp = false; mcpEditOriginal = null; host.rebuild(); }));
-        host.focus(mcpNameInput);   // ready to type the name immediately
+        mcpForm().open(mcpDraft);
+        mcpForm().build(fx(), fy0(), fw(), fBottom() - fy0());
     }
 
-    private void preserveMcpForm() {
-        if (mcpNameInput != null) wMcpName = mcpNameInput.getValue();
-        if (mcpTargetInput != null) wMcpTarget = mcpTargetInput.getValue();
-        if (mcpHeaderInput != null) wMcpHeader = mcpHeaderInput.getValue();
+    private McpFormPanel mcpForm() {
+        if (mcpForm == null) {
+            mcpForm = new McpFormPanel(this::onMcpSave,
+                    () -> {
+                        addingMcp = false;
+                        host.rebuild();
+                    });
+        }
+        return mcpForm;
     }
 
-    private void onSaveMcp() {
-        String name = mcpNameInput.getValue().trim();
-        String target = mcpTargetInput.getValue().trim();
-        if (name.isEmpty() || target.isEmpty()) { host.warnPulse(); return; }
+    private void onMcpSave(McpFormPanel.Draft d) {
+        String name = d.name.trim();
+        String target = d.target.trim();
         // When editing, preserve the server's on/off state (a plain edit shouldn't flip its toggle).
         boolean enabled = true;
-        if (mcpEditOriginal != null) {
-            var orig = com.dwinovo.numen.mcp.client.McpClientManager.spec(mcpEditOriginal);
+        if (d.editOriginal != null) {
+            var orig = com.dwinovo.numen.mcp.client.McpClientManager.spec(d.editOriginal);
             if (orig != null) enabled = orig.enabled();
         }
         com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec spec;
-        String extra = mcpHeaderInput == null ? "" : mcpHeaderInput.getValue();
-        if (mcpStdio) {
+        if (d.stdio) {
             String[] parts = target.split("\\s+");
             String command = parts[0];
             List<String> args = new ArrayList<>();
             for (int i = 1; i < parts.length; i++) args.add(parts[i]);
             spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "stdio", "", java.util.Map.of(),
-                    command, List.copyOf(args), parseEnv(extra), enabled, 20, 120);
+                    command, List.copyOf(args), parseEnv(d.extra), enabled, 20, 120);
         } else {
-            spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "http", target, parseHeader(extra),
+            spec = new com.dwinovo.numen.mcp.client.McpClientConfig.ServerSpec(name, "http", target, parseHeader(d.extra),
                     "", List.of(), java.util.Map.of(), enabled, 20, 120);
         }
         com.dwinovo.numen.mcp.client.McpClientManager.upsertServer(spec);
         // Renamed while editing → upsert wrote the new-named entry; drop the old one.
-        if (mcpEditOriginal != null && !mcpEditOriginal.equals(name)) {
-            com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(mcpEditOriginal);
+        if (d.editOriginal != null && !d.editOriginal.equals(name)) {
+            com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(d.editOriginal);
         }
-        mcpEditOriginal = null;
         addingMcp = false;
-        wMcpName = ""; wMcpTarget = ""; wMcpHeader = ""; mcpStdio = false;
+        mcpDraft = new McpFormPanel.Draft();
         host.rebuild();
     }
 
@@ -1011,7 +978,7 @@ public final class SettingsView {
         // (否则表单里的下拉/按钮悬停被误杀)。
         rawMouseX = mouseX;
         rawMouseY = mouseY;
-        if (activeModalTitle() != null || formActive()) {
+        if (formActive()) {
             mouseX = -10000;
             mouseY = -10000;
         }
@@ -1033,13 +1000,6 @@ public final class SettingsView {
             case STT -> sttPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                     HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
             case THEME -> renderThemeSection(g, mouseX, mouseY);
-        }
-        // 删除确认改模态:列表照常渲染作背景,暗幕+确认卡压在上面(按钮走 widget
-        // 通道,在暗幕之后渲染,天然浮在卡上)。
-        Component modal = activeModalTitle();
-        if (modal != null) {
-            com.dwinovo.numen.client.ui.ConfirmModal.render(g, font(), host.railX(),
-                    left() + panelW(), top(), panelH(), modal, null);
         }
     }
 
@@ -1139,61 +1099,22 @@ public final class SettingsView {
     // ---- MCP section: external server list with a live on/off switch per row ----
 
     private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
+        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingMcp) {
-            renderMcpList(g, -10000, -10000);
+            mcpListPanel().render(surface, HostThemeColors.current(),
+                    -10000, -10000, net.minecraft.Util.getMillis());
             formModal(g, Component.translatable("numen.mcp.title"));
-            renderMcpForm(g);
+            mcpForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
             return;
         }
-        renderMcpList(g, mouseX, mouseY);
-    }
-
-    private void renderMcpList(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX(), w = secW();
-        txt(g, Component.translatable("numen.mcp.title"), x, secY0() - 2, TXT);
-        var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
-        if (servers.isEmpty()) {
-            txt(g, Component.translatable("numen.mcp.empty"), x, secY0() + 16, TXT_FAINT);
-            return;
+        mcpListPanel().render(surface, HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+        // 悬停行体 → tooltip:工具名 + url/命令 + 错误(行尾动作热区上不弹)。
+        var hovered = mcpListPanel().entryAtBody(mouseX, mouseY);
+        if (hovered != null) {
+            host.tip(mcpTooltip(hovered), mouseX, mouseY);
         }
-        int listY0 = secY0() + 14;
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, servers.size() - visible));
-        for (int i = settingsScroll; i < servers.size(); i++) {
-            int row = i - settingsScroll;
-            int ry = listY0 + row * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            var h = servers.get(i);
-            int togX = x + w - 34, delX = x + w - 12;
-            hoverRow(g, mouseX, mouseY, x, w, ry);
-            // status dot
-            int dy = ry + 3;
-            g.fill(x, dy, x + 5, dy + 5, mcpDotColor(h.status()));
-            Nb.border(g, x, dy, 5, 5, 1, BORDER);
-            // name + meta line
-            txt(g, Component.literal(h.name()), x + 10, ry + 1, TXT);
-            txt(g, Component.literal(mcpMeta(h)), x + 10, ry + 13, TXT_MUTED);
-            // toggle + delete, right-aligned
-            drawToggle(g, togX, ry + 5, h.toggledOn());
-            boolean overDel = overDelete(mouseX, mouseY, delX, ry);
-            txt(g, Component.literal("✕"), delX, ry + 6, overDel ? FAIL : TXT_FAINT);
-            // hover tooltip: tool names + url/command + any error (not over a control)
-            if (overRow(mouseX, mouseY, x, w, ry) && !overToggle(mouseX, mouseY, togX, ry + 5) && !overDel) {
-                host.tip(mcpTooltip(h), mouseX, mouseY);
-            }
-        }
-    }
-
-    /** Add-server form labels + placeholders (fields/buttons are widgets, drawn in the overlay pass). */
-    private void renderMcpForm(GuiGraphics g) {
-        int x = fx();
-        int fy = fy0();   // matches buildMcpForm
-        txt(g, Component.translatable("numen.mcp.form_name"), x, fy, TXT_MUTED);
-        // the type row is the self-labelled toggle button (no separate label)
-        txt(g, Component.translatable(mcpStdio ? "numen.mcp.form_command" : "numen.mcp.form_url"),
-                x, fy + 56, TXT_MUTED);
-        txt(g, Component.translatable(mcpStdio ? "numen.mcp.form_env" : "numen.mcp.form_header"), x, fy + 89, TXT_MUTED);
-        // field placeholders are drawn in the post-widget pass (see renderOverlays), so they sit above the frames
     }
 
     private boolean overDelete(int mx, int my, int delX, int ry) {
@@ -1388,6 +1309,15 @@ public final class SettingsView {
                 && skinListPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
+        // MCP 表单/列表(NumenUI)。
+        if (section == Section.MCP && addingMcp
+                && mcpForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.MCP && !addingMcp
+                && mcpListPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
         return settingsClickedAt(mouseX, mouseY);
     }
 
@@ -1423,45 +1353,8 @@ public final class SettingsView {
                 return true;
             }
         }
-        if (section == Section.MCP) return mcpToggleClick(mx, my);
         if (section == Section.BRAIN) return brainToggleClick(mx, my);
         if (section == Section.SKILLS) return skillToggleClick(mx, my);
-        return false;
-    }
-
-    private boolean mcpToggleClick(int mx, int my) {
-        if (addingMcp || mcpDeletePending != null) return false;   // form / confirm widgets handle clicks
-        int x = secX(), w = secW();
-        var servers = com.dwinovo.numen.mcp.client.McpClientManager.servers();
-        int listY0 = secY0() + 14;
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, servers.size() - visible));
-        for (int i = scroll; i < servers.size(); i++) {
-            int ry = listY0 + (i - scroll) * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            int togX = x + w - 34, delX = x + w - 12;
-            var h = servers.get(i);
-            if (overToggle(mx, my, togX, ry + 5)) {
-                var st = h.status();
-                // CONNECTED / CONNECTING → turn off; DISABLED / FAILED → (re)connect (retry a failed one)
-                if (st == com.dwinovo.numen.mcp.client.McpClientManager.Status.CONNECTED
-                        || st == com.dwinovo.numen.mcp.client.McpClientManager.Status.CONNECTING) {
-                    com.dwinovo.numen.mcp.client.McpClientManager.disableServer(h.name());
-                } else {
-                    com.dwinovo.numen.mcp.client.McpClientManager.enableServer(h.name());
-                }
-                return true;
-            }
-            if (overDelete(mx, my, delX, ry)) {
-                mcpDeletePending = h.name();   // ask first — deletion is confirmed via the bar
-                host.rebuild();
-                return true;
-            }
-            if (overRow(mx, my, x, w, ry)) {   // body (name/meta) click → edit this server
-                beginEditMcp(h.name());
-                return true;
-            }
-        }
         return false;
     }
 
@@ -1469,19 +1362,21 @@ public final class SettingsView {
     private void beginEditMcp(String name) {
         var spec = com.dwinovo.numen.mcp.client.McpClientManager.spec(name);
         if (spec == null) return;
-        mcpEditOriginal = name;
         addingMcp = true;
-        mcpStdio = spec.isStdio();
-        wMcpName = spec.name();
-        if (mcpStdio) {
+        var d = new McpFormPanel.Draft();
+        d.editOriginal = name;
+        d.stdio = spec.isStdio();
+        d.name = spec.name();
+        if (d.stdio) {
             StringBuilder cmd = new StringBuilder(spec.command() == null ? "" : spec.command());
             for (String a : spec.args()) cmd.append(' ').append(a);
-            wMcpTarget = cmd.toString().trim();
-            wMcpHeader = joinPairs(spec.env(), '=');       // stdio → env "KEY=value"
+            d.target = cmd.toString().trim();
+            d.extra = joinPairs(spec.env(), '=');       // stdio → env "KEY=value"
         } else {
-            wMcpTarget = spec.url() == null ? "" : spec.url();
-            wMcpHeader = joinPairs(spec.headers(), ':');    // http → header "Name: Value"
+            d.target = spec.url() == null ? "" : spec.url();
+            d.extra = joinPairs(spec.headers(), ':');    // http → header "Name: Value"
         }
+        mcpDraft = d;
         host.rebuild();
     }
 
@@ -1534,6 +1429,10 @@ public final class SettingsView {
         if (section == Section.STT && sttPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
+        if (section == Section.MCP && !addingMcp
+                && mcpListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
         return false;
     }
 
@@ -1562,7 +1461,6 @@ public final class SettingsView {
     public boolean mouseScrolledList(double sy) {
         if (formActive()) return false;   // 列表在表单模态的暗幕之下,不滚
         int count = switch (section) {
-            case MCP -> com.dwinovo.numen.mcp.client.McpClientManager.servers().size();
             case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
             default -> 0;
         };
@@ -1593,6 +1491,10 @@ public final class SettingsView {
             return skinListPanel().keyPressed(keyCode, modifiers);
         }
         if (section == Section.STT) return sttPanel().keyPressed(keyCode, modifiers);
+        if (section == Section.MCP) {
+            if (addingMcp) return mcpForm().keyPressed(keyCode, modifiers);
+            return mcpListPanel().keyPressed(keyCode, modifiers);
+        }
         return false;
     }
 
@@ -1602,15 +1504,11 @@ public final class SettingsView {
         if (section == Section.PERSONA && addingPersona) return personaForm().charTyped(ch);
         if (section == Section.SKIN && addingSkin) return skinForm().charTyped(ch);
         if (section == Section.STT) return sttPanel().charTyped(ch);
+        if (section == Section.MCP && addingMcp) return mcpForm().charTyped(ch);
         return false;
     }
 
     public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
-        if (section == Section.MCP && addingMcp) {
-            placeholder(g, mcpNameInput, "kfc");
-            placeholder(g, mcpTargetInput, mcpStdio ? "cmd /c npx -y <server>" : "https://mcp.mcd.cn");
-            placeholder(g, mcpHeaderInput, mcpStdio ? "KEY=value; KEY2=value2" : "Authorization: Bearer <token>");
-        }
     }
 }
