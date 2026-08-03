@@ -73,6 +73,15 @@ public final class ToolDispatcher {
         return !inFlight.isEmpty() || !queue.isEmpty();
     }
 
+    /** 在飞那一件的工具名(串行模型下 ≤1),空闲返回 null——头顶气泡的副文本取它。 */
+    public String currentToolName() {
+        for (ToolInvocation inv : inFlight.values()) {
+            return inv.name();
+        }
+        ToolInvocation next = queue.peek();
+        return next == null ? null : next.name();
+    }
+
     /** Run this turn's tool calls, serially. */
     public void dispatch(List<ToolInvocation> calls) {
         queue.addAll(calls);

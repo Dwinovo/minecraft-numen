@@ -21,7 +21,6 @@ import com.dwinovo.numen.network.payload.NumenInventoryPayload;
 import com.dwinovo.numen.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.network.payload.NumenRespawnPayload;
 import com.dwinovo.numen.network.payload.PathDebugPayload;
-import com.dwinovo.numen.network.payload.SpeechBubbleSyncPayload;
 
 import java.util.UUID;
 
@@ -47,7 +46,6 @@ public final class ClientPayloadHandlers {
         ClientPayloadSink.locations = ClientPayloadHandlers::handleLocations;
         ClientPayloadSink.respawn = ClientPayloadHandlers::handleRespawn;
         ClientPayloadSink.pathDebug = PathDebugState::accept;
-        ClientPayloadSink.speechBubble = p -> SpeechBubbles.apply(p.entityUuid(), p.kind(), p.text());
         ClientPayloadSink.uiAction = ClientPayloadHandlers::handleUiAction;
     }
 

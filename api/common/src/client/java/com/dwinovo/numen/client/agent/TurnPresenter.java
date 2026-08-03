@@ -4,7 +4,6 @@ import com.dwinovo.numen.client.chat.ChatDisplayFilters;
 import com.dwinovo.numen.client.chat.ChatLines;
 import com.dwinovo.numen.client.voice.VoiceLibrary;
 import com.dwinovo.numen.client.voice.VoicePipeline;
-import com.dwinovo.numen.network.payload.SpeechBubblePayload;
 import com.dwinovo.numen.platform.Services;
 import com.google.gson.JsonObject;
 import net.minecraft.client.Minecraft;
@@ -107,7 +106,7 @@ final class TurnPresenter {
                     Minecraft.getInstance().execute(() -> {
                         if (gen == generation.getAsInt()) {
                             com.dwinovo.numen.client.hud.SpeechBubbles
-                                    .appendLocalThinking(entityUuid, r);
+                                    .appendThinking(entityUuid, r);
                         }
                     });
                 }
@@ -186,20 +185,4 @@ final class TurnPresenter {
         }
     }
 
-    /**
-     * 头顶气泡上报:思考中/正文/收起。服务端校验主人身份后转发给同伴
-     * 附近的所有玩家(含主人自己——不做本地特例,单一路径)。断线期不发,
-     * 气泡本来就是会话态。
-     */
-    void reportBubble(byte kind, String text) {
-        if (Minecraft.getInstance().getConnection() == null) {
-            return;
-        }
-        String capped = text == null ? "" : truncate(text, SpeechBubblePayload.MAX_TEXT / 2 - 4);
-        Services.NETWORK.sendToServer(new SpeechBubblePayload(entityUuid, kind, capped));
-    }
-
-    private static String truncate(String s, int max) {
-        return s.length() <= max ? s : s.substring(0, max) + "…";
-    }
 }

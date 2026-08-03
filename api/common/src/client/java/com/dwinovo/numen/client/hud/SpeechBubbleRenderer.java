@@ -8,6 +8,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.player.AbstractClientPlayer;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
@@ -60,7 +61,7 @@ public final class SpeechBubbleRenderer {
 
     private static void renderInner(AbstractClientPlayer body, PoseStack poseStack,
                                     MultiBufferSource buffers) {
-        SpeechBubbles.Bubble bubble = SpeechBubbles.live(body.getUUID());
+        SpeechBubbles.View bubble = SpeechBubbles.view(body.getUUID());
         if (bubble == null || body.isInvisible()) {
             return;
         }
@@ -83,10 +84,10 @@ public final class SpeechBubbleRenderer {
      * <b>+z 朝观察者</b>:阴影垫底(0)、边框、填充逐层抬高,文字最前。
      */
     private static void drawBubble(PoseStack poseStack, MultiBufferSource buffers,
-                                   Font font, SpeechBubbles.Bubble bubble, java.util.UUID uuid) {
+                                   Font font, SpeechBubbles.View bubble, java.util.UUID uuid) {
         UiTheme th = UiTheme.current();
         List<String> lines = bubble.thinking()
-                ? thinkingLines(font, uuid)
+                ? thinkingLines(font, uuid, bubble.activity())
                 : wrapToWidth(font, bubble.text(), MAX_WIDTH, MAX_LINES);
         if (lines.isEmpty()) {
             return;
@@ -128,21 +129,33 @@ public final class SpeechBubbleRenderer {
         poseStack.popPose();
     }
 
-    /** 思考中:三点脉冲,约 0.4s 一跳。 */
-    /** 思考泡的内容:有本地思考流就滚动展示尾巴(暗色沿用),没有退省略号动画。 */
-    private static List<String> thinkingLines(Font font, java.util.UUID uuid) {
-        String stream = SpeechBubbles.localThinking(uuid);
-        if (stream.isEmpty()) return List.of(thinkingDots());
-        String tail = stream.length() > 72 ? "…" + stream.substring(stream.length() - 72) : stream;
-        List<String> wrapped = wrapToWidth(font, tail.replace('\n', ' '), MAX_WIDTH, 2);
-        return wrapped.isEmpty() ? List.of(thinkingDots()) : wrapped;
+    /**
+     * 思考泡的内容:主行是「正在回复中」加脉冲点(推理模型有思考流时改滚它的
+     * 尾巴——那更有信息量);末行附当前动作,长任务跑几十秒时主人得看见她在
+     * 挖矿而不是卡死了。
+     */
+    private static List<String> thinkingLines(Font font, java.util.UUID uuid, String activity) {
+        List<String> out = new ArrayList<>();
+        String stream = SpeechBubbles.thinkingTail(uuid);
+        if (!stream.isEmpty()) {
+            String tail = stream.length() > 72
+                    ? "…" + stream.substring(stream.length() - 72) : stream;
+            out.addAll(wrapToWidth(font, tail.replace('\n', ' '), MAX_WIDTH, 2));
+        }
+        if (out.isEmpty()) {
+            out.add(I18n.get("numen.bubble.replying") + thinkingDots());
+        }
+        if (activity != null && !activity.isBlank()) {
+            out.add(I18n.get("numen.bubble.doing", activity));
+        }
+        return out;
     }
 
+    /** 脉冲点:约 0.4s 一跳,证明她还活着。 */
     private static String thinkingDots() {
-        int n = (int) (System.currentTimeMillis() / 400 % 3) + 1;
-        return switch (n) {
-            case 1 -> "·";
-            case 2 -> "· ·";
+        return switch ((int) (System.currentTimeMillis() / 400 % 3)) {
+            case 0 -> "·";
+            case 1 -> "· ·";
             default -> "· · ·";
         };
     }

@@ -8,7 +8,6 @@ import com.dwinovo.numen.network.payload.NumenInventoryPayload;
 import com.dwinovo.numen.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.network.payload.NumenRespawnPayload;
 import com.dwinovo.numen.network.payload.PathDebugPayload;
-import com.dwinovo.numen.network.payload.SpeechBubbleSyncPayload;
 
 import java.util.function.Consumer;
 
@@ -30,6 +29,5 @@ public final class ClientPayloadSink {
     public static volatile Consumer<NumenLocationsPayload> locations = p -> {};
     public static volatile Consumer<NumenRespawnPayload> respawn = p -> {};
     public static volatile Consumer<PathDebugPayload> pathDebug = p -> {};
-    public static volatile Consumer<SpeechBubbleSyncPayload> speechBubble = p -> {};
     public static volatile Consumer<ClientUiActionPayload> uiAction = p -> {};
 }

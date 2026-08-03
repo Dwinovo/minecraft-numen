@@ -416,6 +416,18 @@ public final class EntityAgentLoop {
         return awaitingLlmResponse || compacting || dispatcher.busy() || currentTask != null;
     }
 
+    /**
+     * 此刻在干的那件事(工具名/长活任务名),没有具体动作时返回 null——
+     * 头顶「正在回复中」气泡拿它当副文本:长任务跑几十秒时,主人得看见
+     * 她在挖矿而不是卡死了。
+     */
+    public String currentActivity() {
+        if (currentTask != null) {
+            return currentTask.tool();
+        }
+        return dispatcher.currentToolName();
+    }
+
     /** A summarization call is currently in flight (drives the GUI status line). */
     public boolean isCompacting() {
         return compacting;
@@ -465,7 +477,7 @@ public final class EntityAgentLoop {
         // 主人按下 Stop 时还在播/待播的语音都不该继续。
         presenter.interruptVoice();
         // 头顶的思考/残句气泡同理随打断收起
-        presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+        com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
         if (isBusy()) {
             // Priority 1: stop the running turn, in-flight compaction, or a body background task.
             // Responses are generation-stamped, so any in-flight one is discarded.
@@ -837,7 +849,7 @@ public final class EntityAgentLoop {
             Constants.LOG.warn("[numen-entity#{}] can't start turn: {}", entityUuid, problem);
             // 配置问题不能静默:快捷键用户不开面板,聊天栏警示行是唯一出口
             com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(), truncate(problem, 160));
-            presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+            com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
             turnPause = AgentTurnPause.BLOCKED;
             return;
         }
@@ -878,7 +890,6 @@ public final class EntityAgentLoop {
         final TurnPresenter.VoiceTurn vt = presenter.beginVoiceTurn();
         presenter.clearPartial();
         // 头顶挂思考气泡:从发出请求到回应落地的整个空窗都有反馈
-        presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
         NumenLlmClient llm = client();
         llm.chatStreaming(snapshot, tools, systemPrompt,
                         presenter.tapForUi(gen, vt.sink(), llm.provider()::extractReasoningDelta))
@@ -1124,7 +1135,7 @@ public final class EntityAgentLoop {
         // The failed turn is over. Any fresh turn started now or by a later wake event gets its own
         // one-retry allowance rather than inheriting the exhausted budget from this turn.
         turnRetried = false;
-        presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+        com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
         // 失败必须让主人看见——沉进日志就是"已读不回"
         String why = lastTurnError == null ? "连接中断" : lastTurnError;
         lastTurnError = null;
@@ -1193,7 +1204,6 @@ public final class EntityAgentLoop {
                 final int gen2 = turnGeneration;
                 final TurnPresenter.VoiceTurn vt2 = presenter.beginVoiceTurn();   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
                 presenter.clearPartial();                 // 失败那次的半截文字同理作废
-                presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_THINKING, "");
                 NumenLlmClient llm2 = client();
                 llm2.chatStreaming(modelContextSnapshot(), ToolRegistry.all(),
                                 composeSystemPrompt(),
@@ -1244,16 +1254,16 @@ public final class EntityAgentLoop {
                 String shown = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
                         .filterAssistantMessage(turn.content());
                 if (!shown.isBlank()) {
-                    presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, shown);
+                    com.dwinovo.numen.client.hud.SpeechBubbles.say(entityUuid, shown);
                     com.dwinovo.numen.client.chat.ChatLines.companion(presenter.speakerName(), shown);
                 } else {
-                    presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+                    com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
                 }
             } else {
                 // 模型交了白卷(无工具调用、正文为空,部分后端偶发)——不能无声
                 // 咽下变成"已读不回",给主人一条透明的提示
                 Constants.LOG.info("[numen-entity#{}] assistant (final, empty content)", entityUuid);
-                presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_CLEAR, "");
+                com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
                 com.dwinovo.numen.client.hud.TalkHint.flash(
                         presenter.speakerName() + " 想了想,什么也没说——再问一句试试", 3500);
             }
@@ -1270,10 +1280,9 @@ public final class EntityAgentLoop {
         String aside = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
                 .filterAssistantMessage(turn.content() == null ? "" : turn.content());
         if (!aside.isBlank()) {
-            presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_TEXT, aside);
+            com.dwinovo.numen.client.hud.SpeechBubbles.say(entityUuid, aside);
             com.dwinovo.numen.client.chat.ChatLines.companion(presenter.speakerName(), aside);
         } else {
-            presenter.reportBubble(com.dwinovo.numen.network.payload.SpeechBubblePayload.KIND_SETTLE, "");
         }
 
         // Hand this turn's calls to the dispatcher — it runs them serially and
