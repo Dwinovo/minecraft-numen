@@ -231,8 +231,7 @@ public final class LibraryListPanel<T> {
 
     private void renderRow(IDrawSurface s, NumenTheme.Colors c, T e, int index,
                            int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
-        Row row = rowOf.apply(e);
-        if (hovered) s.fillRoundRect(rx, ry, rw, rh, NumenStyle.RADIUS_SMALL, c.hover());
+        Row row = rowOf.apply(e);   // 行悬停底由 ListView 统一画(带淡入),这里只画内容
         if (Boolean.TRUE.equals(row.marked())) {
             // 绑定标记 = 行左缘 accent 侧条,不占缩进(行内容与无标记库同列对齐)。
             s.fillRect(rx, ry + 2, 2, rh - 4, c.accent());

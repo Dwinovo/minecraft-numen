@@ -22,24 +22,41 @@ public final class Button extends Widget {
 
     public void setLabel(String label) { this.label = label; }
 
+    /** 悬停进度(0~1,HOVER_MS 走满)——指针反馈短过渡,不瞬时硬切。 */
+    private float hoverT;
+    private long lastMs = -1;
+
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         boolean hovered = enabled && contains(mouseX, mouseY);
+        long dt = lastMs < 0 ? 1000 : nowMs - lastMs;
+        lastMs = nowMs;
+        hoverT = NumenStyle.hoverStep(hoverT, hovered, dt);
+        float t = enabled ? hoverT : 0f;
+
         if (style == Style.GHOST) {
-            if (hovered) s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, c.hover());
-            int ghostColor = !enabled ? c.textMuted() : hovered ? c.textPrimary() : c.textSecondary();
+            if (t > 0.01f) {   // 浮现的浅底:半透明 hover 色按进度收放透明度
+                int bg = ((int) (((c.hover() >>> 24) & 0xFF) * t) << 24) | (c.hover() & 0xFFFFFF);
+                s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, bg);
+            }
+            int ghostColor = !enabled ? c.textMuted()
+                    : NumenStyle.mixColor(c.textSecondary(), c.textPrimary(), t);
             s.drawText(label, x + (w - s.textWidth(label)) / 2,
                     y + (h - s.lineHeight()) / 2 + 1, ghostColor, false);
             return;
         }
-        int bg = switch (style) {
-            case ACCENT -> c.accent();
-            case DANGER -> c.danger();
-            default -> hovered ? c.hover() : c.sectionBg();
-        };
-        if (hovered && style != Style.NORMAL) bg = NumenStyle.hoverBrighten(bg);
-        if (!enabled) bg = c.sectionBg();
-        s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, bg);
+        if (style == Style.NORMAL) {
+            s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, c.sectionBg());
+            if (t > 0.01f) {   // hover 是叠加色:铺在底上,透明度随进度
+                int overlay = ((int) (((c.hover() >>> 24) & 0xFF) * t) << 24) | (c.hover() & 0xFFFFFF);
+                s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, overlay);
+            }
+        } else {
+            int base = style == Style.ACCENT ? c.accent() : c.danger();
+            int bg = !enabled ? c.sectionBg()
+                    : NumenStyle.mixColor(base, NumenStyle.hoverBrighten(base), t);
+            s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, bg);
+        }
         int textColor = !enabled ? c.textMuted()
                 : style == Style.NORMAL ? c.textPrimary() : 0xFFFFFFFF;
         int tx = x + (w - s.textWidth(label)) / 2;

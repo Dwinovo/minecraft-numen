@@ -34,6 +34,10 @@ public final class ListView<T> extends Widget {
     private RowClick rowClick;
     private int selectedIndex = -1;
     private double scrollY;
+    /** 悬停行与其淡入进度(行悬停底由列表统一画,渲染回调只管内容)。 */
+    private int hoverRow = -1;
+    private float hoverT;
+    private long lastFrameMs = -1;
 
     public ListView(List<T> items, int rowHeight, RowRenderer<T> renderer, IntConsumer onSelect) {
         this.items = items;
@@ -90,8 +94,22 @@ public final class ListView<T> extends Widget {
         s.pushScissor(x, y, w, h);
         int[] range = visibleRange();
         int hoveredRow = contains(mouseX, mouseY) ? rowAt(mouseY) : -1;
+        // 行悬停底统一在这画(短过渡淡入淡出),渲染回调只画内容。
+        long dt = lastFrameMs < 0 ? 1000 : nowMs - lastFrameMs;
+        lastFrameMs = nowMs;
+        if (hoveredRow >= 0 && hoveredRow != hoverRow) {
+            hoverRow = hoveredRow;
+            hoverT = 0;
+        }
+        hoverT = NumenStyle.hoverStep(hoverT, hoveredRow == hoverRow && hoveredRow >= 0, dt);
+        if (hoverT <= 0f && hoveredRow < 0) hoverRow = -1;
         for (int i = range[0]; i <= range[1]; i++) {
             int rowY = y + i * rowHeight - (int) scrollY;
+            if (i == hoverRow && hoverT > 0.01f) {
+                int overlay = ((int) (((c.hover() >>> 24) & 0xFF) * hoverT) << 24)
+                        | (c.hover() & 0xFFFFFF);
+                s.fillRoundRect(x, rowY, w, rowHeight, NumenStyle.RADIUS_SMALL, overlay);
+            }
             renderer.render(s, c, items.get(i), i, x, rowY, w, rowHeight,
                     i == selectedIndex, i == hoveredRow);
         }

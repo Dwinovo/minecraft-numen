@@ -47,6 +47,31 @@ public final class NumenStyle {
         s.fillRoundRect(x + 1, y + 1, w - 2, h - 2, RADIUS_FIELD - 1, fill);
     }
 
+    // ---- 动效 ----
+    /**
+     * 动效政策(全库统一):指针反馈(悬停/按下)用 {@link #HOVER_MS} 短过渡;
+     * 状态转换(开关滑块/胶囊与 toast 出入场)150~250ms 缓动。新组件照单执行,
+     * 不许瞬时硬切也不许自创时长。
+     */
+    public static final int HOVER_MS = 100;
+
+    /** 按帧推进悬停进度(线性,恰好 HOVER_MS 走满):返回夹紧后的新进度。 */
+    public static float hoverStep(float current, boolean hovered, long dtMs) {
+        float step = dtMs / (float) HOVER_MS;
+        float next = current + (hovered ? step : -step);
+        return Math.max(0f, Math.min(1f, next));
+    }
+
+    /** ARGB 逐通道线性混合(悬停过渡的取色器)。 */
+    public static int mixColor(int a, int b, float t) {
+        int aa = (a >>> 24) & 0xFF, ar = (a >> 16) & 0xFF, ag = (a >> 8) & 0xFF, ab = a & 0xFF;
+        int ba = (b >>> 24) & 0xFF, br = (b >> 16) & 0xFF, bg = (b >> 8) & 0xFF, bb = b & 0xFF;
+        return ((int) (aa + (ba - aa) * t) << 24)
+                | ((int) (ar + (br - ar) * t) << 16)
+                | ((int) (ag + (bg - ag) * t) << 8)
+                | (int) (ab + (bb - ab) * t);
+    }
+
     // ---- 效果 ----
     /** 悬停提亮:各通道向 255 走的百分比。 */
     private static final int HOVER_BRIGHTEN_PCT = 15;

@@ -18,6 +18,9 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     private int selected;
     private final IntConsumer onSelect;
     private boolean open;
+    /** 折叠框悬停进度(0~1,HOVER_MS 走满)。 */
+    private float hoverT;
+    private long lastFrameMs = -1;
     private int popupScroll;   // 弹层滚动(行数)
     
 
@@ -71,10 +74,13 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         boolean hovered = enabled && contains(mouseX, mouseY);
-        // 与输入框同一卡壳形制;展开描边亮 accent(=聚焦态)。悬停只微提亮底——
+        long dt = lastFrameMs < 0 ? 1000 : nowMs - lastFrameMs;
+        lastFrameMs = nowMs;
+        hoverT = NumenStyle.hoverStep(hoverT, hovered || open, dt);
+        // 与输入框同一卡壳形制;展开描边亮 accent(=聚焦态)。悬停微提亮底并短过渡——
         // c.hover() 是给列表行叠加用的半透明色,当实底填会整块发黑。
         NumenStyle.fieldCard(s, x, y, w, h,
-                hovered || open ? NumenStyle.hoverBrighten(c.inputBg()) : c.inputBg(),
+                NumenStyle.mixColor(c.inputBg(), NumenStyle.hoverBrighten(c.inputBg()), hoverT),
                 open ? c.accent() : c.inputBorder());
         if (!compact) {
             s.drawText(selectedItem(), x + 5, y + (h - s.lineHeight()) / 2 + 1,
