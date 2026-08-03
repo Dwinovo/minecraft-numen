@@ -22,6 +22,7 @@ public final class KeyCodes {
     public static final int KEY_A = 65;
     public static final int KEY_C = 67;
     public static final int KEY_V = 86;
+    public static final int KEY_X = 88;
 
     /** GLFW 修饰键位掩码。 */
     public static final int MOD_CTRL = 0x2;
