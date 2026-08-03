@@ -107,12 +107,25 @@ public final class SettingsView {
         return providerForm;
     }
 
-    // ---- 模型配置列表:NumenUI ProfileListPanel(ListView 行 + ConfirmDialog 删除闸) ----
-    private ProfileListPanel profileList;
+    // ---- 模型配置列表:通用 LibraryListPanel(ListView 行 + ConfirmDialog 删除闸) ----
+    private LibraryListPanel<com.dwinovo.numen.agent.llm.ProviderLibrary.Entry> profileList;
 
-    private ProfileListPanel profileList() {
+    private LibraryListPanel<com.dwinovo.numen.agent.llm.ProviderLibrary.Entry> profileList() {
         if (profileList == null) {
-            profileList = new ProfileListPanel(
+            profileList = new LibraryListPanel<>(
+                    ModLanguageData.Keys.PROVIDER_TITLE, ModLanguageData.Keys.PROVIDER_ADD,
+                    ModLanguageData.Keys.PROVIDER_EMPTY,
+                    () -> com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list(),
+                    e -> {
+                        boolean hasKey = nb(e.apiKey());
+                        String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
+                                + (nb(e.model()) ? e.model() : "?")
+                                + (hasKey ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
+                        return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta, !hasKey, null);
+                    },
+                    e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
+                            e.name() == null ? "" : e.name()).getString(),
+                    e -> com.dwinovo.numen.agent.llm.ProviderLibrary.instance().remove(e.id()),
                     () -> {
                         addingProvider = true;
                         providerEditId = null;
@@ -122,6 +135,44 @@ public final class SettingsView {
                     this::beginEditProvider);
         }
         return profileList;
+    }
+
+    // ---- 声线列表:同一底盘,加标题行全局开关与行首绑定 ● ----
+    private LibraryListPanel<com.dwinovo.numen.client.voice.VoiceLibrary.Entry> voiceListPanel;
+
+    private LibraryListPanel<com.dwinovo.numen.client.voice.VoiceLibrary.Entry> voiceListPanel() {
+        if (voiceListPanel == null) {
+            voiceListPanel = new LibraryListPanel<>(
+                    ModLanguageData.Keys.VOICE_TITLE, ModLanguageData.Keys.VOICE_ADD,
+                    ModLanguageData.Keys.VOICE_EMPTY,
+                    () -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().list(),
+                    e -> {
+                        String detail;
+                        if (e.isSovits()) detail = nb(e.refAudio()) ? e.refAudio() : "?";
+                        else if (e.isMiniMax() || e.isFishAudio()) detail = nb(e.voice()) ? e.voice() : "?";
+                        else detail = nb(e.model()) ? e.model() : "?";
+                        String meta = (nb(e.backend()) ? e.backend() : "openai") + " · " + detail
+                                + " · vol " + Math.round(e.volume() * 5.0f);
+                        // 行首 ● = 本同伴正在用的声线(召唤时选定);只读标记,不提供事后换绑。
+                        Boolean marked = host.uuid() == null ? null : e.id().equals(
+                                com.dwinovo.numen.client.voice.VoiceLibrary.instance().assignedEntry(host.uuid()));
+                        return new LibraryListPanel.Row(e.name(), meta, false, marked);
+                    },
+                    e -> Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM,
+                            e.name() == null ? "" : e.name()).getString(),
+                    e -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().remove(e.id()),
+                    () -> {
+                        addingVoice = true;
+                        voiceEditId = null;
+                        resetVoiceForm();
+                        host.rebuild();
+                    },
+                    this::beginEditVoice)
+                    .withToggle(ModLanguageData.Keys.VOICE_ENABLED,
+                            () -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().enabled(),
+                            v -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().setEnabled(v));
+        }
+        return voiceListPanel;
     }
 
     private void onProfileSave(ProfileFormPanel.Draft d) {
@@ -147,7 +198,6 @@ public final class SettingsView {
     // ---- voice section state (mirrors the model-config section: list / form / delete-confirm) ----
     private boolean addingVoice;
     private String voiceEditId;
-    private String voiceDeletePending;
     /** Form backend type (openai / gpt_sovits / minimax / fish_audio),经下拉选择,切换即换字段行。 */
     private String wVoiceBackend = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
     private Dropdown voiceBackendDropdown;
@@ -369,7 +419,6 @@ public final class SettingsView {
         providerEditId = null;
         addingVoice = false;
         voiceEditId = null;
-        voiceDeletePending = null;
         voiceTestGen++;   // 离开语音表单:在途试听回调作废
         addingSkin = false;
         skinEditId = null;
@@ -383,10 +432,6 @@ public final class SettingsView {
     /** 当前待确认删除的标题(null = 无模态)。build 与 render 共用同一份文案,
      *  ConfirmModal 的卡片几何(高度随换行数)才不会漂。 */
     private Component activeModalTitle() {
-        if (voiceDeletePending != null) {
-            var e = com.dwinovo.numen.client.voice.VoiceLibrary.instance().get(voiceDeletePending);
-            return Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM, e != null ? e.name() : "");
-        }
         if (skinDeletePending != null) {
             var e = com.dwinovo.numen.client.skin.SkinLibrary.instance().get(skinDeletePending);
             return Component.translatable(ModLanguageData.Keys.SKIN_DELETE_CONFIRM, e != null ? e.name() : "");
@@ -415,7 +460,6 @@ public final class SettingsView {
     }
 
     private void clearDeletePending() {
-        voiceDeletePending = null;
         skinDeletePending = null;
         personaDeletePending = null;
         mcpDeletePending = null;
@@ -459,9 +503,10 @@ public final class SettingsView {
                 if (addingProvider) buildProviderFormNew();
             }
             case VOICE -> {
-                if (voiceDeletePending != null) buildVoiceDeleteConfirm();
-                else if (addingVoice) buildVoiceForm();
-                else buildVoiceListWidgets();
+                // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
+                voiceListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                        left(), top(), panelW(), panelH());
+                if (addingVoice) buildVoiceForm();
             }
             case SKIN -> {
                 if (skinDeletePending != null) buildSkinDeleteConfirm();
@@ -696,16 +741,6 @@ public final class SettingsView {
 
     // ---- Voice section: the library of named TTS voices companions bind to (mirrors the provider section) ----
 
-    private void buildVoiceListWidgets() {
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, secY0() - 2, 64, 14,
-                Component.translatable(ModLanguageData.Keys.VOICE_ADD), b -> {
-                    addingVoice = true; voiceEditId = null;
-                    resetVoiceForm();
-                    host.rebuild();
-                }));
-        // 绑定不再是单独一行下拉:声线在召唤时选定、新建时自动绑定,列表行内的
-        // ●/○ 标记负责事后换绑(点 ○ 换用,点 ● 解绑静音)。
-    }
 
     /**
      * 声线表单:模型配置同款制式——每个输入框上方一行标题({@code SET_SP} 行距),
@@ -808,13 +843,6 @@ public final class SettingsView {
         return f;
     }
 
-    private void buildVoiceDeleteConfirm() {
-        buildConfirmButtons(() -> {
-            com.dwinovo.numen.client.voice.VoiceLibrary.instance().remove(voiceDeletePending);
-            voiceDeletePending = null;
-            host.rebuild();
-        });
-    }
 
     /** Keep typed values across a rebuild (backend switch / edit entry). */
     private void preserveVoiceForm() {
@@ -961,98 +989,21 @@ public final class SettingsView {
     }
 
     private void renderVoiceSection(GuiGraphics g, int mouseX, int mouseY) {
+        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingVoice) {
-            // 表单模态:列表照常渲染作背景,暗幕+表单卡压上;字段/标题在 overlay 通道。
-            renderVoiceList(g, -10000, -10000);
+            // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压上;
+            // 字段/标题在 overlay 通道。这里只画状态行。
+            voiceListPanel().render(surface, HostThemeColors.current(),
+                    -10000, -10000, net.minecraft.Util.getMillis());
             formModal(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE));
-            // 表单本体是占位符自述的字段 + 自标注的类型按钮;这里只画状态行。
             if (voiceMsg != null && voiceMsgUntil > System.currentTimeMillis()) {
                 txt(g, Component.literal(clip(voiceMsg, fw() - 94)), fx(), fBottom() - 14,
                         voiceMsgFail ? FAIL : OK);
             }
             return;
         }
-        renderVoiceList(g, mouseX, mouseY);
-    }
-
-    private void renderVoiceList(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX(), w = secW();
-        var lib = com.dwinovo.numen.client.voice.VoiceLibrary.instance();
-        txt(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE), x, secY0() - 2, TXT);
-        // 列表视图:全局总开关(标题行右侧,新建按钮左边)。
-        int togX = x + w - 64 - 10 - TOG_W;
-        String onLabel = I18n.get(ModLanguageData.Keys.VOICE_ENABLED);
-        txt(g, Component.literal(onLabel), togX - font().width(onLabel) - 4, secY0() - 1, TXT_MUTED);
-        drawToggle(g, togX, secY0() - 2, lib.enabled());
-        var list = lib.list();
-        if (list.isEmpty()) {
-            txt(g, Component.translatable(ModLanguageData.Keys.VOICE_EMPTY), x, secY0() + 16, TXT_FAINT);
-            return;
-        }
-        int listY0 = voiceListY0();
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
-        String bound = host.uuid() != null ? lib.assignedEntry(host.uuid()) : null;
-        for (int i = settingsScroll; i < list.size(); i++) {
-            int ry = listY0 + (i - settingsScroll) * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            var e = list.get(i);
-            int delX = x + w - 12, editX = x + w - 26;
-            hoverRow(g, mouseX, mouseY, x, w, ry);
-            int tx = x;
-            if (host.uuid() != null) {
-                // 行首 ● = 本同伴正在用的声线(召唤时选定/新建时自动绑定)。只读标记,
-                // 用户裁决:声线在开始时选好即可,不提供事后换绑。
-                if (e.id().equals(bound)) {
-                    txt(g, Component.literal("●"), x, ry + 6, CTA);
-                }
-                tx = x + 12;
-            }
-            txt(g, Component.literal(e.name()), tx, ry + 1, TXT);
-            String detail;
-            if (e.isSovits()) detail = nb(e.refAudio()) ? e.refAudio() : "?";
-            else if (e.isMiniMax()) detail = nb(e.voice()) ? e.voice() : "?";
-            else if (e.isFishAudio()) detail = nb(e.voice()) ? e.voice() : "?";
-            else detail = nb(e.model()) ? e.model() : "?";
-            String meta = (nb(e.backend()) ? e.backend() : "openai") + " · " + detail
-                    + " · vol " + Math.round(e.volume() * 5.0f);
-            txt(g, Component.literal(clip(meta, w - 30 - (tx - x))), tx, ry + 13, TXT_MUTED);
-            txt(g, Component.literal("✎"), editX, ry + 6,
-                    overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
-            txt(g, Component.literal("✕"), delX, ry + 6,
-                    overDelete(mouseX, mouseY, delX, ry) ? FAIL : TXT_FAINT);
-        }
-    }
-
-    /** 声线列表首行的 y。 */
-    private int voiceListY0() {
-        return secY0() + 14;
-    }
-
-    private boolean voiceClick(int mx, int my) {
-        if (addingVoice || voiceDeletePending != null) return false;
-        int x = secX(), w = secW();
-        var lib = com.dwinovo.numen.client.voice.VoiceLibrary.instance();
-        // 全局总开关。
-        int togX = x + w - 64 - 10 - TOG_W;
-        if (overToggle(mx, my, togX, secY0() - 2)) {
-            lib.setEnabled(!lib.enabled());
-            return true;
-        }
-        var list = lib.list();
-        int listY0 = voiceListY0();
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
-        for (int i = scroll; i < list.size(); i++) {
-            int ry = listY0 + (i - scroll) * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            var e = list.get(i);
-            int delX = x + w - 12, editX = x + w - 26;
-            if (overDelete(mx, my, editX, ry)) { beginEditVoice(e); return true; }
-            if (overDelete(mx, my, delX, ry)) { voiceDeletePending = e.id(); host.rebuild(); return true; }
-            if (overRow(mx, my, x, w, ry)) { beginEditVoice(e); return true; }
-        }
-        return false;
+        voiceListPanel().render(surface, HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
     }
 
     private void beginEditVoice(com.dwinovo.numen.client.voice.VoiceLibrary.Entry e) {
@@ -2021,10 +1972,14 @@ public final class SettingsView {
                 && providerForm().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
-        // 模型配置列表(NumenUI):删除确认卡开着时面板吃掉一切(模态);
-        // 平时接行/图标/新建,没命中就放行给子导航。
+        // NumenUI 列表面板:删除确认卡开着时面板吃掉一切(模态);
+        // 平时接行/图标/开关/新建,没命中就放行给子导航。
         if (section == Section.PROVIDER && !addingProvider
                 && profileList().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.VOICE && !addingVoice
+                && voiceListPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
         if (section == Section.STT && sttProviderDropdown != null) {
@@ -2121,7 +2076,6 @@ public final class SettingsView {
         if (section == Section.BRAIN) return brainToggleClick(mx, my);
         if (section == Section.SKILLS) return skillToggleClick(mx, my);
         if (section == Section.PERSONA) return personaClick(mx, my);
-        if (section == Section.VOICE) return voiceClick(mx, my);
         if (section == Section.SKIN) return skinClick(mx, my);
         return false;
     }
@@ -2204,6 +2158,10 @@ public final class SettingsView {
                 && profileList().mouseScrolled(mx, my, sy)) {
             return true;
         }
+        if (section == Section.VOICE && !addingVoice
+                && voiceListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
         for (Dropdown d : new Dropdown[]{voiceBackendDropdown, skinVariantDropdown}) {
             if (d != null && d.mouseScrolled(mx, my, sy)) return true;
         }
@@ -2225,7 +2183,6 @@ public final class SettingsView {
             case MCP -> com.dwinovo.numen.mcp.client.McpClientManager.servers().size();
             case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
             case PERSONA -> PersonaLibrary.instance().list().size();
-            case VOICE -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().list().size();
             case SKIN -> com.dwinovo.numen.client.skin.SkinLibrary.instance().list().size();
             default -> 0;
         };
@@ -2239,9 +2196,14 @@ public final class SettingsView {
      *  and the form dropdowns' open lists (drawn last so they sit above the fields). */
     /** 键盘/字符输入:目前只有模型配置表单的 NumenUI 输入框需要。 */
     public boolean keyPressed(int keyCode, int modifiers) {
-        if (section != Section.PROVIDER) return false;
-        if (addingProvider) return providerForm().keyPressed(keyCode, modifiers);
-        return profileList().keyPressed(keyCode, modifiers);   // ESC 关删除确认(= 取消)
+        if (section == Section.PROVIDER) {
+            if (addingProvider) return providerForm().keyPressed(keyCode, modifiers);
+            return profileList().keyPressed(keyCode, modifiers);   // ESC 关删除确认(= 取消)
+        }
+        if (section == Section.VOICE && !addingVoice) {
+            return voiceListPanel().keyPressed(keyCode, modifiers);
+        }
+        return false;
     }
 
     public boolean charTyped(char ch) {

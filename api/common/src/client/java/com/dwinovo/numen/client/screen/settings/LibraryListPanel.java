@@ -1,6 +1,5 @@
 package com.dwinovo.numen.client.screen.settings;
 
-import com.dwinovo.numen.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
@@ -8,20 +7,27 @@ import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.ConfirmDialog;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.ListView;
+import com.dwinovo.numen.client.ui.widget.Toggle;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
-import com.dwinovo.numen.data.ModLanguageData;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
-import net.minecraft.network.chat.Component;
 
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
- * 模型配置列表(NumenUI):标题行+新建、档案行(名称/元信息/✎/✕)、删除走
- * {@link ConfirmDialog} 模态闸。行体与 ✎ 同义(点行即编辑);✕ 先确认再删,
- * 确认卡开着时整个面板的点击都被浮层吞掉(模态语义由 UiRoot 保证)。
+ * 具名条目库的列表分区(NumenUI):标题行+新建(可选全局开关)、条目行
+ * (名称/元信息/✎✕ 热区/可选行首绑定 ●)、删除走 {@link ConfirmDialog} 模态闸。
+ * 模型配置/声线/皮肤同构——差异全在构造参数(取数、行文案、删除动作),
+ * 面板只管几何与交互。行体与 ✎ 同义(点行即编辑);✕ 先确认再删。
  */
-public final class ProfileListPanel {
+public final class LibraryListPanel<T> {
+
+    /** 一行的展示数据(每帧按条目现算,绑定标记等活状态即时反映)。
+     *  {@code marked}:null=本库无标记列;FALSE=留缩进不点 ●;TRUE=行首 ●。 */
+    public record Row(String name, String meta, boolean metaDanger, Boolean marked) {}
 
     private static final int ROW_H = 24;
     /** 行尾图标热区左缘距行右缘:✕ 最右,✎ 在其左(与旧版热区同宽,肌肉记忆不换)。 */
@@ -30,19 +36,48 @@ public final class ProfileListPanel {
 
     private final UiRoot ui = new UiRoot();
     private final ConfirmDialog confirm = new ConfirmDialog();
+    private final String titleKey;
+    private final String addKey;
+    private final String emptyKey;
+    private final Supplier<List<T>> source;
+    private final Function<T, Row> rowOf;
+    private final Function<T, String> deleteMessage;
+    private final Consumer<T> onDeleteConfirmed;
     private final Runnable onAdd;
-    private final Consumer<ProviderLibrary.Entry> onEdit;
+    private final Consumer<T> onEdit;
 
-    private ListView<ProviderLibrary.Entry> list;
+    // 可选的标题行全局开关(声线库的"启用语音")。
+    private String toggleLabelKey;
+    private Supplier<Boolean> toggleGet;
+    private Consumer<Boolean> toggleSet;
+
+    private ListView<T> list;
     private Label emptyLabel;
-    private List<ProviderLibrary.Entry> entries = List.of();
+    private List<T> entries = List.of();
     private int listW;
     private int dimX, dimY, dimW, dimH;
     private int mouseX = -10000, mouseY = -10000;
 
-    public ProfileListPanel(Runnable onAdd, Consumer<ProviderLibrary.Entry> onEdit) {
+    public LibraryListPanel(String titleKey, String addKey, String emptyKey,
+                            Supplier<List<T>> source, Function<T, Row> rowOf,
+                            Function<T, String> deleteMessage, Consumer<T> onDeleteConfirmed,
+                            Runnable onAdd, Consumer<T> onEdit) {
+        this.titleKey = titleKey;
+        this.addKey = addKey;
+        this.emptyKey = emptyKey;
+        this.source = source;
+        this.rowOf = rowOf;
+        this.deleteMessage = deleteMessage;
+        this.onDeleteConfirmed = onDeleteConfirmed;
         this.onAdd = onAdd;
         this.onEdit = onEdit;
+    }
+
+    public LibraryListPanel<T> withToggle(String labelKey, Supplier<Boolean> get, Consumer<Boolean> set) {
+        this.toggleLabelKey = labelKey;
+        this.toggleGet = get;
+        this.toggleSet = set;
+        return this;
     }
 
     /** {@code x,y} = 标题行左上;{@code dim*} = 删除确认的暗幕覆盖区(整块设置面板)。 */
@@ -55,15 +90,24 @@ public final class ProfileListPanel {
         double keepScroll = list != null ? list.scrollY() : 0;
         ui.clear();
 
-        Label title = ui.add(new Label(t(ModLanguageData.Keys.PROVIDER_TITLE), Label.Role.PRIMARY));
+        Label title = ui.add(new Label(t(titleKey), Label.Role.PRIMARY));
         title.setBounds(x, y, w - 70, 9);
-        Button add = ui.add(new Button(t(ModLanguageData.Keys.PROVIDER_ADD), Button.Style.ACCENT, onAdd));
+        Button add = ui.add(new Button(t(addKey), Button.Style.ACCENT, onAdd));
         add.setBounds(x + w - 56, y - 2, 56, NumenStyle.CONTROL_H);
 
-        emptyLabel = ui.add(new Label(t(ModLanguageData.Keys.PROVIDER_EMPTY), Label.Role.MUTED));
+        if (toggleGet != null) {
+            Toggle tog = ui.add(new Toggle(toggleGet.get(), toggleSet));
+            int togX = x + w - 56 - 8 - 22;
+            tog.setBounds(togX, y - 1, 22, 11);
+            String label = t(toggleLabelKey);
+            Label togLabel = ui.add(new Label(label, Label.Role.MUTED));
+            togLabel.setBounds(togX - Minecraft.getInstance().font.width(label) - 4, y, 90, 9);
+        }
+
+        emptyLabel = ui.add(new Label(t(emptyKey), Label.Role.MUTED));
         emptyLabel.setBounds(x, y + 18, w, 9);
 
-        list = ui.add(new ListView<ProviderLibrary.Entry>(entries, ROW_H, this::renderRow, null)
+        list = ui.add(new ListView<T>(entries, ROW_H, this::renderRow, null)
                 .rowClick(this::rowClicked));
         list.setBounds(x, y + 16, w, h - 16);
         refresh();
@@ -93,22 +137,23 @@ public final class ProfileListPanel {
     // ---- 内部 ----
 
     private void refresh() {
-        entries = ProviderLibrary.instance().list();
+        entries = source.get();
         list.setItems(entries);
         emptyLabel.setVisible(entries.isEmpty());
     }
 
-    private void renderRow(IDrawSurface s, NumenTheme.Colors c, ProviderLibrary.Entry e, int index,
+    private void renderRow(IDrawSurface s, NumenTheme.Colors c, T e, int index,
                            int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
+        Row row = rowOf.apply(e);
         if (hovered) s.fillRoundRect(rx, ry, rw, rh, NumenStyle.RADIUS_SMALL, c.hover());
-        s.drawText(e.name() == null ? "" : e.name(), rx + 2, ry + 3, c.textPrimary(), false);
-        boolean hasKey = nb(e.apiKey());
-        String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
-                + (nb(e.model()) ? e.model() : "?")
-                + (hasKey ? "" : " · " + t(ModLanguageData.Keys.PROVIDER_NO_KEY));
-        // 元信息用次级色不用最淡档——这是内容不是装饰,淡到读不清等于没写。
-        s.drawText(clip(s, meta, rw - EDIT_ZONE - 6), rx + 2, ry + 13,
-                hasKey ? c.textMuted() : c.danger(), false);
+        int tx = rx + 2;
+        if (row.marked() != null) {
+            if (row.marked()) s.drawText("●", rx + 2, ry + 7, c.accent(), false);
+            tx = rx + 14;
+        }
+        s.drawText(row.name() == null ? "" : row.name(), tx, ry + 3, c.textPrimary(), false);
+        s.drawText(clip(s, row.meta(), rw - EDIT_ZONE - 6 - (tx - rx)), tx, ry + 13,
+                row.metaDanger() ? c.danger() : c.textMuted(), false);
 
         int iconY = ry + (rh - s.lineHeight()) / 2 + 1;
         boolean overEdit = hovered && inZone(rx, rw, EDIT_ZONE, DEL_ZONE);
@@ -126,7 +171,7 @@ public final class ProfileListPanel {
 
     private boolean rowClicked(int index, double xInRow) {
         if (index < 0 || index >= entries.size()) return false;
-        ProviderLibrary.Entry e = entries.get(index);
+        T e = entries.get(index);
         if (xInRow >= listW - DEL_ZONE) {
             askDelete(e);
             return true;
@@ -135,13 +180,11 @@ public final class ProfileListPanel {
         return true;
     }
 
-    private void askDelete(ProviderLibrary.Entry e) {
-        confirm.open(ui, dimX, dimY, dimW, dimH,
-                Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
-                        e.name() == null ? "" : e.name()).getString(),
+    private void askDelete(T e) {
+        confirm.open(ui, dimX, dimY, dimW, dimH, deleteMessage.apply(e),
                 t("numen.gui.settings.cancel"), t("numen.dismiss.delete"),
                 () -> {
-                    ProviderLibrary.instance().remove(e.id());
+                    onDeleteConfirmed.accept(e);
                     refresh();
                 });
     }
@@ -153,10 +196,6 @@ public final class ProfileListPanel {
             cut = cut.substring(0, cut.length() - 1);
         }
         return cut + "…";
-    }
-
-    private static boolean nb(String s) {
-        return s != null && !s.isBlank();
     }
 
     private static String t(String key) {
