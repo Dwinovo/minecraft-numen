@@ -33,6 +33,8 @@ public final class MineSkinClient {
 
     private static final String GENERATE_URL = "https://api.mineskin.org/v2/generate";
     private static final Duration TIMEOUT = Duration.ofSeconds(40);   // 生成含排队,给足
+    /** name 字段的保守长度上限(服务端有校验,宁短勿长)。 */
+    private static final int MAX_NAME = 20;
 
     private MineSkinClient() {}
 
@@ -82,15 +84,21 @@ public final class MineSkinClient {
     private static byte[] multipart(String boundary, byte[] png, String variant, String name) {
         try {
             ByteArrayOutputStream out = new ByteArrayOutputStream(png.length + 512);
-            String head = "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"variant\"\r\n\r\n" + variant + "\r\n"
-                    + "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"name\"\r\n\r\n"
-                    + (name == null ? "numen" : name) + "\r\n"
-                    + "--" + boundary + "\r\n"
-                    + "Content-Disposition: form-data; name=\"file\"; filename=\"skin.png\"\r\n"
-                    + "Content-Type: image/png\r\n\r\n";
-            out.write(head.getBytes(StandardCharsets.UTF_8));
+            StringBuilder head = new StringBuilder()
+                    .append("--").append(boundary).append("\r\n")
+                    .append("Content-Disposition: form-data; name=\"variant\"\r\n\r\n")
+                    .append(variant).append("\r\n");
+            // name 是可选字段:净化后为空就整条不发,而不是硬塞一个会被拒的值。
+            String safe = asciiName(name);
+            if (!safe.isEmpty()) {
+                head.append("--").append(boundary).append("\r\n")
+                        .append("Content-Disposition: form-data; name=\"name\"\r\n\r\n")
+                        .append(safe).append("\r\n");
+            }
+            head.append("--").append(boundary).append("\r\n")
+                    .append("Content-Disposition: form-data; name=\"file\"; filename=\"skin.png\"\r\n")
+                    .append("Content-Type: image/png\r\n\r\n");
+            out.write(head.toString().getBytes(StandardCharsets.UTF_8));
             out.write(png);
             out.write(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
             return out.toByteArray();
@@ -99,10 +107,29 @@ public final class MineSkinClient {
         }
     }
 
+    /**
+     * MineSkin 的 name 有服务端字符白名单,中文名直接 400 Validation error
+     * (真机日志实证)。这里净化成保守的 ASCII 子集——但**不在表单层面限制**:
+     * 皮肤条目名是玩家自己看的库标签,中文完全合理,上游的技术约束不该
+     * 泄漏成用户的输入限制。净化后为空(纯中文名)就不发这个可选字段。
+     */
+    private static String asciiName(String raw) {
+        if (raw == null) return "";
+        StringBuilder sb = new StringBuilder(MAX_NAME);
+        for (int i = 0; i < raw.length() && sb.length() < MAX_NAME; i++) {
+            char c = raw.charAt(i);
+            if (c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
+                    || c >= '0' && c <= '9' || c == '_' || c == '-') {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
     /** 容错解析:v2({@code skin.texture.data})与 v1({@code data.texture})两种形状都吃。 */
     private static Signed parse(HttpResponse<String> resp) {
         if (resp.statusCode() == 429) {
-            throw new IllegalStateException("MineSkin 限流(免费档约 10 张/分),稍等再试");
+            throw new IllegalStateException("MineSkin 限流(免费档 20 张/分),稍等再试");
         }
         JsonObject root;
         try {
