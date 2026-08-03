@@ -730,7 +730,7 @@ public final class NumenScreen extends Screen {
         }
         // 设置页的模态(删除确认卡 / 新建编辑表单卡):Esc 收起卡片而不是关掉整个面板。
         if (k == 256 && tab == Tab.SETTINGS && !summoning
-                && (settings.cancelModal() || settings.cancelForm())) {
+                && settings.cancelForm()) {
             return true;
         }
         // "连接"分区的内嵌 NumenUI 面板(输入框光标键/粘贴、下拉 Esc 收浮层)。
@@ -814,10 +814,6 @@ public final class NumenScreen extends Screen {
         if (dismissPending != null) {
             return super.mouseClicked(mouseX, mouseY, button);   // modal confirm — let its Cancel/Delete buttons handle it
         }
-        if (tab == Tab.SETTINGS && settings.modalActive()) {
-            // 设置页的删除确认模态:侧栏/页签/列表全部只是背景,只有卡上按钮可点。
-            return super.mouseClicked(mouseX, mouseY, button);
-        }
         if (!summoning && tab == Tab.SETTINGS && settings.formActive()) {
             // 设置页的表单模态:先给表单自己的下拉路由,其余只放行 widget 通道
             // (卡上字段/按钮),侧栏/页签/背景列表全部屏蔽。
@@ -896,7 +892,7 @@ public final class NumenScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mx, double my, double sx, double sy) {
         // 模态确认卡在场:背景(侧栏名册/设置列表)不响应滚轮。
-        if (dismissPending != null || (tab == Tab.SETTINGS && settings.modalActive())) {
+        if (dismissPending != null) {
             return false;
         }
         // 打开着的下拉列表优先吃滚轮(列表被面板截断时滚动余下的行)。
@@ -921,7 +917,6 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.CHAT && sy != 0) {
             return chatView.mouseScrolled(sy);
         }
-        if (tab == Tab.SETTINGS && sy != 0 && settings.mouseScrolledList(sy)) return true;
         return super.mouseScrolled(mx, my, sx, sy);
     }
 

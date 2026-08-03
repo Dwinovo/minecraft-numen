@@ -8,7 +8,6 @@ import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.screen.Dropdown;
 import com.dwinovo.numen.client.screen.LlmProviders;
 import com.dwinovo.numen.client.screen.Nb;
-import com.dwinovo.numen.client.screen.SimpleButton;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.mcp.server.McpMode;
@@ -218,6 +217,30 @@ public final class SettingsView {
     private McpFormPanel mcpForm;
     private McpFormPanel.Draft mcpDraft = new McpFormPanel.Draft();
 
+    // ---- 左侧子导航:NumenUI NavPanel(选中胶囊+竖条,悬停动效随 ListView) ----
+    private NavPanel navPanel;
+
+    private NavPanel navPanel() {
+        if (navPanel == null) {
+            navPanel = new NavPanel(i -> selectSection(Section.values()[i]));
+        }
+        return navPanel;
+    }
+
+    /** 子导航标签:与 Section 声明顺序严格对应。 */
+    private static List<String> navLabels() {
+        return List.of(
+                I18n.get(ModLanguageData.Keys.PROVIDER_TITLE),
+                I18n.get("numen.settings.nav.mcp"),
+                I18n.get("numen.settings.nav.brain"),
+                I18n.get("numen.settings.nav.skills"),
+                I18n.get("numen.settings.nav.persona"),
+                I18n.get(ModLanguageData.Keys.VOICE_TITLE),
+                I18n.get(ModLanguageData.Keys.SKIN_TITLE),
+                I18n.get(ModLanguageData.Keys.STT_NAV),
+                I18n.get("numen.settings.nav.theme"));
+    }
+
     // ---- STT 分区:NumenUI SttPanel(服务商联动/模型双态/麦克风/保存回执) ----
     private SttPanel sttPanel;
 
@@ -360,18 +383,11 @@ public final class SettingsView {
 
     // ---- delete-confirm modal (shared by the five sections that can delete) ----
 
-    /** 旧删除确认模态已整体退役(各面板自带 ConfirmDialog 浮层);屏幕侧调用面保留。 */
-    public boolean modalActive() {
-        return false;
-    }
-
-    public boolean cancelModal() {
-        return false;
-    }
-
     /** Dispatch widget building by the active section (skill/MCP lists render manually). */
     public void buildWidgets() {
         loadPalette();
+        navPanel().build(left() + PAD - 4, secY0() - 3, NAV_W, secBottom() - secY0() + 3,
+                navLabels(), section.ordinal());
         switch (section) {
             case SKILLS -> skillsListPanel().build(secX(), secY0() - 2, secW(),
                     secBottom() - secY0() + 2, left(), top(), panelW(), panelH());
@@ -923,7 +939,10 @@ public final class SettingsView {
         com.dwinovo.numen.client.ui.RoundRect.card(g,
                 left() + 5, top() + HEADER_H + 2, left() + panelW() - 5, top() + panelH() - 5,
                 6, th.surface(), th.surfaceBorder());
-        renderSettingsNav(g, mouseX, mouseY);
+        navPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+        int dx = left() + PAD + NAV_W + 3;
+        g.fill(dx, secY0() - 2, dx + 1, secBottom(), BORDER);   // 导航与正文的竖分隔线
         switch (section) {
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> {
@@ -969,41 +988,6 @@ public final class SettingsView {
         providerDraft.reasoningEffort = e.reasoningEffort() == null ? "" : e.reasoningEffort();
         providerDraft.proxy = e.proxy() == null ? "" : e.proxy();
         host.rebuild();
-    }
-
-    /** The config-hub left sub-nav + the divider. */
-    private void renderSettingsNav(GuiGraphics g, int mouseX, int mouseY) {
-        String[] labels = {
-                I18n.get(ModLanguageData.Keys.PROVIDER_TITLE),
-                I18n.get("numen.settings.nav.mcp"), I18n.get("numen.settings.nav.brain"),
-                I18n.get("numen.settings.nav.skills"), I18n.get("numen.settings.nav.persona"),
-                I18n.get(ModLanguageData.Keys.VOICE_TITLE),
-                I18n.get(ModLanguageData.Keys.SKIN_TITLE),
-                I18n.get(ModLanguageData.Keys.STT_NAV),
-                I18n.get("numen.settings.nav.theme")};
-        int navX = left() + PAD;
-        int y = secY0();
-        int chip = UiTheme.current().chipFill();
-        int chipFaint = (chip & 0xFFFFFF) | (((chip >>> 24) / 2) << 24);   // 悬停胶囊:半透明再减半
-        for (int i = 0; i < labels.length; i++) {
-            boolean active = section == Section.values()[i];
-            int ry = y + i * NAV_SP;
-            // 命中区与 navClick 完全一致(ry-3 .. ry+NAV_SP-5)。
-            boolean hovered = mouseX >= navX && mouseX < navX + NAV_W
-                    && mouseY >= ry - 3 && mouseY < ry + NAV_SP - 5;
-            if (active || hovered) {                              // 选中/悬停胶囊底
-                com.dwinovo.numen.client.ui.RoundRect.fill(g, navX - 4, ry - 3,
-                        navX + NAV_W - 2, ry + NAV_SP - 5, 4, active ? chip : chipFaint);
-            }
-            if (active) {
-                g.fill(navX - 2, ry - 3, navX - 1, ry + NAV_SP - 5, ACCENT);   // gold left bar
-                txt(g, Component.literal(labels[i]), navX + 3, ry, TXT);
-            } else {
-                txt(g, Component.literal(labels[i]), navX + 3, ry, TXT_MUTED);
-            }
-        }
-        int dx = left() + PAD + NAV_W + 3;
-        g.fill(dx, secY0() - 2, dx + 1, secBottom(), BORDER);   // vertical divider
     }
 
     // ---- MCP section: external server list with a live on/off switch per row ----
@@ -1096,9 +1080,6 @@ public final class SettingsView {
      *  the fields), then the sub-nav / theme rows / per-row toggles. Returns true = consumed. */
     public boolean mouseClicked(double mouseX, double mouseY) {
         loadPalette();
-        // 模态确认卡在场:面板内容只是背景,任何命中(子导航/主题行/列表行)都不放行
-        // ——卡上的两颗按钮走 Screen 的 widget 通道,不经过这里。
-        if (modalActive()) return false;
         // 模型配置表单(NumenUI):事件整体交给表单面板(浮层打开时它优先吃掉一切)。
         if (section == Section.PROVIDER && addingProvider
                 && providerForm().mouseClicked(mouseX, mouseY, 0)) {
@@ -1161,24 +1142,9 @@ public final class SettingsView {
         if (section == Section.THEME && themePanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
-        return settingsClickedAt(mouseX, mouseY);
-    }
-
-    /** Sub-nav column, the theme rows, then per-row toggles / edits in the section lists. */
-    private boolean settingsClickedAt(double mxd, double myd) {
-        int mx = (int) mxd, my = (int) myd;
-        // 表单模态:子导航/主题行/列表全在暗幕之下,不放行(表单自己的点击
-        // 已在 mouseClicked 的面板路由里处理)。
-        if (formActive()) return false;
-        int navX = left() + PAD, y = secY0();
-        if (mx >= navX && mx < navX + NAV_W) {
-            for (int i = 0; i < Section.values().length; i++) {
-                int ry = y + i * NAV_SP;
-                if (my >= ry - 3 && my < ry + NAV_SP - 5) {
-                    selectSection(Section.values()[i]);
-                    return true;
-                }
-            }
+        // 子导航(NumenUI):表单模态时在暗幕之下不放行。
+        if (!formActive() && navPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
         }
         return false;
     }
@@ -1285,14 +1251,6 @@ public final class SettingsView {
         if (section == Section.PERSONA && addingPersona) {
             return personaForm().mouseReleased(mx, my, button);
         }
-        return false;
-    }
-
-    /** Post-widget overlay pass: field placeholders (shadowless), the voice form's row labels,
-     *  and the form dropdowns' open lists (drawn last so they sit above the fields). */
-    /** 键盘/字符输入:目前只有模型配置表单的 NumenUI 输入框需要。 */
-    /** 旧分区列表滚动通道已整体退役(各面板自滚);屏幕侧调用面保留。 */
-    public boolean mouseScrolledList(double sy) {
         return false;
     }
 
