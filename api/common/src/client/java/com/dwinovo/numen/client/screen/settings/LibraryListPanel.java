@@ -68,6 +68,11 @@ public final class LibraryListPanel<T> {
 
     private RowIcon<T> rowIcon;
     private int rowIconSize;
+    /** 行内开关的滑动动画:一次只翻一行,记住它并逐帧趋近(其余行取静态位置)。
+     *  行控件实例进不了 ListView 的渲染回调,动画状态只能由面板自己拿着。 */
+    private int animRow = -1;
+    private float animKnob;
+    private long lastAnimMs = -1;
     // 可选的行内开关(MCP 服务器的启停):画在 ✕ 左侧,替代 ✎(行体点击仍=编辑)。
     private java.util.function.Predicate<T> toggleOn;
     private Consumer<T> toggleFlip;
@@ -205,7 +210,22 @@ public final class LibraryListPanel<T> {
         if (list == null) return;
         this.mouseX = mx;
         this.mouseY = my;
+        advanceRowToggleAnim(nowMs);
         ui.render(s, c, mx, my, nowMs);
+    }
+
+    /** 帧间隔归一化的趋近(与 Toggle 组件同一节律);到位即释放动画行。 */
+    private void advanceRowToggleAnim(long nowMs) {
+        long dt = lastAnimMs < 0 ? 16 : nowMs - lastAnimMs;
+        lastAnimMs = nowMs;
+        if (animRow < 0 || animRow >= entries.size()) {
+            animRow = -1;
+            return;
+        }
+        float target = toggleOn.test(entries.get(animRow)) ? 1f : 0f;
+        float speed = Math.min(1f, dt / 16f * 0.35f);
+        animKnob = com.dwinovo.numen.client.ui.Animation.lerpTo(animKnob, target, speed, 0.01f);
+        if (Math.abs(animKnob - target) < 0.01f) animRow = -1;
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
@@ -253,20 +273,22 @@ public final class LibraryListPanel<T> {
             return;
         }
         if (toggleOn != null) {
-            // 行内启停:静态小胶囊(逐行控件实例进不了 ListView 的渲染回调,画出来即可)。
-            // 关闭态描边环+灰轨道,浅色面板上不隐形(与 Toggle 组件同制)。
+            // 行内启停:与 Toggle 组件同制——关闭态描边环+灰轨道(浅面板上不隐形),
+            // 翻转时滑块滑动、轨道色随之渐变(动画状态由面板持有,见 animRow)。
             boolean on = toggleOn.test(e);
+            float knob = index == animRow ? animKnob : (on ? 1f : 0f);
             int tx0 = rx + rw - (deleteMessage != null ? TOGGLE_ZONE : 24);
             int ty = ry + (rh - 10) / 2;
-            if (on) {
-                s.fillRoundRect(tx0, ty, 20, 10, 5, c.accent());
-            } else {
-                s.fillRoundRect(tx0, ty, 20, 10, 5, c.textMuted());
-                s.fillRoundRect(tx0 + 1, ty + 1, 18, 8, 4, c.inputBg());
+            s.fillRoundRect(tx0, ty, 20, 10, 5,
+                    NumenStyle.mixColor(c.textMuted(), c.accent(), knob));
+            if (knob < 0.99f) {   // 关闭侧的浅底+灰纹随进度淡出
+                int fade = (int) (255 * (1f - knob));
                 s.fillRoundRect(tx0 + 1, ty + 1, 18, 8, 4,
-                        (c.textMuted() & 0x00FFFFFF) | 0x40000000);
+                        (fade << 24) | (c.inputBg() & 0xFFFFFF));
+                s.fillRoundRect(tx0 + 1, ty + 1, 18, 8, 4,
+                        ((int) (0x40 * (1f - knob)) << 24) | (c.textMuted() & 0xFFFFFF));
             }
-            s.fillRoundRect(on ? tx0 + 11 : tx0 + 2, ty + 2, 7, 6, 3, 0xFFFFFFFF);
+            s.fillRoundRect(tx0 + 2 + Math.round(9 * knob), ty + 2, 7, 6, 3, 0xFFFFFFFF);
         } else if (deleteMessage != null) {
             boolean overEdit = hovered && inZone(rx, rw, EDIT_ZONE, DEL_ZONE);
             s.drawText("✎", rx + rw - EDIT_ZONE + 2, iconY,
@@ -299,6 +321,8 @@ public final class LibraryListPanel<T> {
             return true;
         }
         if (toggleOn != null && xInRow >= listW - TOGGLE_ZONE) {
+            animRow = index;                                  // 从翻转前的位置起步滑动
+            animKnob = toggleOn.test(e) ? 1f : 0f;
             toggleFlip.accept(e);
             return true;
         }

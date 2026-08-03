@@ -25,6 +25,7 @@ public final class BrainPanel {
     private final UiRoot ui = new UiRoot();
     /** 复制回执:跨 build 持久(开关重建不吞在途消息)。 */
     private final InlineAlert notice = new InlineAlert();
+    private Button tokenCopy;
     private int x, y, w, h;
 
     public BrainPanel() {
@@ -44,16 +45,14 @@ public final class BrainPanel {
         Label title = ui.add(new Label(t("numen.brain.title"), Label.Role.PRIMARY));
         title.setBounds(x, y, w, 9);
 
-        Toggle tog = ui.add(new Toggle(mcp.enabled(), v -> {
-            mcp.setEnabled(v);
-            build(this.x, this.y, this.w, this.h);   // 令牌行的复制按钮随配置在场与否增减
-        }));
+        // 开关回调只写配置,绝不在此重建——重建会 new 出滑块已在终点的新 Toggle,
+        // 滑动动画连起步都来不及(真机教训:大脑区开关瞬时切换的病根)。
+        Toggle tog = ui.add(new Toggle(mcp.enabled(), McpMode.instance()::setEnabled));
         tog.setBounds(x + w - 24, y + R_TOGGLE - 1, 22, 11);
 
-        copyButton(x + w - 50, y + R_ENDPOINT + 9, "numen.brain.copy", mcp.endpoint());
-        if (!mcp.token().isBlank()) {
-            copyButton(x + w - 50, y + R_TOKEN + 9, "numen.brain.copy", mcp.token());
-        }
+        // 端点/令牌的复制按钮常驻;令牌未生成时由 render 收起(见 tokenCopy.setVisible)。
+        copyButton(x + w - 50, y + R_ENDPOINT + 9, () -> McpMode.instance().endpoint());
+        tokenCopy = copyButton(x + w - 50, y + R_TOKEN + 9, () -> McpMode.instance().token());
         String promptLabel = t("numen.brain.copy_prompt");
         int pw = Minecraft.getInstance().font.width(promptLabel) + 14;   // 宽随文案实测
         Button prompt = ui.add(new Button(promptLabel, Button.Style.ACCENT,
@@ -85,6 +84,7 @@ public final class BrainPanel {
         boolean noToken = mcp.token().isBlank();
         s.drawText(noToken ? t("numen.brain.token_none") : mcp.maskedToken(),
                 x, y + R_TOKEN + 11, noToken ? c.textMuted() : c.textPrimary(), false);
+        if (tokenCopy != null) tokenCopy.setVisible(!noToken);   // 无令牌可复制时收起
 
         s.drawText(t("numen.brain.prompt_warn"), x, y + R_WARN, c.textMuted(), false);
         s.drawText(statusLine(mcp), x, y + R_STATUS, on ? c.success() : c.textMuted(), false);
@@ -98,9 +98,12 @@ public final class BrainPanel {
 
     // ---- 内部 ----
 
-    private void copyButton(int bx, int by, String labelKey, String text) {
-        Button b = ui.add(new Button(t(labelKey), Button.Style.NORMAL, () -> copy(text)));
+    /** 复制按钮:文本惰性取(配置随时可变,build 时捕获会复制到过期值)。 */
+    private Button copyButton(int bx, int by, java.util.function.Supplier<String> text) {
+        Button b = ui.add(new Button(t("numen.brain.copy"), Button.Style.NORMAL,
+                () -> copy(text.get())));
         b.setBounds(bx, by, 46, 14);
+        return b;
     }
 
     private void copy(String text) {
