@@ -37,7 +37,6 @@
   "numen.chat.persona_changed": "─── persona switched ───",
   "numen.chat.plan": "PLAN",
   "numen.chat.reasoning": "Reasoning",
-  "numen.chat.reasoning_chars": "%s chars",
   "numen.chat.send": "Send",
   "numen.chat.steps": "%s steps",
   "numen.chat.tip.compact": "Compact history",

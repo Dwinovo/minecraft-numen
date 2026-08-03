@@ -486,10 +486,9 @@ public final class ChatView {
         List<ChipRow> rows = new ArrayList<>();
         boolean expanded = live || (foldKey != null && expandedGroups.contains(foldKey));
         if (!expanded) {
-            String summary = I18n.get("numen.chat.reasoning") + " · "
-                    + I18n.get("numen.chat.reasoning_chars", flat.length()) + " ▸";
+            // 不报字数:中英混排的 length() 一半是字一半是字符,数出来没有意义。
             rows.add(new ChipRow("▸", MUTED,
-                    Nb.colored(fitOneLine(summary, innerW - ICON_W), MUTED).getVisualOrderText()));
+                    Nb.colored(I18n.get("numen.chat.reasoning") + " ▸", MUTED).getVisualOrderText()));
             return new Chip(List.copyOf(rows), foldKey);
         }
         rows.add(new ChipRow(live ? SPIN[(int) ((System.currentTimeMillis() / 120) % 4)] : "▾", MUTED,
