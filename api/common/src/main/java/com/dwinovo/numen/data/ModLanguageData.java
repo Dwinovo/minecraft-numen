@@ -361,6 +361,10 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_OK,         "\"%s\" signed");
         adder.add("numen.summon.mode",       "Mode");
         adder.add("numen.bubble.replying",   "Replying");
+        adder.add("numen.chat.reasoning",    "Reasoning");
+        adder.add("numen.summon.fetching_skin", "Fetching skin…");
+        adder.add("numen.summon.skin_failed", "Skin unavailable (%s), using default");
+        adder.add("numen.chat.reasoning_chars", "%s chars");
         adder.add("numen.skin.name_placeholder", "3-16 letters, digits or _");
         adder.add("numen.bubble.doing",      "%s…");
         adder.add("numen.gui.list.deleted",  "Deleted \"%s\"");
@@ -610,6 +614,10 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_OK,         "「%s」签名成功");
         adder.add("numen.summon.mode",       "模式");
         adder.add("numen.bubble.replying",   "正在回复中");
+        adder.add("numen.chat.reasoning",    "思考过程");
+        adder.add("numen.summon.fetching_skin", "正在获取皮肤…");
+        adder.add("numen.summon.skin_failed", "没借到皮肤(%s),用默认皮肤");
+        adder.add("numen.chat.reasoning_chars", "%s 字");
         adder.add("numen.skin.name_placeholder", "3~16 位英文/数字/下划线");
         adder.add("numen.bubble.doing",      "正在%s");
         adder.add("numen.gui.list.deleted",  "已删除「%s」");

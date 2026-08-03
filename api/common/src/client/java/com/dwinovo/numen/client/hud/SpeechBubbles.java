@@ -30,8 +30,6 @@ public final class SpeechBubbles {
     private static final long TEXT_LIFE_BASE_MS = 7_000;
     private static final long TEXT_LIFE_PER_CHAR_MS = 55;
     private static final long TEXT_LIFE_MAX_MS = 22_000;
-    /** 思考流只留尾巴:气泡最多两行,存多了也是白存。 */
-    private static final int THINKING_TAIL_CAP = 300;
 
     /** 渲染方要画的东西。{@code text} 为空 = 思考态(画省略号/思考流)。 */
     public record View(String text, String activity, boolean thinking) {}
@@ -44,7 +42,6 @@ public final class SpeechBubbles {
     }
 
     private static final Map<UUID, Said> SAID = new HashMap<>();
-    private static final Map<UUID, StringBuilder> THINKING = new HashMap<>();
 
     private SpeechBubbles() {}
 
@@ -61,28 +58,17 @@ public final class SpeechBubbles {
         long life = Math.min(TEXT_LIFE_MAX_MS,
                 TEXT_LIFE_BASE_MS + (long) shown.length() * TEXT_LIFE_PER_CHAR_MS);
         SAID.put(entityUuid, new Said(shown, System.currentTimeMillis(), life));
-        THINKING.remove(entityUuid);   // 说出口了,思考流没用了
     }
 
-    /** 思考增量(推理模型的 reasoning 流):只留尾巴。 */
-    public static void appendThinking(UUID entityUuid, String delta) {
-        if (entityUuid == null || delta == null || delta.isEmpty()) return;
-        StringBuilder sb = THINKING.computeIfAbsent(entityUuid, k -> new StringBuilder());
-        sb.append(delta);
-        if (sb.length() > THINKING_TAIL_CAP) sb.delete(0, sb.length() - THINKING_TAIL_CAP);
-    }
-
-    /** 打断/死亡/退出:正文与思考流一起清(忙碌态自会随代理循环停下)。 */
+    /** 打断/死亡/退出:清掉这只的正文(忙碌态自会随代理循环停下)。 */
     public static void clear(UUID entityUuid) {
         if (entityUuid == null) return;
         SAID.remove(entityUuid);
-        THINKING.remove(entityUuid);
     }
 
     /** 退出世界:清台账(和其他客户端会话态一起挂在断线钩子上)。 */
     public static void clear() {
         SAID.clear();
-        THINKING.clear();
     }
 
     // ---- 读取面(渲染方逐帧调用) ----
@@ -101,11 +87,5 @@ public final class SpeechBubbles {
                 .filter(loop -> loop.isBusy())
                 .map(loop -> new View("", loop.currentActivity(), true))
                 .orElse(null);
-    }
-
-    /** 当前思考流尾巴(思考气泡的内容),没有则空串。 */
-    public static String thinkingTail(UUID entityUuid) {
-        StringBuilder sb = THINKING.get(entityUuid);
-        return sb == null ? "" : sb.toString();
     }
 }

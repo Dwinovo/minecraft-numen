@@ -51,6 +51,10 @@ final class TurnPresenter {
      *  HTTP 线程到达后经 {@code Minecraft.execute} 蹦回来追加,代际不符直接丢;
      *  回复落库/打断/死亡时清空——committed 消息接管显示,永不双份。 */
     private final StringBuilder livePartial = new StringBuilder();
+    /** 在飞回合的思考流(推理模型的 reasoning 增量)。与 {@link #livePartial} 同一套
+     *  生命周期:同代际到达才追加,落库/打断/死亡一起清——落库后由 AssistantTurn
+     *  里那份 reasoning 接管显示,永不双份。 */
+    private final StringBuilder liveReasoning = new StringBuilder();
     /** 上次刷进聊天框流式行的文本(变了才重刷,不逐 tick 折腾聊天框)。 */
     private String lastStreamedPartial = "";
     /** 上次发给服务端的说话状态(翻转才发包,不逐 tick 刷)。 */
@@ -70,9 +74,15 @@ final class TurnPresenter {
         return livePartial.toString();
     }
 
-    /** 半截打字作废(打断/死亡/回复落库时)。 */
+    /** 在飞回合的思考流("" = 没有或已落库)——G 面板思考块的流式数据源。 */
+    String liveReasoning() {
+        return liveReasoning.toString();
+    }
+
+    /** 半截打字作废(打断/死亡/回复落库时):正文与思考流一起清。 */
     void clearPartial() {
         livePartial.setLength(0);
+        liveReasoning.setLength(0);
     }
 
     /** 每 client tick:语音管线推进、说话状态上报、聊天框打字机。 */
@@ -104,10 +114,7 @@ final class TurnPresenter {
                 String r = reasoningDelta.apply(chunk);
                 if (r != null && !r.isEmpty()) {
                     Minecraft.getInstance().execute(() -> {
-                        if (gen == generation.getAsInt()) {
-                            com.dwinovo.numen.client.hud.SpeechBubbles
-                                    .appendThinking(entityUuid, r);
-                        }
+                        if (gen == generation.getAsInt()) liveReasoning.append(r);
                     });
                 }
             }

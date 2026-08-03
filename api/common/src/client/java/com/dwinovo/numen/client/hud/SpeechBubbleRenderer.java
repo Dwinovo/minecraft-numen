@@ -87,7 +87,7 @@ public final class SpeechBubbleRenderer {
                                    Font font, SpeechBubbles.View bubble, java.util.UUID uuid) {
         UiTheme th = UiTheme.current();
         List<String> lines = bubble.thinking()
-                ? thinkingLines(font, uuid, bubble.activity())
+                ? thinkingLines(bubble.activity())
                 : wrapToWidth(font, bubble.text(), MAX_WIDTH, MAX_LINES);
         if (lines.isEmpty()) {
             return;
@@ -130,21 +130,15 @@ public final class SpeechBubbleRenderer {
     }
 
     /**
-     * 思考泡的内容:主行是「正在回复中」加脉冲点(推理模型有思考流时改滚它的
-     * 尾巴——那更有信息量);末行附当前动作,长任务跑几十秒时主人得看见她在
-     * 挖矿而不是卡死了。
+     * 思考泡的内容:「正在回复中」加脉冲点 + 一行当前动作(长任务跑几十秒时
+     * 主人得看见她在挖矿而不是卡死了)。
+     *
+     * <p>思考过程本身<b>不上气泡</b>——那是长文,头顶两行装不下也读不完,
+     * 它的去处是 G 面板的思考块(流式展开、完成折叠)。气泡只回答"她在忙什么"。
      */
-    private static List<String> thinkingLines(Font font, java.util.UUID uuid, String activity) {
+    private static List<String> thinkingLines(String activity) {
         List<String> out = new ArrayList<>();
-        String stream = SpeechBubbles.thinkingTail(uuid);
-        if (!stream.isEmpty()) {
-            String tail = stream.length() > 72
-                    ? "…" + stream.substring(stream.length() - 72) : stream;
-            out.addAll(wrapToWidth(font, tail.replace('\n', ' '), MAX_WIDTH, 2));
-        }
-        if (out.isEmpty()) {
-            out.add(I18n.get("numen.bubble.replying") + thinkingDots());
-        }
+        out.add(I18n.get("numen.bubble.replying") + thinkingDots());
         if (activity != null && !activity.isBlank()) {
             out.add(I18n.get("numen.bubble.doing", activity));
         }

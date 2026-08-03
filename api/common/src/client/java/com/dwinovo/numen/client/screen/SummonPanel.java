@@ -62,6 +62,7 @@ public final class SummonPanel {
 
     private TextField nameField;
     private InlineAlert alert;
+    private Button createButton;
     private List<String> personaIds = List.of();
     private List<String> providerIds = List.of();
     private List<String> voiceIds = List.of();
@@ -205,9 +206,9 @@ public final class SummonPanel {
         Button cancel = ui.add(new Button(t("numen.gui.settings.cancel"),
                 Button.Style.NORMAL, host::onCancel));
         cancel.setBounds(bx, ry, bw, 16);
-        Button create = ui.add(new Button(t(ModLanguageData.Keys.SUMMON_CREATE),
+        createButton = ui.add(new Button(t(ModLanguageData.Keys.SUMMON_CREATE),
                 Button.Style.ACCENT, this::submit));
-        create.setBounds(bx + bw + gap, ry, bw, 16);
+        createButton.setBounds(bx + bw + gap, ry, bw, 16);
 
         ui.requestFocus(nameField);
     }
@@ -271,6 +272,12 @@ public final class SummonPanel {
      * 名字限定 Minecraft 官方命名规则(3~16 位英文/数字/下划线)——中文名在玩家
      * 系统各处容易出错,而且名字同时就是皮肤来源:同名正版玩家的皮肤会自动穿上。
      */
+    /** 提交后的等待态:胶囊说明在干嘛,创建钮自锁防重复点(异步查皮肤要一两秒)。 */
+    public void setBusy(String message) {
+        if (alert != null) alert.show(InlineAlert.Severity.INFO, message);
+        if (createButton != null) createButton.setEnabled(false);
+    }
+
     private void submit() {
         String n = draft.name == null ? "" : draft.name.trim();
         if (n.isEmpty()) {

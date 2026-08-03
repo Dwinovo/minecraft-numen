@@ -323,6 +323,11 @@ public final class EntityAgentLoop {
         return presenter.livePartial();
     }
 
+    /** 在飞回合的思考流("" = 没有或已落库)——G 面板思考块的流式数据源。 */
+    public String liveReasoning() {
+        return presenter.liveReasoning();
+    }
+
     /** 本同伴累计消耗的 token(跨会话持久化)。 */
     public long totalTokensUsed() {
         return tokens.total();

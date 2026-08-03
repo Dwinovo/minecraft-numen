@@ -296,16 +296,31 @@ public final class NumenScreen extends Screen {
             if (d.personaId != null) com.dwinovo.numen.persona.PersonaLibrary.pendSummon(d.name, d.personaId);
             com.dwinovo.numen.agent.llm.ProviderLibrary.pendSummon(d.name, d.providerId);
             if (d.voiceId != null) com.dwinovo.numen.client.voice.VoiceLibrary.pendSummon(d.name, d.voiceId);
-            // 自定义皮肤:库里存好的 Mojang 签名数据随包捎给服务端(自验证,伪造不了);
-            // 没选就留空,服务端按名字找同名正版皮肤。
-            String skinValue = "", skinSig = "";
+            // 自定义皮肤:库里存好的签名数据现成,直接发。
             var skinEntry = com.dwinovo.numen.client.skin.SkinLibrary.instance().get(d.skinId);
             if (skinEntry != null && skinEntry.signed()) {
-                skinValue = skinEntry.value();
-                skinSig = skinEntry.signature();
+                com.dwinovo.numen.Constants.LOG.info("[numen-skin] 召唤 {}: 用皮肤库条目「{}」",
+                        d.name, skinEntry.name());
+                sendSummon(d, skinEntry.value(), skinEntry.signature());
+                return;
             }
-            com.dwinovo.numen.Constants.LOG.info("[numen-skin] 召唤 {}: 皮肤选择={} 条目={} 携带签名数据={}",
-                    d.name, d.skinId, skinEntry == null ? "null" : skinEntry.name(), !skinValue.isEmpty());
+            // 默认(按名字):在本机查 Mojang——走玩家自己的代理,失败也说得清原因
+            // (服务端那条路吃 JVM 默认网络,国内经常静默超时)。
+            summonPanel().setBusy(I18n.get("numen.summon.fetching_skin"));
+            com.dwinovo.numen.client.skin.MojangSkinLookup.fetch(d.name)
+                    .thenAccept(r -> Minecraft.getInstance().execute(() -> {
+                        if (r.problem() != null) {
+                            // 借不到不挡召唤(默认皮肤照样能玩),但必须让主人知道为什么
+                            warnText = I18n.get("numen.summon.skin_failed", r.problem());
+                            warnUntil = System.currentTimeMillis() + 5000;
+                        }
+                        var skin = r.skin();
+                        sendSummon(d, skin == null ? "" : skin.value(),
+                                skin == null ? "" : skin.signature());
+                    }));
+        }
+
+        private void sendSummon(SummonPanel.Draft d, String skinValue, String skinSig) {
             Services.NETWORK.sendToServer(
                     new com.dwinovo.numen.network.payload.SummonRequestPayload(
                             d.name, skinValue, skinSig, d.creative));

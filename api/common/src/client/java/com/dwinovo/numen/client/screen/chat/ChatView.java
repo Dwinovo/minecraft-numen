@@ -321,7 +321,10 @@ public final class ChatView {
         for (ConvoState.Msg m : lp.display()) {
             if (m instanceof ConvoState.Msg.Tool t) {
                 done.add(t.toolCallId());
-                if (looksFailed(t.content())) failed.add(t.toolCallId());
+                // 成败判据的单一真源(展示层不猜字符串)。
+                if (com.dwinovo.numen.agent.llm.ToolOutcome.failed(t.content())) {
+                    failed.add(t.toolCallId());
+                }
             }
         }
         int innerW = bubbleMaxW - PAD_H * 2;
@@ -329,7 +332,9 @@ public final class ChatView {
         // Consecutive same-side messages group like a chat app: avatar + name only on
         // the first of a run. Chips don't break a run; notices do. null = run broken.
         Boolean lastSide = null;
+        int msgIndex = -1;
         for (ConvoState.Msg msg : lp.display()) {
+            msgIndex++;
             switch (msg) {
                 case ConvoState.Msg.User u -> {
                     flushTools(out, group, done, failed, bubbleMaxW);
@@ -351,6 +356,12 @@ public final class ChatView {
                 }
                 case ConvoState.Msg.Assistant a -> {
                     AssistantTurn turn = a.turn();
+                    // 思考在说话之前:落库的思考默认折叠(它是过程不是结论,想看再展开)。
+                    String reasoned = turn.reasoning();
+                    if (reasoned != null && !reasoned.isBlank()) {
+                        flushTools(out, group, done, failed, bubbleMaxW);
+                        out.add(reasoningChip(reasoned, "reason#" + msgIndex, innerW, false));
+                    }
                     String spoken = ChatDisplayFilters.current().filterAssistantMessage(turn.content());
                     if (!spoken.isBlank()) {
                         flushTools(out, group, done, failed, bubbleMaxW);   // spoken reply breaks the fold
@@ -365,6 +376,12 @@ public final class ChatView {
             }
         }
         flushTools(out, group, done, failed, bubbleMaxW);
+        // 在飞的思考流:展开着实时长(它正在发生,折起来就看不见了);回合落库后
+        // 由上面那条 committed 的思考块接管,永不双份。
+        String liveReasoning = lp.liveReasoning();
+        if (!liveReasoning.isBlank()) {
+            out.add(reasoningChip(liveReasoning, null, innerW, true));
+        }
         // The in-flight reply, typed out live (chunk stream → EntityAgentLoop.livePartial).
         if (!liveShown.isEmpty()) {
             boolean first = lastSide == null || lastSide;
@@ -457,6 +474,30 @@ public final class ChatView {
         }
         out.add(new Chip(List.copyOf(rows), foldKey));
         group.clear();
+    }
+
+    /**
+     * 思考块:与工具 chip 同一形制(同样的行、同样的折叠交互),只是内容是
+     * 推理文本。{@code live}=在飞,展开着实时长且不可折(正在发生的事折起来
+     * 就看不见);已落库的默认折叠成一行摘要,点开看全文——它是过程不是结论。
+     */
+    private Chip reasoningChip(String text, String foldKey, int innerW, boolean live) {
+        String flat = text.replaceAll("\\s+", " ").trim();
+        List<ChipRow> rows = new ArrayList<>();
+        boolean expanded = live || (foldKey != null && expandedGroups.contains(foldKey));
+        if (!expanded) {
+            String summary = I18n.get("numen.chat.reasoning") + " · "
+                    + I18n.get("numen.chat.reasoning_chars", flat.length()) + " ▸";
+            rows.add(new ChipRow("▸", MUTED,
+                    Nb.colored(fitOneLine(summary, innerW - ICON_W), MUTED).getVisualOrderText()));
+            return new Chip(List.copyOf(rows), foldKey);
+        }
+        rows.add(new ChipRow(live ? SPIN[(int) ((System.currentTimeMillis() / 120) % 4)] : "▾", MUTED,
+                Nb.colored(I18n.get("numen.chat.reasoning"), MUTED).getVisualOrderText()));
+        for (FormattedCharSequence line : font.split(Nb.colored(flat, FAINT), innerW - ICON_W)) {
+            rows.add(new ChipRow(" ", MUTED, line));
+        }
+        return new Chip(List.copyOf(rows), foldKey);
     }
 
     private ChipRow toolRow(LlmToolCall tc, Set<String> done, Set<String> failed, long t, int textW) {
@@ -613,9 +654,4 @@ public final class ChatView {
         return args;
     }
 
-    private static boolean looksFailed(String content) {
-        if (content == null) return false;
-        String c = content.replaceAll("\\s+", "");
-        return c.contains("\"success\":false") || c.startsWith("ERROR") || c.contains("\"error\"");
-    }
 }

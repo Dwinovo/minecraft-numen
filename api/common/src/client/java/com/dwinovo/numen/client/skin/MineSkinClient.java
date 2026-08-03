@@ -1,16 +1,12 @@
 package com.dwinovo.numen.client.skin;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.platform.Services;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.net.ProxySelector;
 import java.net.URI;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -55,28 +51,8 @@ public final class MineSkinClient {
         } catch (RuntimeException e) {
             return CompletableFuture.failedFuture(e);
         }
-        return client().sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+        return ProxiedHttp.client().sendAsync(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
                 .thenApply(MineSkinClient::parse);
-    }
-
-    /** 每次按当前代理设置新建(设置可随时改,不缓存过期的 ProxySelector)。 */
-    private static HttpClient client() {
-        HttpClient.Builder b = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .followRedirects(HttpClient.Redirect.NORMAL);
-        String proxy = Services.CONFIG.getProxy();
-        if (proxy != null && !proxy.isBlank()) {
-            int colon = proxy.lastIndexOf(':');
-            if (colon > 0) {
-                try {
-                    b.proxy(ProxySelector.of(new InetSocketAddress(proxy.substring(0, colon),
-                            Integer.parseInt(proxy.substring(colon + 1).trim()))));
-                } catch (RuntimeException ignored) {
-                    // 端口不是数字之类——按直连走
-                }
-            }
-        }
-        return b.build();
     }
 
     private static byte[] multipart(String boundary, byte[] png, String variant, String name) {

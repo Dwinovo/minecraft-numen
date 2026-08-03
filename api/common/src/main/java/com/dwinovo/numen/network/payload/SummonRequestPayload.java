@@ -67,35 +67,21 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
         // 登录中闸:异步皮肤查询窗口内(几秒)重复点击不许再召。
         String spawnKey = owner.getUUID() + "/" + name;
         if (!SPAWNING.add(spawnKey)) return;
+        // 皮肤一律由客户端备好(自定义库条目或它在本机查到的正版档案),服务端
+        // 不再查询:那条路吃 JVM 默认网络、绕开玩家的代理,国内经常静默超时。
+        // 签名数据是 Mojang 自验证的,伪造不了,所以照单收下是安全的。
         String value = p.skinValue() == null ? "" : p.skinValue();
-        if (!value.isBlank()) {
-            // 自定义皮肤:签名数据现成,直接召唤,零网络。
-            com.dwinovo.numen.Constants.LOG.info("[numen-skin] 召唤 {} 携带自定义皮肤数据,直接入册", name);
-            try {
-                ServerLevel level = (ServerLevel) owner.level();
-                var body = Companions.summon(server, owner.getUUID(), name, level, owner.position(),
-                        new com.dwinovo.numen.entity.MojangSkins.Skin(value,
-                                p.skinSig() == null ? "" : p.skinSig()));
-                applyMode(owner, body, p.creative());
-                Companions.syncRosterToOwner(server, owner);
-            } finally {
-                SPAWNING.remove(spawnKey);
-            }
-            return;
+        var skin = value.isBlank() ? null
+                : new com.dwinovo.numen.entity.MojangSkins.Skin(value,
+                        p.skinSig() == null ? "" : p.skinSig());
+        try {
+            ServerLevel level = (ServerLevel) owner.level();
+            var body = Companions.summon(server, owner.getUUID(), name, level, owner.position(), skin);
+            applyMode(owner, body, p.creative());
+            Companions.syncRosterToOwner(server, owner);   // push the new roster to the owner
+        } finally {
+            SPAWNING.remove(spawnKey);
         }
-        // 按名字借皮肤:查询在后台线程,绝不阻塞主线程;
-        // 取到(或确认没有)后蹦回主线程再召唤。
-        com.dwinovo.numen.entity.MojangSkins.fetch(server, name).thenAccept(skin -> server.execute(() -> {
-            try {
-                if (owner.hasDisconnected()) return;
-                ServerLevel level = (ServerLevel) owner.level();
-                var body = Companions.summon(server, owner.getUUID(), name, level, owner.position(), skin);
-                applyMode(owner, body, p.creative());
-                Companions.syncRosterToOwner(server, owner);   // push the new roster to the owner
-            } finally {
-                SPAWNING.remove(spawnKey);
-            }
-        }));
     }
 
     /**
