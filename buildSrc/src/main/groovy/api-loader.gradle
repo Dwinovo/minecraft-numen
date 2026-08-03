@@ -19,6 +19,9 @@ dependencies {
     // loader 模块)需要看见 ai 的类型。发行 jar 已把 ai 的类平铺进来(见下方
     // jar 块),运行时自含,这条声明只服务编译期与 pom 的如实陈述。
     api project(':ai')
+    // UI 组件库(纯 JVM)同理:屏幕组装层引用 widget/令牌类型,编译期要看得见;
+    // 发行 jar 里的类由下方 jar 块平铺进来。
+    api project(':ui')
     compileOnly(project(':api:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
         attributes {
@@ -60,10 +63,12 @@ tasks.named('sourcesJar', Jar) {
     dependsOn(configurations.commonResources)
     from(configurations.commonResources)
     from({ project(':ai').sourceSets.main.allSource })
+    from({ project(':ui').sourceSets.main.allSource })
 }
 
 // numen-ai 的类平铺进加载器发行 jar——http/prompt 从 common 源码集迁去 ai
 // 模块后,加载器不再从源码把它们编进来,这里补回,发行 jar 内容与拆分前一致。
 tasks.named('jar', Jar) {
     from({ project(':ai').sourceSets.main.output })
+    from({ project(':ui').sourceSets.main.output })
 }

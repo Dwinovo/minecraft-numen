@@ -181,7 +181,7 @@ public final class MultilineTextField extends Widget {
         if (!contains(mx, my)) return false;
         int contentH = lines.size() * pitch();
         if (contentH <= viewH()) return false;
-        scrollY = Math.clamp((long) (scrollY - delta * pitch() * 2), 0, contentH - viewH());
+        scrollY = clampInt((int) Math.round(scrollY - delta * pitch() * 2), 0, contentH - viewH());
         return true;
     }
 
@@ -338,7 +338,7 @@ public final class MultilineTextField extends Widget {
 
     /** 移动光标;{@code keepAnchor}=Shift 按住(扩展选区),否则锚点跟走。 */
     private void moveCursor(int to, boolean keepAnchor) {
-        cursor = Math.clamp(to, 0, value.length());
+        cursor = clampInt(to, 0, value.length());
         if (!keepAnchor) anchor = cursor;
         goalX = -1;
         ensureCursorVisible();
@@ -373,6 +373,11 @@ public final class MultilineTextField extends Widget {
     }
 
     // ---- 换行几何 ----
+
+    /** 夹紧(Math.clamp 是 Java 21 的;组件库按 17 编译,十一分支同源消费)。 */
+    private static int clampInt(int v, int lo, int hi) {
+        return v < lo ? lo : Math.min(v, hi);
+    }
 
     private int innerW() { return w - NumenStyle.FIELD_PAD * 2 - NumenStyle.SCROLLBAR_W - 1; }
 
@@ -463,7 +468,7 @@ public final class MultilineTextField extends Widget {
     /** 屏幕坐标 → 文本下标(行外点击夹到最近行/行首行尾)。 */
     private int indexAt(double mx, double my) {
         reflowIfNeeded();
-        int line = Math.clamp((int) Math.floor((my - y - 2 + scrollY) / (double) pitch()),
+        int line = clampInt((int) Math.floor((my - y - 2 + scrollY) / (double) pitch()),
                 0, lines.size() - 1);
         return indexAtX(line, (int) (mx - x - NumenStyle.FIELD_PAD));
     }
@@ -483,7 +488,7 @@ public final class MultilineTextField extends Widget {
 
     private void clampScroll() {
         int contentH = lines.size() * pitch();
-        scrollY = Math.clamp(scrollY, 0, Math.max(0, contentH - viewH()));
+        scrollY = clampInt(scrollY, 0, Math.max(0, contentH - viewH()));
     }
 
     /** 编辑/移动后自动滚动:光标行完整落在视口内。 */

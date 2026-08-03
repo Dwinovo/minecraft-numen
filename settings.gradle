@@ -32,3 +32,4 @@ include('api:fabric')
 include('api:neoforge')
 // numen-ai:LLM 连接层,纯 JVM、与 MC 版本无关(详见 ai/build.gradle 头注)。
 include('ai')
+include('ui')
