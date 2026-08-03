@@ -21,10 +21,17 @@ public final class ListView<T> extends Widget {
                     boolean selected, boolean hovered);
     }
 
+    /** 行内点击回调:行下标 + 点击点相对行左缘的横坐标(行尾图标热区判定用)。
+     *  设了它就全权接管行点击(选中与否由回调自己决定),onSelect 不再触发。 */
+    public interface RowClick {
+        boolean click(int index, double xInRow);
+    }
+
     private List<T> items;
     private final int rowHeight;
     private final RowRenderer<T> renderer;
     private final IntConsumer onSelect;
+    private RowClick rowClick;
     private int selectedIndex = -1;
     private double scrollY;
 
@@ -33,6 +40,16 @@ public final class ListView<T> extends Widget {
         this.rowHeight = rowHeight;
         this.renderer = renderer;
         this.onSelect = onSelect;
+    }
+
+    public ListView<T> rowClick(RowClick rc) {
+        this.rowClick = rc;
+        return this;
+    }
+
+    /** 像素级滚动位移并夹紧(宿主重建后恢复滚动位,或视口外的滚轮转发)。 */
+    public void scrollBy(double px) {
+        scrollY = Math.max(0, Math.min(maxScroll(), scrollY + px));
     }
 
     public void setItems(List<T> items) {
@@ -93,8 +110,9 @@ public final class ListView<T> extends Widget {
         if (button != 0 || !contains(mx, my)) return false;
         int row = rowAt(my);
         if (row >= 0) {
+            if (rowClick != null) return rowClick.click(row, mx - x);
             selectedIndex = row;
-            onSelect.accept(row);
+            if (onSelect != null) onSelect.accept(row);
             return true;
         }
         return false;

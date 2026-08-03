@@ -107,6 +107,23 @@ public final class SettingsView {
         return providerForm;
     }
 
+    // ---- 模型配置列表:NumenUI ProfileListPanel(ListView 行 + ConfirmDialog 删除闸) ----
+    private ProfileListPanel profileList;
+
+    private ProfileListPanel profileList() {
+        if (profileList == null) {
+            profileList = new ProfileListPanel(
+                    () -> {
+                        addingProvider = true;
+                        providerEditId = null;
+                        providerDraft = new ProfileFormPanel.Draft();
+                        host.rebuild();
+                    },
+                    this::beginEditProvider);
+        }
+        return profileList;
+    }
+
     private void onProfileSave(ProfileFormPanel.Draft d) {
         var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
         if (providerEditId != null) {
@@ -126,7 +143,6 @@ public final class SettingsView {
     // ---- model-config section state (mirrors the persona section) ----
     private boolean addingProvider;
     private String providerEditId;
-    private String providerDeletePending;
 
     // ---- voice section state (mirrors the model-config section: list / form / delete-confirm) ----
     private boolean addingVoice;
@@ -351,7 +367,6 @@ public final class SettingsView {
         personaDeletePending = null;
         addingProvider = false;
         providerEditId = null;
-        providerDeletePending = null;
         addingVoice = false;
         voiceEditId = null;
         voiceDeletePending = null;
@@ -368,10 +383,6 @@ public final class SettingsView {
     /** 当前待确认删除的标题(null = 无模态)。build 与 render 共用同一份文案,
      *  ConfirmModal 的卡片几何(高度随换行数)才不会漂。 */
     private Component activeModalTitle() {
-        if (providerDeletePending != null) {
-            var e = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerDeletePending);
-            return Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM, e != null ? e.name() : "");
-        }
         if (voiceDeletePending != null) {
             var e = com.dwinovo.numen.client.voice.VoiceLibrary.instance().get(voiceDeletePending);
             return Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM, e != null ? e.name() : "");
@@ -404,7 +415,6 @@ public final class SettingsView {
     }
 
     private void clearDeletePending() {
-        providerDeletePending = null;
         voiceDeletePending = null;
         skinDeletePending = null;
         personaDeletePending = null;
@@ -443,9 +453,10 @@ public final class SettingsView {
                 else buildPersonaListWidgets();
             }
             case PROVIDER -> {
-                if (providerDeletePending != null) buildProviderDeleteConfirm();
-                else if (addingProvider) buildProviderFormNew();
-                else buildProviderListWidgets();
+                // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
+                profileList().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                        left(), top(), panelW(), panelH());
+                if (addingProvider) buildProviderFormNew();
             }
             case VOICE -> {
                 if (voiceDeletePending != null) buildVoiceDeleteConfirm();
@@ -675,15 +686,6 @@ public final class SettingsView {
 
     // ---- Provider section: the library of named LLM provider configs companions select from ----
 
-    private void buildProviderListWidgets() {
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, secY0() - 2, 64, 14,
-                Component.translatable(ModLanguageData.Keys.PROVIDER_ADD), b -> {
-                    addingProvider = true; providerEditId = null;
-                    providerDraft = new ProfileFormPanel.Draft();
-                    host.rebuild();
-                }));
-    }
-
     /** 表单卡里的 NumenUI 表单(检测/思考/强度/toast 齐备);卡壳照旧 formModal。 */
     private void buildProviderFormNew() {
         providerForm().open(providerDraft);
@@ -691,13 +693,6 @@ public final class SettingsView {
                 top() + panelH() - 2);
     }
 
-    private void buildProviderDeleteConfirm() {
-        buildConfirmButtons(() -> {
-            com.dwinovo.numen.agent.llm.ProviderLibrary.instance().remove(providerDeletePending);
-            providerDeletePending = null;
-            host.rebuild();
-        });
-    }
 
     // ---- Voice section: the library of named TTS voices companions bind to (mirrors the provider section) ----
 
@@ -1691,64 +1686,18 @@ public final class SettingsView {
     }
 
     private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
+        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingProvider) {
             // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压在上面。
-            renderProviderList(g, -10000, -10000);
+            profileList().render(surface, HostThemeColors.current(),
+                    -10000, -10000, net.minecraft.Util.getMillis());
             formModal(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE));
             providerForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                     HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
             return;
         }
-        renderProviderList(g, mouseX, mouseY);
-    }
-
-    private void renderProviderList(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX(), w = secW();
-        txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE), x, secY0() - 2, TXT);
-        var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
-        if (list.isEmpty()) {
-            txt(g, Component.translatable(ModLanguageData.Keys.PROVIDER_EMPTY), x, secY0() + 16, TXT_FAINT);
-            return;
-        }
-        int listY0 = secY0() + 14;
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
-        for (int i = settingsScroll; i < list.size(); i++) {
-            int ry = listY0 + (i - settingsScroll) * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            var e = list.get(i);
-            int delX = x + w - 12, editX = x + w - 26;
-            hoverRow(g, mouseX, mouseY, x, w, ry);
-            txt(g, Component.literal(e.name()), x, ry + 2, TXT);
-            String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
-                    + (nb(e.model()) ? e.model() : "?")
-                    + (nb(e.apiKey()) ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
-            // 元信息用次级色不用最淡档——这是内容不是装饰,淡到读不清等于没写。
-            txt(g, Component.literal(clip(meta, w - 30)), x, ry + 13, nb(e.apiKey()) ? TXT_MUTED : FAIL);
-            txt(g, Component.literal("✎"), editX, ry + 7,
-                    overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
-            txt(g, Component.literal("✕"), delX, ry + 7,
-                    overDelete(mouseX, mouseY, delX, ry) ? FAIL : TXT_FAINT);
-        }
-    }
-
-    private boolean providerClick(int mx, int my) {
-        if (addingProvider || providerDeletePending != null) return false;
-        int x = secX(), w = secW();
-        var list = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list();
-        int listY0 = secY0() + 14;
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
-        for (int i = scroll; i < list.size(); i++) {
-            int ry = listY0 + (i - scroll) * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            var e = list.get(i);
-            int delX = x + w - 12, editX = x + w - 26;
-            if (overDelete(mx, my, editX, ry)) { beginEditProvider(e); return true; }
-            if (overDelete(mx, my, delX, ry)) { providerDeletePending = e.id(); host.rebuild(); return true; }
-            if (overRow(mx, my, x, w, ry)) { beginEditProvider(e); return true; }
-        }
-        return false;
+        profileList().render(surface, HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
     }
 
     private void beginEditProvider(com.dwinovo.numen.agent.llm.ProviderLibrary.Entry e) {
@@ -2072,6 +2021,12 @@ public final class SettingsView {
                 && providerForm().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
+        // 模型配置列表(NumenUI):删除确认卡开着时面板吃掉一切(模态);
+        // 平时接行/图标/新建,没命中就放行给子导航。
+        if (section == Section.PROVIDER && !addingProvider
+                && profileList().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
         if (section == Section.STT && sttProviderDropdown != null) {
             String beforeStt = sttProviderDropdown.selectedId();
             if (sttProviderDropdown.mouseClicked(mouseX, mouseY)) {
@@ -2166,7 +2121,6 @@ public final class SettingsView {
         if (section == Section.BRAIN) return brainToggleClick(mx, my);
         if (section == Section.SKILLS) return skillToggleClick(mx, my);
         if (section == Section.PERSONA) return personaClick(mx, my);
-        if (section == Section.PROVIDER) return providerClick(mx, my);
         if (section == Section.VOICE) return voiceClick(mx, my);
         if (section == Section.SKIN) return skinClick(mx, my);
         return false;
@@ -2246,6 +2200,10 @@ public final class SettingsView {
                 && providerForm().mouseScrolled(mx, my, sy)) {
             return true;
         }
+        if (section == Section.PROVIDER && !addingProvider
+                && profileList().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
         for (Dropdown d : new Dropdown[]{voiceBackendDropdown, skinVariantDropdown}) {
             if (d != null && d.mouseScrolled(mx, my, sy)) return true;
         }
@@ -2267,7 +2225,6 @@ public final class SettingsView {
             case MCP -> com.dwinovo.numen.mcp.client.McpClientManager.servers().size();
             case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
             case PERSONA -> PersonaLibrary.instance().list().size();
-            case PROVIDER -> com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list().size();
             case VOICE -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().list().size();
             case SKIN -> com.dwinovo.numen.client.skin.SkinLibrary.instance().list().size();
             default -> 0;
@@ -2282,8 +2239,9 @@ public final class SettingsView {
      *  and the form dropdowns' open lists (drawn last so they sit above the fields). */
     /** 键盘/字符输入:目前只有模型配置表单的 NumenUI 输入框需要。 */
     public boolean keyPressed(int keyCode, int modifiers) {
-        return section == Section.PROVIDER && addingProvider
-                && providerForm().keyPressed(keyCode, modifiers);
+        if (section != Section.PROVIDER) return false;
+        if (addingProvider) return providerForm().keyPressed(keyCode, modifiers);
+        return profileList().keyPressed(keyCode, modifiers);   // ESC 关删除确认(= 取消)
     }
 
     public boolean charTyped(char ch) {
