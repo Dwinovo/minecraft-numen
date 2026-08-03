@@ -30,6 +30,8 @@ public final class MultilineTextField extends Widget {
     /** 选区锚点;与 cursor 相等 = 无选区。 */
     private int anchor;
     private String error;
+    /** 可选:本字段的标签,出错时让位(与单行 TextField 同制)。 */
+    private Label labelWidget;
     /** 垂直移动的目标横坐标(px,-1=未设);上下键连按沿同一列走,横向操作重置。 */
     private int goalX = -1;
     private int scrollY;
@@ -51,6 +53,12 @@ public final class MultilineTextField extends Widget {
 
     public MultilineTextField placeholder(String text) {
         this.placeholder = text == null ? "" : text;
+        return this;
+    }
+
+    /** 认领标签:出错时自动收起它,免得两串文字在同一行叠着。 */
+    public MultilineTextField withLabel(Label label) {
+        this.labelWidget = label;
         return this;
     }
 
@@ -100,6 +108,7 @@ public final class MultilineTextField extends Widget {
         // 统一卡壳:圆角描边+内衬底;聚焦/错误只换描边色(与单行 TextField 同制)。
         int border = error != null ? c.danger() : isFocused() ? c.accent() : c.inputBorder();
         NumenStyle.fieldCard(s, x, y, w, h, c.inputBg(), border);
+        if (labelWidget != null) labelWidget.setVisible(error == null);   // 出错时标签让位
         if (error != null) {
             s.drawText(error, x + w - s.textWidth(error), y - 10, c.danger(), false);
         }

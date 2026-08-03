@@ -21,6 +21,9 @@ public final class TextField extends Widget {
     private int cursor;
     /** 内联校验错误:字段红边 + 标签行右侧红字,驻留到用户开始修改。 */
     private String error;
+    /** 可选:本字段的标签。错误文案与标签同处一行,长标签必撞——有错误时标签让位
+     *  (一行只说一件事,而且此刻错误比标签重要)。 */
+    private Label labelWidget;
     /** 视窗左缘对应的字符下标(水平滚动)。 */
     private int viewStart;
 
@@ -37,6 +40,12 @@ public final class TextField extends Widget {
 
     public TextField masked(boolean masked) {
         this.masked = masked;
+        return this;
+    }
+
+    /** 认领标签:出错时自动收起它,免得两串文字在同一行叠着。 */
+    public TextField withLabel(Label label) {
+        this.labelWidget = label;
         return this;
     }
 
@@ -68,9 +77,11 @@ public final class TextField extends Widget {
         // 统一卡壳:圆角描边+内衬底;聚焦/错误只换描边色(STT 参考样式定标)。
         int border = error != null ? c.danger() : isFocused() ? c.accent() : c.inputBorder();
         NumenStyle.fieldCard(s, x, y, w, h, c.inputBg(), border);
+        if (labelWidget != null) labelWidget.setVisible(error == null);   // 出错时标签让位
         if (error != null) {
-            // 错误文案画在标签行右侧(字段正上方)——错误出现在错误发生的地方。
-            String msg = clipToWidth(s, error, w * 2 / 3);
+            // 错误文案画在标签行(字段正上方)——错误出现在错误发生的地方;
+            // 标签已收起,整行都归它,不必再让出三分之一。
+            String msg = clipToWidth(s, error, w);
             s.drawText(msg, x + w - s.textWidth(msg), y - 10, c.danger(), false);
         }
 

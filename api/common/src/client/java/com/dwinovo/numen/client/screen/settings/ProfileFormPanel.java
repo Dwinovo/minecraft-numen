@@ -100,8 +100,9 @@ public final class ProfileFormPanel {
         }
 
         int ry = y;
-        ry = label(x, ry, "numen.provider.form_name");
-        nameField = ui.add(new TextField(draft.name, v -> draft.name = v));
+        Label nameLabel = labelWidget(x, ry, "numen.provider.form_name");
+        ry += NumenStyle.LABEL_PITCH;
+        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -112,8 +113,9 @@ public final class ProfileFormPanel {
         sitePick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
-        ry = label(x, ry, "numen.gui.settings.api_key");
-        keyField = ui.add(new TextField(draft.apiKey, v -> draft.apiKey = v).masked(true));
+        Label keyLabel = labelWidget(x, ry, "numen.gui.settings.api_key");
+        ry += NumenStyle.LABEL_PITCH;
+        keyField = ui.add(new TextField(draft.apiKey, v -> draft.apiKey = v).masked(true).withLabel(keyLabel));
         keyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -239,9 +241,15 @@ public final class ProfileFormPanel {
     // ---- 内部 ----
 
     private int label(int lx, int ly, String key) {
-        Label l = ui.add(new Label(t(key), Label.Role.MUTED));
-        l.setBounds(lx, ly, 140, 9);
+        labelWidget(lx, ly, key);
         return ly + NumenStyle.LABEL_PITCH;
+    }
+
+    /** 标签控件本体:会报错的字段用 withLabel 认领它(出错时自动让位)。 */
+    private Label labelWidget(int lx, int ly, String key) {
+        Label l = ui.add(new Label(t(key), Label.Role.MUTED));
+        l.setBounds(lx, ly, 200, 9);
+        return l;
     }
 
     private int indexOfSite(String providerId) {

@@ -96,9 +96,11 @@ public final class SummonPanel {
         title.setBounds(x, ry, w, 9);
         ry += 16;
 
-        ry = label(x, ry, ModLanguageData.Keys.SUMMON_NAME);
+        Label nameLabel = labelWidget(x, ry, ModLanguageData.Keys.SUMMON_NAME);
+        ry += NumenStyle.LABEL_PITCH;
         nameField = ui.add(new TextField(draft.name, v -> draft.name = v)
-                .placeholder(t(ModLanguageData.Keys.SUMMON_NAME_PLACEHOLDER)));
+                .placeholder(t(ModLanguageData.Keys.SUMMON_NAME_PLACEHOLDER))
+                .withLabel(nameLabel));   // 出错时标签让位,免得两串文字叠在一行
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -257,9 +259,14 @@ public final class SummonPanel {
     // ---- 内部 ----
 
     private int label(int lx, int ly, String key) {
-        Label l = ui.add(new Label(t(key), Label.Role.MUTED));
-        l.setBounds(lx, ly, 140, 9);
+        labelWidget(lx, ly, key);
         return ly + NumenStyle.LABEL_PITCH;
+    }
+
+    private Label labelWidget(int lx, int ly, String key) {
+        Label l = ui.add(new Label(t(key), Label.Role.MUTED));
+        l.setBounds(lx, ly, 200, 9);
+        return l;
     }
 
     /**

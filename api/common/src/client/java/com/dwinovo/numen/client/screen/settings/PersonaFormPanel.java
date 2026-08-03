@@ -53,10 +53,11 @@ public final class PersonaFormPanel {
 
         int ry = y;
         Label nameLabel = ui.add(new Label(t("numen.persona.form_name"), Label.Role.MUTED));
-        nameLabel.setBounds(x, ry, 140, 9);
+        nameLabel.setBounds(x, ry, 200, 9);
         ry += NumenStyle.LABEL_PITCH;
         nameField = ui.add(new TextField(draft.name, v -> draft.name = v)
-                .placeholder("名称(即文件名),如 小焰"));
+                .placeholder("名称(即文件名),如 小焰")
+                .withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -66,7 +67,8 @@ public final class PersonaFormPanel {
         // 正文占满剩余高度(编辑器自带滚动),底部留出按钮行。
         textArea = ui.add(new MultilineTextField(draft.text, v -> draft.text = v)
                 .placeholder(t("numen.persona.text_placeholder"))
-                .maxLength(4096));
+                .maxLength(4096)
+                .withLabel(textLabel));
         textArea.setBounds(x, ry, w, (y + h - 20) - ry);
 
         Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
