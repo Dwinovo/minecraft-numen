@@ -73,8 +73,8 @@ public final class NumenStyle {
     }
 
     // ---- 效果 ----
-    /** 悬停提亮:各通道向 255 走的百分比。 */
-    private static final int HOVER_BRIGHTEN_PCT = 15;
+    /** 悬停提亮:各通道向 255 走的百分比(15% 在深蓝 accent 上几乎看不出——真机教训)。 */
+    private static final int HOVER_BRIGHTEN_PCT = 22;
 
     /** 实色控件(accent/danger 底)的统一悬停提亮。 */
     public static int hoverBrighten(int argb) {

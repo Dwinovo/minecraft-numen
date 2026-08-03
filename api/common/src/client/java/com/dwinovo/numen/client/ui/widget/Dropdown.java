@@ -77,11 +77,15 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
         long dt = lastFrameMs < 0 ? 1000 : nowMs - lastFrameMs;
         lastFrameMs = nowMs;
         hoverT = NumenStyle.hoverStep(hoverT, hovered || open, dt);
-        // 与输入框同一卡壳形制;展开描边亮 accent(=聚焦态)。悬停微提亮底并短过渡——
-        // c.hover() 是给列表行叠加用的半透明色,当实底填会整块发黑。
-        NumenStyle.fieldCard(s, x, y, w, h,
-                NumenStyle.mixColor(c.inputBg(), NumenStyle.hoverBrighten(c.inputBg()), hoverT),
+        // 与输入框同一卡壳形制;展开描边亮 accent(=聚焦态)。悬停是"在底上叠一层"
+        // 而非"换底色"——hover 是亮度感知的半透明叠加色(暗主题偏白/亮主题偏黑),
+        // 拿它当实底填会整块发黑(真机教训),按进度收放透明度才对。
+        NumenStyle.fieldCard(s, x, y, w, h, c.inputBg(),
                 open ? c.accent() : c.inputBorder());
+        if (hoverT > 0.01f) {
+            int overlay = ((int) (((c.hover() >>> 24) & 0xFF) * hoverT) << 24) | (c.hover() & 0xFFFFFF);
+            s.fillRoundRect(x + 1, y + 1, w - 2, h - 2, NumenStyle.RADIUS_FIELD - 1, overlay);
+        }
         if (!compact) {
             s.drawText(selectedItem(), x + 5, y + (h - s.lineHeight()) / 2 + 1,
                     enabled ? c.textPrimary() : c.textMuted(), false);
