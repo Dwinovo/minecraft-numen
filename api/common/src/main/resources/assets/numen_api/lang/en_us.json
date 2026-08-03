@@ -157,6 +157,7 @@
   "numen.skin.form_variant": "Arm model",
   "numen.skin.keep_old": "Keeping the current image",
   "numen.skin.loaded": "Loaded %s ✓ — Save signs it via MineSkin",
+  "numen.skin.name_placeholder": "3-16 letters, digits or _",
   "numen.skin.pick_file": "Choose file…",
   "numen.skin.sign_fail": "Signing failed: %s",
   "numen.skin.sign_ok": "\"%s\" signed",

@@ -79,7 +79,9 @@ public final class SkinFormPanel {
         int ry = y;
         Label nameLabel = labelWidget(x, ry, ModLanguageData.Keys.SKIN_FORM_NAME);
         ry += NumenStyle.LABEL_PITCH;
-        nameField = ui.add(new TextField(draft.name, v -> draft.name = v).withLabel(nameLabel));
+        nameField = ui.add(new TextField(draft.name, v -> draft.name = v)
+                .placeholder(t("numen.skin.name_placeholder"))   // 规则先说,别等报错才知道
+                .withLabel(nameLabel));
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
@@ -195,6 +197,12 @@ public final class SkinFormPanel {
         String name = draft.name.trim();
         if (name.isEmpty()) {
             nameField.setError(t("numen.gui.inline.required"));   // 校验错误内联在错误发生处
+            return;
+        }
+        // 皮肤名与同伴名同一套规则:它会原样发给 MineSkin,而那边有服务端
+        // 字符白名单——中文名直接 400(真机实证)。规则复用单一真源。
+        if (!com.dwinovo.numen.entity.MojangSkins.validName(name)) {
+            nameField.setError(t(ModLanguageData.Keys.SUMMON_WARN_NAME_FORMAT));
             return;
         }
         var lib = SkinLibrary.instance();

@@ -282,7 +282,7 @@ public final class SummonPanel {
             alert.show(InlineAlert.Severity.ERROR, t(ModLanguageData.Keys.SUMMON_WARN_PROVIDER));
             return;
         }
-        if (!n.matches("[A-Za-z0-9_]{3,16}")) {
+        if (!com.dwinovo.numen.entity.MojangSkins.validName(n)) {   // 与服务端权威校验同一真源
             nameField.setError(t(ModLanguageData.Keys.SUMMON_WARN_NAME_FORMAT));
             return;
         }

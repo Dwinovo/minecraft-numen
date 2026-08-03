@@ -361,6 +361,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_OK,         "\"%s\" signed");
         adder.add("numen.summon.mode",       "Mode");
         adder.add("numen.bubble.replying",   "Replying");
+        adder.add("numen.skin.name_placeholder", "3-16 letters, digits or _");
         adder.add("numen.bubble.doing",      "%s…");
         adder.add("numen.gui.list.deleted",  "Deleted \"%s\"");
         adder.add("numen.gui.list.cloned",   "Cloned as an editable copy");
@@ -609,6 +610,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_OK,         "「%s」签名成功");
         adder.add("numen.summon.mode",       "模式");
         adder.add("numen.bubble.replying",   "正在回复中");
+        adder.add("numen.skin.name_placeholder", "3~16 位英文/数字/下划线");
         adder.add("numen.bubble.doing",      "正在%s");
         adder.add("numen.gui.list.deleted",  "已删除「%s」");
         adder.add("numen.gui.list.cloned",   "已克隆为可编辑副本");

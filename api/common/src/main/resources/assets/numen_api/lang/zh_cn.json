@@ -157,6 +157,7 @@
   "numen.skin.form_variant": "手臂模型",
   "numen.skin.keep_old": "沿用当前图片",
   "numen.skin.loaded": "已加载 %s ✓——点保存经 MineSkin 签名",
+  "numen.skin.name_placeholder": "3~16 位英文/数字/下划线",
   "numen.skin.pick_file": "选择文件…",
   "numen.skin.sign_fail": "签名失败: %s",
   "numen.skin.sign_ok": "「%s」签名成功",
