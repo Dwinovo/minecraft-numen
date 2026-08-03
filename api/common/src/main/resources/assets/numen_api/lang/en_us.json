@@ -56,6 +56,7 @@
   "numen.gui.inline.required": "Required",
   "numen.gui.list.cloned": "Cloned as an editable copy",
   "numen.gui.list.deleted": "Deleted \"%s\"",
+  "numen.gui.list.unbound": "The entry it was using was just deleted — now unbound",
   "numen.gui.providers.badge.local": "Local",
   "numen.gui.providers.check": "Check",
   "numen.gui.providers.check.bad_request": "Request rejected",

@@ -86,8 +86,27 @@ public abstract class JsonLibrary<E> {
         return id == null ? null : entries.get(id);
     }
 
-    public void remove(String id) {
-        if (entries.remove(id) != null) save();
+    /**
+     * 删条目,并清掉指向它的所有绑定——绑定的生命周期由库自己管,
+     * 不然会留下一批指向空条目的悬空绑定(同伴静悄悄失去声线/模型配置,
+     * 主人要找很久)。
+     *
+     * @return 被解绑的同伴 uuid 串(调用方据此告知主人);没有则空表
+     */
+    public java.util.List<String> remove(String id) {
+        if (entries.remove(id) == null) {
+            return java.util.List.of();
+        }
+        java.util.List<String> orphaned = new java.util.ArrayList<>();
+        assignments.entrySet().removeIf(e -> {
+            if (id.equals(e.getValue())) {
+                orphaned.add(e.getKey());
+                return true;
+            }
+            return false;
+        });
+        save();
+        return orphaned;
     }
 
     protected String freshId(String prefix) {

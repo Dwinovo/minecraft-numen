@@ -370,6 +370,7 @@ public final class ModLanguageData {
         adder.add("numen.bubble.doing",      "%s…");
         adder.add("numen.gui.list.deleted",  "Deleted \"%s\"");
         adder.add("numen.gui.list.cloned",   "Cloned as an editable copy");
+        adder.add("numen.gui.list.unbound",  "The entry it was using was just deleted — now unbound");
         adder.add(Keys.SKIN_WARN_NAME,       "Name is required");
         adder.add(Keys.SKIN_WARN_IMAGE,      "Drag a skin png into the window first");
         adder.add(Keys.SKIN_WARN_SIZE,       "Skin must be 64x64 (or legacy 64x32), got %s");
@@ -624,6 +625,7 @@ public final class ModLanguageData {
         adder.add("numen.bubble.doing",      "正在%s");
         adder.add("numen.gui.list.deleted",  "已删除「%s」");
         adder.add("numen.gui.list.cloned",   "已克隆为可编辑副本");
+        adder.add("numen.gui.list.unbound",  "刚才删掉的条目它正在用,现在已解绑");
         adder.add(Keys.SKIN_WARN_NAME,       "名称必填");
         adder.add(Keys.SKIN_WARN_IMAGE,      "先把皮肤 png 拖进游戏窗口");
         adder.add(Keys.SKIN_WARN_SIZE,       "皮肤需为 64x64(或旧版 64x32),拖入的是 %s");

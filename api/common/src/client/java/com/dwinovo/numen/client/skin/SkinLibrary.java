@@ -70,15 +70,16 @@ public final class SkinLibrary extends JsonLibrary<SkinLibrary.Entry> {
     }
 
     @Override
-    public void remove(String id) {
-        if (entries.remove(id) == null) return;
+    public java.util.List<String> remove(String id) {
+        // 先让基类删条目+清悬空绑定,再收拾本库特有的副产物(原图与预览纹理)
+        java.util.List<String> orphaned = super.remove(id);
         try {
             Files.deleteIfExists(pngPath(id));
         } catch (IOException ex) {
             Constants.LOG.warn("[numen-skin] 皮肤原图删除失败 {}: {}", id, ex.toString());
         }
         SkinTextures.evict(id);
-        save();
+        return orphaned;
     }
 
     public String freshId() {

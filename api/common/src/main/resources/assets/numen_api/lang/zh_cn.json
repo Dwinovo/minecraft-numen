@@ -56,6 +56,7 @@
   "numen.gui.inline.required": "必填",
   "numen.gui.list.cloned": "已克隆为可编辑副本",
   "numen.gui.list.deleted": "已删除「%s」",
+  "numen.gui.list.unbound": "刚才删掉的条目它正在用,现在已解绑",
   "numen.gui.providers.badge.local": "本地",
   "numen.gui.providers.check": "检测",
   "numen.gui.providers.check.bad_request": "请求被拒",

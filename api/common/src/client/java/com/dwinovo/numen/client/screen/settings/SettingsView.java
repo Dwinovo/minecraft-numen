@@ -596,17 +596,16 @@ public final class SettingsView {
         String text = d.text.trim();
         var lib = PersonaLibrary.instance();
         if (personaEditId != null) {
-            PersonaLibrary.Persona old = lib.get(personaEditId);
-            String oldName = old != null ? old.name() : null;
-            // 改名会换文件名(id 随之更换),传播用落盘后的新条目。
             PersonaLibrary.Persona saved = lib.update(personaEditId, name, text);
-            if (saved != null) {
+            // 改正文不需要做任何事:同伴只记 id,正文用时去库里现取,编辑即刻
+            // 对所有同伴生效(不管它加载没加载)。这里只处理改名——人设的 id
+            // 就是文件名,改名等于换了身份,得把在用的同伴重新指过去。
+            if (saved != null && !saved.id().equals(personaEditId)) {
                 for (UUID cu : AgentLoopRegistry.loadedEntityUuids()) {
                     EntityAgentLoop l = AgentLoopRegistry.get(cu).orElse(null);
-                    if (l == null) continue;
-                    boolean uses = personaEditId.equals(l.personaId())
-                            || (l.personaId() == null && oldName != null && oldName.equals(l.personaName()));
-                    if (uses) l.setPersona(saved.id(), saved.text(), saved.name());
+                    if (l != null && personaEditId.equals(l.personaId())) {
+                        l.setPersona(saved.id(), saved.text(), saved.name());
+                    }
                 }
             }
         } else {
@@ -644,7 +643,10 @@ public final class SettingsView {
                     h -> new LibraryListPanel.Row(h.name(), mcpMeta(h),
                             h.status() == com.dwinovo.numen.mcp.client.McpClientManager.Status.FAILED, null),
                     h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
-                    h -> com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(h.name()),
+                    h -> {
+                        com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(h.name());
+                        return java.util.List.<String>of();   // MCP 服务器不按同伴绑定
+                    },
                     () -> {
                         addingMcp = true;
                         mcpDraft = new McpFormPanel.Draft();
@@ -755,7 +757,7 @@ public final class SettingsView {
                                 ? I18n.get("numen.skill.no_desc") : sk.description();
                         return new LibraryListPanel.Row(sk.name(), desc, false, null);
                     },
-                    null, sk -> { }, () -> { }, sk -> { })
+                    null, sk -> java.util.List.<String>of(), () -> { }, sk -> { })
                     .withRowToggle(
                             sk -> !com.dwinovo.numen.agent.skill.SkillRegistry.instance().isDisabled(sk.name()),
                             sk -> {

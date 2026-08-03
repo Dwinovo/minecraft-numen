@@ -145,9 +145,18 @@ public final class EntityAgentLoop {
      * event in the log on restore, mutated live by {@link #setPersona}. Null/blank → falls back to the
      * global {@code getSystemPrompt} default. Read fresh every turn in {@link #composeSystemPrompt}.
      */
-    private String personaText;
-    private String personaName;
-    private String personaId;   // library id this persona came from (so a library edit can propagate here)
+    /**
+     * 绑定的人设 id——<b>真源在人设库</b>,这里只记 id,正文用时现取。
+     * 于是编辑人设对所有同伴立即生效,不管它这会儿加载没加载:没有副本,
+     * 就没有"把修改推给每个实例"这种要写代码维护的同步。
+     */
+    private String personaId;
+    /**
+     * 兜底快照:人设文件被删/改名时接着用,免得她突然失忆。
+     * 只在库里查不到 {@link #personaId} 时才生效——库永远优先。
+     */
+    private String personaTextSnapshot;
+    private String personaNameSnapshot;
 
     /**
      * The {@link com.dwinovo.numen.agent.llm.ProviderLibrary} entry this companion
@@ -253,7 +262,7 @@ public final class EntityAgentLoop {
                 () -> awaitingLlmResponse,
                 () -> awaitingLlmResponse || dispatcher.busy(),
                 () -> turnGeneration,
-                () -> personaName);
+                this::personaName);
         this.tokens = new TokenLedger(entityUuid);
         restoreFromDisk();
     }
@@ -292,8 +301,8 @@ public final class EntityAgentLoop {
         ConvoLog.PersonaState p = log.loadCurrentPersona();   // independent of history — a persona may be set before any chat
         if (p != null && p.text() != null && !p.text().isBlank()) {
             personaId = p.id() == null || p.id().isBlank() ? null : p.id();
-            personaText = p.text();
-            personaName = p.name();
+            personaTextSnapshot = p.text();
+            personaNameSnapshot = p.name();
         }
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
@@ -696,8 +705,18 @@ public final class EntityAgentLoop {
     }
 
     /** This companion's current persona name (for the panel), or null. */
+    /** 人设正文:库里现取(编辑立即生效),查不到才用兜底快照。 */
+    private String personaText() {
+        var p = personaId == null ? null
+                : com.dwinovo.numen.persona.PersonaLibrary.instance().get(personaId);
+        return p != null ? p.text() : personaTextSnapshot;
+    }
+
+    /** 人设名:同上,库优先、快照兜底。 */
     public String personaName() {
-        return personaName;
+        var p = personaId == null ? null
+                : com.dwinovo.numen.persona.PersonaLibrary.instance().get(personaId);
+        return p != null ? p.name() : personaNameSnapshot;
     }
 
     /** The library id this companion's persona came from, or null (legacy / default). */
@@ -751,18 +770,17 @@ public final class EntityAgentLoop {
      *     identity (read fresh in {@link #composeSystemPrompt} — no in-flight interruption);
      * (2) a {@code persona-change} event is logged, so a relaunch recovers the current persona
      *     ({@link #restoreFromDisk} via {@code loadCurrentPersona});
-     * (3) a reconciliation user message is queued so the model is TOLD its identity was rewritten —
-     *     otherwise it sees its own prior self-descriptions in history and contradicts itself.
+     * (3) 聊天流插一条分隔记号(给主人看的,不发给模型)。
      */
     public void setPersona(String id, String text, String name) {
         this.personaId = id;
-        this.personaText = text;
-        this.personaName = name;
+        this.personaTextSnapshot = text;
+        this.personaNameSnapshot = name;
         log.appendPersonaChange(id, text, name);
-        display.add(new ConvoState.Msg.User(ConvoLog.PERSONA_DIVIDER));   // physical transcript gains a divider now
-        String who = (name != null && !name.isBlank()) ? "「" + name + "」" : "新的设定";
-        pushEvent("<persona-change>你的人设已更新为" + who
-                + "。以上对话确实发生过，但从现在起请完全按新的人设继续，不必解释过去、不要延续旧的说话风格。</persona-change>", false);
+        // 聊天流插一条分隔:给主人看的记号(什么时候换的),不发给模型。
+        // 换人设不再给模型注入"和解"消息——新系统提示本身就是最强的指令,
+        // 历史口吻要不要接得上是主人自己的选择,不由我们替他兜。
+        display.add(new ConvoState.Msg.User(ConvoLog.PERSONA_DIVIDER));
     }
 
     /**
@@ -771,10 +789,10 @@ public final class EntityAgentLoop {
      * No-op if a persona is already set (avoids stomping a resumed companion).
      */
     public void setInitialPersona(String id, String text, String name) {
-        if (personaText != null && !personaText.isBlank()) return;   // already has one
+        if (personaText() != null && !personaText().isBlank()) return;   // already has one
         this.personaId = id;
-        this.personaText = text;
-        this.personaName = name;
+        this.personaTextSnapshot = text;
+        this.personaNameSnapshot = name;
         log.appendPersonaChange(id, text, name);
     }
 
@@ -1100,10 +1118,9 @@ public final class EntityAgentLoop {
     private String composeSystemPrompt() {
         // Per-companion persona wins; fall back to the global default; with neither,
         // the persona slot says so EXPLICITLY — an unconfigured persona is a valid
-        // state (自由发挥), not a missing one. Read fresh each turn so a live persona
-        // switch takes effect next turn with no in-flight interruption.
-        String base = (personaText != null && !personaText.isBlank())
-                ? personaText : Services.CONFIG.getSystemPrompt();
+        // state (自由发挥), not a missing one.
+        String base = (personaText() != null && !personaText().isBlank())
+                ? personaText() : Services.CONFIG.getSystemPrompt();
         if (base == null || base.isBlank()) base = "未配置人设,可以自由发挥。";
         String skillsXml = SkillRegistry.instance().formatXml();
 
