@@ -19,6 +19,13 @@ public final class InlineAlert extends Widget {
 
     public enum Severity { INFO, SUCCESS, WARNING, ERROR }
 
+    /** 纯展示,永不参与命中——胶囊的名义边界常盖在表单行上,吞掉命中会把
+     *  底下的输入框点死(UiRoot 命中第一个含点控件就停)。 */
+    @Override
+    public boolean contains(double mx, double my) {
+        return false;
+    }
+
     private static final long ENTER_MS = 150;
     private static final long EXIT_MS = 200;
 

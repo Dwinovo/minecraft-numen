@@ -91,11 +91,13 @@ public final class SkinFormPanel {
 
         // 导入区:唯一入口「选择文件…」——原生文件对话框(FCL 会把它翻译成
         // 安卓的文件选择器);拖拽入窗仍被宿主 onFilesDrop 静默接住,不再宣传。
-        Button pick = ui.add(new Button(t(ModLanguageData.Keys.SKIN_PICK_FILE),
-                Button.Style.NORMAL, onPickFile));
-        pick.setBounds(x, ry, 76, 16);
+        String pickLabel = t(ModLanguageData.Keys.SKIN_PICK_FILE);
+        // 按钮宽随文案实测(写死会被长文案穿底)。
+        int pickW = Minecraft.getInstance().font.width(pickLabel) + 14;
+        Button pick = ui.add(new Button(pickLabel, Button.Style.NORMAL, onPickFile));
+        pick.setBounds(x, ry, pickW, 16);
         statusLabel = ui.add(new Label("", Label.Role.MUTED));
-        statusLabel.setBounds(x + 82, ry + 4, w - 82, 9);
+        statusLabel.setBounds(x + pickW + 6, ry + 4, Math.max(0, w - pickW - 6), 9);
         refreshStatus();
 
         Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
