@@ -13,6 +13,9 @@ public final class McDrawSurface implements IDrawSurface {
     private final GuiGraphics g;
     private final Font font;
 
+    /** 逃生口:屏幕层的行渲染回调偶需原生画布(皮肤脸预览等 MC 专属绘制)。 */
+    public GuiGraphics graphics() { return g; }
+
     public McDrawSurface(GuiGraphics g, Font font) {
         this.g = g;
         this.font = font;

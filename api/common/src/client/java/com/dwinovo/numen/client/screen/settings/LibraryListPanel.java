@@ -57,6 +57,13 @@ public final class LibraryListPanel<T> {
     private String toggleLabelKey;
     private Supplier<Boolean> toggleGet;
     private Consumer<Boolean> toggleSet;
+    /** 可选的行首图标回调(皮肤库的脸预览);MC 专属绘制经 McDrawSurface 降级取原生画布。 */
+    public interface RowIcon<T> {
+        void draw(IDrawSurface s, T item, int x, int y, int size);
+    }
+
+    private RowIcon<T> rowIcon;
+    private int rowIconSize;
     // 可选的预设行克隆动作(人格库的 ⧉)。
     private Consumer<T> onClone;
     // 可选的标题行附加按钮(人格库的 ↻ 重扫)。
@@ -89,6 +96,13 @@ public final class LibraryListPanel<T> {
         this.toggleLabelKey = labelKey;
         this.toggleGet = get;
         this.toggleSet = set;
+        return this;
+    }
+
+    /** 行首图标列(条目自绘,如皮肤脸);行内容右移让位。 */
+    public LibraryListPanel<T> withRowIcon(int size, RowIcon<T> icon) {
+        this.rowIconSize = size;
+        this.rowIcon = icon;
         return this;
     }
 
@@ -186,6 +200,10 @@ public final class LibraryListPanel<T> {
             s.fillRect(rx, ry + 2, 2, rh - 4, c.accent());
         }
         int tx = rx + 4;
+        if (rowIcon != null) {
+            rowIcon.draw(s, e, rx + 2, ry + (rh - rowIconSize) / 2, rowIconSize);
+            tx = rx + 2 + rowIconSize + 4;
+        }
         s.drawText(row.name() == null ? "" : row.name(), tx, ry + 3, c.textPrimary(), false);
         s.drawText(clip(s, row.meta(), rw - EDIT_ZONE - 6 - (tx - rx)), tx, ry + 13,
                 row.metaDanger() ? c.danger() : c.textMuted(), false);
