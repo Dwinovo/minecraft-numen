@@ -81,7 +81,6 @@ public final class SettingsView {
     private static final int NAV_SP = 20;     // sub-nav row pitch
     private static final int LIST_ROW = 24;   // list row height(两行内容 9+9 加呼吸,贴行显挤)
     private static final int TOG_W = 18, TOG_H = 10;
-    private static final String CUSTOM_MODEL = "__custom__";
     /** 试听用的固定测试句(按当前表单参数就地合成)。 */
 
     private final Host host;
@@ -224,12 +223,14 @@ public final class SettingsView {
     private String mcpDeletePending;          // non-null = showing the delete-confirm bar for this server
     private String mcpEditOriginal;           // non-null = the add-form is EDITING this server (replace on save)
 
-    // STT section
-    private EditBox sttKeyInput, sttBaseUrlInput, sttModelInput;
-    private Dropdown sttProviderDropdown, sttModelDropdown, sttMicDropdown;
-    private boolean sttCustomModel;
-    private String wSttProvider, wSttKey, wSttBaseUrl, wSttModel, wSttMic;
+    // ---- STT 分区:NumenUI SttPanel(服务商联动/模型双态/麦克风/保存回执) ----
+    private SttPanel sttPanel;
     private long savedFlashUntil;
+
+    private SttPanel sttPanel() {
+        if (sttPanel == null) sttPanel = new SttPanel();
+        return sttPanel;
+    }
 
     public SettingsView(Host host) {
         this.host = host;
@@ -362,8 +363,6 @@ public final class SettingsView {
 
     /** Null every widget reference (the screen just cleared the actual widget lists). */
     public void clearWidgets() {
-        sttKeyInput = sttBaseUrlInput = sttModelInput = null;
-        sttProviderDropdown = sttModelDropdown = sttMicDropdown = null;
         mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
     }
 
@@ -371,7 +370,7 @@ public final class SettingsView {
         if (s == section) return;
         section = s;
         settingsScroll = 0;
-        wSttProvider = null;   // re-seed STT form from saved config on entry
+        if (sttPanel != null) sttPanel.reseed();   // 进分区从已存配置重播种
         if (s == Section.PERSONA) {
             // 人设是目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
             PersonaLibrary.instance().reload();
@@ -470,7 +469,7 @@ public final class SettingsView {
                 if (addingSkin) buildSkinForm();
             }
             case BRAIN -> buildBrainWidgets();
-            case STT -> buildSttWidgets();
+            case STT -> sttPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2);
             case THEME -> { /* no widgets — plain click rows */ }
         }
     }
@@ -478,122 +477,6 @@ public final class SettingsView {
     // ---- Proxy section: the global network proxy, its own tab (IP + port) ----
 
     // ---- Voice input (STT) section: provider dropdown → prefilled base/model, mic dropdown ----
-
-    private void buildSttWidgets() {
-        int x = secX(), w = secW();
-        int fy = secY0();
-        INumenConfig cfg = Services.CONFIG;
-        if (wSttProvider == null) {   // seed working fields from config on section entry
-            wSttProvider = cfg.getSttProvider();
-            wSttKey = cfg.getSttApiKey();
-            wSttBaseUrl = cfg.getSttBaseUrl();
-            wSttModel = cfg.getSttModel();
-            wSttMic = cfg.getSttMicrophone();
-            com.dwinovo.numen.client.stt.SttProviders.Option seed =
-                    com.dwinovo.numen.client.stt.SttProviders.byId(wSttProvider);
-            sttCustomModel = seed.models().isEmpty() || !seed.models().contains(wSttModel);
-        }
-        com.dwinovo.numen.client.stt.SttProviders.Option opt =
-                com.dwinovo.numen.client.stt.SttProviders.byId(wSttProvider);
-        sttProviderDropdown = new Dropdown(sttProviderItems(), opt.id());
-        sttProviderDropdown.setBounds(x, fy + 25, w, 18);
-        sttProviderDropdown.setDropBottom(top() + panelH() - 2);
-        sttKeyInput = field(x, fy + 25 + SET_SP, w, 256, wSttKey);
-        // Model row: provider's known models as a dropdown (+ 自定义 → free text).
-        int modelY = fy + 25 + 2 * SET_SP;
-        if (sttCustomModel || opt.models().isEmpty()) {
-            sttModelDropdown = null;
-            boolean hasModels = !opt.models().isEmpty();
-            sttModelInput = field(x, modelY, hasModels ? w - 20 : w, 128, wSttModel);
-            if (hasModels) {
-                host.add(new SimpleButton(x + w - 18, modelY, 18, 18, Component.literal("▾"),
-                        b -> { preserveSttForm(); sttCustomModel = false; host.rebuild(); }));
-            }
-        } else {
-            sttModelInput = null;
-            String sel = opt.models().contains(wSttModel) ? wSttModel : opt.models().get(0);
-            sttModelDropdown = new Dropdown(sttModelItems(opt), sel);
-            sttModelDropdown.setBounds(x, modelY, w, 18);
-            sttModelDropdown.setDropBottom(top() + panelH() - 2);
-        }
-        sttBaseUrlInput = field(x, fy + 25 + 3 * SET_SP, w, 256, wSttBaseUrl);
-        sttMicDropdown = new Dropdown(sttMicItems(), wSttMic == null ? "" : wSttMic);
-        sttMicDropdown.setBounds(x, fy + 25 + 4 * SET_SP, w, 18);
-        sttMicDropdown.setDropBottom(top() + panelH() - 2);
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, top() + panelH() - PAD - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> {
-                    String sttModel = sttModelDropdown != null
-                            && !CUSTOM_MODEL.equals(sttModelDropdown.selectedId())
-                            ? sttModelDropdown.selectedId()
-                            : (sttModelInput != null ? sttModelInput.getValue().trim() : wSttModel);
-                    cfg.setSttProvider(sttProviderDropdown.selectedId());
-                    cfg.setSttApiKey(sttKeyInput.getValue().trim());
-                    cfg.setSttModel(sttModel);
-                    cfg.setSttBaseUrl(sttBaseUrlInput.getValue().trim());
-                    cfg.setSttMicrophone(sttMicDropdown.selectedId());
-                    cfg.save();
-                    savedFlashUntil = System.currentTimeMillis() + 1500;
-                }).primary());
-    }
-
-    private List<Dropdown.Item> sttProviderItems() {
-        List<Dropdown.Item> out = new ArrayList<>();
-        for (com.dwinovo.numen.client.stt.SttProviders.Option o
-                : com.dwinovo.numen.client.stt.SttProviders.all()) {
-            out.add(new Dropdown.Item(o.id(), o.displayName()));
-        }
-        return out;
-    }
-
-    private List<Dropdown.Item> sttMicItems() {
-        List<Dropdown.Item> out = new ArrayList<>();
-        out.add(new Dropdown.Item("", I18n.get(ModLanguageData.Keys.STT_MIC_DEFAULT)));
-        for (String name : com.dwinovo.numen.client.stt.MicrophoneManager.deviceNames()) {
-            out.add(new Dropdown.Item(name, name));
-        }
-        return out;
-    }
-
-    private List<Dropdown.Item> sttModelItems(com.dwinovo.numen.client.stt.SttProviders.Option o) {
-        List<Dropdown.Item> items = new ArrayList<>();
-        for (String m : o.models()) {
-            items.add(new Dropdown.Item(m, m));
-        }
-        items.add(new Dropdown.Item(CUSTOM_MODEL, I18n.get("numen.settings.custom_model")));
-        return items;
-    }
-
-    /** Keep typed key/model/baseUrl across a rebuild triggered by a dropdown. */
-    private void preserveSttForm() {
-        if (sttKeyInput != null) wSttKey = sttKeyInput.getValue();
-        if (sttBaseUrlInput != null) wSttBaseUrl = sttBaseUrlInput.getValue();
-        if (sttModelInput != null) {
-            wSttModel = sttModelInput.getValue();
-        } else if (sttModelDropdown != null && !CUSTOM_MODEL.equals(sttModelDropdown.selectedId())) {
-            wSttModel = sttModelDropdown.selectedId();
-        }
-    }
-
-    /** Provider changed → adapt model + base URL to the pick's preset defaults (still editable). */
-    private void adaptToSttProvider(String id) {
-        wSttProvider = id;
-        com.dwinovo.numen.client.stt.SttProviders.Option o =
-                com.dwinovo.numen.client.stt.SttProviders.byId(id);
-        sttCustomModel = o.models().isEmpty();   // custom provider → free-text model
-        wSttModel = o.defaultModel();
-        wSttBaseUrl = o.defaultBaseUrl();
-    }
-
-    private void renderSttSection(GuiGraphics g) {
-        int x = secX();
-        int fy = secY0();
-        txt(g, Component.translatable(ModLanguageData.Keys.STT_TITLE), x, fy - 2, TXT);
-        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_PROVIDER), x, fy + 14, TXT_MUTED);
-        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_API_KEY), x, fy + 14 + SET_SP, TXT_MUTED);
-        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_MODEL), x, fy + 14 + 2 * SET_SP, TXT_MUTED);
-        txt(g, Component.translatable(ModLanguageData.Keys.GUI_SETTINGS_BASE_URL), x, fy + 14 + 3 * SET_SP, TXT_MUTED);
-        txt(g, Component.translatable(ModLanguageData.Keys.STT_MICROPHONE), x, fy + 14 + 4 * SET_SP, TXT_MUTED);
-    }
 
     // ---- External-brain section: 我们自己当 MCP 服务器,把同伴交给外面的 AI 驱动 ----
 
@@ -1147,7 +1030,8 @@ public final class SettingsView {
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
             case BRAIN -> renderBrainSection(g, mouseX, mouseY);
-            case STT -> renderSttSection(g);
+            case STT -> sttPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
             case THEME -> renderThemeSection(g, mouseX, mouseY);
         }
         // 删除确认改模态:列表照常渲染作背景,暗幕+确认卡压在上面(按钮走 widget
@@ -1477,36 +1361,8 @@ public final class SettingsView {
                 && voiceListPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
-        if (section == Section.STT && sttProviderDropdown != null) {
-            String beforeStt = sttProviderDropdown.selectedId();
-            if (sttProviderDropdown.mouseClicked(mouseX, mouseY)) {
-                if (sttModelDropdown != null) sttModelDropdown.close();
-                if (sttMicDropdown != null) sttMicDropdown.close();
-                String selStt = sttProviderDropdown.selectedId();
-                if (!selStt.equals(beforeStt)) {   // provider changed → prefill model + base URL
-                    preserveSttForm();
-                    adaptToSttProvider(selStt);
-                    host.rebuild();
-                }
-                return true;
-            }
-        }
-        if (section == Section.STT && sttModelDropdown != null
-                && sttModelDropdown.mouseClicked(mouseX, mouseY)) {
-            if (sttProviderDropdown != null) sttProviderDropdown.close();
-            if (sttMicDropdown != null) sttMicDropdown.close();
-            if (CUSTOM_MODEL.equals(sttModelDropdown.selectedId())) {   // 自定义 → free text
-                preserveSttForm();
-                sttCustomModel = true;
-                wSttModel = "";
-                host.rebuild();
-            }
-            return true;
-        }
-        if (section == Section.STT && sttMicDropdown != null
-                && sttMicDropdown.mouseClicked(mouseX, mouseY)) {
-            if (sttProviderDropdown != null) sttProviderDropdown.close();
-            if (sttModelDropdown != null) sttModelDropdown.close();
+        // STT 分区(NumenUI):下拉浮层/双态切换/保存全在面板里。
+        if (section == Section.STT && sttPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
         // 声线表单(NumenUI):事件整体交给表单面板(浮层打开时它优先吃掉一切)。
@@ -1675,6 +1531,9 @@ public final class SettingsView {
                 && skinListPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
+        if (section == Section.STT && sttPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
         return false;
     }
 
@@ -1733,6 +1592,7 @@ public final class SettingsView {
             if (addingSkin) return skinForm().keyPressed(keyCode, modifiers);
             return skinListPanel().keyPressed(keyCode, modifiers);
         }
+        if (section == Section.STT) return sttPanel().keyPressed(keyCode, modifiers);
         return false;
     }
 
@@ -1741,21 +1601,12 @@ public final class SettingsView {
         if (section == Section.VOICE && addingVoice) return voiceForm().charTyped(ch);
         if (section == Section.PERSONA && addingPersona) return personaForm().charTyped(ch);
         if (section == Section.SKIN && addingSkin) return skinForm().charTyped(ch);
+        if (section == Section.STT) return sttPanel().charTyped(ch);
         return false;
     }
 
     public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
-        if (section == Section.STT) {
-            Dropdown[] sttDd = { sttProviderDropdown, sttModelDropdown, sttMicDropdown };
-            Dropdown sttOpen = null;
-            for (Dropdown d : sttDd) {
-                if (d == null) continue;
-                if (d.isOpen()) sttOpen = d;
-                else d.render(g, font(), mouseX, mouseY);
-            }
-            if (sttOpen != null) sttOpen.render(g, font(), mouseX, mouseY);   // open list overlays fields
-        }
         if (section == Section.MCP && addingMcp) {
             placeholder(g, mcpNameInput, "kfc");
             placeholder(g, mcpTargetInput, mcpStdio ? "cmd /c npx -y <server>" : "https://mcp.mcd.cn");
