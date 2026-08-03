@@ -26,8 +26,15 @@ import java.util.function.Supplier;
 public final class LibraryListPanel<T> {
 
     /** 一行的展示数据(每帧按条目现算,绑定标记等活状态即时反映)。
-     *  {@code marked}:null=本库无标记列;FALSE=留缩进不点 ●;TRUE=行首 ●。 */
-    public record Row(String name, String meta, boolean metaDanger, Boolean marked) {}
+     *  {@code marked}:TRUE=行左缘 accent 侧条(本同伴绑定中);null/FALSE=无标记。
+     *  侧条不占缩进——行内容永远与无标记库同列对齐。
+     *  {@code preset}=只读预设行:行尾 ⧉(克隆成自定义副本)替代 ✎✕,行体不可点。 */
+    public record Row(String name, String meta, boolean metaDanger, Boolean marked, boolean preset) {
+
+        public Row(String name, String meta, boolean metaDanger, Boolean marked) {
+            this(name, meta, metaDanger, marked, false);
+        }
+    }
 
     private static final int ROW_H = 24;
     /** 行尾图标热区左缘距行右缘:✕ 最右,✎ 在其左(与旧版热区同宽,肌肉记忆不换)。 */
@@ -50,6 +57,11 @@ public final class LibraryListPanel<T> {
     private String toggleLabelKey;
     private Supplier<Boolean> toggleGet;
     private Consumer<Boolean> toggleSet;
+    // 可选的预设行克隆动作(人格库的 ⧉)。
+    private Consumer<T> onClone;
+    // 可选的标题行附加按钮(人格库的 ↻ 重扫)。
+    private String titleActionLabel;
+    private Runnable titleAction;
 
     private ListView<T> list;
     private Label emptyLabel;
@@ -80,6 +92,19 @@ public final class LibraryListPanel<T> {
         return this;
     }
 
+    /** 预设行(Row.preset)的 ⧉ 动作:克隆成可编辑副本并刷新列表。 */
+    public LibraryListPanel<T> withPresetClone(Consumer<T> onClone) {
+        this.onClone = onClone;
+        return this;
+    }
+
+    /** 标题行附加按钮(新建左侧的小方钮,如人格库的 ↻ 重扫)。 */
+    public LibraryListPanel<T> withTitleAction(String label, Runnable action) {
+        this.titleActionLabel = label;
+        this.titleAction = action;
+        return this;
+    }
+
     /** {@code x,y} = 标题行左上;{@code dim*} = 删除确认的暗幕覆盖区(整块设置面板)。 */
     public void build(int x, int y, int w, int h, int dimX, int dimY, int dimW, int dimH) {
         this.dimX = dimX;
@@ -95,13 +120,23 @@ public final class LibraryListPanel<T> {
         Button add = ui.add(new Button(t(addKey), Button.Style.ACCENT, onAdd));
         add.setBounds(x + w - 56, y - 2, 56, NumenStyle.CONTROL_H);
 
+        if (titleAction != null) {
+            Button act = ui.add(new Button(titleActionLabel, Button.Style.NORMAL, () -> {
+                titleAction.run();
+                refresh();   // 动作(重扫等)可能改变条目集,当场刷新
+            }));
+            act.setBounds(x + w - 56 - 6 - 18, y - 2, 18, NumenStyle.CONTROL_H);
+        }
+
         if (toggleGet != null) {
             Toggle tog = ui.add(new Toggle(toggleGet.get(), toggleSet));
             int togX = x + w - 56 - 8 - 22;
             tog.setBounds(togX, y - 1, 22, 11);
             String label = t(toggleLabelKey);
+            int lw = Minecraft.getInstance().font.width(label);
             Label togLabel = ui.add(new Label(label, Label.Role.MUTED));
-            togLabel.setBounds(togX - Minecraft.getInstance().font.width(label) - 4, y, 90, 9);
+            // 宽度=实测文本宽:标签后加在按钮之上,虚宽会盖住右侧新建钮吞掉点击。
+            togLabel.setBounds(togX - lw - 4, y, lw, 9);
         }
 
         emptyLabel = ui.add(new Label(t(emptyKey), Label.Role.MUTED));
@@ -146,18 +181,23 @@ public final class LibraryListPanel<T> {
                            int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
         Row row = rowOf.apply(e);
         if (hovered) s.fillRoundRect(rx, ry, rw, rh, NumenStyle.RADIUS_SMALL, c.hover());
-        int tx = rx + 2;
-        if (row.marked() != null) {
-            if (row.marked()) s.drawText("●", rx + 2, ry + 7, c.accent(), false);
-            tx = rx + 14;
+        if (Boolean.TRUE.equals(row.marked())) {
+            // 绑定标记 = 行左缘 accent 侧条,不占缩进(行内容与无标记库同列对齐)。
+            s.fillRect(rx, ry + 2, 2, rh - 4, c.accent());
         }
+        int tx = rx + 4;
         s.drawText(row.name() == null ? "" : row.name(), tx, ry + 3, c.textPrimary(), false);
         s.drawText(clip(s, row.meta(), rw - EDIT_ZONE - 6 - (tx - rx)), tx, ry + 13,
                 row.metaDanger() ? c.danger() : c.textMuted(), false);
 
         int iconY = ry + (rh - s.lineHeight()) / 2 + 1;
-        boolean overEdit = hovered && inZone(rx, rw, EDIT_ZONE, DEL_ZONE);
         boolean overDel = hovered && inZone(rx, rw, DEL_ZONE, 0);
+        if (row.preset()) {   // 只读预设:行尾唯一动作 = ⧉ 克隆成副本
+            s.drawText("⧉", rx + rw - DEL_ZONE + 2, iconY,
+                    overDel ? c.accent() : c.textMuted(), false);
+            return;
+        }
+        boolean overEdit = hovered && inZone(rx, rw, EDIT_ZONE, DEL_ZONE);
         s.drawText("✎", rx + rw - EDIT_ZONE + 2, iconY,
                 overEdit ? c.accent() : c.textMuted(), false);
         s.drawText("✕", rx + rw - DEL_ZONE + 2, iconY,
@@ -172,6 +212,13 @@ public final class LibraryListPanel<T> {
     private boolean rowClicked(int index, double xInRow) {
         if (index < 0 || index >= entries.size()) return false;
         T e = entries.get(index);
+        if (rowOf.apply(e).preset()) {   // 预设行:只有 ⧉ 热区有动作,行体吞掉不编辑
+            if (xInRow >= listW - DEL_ZONE && onClone != null) {
+                onClone.accept(e);
+                refresh();
+            }
+            return true;
+        }
         if (xInRow >= listW - DEL_ZONE) {
             askDelete(e);
             return true;

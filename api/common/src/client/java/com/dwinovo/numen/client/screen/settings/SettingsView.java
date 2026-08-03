@@ -224,10 +224,9 @@ public final class SettingsView {
     // Persona library form state (mirrors the MCP add/edit/delete flow).
     private boolean addingPersona;
     private String personaEditId;          // non-null = editing this persona; null = creating
-    private String personaDeletePending;   // id awaiting delete confirm
-    private String wPersonaName = "", wPersonaText = "";
-    private EditBox personaNameInput;
-    private net.minecraft.client.gui.components.MultiLineEditBox personaTextArea;
+    // ---- 人格表单:NumenUI PersonaFormPanel(名称 + 多行正文编辑器) ----
+    private PersonaFormPanel personaForm;
+    private PersonaFormPanel.Draft personaDraft = new PersonaFormPanel.Draft();
 
     // MCP "add server" form
     private boolean addingMcp;
@@ -377,8 +376,6 @@ public final class SettingsView {
         sttKeyInput = sttBaseUrlInput = sttModelInput = null;
         sttProviderDropdown = sttModelDropdown = sttMicDropdown = null;
         mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
-        personaNameInput = null;
-        personaTextArea = null;
         skinNameInput = null;
         skinVariantDropdown = null;
     }
@@ -397,7 +394,6 @@ public final class SettingsView {
         mcpEditOriginal = null;
         addingPersona = false;
         personaEditId = null;
-        personaDeletePending = null;
         addingProvider = false;
         providerEditId = null;
         addingVoice = false;
@@ -418,10 +414,6 @@ public final class SettingsView {
         if (skinDeletePending != null) {
             var e = com.dwinovo.numen.client.skin.SkinLibrary.instance().get(skinDeletePending);
             return Component.translatable(ModLanguageData.Keys.SKIN_DELETE_CONFIRM, e != null ? e.name() : "");
-        }
-        if (personaDeletePending != null) {
-            PersonaLibrary.Persona p = PersonaLibrary.instance().get(personaDeletePending);
-            return Component.translatable("numen.persona.delete_confirm", p != null ? p.name() : "");
         }
         if (mcpDeletePending != null) {
             return Component.translatable("numen.mcp.delete_confirm", mcpDeletePending);
@@ -444,7 +436,6 @@ public final class SettingsView {
 
     private void clearDeletePending() {
         skinDeletePending = null;
-        personaDeletePending = null;
         mcpDeletePending = null;
     }
 
@@ -475,9 +466,10 @@ public final class SettingsView {
                 else buildMcpListWidgets();
             }
             case PERSONA -> {
-                if (personaDeletePending != null) buildPersonaDeleteConfirm();
-                else if (addingPersona) buildPersonaForm();
-                else buildPersonaListWidgets();
+                // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
+                personaListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                        left(), top(), panelW(), panelH());
+                if (addingPersona) buildPersonaForm();
             }
             case PROVIDER -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
@@ -818,63 +810,57 @@ public final class SettingsView {
 
     // ---- Persona section: a library of reusable personas; apply one to the active companion ----
 
-    private void buildPersonaListWidgets() {
-        // ↻ 刷新:重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
-        host.add(new SimpleButton(left() + panelW() - PAD - 64 - 22, secY0() - 2, 18, 14,
-                Component.literal("↻"), b -> {
-                    PersonaLibrary.instance().reload();
-                    host.rebuild();
-                }));
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, secY0() - 2, 64, 14,
-                Component.translatable("numen.persona.add"), b -> {
-                    addingPersona = true; personaEditId = null;
-                    wPersonaName = ""; wPersonaText = "";
-                    host.rebuild();
-                }));
+    // ---- 人格列表:通用 LibraryListPanel + 预设行 ⧉ 克隆 + 标题行 ↻ 重扫 ----
+    private LibraryListPanel<PersonaLibrary.Persona> personaListPanel;
+
+    private LibraryListPanel<PersonaLibrary.Persona> personaListPanel() {
+        if (personaListPanel == null) {
+            personaListPanel = new LibraryListPanel<>(
+                    "numen.persona.title", "numen.persona.add", "numen.persona.empty",
+                    () -> PersonaLibrary.instance().list(),
+                    p -> {
+                        String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
+                        // 正文预览压成单行(MD 里的换行在 24px 行里没有意义)。
+                        String meta = (badge + p.text()).replace('\n', ' ');
+                        return new LibraryListPanel.Row(p.name(), meta, false, null, p.preset());
+                    },
+                    p -> Component.translatable("numen.persona.delete_confirm", p.name()).getString(),
+                    p -> PersonaLibrary.instance().remove(p.id()),
+                    () -> {
+                        addingPersona = true;
+                        personaEditId = null;
+                        personaDraft = new PersonaFormPanel.Draft();
+                        host.rebuild();
+                    },
+                    this::beginEditPersona)
+                    .withPresetClone(p -> PersonaLibrary.instance().clonePersona(p.id()))
+                    // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
+                    .withTitleAction("↻", () -> PersonaLibrary.instance().reload());
+        }
+        return personaListPanel;
     }
 
+    /** 表单卡里的 NumenUI 人格表单(名称 + 多行正文编辑器);卡壳照旧 formModal。 */
     private void buildPersonaForm() {
-        int x = fx(), w = fw();
-        int fy = fy0();
-        // 名称即文件名;正文(自由 MD)占满剩余高度。
-        personaNameInput = field(x, fy + 11, w, 48, wPersonaName);
-        int ty = fy + 44;
-        int th = (fBottom() - 22) - ty;
-        personaTextArea = new net.minecraft.client.gui.components.MultiLineEditBox(
-                font(), x, ty, w, th,
-                Component.translatable("numen.persona.text_placeholder"), Component.empty()) {
-            @Override
-            protected void renderBackground(GuiGraphics gg) {
-                // 圆角深色编辑底替换原版方框——正文字色是原版硬编码的浅色,底必须够深;
-                // 主题 text 深色正好当底,聚焦时边框亮 CTA,与单行字段同一套语言。
-                UiTheme t = UiTheme.current();
-                com.dwinovo.numen.client.ui.RoundRect.card(gg, getX(), getY(),
-                        getX() + getWidth(), getY() + getHeight(), 5,
-                        t.text(), isFocused() ? t.cta() : t.aiBorder());
-            }
-        };
-        personaTextArea.setValue(wPersonaText);
-        personaTextArea.setCharacterLimit(4096);
-        host.add(personaTextArea);
-        host.add(new SimpleButton(fRight() - 64, fBottom() - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> onSavePersona()).primary());
-        host.add(new SimpleButton(fRight() - 64 - 22, fBottom() - 18, 18, 18,
-                Component.literal("✕"), b -> { addingPersona = false; personaEditId = null; host.rebuild(); }));
-        host.focus(personaNameInput);
+        personaForm().open(personaDraft);
+        personaForm().build(fx(), fy0(), fw(), fBottom() - fy0());
     }
 
-    private void buildPersonaDeleteConfirm() {
-        buildConfirmButtons(() -> {
-            PersonaLibrary.instance().remove(personaDeletePending);
-            personaDeletePending = null;
-            host.rebuild();
-        });
+    private PersonaFormPanel personaForm() {
+        if (personaForm == null) {
+            personaForm = new PersonaFormPanel(this::onPersonaSave,
+                    () -> {
+                        addingPersona = false;
+                        personaEditId = null;
+                        host.rebuild();
+                    });
+        }
+        return personaForm;
     }
 
-    private void onSavePersona() {
-        String name = personaNameInput.getValue().trim();
-        String text = personaTextArea == null ? "" : personaTextArea.getValue().trim();
-        if (name.isEmpty() || text.isEmpty()) { host.warnPulse(); return; }
+    private void onPersonaSave(PersonaFormPanel.Draft d) {
+        String name = d.name.trim();
+        String text = d.text.trim();
         var lib = PersonaLibrary.instance();
         if (personaEditId != null) {
             PersonaLibrary.Persona old = lib.get(personaEditId);
@@ -895,7 +881,7 @@ public final class SettingsView {
         }
         addingPersona = false;
         personaEditId = null;
-        wPersonaName = ""; wPersonaText = "";
+        personaDraft = new PersonaFormPanel.Draft();
         host.rebuild();
     }
 
@@ -1634,83 +1620,26 @@ public final class SettingsView {
     // ---- Persona section render + hit-test ----
 
     private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
+        var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingPersona) {
-            renderPersonaList(g, -10000, -10000);
+            personaListPanel().render(surface, HostThemeColors.current(),
+                    -10000, -10000, net.minecraft.Util.getMillis());
             formModal(g, Component.translatable("numen.persona.title"));
-            renderPersonaForm(g);
+            personaForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
             return;
         }
-        renderPersonaList(g, mouseX, mouseY);
-    }
-
-    private void renderPersonaList(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX(), w = secW();
-        txt(g, Component.translatable("numen.persona.title"), x, secY0() - 2, TXT);
-        var list = PersonaLibrary.instance().list();
-        if (list.isEmpty()) {
-            txt(g, Component.translatable("numen.persona.empty"), x, secY0() + 16, TXT_FAINT);
-            return;
-        }
-        int listY0 = secY0() + 14;
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
-        for (int i = settingsScroll; i < list.size(); i++) {
-            int ry = listY0 + (i - settingsScroll) * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            PersonaLibrary.Persona p = list.get(i);
-            int delX = x + w - 12, editX = x + w - 26;
-            hoverRow(g, mouseX, mouseY, x, w, ry);
-            txt(g, Component.literal(p.name()), x, ry + 1, TXT);
-            String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
-            txt(g, Component.literal(clip(badge + p.text(), w - 30)), x, ry + 13, TXT_MUTED);
-            if (p.preset()) {
-                txt(g, Component.literal("⧉"), delX, ry + 6,
-                        overDelete(mouseX, mouseY, delX, ry) ? CTA : TXT_FAINT);
-            } else {
-                txt(g, Component.literal("✎"), editX, ry + 6,
-                        overDelete(mouseX, mouseY, editX, ry) ? CTA : TXT_FAINT);
-                txt(g, Component.literal("✕"), delX, ry + 6,
-                        overDelete(mouseX, mouseY, delX, ry) ? FAIL : TXT_FAINT);
-            }
-        }
-    }
-
-    private void renderPersonaForm(GuiGraphics g) {
-        int x = fx();
-        int fy = fy0();
-        txt(g, Component.translatable("numen.persona.form_name"), x, fy, TXT_MUTED);
-        txt(g, Component.translatable("numen.persona.form_text"), x, fy + 33, TXT_MUTED);
-    }
-
-    private boolean personaClick(int mx, int my) {
-        if (addingPersona || personaDeletePending != null) return false;
-        int x = secX(), w = secW();
-        var lib = PersonaLibrary.instance();
-        var list = lib.list();
-        int listY0 = secY0() + 14;
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, list.size() - visible));
-        for (int i = scroll; i < list.size(); i++) {
-            int ry = listY0 + (i - scroll) * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            PersonaLibrary.Persona p = list.get(i);
-            int delX = x + w - 12, editX = x + w - 26;
-            if (p.preset()) {
-                if (overDelete(mx, my, delX, ry)) { lib.clonePersona(p.id()); host.rebuild(); return true; }
-            } else {
-                if (overDelete(mx, my, editX, ry)) { beginEditPersona(p); return true; }
-                if (overDelete(mx, my, delX, ry)) { personaDeletePending = p.id(); host.rebuild(); return true; }
-                if (overRow(mx, my, x, w, ry)) { beginEditPersona(p); return true; }   // body → edit a custom persona
-            }
-        }
-        return false;
+        personaListPanel().render(surface, HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
     }
 
     private void beginEditPersona(PersonaLibrary.Persona p) {
         addingPersona = true;
         personaEditId = p.id();
-        wPersonaName = p.name();
-        wPersonaText = p.text();
+        var d = new PersonaFormPanel.Draft();
+        d.name = p.name();
+        d.text = p.text();
+        personaDraft = d;
         host.rebuild();
     }
 
@@ -1794,6 +1723,15 @@ public final class SettingsView {
                 && voiceForm().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
+        // 人格表单(NumenUI):名称/正文编辑器/保存。
+        if (section == Section.PERSONA && addingPersona
+                && personaForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.PERSONA && !addingPersona
+                && personaListPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
         return settingsClickedAt(mouseX, mouseY);
     }
 
@@ -1835,7 +1773,6 @@ public final class SettingsView {
         if (section == Section.MCP) return mcpToggleClick(mx, my);
         if (section == Section.BRAIN) return brainToggleClick(mx, my);
         if (section == Section.SKILLS) return skillToggleClick(mx, my);
-        if (section == Section.PERSONA) return personaClick(mx, my);
         if (section == Section.SKIN) return skinClick(mx, my);
         return false;
     }
@@ -1926,21 +1863,39 @@ public final class SettingsView {
                 && voiceForm().mouseScrolled(mx, my, sy)) {
             return true;
         }
+        if (section == Section.PERSONA && addingPersona
+                && personaForm().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.PERSONA && !addingPersona
+                && personaListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
         if (skinVariantDropdown != null && skinVariantDropdown.mouseScrolled(mx, my, sy)) {
             return true;
         }
         return false;
     }
 
-    /** 拖动/松开:声线表单的音量滑条需要(NumenUI 里唯一的拖动控件)。 */
+    /** 拖动/松开:声线表单的音量滑条与人格正文的拖选需要。 */
     public boolean mouseDragged(double mx, double my, double dx, double dy) {
-        return section == Section.VOICE && addingVoice
-                && voiceForm().mouseDragged(mx, my, dx, dy);
+        if (section == Section.VOICE && addingVoice) {
+            return voiceForm().mouseDragged(mx, my, dx, dy);
+        }
+        if (section == Section.PERSONA && addingPersona) {
+            return personaForm().mouseDragged(mx, my, dx, dy);
+        }
+        return false;
     }
 
     public boolean mouseReleased(double mx, double my, int button) {
-        return section == Section.VOICE && addingVoice
-                && voiceForm().mouseReleased(mx, my, button);
+        if (section == Section.VOICE && addingVoice) {
+            return voiceForm().mouseReleased(mx, my, button);
+        }
+        if (section == Section.PERSONA && addingPersona) {
+            return personaForm().mouseReleased(mx, my, button);
+        }
+        return false;
     }
 
     /** Wheel pass 2 (after the rail/chat checks): scroll the section list. */
@@ -1949,7 +1904,6 @@ public final class SettingsView {
         int count = switch (section) {
             case MCP -> com.dwinovo.numen.mcp.client.McpClientManager.servers().size();
             case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
-            case PERSONA -> PersonaLibrary.instance().list().size();
             case SKIN -> com.dwinovo.numen.client.skin.SkinLibrary.instance().list().size();
             default -> 0;
         };
@@ -1971,12 +1925,17 @@ public final class SettingsView {
             if (addingVoice) return voiceForm().keyPressed(keyCode, modifiers);
             return voiceListPanel().keyPressed(keyCode, modifiers);
         }
+        if (section == Section.PERSONA) {
+            if (addingPersona) return personaForm().keyPressed(keyCode, modifiers);
+            return personaListPanel().keyPressed(keyCode, modifiers);
+        }
         return false;
     }
 
     public boolean charTyped(char ch) {
         if (section == Section.PROVIDER && addingProvider) return providerForm().charTyped(ch);
         if (section == Section.VOICE && addingVoice) return voiceForm().charTyped(ch);
+        if (section == Section.PERSONA && addingPersona) return personaForm().charTyped(ch);
         return false;
     }
 
@@ -1996,9 +1955,6 @@ public final class SettingsView {
             placeholder(g, mcpNameInput, "kfc");
             placeholder(g, mcpTargetInput, mcpStdio ? "cmd /c npx -y <server>" : "https://mcp.mcd.cn");
             placeholder(g, mcpHeaderInput, mcpStdio ? "KEY=value; KEY2=value2" : "Authorization: Bearer <token>");
-        }
-        if (section == Section.PERSONA && addingPersona) {
-            placeholder(g, personaNameInput, "名称(即文件名),如 小焰");   // the text area has its own built-in placeholder
         }
     }
 }
