@@ -1,7 +1,6 @@
 package com.dwinovo.numen.client.screen.settings;
 
 import com.dwinovo.numen.client.ui.IDrawSurface;
-import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.widget.ListView;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
@@ -37,16 +36,16 @@ public final class NavPanel {
                     return true;
                 }));
         list.setBounds(x, y, w, h);
+        list.select(selected);   // 选中底由 ListView 统一画(与悬停底同几何)
     }
 
     private void renderRow(IDrawSurface s, NumenTheme.Colors c, String label, int index,
-                           int rx, int ry, int rw, int rh, boolean sel, boolean hovered) {
-        boolean active = index == selected;
+                           int rx, int ry, int rw, int rh, boolean active, boolean hovered) {
+        // 行底(选中/悬停)由 ListView 画,这里只画竖条与文字。
         if (active) {
-            s.fillRoundRect(rx, ry, rw, rh - 2, NumenStyle.RADIUS_CONTROL, c.selected());
-            s.fillRect(rx, ry + 2, 2, rh - 6, c.accent());   // 左缘竖条:当前分区
+            s.fillRect(rx, ry + 3, 2, rh - 6, c.accent());   // 左缘竖条:当前分区
         }
-        s.drawText(label, rx + 6, ry + (rh - 2 - s.lineHeight()) / 2 + 1,
+        s.drawText(label, rx + 6, ry + (rh - s.lineHeight()) / 2,
                 active ? c.textPrimary() : c.textSecondary(), false);
     }
 
