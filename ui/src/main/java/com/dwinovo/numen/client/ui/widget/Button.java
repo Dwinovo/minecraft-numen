@@ -10,9 +10,20 @@ public final class Button extends Widget {
     /** GHOST = 幽灵钮(图标类):平时无底,悬停浮现浅底——主流模态 ✕ 的标准形态。 */
     public enum Style { NORMAL, ACCENT, DANGER, GHOST }
 
+    /**
+     * 图标绘制回调:组件库不认识贴图(那是每版本适配层的事),宿主注入一段
+     * "在这个方框里画图标"的闭包即可。{@code argb} 是按状态算好的图标色调。
+     */
+    public interface IconDrawer {
+        void draw(IDrawSurface s, int x, int y, int size, int argb);
+    }
+
     private String label;
     private final Style style;
     private final Runnable onClick;
+    private IconDrawer icon;
+    private int iconSize = 10;
+    private String tooltip;
 
     public Button(String label, Style style, Runnable onClick) {
         this.label = label;
@@ -21,6 +32,21 @@ public final class Button extends Widget {
     }
 
     public void setLabel(String label) { this.label = label; }
+
+    /** 图标钮:图标居中替代文字(label 退为无障碍/tooltip 文案)。 */
+    public Button icon(int size, IconDrawer drawer) {
+        this.iconSize = size;
+        this.icon = drawer;
+        return this;
+    }
+
+    /** 悬停提示(宿主取走自行绘制——tooltip 的定位与样式是宿主的事)。 */
+    public Button tooltip(String text) {
+        this.tooltip = text;
+        return this;
+    }
+
+    public String tooltip() { return tooltip; }
 
     /** 悬停进度(0~1,HOVER_MS 走满)——指针反馈短过渡,不瞬时硬切。 */
     private float hoverT;
@@ -59,6 +85,10 @@ public final class Button extends Widget {
         }
         int textColor = !enabled ? c.textMuted()
                 : style == Style.NORMAL ? c.textPrimary() : 0xFFFFFFFF;
+        if (icon != null) {
+            icon.draw(s, x + (w - iconSize) / 2, y + (h - iconSize) / 2, iconSize, textColor);
+            return;
+        }
         int tx = x + (w - s.textWidth(label)) / 2;
         int ty = y + (h - s.lineHeight()) / 2 + 1;
         s.drawText(label, tx, ty, textColor, false);

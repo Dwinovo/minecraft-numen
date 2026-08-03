@@ -142,11 +142,8 @@ public final class NumenScreen extends Screen {
     private String summonVoiceId;
     private static final String PERSONA_DEFAULT = "__default__";
 
-    private EditBox input;
-    private SimpleButton sendButton;
-    private SimpleButton stopButton;
-    private SimpleButton compactButton;
-    private SimpleButton micButton;
+    /** 聊天输入行(NumenUI):四颗图标钮 + 输入框,见 ChatInputBar。 */
+    private com.dwinovo.numen.client.screen.chat.ChatInputBar inputBar;
     private String savedInput = "";
 
     // "+" summon flow: a transient name field shown over the panel
@@ -232,7 +229,7 @@ public final class NumenScreen extends Screen {
     /** Switch the panel to another companion in place (left-rail click) — no reopen. */
     private void switchTo(UUID u, String n) {
         if (java.util.Objects.equals(u, uuid)) return;
-        input = null; savedInput = "";          // don't carry typed text across companions
+        inputBar = null; savedInput = "";       // don't carry typed text across companions
         uuid = u; name = n;
         chatView.reset();
         rebuild();
@@ -276,11 +273,10 @@ public final class NumenScreen extends Screen {
 
     /** Rebuild the widgets for the active tab. */
     private void rebuild() {
-        if (input != null) savedInput = input.getValue();
+        if (inputBar != null) savedInput = inputBar.text();
         clearWidgets();
         overlay.clear();
-        input = null;
-        sendButton = stopButton = compactButton = micButton = null;
+        inputBar = null;
         settings.clearWidgets();
         summonInput = null;
         summonSkinDropdown = null;
@@ -532,88 +528,60 @@ public final class NumenScreen extends Screen {
     private static final net.minecraft.resources.ResourceLocation ICON_COMPACT = chatIcon("icon_compact");
 
     private void buildChatWidgets() {
-        // 聊天行四键全部图标化(高频动作,含义靠图标 + 悬停 tooltip,不再占文字宽度)。
         int inputY = top + panelH - INPUT_H - PAD;
-        int btnW = 22;
-        int inX = left + PAD + (btnW + 4) * 2;
-        int inW = panelW - PAD * 2 - btnW * 4 - 20;
+        inputBar = new com.dwinovo.numen.client.screen.chat.ChatInputBar(
+                new ChatBarHost(), ICON_COMPACT, ICON_MIC, ICON_SEND, ICON_STOP);
+        inputBar.build(left + PAD, inputY, panelW - PAD * 2, INPUT_H);
+        if (!savedInput.isEmpty()) {
+            inputBar.setText(savedInput);
+            savedInput = "";
+        }
+    }
 
-        compactButton = add(new SimpleButton(left + PAD, inputY, btnW, INPUT_H,
-                Component.translatable("numen.chat.tip.compact"), b -> loop().requestCompact())
-                .icon(ICON_COMPACT));
-        compactButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
-                Component.translatable("numen.chat.tip.compact")));
-        compactButton.active = loop().canCompact();
+    /** 输入行的宿主回调面:发言闸门与可按性判据都在屏幕这边。 */
+    private final class ChatBarHost implements com.dwinovo.numen.client.screen.chat.ChatInputBar.Host {
+        @Override public void onSend(String text) { submitChat(text); }
 
-        micButton = add(new SimpleButton(left + PAD + btnW + 4, inputY, btnW, INPUT_H,
-                Component.translatable("numen.chat.tip.mic"), b -> onMicToggle())
-                .icon(ICON_MIC));
-        micButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
-                Component.translatable("numen.chat.tip.mic")));
+        @Override public void onMicToggle() { NumenScreen.this.onMicToggle(); }
 
-        input = new FlatEditBox(font, inX + FIELD_INSET_X, inputY + FIELD_INSET_Y,
-                inW - FIELD_INSET_X * 2, INPUT_H - FIELD_INSET_Y * 2, Component.literal("numen.chat.input"));
-        input.setMaxLength(MAX_PROMPT);
-        input.setBordered(false);
-        input.setTextColor(TXT);
-        // FlatEditBox draws the hint shadowless and UNDER the caret (same widget pass), so use it
-        // directly — no separate screen-side placeholder that would paint over the blinking caret.
-        // Faint colour is baked into the Component's Style.
-        input.setHint(defaultChatHint());
-        if (!savedInput.isEmpty()) { input.setValue(savedInput); savedInput = ""; }
-        add(input);
-        setInitialFocus(input);
+        @Override public void onCompact() { loop().requestCompact(); }
 
-        sendButton = add(new SimpleButton(inX + inW + 4, inputY, btnW, INPUT_H,
-                Component.translatable("numen.chat.send"), b -> onSend())
-                .icon(ICON_SEND).primary());
-        sendButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
-                Component.translatable("numen.chat.send")));
+        @Override public void onAbort() { loop().abort(); }
 
-        stopButton = add(new SimpleButton(inX + inW + 4 + btnW + 4, inputY, btnW, INPUT_H,
-                Component.translatable("numen.chat.tip.stop"), b -> loop().abort())
-                .icon(ICON_STOP));
-        stopButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
-                Component.translatable("numen.chat.tip.stop")));
-        stopButton.active = loop().canInterrupt();
+        @Override public boolean canCompact() { return loop().canCompact(); }
 
-        // 「外接大脑」模式:发言入口整排锁死(输入框/发送/麦克风/压缩),占位文案说明原因。
-        // 真正的互斥在 EntityAgentLoop 的开轮闸门上——这里只是把"按了没反应"提前成
-        // "按不下去"。叫停键不锁:那是主人的急刹车,外部 AI 抽风时更需要它。
-        if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) {
-            input.setEditable(false);
-            input.setHint(Nb.colored(I18n.get("numen.brain.chat_locked"), TXT_FAINT));
-            sendButton.active = false;
-            micButton.active = false;
-            compactButton.active = false;
+        @Override public boolean canAbort() { return loop().canInterrupt(); }
+
+        @Override public boolean inputLocked() {
+            // 「外接大脑」模式:发言入口整排锁死。真正的互斥在 EntityAgentLoop 的开轮
+            // 闸门上——这里只是把"按了没反应"提前成"按不下去"。叫停键不锁:那是主人
+            // 的急刹车,外部 AI 抽风时更需要它。
+            return com.dwinovo.numen.mcp.server.McpMode.instance().enabled();
+        }
+
+        @Override public String hint() {
+            if (inputLocked()) return I18n.get("numen.brain.chat_locked");
+            if (micNotice != null && micNoticeUntil > System.currentTimeMillis()) return micNotice;
+            return I18n.get("numen.chat.hint", name == null ? "" : name);
         }
     }
 
     /** 正常的输入框占位文案("说点什么…, {name}");麦克风状态提示消失后用它复位。 */
-    private Component defaultChatHint() {
-        return Nb.colored(I18n.get("numen.chat.hint", name == null ? "" : name), TXT_FAINT);
-    }
-
     /** 麦克风按钮:点击开录/再点停;转写文本(批量结尾一次、流式边说边刷)落进输入框。 */
     private void onMicToggle() {
         com.dwinovo.numen.client.stt.VoiceInputController.toggle(
                 Services.CONFIG,
-                text -> { if (input != null) input.setValue(text); },
-                // 状态提示(未配置/无麦克风/失败)落在输入框的 placeholder 上——眼睛正看的地方,醒目
-                // 却不写进真实输入。框里已有文字时 hint 不显示,由渲染里的底部一行兜底。
+                text -> { if (inputBar != null) inputBar.setText(text); },
+                // 状态提示(未配置/无麦克风/失败)落在输入框的占位文案上——眼睛正看的
+                // 地方,醒目却不写进真实输入(输入行每帧现取 hint());框里已有文字时
+                // 占位不显示,由渲染里的底部一行兜底。
                 status -> {
                     micNotice = status;
                     micNoticeUntil = System.currentTimeMillis() + 4000;
-                    if (input != null && input.getValue().isEmpty()) {
-                        input.setHint(Nb.colored(status, FAIL));
-                    }
                 });
-        if (micButton != null) {
-            // 录音中图标换成停止方块,tooltip 跟着换——同一颗键,两种含义都一眼可读。
-            boolean rec = com.dwinovo.numen.client.stt.VoiceInputController.isActive();
-            micButton.icon(rec ? ICON_STOP : ICON_MIC);
-            micButton.setTooltip(net.minecraft.client.gui.components.Tooltip.create(
-                    Component.translatable(rec ? "numen.chat.tip.mic_stop" : "numen.chat.tip.mic")));
+        // 录音中图标换成停止方块——同一颗键,两种含义都一眼可读。
+        if (inputBar != null) {
+            inputBar.setRecording(com.dwinovo.numen.client.stt.VoiceInputController.isActive());
         }
     }
 
@@ -697,13 +665,11 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    private void onSend() {
-        if (input == null) return;
-        // 回车走的是这条路,绕过了被禁用的发送键——模式开着时一并挡掉,
-        // 否则消息会进内置大脑的收件箱、在模式关闭后突然诈尸开轮。
+    /** 发言闸门:模式开着时一并挡掉(回车绕过了被禁用的发送键,否则消息会进
+     *  内置大脑的收件箱、在模式关闭后突然诈尸开轮)。 */
+    private void submitChat(String text) {
         if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) return;
-        String text = input.getValue() == null ? "" : input.getValue().trim();
-        if (text.isEmpty()) return;
+        if (text == null || text.isBlank()) return;
         // Endpoint check for THIS companion (its provider entry, not the legacy global
         // key): unbound / keyless surfaces as a visible hint, never a crash or a
         // silent no-op — the no-provider safety net.
@@ -715,7 +681,7 @@ public final class NumenScreen extends Screen {
             return;
         }
         loop().submitPrompt(text);
-        input.setValue("");
+        if (inputBar != null) inputBar.setText("");
         chatView.pinToBottom();
     }
 
@@ -742,8 +708,7 @@ public final class NumenScreen extends Screen {
             if (k == 256) { summoning = false; rebuild(); return true; } // Esc cancels (doesn't close panel)
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
-        if ((k == 257 || k == 335) && input != null && input.isFocused()) {
-            onSend();
+        if (tab == Tab.CHAT && inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -752,6 +717,9 @@ public final class NumenScreen extends Screen {
     @Override
     public boolean charTyped(char ch, int modifiers) {
         if (tab == Tab.SETTINGS && !summoning && settings.charTyped(ch)) {
+            return true;
+        }
+        if (tab == Tab.CHAT && !summoning && inputBar != null && inputBar.charTyped(ch)) {
             return true;
         }
         return super.charTyped(ch, modifiers);
@@ -867,6 +835,10 @@ public final class NumenScreen extends Screen {
                     }
                 }
             }
+            if (tab == Tab.CHAT && inputBar != null
+                    && inputBar.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
             if (tab == Tab.CHAT && chatView.mouseClicked(mouseX, mouseY)) return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -963,10 +935,6 @@ public final class NumenScreen extends Screen {
 
         // 当前 tab 内容永远渲染——召唤模态时它是暗幕下的背景(widgets 只建了召唤卡的,
         // 背景不可交互)。
-        if (uuid != null && !summoning) {
-            if (compactButton != null) compactButton.active = loop().canCompact();
-            if (stopButton != null) stopButton.active = loop().canInterrupt();
-        }
         switch (tab) {
             case SETTINGS -> settings.render(g, mouseX, mouseY);   // global — works with no companion
             case CHAT -> { if (uuid != null) renderChat(g, mouseX, mouseY); else emptyHint(g); }
@@ -1265,14 +1233,25 @@ public final class NumenScreen extends Screen {
         }
 
         boolean noticeLive = micNotice != null && micNoticeUntil > System.currentTimeMillis();
-        if (!noticeLive && micNoticeUntil != 0) {   // 过期一次性复位:把醒目 hint 换回正常的淡色占位
+        if (!noticeLive && micNoticeUntil != 0) {   // 过期一次性复位(占位文案由输入行现取)
             micNoticeUntil = 0;
             micNotice = null;
-            if (input != null) input.setHint(defaultChatHint());
         }
-        // 框里已有文字时 hint 不显示,这条兜底行接管(用醒目的 FAIL 色,不再是淡 ACCENT)
-        if (noticeLive && input != null && !input.getValue().isEmpty()) {
+        // 框里已有文字时占位不显示,这条兜底行接管(用醒目的 FAIL 色)
+        if (noticeLive && inputBar != null && !inputBar.text().isEmpty()) {
             txt(g, Component.literal(micNotice), left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
+        }
+
+        // 输入行(NumenUI):四颗图标钮 + 输入框;悬停提示由屏幕层画(定位是宿主的事)。
+        if (inputBar != null) {
+            inputBar.render(g, mouseX, mouseY, net.minecraft.Util.getMillis(),
+                    com.dwinovo.numen.client.screen.settings.HostThemeColors.current());
+            String tip = inputBar.tooltipAt(mouseX, mouseY);
+            if (tip != null) {
+                pendingTip = java.util.List.of(Component.literal(tip));
+                pendingTipX = mouseX;
+                pendingTipY = mouseY;
+            }
         }
     }
 

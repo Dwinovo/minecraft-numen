@@ -160,6 +160,11 @@ public final class UiRoot {
 
     public Widget focusedWidget() { return focused; }
 
+    /** 宿主指定初始焦点(如聊天输入框:开屏即可打字)。 */
+    public void requestFocus(Widget target) {
+        if (target == null || target.focusable()) setFocus(target);
+    }
+
     void setFocus(Widget target) {
         if (focused == target) return;
         if (focused != null) {
