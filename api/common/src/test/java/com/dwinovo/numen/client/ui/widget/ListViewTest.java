@@ -81,4 +81,33 @@ class ListViewTest {
         assertFalse(lv.mouseScrolled(5, 5, -1));
         assertEquals(0, lv.scrollY());
     }
+
+    @Test
+    void rowClickHandlerOwnsTheClickAndGetsRowRelativeX() {
+        AtomicInteger selected = new AtomicInteger(-1);
+        var hits = new java.util.ArrayList<double[]>();
+        ListView<String> lv = list(20, selected).rowClick((index, xInRow) -> {
+            hits.add(new double[]{index, xInRow});
+            return true;
+        });
+        for (int i = 0; i < 3; i++) lv.mouseScrolled(5, 5, -1);   // scrollY=30
+        assertTrue(lv.mouseClicked(88, 12, 0));   // 行尾图标热区:x 相对行左缘应为 88
+        assertEquals(1, hits.size());
+        assertEquals(4, (int) hits.get(0)[0]);    // 滚动折算后的全局行下标
+        assertEquals(88, hits.get(0)[1]);
+        assertEquals(-1, selected.get());          // 接管模式:onSelect 不触发
+        assertEquals(-1, lv.selectedIndex());
+    }
+
+    @Test
+    void scrollByClampsAndSurvivesRebuildRestore() {
+        ListView<String> lv = list(20, new AtomicInteger());
+        lv.scrollBy(70);
+        assertEquals(70, lv.scrollY());
+        lv.scrollBy(9999);                         // 越界:夹到底
+        assertEquals(150, lv.scrollY());
+        ListView<String> rebuilt = list(20, new AtomicInteger());
+        rebuilt.scrollBy(lv.scrollY());            // 宿主重建后恢复滚动位的用法
+        assertEquals(150, rebuilt.scrollY());
+    }
 }
