@@ -360,7 +360,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_FAIL,       "Signing failed: %s");
         adder.add(Keys.SKIN_SIGN_OK,         "\"%s\" signed");
         adder.add("numen.summon.mode",       "Mode");
-        adder.add("numen.bubble.replying",   "Replying");
+        adder.add("numen.bubble.thinking",   "Thinking");
         adder.add("numen.chat.reasoning",    "Reasoning");
         adder.add("numen.summon.fetching_skin", "Fetching skin…");
         adder.add("numen.summon.skin_failed", "Skin unavailable (%s), using default");
@@ -613,7 +613,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_FAIL,       "签名失败: %s");
         adder.add(Keys.SKIN_SIGN_OK,         "「%s」签名成功");
         adder.add("numen.summon.mode",       "模式");
-        adder.add("numen.bubble.replying",   "正在回复中");
+        adder.add("numen.bubble.thinking",   "正在思考中");
         adder.add("numen.chat.reasoning",    "思考过程");
         adder.add("numen.summon.fetching_skin", "正在获取皮肤…");
         adder.add("numen.summon.skin_failed", "没借到皮肤(%s),用默认皮肤");

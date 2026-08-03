@@ -27,8 +27,11 @@ import java.util.List;
  * (白色底图 + 顶点着色),文字全亮度——夜里也得看得清她在说什么。
  *
  * <p>视觉沿用 GUI 的 BlockFrame 方言:方角、粗边、硬偏移阴影,配色取
- * 当前 {@link UiTheme}(奶油底深字),底部一枚小方尾指向说话者。思考
- * 态渲染成跳动的省略号。
+ * 当前 {@link UiTheme}(奶油底深字),底部一枚小方尾指向说话者。
+ *
+ * <p>一只气泡里可以同时有两条线(见 {@link SpeechBubbles}):正文在上、
+ * 状态行(正在 xxx / 正在思考中)在下且暗一档——它是旁白,不是她说的话。
+ * 只剩状态行时底色退成纸面,一眼能分出"她在说话"还是"她在忙"。
  */
 public final class SpeechBubbleRenderer {
 
@@ -86,9 +89,17 @@ public final class SpeechBubbleRenderer {
     private static void drawBubble(PoseStack poseStack, MultiBufferSource buffers,
                                    Font font, SpeechBubbles.View bubble, java.util.UUID uuid) {
         UiTheme th = UiTheme.current();
-        List<String> lines = bubble.thinking()
-                ? thinkingLines(bubble.activity())
-                : wrapToWidth(font, bubble.text(), MAX_WIDTH, MAX_LINES);
+        // 两条线各自成行:正文在上(她说的话),状态在下(此刻在干什么)。
+        List<String> lines = new ArrayList<>();
+        if (bubble.hasText()) {
+            lines.addAll(wrapToWidth(font, bubble.text(), MAX_WIDTH, MAX_LINES));
+        }
+        int statusFrom = lines.size();   // 从这行起是状态行,画暗一档
+        if (bubble.hasStatus()) {
+            lines.add(bubble.activity() != null
+                    ? I18n.get("numen.bubble.doing", bubble.activity())
+                    : I18n.get("numen.bubble.thinking") + thinkingDots());
+        }
         if (lines.isEmpty()) {
             return;
         }
@@ -110,39 +121,27 @@ public final class SpeechBubbleRenderer {
                 0.0f, th.border());
         // 粗边:比填充大一圈的同心方
         quad(vc, m, x0 - 1, y0 - 1, x1 + 1, y1 + 1, 0.02f, th.border());
-        quad(vc, m, x0, y0, x1, y1, 0.04f, bubble.thinking() ? th.surface() : th.aiFill());
+        // 有话说就是"说话泡"(奶油底),纯状态是"状态泡"(纸面底,退后一档)
+        int fill = bubble.hasText() ? th.aiFill() : th.surface();
+        quad(vc, m, x0, y0, x1, y1, 0.04f, fill);
         // 小方尾:边框菱形在后,填充菱形在前,尖端指向说话者
         diamond(vc, m, 0, y1, 5, TAIL_H + 1, 0.02f, th.border());
-        diamond(vc, m, 0, y1 - 1, 4, TAIL_H, 0.04f, bubble.thinking() ? th.surface() : th.aiFill());
+        diamond(vc, m, 0, y1 - 1, 4, TAIL_H, 0.04f, fill);
 
         // 文字压最前(drawInBatch 没有 z 参,用矩阵抬)
         poseStack.pushPose();
         poseStack.translate(0, 0, 0.06f);
-        int color = bubble.thinking() ? th.textDim() : th.text();
         float ty = y0 + PAD_Y + 1;
-        for (String line : lines) {
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
+            // 状态行暗一档:它是旁白,正文才是她说的话
+            int color = i >= statusFrom ? th.textDim() : th.text();
             float tx = -font.width(line) / 2.0f;
             font.drawInBatch(line, tx, ty, color, false, poseStack.last().pose(), buffers,
                     Font.DisplayMode.NORMAL, 0, FULL_BRIGHT);
             ty += LINE_H;
         }
         poseStack.popPose();
-    }
-
-    /**
-     * 思考泡的内容:「正在回复中」加脉冲点 + 一行当前动作(长任务跑几十秒时
-     * 主人得看见她在挖矿而不是卡死了)。
-     *
-     * <p>思考过程本身<b>不上气泡</b>——那是长文,头顶两行装不下也读不完,
-     * 它的去处是 G 面板的思考块(流式展开、完成折叠)。气泡只回答"她在忙什么"。
-     */
-    private static List<String> thinkingLines(String activity) {
-        List<String> out = new ArrayList<>();
-        out.add(I18n.get("numen.bubble.replying") + thinkingDots());
-        if (activity != null && !activity.isBlank()) {
-            out.add(I18n.get("numen.bubble.doing", activity));
-        }
-        return out;
     }
 
     /** 脉冲点:约 0.4s 一跳,证明她还活着。 */
