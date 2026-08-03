@@ -30,9 +30,7 @@ final class TokenLedger {
     }
 
     private Path file() {
-        return Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config").resolve("numen").resolve("conversations")
-                .resolve(entityUuid + ".stats.json");
+        return CompanionHome.stats(entityUuid);
     }
 
     void load() {

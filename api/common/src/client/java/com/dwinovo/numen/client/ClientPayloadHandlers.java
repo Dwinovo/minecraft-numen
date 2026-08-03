@@ -34,6 +34,9 @@ public final class ClientPayloadHandlers {
 
     /** 客户端入口调用一次,把全部处理体挂进主源码集的挂点。 */
     public static void install() {
+        // 旧布局(conversations/ + memory/ + 库里的 assignments 段)一次性搬进
+        // companions/<uuid>/;幂等,搬过就跳过。
+        com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
         ClientPayloadSink.companionList = ClientPayloadHandlers::handleCompanionList;
         ClientPayloadSink.death = ClientPayloadHandlers::handleDeath;
         ClientPayloadSink.event = p ->
@@ -54,10 +57,21 @@ public final class ClientPayloadHandlers {
         for (NumenRoster.Entry e : NumenRoster.instance().entries()) before.add(e.uuid());
 
         java.util.List<NumenRoster.Entry> snapshot = new java.util.ArrayList<>();
+        java.util.Set<UUID> now = new java.util.HashSet<>();
         for (CompanionListPayload.Entry e : p.companions()) {
             snapshot.add(new NumenRoster.Entry(e.uuid(), e.name()));
+            now.add(e.uuid());
         }
         NumenRoster.instance().replaceAll(snapshot);
+
+        // 花名册里没了的 = 被遣散了:连人带数据一起送走。整个家目录删掉,
+        // 会话/记忆/token/绑定五样一起消失——不需要五处各记得清一次。
+        for (UUID gone : before) {
+            if (!now.contains(gone)) {
+                AgentLoopRegistry.dispose(gone);
+                com.dwinovo.numen.client.agent.CompanionHome.delete(gone);
+            }
+        }
 
         // A newly-arrived companion may have a persona the owner picked at summon (resolved by name here,
         // since the UUID wasn't known client-side until now). Apply it as the starting persona.
@@ -86,7 +100,8 @@ public final class ClientPayloadHandlers {
             String voiceEntry = VoiceLibrary.takePendingSummon(e.name());
             if (voiceEntry != null) {
                 if (VoiceLibrary.instance().get(voiceEntry) != null) {
-                    VoiceLibrary.instance().assign(e.uuid(), voiceEntry);
+                    com.dwinovo.numen.client.agent.CompanionHome.bind(e.uuid(),
+                            com.dwinovo.numen.client.agent.CompanionHome.binding(e.uuid()).withVoice(voiceEntry));
                 } else {
                     // 声线条目在召唤途中被删了:她会变哑巴,不说一声主人要找很久
                     com.dwinovo.numen.client.chat.ChatLines.notice(e.name(),

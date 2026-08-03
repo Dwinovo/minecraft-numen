@@ -53,8 +53,7 @@ public final class LibraryListPanel<T> {
     private final Supplier<List<T>> source;
     private final Function<T, Row> rowOf;
     private final Function<T, String> deleteMessage;
-    /** 删除动作;返回因此失去绑定的同伴 uuid 串(库自己清的),空表 = 没牵连到谁。 */
-    private final Function<T, java.util.List<String>> onDeleteConfirmed;
+    private final Consumer<T> onDeleteConfirmed;
     private final Runnable onAdd;
     private final Consumer<T> onEdit;
 
@@ -95,7 +94,7 @@ public final class LibraryListPanel<T> {
     public LibraryListPanel(String titleKey, String addKey, String emptyKey,
                             Supplier<List<T>> source, Function<T, Row> rowOf,
                             Function<T, String> deleteMessage,
-                            Function<T, java.util.List<String>> onDeleteConfirmed,
+                            Consumer<T> onDeleteConfirmed,
                             Runnable onAdd, Consumer<T> onEdit) {
         this.titleKey = titleKey;
         this.addKey = addKey;
@@ -337,20 +336,10 @@ public final class LibraryListPanel<T> {
                 t("numen.gui.settings.cancel"), t("numen.dismiss.delete"),
                 () -> {
                     String name = rowOf.apply(e).name();
-                    java.util.List<String> orphaned = onDeleteConfirmed.apply(e);
+                    onDeleteConfirmed.accept(e);
                     refresh();
                     noticeSuccess(net.minecraft.network.chat.Component
                             .translatable("numen.gui.list.deleted", name).getString());
-                    // 删掉的条目有同伴在用:它们刚被解绑,主人得知道是谁受了影响
-                    // (去处按判据是聊天框——面板发起、世界里生效、值得留痕)。
-                    for (String uuid : orphaned) {
-                        com.dwinovo.numen.client.agent.NumenRoster.instance()
-                                .entries().stream()
-                                .filter(en -> en.uuid().toString().equals(uuid))
-                                .findFirst()
-                                .ifPresent(en -> com.dwinovo.numen.client.chat.ChatLines.notice(
-                                        en.name(), t("numen.gui.list.unbound")));
-                    }
                 });
     }
 

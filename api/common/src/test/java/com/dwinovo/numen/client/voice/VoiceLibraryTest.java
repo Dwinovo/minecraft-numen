@@ -23,6 +23,16 @@ class VoiceLibraryTest {
     @TempDir
     Path dir;
 
+    @org.junit.jupiter.api.BeforeEach
+    void homeInTemp() {
+        com.dwinovo.numen.client.agent.CompanionHome.overrideRoot(dir);
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void homeRestore() {
+        com.dwinovo.numen.client.agent.CompanionHome.overrideRoot(null);
+    }
+
     private VoiceLibrary fresh() {
         return new VoiceLibrary(dir.resolve("voice.json"));
     }
@@ -135,32 +145,31 @@ class VoiceLibraryTest {
         assertFalse(fresh().enabled());
     }
 
+    // 绑定不再住在库里(它跟着同伴走,见 CompanionHome),所以这几条验的是
+    // "库按外部给的绑定解析"——总开关闸门、悬空绑定回落。
+
     @Test
-    void assignAndResolveGateOnEnabled() {
+    void resolveGatesOnEnabled() {
         VoiceLibrary lib = fresh();
         UUID u = UUID.randomUUID();
         VoiceLibrary.Entry e = openai(lib, "A");
-        lib.assign(u, e.id());
-        assertEquals(e.id(), lib.assignedEntry(u));
+        com.dwinovo.numen.client.agent.CompanionHome.bind(u,
+                com.dwinovo.numen.client.agent.CompanionHome.Binding.EMPTY.withVoice(e.id()));
+
         assertEquals(e.id(), lib.resolve(u).id());   // 缺省开 → 绑定即出声
         lib.setEnabled(false);
-        assertNull(lib.resolve(u));           // 总开关关闭 → 静音
+        assertNull(lib.resolve(u));                  // 总开关关闭 → 静音
 
         lib.setEnabled(true);
-        VoiceLibrary reloaded = fresh();      // 绑定与开关一起持久化
-        assertEquals(e.id(), reloaded.resolve(u).id());
+        assertEquals(e.id(), fresh().resolve(u).id(), "开关持久化,绑定在同伴那边不受重载影响");
     }
 
     @Test
-    void unassignSilences() {
+    void unboundIsSilent() {
         VoiceLibrary lib = fresh();
         lib.setEnabled(true);
         UUID u = UUID.randomUUID();
-        VoiceLibrary.Entry e = openai(lib, "A");
-        lib.assign(u, e.id());
-        lib.assign(u, null);                  // 解绑 = 静音
-        assertNull(lib.assignedEntry(u));
-        assertNull(lib.resolve(u));
+        assertNull(lib.resolve(u), "没绑过 = 静音");
     }
 
     @Test
@@ -169,8 +178,9 @@ class VoiceLibraryTest {
         lib.setEnabled(true);
         UUID u = UUID.randomUUID();
         VoiceLibrary.Entry e = openai(lib, "A");
-        lib.assign(u, e.id());
-        lib.remove(e.id());                   // 条目删了,绑定悬空
+        com.dwinovo.numen.client.agent.CompanionHome.bind(u,
+                com.dwinovo.numen.client.agent.CompanionHome.Binding.EMPTY.withVoice(e.id()));
+        lib.remove(e.id());                   // 条目删了,绑定悬空 → 回落静音
         assertNull(lib.resolve(u));
     }
 
@@ -179,7 +189,7 @@ class VoiceLibraryTest {
         VoiceLibrary lib = fresh();
         lib.setEnabled(true);
         assertNull(lib.resolve(null));
-        assertNull(lib.assignedEntry(null));
+        assertNull(lib.resolve(null), "null 同伴:静音,不抛");
     }
 
     // ---- pending summon (name-keyed, applied when the roster snapshot arrives) ----

@@ -34,8 +34,8 @@ final class InboxJournal {
         this.file = file;
     }
 
-    static InboxJournal forEntity(Path dir, UUID entityUuid) {
-        return new InboxJournal(dir.resolve(entityUuid + ".inbox.jsonl"));
+    static InboxJournal atFile(Path file) {
+        return new InboxJournal(file);
     }
 
     /** 当前未消费输入的完整快照写盘;空箱直接删文件。 */

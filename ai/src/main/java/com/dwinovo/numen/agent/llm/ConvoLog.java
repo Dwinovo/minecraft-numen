@@ -84,8 +84,9 @@ public final class ConvoLog {
     }
 
     /** The log for one entity under {@code conversationsDir}. Creates nothing until the first append. */
-    public static ConvoLog forEntity(Path conversationsDir, UUID entityUuid) {
-        return new ConvoLog(conversationsDir.resolve(entityUuid + ".jsonl"));
+    /** 会话日志的落点由宿主给全路径(客户端按同伴归拢在 companions/&lt;uuid&gt;/)。 */
+    public static ConvoLog atFile(Path file) {
+        return new ConvoLog(file);
     }
 
     public Path file() {

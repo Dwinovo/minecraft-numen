@@ -25,9 +25,10 @@ import java.util.Map;
  * 此前三份各自手抄同一套单例+CRUD+落盘。人设库是"一个 .md 一个人设"
  * 的目录库,不在此列。
  *
- * <p>条目之外的段(每同伴绑定、全局开关等)由子类经
- * {@link #readExtra}/{@link #writeExtra} 挂进同一个文件;需要
- * uuid → 条目 id 绑定的库直接用自带的 {@link #assignments} 表。
+ * <p>条目之外的段(全局开关等)由子类经 {@link #readExtra}/{@link #writeExtra}
+ * 挂进同一个文件。<b>库只装配置,不装绑定</b>——"哪只同伴用哪个条目"住在
+ * 同伴自己的家里({@code companions/<uuid>/binding.json}),跟着同伴生灭;
+ * 于是这些库文件可以原样分享给别人,里面没有别人看不懂的 UUID。
  */
 public abstract class JsonLibrary<E> {
 
@@ -35,8 +36,6 @@ public abstract class JsonLibrary<E> {
 
     protected final Path file;
     protected final Map<String, E> entries = new LinkedHashMap<>();
-    /** 每同伴绑定(uuid → 条目 id)。用不用由子类决定;不用即恒空。 */
-    protected final Map<String, String> assignments = new LinkedHashMap<>();
 
     protected JsonLibrary(Path file) {
         this.file = file;
@@ -87,26 +86,12 @@ public abstract class JsonLibrary<E> {
     }
 
     /**
-     * 删条目,并清掉指向它的所有绑定——绑定的生命周期由库自己管,
-     * 不然会留下一批指向空条目的悬空绑定(同伴静悄悄失去声线/模型配置,
-     * 主人要找很久)。
-     *
-     * @return 被解绑的同伴 uuid 串(调用方据此告知主人);没有则空表
+     * 删条目。<b>不管绑定</b>——绑定住在同伴自己的家里
+     * ({@code companions/<uuid>/binding.json}),跟着同伴生灭,不跟着条目;
+     * 指向已删条目的绑定解析为 null,各消费点自有回落(全局配置/静音/默认人设)。
      */
-    public java.util.List<String> remove(String id) {
-        if (entries.remove(id) == null) {
-            return java.util.List.of();
-        }
-        java.util.List<String> orphaned = new java.util.ArrayList<>();
-        assignments.entrySet().removeIf(e -> {
-            if (id.equals(e.getValue())) {
-                orphaned.add(e.getKey());
-                return true;
-            }
-            return false;
-        });
-        save();
-        return orphaned;
+    public void remove(String id) {
+        if (entries.remove(id) != null) save();
     }
 
     protected String freshId(String prefix) {
@@ -118,47 +103,10 @@ public abstract class JsonLibrary<E> {
         save();
     }
 
-    // ---- 每同伴绑定(可选段) ----
-
-    /** 这个同伴绑定的条目 id,或 null(未绑定 / null 同伴)。 */
-    public String assignedEntry(java.util.UUID companion) {
-        return companion == null ? null : assignments.get(companion.toString());
-    }
-
-    /** 给同伴绑定条目({@code entryId} null/blank = 解绑)并持久化。 */
-    public void assign(java.util.UUID companion, String entryId) {
-        if (companion == null) return;
-        if (entryId == null || entryId.isBlank()) {
-            assignments.remove(companion.toString());
-        } else {
-            assignments.put(companion.toString(), entryId);
-        }
-        save();
-    }
-
-    /** 子类的 {@link #readExtra} 里调:从 root 读绑定段。 */
-    protected final void readAssignments(JsonObject root) {
-        if (root.has("assignments") && root.get("assignments").isJsonObject()) {
-            for (var kv : root.getAsJsonObject("assignments").entrySet()) {
-                if (kv.getValue().isJsonPrimitive()) {
-                    assignments.put(kv.getKey(), kv.getValue().getAsString());
-                }
-            }
-        }
-    }
-
-    /** 子类的 {@link #writeExtra} 里调:把绑定段写进 root。 */
-    protected final void writeAssignments(JsonObject root) {
-        JsonObject assign = new JsonObject();
-        assignments.forEach(assign::addProperty);
-        root.add("assignments", assign);
-    }
-
     // ---- 落盘 ----
 
     protected final void load() {
         entries.clear();
-        assignments.clear();
         resetExtra();
         if (!Files.exists(file)) {
             return;   // 全新安装:库从空开始,玩家自己创建
@@ -180,7 +128,6 @@ public abstract class JsonLibrary<E> {
             Constants.LOG.warn("[{}] unreadable {} — starting empty ({})",
                     logTag(), file, ex.getMessage());
             entries.clear();
-            assignments.clear();
             resetOnCorrupt();
         }
     }

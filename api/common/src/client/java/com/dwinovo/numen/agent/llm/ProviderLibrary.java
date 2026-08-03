@@ -126,11 +126,9 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
 
     @Override
     protected void readExtra(JsonObject root) {
-        readAssignments(root);
     }
 
     @Override
     protected void writeExtra(JsonObject root) {
-        writeAssignments(root);
     }
 }

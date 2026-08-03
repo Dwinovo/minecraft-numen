@@ -237,14 +237,14 @@ public final class EntityAgentLoop {
         this.entityUuid = entityUuid;
         Path numenRoot = Minecraft.getInstance().gameDirectory.toPath()
                 .resolve("config").resolve("numen");
-        this.log = ConvoLog.forEntity(numenRoot.resolve("conversations"), entityUuid);
+        this.log = ConvoLog.atFile(CompanionHome.chat(entityUuid));
         this.convo = new ConvoState(msg -> {
             log.append(msg);
             display.add(msg);
         });
-        this.workBlocks = WorkBlockMemory.forEntity(numenRoot.resolve("memory"), entityUuid);
-        this.inbox = new Inbox(numenRoot.resolve("conversations"), entityUuid);
-        this.providerEntryId = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().assignedEntry(entityUuid);
+        this.workBlocks = WorkBlockMemory.forEntity(entityUuid);
+        this.inbox = new Inbox(entityUuid);
+        this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
                 harvestWorkBlocks(inv.name(), resultJson);
@@ -298,11 +298,17 @@ public final class EntityAgentLoop {
     private void restoreFromDisk() {
         tokens.load();
         log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
-        ConvoLog.PersonaState p = log.loadCurrentPersona();   // independent of history — a persona may be set before any chat
+        // 绑定的真源是 binding.json;日志里那份只留作"库里条目没了"时的兜底快照。
+        personaId = CompanionHome.binding(entityUuid).personaId();
+        ConvoLog.PersonaState p = log.loadCurrentPersona();
         if (p != null && p.text() != null && !p.text().isBlank()) {
-            personaId = p.id() == null || p.id().isBlank() ? null : p.id();
             personaTextSnapshot = p.text();
             personaNameSnapshot = p.name();
+            if (personaId == null) {   // 迁移前存的老会话:绑定仍从日志认领一次
+                personaId = p.id() == null || p.id().isBlank() ? null : p.id();
+                CompanionHome.bind(entityUuid,
+                        CompanionHome.binding(entityUuid).withPersona(personaId));
+            }
         }
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
@@ -759,7 +765,8 @@ public final class EntityAgentLoop {
      *  and persist the assignment. Takes effect on the next request — no restart. */
     public void setProviderEntry(String entryId) {
         this.providerEntryId = entryId == null || entryId.isBlank() ? null : entryId;
-        com.dwinovo.numen.agent.llm.ProviderLibrary.instance().assign(entityUuid, this.providerEntryId);
+        CompanionHome.bind(entityUuid,
+                CompanionHome.binding(entityUuid).withProvider(this.providerEntryId));
         Constants.LOG.info("[numen-entity#{}] provider entry set to {}", entityUuid,
                 this.providerEntryId == null ? "(global)" : this.providerEntryId);
     }
@@ -776,7 +783,8 @@ public final class EntityAgentLoop {
         this.personaId = id;
         this.personaTextSnapshot = text;
         this.personaNameSnapshot = name;
-        log.appendPersonaChange(id, text, name);
+        CompanionHome.bind(entityUuid, CompanionHome.binding(entityUuid).withPersona(id));
+        log.appendPersonaChange(id, text, name);   // 快照留在日志里(库里的条目没了时兜底)
         // 聊天流插一条分隔:给主人看的记号(什么时候换的),不发给模型。
         // 换人设不再给模型注入"和解"消息——新系统提示本身就是最强的指令,
         // 历史口吻要不要接得上是主人自己的选择,不由我们替他兜。
@@ -793,6 +801,7 @@ public final class EntityAgentLoop {
         this.personaId = id;
         this.personaTextSnapshot = text;
         this.personaNameSnapshot = name;
+        CompanionHome.bind(entityUuid, CompanionHome.binding(entityUuid).withPersona(id));
         log.appendPersonaChange(id, text, name);
     }
 

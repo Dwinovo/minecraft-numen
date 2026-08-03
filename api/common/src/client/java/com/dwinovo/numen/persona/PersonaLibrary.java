@@ -107,19 +107,14 @@ public final class PersonaLibrary {
         return p;
     }
 
-    /**
-     * 删除人设文件。返回空表:人设绑定不住 assignments 段(它记在每个同伴自己的
-     * 会话日志里),删了之后在用的同伴回落到兜底快照——她不会突然失忆,所以
-     * 没有"谁被解绑了"要报告。
-     */
-    public java.util.List<String> remove(String id) {
-        if (personas.remove(id) == null) return java.util.List.of();
+    /** 删除人设文件。绑定跟着同伴走,这里不管;在用的同伴回落兜底快照,不会失忆。 */
+    public void remove(String id) {
+        if (personas.remove(id) == null) return;
         try {
             Files.deleteIfExists(dir.resolve(id + ".md"));
         } catch (IOException ex) {
             Constants.LOG.warn("[numen-persona] 人设文件删除失败 {}: {}", id, ex.toString());
         }
-        return java.util.List.of();
     }
 
     /** 复制一份可编辑副本。 */

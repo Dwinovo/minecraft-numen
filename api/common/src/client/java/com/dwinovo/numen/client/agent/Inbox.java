@@ -24,8 +24,8 @@ final class Inbox {
     private final List<Entry> prompts = new ArrayList<>();
     private final InboxJournal journal;
 
-    Inbox(Path conversationsDir, UUID entityUuid) {
-        this.journal = InboxJournal.forEntity(conversationsDir, entityUuid);
+    Inbox(UUID entityUuid) {
+        this.journal = InboxJournal.atFile(CompanionHome.inbox(entityUuid));
         // 上次会话没消费完的输入原样躺回(不开轮——旧闻不值得吵人,
         // 下一个轮子自然带上,倒箱时会标注年龄)。
         for (InboxJournal.Entry e : journal.load()) {

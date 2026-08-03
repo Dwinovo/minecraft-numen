@@ -151,7 +151,7 @@ public final class SettingsView {
                                 + " · vol " + Math.round(e.volume() * 5.0f);
                         // 行首 ● = 本同伴正在用的声线(召唤时选定);只读标记,不提供事后换绑。
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
-                                com.dwinovo.numen.client.voice.VoiceLibrary.instance().assignedEntry(host.uuid()));
+                                com.dwinovo.numen.client.agent.CompanionHome.binding(host.uuid()).voiceId());
                         return new LibraryListPanel.Row(e.name(), meta, false, marked);
                     },
                     e -> Component.translatable(ModLanguageData.Keys.VOICE_DELETE_CONFIRM,
@@ -486,7 +486,9 @@ public final class SettingsView {
             // 从某个同伴的设置页新建 → 直接绑给它:用户的心智模型是"建声线就是给
             // 这只配音",绑定下拉只用于换绑/多同伴共用一条声线。
             if (host.uuid() != null) {
-                lib.assign(host.uuid(), created.id());
+                com.dwinovo.numen.client.agent.CompanionHome.bind(host.uuid(),
+                        com.dwinovo.numen.client.agent.CompanionHome.binding(host.uuid())
+                                .withVoice(created.id()));
             }
         }
         addingVoice = false;
@@ -643,10 +645,7 @@ public final class SettingsView {
                     h -> new LibraryListPanel.Row(h.name(), mcpMeta(h),
                             h.status() == com.dwinovo.numen.mcp.client.McpClientManager.Status.FAILED, null),
                     h -> Component.translatable("numen.mcp.delete_confirm", h.name()).getString(),
-                    h -> {
-                        com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(h.name());
-                        return java.util.List.<String>of();   // MCP 服务器不按同伴绑定
-                    },
+                    h -> com.dwinovo.numen.mcp.client.McpClientManager.deleteServer(h.name()),
                     () -> {
                         addingMcp = true;
                         mcpDraft = new McpFormPanel.Draft();
@@ -757,7 +756,7 @@ public final class SettingsView {
                                 ? I18n.get("numen.skill.no_desc") : sk.description();
                         return new LibraryListPanel.Row(sk.name(), desc, false, null);
                     },
-                    null, sk -> java.util.List.<String>of(), () -> { }, sk -> { })
+                    null, sk -> { }, () -> { }, sk -> { })
                     .withRowToggle(
                             sk -> !com.dwinovo.numen.agent.skill.SkillRegistry.instance().isDisabled(sk.name()),
                             sk -> {

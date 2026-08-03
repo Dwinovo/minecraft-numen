@@ -68,8 +68,8 @@ public final class WorkBlockMemory {
         load();
     }
 
-    public static WorkBlockMemory forEntity(Path memoryDir, UUID entityUuid) {
-        return new WorkBlockMemory(memoryDir.resolve(entityUuid + ".blocks.json"));
+    public static WorkBlockMemory forEntity(UUID entityUuid) {
+        return new WorkBlockMemory(CompanionHome.blocks(entityUuid));
     }
 
     /** Is this block id path a type we remember at all? */

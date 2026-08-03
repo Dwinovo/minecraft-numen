@@ -28,7 +28,6 @@ import java.util.UUID;
  *       "ref_audio": "D:/voices/paimon_ref.wav", "prompt_text": "参考音频里的那句话",
  *       "text_lang": "zh", "volume": 1.2 }
  *   ],
- *   "assignments": { "<同伴uuid>": "voice_18c2f3a_0" }
  * }
  * }</pre>
  *
@@ -141,7 +140,7 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
      */
     public Entry resolve(UUID companion) {
         if (!enabled || companion == null) return null;
-        return get(assignedEntry(companion));
+        return get(com.dwinovo.numen.client.agent.CompanionHome.binding(companion).voiceId());
     }
 
     // ---- pending summon assignment (same mechanism as PersonaLibrary.pendSummon:
@@ -202,13 +201,11 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
     @Override
     protected void readExtra(JsonObject root) {
         enabled = !root.has("enabled") || root.get("enabled").getAsBoolean();
-        readAssignments(root);
     }
 
     @Override
     protected void writeExtra(JsonObject root) {
         root.addProperty("enabled", enabled);
-        writeAssignments(root);
     }
 
     @Override
