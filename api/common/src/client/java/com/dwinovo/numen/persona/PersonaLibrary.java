@@ -136,10 +136,15 @@ public final class PersonaLibrary {
         PENDING_SUMMON.put(name, personaId);
     }
 
-    /** Take (and clear) the persona pending for a just-arrived companion name, or null if none/unknown. */
-    public static Persona takePendingSummon(String name) {
-        String id = PENDING_SUMMON.remove(name);
-        return id == null ? null : instance().get(id);
+    /**
+     * 取走(并清除)刚到货同伴名下暂存的人格 <b>id</b>,没选过则 null。
+     *
+     * <p>刻意返回 id 而不是条目:调用方才分得清"没选"与"选了但条目已不在"
+     * (文件被删/改名)——后者要告诉主人,不能默默变成默认人格。形状与
+     * {@code VoiceLibrary.takePendingSummon} 一致。
+     */
+    public static String takePendingSummon(String name) {
+        return PENDING_SUMMON.remove(name);
     }
 
     // ---- persistence ----

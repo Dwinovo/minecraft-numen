@@ -63,10 +63,18 @@ public final class ClientPayloadHandlers {
         // since the UUID wasn't known client-side until now). Apply it as the starting persona.
         for (CompanionListPayload.Entry e : p.companions()) {
             if (before.contains(e.uuid())) continue;   // not new
-            var persona = com.dwinovo.numen.persona.PersonaLibrary.takePendingSummon(e.name());
-            if (persona != null) {
-                AgentLoopRegistry.getOrCreate(e.uuid())
-                        .setInitialPersona(persona.id(), persona.text(), persona.name());
+            String personaId = com.dwinovo.numen.persona.PersonaLibrary.takePendingSummon(e.name());
+            if (personaId != null) {
+                var persona = com.dwinovo.numen.persona.PersonaLibrary.instance().get(personaId);
+                if (persona != null) {
+                    AgentLoopRegistry.getOrCreate(e.uuid())
+                            .setInitialPersona(persona.id(), persona.text(), persona.name());
+                } else {
+                    // 选过却没落地(文件被删/改名):默认人格照常能聊,但"我明明选了"
+                    // 必须说清楚——降级提示进聊天框,留得住痕。
+                    com.dwinovo.numen.client.chat.ChatLines.notice(e.name(),
+                            net.minecraft.client.resources.language.I18n.get("numen.summon.persona_missing"));
+                }
             }
             // Same resolution for the provider entry picked at summon (selection is
             // mandatory in the summon panel, so a new companion always carries one).
@@ -77,7 +85,13 @@ public final class ClientPayloadHandlers {
             // And for the voice entry picked at summon (optional — none pended = silent).
             String voiceEntry = VoiceLibrary.takePendingSummon(e.name());
             if (voiceEntry != null) {
-                VoiceLibrary.instance().assign(e.uuid(), voiceEntry);
+                if (VoiceLibrary.instance().get(voiceEntry) != null) {
+                    VoiceLibrary.instance().assign(e.uuid(), voiceEntry);
+                } else {
+                    // 声线条目在召唤途中被删了:她会变哑巴,不说一声主人要找很久
+                    com.dwinovo.numen.client.chat.ChatLines.notice(e.name(),
+                            net.minecraft.client.resources.language.I18n.get("numen.summon.voice_missing"));
+                }
             }
         }
     }

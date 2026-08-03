@@ -320,9 +320,11 @@ public final class NumenScreen extends Screen {
             com.dwinovo.numen.client.skin.MojangSkinLookup.fetch(d.name)
                     .thenAccept(r -> Minecraft.getInstance().execute(() -> {
                         if (r.problem() != null) {
-                            // 借不到不挡召唤(默认皮肤照样能玩),但必须让主人知道为什么
-                            warnText = I18n.get("numen.summon.skin_failed", r.problem());
-                            warnUntil = System.currentTimeMillis() + 5000;
+                            // 降级不挡召唤(默认皮肤照样能玩),但得让主人知道为什么。
+                            // 去处是聊天框而不是卡上的提示行:召唤卡这会儿已经关了,
+                            // 而且他多半过一会儿才注意到皮肤不对,那时要能翻得到原因。
+                            com.dwinovo.numen.client.chat.ChatLines.notice(d.name,
+                                    I18n.get("numen.summon.skin_failed", r.problem()));
                         }
                         var skin = r.skin();
                         sendSummon(d, skin == null ? "" : skin.value(),
