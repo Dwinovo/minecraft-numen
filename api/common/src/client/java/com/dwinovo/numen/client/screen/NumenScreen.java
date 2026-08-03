@@ -877,6 +877,23 @@ public final class NumenScreen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        // 声线表单的音量滑条拖动(NumenUI 面板)。
+        if (tab == Tab.SETTINGS && !summoning && settings.mouseDragged(mx, my, dx, dy)) {
+            return true;
+        }
+        return super.mouseDragged(mx, my, button, dx, dy);
+    }
+
+    @Override
+    public boolean mouseReleased(double mx, double my, int button) {
+        if (tab == Tab.SETTINGS && !summoning && settings.mouseReleased(mx, my, button)) {
+            return true;
+        }
+        return super.mouseReleased(mx, my, button);
+    }
+
+    @Override
     public boolean mouseScrolled(double mx, double my, double sx, double sy) {
         // 模态确认卡在场:背景(侧栏名册/设置列表)不响应滚轮。
         if (dismissPending != null || (tab == Tab.SETTINGS && settings.modalActive())) {

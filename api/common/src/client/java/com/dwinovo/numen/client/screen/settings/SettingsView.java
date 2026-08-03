@@ -83,7 +83,6 @@ public final class SettingsView {
     private static final int TOG_W = 18, TOG_H = 10;
     private static final String CUSTOM_MODEL = "__custom__";
     /** 试听用的固定测试句(按当前表单参数就地合成)。 */
-    private static final String VOICE_TEST_SENTENCE = "你好,我是你的同伴,这是我的声音。";
 
     private final Host host;
 
@@ -164,7 +163,7 @@ public final class SettingsView {
                     () -> {
                         addingVoice = true;
                         voiceEditId = null;
-                        resetVoiceForm();
+                        voiceDraft = VoiceFormPanel.freshDraft();
                         host.rebuild();
                     },
                     this::beginEditVoice)
@@ -198,23 +197,9 @@ public final class SettingsView {
     // ---- voice section state (mirrors the model-config section: list / form / delete-confirm) ----
     private boolean addingVoice;
     private String voiceEditId;
-    /** Form backend type (openai / gpt_sovits / minimax / fish_audio),经下拉选择,切换即换字段行。 */
-    private String wVoiceBackend = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
-    private Dropdown voiceBackendDropdown;
-    /** 声线表单的垂直滚动偏移(px)——MiniMax 八行放不下,滚轮驱动。 */
-    private int voiceFormScroll;
-    private String wVoiceName = "", wVoiceUrl = "", wVoiceKey = "", wVoiceGroup = "", wVoiceModel = "",
-            wVoiceVoice = "", wVoiceRef = "", wVoicePrompt = "", wVoiceLang = "", wVoiceVolume = "5";
-    private EditBox voiceNameInput, voiceUrlInput, voiceKeyInput, voiceGroupInput, voiceModelInput,
-            voiceVoiceInput, voiceRefInput, voicePromptInput, voiceLangInput, voiceVolumeInput;
-
-    /** 试听/保存的状态行(表单底部;fail = 红色)。 */
-    private String voiceMsg;
-    private boolean voiceMsgFail;
-    private long voiceMsgUntil;
-    /** 试听代际:再次点击/离开表单让在途合成回调作废;preview 引用用于停掉上一次试听。 */
-    private int voiceTestGen;
-    private com.dwinovo.numen.client.voice.VoicePreviewSound voicePreview;
+    // ---- 声线表单:NumenUI VoiceFormPanel(后端切行/滚动/试听/胶囊) ----
+    private VoiceFormPanel voiceForm;
+    private VoiceFormPanel.Draft voiceDraft = VoiceFormPanel.freshDraft();
 
     // 皮肤库(列表+表单,照声线库制式)。签名发生在保存时(MineSkin 代签),召唤只读现成结果。
     private boolean addingSkin;
@@ -305,7 +290,8 @@ public final class SettingsView {
     public boolean cancelForm() {
         if (!formActive()) return false;
         addingProvider = false; providerEditId = null;
-        addingVoice = false; voiceEditId = null; voiceTestGen++;
+        addingVoice = false; voiceEditId = null;
+        if (voiceForm != null) voiceForm.cancelPendingTest();
         addingSkin = false; skinEditId = null; skinFormGen++;
         addingPersona = false; personaEditId = null;
         addingMcp = false; mcpEditOriginal = null;
@@ -393,9 +379,6 @@ public final class SettingsView {
         mcpNameInput = mcpTargetInput = mcpHeaderInput = null;
         personaNameInput = null;
         personaTextArea = null;
-        voiceNameInput = voiceUrlInput = voiceKeyInput = voiceGroupInput = voiceModelInput = null;
-        voiceVoiceInput = voiceRefInput = voicePromptInput = voiceLangInput = voiceVolumeInput = null;
-        voiceBackendDropdown = null;
         skinNameInput = null;
         skinVariantDropdown = null;
     }
@@ -419,7 +402,7 @@ public final class SettingsView {
         providerEditId = null;
         addingVoice = false;
         voiceEditId = null;
-        voiceTestGen++;   // 离开语音表单:在途试听回调作废
+        if (voiceForm != null) voiceForm.cancelPendingTest();   // 离开语音表单:在途试听回调作废
         addingSkin = false;
         skinEditId = null;
         skinDeletePending = null;
@@ -742,173 +725,37 @@ public final class SettingsView {
     // ---- Voice section: the library of named TTS voices companions bind to (mirrors the provider section) ----
 
 
-    /**
-     * 声线表单:模型配置同款制式——每个输入框上方一行标题({@code SET_SP} 行距),
-     * 名称 → 提供商下拉 → URL(选型预填)→ 各后端专属字段 → 音量 + 试听。
-     * 行数随选型变化(MiniMax 最多 8 行),放不下的部分由 {@link #voiceFormScroll}
-     * 滚动(滚轮),出视口的行连标题带控件一起隐藏;保存/关闭钉在面板右下不随滚。
-     */
+    /** 表单卡里的 NumenUI 声线表单(后端切行/滚动/试听/胶囊);卡壳照旧 formModal。 */
     private void buildVoiceForm() {
-        int x = fx(), w = fw();
-        voiceFormScroll = Math.clamp(voiceFormScroll, 0, maxVoiceFormScroll());
-        voiceNameInput = vclip(field(x, voiceVy(0), w, 48, wVoiceName), 0);
-        // 后端下拉——召唤页人设/模型下拉同款控件;点击路由在 mouseClicked,
-        // 展开列表在 render 末尾最后画(压在字段上面)。
-        voiceBackendDropdown = new Dropdown(List.of(
-                new Dropdown.Item(com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI,
-                        I18n.get(ModLanguageData.Keys.VOICE_BACKEND_OPENAI)),
-                new Dropdown.Item(com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS,
-                        I18n.get(ModLanguageData.Keys.VOICE_BACKEND_SOVITS)),
-                new Dropdown.Item(com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX,
-                        I18n.get(ModLanguageData.Keys.VOICE_BACKEND_MINIMAX)),
-                new Dropdown.Item(com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH,
-                        I18n.get(ModLanguageData.Keys.VOICE_BACKEND_FISH))),
-                wVoiceBackend);
-        voiceBackendDropdown.setBounds(x, voiceVy(1), w, 18);
-        voiceBackendDropdown.setDropBottom(top() + panelH() - 2);
-        voiceUrlInput = vclip(field(x, voiceVy(2), w, 256, wVoiceUrl), 2);
-        int row = 3;
-        switch (wVoiceBackend) {
-            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS -> {
-                voiceRefInput = vclip(field(x, voiceVy(row), w, 256, wVoiceRef), row++);
-                voicePromptInput = vclip(field(x, voiceVy(row), w, 512, wVoicePrompt), row++);
-                voiceLangInput = vclip(field(x, voiceVy(row), w, 16, wVoiceLang), row++);
-            }
-            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX -> {
-                voiceKeyInput = vclip(field(x, voiceVy(row), w, 1024, wVoiceKey), row++);
-                voiceGroupInput = vclip(field(x, voiceVy(row), w, 64, wVoiceGroup), row++);
-                voiceModelInput = vclip(field(x, voiceVy(row), w, 64, wVoiceModel), row++);
-                voiceVoiceInput = vclip(field(x, voiceVy(row), w, 128, wVoiceVoice), row++);
-            }
-            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH -> {
-                voiceKeyInput = vclip(field(x, voiceVy(row), w, 256, wVoiceKey), row++);
-                voiceVoiceInput = vclip(field(x, voiceVy(row), w, 128, wVoiceVoice), row++);
-                voiceModelInput = vclip(field(x, voiceVy(row), w, 64, wVoiceModel), row++);
-            }
-            default -> {
-                voiceKeyInput = vclip(field(x, voiceVy(row), w, 256, wVoiceKey), row++);
-                voiceModelInput = vclip(field(x, voiceVy(row), w, 128, wVoiceModel), row++);
-                voiceVoiceInput = vclip(field(x, voiceVy(row), w, 128, wVoiceVoice), row++);
-            }
+        voiceForm().open(voiceDraft);
+        voiceForm().build(fx(), fy0(), fw(), fBottom() - fy0(), top() + panelH() - 2);
+    }
+
+    private VoiceFormPanel voiceForm() {
+        if (voiceForm == null) {
+            voiceForm = new VoiceFormPanel(this::onVoiceSave,
+                    () -> {
+                        addingVoice = false;
+                        voiceEditId = null;
+                        voiceForm.cancelPendingTest();
+                        host.rebuild();
+                    });
         }
-        voiceVolumeInput = vclip(field(x, voiceVy(row), 70, 8, wVoiceVolume), row);
-        SimpleButton test = new SimpleButton(x + w - 64, voiceVy(row), 64, 18,
-                Component.translatable(ModLanguageData.Keys.VOICE_TEST), b -> onVoiceTest());
-        test.visible = voiceRowVisible(row);
-        test.active = test.visible;
-        host.add(test);
-        host.add(new SimpleButton(fRight() - 64, fBottom() - 18, 64, 18,
-                Component.translatable("numen.gui.settings.save"), b -> onSaveVoice()).primary());
-        host.add(new SimpleButton(fRight() - 64 - 22, fBottom() - 18, 18, 18,
-                Component.literal("✕"), b -> {
-                    addingVoice = false; voiceEditId = null; voiceTestGen++;
-                    host.rebuild();
-                }));
-        if (voiceNameInput.visible) {
-            host.focus(voiceNameInput);
-        }
-    }
-
-    /** 表单第 {@code row} 行输入框的 y(标题画在其上方 11px);随滚动偏移。 */
-    private int voiceVy(int row) {
-        return fy0() + 11 + row * SET_SP - voiceFormScroll;
-    }
-
-    /** 第 {@code row} 行(标题+输入框)完整落在视口内? */
-    private boolean voiceRowVisible(int row) {
-        int y = voiceVy(row);
-        return y - 11 >= fy0() - 2 && y + 18 <= voiceFormBottom();
-    }
-
-    /** 表单视口底:保存行与状态行的上沿(卡内坐标)。 */
-    private int voiceFormBottom() {
-        return fBottom() - 20;
-    }
-
-    /** 当前选型的总行数:名称/提供商/URL 三行 + 各后端专属行 + 音量行。 */
-    private int voiceFormRowCount() {
-        return com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX.equals(wVoiceBackend) ? 8 : 7;
-    }
-
-    private int maxVoiceFormScroll() {
-        int content = 11 + (voiceFormRowCount() - 1) * SET_SP + 18 + 2;
-        return Math.max(0, content - (voiceFormBottom() - fy0()));
-    }
-
-    /** 出视口的行隐藏(不可见的 EditBox 既不渲染也不接输入)。 */
-    private EditBox vclip(EditBox f, int row) {
-        boolean vis = voiceRowVisible(row);
-        f.visible = vis;
-        f.active = vis;
-        return f;
+        return voiceForm;
     }
 
 
-    /** Keep typed values across a rebuild (backend switch / edit entry). */
-    private void preserveVoiceForm() {
-        if (voiceNameInput != null) wVoiceName = voiceNameInput.getValue();
-        if (voiceUrlInput != null) wVoiceUrl = voiceUrlInput.getValue();
-        if (voiceKeyInput != null) wVoiceKey = voiceKeyInput.getValue();
-        if (voiceGroupInput != null) wVoiceGroup = voiceGroupInput.getValue();
-        if (voiceModelInput != null) wVoiceModel = voiceModelInput.getValue();
-        if (voiceVoiceInput != null) wVoiceVoice = voiceVoiceInput.getValue();
-        if (voiceRefInput != null) wVoiceRef = voiceRefInput.getValue();
-        if (voicePromptInput != null) wVoicePrompt = voicePromptInput.getValue();
-        if (voiceLangInput != null) wVoiceLang = voiceLangInput.getValue();
-        if (voiceVolumeInput != null) wVoiceVolume = voiceVolumeInput.getValue();
-    }
 
-    private void resetVoiceForm() {
-        voiceFormScroll = 0;
-        wVoiceBackend = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
-        wVoiceName = ""; wVoiceKey = ""; wVoiceGroup = ""; wVoiceModel = "";
-        wVoiceVoice = ""; wVoiceRef = ""; wVoicePrompt = ""; wVoiceLang = "";
-        wVoiceUrl = defaultVoiceUrl(wVoiceBackend);   // 官方端点预填,用户只补 key/音色
-        wVoiceVolume = "5";
-        voiceMsg = null;
-    }
 
-    /** 各后端的官方端点,选型即预填(后端 composeUrl 对空 URL 也回落到同一个值,
-     *  所以删空保存照样能用)。 */
-    private static String defaultVoiceUrl(String backend) {
-        return switch (backend) {
-            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS ->
-                    com.dwinovo.numen.client.voice.GptSovitsTts.DEFAULT_BASE;
-            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX ->
-                    com.dwinovo.numen.client.voice.MiniMaxTts.DEFAULT_BASE;
-            case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH ->
-                    com.dwinovo.numen.client.voice.FishAudioTts.DEFAULT_BASE;
-            default -> com.dwinovo.numen.client.voice.OpenAiCompatibleTts.DEFAULT_BASE;
-        };
-    }
 
     /** 当前表单(w 值)拼成一个 Entry;id 由调用方给(编辑=原 id,试听=临时)。 */
-    private com.dwinovo.numen.client.voice.VoiceLibrary.Entry formVoiceEntry(String id, String name) {
-        float vol;
-        try { vol = Float.parseFloat(wVoiceVolume.trim()); }
-        catch (NumberFormatException ex) { vol = 5.0f; }
-        // UI 档位 1~10 → 存储增益 0.2~2.0(5 档 = 原始响度 1.0,老数据无需迁移)。
-        vol = Math.clamp(vol, 1.0f, 10.0f) / 5.0f;
-        return new com.dwinovo.numen.client.voice.VoiceLibrary.Entry(id, name,
-                wVoiceBackend,
-                wVoiceUrl.trim(), wVoiceKey.trim(), wVoiceGroup.trim(),
-                wVoiceModel.trim(), wVoiceVoice.trim(),
-                wVoiceRef.trim(), wVoicePrompt.trim(), wVoiceLang.trim(),
-                com.dwinovo.numen.client.voice.VoiceLibrary.clampVolume(vol));
-    }
-
-    private void onSaveVoice() {
-        preserveVoiceForm();
-        String name = wVoiceName.trim();
-        if (name.isEmpty()) {
-            voiceNote(I18n.get(ModLanguageData.Keys.VOICE_WARN_NAME), true);
-            return;
-        }
+    private void onVoiceSave(VoiceFormPanel.Draft d) {
+        String name = d.name.trim();
         var lib = com.dwinovo.numen.client.voice.VoiceLibrary.instance();
         if (voiceEditId != null) {
-            lib.update(formVoiceEntry(voiceEditId, name));
+            lib.update(VoiceFormPanel.entryOf(d, voiceEditId, name));
         } else {
-            var e = formVoiceEntry("", name);
+            var e = VoiceFormPanel.entryOf(d, "", name);
             var created = lib.create(name, e.backend(), e.url(), e.apiKey(), e.groupId(), e.model(),
                     e.voice(), e.refAudio(), e.promptText(), e.textLang(), e.volume());
             // 从某个同伴的设置页新建 → 直接绑给它:用户的心智模型是"建声线就是给
@@ -919,87 +766,19 @@ public final class SettingsView {
         }
         addingVoice = false;
         voiceEditId = null;
-        voiceTestGen++;
-        resetVoiceForm();
+        voiceDraft = VoiceFormPanel.freshDraft();
         host.rebuild();
-    }
-
-    /**
-     * 试听:用当前表单参数合成固定测试句,就地 2D 播放(不挂实体,
-     * {@link com.dwinovo.numen.client.voice.VoicePreviewSound} 走与 3D 语音同一条
-     * mixin 取数路径)。失败把错误人话写到表单状态行(红色),与 summon 页
-     * warnText 同样的"错误在动作处出现"做法。
-     */
-    private void onVoiceTest() {
-        preserveVoiceForm();
-        var probe = formVoiceEntry("__preview__", wVoiceName.isBlank() ? "preview" : wVoiceName.trim());
-        voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_RUNNING), false);
-        final int gen = ++voiceTestGen;
-        final float vol = probe.volume();
-        // 同步防线:后端构建/合成同步抛(坏 URL 曾直接崩掉渲染线程)也只落到状态行。
-        java.util.concurrent.CompletableFuture<byte[]> synth;
-        final com.dwinovo.numen.client.voice.TtsBackend backend;
-        try {
-            backend = probe.createBackend();
-            synth = backend.synthesize(VOICE_TEST_SENTENCE);
-        } catch (Exception ex) {
-            String why = ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage();
-            com.dwinovo.numen.Constants.LOG.warn("[numen-voice] 试音失败(同步): {}", why);
-            voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_FAIL, clip(why, fw() - 10)), true);
-            return;
-        }
-        synth.whenComplete((wav, err) -> {
-            com.dwinovo.numen.client.voice.PcmAudio decoded = null;
-            Throwable failure = err;
-            if (err == null) {
-                try {
-                    decoded = com.dwinovo.numen.client.voice.WavCodec.decode(wav).amplified(vol);
-                } catch (Exception ex) {
-                    failure = ex;
-                }
-            }
-            final var audio = decoded;
-            final Throwable fail = failure;
-            Minecraft.getInstance().execute(() -> {
-                if (gen != voiceTestGen) return;   // 表单已离开/又点了一次:作废
-                if (fail != null) {
-                    Throwable cur = fail;
-                    while (cur.getCause() != null && cur != cur.getCause()) cur = cur.getCause();
-                    String why = cur.getMessage() == null ? cur.getClass().getSimpleName() : cur.getMessage();
-                    // 完整原因进日志(红字被 clip 且只停留几秒,排障全靠这行)。
-                    com.dwinovo.numen.Constants.LOG.warn("[numen-voice] 试音失败({}): {}",
-                            backend.describe(), why);
-                    voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_FAIL, clip(why, fw() - 10)), true);
-                    return;
-                }
-                var sm = Minecraft.getInstance().getSoundManager();
-                if (voicePreview != null) sm.stop(voicePreview);   // 重听:停掉上一句
-                voicePreview = ClientServices.VOICE.previewVoice(audio, 1.0f);   // 响度已烙进 PCM;平台工厂:取数机制两侧不同
-                sm.play(voicePreview);
-                voiceNote(I18n.get(ModLanguageData.Keys.VOICE_TEST_OK), false);
-            });
-        });
-    }
-
-    private void voiceNote(String msg, boolean fail) {
-        voiceMsg = msg;
-        voiceMsgFail = fail;
-        // 失败信息多停一会儿——HTTP 错误原文读一遍不止 5 秒。
-        voiceMsgUntil = System.currentTimeMillis() + (fail ? 12000 : 5000);
     }
 
     private void renderVoiceSection(GuiGraphics g, int mouseX, int mouseY) {
         var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingVoice) {
-            // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压上;
-            // 字段/标题在 overlay 通道。这里只画状态行。
+            // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压上。
             voiceListPanel().render(surface, HostThemeColors.current(),
                     -10000, -10000, net.minecraft.Util.getMillis());
             formModal(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE));
-            if (voiceMsg != null && voiceMsgUntil > System.currentTimeMillis()) {
-                txt(g, Component.literal(clip(voiceMsg, fw() - 94)), fx(), fBottom() - 14,
-                        voiceMsgFail ? FAIL : OK);
-            }
+            voiceForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
             return;
         }
         voiceListPanel().render(surface, HostThemeColors.current(),
@@ -1008,21 +787,21 @@ public final class SettingsView {
 
     private void beginEditVoice(com.dwinovo.numen.client.voice.VoiceLibrary.Entry e) {
         addingVoice = true;
-        voiceFormScroll = 0;
         voiceEditId = e.id();
-        wVoiceBackend = normalizeVoiceBackend(e.backend());
-        wVoiceName = nv(e.name());
-        wVoiceUrl = nv(e.url());
-        wVoiceKey = nv(e.apiKey());
-        wVoiceGroup = nv(e.groupId());
-        wVoiceModel = nv(e.model());
-        wVoiceVoice = nv(e.voice());
-        wVoiceRef = nv(e.refAudio());
-        wVoicePrompt = nv(e.promptText());
-        wVoiceLang = nv(e.textLang());
+        var d = new VoiceFormPanel.Draft();
+        d.backend = normalizeVoiceBackend(e.backend());
+        d.name = nv(e.name());
+        d.url = nv(e.url());
+        d.apiKey = nv(e.apiKey());
+        d.groupId = nv(e.groupId());
+        d.model = nv(e.model());
+        d.voice = nv(e.voice());
+        d.refAudio = nv(e.refAudio());
+        d.promptText = nv(e.promptText());
+        d.textLang = nv(e.textLang());
         // 存储的是增益(0.2~2.0),表单显示 1~10 档。
-        wVoiceVolume = String.valueOf(Math.round(Math.clamp(e.volume(), 0.2f, 2.0f) * 5.0f));
-        voiceMsg = null;
+        d.volume = Math.round(Math.clamp(e.volume(), 0.2f, 2.0f) * 5.0f);
+        voiceDraft = d;
         host.rebuild();
     }
 
@@ -1243,10 +1022,6 @@ public final class SettingsView {
     }
 
     /** 声线表单的行标题:画在该行输入框上方(随滚动偏移,出视口不画)。 */
-    private void voiceLabel(GuiGraphics g, int row, String text) {
-        if (!voiceRowVisible(row)) return;
-        txt(g, Component.literal(text), fx(), voiceVy(row) - 11, TXT_MUTED);
-    }
 
     // ---- Skin section: the named skin library (upload png → MineSkin-signed textures) ----
 
@@ -2014,25 +1789,10 @@ public final class SettingsView {
             if (sttModelDropdown != null) sttModelDropdown.close();
             return true;
         }
-        // 声线表单的后端下拉:选型变了就随之刷新字段区(typed 值经 preserve 存活)。
-        // 行滚出视口时不接点击(控件仍在,只是被表单滚动藏起来了)。
-        if (section == Section.VOICE
-                && addingVoice && voiceBackendDropdown != null && voiceRowVisible(1)) {
-            String before = voiceBackendDropdown.selectedId();
-            if (voiceBackendDropdown.mouseClicked(mouseX, mouseY)) {
-                String sel = voiceBackendDropdown.selectedId();
-                if (!sel.equals(before)) {
-                    preserveVoiceForm();
-                    wVoiceBackend = sel;
-                    // URL 跟着选型换成新后端的官方端点——但只覆盖"空或还是旧默认"
-                    // 的值,用户手改过的自定义地址不动。
-                    if (wVoiceUrl.isBlank() || wVoiceUrl.equals(defaultVoiceUrl(before))) {
-                        wVoiceUrl = defaultVoiceUrl(sel);
-                    }
-                    host.rebuild();
-                }
-                return true;
-            }
+        // 声线表单(NumenUI):事件整体交给表单面板(浮层打开时它优先吃掉一切)。
+        if (section == Section.VOICE && addingVoice
+                && voiceForm().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
         }
         return settingsClickedAt(mouseX, mouseY);
     }
@@ -2162,18 +1922,25 @@ public final class SettingsView {
                 && voiceListPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
-        for (Dropdown d : new Dropdown[]{voiceBackendDropdown, skinVariantDropdown}) {
-            if (d != null && d.mouseScrolled(mx, my, sy)) return true;
+        if (section == Section.VOICE && addingVoice
+                && voiceForm().mouseScrolled(mx, my, sy)) {
+            return true;
         }
-        // 声线表单:滚轮上下滚整个表单(MiniMax 八行超出视口);命中区 = 表单卡。
-        if (section == Section.VOICE
-                && addingVoice && mx >= cardX0() && maxVoiceFormScroll() > 0) {
-            preserveVoiceForm();
-            voiceFormScroll = Math.clamp((long) (voiceFormScroll - sy * 16), 0, maxVoiceFormScroll());
-            host.rebuild();
+        if (skinVariantDropdown != null && skinVariantDropdown.mouseScrolled(mx, my, sy)) {
             return true;
         }
         return false;
+    }
+
+    /** 拖动/松开:声线表单的音量滑条需要(NumenUI 里唯一的拖动控件)。 */
+    public boolean mouseDragged(double mx, double my, double dx, double dy) {
+        return section == Section.VOICE && addingVoice
+                && voiceForm().mouseDragged(mx, my, dx, dy);
+    }
+
+    public boolean mouseReleased(double mx, double my, int button) {
+        return section == Section.VOICE && addingVoice
+                && voiceForm().mouseReleased(mx, my, button);
     }
 
     /** Wheel pass 2 (after the rail/chat checks): scroll the section list. */
@@ -2200,67 +1967,21 @@ public final class SettingsView {
             if (addingProvider) return providerForm().keyPressed(keyCode, modifiers);
             return profileList().keyPressed(keyCode, modifiers);   // ESC 关删除确认(= 取消)
         }
-        if (section == Section.VOICE && !addingVoice) {
+        if (section == Section.VOICE) {
+            if (addingVoice) return voiceForm().keyPressed(keyCode, modifiers);
             return voiceListPanel().keyPressed(keyCode, modifiers);
         }
         return false;
     }
 
     public boolean charTyped(char ch) {
-        return section == Section.PROVIDER && addingProvider
-                && providerForm().charTyped(ch);
+        if (section == Section.PROVIDER && addingProvider) return providerForm().charTyped(ch);
+        if (section == Section.VOICE && addingVoice) return voiceForm().charTyped(ch);
+        return false;
     }
 
     public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
         loadPalette();
-        // 声线表单:模型配置同款——每行标题画在输入框上方,框内只留短示例占位。
-        // 行序与 buildVoiceForm 的 switch 严格一致,随 voiceFormScroll 偏移。
-        if (section == Section.VOICE && addingVoice) {
-            boolean fish = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH.equals(wVoiceBackend);
-            boolean minimax = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX.equals(wVoiceBackend);
-            boolean sovits = com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS.equals(wVoiceBackend);
-            voiceLabel(g, 0, I18n.get(ModLanguageData.Keys.VOICE_FORM_NAME));
-            voiceLabel(g, 1, I18n.get(ModLanguageData.Keys.PROVIDER_FORM_PROVIDER));
-            voiceLabel(g, 2, I18n.get(ModLanguageData.Keys.VOICE_FORM_URL));
-            placeholder(g, voiceUrlInput, defaultVoiceUrl(wVoiceBackend));
-            int row = 3;
-            if (sovits) {
-                voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_REF));
-                placeholder(g, voiceRefInput, "D:/refs/voice.wav");
-                voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_PROMPT));
-                voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_LANG));
-                placeholder(g, voiceLangInput, "zh");
-            } else {
-                voiceLabel(g, row++, I18n.get(fish ? ModLanguageData.Keys.VOICE_FORM_KEY_FISH
-                        : minimax ? ModLanguageData.Keys.VOICE_FORM_KEY_MINIMAX
-                        : ModLanguageData.Keys.VOICE_FORM_KEY_OPENAI));
-                placeholder(g, voiceKeyInput, minimax ? "eyJ…" : "sk-…");
-                if (minimax) {
-                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_GROUP));
-                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_MINIMAX_MODEL));
-                    placeholder(g, voiceModelInput, "speech-02-turbo");
-                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_MINIMAX_VOICE));
-                    placeholder(g, voiceVoiceInput, "male-qn-qingse");
-                } else if (fish) {
-                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_REFERENCE));
-                    placeholder(g, voiceVoiceInput, "fish.audio/m/… 或纯 ID");
-                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_FISH_MODEL));
-                    placeholder(g, voiceModelInput, "s1 / s2.1-pro-free");
-                } else {
-                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_MODEL));
-                    placeholder(g, voiceModelInput, "FunAudioLLM/CosyVoice2-0.5B");
-                    voiceLabel(g, row++, I18n.get(ModLanguageData.Keys.VOICE_FORM_VOICE));
-                    placeholder(g, voiceVoiceInput, "FunAudioLLM/CosyVoice2-0.5B:alex");
-                }
-            }
-            voiceLabel(g, row, I18n.get(ModLanguageData.Keys.VOICE_FORM_VOLUME));
-            placeholder(g, voiceVolumeInput, "5");
-        }
-        // 声线表单的后端下拉最后画(展开的列表要压在字段上面)。
-        if (section == Section.VOICE
-                && addingVoice && voiceBackendDropdown != null && voiceRowVisible(1)) {
-            voiceBackendDropdown.render(g, font(), mouseX, mouseY);
-        }
         if (section == Section.STT) {
             Dropdown[] sttDd = { sttProviderDropdown, sttModelDropdown, sttMicDropdown };
             Dropdown sttOpen = null;
