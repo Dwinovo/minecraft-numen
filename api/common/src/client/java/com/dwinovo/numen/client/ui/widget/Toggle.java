@@ -31,9 +31,17 @@ public final class Toggle extends Widget {
         lastFrameMs = nowMs;
         knobPos = Animation.lerpTo(knobPos, on ? 1f : 0f, speed, 0.01f);
 
-        int bg = on ? c.accent() : c.inputBg();
-        if (!enabled) bg = c.sectionBg();
-        s.fillRoundRect(x, y, w, h, h / 2, bg);
+        // 关闭态在浅色面板上必须自证存在:次级色描边环 + 半透明灰轨道
+        // (纯 inputBg 轨道在奶油底上白上白,等于隐形——真机教训)。
+        if (on && enabled) {
+            s.fillRoundRect(x, y, w, h, h / 2, c.accent());
+        } else {
+            // 描边环 → 不透明浅底 → 半透明灰纹(直接叠环上会整块变深)。
+            s.fillRoundRect(x, y, w, h, h / 2, enabled ? c.textMuted() : c.divider());
+            s.fillRoundRect(x + 1, y + 1, w - 2, h - 2, (h - 2) / 2, c.inputBg());
+            s.fillRoundRect(x + 1, y + 1, w - 2, h - 2, (h - 2) / 2,
+                    (c.textMuted() & 0x00FFFFFF) | 0x40000000);
+        }
         int knobSize = h - 4;
         int travel = w - knobSize - 4;
         int kx = x + 2 + Math.round(travel * knobPos);

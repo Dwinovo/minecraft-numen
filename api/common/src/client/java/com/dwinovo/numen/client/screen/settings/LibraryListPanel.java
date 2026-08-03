@@ -255,10 +255,18 @@ public final class LibraryListPanel<T> {
         }
         if (toggleOn != null) {
             // 行内启停:静态小胶囊(逐行控件实例进不了 ListView 的渲染回调,画出来即可)。
+            // 关闭态描边环+灰轨道,浅色面板上不隐形(与 Toggle 组件同制)。
             boolean on = toggleOn.test(e);
             int tx0 = rx + rw - (deleteMessage != null ? TOGGLE_ZONE : 24);
             int ty = ry + (rh - 10) / 2;
-            s.fillRoundRect(tx0, ty, 20, 10, 5, on ? c.accent() : c.inputBg());
+            if (on) {
+                s.fillRoundRect(tx0, ty, 20, 10, 5, c.accent());
+            } else {
+                s.fillRoundRect(tx0, ty, 20, 10, 5, c.textMuted());
+                s.fillRoundRect(tx0 + 1, ty + 1, 18, 8, 4, c.inputBg());
+                s.fillRoundRect(tx0 + 1, ty + 1, 18, 8, 4,
+                        (c.textMuted() & 0x00FFFFFF) | 0x40000000);
+            }
             s.fillRoundRect(on ? tx0 + 11 : tx0 + 2, ty + 2, 7, 6, 3, 0xFFFFFFFF);
         } else if (deleteMessage != null) {
             boolean overEdit = hovered && inZone(rx, rw, EDIT_ZONE, DEL_ZONE);
