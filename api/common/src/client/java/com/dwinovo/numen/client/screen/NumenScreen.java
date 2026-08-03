@@ -209,6 +209,16 @@ public final class NumenScreen extends Screen {
         Minecraft.getInstance().setScreen(new NumenScreen(uuid, name));
     }
 
+    /** {@code /numen settings} 入口:直接落在设置页(全局配置与同伴无关,空面板也能用)。 */
+    public static void openSettings() {
+        var entries = NumenRoster.instance().entries();
+        NumenRoster.Entry first = entries.isEmpty() ? null : entries.get(0);
+        NumenScreen screen = first == null
+                ? new NumenScreen(null, null) : new NumenScreen(first.uuid(), first.name());
+        screen.tab = Tab.SETTINGS;
+        Minecraft.getInstance().setScreen(screen);
+    }
+
     /** Hotkey entry: open the workspace on the first companion (or an empty panel to summon from). */
     public static void openWorkspace() {
         var entries = NumenRoster.instance().entries();

@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * The LLM providers offered in the settings UI — derived from the {@link ProviderRegistry} (bundled
  * {@code numen_providers.json}) so adding a provider/model is a data edit, not code. Shared by the
- * standalone {@link SettingsScreen} and the {@link NumenScreen} Settings tab.
+ * the {@link NumenScreen} Settings tab.
  */
 public final class LlmProviders {
 

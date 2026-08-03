@@ -40,6 +40,18 @@ public final class NumenStyle {
     /** 下拉弹层行数上限(视口再小也另有保底)。 */
     public static final int POPUP_MAX_ROWS = 8;
 
+    // ---- 机器行(工具调用 / 思考过程)----
+    /**
+     * 过程不是对话:工具调用与思考过程要一眼能和"她说的话"分开,否则读者会
+     * 把机器旁白当成模型的输出。视觉语言取"引用块"那一套——左缘一条竖线 +
+     * 极淡底,不用气泡的实底与圆角。
+     */
+    public static final int TRACE_BAR_W = 2;
+    /** 竖线到内容的呼吸;内容整体比气泡再缩进一点,层级更靠后。 */
+    public static final int TRACE_INDENT = 7;
+    /** 机器行的圆角:比控件更方,越方越"不像话泡"。 */
+    public static final int TRACE_RADIUS = 1;
+
     /** 输入类控件(输入框/下拉收起态)的统一卡壳:圆角描边 + 内衬底。
      *  全部输入控件走同一形制,聚焦/错误只换描边色——框样式的单一真源。 */
     public static void fieldCard(IDrawSurface s, int x, int y, int w, int h, int fill, int border) {

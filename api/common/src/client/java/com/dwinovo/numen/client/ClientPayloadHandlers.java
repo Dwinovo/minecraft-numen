@@ -10,7 +10,6 @@ import com.dwinovo.numen.client.data.ClientNumenInventory;
 import com.dwinovo.numen.client.data.ClientNumenLocations;
 import com.dwinovo.numen.client.debug.PathDebugState;
 import com.dwinovo.numen.client.hud.SpeechBubbles;
-import com.dwinovo.numen.client.screen.SettingsScreen;
 import com.dwinovo.numen.client.voice.VoiceLibrary;
 import com.dwinovo.numen.network.ClientPayloadSink;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
@@ -108,7 +107,7 @@ public final class ClientPayloadHandlers {
 
     private static void handleUiAction(ClientUiActionPayload p) {
         switch (p.action()) {
-            case OPEN_SETTINGS -> SettingsScreen.open(null);
+            case OPEN_SETTINGS -> com.dwinovo.numen.client.screen.NumenScreen.openSettings();
             case RESET_LOOPS -> AgentLoopRegistry.clear();
             case DEBUG_TEXT_ON -> ChatDisplayFilters.set(new DebugChatDisplayFilter());
             case DEBUG_TEXT_OFF -> ChatDisplayFilters.set(null);

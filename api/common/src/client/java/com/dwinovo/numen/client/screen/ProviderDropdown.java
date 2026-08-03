@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * A screen-driven provider picker: a collapsed box showing the current provider, expanding to the live
  * provider list on click (+ an optional "add site" row). Not a self-contained widget — the host renders
- * it LAST (open list on top) and routes clicks FIRST. Shared by {@link SettingsScreen} and the
+ * it LAST (open list on top) and routes clicks FIRST. Used by the
  * {@link NumenScreen} Settings tab.
  */
 public final class ProviderDropdown {

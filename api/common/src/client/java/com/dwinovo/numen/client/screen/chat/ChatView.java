@@ -11,6 +11,7 @@ import com.dwinovo.numen.client.chat.ChatDisplayFilters;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
+import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.RoundRect;
 import com.dwinovo.numen.mcp.server.McpMode;
 import net.minecraft.client.Minecraft;
@@ -73,6 +74,8 @@ public final class ChatView {
     // convention — they behave as constants within a frame. ----
     private int TOOL, MUTED, FAINT, OK, RUN, FAIL, TXT;
     private int AI_FILL, AI_BORDER, OWN_FILL, OWN_BORDER, QUEUED_FILL, QUEUED_BORDER, CHIP_FILL;
+    /** 机器行的左缘竖线色(工具/思考过程共用)。 */
+    private int TRACE_BAR;
 
     private void loadPalette() {
         UiTheme t = UiTheme.current();
@@ -90,6 +93,7 @@ public final class ChatView {
         QUEUED_FILL = t.queuedFill();
         QUEUED_BORDER = t.queuedBorder();
         CHIP_FILL = t.chipFill();
+        TRACE_BAR = t.surfaceBorder();
     }
 
     private static ResourceLocation spr(String n) {
@@ -548,17 +552,26 @@ public final class ChatView {
         }
     }
 
+    /**
+     * 机器行(工具调用 / 思考过程)——刻意长得<b>不像对话</b>:左缘一条竖线 +
+     * 极淡底,没有气泡的实底、圆角与头像。过程与话分得开,读者才不会把旁白
+     * 当成模型的输出。几何取自 {@link NumenStyle} 的 TRACE_* 令牌。
+     */
     private void drawChip(GuiGraphics g, Chip c, int x, int y) {
         int maxW = 0;
         for (ChipRow r : c.rows()) maxW = Math.max(maxW, font.width(r.text()));
         int cx = x + EDGE + AV + AV_GAP;
-        int cw = ICON_W + maxW + PAD_H * 2;
+        int cw = NumenStyle.TRACE_INDENT + ICON_W + maxW + PAD_H;
         int ch = c.rows().size() * LINE_H + PAD_V * 2;
-        RoundRect.fill(g, cx, y, cx + cw, y + ch, RADIUS, CHIP_FILL);
+        // 极淡底衬出块的范围(半透明再减半),左缘竖线是"这是过程"的记号
+        int faintFill = (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24);
+        RoundRect.fill(g, cx, y, cx + cw, y + ch, NumenStyle.TRACE_RADIUS, faintFill);
+        g.fill(cx, y, cx + NumenStyle.TRACE_BAR_W, y + ch, TRACE_BAR);
         int ty = y + PAD_V + 1;
         for (ChipRow r : c.rows()) {
-            draw(g, Nb.colored(r.icon(), r.iconColor()).getVisualOrderText(), cx + PAD_H, ty);
-            draw(g, r.text(), cx + PAD_H + ICON_W, ty);
+            draw(g, Nb.colored(r.icon(), r.iconColor()).getVisualOrderText(),
+                    cx + NumenStyle.TRACE_INDENT, ty);
+            draw(g, r.text(), cx + NumenStyle.TRACE_INDENT + ICON_W, ty);
             ty += LINE_H;
         }
     }

@@ -74,7 +74,7 @@ public interface INumenConfig {
      */
     String getSystemPrompt();
 
-    // ---- write surface (client-side: invoked by SettingsScreen) ----
+    // ---- write surface (client-side: invoked by the settings panels) ----
 
     /**
      * Mutate the in-memory API key. Caller must {@link #save()} to persist.
