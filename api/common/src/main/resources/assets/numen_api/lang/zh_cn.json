@@ -150,6 +150,7 @@
   "numen.stt.not_configured": "未配置语音输入 —— 请在设置里填入 STT 的 API Key",
   "numen.stt.title": "语音输入 (STT)",
   "numen.summon.create": "创建",
+  "numen.summon.mode": "模式",
   "numen.summon.hint": "输入名字 · 回车确认 · Esc 取消",
   "numen.summon.name": "名字(英文,填正版玩家名可穿它的皮肤)",
   "numen.summon.name_hint": "新同伴名字…",

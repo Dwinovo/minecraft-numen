@@ -150,6 +150,7 @@
   "numen.stt.not_configured": "Voice input not configured — set an STT API key in settings",
   "numen.stt.title": "Voice input (STT)",
   "numen.summon.create": "Create",
+  "numen.summon.mode": "Mode",
   "numen.summon.hint": "type a name · Enter to confirm · Esc to cancel",
   "numen.summon.name": "Name (letters/digits/_; a premium player's name borrows their skin)",
   "numen.summon.name_hint": "New companion name…",
