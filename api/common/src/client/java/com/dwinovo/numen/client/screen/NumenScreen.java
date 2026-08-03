@@ -149,7 +149,11 @@ public final class NumenScreen extends Screen {
     // "+" summon flow: a transient name field shown over the panel
     private boolean summoning;
     private EditBox summonInput;
-    private UUID dismissPending;   // non-null = showing the "delete companion?" confirm bar for this uuid
+    /** 屏幕级浮层根:承载模态确认卡(遣散同伴);浮层在场时背景全屏蔽。 */
+    private final com.dwinovo.numen.client.ui.widget.UiRoot overlayUi =
+            new com.dwinovo.numen.client.ui.widget.UiRoot();
+    private final com.dwinovo.numen.client.ui.widget.ConfirmDialog dismissDialog =
+            new com.dwinovo.numen.client.ui.widget.ConfirmDialog();
 
     /** The Settings tab, extracted whole (state + build + render + input) — see SettingsView. */
     private final com.dwinovo.numen.client.screen.settings.SettingsView settings =
@@ -284,7 +288,6 @@ public final class NumenScreen extends Screen {
         summonProviderDropdown = null;
         summonVoiceDropdown = null;
         if (summoning) { buildSummonField(); return; }
-        if (dismissPending != null) { buildDismissConfirm(); return; }
         switch (tab) {
             case CHAT -> { if (uuid != null) buildChatWidgets(); }
             case SETTINGS -> settings.buildWidgets();
@@ -447,39 +450,32 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    private Component dismissTitle() {
-        return Component.translatable("numen.dismiss.title", nameFor(dismissPending));
+    /** 遣散确认:危险操作的最后一道闸——卡外点击吞掉、Esc 取消、删除钮红色。 */
+    private void openDismissConfirm(UUID target) {
+        dismissDialog.open(overlayUi, railX, top, RAIL_W + panelW, panelH,
+                I18n.get("numen.dismiss.title", nameFor(target)),
+                I18n.get("numen.dismiss.warning"),
+                I18n.get("numen.gui.settings.cancel"), I18n.get("numen.dismiss.delete"),
+                () -> {
+                    Services.NETWORK.sendToServer(
+                            new com.dwinovo.numen.network.payload.DismissRequestPayload(target));
+                    if (target.equals(uuid)) {   // 走的是当前这只:跳到另一只/回空屏
+                        NumenRoster.Entry next = firstOther(target);
+                        if (next != null) {
+                            switchTo(next.uuid(), next.name());
+                            return;
+                        }
+                        uuid = null;
+                        name = null;
+                    }
+                    rebuild();
+                });
+        rebuild();
     }
 
-    private Component dismissWarn() {
-        return Component.translatable("numen.dismiss.warning");
-    }
-
-    /** The "delete companion?" confirm — now a modal card; buttons positioned by the SAME
-     *  ConfirmModal box the render uses. Cancel left, destructive Delete right. */
-    private void buildDismissConfirm() {
-        UUID target = dismissPending;
-        var box = com.dwinovo.numen.client.ui.ConfirmModal.box(
-                font, railX, railX + RAIL_W + panelW, top, panelH, dismissTitle(), dismissWarn());
-        int bw = com.dwinovo.numen.client.ui.ConfirmModal.BTN_W;
-        int gap = com.dwinovo.numen.client.ui.ConfirmModal.BTN_GAP;
-        int bx = box.x() + (box.w() - (bw * 2 + gap)) / 2;
-        int by = box.buttonY();
-        add(new SimpleButton(bx, by, bw, com.dwinovo.numen.client.ui.ConfirmModal.BTN_H,
-                Component.translatable("numen.gui.settings.cancel"),
-                b -> { dismissPending = null; rebuild(); }));
-        add(new SimpleButton(bx + bw + gap, by, bw, com.dwinovo.numen.client.ui.ConfirmModal.BTN_H,
-                Component.translatable("numen.dismiss.delete"), b -> {
-            Services.NETWORK.sendToServer(
-                    new com.dwinovo.numen.network.payload.DismissRequestPayload(target));
-            dismissPending = null;
-            if (target.equals(uuid)) {                       // active one is leaving — jump to another / empty
-                NumenRoster.Entry next = firstOther(target);
-                if (next != null) { switchTo(next.uuid(), next.name()); return; }
-                uuid = null; name = null;
-            }
-            rebuild();
-        }).danger());
+    /** 模态确认卡在场——屏幕据此屏蔽背景交互。 */
+    private boolean dismissOpen() {
+        return dismissDialog.isOpen();
     }
 
     /** First roster companion that isn't {@code exclude}, or null if none. */
@@ -690,8 +686,8 @@ public final class NumenScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         int k = keyCode;
-        if (dismissPending != null) {
-            if (k == 256) { dismissPending = null; rebuild(); return true; }   // Esc cancels the confirm
+        if (dismissOpen()) {   // 确认卡在场:Esc = 取消(UiRoot 浮层通道保证),其余键不下传
+            if (overlayUi.keyPressed(keyCode, modifiers)) { rebuild(); return true; }
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
         // 设置页的模态(删除确认卡 / 新建编辑表单卡):Esc 收起卡片而不是关掉整个面板。
@@ -779,8 +775,10 @@ public final class NumenScreen extends Screen {
     }
 
     private boolean mouseClickedInner(double mouseX, double mouseY, int button) {
-        if (dismissPending != null) {
-            return super.mouseClicked(mouseX, mouseY, button);   // modal confirm — let its Cancel/Delete buttons handle it
+        if (dismissOpen()) {   // 确认卡:卡上按钮生效,卡外点击一律吞掉(危险操作不给误触留门)
+            boolean handled = overlayUi.mouseClicked(mouseX, mouseY, button);
+            if (!dismissOpen()) rebuild();   // 卡关了(取消/确认):背景 widget 复位
+            return handled;
         }
         if (!summoning && tab == Tab.SETTINGS && settings.formActive()) {
             // 设置页的表单模态:先给表单自己的下拉路由,其余只放行 widget 通道
@@ -796,10 +794,9 @@ public final class NumenScreen extends Screen {
                 return true;
             }
             UUID close = railCloseAt((int) mouseX, (int) mouseY);
-            if (close != null) {   // ✕ → modal confirm(退出召唤态,否则 rebuild 会建召唤控件而非确认卡)
+            if (close != null) {   // ✕ → 模态确认卡(退出召唤态,免得背景还留着召唤控件)
                 summoning = false;
-                dismissPending = close;
-                rebuild();
+                openDismissConfirm(close);
                 return true;
             }
             if (railPlusAt((int) mouseX, (int) mouseY)) {   // + → start the summon name prompt
@@ -864,7 +861,7 @@ public final class NumenScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mx, double my, double sx, double sy) {
         // 模态确认卡在场:背景(侧栏名册/设置列表)不响应滚轮。
-        if (dismissPending != null) {
+        if (dismissOpen()) {
             return false;
         }
         // 打开着的下拉列表优先吃滚轮(列表被面板截断时滚动余下的行)。
@@ -913,7 +910,7 @@ public final class NumenScreen extends Screen {
 
         // 头部一行四个成员从右往左让位:tab(定宽) ← 用量 ← 人设名(可整个消失) ← 名字(最后裁)。
         int headerLimit = tabX[0] - 8;
-        if (!summoning && dismissPending == null && tab == Tab.CHAT && uuid != null) {
+        if (!summoning && !dismissOpen() && tab == Tab.CHAT && uuid != null) {
             headerLimit = renderUsage(g, mouseX, mouseY) - 8;
         }
         String nm = clip(name == null ? "Numen" : name, Math.max(24, headerLimit - (left + PAD)));
@@ -992,12 +989,6 @@ public final class NumenScreen extends Screen {
                     sumX(), y0 + 186, TXT_FAINT);
         }
 
-        // 删除同伴改模态:上面的 tab 内容只是背景(rebuild 只建了确认卡的两颗按钮,
-        // 背景不可交互),暗幕+确认卡压在上面;按钮在其后的 widget 通道渲染,浮在卡上。
-        if (dismissPending != null) {
-            com.dwinovo.numen.client.ui.ConfirmModal.render(g, font,
-                    railX, railX + RAIL_W + panelW, top, panelH, dismissTitle(), dismissWarn());
-        }
 
         // Widgets render LAST, on top of the panel background (fixes the "dim fields" — the panel fill
         // used to paint over the auto-rendered widgets). Text fields are borderless EditBoxes, so draw
@@ -1021,7 +1012,7 @@ public final class NumenScreen extends Screen {
         // Settings-tab overlay pass: field placeholders, voice-form row labels, and the form
         // dropdowns' open lists (drawn last so they sit above the fields) — see SettingsView.
         // 同伴删除模态在场时跳过——占位符/行标题不能画到暗幕上面。
-        if (tab == Tab.SETTINGS && dismissPending == null && !summoning) {
+        if (tab == Tab.SETTINGS && !dismissOpen() && !summoning) {
             settings.renderOverlays(g, mouseX, mouseY);
         }
         // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
@@ -1035,8 +1026,13 @@ public final class NumenScreen extends Screen {
             renderSummonDropdowns(g, mouseX, mouseY);
         }
 
+        // 屏幕级浮层(遣散确认卡):暗幕+卡压在一切之上,tooltip 之前。
+        overlayUi.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+                com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
+                mouseX, mouseY, net.minecraft.Util.getMillis());
+
         // Hovered MCP / skill row tooltip — drawn last so nothing paints over it.
-        if (pendingTip != null) {
+        if (pendingTip != null && !dismissOpen()) {
             g.renderComponentTooltip(font, pendingTip, pendingTipX, pendingTipY);
         }
     }
@@ -1077,7 +1073,7 @@ public final class NumenScreen extends Screen {
             int bx = ax + RAIL_AV - 3, by = ay - 5;
             boolean overAvatar = mouseX >= ax && mouseX < ax + RAIL_AV && mouseY >= ay && mouseY < ay + RAIL_AV;
             boolean overBadge = mouseX >= bx && mouseX < bx + 9 && mouseY >= by && mouseY < by + 9;
-            if (dismissPending == null && (overAvatar || overBadge)) {
+            if (!dismissOpen() && (overAvatar || overBadge)) {
                 g.fill(bx, by, bx + 9, by + 9, FAIL);
                 Nb.border(g, bx, by, 9, 9, 1, BORDER);
                 txt(g, Component.literal("✕"), bx + 2, by + 1, ON_BAND);

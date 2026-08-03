@@ -18,10 +18,13 @@ public final class ConfirmDialog implements UiRoot.Overlay {
     private UiRoot root;
     private int dimX, dimY, dimW, dimH;
     private String message;
+    /** 可选副文本(次级色小字):危险操作要说清后果,而不是只问一句"确定吗"。 */
+    private String detail;
     private String cancelLabel;
     private String confirmLabel;
     private Runnable onConfirm;
     private List<String> lines;
+    private List<String> detailLines;
 
     // 渲染时缓存的几何,事件无画布也能判命中
     private int cardX, cardY, cardW, cardH;
@@ -33,6 +36,15 @@ public final class ConfirmDialog implements UiRoot.Overlay {
     /** 打开确认卡。{@code dim*} = 暗幕覆盖区(通常是宿主面板),卡居中其内。 */
     public void open(UiRoot root, int dimX, int dimY, int dimW, int dimH,
                      String message, String cancelLabel, String confirmLabel, Runnable onConfirm) {
+        open(root, dimX, dimY, dimW, dimH, message, null, cancelLabel, confirmLabel, onConfirm);
+    }
+
+    /** 带副文本的确认卡:{@code detail} 用次级色小字画在主文案之下。 */
+    public void open(UiRoot root, int dimX, int dimY, int dimW, int dimH,
+                     String message, String detail,
+                     String cancelLabel, String confirmLabel, Runnable onConfirm) {
+        this.detail = detail == null || detail.isBlank() ? null : detail;
+        this.detailLines = null;
         this.root = root;
         this.dimX = dimX;
         this.dimY = dimY;
@@ -55,10 +67,14 @@ public final class ConfirmDialog implements UiRoot.Overlay {
         if (lines == null) {
             lines = TextWrap.wrap(message, CARD_W - NumenStyle.PAD * 2, s::textWidth, 3);
         }
+        if (detail != null && detailLines == null) {
+            detailLines = TextWrap.wrap(detail, CARD_W - NumenStyle.PAD * 2, s::textWidth, 3);
+        }
         s.fillRect(dimX, dimY, dimW, dimH, 0x99000000);
 
+        int detailH = detailLines == null ? 0 : detailLines.size() * s.lineHeight() + 3;
         cardW = CARD_W;
-        cardH = NumenStyle.PAD * 2 + lines.size() * s.lineHeight() + 8 + BTN_H;
+        cardH = NumenStyle.PAD * 2 + lines.size() * s.lineHeight() + detailH + 8 + BTN_H;
         cardX = dimX + (dimW - cardW) / 2;
         cardY = dimY + (dimH - cardH) / 2;
         s.fillRoundRect(cardX, cardY, cardW, cardH, NumenStyle.RADIUS_PANEL, c.panelBg());
@@ -67,6 +83,13 @@ public final class ConfirmDialog implements UiRoot.Overlay {
         for (String line : lines) {
             s.drawText(line, cardX + NumenStyle.PAD, ty, c.textPrimary(), false);
             ty += s.lineHeight();
+        }
+        if (detailLines != null) {
+            ty += 3;
+            for (String line : detailLines) {
+                s.drawText(line, cardX + NumenStyle.PAD, ty, c.textMuted(), false);
+                ty += s.lineHeight();
+            }
         }
 
         buttonY = cardY + cardH - BTN_H - NumenStyle.PAD / 2 - 2;

@@ -322,7 +322,7 @@ public final class SettingsView {
     /** Bottom edge the form's save row sits above. */
     private int fBottom() { return cardY1() - 10; }
 
-    /** 表单模态的暗幕 + 近全幅圆角卡 + 卡顶标题(与 ConfirmModal 同族的视觉参数)。 */
+    /** 表单模态的暗幕 + 近全幅圆角卡 + 卡顶标题。 */
     private void formModal(GuiGraphics g, Component title) {
         UiTheme t = UiTheme.current();
         g.fill(host.railX(), top(), left() + panelW(), top() + panelH(),

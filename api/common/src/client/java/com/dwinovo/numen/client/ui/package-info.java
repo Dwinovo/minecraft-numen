@@ -14,7 +14,7 @@
  * 不做投机抽象。
  *
  * <p><b>混住现状(挂账)</b>:本包还住着旧 SettingsView 时代的 MC 绘制助手
- * (Anim/ConfirmModal/RoundRect/SafeUi),它们 import MC,不守上述纪律——
+ * (Anim/RoundRect/SafeUi),它们 import MC,不守上述纪律——
  * 旧屏逐区退役时随之清退。纯 JVM 层不得依赖它们;{@code mc} 适配器可用
  * (RoundRect 的 SDF 圆角 shader 正是经 McDrawSurface 供给全组件库)。
  */
