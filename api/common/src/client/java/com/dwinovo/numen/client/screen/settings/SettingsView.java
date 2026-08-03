@@ -6,7 +6,6 @@ import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.screen.Dropdown;
-import com.dwinovo.numen.client.screen.FlatEditBox;
 import com.dwinovo.numen.client.screen.LlmProviders;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.SimpleButton;
@@ -187,7 +186,6 @@ public final class SettingsView {
         providerEditId = null;
         host.rebuild();
     }
-    private int settingsScroll;   // first visible row of the section lists (wheel-scroll when long)
 
     // ---- model-config section state (mirrors the persona section) ----
     private boolean addingProvider;
@@ -222,7 +220,6 @@ public final class SettingsView {
 
     // ---- STT 分区:NumenUI SttPanel(服务商联动/模型双态/麦克风/保存回执) ----
     private SttPanel sttPanel;
-    private long savedFlashUntil;
 
     private SttPanel sttPanel() {
         if (sttPanel == null) sttPanel = new SttPanel();
@@ -318,34 +315,12 @@ public final class SettingsView {
         Nb.text(g, font(), c, x, y, color);
     }
 
-    /** Truncate {@code s} with an ellipsis so it fits in {@code maxW} px. */
-    private String clip(String s, int maxW) {
-        if (font().width(s) <= maxW) return s;
-        StringBuilder b = new StringBuilder();
-        for (int i = 0; i < s.length(); i++) {
-            if (font().width(b.toString() + s.charAt(i) + "…") > maxW) break;
-            b.append(s.charAt(i));
-        }
-        return b + "…";
-    }
-
     /** Shadowless placeholder for an empty, unfocused field — the EditBox's own hint renders with a shadow. */
     private void placeholder(GuiGraphics g, EditBox f, String text) {
         if (f != null && f.visible && f.getValue().isEmpty() && !f.isFocused()
                 && text != null && !text.isEmpty()) {
             txt(g, Component.literal(text), f.getX(), f.getY(), TXT_FAINT);
         }
-    }
-
-    private EditBox field(int x, int y, int w, int max, String value) {
-        EditBox e = new FlatEditBox(font(), x + FIELD_INSET_X, y + FIELD_INSET_Y,
-                w - FIELD_INSET_X * 2, 18 - FIELD_INSET_Y * 2, Component.literal(""));
-        e.setMaxLength(max);
-        e.setValue(value == null ? "" : value);
-        e.setBordered(false);
-        e.setTextColor(TXT);
-        host.add(e);
-        return e;
     }
 
     private static boolean nb(String s) {
@@ -365,7 +340,6 @@ public final class SettingsView {
     private void selectSection(Section s) {
         if (s == section) return;
         section = s;
-        settingsScroll = 0;
         if (sttPanel != null) sttPanel.reseed();   // 进分区从已存配置重播种
         if (s == Section.PERSONA) {
             // 人设是目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
@@ -399,7 +373,8 @@ public final class SettingsView {
     public void buildWidgets() {
         loadPalette();
         switch (section) {
-            case SKILLS -> buildSkillsWidgets();
+            case SKILLS -> skillsListPanel().build(secX(), secY0() - 2, secW(),
+                    secBottom() - secY0() + 2, left(), top(), panelW(), panelH());
             case MCP -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
                 mcpListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
@@ -430,9 +405,11 @@ public final class SettingsView {
                         left(), top(), panelW(), panelH());
                 if (addingSkin) buildSkinForm();
             }
-            case BRAIN -> buildBrainWidgets();
+            case BRAIN -> brainPanel().build(secX(), secY0() - 2, secW(),
+                    secBottom() - secY0() + 2);
             case STT -> sttPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2);
-            case THEME -> { /* no widgets — plain click rows */ }
+            case THEME -> themePanel().build(secX(), secY0() - 2, secW(),
+                    secBottom() - secY0() + 2);
         }
     }
 
@@ -443,92 +420,6 @@ public final class SettingsView {
     // ---- External-brain section: 我们自己当 MCP 服务器,把同伴交给外面的 AI 驱动 ----
 
     /** 本节的纵向锚点(相对 secY0):build 与 render 共读一份,按钮和标签才不会跑偏。 */
-    private static final int BR_TOGGLE = 16, BR_HINT = 32, BR_ENDPOINT = 56,
-            BR_TOKEN = 86, BR_PROMPT = 118, BR_WARN = 140, BR_STATUS = 158;
-    private static final int BR_COPY_W = 46;
-
-    private void buildBrainWidgets() {
-        int x = secX(), w = secW(), fy = secY0();
-        McpMode mcp = McpMode.instance();
-        host.add(new SimpleButton(x + w - BR_COPY_W, fy + BR_ENDPOINT + 9, BR_COPY_W, 14,
-                Component.translatable("numen.brain.copy"),
-                b -> copyToClipboard(mcp.endpoint())));
-        if (!mcp.token().isBlank()) {
-            host.add(new SimpleButton(x + w - BR_COPY_W, fy + BR_TOKEN + 9, BR_COPY_W, 14,
-                    Component.translatable("numen.brain.copy"),
-                    b -> copyToClipboard(mcp.token())));
-        }
-        host.add(new SimpleButton(x, fy + BR_PROMPT, 150, 16,
-                Component.translatable("numen.brain.copy_prompt"),
-                b -> copyToClipboard(mcp.accessPrompt())).primary());
-    }
-
-    /** 复制并闪一下"已复制"——与保存态共用同一个提示位。 */
-    private void copyToClipboard(String text) {
-        Minecraft.getInstance().keyboardHandler.setClipboard(text);
-        savedFlashUntil = System.currentTimeMillis() + 1500;
-    }
-
-    private void renderBrainSection(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX(), w = secW(), fy = secY0();
-        McpMode mcp = McpMode.instance();
-        boolean on = mcp.enabled();
-
-        txt(g, Component.translatable("numen.brain.title"), x, fy - 2, TXT);
-
-        // 开关行:整行可点(与 brainToggleClick 的命中区一致)。
-        txt(g, Component.translatable("numen.brain.toggle"), x, fy + BR_TOGGLE, TXT);
-        drawToggle(g, x + w - TOG_W, fy + BR_TOGGLE - 1, on);
-        txt(g, Component.translatable(on ? "numen.brain.hint_on" : "numen.brain.hint_off"),
-                x, fy + BR_HINT, TXT_FAINT);
-        String err = mcp.lastError();
-        if (err != null) {
-            txt(g, Component.translatable("numen.brain.start_failed", err), x, fy + BR_HINT + 10, FAIL);
-        }
-
-        txt(g, Component.translatable("numen.brain.endpoint"), x, fy + BR_ENDPOINT, TXT_MUTED);
-        txt(g, Component.literal(mcp.endpoint()), x, fy + BR_ENDPOINT + 11, TXT);
-
-        txt(g, Component.translatable("numen.brain.token"), x, fy + BR_TOKEN, TXT_MUTED);
-        // 明文令牌不上屏:截图/录屏泄露一次就永久泄露,要整份走复制按钮。
-        txt(g, mcp.token().isBlank()
-                        ? Component.translatable("numen.brain.token_none")
-                        : Component.literal(mcp.maskedToken()),
-                x, fy + BR_TOKEN + 11, mcp.token().isBlank() ? TXT_FAINT : TXT);
-
-        txt(g, Component.translatable("numen.brain.prompt_warn"), x, fy + BR_WARN, TXT_FAINT);
-        txt(g, brainStatusLine(mcp), x, fy + BR_STATUS, on ? OK : TXT_FAINT);
-
-        if (savedFlashUntil > System.currentTimeMillis()) {
-            txt(g, Component.translatable("numen.brain.copied"), x, top() + panelH() - PAD - 14, OK);
-        }
-    }
-
-    /** 连接状态一行:没开 → 关闭;开着没人连 → 等待接入;连过 → 谁 + 多久前活跃。 */
-    private Component brainStatusLine(McpMode mcp) {
-        if (!mcp.enabled()) return Component.translatable("numen.brain.status_off");
-        String who = mcp.clientName();
-        if (who == null) return Component.translatable("numen.brain.status_waiting");
-        return Component.translatable("numen.brain.status_connected", who, sinceLabel(mcp.lastActivityMs()));
-    }
-
-    /** "12 秒前" / "3 分钟前" —— 面板每帧重算,不缓存。 */
-    private static String sinceLabel(long stampMs) {
-        long sec = Math.max(0, (System.currentTimeMillis() - stampMs) / 1000);
-        if (sec < 60) return I18n.get("numen.brain.since_sec", sec);
-        return I18n.get("numen.brain.since_min", sec / 60);
-    }
-
-    private boolean brainToggleClick(int mx, int my) {
-        int x = secX(), w = secW(), fy = secY0();
-        boolean onToggle = overToggle(mx, my, x + w - TOG_W, fy + BR_TOGGLE - 1);
-        boolean onRow = mx >= x && mx < x + w && my >= fy + BR_TOGGLE - 2 && my < fy + BR_TOGGLE + 11;
-        if (!onToggle && !onRow) return false;
-        McpMode mcp = McpMode.instance();
-        mcp.setEnabled(!mcp.enabled());
-        host.rebuild();   // 令牌行的复制按钮随配置在场与否增减
-        return true;
-    }
 
     // ---- Provider section: the library of named LLM provider configs companions select from ----
 
@@ -713,6 +604,20 @@ public final class SettingsView {
 
     // ---- MCP section ----
 
+    // ---- 大脑/主题分区:NumenUI 面板 ----
+    private BrainPanel brainPanel;
+    private ThemePanel themePanel;
+
+    private BrainPanel brainPanel() {
+        if (brainPanel == null) brainPanel = new BrainPanel();
+        return brainPanel;
+    }
+
+    private ThemePanel themePanel() {
+        if (themePanel == null) themePanel = new ThemePanel(host::repaintPalette);
+        return themePanel;
+    }
+
     private LibraryListPanel<com.dwinovo.numen.mcp.client.McpClientManager.ServerHandle> mcpListPanel;
 
     private LibraryListPanel<com.dwinovo.numen.mcp.client.McpClientManager.ServerHandle> mcpListPanel() {
@@ -821,10 +726,40 @@ public final class SettingsView {
         return java.util.Map.copyOf(out);
     }
 
-    private void buildSkillsWidgets() {
-        // "open skills folder" affordance, top-right of the section.
-        host.add(new SimpleButton(left() + panelW() - PAD - 64, secY0() - 2, 64, 14,
-                Component.translatable("numen.skill.open_dir"), b -> openSkillsFolder()));
+    // ---- 技能列表:通用 LibraryListPanel 的纯开关形态(无新建/编辑/删除) ----
+    private LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo> skillsListPanel;
+
+    private LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo> skillsListPanel() {
+        if (skillsListPanel == null) {
+            skillsListPanel = new LibraryListPanel<com.dwinovo.numen.agent.skill.SkillInfo>(
+                    "numen.skill.title", null, "numen.skill.empty",
+                    () -> new ArrayList<>(com.dwinovo.numen.agent.skill.SkillRegistry.instance().all()),
+                    sk -> {
+                        String desc = sk.description() == null
+                                ? I18n.get("numen.skill.no_desc") : sk.description();
+                        return new LibraryListPanel.Row(sk.name(), desc, false, null);
+                    },
+                    null, sk -> { }, () -> { }, sk -> { })
+                    .withRowToggle(
+                            sk -> !com.dwinovo.numen.agent.skill.SkillRegistry.instance().isDisabled(sk.name()),
+                            sk -> {
+                                var reg = com.dwinovo.numen.agent.skill.SkillRegistry.instance();
+                                reg.setEnabled(sk.name(), reg.isDisabled(sk.name()));   // flip
+                            })
+                    .withTitleAction(I18n.get("numen.skill.open_dir"), SettingsView::openSkillsFolder);
+        }
+        return skillsListPanel;
+    }
+
+    private void renderSkillsSection(GuiGraphics g, int mouseX, int mouseY) {
+        skillsListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+        // 悬停行体 → tooltip:技能名 + 完整描述(行内被 clip 过)。
+        var sk = skillsListPanel().entryAtBody(mouseX, mouseY);
+        if (sk != null && sk.description() != null) {
+            host.tip(List.of(Component.literal(sk.name()), Nb.colored(sk.description(), TXT_MUTED)),
+                    mouseX, mouseY);
+        }
     }
 
     private static void openSkillsFolder() {
@@ -991,45 +926,20 @@ public final class SettingsView {
         renderSettingsNav(g, mouseX, mouseY);
         switch (section) {
             case MCP -> renderMcpSection(g, mouseX, mouseY);
-            case SKILLS -> renderSkillsSection(g, mouseX, mouseY);
+            case SKILLS -> {
+                renderSkillsSection(g, mouseX, mouseY);
+            }
             case PERSONA -> renderPersonaSection(g, mouseX, mouseY);
             case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
-            case BRAIN -> renderBrainSection(g, mouseX, mouseY);
+            case BRAIN -> brainPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
             case STT -> sttPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                     HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
-            case THEME -> renderThemeSection(g, mouseX, mouseY);
+            case THEME -> themePanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
         }
-    }
-
-    /** 主题选择:五套配色一行一个(三色小样 + 名字),点击即切换并写入 ui.json。 */
-    private void renderThemeSection(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX();
-        txt(g, Component.translatable("numen.settings.theme.title"), x, secY0() - 2, TXT);
-        int listY0 = secY0() + 14;
-        for (int i = 0; i < UiTheme.ALL.size(); i++) {
-            UiTheme t = UiTheme.ALL.get(i);
-            int ry = listY0 + i * LIST_ROW;
-            boolean cur = t == UiTheme.current();
-            hoverRow(g, mouseX, mouseY, x, secW(), ry);
-            // 圆角描边环:先画整块圆角底当"框",三色小样叠在内缩区上。
-            com.dwinovo.numen.client.ui.RoundRect.fill(g, x - 2, ry - 1, x + 32, ry + 15, 4,
-                    cur ? ACCENT : BORDER);
-            g.fill(x, ry + 1, x + 10, ry + 13, t.ground());
-            g.fill(x + 10, ry + 1, x + 20, ry + 13, t.band());
-            g.fill(x + 20, ry + 1, x + 30, ry + 13, t.cta());
-            txt(g, Component.literal(t.label()), x + 38, ry + 3, cur ? TXT : TXT_MUTED);
-            if (cur) {
-                txt(g, Component.literal("✔"), x + 38 + font().width(t.label()) + 6, ry + 3, OK);
-            }
-        }
-        // 快捷对话提醒开关行(默认开:准星指着同伴时浮「按 [键] 对话」)
-        int hy = listY0 + UiTheme.ALL.size() * LIST_ROW + 8;
-        hoverRow(g, mouseX, mouseY, x, secW(), hy);
-        boolean hintOn = UiTheme.talkHintEnabled();
-        txt(g, Component.literal((hintOn ? "[开] " : "[关] ") + "快捷对话提醒(准星指着同伴时提示按键)"),
-                x, hy + 3, hintOn ? TXT : TXT_MUTED);
     }
 
     private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
@@ -1117,10 +1027,6 @@ public final class SettingsView {
         }
     }
 
-    private boolean overDelete(int mx, int my, int delX, int ry) {
-        return mx >= delX - 2 && mx < delX + 9 && my >= ry + 2 && my < ry + LIST_ROW - 2;
-    }
-
     private int mcpDotColor(com.dwinovo.numen.mcp.client.McpClientManager.Status s) {
         return switch (s) {
             case CONNECTED -> OK;
@@ -1156,62 +1062,7 @@ public final class SettingsView {
 
     // ---- Skills section: skill list with a live on/off switch per row ----
 
-    private void renderSkillsSection(GuiGraphics g, int mouseX, int mouseY) {
-        int x = secX(), w = secW();
-        txt(g, Component.translatable("numen.skill.title"), x, secY0() - 2, TXT);
-        var skills = new ArrayList<>(com.dwinovo.numen.agent.skill.SkillRegistry.instance().all());
-        if (skills.isEmpty()) {
-            txt(g, Component.translatable("numen.skill.empty"), x, secY0() + 16, TXT_FAINT);
-            return;
-        }
-        int listY0 = secY0() + 14;
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        settingsScroll = Math.clamp(settingsScroll, 0, Math.max(0, skills.size() - visible));
-        for (int i = settingsScroll; i < skills.size(); i++) {
-            int row = i - settingsScroll;
-            int ry = listY0 + row * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            var s = skills.get(i);
-            boolean on = !com.dwinovo.numen.agent.skill.SkillRegistry.instance().isDisabled(s.name());
-            hoverRow(g, mouseX, mouseY, x, w, ry);
-            txt(g, Component.literal(s.name()), x, ry + 1, on ? TXT : TXT_FAINT);
-            String desc = s.description() == null ? I18n.get("numen.skill.no_desc") : s.description();
-            txt(g, Component.literal(clip(desc, w - 26)), x, ry + 13, TXT_MUTED);
-            drawToggle(g, x + w - 20, ry + 5, on);
-            if (overRow(mouseX, mouseY, x, w, ry) && !overToggle(mouseX, mouseY, x + w - 20, ry + 5)
-                    && s.description() != null) {
-                host.tip(List.of(Component.literal(s.name()), Nb.colored(s.description(), TXT_MUTED)),
-                        mouseX, mouseY);
-            }
-        }
-    }
-
     // ---- shared toggle switch (no vanilla widget for this) ----
-
-    private void drawToggle(GuiGraphics g, int x, int y, boolean on) {
-        // 轨道恒中性,状态全由滑块表达:开 = 黄色滑块在右,关 = 暗滑块在左。
-        g.fill(x, y, x + TOG_W, y + TOG_H, FIELD);
-        Nb.border(g, x, y, TOG_W, TOG_H, 1, BORDER);
-        int knobX = on ? x + TOG_W - 8 : x + 1;
-        g.fill(knobX, y + 1, knobX + 7, y + TOG_H - 1, on ? CTA : TXT_FAINT);
-    }
-
-    private boolean overToggle(int mx, int my, int x, int y) {
-        return mx >= x && mx < x + TOG_W && my >= y && my < y + TOG_H;
-    }
-
-    private boolean overRow(int mx, int my, int x, int w, int ry) {
-        return mx >= x && mx < x + w && my >= ry && my < ry + LIST_ROW;
-    }
-
-    /** 列表行悬停底:一层 chipFill 圆角暗洗,让"行可点"可感知(表单模态的背景列表
-     *  以 (-10000,-10000) 渲染,自然不触发)。画在行内容之前。 */
-    private void hoverRow(GuiGraphics g, int mouseX, int mouseY, int x, int w, int ry) {
-        if (overRow(mouseX, mouseY, x, w, ry)) {
-            com.dwinovo.numen.client.ui.RoundRect.fill(g, x - 3, ry - 1, x + w + 1,
-                    ry + LIST_ROW - 3, 4, UiTheme.current().chipFill());
-        }
-    }
 
     // ---- Persona section render + hit-test ----
 
@@ -1237,25 +1088,6 @@ public final class SettingsView {
         d.text = p.text();
         personaDraft = d;
         host.rebuild();
-    }
-
-    private boolean skillToggleClick(int mx, int my) {
-        int x = secX(), w = secW();
-        var reg = com.dwinovo.numen.agent.skill.SkillRegistry.instance();
-        var skills = new ArrayList<>(reg.all());
-        int listY0 = secY0() + 14;
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        int scroll = Math.clamp(settingsScroll, 0, Math.max(0, skills.size() - visible));
-        for (int i = scroll; i < skills.size(); i++) {
-            int ry = listY0 + (i - scroll) * LIST_ROW;
-            if (ry + LIST_ROW > secBottom()) break;
-            if (overToggle(mx, my, x + w - 20, ry + 5)) {
-                String n = skills.get(i).name();
-                reg.setEnabled(n, reg.isDisabled(n));   // flip
-                return true;
-            }
-        }
-        return false;
     }
 
     // ---- input (called from the screen's mouseClicked / mouseScrolled) ----
@@ -1318,6 +1150,17 @@ public final class SettingsView {
                 && mcpListPanel().mouseClicked(mouseX, mouseY, 0)) {
             return true;
         }
+        // 技能列表(NumenUI 纯开关形态)。
+        if (section == Section.SKILLS && skillsListPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        // 大脑/主题分区(NumenUI)。
+        if (section == Section.BRAIN && brainPanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
+        if (section == Section.THEME && themePanel().mouseClicked(mouseX, mouseY, 0)) {
+            return true;
+        }
         return settingsClickedAt(mouseX, mouseY);
     }
 
@@ -1337,24 +1180,6 @@ public final class SettingsView {
                 }
             }
         }
-        if (section == Section.THEME && mx >= secX()) {
-            int listY0 = secY0() + 14;
-            for (int i = 0; i < UiTheme.ALL.size(); i++) {
-                int ry = listY0 + i * LIST_ROW;
-                if (my >= ry && my < ry + LIST_ROW) {
-                    UiTheme.select(UiTheme.ALL.get(i).id());
-                    host.repaintPalette();          // 屏幕的调色板常量重读新主题
-                    return true;
-                }
-            }
-            int hy = listY0 + UiTheme.ALL.size() * LIST_ROW + 8;
-            if (my >= hy && my < hy + LIST_ROW) {
-                UiTheme.setTalkHint(!UiTheme.talkHintEnabled());
-                return true;
-            }
-        }
-        if (section == Section.BRAIN) return brainToggleClick(mx, my);
-        if (section == Section.SKILLS) return skillToggleClick(mx, my);
         return false;
     }
 
@@ -1433,6 +1258,12 @@ public final class SettingsView {
                 && mcpListPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
+        if (section == Section.SKILLS && skillsListPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
+        if (section == Section.THEME && themePanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
         return false;
     }
 
@@ -1457,22 +1288,14 @@ public final class SettingsView {
         return false;
     }
 
-    /** Wheel pass 2 (after the rail/chat checks): scroll the section list. */
-    public boolean mouseScrolledList(double sy) {
-        if (formActive()) return false;   // 列表在表单模态的暗幕之下,不滚
-        int count = switch (section) {
-            case SKILLS -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().size();
-            default -> 0;
-        };
-        int listY0 = secY0() + 14;
-        int visible = Math.max(1, (secBottom() - listY0) / LIST_ROW);
-        settingsScroll = Math.clamp((long) (settingsScroll - sy), 0, Math.max(0, count - visible));
-        return true;
-    }
-
     /** Post-widget overlay pass: field placeholders (shadowless), the voice form's row labels,
      *  and the form dropdowns' open lists (drawn last so they sit above the fields). */
     /** 键盘/字符输入:目前只有模型配置表单的 NumenUI 输入框需要。 */
+    /** 旧分区列表滚动通道已整体退役(各面板自滚);屏幕侧调用面保留。 */
+    public boolean mouseScrolledList(double sy) {
+        return false;
+    }
+
     public boolean keyPressed(int keyCode, int modifiers) {
         if (section == Section.PROVIDER) {
             if (addingProvider) return providerForm().keyPressed(keyCode, modifiers);

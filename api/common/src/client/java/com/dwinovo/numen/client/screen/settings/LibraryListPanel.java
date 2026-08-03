@@ -158,15 +158,20 @@ public final class LibraryListPanel<T> {
 
         Label title = ui.add(new Label(t(titleKey), Label.Role.PRIMARY));
         title.setBounds(x, y, w - 70, 9);
-        Button add = ui.add(new Button(t(addKey), Button.Style.ACCENT, onAdd));
-        add.setBounds(x + w - 56, y - 2, 56, NumenStyle.CONTROL_H);
-
+        int actionRight = x + w;   // 标题行按钮从右往左排
+        if (addKey != null) {
+            Button add = ui.add(new Button(t(addKey), Button.Style.ACCENT, onAdd));
+            add.setBounds(x + w - 56, y - 2, 56, NumenStyle.CONTROL_H);
+            actionRight = x + w - 56 - 6;
+        }
         if (titleAction != null) {
+            // 宽随文案实测(写死会被长文案穿底/盖住邻钮)。
+            int aw = Math.max(18, Minecraft.getInstance().font.width(titleActionLabel) + 12);
             Button act = ui.add(new Button(titleActionLabel, Button.Style.NORMAL, () -> {
                 titleAction.run();
                 refresh();   // 动作(重扫等)可能改变条目集,当场刷新
             }));
-            act.setBounds(x + w - 56 - 6 - 18, y - 2, 18, NumenStyle.CONTROL_H);
+            act.setBounds(actionRight - aw, y - 2, aw, NumenStyle.CONTROL_H);
         }
 
         if (toggleGet != null) {
@@ -251,17 +256,19 @@ public final class LibraryListPanel<T> {
         if (toggleOn != null) {
             // 行内启停:静态小胶囊(逐行控件实例进不了 ListView 的渲染回调,画出来即可)。
             boolean on = toggleOn.test(e);
-            int tx0 = rx + rw - TOGGLE_ZONE;
+            int tx0 = rx + rw - (deleteMessage != null ? TOGGLE_ZONE : 24);
             int ty = ry + (rh - 10) / 2;
             s.fillRoundRect(tx0, ty, 20, 10, 5, on ? c.accent() : c.inputBg());
             s.fillRoundRect(on ? tx0 + 11 : tx0 + 2, ty + 2, 7, 6, 3, 0xFFFFFFFF);
-        } else {
+        } else if (deleteMessage != null) {
             boolean overEdit = hovered && inZone(rx, rw, EDIT_ZONE, DEL_ZONE);
             s.drawText("✎", rx + rw - EDIT_ZONE + 2, iconY,
                     overEdit ? c.accent() : c.textMuted(), false);
         }
-        s.drawText("✕", rx + rw - DEL_ZONE + 2, iconY,
-                overDel ? c.danger() : c.textMuted(), false);
+        if (deleteMessage != null) {
+            s.drawText("✕", rx + rw - DEL_ZONE + 2, iconY,
+                    overDel ? c.danger() : c.textMuted(), false);
+        }
     }
 
     /** 鼠标横坐标是否落在距行右缘 [from, to) 的图标热区(from > to,都是距右缘距离)。 */
@@ -280,7 +287,7 @@ public final class LibraryListPanel<T> {
             }
             return true;
         }
-        if (xInRow >= listW - DEL_ZONE) {
+        if (deleteMessage != null && xInRow >= listW - DEL_ZONE) {
             askDelete(e);
             return true;
         }
@@ -288,7 +295,7 @@ public final class LibraryListPanel<T> {
             toggleFlip.accept(e);
             return true;
         }
-        onEdit.accept(e);   // ✎ 与行体同义:点行即编辑
+        onEdit.accept(e);   // ✎ 与行体同义:点行即编辑(纯开关库传空实现)
         return true;
     }
 
