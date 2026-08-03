@@ -81,10 +81,24 @@ public final class UiRoot {
     public boolean hasOverlay() { return overlay != null; }
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
+        renderContent(s, c, mouseX, mouseY, nowMs);
+        renderOverlayLayer(s, c, mouseX, mouseY, nowMs);
+    }
+
+    /** 只画控件不画浮层——滚动容器场景:内容进裁剪区,浮层(下拉弹层)在裁剪区外画。 */
+    public void renderContent(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         for (Widget w : widgets) {
             if (w.visible) w.render(s, c, mouseX, mouseY, nowMs);
         }
+    }
+
+    public void renderOverlayLayer(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         if (overlay != null) overlay.renderOverlay(s, c, mouseX, mouseY, nowMs);
+    }
+
+    /** 只读控件视图(滚动容器按此记录基线纵坐标并整体位移)。 */
+    public List<Widget> widgetsView() {
+        return java.util.Collections.unmodifiableList(widgets);
     }
 
     public boolean mouseClicked(double mx, double my, int button) {

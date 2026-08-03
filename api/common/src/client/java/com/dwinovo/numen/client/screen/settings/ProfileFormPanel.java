@@ -42,9 +42,18 @@ public final class ProfileFormPanel {
         public String proxy = "";
     }
 
+    /** 滚动根:表单行(进裁剪区,可上下滚);固定根:✕/结果胶囊/按钮行(不动)。 */
     private final UiRoot ui = new UiRoot();
+    private final UiRoot fixedUi = new UiRoot();
     private final Consumer<Draft> onSave;
     private final Runnable onCancel;
+
+    // ---- 滚动机制:记录各行基线纵坐标,滚动=整体位移 ----
+    private final java.util.Map<com.dwinovo.numen.client.ui.widget.Widget, Integer> baseYs =
+            new java.util.HashMap<>();
+    private int scrollY;
+    private int contentH;
+    private int viewH;
 
     private Draft draft = new Draft();
     private List<ProviderRegistry.Provider> sites = List.of();
@@ -74,11 +83,15 @@ public final class ProfileFormPanel {
         this.draft = d;
     }
 
-    private int formW;
+    private int formX, formY, formW;
 
     public void build(int x, int y, int w, int h, int viewportBottom) {
+        this.formX = x;
+        this.formY = y;
         this.formW = w;
         ui.clear();
+        fixedUi.clear();
+        baseYs.clear();
         ui.setViewportHeight(viewportBottom);
 
         sites = new ArrayList<>(ProviderRegistry.providers());
@@ -135,48 +148,92 @@ public final class ProfileFormPanel {
         thinkingPick = ui.add(new Dropdown(List.of(), 0, this::onThinkingPicked));
         thinkingPick.setBounds(x, ry, 110, NumenStyle.CONTROL_H);
 
-        // ✕ 幽灵钮钉在卡片右上角落(cardX1-4-14, cardY0+4):平时无底,悬停浮浅底。
-        Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
+        // ---- 滚动记账:内容高、视口高(按钮行之上),各行基线快照 ----
+        contentH = (ry + NumenStyle.CONTROL_H) - y;
+        viewH = h - 20;
+        scrollY = Math.min(scrollY, maxScroll());
+        for (com.dwinovo.numen.client.ui.widget.Widget rw : ui.widgetsView()) {
+            baseYs.put(rw, rw.y());
+        }
+        reposition();
+
+        // ---- 固定层:✕(卡片右上角落)/结果胶囊/按钮行——不随滚动 ----
+        Button close = fixedUi.add(new Button("✕", Button.Style.GHOST, onCancel));
         close.setBounds(x + w - 8, y - 14, 14, 14);
 
         int by = y + h - 16;
         // 页面级 Alert:表单区左右居中、垂直偏上悬浮——操作结果的家(字段错误才内联)。
-        resultAlert = ui.add(new InlineAlert());
+        resultAlert = fixedUi.add(new InlineAlert());
         resultAlert.setBounds(x, y + 2, w, 24);
-        checkButton = ui.add(new Button(t("numen.gui.providers.check"),
+        checkButton = fixedUi.add(new Button(t("numen.gui.providers.check"),
                 Button.Style.NORMAL, this::runConnectivityCheck));
         checkButton.setBounds(x + w - 54 - 58, by, 54, 15);
-        Button save = ui.add(new Button(t("numen.gui.settings.save"),
+        Button save = fixedUi.add(new Button(t("numen.gui.settings.save"),
                 Button.Style.ACCENT, this::save));
         save.setBounds(x + w - 54, by, 54, 15);
 
         refreshSiteDependent();
     }
 
-    // ---- 宿主转发面(与 ProviderPanel 同款) ----
+    private int maxScroll() {
+        return Math.max(0, contentH - viewH);
+    }
+
+    /** 滚动=全部行控件按基线整体位移(布局账只算一次,滚动只挪 y)。 */
+    private void reposition() {
+        for (var e : baseYs.entrySet()) {
+            var rw = e.getKey();
+            rw.setBounds(rw.x(), e.getValue() - scrollY, rw.w(), rw.h());
+        }
+    }
+
+    // ---- 宿主转发面 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        ui.render(s, c, mouseX, mouseY, nowMs);
+        // 表单行进裁剪区(滚出视口的部分不画);下拉弹层与固定层在裁剪区外。
+        s.pushScissor(formX, formY, formW + 2, viewH);
+        ui.renderContent(s, c, mouseX, mouseY, nowMs);
+        s.popScissor();
+        if (maxScroll() > 0) {   // 滚动拇指:内容装不下时提示"下面还有"
+            int thumbH = Math.max(10, viewH * viewH / contentH);
+            int thumbY = formY + (viewH - thumbH) * scrollY / maxScroll();
+            s.fillRoundRect(formX + formW, thumbY, NumenStyle.SCROLLBAR_W, thumbH,
+                    NumenStyle.RADIUS_SMALL, c.divider());
+        }
+        fixedUi.render(s, c, mouseX, mouseY, nowMs);
+        ui.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
-        return ui.mouseClicked(mx, my, button);
+        if (ui.hasOverlay()) return ui.mouseClicked(mx, my, button);   // 弹层优先(可越出视口)
+        if (fixedUi.mouseClicked(mx, my, button)) return true;
+        // 视口外的行控件虽被裁掉,坐标上仍在——点击按可视区域裁决。
+        if (my >= formY && my < formY + viewH) {
+            return ui.mouseClicked(mx, my, button);
+        }
+        return false;
     }
 
     public boolean mouseScrolled(double mx, double my, double delta) {
-        return ui.mouseScrolled(mx, my, delta);
+        if (ui.mouseScrolled(mx, my, delta)) return true;   // 下拉弹层滚动优先
+        if (maxScroll() > 0 && my >= formY && my < formY + viewH) {
+            scrollY = Math.max(0, Math.min(maxScroll(), scrollY - (int) (delta * 14)));
+            reposition();
+            return true;
+        }
+        return false;
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
-        return ui.keyPressed(keyCode, modifiers);
+        return ui.keyPressed(keyCode, modifiers) || fixedUi.keyPressed(keyCode, modifiers);
     }
 
     public boolean charTyped(char ch) {
-        return ui.charTyped(ch);
+        return ui.charTyped(ch) || fixedUi.charTyped(ch);
     }
 
     public boolean hasOverlay() {
-        return ui.hasOverlay();
+        return ui.hasOverlay() || fixedUi.hasOverlay();
     }
 
     // ---- 内部 ----
