@@ -71,7 +71,10 @@ public final class Dropdown extends Widget implements UiRoot.Overlay {
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         boolean hovered = enabled && contains(mouseX, mouseY);
-        s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, hovered || open ? c.hover() : c.inputBg());
+        // 与输入框同一卡壳形制;展开时描边亮 accent(=输入框聚焦态的对应物)。
+        NumenStyle.fieldCard(s, x, y, w, h,
+                hovered || open ? c.hover() : c.inputBg(),
+                open ? c.accent() : c.inputBorder());
         if (!compact) {
             s.drawText(selectedItem(), x + 5, y + (h - s.lineHeight()) / 2 + 1,
                     enabled ? c.textPrimary() : c.textMuted(), false);

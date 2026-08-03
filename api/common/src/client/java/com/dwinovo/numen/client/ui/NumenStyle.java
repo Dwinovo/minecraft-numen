@@ -38,6 +38,13 @@ public final class NumenStyle {
     /** 下拉弹层行数上限(视口再小也另有保底)。 */
     public static final int POPUP_MAX_ROWS = 8;
 
+    /** 输入类控件(输入框/下拉收起态)的统一卡壳:圆角描边 + 内衬底。
+     *  全部输入控件走同一形制,聚焦/错误只换描边色——框样式的单一真源。 */
+    public static void fieldCard(IDrawSurface s, int x, int y, int w, int h, int fill, int border) {
+        s.fillRoundRect(x, y, w, h, RADIUS_CONTROL, border);
+        s.fillRoundRect(x + 1, y + 1, w - 2, h - 2, RADIUS_CONTROL - 1, fill);
+    }
+
     // ---- 效果 ----
     /** 悬停提亮:各通道向 255 走的百分比。 */
     private static final int HOVER_BRIGHTEN_PCT = 15;

@@ -65,9 +65,9 @@ public final class TextField extends Widget {
 
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        s.fillRect(x, y, w, h, c.inputBg());
+        // 统一卡壳:圆角描边+内衬底;聚焦/错误只换描边色(STT 参考样式定标)。
         int border = error != null ? c.danger() : isFocused() ? c.accent() : c.inputBorder();
-        s.fillRect(x, y + h - 1, w, error != null ? 2 : 1, border);
+        NumenStyle.fieldCard(s, x, y, w, h, c.inputBg(), border);
         if (error != null) {
             // 错误文案画在标签行右侧(字段正上方)——错误出现在错误发生的地方。
             String msg = clipToWidth(s, error, w * 2 / 3);
