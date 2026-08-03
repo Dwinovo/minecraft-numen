@@ -19,12 +19,14 @@ public final class NumenStyle {
     public static final int RADIUS_CONTROL = 3;
     /** 徽章/滚动拇指等微件。 */
     public static final int RADIUS_SMALL = 2;
+    /** 输入类控件卡壳(STT 字段定标:比按钮更圆润的 5px)。 */
+    public static final int RADIUS_FIELD = 5;
 
     // ---- 尺寸与间距 ----
-    /** 标准控件高(输入框/下拉/按钮的紧凑档)。 */
-    public static final int CONTROL_H = 13;
+    /** 标准控件高(输入框/下拉——STT 字段同高)。 */
+    public static final int CONTROL_H = 18;
     /** 表单行距(标签+控件一组的纵向步进)。 */
-    public static final int ROW_PITCH = 18;
+    public static final int ROW_PITCH = 23;
     /** 标签到其控件的间距。 */
     public static final int LABEL_PITCH = 10;
     /** 容器内边距。 */
@@ -41,8 +43,8 @@ public final class NumenStyle {
     /** 输入类控件(输入框/下拉收起态)的统一卡壳:圆角描边 + 内衬底。
      *  全部输入控件走同一形制,聚焦/错误只换描边色——框样式的单一真源。 */
     public static void fieldCard(IDrawSurface s, int x, int y, int w, int h, int fill, int border) {
-        s.fillRoundRect(x, y, w, h, RADIUS_CONTROL, border);
-        s.fillRoundRect(x + 1, y + 1, w - 2, h - 2, RADIUS_CONTROL - 1, fill);
+        s.fillRoundRect(x, y, w, h, RADIUS_FIELD, border);
+        s.fillRoundRect(x + 1, y + 1, w - 2, h - 2, RADIUS_FIELD - 1, fill);
     }
 
     // ---- 效果 ----

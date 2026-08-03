@@ -15,6 +15,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * 皮肤的编辑表单——NumenUI 版的瓤:名称 + 手臂模型下拉 + 「选择文件…」
@@ -38,7 +39,8 @@ public final class SkinFormPanel {
             List.of(SkinLibrary.VARIANT_CLASSIC, SkinLibrary.VARIANT_SLIM);
 
     private final UiRoot ui = new UiRoot();
-    private final Runnable onSaved;
+    /** 保存完成回调:参数=经 MineSkin 签名的名称(仅改名未重签时为 null)。 */
+    private final Consumer<String> onSaved;
     private final Runnable onCancel;
     private final Runnable onPickFile;
 
@@ -51,7 +53,7 @@ public final class SkinFormPanel {
     private boolean signing;
     private int gen;
 
-    public SkinFormPanel(Runnable onSaved, Runnable onCancel, Runnable onPickFile) {
+    public SkinFormPanel(Consumer<String> onSaved, Runnable onCancel, Runnable onPickFile) {
         this.onSaved = onSaved;
         this.onCancel = onCancel;
         this.onPickFile = onPickFile;
@@ -210,7 +212,7 @@ public final class SkinFormPanel {
         String id = old != null ? old.id() : lib.freshId();
         if (!needSign) {
             lib.put(new SkinLibrary.Entry(id, name, draft.variant, old.value(), old.signature()), null);
-            onSaved.run();
+            onSaved.accept(null);   // 仅改名:没签名,不报"签名成功"
             return;
         }
         signing = true;
@@ -241,7 +243,7 @@ public final class SkinFormPanel {
                     SkinLibrary.instance().put(
                             new SkinLibrary.Entry(id, name, fVariant, signed.value(), signed.signature()),
                             fPng);
-                    onSaved.run();
+                    onSaved.accept(name);
                 }));
     }
 

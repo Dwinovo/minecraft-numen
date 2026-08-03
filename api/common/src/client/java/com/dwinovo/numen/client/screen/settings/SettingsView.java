@@ -1042,10 +1042,14 @@ public final class SettingsView {
     private SkinFormPanel skinForm() {
         if (skinForm == null) {
             skinForm = new SkinFormPanel(
-                    () -> {   // 保存(含签名)完成
+                    signedName -> {   // 保存完成;真签过名才在列表页报回执
                         addingSkin = false;
                         skinDraft = new SkinFormPanel.Draft();
                         host.rebuild();
+                        if (signedName != null) {
+                            skinListPanel().noticeSuccess(Component.translatable(
+                                    ModLanguageData.Keys.SKIN_SIGN_OK, signedName).getString());
+                        }
                     },
                     () -> {   // ✕ 关闭
                         addingSkin = false;

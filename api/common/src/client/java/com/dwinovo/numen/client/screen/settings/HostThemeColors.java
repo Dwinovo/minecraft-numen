@@ -37,7 +37,7 @@ public final class HostThemeColors {
                 th.cardFill(), th.surfaceBorder(),     // sectionBg / divider
                 th.text(), th.textDim(), th.faint(),   // 文字三级(跟主题——黑字是 LIGHT 主题的事)
                 th.cta(), th.fail(), th.ok(), th.run(),   // accent/danger/success/warning(主题琥珀)
-                th.field(), th.border(),               // 输入底/描边
+                th.aiFill(), th.aiBorder(),            // 输入底/描边(STT 字段=全线基准:奶油底浅灰边)
                 th.chipFill(),                         // hover(半透明胶囊)
                 (th.cta() & 0xFFFFFF) | 0x30000000,    // selected:金色淡染,与宿主选中语言一致
                 th.field(), th.text(),                 // badge 底/字

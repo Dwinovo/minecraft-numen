@@ -94,6 +94,7 @@ public final class ModLanguageData {
         public static final String SKIN_KEEP_OLD        = "numen.skin.keep_old";
         public static final String SKIN_SIGNING         = "numen.skin.signing";
         public static final String SKIN_SIGN_FAIL       = "numen.skin.sign_fail";
+        public static final String SKIN_SIGN_OK         = "numen.skin.sign_ok";
         public static final String SKIN_WARN_NAME       = "numen.skin.warn_name";
         public static final String SKIN_WARN_IMAGE      = "numen.skin.warn_image";
         public static final String SKIN_WARN_SIZE       = "numen.skin.warn_size";
@@ -361,6 +362,9 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_KEEP_OLD,        "Keeping the current image (drag a new png to replace)");
         adder.add(Keys.SKIN_SIGNING,         "Signing via MineSkin… (a few seconds)");
         adder.add(Keys.SKIN_SIGN_FAIL,       "Signing failed: %s");
+        adder.add(Keys.SKIN_SIGN_OK,         "\"%s\" signed");
+        adder.add("numen.gui.list.deleted",  "Deleted \"%s\"");
+        adder.add("numen.gui.list.cloned",   "Cloned as an editable copy");
         adder.add(Keys.SKIN_WARN_NAME,       "Name is required");
         adder.add(Keys.SKIN_WARN_IMAGE,      "Drag a skin png into the window first");
         adder.add(Keys.SKIN_WARN_SIZE,       "Skin must be 64x64 (or legacy 64x32), got %s");
@@ -606,6 +610,9 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_KEEP_OLD,        "沿用当前图片(拖入新 png 可替换)");
         adder.add(Keys.SKIN_SIGNING,         "MineSkin 签名中…(需要几秒)");
         adder.add(Keys.SKIN_SIGN_FAIL,       "签名失败: %s");
+        adder.add(Keys.SKIN_SIGN_OK,         "「%s」签名成功");
+        adder.add("numen.gui.list.deleted",  "已删除「%s」");
+        adder.add("numen.gui.list.cloned",   "已克隆为可编辑副本");
         adder.add(Keys.SKIN_WARN_NAME,       "名称必填");
         adder.add(Keys.SKIN_WARN_IMAGE,      "先把皮肤 png 拖进游戏窗口");
         adder.add(Keys.SKIN_WARN_SIZE,       "皮肤需为 64x64(或旧版 64x32),拖入的是 %s");

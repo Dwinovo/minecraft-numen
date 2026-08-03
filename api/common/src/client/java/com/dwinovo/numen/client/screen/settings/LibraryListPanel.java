@@ -43,6 +43,10 @@ public final class LibraryListPanel<T> {
 
     private final UiRoot ui = new UiRoot();
     private final ConfirmDialog confirm = new ConfirmDialog();
+    /** 列表页轻回执(四层提示制式第③层):删除/克隆/签名成功一句话,自动淡出。
+     *  跨 build 持久(host.rebuild 不吞在途消息)。 */
+    private final com.dwinovo.numen.client.ui.widget.InlineAlert notice =
+            new com.dwinovo.numen.client.ui.widget.InlineAlert();
     private final String titleKey;
     private final String addKey;
     private final String emptyKey;
@@ -159,8 +163,14 @@ public final class LibraryListPanel<T> {
         list = ui.add(new ListView<T>(entries, ROW_H, this::renderRow, null)
                 .rowClick(this::rowClicked));
         list.setBounds(x, y + 16, w, h - 16);
+        ui.add(notice).setBounds(x, y + 18, w, 24);   // 列表顶部悬浮,永不参与命中
         refresh();
         list.scrollBy(keepScroll);   // 重建(换主题/改窗口)不丢滚动位
+    }
+
+    /** 列表页操作回执:成功绿胶囊 2.5s 自动淡出(宿主的异步动作完成后也可投递)。 */
+    public void noticeSuccess(String message) {
+        notice.show(com.dwinovo.numen.client.ui.widget.InlineAlert.Severity.SUCCESS, message, 2_500);
     }
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mx, int my, long nowMs) {
@@ -234,6 +244,7 @@ public final class LibraryListPanel<T> {
             if (xInRow >= listW - DEL_ZONE && onClone != null) {
                 onClone.accept(e);
                 refresh();
+                noticeSuccess(t("numen.gui.list.cloned"));
             }
             return true;
         }
@@ -249,8 +260,11 @@ public final class LibraryListPanel<T> {
         confirm.open(ui, dimX, dimY, dimW, dimH, deleteMessage.apply(e),
                 t("numen.gui.settings.cancel"), t("numen.dismiss.delete"),
                 () -> {
+                    String name = rowOf.apply(e).name();
                     onDeleteConfirmed.accept(e);
                     refresh();
+                    noticeSuccess(net.minecraft.network.chat.Component
+                            .translatable("numen.gui.list.deleted", name).getString());
                 });
     }
 
