@@ -1,7 +1,7 @@
 package com.dwinovo.numen.client.data;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.event.InboxPolicy;
+import com.dwinovo.numen.event.EventQueue;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -27,7 +27,7 @@ public final class ClientPrefs {
 
     private static String theme = "light";
     private static boolean talkHint = true;
-    private static int initiative = InboxPolicy.DEFAULT_LEVEL;
+    private static int initiative = EventQueue.DEFAULT_LEVEL;
 
     private ClientPrefs() {}
 
@@ -41,7 +41,7 @@ public final class ClientPrefs {
             JsonObject o = JsonParser.parseString(Files.readString(file)).getAsJsonObject();
             if (o.has("theme")) theme = o.get("theme").getAsString();
             if (o.has("talkHint")) talkHint = o.get("talkHint").getAsBoolean();
-            if (o.has("initiative")) initiative = InboxPolicy.clampLevel(o.get("initiative").getAsInt());
+            if (o.has("initiative")) initiative = EventQueue.clampLevel(o.get("initiative").getAsInt());
         } catch (Exception e) {
             Constants.LOG.warn("[numen-prefs] ui.json 读不了,用默认值", e);
         }
@@ -68,14 +68,14 @@ public final class ClientPrefs {
 
     /**
      * 主动性档位 1~10:她多久把攒下的世界变化说一次。
-     * 小 = 知道得及时、token 烧得快;大 = 知道得晚、省。见 {@link InboxPolicy}。
+     * 小 = 知道得及时、token 烧得快;大 = 知道得晚、省。见 {@link EventQueue}。
      */
     public static int initiativeLevel() {
         return initiative;
     }
 
     public static void setInitiativeLevel(int level) {
-        initiative = InboxPolicy.clampLevel(level);
+        initiative = EventQueue.clampLevel(level);
         persist();
     }
 

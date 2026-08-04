@@ -102,6 +102,6 @@ final class CompanionBrain {
     void dropActiveNoResult(NumenPlayer companion) {
         // Death ends the task session — the task-scoped hand pin goes with it.
         TaskSessionHooks.fireSessionEnd(companion);
-        llm.dropActiveNoResult();
+        llm.dropActiveNoResult(companion);
     }
 }

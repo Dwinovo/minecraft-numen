@@ -40,6 +40,17 @@ public final class NumenPlayer extends ServerPlayer {
     /** Latched once we've handled this body's death, so the post-death routine runs exactly once. */
     private boolean deathHandled;
 
+    /**
+     * 死因,在 {@link #die} 里趁早抄下来。
+     *
+     * <p>不能等到 {@link #tick} 里再问战斗记录:原版 {@code ServerPlayer.die()} 的<b>最后一行</b>
+     * 是 {@code getCombatTracker().recheckStatus()},玩家已死就把记录清空。我们的死亡检测是
+     * tick 轮询,跑到的时候记录早没了,{@code getDeathMessage()} 只能返回兜底的
+     * {@code death.attack.generic}——"她死了",没有凶手。于是原版聊天里广播的是
+     * "被僵尸杀死了",她自己却只知道"我死了"。
+     */
+    private String deathMessage;
+
     public NumenPlayer(MinecraftServer server, ServerLevel level, GameProfile profile,
                         ClientInformation clientInformation) {
         super(server, level, profile, clientInformation);
@@ -126,6 +137,21 @@ public final class NumenPlayer extends ServerPlayer {
      * connection position and let chunk loading follow the body so it never
      * walks out of its loaded area.
      */
+    /**
+     * 死因在这里抄下来——原版广播死亡消息也是在这一刻(清空战斗记录之前)。
+     * 抄的是同一句话,所以她知道的和聊天里广播的一字不差。
+     */
+    @Override
+    public void die(net.minecraft.world.damagesource.DamageSource cause) {
+        this.deathMessage = getCombatTracker().getDeathMessage().getString();
+        super.die(cause);
+    }
+
+    /** 上一次的死因(原版死亡消息原文);还没死过则 null。 */
+    public String deathMessage() {
+        return deathMessage;
+    }
+
     @Override
     public void tick() {
         // A fake player isn't auto-removed on death (no client to send a respawn packet), so it would

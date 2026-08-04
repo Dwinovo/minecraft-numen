@@ -8,7 +8,7 @@ import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.ListView;
 import com.dwinovo.numen.client.ui.widget.Slider;
 import com.dwinovo.numen.client.ui.widget.Toggle;
-import com.dwinovo.numen.event.InboxPolicy;
+import com.dwinovo.numen.event.EventQueue;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
@@ -58,7 +58,7 @@ public final class ThemePanel {
         Label initTitle = ui.add(new Label("主动性", Label.Role.SECONDARY));
         initTitle.setBounds(x, sy + 1, Minecraft.getInstance().font.width("主动性"), 9);
         Slider initiative = ui.add(new Slider(
-                InboxPolicy.MIN_LEVEL, InboxPolicy.MAX_LEVEL, 1,
+                EventQueue.MIN_LEVEL, EventQueue.MAX_LEVEL, 1,
                 com.dwinovo.numen.client.data.ClientPrefs.initiativeLevel(),
                 v -> com.dwinovo.numen.client.data.ClientPrefs.setInitiativeLevel((int) v),
                 v -> String.valueOf((int) v)));

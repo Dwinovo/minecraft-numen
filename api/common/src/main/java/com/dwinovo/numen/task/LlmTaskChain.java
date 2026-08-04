@@ -172,10 +172,21 @@ public final class LlmTaskChain implements TaskChain {
     // ---- lifecycle finalizers (called by CompanionTickDispatcher via CompanionLifecycle) ----
 
     /**
-     * Death: drop the running task WITHOUT a result — the client's death payload
-     * already resolved the call.
+     * 死亡:丢掉在跑的任务,不发工具结果——那条 tool_call 客户端已经用死因结算过了,
+     * 这里再发一个是重复。
+     *
+     * <p>但<b>异步任务要补一条收尾事件</b>:派发时的回执写着"完成会自动收到
+     * task_finished 事件,不要轮询"——那是系统给出的承诺。死亡把任务丢掉却不发收尾,
+     * 等于毁约:她被明确告知别轮询,然后那个事件永远不来。
+     *
+     * <p>异步之后"死亡时零个未结算 tool_call"是<b>常态不是边缘</b>(回执在派发那一刻
+     * 就返回了),所以这条路比看上去常走得多。
      */
-    void dropActiveNoResult() {
+    void dropActiveNoResult(NumenPlayer player) {
+        if (record != null && record.isAsync() && !record.isExternalCall()) {
+            com.dwinovo.numen.event.NumenEvents.taskFinished(player, record.publicId(),
+                    record.getToolName(), "interrupted", "任务因她死亡而中断");
+        }
         task = null;
         record = null;
     }

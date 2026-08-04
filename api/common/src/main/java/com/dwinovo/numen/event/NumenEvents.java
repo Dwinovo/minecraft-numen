@@ -2,6 +2,7 @@ package com.dwinovo.numen.event;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.EventOutbox;
+import com.dwinovo.numen.event.EventTypes;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.platform.Services;
@@ -95,19 +96,22 @@ public final class NumenEvents {
             return;
         }
         String xml = compose(server, kind, attrs, text);
+        long now = System.currentTimeMillis();
         ServerPlayer owner = companion.resolveOwnerPlayer();
         if (owner != null) {
-            Services.NETWORK.sendToPlayer(owner, new NumenEventPayload(companion.getUUID(), xml, urgent));
+            Services.NETWORK.sendToPlayer(owner, new NumenEventPayload(
+                    companion.getUUID(), EventTypes.EVENT, xml, now, urgent));
             Constants.LOG.info("[numen-event] {} kind={}{} → 客户端", companion.getUUID(),
                     kind.kind, urgent ? " URGENT" : "");
             return;
         }
         // 主人不在:留着。他下线期间她照样在干活,回来该知道发生了什么——
         // 从前这里是直接丢,于是"帮你挖了一晚上矿"永远没人知道。
-        EventOutbox.get(server).put(companion.getUUID(), xml, urgent);
-        Constants.LOG.info("[numen-event] {} kind={}{} → 出箱(主人离线,已攒 {} 条)",
+        EventOutbox outbox = EventOutbox.get(server);
+        outbox.put(companion.getUUID(), EventTypes.EVENT, xml, now, urgent);
+        Constants.LOG.info("[numen-event] {} kind={}{} → 暂存(主人离线,已攒 {} 条)",
                 companion.getUUID(), kind.kind, urgent ? " URGENT" : "",
-                EventOutbox.get(server).peek(companion.getUUID()).pending().size());
+                outbox.peek(companion.getUUID()).size());
     }
 
     /** 组装 XML,盖上游戏内时间戳。 */

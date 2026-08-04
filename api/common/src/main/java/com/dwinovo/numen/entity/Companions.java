@@ -133,24 +133,19 @@ public final class Companions {
      */
     private static void replayOutbox(MinecraftServer server, UUID ownerUuid, ServerPlayer owner) {
         EventOutbox outbox = EventOutbox.get(server);
+        long now = System.currentTimeMillis();
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
-            EventOutbox.Box box = outbox.take(e.getKey());
-            if (box.pending().isEmpty() && box.dropped() <= 0) {
+            List<com.dwinovo.numen.event.EventQueue.Entry> pending = outbox.take(e.getKey(), now);
+            if (pending.isEmpty()) {
                 continue;
             }
-            for (EventOutbox.Pending p : box.pending()) {
+            for (com.dwinovo.numen.event.EventQueue.Entry p : pending) {
                 Services.NETWORK.sendToPlayer(owner,
-                        new com.dwinovo.numen.network.payload.NumenEventPayload(e.getKey(), p.xml(), p.urgent()));
+                        new com.dwinovo.numen.network.payload.NumenEventPayload(
+                                e.getKey(), p.type(), p.text(), p.ts(), p.urgent()));
             }
-            com.dwinovo.numen.Constants.LOG.info(
-                    "[numen-outbox] {} 补发 {} 条离线事件(另有 {} 条因攒满被丢弃)",
-                    e.getKey(), box.pending().size(), box.dropped());
-            if (box.dropped() > 0) {
-                Services.NETWORK.sendToPlayer(owner,
-                        new com.dwinovo.numen.network.payload.NumenEventPayload(e.getKey(),
-                                "<event kind=\"body_log\">你不在的时候还发生了大约 " + box.dropped()
-                                        + " 件事,没能记下来</event>", false));
-            }
+            com.dwinovo.numen.Constants.LOG.info("[numen-outbox] {} 补发 {} 条离线输入",
+                    e.getKey(), pending.size());
         }
     }
 
@@ -166,13 +161,24 @@ public final class Companions {
         MinecraftServer server = body.level().getServer();
         if (server == null) return;
         UUID uuid = body.getUUID();
-        String cause = body.getCombatTracker().getDeathMessage().getString();
+        // 死因取 die() 里抄下的那一句:此刻再问战斗记录已经被 vanilla 清空了,
+        // 只会拿到"她死了"这种没有凶手的兜底文案(见 NumenPlayer#deathMessage)。
+        String cause = body.deathMessage();
+        if (cause == null || cause.isBlank()) {
+            cause = body.getCombatTracker().getDeathMessage().getString();
+        }
         if (cause == null || cause.isBlank()) cause = "未知原因";
-        CompanionLifecycle.fireDeath(body);   // no result shipped — the death payload drives the client
+        // 先把死亡消息发出去,再触发生命周期钩子——<b>顺序要紧</b>:死亡消息一到,
+        // 客户端就把输入队列锁上;此后钩子里产生的收尾事件(异步任务的
+        // task_finished status="interrupted")落进的是一个锁着的队列,安静躺到复活。
+        //
+        // 反过来的话,那条 urgent 收尾事件会在锁上之前到达、当场开一轮,而紧接着的
+        // 死亡消息又把那一轮整个作废——白烧一次请求,还多一条没人看的对话。
         ServerPlayer owner = body.resolveOwnerPlayer();
         if (owner != null) {   // immediate, same-session
             Services.NETWORK.sendToPlayer(owner, new NumenDeathPayload(uuid, cause));
         }
+        CompanionLifecycle.fireDeath(body);   // 不发工具结果:那条 tool_call 已由死因结算
         // Persist the death (cause + game-time) in the world-saved registry so it survives a logout during
         // the respawn window — without this, a relog lost the pending state and the body silently respawned
         // "alive" with an empty inventory and no idea it had died.

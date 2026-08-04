@@ -3,7 +3,9 @@ package com.dwinovo.numen.client.agent;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.agent.llm.ConvoLog;
-import com.dwinovo.numen.event.InboxPolicy;
+import com.dwinovo.numen.event.EventQueue;
+import com.dwinovo.numen.event.EventTypes;
+import com.dwinovo.numen.event.JsonlJournal;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
@@ -132,9 +134,13 @@ public final class EntityAgentLoop {
      * 底层原因——{@code assistant(tool_calls)} 后面必须直接跟 {@code tool}
      * 结果,user 消息不能插队,所以输入一律进箱,在 {@link #drainInbox} 的
      * 协议安全点一次倒空。三态路由(什么输入什么状态下配开轮)在
-     * {@link #pushEvent};条目、落盘、年龄标注在 {@link Inbox}。
+     * {@link #pushEvent};条目、落盘、年龄标注、排空规则全在 {@link EventQueue}。
+     *
+     * <p>什么时候该倒是<b>队列自己的规则</b>(急件 / 攒够条数 / 攒够时长 / 锁着就等),
+     * 它不认识"死亡""外接大脑"这些概念——那些只是拿了 {@link QueueLock} 里某把锁的
+     * 上层。这里只负责在状态变化时上锁松手。
      */
-    private Inbox inbox;
+    private EventQueue queue;
     /** 后台异步任务记账(派发回执置位,对上 id 的 task_finished 清零);null = 身体空闲。
      *  客户端自记账,不走新网络包:回执与事件本来就都经过这里。 */
     private CurrentTask currentTask;
@@ -236,7 +242,7 @@ public final class EntityAgentLoop {
             display.add(msg);
         });
         this.workBlocks = WorkBlockMemory.forEntity(entityUuid);
-        this.inbox = new Inbox(entityUuid);
+        this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
@@ -292,6 +298,14 @@ public final class EntityAgentLoop {
         tokens.load();
         log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
         personaId = CompanionHome.binding(entityUuid).personaId();
+        // 锁不落盘,恢复时按状态重新上:她死着的时候主人退出游戏,重进后 loop 是全新的,
+        // 而队列里可能躺着急件——不补这一下她会在还没复活的时候就开口。
+        // 真源是名册说她死没死(状态),不是"我收到过死亡消息"(事件)。
+        if (NumenRoster.instance().isDead(entityUuid)) {
+            dead = true;
+            queue.lock(QueueLock.DEATH);
+            Constants.LOG.info("[numen-entity#{}] 恢复时她还死着 — 队列上锁", entityUuid);
+        }
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
         convo.preload(history);
@@ -339,7 +353,7 @@ public final class EntityAgentLoop {
     /** Snapshot of prompts (GUI or {@code NumenGateway}) still waiting for the
      *  next protocol-valid splice point — the GUI renders these as pending. */
     public List<String> queuedPrompts() {
-        return inbox.snapshot();
+        return queue.chatPreview();
     }
 
     /**
@@ -363,7 +377,9 @@ public final class EntityAgentLoop {
         boolean deferred = awaitingLlmResponse || dispatcher.busy();
         // Wrap the owner's words in <query> so the model can always tell real user input apart from
         // anything else numen injects into the same user turn (events, and future world-state/reminders).
-        inbox.pushPrompt("<query>" + text + "</query>");
+        // 主人的话恒为急件:人说话了就该有回应。队列不区分类型,只看这个标记。
+        queue.push(EventTypes.QUERY, "<query>" + text + "</query>",
+                System.currentTimeMillis(), true);
         Constants.LOG.info("[numen-entity#{}] user prompt ({} chars){}{}: {}",
                 entityUuid, text.length(),
                 wasAborted ? " — reset previous abort" : "",
@@ -376,7 +392,13 @@ public final class EntityAgentLoop {
     public void clientTick() {
         dispatcher.tick();
         presenter.tick();
-        // 攒够时长也要开口:光靠"事件到达"触发的话,最后一条之后就再没人问了
+        // 外接大脑那把锁按状态同步,不靠"模式切换时通知":漏掉一次通知会把队列永久锁死。
+        if (McpMode.instance().enabled()) {
+            queue.lock(QueueLock.MCP_MODE);
+        } else {
+            queue.unlock(QueueLock.MCP_MODE);
+        }
+        // 攒够时长也要开口:光靠"输入到达"触发的话,最后一条之后就再没人问了
         if (!awaitingLlmResponse && !dispatcher.busy()) {
             maybeDrain();
         }
@@ -450,7 +472,7 @@ public final class EntityAgentLoop {
 
     /** Owner prompts are queued, waiting to flush into the conversation. */
     public boolean hasQueuedPrompts() {
-        return !inbox.isEmpty();
+        return !queue.isEmpty();
     }
 
     /** There is something an interrupt would act on — drives the Stop button's enabled state. */
@@ -525,15 +547,14 @@ public final class EntityAgentLoop {
             convo.resetTurnCount();
             turnPause = AgentTurnPause.OWNER_INTERRUPT;
             Constants.LOG.info("[numen-entity#{}] interrupted by owner (awaitingLlm={}, backgroundTask={}, cancelledTools={}, queued={})",
-                    entityUuid, wasAwaitingLlm, wasBackgroundTask, cancelled.size(), inbox.promptCount());
-        } else if (inbox.promptCount() > 0) {
-            // Priority 2: idle — drop the held PROMPT bucket only. Inboxed events are
-            // facts, not superseded instructions: they stay and ride the next turn
-            // (a death narrative wiped here left the model answering "啥情况" without
-            // knowing it had died — the exact hole this split closes).
-            int dropped = inbox.clearPrompts();
-            Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued prompt(s) ({} event(s) kept)",
-                    entityUuid, dropped, inbox.eventCount());
+                    entityUuid, wasAwaitingLlm, wasBackgroundTask, cancelled.size(),
+                    queue.count(EventTypes.QUERY));
+        } else if (queue.count(EventTypes.QUERY) > 0) {
+            // 空闲时打断:清掉被取代的指令,事实留着。清哪些不在这里判断——
+            // 由类型表的 clearedByInterrupt 决定,加一种新类型不用回来改这儿。
+            int dropped = queue.clearInterrupted();
+            Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued prompt(s) ({} left)",
+                    entityUuid, dropped, queue.size());
         }
     }
 
@@ -595,7 +616,9 @@ public final class EntityAgentLoop {
         // 箱子一样不清:每条都盖着时间戳,模型自己看得出哪些是死之前的。
         // 我们替它判断"哪些信息过期了",反而会删掉有用的叙事("我死前刚吃了东西")。
         dead = true;
-        Constants.LOG.info("[numen-entity#{}] body died ({}) — loop frozen ({} call(s) in flight)",
+        // 上锁而不是在排空路径上加一个 if:队列只知道"有人锁着",不知道那个人是死亡。
+        queue.lock(QueueLock.DEATH);
+        Constants.LOG.info("[numen-entity#{}] body died ({}) — 队列上锁 ({} call(s) in flight)",
                 entityUuid, cause, deathInterruptedCalls.size());
     }
 
@@ -626,25 +649,15 @@ public final class EntityAgentLoop {
         deathCause = null;
         currentTask = null;   // 死亡掉了后台任务(无收尾事件),记账一并清零
         Constants.LOG.info("[numen-entity#{}] respawned ({}) — loop thawed", entityUuid, cause);
-        // The death narrative is ALWAYS ambient — never a wake (mind-model constitution §4: 死亡叙事
-        // 无特权). Timing of who learns what, in order:
-        //   1. a mid-task death already reaches the model through D1: the interrupted tool calls were
-        //      resolved above with fail("任务因你死亡而中断"), so the suspended turn itself carries the
-        //      death the moment it continues;
-        //   2. this <event> is buffered BEFORE the resume below, so it splices into that same resumed
-        //      request as the ambient rider — the turn right after the death, no extra LLM call;
-        //   3. with no suspended turn (died idle, or a fresh loop after relog) it simply waits for the
-        //      next owner input. The OWNER's awareness is vanilla's death broadcast, not the model's job.
-        pushEvent("<event kind=\"death\">你刚才死了(" + cause
-                + "),物品掉落在死亡地点,手头的任务中断了;现已在主人身边复活。先看看状况,继续或重新规划。</event>", false);
-        // D1 resumes the suspended turn: the death-failure results above are exactly the tool results
-        // the in-flight turn was waiting on — continuing it is turn completion, not a wake. (Before the
-        // downgrade this resume rode the urgent flag; now it is explicit.)
-        // 有被挂起的回合就续上;没有但主人在死亡期间说了话,也要开轮——⌛ 气泡挂着
-        // 不动同样是一种"看起来坏了"。纯空闲死亡(只有死亡叙事)才躺着搭下次的车。
-        if (hadSuspendedTurn || inbox.promptCount() > 0) {
-            tryStartTurn();
-        }
+        // 死亡是急件——她关于自己处境的认知几乎每一条都作废了:物品掉在死亡地点、
+        // 位置从矿洞变成了主人身边、手上的任务没了、血量装备全变了。这不分"任务中死"
+        // 还是"空闲死",所以这里没有任何判据。
+        pushEvent(EventTypes.EVENT, "<event kind=\"death\">你刚才死了(" + cause
+                + "),物品掉落在死亡地点,手头的任务中断了;现已在主人身边复活。先看看状况,继续或重新规划。</event>",
+                System.currentTimeMillis(), true);
+        // 松手就完了:队列自己会判断该排空,连同死亡期间攒下的一切(工具失败结果之外
+        // 的事件、主人说的话)一起走。
+        queue.unlock(QueueLock.DEATH);
     }
 
     /** 派发回执识别:异步工具的受理结果带 data.async=true 与 data.task_id。 */
@@ -664,70 +677,55 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * 收件箱唯一入口(事件侧)。事件<b>一律进箱</b>,什么时候倒出去由
-     * {@link InboxPolicy} 说了算——有 urgent、攒够档位阈值、或者躺太久了。
+     * 收一条进队列的输入(事件侧)。什么时候倒出去<b>由队列自己说了算</b>——
+     * 急件、攒够条数、攒够时长,锁着就等。这里不做任何"这条该不该立刻开轮"的判断:
+     * 那种判据正是会漏的东西(它漏掉过"死亡打断了后台任务")。
      *
-     * <p>回合进行中的事件不必特殊处理:它会在工具批结算的边界自然一次倒箱,
-     * 那是协议决定的(assistant 的 tool_calls 中间插 user 消息会被 API 直接 400)。
-     *
-     * <p>死了也照收——每条都盖着游戏内时间戳,模型自己看得出哪些发生在死亡之前,
-     * 不需要我们替它清箱。
+     * <p>死着也照收:每条都盖着真实时间戳,复活后模型看得出哪些发生在死亡之前。
      */
-    public void pushEvent(String xml, boolean urgent) {
-        // 死了也照收:时间戳会说清它发生在死亡前后,复活时一并送出。
-        boolean wasTaskWindDown = currentTask != null
-                && xml.contains("kind=\"task_finished\"")
-                && xml.contains("id=\"" + currentTask.id() + "\"");
-        if (wasTaskWindDown) {
+    public void pushEvent(String type, String text, long ts, boolean urgent) {
+        // 后台任务收尾:对上 id 清记账
+        if (currentTask != null && text.contains("kind=\"task_finished\"")
+                && text.contains("id=\"" + currentTask.id() + "\"")) {
             currentTask = null;
         }
-        inbox.pushEvent(xml, urgent);
-        Constants.LOG.info("[numen-entity#{}] event inboxed{}: {}",
-                entityUuid, urgent ? " (urgent)" : "", truncate(xml, 120));
+        queue.push(type, text, ts > 0 ? ts : System.currentTimeMillis(), urgent);
+        Constants.LOG.info("[numen-entity#{}] queued {}{}: {}",
+                entityUuid, type, urgent ? " URGENT" : "", truncate(text, 120));
         if (urgent) {
             AgentTurnPause previousPause = turnPause;
             turnPause = turnPause.afterWakeEvent(true);
             if (previousPause != turnPause) {
                 // 上一轮的失败已经作废,这是新的一轮,重试预算跟着重置。
                 turnRetried = false;
-                Constants.LOG.info("[numen-entity#{}] urgent event resumed chain after recoverable LLM failure",
-                        entityUuid);
+                Constants.LOG.info("[numen-entity#{}] urgent 输入让链条从失败中恢复", entityUuid);
             }
         }
         maybeDrain();
     }
 
     /**
-     * 空闲时问一次:攒的事件够不够开一轮。规则在 {@link InboxPolicy}(纯 JVM,可单测)——
-     * 有 urgent、攒够档位阈值、或者躺太久了。
+     * 问队列一次:现在该不该主动开一轮。
      *
-     * <p>回合进行中不必问:事件会在工具批结算的边界自然一次倒箱,那是协议决定的。
-     * 也不再看"身体是不是在跑后台任务"——那条规则让她<b>忙的时候话最多、闲下来最沉默</b>,
-     * 正好和陪伴需要的相反。
+     * <p>"该排空"不等于"立刻发出"——协议不允许时(assistant 的 tool_calls 中间不能插
+     * user 消息)这一 tick 排不成,下一 tick 再问。{@code shouldDrain} 只读状态、
+     * 可以反复问,所以<b>不存在"错过的排空"</b>,也就不需要记住"我刚才想排空"。
      */
     private void maybeDrain() {
-        if (dead) {
+        int level = com.dwinovo.numen.client.data.ClientPrefs.initiativeLevel();
+        long now = System.currentTimeMillis();
+        if (!queue.shouldDrain(now, level)) {
             return;
         }
-        int level = initiativeLevel();
-        int queued = inbox.eventCount();
-        long age = inbox.oldestEventAgeMs();
-        boolean urgent = inbox.hasUrgent();
-        if (!InboxPolicy.shouldDrain(urgent, queued, age, level)) {
-            return;
-        }
-        Constants.LOG.info("[numen-inbox#{}] 主动开轮:{}(攒了 {} 条/阈值 {},最老 {}s/上限 {}s,档位 {})",
+        Constants.LOG.info("[numen-queue#{}] 主动开轮:{}(攒了 {} 条/阈值 {},最老 {}s/上限 {}s,档位 {})",
                 entityUuid,
-                urgent ? "有急事" : (queued >= InboxPolicy.threshold(level) ? "攒够了" : "攒久了"),
-                queued, InboxPolicy.threshold(level),
-                age / 1000L, InboxPolicy.maxWaitMs(level) / 1000L, level);
+                queue.hasUrgent() ? "有急件"
+                        : (queue.size() >= EventQueue.thresholdOf(level) ? "攒够了" : "攒久了"),
+                queue.size(), EventQueue.thresholdOf(level),
+                queue.oldestAgeMs(now) / 1000L, EventQueue.maxWaitMsOf(level) / 1000L, level);
         tryStartTurn();
     }
 
-    /** 主人拉的主动性档位 1~10。 */
-    private static int initiativeLevel() {
-        return com.dwinovo.numen.client.data.ClientPrefs.initiativeLevel();
-    }
 
     /** 人设正文:库里现取(编辑立即生效);没绑或条目没了 → null,回落全局默认人格。 */
     private String personaText() {
@@ -827,7 +825,7 @@ public final class EntityAgentLoop {
      * messages that some backends reject.
      */
     private void drainInbox() {
-        if (inbox.isEmpty()) return;
+        if (queue.isEmpty()) return;
         List<String> parts = new ArrayList<>();
         // current_task is live runtime state. It is attached request-locally by
         // modelContextSnapshot(), never written into conversation history or JSONL.
@@ -839,7 +837,7 @@ public final class EntityAgentLoop {
         if (!knownBlocks.isEmpty()) {
             parts.add(knownBlocks);
         }
-        parts.addAll(inbox.drain());
+        parts.addAll(queue.drain(System.currentTimeMillis()));
         String merged = String.join("\n", parts);
         convo.addUser(merged);
         // A fresh owner directive starts a new tool-chain: restart the turn
@@ -848,19 +846,16 @@ public final class EntityAgentLoop {
     }
 
     private void tryStartTurn() {
-        if (dead) {
-            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: body dead", entityUuid);
+        // 队列锁着 = 现在不该对外说话。谁锁的、为什么锁,这里不关心也不需要知道:
+        // 死亡、外接大脑、以后任何暂停理由,都只是 QueueLock 里多一个持有者,
+        // 而不是这里多一个 if——这一轮清掉的三个特例都是那么长出来的。
+        if (queue.locked()) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: 队列锁着 {}",
+                    entityUuid, queue.lockHolders());
             return;
         }
         if (turnPause.isPaused()) {
             Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: pause={}", entityUuid, turnPause);
-            return;
-        }
-        // 「外接大脑」模式的总闸:模式开着,身体归外部 MCP 驱动者,内置大脑一轮都不开。
-        // 收件箱照收不误(事件不丢),模式关掉后主人下次说话就能带着这段空白期的见闻开轮。
-        // 聊天框禁用只是体验层——外部桥接送进来的消息只有这里拦得住。
-        if (McpMode.instance().enabled()) {
-            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: 外接大脑模式开启中", entityUuid);
             return;
         }
         if (awaitingLlmResponse) {
@@ -1187,7 +1182,7 @@ public final class EntityAgentLoop {
         com.dwinovo.numen.client.hud.NumenHudToasts.push(
                 com.dwinovo.numen.client.ui.NumenToasts.Severity.ERROR,
                 presenter.speakerName() + ": " + truncate(why, 90));
-        if (inbox.isEmpty()) {
+        if (queue.isEmpty()) {
             turnPause = AgentTurnPause.RECOVERABLE_FAILURE;
             return;
         }
@@ -1197,8 +1192,8 @@ public final class EntityAgentLoop {
         if (convo.lastMessage() instanceof ConvoState.Msg.User) {
             convo.addAssistant(new AssistantTurn("(连接中断)", List.of(), null));
         }
-        Constants.LOG.info("[numen-entity#{}] turn failed with {} inboxed item(s) — starting a fresh turn with them",
-                entityUuid, inbox.promptCount() + inbox.eventCount());
+        Constants.LOG.info("[numen-entity#{}] turn failed with {} queued item(s) — starting a fresh turn with them",
+                entityUuid, queue.size());
         tryStartTurn();
     }
 

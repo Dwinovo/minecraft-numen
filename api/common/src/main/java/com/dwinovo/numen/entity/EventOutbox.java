@@ -1,5 +1,6 @@
 package com.dwinovo.numen.entity;
 
+import com.dwinovo.numen.event.EventQueue;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.HolderLookup;
@@ -16,50 +17,35 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * 主人离线期间攒下的世界事件——跟着存档落盘,他登录时一次性补发。
+ * 主人离线期间攒下的输入——服务端这一侧的 {@link EventQueue},跟着存档落盘。
  *
  * <h2>为什么要有</h2>
- * 大脑跑在<b>主人的客户端</b>上,主人一下线,收件箱就不存在了。而她的身体还在
- * 服务器里继续干活:任务跑完、被怪打、跨了维度。从前这些一律直接丢——
- * {@code drainResults} 里那句 {@code if (owner == null) return} 是先把完成记录
- * 取出队列再扔掉,于是"我帮你把矿挖完了"这件最值得说的事,恰好最容易丢。
+ * 大脑跑在<b>主人的客户端</b>上,主人一下线,客户端那个队列就不存在了。而她的身体
+ * 还在服务器里干活:任务跑完、被怪打、跨了维度。从前这些一律直接丢——
+ * {@code drainResults} 里那句 {@code if (owner == null) return} 是先把完成记录取出
+ * 队列再扔掉,于是"我帮你把矿挖完了"这件最值得说的事,恰好最容易丢。
  *
- * <h2>上限</h2>
- * 每只同伴 {@value #MAX_PER_COMPANION} 条,满了丢最老的并记账。补发时会补一句
- * "期间还发生了 N 件事,没记下来"——<b>丢弃可以,无声消失不行</b>:主人离线一周
- * 回来看到三条事件,得知道那是全部还是残片。
- *
- * <p>落盘而不是只放内存:多人服务器重启是常事,纯内存的话最有价值的长时段叙事
- * 恰好最容易丢。
+ * <h2>跟客户端是同一个队列</h2>
+ * 同一个 {@link EventQueue} 类、同一张类型表、同一个 {@value EventQueue#DEFAULT_CAP}
+ * 上限、同样的"丢最老的并记账"。区别只在两处:落盘走存档而不是 JSONL(所以注入
+ * {@link EventQueue.Journal#NONE},整份状态交给 {@link SavedData});以及它不问
+ * {@code shouldDrain} —— 它的排空时机只有一个,主人回来了。
  *
  * <p>服务端专用。
  */
 public final class EventOutbox extends SavedData {
 
-    /** 每只同伴最多攒多少条。 */
-    public static final int MAX_PER_COMPANION = 50;
+    private static final Codec<EventQueue.Entry> ENTRY_CODEC = RecordCodecBuilder.create(i -> i.group(
+            Codec.STRING.fieldOf("type").forGetter(EventQueue.Entry::type),
+            Codec.STRING.fieldOf("text").forGetter(EventQueue.Entry::text),
+            Codec.LONG.optionalFieldOf("ts", 0L).forGetter(EventQueue.Entry::ts),
+            Codec.BOOL.optionalFieldOf("urgent", false).forGetter(EventQueue.Entry::urgent)
+    ).apply(i, EventQueue.Entry::new));
 
-    /** 一条攒着的事件。{@code urgent} 留着,因为补发时它仍然该立刻开一轮。 */
-    public record Pending(String xml, boolean urgent) {
-        static final Codec<Pending> CODEC = RecordCodecBuilder.create(i -> i.group(
-                Codec.STRING.fieldOf("xml").forGetter(Pending::xml),
-                Codec.BOOL.optionalFieldOf("urgent", false).forGetter(Pending::urgent)
-        ).apply(i, Pending::new));
-    }
-
-    /** 一只同伴的出箱:攒下的条目 + 因为满了被丢掉的条数。 */
-    public record Box(List<Pending> pending, int dropped) {
-        static final Box EMPTY = new Box(List.of(), 0);
-
-        static final Codec<Box> CODEC = RecordCodecBuilder.create(i -> i.group(
-                Pending.CODEC.listOf().fieldOf("pending").forGetter(Box::pending),
-                Codec.INT.optionalFieldOf("dropped", 0).forGetter(Box::dropped)
-        ).apply(i, Box::new));
-    }
-
-    private static final Codec<EventOutbox> CODEC = Codec.unboundedMap(UUIDUtil.STRING_CODEC, Box.CODEC)
-            .xmap(EventOutbox::new, d -> d.boxes)
-            .fieldOf("outboxes").codec();
+    private static final Codec<EventOutbox> CODEC =
+            Codec.unboundedMap(UUIDUtil.STRING_CODEC, ENTRY_CODEC.listOf())
+                    .xmap(EventOutbox::fromEntries, EventOutbox::toEntries)
+                    .fieldOf("outboxes").codec();
 
     private static final SavedData.Factory<EventOutbox> FACTORY = new SavedData.Factory<>(
             EventOutbox::new, EventOutbox::load,
@@ -77,52 +63,75 @@ public final class EventOutbox extends SavedData {
         return CODEC.parse(NbtOps.INSTANCE, tag).result().orElseGet(EventOutbox::new);
     }
 
-    private final Map<UUID, Box> boxes;
+    private final Map<UUID, EventQueue> queues;
 
     EventOutbox() {
-        this.boxes = new HashMap<>();
+        this.queues = new HashMap<>();
     }
 
-    private EventOutbox(Map<UUID, Box> boxes) {
-        this.boxes = new HashMap<>(boxes);
+    private static EventOutbox fromEntries(Map<UUID, List<EventQueue.Entry>> raw) {
+        EventOutbox out = new EventOutbox();
+        raw.forEach((uuid, list) -> {
+            EventQueue q = new EventQueue(EventQueue.Journal.NONE);
+            long now = 0L;   // ts 原样带在条目里,push 的 now 只在 ts<=0 时才有意义
+            for (EventQueue.Entry e : list) {
+                q.push(e.type(), e.text(), e.ts() > 0 ? e.ts() : now, e.urgent());
+            }
+            out.queues.put(uuid, q);
+        });
+        return out;
+    }
+
+    private static Map<UUID, List<EventQueue.Entry>> toEntries(EventOutbox box) {
+        Map<UUID, List<EventQueue.Entry>> raw = new HashMap<>();
+        box.queues.forEach((uuid, q) -> {
+            if (!q.isEmpty()) {
+                raw.put(uuid, new ArrayList<>(q.entries()));
+            }
+        });
+        return raw;
     }
 
     public static EventOutbox get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_event_outbox");
     }
 
-    /** 攒一条。满了丢最老的,并把丢弃计入账。 */
-    public void put(UUID companionUuid, String xml, boolean urgent) {
-        Box box = boxes.getOrDefault(companionUuid, Box.EMPTY);
-        List<Pending> next = new ArrayList<>(box.pending());
-        int dropped = box.dropped();
-        next.add(new Pending(xml, urgent));
-        while (next.size() > MAX_PER_COMPANION) {
-            next.remove(0);
-            dropped++;
-        }
-        boxes.put(companionUuid, new Box(next, dropped));
+    /** 这只同伴的暂存队列(没有则建)。 */
+    public EventQueue queue(UUID companionUuid) {
+        return queues.computeIfAbsent(companionUuid, k -> new EventQueue(EventQueue.Journal.NONE));
+    }
+
+    /** 攒一条。 */
+    public void put(UUID companionUuid, String type, String text, long now, boolean urgent) {
+        queue(companionUuid).push(type, text, now, urgent);
         setDirty();
     }
 
-    /** 取走这只同伴攒的一切并清空(主人登录时补发)。 */
-    public Box take(UUID companionUuid) {
-        Box box = boxes.remove(companionUuid);
-        if (box == null) {
-            return Box.EMPTY;
+    /**
+     * 取走这只同伴攒的一切并清空(主人登录时补发)。
+     *
+     * <p>返回<b>原始条目</b>不是渲染后的字符串:类型和时间戳必须原样送到客户端,
+     * 否则她会把"你不在时发生的事"当成刚发生的。
+     */
+    public List<EventQueue.Entry> take(UUID companionUuid, long now) {
+        EventQueue q = queues.get(companionUuid);
+        if (q == null) {
+            return List.of();
         }
+        List<EventQueue.Entry> out = q.takeEntries(now);
+        queues.remove(companionUuid);
         setDirty();
-        return box;
+        return out;
     }
 
-    /** 只看不取(主要给测试与诊断)。 */
-    public Box peek(UUID companionUuid) {
-        return boxes.getOrDefault(companionUuid, Box.EMPTY);
+    /** 只看不取(诊断与测试)。 */
+    public EventQueue peek(UUID companionUuid) {
+        return queues.getOrDefault(companionUuid, new EventQueue(EventQueue.Journal.NONE));
     }
 
-    /** 同伴被遣散:她攒的事件跟着走,没人会再收。 */
+    /** 同伴被遣散:她攒的东西跟着走,没人会再收。 */
     public void forget(UUID companionUuid) {
-        if (boxes.remove(companionUuid) != null) {
+        if (queues.remove(companionUuid) != null) {
             setDirty();
         }
     }
