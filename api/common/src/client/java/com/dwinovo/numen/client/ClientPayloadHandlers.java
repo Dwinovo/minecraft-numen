@@ -13,6 +13,7 @@ import com.dwinovo.numen.client.hud.SpeechBubbles;
 import com.dwinovo.numen.client.voice.VoiceLibrary;
 import com.dwinovo.numen.network.ClientPayloadSink;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
+import com.dwinovo.numen.network.payload.ClientGoalCommandPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
@@ -46,6 +47,7 @@ public final class ClientPayloadHandlers {
         ClientPayloadSink.respawn = ClientPayloadHandlers::handleRespawn;
         ClientPayloadSink.pathDebug = PathDebugState::accept;
         ClientPayloadSink.uiAction = ClientPayloadHandlers::handleUiAction;
+        ClientPayloadSink.goalCommand = ClientPayloadHandlers::handleGoalCommand;
     }
 
     private static void handleCompanionList(CompanionListPayload p) {
@@ -126,5 +128,9 @@ public final class ClientPayloadHandlers {
             case DEBUG_TEXT_ON -> ChatDisplayFilters.set(new DebugChatDisplayFilter());
             case DEBUG_TEXT_OFF -> ChatDisplayFilters.set(null);
         }
+    }
+
+    private static void handleGoalCommand(ClientGoalCommandPayload p) {
+        AgentLoopRegistry.getOrCreate(p.entityUuid()).submitGoalCommand(p.command());
     }
 }

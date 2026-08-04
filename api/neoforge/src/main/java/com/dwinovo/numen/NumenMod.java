@@ -33,6 +33,8 @@ public class NumenMod {
         // Dev: /numen_summon — create a companion fake player at the caller.
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
                 com.dwinovo.numen.entity.NumenCommands.register(e.getDispatcher()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
+                com.dwinovo.numen.entity.GoalCommands.register(e.getDispatcher()));
         // When an owner logs in, bring their dormant companions back.
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerLoggedIn);
         NeoForge.EVENT_BUS.addListener(NumenMod::onPlayerChangedDimension);

@@ -55,7 +55,7 @@ import java.util.UUID;
  */
 public final class NumenScreen extends Screen {
 
-    private enum Tab { CHAT, ITEMS, SETTINGS }
+    private enum Tab { CHAT, STATUS, SETTINGS }
 
     // ---- layout ----
     // 面板随窗口伸缩:下限=从前的固定尺寸(小窗口下与历史布局完全一致),
@@ -136,6 +136,8 @@ public final class NumenScreen extends Screen {
     private boolean summoning;
     /** 召唤卡(NumenUI):名字 + 人设/模型配置/模式/声线/皮肤,见 SummonPanel。 */
     private SummonPanel summonPanel;
+    /** Status tab: original ItemsView with inline model/persona/voice pickers. */
+    private com.dwinovo.numen.client.screen.items.ItemsView itemsView;
     /** 屏幕级浮层根:承载模态确认卡(遣散同伴);浮层在场时背景全屏蔽。 */
     private final com.dwinovo.numen.client.ui.widget.UiRoot overlayUi =
             new com.dwinovo.numen.client.ui.widget.UiRoot();
@@ -234,7 +236,7 @@ public final class NumenScreen extends Screen {
         uuid = u; name = n;
         chatView.reset();
         rebuild();
-        if (tab == Tab.ITEMS && u != null) requestInventory();
+        if (tab == Tab.STATUS && u != null) requestInventory();
     }
 
     private EntityAgentLoop loop() {
@@ -283,8 +285,19 @@ public final class NumenScreen extends Screen {
         switch (tab) {
             case CHAT -> { if (uuid != null) buildChatWidgets(); }
             case SETTINGS -> settings.buildWidgets();
-            case ITEMS -> { /* no widgets */ }
+            case STATUS -> { if (uuid != null) buildStatusWidgets(); }
         }
+    }
+
+    private com.dwinovo.numen.client.screen.items.ItemsView itemsView() {
+        if (itemsView == null) {
+            itemsView = new com.dwinovo.numen.client.screen.items.ItemsView();
+        }
+        return itemsView;
+    }
+
+    private void buildStatusWidgets() {
+        itemsView().build(uuid, font, left, top, panelW, panelH, HEADER_H);
     }
 
     private SummonPanel summonPanel() {
@@ -459,7 +472,7 @@ public final class NumenScreen extends Screen {
 
         @Override public void onCompact() { loop().requestCompact(); }
 
-        @Override public void onAbort() { loop().abort(); }
+        @Override public void onAbort() { loop().abortGoal(); }
 
         @Override public boolean canCompact() { return loop().canCompact(); }
 
@@ -502,7 +515,7 @@ public final class NumenScreen extends Screen {
         if (t == tab) return;
         tab = t;
         chatView.reset();
-        if (t == Tab.ITEMS) requestInventory();
+        if (t == Tab.STATUS) requestInventory();
         rebuild();
     }
 
@@ -564,7 +577,7 @@ public final class NumenScreen extends Screen {
 
     @Override
     public void tick() {
-        if (tab == Tab.ITEMS && ++tickCounter % INV_REFRESH_TICKS == 0) {
+        if (tab == Tab.STATUS && ++tickCounter % INV_REFRESH_TICKS == 0) {
             requestInventory();
         }
     }
@@ -583,6 +596,14 @@ public final class NumenScreen extends Screen {
     private void submitChat(String text) {
         if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) return;
         if (text == null || text.isBlank()) return;
+        // Goal commands are local and must keep working without an API key or a
+        // configured provider, so they bypass the endpoint gate below.
+        if (loop().isGoalCommand(text)) {
+            loop().submitGoalCommand(text);
+            if (inputBar != null) inputBar.setText("");
+            chatView.pinToBottom();
+            return;
+        }
         // Endpoint check for THIS companion (its provider entry, not the legacy global
         // key): unbound / keyless surfaces as a visible hint, never a crash or a
         // silent no-op — the no-provider safety net.
@@ -706,6 +727,9 @@ public final class NumenScreen extends Screen {
                     }
                 }
             }
+            if (tab == Tab.STATUS && itemsView().mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
             if (tab == Tab.CHAT && inputBar != null
                     && inputBar.mouseClicked(mouseX, mouseY, button)) {
                 return true;
@@ -757,6 +781,10 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.CHAT && sy != 0) {
             return chatView.mouseScrolled(sy);
         }
+        if (tab == Tab.STATUS && sy != 0
+                && itemsView().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
         return super.mouseScrolled(mx, my, sx, sy);
     }
 
@@ -806,10 +834,10 @@ public final class NumenScreen extends Screen {
         switch (tab) {
             case SETTINGS -> settings.render(g, mouseX, mouseY);   // global — works with no companion
             case CHAT -> { if (uuid != null) renderChat(g, mouseX, mouseY); else emptyHint(g); }
-            case ITEMS -> {
+            case STATUS -> {
                 if (uuid != null) {
-                    com.dwinovo.numen.client.screen.items.ItemsView.render(
-                            g, font, uuid, left, top, panelW, panelH, HEADER_H, mouseX, mouseY);
+                    itemsView().render(g, font, uuid, left, top, panelW, panelH,
+                            HEADER_H, mouseX, mouseY);
                 } else {
                     emptyHint(g);
                 }
@@ -1066,8 +1094,11 @@ public final class NumenScreen extends Screen {
 
         // right-side PLAN card + the bubble transcript
         int planX = transX + transW + 8;
-        com.dwinovo.numen.client.screen.chat.PlanCard.render(
+        int goalH = com.dwinovo.numen.client.screen.chat.GoalCard.render(
                 g, font, loop(), planX - 4, bodyY, PLAN_W + 4, bodyBottom);
+        int planY = bodyY + (goalH > 0 ? goalH + 4 : 0);
+        com.dwinovo.numen.client.screen.chat.PlanCard.render(
+                g, font, loop(), planX - 4, planY, PLAN_W + 4, bodyBottom);
         // 「外接大脑」模式:对话流换成控制台——身体归外部 AI,这屏就该显示它在干嘛。
         if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) {
             chatView.renderConsole(g, transX, bodyY, transW, bodyBottom - bodyY);

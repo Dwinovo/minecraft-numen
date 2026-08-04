@@ -67,6 +67,11 @@ public final class NumenPrompts {
             - Plan only what's big. Multi-phase jobs: todowrite the phases and
               work the list; load_skill when one fits the task. One-step
               requests: just do them.
+            - Persistent goal lifecycle is separate from the todo list. todowrite
+              only records steps. When a goal's work is verified complete, call
+              goal_control with action=complete before replying. Use pause for a
+              deliberate stop, blocked with a concrete reason when progress is
+              impossible, resume to continue, and cancel only when abandoning it.
             </operating_principles>
 
             <choosing_actions>

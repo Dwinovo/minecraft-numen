@@ -14,6 +14,9 @@ public class NumenMod implements ModInitializer {
         net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register(
                 (dispatcher, registry, env) ->
                         com.dwinovo.numen.entity.NumenCommands.register(dispatcher));
+        net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback.EVENT.register(
+                (dispatcher, registry, env) ->
+                        com.dwinovo.numen.entity.GoalCommands.register(dispatcher));
 
         // When an owner logs in, bring their dormant companions back.
         net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents.JOIN.register(

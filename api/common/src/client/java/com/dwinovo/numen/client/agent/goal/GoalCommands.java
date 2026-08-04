@@ -72,6 +72,7 @@ public final class GoalCommands {
             case PAUSE -> mutation(state, normalized, nowMs, GoalCommand.PAUSE,
                     () -> state.pause(nowMs),
                     "已暂停 goal");
+            case BLOCKED -> blocked(state, normalized, arg, nowMs);
             case RESUME -> mutation(state, normalized, nowMs, GoalCommand.RESUME,
                     () -> state.resume(nowMs),
                     "已恢复 goal");
@@ -137,10 +138,20 @@ public final class GoalCommands {
         return Result.ok("已请求上下文压缩，将在可执行时处理", GoalCommand.COMPACT);
     }
 
+    private static Result blocked(GoalState state, String command, String reason, long nowMs) {
+        if (reason.isBlank()) return Result.fail("用法: /goal blocked <原因>");
+        if (!state.hasGoal() || state.isTerminal()) {
+            return Result.fail("没有可阻塞的当前 goal。");
+        }
+        if (!state.block(reason, nowMs)) return Result.fail("当前 goal 状态不允许标记为阻塞。");
+        state.recordCommand(command + " " + reason, "blocked: " + reason, nowMs);
+        return Result.ok("已标记 goal 阻塞: " + reason, GoalCommand.BLOCKED);
+    }
+
     private static String helpText() {
         return "goal 指令: /goal <内容> 直接创建, /goal, /goal help, /goal list, /goal add <内容>, "
                 + "/goal update <内容>, /goal status, /goal progress, /goal complete, "
-                + "/goal cancel, /goal pause, /goal resume, /goal recent, /goal compact, "
+                + "/goal cancel, /goal pause, /goal blocked <原因>, /goal resume, /goal recent, /goal compact, "
                 + "/goal settings";
     }
 
@@ -152,6 +163,7 @@ public final class GoalCommands {
             case COMPLETED -> "已完成";
             case CANCELLED -> "已取消";
             case FAILED -> "失败";
+            case BLOCKED -> "已阻塞";
             case NONE -> "未使用";
         };
         String elapsed = formatDuration(state.effectiveElapsedMs(nowMs));

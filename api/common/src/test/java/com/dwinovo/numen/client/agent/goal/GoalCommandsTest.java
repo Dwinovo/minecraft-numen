@@ -56,6 +56,21 @@ class GoalCommandsTest {
     }
 
     @Test
+    void blockedGoalKeepsReasonAndCanResume() {
+        GoalState state = GoalState.create("entity-1", "reach the village", 1000);
+
+        GoalCommands.Result blocked = GoalCommands.execute(
+                state, "/goal blocked missing a bridge", 3000);
+
+        assertTrue(blocked.success());
+        assertEquals(GoalCommand.BLOCKED, blocked.command());
+        assertEquals(GoalStatus.BLOCKED, state.status());
+        assertEquals("missing a bridge", state.lastError());
+        assertTrue(GoalCommands.execute(state, "/goal resume", 4000).success());
+        assertEquals(GoalStatus.ACTIVE, state.status());
+    }
+
+    @Test
     void directTextCreatesGoalWithoutAddVerb() {
         GoalState state = GoalState.none("entity-1");
         GoalCommands.Result result = GoalCommands.execute(state, "/goal nope", 1000);

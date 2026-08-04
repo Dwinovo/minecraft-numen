@@ -218,7 +218,8 @@ public final class GoalState {
     }
 
     public boolean resume(long nowMs) {
-        if (status != GoalStatus.PAUSED && status != GoalStatus.FAILED) return false;
+        if (status != GoalStatus.PAUSED && status != GoalStatus.FAILED
+                && status != GoalStatus.BLOCKED) return false;
         status = GoalStatus.ACTIVE;
         lastStartedAtMs = nowMs;
         if (startedAtMs == 0) startedAtMs = nowMs;
@@ -257,6 +258,17 @@ public final class GoalState {
         lastStartedAtMs = 0;
         status = GoalStatus.FAILED;
         lastError = error == null ? "" : error;
+        updatedAtMs = nowMs;
+        return true;
+    }
+
+    /** Pause an active goal because progress is impossible without an outside condition. */
+    public boolean block(String reason, long nowMs) {
+        if (status != GoalStatus.ACTIVE) return false;
+        elapsedMs = effectiveElapsedMs(nowMs);
+        lastStartedAtMs = 0;
+        status = GoalStatus.BLOCKED;
+        lastError = reason == null ? "" : reason;
         updatedAtMs = nowMs;
         return true;
     }

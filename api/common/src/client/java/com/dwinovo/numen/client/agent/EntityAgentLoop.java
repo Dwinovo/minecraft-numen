@@ -359,6 +359,70 @@ public final class EntityAgentLoop {
         goalStore.save(this.goal);
     }
 
+    /** Apply an agent-issued lifecycle action and persist it immediately. */
+    public String applyGoalControl(String rawAction, String reason) {
+        String action = rawAction == null ? "" : rawAction.trim().toLowerCase(java.util.Locale.ROOT);
+        String why = reason == null ? "" : reason.trim();
+        if (goal == null || !goal.hasGoal()) {
+            return goalToolResult(false, action, "没有当前 goal", null);
+        }
+        long nowMs = System.currentTimeMillis();
+        if ("status".equals(action)) {
+            return goalToolResult(true, action, "", goal);
+        }
+        boolean changed;
+        String message;
+        switch (action) {
+            case "complete" -> {
+                changed = goal.complete(nowMs);
+                message = "已标记 goal 完成";
+            }
+            case "pause" -> {
+                changed = goal.pause(nowMs);
+                message = "已暂停 goal";
+            }
+            case "blocked" -> {
+                if (why.isBlank()) return goalToolResult(false, action, "action=blocked 必须提供 reason", goal);
+                changed = goal.block(why, nowMs);
+                message = "已标记 goal 阻塞: " + why;
+            }
+            case "resume" -> {
+                changed = goal.resume(nowMs);
+                message = "已恢复 goal";
+            }
+            case "cancel" -> {
+                changed = goal.cancel(nowMs);
+                message = "已取消 goal";
+            }
+            default -> {
+                return goalToolResult(false, action,
+                        "未知 action，使用 complete/pause/blocked/resume/cancel/status", goal);
+            }
+        }
+        if (!changed) return goalToolResult(false, action, "当前 goal 状态不允许此操作", goal);
+        goal.recordCommand("goal_control " + action,
+                message + (why.isBlank() ? "" : " (" + why + ")"), nowMs);
+        replaceGoal(goal);
+        if ("complete".equals(action) || "pause".equals(action) || "blocked".equals(action)
+                || "cancel".equals(action)) {
+            goalExecutionQueued = false;
+        }
+        return goalToolResult(true, action, message, goal);
+    }
+
+    private static String goalToolResult(boolean success, String action, String message, GoalState state) {
+        com.google.gson.JsonObject out = new com.google.gson.JsonObject();
+        out.addProperty("success", success);
+        out.addProperty("action", action == null ? "" : action);
+        if (message != null && !message.isBlank()) out.addProperty("message", message);
+        if (state != null) {
+            out.addProperty("title", state.title());
+            out.addProperty("status", state.status().key());
+            out.addProperty("elapsedMs", state.effectiveElapsedMs(System.currentTimeMillis()));
+        }
+        return out.toString();
+    }
+
     /** Live partial of the in-flight assistant reply ("" when idle) — GUI typewriter source. */
     public String livePartial() {
         return presenter.livePartial();
@@ -471,8 +535,8 @@ public final class EntityAgentLoop {
                     abort();
                 }
                 startGoalExecution();
-            } else if (command == GoalCommand.PAUSE || command == GoalCommand.CANCEL
-                    || command == GoalCommand.COMPLETE) {
+            } else if (command == GoalCommand.PAUSE || command == GoalCommand.BLOCKED
+                    || command == GoalCommand.CANCEL || command == GoalCommand.COMPLETE) {
                 goalExecutionQueued = false;
                 if (isBusy() || hasQueuedPrompts()) abort();
             }
@@ -480,7 +544,7 @@ public final class EntityAgentLoop {
         if (result.command() == GoalCommand.COMPACT) {
             requestCompact();
         }
-        String speaker = presenter == null ? personaName : presenter.speakerName();
+        String speaker = presenter == null ? personaName() : presenter.speakerName();
         com.dwinovo.numen.client.chat.ChatLines.notice(
                 speaker == null || speaker.isBlank() ? "goal" : speaker, result.text());
         Constants.LOG.info("[numen-entity#{}] goal command {} -> {}",
@@ -697,7 +761,7 @@ public final class EntityAgentLoop {
             goal.pause(System.currentTimeMillis());
             replaceGoal(goal);
             goalExecutionQueued = false;
-            String speaker = presenter == null ? personaName : presenter.speakerName();
+            String speaker = presenter == null ? personaName() : presenter.speakerName();
             com.dwinovo.numen.client.chat.ChatLines.notice(
                     speaker == null || speaker.isBlank() ? "goal" : speaker,
                     "goal 已打断并暂停，/goal resume 可继续");

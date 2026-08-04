@@ -4,6 +4,7 @@ import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.network.payload.LocateNumenPayload;
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
+import com.dwinovo.numen.network.payload.ClientGoalCommandPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.platform.Services;
 
@@ -81,6 +82,11 @@ public final class NumenNetwork {
         Services.NETWORK.registerServerToClient(
                 ClientUiActionPayload.TYPE, ClientUiActionPayload.STREAM_CODEC,
                 ClientUiActionPayload::handle);
+
+        // S→C: server `/goal <companion> ...` routes into the client-side goal loop.
+        Services.NETWORK.registerServerToClient(
+                ClientGoalCommandPayload.TYPE, ClientGoalCommandPayload.STREAM_CODEC,
+                ClientGoalCommandPayload::handle);
 
         // S→C: a companion's live pathing state for the debug overlay (lines/boxes).
         Services.NETWORK.registerServerToClient(

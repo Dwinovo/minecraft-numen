@@ -1,6 +1,7 @@
 package com.dwinovo.numen.network;
 
 import com.dwinovo.numen.network.payload.ClientUiActionPayload;
+import com.dwinovo.numen.network.payload.ClientGoalCommandPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
@@ -30,4 +31,5 @@ public final class ClientPayloadSink {
     public static volatile Consumer<NumenRespawnPayload> respawn = p -> {};
     public static volatile Consumer<PathDebugPayload> pathDebug = p -> {};
     public static volatile Consumer<ClientUiActionPayload> uiAction = p -> {};
+    public static volatile Consumer<ClientGoalCommandPayload> goalCommand = p -> {};
 }

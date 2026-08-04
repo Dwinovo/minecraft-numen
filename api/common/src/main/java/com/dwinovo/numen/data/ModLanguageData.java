@@ -35,6 +35,7 @@ public final class ModLanguageData {
         public static final String GUI_SETTINGS_PROVIDER    = "numen.gui.settings.provider";
         public static final String GUI_SETTINGS_API_KEY     = "numen.gui.settings.api_key";
         public static final String GUI_SETTINGS_MODEL       = "numen.gui.settings.model";
+        public static final String CHAT_PROVIDER_UNSET      = "numen.chat.provider_unset";
         public static final String GUI_SETTINGS_BASE_URL    = "numen.gui.settings.base_url";
         public static final String GUI_SETTINGS_SAVE        = "numen.gui.settings.save";
         public static final String GUI_SETTINGS_CANCEL      = "numen.gui.settings.cancel";
@@ -153,6 +154,22 @@ public final class ModLanguageData {
         public static final String STT_NOT_CONFIGURED = "numen.stt.not_configured";
         public static final String STT_NO_MIC         = "numen.stt.no_mic";
         public static final String STT_FAILED         = "numen.stt.failed";
+
+        // Goal card.
+        public static final String GOAL_STATUS_ACTIVE    = "numen.goal.status.active";
+        public static final String GOAL_STATUS_PAUSED    = "numen.goal.status.paused";
+        public static final String GOAL_STATUS_COMPLETED = "numen.goal.status.completed";
+        public static final String GOAL_STATUS_CANCELLED = "numen.goal.status.cancelled";
+        public static final String GOAL_STATUS_FAILED    = "numen.goal.status.failed";
+        public static final String GOAL_STATUS_BLOCKED   = "numen.goal.status.blocked";
+        public static final String GOAL_STATUS_NONE      = "numen.goal.status.none";
+        public static final String GOAL_ELAPSED          = "numen.goal.elapsed";
+        public static final String GOAL_CREATED          = "numen.goal.created";
+        public static final String GOAL_STARTED          = "numen.goal.started";
+        public static final String GOAL_COMPLETED_AT     = "numen.goal.completed_at";
+        public static final String GOAL_PROGRESS         = "numen.goal.progress";
+        public static final String GOAL_CURRENT          = "numen.goal.current";
+        public static final String GOAL_ERROR            = "numen.goal.error";
     }
 
     /** Loader-side providers funnel both English and Simplified Chinese through here. */
@@ -261,6 +278,20 @@ public final class ModLanguageData {
         adder.add("numen.chat.steps", "%s steps");
         adder.add("numen.chat.plan", "PLAN");
         adder.add("numen.chat.no_plan", "no plan yet");
+        adder.add(Keys.GOAL_STATUS_ACTIVE, "Running");
+        adder.add(Keys.GOAL_STATUS_PAUSED, "Paused");
+        adder.add(Keys.GOAL_STATUS_COMPLETED, "Completed");
+        adder.add(Keys.GOAL_STATUS_CANCELLED, "Cancelled");
+        adder.add(Keys.GOAL_STATUS_FAILED, "Failed");
+        adder.add(Keys.GOAL_STATUS_BLOCKED, "Blocked");
+        adder.add(Keys.GOAL_STATUS_NONE, "Not used");
+        adder.add(Keys.GOAL_ELAPSED, "Elapsed %s");
+        adder.add(Keys.GOAL_CREATED, "Created %s");
+        adder.add(Keys.GOAL_STARTED, " · Started %s");
+        adder.add(Keys.GOAL_COMPLETED_AT, "Completed %s");
+        adder.add(Keys.GOAL_PROGRESS, "Progress %s/%s");
+        adder.add(Keys.GOAL_CURRENT, "Current %s");
+        adder.add(Keys.GOAL_ERROR, "Error %s");
         adder.add("numen.chat.usage_tip.context", "context: how full the model's memory window is — near the top it compacts itself, nothing to do");
         adder.add("numen.chat.usage_tip.tokens", "tokens: cumulative fresh work = cache-missed input + output");
         adder.add("numen.chat.usage_tip.cache", "cached input is free-ish and not counted, so most messages add only a little");
@@ -324,6 +355,7 @@ public final class ModLanguageData {
         adder.add("numen.status.asleep", "asleep — chat to wake it.");
 
         // Model-config section
+        adder.add(Keys.CHAT_PROVIDER_UNSET, "Global / unset");
         adder.add(Keys.PROVIDER_TITLE,          "Model Configs");
         adder.add(Keys.PROVIDER_EMPTY,          "No model config yet — click New (top-right) to create one");
         adder.add(Keys.PROVIDER_ADD,            "New");
@@ -516,6 +548,20 @@ public final class ModLanguageData {
         adder.add("numen.chat.steps", "%s 步");
         adder.add("numen.chat.plan", "计划");
         adder.add("numen.chat.no_plan", "暂无计划");
+        adder.add(Keys.GOAL_STATUS_ACTIVE, "进行中");
+        adder.add(Keys.GOAL_STATUS_PAUSED, "已暂停");
+        adder.add(Keys.GOAL_STATUS_COMPLETED, "已完成");
+        adder.add(Keys.GOAL_STATUS_CANCELLED, "已取消");
+        adder.add(Keys.GOAL_STATUS_FAILED, "失败");
+        adder.add(Keys.GOAL_STATUS_BLOCKED, "已阻塞");
+        adder.add(Keys.GOAL_STATUS_NONE, "未使用");
+        adder.add(Keys.GOAL_ELAPSED, "耗时 %s");
+        adder.add(Keys.GOAL_CREATED, "创建 %s");
+        adder.add(Keys.GOAL_STARTED, " · 开始 %s");
+        adder.add(Keys.GOAL_COMPLETED_AT, "完成 %s");
+        adder.add(Keys.GOAL_PROGRESS, "进度 %s/%s");
+        adder.add(Keys.GOAL_CURRENT, "当前 %s");
+        adder.add(Keys.GOAL_ERROR, "错误 %s");
         adder.add("numen.chat.usage_tip.context", "context：对话占模型记忆窗口的比例，快满时会自动压缩，无需操作");
         adder.add("numen.chat.usage_tip.tokens", "tokens：累计新处理量 = 未命中缓存的输入 + 输出");
         adder.add("numen.chat.usage_tip.cache", "命中缓存的输入不计入，所以平时每条消息只涨一点");
@@ -579,6 +625,7 @@ public final class ModLanguageData {
         adder.add("numen.status.asleep", "休眠中 —— 对它说话唤醒。");
 
         // Model-config section
+        adder.add(Keys.CHAT_PROVIDER_UNSET, "全局 / 未选择");
         adder.add(Keys.PROVIDER_TITLE,          "模型配置");
         adder.add(Keys.PROVIDER_EMPTY,          "还没有模型配置——点右上「新建」创建一条");
         adder.add(Keys.PROVIDER_ADD,            "新建");

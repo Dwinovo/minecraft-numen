@@ -11,6 +11,7 @@ public enum GoalCommand {
     COMPLETE("complete", "标记当前 goal 完成"),
     CANCEL("cancel", "取消当前 goal"),
     PAUSE("pause", "暂停当前 goal"),
+    BLOCKED("blocked", "标记当前 goal 被阻塞", true),
     RESUME("resume", "恢复当前 goal"),
     RECENT("recent", "查看最近 goal 操作"),
     COMPACT("compact", "请求压缩上下文"),
