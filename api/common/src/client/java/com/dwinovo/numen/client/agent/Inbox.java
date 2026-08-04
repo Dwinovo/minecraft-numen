@@ -34,6 +34,11 @@ final class Inbox {
     }
 
     void pushEvent(String xml) {
+        // 人格切换是可合并的状态同步，不是需要逐条重放的世界事实。
+        // 连续切换时只保留最后一次，避免下一回合把旧人格重新灌回上下文。
+        if (isPersonaChange(xml)) {
+            events.removeIf(e -> isPersonaChange(e.text()));
+        }
         events.add(new Entry(xml, System.currentTimeMillis()));
         persist();
     }
@@ -113,5 +118,9 @@ final class Inbox {
                 : ageMs < 86_400_000L ? (ageMs / 3_600_000L) + "小时"
                 : (ageMs / 86_400_000L) + "天";
         return "[发生于约" + age + "前] " + e.text();
+    }
+
+    private static boolean isPersonaChange(String text) {
+        return text != null && text.startsWith("<persona-change>");
     }
 }

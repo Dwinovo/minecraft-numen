@@ -39,4 +39,23 @@ class InboxTest {
         assertEquals(0, restored.promptCount());
         assertEquals(0, restored.eventCount());
     }
+
+    @Test
+    void repeatedPersonaChangesKeepOnlyTheLatestEvent(@TempDir Path dir) {
+        UUID entityUuid = UUID.randomUUID();
+        Inbox inbox = new Inbox(dir, entityUuid);
+        String first = "<persona-change>first</persona-change>";
+        String latest = "<persona-change>latest</persona-change>";
+
+        inbox.pushEvent(first);
+        inbox.pushEvent("<death>事实仍需保留</death>");
+        inbox.pushEvent(latest);
+
+        assertEquals(2, inbox.eventCount());
+        assertEquals(List.of("<death>事实仍需保留</death>", latest), inbox.snapshot());
+        assertTrue(inbox.promptSnapshot().isEmpty());
+
+        Inbox restored = new Inbox(dir, entityUuid);
+        assertEquals(List.of("<death>事实仍需保留</death>", latest), restored.drain());
+    }
 }
