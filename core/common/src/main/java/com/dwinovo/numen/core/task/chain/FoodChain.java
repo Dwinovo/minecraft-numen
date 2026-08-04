@@ -1,6 +1,5 @@
 package com.dwinovo.numen.core.task.chain;
 
-import com.dwinovo.numen.task.BodyLog;
 import com.dwinovo.numen.task.reflex.Reflex;
 
 import com.dwinovo.numen.core.task.SurvivalConfig;
@@ -35,8 +34,6 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class FoodChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
 
-    /** BodyLog for completed episodes — dual-rail routed (may be null in unit tests). */
-    private final com.dwinovo.numen.task.BodyLog bodyLog;
 
     /** The in-flight native eat (held use), or {@code null} between eats. */
     private Interaction eat;
@@ -45,11 +42,6 @@ public final class FoodChain implements TaskChain, com.dwinovo.numen.task.reflex
     private int eatingStartFood;
 
     public FoodChain() {
-        this(null);
-    }
-
-    public FoodChain(com.dwinovo.numen.task.BodyLog bodyLog) {
-        this.bodyLog = bodyLog;
     }
 
     @Override
@@ -86,9 +78,8 @@ public final class FoodChain implements TaskChain, com.dwinovo.numen.task.reflex
                 // stays up and the next tick starts a fresh eat; else we go dormant.
                 // Diary only a REAL meal (hunger actually rose — a declined/instant DONE
                 // with no effect isn't an episode).
-                if (bodyLog != null
-                        && companion.getFoodData().getFoodLevel() > eatingStartFood) {
-                    bodyLog.report("got hungry and ate a " + eatingLabel);
+                if (companion.getFoodData().getFoodLevel() > eatingStartFood) {
+                    com.dwinovo.numen.event.NumenEvents.body(companion, "got hungry and ate a " + eatingLabel);
                 }
                 eat.stop();
                 eat = null;

@@ -1,7 +1,6 @@
 package com.dwinovo.numen.entity;
 
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
-import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.network.payload.NumenRespawnPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.platform.Services;
@@ -11,6 +10,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -24,8 +24,9 @@ import java.util.UUID;
 @com.dwinovo.numen.api.Internal
 public final class Companions {
 
-    /** Ticks a dead companion stays down before respawning at its owner (~30 s). */
-    private static final long RESPAWN_DELAY_TICKS = 30 * 20;
+    /** 死后躺多久再在主人身边复活。5 秒:够让主人看清"她死了"这件事,
+     *  又短到不会把她整场战斗排除在外。 */
+    private static final long RESPAWN_DELAY_TICKS = 5 * 20;
 
     private Companions() {}
 
@@ -75,12 +76,19 @@ public final class Companions {
         return body;
     }
 
-    /** Companion UUID of the owner's companion named {@code name}, or null if none. */
+    /** 主人名下叫这个名字的同伴,没有则 null。判断规则在 {@link CompanionRoster#findByName}
+     *  (纯 JVM,可单测);这里只负责把注册表摊平成它认得的形状。 */
     private static UUID findByOwnerName(MinecraftServer server, UUID ownerUuid, String name) {
+        return CompanionRoster.findByName(rowsOf(server, ownerUuid), name);
+    }
+
+    /** 注册表 → 决策层认得的纯数据行。 */
+    private static List<CompanionRoster.Row> rowsOf(MinecraftServer server, UUID ownerUuid) {
+        List<CompanionRoster.Row> rows = new ArrayList<>();
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
-            if (e.getValue().name().equals(name)) return e.getKey();
+            rows.add(new CompanionRoster.Row(e.getKey(), e.getValue().name(), e.getValue().diedAt()));
         }
-        return null;
+        return rows;
     }
 
     /**
@@ -111,6 +119,39 @@ public final class Companions {
                 respawn(server, e.getKey());
             }
         }
+        if (owner != null) {
+            replayOutbox(server, ownerUuid, owner);
+        }
+    }
+
+    /**
+     * 主人登录:把他离线期间攒下的世界事件补发给客户端。
+     *
+     * <p>他不在的时候她照样在干活——任务跑完了、被怪打了、跨了维度。从前这些
+     * 一律直接丢,于是"我帮你把矿挖完了"这件最值得说的事恰好最容易丢。
+     * 攒满被丢掉的条数也如实说一句:丢弃可以,无声消失不行。
+     */
+    private static void replayOutbox(MinecraftServer server, UUID ownerUuid, ServerPlayer owner) {
+        EventOutbox outbox = EventOutbox.get(server);
+        for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
+            EventOutbox.Box box = outbox.take(e.getKey());
+            if (box.pending().isEmpty() && box.dropped() <= 0) {
+                continue;
+            }
+            for (EventOutbox.Pending p : box.pending()) {
+                Services.NETWORK.sendToPlayer(owner,
+                        new com.dwinovo.numen.network.payload.NumenEventPayload(e.getKey(), p.xml(), p.urgent()));
+            }
+            com.dwinovo.numen.Constants.LOG.info(
+                    "[numen-outbox] {} 补发 {} 条离线事件(另有 {} 条因攒满被丢弃)",
+                    e.getKey(), box.pending().size(), box.dropped());
+            if (box.dropped() > 0) {
+                Services.NETWORK.sendToPlayer(owner,
+                        new com.dwinovo.numen.network.payload.NumenEventPayload(e.getKey(),
+                                "<event kind=\"body_log\">你不在的时候还发生了大约 " + box.dropped()
+                                        + " 件事,没能记下来</event>", false));
+            }
+        }
     }
 
     /**
@@ -129,13 +170,18 @@ public final class Companions {
         if (cause == null || cause.isBlank()) cause = "未知原因";
         CompanionLifecycle.fireDeath(body);   // no result shipped — the death payload drives the client
         ServerPlayer owner = body.resolveOwnerPlayer();
-        if (owner != null) {   // immediate, same-session (carries the respawn delay for the client countdown)
-            Services.NETWORK.sendToPlayer(owner, new NumenDeathPayload(uuid, cause, RESPAWN_DELAY_TICKS * 50L));
+        if (owner != null) {   // immediate, same-session
+            Services.NETWORK.sendToPlayer(owner, new NumenDeathPayload(uuid, cause));
         }
         // Persist the death (cause + game-time) in the world-saved registry so it survives a logout during
         // the respawn window — without this, a relog lost the pending state and the body silently respawned
         // "alive" with an empty inventory and no idea it had died.
         CompanionRegistry.get(server).markDead(uuid, cause, server.overworld().getGameTime());
+        // 死亡状态进了注册表,名册才说得出"她还在,只是躺着"——面板的倒计时读这个。
+        // 少了这一推,主人在死亡窗口里重登就会看见她凭空消失。
+        if (owner != null) {
+            syncRosterToOwner(server, owner);
+        }
         body.setHealth(body.getMaxHealth());             // saved .dat is a healthy body for the respawn
         server.execute(() -> CompanionFactory.despawn(server, body));   // remove the corpse safely after the tick
     }
@@ -182,40 +228,24 @@ public final class Companions {
     }
 
     /**
-     * Push a snapshot of the owner's companions <em>currently live in the world</em>
-     * (UUID + name) to their client, so the G panel reflects what actually exists
-     * rather than a persisted list. The server is the only place that can answer
-     * "which in-world players are NumenPlayers owned by you" — owner is a
-     * server-side field — so it does the detection and ships the result. The
-     * client treats each push as a complete replacement. Call after any change to
-     * the live set (login-respawn, summon, despawn, death).
+     * 把主人名下<b>存在的</b>同伴推给他的客户端。
+     *
+     * <p>取自持久的 {@link CompanionRegistry},不是玩家列表——死了、正等复活、休眠的
+     * 同伴都还存在,只是此刻不在世界里。客户端拿这份名册对账并<b>删除已遣散同伴的
+     * 本地数据</b>,所以名册的语义必须是"存在";用"此刻活着"做过一版,结果是同伴一死
+     * 就被当成遣散,数据整个删掉。判断规则在 {@link CompanionRoster}(纯 JVM,可单测)。
+     *
+     * <p>任何"存在或存活状态"的变化之后都要调:登录、召唤、遣散、死亡、复活。
      */
     public static void syncRosterToOwner(MinecraftServer server, ServerPlayer owner) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        List<CompanionRoster.Row> rows = rowsOf(server, owner.getUUID());
         List<CompanionListPayload.Entry> list = new ArrayList<>();
-        for (ServerPlayer p : server.getPlayerList().getPlayers()) {
-            if (p instanceof NumenPlayer a && a.isOwnedByPlayer(owner.getUUID())) {
-                list.add(new CompanionListPayload.Entry(a.getUUID(), a.getName().getString()));
-            }
+        for (CompanionRoster.Line l : CompanionRoster.build(
+                rows, server.overworld().getGameTime(), RESPAWN_DELAY_TICKS)) {
+            list.add(new CompanionListPayload.Entry(l.uuid(), l.name(), l.respawnInMs()));
         }
-        Services.NETWORK.sendToPlayer(owner, new CompanionListPayload(list));
-    }
-
-    /**
-     * Push an async world {@code <event>} to the companion's brain (it runs on the owner's client).
-     * Consumption timing is the client inbox's business — it routes by the brain's state at arrival
-     * (mid-turn → next boundary; background task running → immediate turn; idle → wait and ride).
-     * No-op if the owner is offline (no client to receive it).
-     *
-     * <p>{@code principal} means "a live HUMAN is speaking through this event" — bridge mods relaying
-     * danmaku / QQ messages set it true and get owner-grade treatment (opens a turn even from full
-     * idle). World/body events (task wind-downs, dimension changes, body narrative) always pass
-     * false: they are facts, and facts don't get to decide their own urgency.
-     */
-    public static void emitEvent(NumenPlayer body, String xml, boolean principal) {
-        ServerPlayer owner = body.resolveOwnerPlayer();
-        if (owner != null) {
-            Services.NETWORK.sendToPlayer(owner, new NumenEventPayload(body.getUUID(), xml, principal));
-        }
+        Services.NETWORK.sendToPlayer(owner, new CompanionListPayload(reg.worldId(), list));
     }
 
     /**
@@ -225,10 +255,10 @@ public final class Companions {
      */
     public static void onDimensionChanged(NumenPlayer body) {
         String dim = body.level().dimension().location().toString();
-        com.dwinovo.numen.event.GameEvents.emit(body,
-                com.dwinovo.numen.event.GameEvents.Kind.DIMENSION_CHANGE,
+        com.dwinovo.numen.event.NumenEvents.emit(body,
+                com.dwinovo.numen.event.NumenEvents.Kind.DIMENSION_CHANGE,
                 java.util.Map.of("to", dim),
-                "你进入了 " + dim + "。留意这个维度的环境和危险。");
+                "你进入了 " + dim + "。留意这个维度的环境和危险。", false);
     }
 
     /** Save the companion to its {@code .dat} and remove it from the world (dormancy). */
@@ -243,11 +273,34 @@ public final class Companions {
         CompanionFactory.despawn(server, body);
     }
 
-    /** Permanently forget a companion (death / dismissal): despawn + drop the index entry. */
+    /** 遣散一只活体:身体离场 + 永久除名。 */
     public static void dismiss(MinecraftServer server, NumenPlayer body) {
+        UUID ownerUuid = body.getOwnerUuid();
         UUID uuid = body.getUUID();
         CompanionFactory.despawn(server, body);
-        CompanionRegistry.get(server).remove(uuid);
+        forget(server, ownerUuid, List.of(uuid));
+    }
+
+    /**
+     * <b>永久除名的唯一出口</b>。删注册表条目 = 这只同伴不再存在,再把新名册推给主人
+     * ——客户端据此把她的家目录一并删掉。
+     *
+     * <p>遣散的三条路(面板 ✕、{@code /numen despawn}、休眠体)都从这儿走:一个动作
+     * 一个出口,才不会出现"删了条目却忘了通知"或者"通知了却没删干净"的半截状态。
+     * 主人不在线就只删条目——他下次登录收到的名册照样是对的,对账是<b>状态同步</b>
+     * 不是事件通知,漏不掉。
+     */
+    public static void forget(MinecraftServer server, UUID ownerUuid, Collection<UUID> uuids) {
+        CompanionRegistry reg = CompanionRegistry.get(server);
+        EventOutbox outbox = EventOutbox.get(server);
+        for (UUID uuid : uuids) {
+            reg.remove(uuid);
+            outbox.forget(uuid);   // 她攒的事件跟着走:没人会再收
+        }
+        ServerPlayer owner = ownerUuid == null ? null : server.getPlayerList().getPlayer(ownerUuid);
+        if (owner != null) {
+            syncRosterToOwner(server, owner);
+        }
     }
 
     /**
@@ -273,8 +326,8 @@ public final class Companions {
         for (UUID id : ids) {
             NumenPlayer live = NumenPlayer.findByUuid(server, id);
             if (live != null) CompanionFactory.despawn(server, live);
-            reg.remove(id);
         }
+        forget(server, ownerUuid, ids);   // 一次除名、一次推送
         return ids.size();
     }
 }

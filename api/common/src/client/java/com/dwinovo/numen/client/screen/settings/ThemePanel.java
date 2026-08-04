@@ -6,7 +6,9 @@ import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.ListView;
+import com.dwinovo.numen.client.ui.widget.Slider;
 import com.dwinovo.numen.client.ui.widget.Toggle;
+import com.dwinovo.numen.event.InboxPolicy;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
@@ -43,11 +45,28 @@ public final class ThemePanel {
 
         // 快捷对话提醒开关行(默认开:准星指着同伴时浮「按 [键] 对话」)。
         int hy = y + 16 + Math.min(listH, h - 16 - 30) + 8;
-        Toggle hint = ui.add(new Toggle(UiTheme.talkHintEnabled(), UiTheme::setTalkHint));
+        Toggle hint = ui.add(new Toggle(com.dwinovo.numen.client.data.ClientPrefs.talkHint(),
+                com.dwinovo.numen.client.data.ClientPrefs::setTalkHint));
         hint.setBounds(x, hy, 22, 11);
         String label = "快捷对话提醒(准星指着同伴时提示按键)";
         Label hintLabel = ui.add(new Label(label, Label.Role.SECONDARY));
         hintLabel.setBounds(x + 28, hy + 1, Minecraft.getInstance().font.width(label), 9);
+
+        // 主动性:她多久把攒下的世界变化说一次。这是"及时性"的旋钮,不是"话多话少"——
+        // 拉小知道得及时、token 烧得快,拉大知道得晚、省。默认 3。
+        int sy = hy + NumenStyle.ROW_PITCH;
+        Label initTitle = ui.add(new Label("主动性", Label.Role.SECONDARY));
+        initTitle.setBounds(x, sy + 1, Minecraft.getInstance().font.width("主动性"), 9);
+        Slider initiative = ui.add(new Slider(
+                InboxPolicy.MIN_LEVEL, InboxPolicy.MAX_LEVEL, 1,
+                com.dwinovo.numen.client.data.ClientPrefs.initiativeLevel(),
+                v -> com.dwinovo.numen.client.data.ClientPrefs.setInitiativeLevel((int) v),
+                v -> String.valueOf((int) v)));
+        initiative.setBounds(x + 44, sy, Math.min(140, w - 44), NumenStyle.CONTROL_H);
+        String hintText = "小 = 世界变化知道得及时,更费 token;大 = 知道得晚,更省";
+        Label initHint = ui.add(new Label(hintText, Label.Role.MUTED));
+        initHint.setBounds(x, sy + NumenStyle.CONTROL_H + 3,
+                Minecraft.getInstance().font.width(hintText), 9);
     }
 
     private void renderRow(IDrawSurface s, NumenTheme.Colors c, UiTheme t, int index,

@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -101,6 +102,80 @@ class CompanionHomeTest {
         assertEquals("voice_1", CompanionHome.binding(B).voiceId(), "不许殃及别人");
     }
 
+    // ---- 对账(删除本地数据的唯一入口) ----
+
+    @Test
+    void reconcileSweepsTheDismissedAndClaimsTheRest() throws IOException {
+        Files.writeString(CompanionHome.chat(A), "a\n", StandardCharsets.UTF_8);
+        Files.writeString(CompanionHome.chat(B), "b\n", StandardCharsets.UTF_8);
+        CompanionHome.claim(A, "world-1");
+        CompanionHome.claim(B, "world-1");
+
+        assertEquals(1, CompanionHome.reconcile("world-1", Set.of(A)), "B 不在名册上 = 被遣散了");
+
+        assertTrue(Files.isDirectory(root.resolve("companions").resolve(A.toString())));
+        assertFalse(Files.exists(root.resolve("companions").resolve(B.toString())));
+        assertEquals("world-1", CompanionHome.world(A), "名册上的同伴顺手认领世界归属");
+    }
+
+    @Test
+    void reconcileNeverTouchesAnotherWorldsCompanions() throws IOException {
+        // 换个存档进去:上一个存档的同伴当然不在这份名册上,但她们的数据一根汗毛都不能动
+        Files.writeString(CompanionHome.chat(A), "存档一的会话\n", StandardCharsets.UTF_8);
+        CompanionHome.claim(A, "world-1");
+        Files.writeString(CompanionHome.chat(B), "存档二的会话\n", StandardCharsets.UTF_8);
+        CompanionHome.claim(B, "world-2");
+
+        assertEquals(0, CompanionHome.reconcile("world-2", Set.of(B)));
+
+        assertEquals("存档一的会话\n", Files.readString(CompanionHome.chat(A), StandardCharsets.UTF_8));
+        assertEquals("world-1", CompanionHome.world(A), "别人的世界标记不许被改写");
+    }
+
+    @Test
+    void reconcileLeavesUnclaimedHomesAlone() throws IOException {
+        // 旧版本迁移过来的数据没标世界,归属不明——宁可留孤儿也不删错
+        Files.writeString(CompanionHome.chat(A), "来历不明\n", StandardCharsets.UTF_8);
+        assertNull(CompanionHome.world(A));
+
+        assertEquals(0, CompanionHome.reconcile("world-1", Set.of()));
+        assertTrue(Files.exists(CompanionHome.chat(A)));
+    }
+
+    @Test
+    void reconcileWithoutAWorldIdIsANoOp() throws IOException {
+        // 还没收到过名册(或服务端是老版本)就不知道自己在哪儿,一个都不能删
+        Files.writeString(CompanionHome.chat(A), "a\n", StandardCharsets.UTF_8);
+        CompanionHome.claim(A, "world-1");
+
+        assertEquals(0, CompanionHome.reconcile(null, Set.of()));
+        assertEquals(0, CompanionHome.reconcile("", Set.of()));
+        assertTrue(Files.exists(CompanionHome.chat(A)));
+    }
+
+    @Test
+    void claimIsIdempotentAndRejectsBlanks() {
+        CompanionHome.claim(A, "world-1");
+        CompanionHome.claim(A, "world-1");
+        assertEquals("world-1", CompanionHome.world(A));
+
+        CompanionHome.claim(B, null);
+        CompanionHome.claim(B, "   ");
+        assertNull(CompanionHome.world(B), "空白不是世界");
+    }
+
+    @Test
+    void sweptHomeTakesTheWorldMarkerWithIt() {
+        CompanionHome.bind(A, CompanionHome.Binding.EMPTY.withProvider("p"));
+        CompanionHome.claim(A, "world-1");
+
+        CompanionHome.reconcile("world-1", Set.of());
+
+        assertNull(CompanionHome.world(A), "整个目录都没了,标记自然也没了");
+        assertTrue(CompanionHome.binding(A).isEmpty());
+        assertTrue(CompanionHome.known().isEmpty());
+    }
+
     @Test
     void deleteIsSafeWhenNothingIsThere() {
         CompanionHome.delete(A);   // 没建过家:静默,不抛
@@ -128,6 +203,7 @@ class CompanionHomeTest {
         Files.writeString(conv.resolve(A + ".jsonl"), "chat-a\n", StandardCharsets.UTF_8);
         Files.writeString(conv.resolve(A + ".stats.json"), "{\"t\":1}", StandardCharsets.UTF_8);
         Files.writeString(conv.resolve(A + ".inbox.jsonl"), "inbox-a\n", StandardCharsets.UTF_8);
+        Files.writeString(conv.resolve(A + ".jsonl.v1.bak"), "old-format\n", StandardCharsets.UTF_8);
         Files.writeString(mem.resolve(A + ".blocks.json"), "{\"b\":1}", StandardCharsets.UTF_8);
 
         CompanionHome.migrateLegacy();
@@ -136,7 +212,54 @@ class CompanionHomeTest {
         assertEquals("{\"t\":1}", Files.readString(CompanionHome.stats(A), StandardCharsets.UTF_8));
         assertEquals("inbox-a\n", Files.readString(CompanionHome.inbox(A), StandardCharsets.UTF_8));
         assertEquals("{\"b\":1}", Files.readString(CompanionHome.blocks(A), StandardCharsets.UTF_8));
+        assertEquals("old-format\n", Files.readString(
+                CompanionHome.dir(A).resolve("chat.jsonl.v1.bak"), StandardCharsets.UTF_8));
         assertFalse(Files.exists(conv.resolve(A + ".jsonl")), "搬走就不该留在原地");
+        // 一个没搬走的文件就会让旧目录永远删不掉,迁移于是年年重跑——所以这条必须验
+        assertFalse(Files.isDirectory(conv), "搬空的旧目录随手删掉 = 迁移完成的标记");
+        assertFalse(Files.isDirectory(mem));
+    }
+
+    @Test
+    void migrationClaimsPersonaBindingFromTheLog() throws IOException {
+        // 旧版把人设绑定记在会话日志的事件里(事件溯源,后写胜出)
+        Path conv = Files.createDirectories(root.resolve("conversations"));
+        Files.writeString(conv.resolve(A + ".jsonl"), """
+                {"type":"header","v":2}
+                {"role":"user","content":"在吗"}
+                {"type":"persona-change","id":"旧人设","content":"正文","name":"旧"}
+                {"type":"persona-change","id":"新人设","content":"正文2","name":"新"}
+                """, StandardCharsets.UTF_8);
+
+        CompanionHome.migrateLegacy();
+
+        assertEquals("新人设", CompanionHome.binding(A).personaId(), "认最后一条,不是第一条");
+    }
+
+    @Test
+    void personaClaimNeverOverwritesAnExistingBinding() throws IOException {
+        CompanionHome.bind(A, CompanionHome.Binding.EMPTY.withPersona("主人刚选的"));
+        Path conv = Files.createDirectories(root.resolve("conversations"));
+        Files.writeString(conv.resolve(A + ".jsonl"),
+                "{\"type\":\"persona-change\",\"id\":\"日志里的老货\"}\n", StandardCharsets.UTF_8);
+
+        CompanionHome.migrateLegacy();
+
+        assertEquals("主人刚选的", CompanionHome.binding(A).personaId());
+    }
+
+    @Test
+    void migrationStopsRunningOnceTheOldLayoutIsGone() throws IOException {
+        Files.createDirectories(root.resolve("conversations"));
+        CompanionHome.migrateLegacy();          // 空目录也算搬完:删掉
+        assertFalse(Files.isDirectory(root.resolve("conversations")));
+
+        // 之后新写的分隔不带 id,就算再跑也认领不出东西——但根本不会再跑
+        CompanionHome.bind(A, CompanionHome.Binding.EMPTY.withProvider("p"));
+        Files.writeString(CompanionHome.chat(A),
+                "{\"type\":\"persona-change\",\"ts\":1}\n", StandardCharsets.UTF_8);
+        CompanionHome.migrateLegacy();
+        assertNull(CompanionHome.binding(A).personaId());
     }
 
     @Test
@@ -173,6 +296,7 @@ class CompanionHomeTest {
 
         // 第二轮:旧文件又出现(手动还原/多存档),但家里已有更新的内容
         Files.writeString(CompanionHome.chat(A), "new\n", StandardCharsets.UTF_8);
+        Files.createDirectories(conv);
         Files.writeString(conv.resolve(A + ".jsonl"), "old-again\n", StandardCharsets.UTF_8);
         CompanionHome.migrateLegacy();
 

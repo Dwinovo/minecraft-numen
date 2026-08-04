@@ -76,10 +76,11 @@ public final class CompanionRegistry extends SavedData {
         ).apply(i, Entry::new));
     }
 
-    private static final Codec<CompanionRegistry> CODEC =
+    private static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Entry.CODEC)
-                    .xmap(CompanionRegistry::new, d -> d.entries)
-                    .fieldOf("companions").codec();
+                    .fieldOf("companions").forGetter(d -> d.entries),
+            Codec.STRING.optionalFieldOf("worldId", "").forGetter(d -> d.worldId)
+    ).apply(i, CompanionRegistry::new));
 
     // 1.21.4 predates the codec-based SavedDataType; register with the old SavedData.Factory
     // (Supplier + deserializer + DataFixType) and drive (de)serialization through CODEC ourselves.
@@ -94,22 +95,44 @@ public final class CompanionRegistry extends SavedData {
         return tag;
     }
 
-    private static CompanionRegistry load(CompoundTag tag, HolderLookup.Provider registries) {
+    // 包内可见:持久化是这个类最要命的部分(解析失败 = 全世界同伴静默消失),
+    // 得让单测够得着。
+    static CompanionRegistry load(CompoundTag tag, HolderLookup.Provider registries) {
         return CODEC.parse(NbtOps.INSTANCE, tag).result().orElseGet(CompanionRegistry::new);
     }
 
     private final Map<UUID, Entry> entries;
+    private String worldId;
 
-    private CompanionRegistry() {
+    CompanionRegistry() {
         this.entries = new HashMap<>();
+        this.worldId = "";
     }
 
-    private CompanionRegistry(Map<UUID, Entry> entries) {
+    private CompanionRegistry(Map<UUID, Entry> entries, String worldId) {
         this.entries = new HashMap<>(entries);
+        this.worldId = worldId == null ? "" : worldId;
     }
 
     public static CompanionRegistry get(MinecraftServer server) {
         return server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_companions");
+    }
+
+    /**
+     * 这个世界的身份证——首次访问时随机生成并持久化。
+     *
+     * <p>客户端的同伴数据({@code config/numen/companions/}) 是一个跨存档共用的目录,
+     * 所以"这只同伴不在名册上"必须先问清楚"名册是哪个世界的"。没有这个 id,换一个
+     * 存档进去就会把上一个存档的同伴全判成已遣散——那是会毁数据的。
+     *
+     * <p>随机 UUID 而不是存档名:存档名会重名、会改名,服务器地址会变。
+     */
+    public String worldId() {
+        if (worldId == null || worldId.isBlank()) {
+            worldId = UUID.randomUUID().toString();
+            setDirty();
+        }
+        return worldId;
     }
 
     /** Add or update a companion's catalog entry. */

@@ -100,7 +100,8 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.chat.SelectedCompanion.clear();
                     com.dwinovo.numen.client.chat.QuickVoice.clear();
                     com.dwinovo.numen.client.chat.ChatLines.clearLive();
-                    com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
+                    com.dwinovo.numen.client.agent.NumenRoster.instance().clear();
+                    com.dwinovo.numen.client.agent.CompanionHome.onDisconnect();
                     com.dwinovo.numen.client.debug.PathDebugState.clear();
                 });
 

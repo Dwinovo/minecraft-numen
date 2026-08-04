@@ -606,7 +606,7 @@ public final class SettingsView {
                 for (UUID cu : AgentLoopRegistry.loadedEntityUuids()) {
                     EntityAgentLoop l = AgentLoopRegistry.get(cu).orElse(null);
                     if (l != null && personaEditId.equals(l.personaId())) {
-                        l.setPersona(saved.id(), saved.text(), saved.name());
+                        l.setPersona(saved.id());
                     }
                 }
             }

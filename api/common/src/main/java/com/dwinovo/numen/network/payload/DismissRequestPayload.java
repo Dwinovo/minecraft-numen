@@ -45,12 +45,11 @@ public record DismissRequestPayload(UUID uuid) implements CustomPacketPayload {
             body.getInventory().dropAll();                        // death-style: drop everything at its feet
             Companions.dismiss(server, body);                     // despawn + forget (no respawn)
         } else {
-            // Dormant / not loaded — verify ownership via the registry, then forget it.
-            CompanionRegistry reg = CompanionRegistry.get(server);
-            CompanionRegistry.Entry e = reg.find(p.uuid());
+            // 休眠 / 没加载——先按注册表验归属,再除名。走 Companions.forget 而不是直接
+            // reg.remove:除名和通知客户端是同一件事的两半,分开写迟早漏一半。
+            CompanionRegistry.Entry e = CompanionRegistry.get(server).find(p.uuid());
             if (e == null || !e.owner().equals(owner.getUUID())) return;
-            reg.remove(p.uuid());
+            Companions.forget(server, owner.getUUID(), java.util.List.of(p.uuid()));
         }
-        Companions.syncRosterToOwner(server, owner);              // push the trimmed roster to the owner
     }
 }

@@ -125,6 +125,7 @@
   "numen.provider.no_key": "no key",
   "numen.provider.title": "Model Configs",
   "numen.respawn": "· reviving %ss",
+  "numen.respawn.blocked": "· waiting for room to land",
   "numen.settings.add_site": "＋ Add site",
   "numen.settings.base_url": "Base URL",
   "numen.settings.custom_model": "Custom…",

@@ -119,53 +119,17 @@ public record UiTheme(
         return 0xFF000000 | (r << 16) | (gr << 8) | bl;
     }
 
-    // ---- persistence: config/numen/ui.json {"theme": "<id>", "talkHint": bool} ----
+    // ---- 选择的持久化归 ClientPrefs;这里只管颜色 ----
 
-    private static java.nio.file.Path file;
-    /** 快捷对话提醒:准星指着同伴时浮「按 [键] 对话」。默认开,设置里可关。 */
-    private static boolean talkHint = true;
-
-    public static boolean talkHintEnabled() {
-        return talkHint;
-    }
-
-    /** 设置入口:切换快捷对话提醒并落盘。 */
-    public static void setTalkHint(boolean enabled) {
-        talkHint = enabled;
-        persist();
-    }
-
-    /** Load the saved pick (client init). Missing/broken file keeps the default. */
+    /** 客户端启动:把主人存的主题应用上。 */
     public static void init(java.nio.file.Path numenConfigDir) {
-        file = numenConfigDir.resolve("ui.json");
-        try {
-            if (java.nio.file.Files.exists(file)) {
-                var o = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(file))
-                        .getAsJsonObject();
-                if (o.has("theme")) set(o.get("theme").getAsString());
-                if (o.has("talkHint")) talkHint = o.get("talkHint").getAsBoolean();
-            }
-        } catch (Exception e) {
-            com.dwinovo.numen.Constants.LOG.warn("ui.json unreadable — using default theme", e);
-        }
+        com.dwinovo.numen.client.data.ClientPrefs.init(numenConfigDir);
+        set(com.dwinovo.numen.client.data.ClientPrefs.theme());
     }
 
-    /** The picker's entry point: switch AND save. */
+    /** 主题选择器的入口:切换并记住。 */
     public static void select(String id) {
         set(id);
-        persist();
-    }
-
-    private static void persist() {
-        if (file == null) return;
-        try {
-            java.nio.file.Files.createDirectories(file.getParent());
-            var o = new com.google.gson.JsonObject();
-            o.addProperty("theme", current.id());
-            o.addProperty("talkHint", talkHint);
-            java.nio.file.Files.writeString(file, o.toString());
-        } catch (Exception e) {
-            com.dwinovo.numen.Constants.LOG.warn("ui.json write failed — prefs not persisted", e);
-        }
+        com.dwinovo.numen.client.data.ClientPrefs.setTheme(id);
     }
 }

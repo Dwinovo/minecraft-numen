@@ -9,8 +9,8 @@
  *   <li>{@link CompanionTaskFactory} / {@link TaskDispatch} /
  *       {@link CompanionTickDispatcher} — the registration and driving points a
  *       pack (and its loader entry points) call;</li>
- *   <li>{@link TaskChain} / {@link BrainChains} / {@link BodyLog} — the
- *       priority-bidding chain surface for instinct layers;</li>
+ *   <li>{@link TaskChain} / {@link BrainChains} — the priority-bidding chain
+ *       surface for instinct layers;</li>
  *   <li>{@link com.dwinovo.numen.task.reflex reflex} — the instinct switch
  *       roster;</li>
  *   <li>{@link TaskStatusTool} / {@link TaskStopTool} — the two engine-owned

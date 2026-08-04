@@ -1,6 +1,5 @@
 package com.dwinovo.numen.core.task.chain;
 
-import com.dwinovo.numen.task.BodyLog;
 import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
@@ -49,8 +48,6 @@ public final class BreathChain implements TaskChain, com.dwinovo.numen.task.refl
     /** Ticks between re-validating/re-picking the opening being swum toward. */
     private static final int RETARGET_TICKS = 20;
 
-    /** BodyLog for completed episodes — dual-rail routed (may be null in unit tests). */
-    private final com.dwinovo.numen.task.BodyLog bodyLog;
     /** Lowest air seen during the current episode (drives the one diary line). */
     private int worstAir = Integer.MAX_VALUE;
     private boolean episodeActive;
@@ -67,11 +64,6 @@ public final class BreathChain implements TaskChain, com.dwinovo.numen.task.refl
     private static final int FEARLESS_FLOAT_DELAY_TICKS = 60;
 
     public BreathChain() {
-        this(null);
-    }
-
-    public BreathChain(com.dwinovo.numen.task.BodyLog bodyLog) {
-        this.bodyLog = bodyLog;
     }
 
     @Override
@@ -198,9 +190,9 @@ public final class BreathChain implements TaskChain, com.dwinovo.numen.task.refl
 
     /** Diary the entrapment the moment it is diagnosed — not post-mortem. */
     private void noteTrapped(NumenPlayer companion) {
-        if (trappedNoted || bodyLog == null) return;
+        if (trappedNoted) return;
         trappedNoted = true;
-        bodyLog.report("drowning under a sealed ceiling with " + Math.max(0, companion.getAirSupply() / 20)
+        com.dwinovo.numen.event.NumenEvents.body(companion, "drowning under a sealed ceiling with " + Math.max(0, companion.getAirSupply() / 20)
                 + "s of air — no opening within " + AIR_SEARCH_RADIUS
                 + " blocks of connected water; I need an air hole dug or a way out");
     }
@@ -213,8 +205,7 @@ public final class BreathChain implements TaskChain, com.dwinovo.numen.task.refl
         airColumn = null;
         retargetCooldown = 0;
         trappedNoted = false;
-        if (bodyLog == null) return;
-        bodyLog.report("nearly drowned (" + Math.max(0, worst / 20) + "s of air left) — swam up for a breath");
+        com.dwinovo.numen.event.NumenEvents.body(companion, "nearly drowned (" + Math.max(0, worst / 20) + "s of air left) — swam up for a breath");
     }
 
     @Override

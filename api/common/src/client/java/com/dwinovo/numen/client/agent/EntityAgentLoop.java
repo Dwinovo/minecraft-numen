@@ -3,6 +3,7 @@ package com.dwinovo.numen.client.agent;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.agent.llm.ConvoLog;
+import com.dwinovo.numen.event.InboxPolicy;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
@@ -141,22 +142,14 @@ public final class EntityAgentLoop {
     private record CurrentTask(String id, String tool, String arguments, long sinceMs) {}
 
     /**
-     * This companion's persona (per-companion, dynamic). Sourced from the last {@code persona-change}
-     * event in the log on restore, mutated live by {@link #setPersona}. Null/blank → falls back to the
-     * global {@code getSystemPrompt} default. Read fresh every turn in {@link #composeSystemPrompt}.
-     */
-    /**
-     * 绑定的人设 id——<b>真源在人设库</b>,这里只记 id,正文用时现取。
-     * 于是编辑人设对所有同伴立即生效,不管它这会儿加载没加载:没有副本,
-     * 就没有"把修改推给每个实例"这种要写代码维护的同步。
+     * 绑定的人设 id——<b>真源在人设库</b>,这里只记 id,正文用时现取(落盘在
+     * {@link CompanionHome} 的 {@code binding.json})。于是编辑人设对所有同伴立即生效,
+     * 不管它这会儿加载没加载:没有副本,就没有"把修改推给每个实例"这种要写代码维护的同步。
+     *
+     * <p>人设文件被删/改名 → 这里悬空 → 回落全局默认人格。不留兜底快照:那会变成
+     * 第二真源,改人设时必然对不上,而"我把人设删了"是主人自己的选择。
      */
     private String personaId;
-    /**
-     * 兜底快照:人设文件被删/改名时接着用,免得她突然失忆。
-     * 只在库里查不到 {@link #personaId} 时才生效——库永远优先。
-     */
-    private String personaTextSnapshot;
-    private String personaNameSnapshot;
 
     /**
      * The {@link com.dwinovo.numen.agent.llm.ProviderLibrary} entry this companion
@@ -298,18 +291,7 @@ public final class EntityAgentLoop {
     private void restoreFromDisk() {
         tokens.load();
         log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
-        // 绑定的真源是 binding.json;日志里那份只留作"库里条目没了"时的兜底快照。
         personaId = CompanionHome.binding(entityUuid).personaId();
-        ConvoLog.PersonaState p = log.loadCurrentPersona();
-        if (p != null && p.text() != null && !p.text().isBlank()) {
-            personaTextSnapshot = p.text();
-            personaNameSnapshot = p.name();
-            if (personaId == null) {   // 迁移前存的老会话:绑定仍从日志认领一次
-                personaId = p.id() == null || p.id().isBlank() ? null : p.id();
-                CompanionHome.bind(entityUuid,
-                        CompanionHome.binding(entityUuid).withPersona(personaId));
-            }
-        }
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
         convo.preload(history);
@@ -360,12 +342,16 @@ public final class EntityAgentLoop {
         return inbox.snapshot();
     }
 
-    /** Owner typed a prompt in the chat GUI. */
+    /**
+     * 主人在聊天框里说话。
+     *
+     * <p>死着也照收——{@link #tryStartTurn} 第一道守卫就是 {@code dead},开不起来轮,
+     * 话安安静静躺在收件箱里,聊天里显示成 ⌛ 待发气泡,复活时随死亡叙事一起送出。
+     * (外接大脑模式早就是这个做法:"收件箱照收不误,事件不丢"。)直接丢掉的话,
+     * 死前一秒说的留着、死后一秒说的蒸发——而主人根本看不见那一 tick 的分界,
+     * 只会觉得这模组有时候吞消息。
+     */
     public void submitPrompt(String text) {
-        if (dead) {
-            Constants.LOG.info("[numen-entity#{}] prompt ignored — body is dead", entityUuid);
-            return;
-        }
         boolean wasAborted = turnPause.isPaused();
         turnPause = AgentTurnPause.NONE;
         // Always buffer first; tryStartTurn() splices buffered prompts into the
@@ -390,6 +376,10 @@ public final class EntityAgentLoop {
     public void clientTick() {
         dispatcher.tick();
         presenter.tick();
+        // 攒够时长也要开口:光靠"事件到达"触发的话,最后一条之后就再没人问了
+        if (!awaitingLlmResponse && !dispatcher.busy()) {
+            maybeDrain();
+        }
     }
 
     /**
@@ -602,7 +592,8 @@ public final class EntityAgentLoop {
         awaitingLlmResponse = false;
         compacting = false;
         presenter.clearPartial();
-        inbox.clearAll();
+        // 箱子一样不清:每条都盖着时间戳,模型自己看得出哪些是死之前的。
+        // 我们替它判断"哪些信息过期了",反而会删掉有用的叙事("我死前刚吃了东西")。
         dead = true;
         Constants.LOG.info("[numen-entity#{}] body died ({}) — loop frozen ({} call(s) in flight)",
                 entityUuid, cause, deathInterruptedCalls.size());
@@ -649,7 +640,9 @@ public final class EntityAgentLoop {
         // D1 resumes the suspended turn: the death-failure results above are exactly the tool results
         // the in-flight turn was waiting on — continuing it is turn completion, not a wake. (Before the
         // downgrade this resume rode the urgent flag; now it is explicit.)
-        if (hadSuspendedTurn) {
+        // 有被挂起的回合就续上;没有但主人在死亡期间说了话,也要开轮——⌛ 气泡挂着
+        // 不动同样是一种"看起来坏了"。纯空闲死亡(只有死亡叙事)才躺着搭下次的车。
+        if (hadSuspendedTurn || inbox.promptCount() > 0) {
             tryStartTurn();
         }
     }
@@ -671,58 +664,86 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * 收件箱唯一入口(事件侧)。三态路由——消费时机由**发生时的状态**决定,
-     * 不由事件类型决定:
-     * <ul>
-     *   <li><b>回合进行中</b>:进箱躺着。{@link #tryStartTurn} 的守卫会挡下开轮,
-     *       到工具批结算的边界自然一次倒箱——"直接发"的最快合法形态;</li>
-     *   <li><b>身体在执行后台任务(大脑空闲)</b>:立刻开轮。任务期间的事是军情
-     *       (呛水、被袭、任务收尾都可能要改链),模型有权当场重新决策;</li>
-     *   <li><b>完全空闲</b>:进箱躺着,等下一个轮子搭车——僵尸击杀只是日记素材,
-     *       不值得单独吵主人。只有 {@code principal}(活人在说话:外部桥接的
-     *       弹幕/QQ 消息)例外,享受与主人同级的开轮资格。</li>
-     * </ul>
-     * push 即落盘(跨会话不失忆);死亡冻结期间丢弃。
+     * 收件箱唯一入口(事件侧)。事件<b>一律进箱</b>,什么时候倒出去由
+     * {@link InboxPolicy} 说了算——有 urgent、攒够档位阈值、或者躺太久了。
+     *
+     * <p>回合进行中的事件不必特殊处理:它会在工具批结算的边界自然一次倒箱,
+     * 那是协议决定的(assistant 的 tool_calls 中间插 user 消息会被 API 直接 400)。
+     *
+     * <p>死了也照收——每条都盖着游戏内时间戳,模型自己看得出哪些发生在死亡之前,
+     * 不需要我们替它清箱。
      */
-    public void pushEvent(String xml, boolean principal) {
-        if (dead) return;
-        // 后台任务收尾:对上 id 清记账。注意先取"发生时的状态"再清——收尾事件
-        // 本身发生在任务态,有资格立刻开轮(主动汇报"挖完了")。
-        boolean duringTask = currentTask != null;
-        if (duringTask && xml.contains("kind=\"task_finished\"")
-                && xml.contains("id=\"" + currentTask.id() + "\"")) {
+    public void pushEvent(String xml, boolean urgent) {
+        // 死了也照收:时间戳会说清它发生在死亡前后,复活时一并送出。
+        boolean wasTaskWindDown = currentTask != null
+                && xml.contains("kind=\"task_finished\"")
+                && xml.contains("id=\"" + currentTask.id() + "\"");
+        if (wasTaskWindDown) {
             currentTask = null;
         }
-        inbox.pushEvent(xml);
-        Constants.LOG.info("[numen-entity#{}] event inboxed{}{}: {}",
-                entityUuid, principal ? " (principal)" : "", duringTask ? " (during task)" : "",
-                truncate(xml, 120));
-        boolean wakeWorthy = principal || duringTask;
-        AgentTurnPause previousPause = turnPause;
-        turnPause = turnPause.afterWakeEvent(wakeWorthy);
-        if (previousPause != turnPause) {
-            // The failed LLM turn was already abandoned. This event starts a fresh turn and therefore
-            // receives a fresh turn-level retry budget as well.
-            turnRetried = false;
-            Constants.LOG.info("[numen-entity#{}] wake event resumed chain after recoverable LLM failure",
-                    entityUuid);
+        inbox.pushEvent(xml, urgent);
+        Constants.LOG.info("[numen-entity#{}] event inboxed{}: {}",
+                entityUuid, urgent ? " (urgent)" : "", truncate(xml, 120));
+        if (urgent) {
+            AgentTurnPause previousPause = turnPause;
+            turnPause = turnPause.afterWakeEvent(true);
+            if (previousPause != turnPause) {
+                // 上一轮的失败已经作废,这是新的一轮,重试预算跟着重置。
+                turnRetried = false;
+                Constants.LOG.info("[numen-entity#{}] urgent event resumed chain after recoverable LLM failure",
+                        entityUuid);
+            }
         }
-        if (wakeWorthy) tryStartTurn();
+        maybeDrain();
     }
 
-    /** This companion's current persona name (for the panel), or null. */
-    /** 人设正文:库里现取(编辑立即生效),查不到才用兜底快照。 */
+    /**
+     * 空闲时问一次:攒的事件够不够开一轮。规则在 {@link InboxPolicy}(纯 JVM,可单测)——
+     * 有 urgent、攒够档位阈值、或者躺太久了。
+     *
+     * <p>回合进行中不必问:事件会在工具批结算的边界自然一次倒箱,那是协议决定的。
+     * 也不再看"身体是不是在跑后台任务"——那条规则让她<b>忙的时候话最多、闲下来最沉默</b>,
+     * 正好和陪伴需要的相反。
+     */
+    private void maybeDrain() {
+        if (dead) {
+            return;
+        }
+        int level = initiativeLevel();
+        int queued = inbox.eventCount();
+        long age = inbox.oldestEventAgeMs();
+        boolean urgent = inbox.hasUrgent();
+        if (!InboxPolicy.shouldDrain(urgent, queued, age, level)) {
+            return;
+        }
+        Constants.LOG.info("[numen-inbox#{}] 主动开轮:{}(攒了 {} 条/阈值 {},最老 {}s/上限 {}s,档位 {})",
+                entityUuid,
+                urgent ? "有急事" : (queued >= InboxPolicy.threshold(level) ? "攒够了" : "攒久了"),
+                queued, InboxPolicy.threshold(level),
+                age / 1000L, InboxPolicy.maxWaitMs(level) / 1000L, level);
+        tryStartTurn();
+    }
+
+    /** 主人拉的主动性档位 1~10。 */
+    private static int initiativeLevel() {
+        return com.dwinovo.numen.client.data.ClientPrefs.initiativeLevel();
+    }
+
+    /** 人设正文:库里现取(编辑立即生效);没绑或条目没了 → null,回落全局默认人格。 */
     private String personaText() {
-        var p = personaId == null ? null
-                : com.dwinovo.numen.persona.PersonaLibrary.instance().get(personaId);
-        return p != null ? p.text() : personaTextSnapshot;
+        var p = persona();
+        return p == null ? null : p.text();
     }
 
-    /** 人设名:同上,库优先、快照兜底。 */
+    /** 人设名(面板显示用),没绑或条目没了则 null。 */
     public String personaName() {
-        var p = personaId == null ? null
+        var p = persona();
+        return p == null ? null : p.name();
+    }
+
+    private com.dwinovo.numen.persona.PersonaLibrary.Persona persona() {
+        return personaId == null ? null
                 : com.dwinovo.numen.persona.PersonaLibrary.instance().get(personaId);
-        return p != null ? p.name() : personaNameSnapshot;
     }
 
     /** The library id this companion's persona came from, or null (legacy / default). */
@@ -772,37 +793,27 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * Switch this companion's persona at runtime. Three things happen:
-     * (1) the persona text/name update, so the next turn's system prompt recomposes with the new
-     *     identity (read fresh in {@link #composeSystemPrompt} — no in-flight interruption);
-     * (2) a {@code persona-change} event is logged, so a relaunch recovers the current persona
-     *     ({@link #restoreFromDisk} via {@code loadCurrentPersona});
-     * (3) 聊天流插一条分隔记号(给主人看的,不发给模型)。
+     * 运行时换人设。只做两件事:改绑定(下一轮 {@link #composeSystemPrompt} 现取正文,
+     * 不打断在飞的请求),再往聊天流插一条分隔记号。
+     *
+     * <p>不给模型注入"从现在起你是…"的和解消息——新系统提示本身就是最强的指令,
+     * 历史口吻要不要接得上是主人自己的选择,不由我们替他兜。
      */
-    public void setPersona(String id, String text, String name) {
+    public void setPersona(String id) {
         this.personaId = id;
-        this.personaTextSnapshot = text;
-        this.personaNameSnapshot = name;
         CompanionHome.bind(entityUuid, CompanionHome.binding(entityUuid).withPersona(id));
-        log.appendPersonaChange(id, text, name);   // 快照留在日志里(库里的条目没了时兜底)
-        // 聊天流插一条分隔:给主人看的记号(什么时候换的),不发给模型。
-        // 换人设不再给模型注入"和解"消息——新系统提示本身就是最强的指令,
-        // 历史口吻要不要接得上是主人自己的选择,不由我们替他兜。
+        log.appendPersonaDivider();   // 落盘的记号:重启后回看也知道这儿换过
         display.add(new ConvoState.Msg.User(ConvoLog.PERSONA_DIVIDER));
     }
 
     /**
-     * Set the companion's STARTING persona at summon — records it (event-sourced) but does NOT inject a
-     * reconciliation or divider, since a brand-new companion has no prior history/identity to reconcile.
-     * No-op if a persona is already set (avoids stomping a resumed companion).
+     * 召唤时定下的初始人设——不插分隔记号:全新的同伴没有"之前"可分隔。
+     * 已经有人设就不动(别把恢复出来的同伴冲掉)。
      */
-    public void setInitialPersona(String id, String text, String name) {
-        if (personaText() != null && !personaText().isBlank()) return;   // already has one
+    public void setInitialPersona(String id) {
+        if (personaId != null) return;
         this.personaId = id;
-        this.personaTextSnapshot = text;
-        this.personaNameSnapshot = name;
         CompanionHome.bind(entityUuid, CompanionHome.binding(entityUuid).withPersona(id));
-        log.appendPersonaChange(id, text, name);
     }
 
     // ---- internals ----
@@ -847,7 +858,7 @@ public final class EntityAgentLoop {
         }
         // 「外接大脑」模式的总闸:模式开着,身体归外部 MCP 驱动者,内置大脑一轮都不开。
         // 收件箱照收不误(事件不丢),模式关掉后主人下次说话就能带着这段空白期的见闻开轮。
-        // 聊天框禁用只是体验层——弹幕/QQ 桥接送进来的 principal 消息只有这里拦得住。
+        // 聊天框禁用只是体验层——外部桥接送进来的消息只有这里拦得住。
         if (McpMode.instance().enabled()) {
             Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: 外接大脑模式开启中", entityUuid);
             return;

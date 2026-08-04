@@ -34,7 +34,8 @@ import java.util.UUID;
  *   <li><b>Messages</b> — the v1 shape, keyed by {@code role} = {@code user}/{@code assistant}/{@code tool},
  *       plus optional additive metadata ({@code ts}, and reserved {@code model}/{@code usage}).</li>
  *   <li><b>Events</b> — keyed by {@code type}, no {@code role}: {@code compact}, {@code persona-change},
- *       and the reserved {@code goal}. Events carry state, not conversation.</li>
+ *       and the reserved {@code goal}. Events record <em>what happened, and when</em> — never a copy of
+ *       configuration (bindings live in the companion's {@code binding.json}, persona text in the library).</li>
  * </ul>
  * <b>Discriminator rule:</b> a record with a {@code type} field is an event; otherwise it's a message
  * dispatched on {@code role}. The legacy v1 {@code role:"compact"} line is read as a {@code compact} event.
@@ -93,9 +94,6 @@ public final class ConvoLog {
         return file;
     }
 
-    /** A companion's current persona, recovered from the last {@code persona-change} event. */
-    public record PersonaState(String id, String text, String name) {}
-
     // ---- write ----
 
     /** Append one message as a single JSONL line (with a {@code ts}). Best-effort: failures only warn. */
@@ -130,17 +128,14 @@ public final class ConvoLog {
     }
 
     /**
-     * Append a {@code persona-change} event: the companion's new persona text + display name. Event-sourced
-     * (last-wins) — {@link #loadCurrentPersona} recovers the current persona from the latest such event, and
-     * {@link #loadDisplay} renders it as a {@link #PERSONA_DIVIDER}. The LLM-facing reconciliation ("从现在起
-     * 你是…") is a separate ordinary user message injected by the loop, not this event.
+     * 记一条"这里换过人设"的分隔——只记<b>何时发生</b>,不记换成了什么:
+     * 绑定的真源是同伴自己的 {@code binding.json},正文的真源是人设库。
+     * 日志存副本就成了第二真源,改人设时必然对不上。
+     * {@link #loadDisplay} 把它渲染成 {@link #PERSONA_DIVIDER};LLM 上下文里没有它。
      */
-    public void appendPersonaChange(String id, String text, String name) {
+    public void appendPersonaDivider() {
         JsonObject o = new JsonObject();
         o.addProperty("type", EV_PERSONA);
-        if (id != null && !id.isBlank()) o.addProperty("id", id);
-        o.addProperty("content", text == null ? "" : text);
-        if (name != null && !name.isBlank()) o.addProperty("name", name);
         o.addProperty("ts", System.currentTimeMillis());
         writeLine(o);
     }
@@ -339,16 +334,21 @@ public final class ConvoLog {
         return new ArrayList<>(all.subList(all.size() - limit, all.size()));
     }
 
-    /** The companion's current persona from the latest {@code persona-change} event, or {@code null} if none. */
-    public PersonaState loadCurrentPersona() {
+    /**
+     * <b>迁移专用</b>:旧版把人设绑定记在 {@code persona-change} 事件的 {@code id} 里
+     * (事件溯源、后写胜出)。返回最后一条的 id 供 {@code binding.json} 接管;新写的分隔
+     * 不带 id,所以迁移完这里恒返回 null。旧布局清空后整个方法可以删掉。
+     */
+    public String legacyPersonaId() {
         if (!Files.isRegularFile(file)) return null;
-        PersonaState current = null;
+        String current = null;
         try {
             for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
                 if (line.isBlank()) continue;
                 JsonObject o = tryParse(line);
                 if (o != null && EV_PERSONA.equals(eventType(o))) {
-                    current = new PersonaState(str(o.get("id")), str(o.get("content")), str(o.get("name")));
+                    String id = str(o.get("id"));
+                    current = id == null || id.isBlank() ? null : id;
                 }
             }
         } catch (IOException ex) {

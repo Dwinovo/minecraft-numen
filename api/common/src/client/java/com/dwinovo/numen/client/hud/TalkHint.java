@@ -47,7 +47,7 @@ public final class TalkHint {
             draw(g, mc, flashText, 0xFFFFE9B0);
             return;
         }
-        if (!UiTheme.talkHintEnabled()) {
+        if (!com.dwinovo.numen.client.data.ClientPrefs.talkHint()) {
             return;
         }
         AbstractClientPlayer body = CompanionChatScreen.crosshairCompanion();

@@ -1,6 +1,7 @@
 package com.dwinovo.numen.client.agent;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.entity.CompanionRoster;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
@@ -28,6 +29,7 @@ import java.util.stream.Stream;
  *   stats.json     token 账
  *   inbox.jsonl    待发消息
  *   blocks.json    工作方块记忆
+ *   world          她属于哪个存档(对账用,见 {@link #reconcile})
  * </pre>
  *
  * <h2>为什么这么排</h2>
@@ -77,6 +79,7 @@ public final class CompanionHome {
     private static final String STATS = "stats.json";
     private static final String INBOX = "inbox.jsonl";
     private static final String BLOCKS = "blocks.json";
+    private static final String WORLD = "world";
 
     /** 根目录覆盖(测试注入临时目录);null = 走游戏目录。 */
     private static Path rootOverride;
@@ -98,9 +101,20 @@ public final class CompanionHome {
         return Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("numen");
     }
 
-    /** 这只同伴的家(不存在则建)。 */
+    /** 这只同伴家的位置——<b>只算路径,不建目录</b>。 */
+    private static Path at(UUID entityUuid) {
+        return numenRoot().resolve(DIR).resolve(entityUuid.toString());
+    }
+
+    /**
+     * 这只同伴的家,不存在则建——<b>只给要往里写东西的人用</b>。
+     *
+     * <p>读取一律走 {@link #at}:让"读"能建目录,就等于让 {@code binding(uuid)} 这种
+     * 纯查询把刚删掉的家复活成一个空壳。而空壳没有 {@code world} 标记,
+     * {@link #reconcile} 又永远不碰无标记的目录——于是它会一直烂在那儿。
+     */
     public static Path dir(UUID entityUuid) {
-        Path p = numenRoot().resolve(DIR).resolve(entityUuid.toString());
+        Path p = at(entityUuid);
         try {
             Files.createDirectories(p);
         } catch (IOException e) {
@@ -129,7 +143,7 @@ public final class CompanionHome {
 
     /** 读这只同伴的绑定;没有则 {@link Binding#EMPTY}。 */
     public static Binding binding(UUID entityUuid) {
-        Path p = dir(entityUuid).resolve(BINDING);
+        Path p = at(entityUuid).resolve(BINDING);
         if (!Files.isRegularFile(p)) {
             return Binding.EMPTY;
         }
@@ -145,9 +159,11 @@ public final class CompanionHome {
 
     /** 写这只同伴的绑定(全空则删文件——不留空壳)。 */
     public static void bind(UUID entityUuid, Binding b) {
-        Path p = dir(entityUuid).resolve(BINDING);
+        // 解绑走 at():删一个文件不该顺手把家建出来
+        boolean unbind = b == null || b.isEmpty();
+        Path p = (unbind ? at(entityUuid) : dir(entityUuid)).resolve(BINDING);
         try {
-            if (b == null || b.isEmpty()) {
+            if (unbind) {
                 Files.deleteIfExists(p);
                 return;
             }
@@ -161,11 +177,102 @@ public final class CompanionHome {
         }
     }
 
+    // ---- 世界归属 ----
+
+    /**
+     * 这只同伴属于哪个世界(存档/服务器),没标过则 null。
+     *
+     * <p>为什么要标:{@code companions/} 是<b>跨存档共用</b>的目录,而"她不在名册上"
+     * 这句话只在同一个世界内才等于"被遣散了"。不标世界的话,换个存档进去,上一个
+     * 存档的同伴全都不在新名册上——照着删就是灭顶之灾。
+     */
+    public static String world(UUID entityUuid) {
+        Path p = at(entityUuid).resolve(WORLD);
+        if (!Files.isRegularFile(p)) {
+            return null;
+        }
+        try {
+            String s = Files.readString(p, StandardCharsets.UTF_8).trim();
+            return s.isEmpty() ? null : s;
+        } catch (IOException e) {
+            Constants.LOG.warn("[numen-home] 世界标记读取失败 {}: {}", p, e.toString());
+            return null;
+        }
+    }
+
+    /** 认领:把这只同伴记在这个世界名下(已经是了就不重写)。 */
+    public static void claim(UUID entityUuid, String worldId) {
+        if (worldId == null || worldId.isBlank() || worldId.equals(world(entityUuid))) {
+            return;
+        }
+        try {
+            Files.writeString(dir(entityUuid).resolve(WORLD), worldId, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            Constants.LOG.warn("[numen-home] 世界标记写入失败 {}: {}", entityUuid, e.toString());
+        }
+    }
+
+    /**
+     * 对账:名册说这个世界还剩这些同伴,把<b>本世界</b>其余的家全删掉,同时给名册上的
+     * 认领世界归属。返回删掉了几只。
+     *
+     * <p>这是删除本地数据的<b>唯一</b>入口,而且是<b>状态同步</b>不是事件通知——
+     * 掉线期间遣散的、信号丢了的、上个版本留下的孤儿,只要在同一个世界,下次收到名册
+     * 就一次对平。没标世界的旧数据一个都不碰(见 {@link CompanionRoster#orphans})。
+     */
+    public static int reconcile(String worldId, java.util.Set<UUID> onRoster) {
+        if (worldId == null || worldId.isBlank()) {
+            return 0;
+        }
+        for (UUID uuid : onRoster) {
+            claim(uuid, worldId);
+        }
+        java.util.Map<UUID, String> homeWorlds = new java.util.LinkedHashMap<>();
+        for (UUID uuid : known()) {
+            homeWorlds.put(uuid, world(uuid));
+        }
+        List<UUID> gone = CompanionRoster.orphans(homeWorlds, worldId, onRoster);
+        for (UUID uuid : gone) {
+            delete(uuid);
+        }
+        reportUnclaimed(homeWorlds);
+        return gone.size();
+    }
+
+    /** 每次进游戏提醒一次:有多少来历不明的旧数据。自动删不了(不知道是谁的),
+     *  但也不能装作没有——它们正是这套东西要根治的那个问题。 */
+    private static void reportUnclaimed(java.util.Map<UUID, String> homeWorlds) {
+        if (unclaimedReported) {
+            return;
+        }
+        unclaimedReported = true;
+        long n = homeWorlds.values().stream().filter(java.util.Objects::isNull).count();
+        if (n > 0) {
+            Constants.LOG.info("[numen-home] {} 份同伴数据没有世界归属(旧版本迁移来的),"
+                    + "不会被自动清理;她们所属的存档登录一次即可认领", n);
+        }
+    }
+
+    /** 见 {@link #reportUnclaimed};断开连接时复位,换存档会重新数一次。 */
+    private static boolean unclaimedReported;
+
+    /** 断开连接:下次进游戏重新提醒一次无主数据。 */
+    public static void onDisconnect() {
+        unclaimedReported = false;
+    }
+
     // ---- 生命周期 ----
 
-    /** 遣散:整个目录端走。五种数据一起消失,没有第二处要记得清。 */
+    /**
+     * 遣散:整个目录端走。六种数据一起消失,没有第二处要记得清。
+     *
+     * <p>先掐大脑再删盘:她要是正有一个回合在飞,响应落地时会照常往会话日志写,
+     * 而写日志会把父目录建回来——刚删干净的家又长出一个只剩半截对话的空壳。
+     * 这条顺序放在这里而不是交给调用方记,是因为忘记的代价是脏数据。
+     */
     public static void delete(UUID entityUuid) {
-        Path home = numenRoot().resolve(DIR).resolve(entityUuid.toString());
+        AgentLoopRegistry.dispose(entityUuid);
+        Path home = at(entityUuid);
         if (!Files.isDirectory(home)) {
             return;
         }
@@ -207,22 +314,74 @@ public final class CompanionHome {
     // ---- 迁移(一次性、幂等、可重跑) ----
 
     /**
-     * 把散落的旧数据搬进各自的家:{@code conversations/<uuid>.*}、
-     * {@code memory/<uuid>.blocks.json},以及两个库 assignments 段里的绑定。
-     * 每一步自探测(目标已在就跳过),失败只记日志不阻断启动——
-     * 与 {@code ConfigMigrations} 同一制式。
+     * 把散落的旧数据搬进各自的家:两个库 assignments 段里的绑定、
+     * {@code conversations/<uuid>.*}、{@code memory/<uuid>.blocks.json},
+     * 以及记在会话日志事件里的人设绑定。每一步自探测(目标已在就跳过),
+     * 失败只记日志不阻断启动——与 {@code ConfigMigrations} 同一制式。
+     *
+     * <p>搬空的旧目录随手删掉:<b>目录不在 = 迁移完成</b>,下次启动整段直接跳过。
+     * 这样不必另存一个标志文件,也不会为了一次性的事年年重扫所有会话日志。
      */
     public static void migrateLegacy() {
         Path root = numenRoot();
-        int moved = 0;
-        moved += moveByPattern(root.resolve("conversations"), ".jsonl", CHAT);
-        moved += moveByPattern(root.resolve("conversations"), ".stats.json", STATS);
-        moved += moveByPattern(root.resolve("conversations"), ".inbox.jsonl", INBOX);
-        moved += moveByPattern(root.resolve("memory"), ".blocks.json", BLOCKS);
         int bound = migrateAssignments(root.resolve("providers.json"), "provider")
                 + migrateAssignments(root.resolve("voice.json"), "voice");
+
+        Path conv = root.resolve("conversations");
+        Path mem = root.resolve("memory");
+        int moved = 0;
+        if (Files.isDirectory(conv) || Files.isDirectory(mem)) {
+            moved += moveByPattern(conv, ".jsonl", CHAT);
+            moved += moveByPattern(conv, ".stats.json", STATS);
+            moved += moveByPattern(conv, ".inbox.jsonl", INBOX);
+            // v1→v2 升级留下的备份也是这只同伴的东西:一起搬,将来跟着她一起被删。
+            // 落点与 ConvoLog 自己的命名一致(chat.jsonl + ".v1.bak")。
+            moved += moveByPattern(conv, ".jsonl.v1.bak", CHAT + ".v1.bak");
+            moved += moveByPattern(mem, ".blocks.json", BLOCKS);
+            bound += claimPersonaBindings();
+            deleteIfEmpty(conv);
+            deleteIfEmpty(mem);
+        }
         if (moved > 0 || bound > 0) {
             Constants.LOG.info("[numen-home] 迁移完成:搬入 {} 个文件,收拢 {} 条绑定", moved, bound);
+        }
+    }
+
+    /**
+     * 人设绑定旧版记在会话日志的 {@code persona-change} 事件里(事件溯源),
+     * 现在收进 binding.json。已经绑了的不动——迁移可重跑。
+     */
+    private static int claimPersonaBindings() {
+        int n = 0;
+        for (UUID uuid : known()) {
+            if (binding(uuid).personaId() != null) {
+                continue;
+            }
+            Path chat = chat(uuid);
+            if (!Files.isRegularFile(chat)) {
+                continue;
+            }
+            String personaId = com.dwinovo.numen.agent.llm.ConvoLog.atFile(chat).legacyPersonaId();
+            if (personaId != null) {
+                bind(uuid, binding(uuid).withPersona(personaId));
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** 空了才删——里面还有别人的东西就留着(也就留着下次再扫一遍,那是他自己放的)。 */
+    private static void deleteIfEmpty(Path dir) {
+        if (!Files.isDirectory(dir)) {
+            return;
+        }
+        try (Stream<Path> list = Files.list(dir)) {
+            if (list.findAny().isPresent()) {
+                return;
+            }
+            Files.delete(dir);
+        } catch (IOException e) {
+            Constants.LOG.warn("[numen-home] 旧目录清理失败 {}: {}", dir, e.toString());
         }
     }
 

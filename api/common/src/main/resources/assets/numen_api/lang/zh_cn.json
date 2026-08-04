@@ -125,6 +125,7 @@
   "numen.provider.no_key": "未填Key",
   "numen.provider.title": "模型配置",
   "numen.respawn": "· 复活中 %ss",
+  "numen.respawn.blocked": "· 周围太挤,等一个落脚点",
   "numen.settings.add_site": "＋ 添加站点",
   "numen.settings.base_url": "Base URL",
   "numen.settings.custom_model": "自定义…",

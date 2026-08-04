@@ -92,9 +92,17 @@ public final class AgentLoopRegistry {
         }
     }
 
-    /** Drop one entity's loop (e.g. when it dies / unloads). */
+    /**
+     * 停掉一只同伴的大脑并摘出表——她不在了(遣散/离场)时调。
+     *
+     * <p>先 {@code abort()} 再摘表,跟 {@link #quiesceAll()} 同一制式:光摘表拦不住
+     * 已经在飞的请求,响应回来照样往磁盘写,把刚删掉的数据写回来。
+     */
     public static void dispose(UUID entityUuid) {
-        ENTITY_LOOPS.remove(entityUuid);
+        EntityAgentLoop loop = ENTITY_LOOPS.remove(entityUuid);
+        if (loop != null) {
+            loop.abort();
+        }
     }
 
     /** Clear everything — called on world-disconnect / explicit reset. */

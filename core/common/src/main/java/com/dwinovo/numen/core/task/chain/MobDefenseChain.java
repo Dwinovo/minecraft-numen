@@ -1,6 +1,5 @@
 package com.dwinovo.numen.core.task.chain;
 
-import com.dwinovo.numen.task.BodyLog;
 import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
@@ -59,19 +58,12 @@ public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.task.
     private static final long UNREACHABLE_COOLDOWN = 200;
     private static final long CHAIN_COOLDOWN = 100;
 
-    /** BodyLog for completed episodes (kill / escape) — dual-rail routed (may be null in unit tests). */
-    private final com.dwinovo.numen.task.BodyLog bodyLog;
 
     private Mode mode = Mode.NONE;
     private LivingEntity target;
     private PlayerNav nav;
 
     public MobDefenseChain() {
-        this(null);
-    }
-
-    public MobDefenseChain(com.dwinovo.numen.task.BodyLog bodyLog) {
-        this.bodyLog = bodyLog;
     }
     /** Last known threat position, for the flee goal supplier (survives the mob despawning mid-flee). */
     private BlockPos lastThreatPos;
@@ -291,12 +283,12 @@ public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.task.
      *  escape (we fled and nothing hostile remains in range). Anything else (preempted
      *  mid-fight, leashed unreachable) is not an outcome worth a line. */
     private void noteOutcome(NumenPlayer companion) {
-        if (bodyLog == null || target == null) return;
+        if (target == null) return;
         String mob = target.getType().getDescription().getString();
         if (mode == Mode.CHASE && (target.isDeadOrDying() || target.isRemoved())) {
-            bodyLog.report("was attacked by a " + mob + " and killed it");
+            com.dwinovo.numen.event.NumenEvents.body(companion, "was attacked by a " + mob + " and killed it");
         } else if (mode == Mode.FLEE && nearestThreat(companion) == null) {
-            bodyLog.report("fled from a " + mob + " to safety");
+            com.dwinovo.numen.event.NumenEvents.body(companion, "fled from a " + mob + " to safety");
         }
     }
 }

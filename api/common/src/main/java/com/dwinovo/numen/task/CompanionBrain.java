@@ -18,10 +18,6 @@ import java.util.List;
  * {@link LlmTaskChain#onInterrupt}, its deadline frozen via
  * {@link LlmTaskChain#freezeTick}) and it resumes when the spike subsides.
  *
- * <p>This class also wires the {@link BodyLog} (constitution §4, 即报即发):
- * chains report body episodes into the log, whose transport is this brain's
- * {@link #tryEmitEvent} — one {@code <event kind="body_log">} to the owner's
- * client; consumption timing is the client inbox's three-state routing.
  */
 final class CompanionBrain {
 
@@ -36,18 +32,10 @@ final class CompanionBrain {
     private static final int HAND_PIN_GRACE_TICKS = 600;
 
     final TaskQueue queue = new TaskQueue();
-    /** The body's narrative outlet: 即报即发,消费时机由客户端收件箱三态路由。
-     *  See {@link BodyLog}. */
-    private final BodyLog bodyLog;
     final LlmTaskChain llm;
 
     private final List<TaskChain> chains;
 
-    /** The body this brain is currently acting for — bound at every entry point
-     *  that can trigger a body-log flush, read by {@link #tryEmitEvent}. (The
-     *  brain is keyed per companion UUID, but chains report without a companion
-     *  argument, so the flush transport resolves the body through this field.) */
-    private NumenPlayer body;
 
     /** Last tick's winner, so we can fire {@code onInterrupt} exactly on the switching edge. */
     private TaskChain running;
@@ -57,30 +45,14 @@ final class CompanionBrain {
             new com.dwinovo.numen.task.HandPinRelease(HAND_PIN_GRACE_TICKS);
 
     CompanionBrain() {
-        this.bodyLog = new BodyLog(this::tryEmitEvent);
         this.llm = new LlmTaskChain(queue);
-        List<TaskChain> all = new ArrayList<>(BrainChains.build(bodyLog));
+        List<TaskChain> all = new ArrayList<>(BrainChains.build());
         all.add(llm);
         all.add(new com.dwinovo.numen.task.chain.SpeakingLookChain());
         this.chains = List.copyOf(all);
     }
 
-    /**
-     * {@link BodyLog}'s transport: ship the packaged {@code body_log} event to
-     * the owner's client via the engine's public event channel. principal=false
-     * ——身体叙事是事实,事实不配自定紧急度;消费时机由客户端收件箱按发生时
-     * 状态路由(任务中=军情立刻开轮,全闲=躺着搭车)。No owner online →
-     * refuse, so the log keeps its entries and retries on a later flush.
-     */
-    private boolean tryEmitEvent(String xml) {
-        NumenPlayer companion = body;
-        if (companion == null || companion.resolveOwnerPlayer() == null) return false;
-        com.dwinovo.numen.entity.Companions.emitEvent(companion, xml, false);
-        return true;
-    }
-
     void tick(NumenPlayer companion) {
-        body = companion;
 
         // 任务结束边沿 (constitution §5): the LLM chain has stayed workless past the
         // grace window — the explicit-hold session is over, the hand goes back to
@@ -99,9 +71,6 @@ final class CompanionBrain {
                 running.onInterrupt(companion);
                 running = null;
             }
-            // Idle retry for entries a refused flush left behind (the owner was
-            // offline when they were reported) — a no-op when the log is empty.
-            bodyLog.flush();
             llm.finalizeTerminal();
             llm.drainResults(companion);
             return;
@@ -128,16 +97,11 @@ final class CompanionBrain {
         llm.drainResults(companion);
     }
 
-    /**
-     * Death path (via {@code CompanionTickDispatcher.clearActiveTask}): bind the
-     * body so the sink can reach its owner, drop the running task, and retry any
-     * body-log entries a refused flush left behind (owner was offline).
-     */
+    /** 死亡(经 {@code CompanionTickDispatcher.clearActiveTask}):丢掉在跑的任务,
+     *  并结束任务作用域的手部占用。 */
     void dropActiveNoResult(NumenPlayer companion) {
-        body = companion;
         // Death ends the task session — the task-scoped hand pin goes with it.
         TaskSessionHooks.fireSessionEnd(companion);
         llm.dropActiveNoResult();
-        bodyLog.flush();
     }
 }

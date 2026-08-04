@@ -7,7 +7,6 @@ import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
-import com.dwinovo.numen.client.agent.ClientDeaths;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
@@ -787,9 +786,12 @@ public final class NumenScreen extends Screen {
         String nm = clip(name == null ? "Numen" : name, Math.max(24, headerLimit - (left + PAD)));
         txt(g, Component.literal(nm), left + PAD, top + 7, ON_BAND);
         int afterName = left + PAD + font.width(nm) + 6;
-        if (uuid != null && ClientDeaths.isDead(uuid)) {        // active companion dead — respawn countdown
-            long rem = ClientDeaths.remainingMs(uuid);
-            String rs = I18n.get("numen.respawn", (int) Math.ceil(rem / 1000.0));
+        if (uuid != null && NumenRoster.instance().isDead(uuid)) {   // active companion dead — respawn countdown
+            // 倒计时归零还没回来 = 周围没有能站的地方,复活在重试。继续显示"0"就是
+            // 一个数字卡死不动,教科书级的"看起来坏了"——说清楚在等什么。
+            long rem = NumenRoster.instance().remainingMs(uuid);
+            String rs = rem <= 0 ? I18n.get("numen.respawn.blocked")
+                    : I18n.get("numen.respawn", (int) Math.ceil(rem / 1000.0));
             if (afterName < headerLimit) {
                 txt(g, Component.literal(clip(rs, headerLimit - afterName)), afterName, top + 7, ON_BAND);
             }
@@ -902,13 +904,12 @@ public final class NumenScreen extends Screen {
             // textured socket behind the head (gold-bordered when active), then the avatar, then a status LED
             g.blitSprite(active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
             PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
-            if (ClientDeaths.isDead(e.uuid())) {                      // dead — dim veil + respawn countdown
+            if (e.dead()) {                                           // dead — dim veil + respawn countdown
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
-                long rem = ClientDeaths.remainingMs(e.uuid());
-                if (rem >= 0) {
-                    String c = String.valueOf((int) Math.ceil(rem / 1000.0));
-                    txt(g, Component.literal(c), ax + (RAIL_AV - font.width(c)) / 2, ay + (RAIL_AV - 8) / 2, CTA);
-                }
+                long rem = e.remainingMs();
+                // 头像太小写不下字:归零改画一个"等"字记号,细节交给上面的头部行
+                String c = rem <= 0 ? "…" : String.valueOf((int) Math.ceil(rem / 1000.0));
+                txt(g, Component.literal(c), ax + (RAIL_AV - font.width(c)) / 2, ay + (RAIL_AV - 8) / 2, CTA);
             } else {
                 int d = ax + RAIL_AV - 6, e2 = ay + RAIL_AV - 6;     // status LED, bottom-right
                 g.fill(d, e2, d + 5, e2 + 5, statusColor(e.uuid()));

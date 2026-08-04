@@ -119,14 +119,16 @@ public final class LlmTaskChain implements TaskChain {
 
     /**
      * Ship every completed record back to the owner as a {@link TaskResultPayload}.
-     * Called each tick by {@link CompanionBrain} (a lift of the old
-     * {@code drainResults}). Owner offline → drop (the loop re-asks).
+     * Called each tick by {@link CompanionBrain}.
+     *
+     * <p>主人离线时<b>异步任务的收尾照发</b>——它走 {@link com.dwinovo.numen.event.NumenEvents},
+     * 自己会进出箱等主人回来。只有同步 tool_call 的结果没处送(那条 tool_call 属于
+     * 一个已经随客户端消失的回合),重登时由 {@code unansweredToolCallIds} 补成中断。
      */
     void drainResults(NumenPlayer player) {
         List<TaskRecord> completed = queue.drainCompleted();
         if (completed.isEmpty()) return;
         ServerPlayer owner = player.resolveOwnerPlayer();
-        if (owner == null) return;
         for (TaskRecord rec : completed) {
             TaskResult result = rec.getResult();
             // 异步记录:tool_call 在受理时就回执过了,收尾改走 task_finished 事件
@@ -144,8 +146,13 @@ public final class LlmTaskChain implements TaskChain {
                     default -> "failed";
                 };
                 String msg = result == null ? "no result produced" : result.message();
-                com.dwinovo.numen.event.GameEvents.taskFinished(
+                com.dwinovo.numen.event.NumenEvents.taskFinished(
                         player, rec.publicId(), rec.getToolName(), status, msg);
+                continue;
+            }
+            // 同步 tool_call 的结果只有在线才送得出去:它属于一个随客户端一起
+            // 消失的回合,存下来也没有对应的调用在等。重登由 unansweredToolCallIds 收口。
+            if (owner == null) {
                 continue;
             }
             String json = result == null

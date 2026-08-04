@@ -28,7 +28,7 @@ import java.util.UUID;
  * cause (so the conversation stays valid and the brain learns WHY it stopped) and latches it idle.
  * {@code cause} is the vanilla death message ("X was slain by a zombie") for that tool result.
  */
-public record NumenDeathPayload(UUID entityUuid, String cause, long respawnDelayMs)
+public record NumenDeathPayload(UUID entityUuid, String cause)
         implements CustomPacketPayload {
 
     public static final Type<NumenDeathPayload> TYPE = new Type<>(
@@ -38,7 +38,6 @@ public record NumenDeathPayload(UUID entityUuid, String cause, long respawnDelay
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, NumenDeathPayload::entityUuid,
                     ByteBufCodecs.STRING_UTF8, NumenDeathPayload::cause,
-                    ByteBufCodecs.VAR_LONG, NumenDeathPayload::respawnDelayMs,
                     NumenDeathPayload::new);
 
     @Override

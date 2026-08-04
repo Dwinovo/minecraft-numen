@@ -11,14 +11,21 @@ import java.util.UUID;
  * 倒箱、什么输入配开轮)不在这里:那需要大脑的状态,是
  * {@link EntityAgentLoop} 的事。
  *
- * <p>事件与主人话分桶存,因为二者清除语义不同——主人打断清的是被取代的
- * <em>指令</em>,永远不清<em>事实</em>(死亡叙事必须活过停止按钮)。倒箱
- * 顺序固定:事件按到达序在前,主人的话压轴。push 即整本落盘,倒箱/清除
- * 即清账,跨会话不失忆。
+ * <p>事件与主人话分桶存:主人按停止清的是被取代的<em>指令</em>,永远不清
+ * <em>事实</em>。<b>死亡什么都不清</b>——每条都盖着时间戳,模型自己看得出
+ * "捡到铁矿"发生在"你死了、物品掉落"之前,不需要我们替它判断哪些信息过期。
+ *
+ * <p>倒箱顺序固定:事件按到达序在前,主人的话压轴。push 即整本落盘,
+ * 倒箱/清除即清账,跨会话不失忆。
+ *
+ * <h2>urgent 不变量</h2>
+ * urgent 事件<b>不在箱里过夜</b>:它一进来就该带着箱里一切开一轮。开轮的时机
+ * 由 {@link EntityAgentLoop} 决定(回合进行中只能等协议边界),所以这里只负责
+ * 如实记着 {@link #hasUrgent()},让上层问得到。
  */
 final class Inbox {
 
-    private record Entry(String text, long ts) {}
+    private record Entry(String text, long ts, boolean urgent) {}
 
     private final List<Entry> events = new ArrayList<>();
     private final List<Entry> prompts = new ArrayList<>();
@@ -29,18 +36,36 @@ final class Inbox {
         // 上次会话没消费完的输入原样躺回(不开轮——旧闻不值得吵人,
         // 下一个轮子自然带上,倒箱时会标注年龄)。
         for (InboxJournal.Entry e : journal.load()) {
-            (("prompt".equals(e.type())) ? prompts : events).add(new Entry(e.text(), e.ts()));
+            boolean prompt = "prompt".equals(e.type());
+            (prompt ? prompts : events).add(new Entry(e.text(), e.ts(), e.urgent()));
         }
     }
 
-    void pushEvent(String xml) {
-        events.add(new Entry(xml, System.currentTimeMillis()));
+    void pushEvent(String xml, boolean urgent) {
+        events.add(new Entry(xml, System.currentTimeMillis(), urgent));
         persist();
     }
 
     void pushPrompt(String wrapped) {
-        prompts.add(new Entry(wrapped, System.currentTimeMillis()));
+        prompts.add(new Entry(wrapped, System.currentTimeMillis(), false));
         persist();
+    }
+
+    /** 箱里有没有等着的 urgent 事件(它该逼出一次倾倒)。 */
+    boolean hasUrgent() {
+        for (Entry e : events) {
+            if (e.urgent()) return true;
+        }
+        return false;
+    }
+
+    /** 最老那条事件躺了多久(毫秒);没有事件返回 0。 */
+    long oldestEventAgeMs() {
+        long oldest = Long.MAX_VALUE;
+        for (Entry e : events) {
+            if (e.ts() > 0 && e.ts() < oldest) oldest = e.ts();
+        }
+        return oldest == Long.MAX_VALUE ? 0L : Math.max(0L, System.currentTimeMillis() - oldest);
     }
 
     boolean isEmpty() {
@@ -71,13 +96,6 @@ final class Inbox {
         return n;
     }
 
-    /** 死亡冻结:全清。 */
-    void clearAll() {
-        events.clear();
-        prompts.clear();
-        persist();
-    }
-
     /** 倒箱:全部条目按 事件 → 主人话 顺序取出(躺超十分钟的标注年龄),清空落盘。 */
     List<String> drain() {
         List<String> out = new ArrayList<>();
@@ -92,8 +110,8 @@ final class Inbox {
 
     private void persist() {
         List<InboxJournal.Entry> all = new ArrayList<>();
-        for (Entry e : events) all.add(new InboxJournal.Entry("event", e.text(), e.ts()));
-        for (Entry p : prompts) all.add(new InboxJournal.Entry("prompt", p.text(), p.ts()));
+        for (Entry e : events) all.add(new InboxJournal.Entry("event", e.text(), e.ts(), e.urgent()));
+        for (Entry p : prompts) all.add(new InboxJournal.Entry("prompt", p.text(), p.ts(), false));
         journal.save(all);
     }
 

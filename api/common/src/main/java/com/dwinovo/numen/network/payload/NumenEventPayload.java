@@ -14,12 +14,12 @@ import java.util.UUID;
  * Server → Client: an asynchronous WORLD EVENT for a companion's brain (dimension change, a hazard,
  * task wind-down, …). The server ships a ready-made {@code <event>} XML string; the client-side
  * INBOX decides consumption timing by the brain's state at arrival (mid-turn → next boundary;
- * background task running → immediate turn; fully idle → wait for the next turn). {@code principal}
+ * background task running → immediate turn; fully idle → wait for the next turn). {@code urgent}
  * marks "a live human is speaking" (bridge mods relaying danmaku / QQ messages): those open a turn
  * even from full idle, same privilege as the owner. Plain world events leave it false — their
  * timing is the inbox's business, not the producer's.
  */
-public record NumenEventPayload(UUID entityUuid, String xml, boolean principal) implements CustomPacketPayload {
+public record NumenEventPayload(UUID entityUuid, String xml, boolean urgent) implements CustomPacketPayload {
 
     public static final Type<NumenEventPayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_event"));
@@ -28,7 +28,7 @@ public record NumenEventPayload(UUID entityUuid, String xml, boolean principal) 
             StreamCodec.composite(
                     UUIDUtil.STREAM_CODEC, NumenEventPayload::entityUuid,
                     ByteBufCodecs.STRING_UTF8, NumenEventPayload::xml,
-                    ByteBufCodecs.BOOL, NumenEventPayload::principal,
+                    ByteBufCodecs.BOOL, NumenEventPayload::urgent,
                     NumenEventPayload::new);
 
     @Override

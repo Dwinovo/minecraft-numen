@@ -2,7 +2,6 @@ package com.dwinovo.numen.client;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
-import com.dwinovo.numen.client.agent.ClientDeaths;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.chat.ChatDisplayFilters;
 import com.dwinovo.numen.client.chat.DebugChatDisplayFilter;
@@ -39,8 +38,10 @@ public final class ClientPayloadHandlers {
         com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
         ClientPayloadSink.companionList = ClientPayloadHandlers::handleCompanionList;
         ClientPayloadSink.death = ClientPayloadHandlers::handleDeath;
+        // getOrCreate:主人登录时补发的离线事件可能先于任何交互到达,
+        // 那时 loop 还没造出来——用 get 会把补发的事件整批丢掉。
         ClientPayloadSink.event = p ->
-                AgentLoopRegistry.get(p.entityUuid()).ifPresent(loop -> loop.pushEvent(p.xml(), p.principal()));
+                AgentLoopRegistry.getOrCreate(p.entityUuid()).pushEvent(p.xml(), p.urgent());
         ClientPayloadSink.inventory = p ->
                 ClientNumenInventory.update(p.uuid(), new ClientNumenInventory.Snapshot(
                         p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(),
@@ -52,24 +53,27 @@ public final class ClientPayloadHandlers {
     }
 
     private static void handleCompanionList(CompanionListPayload p) {
-        // Which companions were already known — so we can spot the ones this snapshot just added.
         java.util.Set<UUID> before = new java.util.HashSet<>();
         for (NumenRoster.Entry e : NumenRoster.instance().entries()) before.add(e.uuid());
 
         java.util.List<NumenRoster.Entry> snapshot = new java.util.ArrayList<>();
-        java.util.Set<UUID> now = new java.util.HashSet<>();
+        java.util.Set<UUID> onRoster = new java.util.LinkedHashSet<>();
         for (CompanionListPayload.Entry e : p.companions()) {
-            snapshot.add(new NumenRoster.Entry(e.uuid(), e.name()));
-            now.add(e.uuid());
+            snapshot.add(NumenRoster.toEntry(e.uuid(), e.name(), e.respawnInMs()));
+            onRoster.add(e.uuid());
         }
-        NumenRoster.instance().replaceAll(snapshot);
+        NumenRoster.instance().replaceAll(p.worldId(), snapshot);
 
-        // 花名册里没了的 = 被遣散了:连人带数据一起送走。整个家目录删掉,
-        // 会话/记忆/token/绑定五样一起消失——不需要五处各记得清一次。
+        // 对账:本世界不在名册上的 = 已被永久遣散,家目录整个删掉。
+        // 名册来自服务端的持久注册表(死亡/休眠的同伴都在册),所以"不在册"只有这一个意思。
+        // 这是状态同步不是事件通知——掉线时遣散的、信号丢了的,下次收到名册照样对得平。
+        int swept = com.dwinovo.numen.client.agent.CompanionHome.reconcile(p.worldId(), onRoster);
+        if (swept > 0) {
+            Constants.LOG.info("[numen-net] 对账清理了 {} 只已遣散同伴的数据", swept);
+        }
         for (UUID gone : before) {
-            if (!now.contains(gone)) {
-                AgentLoopRegistry.dispose(gone);
-                com.dwinovo.numen.client.agent.CompanionHome.delete(gone);
+            if (!onRoster.contains(gone)) {
+                AgentLoopRegistry.dispose(gone);   // 大脑先停,免得在飞的回合写回已删的家
             }
         }
 
@@ -81,8 +85,7 @@ public final class ClientPayloadHandlers {
             if (personaId != null) {
                 var persona = com.dwinovo.numen.persona.PersonaLibrary.instance().get(personaId);
                 if (persona != null) {
-                    AgentLoopRegistry.getOrCreate(e.uuid())
-                            .setInitialPersona(persona.id(), persona.text(), persona.name());
+                    AgentLoopRegistry.getOrCreate(e.uuid()).setInitialPersona(persona.id());
                 } else {
                     // 选过却没落地(文件被删/改名):默认人格照常能聊,但"我明明选了"
                     // 必须说清楚——降级提示进聊天框,留得住痕。
@@ -113,10 +116,9 @@ public final class ClientPayloadHandlers {
 
     private static void handleDeath(NumenDeathPayload p) {
         Constants.LOG.info("[numen-net] numen_death entity={} ({}) — suspending loop", p.entityUuid(), p.cause());
+        // 只管大脑:死亡的展示状态(倒计时)跟着名册走,服务端在标记死亡后就推了一份。
+        // 这条 payload 存在的理由是"她为什么死的"——那是叙事,必须恰好送达一次。
         AgentLoopRegistry.get(p.entityUuid()).ifPresent(loop -> loop.onEntityDied(p.cause()));
-        // Keep it in the roster (marked dead) so the HUD / rail can show the respawn countdown;
-        // it goes live again on NumenRespawnPayload.
-        ClientDeaths.markDead(p.entityUuid(), System.currentTimeMillis() + p.respawnDelayMs());
     }
 
     private static void handleLocations(NumenLocationsPayload p) {
@@ -130,7 +132,6 @@ public final class ClientPayloadHandlers {
     /** getOrCreate(not get):登出后 loop 可能还不存在——先造出来,死亡事件才有处落。 */
     private static void handleRespawn(NumenRespawnPayload p) {
         Constants.LOG.info("[numen-net] numen_respawn entity={} ({}) — resuming loop", p.entityUuid(), p.cause());
-        ClientDeaths.clear(p.entityUuid());
         AgentLoopRegistry.getOrCreate(p.entityUuid()).onRespawned(p.cause());
     }
 

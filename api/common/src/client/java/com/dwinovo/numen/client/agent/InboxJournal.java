@@ -25,7 +25,7 @@ import java.util.UUID;
 final class InboxJournal {
 
     /** type: "prompt"(主人的话,已裹 &lt;query&gt;) 或 "event"(&lt;event&gt; XML)。 */
-    record Entry(String type, String text, long ts) {}
+    record Entry(String type, String text, long ts, boolean urgent) {}
 
     private static final Gson GSON = new Gson();
     private final Path file;
@@ -52,6 +52,7 @@ final class InboxJournal {
                 o.addProperty("type", e.type());
                 o.addProperty("text", e.text());
                 o.addProperty("ts", e.ts());
+                if (e.urgent()) o.addProperty("urgent", true);
                 sb.append(GSON.toJson(o)).append('\n');
             }
             Files.writeString(file, sb.toString(), StandardCharsets.UTF_8);
@@ -71,7 +72,8 @@ final class InboxJournal {
                     JsonObject o = JsonParser.parseString(line).getAsJsonObject();
                     out.add(new Entry(o.get("type").getAsString(),
                             o.get("text").getAsString(),
-                            o.has("ts") ? o.get("ts").getAsLong() : 0L));
+                            o.has("ts") ? o.get("ts").getAsLong() : 0L,
+                            o.has("urgent") && o.get("urgent").getAsBoolean()));
                 } catch (RuntimeException bad) {
                     Constants.LOG.warn("[numen-inbox] skipping corrupt line in {}", file.getFileName());
                 }
