@@ -383,7 +383,12 @@ public final class EntityAgentLoop {
     /** Snapshot of prompts (GUI or {@code NumenGateway}) still waiting for the
      *  next protocol-valid splice point — the GUI renders these as pending. */
     public List<String> queuedPrompts() {
-        return inbox.snapshot();
+        return inbox.promptSnapshot();
+    }
+
+    /** Number of owner prompts waiting to be spliced; ambient events are excluded. */
+    public int queuedPromptCount() {
+        return inbox.promptCount();
     }
 
     /** Owner typed a prompt in the chat GUI. */
@@ -569,7 +574,7 @@ public final class EntityAgentLoop {
 
     /** Owner prompts are queued, waiting to flush into the conversation. */
     public boolean hasQueuedPrompts() {
-        return !inbox.isEmpty();
+        return inbox.promptCount() > 0;
     }
 
     /** There is something an interrupt would act on — drives the Stop button's enabled state. */

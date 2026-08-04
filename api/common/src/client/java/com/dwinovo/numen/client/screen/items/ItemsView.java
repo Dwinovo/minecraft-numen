@@ -186,7 +186,7 @@ public final class ItemsView {
             else if (loop.isCompacting())  { state = "整理记忆中"; stateColor = th.run(); alive = true; }
             else if (loop.isBusy())        { state = "忙碌中"; stateColor = th.run(); alive = true; }
             else if (loop.hasQueuedPrompts()) {
-                state = "积压 " + loop.queuedPrompts().size() + " 条"; stateColor = th.run(); alive = true;
+                state = "积压 " + loop.queuedPromptCount() + " 条"; stateColor = th.run(); alive = true;
             } else { state = "空闲"; stateColor = th.ok(); alive = false; }
             String dot = alive ? (System.currentTimeMillis() / 500 % 2 == 0 ? "●" : "○") : "●";
             String stateText = dot + " " + state;

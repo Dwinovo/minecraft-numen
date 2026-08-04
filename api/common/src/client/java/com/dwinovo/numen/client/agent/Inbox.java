@@ -55,12 +55,19 @@ final class Inbox {
         return events.size();
     }
 
-    /** GUI 待发列表(与倒箱顺序一致:事件在前,主人话在后)。 */
+    /** Complete unconsumed snapshot (events first, owner prompts last). */
     List<String> snapshot() {
         List<String> all = new ArrayList<>();
         for (Entry e : events) all.add(e.text());
         for (Entry p : prompts) all.add(p.text());
         return List.copyOf(all);
+    }
+
+    /** Owner prompts only; ambient events must not be presented as backlog. */
+    List<String> promptSnapshot() {
+        List<String> out = new ArrayList<>(prompts.size());
+        for (Entry p : prompts) out.add(p.text());
+        return List.copyOf(out);
     }
 
     /** 主人打断:清掉被取代的指令,事实(事件)保留。返回清掉的条数。 */
