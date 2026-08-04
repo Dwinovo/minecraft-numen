@@ -60,6 +60,11 @@ public final class TextField extends Widget {
 
     public int cursor() { return cursor; }
 
+    /** Move the insertion point after programmatic completion/replacement. */
+    public void moveCursorToEnd() {
+        cursor = value.length();
+    }
+
     /** 标记校验错误(内联展示);用户一开始输入即自动清除——错误跟着修复走。 */
     public void setError(String message) {
         this.error = message == null || message.isBlank() ? null : message;

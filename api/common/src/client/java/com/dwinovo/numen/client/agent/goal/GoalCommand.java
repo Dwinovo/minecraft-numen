@@ -5,8 +5,8 @@ public enum GoalCommand {
     STATUS("status", "查看当前 goal 状态"),
     HELP("help", "显示可用 goal 指令"),
     LIST("list", "列出当前 goal"),
-    ADD("add", "/goal add <内容> 创建新 goal"),
-    UPDATE("update", "/goal update <内容> 更新当前 goal 标题"),
+    ADD("add", "/goal add <内容> 创建新 goal", true),
+    UPDATE("update", "/goal update <内容> 更新当前 goal 标题", true),
     PROGRESS("progress", "查看 goal 进度"),
     COMPLETE("complete", "标记当前 goal 完成"),
     CANCEL("cancel", "取消当前 goal"),
@@ -18,10 +18,16 @@ public enum GoalCommand {
 
     private final String text;
     private final String help;
+    private final boolean requiresArgument;
 
     GoalCommand(String text, String help) {
+        this(text, help, false);
+    }
+
+    GoalCommand(String text, String help, boolean requiresArgument) {
         this.text = text;
         this.help = help;
+        this.requiresArgument = requiresArgument;
     }
 
     public String text() {
@@ -30,6 +36,10 @@ public enum GoalCommand {
 
     public String help() {
         return help;
+    }
+
+    public boolean requiresArgument() {
+        return requiresArgument;
     }
 
     public static GoalCommand parse(String verb) {
