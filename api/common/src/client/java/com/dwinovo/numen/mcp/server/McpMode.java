@@ -140,6 +140,7 @@ public final class McpMode {
         clientName = null;      // 连接状态随服务器一起归零
         feed.clear();
         Constants.LOG.info("[numen-mcp] 外接大脑模式已关闭,内置大脑恢复接管");
+        com.dwinovo.numen.client.agent.AgentLoopRegistry.resumeActiveGoalsAfterMcpRelease();
     }
 
     // ---- 状态查询(UI / 闸门) ----

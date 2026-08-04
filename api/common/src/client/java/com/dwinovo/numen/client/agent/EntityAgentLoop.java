@@ -14,6 +14,7 @@ import com.dwinovo.numen.client.agent.goal.GoalStore;
 import com.dwinovo.numen.client.agent.goal.GoalCommand;
 import com.dwinovo.numen.client.agent.goal.GoalCommands;
 import com.dwinovo.numen.client.agent.goal.GoalFailurePolicy;
+import com.dwinovo.numen.client.agent.goal.GoalResumePolicy;
 import com.dwinovo.numen.client.agent.goal.GoalTodo;
 import com.dwinovo.numen.client.agent.goal.GoalTodoHarvest;
 import com.dwinovo.numen.data.ModLanguageData;
@@ -459,8 +460,8 @@ public final class EntityAgentLoop {
 
     /** Queue the active goal's continuation prompt unless it is already queued. */
     private void startGoalExecution() {
-        if (goal == null || !goal.isActive() || goalExecutionQueued) return;
-        if (dead || externallyDriven || McpMode.instance().enabled()) return;
+        if (!GoalResumePolicy.shouldQueue(goal, dead, externallyDriven,
+                McpMode.instance().enabled(), goalExecutionQueued)) return;
         goalExecutionQueued = true;
         submitPrompt(goalExecutionPrompt());
     }
@@ -686,6 +687,7 @@ public final class EntityAgentLoop {
         if (externallyDriven) return;
         externallyDriven = true;
         abort();   // stop any running internal turn + free the body
+        goalExecutionQueued = false; // release must be able to enqueue a fresh continuation
         Constants.LOG.info("[numen-entity#{}] external control acquired — internal brain paused", entityUuid);
     }
 
@@ -698,7 +700,13 @@ public final class EntityAgentLoop {
         if (!externallyDriven) return;
         externallyDriven = false;
         turnPause = AgentTurnPause.NONE; // clear the owner-interrupt latch set by acquireExternal
+        startGoalExecution();
         Constants.LOG.info("[numen-entity#{}] external control released — internal brain resumed", entityUuid);
+    }
+
+    /** Called when the global MCP server stops and the built-in brain may resume. */
+    public void onMcpReleased() {
+        startGoalExecution();
     }
 
     /** True while an external driver (MCP / Claude) holds this body. */

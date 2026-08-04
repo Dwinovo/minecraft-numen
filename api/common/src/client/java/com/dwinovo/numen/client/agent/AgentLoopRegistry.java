@@ -79,6 +79,13 @@ public final class AgentLoopRegistry {
         }
     }
 
+    /** Resume active goal continuations after the global external-brain gate closes. */
+    public static void resumeActiveGoalsAfterMcpRelease() {
+        for (EntityAgentLoop loop : ENTITY_LOOPS.values()) {
+            loop.onMcpReleased();
+        }
+    }
+
     /**
      * 断线静默:对所有 loop 执行 abort——代数戳作废在飞的 LLM 回应、给未决
      * 工具调用合成取消结果、清空半截打字。对话内存保留(同一存档重进接着聊);
