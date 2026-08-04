@@ -10,7 +10,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 语音输入 provider 注册表(TouhouLittleMaid 式思路,numen 原生实现,镜像
@@ -91,9 +93,11 @@ public final class SttProviders {
     private static List<Option> load() {
         String bundled = readBundled();
         String json = bundled;
+        Path file = Services.PLATFORM.getConfigDir().resolve("numen").resolve("stt.json");
+        boolean hasUserFile = false;
         try {
-            Path file = Services.PLATFORM.getConfigDir().resolve("numen").resolve("stt.json");
             if (Files.exists(file)) {
+                hasUserFile = true;
                 json = Files.readString(file, StandardCharsets.UTF_8);   // user-authoritative
             } else if (bundled != null) {
                 Files.createDirectories(file.getParent());
@@ -102,12 +106,58 @@ public final class SttProviders {
         } catch (Exception e) {
             Constants.LOG.warn("[numen] couldn't read/seed config/numen/stt.json, using bundled", e);
         }
+        // 迁移：老用户文件优先，但新内置 provider（如 dashscope）要并进来，用户覆盖的字段原样保留。
+        if (hasUserFile && bundled != null) {
+            String merged = mergeMissingProviders(json, bundled);
+            if (!merged.equals(json)) {
+                try {
+                    Files.writeString(file, merged, StandardCharsets.UTF_8);
+                } catch (Exception e) {
+                    Constants.LOG.warn("[numen] couldn't persist merged stt.json", e);
+                }
+                json = merged;
+            }
+        }
         List<Option> out = parse(json);
         if (out.isEmpty() && bundled != null && !bundled.equals(json)) {
             Constants.LOG.warn("[numen] user stt.json yielded no providers, falling back to bundled");
             out = parse(bundled);
         }
         return List.copyOf(out);
+    }
+
+    /**
+     * 把内置 providers 里用户文件缺失的 id 追加进去（保留用户已有的条目与 _comment），
+     * 返回合并后的 JSON 文本；无新增则原样返回。
+     */
+    private static String mergeMissingProviders(String userJson, String bundledJson) {
+        try {
+            JsonObject user = JsonParser.parseString(userJson).getAsJsonObject();
+            JsonObject bundled = JsonParser.parseString(bundledJson).getAsJsonObject();
+            if (!user.has("providers") || !bundled.has("providers")) {
+                return userJson;
+            }
+            var userArr = user.getAsJsonArray("providers");
+            Set<String> ids = new HashSet<>();
+            for (var pe : userArr) {
+                JsonObject p = pe.getAsJsonObject();
+                if (p.has("id")) {
+                    ids.add(p.get("id").getAsString());
+                }
+            }
+            boolean added = false;
+            for (var be : bundled.getAsJsonArray("providers")) {
+                JsonObject bp = be.getAsJsonObject();
+                if (bp.has("id") && ids.add(bp.get("id").getAsString())) {
+                    userArr.add(bp);
+                    added = true;
+                }
+            }
+            return added ? user.toString() : userJson;
+        } catch (Exception e) {
+            Constants.LOG.warn("[numen] stt.json merge failed, keeping user file", e);
+            return userJson;
+        }
     }
 
     private static String readBundled() {

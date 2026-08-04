@@ -9,7 +9,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -58,6 +60,9 @@ public final class DashScopeStt implements SttBackend {
         private final SttListener listener;
         private final AtomicBoolean done = new AtomicBoolean(false);
         private volatile WebSocket ws;
+        /** 握手完成前到达的音频块与 finish 请求：连接就绪后按序补发，不丢。 */
+        private final List<byte[]> pendingAudio = new ArrayList<>();
+        private boolean finishRequested;
 
         RealtimeSession(SttListener listener) {
             this.listener = listener;
@@ -78,13 +83,57 @@ public final class DashScopeStt implements SttBackend {
                                 return;
                             }
                             ws = socket;
+                            if (done.get()) {              // cancel() 先于握手完成：别发了，直接关
+                                try {
+                                    socket.sendClose(1000, "cancel");
+                                } catch (Exception ignored) {
+                                    // 已关闭则忽略
+                                }
+                                return;
+                            }
                             sendSessionUpdate();
+                            flushPending();
                         });
             } catch (Exception e) {
                 if (done.compareAndSet(false, true)) {
                     listener.onError(e);
                 }
             }
+        }
+
+        /** 连接就绪后补发积压音频与 finish（在 session.update 之后、任何后续音频之前）。 */
+        private void flushPending() {
+            List<byte[]> queued;
+            boolean finish;
+            synchronized (RealtimeSession.this) {
+                queued = new ArrayList<>(pendingAudio);
+                pendingAudio.clear();
+                finish = finishRequested;
+                finishRequested = false;
+            }
+            for (byte[] pcm : queued) {
+                sendAppend(pcm);
+            }
+            if (finish) {
+                sendCommitAndCreate();
+            }
+        }
+
+        private void sendAppend(byte[] pcm) {
+            JsonObject o = new JsonObject();
+            o.addProperty("type", "input_audio_buffer.append");
+            o.addProperty("audio", Base64.getEncoder().encodeToString(pcm));
+            send(o.toString());
+        }
+
+        private void sendCommitAndCreate() {
+            // 提交缓冲并触发一次响应（响应过程中会产生输入音频转写）
+            JsonObject commit = new JsonObject();
+            commit.addProperty("type", "input_audio_buffer.commit");
+            send(commit.toString());
+            JsonObject create = new JsonObject();
+            create.addProperty("type", "response.create");
+            send(create.toString());
         }
 
         private void sendSessionUpdate() {
@@ -116,13 +165,16 @@ public final class DashScopeStt implements SttBackend {
 
         @Override
         public void feed(byte[] pcm) {
-            if (done.get() || ws == null) {
+            if (done.get()) {
                 return;
             }
-            JsonObject o = new JsonObject();
-            o.addProperty("type", "input_audio_buffer.append");
-            o.addProperty("audio", Base64.getEncoder().encodeToString(pcm));
-            send(o.toString());
+            synchronized (RealtimeSession.this) {
+                if (ws == null) {          // 握手还没好：先积压，连接就绪后补发
+                    pendingAudio.add(pcm);
+                    return;
+                }
+            }
+            sendAppend(pcm);
         }
 
         @Override
@@ -130,13 +182,13 @@ public final class DashScopeStt implements SttBackend {
             if (done.get()) {
                 return;
             }
-            // 提交缓冲并触发一次响应（响应过程中会产生输入音频转写）
-            JsonObject commit = new JsonObject();
-            commit.addProperty("type", "input_audio_buffer.commit");
-            send(commit.toString());
-            JsonObject create = new JsonObject();
-            create.addProperty("type", "response.create");
-            send(create.toString());
+            synchronized (RealtimeSession.this) {
+                if (ws == null) {          // 握手还没好：记下 finish，连接就绪后补发
+                    finishRequested = true;
+                    return;
+                }
+            }
+            sendCommitAndCreate();
         }
 
         @Override

@@ -62,7 +62,13 @@ public final class DashScopeTts implements TtsBackend {
             CLIENT.newWebSocketBuilder()
                     .header("Authorization", "Bearer " + apiKey)
                     .connectTimeout(Duration.ofSeconds(10))
-                    .buildAsync(URI.create(WS_BASE + model), new WsListener(text, result));
+                    .buildAsync(URI.create(WS_BASE + model), new WsListener(text, result))
+                    // 握手失败（key 无效/DNS/拒绝升级）走这里：不能让调用方永远挂起
+                    .whenComplete((socket, ex) -> {
+                        if (ex != null) {
+                            result.completeExceptionally(ex);
+                        }
+                    });
         } catch (Exception e) {
             result.completeExceptionally(e);
         }
