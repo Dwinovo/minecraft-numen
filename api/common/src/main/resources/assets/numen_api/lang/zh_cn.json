@@ -232,6 +232,7 @@
   "numen.tool.todowrite": "更新计划",
   "numen.tool.transfer": "转移物品",
   "numen.voice.add": "新建",
+  "numen.voice.backend_dashscope": "DashScope（阿里云百炼）",
   "numen.voice.backend_fish": "Fish Audio",
   "numen.voice.backend_minimax": "MiniMax",
   "numen.voice.backend_openai": "OpenAI 兼容",

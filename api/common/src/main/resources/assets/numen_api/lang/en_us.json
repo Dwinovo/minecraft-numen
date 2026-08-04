@@ -232,6 +232,7 @@
   "numen.tool.todowrite": "Update plan",
   "numen.tool.transfer": "Transfer items",
   "numen.voice.add": "New",
+  "numen.voice.backend_dashscope": "DashScope",
   "numen.voice.backend_fish": "Fish Audio",
   "numen.voice.backend_minimax": "MiniMax",
   "numen.voice.backend_openai": "OpenAI-compatible",

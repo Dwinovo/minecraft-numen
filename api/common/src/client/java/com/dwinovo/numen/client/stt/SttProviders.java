@@ -25,6 +25,8 @@ import java.util.List;
 public final class SttProviders {
 
     public static final String BACKEND_WHISPER_HTTP = "whisper-http";
+    /** 阿里云百炼(DashScope)实时语音识别：走 /api-ws/v1/realtime WebSocket。 */
+    public static final String BACKEND_DASHSCOPE = "dashscope";
 
     public record Option(String id, String displayName, String backend,
                          String defaultBaseUrl, List<String> models) {
@@ -79,6 +81,7 @@ public final class SttProviders {
         }
         return switch (opt.backend()) {
             case BACKEND_WHISPER_HTTP -> new WhisperHttpStt(base, key, model);
+            case BACKEND_DASHSCOPE -> new DashScopeStt(base, key, model);
             default -> new WhisperHttpStt(base, key, model);
         };
     }

@@ -1,5 +1,5 @@
 {
-  "_comment": "Numen STT (voice-input) providers. OpenAI-compatible POST {base}/v1/audio/transcriptions (multipart file+model) unless 'backend' says otherwise. Per provider: base URL + known model ids. Model lists refreshed from each provider's docs (2026-07); best-effort, may drift. USER-EDITABLE: this is copied to config/numen/stt.json on first run; edit that file to add your own providers/models or override URLs. The settings 'custom' model escape hatch also accepts any id.",
+  "_comment": "Numen STT (voice-input) providers. OpenAI-compatible POST {base}/v1/audio/transcriptions (multipart file+model) unless 'backend' says otherwise. The 'dashscope' backend is special: it does NOT use a REST transcription endpoint, but a realtime WebSocket (wss://dashscope.aliyuncs.com/api-ws/v1/realtime), so 'baseUrl' is ignored and only the qwen-audio realtime model applies. Per provider: base URL + known model ids. Model lists refreshed from each provider's docs (2026-07); best-effort, may drift. USER-EDITABLE: this is copied to config/numen/stt.json on first run; edit that file to add your own providers/models or override URLs. The settings 'custom' model escape hatch also accepts any id.",
   "providers": [
     {
       "id": "siliconflow",
@@ -28,6 +28,13 @@
       "backend": "whisper-http",
       "baseUrl": "",
       "models": []
+    },
+    {
+      "id": "dashscope",
+      "name": "DashScope (阿里云百炼 实时)",
+      "backend": "dashscope",
+      "baseUrl": "",
+      "models": ["qwen-audio-3.0-realtime-flash"]
     }
   ]
 }

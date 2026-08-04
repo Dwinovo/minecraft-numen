@@ -47,6 +47,8 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
     public static final String BACKEND_SOVITS = "gpt_sovits";
     public static final String BACKEND_MINIMAX = "minimax";
     public static final String BACKEND_FISH = "fish_audio";
+    /** 阿里云百炼(DashScope)实时语音合成：走 /api-ws/v1/realtime WebSocket。 */
+    public static final String BACKEND_DASHSCOPE = "dashscope";
 
     /**
      * 一条命名声线配置。允许不完整——只有名字是必填;参数错误在第一次合成时以日志报错。
@@ -70,6 +72,10 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
             return BACKEND_FISH.equalsIgnoreCase(backend);
         }
 
+        public boolean isDashScope() {
+            return BACKEND_DASHSCOPE.equalsIgnoreCase(backend);
+        }
+
         /** 据 backend 字段实例化对应 TTS 实现。 */
         public TtsBackend createBackend() {
             if (isSovits()) {
@@ -80,6 +86,9 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
             }
             if (isFishAudio()) {
                 return new FishAudioTts(url, apiKey, voice, model);
+            }
+            if (isDashScope()) {
+                return new DashScopeTts(url, apiKey, model, voice);
             }
             return new OpenAiCompatibleTts(url, apiKey, model, voice);
         }

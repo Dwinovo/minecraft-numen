@@ -120,6 +120,7 @@ public final class ModLanguageData {
         public static final String VOICE_BACKEND_SOVITS  = "numen.voice.backend_sovits";
         public static final String VOICE_BACKEND_MINIMAX = "numen.voice.backend_minimax";
         public static final String VOICE_BACKEND_FISH    = "numen.voice.backend_fish";
+        public static final String VOICE_BACKEND_DASHSCOPE = "numen.voice.backend_dashscope";
         public static final String VOICE_FORM_URL       = "numen.voice.form_url";
         public static final String VOICE_FORM_KEY_OPENAI  = "numen.voice.form_key_openai";
         public static final String VOICE_FORM_KEY_MINIMAX = "numen.voice.form_key_minimax";
@@ -397,6 +398,7 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_BACKEND_SOVITS,  "GPT-SoVITS");
         adder.add(Keys.VOICE_BACKEND_MINIMAX, "MiniMax");
         adder.add(Keys.VOICE_BACKEND_FISH,    "Fish Audio");
+        adder.add(Keys.VOICE_BACKEND_DASHSCOPE, "DashScope");
         adder.add(Keys.VOICE_FORM_URL,       "Service URL");
         adder.add(Keys.VOICE_FORM_KEY_OPENAI,  "API Key");
         adder.add(Keys.VOICE_FORM_KEY_MINIMAX, "API Key");
@@ -652,6 +654,7 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_BACKEND_SOVITS,  "GPT-SoVITS");
         adder.add(Keys.VOICE_BACKEND_MINIMAX, "MiniMax");
         adder.add(Keys.VOICE_BACKEND_FISH,    "Fish Audio");
+        adder.add(Keys.VOICE_BACKEND_DASHSCOPE, "DashScope");
         adder.add(Keys.VOICE_FORM_URL,       "服务地址");
         adder.add(Keys.VOICE_FORM_KEY_OPENAI,  "API Key");
         adder.add(Keys.VOICE_FORM_KEY_MINIMAX, "API Key");
