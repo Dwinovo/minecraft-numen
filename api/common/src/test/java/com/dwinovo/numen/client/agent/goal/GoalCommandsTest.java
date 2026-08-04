@@ -123,4 +123,17 @@ class GoalCommandsTest {
         assertTrue(state.compactRequested());
         assertTrue(state.history().get(state.history().size() - 1).command().equals("/goal compact"));
     }
+
+    @Test
+    void resumeCommandRecoversAProductionFailedGoal() {
+        GoalState state = GoalState.create("entity-1", "reach the village", 1000);
+        assertTrue(GoalFailurePolicy.markExhausted(state, true, "api timeout", 2000));
+
+        GoalCommands.Result result = GoalCommands.execute(state, "/goal resume", 4000);
+
+        assertTrue(result.success());
+        assertEquals(GoalCommand.RESUME, result.command());
+        assertEquals(GoalStatus.ACTIVE, state.status());
+        assertEquals("", state.lastError());
+    }
 }

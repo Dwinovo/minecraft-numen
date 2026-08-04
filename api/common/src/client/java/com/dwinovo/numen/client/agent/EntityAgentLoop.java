@@ -9,6 +9,13 @@ import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.agent.tool.ToolInvocation;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.client.agent.goal.GoalState;
+import com.dwinovo.numen.client.agent.goal.GoalStore;
+import com.dwinovo.numen.client.agent.goal.GoalCommand;
+import com.dwinovo.numen.client.agent.goal.GoalCommands;
+import com.dwinovo.numen.client.agent.goal.GoalFailurePolicy;
+import com.dwinovo.numen.client.agent.goal.GoalTodo;
+import com.dwinovo.numen.client.agent.goal.GoalTodoHarvest;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.mcp.server.McpMode;
 import com.dwinovo.numen.platform.Services;
@@ -126,6 +133,11 @@ public final class EntityAgentLoop {
     private final ConvoState convo;
     /** Functional-block coordinate memory, injected as {@code <known_blocks>}. */
     private final WorkBlockMemory workBlocks;
+    /** Write-through persistent goal state ({@code config/numen/goals/<uuid>.json}). */
+    private final GoalStore goalStore;
+    private GoalState goal;
+    /** True while the active goal's continuation prompt/tool chain is still unsettled. */
+    private boolean goalExecutionQueued;
     /**
      * 收件箱(宪法 §4):主人的话与世界事件的统一进箱口。协议约束是它存在的
      * 底层原因——{@code assistant(tool_calls)} 后面必须直接跟 {@code tool}
@@ -244,10 +256,18 @@ public final class EntityAgentLoop {
         });
         this.workBlocks = WorkBlockMemory.forEntity(numenRoot.resolve("memory"), entityUuid);
         this.inbox = new Inbox(numenRoot.resolve("conversations"), entityUuid);
+        this.goalStore = GoalStore.forEntity(numenRoot.resolve("goals"), entityUuid);
+        this.goal = goalStore.load();
+        if (this.goal != null && this.goal.isActive()) {
+            this.goal.pause(System.currentTimeMillis());
+            goalStore.save(this.goal);
+            Constants.LOG.info("[numen-entity#{}] active goal paused on world reload", entityUuid);
+        }
         this.providerEntryId = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().assignedEntry(entityUuid);
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
                 harvestWorkBlocks(inv.name(), resultJson);
+                harvestGoalTodos(inv.name(), resultJson);
                 trackAsyncDispatch(inv, resultJson);
                 convo.addToolResult(inv.id(), resultJson);
             }
@@ -327,6 +347,17 @@ public final class EntityAgentLoop {
 
     public UUID entityUuid() { return entityUuid; }
 
+    /** Current persistent goal state; empty when the owner has not used goal yet. */
+    public GoalState goalState() {
+        return goal;
+    }
+
+    /** Replace and persist the entity's goal state. */
+    public void replaceGoal(GoalState next) {
+        this.goal = next == null ? GoalState.none(entityUuid.toString()) : next;
+        goalStore.save(this.goal);
+    }
+
     /** Live partial of the in-flight assistant reply ("" when idle) — GUI typewriter source. */
     public String livePartial() {
         return presenter.livePartial();
@@ -356,6 +387,10 @@ public final class EntityAgentLoop {
 
     /** Owner typed a prompt in the chat GUI. */
     public void submitPrompt(String text) {
+        if (GoalCommands.isGoalCommand(text)) {
+            submitGoalCommand(text);
+            return;
+        }
         if (dead) {
             Constants.LOG.info("[numen-entity#{}] prompt ignored — body is dead", entityUuid);
             return;
@@ -378,6 +413,68 @@ public final class EntityAgentLoop {
                 deferred ? " — buffered (mid-turn)" : "",
                 truncate(text, 200));
         tryStartTurn();
+    }
+
+    /** True when the typed text should be handled locally by the goal command layer. */
+    public boolean isGoalCommand(String text) {
+        return GoalCommands.isGoalCommand(text);
+    }
+
+    /**
+     * Execute a chat-style {@code /goal ...} command locally and persist the
+     * mutated goal state. This deliberately does not require an API key or a
+     * live LLM turn. After state-changing verbs it queues a continuation prompt
+     * for the agent, and pauses/cancels/completes stop the current work.
+     */
+    public boolean submitGoalCommand(String raw) {
+        if (!GoalCommands.isGoalCommand(raw)) return false;
+        long nowMs = System.currentTimeMillis();
+        GoalCommands.Result result = GoalCommands.execute(goal, raw, nowMs);
+        if (result.success()) {
+            replaceGoal(goal);
+            GoalCommand command = result.command();
+            if (command == GoalCommand.ADD || command == GoalCommand.UPDATE
+                    || command == GoalCommand.RESUME) {
+                goalExecutionQueued = false;
+                if (command == GoalCommand.UPDATE && (isBusy() || hasQueuedPrompts())) {
+                    abort();
+                }
+                startGoalExecution();
+            } else if (command == GoalCommand.PAUSE || command == GoalCommand.CANCEL
+                    || command == GoalCommand.COMPLETE) {
+                goalExecutionQueued = false;
+                if (isBusy() || hasQueuedPrompts()) abort();
+            }
+        }
+        if (result.command() == GoalCommand.COMPACT) {
+            requestCompact();
+        }
+        String speaker = presenter == null ? personaName : presenter.speakerName();
+        com.dwinovo.numen.client.chat.ChatLines.notice(
+                speaker == null || speaker.isBlank() ? "goal" : speaker, result.text());
+        Constants.LOG.info("[numen-entity#{}] goal command {} -> {}",
+                entityUuid, raw, result.text());
+        return true;
+    }
+
+    /** Queue the active goal's continuation prompt unless it is already queued. */
+    private void startGoalExecution() {
+        if (goal == null || !goal.isActive() || goalExecutionQueued) return;
+        if (dead || externallyDriven || McpMode.instance().enabled()) return;
+        goalExecutionQueued = true;
+        submitPrompt(goalExecutionPrompt());
+    }
+
+    private String goalExecutionPrompt() {
+        StringBuilder sb = new StringBuilder("开始执行 goal: ").append(goal.title());
+        List<GoalTodo> todos = goal.todos();
+        if (!todos.isEmpty()) {
+            sb.append("\n当前计划:");
+            for (GoalTodo todo : todos) {
+                sb.append("\n- [").append(todo.status()).append("] ").append(todo.content());
+            }
+        }
+        return sb.toString();
     }
 
     /** Driven once per client tick (see {@code AgentLoopRegistry.tickAll}) — backstop timeout. */
@@ -421,6 +518,23 @@ public final class EntityAgentLoop {
             Constants.LOG.debug("[numen-entity#{}] work-block harvest skipped: {}",
                     entityUuid, ex.toString());
         }
+    }
+
+    /** Pull {@code todowrite} snapshots into the persistent goal card state. */
+    private void harvestGoalTodos(String toolName, String resultJson) {
+        if (!"todowrite".equals(toolName) || goal == null || !goal.hasGoal()) return;
+        long now = System.currentTimeMillis();
+        var parsed = GoalTodoHarvest.parse(resultJson, now);
+        if (parsed.isEmpty()) return;
+        List<GoalTodo> next = parsed.get();
+        goal.setTodos(next, now);
+        for (GoalTodo todo : next) {
+            if ("in_progress".equals(todo.status()) && !todo.content().isBlank()) {
+                goal.setCurrentTask(todo.content(), now);
+                break;
+            }
+        }
+        replaceGoal(goal);
     }
 
     // ---- interrupt (owner-triggered, from the chat GUI "Stop" button) ----
@@ -541,6 +655,24 @@ public final class EntityAgentLoop {
         }
     }
 
+    /**
+     * Owner-triggered Stop for a goal-backed turn: same hard abort as
+     * {@link #abort()}, and if a goal was active it is marked paused so the
+     * right-side card and command state agree that work was interrupted.
+     */
+    public void abortGoal() {
+        abort();
+        if (goal != null && goal.isActive()) {
+            goal.pause(System.currentTimeMillis());
+            replaceGoal(goal);
+            goalExecutionQueued = false;
+            String speaker = presenter == null ? personaName : presenter.speakerName();
+            com.dwinovo.numen.client.chat.ChatLines.notice(
+                    speaker == null || speaker.isBlank() ? "goal" : speaker,
+                    "goal 已打断并暂停，/goal resume 可继续");
+        }
+    }
+
     // ---- external control (an MCP client / Claude drives the body directly) ----
 
     /**
@@ -596,6 +728,7 @@ public final class EntityAgentLoop {
         awaitingLlmResponse = false;
         compacting = false;
         presenter.clearPartial();
+        goalExecutionQueued = false;
         inbox.clearAll();
         dead = true;
         Constants.LOG.info("[numen-entity#{}] body died ({}) — loop frozen ({} call(s) in flight)",
@@ -645,6 +778,8 @@ public final class EntityAgentLoop {
         // downgrade this resume rode the urgent flag; now it is explicit.)
         if (hadSuspendedTurn) {
             tryStartTurn();
+        } else {
+            startGoalExecution();
         }
     }
 
@@ -1167,6 +1302,20 @@ public final class EntityAgentLoop {
         com.dwinovo.numen.client.hud.NumenHudToasts.push(
                 com.dwinovo.numen.client.ui.NumenToasts.Severity.ERROR,
                 presenter.speakerName() + ": " + truncate(why, 90));
+        boolean goalFailed = GoalFailurePolicy.markExhausted(
+                goal, goalExecutionQueued, why, System.currentTimeMillis());
+        if (goalFailed) {
+            replaceGoal(goal);
+            goalExecutionQueued = false;
+            Constants.LOG.warn("[numen-entity#{}] goal marked failed after LLM retry exhaustion: {}",
+                    entityUuid, truncate(why, 160));
+        }
+        // A failed goal must wait for an explicit /goal resume. Preserve any
+        // queued owner prompts, but do not immediately dispatch them here.
+        if (goalFailed) {
+            turnPause = AgentTurnPause.RECOVERABLE_FAILURE;
+            return;
+        }
         if (inbox.isEmpty()) {
             turnPause = AgentTurnPause.RECOVERABLE_FAILURE;
             return;
@@ -1289,6 +1438,9 @@ public final class EntityAgentLoop {
                 com.dwinovo.numen.client.hud.TalkHint.flash(
                         presenter.speakerName() + " 想了想,什么也没说——再问一句试试", 3500);
             }
+            // The goal-backed chain has settled. A later unrelated owner
+            // prompt must not be attributed to this goal's failure policy.
+            goalExecutionQueued = false;
             convo.resetTurnCount();
             // A prompt that arrived during this final turn was buffered; now that
             // the chain has settled, start a fresh turn to answer it.
