@@ -43,13 +43,17 @@ class InboxTest {
     @Test
     void repeatedPersonaChangesKeepOnlyTheLatestEvent(@TempDir Path dir) {
         UUID entityUuid = UUID.randomUUID();
-        Inbox inbox = new Inbox(dir, entityUuid);
         String first = "<persona-change>first</persona-change>";
         String latest = "<persona-change>latest</persona-change>";
+        long now = System.currentTimeMillis();
 
-        inbox.pushEvent(first);
-        inbox.pushEvent("<death>事实仍需保留</death>");
-        inbox.pushEvent(latest);
+        // Seed the journal directly to model a queue written by the pre-coalescing build.
+        InboxJournal.forEntity(dir, entityUuid).save(List.of(
+                new InboxJournal.Entry("event", first, now),
+                new InboxJournal.Entry("event", "<death>事实仍需保留</death>", now),
+                new InboxJournal.Entry("event", latest, now)));
+
+        Inbox inbox = new Inbox(dir, entityUuid);
 
         assertEquals(2, inbox.eventCount());
         assertEquals(List.of("<death>事实仍需保留</death>", latest), inbox.snapshot());

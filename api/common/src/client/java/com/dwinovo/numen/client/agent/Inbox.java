@@ -28,19 +28,37 @@ final class Inbox {
         this.journal = InboxJournal.forEntity(conversationsDir, entityUuid);
         // 上次会话没消费完的输入原样躺回(不开轮——旧闻不值得吵人,
         // 下一个轮子自然带上,倒箱时会标注年龄)。
+        boolean coalesced = false;
         for (InboxJournal.Entry e : journal.load()) {
-            (("prompt".equals(e.type())) ? prompts : events).add(new Entry(e.text(), e.ts()));
+            if ("prompt".equals(e.type())) {
+                prompts.add(new Entry(e.text(), e.ts()));
+            } else {
+                coalesced |= appendEvent(new Entry(e.text(), e.ts()));
+            }
+        }
+        if (coalesced) {
+            // 旧会话可能已经留下多条人格事件，启动时压缩并立即修复账本。
+            persist();
         }
     }
 
     void pushEvent(String xml) {
+        appendEvent(new Entry(xml, System.currentTimeMillis()));
+        persist();
+    }
+
+    /** Add an event, returning true when an older coalescible event was removed. */
+    private boolean appendEvent(Entry entry) {
         // 人格切换是可合并的状态同步，不是需要逐条重放的世界事实。
         // 连续切换时只保留最后一次，避免下一回合把旧人格重新灌回上下文。
-        if (isPersonaChange(xml)) {
-            events.removeIf(e -> isPersonaChange(e.text()));
+        if (!isPersonaChange(entry.text())) {
+            events.add(entry);
+            return false;
         }
-        events.add(new Entry(xml, System.currentTimeMillis()));
-        persist();
+        int before = events.size();
+        events.removeIf(e -> isPersonaChange(e.text()));
+        events.add(entry);
+        return events.size() != before + 1;
     }
 
     void pushPrompt(String wrapped) {
