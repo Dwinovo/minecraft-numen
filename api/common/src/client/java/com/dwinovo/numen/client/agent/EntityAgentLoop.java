@@ -380,6 +380,31 @@ public final class EntityAgentLoop {
         return java.util.Collections.unmodifiableList(display);
     }
 
+    /** Logical memory size for the status panel; UI-only persona markers are excluded. */
+    public int memoryMessageCount() {
+        return countMemoryMessages(convo.snapshot());
+    }
+
+    static int countMemoryMessages(List<ConvoState.Msg> messages) {
+        int count = 0;
+        for (ConvoState.Msg message : messages) {
+            if (message instanceof ConvoState.Msg.User user && isMemoryMarker(user.content())) {
+                continue;
+            }
+            count++;
+        }
+        return count;
+    }
+
+    private static boolean isMemoryMarker(String content) {
+        if (content == null) return true;
+        String text = content.strip();
+        return ConvoLog.PERSONA_DIVIDER.equals(text)
+                || ConvoLog.COMPACT_DIVIDER.equals(text)
+                || (text.startsWith("<persona-change>")
+                        && text.endsWith("</persona-change>"));
+    }
+
     /** Snapshot of prompts (GUI or {@code NumenGateway}) still waiting for the
      *  next protocol-valid splice point — the GUI renders these as pending. */
     public List<String> queuedPrompts() {

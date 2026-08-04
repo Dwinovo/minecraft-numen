@@ -2,6 +2,7 @@ package com.dwinovo.numen.client.screen.items;
 
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
+import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.data.ClientNumenInventory;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
@@ -16,6 +17,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.UUID;
 
 /**
@@ -53,11 +55,52 @@ public final class ItemsView {
     private static final ResourceLocation FOOD_FULL = ResourceLocation.withDefaultNamespace("hud/food_full");
     private static final ResourceLocation FOOD_HALF = ResourceLocation.withDefaultNamespace("hud/food_half");
 
-    private ItemsView() {}
+    // 状态带左栏三行(人设/模型/声线)的原地命中区:x/y/w/h,build 时随布局算出
+    private final int[] personaBox = new int[4];
+    private final int[] modelBox = new int[4];
+    private final int[] voiceBox = new int[4];
+    private List<String> providerIds = List.of();
+    private List<String> personaIds = List.of();
+    private List<String> voiceIds = List.of();
 
-    public static void render(GuiGraphics g, Font font, UUID uuid,
-                              int left, int top, int panelW, int panelH, int headerH,
-                              int mouseX, int mouseY) {
+    public ItemsView() {}
+
+    public void build(UUID uuid, Font font, int left, int top, int panelW, int panelH,
+                      int headerH) {
+        this.activeUuid = uuid;
+
+        int startX = left + (panelW - COMP_W) / 2;
+        int cTop = top + headerH + (panelH - headerH - COMP_H) / 2;
+        int aY = cTop + TOP_H + 6;
+        int c1 = startX + 8;
+        int lw = COMP_W / 2 - 16;
+        int ly = aY + 6;
+        rowBox(personaBox, c1, ly, lw);
+        rowBox(modelBox, c1, ly + 12, lw);
+        rowBox(voiceBox, c1, ly + 24, lw);
+
+        providerIds = new ArrayList<>();
+        providerIds.add(null);
+        for (var e : com.dwinovo.numen.agent.llm.ProviderLibrary.instance().list()) {
+            providerIds.add(e.id());
+        }
+
+        personaIds = new ArrayList<>();
+        personaIds.add(null);
+        for (var p : com.dwinovo.numen.persona.PersonaLibrary.instance().list()) {
+            personaIds.add(p.id());
+        }
+
+        voiceIds = new ArrayList<>();
+        voiceIds.add(null);
+        for (var v : com.dwinovo.numen.client.voice.VoiceLibrary.instance().list()) {
+            voiceIds.add(v.id());
+        }
+    }
+
+    public void render(GuiGraphics g, Font font, UUID uuid,
+                       int left, int top, int panelW, int panelH, int headerH,
+                       int mouseX, int mouseY) {
         UiTheme th = UiTheme.current();
         var snap = ClientNumenInventory.get(uuid).orElse(null);
         AbstractClientPlayer e = ClientNumenLookup.resolve(uuid);
@@ -136,12 +179,17 @@ public final class ItemsView {
         int c2 = startX + COMP_W / 2 + 4;
         int lw = COMP_W / 2 - 16;
         int ly = aY + 6;
+        // 左栏三行(人设/模型/声线)就是选择器:原地点击/滚轮切换,
+        // 悬停给出行高亮与 ▾,不再另起按钮行。
+        int hoverRow = hoverRow(mouseX, mouseY);
+        if (hoverRow == 0) rowWash(g, th, personaBox);
         // 人设行:8px 小脸 + 名字
         net.minecraft.client.gui.components.PlayerFaceRenderer.draw(
                 g, com.dwinovo.numen.client.agent.KnownSkins.of(uuid), c1, ly - 1, 8);
         String persona = loop != null && loop.personaName() != null && !loop.personaName().isBlank()
                 ? loop.personaName() : "默认人设";
-        Nb.text(g, font, clip(font, persona, lw - 11), c1 + 11, ly, th.text());
+        Nb.text(g, font, clip(font, persona, lw - 20), c1 + 11, ly, th.text());
+        rowHint(g, font, th, personaBox, ly, hoverRow == 0);
         // 模型行:条目 ID 解析回人读的名字(条目名 · 型号),别把主键糊给用户
         String model = "未绑定模型";
         if (loop != null && loop.providerEntryId() != null && !loop.providerEntryId().isBlank()) {
@@ -152,10 +200,15 @@ public final class ItemsView {
                             ? "" : " · " + entry.model())
                     : "条目已删除";
         }
-        Nb.text(g, font, clip(font, "模型 " + model, lw), c1, ly + 12, th.textDim());
+        if (hoverRow == 1) rowWash(g, th, modelBox);
+        Nb.text(g, font, clip(font, "模型 " + model, lw - 9), c1, ly + 12,
+                hoverRow == 1 ? th.text() : th.textDim());
+        rowHint(g, font, th, modelBox, ly + 12, hoverRow == 1);
         var voice = com.dwinovo.numen.client.voice.VoiceLibrary.instance().resolve(uuid);
-        Nb.text(g, font, clip(font, "声线 " + (voice != null ? voice.name() : "无"), lw),
-                c1, ly + 24, th.textDim());
+        if (hoverRow == 2) rowWash(g, th, voiceBox);
+        Nb.text(g, font, clip(font, "声线 " + (voice != null ? voice.name() : "无"), lw - 9),
+                c1, ly + 24, hoverRow == 2 ? th.text() : th.textDim());
+        rowHint(g, font, th, voiceBox, ly + 24, hoverRow == 2);
         if (loop != null) {
             // 记忆行:水位条(绿→琥珀→红)+ 条数与累计消耗
             Nb.text(g, font, "记忆", c2, ly, th.textDim());
@@ -165,7 +218,7 @@ public final class ItemsView {
             if (pct > 0) {
                 RoundRect.fill(g, barX, ly + 1, barX + Math.max(3, barW * pct / 100), ly + 7, 2, barColor);
             }
-            Nb.text(g, font, clip(font, loop.display().size() + "条·"
+            Nb.text(g, font, clip(font, loop.memoryMessageCount() + "条·"
                     + fmtTokens(loop.totalTokensUsed()), lw - 26 - barW - 8),
                     barX + barW + 4, ly, th.textDim());
             // 距离行:相对朝向的方位箭头——一眼知道她在哪边
@@ -205,6 +258,112 @@ public final class ItemsView {
 
         tooltipLast(g, font, hover, mouseX, mouseY);
     }
+
+    public boolean mouseClicked(double mx, double my, int button) {
+        // 左键下一个、右键上一个;三行各自的命中区互不重叠。
+        int dir = button == 1 ? -1 : 1;
+        if (inside(modelBox, mx, my)) {
+            cycleProvider(dir);
+            return true;
+        }
+        if (inside(personaBox, mx, my)) {
+            cyclePersona(dir);
+            return true;
+        }
+        if (inside(voiceBox, mx, my)) {
+            cycleVoice(dir);
+            return true;
+        }
+        return false;
+    }
+
+    public boolean mouseScrolled(double mx, double my, double delta) {
+        if (inside(modelBox, mx, my)) {
+            cycleProvider(delta > 0 ? -1 : 1);
+            return true;
+        }
+        if (inside(personaBox, mx, my)) {
+            cyclePersona(delta > 0 ? -1 : 1);
+            return true;
+        }
+        if (inside(voiceBox, mx, my)) {
+            cycleVoice(delta > 0 ? -1 : 1);
+            return true;
+        }
+        return false;
+    }
+
+    /** 命中的选择器行:0 人设 / 1 模型 / 2 声线 / -1 无。 */
+    private int hoverRow(double mx, double my) {
+        if (inside(personaBox, mx, my)) return 0;
+        if (inside(modelBox, mx, my)) return 1;
+        if (inside(voiceBox, mx, my)) return 2;
+        return -1;
+    }
+
+    /** 行命中区:与状态带文本行同位同宽,12px 行距互不重叠。 */
+    private static void rowBox(int[] out, int x, int textY, int w) {
+        out[0] = x;
+        out[1] = textY - 1;
+        out[2] = w;
+        out[3] = 12;
+    }
+
+    /** 悬停行底色:chip 色轻洗一层,压住槽位感的只有这一行。 */
+    private static void rowWash(GuiGraphics g, UiTheme th, int[] box) {
+        RoundRect.fill(g, box[0] - 2, box[1], box[0] + box[2] + 2, box[1] + box[3],
+                2, th.chipFill());
+    }
+
+    /** 行尾 ▾:常驻 faint 提示可选,悬停提亮。 */
+    private static void rowHint(GuiGraphics g, Font font, UiTheme th, int[] box,
+                                int textY, boolean hovered) {
+        Nb.text(g, font, "▾", box[0] + box[2] - 8, textY, hovered ? th.text() : th.faint());
+    }
+
+    private static boolean inside(int[] box, double mx, double my) {
+        return box[2] > 0 && mx >= box[0] && mx < box[0] + box[2]
+                && my >= box[1] && my < box[1] + box[3];
+    }
+
+    private void cycleProvider(int dir) {
+        EntityAgentLoop loop = currentLoop();
+        if (loop == null || providerIds.isEmpty()) return;
+        int current = providerIds.indexOf(loop.providerEntryId());
+        int next = Math.floorMod(current < 0 ? 0 : current + dir, providerIds.size());
+        loop.setProviderEntry(providerIds.get(next));
+    }
+
+    private void cyclePersona(int dir) {
+        EntityAgentLoop loop = currentLoop();
+        if (loop == null || personaIds.isEmpty()) return;
+        int current = personaIds.indexOf(loop.personaId());
+        int next = Math.floorMod(current < 0 ? 0 : current + dir, personaIds.size());
+        String personaId = personaIds.get(next);
+        if (personaId == null) {
+            loop.setPersona(null, "", null);
+        } else {
+            com.dwinovo.numen.persona.PersonaLibrary.Persona p =
+                    com.dwinovo.numen.persona.PersonaLibrary.instance().get(personaId);
+            if (p != null) loop.setPersona(p.id(), p.text(), p.name());
+        }
+    }
+
+    private void cycleVoice(int dir) {
+        EntityAgentLoop loop = currentLoop();
+        if (loop == null || voiceIds.isEmpty()) return;
+        int current = voiceIds.indexOf(
+                com.dwinovo.numen.client.voice.VoiceLibrary.instance().assignedEntry(loop.entityUuid()));
+        int next = Math.floorMod(current < 0 ? 0 : current + dir, voiceIds.size());
+        com.dwinovo.numen.client.voice.VoiceLibrary.instance().assign(
+                loop.entityUuid(), voiceIds.get(next));
+    }
+
+    private EntityAgentLoop currentLoop() {
+        return activeUuid == null ? null : AgentLoopRegistry.get(activeUuid).orElse(null);
+    }
+
+    private UUID activeUuid;
 
     /** 统一凹槽:从当前主题的地色向边框色压暗两档(边更深、内浅一档)——
      *  深色但同一家谱,切主题跟着换装,不是生硬的半透黑。 */
