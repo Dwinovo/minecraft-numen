@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -212,7 +213,7 @@ public final class DashScopeStt implements SttBackend {
             }
 
             @Override
-            public void onMessage(WebSocket webSocket, CharSequence data) {
+            public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
                 try {
                     JsonObject e = JsonParser.parseString(data.toString()).getAsJsonObject();
                     String type = e.has("type") ? e.get("type").getAsString() : "";
@@ -251,6 +252,7 @@ public final class DashScopeStt implements SttBackend {
                         listener.onError(ex);
                     }
                 }
+                return null;   // 单帧小消息，无需分帧续传
             }
 
             @Override
@@ -261,11 +263,12 @@ public final class DashScopeStt implements SttBackend {
             }
 
             @Override
-            public void onClose(WebSocket webSocket, int statusCode, String reason) {
+            public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
                 // 若转写未完成连接就断了，给一个空结果而非永远挂起
                 if (done.compareAndSet(false, true)) {
                     listener.onFinal(transcript.toString().strip());
                 }
+                return null;
             }
 
             private void closeQuietly() {

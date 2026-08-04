@@ -13,6 +13,7 @@ import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -137,7 +138,7 @@ public final class DashScopeTts implements TtsBackend {
         }
 
         @Override
-        public void onMessage(WebSocket webSocket, CharSequence data) {
+        public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
             try {
                 JsonObject e = JsonParser.parseString(data.toString()).getAsJsonObject();
                 String type = e.has("type") ? e.get("type").getAsString() : "";
@@ -155,9 +156,10 @@ public final class DashScopeTts implements TtsBackend {
                     }
                     fail(new IllegalStateException(msg));
                 }
-            } catch (RuntimeException ex) {
+            } catch (Exception ex) {   // IOException(pcm.write) 与 RuntimeException 都按失败处理
                 fail(ex);
             }
+            return null;   // 单帧小消息，无需分帧续传
         }
 
         @Override
@@ -166,11 +168,12 @@ public final class DashScopeTts implements TtsBackend {
         }
 
         @Override
-        public void onClose(WebSocket webSocket, int statusCode, String reason) {
+        public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
             // 流意外中断时，尽量用已收到的音频完成（避免整句丢失）
             if (!finished.get()) {
                 complete();
             }
+            return null;
         }
 
         private void complete() {
