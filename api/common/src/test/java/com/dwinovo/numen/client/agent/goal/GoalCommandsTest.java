@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class GoalCommandsTest {
@@ -16,6 +17,12 @@ class GoalCommandsTest {
         assertFalse(GoalCommands.isGoalCommand("goal status"));
         assertFalse(GoalCommands.isGoalCommand("/numen reset"));
         assertFalse(GoalCommands.isGoalCommand(null));
+    }
+
+    @Test
+    void executeRejectsNullStateInsteadOfMutatingAnUnobservableTemporaryGoal() {
+        assertThrows(NullPointerException.class,
+                () -> GoalCommands.execute(null, "/goal add build a house", 1000));
     }
 
     @Test

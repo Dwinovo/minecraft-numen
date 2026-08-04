@@ -3,6 +3,7 @@ package com.dwinovo.numen.client.agent.goal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /** Parser and local executor for the chat-side {@code /goal} command family. */
 public final class GoalCommands {
@@ -37,7 +38,7 @@ public final class GoalCommands {
     }
 
     public static Result execute(GoalState goal, String raw, long nowMs) {
-        GoalState state = goal == null ? GoalState.none("") : goal;
+        GoalState state = Objects.requireNonNull(goal, "goal state");
         String rest = raw == null ? "" : raw.trim();
         if (rest.toLowerCase(Locale.ROOT).startsWith("/goal")) {
             rest = rest.substring(5).trim();
