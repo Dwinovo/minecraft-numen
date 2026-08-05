@@ -21,7 +21,8 @@ let package = Package(
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket")
             ],
             linkerSettings: [
-                .linkedFramework("Security")
+                .linkedFramework("Security"),
+                .linkedFramework("AVFoundation")
             ]
         ),
         .testTarget(
