@@ -5,38 +5,46 @@ import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.scan.BlockScanner;
-import com.dwinovo.numen.core.scan.ScanExecutor;
+import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 
 /**
- * goto 的 FIND(就近方块)子系统:离线环形扫描出候选、按 mine 同一道
- * 剪枝入册、编译 anyOf 导航契约、打不通时逐个除名轮换。它与 goto 的
- * 坐标三态(BLOCK/COLUMN/YLEVEL)不共享任何逻辑——此前十二个字段和
- * 五处 switch 分支散在任务里,现在收进一个组件,任务只管驱动。
+ * goto 的 FIND(就近方块)子系统:起一次 {@link BlockSearch} 找出候选、按 mine 同一道
+ * 剪枝入册、编译 anyOf 导航契约、打不通时逐个除名轮换。它与 goto 的坐标三态
+ * (BLOCK/COLUMN/YLEVEL)不共享任何逻辑,任务只管驱动。
+ *
+ * <p>搜索和 {@code scan_blocks} 走同一条路,只是 {@code want} 不同——所以
+ * "最近的铁矿在哪"两个工具给的是同一个答案。
  */
 final class NearestBlockFinder {
 
-    /** 候选上限、最远环半径、离线扫描的放弃时限、行程预算基准。 */
+    /** 候选上限、最远环半径、行程预算基准。 */
     private static final int MAX_CANDIDATES = 64;
     private static final int MAX_CHUNK_RADIUS = 32;
-    private static final long SCAN_TIMEOUT_TICKS = 40;
+    /**
+     * 收工判据的配额。要 1 个:她只需要最近的那一个,余下的候选是寻路打不通时的备胎,
+     * 顺路捡到多少算多少。要 64 个会逼着搜索一路走到能证明"这 64 个都是最近的"为止
+     * ——找一把独一份的工作台时,那就是把整个加载区走一遍。
+     */
+    private static final int NEAREST_WANTED = 1;
     static final int BUDGET_BLOCKS = 128;
 
     private final NumenPlayer player;
     private final Block target;
     /** 仍在册的候选格(打不通的会被逐个除名)。 */
     private final List<BlockPos> candidates = new ArrayList<>();
-    /** 在飞的离线扫描;完成/超时后归 null。 */
-    private CompletableFuture<List<BlockScanner.Hit>> scan;
-    private long scanDeadline;
+    /** 在飞搜索的句柄;0 表示没有在飞的。 */
+    private int scanId;
+    /** 搜索回来的命中,等 {@link #drain()} 收割。 */
+    private List<BlockScanner.Hit> hits;
     private boolean scanDrained;
     /** 候选集编译出的导航契约(候选变动时重建)。 */
     private GoalCompiler.Compiled contract;
@@ -46,44 +54,42 @@ final class NearestBlockFinder {
         this.target = target;
     }
 
-    /** 踢一次离线扫描:主线程环形捕获身体周围的已加载 chunk 引用,后台按环序由近及远
-     *  扫,攒够的这批比下一环最近的可能还近就收工。 */
+    /** 踢一次搜索:按环序由近及远走已加载地形,最近的那个一被证明就收工。 */
     void kickScan() {
-        var level = player.level();
+        if (!(player.level() instanceof ServerLevel level)) {
+            scanDrained = true;
+            return;
+        }
         // 圆心用寻路口径的脚位格(0.1251 上抬 + 台阶取上格)——section 遍历序从它导出。
-        var cap = BlockScanner.captureRings(level,
-                BlockHelper.playerFeet(level, player.getX(), player.getY(), player.getZ()),
-                MAX_CHUNK_RADIUS);
-        scan = ScanExecutor.submit(() -> BlockScanner.scanRings(
-                level, cap, Set.of(target), MAX_CANDIDATES, MAX_CHUNK_RADIUS));
-        scanDeadline = level.getGameTime() + SCAN_TIMEOUT_TICKS;
+        BlockPos feet = BlockHelper.playerFeet(level, player.getX(), player.getY(), player.getZ());
+        scanId = BlockSearch.start(player.getUUID(), level, feet, MAX_CHUNK_RADIUS * 16,
+                NEAREST_WANTED, Set.of(target), res -> {
+                    scanId = 0;
+                    hits = res.matches();
+                });
     }
 
-    /** 收割离线扫描:按距离取最近的前 {@link #MAX_CANDIDATES} 个入册。 */
+    /** 任务收尾:丢掉还在飞的搜索,免得回执落到一个已经没人读的组件上。 */
+    void cancelScan() {
+        if (scanId != 0) {
+            BlockSearch.cancel(scanId);
+            scanId = 0;
+            scanDrained = true;
+        }
+    }
+
+    /** 收割搜索结果:按距离取最近的前 {@link #MAX_CANDIDATES} 个入册。 */
     void drain() {
-        if (scan == null) {
-            return;
+        if (hits == null) {
+            return;   // 还在飞,或者已经收割过
         }
-        if (!scan.isDone()) {
-            if (player.level().getGameTime() > scanDeadline) {
-                scan.cancel(false);
-                scan = null;
-                scanDrained = true;
-            }
-            return;
-        }
-        List<BlockScanner.Hit> hits;
-        try {
-            hits = scan.join();
-        } catch (Exception e) {
-            hits = List.of();
-        }
-        scan = null;
+        List<BlockScanner.Hit> found = hits;
+        hits = null;
         scanDrained = true;
         // 入册前过与 mine 同一道目标剪枝:挖不动/禁挖(贴液体等)/基岩上下
         // 夹死的格不作候选——省得选中一个走近了也没法处置的目标。
         var ctx = ContextFactory.forExecution(player);
-        hits.stream()
+        found.stream()
                 .sorted(Comparator.comparingDouble(BlockScanner.Hit::distance))
                 .map(h -> h.pos().immutable())
                 .filter(p -> MineCompanionTask.plausibleToBreak(
@@ -97,9 +103,9 @@ final class NearestBlockFinder {
         return !candidates.isEmpty();
     }
 
-    /** 扫描已收割/超时,且没有候选可给了。 */
+    /** 搜索已收割,且没有候选可给了。 */
     boolean exhausted() {
-        return scan == null && scanDrained;
+        return scanId == 0 && scanDrained;
     }
 
     /** 当前候选集的导航契约;无候选为 null。 */

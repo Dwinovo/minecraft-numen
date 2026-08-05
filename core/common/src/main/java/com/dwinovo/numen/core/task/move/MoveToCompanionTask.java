@@ -431,6 +431,16 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         return String.format("%.0f,%d,%.0f", player.getX(), gy, player.getZ());
     }
 
+    /** Release the nav (base) and drop a FIND lookup that is still walking rings for a
+     *  destination nobody is going to any more. */
+    @Override
+    protected void cleanup() {
+        super.cleanup();
+        if (finder != null) {
+            finder.cancelScan();
+        }
+    }
+
     /** The give-up message for a planner failure that wasn't close enough to count as arrival.
      *  Captured at the fail site (nav still alive) so its {@code failReason} is readable before
      *  the base's {@code cleanup()} releases the nav. */

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
-import com.dwinovo.numen.core.scan.ScanBlocksJob;
+import com.dwinovo.numen.core.scan.BlockSearch;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -10,8 +10,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ScanOpsTest {
 
-    private static ScanBlocksJob.ScanResult result(int scanned, int unloaded, int total, boolean deadlineHit) {
-        return new ScanBlocksJob.ScanResult(List.of(), scanned, unloaded, total, deadlineHit, false);
+    private static BlockSearch.ScanResult result(int scanned, int unloaded, int total, boolean deadlineHit) {
+        return new BlockSearch.ScanResult(List.of(), scanned, unloaded, total, deadlineHit, false);
     }
 
     @Test
@@ -48,14 +48,14 @@ class ScanOpsTest {
     @Test
     void stoppingEarlyOnTheRingBoundWarnsAboutNothing() {
         assertNull(ScanOps.coverageNote(
-                new ScanBlocksJob.ScanResult(List.of(), 41, 0, 625, false, true)));
+                new BlockSearch.ScanResult(List.of(), 41, 0, 625, false, true)));
     }
 
     /** Unloaded ground is still unloaded even when the quota was met early. */
     @Test
     void stoppingEarlyStillReportsGroundNobodyLookedAt() {
         String note = ScanOps.coverageNote(
-                new ScanBlocksJob.ScanResult(List.of(), 41, 12, 625, false, true));
+                new BlockSearch.ScanResult(List.of(), 41, 12, 625, false, true));
         assertTrue(note.contains("12 of 625"), note);
     }
 }

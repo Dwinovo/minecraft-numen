@@ -209,7 +209,7 @@ public final class TargetIndex {
 
     /**
      * 从 {@code center} 按 chebyshev 区块环由近及远收集 {@code targets} 的位置。哪一节先看、
-     * 什么时候可以不看了,判据在 {@link SearchGeometry} ——和现扫的 {@link ScanBlocksJob} 同一份,
+     * 什么时候可以不看了,判据在 {@link SearchGeometry} ——和现扫的 {@link BlockSearch} 同一份,
      * 同一片地不会给出两种"最近"。收工是精确的:攒够的 {@code want} 个已经比下一环最近的可能
      * 还近才停。
      *

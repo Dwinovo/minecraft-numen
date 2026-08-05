@@ -5,7 +5,7 @@ import com.dwinovo.numen.core.debug.DebugCommands;
 import com.dwinovo.numen.core.debug.PathDebugRenderer;
 import com.dwinovo.numen.core.pathing.cache.PathCaches;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
-import com.dwinovo.numen.core.scan.ScanBlocksJob;
+import com.dwinovo.numen.core.scan.BlockSearch;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -56,7 +56,7 @@ public class NumenCoreNeoForge {
 
     private static void onServerTickPost(ServerTickEvent.Post event) {
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
-        ScanBlocksJob.tick(event.getServer());
+        BlockSearch.tick(event.getServer());
         PathCaches.serverTick(event.getServer());
         // Periodic eviction sweep for the target-block index (entries of unloaded chunks).
         com.dwinovo.numen.core.scan.TargetIndex.serverTick(event.getServer());

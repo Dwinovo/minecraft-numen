@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.scan.BlockScanner;
-import com.dwinovo.numen.core.scan.ScanBlocksJob;
+import com.dwinovo.numen.core.scan.BlockSearch;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
@@ -40,7 +40,7 @@ List<String> block_ids,
             throw new IllegalArgumentException("not on a server level");
         }
         BlockPos center = self.blockPosition();
-        ScanBlocksJob.start(self.getUUID(), sl, center, r, MAX_RESULTS, targets,
+        BlockSearch.start(self.getUUID(), sl, center, r, MAX_RESULTS, targets,
                 result -> reply.accept(buildResult(result, r, center)));
     }
 
@@ -50,7 +50,7 @@ List<String> block_ids,
      * iron within 192 blocks" from "most of that sphere was never looked at", and
      * the model will read the first meaning into silence every time.
      */
-    static String coverageNote(ScanBlocksJob.ScanResult res) {
+    static String coverageNote(BlockSearch.ScanResult res) {
         List<String> notes = new ArrayList<>(2);
         if (res.deadlineHit()) {
             notes.add("time budget hit after " + res.columnsScanned() + "/" + res.columnsTotal()
@@ -65,7 +65,7 @@ List<String> block_ids,
         return notes.isEmpty() ? null : String.join("; ", notes);
     }
 
-    private static String buildResult(ScanBlocksJob.ScanResult res, int radius, BlockPos center) {
+    private static String buildResult(BlockSearch.ScanResult res, int radius, BlockPos center) {
         List<BlockScanner.Hit> matches = res.matches();
         int limit = Math.min(matches.size(), MAX_RESULTS);
         JsonArray out = new JsonArray();

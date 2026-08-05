@@ -22,38 +22,38 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
- * Budget-sliced long-range block scan — the async backend of the
- * {@code scan_blocks} tool for radii beyond what a single synchronous tick
- * can afford. Walks chunk COLUMNS on an expanding {@link RingSpiral} from the
- * scan center (nearest-first, so an early result cap still favours close
- * hits), scanning one palette-filtered 16³ section per
- * {@link SearchBudget#trySectionScan} permit. Which layer of a column comes first
- * and when the walk may stop are {@link SearchGeometry}'s call, shared with every
- * other place in the mod that looks for a block.
+ * 找方块,全仓就这一条路:{@code scan_blocks} 问"附近有哪些",{@code goto} 的 FIND 模式问
+ * "最近的那个在哪",两者只差 {@code want} 和半径。
  *
- * <h2>Loaded terrain is the boundary</h2>
- * A column that isn't loaded is skipped and counted, never loaded: reading it
- * would park the server thread on chunk I/O or worldgen, and a perception query
- * has no business making the world bigger to answer itself. The skipped count
- * rides back in {@link ScanResult} so the reply can say what the answer covers
- * — out there blocks are UNKNOWN, not absent. Nothing here can stall a tick:
- * every unit of work is metered, and a deadline converts a too-expensive scan
- * into an honest partial result.
+ * <p>从中心所在 chunk 起按 {@link RingSpiral} 逐环外扩走 chunk 列,每列内 section 的顺序和
+ * 何时可以收工都问 {@link SearchGeometry}:攒够的 {@code want} 个一旦比下一环最近的可能还近,
+ * 立刻停——这是精确界,停下来的结果和走满全程逐字一致。一个
+ * {@link SearchBudget#trySectionScan} 配额换一节,跨 tick 续。
  *
- * <p>This is a QUERY in spirit — it never occupies the body or the task
- * queue; the pet keeps walking/mining while the scan runs. The reply rides
- * the normal async tool-result channel. Server main thread only; ticked from
- * both loaders' end-of-tick hooks.
+ * <h2>已加载地形就是边界</h2>
+ * 没加载的列跳过并计数,绝不去加载它:读它会把服务端线程按在区块 IO 或地形生成上,而一次感知
+ * 查询没有理由为了回答自己而把世界变大。跳过的列数随 {@link ScanResult} 回去,让回执说得清
+ * 覆盖到哪——那边的方块是"不知道",不是"没有"。
+ *
+ * <h2>为什么在主线程</h2>
+ * {@code LevelChunkSection} 的调色板是可变的,主线程随时可能就地扩容,后台读到一半会炸。
+ * 所以读地形只能排队,靠配额与 4ms 墙钟顶住 tick。代价是找一个八成不存在的方块要花几秒;
+ * 换来的是不会漏节、不会读到半个调色板。
+ *
+ * <p>它<b>不占身体、不进任务队列</b>:她该走走该挖挖,搜索在后头自己推进。服务端主线程,
+ * 由两个 loader 的 tick 末钩子驱动。
  */
-public final class ScanBlocksJob {
+public final class BlockSearch {
 
     /** Hard stop: convert a crawling scan into a partial answer (30s). */
     private static final int DEADLINE_TICKS = 600;
     /** Same collect cap as the synchronous scanner — bounds memory and sort. */
     private static final int MAX_COLLECT = 8_192;
 
-    private static final List<ScanBlocksJob> JOBS = new ArrayList<>();
+    private static final List<BlockSearch> JOBS = new ArrayList<>();
+    private static int nextId = 1;
 
+    private final int id = nextId++;
     private final UUID entityUuid;
     private final ResourceKey<Level> dimension;
     private final BlockPos center;
@@ -99,7 +99,7 @@ public final class ScanBlocksJob {
         }
     }
 
-    private ScanBlocksJob(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
+    private BlockSearch(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
                           Set<Block> targets, Consumer<ScanResult> onDone) {
         this.entityUuid = entityUuid;
         this.dimension = level.dimension();
@@ -122,28 +122,36 @@ public final class ScanBlocksJob {
         this.columnsTotal = side * side;
     }
 
-    /** Register a scan; the result arrives via the callback on a later tick. */
-    public static void start(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
-                             Set<Block> targets, Consumer<ScanResult> onDone) {
-        ScanBlocksJob job = new ScanBlocksJob(entityUuid, level, center, radius, want, targets, onDone);
+    /**
+     * Register a search; the result arrives via the callback on a later tick.
+     *
+     * @param want how many nearest hits the caller actually needs — the stop rule's quota.
+     *             Ask for what you will use: a bigger number walks further to prove itself.
+     * @return a handle for {@link #cancel(int)}, per SEARCH rather than per companion —
+     *         one pet can have a {@code scan_blocks} query and a {@code goto} lookup in
+     *         flight at once, and abandoning one must not silence the other.
+     */
+    public static int start(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
+                            Set<Block> targets, Consumer<ScanResult> onDone) {
+        BlockSearch job = new BlockSearch(entityUuid, level, center, radius, want, targets, onDone);
         JOBS.add(job);
         Constants.LOG.info("[numen-scan] started radius-{} scan around {} in {} ({} columns)",
                 radius, center.toShortString(), level.dimension().location(), job.columnsTotal);
+        return job.id;
     }
 
-    /** Drop pending scans for one entity (owner interrupt — client already
-     *  synthesized cancelled results, a late reply would be an orphan). */
-    public static void cancelFor(UUID entityUuid) {
-        JOBS.removeIf(job -> job.entityUuid.equals(entityUuid));
+    /** Abandon one search: no callback will fire. Unknown / already-finished ids are a no-op. */
+    public static void cancel(int id) {
+        JOBS.removeIf(job -> job.id == id);
     }
 
     /** Advance all pending scans under the shared budget. */
     public static void tick(MinecraftServer server) {
         if (JOBS.isEmpty()) return;
         SearchBudget.refresh(server);
-        Iterator<ScanBlocksJob> it = JOBS.iterator();
+        Iterator<BlockSearch> it = JOBS.iterator();
         while (it.hasNext()) {
-            ScanBlocksJob job = it.next();
+            BlockSearch job = it.next();
             if (job.tickOne(server)) it.remove();
         }
     }

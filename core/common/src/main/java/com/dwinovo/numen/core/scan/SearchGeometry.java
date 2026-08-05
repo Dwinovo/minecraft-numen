@@ -8,7 +8,7 @@ import java.util.PriorityQueue;
  * <b>什么时候可以不看了</b>。
  *
  * <p>两条都只是几何,与"现扫一遍"还是"查索引"无关——所以现扫的
- * {@link ScanBlocksJob}、建索引的 {@link TargetIndex} 和 {@link BlockScanner} 的环形扫
+ * {@link BlockSearch}、建索引的 {@link TargetIndex} 和 {@link BlockScanner} 的环形扫
  * 读的是同一个答案,同一片地不会给出两种"最近"。
  *
  * <p>纯函数,不碰世界,不碰线程。
