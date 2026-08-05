@@ -1,7 +1,5 @@
 package com.dwinovo.numen.client.voice;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -12,13 +10,14 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 阿里云百炼(DashScope)实时语音合成后端：走 {@code /api-ws/v1/realtime} 双向 WebSocket
- * （OpenAI realtime 兼容协议），用 qwen-audio 实时模型把文字合成语音。
+ * 阿里云百炼(DashScope)实时语音合成后端：走 {@code /api-ws/v1/realtime} 双向 WebSocket，
+ * 用 qwen3-tts 实时模型把文字朗读成语音。
  *
  * <p>与 {@link OpenAiCompatibleTts} 的 REST {@code /v1/audio/speech} 不同，这里用实时模型的
  * {@code response.audio.delta} 流式拿 16-bit PCM，自行封装成 WAV 字节返回——
@@ -32,9 +31,14 @@ public final class DashScopeTts implements TtsBackend {
 
     /** 后端标识，与 voice.json 的 entry.backend 对应。 */
     public static final String BACKEND = "dashscope";
-    /** 实时模型（同时具备 ASR + TTS 能力）；TTS 只用其合成侧。 */
-    public static final String DEFAULT_MODEL = "qwen-audio-3.0-realtime-flash";
-    /** realtime 音频输出采样率（qwen-audio 实时为 24kHz PCM）。 */
+    /**
+     * 专用实时语音合成模型。
+     *
+     * <p>不要用 {@code qwen-audio-3.0-realtime-flash} 这类实时对话模型来做 TTS：
+     * 它会回答输入文字，而不是逐字朗读已经生成的回复。
+     */
+    public static final String DEFAULT_MODEL = "qwen3-tts-flash-realtime";
+    /** realtime 音频输出采样率（qwen3-tts 实时为 24kHz PCM）。 */
     private static final int SAMPLE_RATE = 24_000;
     private static final String WS_BASE = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime?model=";
 
@@ -81,6 +85,27 @@ public final class DashScopeTts implements TtsBackend {
         return "dashscope-realtime-tts(" + model + ", voice=" + voice + ")";
     }
 
+    static List<String> buildRequestMessages(String text, String voice) {
+        JsonObject update = new JsonObject();
+        update.addProperty("type", "session.update");
+        JsonObject session = new JsonObject();
+        session.addProperty("mode", "server_commit");
+        if (voice != null && !voice.isEmpty()) {
+            session.addProperty("voice", voice);
+        }
+        session.addProperty("response_format", "pcm");
+        session.addProperty("sample_rate", SAMPLE_RATE);
+        update.add("session", session);
+
+        JsonObject append = new JsonObject();
+        append.addProperty("type", "input_text_buffer.append");
+        append.addProperty("text", text);
+
+        JsonObject commit = new JsonObject();
+        commit.addProperty("type", "input_text_buffer.commit");
+        return List.of(update.toString(), append.toString(), commit.toString());
+    }
+
     private final class WsListener implements WebSocket.Listener {
 
         private final String text;
@@ -102,39 +127,9 @@ public final class DashScopeTts implements TtsBackend {
         }
 
         private void sendSessionUpdate() {
-            JsonObject root = new JsonObject();
-            root.addProperty("type", "session.update");
-            JsonObject s = new JsonObject();
-            JsonArray modalities = new JsonArray();
-            modalities.add("audio");
-            s.add("modalities", modalities);
-            if (!voice.isEmpty()) {
-                s.addProperty("voice", voice);
+            for (String message : buildRequestMessages(text, voice)) {
+                ws.sendText(message, true);
             }
-            s.add("input_audio_transcription", JsonNull.INSTANCE);   // 合成不需要输入转写
-            s.add("turn_detection", JsonNull.INSTANCE);
-            root.add("session", s);
-            ws.sendText(root.toString(), true);
-            sendUserText();
-        }
-
-        private void sendUserText() {
-            JsonObject item = new JsonObject();
-            item.addProperty("type", "conversation.item.create");
-            JsonObject it = new JsonObject();
-            it.addProperty("type", "message");
-            it.addProperty("role", "user");
-            JsonArray content = new JsonArray();
-            JsonObject c = new JsonObject();
-            c.addProperty("type", "input_text");
-            c.addProperty("text", text);
-            content.add(c);
-            it.add("content", content);
-            item.add("item", it);   // conversation.item.create 的 item 字段
-            ws.sendText(item.toString(), true);
-            JsonObject create = new JsonObject();
-            create.addProperty("type", "response.create");
-            ws.sendText(create.toString(), true);
         }
 
         @Override

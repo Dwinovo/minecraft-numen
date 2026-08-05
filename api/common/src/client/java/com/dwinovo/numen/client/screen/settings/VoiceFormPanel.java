@@ -182,9 +182,9 @@ public final class VoiceFormPanel {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_OPENAI,
                         "sk-…", true, draft.apiKey, v -> draft.apiKey = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_MODEL,
-                        "qwen-audio-3.0-realtime-flash", false, draft.model, v -> draft.model = v);
+                        "qwen3-tts-flash-realtime", false, draft.model, v -> draft.model = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_VOICE,
-                        "Cherry / Serena / Alloy…", false, draft.voice, v -> draft.voice = v);
+                        "Cherry / Ethan / Nofish…", false, draft.voice, v -> draft.voice = v);
             }
             default -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_OPENAI,
