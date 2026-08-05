@@ -53,6 +53,9 @@ final class CompanionBrain {
     /** 重启后的活接回来没有(每具身体只接一次)。 */
     boolean restored;
 
+    /** 这个大脑伺候的那具身体。首次 tick 时认下，以后不换。 */
+    private NumenPlayer body;
+
     /** 上一刻的赢家,用来在切换的那一刻(而不是每刻)通知它丢了身体。 */
     private Task holder;
 
@@ -66,7 +69,24 @@ final class CompanionBrain {
         this.idlePoses = List.of(new com.dwinovo.numen.task.chain.SpeakingLookChain());
     }
 
+    /**
+     * 还是不是同一具身体。
+     *
+     * <p>同伴的 UUID 跨存档不变，身体实例却是新的。而任务把身体记在自己身上
+     * ({@code AbstractCompanionTask.player} 是 final 的)，所以一个大脑<b>不能跨身体复用</b>：
+     * 旧任务会拿旧 {@code ServerLevel} 去读方块，而那个 level 记的主线程早就结束了，
+     * {@code getChunk} 会把活派进一个再也没人抽取的队列然后 {@code join()} —— 新 Server thread
+     * 永久 park，世界再也加载不出来。
+     *
+     * <p>正常情况下关服就会把整表作废({@code ServerLifecycle})，轮不到这里。它是不变式本身：
+     * 哪天又有哪张静态表漏了，最坏是大脑重建，不是服务端线程死锁。
+     */
+    boolean boundTo(NumenPlayer companion) {
+        return body == null || body == companion;
+    }
+
     void tick(NumenPlayer companion) {
+        body = companion;
         // 任务结束边沿(宪法 §5):两个槽都空过了宽限窗口,显式占用的会话就结束了,
         // 手还给反射。护甲的占用不动(它的生命是 §5 的四个自然终点),只有主手是任务作用域的。
         if (handPinRelease.tick(!sync.isEmpty() || !current.isEmpty())) {

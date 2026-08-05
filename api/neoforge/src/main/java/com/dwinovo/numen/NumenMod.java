@@ -43,6 +43,11 @@ public class NumenMod {
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Pre e) ->
                 com.dwinovo.numen.task.CompanionTickDispatcher.tick(e.getServer()));
 
+        // 服务器停了：属于那个世界的进程内状态一起作废。单人「退出存档」不结束进程，
+        // 静态表会原封不动活到下一个存档——谁持有谁在自己那边报到，见 ServerLifecycle。
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerStoppedEvent e) ->
+                com.dwinovo.numen.platform.ServerLifecycle.fireStopped());
+
         CommonClass.init();
         Constants.LOG.info("Numen mod initialised on NeoForge.");
     }

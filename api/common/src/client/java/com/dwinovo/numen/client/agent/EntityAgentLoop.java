@@ -541,6 +541,10 @@ public final class EntityAgentLoop {
             turnGeneration++; // any in-flight LLM response is now stale → discarded on arrival
             boolean wasAwaitingLlm = awaitingLlmResponse;
             boolean wasBackgroundTask = currentTask != null;
+            // 这件活不再属于这个会话了：按停止 = 她不做了；断线 = 下一个存档跟它无关。
+            // 不清的话它会一直写在运行时状态里告诉模型「你手上有活」（日志里那些
+            // backgroundTask=true 就是它）。真干完了走 task_finished，那条路在 onEvent。
+            currentTask = null;
             awaitingLlmResponse = false;
             compacting = false;
             presenter.clearPartial();   // 半截打字随打断作废

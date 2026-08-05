@@ -33,7 +33,22 @@ public final class CompanionTickDispatcher {
 
     private static final Map<UUID, CompanionBrain> BRAINS = new HashMap<>();
 
+    static {
+        // 大脑属于世界,不属于进程:退出存档就把整表作废,下一个存档从空表开始。
+        // 见 ServerLifecycle —— 少了这一步,上一局的任务会绑着上一局的身体在新世界里跑。
+        com.dwinovo.numen.platform.ServerLifecycle.onStopped(CompanionTickDispatcher::dropAll);
+    }
+
     private CompanionTickDispatcher() {}
+
+    /**
+     * 世界没了,大脑跟着没。心跳标记一并复位——它证明的是"这个服务器的 tick 钩子接上了",
+     * 每个服务器都该重新证一次(它正是当初暴露这个 bug 的那把尺子)。
+     */
+    static void dropAll() {
+        BRAINS.clear();
+        heartbeatLogged = false;
+    }
 
     private static CompanionBrain brainFor(UUID companionUuid) {
         return BRAINS.computeIfAbsent(companionUuid, k -> new CompanionBrain());
@@ -74,6 +89,14 @@ public final class CompanionTickDispatcher {
                     CompanionChunkLoader.refresh(ap);
                 }
                 CompanionBrain brain = brainFor(ap.getUUID());
+                if (!brain.boundTo(ap)) {
+                    // 到不了这里（关服已经清过表）—— 到了就是哪处漏了，大声记一笔。
+                    // 整个大脑作废：里面的任务都绑在旧身体上，一个都不能再 tick。
+                    com.dwinovo.numen.Constants.LOG.warn(
+                            "[numen-task] {} 换了身体但旧大脑还在，整个作废重建", ap.getUUID());
+                    BRAINS.remove(ap.getUUID());
+                    brain = brainFor(ap.getUUID());
+                }
                 if (!brain.restored) {
                     // 首次见到这具身体:把重启前她手上的活接回来(见 TaskPersistence)。
                     brain.restored = true;

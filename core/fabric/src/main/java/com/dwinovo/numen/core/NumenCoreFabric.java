@@ -6,7 +6,6 @@ import com.dwinovo.numen.core.pathing.cache.PathCaches;
 import com.dwinovo.numen.core.scan.ScanBlocksJob;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 /**
@@ -27,11 +26,8 @@ public class NumenCoreFabric implements ModInitializer {
         ServerTickEvents.END_SERVER_TICK.register(ScanBlocksJob::tick);
         // Snapshot loaded chunks near companions for the off-thread planner to read live.
         ServerTickEvents.END_SERVER_TICK.register(PathCaches::serverTick);
-        // Release those chunk references when the server stops (don't pin an old world's chunks).
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> PathCaches.dropAll());
-        // Target-block index: periodic eviction of unloaded-chunk entries + drop with the world.
+        // Target-block index: periodic eviction of unloaded-chunk entries.
         ServerTickEvents.END_SERVER_TICK.register(com.dwinovo.numen.core.scan.TargetIndex::serverTick);
-        ServerLifecycleEvents.SERVER_STOPPED.register(server -> com.dwinovo.numen.core.scan.TargetIndex.dropAll());
         // Debug particles for pathing state, sent only to players with debug on.
         ServerTickEvents.END_SERVER_TICK.register(PathDebugRenderer::serverTick);
         // Debug verbs merged into the /numen root registered by the engine mod.

@@ -13,7 +13,6 @@ import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
 import java.nio.file.Path;
@@ -32,10 +31,6 @@ public class NumenCoreNeoForge {
         NumenCore.init();
 
         NeoForge.EVENT_BUS.addListener(NumenCoreNeoForge::onServerTickPost);
-        // Release pathfinding chunk-ref snapshots when the server stops (don't pin an old world).
-        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> PathCaches.dropAll());
-        // Drop the shared target-block index with the world it describes.
-        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> com.dwinovo.numen.core.scan.TargetIndex.dropAll());
         // Debug verbs merged into the /numen root registered by the engine mod.
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
                 DebugCommands.register(e.getDispatcher()));

@@ -124,6 +124,10 @@ public final class ToolDispatcher {
         advancing = false;
         if (stopBody) {
             CompanionLifecycle.fireAbort(entityUuid);   // 内容包据此停掉自己那边的活
+        } else {
+            // 不叫停身体，但停在传输层的调用还是得忘掉：它们属于一个已经结束
+            // 的会话，结果再也回不来。（fireAbort 以前顺手干了这件，拆开后得明写。）
+            com.dwinovo.numen.agent.tool.ServerToolTransport.forget(entityUuid);
         }
         return ids;
     }

@@ -35,6 +35,12 @@ public final class PathCaches {
 
     private PathCaches() {}
 
+    static {
+        // 这两份都描述一个具体的世界，世界没了就得跟着没。报到写在这里而不是
+        // 各 loader 的启动代码里：清理跟状态同居，就不会再出现「清单上漏了一项」。见 ServerLifecycle。
+        com.dwinovo.numen.platform.ServerLifecycle.onStopped(PathCaches::dropAll);
+    }
+
     /** How far around each companion to capture loaded chunks (radius in chunks). */
     private static final int RADIUS_CHUNKS = 8;
     /** Keep a companion-less level's snapshot this long before freeing it, so a brief roster gap

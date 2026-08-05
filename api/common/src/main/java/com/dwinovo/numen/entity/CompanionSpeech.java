@@ -15,6 +15,12 @@ public final class CompanionSpeech {
 
     private static final Map<UUID, Boolean> SPEAKING = new ConcurrentHashMap<>();
 
+    static {
+        // 记的是那个世界里谁在说话；世界没了就不算数，否则一个没翻回来的
+        // true 会让下一个存档里的她一直盯着主人看。见 ServerLifecycle。
+        com.dwinovo.numen.platform.ServerLifecycle.onStopped(SPEAKING::clear);
+    }
+
     private CompanionSpeech() {}
 
     public static void setSpeaking(UUID companionUuid, boolean speaking) {

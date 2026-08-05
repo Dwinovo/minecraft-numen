@@ -50,6 +50,12 @@ public final class TargetIndex {
 
     private TargetIndex() {}
 
+    static {
+        // 这两份都描述一个具体的世界，世界没了就得跟着没。报到写在这里而不是
+        // 各 loader 的启动代码里：清理跟状态同居，就不会再出现「清单上漏了一项」。见 ServerLifecycle。
+        com.dwinovo.numen.platform.ServerLifecycle.onStopped(TargetIndex::dropAll);
+    }
+
     /** 段内某目标超过该数即记"饱和",不枚举位置(4096 格的 1/16)。 */
     private static final int SATURATION = 256;
     /** 饱和标记(位置永远非负,-1 不会与真实位置冲突)。 */

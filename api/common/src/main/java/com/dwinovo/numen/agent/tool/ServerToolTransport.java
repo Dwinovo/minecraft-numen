@@ -38,9 +38,19 @@ public final class ServerToolTransport {
         if (call != null) call.complete(resultJson);
     }
 
-    /** Owner interrupted: forget this companion's parked calls and tell the body to stop. */
+    /** 主人按停止:忘掉停在这里的调用,并告诉身体住手。 */
     public static void abort(UUID companionUuid) {
-        IN_FLIGHT.values().removeIf(c -> companionUuid.equals(c.ctx().entityUuid()));
+        forget(companionUuid);
         Services.NETWORK.sendToServer(new CancelTasksPayload(companionUuid));
+    }
+
+    /**
+     * 只忘掉停在这里的调用，<b>不动身体</b> —— 断线登出走这条。
+     *
+     * <p>那些调用属于一个已经结束的会话，结果再也回不来了；不忘就是一直长的账本。
+     * 但身体不能叫停：她还在服务器里 tick，任务照样该跑完，收尾进离线出箱等主人回来。
+     */
+    public static void forget(UUID companionUuid) {
+        IN_FLIGHT.values().removeIf(c -> companionUuid.equals(c.ctx().entityUuid()));
     }
 }
