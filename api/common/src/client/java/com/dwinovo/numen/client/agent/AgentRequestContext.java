@@ -14,8 +14,17 @@ final class AgentRequestContext {
     private AgentRequestContext() {}
 
     /**
-     * Attach live state to the final request message. Reusing the existing role avoids creating an
-     * artificial user turn after a tool result. The source list and messages remain untouched.
+     * 把运行期状态挂进这一次请求。<b>永远落在 role=user 的消息里</b>:跟主人的话同一条
+     * (尾巴就是 user 时并进去),否则新起一条。源列表与其中的消息一个字不动。
+     *
+     * <h2>为什么必须是 user</h2>
+     * "这一轮发出去的 user 消息"得是一个<b>完整</b>的答案。把它挂到工具结果上,
+     * 这句话就有了例外——而例外只能靠"再去别处看一眼"补,面板、日志、排查的人
+     * 各补各的。顺带工具结果也就不再是服务端原样交回的那串,读日志时会以为
+     * 工具自己吐了个 {@code <runtime_state>}。
+     *
+     * <p>唯一挂不上的时刻:assistant 的 {@code tool_calls} 还没等到它的结果——那中间
+     * 插任何东西上游都会 400。那一刻宁可不带,不找地方硬塞。
      */
     static List<ConvoState.Msg> attach(List<ConvoState.Msg> messages, String runtimeXml) {
         List<ConvoState.Msg> cleaned = withoutLegacyCurrentTask(messages);
@@ -24,18 +33,15 @@ final class AgentRequestContext {
 
         List<ConvoState.Msg> out = new ArrayList<>(cleaned);
         int last = out.size() - 1;
-        ConvoState.Msg tail = out.get(last);
-        String suffix = "\n\n" + runtimeXml;
-        switch (tail) {
+        switch (out.get(last)) {
             case ConvoState.Msg.User user ->
-                    out.set(last, new ConvoState.Msg.User(user.content() + suffix));
-            case ConvoState.Msg.Tool tool ->
-                    out.set(last, new ConvoState.Msg.Tool(tool.toolCallId(), tool.content() + suffix));
+                    out.set(last, new ConvoState.Msg.User(user.content() + "\n\n" + runtimeXml));
             case ConvoState.Msg.Assistant assistant -> {
                 if (!assistant.turn().hasToolCalls()) {
                     out.add(new ConvoState.Msg.User(runtimeXml));
                 }
             }
+            case ConvoState.Msg.Tool ignored -> out.add(new ConvoState.Msg.User(runtimeXml));
         }
         return List.copyOf(out);
     }

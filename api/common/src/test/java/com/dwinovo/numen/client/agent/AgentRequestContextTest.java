@@ -8,13 +8,14 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentRequestContextTest {
 
     @Test
-    void appendsRuntimeStateToToolResultWithoutCreatingAnotherUserTurn() {
+    void afterAToolResultTheStateComesAsItsOwnUserMessage() {
+        // 工具结果原样交回,一个字不加:挂上去的话,"这一轮的 user 消息"就有了例外,
+        // 而且读日志的人会以为工具自己吐了个 <runtime_state>。
         List<ConvoState.Msg> source = List.of(
                 new ConvoState.Msg.User("go"),
                 new ConvoState.Msg.Assistant(new AssistantTurn("",
@@ -24,10 +25,9 @@ class AgentRequestContextTest {
         List<ConvoState.Msg> request = AgentRequestContext.attach(source,
                 "<runtime_state><current_task id=\"t1\"/></runtime_state>");
 
-        assertEquals(source.size(), request.size());
-        assertNotSame(source.get(2), request.get(2));
-        assertEquals("{\"success\":true}", ((ConvoState.Msg.Tool) source.get(2)).content());
-        assertTrue(((ConvoState.Msg.Tool) request.get(2)).content().contains("current_task"));
+        assertEquals(source.size() + 1, request.size());
+        assertEquals("{\"success\":true}", ((ConvoState.Msg.Tool) request.get(2)).content());
+        assertTrue(((ConvoState.Msg.User) request.get(3)).content().contains("current_task"));
     }
 
     @Test
@@ -67,28 +67,19 @@ class AgentRequestContextTest {
         assertEquals(source, AgentRequestContext.attach(source, " "));
     }
 
-    /**
-     * 透视面板画得出运行期状态——不管它挂在哪一种消息上。
-     *
-     * <p>{@code ChatView} 在 {@code showsModelRequest} 下画 User / Assistant 正文 / Tool
-     * 三种;挂载点却随尾巴形状变(见 {@link AgentRequestContext#attach})。两边各改各的话,
-     * 挂到一种面板不画的消息上,现象就是"开了 debug 还是看不见 current_task"——而那
-     * 会被读成"这东西没发出去"。所以这里按面板的口径去找。
-     */
-    private static String whatThePanelWouldDraw(List<ConvoState.Msg> request) {
+    /** 这一轮所有 role=user 的消息拼起来——"发出去的 user 消息"就是这些,没有别处。 */
+    private static String userMessages(List<ConvoState.Msg> request) {
         StringBuilder sb = new StringBuilder();
         for (ConvoState.Msg m : request) {
-            switch (m) {
-                case ConvoState.Msg.User u -> sb.append(u.content()).append('\n');
-                case ConvoState.Msg.Tool t -> sb.append(t.content()).append('\n');
-                case ConvoState.Msg.Assistant a -> sb.append(a.turn().content()).append('\n');
-            }
+            if (m instanceof ConvoState.Msg.User u) sb.append(u.content()).append('\n');
         }
         return sb.toString();
     }
 
     @Test
-    void runtimeStateAlwaysLandsSomewhereThePanelDraws() {
+    void runtimeStateIsAlwaysCarriedByAUserMessage() {
+        // 不管尾巴是什么形状,运行期状态都在 user 里。"这一轮的 user 消息"因此是一个
+        // 完整的答案,不需要谁再去别处补看一眼。
         String rt = "<runtime_state><current_task id=\"t1\" tool=\"follow\"/></runtime_state>";
 
         List<List<ConvoState.Msg>> tails = List.of(
@@ -101,15 +92,33 @@ class AgentRequestContextTest {
                         new ConvoState.Msg.Assistant(new AssistantTurn("好的", List.of(), null))));
 
         for (List<ConvoState.Msg> tail : tails) {
-            assertTrue(whatThePanelWouldDraw(AgentRequestContext.attach(tail, rt)).contains(rt),
-                    "这种尾巴下面板画不出运行期状态:" + tail);
+            assertTrue(userMessages(AgentRequestContext.attach(tail, rt)).contains(rt),
+                    "这种尾巴下运行期状态没落在 user 消息里:" + tail);
+        }
+    }
+
+    @Test
+    void toolResultsAreHandedBackWordForWord() {
+        // 工具结果是服务端交回的原文。往里塞东西 = 读日志的人会以为工具自己吐了它。
+        ConvoState.Msg.Tool result = new ConvoState.Msg.Tool("c1", "{\"success\":true}");
+        List<ConvoState.Msg> request = AgentRequestContext.attach(
+                List.of(new ConvoState.Msg.User("go"),
+                        new ConvoState.Msg.Assistant(new AssistantTurn("",
+                                List.of(new LlmToolCall("c1", "goto", "{}")), null)),
+                        result),
+                "<runtime_state/>");
+
+        for (ConvoState.Msg m : request) {
+            if (m instanceof ConvoState.Msg.Tool t) {
+                assertEquals(result.content(), t.content());
+            }
         }
     }
 
     @Test
     void aTurnStuckMidToolCallCarriesNoRuntimeStateOnPurpose() {
-        // assistant 的 tool_calls 与它的结果之间插不进 user 消息(上游会 400),
-        // 所以这一刻宁可不带。面板跟着一起没有,两边看到的是同一件事。
+        // assistant 的 tool_calls 与它的结果之间插不进任何消息(上游会 400),
+        // 所以这一刻宁可不带,不找地方硬塞。
         List<ConvoState.Msg> source = List.of(
                 new ConvoState.Msg.User("go"),
                 new ConvoState.Msg.Assistant(new AssistantTurn("",
@@ -117,7 +126,6 @@ class AgentRequestContextTest {
 
         List<ConvoState.Msg> request = AgentRequestContext.attach(source, "<runtime_state/>");
 
-        assertEquals(source.size(), request.size());
-        assertTrue(!whatThePanelWouldDraw(request).contains("runtime_state"));
+        assertEquals(source, request);
     }
 }

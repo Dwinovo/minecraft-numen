@@ -388,17 +388,7 @@ public final class ChatView {
                     }
                     group.addAll(turn.toolCalls());
                 }
-                case ConvoState.Msg.Tool t -> {
-                    // 常态:工具结果只驱动那颗芯片的成/败,不单独占一块。
-                    // 透视态:它是请求的一部分,就得原样画出来——而且 <runtime_state>
-                    // 恰好可能挂在工具结果的尾巴上(见 AgentRequestContext.attach),
-                    // 漏画它就等于 debug 在某些时刻照旧看不见运行期状态。
-                    if (!rawRequest) continue;
-                    flushTools(out, group, done, failed, bubbleMaxW);
-                    boolean first = lastSide == null || !lastSide;
-                    out.add(bubble(true, null, t.content(), TXT, OWN_FILL, OWN_BORDER, innerW, first));
-                    lastSide = true;
-                }
+                case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
             }
         }
         flushTools(out, group, done, failed, bubbleMaxW);
