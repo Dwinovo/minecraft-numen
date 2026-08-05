@@ -188,7 +188,6 @@ public final class EntityAgentLoop {
      * {@link #dead} (body gone) and {@link #turnPause} (one paused internal turn):
      * this is a deliberate hand-off of the whole body to an outside brain.
      */
-    private boolean externallyDriven = false;
 
     /**
      * Runs this turn's tool calls one at a time and reports each result back
@@ -601,35 +600,18 @@ public final class EntityAgentLoop {
     // ---- external control (an MCP client / Claude drives the body directly) ----
 
     /**
-     * An external driver takes control of this body. The internal brain stops
-     * starting turns and any in-flight turn/task is aborted (via {@link #abort},
-     * which also fires {@code CompanionLifecycle.onAbort} so the body itself
-     * stops), leaving the body free for the external driver. Reverse with
-     * {@link #releaseExternal}. Idempotent.
+     * 外接大脑(MCP)此刻是不是接管着她 —— 读的是队列上那把锁的持有者,
+     * <b>不另记一份</b>。锁本身每刻按 {@code McpMode} 的状态同步(见 clientTick)。
+     *
+     * <p>从前这里有另一套:{@code acquireExternal/releaseExternal} 翻一个
+     * {@code externallyDriven} 字段。那套<b>一个调用者都没有</b>,字段永远是 false,
+     * 面板里那行"外接大脑驱动中"一次都没显示过 —— 而它一旦被接上,就会跟锁那套
+     * 对同一个问题给出两个答案。删掉,只留锁这一个真源。
      */
-    public void acquireExternal() {
-        if (externallyDriven) return;
-        externallyDriven = true;
-        abort();   // stop any running internal turn + free the body
-        Constants.LOG.info("[numen-entity#{}] external control acquired — internal brain paused", entityUuid);
-    }
-
-    /**
-     * The external driver released control — the internal brain may act again.
-     * Does not auto-start a turn; waits for the next owner prompt or event.
-     * Idempotent.
-     */
-    public void releaseExternal() {
-        if (!externallyDriven) return;
-        externallyDriven = false;
-        turnPause = AgentTurnPause.NONE; // clear the owner-interrupt latch set by acquireExternal
-        Constants.LOG.info("[numen-entity#{}] external control released — internal brain resumed", entityUuid);
-    }
-
-    /** True while an external driver (MCP / Claude) holds this body. */
     public boolean isExternallyDriven() {
-        return externallyDriven;
+        return queue.lockHolders().contains(QueueLock.MCP_MODE);
     }
+
 
     /**
      * The body died — the server tells us via {@code NumenDeathPayload} with the death cause. SUSPEND
