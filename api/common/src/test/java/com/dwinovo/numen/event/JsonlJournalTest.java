@@ -122,8 +122,11 @@ class JsonlJournalTest {
         assertEquals(2, reopened.size());
         assertTrue(reopened.hasUrgent(), "重进游戏它还是急的");
         assertEquals(1, reopened.count(EventTypes.QUERY));
-        assertTrue(reopened.drain(T0 + 3 * 3600_000L).get(0).startsWith("[发生于约3小时前]"),
-                "时间戳过了磁盘一圈还得能算出年龄");
+        // 年龄标在每一条身上(世界的事包在 <events> 里,主人的话跟在后面),
+        // 所以看整段:时间戳过了磁盘一圈还得能算出年龄
+        String out = String.join("\n", reopened.drain(T0 + 3 * 3600_000L));
+        assertTrue(out.contains("[发生于约3小时前] <event>矿挖完了</event>"), out);
+        assertTrue(out.contains("[发生于约3小时前] <query>辛苦了</query>"), out);
     }
 
     @Test

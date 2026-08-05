@@ -47,7 +47,9 @@ public final class NumenEvents {
         /** 身体自理:饿了吃、快淹死了浮上来、被打了还手。 */
         BODY_LOG("body_log"),
         /** 同伴自己跨了维度。 */
-        DIMENSION_CHANGE("dimension_change");
+        DIMENSION_CHANGE("dimension_change"),
+        /** 她死了又复活了(在客户端合成——身体那会儿已经不在了)。 */
+        DEATH("death");
 
         private final String kind;
 
@@ -114,7 +116,17 @@ public final class NumenEvents {
 
     /** 组装 XML,盖上游戏内时间戳。 */
     private static String compose(MinecraftServer server, Kind kind, Map<String, String> attrs, String text) {
-        long dayTime = server.overworld().getDayTime();
+        return compose(server.overworld().getDayTime(), kind, attrs, text);
+    }
+
+    /**
+     * 造一条 {@code <event>} —— <b>唯一的构造口</b>,{@code day} / {@code t} 由它统一盖上。
+     *
+     * <p>收 {@code dayTime} 而不是 {@code MinecraftServer},所以客户端也能用同一条路
+     * (死亡事件在客户端合成:那会儿身体已经不在了)。从前客户端手搓字符串,
+     * 于是全仓唯一漏掉时间戳的事件就是死亡——最该有时间的那一条。
+     */
+    public static String compose(long dayTime, Kind kind, Map<String, String> attrs, String text) {
         StringBuilder sb = new StringBuilder("<event kind=\"").append(kind.kind).append('"');
         sb.append(" day=\"").append(dayTime / 24000L).append('"');
         sb.append(" t=\"").append(clockOf(dayTime)).append('"');

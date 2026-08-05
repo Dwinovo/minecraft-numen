@@ -94,7 +94,9 @@ public final class SpeechBubbleRenderer {
         if (bubble.hasText()) {
             lines.addAll(wrapToWidth(font, bubble.text(), MAX_WIDTH, MAX_LINES));
         }
-        int statusFrom = lines.size();   // 从这行起是状态行,画暗一档
+        // 从这行起是状态行:画暗一档 + 前缀记号。只差一档灰的话,主人读起来跟正文
+        // 没区别——"她在说话"和"她在干活"是两种东西,得看得出来。
+        int statusFrom = lines.size();
         if (bubble.hasStatus()) {
             lines.add(bubble.activity() != null
                     ? I18n.get("numen.bubble.doing", bubble.activity())

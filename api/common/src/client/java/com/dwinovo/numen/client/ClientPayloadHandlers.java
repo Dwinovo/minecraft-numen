@@ -37,6 +37,9 @@ public final class ClientPayloadHandlers {
         // companions/<uuid>/;幂等,搬过就跳过。
         com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
         ClientPayloadSink.companionList = ClientPayloadHandlers::handleCompanionList;
+        ClientPayloadSink.currentTask = p ->
+                com.dwinovo.numen.client.agent.AgentLoopRegistry.get(p.entityUuid())
+                        .ifPresent(loop -> loop.onCurrentTask(p));
         ClientPayloadSink.death = ClientPayloadHandlers::handleDeath;
         // getOrCreate:主人登录时补发的离线事件可能先于任何交互到达,
         // 那时 loop 还没造出来——用 get 会把补发的事件整批丢掉。

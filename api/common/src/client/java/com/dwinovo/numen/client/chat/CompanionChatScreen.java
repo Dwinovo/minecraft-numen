@@ -117,11 +117,10 @@ public class CompanionChatScreen extends Screen {
     private void send() {
         String text = input.getValue().trim();
         if (!text.isEmpty()) {
-            boolean queued = com.dwinovo.numen.client.agent.AgentLoopRegistry.get(companionUuid)
-                    .map(l -> l.isBusy() || l.hasQueuedPrompts()).orElse(false);
-            boolean accepted = NumenGateway.enqueue(companionUuid, text);
-            if (accepted) {
-                ChatLines.owner(companionName, text, false, queued);
+            NumenGateway.Delivery sent = NumenGateway.enqueue(companionUuid, text);
+            if (sent != NumenGateway.Delivery.REJECTED) {
+                ChatLines.owner(companionName, text, false,
+                    sent == NumenGateway.Delivery.QUEUED);
             } else {
                 com.dwinovo.numen.client.hud.TalkHint.flash(
                         companionName + " 没能收到——它可能不在线", 3000);

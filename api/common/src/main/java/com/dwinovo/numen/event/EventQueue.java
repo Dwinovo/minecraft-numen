@@ -149,6 +149,9 @@ public final class EventQueue {
      */
     public List<Entry> takeEntries(long now) {
         List<Entry> out = new ArrayList<>(entries);
+        // 按发生时间排：入队顺序不等于发生顺序（服务端离线出箱里攒的那批、
+        // 死亡期间锁着攒下的那批，都是后来才进队的）。稳定排序，同时刻保持入队先后。
+        out.sort(java.util.Comparator.comparingLong(Entry::ts));
         if (dropped > 0) {
             out.add(new Entry(EventTypes.EVENT, droppedNote(dropped), now, false));
             dropped = 0;
@@ -159,14 +162,32 @@ public final class EventQueue {
     }
 
     /** 全部取走并清空,按到达序渲染成给模型的字符串。躺超十分钟的标上年龄。 */
+    /**
+     * 倒出来拼给模型:<b>世界的事在前,主人的话在后</b>。
+     *
+     * <p>世界的事按发生时间排好、包进一个 {@code <events>} 里;主人说的话原样跟在后面。
+     * 从前是按入队顺序平铺,事件和 query 混着——模型得自己从一串杂物里理出时间线,
+     * 而"她说了什么"跟"世界发生了什么"本来就是两种东西。
+     *
+     * <p>谁算哪一种由类型表说了算({@link EventTypes.Type#fromOwner}),这里不认 id。
+     */
     public List<String> drain(long now) {
-        List<String> out = new ArrayList<>();
-        for (Entry e : takeEntries(now)) {
-            String rendered = EventTypes.get(e.type()).toModel().apply(e.text());
-            if (rendered != null && !rendered.isBlank()) {
-                out.add(annotateAge(rendered, e.ts(), now));
+        List<Entry> taken = takeEntries(now);
+        List<String> events = new ArrayList<>();
+        List<String> owner = new ArrayList<>();
+        for (Entry e : taken) {
+            EventTypes.Type t = EventTypes.get(e.type());
+            String rendered = t.toModel().apply(e.text());
+            if (rendered == null || rendered.isBlank()) {
+                continue;
             }
+            (t.fromOwner() ? owner : events).add(annotateAge(rendered, e.ts(), now));
         }
+        List<String> out = new ArrayList<>();
+        if (!events.isEmpty()) {
+            out.add("<events>\n" + String.join("\n", events) + "\n</events>");
+        }
+        out.addAll(owner);
         return out;
     }
 

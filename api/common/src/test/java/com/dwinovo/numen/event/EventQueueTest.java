@@ -105,6 +105,7 @@ class EventQueueTest {
         q.unlock("死亡");
 
         assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL));
+        // 世界的事包成一块、主人的话跟在后面，所以是两段
         assertEquals(2, q.drain(T0).size(), "锁期间攒的一起走");
     }
 
@@ -178,31 +179,46 @@ class EventQueueTest {
         EventQueue q = fresh();
         q.push("第三方模组的类型", "外面来的一条", T0, false);
 
-        assertEquals(List.of("外面来的一条"), q.drain(T0));
+        assertEquals(List.of("<events>\n外面来的一条\n</events>"), q.drain(T0));
     }
 
     @Test
     void thirdPartyTypesJustWork() {
         EventTypes.register(new EventTypes.Type("raid_alert",
-                s -> "[袭击] " + s, s -> "⚔ " + s, false));
+                s -> "[袭击] " + s, s -> "⚔ " + s, false, false));
         EventQueue q = fresh();
         q.push("raid_alert", "村庄被围了", T0, true);
 
         assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), "急不急看条目,不看类型");
         assertEquals(List.of("⚔ 村庄被围了"), q.chatPreview());
-        assertEquals(List.of("[袭击] 村庄被围了"), q.drain(T0));
+        assertEquals(List.of("<events>\n[袭击] 村庄被围了\n</events>"), q.drain(T0));
     }
 
     // ---- 排空 ----
 
     @Test
-    void drainKeepsArrivalOrderAndEmpties() {
+    void worldEventsComeFirstOwnerWordsLast() {
+        // 模型该读到的顺序是“先看清发生了什么，再看主人要什么”——
+        // 从前按入队顺序平铺，事件和 query 混着，得它自己从一串杂物里理时间线。
         EventQueue q = fresh();
         q.push(EventTypes.QUERY, "<query>先说的</query>", T0, true);
         q.push(EventTypes.EVENT, "<event>后到的</event>", T0, false);
 
-        assertEquals(List.of("<query>先说的</query>", "<event>后到的</event>"), q.drain(T0));
+        assertEquals(List.of("<events>\n<event>后到的</event>\n</events>",
+                "<query>先说的</query>"), q.drain(T0));
         assertTrue(q.isEmpty(), "倒完就空");
+    }
+
+    @Test
+    void eventsAreSortedByWhenTheyHappened() {
+        // 入队顺序≠发生顺序：服务端离线出箱里攒的、死亡期间锁着攒下的，
+        // 都是后来才进队的。模型要拿它们理因果，时间必须是对的。
+        EventQueue q = fresh();
+        q.push(EventTypes.EVENT, "<event>后发生的</event>", T0 + 5_000L, false);
+        q.push(EventTypes.EVENT, "<event>先发生的</event>", T0, false);
+
+        assertEquals(List.of("<events>\n<event>先发生的</event>\n"
+                + "<event>后发生的</event>\n</events>"), q.drain(T0 + 5_000L));
     }
 
     @Test
@@ -238,9 +254,11 @@ class EventQueueTest {
 
         List<String> out = q.drain(T0);
 
-        assertEquals(4, out.size(), "3 条 + 一句丢弃说明");
-        assertTrue(out.get(0).contains("第2件"), "丢的是最老的");
-        assertTrue(out.get(3).contains("2 件事"), "丢了几条要说得出来:" + out.get(3));
+        assertEquals(1, out.size(), "全是世界的事，包成一块");
+        String block = out.get(0);
+        assertTrue(block.contains("第2件"), "丢的是最老的");
+        assertFalse(block.contains("第1件"), "最老的两条该没了");
+        assertTrue(block.contains("2 件事"), "丢了几条要说得出来:" + block);
     }
 
     @Test

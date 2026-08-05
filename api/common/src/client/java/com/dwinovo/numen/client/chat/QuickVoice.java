@@ -68,11 +68,10 @@ public final class QuickVoice {
             if (said.isEmpty()) flash("没听清,再试一次");
             return;
         }
-        boolean queued = com.dwinovo.numen.client.agent.AgentLoopRegistry.get(t.uuid())
-                .map(l -> l.isBusy() || l.hasQueuedPrompts()).orElse(false);
-        boolean accepted = NumenGateway.enqueue(t.uuid(), said);
-        if (accepted) {
-            ChatLines.owner(t.name(), said, true, queued);
+        NumenGateway.Delivery sent = NumenGateway.enqueue(t.uuid(), said);
+        if (sent != NumenGateway.Delivery.REJECTED) {
+            ChatLines.owner(t.name(), said, true,
+                    sent == NumenGateway.Delivery.QUEUED);
         } else {
             flash(t.name() + " 没能收到——它可能不在线");
         }

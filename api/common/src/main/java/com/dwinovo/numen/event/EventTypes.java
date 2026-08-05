@@ -35,11 +35,15 @@ public final class EventTypes {
      * @param chatPreview        进聊天流的样子;{@code null} = 这类东西不进聊天流
      * @param clearedByInterrupt 主人按停止时清不清 —— 清的是被取代的<em>指令</em>,
      *                           不清<em>事实</em>
+     * @param fromOwner          是主人说的话,还是世界发生的事。决定排版:世界的事
+     *                           归进 {@code <events>} 按时间排,主人的话一律垫底 ——
+     *                           模型读到的顺序是"先看清发生了什么,再看主人要什么"
      */
     public record Type(String id,
                        Function<String, String> toModel,
                        Function<String, String> chatPreview,
-                       boolean clearedByInterrupt) {}
+                       boolean clearedByInterrupt,
+                       boolean fromOwner) {}
 
     private static final Map<String, Type> TYPES = new HashMap<>();
 
@@ -49,11 +53,11 @@ public final class EventTypes {
      * <p>不是为了防模组卸载(类型跟着模组走),是防"注册漏了"这种自己人的失误——
      * 没有兜底的话表现是静默丢数据,那比多一行日志难查得多。
      */
-    static final Type UNKNOWN = new Type("?", s -> s, s -> null, false);
+    static final Type UNKNOWN = new Type("?", s -> s, s -> null, false, false);
 
     static {
-        register(new Type(QUERY, s -> s, s -> "⌛ " + s, true));
-        register(new Type(EVENT, s -> s, s -> null, false));
+        register(new Type(QUERY, s -> s, s -> "⌛ " + s, true, true));
+        register(new Type(EVENT, s -> s, s -> null, false, false));
     }
 
     private EventTypes() {}

@@ -59,6 +59,9 @@ final class CompanionBrain {
     /** 上一刻的赢家,用来在切换的那一刻(而不是每刻)通知它丢了身体。 */
     private Task holder;
 
+    /** 上一次推给主人的任务 id(""=闲着)——只在变化的那一刻推,不逐刻刷。 */
+    private String pushedTaskId = "";
+
     /** 手部占用的空闲边沿(纯计数器,见 {@link #HAND_PIN_GRACE_TICKS})。 */
     private final HandPinRelease handPinRelease = new HandPinRelease(HAND_PIN_GRACE_TICKS);
 
@@ -127,6 +130,39 @@ final class CompanionBrain {
         }
         wasIdle = current.isEmpty();
         shipResults(companion);
+        syncCurrentTask(companion);
+    }
+
+    /**
+     * 把「她现在在做什么」推给主人——<b>槽变了才推</b>。
+     *
+     * <p>叫在每个改动槽的地方(这里、死亡丢弃、离场结算),因为槽的转换只发生在本类里,
+     * 所以这就是那件事的唯一出口:派发、重放、被顶替、干完、死亡清空,客户端看到的是
+     * 同一条消息。从前客户端自己记账,只认得它<b>自己派出去</b>的那次调用,于是重放回来
+     * 的活它一概不知道——头顶没气泡,{@code <runtime_state>} 里也说她闲着。
+     */
+    private void syncCurrentTask(NumenPlayer companion) {
+        TaskRecord rec = current.record();
+        String id = rec == null ? "" : rec.publicId();
+        if (id.equals(pushedTaskId)) {
+            return;
+        }
+        pushedTaskId = id;
+        net.minecraft.server.level.ServerPlayer owner = companion.resolveOwnerPlayer();
+        if (owner == null) {
+            return;   // 主人不在线:他重登时会看到那时的状态,不需要补发历史
+        }
+        com.dwinovo.numen.network.payload.CurrentTaskPayload msg;
+        if (rec == null) {
+            msg = com.dwinovo.numen.network.payload.CurrentTaskPayload.idle(companion.getUUID());
+        } else {
+            long startedTick = Math.max(0, rec.getStartedGameTime());
+            long elapsedMs = Math.max(0, companion.level().getGameTime() - startedTick) * 50L;
+            msg = new com.dwinovo.numen.network.payload.CurrentTaskPayload(
+                    companion.getUUID(), id, rec.getToolName(), rec.describe(),
+                    rec.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE, elapsedMs);
+        }
+        com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(owner, msg);
     }
 
     /** 上一刻当前任务槽是不是空的——用来只在"刚变空"那一刻清记录,不必每刻写盘。 */
@@ -138,6 +174,7 @@ final class CompanionBrain {
         sync.dropNoResult(companion);
         current.dropNoResult(companion);
         holder = null;
+        syncCurrentTask(companion);
     }
 
     /** 身体离开世界:两个槽就地结算(它们不会再被 tick),结果照送。 */
@@ -146,6 +183,7 @@ final class CompanionBrain {
         current.finalizeInline();
         shipResults(companion);
         holder = null;
+        syncCurrentTask(companion);
     }
 
     // ---- 槽的代理:让选择器能像问一个 Task 那样问一个槽 ----

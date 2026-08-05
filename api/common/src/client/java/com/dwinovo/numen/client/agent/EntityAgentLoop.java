@@ -149,7 +149,11 @@ public final class EntityAgentLoop {
      * 在跑的后台任务的客户端记账。{@code standing} = 这件活没有终点(不会有
      * task_finished),只能被换掉——模型必须分得清,否则会干等一个永不到来的事件。
      */
-    private record CurrentTask(String id, String tool, String arguments, long sinceMs,
+    /**
+     * 她此刻在做什么——<b>服务端推来的镜像</b>,不是本地推断的账本
+     * (见 {@link com.dwinovo.numen.network.payload.CurrentTaskPayload})。
+     */
+    private record CurrentTask(String id, String tool, String describe, long sinceMs,
                                boolean standing) {}
 
     /**
@@ -252,7 +256,6 @@ public final class EntityAgentLoop {
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
                 harvestWorkBlocks(inv.name(), resultJson);
-                trackAsyncDispatch(inv, resultJson);
                 convo.addToolResult(inv.id(), resultJson);
             }
             @Override public void onAllSettled() {
@@ -370,7 +373,14 @@ public final class EntityAgentLoop {
      * 死前一秒说的留着、死后一秒说的蒸发——而主人根本看不见那一 tick 的分界,
      * 只会觉得这模组有时候吞消息。
      */
-    public void submitPrompt(String text) {
+    /**
+     * @return 这句话有没有被压着(true = 她没能当场看,得等)。这是<b>观察</b>不是预测:
+     *         {@code tryStartTurn} 之后有没有真的发出请求,看的就是它自己的状态。
+     *         从前聊天框自己拿 {@code isBusy()} 猜——而 {@code isBusy()} 里的
+     *         {@code currentTask != null} 根本不在开轮的闸门里,于是她在跟随时你说的话
+     *         明明当场就发出去了,界面却写着"排队中"。闸门以后再加几道,这里也不会跑偏。
+     */
+    public boolean submitPrompt(String text) {
         boolean wasAborted = turnPause.isPaused();
         turnPause = AgentTurnPause.NONE;
         // Always buffer first; tryStartTurn() splices buffered prompts into the
@@ -391,6 +401,7 @@ public final class EntityAgentLoop {
                 deferred ? " — buffered (mid-turn)" : "",
                 truncate(text, 200));
         tryStartTurn();
+        return !awaitingLlmResponse;
     }
 
     /**
@@ -476,7 +487,10 @@ public final class EntityAgentLoop {
      */
     public String currentActivity() {
         if (currentTask != null) {
-            return currentTask.tool();
+            // 服务端给的人话描述("挖 64 块泥土"),不是工具 id("mine")——
+            // 气泡是给主人看的,印内部标识符是从前没有别的可印。
+            String d = currentTask.describe();
+            return d != null && !d.isBlank() ? d : currentTask.tool();
         }
         return dispatcher.currentToolName();
     }
@@ -541,9 +555,8 @@ public final class EntityAgentLoop {
             turnGeneration++; // any in-flight LLM response is now stale → discarded on arrival
             boolean wasAwaitingLlm = awaitingLlmResponse;
             boolean wasBackgroundTask = currentTask != null;
-            // 这件活不再属于这个会话了：按停止 = 她不做了；断线 = 下一个存档跟它无关。
-            // 不清的话它会一直写在运行时状态里告诉模型「你手上有活」（日志里那些
-            // backgroundTask=true 就是它）。真干完了走 task_finished，那条路在 onEvent。
+            // 断线时清掉本地镜像:下一个存档跟这件活无关,而那时不会有服务端推送来纠正它。
+            // (按停止走的是服务端顶替/取消,那边会推 idle 过来。)
             currentTask = null;
             awaitingLlmResponse = false;
             compacting = false;
@@ -674,34 +687,37 @@ public final class EntityAgentLoop {
                 : (deathCause != null ? deathCause : "未知原因");
         String cause = raw.replace('<', '(').replace('>', ')');
         deathCause = null;
-        currentTask = null;   // 死亡掉了后台任务(无收尾事件),记账一并清零
         Constants.LOG.info("[numen-entity#{}] respawned ({}) — loop thawed", entityUuid, cause);
         // 死亡是急件——她关于自己处境的认知几乎每一条都作废了:物品掉在死亡地点、
         // 位置从矿洞变成了主人身边、手上的任务没了、血量装备全变了。这不分"任务中死"
         // 还是"空闲死",所以这里没有任何判据。
-        pushEvent(EventTypes.EVENT, "<event kind=\"death\">你刚才死了(" + cause
-                + "),物品掉落在死亡地点,手头的任务中断了;现已在主人身边复活。先看看状况,继续或重新规划。</event>",
+        AbstractClientPlayer body = resolveEntity();
+        long dayTime = body != null ? body.level().getDayTime() : 0L;
+        pushEvent(EventTypes.EVENT, com.dwinovo.numen.event.NumenEvents.compose(
+                dayTime, com.dwinovo.numen.event.NumenEvents.Kind.DEATH, null,
+                "你刚才死了(" + cause + "),物品掉落在死亡地点,手头的任务中断了;"
+                        + "现已在主人身边复活。先看看状况,继续或重新规划。"),
                 System.currentTimeMillis(), true);
         // 松手就完了:队列自己会判断该排空,连同死亡期间攒下的一切(工具失败结果之外
         // 的事件、主人说的话)一起走。
         queue.unlock(QueueLock.DEATH);
     }
 
-    /** 派发回执识别:异步工具的受理结果带 data.async=true 与 data.task_id。 */
-    private void trackAsyncDispatch(ToolInvocation invocation, String resultJson) {
-        try {
-            com.google.gson.JsonObject o =
-                    com.google.gson.JsonParser.parseString(resultJson).getAsJsonObject();
-            if (!o.has("data") || !o.get("data").isJsonObject()) return;
-            com.google.gson.JsonObject data = o.getAsJsonObject("data");
-            if (data.has("async") && data.get("async").getAsBoolean() && data.has("task_id")) {
-                boolean standing = data.has("standing") && data.get("standing").getAsBoolean();
-                currentTask = new CurrentTask(data.get("task_id").getAsString(), invocation.name(),
-                        invocation.argsJson(), System.currentTimeMillis(), standing);
-            }
-        } catch (RuntimeException ignored) {
-            // 非 JSON 或形状不符——不是异步回执,不记账。
+    /**
+     * 服务端说她在做什么——直接照抄,不判断、不合并、不推断。
+     *
+     * <p>这是 {@code currentTask} 的<b>唯一</b>写入点。从前是客户端自己记账
+     * ({@code trackAsyncDispatch}:只认自己派出去的那次调用),于是服务器重启重放、
+     * 死亡复活重放起来的任务它一概不知道,头顶没气泡、模型也看不见。
+     */
+    public void onCurrentTask(com.dwinovo.numen.network.payload.CurrentTaskPayload p) {
+        if (p.idle()) {
+            currentTask = null;
+            return;
         }
+        // 用服务端给的已耗时回推起点,重放回来的活也不会从这一刻重新计时
+        currentTask = new CurrentTask(p.taskId(), p.tool(), p.describe(),
+                System.currentTimeMillis() - p.elapsedMs(), p.standing());
     }
 
     /**
@@ -712,11 +728,6 @@ public final class EntityAgentLoop {
      * <p>死着也照收:每条都盖着真实时间戳,复活后模型看得出哪些发生在死亡之前。
      */
     public void pushEvent(String type, String text, long ts, boolean urgent) {
-        // 后台任务收尾:对上 id 清记账
-        if (currentTask != null && text.contains("kind=\"task_finished\"")
-                && text.contains("id=\"" + currentTask.id() + "\"")) {
-            currentTask = null;
-        }
         queue.push(type, text, ts > 0 ? ts : System.currentTimeMillis(), urgent);
         Constants.LOG.info("[numen-entity#{}] queued {}{}: {}",
                 entityUuid, type, urgent ? " URGENT" : "", truncate(text, 120));
@@ -1168,7 +1179,7 @@ public final class EntityAgentLoop {
         return "<runtime_state><current_task id=\"" + xml(task.id()) + "\" tool=\""
                 + xml(task.tool()) + "\" state=\"running\" standing=\"" + task.standing()
                 + "\" elapsed_s=\"" + elapsed
-                + "\">Original arguments: " + xml(truncate(task.arguments(), 600)) + ". "
+                + "\">" + xml(truncate(task.describe(), 600)) + ". "
                 + tail + swap + "</current_task></runtime_state>";
     }
 

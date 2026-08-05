@@ -39,6 +39,18 @@ public final class NumenGateway {
 
     private NumenGateway() {}
 
+    /** 一句话送出去之后的下场。 */
+    public enum Delivery {
+        /** 空消息 / 不认识这个 UUID —— 没送出去。 */
+        REJECTED,
+        /** 她当场就看了(请求已经发出)。 */
+        SEEN,
+        /** 先排着:她手上有事没法马上看(在飞的回合、未决工具、死着、被停止)。 */
+        QUEUED,
+        /** 不在客户端主线程,只能交给它稍后处理 —— 结果这边观察不到。 */
+        HANDED_OFF
+    }
+
     /**
      * Queue {@code message} for {@code companion}, verbatim. If the companion
      * is idle this starts a turn immediately; if it is mid-task the message is
@@ -51,21 +63,23 @@ public final class NumenGateway {
      * made every quick-key/bridge message before the first panel visit vanish
      * with "not online".)
      *
+     * <p>返回的是<b>实际发生了什么</b>,不是对"她忙不忙"的推断。界面要显示"排队中"
+     * 就照这个显示;自己另判一遍必然会跟真正的闸门跑偏。
+     *
      * @param companion the companion entity's UUID
-     * @param message   delivered exactly as given — formatting is the caller's
-     *                  business
-     * @return false when the message is blank or {@code companion} is neither
-     *         on the roster nor already running a loop (unknown UUID);
-     *         true means the message was handed to the client thread for
-     *         enqueueing (a dead-and-awaiting-respawn body may still drop it)
+     * @param message   delivered exactly as given — formatting is the caller's business
      */
-    public static boolean enqueue(UUID companion, String message) {
-        if (companion == null || message == null || message.isBlank()) return false;
+    public static Delivery enqueue(UUID companion, String message) {
+        if (companion == null || message == null || message.isBlank()) return Delivery.REJECTED;
         boolean known = AgentLoopRegistry.get(companion).isPresent()
                 || com.dwinovo.numen.client.agent.NumenRoster.instance().name(companion) != null;
-        if (!known) return false;
-        Minecraft.getInstance().execute(() ->
-                AgentLoopRegistry.getOrCreate(companion).submitPrompt(message));
-        return true;
+        if (!known) return Delivery.REJECTED;
+        Minecraft mc = Minecraft.getInstance();
+        if (!mc.isSameThread()) {
+            mc.execute(() -> AgentLoopRegistry.getOrCreate(companion).submitPrompt(message));
+            return Delivery.HANDED_OFF;
+        }
+        return AgentLoopRegistry.getOrCreate(companion).submitPrompt(message)
+                ? Delivery.QUEUED : Delivery.SEEN;
     }
 }

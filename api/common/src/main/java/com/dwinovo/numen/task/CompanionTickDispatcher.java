@@ -130,9 +130,9 @@ public final class CompanionTickDispatcher {
      * ——让它拿到第一个的结果再决定下一步),和新回合里派的(主人/模型改主意了,
      * 该直接替换)。判据本地可判,不用把回合 id 穿到服务端。
      */
-    public static boolean currentFreshlyAccepted(UUID companionUuid) {
-        CompanionBrain brain = BRAINS.get(companionUuid);
-        return brain != null && brain.current.freshlyAccepted();
+    public static boolean currentFreshlyAccepted(NumenPlayer companion) {
+        CompanionBrain brain = BRAINS.get(companion.getUUID());
+        return brain != null && brain.current.freshlyAccepted(companion);
     }
 
     /**

@@ -66,11 +66,17 @@ public final class TaskDispatch {
     public static void setTask(NumenPlayer companion, TaskRecord record, JsonObject args,
                                Consumer<String> reply) {
         java.util.UUID id = companion.getUUID();
-        if (CompanionTickDispatcher.currentFreshlyAccepted(id)) {
+        if (CompanionTickDispatcher.currentFreshlyAccepted(companion)) {
             TaskRecord busy = CompanionTickDispatcher.currentTaskFor(id);
+            // 常驻的活永远不会发 task_finished，让模型去等它就是指一个不存在的事件。
+            boolean busyStanding = busy.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE;
             reply.accept(TaskResult.fail("身体一次只做一件事。" + busy.publicId()
-                    + "(" + busy.describe() + ")刚受理,等它的 task_finished 再派下一件;"
-                    + "要改主意就等这一轮结束后再派。").toJson());
+                    + "(" + busy.describe() + ")就在刚才那一刻受理的"
+                    + (busyStanding
+                        ? ";它是常驻的活,不会发 task_finished。"
+                        : ";等它的 task_finished。")
+                    + "先拿到这一件的结果、看清状况再决定下一步;"
+                    + "真要换,下一回合直接派新的就是了。").toJson());
             return;
         }
         record.markAsync();

@@ -111,6 +111,20 @@ public abstract class TaskRecord {
     }
     public final long getStartedGameTime() { return startedGameTime; }
 
+    /**
+     * 受理它的那一刻还没过去。
+     *
+     * <p>用来分开两种"再派一个活":同一批工具调用里的第二个(模型在做计划,该拒绝
+     * ——让它拿到第一个的结果再决定),和新回合里派的(改主意了,该直接替换)。
+     *
+     * <p><b>问的是记录多老,不是任务跑了多少刻。</b>这两个从前是一回事,直到任务学会
+     * 休眠:{@code follow} 在主人身边时不占身体,槽永远轮不到 tick,"跑过几刻"就永远是 0
+     * ——于是一个跟了你十分钟的跟随任务始终自称"刚受理",你让她顺手捡个掉落物都会被拒。
+     */
+    public final boolean acceptedThisTick(long gameTime) {
+        return startedGameTime >= 0 && gameTime <= startedGameTime;
+    }
+
     /** Called by {@code CompanionTickDispatcher} as the record transitions through lifecycle. */
     public final void setState(TaskState state) { this.state = state; }
     public final void setResult(TaskResult result) { this.result = result; }

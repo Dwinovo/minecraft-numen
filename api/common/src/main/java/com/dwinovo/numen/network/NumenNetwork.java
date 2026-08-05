@@ -40,6 +40,13 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.TaskResultPayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.TaskResultPayload::handle);
 
+        // S→C: 她此刻在做什么 —— 「她在做什么」的唯一真源。槽一变就推，
+        // 派发/重放/顶替/干完走同一个出口（见 CurrentTaskPayload）。
+        Services.NETWORK.registerServerToClient(
+                com.dwinovo.numen.network.payload.CurrentTaskPayload.TYPE,
+                com.dwinovo.numen.network.payload.CurrentTaskPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.CurrentTaskPayload::handle);
+
         // C→S: owner pressed Stop — cancel the companion's queued + running tasks.
         Services.NETWORK.registerClientToServer(
                 com.dwinovo.numen.network.payload.CancelTasksPayload.TYPE,
