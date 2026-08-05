@@ -11,7 +11,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -28,11 +27,16 @@ import java.util.function.Predicate;
  * can afford. Walks chunk COLUMNS on an expanding {@link RingSpiral} from the
  * scan center (nearest-first, so an early result cap still favours close
  * hits), scanning one palette-filtered 16³ section per
- * {@link SearchBudget#trySectionScan} permit and paying for not-yet-loaded
- * chunks with the same global {@link SearchBudget#tryChunkLoad} pool the
- * structure locator uses. Nothing here can stall a tick: every unit of work
- * is metered, and a deadline converts a too-expensive scan into an honest
- * partial result.
+ * {@link SearchBudget#trySectionScan} permit.
+ *
+ * <h2>Loaded terrain is the boundary</h2>
+ * A column that isn't loaded is skipped and counted, never loaded: reading it
+ * would park the server thread on chunk I/O or worldgen, and a perception query
+ * has no business making the world bigger to answer itself. The skipped count
+ * rides back in {@link ScanResult} so the reply can say what the answer covers
+ * — out there blocks are UNKNOWN, not absent. Nothing here can stall a tick:
+ * every unit of work is metered, and a deadline converts a too-expensive scan
+ * into an honest partial result.
  *
  * <p>This is a QUERY in spirit — it never occupies the body or the task
  * queue; the pet keeps walking/mining while the scan runs. The reply rides
@@ -54,13 +58,12 @@ public final class ScanBlocksJob {
     private final int radius;
     private final double radiusSq;
     private final Predicate<BlockState> filter;
-    private final Consumer<List<BlockScanner.Hit>> onDone;
-    private final Consumer<ScanProgress> onPartial;
+    private final Consumer<ScanResult> onDone;
 
     private final int centerChunkX, centerChunkZ, maxRing, minSectionY, maxSectionY;
     private int ring, perimIdx;
     private long deadline = -1;
-    private int columnsScanned;
+    private int columnsScanned, columnsUnloaded;
     private final int columnsTotal;
 
     // Column in progress (budget ran dry mid-column); null = fetch next.
@@ -69,13 +72,18 @@ public final class ScanBlocksJob {
 
     private final List<BlockScanner.Hit> matches = new ArrayList<>();
 
-    /** Completion summary for partial results. */
-    public record ScanProgress(List<BlockScanner.Hit> matches, int columnsScanned, int columnsTotal) {}
+    /**
+     * One scan's answer plus its coverage ledger: how many of {@code columnsTotal}
+     * chunk columns were actually read, how many were skipped for not being
+     * loaded, and whether the deadline cut the walk short. The caller words the
+     * reply from these — a hit list alone can't tell the model whether "nothing
+     * found" means "nothing there".
+     */
+    public record ScanResult(List<BlockScanner.Hit> matches, int columnsScanned,
+                             int columnsUnloaded, int columnsTotal, boolean deadlineHit) {}
 
     private ScanBlocksJob(UUID entityUuid, ServerLevel level, BlockPos center, int radius,
-                          Set<Block> targets,
-                          Consumer<List<BlockScanner.Hit>> onDone,
-                          Consumer<ScanProgress> onPartial) {
+                          Set<Block> targets, Consumer<ScanResult> onDone) {
         this.entityUuid = entityUuid;
         this.dimension = level.dimension();
         this.center = center;
@@ -83,7 +91,6 @@ public final class ScanBlocksJob {
         this.radiusSq = (double) radius * radius;
         this.filter = state -> targets.contains(state.getBlock());
         this.onDone = onDone;
-        this.onPartial = onPartial;
         this.centerChunkX = SectionPos.blockToSectionCoord(center.getX());
         this.centerChunkZ = SectionPos.blockToSectionCoord(center.getZ());
         this.maxRing = Math.max(
@@ -97,12 +104,10 @@ public final class ScanBlocksJob {
         this.columnsTotal = side * side;
     }
 
-    /** Register a scan; results arrive via the callbacks on a later tick. */
+    /** Register a scan; the result arrives via the callback on a later tick. */
     public static void start(UUID entityUuid, ServerLevel level, BlockPos center, int radius,
-                             Set<Block> targets,
-                             Consumer<List<BlockScanner.Hit>> onDone,
-                             Consumer<ScanProgress> onPartial) {
-        ScanBlocksJob job = new ScanBlocksJob(entityUuid, level, center, radius, targets, onDone, onPartial);
+                             Set<Block> targets, Consumer<ScanResult> onDone) {
+        ScanBlocksJob job = new ScanBlocksJob(entityUuid, level, center, radius, targets, onDone);
         JOBS.add(job);
         Constants.LOG.info("[numen-scan] started radius-{} scan around {} in {} ({} columns)",
                 radius, center.toShortString(), level.dimension().location(), job.columnsTotal);
@@ -129,24 +134,18 @@ public final class ScanBlocksJob {
     private boolean tickOne(MinecraftServer server) {
         ServerLevel level = server.getLevel(dimension);
         if (level == null) {
-            finish(true);
+            finish(false);
             return true;
         }
         if (deadline < 0) deadline = server.getTickCount() + DEADLINE_TICKS;
         if (server.getTickCount() >= deadline) {
-            finish(false);
+            finish(true);
             return true;
         }
         while (true) {
-            if (currentChunk == null) {
-                if (!nextColumn(level)) {
-                    // Either exhausted (finish) or out of chunk-load budget (wait).
-                    if (ring > maxRing) {
-                        finish(true);
-                        return true;
-                    }
-                    return false;
-                }
+            if (currentChunk == null && !nextColumn(level)) {
+                finish(false);   // spiral exhausted
+                return true;
             }
             // Scan the in-progress column one budgeted section at a time.
             while (sectionCursor <= maxSectionY) {
@@ -157,7 +156,7 @@ public final class ScanBlocksJob {
                 sectionCursor++;
                 if (matches.size() >= MAX_COLLECT) {
                     // Ring order means what we have is the nearest area anyway.
-                    finish(true);
+                    finish(false);
                     return true;
                 }
             }
@@ -167,9 +166,10 @@ public final class ScanBlocksJob {
     }
 
     /**
-     * Resolve the next spiral column into {@link #currentChunk}. Returns false
-     * when the spiral is exhausted (ring > maxRing) OR the chunk-load budget
-     * is dry (ring unchanged — retry next tick).
+     * Resolve the next spiral column into {@link #currentChunk}, tallying and
+     * skipping columns whose chunk isn't loaded. Returns false only when the
+     * spiral is exhausted — walking past unloaded terrain costs one cache lookup
+     * per column, so it needs no permit and never defers to the next tick.
      */
     private boolean nextColumn(ServerLevel level) {
         while (ring <= maxRing) {
@@ -178,17 +178,14 @@ public final class ScanBlocksJob {
                 perimIdx = 0;
                 continue;
             }
-            int[] d = RingSpiral.offset(ring, perimIdx);
+            int[] d = RingSpiral.offset(ring, perimIdx++);
             int cx = centerChunkX + d[0];
             int cz = centerChunkZ + d[1];
-            ChunkAccess chunk = level.getChunk(cx, cz, ChunkStatus.FULL, false);
+            ChunkAccess chunk = BlockScanner.loadedChunk(level, cx, cz);
             if (chunk == null) {
-                // Not loaded: pay one global chunk-load permit, or wait.
-                if (!SearchBudget.tryChunkLoad()) return false;
-                chunk = level.getChunk(cx, cz);
+                columnsUnloaded++;
+                continue;
             }
-            perimIdx++;
-            if (chunk == null) continue;   // failed to load — skip the column
             currentChunk = chunk;
             currentChunkX = cx;
             currentChunkZ = cz;
@@ -198,12 +195,8 @@ public final class ScanBlocksJob {
         return false;
     }
 
-    private void finish(boolean complete) {
+    private void finish(boolean deadlineHit) {
         matches.sort(Comparator.comparingDouble(BlockScanner.Hit::distance));
-        if (complete) {
-            onDone.accept(matches);
-        } else {
-            onPartial.accept(new ScanProgress(matches, columnsScanned, columnsTotal));
-        }
+        onDone.accept(new ScanResult(matches, columnsScanned, columnsUnloaded, columnsTotal, deadlineHit));
     }
 }

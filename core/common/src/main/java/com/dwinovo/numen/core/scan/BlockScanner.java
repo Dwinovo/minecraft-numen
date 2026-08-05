@@ -46,11 +46,12 @@ public final class BlockScanner {
     /**
      * The fully-loaded chunk at ({@code cx},{@code cz}), or {@code null} if it isn't loaded — a pure
      * cache read via {@link net.minecraft.server.level.ServerChunkCache#getChunkNow} that <b>never</b>
-     * forces a load, generates, or bounces to the main thread. A synchronous/off-tick scan must never
-     * drive chunk loading (that path can block the server thread on chunk I/O); long-range perception
-     * over unloaded terrain is {@code ScanBlocksJob}'s budgeted job.
+     * forces a load, generates, or bounces to the main thread. Every scan in this package reads terrain
+     * through here: {@code getChunk} with a status would block the server thread on chunk I/O or
+     * generation, and a scan is a perception query — it reports what is loaded and says so, it does not
+     * make the world bigger to answer.
      */
-    private static ChunkAccess loadedChunk(Level level, int cx, int cz) {
+    static ChunkAccess loadedChunk(Level level, int cx, int cz) {
         return level instanceof ServerLevel serverLevel
                 ? serverLevel.getChunkSource().getChunkNow(cx, cz)
                 : null;

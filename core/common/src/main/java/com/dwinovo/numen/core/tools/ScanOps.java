@@ -10,6 +10,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -40,15 +41,32 @@ List<String> block_ids,
         }
         BlockPos center = self.blockPosition();
         ScanBlocksJob.start(self.getUUID(), sl, center, r, targets,
-                matches -> reply.accept(buildResult(matches, r, center, null)),
-                partial -> reply.accept(buildResult(partial.matches(), r, center,
-                        "partial: time budget hit after " + partial.columnsScanned() + "/"
-                                + partial.columnsTotal() + " chunk columns — results cover "
-                                + "the area nearest you; retry for fresh coverage or scan smaller")));
+                result -> reply.accept(buildResult(result, r, center)));
     }
 
-    private static String buildResult(List<BlockScanner.Hit> matches, int radius,
-                                      BlockPos center, String partialNote) {
+    /**
+     * What the scan actually covered, in the model's words — {@code null} when it
+     * covered everything asked for. A hit list on its own can't distinguish "no
+     * iron within 192 blocks" from "most of that sphere was never looked at", and
+     * the model will read the first meaning into silence every time.
+     */
+    static String coverageNote(ScanBlocksJob.ScanResult res) {
+        List<String> notes = new ArrayList<>(2);
+        if (res.deadlineHit()) {
+            notes.add("time budget hit after " + res.columnsScanned() + "/" + res.columnsTotal()
+                    + " chunk columns — what came back is the area nearest you; "
+                    + "retry for fresh coverage or scan smaller");
+        }
+        if (res.columnsUnloaded() > 0) {
+            notes.add(res.columnsUnloaded() + " of " + res.columnsTotal() + " chunk columns in this "
+                    + "radius are not loaded, so they were not searched — blocks out there are "
+                    + "UNKNOWN, not absent; walk that way and scan again to find out");
+        }
+        return notes.isEmpty() ? null : String.join("; ", notes);
+    }
+
+    private static String buildResult(ScanBlocksJob.ScanResult res, int radius, BlockPos center) {
+        List<BlockScanner.Hit> matches = res.matches();
         int limit = Math.min(matches.size(), MAX_RESULTS);
         JsonArray out = new JsonArray();
         for (int i = 0; i < limit; i++) {
@@ -71,8 +89,9 @@ List<String> block_ids,
         root.addProperty("total_found", matches.size());
         root.addProperty("truncated", matches.size() > MAX_RESULTS);
         root.addProperty("radius_searched", radius);
-        if (partialNote != null) {
-            root.addProperty("note", partialNote);
+        String note = coverageNote(res);
+        if (note != null) {
+            root.addProperty("note", note);
         }
         JsonObject centerJson = new JsonObject();
         centerJson.addProperty("x", center.getX());
