@@ -3,7 +3,6 @@ import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.PlayerInv;
 
 import com.dwinovo.numen.task.TaskState;
-import com.dwinovo.numen.task.Suspendable;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;

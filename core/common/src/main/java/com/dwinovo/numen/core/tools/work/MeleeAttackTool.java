@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools.work;
 import com.dwinovo.numen.core.tools.CombatOps;
 
 import static com.dwinovo.numen.task.TaskDispatch.ctx;
-import static com.dwinovo.numen.task.TaskDispatch.dispatchAsync;
+import static com.dwinovo.numen.task.TaskDispatch.setTask;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -58,6 +58,6 @@ public final class MeleeAttackTool implements NumenTool {
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion,
                              Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        dispatchAsync(companion, impl.meleeAttack(a.entity_ids(), ctx(toolCallId, companion)), reply);
+        setTask(companion, impl.meleeAttack(a.entity_ids(), ctx(toolCallId, companion)), reply);
     }
 }

@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.task.base;
 
 import com.dwinovo.numen.task.TaskState;
 
-import com.dwinovo.numen.task.CompanionTask;
+import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.core.FailureType;
 
 import java.util.List;
@@ -39,7 +39,7 @@ import java.util.function.Supplier;
  * }
  *
  * <p>Deterministic and Minecraft-free: strategies are {@link Supplier}s of
- * {@link CompanionTask}, so the advancement logic is unit-testable with fakes.
+ * {@link Task}, so the advancement logic is unit-testable with fakes.
  */
 public final class RecoveryLadder {
 
@@ -54,7 +54,7 @@ public final class RecoveryLadder {
      * @param maxAttempts total number of executions allowed on this rung
      *                    (≥ 1); reaching it advances to the next matching rung.
      */
-    public record Rung(Supplier<CompanionTask> strategy, Set<FailureType> handles, int maxAttempts) {}
+    public record Rung(Supplier<Task> strategy, Set<FailureType> handles, int maxAttempts) {}
 
     private final List<Rung> rungs;
 
@@ -63,7 +63,7 @@ public final class RecoveryLadder {
     /** Executions committed on the current rung so far (starts at 1 when a rung is entered). */
     private int attempts = 1;
     /** The lazily-built task for the current rung; nulled on retry / advance so it is rebuilt. */
-    private CompanionTask cached;
+    private Task cached;
 
     public RecoveryLadder(List<Rung> rungs) {
         this.rungs = List.copyOf(rungs);
@@ -79,7 +79,7 @@ public final class RecoveryLadder {
      * and cached until the ladder retries or advances (so per-tick calls reuse the
      * same instance). {@code null} once the ladder is {@link #exhausted()}.
      */
-    public CompanionTask current() {
+    public Task current() {
         if (index >= rungs.size()) return null;
         if (cached == null) cached = rungs.get(index).strategy().get();
         return cached;

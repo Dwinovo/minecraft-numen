@@ -3,7 +3,6 @@ import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.PlayerInv;
 
 import com.dwinovo.numen.task.TaskState;
-import com.dwinovo.numen.task.Suspendable;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -100,7 +99,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         if (entity == null || !entity.isAlive()) {
             if (acted) {
                 successMsg = r.button == MouseButton.LEFT
-                        ? "defeated " + name() : "done with " + name();
+                        ? "defeated " + targetName() : "done with " + targetName();
                 return TaskState.SUCCESS;
             }
             fail("the target entity is gone before I could reach it", FailureType.TARGET_LOST);
@@ -180,7 +179,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
                 ? " (also tried a looser stance anywhere within " + REPOSITION_RADIUS
                         + " blocks of it: " + reason + ")"
                 : "";
-        fail("can't reach " + name() + ": " + original + tried, type);
+        fail("can't reach " + targetName() + ": " + original + tried, type);
         return TaskState.FAILED;
     }
 
@@ -207,13 +206,13 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         return withinReach() && player.hasLineOfSight(entity);
     }
 
-    private String name() {
+    private String targetName() {
         return entity != null ? entity.getName().getString() : "entity#" + r.entityId;
     }
 
     private String describeDone() {
         String verb = r.button == MouseButton.LEFT ? "attacked" : "interacted with";
-        return verb + " " + name();
+        return verb + " " + targetName();
     }
 
     /** Release the interaction, then the nav + overlay (base default). */
@@ -238,7 +237,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
 
     @Override
     protected String timeoutMessage() {
-        return "timed out before interacting with " + name();
+        return "timed out before interacting with " + targetName();
     }
 
     @Override

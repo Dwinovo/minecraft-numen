@@ -649,10 +649,10 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     }
 
     @Override
-    public void suspend() {
+    public void stop(NumenPlayer companion, StopReason why) {
         boolean wasPositioning = phase == Phase.POSITION;
         boolean wasCollecting = phase == Phase.COLLECT;
-        super.suspend();
+        super.stop(companion, why);
         discardHook();
         if (wasCollecting) {
             // Survival preemption may stop the navigator, but the already-caught

@@ -5,7 +5,8 @@ import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.core.WorkProfile;
-import com.dwinovo.numen.task.TaskChain;
+import com.dwinovo.numen.task.Task;
+import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.world.InteractionHand;
@@ -36,7 +37,7 @@ import net.minecraft.world.phys.Vec3;
  * once the bucket empties (it becomes a plain bucket) the chain no longer fires a
  * use — it never scoops the just-placed water back up.
  */
-public final class MLGChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
+public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
     /** Fire the water/block once the ground is this close below (blocks). */
     private static final double PLACE_WITHIN = 3.5;
@@ -50,27 +51,25 @@ public final class MLGChain implements TaskChain, com.dwinovo.numen.task.reflex.
     }
 
     @Override
-    public float getPriority(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+    public boolean canRun(NumenPlayer companion) {
+        if (!SurvivalConfig.enabled()) return false;
         if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+            return false;   // reflex switched off by the owner
         }
-        // 无畏画像(创造):摔不痛,救援毫无意义;而且创造下水桶永不清空,
-        // "倒完即停"的安全阀失效,触发只会一路撒水。整条链休眠。
         if (WorkProfile.of(companion).fearless()) {
-            return SurvivalDecisions.DORMANT;
+            return false;
         }
         boolean canSave = waterBucketSlot(companion) >= 0 || softBlockSlot(companion) >= 0;
-        return SurvivalDecisions.mlgPriority(companion.onGround(), companion.fallDistance, canSave);
+        return SurvivalDecisions.mlgTriggered(companion.onGround(), companion.fallDistance, canSave);
     }
 
     @Override
-    public void tick(NumenPlayer companion) {
+    public TaskState tick(NumenPlayer companion) {
         // Aim straight down every tick — both the bucket and a block placement raycast
         // along the current look.
         companion.setXRot(90.0f);
         double toGround = distanceToGround(companion);
-        if (toGround > PLACE_WITHIN) return;   // hold the save until we're close enough
+        if (toGround > PLACE_WITHIN) return TaskState.RUNNING;   // hold the save until we're close enough
 
         int bucket = waterBucketSlot(companion);
         if (bucket >= 0) {
@@ -78,7 +77,7 @@ public final class MLGChain implements TaskChain, com.dwinovo.numen.task.reflex.
             // Straight-down useItem: the vanilla water bucket places water on the block below.
             Interaction.useInAir(companion, InteractionHand.MAIN_HAND, Interaction.Timing.once()).tick();
             noteSave(companion, "a water bucket");
-            return;
+            return TaskState.RUNNING;
         }
         int block = softBlockSlot(companion);
         if (block >= 0) {
@@ -90,6 +89,7 @@ public final class MLGChain implements TaskChain, com.dwinovo.numen.task.reflex.
                 noteSave(companion, "a soft block");
             }
         }
+        return TaskState.RUNNING;
     }
 
     /** One diary line per fall episode, stamped with the height it survived. */
@@ -100,7 +100,7 @@ public final class MLGChain implements TaskChain, com.dwinovo.numen.task.reflex.
     }
 
     @Override
-    public void onInterrupt(NumenPlayer companion) {
+    public void stop(NumenPlayer companion, StopReason why) {
         if (companion.isUsingItem()) {
             companion.releaseUsingItem();
         }

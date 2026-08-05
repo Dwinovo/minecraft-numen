@@ -1,13 +1,9 @@
 package com.dwinovo.numen.core.task.survival;
 
-import com.dwinovo.numen.task.ChainScheduler;
-
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.task.TaskChain;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,10 +42,11 @@ class SurvivalGateTest {
     }
 
     @Test
-    void dormantValueIsBelowTheLlmBase() {
-        // The value each survival getPriority returns while the gate is off is strictly
-        // below the LLM base priority, so ChainScheduler.select can never pick it.
-        assertTrue(SurvivalDecisions.DORMANT < TaskChain.LLM_BASE_PRIORITY);
-        assertEquals(Float.NEGATIVE_INFINITY, SurvivalDecisions.DORMANT);
+    void gateOffMeansNoReflexCanRun() {
+        // 总闸关掉时每条反射的 canRun 都直接返 false —— 它们在选择器里
+        // 一个都轮不到,身体完全交给任务层。这条只钉总闸的语义,
+        // 各反射自己的触发判据在 SurvivalDecisionsTest。
+        SurvivalConfig.setEnabled(false);
+        assertFalse(SurvivalConfig.enabled());
     }
 }

@@ -4,7 +4,8 @@ import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.task.TaskChain;
+import com.dwinovo.numen.task.Task;
+import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.task.survival.UnstuckDetector;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -28,7 +29,7 @@ import net.minecraft.world.phys.Vec3;
  * position sampling, so with the gate off nothing is recorded and the chain is a
  * strict no-op.
  */
-public final class UnstuckChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
+public final class UnstuckChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
     /** Rolling window length (ticks) and the disc radius (blocks) that counts as "not moving". */
     private static final int WINDOW = 40;
@@ -41,23 +42,21 @@ public final class UnstuckChain implements TaskChain, com.dwinovo.numen.task.ref
     private float wanderYaw;
 
     @Override
-    public float getPriority(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+    public boolean canRun(NumenPlayer companion) {
+        if (!SurvivalConfig.enabled()) return false;
         if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+            return false;   // reflex switched off by the owner
         }
-        // Poll: feed the rolling window every tick (whoever holds the body this tick
-        // set its locomotion inputs, so this reflects real attempted movement).
         Vec3 pos = companion.position();
         boolean tryingToMove = companion.zza != 0.0f || companion.xxa != 0.0f;
         detector.record(pos.x, pos.z, tryingToMove);
 
-        if (wanderTicksLeft > 0) return SurvivalDecisions.UNSTUCK_PRIORITY;   // finish the burst
-        return detector.isStuck() ? SurvivalDecisions.UNSTUCK_PRIORITY : Float.NEGATIVE_INFINITY;
+        if (wanderTicksLeft > 0) return true;   // finish the burst
+        return detector.isStuck();
     }
 
     @Override
-    public void tick(NumenPlayer companion) {
+    public TaskState tick(NumenPlayer companion) {
         if (wanderTicksLeft <= 0) {
             // Begin a fresh break-out: pick a new heading (turn ~137° off current so
             // repeated attempts fan out) and clear the window so we re-evaluate after.
@@ -69,10 +68,11 @@ public final class UnstuckChain implements TaskChain, com.dwinovo.numen.task.ref
         if (--wanderTicksLeft <= 0) {
             InputDriver.halt(companion);
         }
+        return TaskState.RUNNING;
     }
 
     @Override
-    public void onInterrupt(NumenPlayer companion) {
+    public void stop(NumenPlayer companion, StopReason why) {
         InputDriver.halt(companion);
         companion.setShiftKeyDown(false);
         wanderTicksLeft = 0;

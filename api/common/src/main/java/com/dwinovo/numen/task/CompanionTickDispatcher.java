@@ -39,9 +39,14 @@ public final class CompanionTickDispatcher {
         return BRAINS.computeIfAbsent(companionUuid, k -> new CompanionBrain());
     }
 
-    /** The companion's task queue (created on first use). Body-bound tools enqueue here. */
-    public static TaskQueue queueFor(UUID companionUuid) {
-        return brainFor(companionUuid).queue;
+    /** 回合挂着等的同步动作槽(首次使用时建脑)。 */
+    static TaskSlot syncSlotFor(UUID companionUuid) {
+        return brainFor(companionUuid).sync;
+    }
+
+    /** 她现在在做的事那个槽(首次使用时建脑)。 */
+    static TaskSlot currentSlotFor(UUID companionUuid) {
+        return brainFor(companionUuid).current;
     }
 
     /** 一次性心跳日志:证明排程机器的 tick 钩子真的接上了(排查"闲时链不触发"时先看它)。 */
@@ -83,16 +88,22 @@ public final class CompanionTickDispatcher {
         if (brain != null) brain.dropActiveNoResult(player);   // event must not leak a brain
     }
 
-    /** 身体当前的异步任务(运行中或已受理待跑),null = 没有。task_status/派发闸门用。 */
-    public static TaskRecord asyncTaskFor(UUID companionUuid) {
+    /** 她现在在做的那件事,null = 槽空(她站着)。task_status 用。 */
+    public static TaskRecord currentTaskFor(UUID companionUuid) {
         CompanionBrain brain = BRAINS.get(companionUuid);
-        return brain == null ? null : brain.llm.asyncRecord();
+        return brain == null ? null : brain.current.record();
     }
 
-    /** LLM 车道是否有任何工作(运行或排队,同步异步都算)。异步受理的占用判定用。 */
-    public static boolean llmLaneBusy(UUID companionUuid) {
+    /**
+     * 槽里那个刚受理、一刻都还没跑过。
+     *
+     * <p>用来分开两种"再派一个活":同一批工具调用里的第二个(模型在做计划,该拒绝
+     * ——让它拿到第一个的结果再决定下一步),和新回合里派的(主人/模型改主意了,
+     * 该直接替换)。判据本地可判,不用把回合 id 穿到服务端。
+     */
+    public static boolean currentFreshlyAccepted(UUID companionUuid) {
         CompanionBrain brain = BRAINS.get(companionUuid);
-        return brain != null && brain.llm.hasWork();
+        return brain != null && brain.current.freshlyAccepted();
     }
 
     /**
@@ -103,10 +114,9 @@ public final class CompanionTickDispatcher {
     public static TaskRecord stopActive(NumenPlayer player, String reason) {
         CompanionBrain brain = BRAINS.get(player.getUUID());
         if (brain == null) return null;
-        TaskRecord target = brain.llm.asyncRecord();
+        TaskRecord target = brain.current.record();
         if (target == null) return null;
-        brain.queue.cancelAll(reason);
-        brain.llm.cancelActive();
+        brain.current.cancel();
         TaskSessionHooks.fireSessionEnd(player);
         return target;
     }
@@ -117,8 +127,8 @@ public final class CompanionTickDispatcher {
     public static void cancelFor(NumenPlayer player) {
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late cancel
         if (brain == null) return;                             // packet must not leak a brain
-        brain.queue.cancelAll("interrupted by owner");
-        brain.llm.cancelActive();
+        brain.sync.cancel();
+        brain.current.cancel();
         TaskSessionHooks.fireSessionEnd(player);
     }
 
@@ -133,8 +143,7 @@ public final class CompanionTickDispatcher {
         UUID id = player.getUUID();
         CompanionBrain brain = BRAINS.get(id);
         if (brain != null) {
-            brain.llm.finalizeActive();
-            brain.llm.drainResults(player);
+            brain.finalizeActive(player);
         }
         BRAINS.remove(id);   // the body is gone; don't leak its brain
     }

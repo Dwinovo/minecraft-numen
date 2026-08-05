@@ -7,7 +7,8 @@ import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.task.TaskChain;
+import com.dwinovo.numen.task.Task;
+import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.act.ToolSelect;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
@@ -40,7 +41,7 @@ import net.minecraft.world.phys.Vec3;
  *
  * <p>GATED OFF by default via {@link SurvivalConfig}.
  */
-public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
+public final class MobDefenseChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
     /** How far to look for a threat, and the leash beyond which we abandon a chase. */
     private static final double SCAN_RADIUS = 12.0;
@@ -75,24 +76,21 @@ public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.task.
     private long cooldownUntilGameTime;
 
     @Override
-    public float getPriority(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+    public boolean canRun(NumenPlayer companion) {
+        if (!SurvivalConfig.enabled()) return false;
         if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+            return false;   // reflex switched off by the owner
         }
-        // Leash cooldown: we recently proved we can neither reach nor escape the
-        // threat — stop spiking so the LLM task resumes (and its deadline can run)
-        // instead of holding the body forever while freezeTick pushes the deadline.
-        if (companion.level().getGameTime() < cooldownUntilGameTime) return Float.NEGATIVE_INFINITY;
-        return SurvivalDecisions.mobDefensePriority(nearestThreat(companion) != null);
+        if (companion.level().getGameTime() < cooldownUntilGameTime) return false;
+        return SurvivalDecisions.mobDefenseTriggered(nearestThreat(companion) != null);
     }
 
     @Override
-    public void tick(NumenPlayer companion) {
+    public TaskState tick(NumenPlayer companion) {
         LivingEntity threat = nearestThreat(companion);
         if (threat == null) {
             release(companion);
-            return;
+            return TaskState.RUNNING;
         }
         if (threat != target) {
             noteOutcome(companion);   // the previous engagement just ended (e.g. target died)
@@ -109,10 +107,11 @@ public final class MobDefenseChain implements TaskChain, com.dwinovo.numen.task.
         } else {
             flee(companion);
         }
+        return TaskState.RUNNING;
     }
 
     @Override
-    public void onInterrupt(NumenPlayer companion) {
+    public void stop(NumenPlayer companion, StopReason why) {
         release(companion);
     }
 

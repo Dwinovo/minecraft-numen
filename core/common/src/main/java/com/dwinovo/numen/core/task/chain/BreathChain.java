@@ -5,7 +5,8 @@ import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.core.WorkProfile;
-import com.dwinovo.numen.task.TaskChain;
+import com.dwinovo.numen.task.Task;
+import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
@@ -36,7 +37,7 @@ import net.minecraft.world.phys.Vec3;
  *
  * <p>GATED OFF by default via {@link SurvivalConfig}, like every survival chain.
  */
-public final class BreathChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
+public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
     /** How high the straight-up column is probed before calling the ceiling sealed;
      *  deeper unbroken water than this means "open ocean, just keep rising". */
@@ -67,37 +68,35 @@ public final class BreathChain implements TaskChain, com.dwinovo.numen.task.refl
     }
 
     @Override
-    public float getPriority(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+    public boolean canRun(NumenPlayer companion) {
+        if (!SurvivalConfig.enabled()) return false;
         if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+            return false;   // reflex switched off by the owner
         }
-        // 无畏画像(创造)不扣氧气,airSupply 恒满——但这条链是假玩家唯一的
+        // 无畏画像(创造)不扣氧气,airSupply 恒满——但这条反射是假玩家唯一的
         // 漂浮本能,不能跟着休眠(否则闲置沉底就永远留在水底)。改按
         // "眼在水下持续 N tick"触发,窗口对齐生存的低氧阈值。
-        float p;
+        boolean triggered;
         if (WorkProfile.of(companion).fearless()) {
             if (companion.isEyeInFluid(FluidTags.WATER)) {
                 submergedTicks++;
             } else {
                 submergedTicks = 0;
             }
-            p = submergedTicks > FEARLESS_FLOAT_DELAY_TICKS
-                    ? SurvivalDecisions.breathPriority(true, 0)
-                    : SurvivalDecisions.DORMANT;
+            triggered = submergedTicks > FEARLESS_FLOAT_DELAY_TICKS;
         } else {
             submergedTicks = 0;
-            p = SurvivalDecisions.breathPriority(
+            triggered = SurvivalDecisions.breathTriggered(
                     companion.isEyeInFluid(FluidTags.WATER), companion.getAirSupply());
         }
-        if (p == SurvivalDecisions.DORMANT && episodeActive) {
+        if (!triggered && episodeActive) {
             noteEpisode(companion);   // head just cleared the water — close the episode
         }
-        return p;
+        return triggered;
     }
 
     @Override
-    public void tick(NumenPlayer companion) {
+    public TaskState tick(NumenPlayer companion) {
         episodeActive = true;
         worstAir = Math.min(worstAir, companion.getAirSupply());
         InputDriver.halt(companion);
@@ -121,6 +120,7 @@ public final class BreathChain implements TaskChain, com.dwinovo.numen.task.refl
             }
         }
         InputDriver.jump(companion);   // in water this is the per-tick swim-up stroke
+        return TaskState.RUNNING;
     }
 
     /**
@@ -209,7 +209,7 @@ public final class BreathChain implements TaskChain, com.dwinovo.numen.task.refl
     }
 
     @Override
-    public void onInterrupt(NumenPlayer companion) {
+    public void stop(NumenPlayer companion, StopReason why) {
         // No cross-tick body state to unwind; the episode bookkeeping closes on the
         // next dormant read (or is superseded by a fresh dip).
     }

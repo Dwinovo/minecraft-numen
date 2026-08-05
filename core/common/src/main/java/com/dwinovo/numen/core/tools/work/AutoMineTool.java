@@ -53,7 +53,7 @@ public final class AutoMineTool implements NumenTool {
     @Override
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        dispatchAsync(companion, impl.autoMine(a.block_ids(), a.count(),
+        setTask(companion, impl.autoMine(a.block_ids(), a.count(),
                 ctx(toolCallId, companion)), reply);
     }
 }

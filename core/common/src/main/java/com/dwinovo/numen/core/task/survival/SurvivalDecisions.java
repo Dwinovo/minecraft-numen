@@ -1,37 +1,25 @@
 package com.dwinovo.numen.core.task.survival;
 
-import com.dwinovo.numen.task.TaskChain;
 
 /**
- * The PURE decision core of the autonomous survival layer — the "should I take the
- * body, and how hard" math, split out of the chains so it can be unit-tested
- * headless (no Minecraft). Each method takes only primitives polled from the
- * vanilla {@code ServerPlayer} state (food level, health, fall distance, whether a
- * threat is present / a tool is held) and returns either a spike priority ABOVE
- * {@link TaskChain#LLM_BASE_PRIORITY} (so the chain preempts the LLM task) or
- * {@link Float#NEGATIVE_INFINITY} (dormant).
+ * 生存反射的<b>纯判据</b>——"现在该不该抢身体",从链里拆出来所以能无头单测
+ * (不碰 Minecraft)。每个方法只吃从 {@code ServerPlayer} 上读到的原始值
+ * (饱食度、血量、坠落距离、有没有威胁/有没有工具),返回一个布尔:<b>触发了没有</b>。
  *
- * <h2>Priority ranking (why these magnitudes)</h2>
- * A falling body is the most imminent death, so MLG outranks everything; an active
- * mob is next; hunger (a slow drain) next; being stuck (annoying, not lethal) is
- * the lowest survival concern and must never outrank fighting or eating. All sit
- * above the LLM base (0) so any firing survival concern preempts the task:
- * <pre>  MLG(10) &gt; breath(6) &gt; mob-defense(5) &gt; food-regen(4) &gt; food-hunger(3) &gt; unstuck(2) &gt; llm(0)</pre>
+ * <h2>为什么是布尔而不是优先级数值</h2>
+ * 从前每个反射返回一个浮点"我多想要身体",调度器挑最大的。但反射之间的先后
+ * <b>是固定的</b>(摔落永远比脱困急),不随世界状态变——用连续量表达一个固定序,
+ * 数值就成了必须小心维护却没人看得懂的魔法数。
+ *
+ * <p>先后现在写在注册号上({@code NumenCore.registerReflexes},小的先,与原版
+ * {@code addGoal(int priority, goal)} 同一惯例),这里只回答"触发没触发"。
+ * 顺序是:摔落 &gt; 换气 &gt; 自卫 &gt; 进食 &gt; 脱困——正在坠落是最迫近的死法,
+ * 而卡住只是烦人,绝不该压过打架或吃饭。
  */
 public final class SurvivalDecisions {
 
     private SurvivalDecisions() {}
 
-    public static final float DORMANT = Float.NEGATIVE_INFINITY;
-
-    // ---- priority magnitudes (all > LLM_BASE_PRIORITY = 0) ----
-    public static final float MLG_PRIORITY = 10.0f;
-    /** Above mob-defense: drowning is a hard timer — surface first, fight after. */
-    public static final float BREATH_PRIORITY = 6.0f;
-    public static final float MOB_DEFENSE_PRIORITY = 5.0f;
-    public static final float FOOD_REGEN_PRIORITY = 4.0f;
-    public static final float FOOD_HUNGER_PRIORITY = 3.0f;
-    public static final float UNSTUCK_PRIORITY = 2.0f;
     // ---- food thresholds (vanilla FoodData is 0..20) ----
     /** Natural regeneration needs food &ge; 18, so eating below this while hurt buys HP back. */
     public static final int REGEN_FOOD_LEVEL = 18;
@@ -49,15 +37,12 @@ public final class SurvivalDecisions {
     public static final double MLG_FALL_TRIGGER = 4.0;
 
     /**
-     * How much the auto-eat chain wants the body. Fires only when the body actually
-     * holds something edible; a bigger spike when hurt (eating restores regen) than
-     * for plain hunger.
+     * 进食触发条件:身上真有吃的,而且要么饿了、要么受伤且没到自然回血线。
      */
-    public static float foodPriority(int foodLevel, float health, boolean hasEdible) {
-        if (!hasEdible) return DORMANT;
-        if (health <= LOW_HEALTH && foodLevel < REGEN_FOOD_LEVEL) return FOOD_REGEN_PRIORITY;
-        if (foodLevel <= HUNGRY_LEVEL) return FOOD_HUNGER_PRIORITY;
-        return DORMANT;
+    public static boolean foodTriggered(int foodLevel, float health, boolean hasEdible) {
+        if (!hasEdible) return false;
+        if (health <= LOW_HEALTH && foodLevel < REGEN_FOOD_LEVEL) return true;   // 受伤了,吃回自然回血线
+        return foodLevel <= HUNGRY_LEVEL;
     }
 
     /** How the threat-response chain reacts to a present threat. */
@@ -73,21 +58,19 @@ public final class SurvivalDecisions {
         return armed ? ThreatResponse.FIGHT : ThreatResponse.FLEE;
     }
 
-    /** How much the mob-defense chain wants the body: a fixed spike while a threat is present. */
-    public static float mobDefensePriority(boolean threatPresent) {
-        return threatPresent ? MOB_DEFENSE_PRIORITY : DORMANT;
+    /** 有威胁就触发。 */
+    public static boolean mobDefenseTriggered(boolean threatPresent) {
+        return threatPresent;
     }
 
     /**
-     * How much the MLG chain wants the body. Fires only while airborne, past a
-     * lethal-ish fall distance, and able to save itself (a water bucket or a soft
-     * block on hand) — otherwise there is nothing useful to do.
+     * 摔落缓冲触发条件:人在空中、已经掉过致伤距离、并且手上有救命的东西
+     * (水桶或软方块)——三者缺一就没有可做的事。
      */
-    public static float mlgPriority(boolean onGround, double fallDistance, boolean canSave) {
-        if (onGround) return DORMANT;
-        if (!canSave) return DORMANT;
-        if (fallDistance < MLG_FALL_TRIGGER) return DORMANT;
-        return MLG_PRIORITY;
+    public static boolean mlgTriggered(boolean onGround, double fallDistance, boolean canSave) {
+        if (onGround) return false;
+        if (!canSave) return false;               // 手上没水桶也没软方块,抢了身体也没用
+        return fallDistance >= MLG_FALL_TRIGGER;
     }
 
     // ---- breath thresholds (vanilla air is 0..300 ticks; damage starts at 0) ----
@@ -103,13 +86,10 @@ public final class SurvivalDecisions {
     public static final int LOW_AIR_TICKS = 240;
 
     /**
-     * How much the breath chain wants the body: a hard spike while the head is
-     * submerged with depleted air. Head above water → dormant immediately (air
-     * refills on its own); air above the threshold → not yet a concern.
+     * 换气触发条件:头没在水里且氧气见底。头一出水面立刻不触发(氧气自己回),
+     * 氧气还够也不触发。
      */
-    public static float breathPriority(boolean headUnderWater, int airSupply) {
-        if (!headUnderWater) return DORMANT;
-        if (airSupply > LOW_AIR_TICKS) return DORMANT;
-        return BREATH_PRIORITY;
+    public static boolean breathTriggered(boolean headUnderWater, int airSupply) {
+        return headUnderWater && airSupply <= LOW_AIR_TICKS;
     }
 }

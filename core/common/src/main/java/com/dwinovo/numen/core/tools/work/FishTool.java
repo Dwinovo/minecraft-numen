@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools.work;
 
 import static com.dwinovo.numen.task.TaskDispatch.ctx;
-import static com.dwinovo.numen.task.TaskDispatch.dispatchAsync;
+import static com.dwinovo.numen.task.TaskDispatch.setTask;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.Schema;
@@ -52,6 +52,6 @@ public final class FishTool implements NumenTool {
         int count = Math.clamp(parsed.count(), 1, MAX_COUNT);
         long timeout = Math.max(MIN_TIMEOUT_TICKS, count * TICKS_PER_CATCH);
         var context = ctx(toolCallId, companion);
-        dispatchAsync(companion, new FishTaskRecord(toolCallId, context.deadline(timeout), count), reply);
+        setTask(companion, new FishTaskRecord(toolCallId, context.deadline(timeout), count), reply);
     }
 }

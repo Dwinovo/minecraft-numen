@@ -1286,15 +1286,12 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     @Override
-    public void suspend() {
-        super.suspend();
+    public void stop(NumenPlayer companion, StopReason why) {
+        super.stop(companion, why);
+        // 让位时摘掉放置提供者;下一次 onTick 每刻都会重新登记(registerProvider 幂等),
+        // 所以不需要一个"恢复"钩子——原来那个 resume() 全代码库零调用者,是死代码。
         unregisterProvider();
         InputDriver.halt(player);
-    }
-
-    @Override
-    public void resume() {
-        registerProvider();
     }
 
     @Override

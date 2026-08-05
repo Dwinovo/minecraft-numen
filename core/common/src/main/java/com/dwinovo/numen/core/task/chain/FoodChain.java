@@ -3,7 +3,8 @@ package com.dwinovo.numen.core.task.chain;
 import com.dwinovo.numen.task.reflex.Reflex;
 
 import com.dwinovo.numen.core.task.SurvivalConfig;
-import com.dwinovo.numen.task.TaskChain;
+import com.dwinovo.numen.task.Task;
+import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -32,7 +33,7 @@ import net.minecraft.world.item.ItemStack;
  * {@link #getPriority} short-circuits to {@link Float#NEGATIVE_INFINITY} before
  * touching the body, so the chain is a strict no-op.
  */
-public final class FoodChain implements TaskChain, com.dwinovo.numen.task.reflex.Reflex {
+public final class FoodChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
 
     /** The in-flight native eat (held use), or {@code null} between eats. */
@@ -45,27 +46,23 @@ public final class FoodChain implements TaskChain, com.dwinovo.numen.task.reflex
     }
 
     @Override
-    public float getPriority(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return Float.NEGATIVE_INFINITY;
+    public boolean canRun(NumenPlayer companion) {
+        if (!SurvivalConfig.enabled()) return false;
         if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return SurvivalDecisions.DORMANT;   // reflex switched off by the owner
+            return false;   // reflex switched off by the owner
         }
-        // Never preempt a body already using an item UNLESS it's our own in-flight
-        // eat: the LLM may be mid-eat (whose before/after item accounting a hand
-        // swap would corrupt) or drawing a bow. Our own chew must keep priority,
-        // or the spike would drop mid-bite and the eat could never finish.
-        if (eat == null && companion.isUsingItem()) return Float.NEGATIVE_INFINITY;
+        if (eat == null && companion.isUsingItem()) return false;
         int foodLevel = companion.getFoodData().getFoodLevel();
         float health = companion.getHealth();
         boolean hasEdible = bestEdibleSlot(companion) >= 0;
-        return SurvivalDecisions.foodPriority(foodLevel, health, hasEdible);
+        return SurvivalDecisions.foodTriggered(foodLevel, health, hasEdible);
     }
 
     @Override
-    public void tick(NumenPlayer companion) {
+    public TaskState tick(NumenPlayer companion) {
         if (eat == null) {
             int slot = bestEdibleSlot(companion);
-            if (slot < 0) return;   // priority-gated; belt-and-braces
+            if (slot < 0) return TaskState.RUNNING;   // priority-gated; belt-and-braces
             companion.holdInHand(slot);
             eatingLabel = companion.getInventory().getItem(slot).getHoverName().getString();
             eatingStartFood = companion.getFoodData().getFoodLevel();
@@ -85,10 +82,11 @@ public final class FoodChain implements TaskChain, com.dwinovo.numen.task.reflex
                 eat = null;
             }
         }
+        return TaskState.RUNNING;
     }
 
     @Override
-    public void onInterrupt(NumenPlayer companion) {
+    public void stop(NumenPlayer companion, StopReason why) {
         if (eat != null) {
             eat.stop();
             eat = null;

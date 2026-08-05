@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools.work;
 
 import static com.dwinovo.numen.task.TaskDispatch.ctx;
-import static com.dwinovo.numen.task.TaskDispatch.dispatchAsync;
+import static com.dwinovo.numen.task.TaskDispatch.setTask;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.core.blueprint.BlueprintStore;
@@ -127,6 +127,6 @@ public final class BlueprintTool implements NumenTool {
         record.droppedAtLoad(loaded.dropped());
         // 逐格料单:带花的花盆收盆加花两件,带花纹的旗帜收一叠但要组件一致
         record.cellNeeds(loaded.cellNeeds());
-        dispatchAsync(companion, record, reply);
+        setTask(companion, record, reply);
     }
 }

@@ -205,7 +205,7 @@ public final class DebugCommands {
             ctx.getSource().sendFailure(Component.literal(e.getMessage()));
             return 0;
         }
-        TaskDispatch.enqueue(companion, record, reply ->
+        TaskDispatch.runSync(companion, record, reply ->
                 ctx.getSource().sendFailure(Component.literal(reply)));
         ctx.getSource().sendSuccess(() -> Component.literal(
                 companion.getName().getString() + " ← " + record.describe()), false);
@@ -240,7 +240,7 @@ public final class DebugCommands {
             ctx.getSource().sendFailure(Component.literal(e.getMessage()));
             return 0;
         }
-        TaskDispatch.dispatchAsync(companion, record, reply ->
+        TaskDispatch.setTask(companion, record, reply ->
                 ctx.getSource().sendSuccess(() -> Component.literal(reply), false));
         return 1;
     }

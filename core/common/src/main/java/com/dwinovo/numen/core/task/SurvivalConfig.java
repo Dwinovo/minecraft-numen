@@ -1,13 +1,12 @@
 package com.dwinovo.numen.core.task;
 
-import com.dwinovo.numen.task.TaskChain;
 
 /**
  * The single gate for the autonomous survival layer (auto-eat, fight-back,
  * flee, unstuck, MLG fall-save). Every survival chain's {@code getPriority}
  * FIRST consults {@link #enabled()} and returns
  * {@link Float#NEGATIVE_INFINITY} when it is off — so with the gate off the
- * survival chains never beat {@link TaskChain#LLM_BASE_PRIORITY} and the
+ * survival chains never beat {@link 反射#LLM_BASE_PRIORITY} and the
  * scheduler behaves as if the layer didn't exist. The field's own default is
  * OFF (the safe state a bare library build ships with); the tool pack flips it
  * on explicitly in {@code NumenCore.init()}.

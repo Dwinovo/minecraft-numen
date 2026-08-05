@@ -1,7 +1,7 @@
 package com.dwinovo.numen.core.tools.work;
 
 import static com.dwinovo.numen.task.TaskDispatch.ctx;
-import static com.dwinovo.numen.task.TaskDispatch.dispatchAsync;
+import static com.dwinovo.numen.task.TaskDispatch.setTask;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolArgs;
@@ -269,7 +269,7 @@ public final class BuildTool implements NumenTool {
         // 由任务预检并逐项报缺(见 BuildCompanionTask 的 checkMaterials)。
         boolean consume = !com.dwinovo.numen.core.WorkProfile.of(companion).freeMaterials();
         long timeout = timeoutTicksFor(targets.size(), consume);
-        dispatchAsync(companion, new BuildTaskRecord(toolCallId,
+        setTask(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting,
                 consume), reply);
     }

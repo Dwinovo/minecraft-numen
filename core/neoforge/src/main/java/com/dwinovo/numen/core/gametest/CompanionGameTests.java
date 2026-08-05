@@ -67,7 +67,7 @@ public class CompanionGameTests {
         TaskRecord record = (TaskRecord) new MovementOps().moveTo(
                 (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
                 TaskDispatch.ctx("gametest-goto", companion));
-        TaskDispatch.enqueue(companion, record, reply -> {});
+        TaskDispatch.runSync(companion, record, reply -> {});
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
@@ -111,7 +111,7 @@ public class CompanionGameTests {
         TaskRecord record = (TaskRecord) new MovementOps().moveTo(
                 (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
                 TaskDispatch.ctx("gametest-door", companion));
-        TaskDispatch.enqueue(companion, record, reply -> {});
+        TaskDispatch.runSync(companion, record, reply -> {});
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not escaped through the door");
@@ -158,7 +158,7 @@ public class CompanionGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         TaskRecord record = new BlockActionOps().autoMine(
                 List.of("minecraft:gold_ore"), 2, TaskDispatch.ctx("gametest-doormine", companion));
-        TaskDispatch.dispatchAsync(companion, record, reply -> {});
+        TaskDispatch.setTask(companion, record, reply -> {});
 
         BlockPos wallProbe = helper.absolutePos(new BlockPos(1, 3, 3));
         helper.succeedWhen(() -> {
@@ -197,7 +197,7 @@ public class CompanionGameTests {
 
         TaskRecord record = new BlockActionOps().autoMine(
                 List.of("minecraft:spruce_log"), 8, TaskDispatch.ctx("gametest-mine", companion));
-        TaskDispatch.dispatchAsync(companion, record, reply -> {});
+        TaskDispatch.setTask(companion, record, reply -> {});
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.getInventory().countItem(Items.SPRUCE_LOG) >= 8,
@@ -244,7 +244,7 @@ public class CompanionGameTests {
         }
         var ctx = TaskDispatch.ctx("gametest-build", companion);
         long deadline = ctx.deadline(Math.max(1200L, targets.size() * 400L));
-        TaskDispatch.dispatchAsync(companion,
+        TaskDispatch.setTask(companion,
                 new BuildTaskRecord(ctx.toolCallId(), deadline, targets, true), reply -> {});
 
         List<BlockPos> cells = targets.stream().map(BuildTaskRecord.Target::pos).toList();
@@ -313,7 +313,7 @@ public class CompanionGameTests {
 
         java.util.function.Consumer<String> go = tag -> {
             var ctx = TaskDispatch.ctx(tag, companion);
-            TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+            TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
                     ctx.deadline(4000L), targets, true, true, true), reply -> {});
         };
         go.accept("gametest-resume-1");
@@ -328,7 +328,7 @@ public class CompanionGameTests {
             if (!restocked.get()) {
                 // 等第一趟自己停下来(车道空了),再看它到底建了多少
                 helper.assertTrue(com.dwinovo.numen.task.CompanionTickDispatcher
-                                .asyncTaskFor(companion.getUUID()) == null,
+                                .currentTaskFor(companion.getUUID()) == null,
                         "first run still going");
                 helper.assertTrue(built > 0 && built < total,
                         "first run should stop part-way on 9 cobblestone, built " + built + "/" + total);
@@ -509,7 +509,7 @@ public class CompanionGameTests {
         var targets = List.of(new BuildTaskRecord.Target(Blocks.WHITE_BANNER, Items.WHITE_BANNER,
                 at, "banner", null, null, null));
         var ctx = TaskDispatch.ctx("gametest-be", companion);
-        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(4000L), targets,
                 com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, false, false,
                 java.util.Map.of(at.asLong(), bannerData)), reply -> {});
@@ -806,7 +806,7 @@ public class CompanionGameTests {
         // 免耗材同伴不付料,所以框里那颗钻石照放——收什么放什么,这一档收的是零
         NumenPlayer companion = spawnAt(helper, "gametest_hanger", new BlockPos(1, 2, 1), true);
         var ctx = TaskDispatch.ctx("gametest-fixtures", companion);
-        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(1000L), loaded.targets(),
                 com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, false, true,
                 loaded.blockEntityData(), loaded.entities()), reply -> {});
@@ -1191,7 +1191,7 @@ public class CompanionGameTests {
                 com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true, true,
                 loaded.blockEntityData(), loaded.entities());
         first.cellNeeds(loaded.cellNeeds());
-        TaskDispatch.dispatchAsync(companion, first, reply -> {});
+        TaskDispatch.setTask(companion, first, reply -> {});
 
         var second = new BuildTaskRecord[1];
         net.minecraft.world.phys.AABB site = new net.minecraft.world.phys.AABB(
@@ -1231,7 +1231,7 @@ public class CompanionGameTests {
                             loaded.targets(), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY,
                             true, true, true, loaded.blockEntityData(), loaded.entities());
                     second[0].cellNeeds(loaded.cellNeeds());
-                    TaskDispatch.dispatchAsync(companion, second[0], reply -> {});
+                    TaskDispatch.setTask(companion, second[0], reply -> {});
                 })
                 .thenIdle(60)
                 .thenExecute(() -> {
@@ -1310,7 +1310,7 @@ public class CompanionGameTests {
         first.cellNeeds(loaded.cellNeeds());
         // 注:dispatchAsync 的 reply 是<b>派发受理</b>回执("已受理,后台执行中"),不是
         // 最终结果——拿它当完工信号会立刻通过而什么都没等到。用进度本身当信号。
-        TaskDispatch.dispatchAsync(companion, first, reply -> {});
+        TaskDispatch.setTask(companion, first, reply -> {});
 
         var second = new BuildTaskRecord[1];
         net.minecraft.world.phys.AABB site = new net.minecraft.world.phys.AABB(
@@ -1355,7 +1355,7 @@ public class CompanionGameTests {
                             loaded.targets(), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY,
                             true, true, true, loaded.blockEntityData(), loaded.entities());
                     second[0].cellNeeds(loaded.cellNeeds());
-                    TaskDispatch.dispatchAsync(companion, second[0], reply -> {});
+                    TaskDispatch.setTask(companion, second[0], reply -> {});
                 })
                 // 第二遍把剩下的补齐
                 .thenWaitUntil(() -> {
@@ -1467,7 +1467,7 @@ public class CompanionGameTests {
                 com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true, true,
                 loaded.blockEntityData(), loaded.entities());
         rec.cellNeeds(loaded.cellNeeds());
-        TaskDispatch.dispatchAsync(companion, rec, reply -> {});
+        TaskDispatch.setTask(companion, rec, reply -> {});
 
         long[] startTick = {level.getGameTime()};
         helper.startSequence()
@@ -2163,7 +2163,7 @@ public class CompanionGameTests {
 
         var ctx = TaskDispatch.ctx("gametest-cottage", companion);
         long deadline = ctx.deadline(Math.max(2400L, targets.size() * 400L));
-        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
                 targets, true, false), reply -> {});
 
         helper.succeedWhen(() -> {
@@ -2231,7 +2231,7 @@ public class CompanionGameTests {
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "igloo_top", anchorPos, 0);
         var ctx = TaskDispatch.ctx("gametest-blueprint", companion);
         long deadline = ctx.deadline(Math.max(2400L, loaded.targets().size() * 400L));
-        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
                 loaded.targets(), true, false), reply -> {});
 
         helper.succeedWhen(() -> {
@@ -2296,7 +2296,7 @@ public class CompanionGameTests {
 
         TaskRecord record = new BlockActionOps().autoMine(
                 List.of("minecraft:deepslate_diamond_ore"), 2, TaskDispatch.ctx("gametest-mine", companion));
-        TaskDispatch.dispatchAsync(companion, record, reply -> {});
+        TaskDispatch.setTask(companion, record, reply -> {});
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) >= 2,
@@ -2337,7 +2337,7 @@ public class CompanionGameTests {
         TaskRecord record = (TaskRecord) new MovementOps().moveTo(
                 (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
                 TaskDispatch.ctx("gametest-cgoto", companion));
-        TaskDispatch.enqueue(companion, record, reply -> {});
+        TaskDispatch.runSync(companion, record, reply -> {});
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "creative companion has not reached the goto target");
@@ -2363,7 +2363,7 @@ public class CompanionGameTests {
 
         TaskRecord record = new BlockActionOps().autoMine(
                 List.of("minecraft:gold_ore"), 4, TaskDispatch.ctx("gametest-cmine", companion));
-        TaskDispatch.dispatchAsync(companion, record, reply -> {});
+        TaskDispatch.setTask(companion, record, reply -> {});
 
         helper.succeedWhen(() -> {
             for (BlockPos ore : ores) {
@@ -2388,7 +2388,7 @@ public class CompanionGameTests {
                     helper.absolutePos(rel), "cobblestone", null, null, null));
         }
         var ctx = TaskDispatch.ctx("gametest-cbuild", companion);
-        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(3600L), targets, true, false), reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : targets) {
@@ -2415,7 +2415,7 @@ public class CompanionGameTests {
         // dispatchAsync 的回调只回"已受理"收条;预检失败落在任务记录的终态上
         BuildTaskRecord record = new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(3600L), targets, true, true);
-        TaskDispatch.dispatchAsync(companion, record, reply -> {});
+        TaskDispatch.setTask(companion, record, reply -> {});
         helper.succeedWhen(() -> {
             var result = record.getResult();
             helper.assertTrue(result != null && !result.success()
@@ -2453,7 +2453,7 @@ public class CompanionGameTests {
         TaskRecord record = (TaskRecord) new MovementOps().moveTo(
                 (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
                 TaskDispatch.ctx("gametest-climb", companion));
-        TaskDispatch.enqueue(companion, record, reply -> {});
+        TaskDispatch.runSync(companion, record, reply -> {});
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "empty-handed creative companion has not pillared out");
@@ -2599,7 +2599,7 @@ public class CompanionGameTests {
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
                 level, "japanese_cottage", anchor, 0);
         var ctx = TaskDispatch.ctx("gametest-jp-cottage", companion);
-        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(95000L), loaded.targets(), true, false), reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : loaded.targets()) {
@@ -2664,7 +2664,7 @@ public class CompanionGameTests {
                     helper.absolutePos(rel), "cobblestone", null, null, null));
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild", companion);
-        TaskDispatch.dispatchAsync(companion, new BuildTaskRecord(ctx.toolCallId(),
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(3600L), targets, true, true), reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : targets) {

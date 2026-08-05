@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.task;
 import com.dwinovo.numen.core.FailureType;
 
 import com.dwinovo.numen.task.TaskState;
-import com.dwinovo.numen.task.CompanionTask;
+import com.dwinovo.numen.task.Task;
 
 import com.dwinovo.numen.core.task.base.RecoveryLadder;
 import com.dwinovo.numen.core.task.base.RecoveryLadder.Rung;
@@ -23,22 +23,23 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Pure tests for {@link RecoveryLadder} — no Minecraft: rung strategies are fake
- * {@link Supplier}s of a trivial {@link CompanionTask}, and failure streams are
+ * {@link Supplier}s of a trivial {@link Task}, and failure streams are
  * synthetic {@link FailureType}s.
  */
 class RecoveryLadderTest {
 
     /** A do-nothing task; identity is all the ladder tests care about. */
-    private static final class FakeTask implements CompanionTask {
-        @Override public void start() {}
-        @Override public TaskState tick() { return TaskState.RUNNING; }
-        @Override public TaskResult buildResult(TaskState finalState) { return null; }
+    private static final class FakeTask implements Task {
+        @Override public void start(com.dwinovo.numen.entity.NumenPlayer c) {}
+        @Override public TaskState tick(com.dwinovo.numen.entity.NumenPlayer c) { return TaskState.RUNNING; }
+        @Override public void stop(com.dwinovo.numen.entity.NumenPlayer c, StopReason why) {}
+        @Override public String name() { return "fake"; }
     }
 
     /** A strategy that counts how many tasks it built and returns a fresh one each time. */
-    private static final class CountingStrategy implements Supplier<CompanionTask> {
+    private static final class CountingStrategy implements Supplier<Task> {
         final AtomicInteger builds = new AtomicInteger();
-        @Override public CompanionTask get() {
+        @Override public Task get() {
             builds.incrementAndGet();
             return new FakeTask();
         }
@@ -51,7 +52,7 @@ class RecoveryLadderTest {
                 new Rung(s, Set.of(FailureType.NO_PATH), 1));
 
         assertEquals(0, s.builds.get());          // nothing built until asked
-        CompanionTask first = ladder.current();
+        Task first = ladder.current();
         assertSame(first, ladder.current());      // cached across per-tick calls
         assertEquals(1, s.builds.get());
     }
@@ -64,7 +65,7 @@ class RecoveryLadderTest {
                 new Rung(rung0, Set.of(FailureType.OCCLUDED), 3),   // up to 3 tries
                 new Rung(rung1, Set.of(FailureType.OCCLUDED), 1));
 
-        CompanionTask t1 = ladder.current();
+        Task t1 = ladder.current();
         assertEquals(0, ladder.currentRung());
         assertEquals(1, ladder.currentAttempt());
 
@@ -72,7 +73,7 @@ class RecoveryLadderTest {
         assertTrue(ladder.advance(FailureType.OCCLUDED));
         assertEquals(0, ladder.currentRung());
         assertEquals(2, ladder.currentAttempt());
-        CompanionTask t2 = ladder.current();
+        Task t2 = ladder.current();
         assertNotSame(t1, t2);
         assertEquals(2, rung0.builds.get());
 

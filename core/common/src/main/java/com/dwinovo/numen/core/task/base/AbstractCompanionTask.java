@@ -3,9 +3,8 @@ package com.dwinovo.numen.core.task.base;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.task.CompanionTask;
+import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.core.FailureType;
-import com.dwinovo.numen.task.Suspendable;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -19,7 +18,7 @@ import java.util.Map;
  * The shared skeleton every reactive companion task grows on — the single place
  * the lifecycle ({@code start → tick* → buildResult}), the failure plumbing
  * ({@link FailureType} + a model-facing reason), the result envelope, and
- * {@link Suspendable} preemption all live, so a concrete task only writes the
+ * 被抢占时的让位 all live, so a concrete task only writes the
  * behaviour that is actually specific to it.
  *
  * <h2>Why a base class (the recovery boundary)</h2>
@@ -30,19 +29,19 @@ import java.util.Map;
  * prerequisite gap (no material, wrong tool, target lost) is not recovered here;
  * it is reported via {@link #fail(String, FailureType)} and kicked back to the
  * LLM. This class makes that boundary concrete: the two composition primitives it
- * exposes — {@link #runChild(CompanionTask)} (delegate a bounded SUB-goal) and a
+ * exposes — {@link #runChild(Task)} (delegate a bounded SUB-goal) and a
  * {@link RecoveryLadder} driven through it (try alternative EXECUTIONS of the same
  * goal) — can only ever compose bounded goals, never widen one.
  *
  * <h2>Lifecycle (all {@code final}, so subclasses can't break the contract)</h2>
  * <ul>
- *   <li>{@link #start()} runs the {@link #preconditions()} in order; the first
+ *   <li>{@link #start} runs the {@link #preconditions()} in order; the first
  *       that reports a {@link Precondition.Failure} terminates the task
  *       immediately (via {@link #fail}); otherwise {@link #onStart()} runs.</li>
- *   <li>{@link #tick()} short-circuits to the terminal state a {@code fail(...)}
+ *   <li>{@link #tick} short-circuits to the terminal state a {@code fail(...)}
  *       (or a start-time precondition) parked in {@code pendingTerminal};
  *       otherwise it delegates to {@link #onTick()}.</li>
- *   <li>{@link #buildResult(TaskState)} runs {@link #cleanup()} and then templates
+ *   <li>{@link #result(TaskState)} runs {@link #cleanup()} and then templates
  *       the {@link TaskResult} from the terminal state and the overridable
  *       message / data hooks.</li>
  * </ul>
@@ -59,7 +58,7 @@ import java.util.Map;
  *            input fields.
  */
 public abstract class AbstractCompanionTask<R extends TaskRecord>
-        implements CompanionTask, Suspendable {
+        implements Task {
 
     /** The body this task drives. */
     protected final NumenPlayer player;
@@ -74,14 +73,14 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     private FailureType failType = FailureType.UNKNOWN;
     /**
      * A terminal state decided out-of-band (a start-time precondition, or a
-     * {@link #fail} called from anywhere): {@link #tick()} returns it verbatim
+     * {@link #fail} called from anywhere): {@link #tick} returns it verbatim
      * instead of running {@link #onTick()}.
      */
     private TaskState pendingTerminal;
 
     // ---- sub-task composition state (see runChild) ----
     /** The child sub-goal currently being delegated to, or {@code null}. */
-    private CompanionTask child;
+    private Task child;
     /** Whether {@link #child}'s {@code start()} has been called yet. */
     private boolean childStarted;
 
@@ -95,7 +94,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     // ---------------------------------------------------------------------
 
     @Override
-    public final void start() {
+    public final void start(NumenPlayer companion) {
         for (Precondition p : preconditions()) {
             Precondition.Failure f = p.check();
             if (f != null) {
@@ -123,7 +122,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     }
 
     @Override
-    public final TaskState tick() {
+    public final TaskState tick(NumenPlayer companion) {
         if (pendingTerminal != null) return pendingTerminal;
         // 规划器在飞、身体没有路段可走的等待刻,不烧任务预算:deadline 度量
         // 的是身体干活的刻,异步搜索的墙钟延迟不是任务的错(与调度层被生存
@@ -165,7 +164,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     }
 
     @Override
-    public final TaskResult buildResult(TaskState finalState) {
+    public final TaskResult result(TaskState finalState) {
         cleanup();
         return switch (finalState) {
             case SUCCESS   -> TaskResult.ok(successMessage(), resultData());
@@ -219,7 +218,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
 
     /**
      * Record a failure: stash the model-facing reason and structured cause, and
-     * park a terminal FAILED for {@link #tick()} to surface. Callers in
+     * park a terminal FAILED for {@link #tick} to surface. Callers in
      * {@link #onTick()} pair this with {@code return TaskState.FAILED;}.
      */
     protected void fail(String why, FailureType t) {
@@ -233,8 +232,8 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
 
     /**
      * Park a terminal SUCCESS — the mirror of {@link #fail} for one-shot tasks whose
-     * whole job happens in {@link #onStart()} (drop, equip): {@link #tick()} surfaces
-     * it, and {@link #start()} stamps it on the record for same-tick finalization.
+     * whole job happens in {@link #onStart()} (drop, equip): {@link #tick} surfaces
+     * it, and {@link #start} stamps it on the record for same-tick finalization.
      */
     protected void succeed() {
         this.pendingTerminal = TaskState.SUCCESS;
@@ -274,7 +273,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * different instance switches to (and starts) the new child. The child's
      * {@code start()} is called lazily on its first tick here, so if the child is
      * itself an {@link AbstractCompanionTask} a start-time terminal (a failed
-     * precondition) is observed on the very first {@link #tick()} — no special
+     * precondition) is observed on the very first {@link #tick} — no special
      * "state after start" path is needed.
      *
      * @return the child's terminal {@link TaskState} on the tick it finishes (its
@@ -282,16 +281,16 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      *         {@link #lastFailure()} reflects the child's cause); or {@code null}
      *         while the child is still running.
      */
-    protected TaskState runChild(CompanionTask c) {
+    protected TaskState runChild(Task c) {
         if (child != c) {
             child = c;
             childStarted = false;
         }
         if (!childStarted) {
-            child.start();
+            child.start(player);
             childStarted = true;
         }
-        TaskState st = child.tick();
+        TaskState st = child.tick(player);
         if (st.isTerminal()) {
             if (child instanceof AbstractCompanionTask<?> a) {
                 this.failType = a.lastFailure();
@@ -314,11 +313,16 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * is what lets {@link #resume()} pick straight back up on the next tick.
      */
     @Override
-    public void suspend() {
+    public void stop(NumenPlayer companion, StopReason why) {
+        // 被抢占:只松开身体(归零移动输入、放开潜行),<b>逻辑字段一个不动</b>——
+        // 尤其是寻路计划,它正是下次拿回身体时能接着走的原因。不调 nav.stop()。
+        // 被换掉/身体没了不需要额外收尾:buildResult 里的 cleanup() 会跑。
         InputDriver.halt(player);
         player.setShiftKeyDown(false);
     }
 
-    // resume(): default no-op from Suspendable — the next onTick re-drives from
-    // the preserved state, so nothing is required here.
+    @Override
+    public String name() {
+        return getClass().getSimpleName();
+    }
 }
