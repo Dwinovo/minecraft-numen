@@ -88,6 +88,11 @@ final class CompanionBrain {
         return body == null || body == companion;
     }
 
+    /** 绑着的那具身体已经离开世界了 —— 这才是"该换大脑"。 */
+    boolean boundBodyGone() {
+        return body == null || body.isRemoved();
+    }
+
     void tick(NumenPlayer companion) {
         body = companion;
         // 任务结束边沿(宪法 §5):两个槽都空过了宽限窗口,显式占用的会话就结束了,
@@ -174,6 +179,12 @@ final class CompanionBrain {
         sync.dropNoResult(companion);
         current.dropNoResult(companion);
         holder = null;
+        // 死亡把这件活的前提一并带走了:工具和材料掉在尸体旁,位置从矿洞变成了主人身边。
+        // 所以登记也得抹掉 —— 不抹的话复活后的新大脑会照着旧登记重放一遍
+        // (TaskPersistence 是给"身体没了但意图还在"写的:重启、休眠、换肤重建),
+        // 于是她空着手回去接着挖,而模型刚收到的是 task_finished(interrupted)。
+        // 要不要接着干由她自己看了事件再决定,不由代码替她决定。
+        TaskPersistence.forget(companion);
         syncCurrentTask(companion);
     }
 

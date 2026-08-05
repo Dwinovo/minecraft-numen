@@ -33,6 +33,9 @@ public final class CompanionTickDispatcher {
 
     private static final Map<UUID, CompanionBrain> BRAINS = new HashMap<>();
 
+    /** 已经为"同 UUID 两具身体"警告过的 —— 每具同伴只吵一次。 */
+    private static final java.util.Set<UUID> duplicateWarned = new java.util.HashSet<>();
+
     static {
         // 大脑属于世界,不属于进程:退出存档就把整表作废,下一个存档从空表开始。
         // 见 ServerLifecycle —— 少了这一步,上一局的任务会绑着上一局的身体在新世界里跑。
@@ -47,6 +50,7 @@ public final class CompanionTickDispatcher {
      */
     static void dropAll() {
         BRAINS.clear();
+        duplicateWarned.clear();
         heartbeatLogged = false;
     }
 
@@ -89,6 +93,17 @@ public final class CompanionTickDispatcher {
                     CompanionChunkLoader.refresh(ap);
                 }
                 CompanionBrain brain = brainFor(ap.getUUID());
+                if (!brain.boundTo(ap) && !brain.boundBodyGone()) {
+                    // 同一个 UUID 同时有两具身体:上一具还在世界里,来的这具是重影。
+                    // 【不拆不建】—— 拆建会在两具之间无限自旋,每刻两次,每次还重放
+                    // 一遍她手上的活(真机上 12 秒烧出 465 次重放,任务 id 从 t1 跑到 t107)。
+                    // 病根不在这儿,在"她被复活了两次",见 ExecuteToolPayload。
+                    if (duplicateWarned.add(ap.getUUID())) {
+                        com.dwinovo.numen.Constants.LOG.warn(
+                                "[numen-task] {} 同时有两具身体在玩家列表里,忽略后来的那具", ap.getUUID());
+                    }
+                    continue;
+                }
                 if (!brain.boundTo(ap)) {
                     // 到不了这里（关服已经清过表）—— 到了就是哪处漏了，大声记一笔。
                     // 整个大脑作废：里面的任务都绑在旧身体上，一个都不能再 tick。

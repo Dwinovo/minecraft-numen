@@ -695,8 +695,8 @@ public final class EntityAgentLoop {
         long dayTime = body != null ? body.level().getDayTime() : 0L;
         pushEvent(EventTypes.EVENT, com.dwinovo.numen.event.NumenEvents.compose(
                 dayTime, com.dwinovo.numen.event.NumenEvents.Kind.DEATH, null,
-                "你刚才死了(" + cause + "),物品掉落在死亡地点,手头的任务中断了;"
-                        + "现已在主人身边复活。先看看状况,继续或重新规划。"),
+                "你刚才死了(" + cause + "),背包里的东西全掉在死亡地点了;"
+                        + "现已在主人身边复活。先看看状况再决定下一步。"),
                 System.currentTimeMillis(), true);
         // 松手就完了:队列自己会判断该排空,连同死亡期间攒下的一切(工具失败结果之外
         // 的事件、主人说的话)一起走。

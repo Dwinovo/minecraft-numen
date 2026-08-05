@@ -42,7 +42,11 @@ public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
      * The full message (directives included) is still what the LLM receives — display-only.
      */
     private static String stripInjectedDirectives(String s) {
-        String out = s.replaceAll("(?s)<persona-change>.*?</persona-change>", "")
+        // <events> 是事件的分组包装(EventQueue.drain 发的),必须单独剥、且排在剥单条 <event>
+        // 之前。别指望 <event\b 顺手带走它——"events" 在 t 与 s 之间没有词边界,那条规则
+        // 漏掉整个包装,面板上就剩下字面的 <events></events> 两行(主人会以为在发空事件)。
+        String out = s.replaceAll("(?s)<events>.*?</events>", "")
+                .replaceAll("(?s)<persona-change>.*?</persona-change>", "")
                 .replaceAll("(?s)<event\\b[^>]*>.*?</event>", "")
                 .replaceAll("(?s)<event\\b[^>]*/>", "")
                 .replaceAll("(?s)<env>.*?</env>", "")

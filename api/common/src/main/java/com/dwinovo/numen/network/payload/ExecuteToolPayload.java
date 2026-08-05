@@ -92,6 +92,15 @@ public record ExecuteToolPayload(UUID entityUuid,
         com.dwinovo.numen.entity.NumenPlayer companion =
                 com.dwinovo.numen.entity.NumenPlayer.findByUuid(server, p.entityUuid());
         if (companion == null) {
+            // 她死着的时候不许从这儿把她拉起来:复活的唯一出口是定时复活
+            // (Companions.tickRespawns,读注册表的 diedAt)。两条复活路各自不知道对方,
+            // 结果是一次死亡复活出两具同 UUID 的身体同时在玩家列表里 —— 排程器会在
+            // 两具之间无限重建大脑,每次还重放一遍她手上的活。
+            var reg = com.dwinovo.numen.entity.CompanionRegistry.get(server).find(p.entityUuid());
+            if (reg != null && reg.diedAt() > 0L) {
+                replyError(player, p, "她刚死了,正在复活途中——等复活事件到了再派");
+                return;
+            }
             companion = com.dwinovo.numen.entity.Companions.respawn(server, p.entityUuid());
         }
         if (companion != null) {
