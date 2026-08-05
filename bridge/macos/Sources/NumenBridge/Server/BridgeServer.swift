@@ -6,7 +6,7 @@ enum BridgeServer {
     static let host = "127.0.0.1"
     static let port = 38_471
 
-    static func run() async throws {
+    static func run(state: BridgeState? = nil) async throws {
         let discovery = try DiscoveryFile().loadOrCreate()
         let tokenAuthorizer = BearerTokenAuthorizer(token: discovery.token)
         let credentials = ProviderCredentials(store: KeychainStore())
@@ -41,8 +41,8 @@ enum BridgeServer {
             }
             let client = DashScopeTtsClient(
                 apiKey: apiKey,
-                model: payload.model ?? DashScopeTtsClient.defaultModel,
-                voice: payload.voice ?? DashScopeTtsClient.defaultVoice
+                model: payload.model ?? BridgePreferences.ttsModel(),
+                voice: payload.voice ?? BridgePreferences.voice()
             )
             let wave = try await client.synthesize(payload.input)
             return Response(
@@ -61,7 +61,10 @@ enum BridgeServer {
             let buffer = try await request.body.collect(upTo: context.maxUploadSize)
             let wave = Data(buffer.readableBytesView)
             let pcm = try WavePcmDecoder.decode(wave)
-            let text = try await DashScopeSttClient(apiKey: apiKey).transcribe(pcm: pcm)
+            let text = try await DashScopeSttClient(
+                apiKey: apiKey,
+                model: BridgePreferences.sttModel()
+            ).transcribe(pcm: pcm)
             return TranscriptionResponse(text: text)
         }
         let webSocketRouter = Router(context: BasicWebSocketRequestContext.self)
@@ -73,11 +76,24 @@ enum BridgeServer {
             return .upgrade()
         } onUpgrade: { inbound, outbound, _ in
             guard let apiKey = try credentials.apiKey() else { return }
-            let provider = DashScopeSttClient(apiKey: apiKey).open()
+            let provider = DashScopeSttClient(
+                apiKey: apiKey,
+                model: BridgePreferences.sttModel()
+            ).open()
             let controller = CaptureSocketController(
                 capture: microphoneCapture,
                 provider: provider,
                 send: { event in
+                    if let state {
+                        switch event {
+                        case .started:
+                            await state.captureStarted()
+                        case .done, .error:
+                            await state.captureEnded()
+                        case .delta:
+                            break
+                        }
+                    }
                     guard let text = try? event.wireText() else { return }
                     try? await outbound.write(.text(text))
                 }
@@ -108,12 +124,14 @@ enum BridgeServer {
                 // The cleanup below handles both normal and abnormal disconnects.
             }
             await controller.disconnect()
+            if let state { await state.captureEnded() }
         }
         let application = Hummingbird.Application(
             router: router,
             server: .http1WebSocketUpgrade(webSocketRouter: webSocketRouter),
             configuration: .init(address: .hostname(host, port: port))
         )
+        if let state { await state.serverStarted() }
         try await application.runService()
     }
 }
