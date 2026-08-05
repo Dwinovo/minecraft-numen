@@ -30,17 +30,12 @@ public final class ScanBlocksTool implements NumenTool {
 
     @Override
     public String description() {
-        return "Bulk find blocks of given type(s) within a spherical radius around you. Returns matches "
-                + "sorted by distance, capped at 32. A perception tool for surveying the area — to actually "
-                + "gather blocks use mine, which finds and digs them itself. Radius is in blocks (max "
-                + "192 = 12 chunks — use big radii for landscape features like water, lava lakes or villages' "
-                + "blocks; a big scan answers after a few seconds, you can keep acting meanwhile). It reads "
-                + "terrain that is loaded right now; chunks nobody is near are skipped and tallied in note, so "
-                + "no match out there means UNKNOWN, not empty — walk that way and scan again. FLUIDS are "
-                + "scannable too: minecraft:water / minecraft:lava work as block_ids, and fluid matches carry "
-                + "source:true/false — only SOURCE lava turns to obsidian under water, and only SOURCE water "
-                + "fills a bucket. block_ids accepts one or more namespaced ids; include all variants (e.g. "
-                + "both iron_ore and deepslate_iron_ore for iron).";
+        return "Find blocks of given type(s) near you and report where they are, nearest first, up to 32. "
+                + "Surveying only — to actually gather blocks use mine, which finds and digs them itself. "
+                + "Sees terrain that is loaded right now; anything further out is UNKNOWN, not empty, and "
+                + "note says when that happened — walk that way and scan again. Water and lava are scannable, "
+                + "and those matches carry source:true/false (a source cell behaves very differently from "
+                + "flowing). Give every variant of what you want, e.g. both iron_ore and deepslate_iron_ore.";
     }
 
     @Override

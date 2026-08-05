@@ -86,9 +86,12 @@ List<String> block_ids,
         }
         JsonObject root = new JsonObject();
         root.add("matches", out);
-        // Seen, not existing: the walk stops as soon as the nearest MAX_RESULTS are provably
-        // the nearest, so this counts what it took to prove that — never "how much is out there".
-        root.addProperty("matches_seen", matches.size());
+        // A count only when the walk actually covered the sphere. Cut short — proved its
+        // quota, hit the deadline, skipped unloaded ground — whatever it saw is an artifact
+        // of stopping, and a number in this slot gets read as "that is how much is there".
+        if (res.coveredEverything()) {
+            root.addProperty("total_in_radius", matches.size());
+        }
         root.addProperty("truncated", matches.size() > MAX_RESULTS || !res.coveredEverything());
         root.addProperty("radius_searched", radius);
         String note = coverageNote(res);

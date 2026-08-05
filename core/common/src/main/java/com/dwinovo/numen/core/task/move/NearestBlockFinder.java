@@ -4,10 +4,12 @@ import com.dwinovo.numen.core.task.mine.MineCompanionTask;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
+import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 
@@ -96,6 +98,12 @@ final class NearestBlockFinder {
                         ctx, p, ctx.get(p.getX(), p.getY(), p.getZ())))
                 .limit(MAX_CANDIDATES)
                 .forEach(candidates::add);
+        // "她为什么去了那一块而不是最近的" 要靠这一行答:有几个被剪掉了,直线最近的是哪个。
+        // 实际去哪一个由 A* 在候选之间按代价定,到达回执里有坐标,两者一对就清楚了。
+        Constants.LOG.info("[numen-task] goto FIND {} → {} hit(s), {} usable after pruning,"
+                        + " straight-line nearest {}",
+                BuiltInRegistries.BLOCK.getKey(target).getPath(), found.size(), candidates.size(),
+                candidates.isEmpty() ? "none" : candidates.get(0).toShortString());
         rebuildContract();
     }
 

@@ -30,7 +30,7 @@ public final class MoveToTool implements NumenTool {
         return """
                 Travel to ONE new destination with full terrain pathfinding: digs through, bridges gaps, pillars up, swims, and auto-equips tools. Which fields you fill IS your intent — fill exactly one pattern:
                 • x+z — go to a place. Y resolves to the surface. This is the DEFAULT for exploration or "go there"; omit y.
-                • block — e.g. block:'minecraft:crafting_table'. Finds the nearest one and stops RIGHT BESIDE it, never damaging it. Use this for a chest/station/block you intend to interact with.
+                • block — e.g. block:'minecraft:crafting_table'. Walks up BESIDE the one she can reach most easily and never damages it. Easiest to reach is not always closest in a straight line, so it may not be the first block scan_blocks listed — give coordinates when it has to be a specific one.
                 • x+y+z — stand EXACTLY in that cell, digging out whatever occupies it. Use only when the exact feet cell matters; never aim it at a block you want to keep.
                 • y — climb/descend to that elevation.
                 BACKGROUND: a successful call means movement is already running. Do not call goto again or launch another body action while <current_task> exists; wait for matching task_finished. status=done means that destination is complete, so advance the plan and never resend identical coordinates. Only status=timeout permits the same call to resume.""";
@@ -45,10 +45,10 @@ public final class MoveToTool implements NumenTool {
                         + "auto-resolved to the surface. Only set it for an exact cell (x+y+z) or an "
                         + "elevation move (y alone).")
                 .nullableNumber("z", "Target Z. Null for an elevation-only move (y alone).")
-                .optionalString("block", "Namespaced block id of a block to walk up BESIDE (e.g. "
-                        + "'crafting_table' or 'minecraft:chest') — it is never broken or buried. "
-                        + "Give it ALONE (no coordinates); the nearest one is found by scanning. "
-                        + "ALWAYS use this form for a block you intend to use or mine.")
+                .optionalString("block", "Namespaced block id to walk up BESIDE (e.g. 'crafting_table' "
+                        + "or 'minecraft:chest') — never broken or buried. Give it ALONE (no coordinates); "
+                        + "she picks the one easiest to reach. ALWAYS use this form for a block you intend "
+                        + "to use or mine.")
                 .build();
     }
 

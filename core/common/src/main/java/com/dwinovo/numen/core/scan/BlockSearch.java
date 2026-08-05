@@ -4,6 +4,7 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -54,6 +55,9 @@ public final class BlockSearch {
     private static int nextId = 1;
 
     private final int id = nextId++;
+    /** What was asked for, short enough for one log line: {@code iron_ore} / {@code iron_ore+1}. */
+    private final String label;
+    private long startTick = -1;
     private final UUID entityUuid;
     private final ResourceKey<Level> dimension;
     private final BlockPos center;
@@ -108,6 +112,7 @@ public final class BlockSearch {
         this.radiusSq = (double) radius * radius;
         this.filter = state -> targets.contains(state.getBlock());
         this.onDone = onDone;
+        this.label = describe(targets);
         this.centerChunkX = SectionPos.blockToSectionCoord(center.getX());
         this.centerChunkZ = SectionPos.blockToSectionCoord(center.getZ());
         this.maxRing = Math.max(
@@ -135,8 +140,6 @@ public final class BlockSearch {
                             Set<Block> targets, Consumer<ScanResult> onDone) {
         BlockSearch job = new BlockSearch(entityUuid, level, center, radius, want, targets, onDone);
         JOBS.add(job);
-        Constants.LOG.info("[numen-scan] started radius-{} scan around {} in {} ({} columns)",
-                radius, center.toShortString(), level.dimension().location(), job.columnsTotal);
         return job.id;
     }
 
@@ -160,17 +163,20 @@ public final class BlockSearch {
     private boolean tickOne(MinecraftServer server) {
         ServerLevel level = server.getLevel(dimension);
         if (level == null) {
-            finish(false);
+            finish(server, false);
             return true;
         }
-        if (deadline < 0) deadline = server.getTickCount() + DEADLINE_TICKS;
+        if (deadline < 0) {
+            startTick = server.getTickCount();
+            deadline = startTick + DEADLINE_TICKS;
+        }
         if (server.getTickCount() >= deadline) {
-            finish(true);
+            finish(server, true);
             return true;
         }
         while (true) {
             if (currentChunk == null && !nextColumn(level)) {
-                finish(false);   // spiral exhausted
+                finish(server, false);   // spiral exhausted
                 return true;
             }
             // Scan the in-progress column one budgeted section at a time, nearest layer first.
@@ -183,7 +189,7 @@ public final class BlockSearch {
                 feedBound();
                 if (matches.size() >= MAX_COLLECT) {
                     // Ring order means what we have is the nearest area anyway.
-                    finish(false);
+                    finish(server, false);
                     return true;
                 }
             }
@@ -235,9 +241,33 @@ public final class BlockSearch {
         fed = matches.size();
     }
 
-    private void finish(boolean deadlineHit) {
+    private void finish(MinecraftServer server, boolean deadlineHit) {
         matches.sort(Comparator.comparingDouble(BlockScanner.Hit::distance));
+        // One line per search, and it has to carry everything a bug report needs: what was
+        // asked, what came back, WHY it stopped, and what it cost. "She can't find X" is
+        // answered by the stop reason plus the unloaded count, without a debug build.
+        Constants.LOG.info("[numen-scan] {} r={} → {} hit(s){} | {} | {}/{} columns read,"
+                        + " {} not loaded | {} tick(s)",
+                label, radius, matches.size(),
+                matches.isEmpty() ? "" : String.format(", nearest %.1f", matches.get(0).distance()),
+                stopReason(deadlineHit), columnsScanned, columnsTotal, columnsUnloaded,
+                startTick < 0 ? 0 : server.getTickCount() - startTick);
         onDone.accept(new ScanResult(matches, columnsScanned, columnsUnloaded, columnsTotal,
                 deadlineHit, stoppedEarly));
+    }
+
+    private String stopReason(boolean deadlineHit) {
+        if (deadlineHit) return "deadline";
+        if (stoppedEarly) return "proved nearest at ring " + ring;
+        if (matches.size() >= MAX_COLLECT) return "collect cap";
+        return "covered the whole radius";
+    }
+
+    /** {@code iron_ore} for one target, {@code iron_ore+1} for a set — one log line, not a list. */
+    private static String describe(Set<Block> targets) {
+        Iterator<Block> it = targets.iterator();
+        if (!it.hasNext()) return "nothing";
+        String first = BuiltInRegistries.BLOCK.getKey(it.next()).getPath();
+        return targets.size() > 1 ? first + "+" + (targets.size() - 1) : first;
     }
 }
