@@ -73,7 +73,13 @@ public final class CompanionTickDispatcher {
                 if (owner != null && server.getPlayerList().getPlayer(owner) != null) {
                     CompanionChunkLoader.refresh(ap);
                 }
-                brainFor(ap.getUUID()).tick(ap);
+                CompanionBrain brain = brainFor(ap.getUUID());
+                if (!brain.restored) {
+                    // 首次见到这具身体:把重启前她手上的活接回来(见 TaskPersistence)。
+                    brain.restored = true;
+                    TaskPersistence.restore(ap);
+                }
+                brain.tick(ap);
             }
         }
     }

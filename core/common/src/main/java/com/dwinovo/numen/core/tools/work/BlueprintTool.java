@@ -127,6 +127,6 @@ public final class BlueprintTool implements NumenTool {
         record.droppedAtLoad(loaded.dropped());
         // 逐格料单:带花的花盆收盆加花两件,带花纹的旗帜收一叠但要组件一致
         record.cellNeeds(loaded.cellNeeds());
-        setTask(companion, record, reply);
+        setTask(companion, record, args, reply);
     }
 }

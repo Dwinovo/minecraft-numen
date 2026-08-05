@@ -114,6 +114,7 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.locate.LocateBiomeTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.CollectItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.FishTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.FollowTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.AutoMineTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.EquipItemTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.BuildTool());
@@ -146,6 +147,8 @@ public final class NumenCore {
 
     private static void registerTaskRunners() {
         TaskFactory.register(MoveToTaskRecord.class, (p, r) -> new MoveToCompanionTask(p, r));
+        TaskFactory.register(com.dwinovo.numen.core.task.move.FollowTaskRecord.class,
+                (p, r) -> new com.dwinovo.numen.core.task.move.FollowCompanionTask(p, r));
         TaskFactory.register(MineBlockTaskRecord.class, (p, r) -> new MineCompanionTask(p, r));
         TaskFactory.register(EquipTaskRecord.class, (p, r) -> new EquipCompanionTask(p, r));
         TaskFactory.register(DropItemsTaskRecord.class, (p, r) -> new DropCompanionTask(p, r));

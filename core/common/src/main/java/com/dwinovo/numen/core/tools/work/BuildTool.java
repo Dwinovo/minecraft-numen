@@ -271,7 +271,7 @@ public final class BuildTool implements NumenTool {
         long timeout = timeoutTicksFor(targets.size(), consume);
         setTask(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting,
-                consume), reply);
+                consume), args, reply);
     }
 
     /** 一条指令展开为目标格集。set/set_door 携带状态;体积算子单一方块类型。 */

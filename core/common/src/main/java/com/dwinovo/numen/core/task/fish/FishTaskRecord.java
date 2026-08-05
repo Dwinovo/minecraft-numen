@@ -7,6 +7,7 @@ public final class FishTaskRecord extends TaskRecord {
 
     public static final String TOOL_NAME = "fish";
 
+    /** 要钓几条;<b>0 = 一直钓</b>(常驻,直到主人换掉这件活)。 */
     public final int requested;
 
     private int caught;

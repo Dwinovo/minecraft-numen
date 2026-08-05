@@ -21,7 +21,7 @@ public final class FishTool implements NumenTool {
     private static final long TICKS_PER_CATCH = 90L * 20L;
     private static final long MIN_TIMEOUT_TICKS = 120L * 20L;
 
-    private record Args(int count) {}
+    private record Args(Integer count) {}
 
     @Override
     public String name() {
@@ -41,7 +41,10 @@ public final class FishTool implements NumenTool {
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object()
-                .integer("count", "Number of successful fishing bites to reel in.", 1, MAX_COUNT)
+                .optionalInteger("count",
+                        "How many catches to reel in. OMIT to keep fishing indefinitely — "
+                        + "she stays on it until you give her something else to do.",
+                        1, MAX_COUNT)
                 .build();
     }
 
@@ -49,9 +52,14 @@ public final class FishTool implements NumenTool {
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion,
                              Consumer<String> reply) {
         Args parsed = GSON.fromJson(args, Args.class);
+        var context = ctx(toolCallId, companion);
+        if (parsed == null || parsed.count() == null) {
+            // 没给数量 = 常驻:一直钓,不设期限(期限是给"该多久干完"用的,而它没有干完)。
+            setTask(companion, new FishTaskRecord(toolCallId, com.dwinovo.numen.task.TaskRecord.NO_DEADLINE, 0), args, reply);
+            return;
+        }
         int count = Math.clamp(parsed.count(), 1, MAX_COUNT);
         long timeout = Math.max(MIN_TIMEOUT_TICKS, count * TICKS_PER_CATCH);
-        var context = ctx(toolCallId, companion);
-        setTask(companion, new FishTaskRecord(toolCallId, context.deadline(timeout), count), reply);
+        setTask(companion, new FishTaskRecord(toolCallId, context.deadline(timeout), count), args, reply);
     }
 }

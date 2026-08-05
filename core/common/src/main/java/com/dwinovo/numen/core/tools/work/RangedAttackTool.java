@@ -62,6 +62,6 @@ public final class RangedAttackTool implements NumenTool {
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion,
                              Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        setTask(companion, impl.rangedAttack(a.entity_ids(), ctx(toolCallId, companion)), reply);
+        setTask(companion, impl.rangedAttack(a.entity_ids(), ctx(toolCallId, companion)), args, reply);
     }
 }

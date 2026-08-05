@@ -32,6 +32,15 @@ public abstract class TaskRecord {
     private static final AtomicLong ID_SOURCE = new AtomicLong();
 
     /** Monotonically increasing internal id; only used for logging / dedup. */
+    /**
+     * 常驻任务的"期限":一个永远不会到的游戏刻。
+     *
+     * <p>期限回答的是"这件活该多久干完",而常驻任务<b>没有干完</b>——给它一个真实的
+     * 期限就是给它安排一次注定的超时。用 {@code MAX_VALUE/2} 而不是 {@code MAX_VALUE}:
+     * 被抢占时期限会 +1(见 {@code TaskSlot.freeze}),留出余量免得溢出成负数。
+     */
+    public static final long NO_DEADLINE = Long.MAX_VALUE / 2;
+
     private final long id;
     /** Stable name of the originating tool (matches {@code NumenTool.name()}). */
     private final String toolName;

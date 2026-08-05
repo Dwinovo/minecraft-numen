@@ -56,6 +56,6 @@ public final class MoveToTool implements NumenTool {
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         setTask(companion, impl.moveTo(a.x(), a.y(), a.z(),
-                a.block(), ctx(toolCallId, companion)), reply);
+                a.block(), ctx(toolCallId, companion)), args, reply);
     }
 }

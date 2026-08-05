@@ -106,7 +106,9 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
         InputDriver.halt(player);
         if (phase == Phase.POSITION) return positionForFishing();
         if (phase == Phase.COLLECT) return collectCaughtLoot();
-        if (r.caught() >= r.requested) return TaskState.SUCCESS;
+        // requested == 0 = 主人没说钓几条 —— 这一行永远不成立,任务就是常驻的:
+        // 一直钓下去,直到主人换掉她手上的活。同一段逻辑,两种用法。
+        if (r.requested > 0 && r.caught() >= r.requested) return TaskState.SUCCESS;
 
         int rodSlot = findRodSlot();
         if (rodSlot < 0) {
@@ -417,7 +419,9 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
 
     private TaskState coolDown() {
         if (++phaseTicks < COOLDOWN_TICKS) return TaskState.RUNNING;
-        if (r.caught() >= r.requested) return TaskState.SUCCESS;
+        // requested == 0 = 主人没说钓几条 —— 这一行永远不成立,任务就是常驻的:
+        // 一直钓下去,直到主人换掉她手上的活。同一段逻辑,两种用法。
+        if (r.requested > 0 && r.caught() >= r.requested) return TaskState.SUCCESS;
         phase = Phase.PREPARE;
         phaseTicks = 0;
         return TaskState.RUNNING;

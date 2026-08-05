@@ -49,6 +49,6 @@ public final class CollectItemsTool implements NumenTool {
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
         setTask(companion, impl.collectItems(a.item_ids(), a.radius(),
-                ctx(toolCallId, companion)), reply);
+                ctx(toolCallId, companion)), args, reply);
     }
 }

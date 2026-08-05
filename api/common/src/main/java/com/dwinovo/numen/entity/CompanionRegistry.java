@@ -39,29 +39,39 @@ public final class CompanionRegistry extends SavedData {
      *  {@code skinValue}/{@code skinSig} = 借来的正版皮肤(Mojang 签名的 textures 属性),
      *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
-                        String deathCause, long diedAt, String skinValue, String skinSig) {
-        /** A live companion (not dead), no borrowed skin. */
+                        String deathCause, long diedAt, String skinValue, String skinSig,
+                        String taskTool, String taskArgs) {
+        /** A live companion (not dead), no borrowed skin, idle. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", 0L, "", "");
+            this(name, owner, dimension, pos, "", 0L, "", "", "", "");
+        }
+
+        /** 她现在在做什么(工具名 + 当时的参数);空串 = 闲着。见 {@code TaskPersistence}。 */
+        public Entry doing(String tool, String args) {
+            return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
+                    tool == null ? "" : tool, args == null ? "" : args);
         }
 
         /** 刷新落点(休眠/移动时的 respawn 提示),皮肤与死亡状态原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
-            return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig);
+            return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
+                    taskTool, taskArgs);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
         public Entry withSkin(String value, String sig) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt,
-                    value == null ? "" : value, sig == null ? "" : sig);
+                    value == null ? "" : value, sig == null ? "" : sig, taskTool, taskArgs);
         }
 
         Entry dead(String cause, long at) {
-            return new Entry(name, owner, dimension, pos, cause, at, skinValue, skinSig);
+            return new Entry(name, owner, dimension, pos, cause, at, skinValue, skinSig,
+                    taskTool, taskArgs);
         }
 
         Entry alive() {
-            return new Entry(name, owner, dimension, pos, "", 0L, skinValue, skinSig);
+            return new Entry(name, owner, dimension, pos, "", 0L, skinValue, skinSig,
+                    taskTool, taskArgs);
         }
 
         static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -72,7 +82,9 @@ public final class CompanionRegistry extends SavedData {
                 Codec.STRING.optionalFieldOf("deathCause", "").forGetter(Entry::deathCause),
                 Codec.LONG.optionalFieldOf("diedAt", 0L).forGetter(Entry::diedAt),
                 Codec.STRING.optionalFieldOf("skinValue", "").forGetter(Entry::skinValue),
-                Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig)
+                Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig),
+                Codec.STRING.optionalFieldOf("taskTool", "").forGetter(Entry::taskTool),
+                Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskArgs)
         ).apply(i, Entry::new));
     }
 

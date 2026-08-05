@@ -47,9 +47,7 @@ public final class NumenEvents {
         /** 身体自理:饿了吃、快淹死了浮上来、被打了还手。 */
         BODY_LOG("body_log"),
         /** 同伴自己跨了维度。 */
-        DIMENSION_CHANGE("dimension_change"),
-        /** 她死了(死因 + 物品掉落地点)。 */
-        DEATH("death");
+        DIMENSION_CHANGE("dimension_change");
 
         private final String kind;
 

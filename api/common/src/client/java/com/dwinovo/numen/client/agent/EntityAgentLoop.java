@@ -145,7 +145,12 @@ public final class EntityAgentLoop {
      *  客户端自记账,不走新网络包:回执与事件本来就都经过这里。 */
     private CurrentTask currentTask;
 
-    private record CurrentTask(String id, String tool, String arguments, long sinceMs) {}
+    /**
+     * 在跑的后台任务的客户端记账。{@code standing} = 这件活没有终点(不会有
+     * task_finished),只能被换掉——模型必须分得清,否则会干等一个永不到来的事件。
+     */
+    private record CurrentTask(String id, String tool, String arguments, long sinceMs,
+                               boolean standing) {}
 
     /**
      * 绑定的人设 id——<b>真源在人设库</b>,这里只记 id,正文用时现取(落盘在
@@ -668,8 +673,9 @@ public final class EntityAgentLoop {
             if (!o.has("data") || !o.get("data").isJsonObject()) return;
             com.google.gson.JsonObject data = o.getAsJsonObject("data");
             if (data.has("async") && data.get("async").getAsBoolean() && data.has("task_id")) {
+                boolean standing = data.has("standing") && data.get("standing").getAsBoolean();
                 currentTask = new CurrentTask(data.get("task_id").getAsString(), invocation.name(),
-                        invocation.argsJson(), System.currentTimeMillis());
+                        invocation.argsJson(), System.currentTimeMillis(), standing);
             }
         } catch (RuntimeException ignored) {
             // 非 JSON 或形状不符——不是异步回执,不记账。
@@ -1122,12 +1128,21 @@ public final class EntityAgentLoop {
         CurrentTask task = currentTask;
         if (task == null) return "";
         long elapsed = Math.max(0, System.currentTimeMillis() - task.sinceMs()) / 1000;
+        // 有没有"干完"这回事,决定她该等还是该换:有终点的活等它的 task_finished;
+        // 常驻的活(跟随 / 一直钓鱼)永远不会有那条事件,只能被换掉。分不清这一点,
+        // 她要么干等一个永不到来的事件,要么把还没干完的活当成已经结束。
+        String tail = task.standing()
+                ? "This is a STANDING job — it has no finish line and will NEVER send a "
+                  + "task_finished event. It keeps running until you are given something else to do. "
+                  + "Dispatching any other body action REPLACES it, which is the normal way to stop it."
+                : "This exact background call is ACTIVE. Do not dispatch it again or start another "
+                  + "body action. Wait for its task_finished event; use task_status only when the owner "
+                  + "asks for progress, and task_stop only to abort.";
         return "<runtime_state><current_task id=\"" + xml(task.id()) + "\" tool=\""
-                + xml(task.tool()) + "\" state=\"running\" elapsed_s=\"" + elapsed
+                + xml(task.tool()) + "\" state=\"running\" standing=\"" + task.standing()
+                + "\" elapsed_s=\"" + elapsed
                 + "\">Original arguments: " + xml(truncate(task.arguments(), 600)) + ". "
-                + "This exact background call is ACTIVE. Do not dispatch it again or start another "
-                + "body action. Wait for its task_finished event; use task_status only when the owner "
-                + "asks for progress, and task_stop only to abort.</current_task></runtime_state>";
+                + tail + "</current_task></runtime_state>";
     }
 
     private String composeSystemPrompt() {

@@ -240,7 +240,9 @@ public final class DebugCommands {
             ctx.getSource().sendFailure(Component.literal(e.getMessage()));
             return 0;
         }
-        TaskDispatch.setTask(companion, record, reply ->
+        // 调试命令不走工具层,没有原始 args —— 传 null 就是"这件活不持久化",
+        // 重启后不会被莫名其妙地接回来。
+        TaskDispatch.setTask(companion, record, null, reply ->
                 ctx.getSource().sendSuccess(() -> Component.literal(reply), false));
         return 1;
     }

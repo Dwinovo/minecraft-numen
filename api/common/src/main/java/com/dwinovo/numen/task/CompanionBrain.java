@@ -50,6 +50,9 @@ final class CompanionBrain {
     /** 空闲姿态:没别的事做时才轮到,连身体都不算真正占用。 */
     private final List<Task> idlePoses;
 
+    /** 重启后的活接回来没有(每具身体只接一次)。 */
+    boolean restored;
+
     /** 上一刻的赢家,用来在切换的那一刻(而不是每刻)通知它丢了身体。 */
     private Task holder;
 
@@ -98,8 +101,16 @@ final class CompanionBrain {
         // 卡到那一个结果送出——不能等这个槽下次赢了才结算。
         sync.settleIfTerminal();
         current.settleIfTerminal();
+        // 手上的活干完了就把记录抹掉,免得重启后凭空捡回一件早就完成的活。
+        if (current.isEmpty() && !wasIdle) {
+            TaskPersistence.forget(companion);
+        }
+        wasIdle = current.isEmpty();
         shipResults(companion);
     }
+
+    /** 上一刻当前任务槽是不是空的——用来只在"刚变空"那一刻清记录,不必每刻写盘。 */
+    private boolean wasIdle = true;
 
     /** 死亡:丢掉在跑的任务,并结束任务作用域的手部占用。 */
     void dropActiveNoResult(NumenPlayer companion) {
