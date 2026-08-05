@@ -13,3 +13,16 @@ protocol TextWebSocket: Sendable {
 protocol TextWebSocketConnecting: Sendable {
     func connect(url: URL, authorization: String) async throws -> any TextWebSocket
 }
+
+enum TranscriptionEvent: Equatable, Sendable {
+    case partial(String)
+    case final(String)
+    case failure(String)
+}
+
+protocol StreamingTranscriptionSession: AnyObject, Sendable {
+    func setEventHandler(_ handler: (@Sendable (TranscriptionEvent) async -> Void)?)
+    func append(_ pcm: Data)
+    func finish()
+    func cancel()
+}

@@ -155,7 +155,7 @@ private struct ProviderError: Decodable {
     let message: String?
 }
 
-private struct URLSessionTextWebSocketConnector: TextWebSocketConnecting {
+struct URLSessionTextWebSocketConnector: TextWebSocketConnecting {
     func connect(url: URL, authorization: String) async throws -> any TextWebSocket {
         var request = URLRequest(url: url)
         request.setValue(authorization, forHTTPHeaderField: "Authorization")

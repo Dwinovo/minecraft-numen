@@ -34,3 +34,7 @@ struct SpeechRequest: Decodable, Sendable {
         case responseFormat = "response_format"
     }
 }
+
+struct TranscriptionResponse: ResponseCodable, Equatable, Sendable {
+    let text: String
+}
