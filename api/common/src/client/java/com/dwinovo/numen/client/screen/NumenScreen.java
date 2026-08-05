@@ -536,7 +536,7 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    /** 显示过滤统一走 {@link com.dwinovo.numen.client.chat.ChatDisplayFilter}(可整体切换)。 */
+    /** 显示过滤统一走 {@link com.dwinovo.numen.client.chat.ChatDisplayMode}(可整体切换)。 */
     /** token 数的人读格式:1350 → "1.4k",132400 → "132.4k",1_200_000 → "1.2m"。 */
     private static String fmtTokens(long n) {
         if (n >= 1_000_000) return String.format("%.1fm", n / 1_000_000.0);

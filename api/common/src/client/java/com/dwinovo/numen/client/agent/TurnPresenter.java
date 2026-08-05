@@ -1,6 +1,6 @@
 package com.dwinovo.numen.client.agent;
 
-import com.dwinovo.numen.client.chat.ChatDisplayFilters;
+import com.dwinovo.numen.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.client.chat.ChatLines;
 import com.dwinovo.numen.client.voice.VoiceLibrary;
 import com.dwinovo.numen.client.voice.VoicePipeline;
@@ -151,8 +151,8 @@ final class TurnPresenter {
         if (!streamingActive.getAsBoolean() || livePartial.length() == 0) {
             return;
         }
-        String filtered = ChatDisplayFilters.current()
-                .filterAssistantMessage(livePartial.toString());
+        String filtered = ChatDisplayModes.current()
+                .assistantText(livePartial.toString());
         if (filtered.isBlank() || filtered.equals(lastStreamedPartial)) {
             return;
         }

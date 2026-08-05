@@ -4,20 +4,23 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 默认显示过滤:把协议记号从玩家看到的文本里剥掉。
+ * 看<b>对话</b>:主人和她说过的话,别的都不是这一份的内容。
  * <ul>
- *   <li><b>主人消息</b>:{@code <query>} 包着的才是主人的原话,只显示它;
- *       未打标的旧消息剥掉注入指令块({@code <persona-change>}/{@code <event>})
- *       后展示,纯注入消息显示为空(调用方跳过);</li>
+ *   <li><b>主人消息</b>:只取 {@code <query>} 里的原话。未打标的旧消息剥掉注入块
+ *       ({@code <persona-change>}/{@code <event>})后展示,纯注入的显示为空
+ *       (调用方跳过);</li>
  *   <li><b>同伴消息</b>:折叠段落空行(模型的排版习惯,面板寸土寸金)。</li>
  * </ul>
+ *
+ * <p>剥记号不是这份视图的目的,是它的后果——协议记号本来就不属于"他俩的对话"。
+ * 要看那些东西,换 {@link RawRequestMode}。
  */
-public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
+public final class OwnerWordsMode implements ChatDisplayMode {
 
     private static final Pattern QUERY = Pattern.compile("(?s)<query>(.*?)</query>");
 
     @Override
-    public String filterUserMessage(String raw) {
+    public String userText(String raw) {
         if (raw == null) return "";
         Matcher m = QUERY.matcher(raw);
         StringBuilder b = new StringBuilder();
@@ -30,7 +33,7 @@ public final class DefaultChatDisplayFilter implements ChatDisplayFilter {
     }
 
     @Override
-    public String filterAssistantMessage(String raw) {
+    public String assistantText(String raw) {
         if (raw == null) return "";
         // 段落间的空行折叠成单换行——聊天面板寸土寸金,空行只是模型的排版习惯。
         return raw.replaceAll("\\n\\s*\\n+", "\n").strip();

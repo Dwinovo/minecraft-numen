@@ -1,6 +1,6 @@
 package com.dwinovo.numen.chat;
 
-import com.dwinovo.numen.client.chat.DefaultChatDisplayFilter;
+import com.dwinovo.numen.client.chat.OwnerWordsMode;
 import com.dwinovo.numen.event.EventQueue;
 import com.dwinovo.numen.event.EventTypes;
 import org.junit.jupiter.api.Test;
@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <h2>为什么把这两边绑在一条测试里</h2>
  * 它们住在两个模块、各写各的:{@link EventQueue#drain} 拼协议记号,
- * {@link DefaultChatDisplayFilter} 用一串正则把记号剥掉只留主人的原话。
+ * {@link OwnerWordsMode} 用一串正则把记号剥掉只留主人的原话。
  * 加一个新标签只改一边,另一边不会报错——只会在面板上漏出半截尖括号。
  *
  * <p>真发生过:给事件加了 {@code <events>} 分组包装,而剥的那条规则是
@@ -39,7 +39,7 @@ class InjectedMarkupIsStrippedTest {
         q.push(EventTypes.EVENT, "<event kind=\"death\" day=\"0\" t=\"06:43\">你刚才死了</event>", T0, true);
         q.push(EventTypes.EVENT, "<event kind=\"body_log\" day=\"0\" t=\"06:44\">吃了个面包</event>", T0, false);
 
-        String shown = new DefaultChatDisplayFilter().filterUserMessage(render(q));
+        String shown = new OwnerWordsMode().userText(render(q));
 
         assertTrue(shown.isEmpty(), "面板上漏出了协议记号:" + shown);
     }
@@ -50,7 +50,7 @@ class InjectedMarkupIsStrippedTest {
         q.push(EventTypes.EVENT, "<event kind=\"body_log\" day=\"0\" t=\"06:44\">吃了个面包</event>", T0, false);
         q.push(EventTypes.QUERY, "<query>你在干嘛</query>", T0, true);
 
-        assertEquals("你在干嘛", new DefaultChatDisplayFilter().filterUserMessage(render(q)));
+        assertEquals("你在干嘛", new OwnerWordsMode().userText(render(q)));
     }
 
     @Test
@@ -61,7 +61,7 @@ class InjectedMarkupIsStrippedTest {
         q.push(EventTypes.EVENT, "<event kind=\"dimension_change\"/>", T0, false);
         q.push(EventTypes.QUERY, "<query>好</query>", T0, true);
 
-        String shown = new DefaultChatDisplayFilter().filterUserMessage(render(q));
+        String shown = new OwnerWordsMode().userText(render(q));
 
         assertEquals("好", shown);
         assertTrue(shown.indexOf('<') < 0 && shown.indexOf('>') < 0, shown);

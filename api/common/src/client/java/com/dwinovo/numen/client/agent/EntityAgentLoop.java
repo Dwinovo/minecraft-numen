@@ -1130,8 +1130,15 @@ public final class EntityAgentLoop {
         return raw.replaceFirst("(?s)<analysis>.*?(</analysis>|$)", "").strip();
     }
 
-    /** Effective request history; the source conversation and append-only log remain untouched. */
-    private List<ConvoState.Msg> modelContextSnapshot() {
+    /**
+     * <b>发给模型的就是这一份</b>——会话上下文加上这一轮临时挂载的运行期状态
+     * ({@code <runtime_state>}/{@code <current_task>})。源会话与落盘日志一个字不动。
+     *
+     * <p>公开是因为 debug 面板画的必须是<b>它</b>,不是对话史:临时挂载的东西按定义
+     * 不在对话史里,面板换个过滤器也永远显示不出来,于是"我开了 debug 却看不见"
+     * 会被读成"这东西没发出去"。两边调同一个方法,就没有第二份账可对不上。
+     */
+    public List<ConvoState.Msg> modelContextSnapshot() {
         return AgentRequestContext.attach(convo.snapshot(), currentTaskXml());
     }
 
@@ -1320,8 +1327,8 @@ public final class EntityAgentLoop {
                         entityUuid, turn.content());
                 // 双通道落地:头顶气泡是回复的主显示(附近玩家都看得见),
                 // 聊天框回显一份当日志;超长折叠,悬停看全文,完整记录在 G 面板
-                String shown = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
-                        .filterAssistantMessage(turn.content());
+                String shown = com.dwinovo.numen.client.chat.ChatDisplayModes.current()
+                        .assistantText(turn.content());
                 if (!shown.isBlank()) {
                     com.dwinovo.numen.client.hud.SpeechBubbles.say(entityUuid, shown);
                     com.dwinovo.numen.client.chat.ChatLines.companion(presenter.speakerName(), shown);
@@ -1346,8 +1353,8 @@ public final class EntityAgentLoop {
         // 开工前的顺嘴一句(tool_calls 旁附的 content):是话就上气泡+字幕行;
         // 没话说就 SETTLE——只收思考泡,上一句正文泡留着走完生命周期,
         // 工具执行期不显示"…"(身体动起来本身就是反馈)
-        String aside = com.dwinovo.numen.client.chat.ChatDisplayFilters.current()
-                .filterAssistantMessage(turn.content() == null ? "" : turn.content());
+        String aside = com.dwinovo.numen.client.chat.ChatDisplayModes.current()
+                .assistantText(turn.content() == null ? "" : turn.content());
         if (!aside.isBlank()) {
             com.dwinovo.numen.client.hud.SpeechBubbles.say(entityUuid, aside);
             com.dwinovo.numen.client.chat.ChatLines.companion(presenter.speakerName(), aside);

@@ -3,8 +3,8 @@ package com.dwinovo.numen.client;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.NumenRoster;
-import com.dwinovo.numen.client.chat.ChatDisplayFilters;
-import com.dwinovo.numen.client.chat.DebugChatDisplayFilter;
+import com.dwinovo.numen.client.chat.ChatDisplayModes;
+import com.dwinovo.numen.client.chat.RawRequestMode;
 import com.dwinovo.numen.client.data.ClientNumenInventory;
 import com.dwinovo.numen.client.data.ClientNumenLocations;
 import com.dwinovo.numen.client.debug.PathDebugState;
@@ -173,8 +173,8 @@ public final class ClientPayloadHandlers {
         switch (p.action()) {
             case OPEN_SETTINGS -> com.dwinovo.numen.client.screen.NumenScreen.openSettings();
             case RESET_LOOPS -> AgentLoopRegistry.clear();
-            case DEBUG_TEXT_ON -> ChatDisplayFilters.set(new DebugChatDisplayFilter());
-            case DEBUG_TEXT_OFF -> ChatDisplayFilters.set(null);
+            case DEBUG_TEXT_ON -> ChatDisplayModes.set(new RawRequestMode());
+            case DEBUG_TEXT_OFF -> ChatDisplayModes.set(null);
         }
     }
 }

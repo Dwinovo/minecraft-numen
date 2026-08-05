@@ -7,7 +7,7 @@ import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
-import com.dwinovo.numen.client.chat.ChatDisplayFilters;
+import com.dwinovo.numen.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
@@ -315,14 +315,26 @@ public final class ChatView {
         return sum;
     }
 
-    /** Flatten the loop's PHYSICAL transcript (not the LLM context — compaction must
-     *  never eat the owner's visible history) into renderable blocks. */
+    /**
+     * 摊平成可画的块。<b>画哪一份由当前视图口径说了算</b>
+     * ({@link com.dwinovo.numen.client.chat.ChatDisplayMode#showsModelRequest}):
+     *
+     * <ul>
+     *   <li>常态 = <b>物理对话史</b>({@code display()})。压缩重写的是模型上下文,
+     *       不该连主人看得见的历史一起吃掉;</li>
+     *   <li>debug = <b>这一轮发给模型的那份</b>({@code modelContextSnapshot()},
+     *       跟 LLM 路径同一个方法)。它比对话史短(压缩掉的真的没了),而且带着
+     *       临时挂载的 {@code <runtime_state>} —— 那正是开 debug 要看的东西。</li>
+     * </ul>
+     */
     private List<Block> build(int bubbleMaxW) {
         List<Block> out = new ArrayList<>();
         EntityAgentLoop lp = loop.get();
+        boolean rawRequest = ChatDisplayModes.current().showsModelRequest();
+        List<ConvoState.Msg> source = rawRequest ? lp.modelContextSnapshot() : lp.display();
         Set<String> done = new HashSet<>();
         Set<String> failed = new HashSet<>();
-        for (ConvoState.Msg m : lp.display()) {
+        for (ConvoState.Msg m : source) {
             if (m instanceof ConvoState.Msg.Tool t) {
                 done.add(t.toolCallId());
                 // 成败判据的单一真源(展示层不猜字符串)。
@@ -337,7 +349,7 @@ public final class ChatView {
         // the first of a run. Chips don't break a run; notices do. null = run broken.
         Boolean lastSide = null;
         int msgIndex = -1;
-        for (ConvoState.Msg msg : lp.display()) {
+        for (ConvoState.Msg msg : source) {
             msgIndex++;
             switch (msg) {
                 case ConvoState.Msg.User u -> {
@@ -366,7 +378,7 @@ public final class ChatView {
                         flushTools(out, group, done, failed, bubbleMaxW);
                         out.add(reasoningChip(reasoned, "reason#" + msgIndex, innerW, false));
                     }
-                    String spoken = ChatDisplayFilters.current().filterAssistantMessage(turn.content());
+                    String spoken = ChatDisplayModes.current().assistantText(turn.content());
                     if (!spoken.isBlank()) {
                         flushTools(out, group, done, failed, bubbleMaxW);   // spoken reply breaks the fold
                         boolean first = lastSide == null || lastSide;
@@ -376,7 +388,17 @@ public final class ChatView {
                     }
                     group.addAll(turn.toolCalls());
                 }
-                case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
+                case ConvoState.Msg.Tool t -> {
+                    // 常态:工具结果只驱动那颗芯片的成/败,不单独占一块。
+                    // 透视态:它是请求的一部分,就得原样画出来——而且 <runtime_state>
+                    // 恰好可能挂在工具结果的尾巴上(见 AgentRequestContext.attach),
+                    // 漏画它就等于 debug 在某些时刻照旧看不见运行期状态。
+                    if (!rawRequest) continue;
+                    flushTools(out, group, done, failed, bubbleMaxW);
+                    boolean first = lastSide == null || !lastSide;
+                    out.add(bubble(true, null, t.content(), TXT, OWN_FILL, OWN_BORDER, innerW, first));
+                    lastSide = true;
+                }
             }
         }
         flushTools(out, group, done, failed, bubbleMaxW);
@@ -418,7 +440,7 @@ public final class ChatView {
     /** Advance the typewriter: filter the live partial, ease the reveal toward the
      *  full length, and cache "revealed text + blinking caret". */
     private void updateLive(float dt, long now) {
-        String full = ChatDisplayFilters.current().filterAssistantMessage(loop.get().livePartial());
+        String full = ChatDisplayModes.current().assistantText(loop.get().livePartial());
         if (full.isEmpty()) {
             revealed = 0;
             liveShown = "";
@@ -593,7 +615,7 @@ public final class ChatView {
     // ---- text helpers ----
 
     private static String ownerText(String s) {
-        return ChatDisplayFilters.current().filterUserMessage(s);
+        return ChatDisplayModes.current().userText(s);
     }
 
     private String fitOneLine(String s, int pxWidth) {

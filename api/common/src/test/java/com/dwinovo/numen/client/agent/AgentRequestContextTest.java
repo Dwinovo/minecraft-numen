@@ -66,4 +66,58 @@ class AgentRequestContextTest {
         List<ConvoState.Msg> source = List.of(new ConvoState.Msg.User("hello"));
         assertEquals(source, AgentRequestContext.attach(source, " "));
     }
+
+    /**
+     * 透视面板画得出运行期状态——不管它挂在哪一种消息上。
+     *
+     * <p>{@code ChatView} 在 {@code showsModelRequest} 下画 User / Assistant 正文 / Tool
+     * 三种;挂载点却随尾巴形状变(见 {@link AgentRequestContext#attach})。两边各改各的话,
+     * 挂到一种面板不画的消息上,现象就是"开了 debug 还是看不见 current_task"——而那
+     * 会被读成"这东西没发出去"。所以这里按面板的口径去找。
+     */
+    private static String whatThePanelWouldDraw(List<ConvoState.Msg> request) {
+        StringBuilder sb = new StringBuilder();
+        for (ConvoState.Msg m : request) {
+            switch (m) {
+                case ConvoState.Msg.User u -> sb.append(u.content()).append('\n');
+                case ConvoState.Msg.Tool t -> sb.append(t.content()).append('\n');
+                case ConvoState.Msg.Assistant a -> sb.append(a.turn().content()).append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
+    @Test
+    void runtimeStateAlwaysLandsSomewhereThePanelDraws() {
+        String rt = "<runtime_state><current_task id=\"t1\" tool=\"follow\"/></runtime_state>";
+
+        List<List<ConvoState.Msg>> tails = List.of(
+                List.of(new ConvoState.Msg.User("<query>跟着我</query>")),
+                List.of(new ConvoState.Msg.User("go"),
+                        new ConvoState.Msg.Assistant(new AssistantTurn("",
+                                List.of(new LlmToolCall("c1", "goto", "{}")), null)),
+                        new ConvoState.Msg.Tool("c1", "{\"success\":true}")),
+                List.of(new ConvoState.Msg.User("hi"),
+                        new ConvoState.Msg.Assistant(new AssistantTurn("好的", List.of(), null))));
+
+        for (List<ConvoState.Msg> tail : tails) {
+            assertTrue(whatThePanelWouldDraw(AgentRequestContext.attach(tail, rt)).contains(rt),
+                    "这种尾巴下面板画不出运行期状态:" + tail);
+        }
+    }
+
+    @Test
+    void aTurnStuckMidToolCallCarriesNoRuntimeStateOnPurpose() {
+        // assistant 的 tool_calls 与它的结果之间插不进 user 消息(上游会 400),
+        // 所以这一刻宁可不带。面板跟着一起没有,两边看到的是同一件事。
+        List<ConvoState.Msg> source = List.of(
+                new ConvoState.Msg.User("go"),
+                new ConvoState.Msg.Assistant(new AssistantTurn("",
+                        List.of(new LlmToolCall("c1", "goto", "{}")), null)));
+
+        List<ConvoState.Msg> request = AgentRequestContext.attach(source, "<runtime_state/>");
+
+        assertEquals(source.size(), request.size());
+        assertTrue(!whatThePanelWouldDraw(request).contains("runtime_state"));
+    }
 }
