@@ -34,7 +34,13 @@ public final class AgentLoopRegistry {
 
     private AgentLoopRegistry() {}
 
-    /** Create-on-first-access. The returned loop is bound to {@code entityUuid} for its lifetime. */
+    /**
+     * Create-on-first-access. The returned loop is bound to {@code entityUuid} for its lifetime.
+     *
+     * <p><b>正常情况下这里不会真的新建</b>:名册一到就给册上每只同伴都备好了 loop
+     * (见 {@code ClientPayloadHandlers.handleCompanionList})——「她有没有大脑」跟
+     * 「她存不存在」对齐,不跟「谁先碰过她」对齐。这道 create 只是兜底。
+     */
     public static EntityAgentLoop getOrCreate(UUID entityUuid) {
         return ENTITY_LOOPS.computeIfAbsent(entityUuid, EntityAgentLoop::new);
     }

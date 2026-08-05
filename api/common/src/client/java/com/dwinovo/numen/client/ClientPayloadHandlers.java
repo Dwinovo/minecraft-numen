@@ -82,6 +82,24 @@ public final class ClientPayloadHandlers {
                 AgentLoopRegistry.dispose(gone);   // 大脑先停,免得在飞的回合写回已删的家
             }
         }
+        // 反过来的一半:名册说她存在,她就该有大脑。
+        //
+        // 从前 loop 是懒创建的——最早只有开面板才造,于是每冒出一种新的入站消息就得
+        // 补一次 getOrCreate:快捷键、桥接消息、离线补发的事件、复活包……补了四次,
+        // 漏掉的第五个是<b>死亡包</b>。后果是她死了队列没上锁,紧接着到达的
+        // task_finished 急件照常开了一轮,模型派出感知工具,服务端找不到身体就把她
+        // 提前复活了一具;5 秒后定时复活又来一具,两具同 UUID 的身体同时在世。
+        //
+        // 根子在于"她有没有大脑"取决于<b>谁先碰过她</b>,而不是<b>她存不存在</b>。
+        // 名册是"谁存在"的权威真源,每次变化都推一份(召唤、遣散、死亡、登录都走它),
+        // 所以接在这里就一劳永逸:此后任何包以任何顺序到达都有地方落,各个 sink 也
+        // 不必再逐个纠结 get 还是 getOrCreate。
+        //
+        // 开销就是每只同伴读一次会话日志。一个存档里的同伴是个位数,而且孤儿目录
+        // 不在名册上、不会被造 —— 拿它换掉一整类"包先到、loop 还没有"的 bug,值。
+        for (UUID uuid : onRoster) {
+            AgentLoopRegistry.getOrCreate(uuid);
+        }
 
         // A newly-arrived companion may have a persona the owner picked at summon (resolved by name here,
         // since the UUID wasn't known client-side until now). Apply it as the starting persona.
