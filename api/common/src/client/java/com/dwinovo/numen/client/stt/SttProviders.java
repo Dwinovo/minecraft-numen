@@ -1,6 +1,7 @@
 package com.dwinovo.numen.client.stt;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.client.bridge.BridgeDiscovery;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.platform.services.INumenConfig;
 import com.google.gson.JsonObject;
@@ -29,6 +30,8 @@ public final class SttProviders {
     public static final String BACKEND_WHISPER_HTTP = "whisper-http";
     /** 阿里云百炼(DashScope)实时语音识别：走 /api-ws/v1/realtime WebSocket。 */
     public static final String BACKEND_DASHSCOPE = "dashscope";
+    /** Local Numen Bridge.app owns macOS microphone capture and provider routing. */
+    public static final String BACKEND_BRIDGE = "bridge";
 
     public record Option(String id, String displayName, String backend,
                          String defaultBaseUrl, List<String> models) {
@@ -68,11 +71,19 @@ public final class SttProviders {
      * baseUrl / model 留空时回落到所选预设的默认值。
      */
     public static SttBackend fromConfig(INumenConfig cfg) {
+        Option opt = byId(cfg.getSttProvider());
+        if (BACKEND_BRIDGE.equals(opt.backend())) {
+            try {
+                return new BridgeStt(BridgeDiscovery.load());
+            } catch (IllegalArgumentException e) {
+                Constants.LOG.warn("[numen-stt] Numen Bridge is not available", e);
+                return null;
+            }
+        }
         String key = cfg.getSttApiKey();
         if (key == null || key.isBlank()) {
             return null;
         }
-        Option opt = byId(cfg.getSttProvider());
         String base = cfg.getSttBaseUrl();
         if (base == null || base.isBlank()) {
             base = opt.defaultBaseUrl();

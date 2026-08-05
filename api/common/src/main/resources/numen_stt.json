@@ -35,6 +35,13 @@
       "backend": "dashscope",
       "baseUrl": "",
       "models": ["qwen-audio-3.0-realtime-flash"]
+    },
+    {
+      "id": "bridge",
+      "name": "Numen Bridge（macOS 本机）",
+      "backend": "bridge",
+      "baseUrl": "",
+      "models": ["qwen-audio-3.0-realtime-flash"]
     }
   ]
 }

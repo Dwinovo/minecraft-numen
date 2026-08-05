@@ -17,6 +17,11 @@ public interface SttBackend {
     /** 开一次转写会话,结果经 {@code listener} 回调。 */
     SttSession open(SttListener listener);
 
+    /** True when the backend owns microphone capture outside Java Sound. */
+    default boolean capturesMicrophone() {
+        return false;
+    }
+
     /** 面向日志的一句话描述(不含 apiKey)。 */
     String describe();
 }

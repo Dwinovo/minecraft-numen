@@ -77,6 +77,7 @@ public final class SttPanel {
         ui.clear();
         SttProviders.Option opt = SttProviders.byId(provider);
         provider = opt.id();
+        boolean bridge = SttProviders.BACKEND_BRIDGE.equals(opt.backend());
 
         Label title = ui.add(new Label(t(ModLanguageData.Keys.STT_TITLE), Label.Role.PRIMARY));
         title.setBounds(x, y, w, 9);
@@ -94,10 +95,16 @@ public final class SttPanel {
         providerPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
-        ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_API_KEY);
-        keyField = ui.add(new TextField(key, v -> key = v).masked(true));
-        keyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        ry += NumenStyle.ROW_PITCH;
+        if (bridge) {
+            Label bridgeInfo = ui.add(new Label("由 Numen Bridge.app 提供麦克风和服务", Label.Role.MUTED));
+            bridgeInfo.setBounds(x, ry, w, 9);
+            ry += NumenStyle.ROW_PITCH;
+        } else {
+            ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_API_KEY);
+            keyField = ui.add(new TextField(key, v -> key = v).masked(true));
+            keyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+            ry += NumenStyle.ROW_PITCH;
+        }
 
         // 模型双态:预设下拉(+自定义…) ↔ 输入框(+▾ 回预设);无预设纯输入框。
         ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_MODEL);
@@ -120,11 +127,13 @@ public final class SttPanel {
         }
         ry += NumenStyle.ROW_PITCH;
 
-        ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_BASE_URL);
-        baseUrlField = ui.add(new TextField(baseUrl, v -> baseUrl = v)
-                .placeholder(opt.defaultBaseUrl()));
-        baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
-        ry += NumenStyle.ROW_PITCH;
+        if (!bridge) {
+            ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_BASE_URL);
+            baseUrlField = ui.add(new TextField(baseUrl, v -> baseUrl = v)
+                    .placeholder(opt.defaultBaseUrl()));
+            baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+            ry += NumenStyle.ROW_PITCH;
+        }
 
         ry = label(x, ry, ModLanguageData.Keys.STT_MICROPHONE);
         micIds = new ArrayList<>();
@@ -213,9 +222,11 @@ public final class SttPanel {
     private void save() {
         INumenConfig cfg = Services.CONFIG;
         cfg.setSttProvider(provider);
-        cfg.setSttApiKey(key.trim());
+        cfg.setSttApiKey(SttProviders.BACKEND_BRIDGE.equals(
+                SttProviders.byId(provider).backend()) ? "" : key.trim());
         cfg.setSttModel(model.trim());
-        cfg.setSttBaseUrl(baseUrl.trim());
+        cfg.setSttBaseUrl(SttProviders.BACKEND_BRIDGE.equals(
+                SttProviders.byId(provider).backend()) ? "" : baseUrl.trim());
         cfg.setSttMicrophone(mic);
         cfg.save();
         saved.show(InlineAlert.Severity.SUCCESS, t("numen.gui.settings.saved"), 2_500);

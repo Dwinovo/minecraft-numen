@@ -7,6 +7,9 @@ package com.dwinovo.numen.client.stt;
  */
 public interface SttListener {
 
+    /** Fired when a backend-owned microphone has actually started. */
+    default void onCaptureStarted() {}
+
     /** 流式增量转写(可多次)。批量后端不调用。 */
     default void onPartial(String text) {}
 
