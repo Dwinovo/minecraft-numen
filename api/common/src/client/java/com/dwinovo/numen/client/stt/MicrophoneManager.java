@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.stt;
 
+import com.dwinovo.numen.Constants;
+
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.DataLine;
 import javax.sound.sampled.LineUnavailableException;
@@ -47,11 +49,30 @@ public final class MicrophoneManager {
      * 就回调 {@code onChunk}(采集线程上)。返回 false 表示无可用麦克风或已在录。
      */
     public static boolean start(String deviceName, Consumer<byte[]> onChunk, Runnable onStop) {
-        if (!RECORDING.compareAndSet(false, true)) {
+        if (RECORDING.get()) {
             return false;
         }
         TargetDataLine line = openLine(deviceName);
         if (line == null) {
+            return false;
+        }
+        return startLine(line, onChunk, onStop);
+    }
+
+    static boolean startLine(TargetDataLine line, Consumer<byte[]> onChunk, Runnable onStop) {
+        if (!RECORDING.compareAndSet(false, true)) {
+            return false;
+        }
+        try {
+            line.open(SttAudio.FORMAT);
+            line.start();
+        } catch (LineUnavailableException | RuntimeException ex) {
+            Constants.LOG.warn("[numen-stt] failed to open microphone", ex);
+            try {
+                line.close();
+            } catch (RuntimeException ignored) {
+                // best effort
+            }
             RECORDING.set(false);
             return false;
         }
@@ -71,8 +92,6 @@ public final class MicrophoneManager {
         long deadline = System.nanoTime() + MAX_RECORD_MS * 1_000_000L;
         byte[] buffer = new byte[CHUNK_BYTES];
         try {
-            line.open(SttAudio.FORMAT);
-            line.start();
             while (RECORDING.get() && System.nanoTime() < deadline) {
                 int read = line.read(buffer, 0, buffer.length);
                 if (read > 0) {
@@ -81,8 +100,8 @@ public final class MicrophoneManager {
                     onChunk.accept(chunk);
                 }
             }
-        } catch (LineUnavailableException | RuntimeException ignored) {
-            // fall through to cleanup + onStop
+        } catch (RuntimeException ex) {
+            Constants.LOG.warn("[numen-stt] microphone capture failed", ex);
         } finally {
             try {
                 line.stop();
