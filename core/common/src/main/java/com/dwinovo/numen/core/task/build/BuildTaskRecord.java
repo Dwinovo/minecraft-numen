@@ -232,8 +232,12 @@ public final class BuildTaskRecord extends TaskRecord {
      * 时序,而且只有轮询才拿得到——偏偏状况最不该等人问。
      */
     @Override
+    /**
+     * 一行人话 —— 这是<b>给主人看的</b>:头顶气泡、面板、task_status 印的都是它。
+     * 工具 id 不写进来,需要它的地方(运行时状态的 tool 属性、派发回执)本来就有。
+     */
     public String describe() {
-        return TOOL_NAME + " " + completed + "/" + targets.size();
+        return "搭建 " + completed + "/" + targets.size();
     }
 
     /** 一只待生成的摆设实体:落位点、图纸旋转、剥干净的 NBT。 */

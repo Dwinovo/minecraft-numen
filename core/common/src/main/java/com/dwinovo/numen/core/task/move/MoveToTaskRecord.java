@@ -75,12 +75,16 @@ public final class MoveToTaskRecord extends TaskRecord {
     }
 
     @Override
+    /**
+     * 一行人话 —— 这是<b>给主人看的</b>:头顶气泡、面板、task_status 印的都是它。
+     * 工具 id 不写进来,需要它的地方(运行时状态的 tool 属性、派发回执)本来就有。
+     */
     public String describe() {
         return switch (kind) {
-            case BLOCK -> TOOL_NAME + " " + (int) (double) x + "," + (int) (double) y + "," + (int) (double) z;
-            case COLUMN -> TOOL_NAME + " x=" + (int) (double) x + " z=" + (int) (double) z;
-            case YLEVEL -> TOOL_NAME + " y=" + (int) (double) y;
-            case FIND -> TOOL_NAME + " " + block;
+            case BLOCK -> "走向 " + (int) (double) x + "," + (int) (double) y + "," + (int) (double) z;
+            case COLUMN -> "走向 x=" + (int) (double) x + " z=" + (int) (double) z;
+            case YLEVEL -> "下到 y=" + (int) (double) y;
+            case FIND -> "去找 " + block;
         };
     }
 }

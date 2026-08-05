@@ -59,8 +59,15 @@ final class CompanionBrain {
     /** 上一刻的赢家,用来在切换的那一刻(而不是每刻)通知它丢了身体。 */
     private Task holder;
 
-    /** 上一次推给主人的任务 id(""=闲着)——只在变化的那一刻推,不逐刻刷。 */
+    /** 进度变化最快多久推一次(刻)。一秒足够"在动"的观感,又不至于每刻一个包。 */
+    private static final int TASK_PUSH_GAP_TICKS = 20;
+
+    /** 上一次推给主人的任务 id(""=闲着)。 */
     private String pushedTaskId = "";
+    /** 上一次推给主人的那行人话——进度写在里面,它一变主人就该看见。 */
+    private String pushedDescribe = "";
+    /** 距上次推过了几刻。 */
+    private int ticksSinceTaskPush;
 
     /** 手部占用的空闲边沿(纯计数器,见 {@link #HAND_PIN_GRACE_TICKS})。 */
     private final HandPinRelease handPinRelease = new HandPinRelease(HAND_PIN_GRACE_TICKS);
@@ -149,10 +156,18 @@ final class CompanionBrain {
     private void syncCurrentTask(NumenPlayer companion) {
         TaskRecord rec = current.record();
         String id = rec == null ? "" : rec.publicId();
-        if (id.equals(pushedTaskId)) {
+        String desc = rec == null ? "" : rec.describe();
+        ticksSinceTaskPush++;
+        // 换活立刻推;同一件活只有那行人话变了才推(进度就写在里面),而且限速——
+        // 不限速的话「挖 7/64」每刻都在变,一秒 20 个包;只在换活时推又会让进度
+        // 永远停在受理那一刻,主人看着像卡住了。
+        boolean swapped = !id.equals(pushedTaskId);
+        if (!swapped && (desc.equals(pushedDescribe) || ticksSinceTaskPush < TASK_PUSH_GAP_TICKS)) {
             return;
         }
         pushedTaskId = id;
+        pushedDescribe = desc;
+        ticksSinceTaskPush = 0;
         net.minecraft.server.level.ServerPlayer owner = companion.resolveOwnerPlayer();
         if (owner == null) {
             return;   // 主人不在线:他重登时会看到那时的状态,不需要补发历史
@@ -164,7 +179,7 @@ final class CompanionBrain {
             long startedTick = Math.max(0, rec.getStartedGameTime());
             long elapsedMs = Math.max(0, companion.level().getGameTime() - startedTick) * 50L;
             msg = new com.dwinovo.numen.network.payload.CurrentTaskPayload(
-                    companion.getUUID(), id, rec.getToolName(), rec.describe(),
+                    companion.getUUID(), id, rec.getToolName(), desc,
                     rec.getDeadlineGameTime() >= TaskRecord.NO_DEADLINE, elapsedMs);
         }
         com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(owner, msg);
