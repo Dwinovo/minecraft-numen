@@ -1,7 +1,16 @@
+import AppKit
 import SwiftUI
+
+final class NumenBridgeAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
 
 @main
 struct NumenBridgeApp: App {
+    @NSApplicationDelegateAdaptor(NumenBridgeAppDelegate.self) private var appDelegate
     @StateObject private var state: BridgeState
 
     init() {
@@ -22,23 +31,14 @@ struct NumenBridgeApp: App {
     }
 
     var body: some Scene {
+        WindowGroup("Numen Bridge", id: "main") {
+            BridgeDashboardView(state: state)
+        }
+        .defaultSize(width: 520, height: 300)
+        .windowResizability(.contentSize)
+
         MenuBarExtra("Numen Bridge", systemImage: state.iconName) {
-            Label(state.headline, systemImage: state.iconName)
-            Text("麦克风：\(state.permissionLabel)")
-            Text(state.providerReady ? "DashScope：已配置" : "DashScope：未配置")
-            Divider()
-            Button {
-                Task { await state.requestMicrophonePermission() }
-            } label: {
-                Label("请求麦克风权限", systemImage: "mic.fill")
-            }
-            SettingsLink {
-                Label("设置", systemImage: "gearshape")
-            }
-            Divider()
-            Button("退出") {
-                NSApplication.shared.terminate(nil)
-            }
+            BridgeMenuView(state: state)
         }
         Settings {
             SettingsView(state: state)
