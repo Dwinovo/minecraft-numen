@@ -112,6 +112,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  discarding a possibly-fine ore — blacklisting belongs to genuinely failed paths, not arrivals.
      *  ~2 s gives the periodic rescan several chances to re-stance first. */
     private static final int MAX_ARRIVED_DUD = 40;
+
     /** How long a just-broken target's cell stays a walk-over goal (ticks) — the drop
      *  takes a moment to spawn, and without this window the body sprints for the next
      *  ore before the item pops and leaves it behind. */
@@ -153,6 +154,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private int noShotTicks;
     /** Consecutive ARRIVED-dud ticks (arrived at a stance but nothing mineable in place). */
     private int arrivedDudTicks;
+
+    /** 地图不完整时连续无路的次数（见 {@link NoPathVerdict}）。 */
+    private int coldMapFails;
     /** 上一次索引查询是否覆盖完整(构建预算未耗尽)。false = 冷区域仍在渐进构建,
      *  终局判定("附近没有目标")必须等它为 true 才能下。 */
     private boolean lastQueryComplete;
@@ -203,9 +207,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         runQuery();
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
         com.dwinovo.numen.core.Constants.LOG.info(
-                "[numen-task] mine start targets={} count={} feet={} firstQuery={} hit(s)",
+                "[numen-task] mine start targets={} count={} feet={} firstQuery={} hit(s) mapComplete={}",
                 r.label, r.count, player.blockPosition().toShortString(),
-                knownOres.size());
+                knownOres.size(), lastQueryComplete);
     }
 
     @Override
@@ -332,11 +336,32 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     return TaskState.RUNNING;   // a reachable shaft is handled next tick
                 }
                 case FAILED -> {
-                    // [ANCHOR nav-failed] genuine no-path to the ore field → blacklist the nearest as presumed unreachable.
+                    // [ANCHOR nav-cold-map] 地图自己都说了还没查完，这个“没路”不算证据。
+                    //
+                    // 世界刚加载时共用索引是冷的，第一次查询烧完预算也扫不完请求半径
+                    // ({@code complete=false})，名单里可能只有几十格外的一簇，而脚边那片还没进图。
+                    // 拿这种半张图上的无路去永久拉黑一个好方块，是把“我还不知道”当成了“不可能”。
+                    //
+                    // 跟上面 ARRIVED-dud 是同一条纪律：拉黑只该给真正失败的路。
+                    if (NoPathVerdict.of(lastQueryComplete, coldMapFails)
+                            == NoPathVerdict.Verdict.REQUERY) {
+                        if (++coldMapFails == 1) {
+                            com.dwinovo.numen.core.Constants.LOG.info(
+                                    "[numen-task] mine nav failed ({}) 但目标图还没查完 —— 不拉黑，重查 | nearestOre={}",
+                                    nav.failType(), nearestOreInfo());
+                        }
+                        stopNav();
+                        queryCooldown = 0;   // 下一刻就接着建图，别干等冷却
+                        return TaskState.RUNNING;
+                    }
+                    // [ANCHOR nav-failed] 完整图上真的没路 → 拉黑最近的那个。
+                    // failReason 里的 "toward X" 是复合目标的代表点，<b>不是</b>她奔的那个；
+                    // 她奔的是名单里最近的可达者，即下面的 nearestOre。
                     com.dwinovo.numen.core.Constants.LOG.info(
-                            "[numen-task] mine nav failed ({}): {} | nearestOre={}",
-                            nav.failType(), nav.failReason(), nearestOreInfo());
+                            "[numen-task] mine nav failed ({}): {} | 复合目标 {} 个，nearestOre={}",
+                            nav.failType(), nav.failReason(), knownOres.size(), nearestOreInfo());
                     blacklistNearest();
+                    coldMapFails = 0;
                     stopNav();
                     return TaskState.RUNNING;
                 }
@@ -762,6 +787,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         TargetIndex.Result res = TargetIndex.query(sl, player.blockPosition(), r.targets,
                 MAX_ORES, QUERY_MAX_CHUNK_RADIUS, QUERY_BUILD_BUDGET);
         lastQueryComplete = res.complete();
+        if (lastQueryComplete) {
+            coldMapFails = 0;   // 图齐了，之前那几次无路不再算数
+        }
         com.dwinovo.numen.core.Constants.LOG.debug(
                 "[numen-task] mine query feet={} raw={} complete={} known(before merge)={}",
                 player.blockPosition().toShortString(), res.hits().size(), res.complete(),
