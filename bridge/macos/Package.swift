@@ -19,6 +19,9 @@ let package = Package(
             dependencies: [
                 .product(name: "Hummingbird", package: "hummingbird"),
                 .product(name: "HummingbirdWebSocket", package: "hummingbird-websocket")
+            ],
+            linkerSettings: [
+                .linkedFramework("Security")
             ]
         ),
         .testTarget(
