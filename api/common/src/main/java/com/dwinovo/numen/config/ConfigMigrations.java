@@ -3,6 +3,7 @@ package com.dwinovo.numen.config;
 import com.dwinovo.numen.Constants;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -29,16 +30,45 @@ public final class ConfigMigrations {
 
     /** 全部迁移步骤,按史序执行;加新迁移 = 尾部加一行 + 一个自探测的私有方法。 */
     public static void run(Path numenConfigDir) {
-        step("providers-file-rename", () -> renameProvidersFile(numenConfigDir));
+        step("park-dead-site-catalog", () -> parkDeadSiteCatalog(numenConfigDir));
     }
 
-    /** 0.1.1→0.1.2:用户站点文件 models.json 改名 providers.json(文件主体是站点,原名名不副实)。 */
-    private static void renameProvidersFile(Path dir) throws IOException {
-        Path current = dir.resolve("providers.json");
-        Path legacy = dir.resolve("models.json");
-        if (!Files.exists(current) && Files.exists(legacy)) {
-            Files.move(legacy, current);
-            Constants.LOG.info("[numen] config migration: models.json -> providers.json");
+    /**
+     * 站点目录退回只读内置（见 {@code ProviderRegistry}），落盘的那份从此是死数据，
+     * 挂成 {@code .bak} 移开。
+     *
+     * <p>涉两个文件：0.1.1 叫 {@code models.json}，0.1.2 开发期改叫
+     * {@code providers.json} —— 而后者正是面板站点库（{@code ProviderLibrary}）
+     * 的文件名。<b>所以这里认形状不认文件名</b>：只有顶层是 {@code providers}
+     * 数组的才是死目录，{@code entries} 形状是玩家的 API Key，碰一下都不行。
+     *
+     * <p>从前这一步是把 {@code models.json} 改名成 {@code providers.json}，恰好把死目录
+     * 搬到了玩家密钥库的位置上。
+     */
+    private static void parkDeadSiteCatalog(Path dir) throws IOException {
+        park(dir.resolve("models.json"));
+        park(dir.resolve("providers.json"));
+    }
+
+    private static void park(Path file) throws IOException {
+        if (!Files.exists(file) || !isSiteCatalog(file)) return;
+        Path bak = file.resolveSibling(file.getFileName() + ".bak");
+        if (Files.exists(bak)) {
+            Files.delete(file);   // 已经挂过一份,不再覆盖它
+        } else {
+            Files.move(file, bak);
+        }
+        Constants.LOG.info("[numen] 站点目录已内置化,移走旧文件 {}", file.getFileName());
+    }
+
+    /** 顶层有 {@code providers} 数组 = 旧站点目录。读不动/不是 JSON 一律算不是（宁可不搬）。 */
+    private static boolean isSiteCatalog(Path file) {
+        try {
+            var root = com.google.gson.JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8));
+            return root.isJsonObject() && root.getAsJsonObject().has("providers")
+                    && root.getAsJsonObject().get("providers").isJsonArray();
+        } catch (Exception e) {
+            return false;
         }
     }
 

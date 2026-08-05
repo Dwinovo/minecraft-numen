@@ -393,6 +393,22 @@ public final class EntityAgentLoop {
         tryStartTurn();
     }
 
+    /**
+     * 断线静默:只收拾<b>客户端</b>——作废在飞的回应、给未决调用补取消结果、
+     * 清半截打字和语音。<b>不叫停身体</b>。
+     *
+     * <p>她的身体还在服务器里 tick,任务照样跑完,收尾进离线出箱等主人回来
+     * ——"我帮你把矿挖完了"这条链正是为此做的。登出时叫停她,恰好把它废掉。
+     *
+     * <p>从前这里直接复用 {@link #abort()},于是登出会往一个<b>已经断开</b>的连接
+     * 发叫停包,抛 NPE 打断 {@code onLoggingOut} 的后半段(花名册清空等等一律不执行)。
+     * 那个 NPE 反而"保住"了正确行为——治它不能靠让发包静默失败,得先回答
+     * "登出到底该不该叫停"。答案是不该。
+     */
+    public void quiesce() {
+        abort(false);
+    }
+
     /** Driven once per client tick (see {@code AgentLoopRegistry.tickAll}) — backstop timeout. */
     public void clientTick() {
         dispatcher.tick();
@@ -510,6 +526,10 @@ public final class EntityAgentLoop {
      * No-op when nothing is running and nothing is queued.
      */
     public void abort() {
+        abort(true);
+    }
+
+    private void abort(boolean stopBody) {
         // 语音无条件先闭嘴:不管打断的是在飞的 turn 还是排队的 prompt,
         // 主人按下 Stop 时还在播/待播的语音都不该继续。
         presenter.interruptVoice();
@@ -530,15 +550,13 @@ public final class EntityAgentLoop {
             // still-queued) so the assistant(tool_calls) message keeps matching tool
             // results — otherwise the next request is protocol-invalid (HTTP 400). Real
             // results arriving later are dropped as "late" by the dispatcher.
-            List<String> cancelled = dispatcher.cancelAndDrain();
+            // stopBody=true(主人按停止):cancelAndDrain 顺手触发 CompanionLifecycle.onAbort,
+            // 内容包据此停掉身体那边的活。断线登出不走这条 —— 见 quiesce。
+            List<String> cancelled = dispatcher.cancelAndDrain(stopBody);
+            String why = stopBody ? "interrupted by owner" : "owner disconnected";
             for (String id : cancelled) {
-                convo.addToolResult(id,
-                        "{\"success\":false,\"message\":\"interrupted by owner\"}");
+                convo.addToolResult(id, "{\"success\":false,\"message\":\"" + why + "\"}");
             }
-
-            // Stop the BODY too, not just the conversation: cancelAndDrain fires
-            // CompanionLifecycle.onAbort, which tool packs subscribe to so they can
-            // halt their own server-side work. The engine sends no packet itself.
 
             // If we cut off an in-flight LLM call before its assistant turn was
             // recorded, the conversation now ends on a user message. Cap it with a
@@ -551,8 +569,8 @@ public final class EntityAgentLoop {
 
             convo.resetTurnCount();
             turnPause = AgentTurnPause.OWNER_INTERRUPT;
-            Constants.LOG.info("[numen-entity#{}] interrupted by owner (awaitingLlm={}, backgroundTask={}, cancelledTools={}, queued={})",
-                    entityUuid, wasAwaitingLlm, wasBackgroundTask, cancelled.size(),
+            Constants.LOG.info("[numen-entity#{}] {} (awaitingLlm={}, backgroundTask={}, cancelledTools={}, queued={})",
+                    entityUuid, why, wasAwaitingLlm, wasBackgroundTask, cancelled.size(),
                     queue.count(EventTypes.QUERY));
         } else if (queue.count(EventTypes.QUERY) > 0) {
             // 空闲时打断:清掉被取代的指令,事实留着。清哪些不在这里判断——
@@ -1131,18 +1149,23 @@ public final class EntityAgentLoop {
         // 有没有"干完"这回事,决定她该等还是该换:有终点的活等它的 task_finished;
         // 常驻的活(跟随 / 一直钓鱼)永远不会有那条事件,只能被换掉。分不清这一点,
         // 她要么干等一个永不到来的事件,要么把还没干完的活当成已经结束。
+        // 两支只差在「会不会有 task_finished」。怎么换是一样的 —— 直接派新的。
         String tail = task.standing()
                 ? "This is a STANDING job — it has no finish line and will NEVER send a "
-                  + "task_finished event. It keeps running until you are given something else to do. "
-                  + "Dispatching any other body action REPLACES it, which is the normal way to stop it."
-                : "This exact background call is ACTIVE. Do not dispatch it again or start another "
-                  + "body action. Wait for its task_finished event; use task_status only when the owner "
-                  + "asks for progress, and task_stop only to abort.";
+                  + "task_finished event. It keeps running until something replaces it."
+                : "This background call is ACTIVE and will send a task_finished event when it ends; "
+                  + "use task_status only when the owner asks for progress.";
+        // 身体只有一个槽，派新活自然顶掉旧活。从前这里写的是「别再派」（那时候
+        // 派发侧会拒绝并发任务），闸门拆了以后那句话就成了误导：模型会先 task_stop
+        // 再派，白跑一轮。只有「停下来什么也不干」才需要 task_stop。
+        String swap = " There is only ONE body: dispatching another body action REPLACES this one "
+                + "outright — you do NOT need to stop it first. Use task_stop only when the owner "
+                + "wants her to stop and do nothing.";
         return "<runtime_state><current_task id=\"" + xml(task.id()) + "\" tool=\""
                 + xml(task.tool()) + "\" state=\"running\" standing=\"" + task.standing()
                 + "\" elapsed_s=\"" + elapsed
                 + "\">Original arguments: " + xml(truncate(task.arguments(), 600)) + ". "
-                + tail + "</current_task></runtime_state>";
+                + tail + swap + "</current_task></runtime_state>";
     }
 
     private String composeSystemPrompt() {

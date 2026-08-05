@@ -103,13 +103,28 @@ public final class ToolDispatcher {
      * caller can heal the conversation. Used on owner-interrupt and on death.
      */
     public List<String> cancelAndDrain() {
+        return cancelAndDrain(true);
+    }
+
+    /**
+     * 收掉所有未决调用,返回它们的 id(调用方据此合成取消结果,保住协议)。
+     *
+     * @param stopBody 要不要连身体一起叫停。<b>主人按停止</b>要({@code true}——他要她
+     *                 立刻住手);<b>断线登出</b>不要({@code false})——她的身体还在
+     *                 服务器里,任务照样该跑完,收尾走离线出箱。而且此刻连接已经没了,
+     *                 那个包根本发不出去(从前正是在这里抛 NPE,把登出清理的后半段
+     *                 整个打断)。
+     */
+    public List<String> cancelAndDrain(boolean stopBody) {
         List<String> ids = new ArrayList<>(inFlight.keySet());
         for (ToolInvocation inv : queue) ids.add(inv.id());
         inFlight.clear();
         queue.clear();
         deadlineMillis = 0;
         advancing = false;
-        CompanionLifecycle.fireAbort(entityUuid);   // tool packs stop their own server-side work
+        if (stopBody) {
+            CompanionLifecycle.fireAbort(entityUuid);   // 内容包据此停掉自己那边的活
+        }
         return ids;
     }
 

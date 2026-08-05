@@ -50,6 +50,14 @@ public final class NeoForgeNetworkChannel implements INetworkChannel {
 
     @Override
     public void sendToServer(CustomPacketPayload payload) {
+        // Lazy class-load: Minecraft is client-only. Server JVM never reaches this call site.
+        // 没连接就发不出去，而发包往往夹在一串清理中间（登出钩子），一报错就把
+        // 后面的清理全截断了。警告并丢包：丢一个本来就发不出去的包无害，截断清理有害。
+        // 不静默：真有人在错的时机发包，日志里看得到。
+        if (net.minecraft.client.Minecraft.getInstance().getConnection() == null) {
+            com.dwinovo.numen.Constants.LOG.warn("[numen] 无连接,丢弃 C2S 包 {}", payload.type().id());
+            return;
+        }
         // 1.21.5: the dedicated client ClientPacketDistributor doesn't exist yet;
         // the common PacketDistributor.sendToServer routes through the client connection.
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(payload);

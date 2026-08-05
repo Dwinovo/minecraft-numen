@@ -6,8 +6,6 @@ import com.google.gson.JsonParser;
 
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -18,9 +16,15 @@ import java.util.Map;
  * custom headers, and a list of known models with their context window (tokens). Single source of truth
  * for the settings dropdowns and the per-model auto-compaction threshold.
  *
- * <p>USER-EDITABLE: on first load the bundled {@code /numen_providers.json} is copied to
- * {@code config/numen/providers.json}; thereafter that file is authoritative (edit it to add your own
- * sites/models). A broken user file falls back to the bundled default.
+ * <p>只读，只来自内置的 {@code /numen_providers.json}。它是【协议方言】目录，不是用户配置：
+ * 一个条目 = 一种接口协议 + 它的默认地址/报头/思考字段 + 几个预设模型的上下文长度。
+ * 这些都是代码里真有分支的东西，改了也没用。
+ *
+ * <p>用户想接自己的站点，填的是面板里的 baseUrl + apiKey + 模型名（存在
+ * {@code ProviderLibrary} 的 {@code config/numen/providers.json}），协议从这份目录里选一个。
+ * 从前这里也往同一个文件里播种子、也从那里读，两个类抢一个文件 —— 面板一存就
+ * 把它写成了 {@code entries} 形状，这边每次启动都解析失败报一条 ERROR 再退回内置。
+ * 回到只读内置，那条路就没了。
  */
 public final class ProviderRegistry {
 
@@ -34,93 +38,12 @@ public final class ProviderRegistry {
     /** Fallback context window for an unknown model (e.g. a custom one). */
     public static final int DEFAULT_CTX = 64_000;
 
-    /** 用户可编辑文件的落点,引导期由宿主注入;未注入时只用内置默认(如 headless 测试)。 */
-    private static volatile Path userFile;
-
-    private static volatile List<Provider> PROVIDERS = load();
+    private static final List<Provider> PROVIDERS = load();
 
     private ProviderRegistry() {}
 
-    /** 宿主引导:注入用户文件落点并重载(首次会把内置默认播种到该文件供编辑)。 */
-    public static void init(Path modelsJson) {
-        userFile = modelsJson;
-        reload();
-    }
-
-    /** Re-read the user file (after an edit / a site was added). */
-    public static void reload() { PROVIDERS = load(); }
-
-    /** Append a user-defined OpenAI-compatible site to {@code config/numen/providers.json} and reload.
-     *  Returns the new site id, or null on failure. */
-    public static String addCustomSite(String name, String baseUrl, String modelId) {
-        Path file = userFile;
-        if (file == null) {
-            AiLog.LOG.error("[numen] can't add custom site '{}': registry not initialised with a user file", name);
-            return null;
-        }
-        try {
-            String json = Files.exists(file) ? Files.readString(file, StandardCharsets.UTF_8) : readBundled();
-            com.google.gson.JsonObject root = JsonParser.parseString(json).getAsJsonObject();
-            com.google.gson.JsonArray providers = root.getAsJsonArray("providers");
-            String id = uniqueId(slug(name), providers);
-            com.google.gson.JsonObject p = new com.google.gson.JsonObject();
-            p.addProperty("id", id);
-            p.addProperty("name", name == null || name.isBlank() ? id : name.trim());
-            p.addProperty("baseUrl", baseUrl == null ? "" : baseUrl.trim());
-            com.google.gson.JsonArray models = new com.google.gson.JsonArray();
-            if (modelId != null && !modelId.isBlank()) {
-                com.google.gson.JsonObject m = new com.google.gson.JsonObject();
-                m.addProperty("id", modelId.trim());
-                models.add(m);
-            }
-            p.add("models", models);
-            providers.add(p);
-            Files.createDirectories(file.getParent());
-            Files.writeString(file, new com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(root),
-                    StandardCharsets.UTF_8);
-            reload();
-            return id;
-        } catch (Exception e) {
-            AiLog.LOG.error("[numen] failed to add custom site '{}'", name, e);
-            return null;
-        }
-    }
-
-    private static String slug(String name) {
-        if (name == null) return "site";
-        String s = name.toLowerCase().replaceAll("[^a-z0-9]+", "_").replaceAll("^_+|_+$", "");
-        return s.isEmpty() ? "site" : s;
-    }
-
-    private static String uniqueId(String base, com.google.gson.JsonArray providers) {
-        java.util.Set<String> ids = new java.util.HashSet<>();
-        for (var e : providers) ids.add(e.getAsJsonObject().get("id").getAsString());
-        if (!ids.contains(base)) return base;
-        for (int i = 2; ; i++) if (!ids.contains(base + "_" + i)) return base + "_" + i;
-    }
-
     private static List<Provider> load() {
-        String bundled = readBundled();
-        String json = bundled;
-        Path file = userFile;
-        try {
-            if (file != null) {
-                if (Files.exists(file)) {
-                    json = Files.readString(file, StandardCharsets.UTF_8);   // user-authoritative
-                } else if (bundled != null) {
-                    Files.createDirectories(file.getParent());
-                    Files.writeString(file, bundled, StandardCharsets.UTF_8);  // seed for editing
-                }
-            }
-        } catch (Exception e) {
-            AiLog.LOG.warn("[numen] couldn't read/seed {}, using bundled", file, e);
-        }
-        List<Provider> out = parse(json);
-        if (out.isEmpty() && bundled != null && !bundled.equals(json)) {
-            AiLog.LOG.warn("[numen] user providers.json yielded no sites, falling back to bundled");
-            out = parse(bundled);
-        }
-        return List.copyOf(out);
+        return List.copyOf(parse(readBundled()));
     }
 
     private static String readBundled() {
@@ -170,7 +93,7 @@ public final class ProviderRegistry {
                         p.has("protocol") ? p.get("protocol").getAsString() : ""));
             }
         } catch (Exception e) {
-            AiLog.LOG.error("[numen] failed to parse providers.json", e);
+            AiLog.LOG.error("[numen] failed to parse numen_providers.json", e);
         }
         return out;
     }

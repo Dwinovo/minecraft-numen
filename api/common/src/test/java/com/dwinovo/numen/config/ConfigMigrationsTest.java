@@ -12,53 +12,70 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 迁移台账的四种盘面:只有旧(搬)、只有新(不动)、新旧都有(不动,新为真源)、
- * 全空(无事发生)。外加幂等(跑两遍同一结果)与坏目录不炸。
+ * 站点目录退回只读内置之后,落盘的那份成了死数据,挂成 {@code .bak} 移开。
+ *
+ * <p>关键在于<b>认形状不认文件名</b>:{@code providers.json} 这个名字被两代东西用过——
+ * 开发期是站点目录({@code providers} 数组),现在是面板的密钥库({@code entries})。
+ * 认名字就会把玩家的 API Key 搬走。
  */
 class ConfigMigrationsTest {
+
+    private static final String CATALOG = "{\"providers\":[{\"id\":\"openai\"}]}";
+    private static final String LIBRARY = "{\"entries\":[{\"id\":\"prov_1\",\"api_key\":\"sk-real\"}]}";
 
     @TempDir
     Path dir;
 
     @Test
-    void legacyOnlyGetsRenamedWithContentIntact() throws IOException {
-        Files.writeString(dir.resolve("models.json"), "{\"providers\":[]}");
+    void legacyCatalogIsParked() throws IOException {
+        Files.writeString(dir.resolve("models.json"), CATALOG);
         ConfigMigrations.run(dir);
         assertFalse(Files.exists(dir.resolve("models.json")));
-        assertEquals("{\"providers\":[]}", Files.readString(dir.resolve("providers.json")));
+        assertEquals(CATALOG, Files.readString(dir.resolve("models.json.bak")));
     }
 
     @Test
-    void currentOnlyIsUntouched() throws IOException {
-        Files.writeString(dir.resolve("providers.json"), "new");
+    void catalogSeededUnderTheNewNameIsAlsoParked() throws IOException {
+        // 0.1.2 开发期播下的种子:文件名已经是 providers.json,但形状还是站点目录
+        Files.writeString(dir.resolve("providers.json"), CATALOG);
         ConfigMigrations.run(dir);
-        assertEquals("new", Files.readString(dir.resolve("providers.json")));
-        assertFalse(Files.exists(dir.resolve("models.json")));
+        assertFalse(Files.exists(dir.resolve("providers.json")));
+        assertEquals(CATALOG, Files.readString(dir.resolve("providers.json.bak")));
     }
 
     @Test
-    void bothPresentKeepsCurrentAsTruth() throws IOException {
-        // 双份并存(升级又回滚又升级的盘面):新文件为真源,旧文件不动不删——
-        // 覆盖新文件等于吃掉玩家在新版本里的改动。
-        Files.writeString(dir.resolve("providers.json"), "new");
-        Files.writeString(dir.resolve("models.json"), "old");
+    void playerKeyLibraryIsNeverTouched() throws IOException {
+        // 同一个文件名,装的是玩家的 API Key —— 动它就是丢数据
+        Files.writeString(dir.resolve("providers.json"), LIBRARY);
         ConfigMigrations.run(dir);
-        assertEquals("new", Files.readString(dir.resolve("providers.json")));
-        assertEquals("old", Files.readString(dir.resolve("models.json")));
+        assertEquals(LIBRARY, Files.readString(dir.resolve("providers.json")));
+        assertFalse(Files.exists(dir.resolve("providers.json.bak")));
+    }
+
+    @Test
+    void unreadableFileIsLeftAlone() throws IOException {
+        // 读不动/不是 JSON 一律不搬:宁可留着让人自己看,也不擅自移走
+        Files.writeString(dir.resolve("providers.json"), "{ 半截");
+        ConfigMigrations.run(dir);
+        assertTrue(Files.exists(dir.resolve("providers.json")));
     }
 
     @Test
     void emptyDirIsANoOp() {
         ConfigMigrations.run(dir);
-        assertFalse(Files.exists(dir.resolve("providers.json")));
+        assertFalse(Files.exists(dir.resolve("providers.json.bak")));
+        assertFalse(Files.exists(dir.resolve("models.json.bak")));
     }
 
     @Test
-    void runningTwiceIsIdempotent() throws IOException {
-        Files.writeString(dir.resolve("models.json"), "x");
+    void runningTwiceKeepsTheFirstBackup() throws IOException {
+        Files.writeString(dir.resolve("models.json"), CATALOG);
         ConfigMigrations.run(dir);
+        // 第二次启动:上一版又播了一份种子下来,已有备份不被覆盖
+        Files.writeString(dir.resolve("models.json"), "{\"providers\":[]}");
         ConfigMigrations.run(dir);
-        assertEquals("x", Files.readString(dir.resolve("providers.json")));
+        assertFalse(Files.exists(dir.resolve("models.json")));
+        assertEquals(CATALOG, Files.readString(dir.resolve("models.json.bak")));
     }
 
     @Test

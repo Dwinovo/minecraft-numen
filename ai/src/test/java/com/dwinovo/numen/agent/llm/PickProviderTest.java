@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * 站点名 → provider 实例的装配:别名解析、子类挑选、数据驱动站点的
- * 方言注入。跑在未注入用户文件的 headless 环境(内置 numen_providers.json 兜底)。
+ * 方言注入。目录只读内置 numen_providers.json，所以 headless 跟游戏里读到的是同一份。
  */
 class PickProviderTest {
 

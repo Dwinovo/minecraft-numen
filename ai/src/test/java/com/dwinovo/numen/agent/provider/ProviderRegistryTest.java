@@ -8,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 站点注册表(headless:未注入用户文件,内置 numen_providers.json 兜底):
+ * 站点注册表（只读内置 numen_providers.json）:
  * ctx 查询、生成参数缺省、别名规范化、本地部署站点在册。
  */
 class ProviderRegistryTest {
