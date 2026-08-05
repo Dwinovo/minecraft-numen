@@ -8,6 +8,8 @@ import java.io.DataOutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
@@ -62,12 +64,15 @@ public final class DashScopeTts implements TtsBackend {
 
     @Override
     public CompletableFuture<byte[]> synthesize(String text) {
+        if (text == null || text.isBlank()) {
+            return CompletableFuture.failedFuture(new IllegalArgumentException("TTS text is empty"));
+        }
         CompletableFuture<byte[]> result = new CompletableFuture<>();
         try {
             CLIENT.newWebSocketBuilder()
                     .header("Authorization", "Bearer " + apiKey)
                     .connectTimeout(Duration.ofSeconds(10))
-                    .buildAsync(URI.create(WS_BASE + model), new WsListener(text, result))
+                    .buildAsync(webSocketUri(model), new WsListener(text, result))
                     // 握手失败（key 无效/DNS/拒绝升级）走这里：不能让调用方永远挂起
                     .whenComplete((socket, ex) -> {
                         if (ex != null) {
@@ -106,6 +111,11 @@ public final class DashScopeTts implements TtsBackend {
         return List.of(update.toString(), append.toString(), commit.toString());
     }
 
+    static URI webSocketUri(String model) {
+        String encoded = URLEncoder.encode(model, StandardCharsets.UTF_8).replace("+", "%20");
+        return URI.create(WS_BASE + encoded);
+    }
+
     private final class WsListener implements WebSocket.Listener {
 
         private final String text;
@@ -113,6 +123,7 @@ public final class DashScopeTts implements TtsBackend {
         private final AtomicBoolean finished = new AtomicBoolean(false);
         private volatile WebSocket ws;
         private final ByteArrayOutputStream pcm = new ByteArrayOutputStream();
+        private final StringBuilder fragments = new StringBuilder();
 
         WsListener(String text, CompletableFuture<byte[]> result) {
             this.text = text;
@@ -122,8 +133,8 @@ public final class DashScopeTts implements TtsBackend {
         @Override
         public void onOpen(WebSocket webSocket) {
             ws = webSocket;
-            WebSocket.Listener.super.onOpen(webSocket);
             sendSessionUpdate();
+            webSocket.request(1);
         }
 
         private void sendSessionUpdate() {
@@ -134,27 +145,33 @@ public final class DashScopeTts implements TtsBackend {
 
         @Override
         public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
-            try {
-                JsonObject e = JsonParser.parseString(data.toString()).getAsJsonObject();
-                String type = e.has("type") ? e.get("type").getAsString() : "";
-                if ("response.audio.delta".equals(type) && e.has("delta")) {
-                    pcm.write(Base64.getDecoder().decode(e.get("delta").getAsString()));
-                } else if ("response.done".equals(type) || "response.audio.done".equals(type)) {
-                    complete();
-                } else if ("error".equals(type)) {
-                    String msg = "DashScope TTS error";
-                    if (e.has("error")) {
-                        JsonObject err = e.getAsJsonObject("error");
-                        if (err.has("message")) {
-                            msg = err.get("message").getAsString();
+            fragments.append(data);
+            if (last) {
+                try {
+                    JsonObject e = JsonParser.parseString(fragments.toString()).getAsJsonObject();
+                    String type = e.has("type") ? e.get("type").getAsString() : "";
+                    if ("response.audio.delta".equals(type) && e.has("delta")) {
+                        pcm.write(Base64.getDecoder().decode(e.get("delta").getAsString()));
+                    } else if ("response.done".equals(type)) {
+                        complete();
+                    } else if ("error".equals(type)) {
+                        String msg = "DashScope TTS error";
+                        if (e.has("error")) {
+                            JsonObject err = e.getAsJsonObject("error");
+                            if (err.has("message")) {
+                                msg = err.get("message").getAsString();
+                            }
                         }
+                        fail(new IllegalStateException(msg));
                     }
-                    fail(new IllegalStateException(msg));
+                } catch (Exception ex) {
+                    fail(ex);
+                } finally {
+                    fragments.setLength(0);
                 }
-            } catch (Exception ex) {   // IOException(pcm.write) 与 RuntimeException 都按失败处理
-                fail(ex);
             }
-            return null;   // 单帧小消息，无需分帧续传
+            webSocket.request(1);
+            return CompletableFuture.completedFuture(null);
         }
 
         @Override
@@ -164,11 +181,10 @@ public final class DashScopeTts implements TtsBackend {
 
         @Override
         public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-            // 流意外中断时，尽量用已收到的音频完成（避免整句丢失）
             if (!finished.get()) {
-                complete();
+                fail(new IllegalStateException("DashScope TTS connection closed: " + reason));
             }
-            return null;
+            return CompletableFuture.completedFuture(null);
         }
 
         private void complete() {
@@ -192,35 +208,39 @@ public final class DashScopeTts implements TtsBackend {
 
         private void closeQuietly() {
             try {
-                ws.sendClose(1000, "done");
+                if (ws != null) ws.sendClose(1000, "done");
             } catch (Exception ignored) {
                 // 已关闭则忽略
             }
         }
 
-        /** 把 16-bit LE 单声道 PCM 包成 RIFF/WAVE，采样率 {@link #SAMPLE_RATE}。 */
-        private byte[] toWav(byte[] pcmBytes) {
-            int dataLen = pcmBytes.length;
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            try (DataOutputStream d = new DataOutputStream(out)) {
-                d.writeBytes("RIFF");
-                d.writeInt(Integer.reverseBytes(36 + dataLen));
-                d.writeBytes("WAVE");
-                d.writeBytes("fmt ");
-                d.writeInt(Integer.reverseBytes(16));
-                d.writeShort(Short.reverseBytes((short) 1));        // PCM
-                d.writeShort(Short.reverseBytes((short) 1));        // 单声道
-                d.writeInt(Integer.reverseBytes(SAMPLE_RATE));
-                d.writeInt(Integer.reverseBytes(SAMPLE_RATE * 2));  // byte rate
-                d.writeShort(Short.reverseBytes((short) 2));        // block align
-                d.writeShort(Short.reverseBytes((short) 16));       // 16-bit
-                d.writeBytes("data");
-                d.writeInt(Integer.reverseBytes(dataLen));
-                d.write(pcmBytes);
-            } catch (java.io.IOException ex) {
-                throw new RuntimeException(ex);
-            }
-            return out.toByteArray();
+    }
+
+    /** 把 16-bit LE 单声道 PCM 包成 RIFF/WAVE，采样率 {@link #SAMPLE_RATE}。 */
+    static byte[] toWav(byte[] pcmBytes) {
+        if (pcmBytes == null || pcmBytes.length == 0 || (pcmBytes.length & 1) != 0) {
+            throw new IllegalArgumentException("DashScope returned empty or odd-length PCM");
         }
+        int dataLen = pcmBytes.length;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (DataOutputStream d = new DataOutputStream(out)) {
+            d.writeBytes("RIFF");
+            d.writeInt(Integer.reverseBytes(36 + dataLen));
+            d.writeBytes("WAVE");
+            d.writeBytes("fmt ");
+            d.writeInt(Integer.reverseBytes(16));
+            d.writeShort(Short.reverseBytes((short) 1));
+            d.writeShort(Short.reverseBytes((short) 1));
+            d.writeInt(Integer.reverseBytes(SAMPLE_RATE));
+            d.writeInt(Integer.reverseBytes(SAMPLE_RATE * 2));
+            d.writeShort(Short.reverseBytes((short) 2));
+            d.writeShort(Short.reverseBytes((short) 16));
+            d.writeBytes("data");
+            d.writeInt(Integer.reverseBytes(dataLen));
+            d.write(pcmBytes);
+        } catch (java.io.IOException ex) {
+            throw new RuntimeException(ex);
+        }
+        return out.toByteArray();
     }
 }

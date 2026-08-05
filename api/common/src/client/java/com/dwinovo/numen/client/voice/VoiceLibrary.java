@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.voice;
 
+import com.dwinovo.numen.client.bridge.BridgeDiscovery;
 import com.dwinovo.numen.client.data.JsonLibrary;
 import com.google.gson.JsonObject;
 
@@ -49,6 +50,8 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
     public static final String BACKEND_FISH = "fish_audio";
     /** 阿里云百炼(DashScope)实时语音合成：走 /api-ws/v1/realtime WebSocket。 */
     public static final String BACKEND_DASHSCOPE = "dashscope";
+    /** Local Numen Bridge.app TTS endpoint. */
+    public static final String BACKEND_BRIDGE = "bridge";
 
     /**
      * 一条命名声线配置。允许不完整——只有名字是必填;参数错误在第一次合成时以日志报错。
@@ -76,6 +79,10 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
             return BACKEND_DASHSCOPE.equalsIgnoreCase(backend);
         }
 
+        public boolean isBridge() {
+            return BACKEND_BRIDGE.equalsIgnoreCase(backend);
+        }
+
         /** 据 backend 字段实例化对应 TTS 实现。 */
         public TtsBackend createBackend() {
             if (isSovits()) {
@@ -89,6 +96,13 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
             }
             if (isDashScope()) {
                 return new DashScopeTts(url, apiKey, model, voice);
+            }
+            if (isBridge()) {
+                try {
+                    return new BridgeTts(BridgeDiscovery.load(), model, voice);
+                } catch (IllegalArgumentException error) {
+                    return new UnavailableTts(error);
+                }
             }
             return new OpenAiCompatibleTts(url, apiKey, model, voice);
         }

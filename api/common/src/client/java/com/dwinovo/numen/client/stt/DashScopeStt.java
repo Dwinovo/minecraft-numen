@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -206,16 +207,23 @@ public final class DashScopeStt implements SttBackend {
         private final class WsListener implements WebSocket.Listener {
 
             private final StringBuilder transcript = new StringBuilder();
+            private final StringBuilder fragments = new StringBuilder();
 
             @Override
             public void onOpen(WebSocket webSocket) {
-                WebSocket.Listener.super.onOpen(webSocket);
+                webSocket.request(1);
             }
 
             @Override
             public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
+                fragments.append(data);
+                if (!last) {
+                    webSocket.request(1);
+                    return CompletableFuture.completedFuture(null);
+                }
                 try {
-                    JsonObject e = JsonParser.parseString(data.toString()).getAsJsonObject();
+                    JsonObject e = JsonParser.parseString(fragments.toString()).getAsJsonObject();
+                    fragments.setLength(0);
                     String type = e.has("type") ? e.get("type").getAsString() : "";
                     switch (type) {
                         case "conversation.item.input_audio_transcription.delta" -> {
@@ -227,6 +235,13 @@ public final class DashScopeStt implements SttBackend {
                         case "conversation.item.input_audio_transcription.completed" -> {
                             String t = e.has("transcript")
                                     ? e.get("transcript").getAsString() : transcript.toString();
+                            if (t.strip().isEmpty()) {
+                                if (done.compareAndSet(false, true)) {
+                                    listener.onError(new IllegalStateException("DashScope STT returned empty transcript"));
+                                    closeQuietly();
+                                }
+                                break;
+                            }
                             if (done.compareAndSet(false, true)) {
                                 listener.onFinal(t.strip());
                                 closeQuietly();
@@ -252,7 +267,8 @@ public final class DashScopeStt implements SttBackend {
                         listener.onError(ex);
                     }
                 }
-                return null;   // 单帧小消息，无需分帧续传
+                webSocket.request(1);
+                return CompletableFuture.completedFuture(null);
             }
 
             @Override
@@ -264,11 +280,11 @@ public final class DashScopeStt implements SttBackend {
 
             @Override
             public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-                // 若转写未完成连接就断了，给一个空结果而非永远挂起
                 if (done.compareAndSet(false, true)) {
-                    listener.onFinal(transcript.toString().strip());
+                    listener.onError(new IllegalStateException(
+                            "DashScope STT connection closed: " + reason));
                 }
-                return null;
+                return CompletableFuture.completedFuture(null);
             }
 
             private void closeQuietly() {

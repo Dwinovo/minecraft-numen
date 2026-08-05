@@ -8,6 +8,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class DashScopeTtsTest {
 
@@ -36,5 +37,13 @@ class DashScopeTtsTest {
 
         JsonObject commit = JsonParser.parseString(messages.get(2)).getAsJsonObject();
         assertEquals("input_text_buffer.commit", commit.get("type").getAsString());
+    }
+
+    @Test
+    void rejectsEmptyOrOddPcmAndEncodesModelInWebSocketUri() {
+        assertThrows(IllegalArgumentException.class, () -> DashScopeTts.toWav(new byte[0]));
+        assertThrows(IllegalArgumentException.class, () -> DashScopeTts.toWav(new byte[]{1}));
+        assertEquals("qwen%2Ftts%20model", DashScopeTts.webSocketUri("qwen/tts model")
+                .getRawQuery().substring("model=".length()));
     }
 }

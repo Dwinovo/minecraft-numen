@@ -66,6 +66,7 @@ public final class VoiceFormPanel {
             case VoiceLibrary.BACKEND_FISH -> com.dwinovo.numen.client.voice.FishAudioTts.DEFAULT_BASE;
             // DashScope 实时走固定 WS 地址(后端硬编码,baseUrl 不参与),这里仅作提示
             case VoiceLibrary.BACKEND_DASHSCOPE -> "wss://dashscope.aliyuncs.com/api-ws/v1/realtime";
+            case VoiceLibrary.BACKEND_BRIDGE -> "Numen Bridge.app（本机）";
             default -> com.dwinovo.numen.client.voice.OpenAiCompatibleTts.DEFAULT_BASE;
         };
     }
@@ -73,7 +74,7 @@ public final class VoiceFormPanel {
     private static final List<String> BACKENDS = List.of(
             VoiceLibrary.BACKEND_OPENAI, VoiceLibrary.BACKEND_SOVITS,
             VoiceLibrary.BACKEND_MINIMAX, VoiceLibrary.BACKEND_FISH,
-            VoiceLibrary.BACKEND_DASHSCOPE);
+            VoiceLibrary.BACKEND_DASHSCOPE, VoiceLibrary.BACKEND_BRIDGE);
     private static final String TEST_SENTENCE = "你好,我是你的同伴,这是我的声音。";
 
     /** 滚动根:表单行(进裁剪区,可上下滚);固定根:✕/结果胶囊/按钮行(不动)。 */
@@ -139,7 +140,8 @@ public final class VoiceFormPanel {
                 t(ModLanguageData.Keys.VOICE_BACKEND_SOVITS),
                 t(ModLanguageData.Keys.VOICE_BACKEND_MINIMAX),
                 t(ModLanguageData.Keys.VOICE_BACKEND_FISH),
-                t(ModLanguageData.Keys.VOICE_BACKEND_DASHSCOPE)),
+                t(ModLanguageData.Keys.VOICE_BACKEND_DASHSCOPE),
+                "Numen Bridge（macOS 本机）"),
                 Math.max(0, BACKENDS.indexOf(draft.backend)), this::onBackendPicked));
         backendPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
@@ -185,6 +187,12 @@ public final class VoiceFormPanel {
                         "qwen3-tts-flash-realtime", false, draft.model, v -> draft.model = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_VOICE,
                         "Cherry / Ethan / Nofish…", false, draft.voice, v -> draft.voice = v);
+            }
+            case VoiceLibrary.BACKEND_BRIDGE -> {
+                ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_MODEL,
+                        "qwen3-tts-flash-realtime", false, draft.model, v -> draft.model = v);
+                ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_VOICE,
+                        "Cherry", false, draft.voice, v -> draft.voice = v);
             }
             default -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_OPENAI,

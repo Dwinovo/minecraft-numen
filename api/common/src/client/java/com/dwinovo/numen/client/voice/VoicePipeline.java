@@ -152,6 +152,9 @@ public final class VoicePipeline {
                 Throwable failure = err;
                 if (err == null) {
                     try {
+                        if (wav == null || wav.length == 0) {
+                            throw new IllegalStateException("TTS returned empty audio");
+                        }
                         // 归一化+用户增益烙进采样(MC 实例音量被引擎钳在 1.0,只能在这做响度)。
                         decoded = WavCodec.decode(wav).amplified(volume);
                     } catch (Exception ex) {
@@ -170,9 +173,9 @@ public final class VoicePipeline {
                         target.audio = audio;
                         // INFO 而非 debug:每句一行,是"流式分句确实在 LLM 说完前就开始
                         // 合成"的唯一运行时证据,也是合成延迟的常驻观测点。
-                        Constants.LOG.info("[numen-voice#{}] 合成完成 {}ms, {}ms 音频: {}",
+                        Constants.LOG.info("[numen-voice#{}] 合成完成 {}ms, WAV {} bytes, {}ms 音频: {}",
                                 entityUuid, (System.nanoTime() - t0) / 1_000_000,
-                                audio.durationMs(), truncate(target.text));
+                                wav.length, audio.durationMs(), truncate(target.text));
                     }
                     pumpSynthesis();
                     pumpPlayback();

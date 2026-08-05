@@ -536,7 +536,8 @@ public final class SettingsView {
         return switch (b) {
             case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS,
                  com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX,
-                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH -> b;
+                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH,
+                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_BRIDGE -> b;
             default -> com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
         };
     }
