@@ -37,9 +37,11 @@ public final class ClientPayloadHandlers {
         // companions/<uuid>/;幂等,搬过就跳过。
         com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
         ClientPayloadSink.companionList = ClientPayloadHandlers::handleCompanionList;
+        // getOrCreate:跟死亡/事件同理 —— 这是状态推送,只在槽变化的那一刻发一次,
+        // loop 还没造出来就丢掉的话,客户端永远不会再听说这件活。
         ClientPayloadSink.currentTask = p ->
-                com.dwinovo.numen.client.agent.AgentLoopRegistry.get(p.entityUuid())
-                        .ifPresent(loop -> loop.onCurrentTask(p));
+                com.dwinovo.numen.client.agent.AgentLoopRegistry.getOrCreate(p.entityUuid())
+                        .onCurrentTask(p);
         ClientPayloadSink.death = ClientPayloadHandlers::handleDeath;
         // getOrCreate:主人登录时补发的离线事件可能先于任何交互到达,
         // 那时 loop 还没造出来——用 get 会把补发的事件整批丢掉。
@@ -118,11 +120,23 @@ public final class ClientPayloadHandlers {
         }
     }
 
+    /**
+     * getOrCreate(not get):跟 {@link #handleRespawn} 对称。
+     *
+     * <p>从前这里用 {@code get().ifPresent(...)} —— loop 还没造出来就<b>整条丢掉</b>,
+     * 而那句 "suspending loop" 打在 ifPresent 外面,日志看着像成功了。真机上的后果:
+     * 她死了但队列没上锁,紧接着到达的 task_finished 急件照常开了一轮,模型派出
+     * get_self_status,服务端找不到身体就把她提前复活了一具;5 秒后定时复活又来一具。
+     * 两具同 UUID 的身体同时在玩家列表里,排程器在两者之间反复重建大脑。
+     *
+     * <p>{@code restoreFromDisk} 里有"按名册重新上锁"的兜底,但名册与死亡包是两条独立
+     * 推送、没有顺序保证,loop 建起来的那一刻名册还没说她死了,兜底也接不住。
+     */
     private static void handleDeath(NumenDeathPayload p) {
         Constants.LOG.info("[numen-net] numen_death entity={} ({}) — suspending loop", p.entityUuid(), p.cause());
         // 只管大脑:死亡的展示状态(倒计时)跟着名册走,服务端在标记死亡后就推了一份。
         // 这条 payload 存在的理由是"她为什么死的"——那是叙事,必须恰好送达一次。
-        AgentLoopRegistry.get(p.entityUuid()).ifPresent(loop -> loop.onEntityDied(p.cause()));
+        AgentLoopRegistry.getOrCreate(p.entityUuid()).onEntityDied(p.cause());
     }
 
     private static void handleLocations(NumenLocationsPayload p) {
