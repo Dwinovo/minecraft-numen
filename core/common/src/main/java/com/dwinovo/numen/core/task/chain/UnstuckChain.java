@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.task.chain;
 import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
-import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
@@ -24,10 +23,6 @@ import net.minecraft.world.phys.Vec3;
  * {@link InputDriver} (no nav, no dig plan) — rough but safe: it is capped at
  * {@link #WANDER_TICKS} and never travels far. The pure detection logic lives in
  * {@link UnstuckDetector} so it is unit-tested headless.
- *
- * <p>GATED OFF by default via {@link SurvivalConfig}: the gate check precedes the
- * position sampling, so with the gate off nothing is recorded and the chain is a
- * strict no-op.
  */
 public final class UnstuckChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
@@ -43,10 +38,6 @@ public final class UnstuckChain implements Task, com.dwinovo.numen.task.reflex.R
 
     @Override
     public boolean canRun(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return false;
-        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return false;   // reflex switched off by the owner
-        }
         Vec3 pos = companion.position();
         boolean tryingToMove = companion.zza != 0.0f || companion.xxa != 0.0f;
         detector.record(pos.x, pos.z, tryingToMove);

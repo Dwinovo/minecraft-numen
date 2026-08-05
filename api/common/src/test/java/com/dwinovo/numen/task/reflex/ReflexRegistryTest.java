@@ -1,69 +1,28 @@
 package com.dwinovo.numen.task.reflex;
 
-import com.dwinovo.numen.task.reflex.ReflexRegistry;
-import com.dwinovo.numen.task.reflex.PolicyReflex;
-
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Pure tests for the reflex roster (constitution §6) — no Minecraft: fake
- * {@link PolicyReflex} entries and an in-memory {@link ReflexRegistry.StateStore}.
- * Covers the overview assembly (order, header/tail, disabled entries dropping
- * out), the enabled-switch semantics the chains' getPriority short-circuit reads
- * (default ON, unknown ids fail open), and switch persistence.
+ * 本能名册(宪法 §6):每条自主机制在 init 报到一次,换来一件事——<b>自述进提示词</b>。
+ *
+ * <p>从前它还管一个"每条本能的开关"(默认 ON,落盘到 {@code config/numen/reflexes.json})。
+ * 那套机构是空转的:翻开关的 {@code setEnabled} 在生产代码里<b>一个调用者都没有</b>,
+ * 主人根本没有入口关掉任何一条本能,于是每次启动读一个文件、写一个文件,里面的值永远
+ * 全是 true。看着有、实际没有,比明说没做更难查,所以整套收掉了——真要做,做的是面板
+ * 入口 + 这里重新长出开关。
  */
 class ReflexRegistryTest {
-
-    /** In-memory store standing in for {@code config/numen/reflexes.json}. */
-    private static final class MemoryStore implements ReflexRegistry.StateStore {
-        final Map<String, Boolean> disk = new HashMap<>();
-        int saves;
-
-        @Override public Map<String, Boolean> load() { return new HashMap<>(disk); }
-
-        @Override public void save(Map<String, Boolean> state) {
-            disk.clear();
-            disk.putAll(state);
-            saves++;
-        }
-    }
 
     @BeforeEach
     @AfterEach
     void resetRegistry() {
-        ReflexRegistry.resetForTest();   // static registry: never leak roster/switches across tests
-    }
-
-    // ---- enabled switch: what the chains' short-circuit reads ----
-
-    @Test
-    void reflexesDefaultOn() {
-        ReflexRegistry.register(new PolicyReflex("mlg", "会用水桶自救高坠"));
-        assertTrue(ReflexRegistry.enabled("mlg"));
-    }
-
-    @Test
-    void unknownIdFailsOpen() {
-        // A check that races registration must not silence an instinct.
-        assertTrue(ReflexRegistry.enabled("not_registered"));
-    }
-
-    @Test
-    void setEnabledFlipsTheSwitch() {
-        ReflexRegistry.register(new PolicyReflex("armor", "会自动穿上更好的盔甲"));
-        ReflexRegistry.setEnabled("armor", false);
-        assertFalse(ReflexRegistry.enabled("armor"));
-        ReflexRegistry.setEnabled("armor", true);
-        assertTrue(ReflexRegistry.enabled("armor"));
+        ReflexRegistry.resetForTest();   // 静态名册:别把注册泄漏进别的用例
     }
 
     @Test
@@ -74,64 +33,34 @@ class ReflexRegistryTest {
         assertFalse(ReflexRegistry.overview().contains("应被忽略"));
     }
 
-    // ---- overview assembly ----
-
     @Test
     void overviewJoinsDescriptionsInRegistrationOrder() {
         ReflexRegistry.register(new PolicyReflex("mlg", "会用水桶自救高坠"));
         ReflexRegistry.register(new PolicyReflex("armor", "会自动穿上更好的盔甲"));
+
         String overview = ReflexRegistry.overview();
+
         assertTrue(overview.startsWith("你的身体有这些本能"));
         int mlg = overview.indexOf("会用水桶自救高坠");
         int armor = overview.indexOf("会自动穿上更好的盔甲");
-        assertTrue(mlg >= 0 && armor > mlg);
+        assertTrue(mlg >= 0 && armor > mlg, "顺序该是报到顺序:" + overview);
         assertTrue(overview.contains("你的显式动作永远优先"));
     }
 
     @Test
-    void disabledReflexDropsOutOfTheOverview() {
+    void everyRegisteredReflexShowsUp() {
+        // 名册即全部——没有"开着的才算"这回事了
         ReflexRegistry.register(new PolicyReflex("mlg", "会用水桶自救高坠"));
         ReflexRegistry.register(new PolicyReflex("armor", "会自动穿上更好的盔甲"));
-        ReflexRegistry.setEnabled("armor", false);
+
         String overview = ReflexRegistry.overview();
+
         assertTrue(overview.contains("会用水桶自救高坠"));
-        assertFalse(overview.contains("会自动穿上更好的盔甲"));
+        assertTrue(overview.contains("会自动穿上更好的盔甲"));
     }
 
     @Test
     void emptyRosterHasEmptyOverview() {
         assertEquals("", ReflexRegistry.overview());
-    }
-
-    @Test
-    void allDisabledHasEmptyOverview() {
-        ReflexRegistry.register(new PolicyReflex("mlg", "会用水桶自救高坠"));
-        ReflexRegistry.setEnabled("mlg", false);
-        assertEquals("", ReflexRegistry.overview());
-    }
-
-    // ---- persistence ----
-
-    @Test
-    void bindStoreAppliesSavedOverrides() {
-        MemoryStore store = new MemoryStore();
-        store.disk.put("armor", false);
-        ReflexRegistry.bindStore(store);
-        ReflexRegistry.register(new PolicyReflex("armor", "会自动穿上更好的盔甲"));
-        assertFalse(ReflexRegistry.enabled("armor"));   // the owner's saved OFF survives restart
-    }
-
-    @Test
-    void setEnabledPersistsTheFullSwitchTable() {
-        MemoryStore store = new MemoryStore();
-        ReflexRegistry.bindStore(store);
-        ReflexRegistry.register(new PolicyReflex("mlg", "会用水桶自救高坠"));
-        ReflexRegistry.register(new PolicyReflex("armor", "会自动穿上更好的盔甲"));
-
-        ReflexRegistry.setEnabled("armor", false);
-
-        assertEquals(1, store.saves);
-        assertEquals(Boolean.TRUE, store.disk.get("mlg"));     // defaults written explicitly
-        assertEquals(Boolean.FALSE, store.disk.get("armor"));
     }
 }

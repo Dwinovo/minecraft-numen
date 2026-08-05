@@ -30,9 +30,6 @@ public class CommonClass {
      * {@link com.dwinovo.numen.task.CompanionTaskFactory})。
      */
     private static void wireTaskMachine() {
-        com.dwinovo.numen.task.reflex.ReflexRegistry.bindStore(
-                new com.dwinovo.numen.task.reflex.ReflexStateFile(
-                        Services.PLATFORM.getConfigDir().resolve("numen").resolve("reflexes.json")));
         com.dwinovo.numen.entity.CompanionLifecycle.onDeath(
                 com.dwinovo.numen.task.CompanionTickDispatcher::clearActiveTask);
         com.dwinovo.numen.entity.CompanionLifecycle.onRemove(

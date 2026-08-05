@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.task.chain;
 import com.dwinovo.numen.task.reflex.Reflex;
 
 import com.dwinovo.numen.core.act.Interaction;
-import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
@@ -30,12 +29,6 @@ import net.minecraft.world.phys.Vec3;
  * on the block below); the soft-block path is a rough fallback that clicks the block
  * onto the ground it is about to hit. Drives the {@link Interaction} primitive
  * directly — there is no nav and no result to build.
- *
- * <p>GATED OFF by default via {@link SurvivalConfig}.
- *
- * <p><b>Emptied-bucket safety:</b> the water source is re-scanned every tick, so
- * once the bucket empties (it becomes a plain bucket) the chain no longer fires a
- * use — it never scoops the just-placed water back up.
  */
 public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
@@ -52,10 +45,6 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
 
     @Override
     public boolean canRun(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return false;
-        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return false;   // reflex switched off by the owner
-        }
         if (WorkProfile.of(companion).fearless()) {
             return false;
         }

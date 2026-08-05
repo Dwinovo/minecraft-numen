@@ -6,7 +6,6 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.task.reflex.Reflex;
-import com.dwinovo.numen.task.reflex.ReflexRegistry;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -21,7 +20,6 @@ public final class SpeakingLookChain implements Task, Reflex {
 
     @Override
     public boolean canRun(NumenPlayer companion) {
-        if (!ReflexRegistry.enabled(id())) return false;
         if (!CompanionSpeech.isSpeaking(companion.getUUID())) return false;
         ServerPlayer owner = companion.resolveOwnerPlayer();
         return owner != null && owner.level() == companion.level()

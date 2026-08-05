@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.task.chain;
 import com.dwinovo.numen.task.reflex.Reflex;
 import com.dwinovo.numen.entity.InputDriver;
 
-import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.core.WorkProfile;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
@@ -34,8 +33,6 @@ import net.minecraft.world.phys.Vec3;
  * still stroking upward. Only when no opening exists within the search budget
  * does it fall back to best-effort straight-up and diaries the entrapment so
  * the cognition layer hears about it while there is still air to act on.
- *
- * <p>GATED OFF by default via {@link SurvivalConfig}, like every survival chain.
  */
 public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
@@ -69,10 +66,6 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
 
     @Override
     public boolean canRun(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return false;
-        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return false;   // reflex switched off by the owner
-        }
         // 无畏画像(创造)不扣氧气,airSupply 恒满——但这条反射是假玩家唯一的
         // 漂浮本能,不能跟着休眠(否则闲置沉底就永远留在水底)。改按
         // "眼在水下持续 N tick"触发,窗口对齐生存的低氧阈值。

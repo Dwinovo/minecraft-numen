@@ -1,7 +1,6 @@
 package com.dwinovo.numen.task.reflex;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,88 +11,46 @@ import java.util.Map;
  *
  * <ul>
  *   <li><b>self-description into the prompt</b> — {@link #overview()} joins the
- *       enabled reflexes' one-liners into the "你的身体有这些本能:…你的显式动作
+ *       registered reflexes' one-liners into the "你的身体有这些本能:…你的显式动作
  *       永远优先" paragraph. numen-api exposes no system-prompt extension point
  *       (scouted: {@code EntityAgentLoop.composeSystemPrompt} appends only
  *       persona/env/known_blocks/skills), so the overview rides the
  *       {@code get_self_status} tool DESCRIPTION instead — descriptions are
  *       re-read on every request build ({@code OpenAIProvider}), so the model
  *       sees the current roster each turn;</li>
- *   <li><b>a per-reflex enabled switch</b> — default ON, in-memory, persisted as
- *       a flat JSON map through the bound {@link StateStore}
- *       ({@code config/numen/reflexes.json} in production). A disabled chain
- *       reflex short-circuits its {@code getPriority} to DORMANT; a disabled
- *       policy reflex is checked at its decision-function entry.</li>
+ *   <li>—— 就这一件。<b>从前还有一个"每条本能的开关"</b>:默认 ON、内存里、
+ *       经 StateStore 落到 {@code config/numen/reflexes.json}。整套机构是空转的:
+ *       翻开关的 {@code setEnabled} 生产代码里<b>一个调用者都没有</b>,主人根本
+ *       没有入口关掉任何一条本能,于是每次启动读一个文件、写一个文件,里面的值
+ *       永远全是 true。看着有、实际没有,比明说没做更难查,所以整套收掉了。
+ *       真要做,做的是面板入口 + 这里重新长出开关,而不是留着空机构。</li>
  * </ul>
  *
- * <p>Static like {@code SurvivalConfig} (the switches are per-JVM/global, not
- * per-companion), synchronized because the server tick thread flips/reads while
- * the client request-builder thread reads {@link #overview()}. The core is pure
- * JDK so the roster/overview/switch semantics are headless-testable.
+ * <p>静态(名册是每 JVM 一份,不分同伴),synchronized 因为服务端 tick 线程注册、
+ * 客户端组装请求的线程读 {@link #overview()}。纯 JDK,所以名册与总览的语义
+ * headless 可测。
  */
 public final class ReflexRegistry {
 
-    /** Persistence seam: a flat {@code id -> enabled} map. Production binds the
-     *  Gson file store ({@link ReflexStateFile}); tests bind an in-memory map. */
-    public interface StateStore {
-        Map<String, Boolean> load();
-
-        void save(Map<String, Boolean> state);
-    }
-
     /** Registration order preserved — the overview reads in the order instincts enlisted. */
     private static final Map<String, Reflex> REFLEXES = new LinkedHashMap<>();
-    /** Switch overrides; an absent id means enabled (the default is always ON). */
-    private static final Map<String, Boolean> ENABLED = new HashMap<>();
-    private static StateStore store;
 
     private ReflexRegistry() {}
-
-    /** Bind the persistence store and apply its saved switch states. Call before
-     *  {@link #register} at init; without a store the switches are memory-only. */
-    public static synchronized void bindStore(StateStore s) {
-        store = s;
-        if (s != null) {
-            ENABLED.putAll(s.load());
-        }
-    }
 
     /** Enlist one reflex. Idempotent by id — a duplicate registration is ignored. */
     public static synchronized void register(Reflex reflex) {
         REFLEXES.putIfAbsent(reflex.id(), reflex);
     }
 
-    /** Is this instinct live? Unregistered/unknown ids default to true so a
-     *  check-before-registration ordering bug fails open (behavior unchanged). */
-    public static synchronized boolean enabled(String id) {
-        return ENABLED.getOrDefault(id, Boolean.TRUE);
-    }
-
-    /** Flip one instinct's switch and persist the full switch table. */
-    public static synchronized void setEnabled(String id, boolean on) {
-        ENABLED.put(id, on);
-        if (store != null) {
-            Map<String, Boolean> state = new LinkedHashMap<>();
-            for (String known : REFLEXES.keySet()) {
-                state.put(known, ENABLED.getOrDefault(known, Boolean.TRUE));
-            }
-            // Keep overrides for ids not (yet) registered this session too.
-            ENABLED.forEach(state::putIfAbsent);
-            store.save(state);
-        }
-    }
-
     /**
-     * The reflex overview for the model: enabled reflexes' self-descriptions
+     * The reflex overview for the model: every registered reflex's self-description
      * joined into one paragraph, ending on the constitutional guarantee that
-     * explicit actions always win. Empty when nothing is registered/enabled.
+     * explicit actions always win. Empty when nothing is registered.
      */
     public static synchronized String overview() {
         List<String> lines = new ArrayList<>();
         for (Reflex r : REFLEXES.values()) {
-            if (enabled(r.id())) {
-                lines.add(r.describe());
-            }
+            lines.add(r.describe());
         }
         if (lines.isEmpty()) return "";
         return "你的身体有这些本能,会自动发生,不需要用工具去做:"
@@ -102,10 +59,8 @@ public final class ReflexRegistry {
                 + "equip_item 的 item_id 传 \"auto\" 可解除钉,交还本能管理。";
     }
 
-    /** Test hook: wipe the roster, switches and store binding. */
+    /** Test hook: wipe the roster. */
     static synchronized void resetForTest() {
         REFLEXES.clear();
-        ENABLED.clear();
-        store = null;
     }
 }

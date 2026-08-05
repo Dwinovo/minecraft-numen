@@ -2,7 +2,6 @@ package com.dwinovo.numen.core.task.chain;
 
 import com.dwinovo.numen.task.reflex.Reflex;
 
-import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
@@ -28,10 +27,6 @@ import net.minecraft.world.item.ItemStack;
  * sub-goals and no {@code TaskResult}, so the base class's recovery/result
  * machinery buys nothing here. The only cross-tick state is the in-flight eat
  * handle, held as a field.
- *
- * <p>GATED OFF by default via {@link SurvivalConfig}: with the gate off,
- * {@link #getPriority} short-circuits to {@link Float#NEGATIVE_INFINITY} before
- * touching the body, so the chain is a strict no-op.
  */
 public final class FoodChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
@@ -47,10 +42,6 @@ public final class FoodChain implements Task, com.dwinovo.numen.task.reflex.Refl
 
     @Override
     public boolean canRun(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return false;
-        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return false;   // reflex switched off by the owner
-        }
         if (eat == null && companion.isUsingItem()) return false;
         int foodLevel = companion.getFoodData().getFoodLevel();
         float health = companion.getHealth();

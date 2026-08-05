@@ -6,7 +6,6 @@ import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
-import com.dwinovo.numen.core.task.SurvivalConfig;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.act.ToolSelect;
@@ -38,8 +37,6 @@ import net.minecraft.world.phys.Vec3;
  * swing, {@link NavGoal#runAway} for the flee vector. No {@code AbstractCompanionTask}:
  * there is no result to build and the fight/flee logic is a per-tick decision, not a
  * nav-then-act script.
- *
- * <p>GATED OFF by default via {@link SurvivalConfig}.
  */
 public final class MobDefenseChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
 
@@ -77,10 +74,6 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
 
     @Override
     public boolean canRun(NumenPlayer companion) {
-        if (!SurvivalConfig.enabled()) return false;
-        if (!com.dwinovo.numen.task.reflex.ReflexRegistry.enabled(id())) {
-            return false;   // reflex switched off by the owner
-        }
         if (companion.level().getGameTime() < cooldownUntilGameTime) return false;
         return SurvivalDecisions.mobDefenseTriggered(nearestThreat(companion) != null);
     }

@@ -61,10 +61,6 @@ public final class NumenCore {
         registerTaskRunners();
         registerReflexes();
         enlistReflexRoster();
-        // Enable the autonomous survival chains (auto-eat / mob-defense / unstuck /
-        // MLG). SurvivalConfig's own default is OFF — the safe state a bare library
-        // build ships with — and the pack turns it on here, explicitly, at init.
-        com.dwinovo.numen.core.task.SurvivalConfig.setEnabled(true);
         Constants.LOG.info("[numen-core] registered {} tool(s), {} task type(s); survival chains enabled",
                 ToolRegistry.size(), TaskFactory.size());
     }
