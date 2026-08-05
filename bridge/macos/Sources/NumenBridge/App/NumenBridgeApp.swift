@@ -14,6 +14,11 @@ struct NumenBridgeApp: App {
                 await state.fail("本机服务启动失败：\(error)")
             }
         }
+        // 首次启动就触发系统授权，避免 Java 已开始等待 WebSocket 后才出现弹窗。
+        Task { @MainActor in
+            await Task.yield()
+            await state.requestMicrophonePermission()
+        }
     }
 
     var body: some Scene {
