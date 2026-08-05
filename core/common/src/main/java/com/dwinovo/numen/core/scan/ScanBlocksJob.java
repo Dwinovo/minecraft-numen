@@ -27,7 +27,9 @@ import java.util.function.Predicate;
  * can afford. Walks chunk COLUMNS on an expanding {@link RingSpiral} from the
  * scan center (nearest-first, so an early result cap still favours close
  * hits), scanning one palette-filtered 16³ section per
- * {@link SearchBudget#trySectionScan} permit.
+ * {@link SearchBudget#trySectionScan} permit. Which layer of a column comes first
+ * and when the walk may stop are {@link SearchGeometry}'s call, shared with every
+ * other place in the mod that looks for a block.
  *
  * <h2>Loaded terrain is the boundary</h2>
  * A column that isn't loaded is skipped and counted, never loaded: reading it
@@ -60,11 +62,19 @@ public final class ScanBlocksJob {
     private final Predicate<BlockState> filter;
     private final Consumer<ScanResult> onDone;
 
-    private final int centerChunkX, centerChunkZ, maxRing, minSectionY, maxSectionY;
+    private final int centerChunkX, centerChunkZ, maxRing;
+    /** Section Y values in visit order — nearest layer first ({@link SearchGeometry#sectionOrder}). */
+    private final int[] sectionOrder;
     private int ring, perimIdx;
     private long deadline = -1;
     private int columnsScanned, columnsUnloaded;
     private final int columnsTotal;
+    private boolean stoppedEarly;
+
+    /** How far out the nearest {@code want} reach — the stop rule's whole input. */
+    private final SearchGeometry.NearestBound bound;
+    /** Watermark into {@link #matches} — everything below it is already in {@link #bound}. */
+    private int fed;
 
     // Column in progress (budget ran dry mid-column); null = fetch next.
     private ChunkAccess currentChunk;
@@ -80,9 +90,16 @@ public final class ScanBlocksJob {
      * found" means "nothing there".
      */
     public record ScanResult(List<BlockScanner.Hit> matches, int columnsScanned,
-                             int columnsUnloaded, int columnsTotal, boolean deadlineHit) {}
+                             int columnsUnloaded, int columnsTotal,
+                             boolean deadlineHit, boolean stoppedEarly) {
 
-    private ScanBlocksJob(UUID entityUuid, ServerLevel level, BlockPos center, int radius,
+        /** Did the walk actually cover the whole requested sphere? */
+        public boolean coveredEverything() {
+            return !deadlineHit && !stoppedEarly && columnsUnloaded == 0;
+        }
+    }
+
+    private ScanBlocksJob(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
                           Set<Block> targets, Consumer<ScanResult> onDone) {
         this.entityUuid = entityUuid;
         this.dimension = level.dimension();
@@ -96,18 +113,19 @@ public final class ScanBlocksJob {
         this.maxRing = Math.max(
                 SectionPos.blockToSectionCoord(center.getX() + radius) - centerChunkX,
                 centerChunkX - SectionPos.blockToSectionCoord(center.getX() - radius));
-        this.minSectionY = SectionPos.blockToSectionCoord(
-                Math.max(center.getY() - radius, level.getMinBuildHeight()));
-        this.maxSectionY = SectionPos.blockToSectionCoord(
-                Math.min(center.getY() + radius, level.getMaxBuildHeight()));
+        this.sectionOrder = SearchGeometry.sectionOrder(
+                SectionPos.blockToSectionCoord(Math.max(center.getY() - radius, level.getMinBuildHeight())),
+                SectionPos.blockToSectionCoord(Math.min(center.getY() + radius, level.getMaxBuildHeight())),
+                SectionPos.blockToSectionCoord(center.getY()));
+        this.bound = new SearchGeometry.NearestBound(want);
         int side = 2 * maxRing + 1;
         this.columnsTotal = side * side;
     }
 
     /** Register a scan; the result arrives via the callback on a later tick. */
-    public static void start(UUID entityUuid, ServerLevel level, BlockPos center, int radius,
+    public static void start(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
                              Set<Block> targets, Consumer<ScanResult> onDone) {
-        ScanBlocksJob job = new ScanBlocksJob(entityUuid, level, center, radius, targets, onDone);
+        ScanBlocksJob job = new ScanBlocksJob(entityUuid, level, center, radius, want, targets, onDone);
         JOBS.add(job);
         Constants.LOG.info("[numen-scan] started radius-{} scan around {} in {} ({} columns)",
                 radius, center.toShortString(), level.dimension().location(), job.columnsTotal);
@@ -147,13 +165,14 @@ public final class ScanBlocksJob {
                 finish(false);   // spiral exhausted
                 return true;
             }
-            // Scan the in-progress column one budgeted section at a time.
-            while (sectionCursor <= maxSectionY) {
+            // Scan the in-progress column one budgeted section at a time, nearest layer first.
+            while (sectionCursor < sectionOrder.length) {
                 if (!SearchBudget.trySectionScan()) return false;
                 BlockScanner.scanChunkSection(level, currentChunk,
-                        currentChunkX, sectionCursor, currentChunkZ,
+                        currentChunkX, sectionOrder[sectionCursor], currentChunkZ,
                         center, radius, radiusSq, filter, matches);
                 sectionCursor++;
+                feedBound();
                 if (matches.size() >= MAX_COLLECT) {
                     // Ring order means what we have is the nearest area anyway.
                     finish(false);
@@ -174,6 +193,11 @@ public final class ScanBlocksJob {
     private boolean nextColumn(ServerLevel level) {
         while (ring <= maxRing) {
             if (perimIdx >= RingSpiral.perimeter(ring)) {
+                if (SearchGeometry.canStop(ring, bound)) {
+                    // The nearest `want` are already closer than anything the next ring could hold.
+                    stoppedEarly = true;
+                    return false;
+                }
                 ring++;
                 perimIdx = 0;
                 continue;
@@ -189,14 +213,23 @@ public final class ScanBlocksJob {
             currentChunk = chunk;
             currentChunkX = cx;
             currentChunkZ = cz;
-            sectionCursor = minSectionY;
+            sectionCursor = 0;
             return true;
         }
         return false;
     }
 
+    /** Hand the hits found since the last call to the distance bound the stop rule reads. */
+    private void feedBound() {
+        for (int i = fed; i < matches.size(); i++) {
+            bound.offer(matches.get(i).distance());
+        }
+        fed = matches.size();
+    }
+
     private void finish(boolean deadlineHit) {
         matches.sort(Comparator.comparingDouble(BlockScanner.Hit::distance));
-        onDone.accept(new ScanResult(matches, columnsScanned, columnsUnloaded, columnsTotal, deadlineHit));
+        onDone.accept(new ScanResult(matches, columnsScanned, columnsUnloaded, columnsTotal,
+                deadlineHit, stoppedEarly));
     }
 }

@@ -40,7 +40,7 @@ List<String> block_ids,
             throw new IllegalArgumentException("not on a server level");
         }
         BlockPos center = self.blockPosition();
-        ScanBlocksJob.start(self.getUUID(), sl, center, r, targets,
+        ScanBlocksJob.start(self.getUUID(), sl, center, r, MAX_RESULTS, targets,
                 result -> reply.accept(buildResult(result, r, center)));
     }
 
@@ -86,8 +86,10 @@ List<String> block_ids,
         }
         JsonObject root = new JsonObject();
         root.add("matches", out);
-        root.addProperty("total_found", matches.size());
-        root.addProperty("truncated", matches.size() > MAX_RESULTS);
+        // Seen, not existing: the walk stops as soon as the nearest MAX_RESULTS are provably
+        // the nearest, so this counts what it took to prove that — never "how much is out there".
+        root.addProperty("matches_seen", matches.size());
+        root.addProperty("truncated", matches.size() > MAX_RESULTS || !res.coveredEverything());
         root.addProperty("radius_searched", radius);
         String note = coverageNote(res);
         if (note != null) {

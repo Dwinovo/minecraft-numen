@@ -121,11 +121,18 @@ public final class BlockScanner {
     }
 
     /**
-     * 后台线程:按环序由近及远扫描捕获的 chunk。提前收工条件:已凑够
-     * {@code max} 个命中,且(超出 {@code maxChunkRadius} 环,或已扫过第 1 环
-     * 且有玩家 Y±{@code yLevelThreshold} 内的命中)。目标稀缺时一路扫到
-     * 捕获截断处(加载区边缘)。每个 chunk 内 section 按离玩家 Y 最近优先;
-     * 结果无序,调用方自行按距离排序截断。撕裂的调色板读跳过该 chunk。
+     * 后台线程:按环序由近及远扫描捕获的 chunk。每个 chunk 内 section 的访问序取自
+     * {@link SearchGeometry#sectionOrder}(离玩家 Y 最近的先看),与现扫的
+     * {@link ScanBlocksJob} 同一份判据。
+     *
+     * <p>收工条件仍是本地的一套:已凑够 {@code max} 个命中,且(超出
+     * {@code maxChunkRadius} 环,或已扫过第 1 环且有玩家 Y±{@code yLevelThreshold}
+     * 内的命中)。它是近似的,而且和 {@link SearchGeometry#canStop} 的精确界不是一个
+     * 答案——这里的环是欧氏整数环({@link #captureRings} 的 {@code xoff²+zoff²}),
+     * 精确界算的是切比雪夫方环。两者归一要连着环的定义一起做。
+     *
+     * <p>目标稀缺时一路扫到捕获截断处(加载区边缘)。结果无序,调用方自行按距离排序
+     * 截断。撕裂的调色板读跳过该 chunk。
      */
     public static List<Hit> scanRings(Level level, RingCapture cap, Set<Block> targets,
                                       int max, int yLevelThreshold, int maxChunkRadius) {
@@ -135,9 +142,8 @@ public final class BlockScanner {
         int minY = level.getMinBuildHeight();
         int playerY = center.getY() - minY;
         int playerSection = playerY >> 4;
-        int[] order = java.util.stream.IntStream.range(0, level.getSectionsCount()).boxed()
-                .sorted(Comparator.comparingInt(y -> Math.abs(y - playerSection)))
-                .mapToInt(Integer::intValue).toArray();
+        // section 索引空间(0..count),与 scanWholeChunk 里的 sections[y0] 对齐。
+        int[] order = SearchGeometry.sectionOrder(0, level.getSectionsCount() - 1, playerSection);
         int maxRadiusSq = maxChunkRadius * maxChunkRadius;
         // 收集硬顶:环序天然由近及远,最先入表的就是最近的一批;超过 4×max 的部分
         // 反正会被调用方的距离裁剪丢弃,继续扫只是给主线程的合并/校验层制造成千上万

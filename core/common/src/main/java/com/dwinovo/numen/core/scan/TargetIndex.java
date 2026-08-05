@@ -208,11 +208,14 @@ public final class TargetIndex {
     // ==================== 查询 ====================
 
     /**
-     * 从 {@code center} 按 chebyshev 区块环由近及远收集 {@code targets} 的位置,直到凑够
-     * {@code want} 个(收完当前环)或环耗尽。只读索引;未建条目就地构建,每次调用最多构建
-     * {@code buildBudget} 个 section(预算耗尽返回 {@code complete=false},调用方稍后再查,
-     * 冷区域在几次查询内渐进变热)。未加载区块跳过——索引只回答已加载世界(与扫描时代的
-     * 事实边界一致)。
+     * 从 {@code center} 按 chebyshev 区块环由近及远收集 {@code targets} 的位置。哪一节先看、
+     * 什么时候可以不看了,判据在 {@link SearchGeometry} ——和现扫的 {@link ScanBlocksJob} 同一份,
+     * 同一片地不会给出两种"最近"。收工是精确的:攒够的 {@code want} 个已经比下一环最近的可能
+     * 还近才停。
+     *
+     * <p>只读索引;未建条目就地构建,每次调用最多构建 {@code buildBudget} 个 section(预算耗尽
+     * 返回 {@code complete=false},调用方稍后再查,冷区域在几次查询内渐进变热)。未加载区块
+     * 跳过——索引只回答已加载世界。
      */
     public static Result query(ServerLevel level, BlockPos center, Collection<Block> targets,
                                int want, int maxChunkRadius, int buildBudget) {
@@ -225,6 +228,10 @@ public final class TargetIndex {
         int centerCz = SectionPos.blockToSectionCoord(center.getZ());
         int minSection = level.getMinSection();
         int sectionCount = level.getSectionsCount();
+        int[] sectionOrder = SearchGeometry.sectionOrder(minSection, minSection + sectionCount - 1,
+                SectionPos.blockToSectionCoord(center.getY()));
+        SearchGeometry.NearestBound bound = new SearchGeometry.NearestBound(want);
+        int fed = 0;
         int budget = buildBudget;
         boolean complete = true;
 
@@ -240,8 +247,11 @@ public final class TargetIndex {
                         continue;
                     }
                     LevelChunkSection[] secs = chunk.getSections();
-                    for (int si = 0; si < sectionCount && si < secs.length; si++) {
-                        int sy = minSection + si;
+                    for (int sy : sectionOrder) {
+                        int si = sy - minSection;
+                        if (si < 0 || si >= secs.length) {
+                            continue;
+                        }
                         long key = SectionPos.asLong(cx, sy, cz);
                         SectionEntry e = idx.sections.get(key);
                         if (e == null || e.version != idx.version) {
@@ -254,11 +264,14 @@ public final class TargetIndex {
                             idx.sections.put(key, e);
                         }
                         collect(e, secs[si], cx, sy, cz, targets, want, out);
+                        while (fed < out.size()) {
+                            bound.offer(Math.sqrt(out.get(fed++).distSqr(center)));
+                        }
                     }
                 }
             }
-            if (out.size() >= want) {
-                break;   // 本环收完,近似由近及远已够——精确排序由调用方负责
+            if (SearchGeometry.canStop(r, bound)) {
+                break;   // 攒够的这批已经比下一环最近的可能还近
             }
         }
         return new Result(out, complete);
