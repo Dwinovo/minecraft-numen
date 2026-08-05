@@ -13,7 +13,8 @@ import java.util.function.Consumer;
  *
  * <h2>选道判据(工具作者的单一真源)</h2>
  * <ul>
- *   <li><b>不占身体</b>(纯查询/UI/外部服务)→ 不进任务系统,invoke 现场 complete;</li>
+ *   <li><b>不占身体</b>(纯查询 / UI / 外部服务 / 登记类如 {@code set_timer})→ 不进任务系统,
+ *       invoke 现场 complete;</li>
  *   <li><b>占身体 + 有界短</b>(最坏几秒内保证干完,写得出不冤枉它的固定 deadline)
  *       → {@link #runSync}:回合挂起等结果——短到值得等;</li>
  *   <li><b>占身体 + 无界</b>(时长取决于世界:路程/资源/敌人)→ {@link #setTask}:

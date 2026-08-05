@@ -49,7 +49,9 @@ public final class NumenEvents {
         /** 同伴自己跨了维度。 */
         DIMENSION_CHANGE("dimension_change"),
         /** 她死了又复活了(在客户端合成——身体那会儿已经不在了)。 */
-        DEATH("death");
+        DEATH("death"),
+        /** 她自己定的表到点了(见 {@code TimerRegistry})。提醒而已,不代表那件事完成了。 */
+        TIMER("timer");
 
         private final String kind;
 

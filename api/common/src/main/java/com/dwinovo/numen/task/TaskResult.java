@@ -1,5 +1,6 @@
 package com.dwinovo.numen.task;
 
+import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
 import java.util.Map;
@@ -36,6 +37,8 @@ public record TaskResult(boolean success,
                          boolean timedOut,
                          boolean interrupted,
                          Map<String, Object> data) {
+
+    private static final Gson GSON = new Gson();
 
     public static TaskResult ok(String message, Map<String, Object> data) {
         return new TaskResult(true, message, false, false, data);
@@ -78,7 +81,11 @@ public record TaskResult(boolean success,
                 Object v = e.getValue();
                 if (v instanceof Number n) dataObj.addProperty(e.getKey(), n);
                 else if (v instanceof Boolean b) dataObj.addProperty(e.getKey(), b);
-                else if (v != null) dataObj.addProperty(e.getKey(), v.toString());
+                // 列表/映射按 JSON 展开:塞进去的结构必须以结构的样子到达模型,
+                // 落成 Java 的 toString 就成了它读不动的 [{k=v}]。
+                else if (v instanceof java.util.Collection<?> || v instanceof Map<?, ?>) {
+                    dataObj.add(e.getKey(), GSON.toJsonTree(v));
+                } else if (v != null) dataObj.addProperty(e.getKey(), v.toString());
             }
             root.add("data", dataObj);
         }

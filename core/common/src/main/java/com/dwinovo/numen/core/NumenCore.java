@@ -121,6 +121,7 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.EatItemTool());
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStatusTool());
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStopTool());
+        ToolRegistry.register(new com.dwinovo.numen.task.SetTimerTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.DropItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.TakeItemsTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InspectGuiTool());

@@ -72,8 +72,9 @@ Smelting is NOT crafting — there's no auto-tool, you load the furnace yourself
   1. `interact_at button=right` the furnace / blast furnace / smoker.
   2. Load the input: `transfer moves=[{from:<raw item>}]` — omit `to`, the menu routes it to the top input slot.
   3. Add fuel: `transfer moves=[{from:<coal>}]` — routes to the bottom fuel slot. **Fuel rule**: 1 coal/charcoal smelts 8 items; a log/plank ~1.5, so add ~⌈N/8⌉ coal.
-  4. Wait. Poll with `inspect_gui` — `data values` show cook progress (`[litTime, litDuration, cookProgress, cookTotal]`); the output slot fills as items finish.
-  5. `transfer moves=[{from:<output>}]` to collect (awards the smelting XP). `close_gui`.
+  4. `close_gui`, then `set_timer` for roughly when the batch should be done — a vanilla furnace takes ~10s per item, a blast furnace / smoker ~5s. The timer doesn't occupy your body, so walk away and do something else; don't stand there polling.
+  5. When the `timer` event fires, come back and re-open the furnace. The timer is a reminder, not proof: `inspect_gui` shows the real state (`data values` = `[litTime, litDuration, cookProgress, cookTotal]`). Not done? Set a shorter timer and leave again.
+  6. `transfer moves=[{from:<output>}]` to collect (awards the smelting XP). `close_gui`.
 
 ## Modded machines (hand-load)
 

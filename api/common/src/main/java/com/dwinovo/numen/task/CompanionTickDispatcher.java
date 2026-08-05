@@ -77,6 +77,7 @@ public final class CompanionTickDispatcher {
             com.dwinovo.numen.Constants.LOG.info("[numen-task] scheduler heartbeat online (first server tick)");
         }
         Companions.tickRespawns(server);   // timed death recoveries
+        TimerRegistry.tick(server);        // 她自己定的表,到点发事件
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p instanceof NumenPlayer ap) {
                 // Re-stamp the companion's loading pad from the SERVER tick (this runs every tick over
