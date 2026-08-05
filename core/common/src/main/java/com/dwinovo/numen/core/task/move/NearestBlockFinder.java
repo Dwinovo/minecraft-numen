@@ -24,9 +24,8 @@ import java.util.concurrent.CompletableFuture;
  */
 final class NearestBlockFinder {
 
-    /** 候选上限、扫描同层判据/最远环半径、离线扫描的放弃时限、行程预算基准。 */
+    /** 候选上限、最远环半径、离线扫描的放弃时限、行程预算基准。 */
     private static final int MAX_CANDIDATES = 64;
-    private static final int Y_THRESHOLD = 10;
     private static final int MAX_CHUNK_RADIUS = 32;
     private static final long SCAN_TIMEOUT_TICKS = 40;
     static final int BUDGET_BLOCKS = 128;
@@ -47,16 +46,16 @@ final class NearestBlockFinder {
         this.target = target;
     }
 
-    /** 踢一次离线扫描:主线程环形捕获身体周围的已加载 chunk 引用(捕获止于
-     *  加载区边缘),后台按环序由近及远扫,凑够即提前收工。 */
+    /** 踢一次离线扫描:主线程环形捕获身体周围的已加载 chunk 引用,后台按环序由近及远
+     *  扫,攒够的这批比下一环最近的可能还近就收工。 */
     void kickScan() {
         var level = player.level();
-        // 圆心用寻路口径的脚位格(0.1251 上抬 + 台阶取上格)——同层判据与
-        // section 遍历序都从它导出。
+        // 圆心用寻路口径的脚位格(0.1251 上抬 + 台阶取上格)——section 遍历序从它导出。
         var cap = BlockScanner.captureRings(level,
-                BlockHelper.playerFeet(level, player.getX(), player.getY(), player.getZ()));
+                BlockHelper.playerFeet(level, player.getX(), player.getY(), player.getZ()),
+                MAX_CHUNK_RADIUS);
         scan = ScanExecutor.submit(() -> BlockScanner.scanRings(
-                level, cap, Set.of(target), MAX_CANDIDATES, Y_THRESHOLD, MAX_CHUNK_RADIUS));
+                level, cap, Set.of(target), MAX_CANDIDATES, MAX_CHUNK_RADIUS));
         scanDeadline = level.getGameTime() + SCAN_TIMEOUT_TICKS;
     }
 

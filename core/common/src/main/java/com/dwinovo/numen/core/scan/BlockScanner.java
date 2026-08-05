@@ -11,35 +11,24 @@ import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * Shared block search with a chunk-section palette short-circuit: ring-ordered
- * capture/scan for goto's find mode ({@code MoveToCompanionTask}) and the
- * per-section primitive {@code ScanBlocksJob} slices under its budget.
+ * 找方块的两样东西:<b>扫一节</b>的原语({@link #scanChunkSection}),和把它按环序串起来的
+ * <b>离线环形扫</b>({@link #captureRings} + {@link #scanRings},goto 的 FIND 模式用)。
  *
- * <h2>Performance</h2>
- * Naive search is {@code (2r+1)³} {@code getBlockState} calls (~15k for r=12).
- * Instead we iterate the chunk sections intersecting the bounding box and call
- * {@link LevelChunkSection#maybeHas(Predicate)} — which checks only the
- * section's palette (2-10 entries) before scanning its 4096 inner blocks.
- * Sections without any target block are skipped instantly (50-200× speedup for
- * sparse targets like ore).
+ * <p>扫一节这份实现是全仓唯一的一份——现扫的 {@link ScanBlocksJob} 按预算一节一节切,
+ * 这里的环形扫一口气走完,两边调的是同一个方法。由近及远怎么定义、什么时候可以不看了,
+ * 判据都在 {@link SearchGeometry}。
+ *
+ * <h2>为什么不是逐格读</h2>
+ * 朴素搜索是 {@code (2r+1)³} 次 {@code getBlockState}(r=12 就 ~15k 次)。这里改成遍历
+ * 与包围盒相交的 chunk section,先问 {@link LevelChunkSection#maybeHas(Predicate)}——
+ * 只看该节调色板的 2-10 项,没有目标就整节 4096 格一次跳过。稀疏目标(矿)能快 50-200 倍。
  */
 public final class BlockScanner {
-
-    /**
-     * Hard cap on collected matches. Exists for landscape-scale targets
-     * (water, lava: an ocean inside a 48-block radius is ~10⁵ matching cells)
-     * — without it the match list explodes in memory before sorting. Scanning
-     * stops once the cap is hit, so for super-abundant targets the result is
-     * "plenty of nearby hits" rather than the guaranteed global nearest;
-     * for sparse targets (ores, structures) the cap is never reached.
-     */
-    private static final int MAX_COLLECT = 8_192;
 
     private BlockScanner() {}
 
@@ -84,148 +73,97 @@ public final class BlockScanner {
 
     // ==================== 环形扫描(以身体为圆心,加载区为边界) ====================
 
-    /** 捕获护栏:环半径超过该值(chunk)一律截断。正常服务端视距远小于此,纯防御。 */
+    /** 捕获护栏:环半径超过该值(chunk)一律夹住。正常服务端视距远小于此,纯防御。 */
     private static final int MAX_RING_RADIUS_CHUNKS = 64;
 
     /**
-     * 主线程捕获的环序 chunk 引用:{@code rings.get(i)} = 整数圆环
-     * {@code xoff²+zoff²==i} 上的已加载 chunk(无格点的环为空表占位)。
-     * 捕获在第一个"有格点但无一加载"的环处截断——那就是加载区的边缘,
-     * 后台扫描的事实边界。
+     * 主线程捕获的环序 chunk 引用:{@code rings.get(k)} = 切比雪夫第 k 个方环上的已加载
+     * chunk。环的形状用 {@link RingSpiral},和现扫的 {@link ScanBlocksJob} 同一种——
+     * 于是 {@link SearchGeometry#ringFloorDistance} 的距离下界对两边都成立,同一片地
+     * 不会给出两种"最近"。
+     *
+     * <p>未加载的 chunk 只是不在表里,不截断后面的环:加载区中间有洞时,跨过洞继续找。
      */
     public record RingCapture(List<List<ChunkAccess>> rings, BlockPos center) {}
 
     /** 主线程:以 {@code center} 所在 chunk 为圆心逐环捕获已加载 chunk 引用,
      *  不触发任何加载/生成。交给 {@link #scanRings} 在后台线程读。 */
-    public static RingCapture captureRings(Level level, BlockPos center) {
+    public static RingCapture captureRings(Level level, BlockPos center, int maxChunkRadius) {
         int centerChunkX = center.getX() >> 4;
         int centerChunkZ = center.getZ() >> 4;
-        List<List<ChunkAccess>> rings = new ArrayList<>();
-        int guardSq = MAX_RING_RADIUS_CHUNKS * MAX_RING_RADIUS_CHUNKS;
-        for (int ringSq = 0; ringSq <= guardSq; ringSq++) {
-            boolean hasLattice = false;
-            List<ChunkAccess> ring = new ArrayList<>(4);
-            int reach = (int) Math.sqrt(ringSq);
-            for (int xoff = -reach; xoff <= reach; xoff++) {
-                for (int zoff = -reach; zoff <= reach; zoff++) {
-                    if (xoff * xoff + zoff * zoff != ringSq) continue;
-                    hasLattice = true;
-                    ChunkAccess chunk = loadedChunk(level, centerChunkX + xoff, centerChunkZ + zoff);
-                    if (chunk != null) ring.add(chunk);
-                }
+        int maxRing = Math.clamp(maxChunkRadius, 0, MAX_RING_RADIUS_CHUNKS);
+        List<List<ChunkAccess>> rings = new ArrayList<>(maxRing + 1);
+        for (int ring = 0; ring <= maxRing; ring++) {
+            int perimeter = RingSpiral.perimeter(ring);
+            List<ChunkAccess> loaded = new ArrayList<>(perimeter);
+            for (int i = 0; i < perimeter; i++) {
+                int[] d = RingSpiral.offset(ring, i);
+                ChunkAccess chunk = loadedChunk(level, centerChunkX + d[0], centerChunkZ + d[1]);
+                if (chunk != null) loaded.add(chunk);
             }
-            if (hasLattice && ring.isEmpty()) break;   // 加载区边缘
-            rings.add(ring);
+            rings.add(loaded);
         }
         return new RingCapture(rings, center.immutable());
     }
 
     /**
-     * 后台线程:按环序由近及远扫描捕获的 chunk。每个 chunk 内 section 的访问序取自
-     * {@link SearchGeometry#sectionOrder}(离玩家 Y 最近的先看),与现扫的
-     * {@link ScanBlocksJob} 同一份判据。
+     * 后台线程:按环序由近及远扫描捕获的 chunk,收够就停。判据全部取自
+     * {@link SearchGeometry}——哪一节先看({@code sectionOrder}),什么时候可以不看了
+     * ({@code canStop} 的精确界:攒够的 {@code max} 个已经比下一环最近的可能还近)。
+     * 现扫的 {@link ScanBlocksJob} 读的是同一份,同一片地两条路给同一个"最近"。
      *
-     * <p>收工条件仍是本地的一套:已凑够 {@code max} 个命中,且(超出
-     * {@code maxChunkRadius} 环,或已扫过第 1 环且有玩家 Y±{@code yLevelThreshold}
-     * 内的命中)。它是近似的,而且和 {@link SearchGeometry#canStop} 的精确界不是一个
-     * 答案——这里的环是欧氏整数环({@link #captureRings} 的 {@code xoff²+zoff²}),
-     * 精确界算的是切比雪夫方环。两者归一要连着环的定义一起做。
+     * <p>扫一节的活走 {@link #scanChunkSection},与现扫共用一份实现,球面裁剪、
+     * 调色板短路、Hit 的造法都只有一处。结果无序,调用方自行按距离排序截断。
      *
-     * <p>目标稀缺时一路扫到捕获截断处(加载区边缘)。结果无序,调用方自行按距离排序
-     * 截断。撕裂的调色板读跳过该 chunk。
+     * <p>撕裂的调色板读跳过<b>那一节</b>:主线程随时可能给某一节的调色板扩容,
+     * 后台读到一半会炸。代价是偶尔漏一节,换的是不必把这活压回主线程去排队。
      */
     public static List<Hit> scanRings(Level level, RingCapture cap, Set<Block> targets,
-                                      int max, int yLevelThreshold, int maxChunkRadius) {
+                                      int max, int maxChunkRadius) {
         if (targets.isEmpty()) return List.of();
         Predicate<BlockState> filter = state -> targets.contains(state.getBlock());
         BlockPos center = cap.center();
-        int minY = level.getMinBuildHeight();
-        int playerY = center.getY() - minY;
-        int playerSection = playerY >> 4;
-        // section 索引空间(0..count),与 scanWholeChunk 里的 sections[y0] 对齐。
-        int[] order = SearchGeometry.sectionOrder(0, level.getSectionsCount() - 1, playerSection);
-        int maxRadiusSq = maxChunkRadius * maxChunkRadius;
-        // 收集硬顶:环序天然由近及远,最先入表的就是最近的一批;超过 4×max 的部分
-        // 反正会被调用方的距离裁剪丢弃,继续扫只是给主线程的合并/校验层制造成千上万
-        // 条注定扔掉的条目(地表下令挖深层矿时"同层提前收工"永不触发,没有这个顶,
-        // 一轮扫描能带回整个加载区的全部矿位)。
+        int radius = maxChunkRadius * 16;
+        double radiusSq = (double) radius * radius;
+        int minSection = level.getMinSection();
+        int[] order = SearchGeometry.sectionOrder(minSection,
+                minSection + level.getSectionsCount() - 1,
+                SectionPos.blockToSectionCoord(center.getY()));
+        // 收集硬顶:环序天然由近及远,最先入表的就是最近的一批。目标铺天盖地时,超过
+        // 4×max 的部分反正会被调用方的距离裁剪丢弃,继续扫只是给主线程的合并/校验层
+        // 制造成千上万条注定扔掉的条目。
         int hardCap = max * 4;
         List<Hit> res = new ArrayList<>();
-        boolean foundWithinY = false;
-        outer:
-        for (int ringSq = 0; ringSq < cap.rings().size(); ringSq++) {
-            for (ChunkAccess chunk : cap.rings().get(ringSq)) {
-                try {
-                    if (scanWholeChunk(chunk, minY, filter, res,
-                            max, yLevelThreshold, playerY, order, center)) {
-                        foundWithinY = true;
+        SearchGeometry.NearestBound bound = new SearchGeometry.NearestBound(max);
+        int fed = 0;
+        for (int ring = 0; ring < cap.rings().size(); ring++) {
+            for (ChunkAccess chunk : cap.rings().get(ring)) {
+                for (int sy : order) {
+                    try {
+                        scanChunkSection(level, chunk, chunk.getPos().x, sy, chunk.getPos().z,
+                                center, radius, radiusSq, filter, res);
+                    } catch (Throwable concurrentPaletteRead) {
+                        // 主线程正在改这一节的调色板:跳过这一节。
                     }
-                } catch (Throwable concurrentPaletteRead) {
-                    // 主线程改了这个 chunk 的调色板:本轮跳过。
+                }
+                while (fed < res.size()) {
+                    bound.offer(res.get(fed++).distance());
                 }
                 if (res.size() >= hardCap) {
-                    break outer;
+                    return res;
                 }
             }
-            if (res.size() >= max
-                    && (ringSq > maxRadiusSq || (ringSq > 1 && foundWithinY))) {
+            if (SearchGeometry.canStop(ring, bound)) {
                 break;
             }
         }
         return res;
     }
 
-    /** 扫一个 chunk 的全部 section(近 Y 优先),返回是否有玩家 Y 阈值内的命中。
-     *  凑够 {@code max} 后:同层命中记 foundWithinY;层外命中在本 chunk 已见
-     *  同层命中时直接返回(层外的不再要)。 */
-    private static boolean scanWholeChunk(ChunkAccess chunk, int minY, Predicate<BlockState> filter,
-                                          List<Hit> res, int max, int yLevelThreshold, int playerY,
-                                          int[] order, BlockPos center) {
-        LevelChunkSection[] sections = chunk.getSections();
-        int baseX = chunk.getPos().getMinBlockX();
-        int baseZ = chunk.getPos().getMinBlockZ();
-        boolean foundWithinY = false;
-        for (int y0 : order) {
-            if (y0 < 0 || y0 >= sections.length) continue;
-            LevelChunkSection section = sections[y0];
-            if (section == null || section.hasOnlyAir()) continue;
-            // 调色板短路:该 section 调色板里没有目标就整节跳过(纯加速)。
-            if (!section.maybeHas(filter)) continue;
-            int yReal = y0 << 4;
-            var states = section.getStates();
-            for (int yy = 0; yy < 16; yy++) {
-                for (int z = 0; z < 16; z++) {
-                    for (int x = 0; x < 16; x++) {
-                        BlockState state = states.get(x, yy, z);
-                        if (!filter.test(state)) continue;
-                        int y = yReal | yy;
-                        if (res.size() >= max) {
-                            if (Math.abs(y - playerY) < yLevelThreshold) {
-                                foundWithinY = true;
-                            } else if (foundWithinY) {
-                                return true;
-                            }
-                        }
-                        int wx = baseX | x;
-                        int wy = y + minY;
-                        int wz = baseZ | z;
-                        double dx = wx - center.getX();
-                        double dy = wy - center.getY();
-                        double dz = wz - center.getZ();
-                        res.add(new Hit(new BlockPos(wx, wy, wz), state,
-                                Math.sqrt(dx * dx + dy * dy + dz * dz)));
-                    }
-                }
-            }
-        }
-        return foundWithinY;
-    }
-
     /**
-     * Scan ONE section of an already-resolved chunk (palette short-circuit
-     * included), appending sphere-clipped matches to {@code out}. Public so
-     * the budget-sliced {@code ScanBlocksJob} can meter exactly this unit of
-     * work per permit.
+     * 扫一节:已解析好的 chunk 里的一个 section,调色板短路 + 球面裁剪,命中追加进
+     * {@code out}。全仓找方块最终都落到这里——{@link ScanBlocksJob} 一个配额换一节,
+     * {@link #scanRings} 一口气走完一串。公开是因为前者要按这个粒度计费。
      */
     public static void scanChunkSection(Level level, ChunkAccess chunk,
                                         int chunkX, int sectionY, int chunkZ,
