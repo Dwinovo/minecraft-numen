@@ -78,8 +78,8 @@ class CompanionRosterTest {
 
     @Test
     void duplicateNamesResolveTheSameWayEveryTime() {
-        // 老版本留下的同名分身:注册表是 HashMap,不定序的话同一句"召唤小焰"
-        // 今天复用这只、明天复用那只
+        // 同名分身(迁移来的数据里可能有):注册表是 HashMap,不定序的话同一句
+        // "召唤小焰"今天复用这只、明天复用那只
         List<CompanionRoster.Row> forward = List.of(
                 new CompanionRoster.Row(C, "小焰", 0L), new CompanionRoster.Row(A, "小焰", 0L));
         List<CompanionRoster.Row> backward = List.of(
@@ -127,7 +127,7 @@ class CompanionRosterTest {
 
     @Test
     void deadCompanionOnTheRosterIsNeverSwept() {
-        // 这就是真机上会毁数据的那条路:她死了、暂时不在世界里,但她还在名册上
+        // 判错就是毁数据的那条路:她死了、暂时不在世界里,但她还在名册上
         List<UUID> gone = CompanionRoster.orphans(
                 Map.of(A, "world-1"), "world-1", Set.of(A));
         assertTrue(gone.isEmpty(), "死亡不是遣散");

@@ -215,7 +215,7 @@ public class MovementPillar extends Movement {
             }
             AimGeometry.moveTowards(player, state, against);
             if (player.tickCount % 10 == 0) {
-                // 爬梯分支以前整段没有留声,卡在这里时外面只看到"垫柱毫无动静"。
+                // 爬梯分支得留声:没有它,卡在这里时外面只看到"垫柱毫无动静"。
                 com.dwinovo.numen.core.Constants.LOG.debug(
                         "[numen-pillar] 爬梯 src={} 贴面={} 身位={} y={} 竖速={} 攀附={}",
                         src.toShortString(), against.toShortString(),

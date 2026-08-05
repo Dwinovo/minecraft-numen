@@ -374,9 +374,9 @@ public final class BuildTaskRecord extends TaskRecord {
                 }
                 return Math.max(1, faces);
             }
-            // 注:高草与大蕨类曾按"两株矮的"算两件。那是旧版本的事实——现在
-            // tall_grass / large_fern 自己就是物品,方块自述给的正是它,一格一件。
-            // 沿用旧口径会让玩家按清单备双份,而多出来的那一半永远用不掉。
+            // 高草与大蕨类一格一件:tall_grass / large_fern 自己就是物品,方块自述
+            // 给的正是它。按"两株矮的"算两件会让玩家照清单备双份,多出来的那一半
+            // 永远用不掉。
             return 1;
         }
 

@@ -199,7 +199,7 @@ class EventQueueTest {
     @Test
     void worldEventsComeFirstOwnerWordsLast() {
         // 模型该读到的顺序是“先看清发生了什么，再看主人要什么”——
-        // 从前按入队顺序平铺，事件和 query 混着，得它自己从一串杂物里理时间线。
+        // 按入队顺序平铺的话，事件和 query 混着，得它自己从一串杂物里理时间线。
         EventQueue q = fresh();
         q.push(EventTypes.QUERY, "<query>先说的</query>", T0, true);
         q.push(EventTypes.EVENT, "<event>后到的</event>", T0, false);

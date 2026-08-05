@@ -41,9 +41,6 @@ public final class ConfigMigrations {
      * {@code providers.json} —— 而后者正是面板站点库（{@code ProviderLibrary}）
      * 的文件名。<b>所以这里认形状不认文件名</b>：只有顶层是 {@code providers}
      * 数组的才是死目录，{@code entries} 形状是玩家的 API Key，碰一下都不行。
-     *
-     * <p>从前这一步是把 {@code models.json} 改名成 {@code providers.json}，恰好把死目录
-     * 搬到了玩家密钥库的位置上。
      */
     private static void parkDeadSiteCatalog(Path dir) throws IOException {
         park(dir.resolve("models.json"));

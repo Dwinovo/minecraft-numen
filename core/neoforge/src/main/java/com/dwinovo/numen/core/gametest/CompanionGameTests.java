@@ -397,8 +397,8 @@ public class CompanionGameTests {
                 new Case(Blocks.SNOW.defaultBlockState().setValue(
                         net.minecraft.world.level.block.state.properties.BlockStateProperties.LAYERS, 5), 5,
                         "snow is billed per layer"),
-                // 高草一格一件:tall_grass 自己就是物品(旧版本里不是,那时才按
-                // "两株矮的"算两件)。沿用旧口径会让玩家按清单备双份。
+                // 高草一格一件:tall_grass 自己就是物品。按"两株矮的"算两件
+                // 会让玩家照清单备双份。
                 new Case(Blocks.TALL_GRASS.defaultBlockState(), 1,
                         "tall grass is one item of its own now"),
                 new Case(Blocks.WATER.defaultBlockState(), 0, "liquids cost nothing"),
@@ -1287,7 +1287,7 @@ public class CompanionGameTests {
      * 必须一件不少地还在——多扣一件说明重放了格子,少建一格说明续建漏了。中间还要断言
      * 第一遍<b>真的停在了半途</b>(建了但没建完),否则这条用例退化成上一条。
      *
-     * <p>顺带压住一个曾经的真事故:第一遍失败退出时摆设不该生成(它们在收工那一步),
+     * <p>顺带压住摆设的数量:第一遍失败退出时它们不该生成(生成在收工那一步),
      * 而第二遍补上之后必须各只有一只。
      */
     @GameTest(template = "floor16", timeoutTicks = 12000, batch = "numen_blueprint")
@@ -1901,8 +1901,8 @@ public class CompanionGameTests {
      * 歇山下段四坡、上段双坡;单坡一路倒向一侧。
      *
      * <p>歇山的判据是<b>上下两段的收法不同</b>:下段短边也收(四坡),上段短边
-     * 不再收(脊沿长轴跑满)。曾经这里上段把举架曲线重新从五举起算,结果腰以上
-     * 反而比檐口还缓——真实歇山恰恰相反,所以顺带锁住"上段更陡"。
+     * 不再收(脊沿长轴跑满)。顺带锁住"上段更陡":上段若把举架曲线重新从五举起算,
+     * 腰以上会比檐口还缓,而真实歇山恰恰相反。
      */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void roof_xieshan_and_shed(GameTestHelper helper) {

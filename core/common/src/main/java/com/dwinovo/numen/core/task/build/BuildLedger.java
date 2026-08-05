@@ -38,7 +38,7 @@ final class BuildLedger {
     /**
      * 此刻还需要的材料:按物品汇总所有<b>尚未达标且要花料</b>的格。
      *
-     * <p>以前中途报的是"本遍缺了什么",那是过程量,玩家拿它没法决定去采多少。
+     * <p>报的是<b>存量</b>不是"本遍缺了什么":后者是过程量,玩家拿它没法决定去采多少。
      */
     Map<Item, Integer> remainingNeed() {
         Map<Item, Integer> need = new LinkedHashMap<>();

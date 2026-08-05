@@ -367,8 +367,8 @@ public final class PathExecutor {
             if (ticksOnCurrent > timedOutAt(currentMovementOriginalCostEstimate,
                     NavSettings.get().movementTimeoutTicks)) {
                 // 卡死的动作必须留声:类型、起讫、四邻实况、身位一次性摊开。
-                // 动作卡住是寻路故障里最常见的一类,而它以前只在 debug 级留痕,
-                // 发布态不落盘——线上出问题只能靠猜。这条 INFO 是排障的第一现场。
+                // 动作卡住是寻路故障里最常见的一类,所以这条是 INFO 不是 debug——
+                // 发布态不落盘的话,线上出问题只能靠猜。这是排障的第一现场。
                 Constants.LOG.info(
                         "[numen-path] 动作卡死 {} 耗时{}刻(估价{}) 无进展{}刻 身位{} 精确({}) "
                                 + "起点格={} 终点格={} 终点上={} 终点下={}",

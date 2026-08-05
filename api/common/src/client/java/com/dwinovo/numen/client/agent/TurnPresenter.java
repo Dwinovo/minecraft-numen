@@ -25,7 +25,7 @@ final class TurnPresenter {
     /**
      * 一次 LLM 分发的语音接线:chunk 回调 + 收尾动作打包。语音未配置时是
      * {@link #SILENT_VOICE}(sink 为 null、finish 是空操作),chatStreaming
-     * 收到 null onChunk 与从前完全一样。
+     * 收到 null onChunk 即走无语音那条路。
      */
     record VoiceTurn(Consumer<JsonObject> sink, Runnable finish) {}
 

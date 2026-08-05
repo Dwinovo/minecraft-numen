@@ -375,9 +375,9 @@ public final class EntityAgentLoop {
     /**
      * @return 这句话有没有被压着(true = 她没能当场看,得等)。这是<b>观察</b>不是预测:
      *         {@code tryStartTurn} 之后有没有真的发出请求,看的就是它自己的状态。
-     *         从前聊天框自己拿 {@code isBusy()} 猜——而 {@code isBusy()} 里的
-     *         {@code currentTask != null} 根本不在开轮的闸门里,于是她在跟随时你说的话
-     *         明明当场就发出去了,界面却写着"排队中"。闸门以后再加几道,这里也不会跑偏。
+     *         调用方拿 {@code isBusy()} 之类的东西自己猜是猜不准的——那里面的
+     *         {@code currentTask != null} 并不在开轮的闸门里,她在跟随时你说的话明明
+     *         当场就发出去了,界面却会写"排队中"。闸门以后再加几道,这里也不会跑偏。
      */
     public boolean submitPrompt(String text) {
         boolean wasAborted = turnPause.isPaused();
@@ -410,10 +410,9 @@ public final class EntityAgentLoop {
      * <p>她的身体还在服务器里 tick,任务照样跑完,收尾进离线出箱等主人回来
      * ——"我帮你把矿挖完了"这条链正是为此做的。登出时叫停她,恰好把它废掉。
      *
-     * <p>从前这里直接复用 {@link #abort()},于是登出会往一个<b>已经断开</b>的连接
-     * 发叫停包,抛 NPE 打断 {@code onLoggingOut} 的后半段(花名册清空等等一律不执行)。
-     * 那个 NPE 反而"保住"了正确行为——治它不能靠让发包静默失败,得先回答
-     * "登出到底该不该叫停"。答案是不该。
+     * <p>所以它跟 {@link #abort()} 是两件事,不能互相复用:登出时连接已经断了,
+     * 往那儿发叫停包会抛 NPE 打断 {@code onLoggingOut} 的后半段(花名册清空等等
+     * 一律不执行)。这个问题的答案不是"让发包静默失败",而是登出根本不该叫停。
      */
     public void quiesce() {
         abort(false);
@@ -487,7 +486,7 @@ public final class EntityAgentLoop {
     public String currentActivity() {
         if (currentTask != null) {
             // 服务端给的人话描述("挖 64 块泥土"),不是工具 id("mine")——
-            // 气泡是给主人看的,印内部标识符是从前没有别的可印。
+            // 气泡是给主人看的,他不该在头顶上读内部标识符。
             String d = currentTask.describe();
             return d != null && !d.isBlank() ? d : currentTask.tool();
         }
@@ -603,10 +602,8 @@ public final class EntityAgentLoop {
      * 外接大脑(MCP)此刻是不是接管着她 —— 读的是队列上那把锁的持有者,
      * <b>不另记一份</b>。锁本身每刻按 {@code McpMode} 的状态同步(见 clientTick)。
      *
-     * <p>从前这里有另一套:{@code acquireExternal/releaseExternal} 翻一个
-     * {@code externallyDriven} 字段。那套<b>一个调用者都没有</b>,字段永远是 false,
-     * 面板里那行"外接大脑驱动中"一次都没显示过 —— 而它一旦被接上,就会跟锁那套
-     * 对同一个问题给出两个答案。删掉,只留锁这一个真源。
+     * <p>不另开一个 {@code externallyDriven} 字段配一对 acquire/release:那样"她此刻
+     * 是不是被接管着"就有了两个答案,而两个答案迟早会不一致。锁是唯一真源。
      */
     public boolean isExternallyDriven() {
         return queue.lockHolders().contains(QueueLock.MCP_MODE);
@@ -688,9 +685,9 @@ public final class EntityAgentLoop {
     /**
      * 服务端说她在做什么——直接照抄,不判断、不合并、不推断。
      *
-     * <p>这是 {@code currentTask} 的<b>唯一</b>写入点。从前是客户端自己记账
-     * ({@code trackAsyncDispatch}:只认自己派出去的那次调用),于是服务器重启重放、
-     * 死亡复活重放起来的任务它一概不知道,头顶没气泡、模型也看不见。
+     * <p>这是 {@code currentTask} 的<b>唯一</b>写入点。客户端不靠"我派出去过什么"
+     * 自己记账:那样服务器重启重放、死亡复活重放起来的活它一概不知道,头顶没气泡、
+     * 模型也看不见。
      */
     public void onCurrentTask(com.dwinovo.numen.network.payload.CurrentTaskPayload p) {
         if (p.idle()) {
@@ -1152,9 +1149,9 @@ public final class EntityAgentLoop {
                   + "task_finished event. It keeps running until something replaces it."
                 : "This background call is ACTIVE and will send a task_finished event when it ends; "
                   + "use task_status only when the owner asks for progress.";
-        // 身体只有一个槽，派新活自然顶掉旧活。从前这里写的是「别再派」（那时候
-        // 派发侧会拒绝并发任务），闸门拆了以后那句话就成了误导：模型会先 task_stop
-        // 再派，白跑一轮。只有「停下来什么也不干」才需要 task_stop。
+        // 身体只有一个槽，派新活自然顶掉旧活，所以这里必须说「直接派」而不是
+        // 「别再派」——后者会让模型先 task_stop 再派，白跑一轮。
+        // 只有「停下来什么也不干」才需要 task_stop。
         String swap = " There is only ONE body: dispatching another body action REPLACES this one "
                 + "outright — you do NOT need to stop it first. Use task_stop only when the owner "
                 + "wants her to stop and do nothing.";

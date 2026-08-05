@@ -22,9 +22,9 @@ import java.util.Map;
  *
  * <p>用户想接自己的站点，填的是面板里的 baseUrl + apiKey + 模型名（存在
  * {@code ProviderLibrary} 的 {@code config/numen/providers.json}），协议从这份目录里选一个。
- * 从前这里也往同一个文件里播种子、也从那里读，两个类抢一个文件 —— 面板一存就
- * 把它写成了 {@code entries} 形状，这边每次启动都解析失败报一条 ERROR 再退回内置。
- * 回到只读内置，那条路就没了。
+ * <p>这份目录<b>只读内置</b>，一个字都不往 {@code providers.json} 里写：两个类抢同一个
+ * 文件的话，面板一存就把它写成 {@code entries} 形状，这边每次启动都解析失败、报一条
+ * ERROR 再退回内置。
  */
 public final class ProviderRegistry {
 

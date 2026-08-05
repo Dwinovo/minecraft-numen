@@ -17,17 +17,16 @@ import java.util.Map;
  * 全都往这里写——一个类,一个方法。
  *
  * <h2>为什么收成一个口</h2>
- * 从前有三个:{@code GameEvents.emit}(服务端事件)、{@code BodyLog}(身体日记,
- * 自带一套攒条数+离线重试)、客户端直接 push(死亡)。三条路各有各的时间戳有无、
- * 各有各的离线行为、各有各的合并策略——所以"主人下线时任务做完了"这件事,
- * 走任务那条路直接丢、走日记那条路能留 6 条。同一个问题三个答案,就是胶水。
+ * 多开一条发事件的路,就多一套"带不带时间戳""主人离线怎么办""攒不攒",而它们
+ * 必然分叉:同样是"主人下线时任务做完了",一条路直接丢、另一条能留六条。
+ * 一个问题只能有一个答案,所以只有这一个入口。
  *
  * <h2>两件事这里一定做</h2>
  * <ol>
  *   <li><b>盖时间戳</b>——每条事件都带游戏内日期与时刻。模型能自己判断哪些信息
  *       过期了(死前捡的铁矿在死亡地点掉了),我们就不必替它清箱;</li>
  *   <li><b>主人离线不丢</b>——进 {@link EventOutbox} 跟着存档落盘,主人登录时补发。
- *       从前这条路只有身体日记享受,任务结果是直接扔的。</li>
+ *       每一种事件都享受这条,没有例外。</li>
  * </ol>
  *
  * <h2>urgent</h2>
@@ -107,8 +106,7 @@ public final class NumenEvents {
                     kind.kind, urgent ? " URGENT" : "");
             return;
         }
-        // 主人不在:留着。他下线期间她照样在干活,回来该知道发生了什么——
-        // 从前这里是直接丢,于是"帮你挖了一晚上矿"永远没人知道。
+        // 主人不在:留着。他下线期间她照样在干活,回来该知道发生了什么。
         EventOutbox outbox = EventOutbox.get(server);
         outbox.put(companion.getUUID(), EventTypes.EVENT, xml, now, urgent);
         Constants.LOG.info("[numen-event] {} kind={}{} → 暂存(主人离线,已攒 {} 条)",
@@ -125,8 +123,8 @@ public final class NumenEvents {
      * 造一条 {@code <event>} —— <b>唯一的构造口</b>,{@code day} / {@code t} 由它统一盖上。
      *
      * <p>收 {@code dayTime} 而不是 {@code MinecraftServer},所以客户端也能用同一条路
-     * (死亡事件在客户端合成:那会儿身体已经不在了)。从前客户端手搓字符串,
-     * 于是全仓唯一漏掉时间戳的事件就是死亡——最该有时间的那一条。
+     * (死亡事件在客户端合成:那会儿身体已经不在了)。两侧共用这一个构造口,
+     * 才不会出现"最该有时间的那条事件恰好没盖上时间"。
      */
     public static String compose(long dayTime, Kind kind, Map<String, String> attrs, String text) {
         StringBuilder sb = new StringBuilder("<event kind=\"").append(kind.kind).append('"');

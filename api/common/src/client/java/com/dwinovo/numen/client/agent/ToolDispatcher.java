@@ -112,8 +112,7 @@ public final class ToolDispatcher {
      * @param stopBody 要不要连身体一起叫停。<b>主人按停止</b>要({@code true}——他要她
      *                 立刻住手);<b>断线登出</b>不要({@code false})——她的身体还在
      *                 服务器里,任务照样该跑完,收尾走离线出箱。而且此刻连接已经没了,
-     *                 那个包根本发不出去(从前正是在这里抛 NPE,把登出清理的后半段
-     *                 整个打断)。
+     *                 那个包根本发不出去——硬发会抛 NPE,把登出清理的后半段整个打断。
      */
     public List<String> cancelAndDrain(boolean stopBody) {
         List<String> ids = new ArrayList<>(inFlight.keySet());
@@ -126,7 +125,7 @@ public final class ToolDispatcher {
             CompanionLifecycle.fireAbort(entityUuid);   // 内容包据此停掉自己那边的活
         } else {
             // 不叫停身体，但停在传输层的调用还是得忘掉：它们属于一个已经结束
-            // 的会话，结果再也回不来。（fireAbort 以前顺手干了这件，拆开后得明写。）
+            // 的会话，结果再也回不来。
             com.dwinovo.numen.agent.tool.ServerToolTransport.forget(entityUuid);
         }
         return ids;

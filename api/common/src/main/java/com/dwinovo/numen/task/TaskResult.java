@@ -10,17 +10,13 @@ import java.util.Map;
  * {@code content} of a {@code role:tool} message in the next chat completion
  * request.
  *
- * <h2>Shape decision</h2>
- * Modeled after Mindcraft's {@code {success, message, timedout, interrupted}}
- * envelope (validated by their open-source agent on small models). The
- * {@code data} map carries task-specific structured info — e.g. moveTo
- * reports {@code final_x/y/z}, future scan_inventory would report
- * {@code items: [...]}. Keys are lowercase snake_case; values must be
- * Gson-serialisable.
- *
- * <p>Composite tasks (Phase-2) will use the same envelope but populate
- * {@code data.step_results} with the per-step result list, so a failed chain
- * can be traced step-by-step by the LLM.
+ * <h2>Why four flags and not one</h2>
+ * "Did it work" is not one question. A move_to can succeed, fail (unreachable),
+ * run out of time, or get cancelled — and the model's next move differs in each
+ * case, so each gets its own field rather than being folded into a message the
+ * model has to parse. The {@code data} map carries whatever else that particular
+ * task knows (move_to reports {@code final_x/y/z}). Keys are lowercase
+ * snake_case; values must be Gson-serialisable.
  *
  * @param success      did the task achieve its goal? Distinct from
  *                     {@code !timedOut && !interrupted}: a moveTo can succeed,

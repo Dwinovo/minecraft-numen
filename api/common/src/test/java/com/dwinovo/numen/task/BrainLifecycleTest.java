@@ -41,9 +41,8 @@ class BrainLifecycleTest {
 
     @Test
     void theDispatcherRegistersItselfWithoutAnyLoaderHelp() {
-        // 上面那条测的是行为,这条测的是<b>为什么不会再漏</b>:清理动作写在状态旁边的
-        // 静态块里,类被加载就已经报到了。从前它写在两个 loader 的启动代码里,清单
-        // 上有寻路缓存和目标索引、唯独漏了大脑表——那份漏就是这次死锁的来源。
+        // 上面那条测的是行为,这条测的是<b>为什么不会漏</b>:清理动作写在状态旁边的
+        // 静态块里,类被加载就已经报到了,loader 一个字都不用写,也就没有"忘了登记"。
         UUID her = UUID.randomUUID();
         TaskSlot fresh = CompanionTickDispatcher.currentSlotFor(her);
 

@@ -58,8 +58,8 @@ public interface Task {
     /**
      * 交回给模型的结果信封。只有走到终态才有意义——常驻任务永远不会被调到。
      *
-     * <p>这是我们比 altoclef 那套强的地方:它的任务没有返回值,于是每一层都得
-     * 自己发明超时兜底(它的 {@code TimeoutWanderTask} 散在 28 个文件里)。
+     * <p>任务必须有返回值。没有的话,超时兜底就得每一层自己发明一套,同一个问题
+     * 会在几十个文件里各答一次。
      */
     default TaskResult result(TaskState terminal) {
         return null;

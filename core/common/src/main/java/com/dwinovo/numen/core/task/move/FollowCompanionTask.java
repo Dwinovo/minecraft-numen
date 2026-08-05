@@ -26,11 +26,11 @@ import net.minecraft.world.level.Level;
  * 常驻任务没有"失败"这个终点,所以「够不着」只能表达成休眠 + 退避重试:主人飞起来、
  * 隔着断崖、换了维度,她就先放手,等条件回来自己醒。
  *
- * <p>这一条以前是缺的,后果很重:{@code nav.tick()} 的返回值被整个丢掉,而
- * {@link PlayerNav} 的 FAILED 是<b>终局闩</b>(一经裁定即稳定持续)。于是主人一飞起来
- * 导航判 NO_PATH,此后每一刻都返 FAILED、没人重建,她就<b>永久定在原地</b>——主人落回
- * 地面也不会自愈。而 {@code task_status} 照样说"执行中"(常驻任务按定义永远 RUNNING),
- * 主人完全看不出她卡住了。
+ * <p><b>{@code nav.tick()} 的返回值一个都不能丢</b>:{@link PlayerNav} 的 FAILED 是
+ * <b>终局闩</b>(一经裁定即稳定持续)。主人一飞起来导航就判 NO_PATH,此后每一刻都返
+ * FAILED——没人接住并重建的话,她<b>永久定在原地</b>,主人落回地面也不会自愈。而
+ * {@code task_status} 照样说"执行中"(常驻任务按定义永远 RUNNING),主人完全看不出
+ * 她卡住了。
  */
 public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskRecord> {
 

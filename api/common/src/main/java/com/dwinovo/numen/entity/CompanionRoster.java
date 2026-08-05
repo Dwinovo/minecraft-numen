@@ -12,10 +12,9 @@ import java.util.UUID;
  * 名册的决策层——"哪只同伴还存在"这个问题的唯一答案出处。
  *
  * <h2>为什么单独拎出来</h2>
- * 这层<b>不碰 Minecraft</b>:全是 UUID、字符串、时间戳。同伴的增删改查从前散在
- * {@code Companions}/{@code DismissRequestPayload}/客户端处理体里,每一处都要 MinecraftServer
- * 才跑得起来,于是<b>一条都没测过</b>——真机上"遣散会误删数据"的 bug 正是从这个测不到的
- * 缝里长出来的。判断规则搬到这儿,就能拿普通单测把每条边界钉死。
+ * 这层<b>不碰 Minecraft</b>:全是 UUID、字符串、时间戳,所以每条边界都能拿普通单测钉死。
+ * 判断散在各处的话,每一处都要 MinecraftServer 才跑得起来,也就一条都测不到——而
+ * "谁还存在"判错一次的代价是删掉主人的会话数据。
  *
  * <h2>两条规则</h2>
  * <ol>
@@ -63,9 +62,9 @@ public final class CompanionRoster {
 
     /**
      * 主人名下叫这个名字的同伴,没有则 null——<b>召唤的幂等就靠它</b>:同名就复用,
-     * 不铸新 UUID。(早年每次召唤都铸新 UUID,同名分身全都会在登录时一起复活。)
+     * 不铸新 UUID,否则每喊一次"召唤小焰"就多一只同名分身,登录时一起复活。
      *
-     * <p>万一有重名(老版本留下的),取定序后的第一个:注册表是 HashMap,不定序的话
+     * <p>万一有重名(迁移过来的旧数据),取定序后的第一个:注册表是 HashMap,不定序的话
      * 同一句"召唤小焰"今天复用这只、明天复用那只,主人会觉得同伴精神分裂。
      */
     public static UUID findByName(Collection<Row> rows, String name) {

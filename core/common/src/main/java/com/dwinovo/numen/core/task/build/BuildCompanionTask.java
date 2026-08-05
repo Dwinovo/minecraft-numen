@@ -360,11 +360,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /**
      * 落一批:在<b>当前最低的未完成层</b>里,挑离她最近的几格。
      *
-     * <p>顺序仍然低层优先(上面的东西得有底下的东西撑着),但层内不再是固定的
-     * 蛇形——而是跟着她的位置走。以前落位顺序和她在哪毫无关系,于是观感是"她在
-     * 那边溜达,方块在这边冒出来":两条互不相干的动画叠在一起,一眼就假。绑上
-     * 之后,她走到东墙东墙就长,绕到南边南边接着长。<b>因果对上,比加多少粒子
-     * 都管用。</b>
+     * <p>顺序低层优先(上面的东西得有底下的东西撑着),层内则<b>跟着她的位置走</b>,
+     * 不走固定蛇形。落位顺序跟她在哪无关的话,观感是"她在那边溜达,方块在这边冒出来"
+     * ——两条互不相干的动画叠在一起,一眼就假。绑上之后,她走到东墙东墙就长,绕到
+     * 南边南边接着长。<b>因果对上,比加多少粒子都管用。</b>
      */
     private TaskState runBatch(int budget) {
         List<BlockPos> touched = new ArrayList<>();
@@ -547,8 +546,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         // 回调会把一部分邻居更新引回来——门/床/高草的 setPlacedBy 自己用带更新的方式
         // 写另一半,活塞的会去判断该不该伸出。这是<b>知情的取舍</b>:双格方块的另一半
         // 本来就该由这条回调来造,所以次半根本不进目标集(见
-        // {@code BuildStates#isSecondaryHalf})。曾经的做法是两半都进集、次半记 0 件,
-        // 靠"轮到它时比对已成立直接短路"兜着——那条推理对门成立(另一半恒在正上方,
+        // {@code BuildStates#isSecondaryHalf})。别改成两半都进集、次半记 0 件靠
+        // "轮到它时比对已成立直接短路"兜着——那条推理对门成立(另一半恒在正上方,
         // 按 y 排序主半必先落位),对床不成立:床的两半同 y,朝北时床头的 z 更小会先
         // 落位,而床的回调写的是"朝向再往外一格",那一格在目标集之外。活塞伸出是原版
         // 该有的行为(我们只禁止把活塞头当建材单独摆)。写在这里是为了让下一个排查
@@ -760,9 +759,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * 收不了尾时的病因分类。
      *
      * <p>剩下的格子放不下去只有四种可能,而玩家的应对完全不同:让占着的人挪开、
-     * 让拆的人住手、去补材料、或者认下图纸里原版不允许的那几格。以前四种都归成
-     * 一句 "could not be placed" —— 判据其实早就算出来了,只是没送到人面前。
-     * 裁决做了却不交代理由,和没裁决一样难用。
+     * 让拆的人住手、去补材料、或者认下图纸里原版不允许的那几格。所以必须分开报,
+     * 不能笼统一句 "could not be placed" —— 判据本来就算出来了,裁决做了却不交代
+     * 理由,和没裁决一样难用。
      */
     private String diagnoseOutstanding() {
         int occupied = 0;

@@ -18,12 +18,10 @@ import java.util.Map;
  *       {@code get_self_status} tool DESCRIPTION instead — descriptions are
  *       re-read on every request build ({@code OpenAIProvider}), so the model
  *       sees the current roster each turn;</li>
- *   <li>—— 就这一件。<b>从前还有一个"每条本能的开关"</b>:默认 ON、内存里、
- *       经 StateStore 落到 {@code config/numen/reflexes.json}。整套机构是空转的:
- *       翻开关的 {@code setEnabled} 生产代码里<b>一个调用者都没有</b>,主人根本
- *       没有入口关掉任何一条本能,于是每次启动读一个文件、写一个文件,里面的值
- *       永远全是 true。看着有、实际没有,比明说没做更难查,所以整套收掉了。
- *       真要做,做的是面板入口 + 这里重新长出开关,而不是留着空机构。</li>
+ *   <li>—— 就这一件。<b>名册即全部</b>:登记了就是开着的,没有"每条本能的开关"。
+ *       要做开关,先做主人能按的面板入口,再让这里长出开关——只有开关没有入口的话,
+ *       每次启动读一个文件、写一个文件,里面的值永远全是 true。看着有、实际没有,
+ *       比明说没做更难查。</li>
  * </ul>
  *
  * <p>静态(名册是每 JVM 一份,不分同伴),synchronized 因为服务端 tick 线程注册、

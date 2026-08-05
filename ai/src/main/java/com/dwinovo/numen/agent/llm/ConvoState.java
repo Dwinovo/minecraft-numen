@@ -109,9 +109,8 @@ public final class ConvoState {
         turnCount = 0;
     }
 
-    /** Wipe in-memory history. Called on explicit reset (Phase-2: /numen reset
-     *  command). NOTE: does not touch the sink's storage — a caller owning a
-     *  {@link ConvoLog} must also {@code delete()} it, or the next launch
+    /** Wipe in-memory history. NOTE: does not touch the sink's storage — a caller
+     *  owning a {@link ConvoLog} must also {@code delete()} it, or the next launch
      *  resurrects everything just cleared. */
     public void clear() {
         messages.clear();

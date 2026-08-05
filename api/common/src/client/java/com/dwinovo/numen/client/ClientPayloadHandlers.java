@@ -84,13 +84,13 @@ public final class ClientPayloadHandlers {
         }
         // 反过来的一半:名册说她存在,她就该有大脑。
         //
-        // 从前 loop 是懒创建的——最早只有开面板才造,于是每冒出一种新的入站消息就得
-        // 补一次 getOrCreate:快捷键、桥接消息、离线补发的事件、复活包……补了四次,
-        // 漏掉的第五个是<b>死亡包</b>。后果是她死了队列没上锁,紧接着到达的
-        // task_finished 急件照常开了一轮,模型派出感知工具,服务端找不到身体就把她
-        // 提前复活了一具;5 秒后定时复活又来一具,两具同 UUID 的身体同时在世。
+        // 「她有没有大脑」必须取决于<b>她存不存在</b>,不能取决于<b>谁先碰过她</b>。
+        // 懒创建就是后者:每冒出一种新的入站消息(快捷键、桥接消息、离线补发的事件、
+        // 复活包、死亡包……)都得记得补一次 getOrCreate,漏掉哪个,那种包就整条丢掉。
+        // 丢掉死亡包的后果是她死了队列没上锁,紧接着到达的 task_finished 急件照常
+        // 开一轮,模型派出感知工具,服务端找不到身体就把她提前复活一具,5 秒后定时
+        // 复活再来一具。
         //
-        // 根子在于"她有没有大脑"取决于<b>谁先碰过她</b>,而不是<b>她存不存在</b>。
         // 名册是"谁存在"的权威真源,每次变化都推一份(召唤、遣散、死亡、登录都走它),
         // 所以接在这里就一劳永逸:此后任何包以任何顺序到达都有地方落,各个 sink 也
         // 不必再逐个纠结 get 还是 getOrCreate。
@@ -141,14 +141,12 @@ public final class ClientPayloadHandlers {
     /**
      * getOrCreate(not get):跟 {@link #handleRespawn} 对称。
      *
-     * <p>从前这里用 {@code get().ifPresent(...)} —— loop 还没造出来就<b>整条丢掉</b>,
-     * 而那句 "suspending loop" 打在 ifPresent 外面,日志看着像成功了。真机上的后果:
-     * 她死了但队列没上锁,紧接着到达的 task_finished 急件照常开了一轮,模型派出
-     * get_self_status,服务端找不到身体就把她提前复活了一具;5 秒后定时复活又来一具。
-     * 两具同 UUID 的身体同时在玩家列表里,排程器在两者之间反复重建大脑。
+     * <p>这一条<b>丢不得</b>:它是给队列上锁的那一下。丢了的话她死着但队列没锁,
+     * 紧接着到达的 task_finished 急件照常开一轮,模型派出感知工具,服务端找不到身体
+     * 就把她提前复活一具,5 秒后定时复活再来一具。
      *
-     * <p>{@code restoreFromDisk} 里有"按名册重新上锁"的兜底,但名册与死亡包是两条独立
-     * 推送、没有顺序保证,loop 建起来的那一刻名册还没说她死了,兜底也接不住。
+     * <p>也别指望 {@code restoreFromDisk} 里"按名册重新上锁"那道兜底接住:名册与
+     * 死亡包是两条独立推送、没有顺序保证,loop 建起来的那一刻名册可能还没说她死了。
      */
     private static void handleDeath(NumenDeathPayload p) {
         Constants.LOG.info("[numen-net] numen_death entity={} ({}) — suspending loop", p.entityUuid(), p.cause());

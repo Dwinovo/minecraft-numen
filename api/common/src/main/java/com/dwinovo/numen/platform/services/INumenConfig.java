@@ -9,9 +9,8 @@ package com.dwinovo.numen.platform.services;
  * <h2>Read freshness</h2>
  * Values are read on every call. NeoForge's {@code ConfigValue.get()} is
  * already lazy + cached at the framework level; Fabric's JSON impl caches
- * the parsed values in memory and only re-reads on explicit
- * {@code /reload}-style triggers (Phase-2). For MVP, edits to the config
- * file require a server restart to take effect — acceptable.
+ * the parsed values in memory. Editing the config file therefore takes effect
+ * on the next server restart, not immediately.
  *
  * <h2>Why no setters</h2>
  * Mutation paths differ wildly between loaders (NeoForge needs the screen

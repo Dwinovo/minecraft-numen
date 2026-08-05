@@ -127,8 +127,8 @@ public final class Companions {
     /**
      * 主人登录:把他离线期间攒下的世界事件补发给客户端。
      *
-     * <p>他不在的时候她照样在干活——任务跑完了、被怪打了、跨了维度。从前这些
-     * 一律直接丢,于是"我帮你把矿挖完了"这件最值得说的事恰好最容易丢。
+     * <p>他不在的时候她照样在干活——任务跑完了、被怪打了、跨了维度。这些都留着
+     * 等他回来:"我帮你把矿挖完了"是最值得说的一件事,不能因为他当时不在就没了。
      * 攒满被丢掉的条数也如实说一句:丢弃可以,无声消失不行。
      */
     private static void replayOutbox(MinecraftServer server, UUID ownerUuid, ServerPlayer owner) {

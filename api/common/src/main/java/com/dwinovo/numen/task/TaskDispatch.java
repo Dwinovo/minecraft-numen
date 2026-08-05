@@ -27,9 +27,8 @@ import java.util.function.Consumer;
  * {@code tick()} 返不返终态——给了 {@code count} 就会返 SUCCESS 干完腾位,
  * 没给就永远 RUNNING 占着槽,直到主人换掉它。工具作者写一次钓鱼逻辑,两种用法白送。
  *
- * <p>(从前这里还有第四条:"没有干完语义的注册成 TaskChain 参与竞价"。那条路
- * <b>一个实现都没有</b>——链是全局注册、每同伴全带、不能带参数也不能开关,
- * 根本挂不上去。收进槽之后它不需要单独存在。)
+ * <p>没有第四条。竞价链是本能的场子,工具进不去:链是全局注册、每同伴全带、
+ * 不能带参数也不能开关,一次带参的工具调用挂不上去。
  */
 public final class TaskDispatch {
 
@@ -56,13 +55,13 @@ public final class TaskDispatch {
     /**
      * 换掉她当前在做的事:受理即回执 task_id,身体后台执行,收尾经 task_finished 送达。
      *
-     * <p>槽里原来那件活会被<b>替换</b>(收到取消结果),而不是像从前那样拒绝新的——
-     * "她在挖矿所以不理你"是主人最直观的一种出戏。主人改主意是常态。
+     * <p>槽里原来那件活会被<b>替换</b>(收到取消结果),不拒绝新的——主人改主意是常态,
+     * 而"她在挖矿所以不理你"是最直观的一种出戏。
      *
      * <p><b>唯一拒绝的情形</b>:槽里那件是同一批工具调用里刚受理、一刻都还没跑过的。
      * 那说明模型在一个回合里连派两件活——它该拿到第一件的结果、看清状况再决定下一步,
-     * 而不是盲目承诺。这条判据本地可判({@code ticksRun == 0}),不用把回合 id
-     * 穿到服务端。
+     * 而不是盲目承诺。这条判据本地可判({@link TaskRecord#acceptedThisTick}),
+     * 不用把回合 id 穿到服务端。
      */
     public static void setTask(NumenPlayer companion, TaskRecord record, JsonObject args,
                                Consumer<String> reply) {
