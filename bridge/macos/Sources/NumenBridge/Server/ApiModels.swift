@@ -22,3 +22,15 @@ struct HealthResponse: ResponseCodable, Equatable, Sendable {
         case providerReady = "provider_ready"
     }
 }
+
+struct SpeechRequest: Decodable, Sendable {
+    let model: String?
+    let voice: String?
+    let input: String
+    let responseFormat: String?
+
+    enum CodingKeys: String, CodingKey {
+        case model, voice, input
+        case responseFormat = "response_format"
+    }
+}
