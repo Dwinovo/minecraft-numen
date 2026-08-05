@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  * </ul>
  *
  * <p>剥记号不是这份视图的目的,是它的后果——协议记号本来就不属于"他俩的对话"。
- * 要看那些东西,换 {@link RawRequestMode}。
+ * 要看那些东西,换 {@link RawMessageMode}。
  */
 public final class OwnerWordsMode implements ChatDisplayMode {
 

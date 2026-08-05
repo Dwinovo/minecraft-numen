@@ -316,22 +316,19 @@ public final class ChatView {
     }
 
     /**
-     * 摊平成可画的块。<b>画哪一份由当前视图口径说了算</b>
-     * ({@link com.dwinovo.numen.client.chat.ChatDisplayMode#showsModelRequest}):
+     * 摊平成可画的块。<b>来源恒定:物理对话史</b>({@code display()})——面板是消息记录的
+     * 视图,画的必须是真的发生过的那些消息。压缩重写的是模型上下文,不该连主人看得见的
+     * 历史一起吃掉。
      *
-     * <ul>
-     *   <li>常态 = <b>物理对话史</b>({@code display()})。压缩重写的是模型上下文,
-     *       不该连主人看得见的历史一起吃掉;</li>
-     *   <li>debug = <b>这一轮发给模型的那份</b>({@code modelContextSnapshot()},
-     *       跟 LLM 路径同一个方法)。它比对话史短(压缩掉的真的没了),而且带着
-     *       临时挂载的 {@code <runtime_state>} —— 那正是开 debug 要看的东西。</li>
-     * </ul>
+     * <p>模式只改<b>每条怎么渲染</b>(见 {@link com.dwinovo.numen.client.chat.ChatDisplayMode}):
+     * 常态只取 {@code <query>} 里主人的话,debug 连 {@code <query>} 外的一起画。不换来源
+     * ——请求里临时挂载、从未入过记录的东西(如 {@code <current_task>})混进来的话,
+     * 画出来的会是一条<b>从未存在过</b>的消息。
      */
     private List<Block> build(int bubbleMaxW) {
         List<Block> out = new ArrayList<>();
         EntityAgentLoop lp = loop.get();
-        boolean rawRequest = ChatDisplayModes.current().showsModelRequest();
-        List<ConvoState.Msg> source = rawRequest ? lp.modelContextSnapshot() : lp.display();
+        List<ConvoState.Msg> source = lp.display();
         Set<String> done = new HashSet<>();
         Set<String> failed = new HashSet<>();
         for (ConvoState.Msg m : source) {

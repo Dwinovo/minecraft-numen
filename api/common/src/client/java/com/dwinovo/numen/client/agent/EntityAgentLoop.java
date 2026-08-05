@@ -1134,11 +1134,10 @@ public final class EntityAgentLoop {
      * <b>发给模型的就是这一份</b>——会话上下文加上这一轮临时挂载的运行期状态
      * ({@code <runtime_state>}/{@code <current_task>})。源会话与落盘日志一个字不动。
      *
-     * <p>公开是因为 debug 面板画的必须是<b>它</b>,不是对话史:临时挂载的东西按定义
-     * 不在对话史里,面板换个过滤器也永远显示不出来,于是"我开了 debug 却看不见"
-     * 会被读成"这东西没发出去"。两边调同一个方法,就没有第二份账可对不上。
+     * <p>私有:它是<b>现算</b>的,只在发请求那一刻成立。拿去给别人展示,得到的会是
+     * "历史上那条消息 + 此刻的状态"——一条从未被发送过的消息。
      */
-    public List<ConvoState.Msg> modelContextSnapshot() {
+    private List<ConvoState.Msg> modelContextSnapshot() {
         return AgentRequestContext.attach(convo.snapshot(), currentTaskXml());
     }
 
