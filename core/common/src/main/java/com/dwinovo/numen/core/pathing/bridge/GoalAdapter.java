@@ -6,6 +6,7 @@ import java.util.List;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.goals.GoalBlock;
+import com.dwinovo.numen.core.pathing.goals.GoalApproachAvoiding;
 import com.dwinovo.numen.core.pathing.goals.GoalComposite;
 import com.dwinovo.numen.core.pathing.goals.GoalGetToBlock;
 import com.dwinovo.numen.core.pathing.goals.GoalNear;
@@ -43,6 +44,7 @@ import net.minecraft.core.BlockPos;
  *       调用方只剩分支挖矿——它要的就是"一直往外挖";战斗的后撤走
  *       {@code avoid},那个有终点)</li>
  *   <li>avoid → 门面持有的 {@code GoalAvoidEntities} 本体(不另建,势场公式只此一份)</li>
+ *   <li>approachAvoiding → {@link GoalApproachAvoiding}(吸引项递归映射,势场直接沿用)</li>
  * </ul>
  */
 public final class GoalAdapter {
@@ -58,6 +60,9 @@ public final class GoalAdapter {
 
     /** 把任务层目标映射/包装为内核目标。 */
     public static Goal toEngineGoal(NavGoal goal) {
+        if (goal instanceof NavGoal.ApproachAvoiding g) {
+            return new GoalApproachAvoiding(toEngineGoal(g.approach), g.repulsion);
+        }
         if (goal instanceof NavGoal.Avoid g) {
             return g.engine;   // 门面本来就持着内核目标,直接交出去
         }

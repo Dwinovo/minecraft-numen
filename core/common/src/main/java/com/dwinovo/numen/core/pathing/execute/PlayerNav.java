@@ -23,7 +23,6 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
-import net.minecraft.world.entity.Entity;
 
 /**
  * 任务层的导航正门:把一份编译好的导航契约({@link GoalCompiler.Compiled})
@@ -160,13 +159,6 @@ public final class PlayerNav {
         return new PlayerNav(player, speed, reached, compiled, true);
     }
 
-    /** 持续跟随一个实时实体,每 tick 用实体当前脚位重新校验目标。 */
-    public static PlayerNav followEntity(NumenPlayer player, Supplier<? extends Entity> entitySupplier,
-                                         double followRadius, double speed, BooleanSupplier reached) {
-        return new PlayerNav(player, speed, reached,
-                () -> followEntityContract(player, entitySupplier, followRadius), true);
-    }
-
     /** 裸自定义目标(runAway、column 等)。不带 sacred——有方块目标的意图
      *  应走 {@link #to} / {@link GoalCompiler},让目标受保护。 */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
@@ -181,21 +173,6 @@ public final class PlayerNav {
             return g == null ? null
                     : new GoalCompiler.Compiled(g, LongSets.emptySet());
         };
-    }
-
-    private static GoalCompiler.Compiled followEntityContract(NumenPlayer player,
-                                                             Supplier<? extends Entity> entitySupplier,
-                                                             double followRadius) {
-        Entity entity = entitySupplier.get();
-        if (entity == null || entity == player || entity.isRemoved() || !entity.isAlive()) {
-            return null;
-        }
-        NavGoal goal = followEntityGoal(entity.blockPosition(), followRadius);
-        return new GoalCompiler.Compiled(goal, LongSets.emptySet());
-    }
-
-    static NavGoal followEntityGoal(BlockPos entityFeet, double followRadius) {
-        return NavGoal.near(entityFeet, Math.max(0.0, followRadius));
     }
 
     private PlayerNav(NumenPlayer player, double speed, BooleanSupplier reached,

@@ -209,6 +209,20 @@ public interface NavGoal {
         return new Avoid(distance, penaltyFactor, threats);
     }
 
+    /**
+     * 走到 {@code approach} 那儿,<b>路上绕开这些威胁</b>。到达判定完全归 {@code approach}
+     * ——绕路不改变终点在哪。
+     *
+     * <p>调用方必须把<b>要去的那个目标本身</b>排除在 {@code threats} 之外:她要打的那只也是
+     * 敌对生物,它若在势场里就会把她推开,于是永远走不到跟前。
+     *
+     * @return {@code threats} 为空时直接返回 {@code approach},不白包一层
+     */
+    static NavGoal approachAvoiding(NavGoal approach, double penaltyFactor,
+                                    List<GoalAvoidEntities.Threat> threats) {
+        return threats.isEmpty() ? approach : new ApproachAvoiding(approach, penaltyFactor, threats);
+    }
+
     // ---- 工厂产物(具名,参数可读;行为与原匿名类逐字一致) ----
 
     /** {@link #exact} 的产物:三轴全等才到达。 */
@@ -515,6 +529,35 @@ public interface NavGoal {
         /** 威胁群的重心:它一挪动就触发重规划,快照因此不会用旧太久。 */
         @Override public BlockPos center() {
             return centroid;
+        }
+    }
+
+    /** {@link #approachAvoiding} 的产物。判定归吸引项,估价是吸引项加势场。 */
+    final class ApproachAvoiding implements NavGoal {
+        public final NavGoal approach;
+        public final GoalAvoidEntities repulsion;
+
+        ApproachAvoiding(NavGoal approach, double penaltyFactor,
+                         List<GoalAvoidEntities.Threat> threats) {
+            this.approach = approach;
+            // 拉开距离那一项交给 approach 的到达判定,所以势场只要估价:距离给 0,
+            // 它的 isInGoal 恒真。
+            this.repulsion = new GoalAvoidEntities(0.0, penaltyFactor,
+                    threats.toArray(GoalAvoidEntities.Threat[]::new));
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            return approach.isAt(feet);
+        }
+
+        @Override public double heuristic(BlockPos fromPos) {
+            return approach.heuristic(fromPos)
+                    + repulsion.heuristic(fromPos.getX(), fromPos.getY(), fromPos.getZ());
+        }
+
+        /** 跟着要去的那个目标走:它一挪动就触发重规划。 */
+        @Override public BlockPos center() {
+            return approach.center();
         }
     }
 

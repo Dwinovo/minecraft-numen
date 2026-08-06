@@ -287,7 +287,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private TaskState closeIn() {
         if (nav == null) {
             double reach = Swing.reachOf(player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE));
-            nav = PlayerNav.followEntity(player, () -> target, Math.max(0.5, reach - 1.0), CHASE_SPEED,
+            double maintain = Math.max(0.5, reach - 1.0);
+            nav = PlayerNav.toGoal(player, () -> approachGoal(maintain), CHASE_SPEED,
                     () -> target == null || target.isRemoved());
         }
         switch (nav.tick()) {
@@ -299,6 +300,24 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             }
         }
         return TaskState.RUNNING;
+    }
+
+    /**
+     * 走向目标的路,<b>顺带绕开别的敌对生物</b>。走位是战斗的一部分:她去打一只骷髅,途中从
+     * 三只僵尸身上碾过去,到跟前血已经见底 —— 最短的路常常不是最好的路。
+     *
+     * <p>要打的那只<b>不进势场</b>:它也是敌对生物,若在场就会把她推开,于是她永远走不到跟前。
+     */
+    private NavGoal approachGoal(double radius) {
+        if (target == null || target.isRemoved()) {
+            return null;
+        }
+        var others = Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS);
+        others.remove(target);
+        return NavGoal.approachAvoiding(
+                NavGoal.near(target.blockPosition(), Math.max(0.0, radius)),
+                Menace.AVOID_PENALTY,
+                Menace.field(List.of(), others));
     }
 
     // ==================== 远程 ====================
@@ -363,7 +382,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     /** 射不到:逼近一档再看。逼到不能再逼还是没窗口,才算这只够不着。 */
     private TaskState seekShotWindow() {
         if (nav == null) {
-            nav = PlayerNav.followEntity(player, () -> target, followRadius, CHASE_SPEED,
+            nav = PlayerNav.toGoal(player, () -> approachGoal(followRadius), CHASE_SPEED,
                     () -> target == null || target.isRemoved());
         }
         switch (nav.tick()) {
