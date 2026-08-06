@@ -24,9 +24,15 @@ public class NumenFabricClient implements ClientModInitializer {
                 .resolve("config").resolve(Constants.MOD_ID);
         Path skillsDir = numenConfigRoot.resolve("skills");
 
+        // 同伴数据的根,以及旧布局的一次性迁移。根从 loader 拿,不问 Minecraft
+        // (datagen 里模组照样构造,那时没有 Minecraft 实例)。
+        com.dwinovo.numen.client.agent.CompanionHome.init(
+                FabricLoader.getInstance().getConfigDir().resolve("numen"));
+        com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
+
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(
-                Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("numen"));
+                FabricLoader.getInstance().getConfigDir().resolve("numen"));
 
         // MCP client: connect to any external MCP servers listed in
         // config/numen/mcp_clients.json and register their tools so the built-in

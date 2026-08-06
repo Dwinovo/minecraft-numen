@@ -38,6 +38,12 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.mcp.server.NumenMcp.initClient(
                 net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get());
 
+        // 同伴数据的根,以及旧布局的一次性迁移。根从 FML 拿,不问 Minecraft
+        // (datagen 里模组照样构造,那时没有 Minecraft 实例)。
+        com.dwinovo.numen.client.agent.CompanionHome.init(
+                net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("numen"));
+        com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
+
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(
                 net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("numen"));

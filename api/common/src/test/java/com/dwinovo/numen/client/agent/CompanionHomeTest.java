@@ -34,12 +34,12 @@ class CompanionHomeTest {
 
     @BeforeEach
     void useTempRoot() {
-        CompanionHome.overrideRoot(root);
+        CompanionHome.init(root);
     }
 
     @AfterEach
     void restore() {
-        CompanionHome.overrideRoot(null);
+        CompanionHome.init(null);
     }
 
     // ---- 绑定 ----

@@ -116,6 +116,16 @@ public final class ModItemTagData {
                 .add(Items.ROOTED_DIRT)
                 .add(Items.PODZOL)
                 .add(Items.MUD)
-                .add(Items.MOSSY_COBBLESTONE);
+                .add(Items.MOSSY_COBBLESTONE)
+                .add(Items.GRASS_BLOCK)
+                .add(Items.MYCELIUM)
+                .add(Items.CALCITE)
+                // 各维度手边最多的那种:去了下界/末地,主世界那批可能一块都没带。
+                .add(Items.BLACKSTONE)
+                .add(Items.BASALT)
+                .add(Items.SOUL_SOIL)
+                .add(Items.END_STONE)
+                .add(Items.SNOW_BLOCK);
+        // 沙和砂砾故意不在其中:重力方块垫在半空会直接落下去,柱子搭不起来。
     }
 }

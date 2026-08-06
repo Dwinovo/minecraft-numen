@@ -4,7 +4,6 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.CompanionRoster;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -79,24 +78,32 @@ public final class CompanionHome {
     private static final String BLOCKS = "blocks.json";
     private static final String WORLD = "world";
 
-    /** 根目录覆盖(测试注入临时目录);null = 走游戏目录。 */
-    private static Path rootOverride;
+    /** 同伴数据的根;由各 loader 的客户端入口注入,见 {@link #init}。 */
+    private static Path root;
 
     private CompanionHome() {}
 
-    /** 测试注入:把家安在临时目录里,免得碰真实存档。传 null 恢复默认。 */
-    public static void overrideRoot(Path root) {
-        rootOverride = root;
+    /**
+     * 安家的位置——{@code <config>/numen/}。<b>由 loader 给,不问 {@code Minecraft}</b>:
+     * 模组构造在 datagen 里同样会跑,那时 {@code Minecraft.getInstance()} 还是 null,而
+     * 加载器的配置目录任何时候都在。同一制式见 {@code UiTheme.init} 与
+     * {@code McpClientManager.initClient}。
+     *
+     * <p>测试传临时目录进来,走的是同一条路,不是另开的后门。
+     */
+    public static void init(Path numenConfigRoot) {
+        root = numenConfigRoot;
     }
 
     // ---- 路径 ----
 
-    /** {@code config/numen/} 根。 */
+    /** {@code config/numen/} 根;{@link #init} 之前调用是编程错误。 */
     public static Path numenRoot() {
-        if (rootOverride != null) {
-            return rootOverride;
+        if (root == null) {
+            throw new IllegalStateException(
+                    "CompanionHome.init(...) 还没被调用——loader 的客户端入口该在启动时注入根目录");
         }
-        return Minecraft.getInstance().gameDirectory.toPath().resolve("config").resolve("numen");
+        return root;
     }
 
     /** 这只同伴家的位置——<b>只算路径,不建目录</b>。 */

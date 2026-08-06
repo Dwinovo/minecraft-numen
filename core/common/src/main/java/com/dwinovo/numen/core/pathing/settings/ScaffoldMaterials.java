@@ -1,9 +1,13 @@
 package com.dwinovo.numen.core.pathing.settings;
 
+import com.dwinovo.numen.core.init.InitTag;
 import com.dwinovo.numen.entity.CompanionRegistry;
 
+import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Item;
@@ -47,13 +51,9 @@ public final class ScaffoldMaterials {
 
     /** 这个同伴实际认可的垫路料。清空过就是空表——她垫不了任何东西,如她所愿。 */
     public static List<Item> of(ServerPlayer player) {
-        List<String> stored = storedIds(player);
-        List<Item> out = new ArrayList<>(stored.size());
-        for (String id : stored) {
-            Item item = parse(id);
-            if (item != null && item != Items.AIR) {
-                out.add(item);
-            }
+        Set<Item> out = new LinkedHashSet<>();   // 标签之间会重叠,去重且保序
+        for (String entry : storedIds(player)) {
+            out.addAll(expand(entry));
         }
         return List.copyOf(out);
     }
@@ -86,14 +86,25 @@ public final class ScaffoldMaterials {
         registry.put(player.getUUID(), entry.withScaffoldMaterials(normalize(ids)));
     }
 
-    /** 去重、丢掉解析不出的、保持给定顺序。 */
+    /**
+     * 去重、丢掉认不出的、保持给定顺序。<b>标签原样留着</b>不展开:她写 {@code #c:stones}
+     * 是想说"这个包里的石头都算",展开存下来就冻在了此刻,数据包再改也跟不上。
+     */
     public static List<String> normalize(List<String> ids) {
         if (ids == null) {
             return List.of();
         }
         Set<String> out = new LinkedHashSet<>(ids.size());
         for (String raw : ids) {
-            Item item = parse(raw);
+            if (raw == null || raw.isBlank()) {
+                continue;
+            }
+            String trimmed = raw.trim().toLowerCase(java.util.Locale.ROOT);
+            if (InitTag.parseRef(Registries.ITEM, trimmed) != null) {
+                out.add(trimmed);   // 认得出是标签形式就留着,内容留到用时再查
+                continue;
+            }
+            Item item = parse(trimmed);
             if (item != null && item != Items.AIR) {
                 out.add(idOf(item));
             }
@@ -101,7 +112,7 @@ public final class ScaffoldMaterials {
         return List.copyOf(out);
     }
 
-    /** {@code stone} 与 {@code minecraft:stone} 都收;认不出返回 null。 */
+    /** {@code stone} 与 {@code minecraft:stone} 都收;认不出返回 null。标签走 {@link #expand}。 */
     public static Item parse(String raw) {
         if (raw == null || raw.isBlank()) {
             return null;
@@ -111,6 +122,26 @@ public final class ScaffoldMaterials {
             return null;
         }
         return BuiltInRegistries.ITEM.getOptional(id).orElse(null);
+    }
+
+    /**
+     * 一个条目展开成它代表的物品:{@code #ns:path} 是标签(当下的全部成员),否则是单个 id。
+     * 空表示认不出来。
+     *
+     * <p>每次调用现查标签,所以 {@code /reload} 改了数据包下一次就生效——展开一次存起来
+     * 就等于把标签冻在了那一刻。
+     */
+    private static List<Item> expand(String raw) {
+        TagKey<Item> tag = InitTag.parseRef(Registries.ITEM, raw);
+        if (tag != null) {
+            List<Item> out = new ArrayList<>();
+            for (Holder<Item> holder : BuiltInRegistries.ITEM.getTagOrEmpty(tag)) {
+                out.add(holder.value());
+            }
+            return out;
+        }
+        Item item = parse(raw);
+        return item == null || item == Items.AIR ? List.of() : List.of(item);
     }
 
     public static String idOf(Item item) {

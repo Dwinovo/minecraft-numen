@@ -103,19 +103,17 @@ public final class CompanionRegistry extends SavedData {
 
     /**
      * 新同伴、以及这个字段出现之前的老存档,拿到的垫路料清单。<b>存的就是清单</b>——空表
-     * 是"一块都不许垫"这个真实意图,不是"没设过",所以缺省值在这里给足,而不是让读的人去
-     * 猜空表的意思。
+     * 是"一块都不许垫"这个真实意图,不是"没设过"。
      *
-     * <p>选料判据(遍地都是、没有功能、放下去不会掉)与它为什么是这些,写在消费方
-     * {@code ScaffoldMaterials} 那边;这里只负责它跟着同伴落盘。
+     * <p>缺省值是一条<b>标签引用</b>而不是展开后的清单,两个理由:整合包改
+     * {@code numen:scaffolds} 就能改掉所有新同伴的起点;而标签内容来自数据包、世界加载后
+     * 才存在,静态常量比它早得多——存引用、用时再解析,才躲得开这个时序。和原版配方里
+     * 存 {@code "#minecraft:planks"}、匹配时才现查是同一个形状。
+     *
+     * <p>模型一旦改过清单(add/delete/set),存的就是具体 id,从此不再跟标签走——所以这是
+     * <b>初始</b>默认。选料判据写在消费方 {@code ScaffoldMaterials}。
      */
-    public static final List<String> DEFAULT_SCAFFOLD = List.of(
-            "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:rooted_dirt",
-            "minecraft:grass_block", "minecraft:podzol", "minecraft:mycelium", "minecraft:mud",
-            "minecraft:cobblestone", "minecraft:stone", "minecraft:granite", "minecraft:diorite",
-            "minecraft:andesite", "minecraft:tuff", "minecraft:calcite", "minecraft:deepslate",
-            "minecraft:cobbled_deepslate", "minecraft:netherrack", "minecraft:blackstone",
-            "minecraft:basalt", "minecraft:soul_soil", "minecraft:end_stone", "minecraft:snow_block");
+    public static final List<String> DEFAULT_SCAFFOLD = List.of("#numen:scaffolds");
 
     private static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Entry.CODEC)

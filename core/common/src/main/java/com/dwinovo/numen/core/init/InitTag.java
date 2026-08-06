@@ -71,6 +71,25 @@ public final class InitTag {
 
     private InitTag() {}
 
+    /** 模型写标签用的前缀:{@code #minecraft:beds} 指"床这一类",而不是某一种颜色的床。 */
+    public static final String TAG_PREFIX = "#";
+
+    /**
+     * 把 {@code #ns:path} 解成一个标签键;不是这个形式、或者 id 不合法,返回 {@code null}
+     * (调用方接着按具体 id 试)。
+     *
+     * <p>让工具参数收标签,是因为"一类方块"这件事我们枚举不完:床有 16 色、石头有一族、
+     * 模组还会加。标签是 Minecraft 自己表达"一类"的方式,而且整合包能扩。
+     */
+    public static <T> TagKey<T> parseRef(net.minecraft.resources.ResourceKey<
+            ? extends net.minecraft.core.Registry<T>> registry, String raw) {
+        if (raw == null || !raw.startsWith(TAG_PREFIX)) {
+            return null;
+        }
+        ResourceLocation id = ResourceLocation.tryParse(raw.substring(TAG_PREFIX.length()).trim());
+        return id == null ? null : TagKey.create(registry, id);
+    }
+
     private static TagKey<Item> item(String name) {
         return TagKey.create(Registries.ITEM,
                 ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name));

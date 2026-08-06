@@ -31,11 +31,15 @@ public final class ClientPayloadHandlers {
 
     private ClientPayloadHandlers() {}
 
-    /** 客户端入口调用一次,把全部处理体挂进主源码集的挂点。 */
+    /**
+     * 客户端入口调用一次,把全部处理体挂进主源码集的挂点。
+     *
+     * <p><b>这里只挂处理体</b>——需要客户端真的起来的活(比如
+     * {@code CompanionHome.migrateLegacy()} 要读游戏目录)不属于这儿:模组构造在 datagen
+     * 里同样会跑,那时 {@code Minecraft.getInstance()} 还是 null。那类事挂到各 loader 的
+     * 客户端启动钩子上。
+     */
     public static void install() {
-        // 旧布局(conversations/ + memory/ + 库里的 assignments 段)一次性搬进
-        // companions/<uuid>/;幂等,搬过就跳过。
-        com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
         ClientPayloadSink.companionList = ClientPayloadHandlers::handleCompanionList;
         // getOrCreate:跟死亡/事件同理 —— 这是状态推送,只在槽变化的那一刻发一次,
         // loop 还没造出来就丢掉的话,客户端永远不会再听说这件活。

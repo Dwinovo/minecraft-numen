@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.pathing.settings;
 
+import com.dwinovo.numen.core.init.InitTag;
 import net.minecraft.world.item.Items;
 
 import org.junit.jupiter.api.BeforeAll;
@@ -11,6 +12,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -91,33 +93,23 @@ class ScaffoldMaterialsTest {
 
     // ==================== 出厂默认 ====================
 
-    /** 重力方块垫在半空会直接落下去,出厂默认里一个都不能有。 */
+    /**
+     * 出厂默认是一条<b>标签引用</b>,不是展开后的清单。这样整合包改
+     * {@code numen:scaffolds} 就能改掉所有新同伴的起点,而静态常量读不到数据包——
+     * 存引用、用时再解析,才躲得开那个时序。清单内容本身由 datagen 那份定义,
+     * 它的判据(不含重力方块、不含有功能的方块)在 {@code ModItemTagData} 那边钉。
+     */
     @Test
-    void theFactoryDefaultCarriesNoFallingBlocks() {
+    void theFactoryDefaultIsATagReferenceSoPacksCanChangeIt() {
         assumeTrue(booted);
-        List<String> ids = ScaffoldMaterials.factoryDefaultIds();
-        assertFalse(ids.contains("minecraft:sand"), ids.toString());
-        assertFalse(ids.contains("minecraft:red_sand"), ids.toString());
-        assertFalse(ids.contains("minecraft:gravel"), ids.toString());
+        assertEquals(List.of("#numen:scaffolds"), ScaffoldMaterials.factoryDefaultIds());
     }
 
-    /** 她在深板岩层挖了一小时,背包全是这些——认不出就等于没垫路料。 */
+    /** 标签引用必须真的解析得开——认不出就等于所有新同伴一件垫路料都没有。 */
     @Test
-    void theFactoryDefaultCoversWhatSheActuallyDigsUp() {
+    void thatReferenceResolvesToRealItems() {
         assumeTrue(booted);
-        List<String> ids = ScaffoldMaterials.factoryDefaultIds();
-        assertTrue(ids.contains("minecraft:cobbled_deepslate"), ids.toString());
-        assertTrue(ids.contains("minecraft:deepslate"), ids.toString());
-        assertTrue(ids.contains("minecraft:tuff"), ids.toString());
-        assertTrue(ids.contains("minecraft:cobblestone"), ids.toString());
-    }
-
-    @Test
-    void nothingWithAJobInItIsSpendableByDefault() {
-        assumeTrue(booted);
-        List<String> ids = ScaffoldMaterials.factoryDefaultIds();
-        assertFalse(ids.contains("minecraft:chest"), ids.toString());
-        assertFalse(ids.contains("minecraft:crafting_table"), ids.toString());
-        assertFalse(ids.contains("minecraft:diamond_block"), ids.toString());
+        String ref = ScaffoldMaterials.factoryDefaultIds().get(0);
+        assertNotNull(InitTag.parseRef(net.minecraft.core.registries.Registries.ITEM, ref), ref);
     }
 }
