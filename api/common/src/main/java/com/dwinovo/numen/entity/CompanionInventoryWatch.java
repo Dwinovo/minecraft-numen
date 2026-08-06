@@ -105,9 +105,10 @@ public final class CompanionInventoryWatch implements ContainerListener {
         // 一次推送一行。链路是"服务端推 → 客户端缓存 → 渲染进请求",出问题时得能一眼看出
         // 断在哪一节;只记开始不记结果的日志上一轮已经害过我们一次。
         com.dwinovo.numen.Constants.LOG.info(
-                "[numen-inv] {} → {} 种物品 / {} 格, 主手 {}{}",
+                "[numen-inv] {} → {} 种物品 / {} 格, 主手 {}, 副手 {}{}",
                 companion.getName().getString(), kinds(payload), usedSlots(payload),
-                describe(payload.selectedSlot(), payload.items()), first ? " (首次)" : "");
+                describe(payload.selectedSlot(), payload.items()), name(payload.offhand()),
+                first ? " (首次)" : "");
     }
 
     private static int kinds(NumenInventoryPayload p) {
@@ -120,11 +121,13 @@ public final class CompanionInventoryWatch implements ContainerListener {
     }
 
     private static String describe(int selected, java.util.List<ItemStack> items) {
-        if (selected < 0 || selected >= items.size() || items.get(selected).isEmpty()) {
-            return "空手";
-        }
-        return net.minecraft.core.registries.BuiltInRegistries.ITEM
-                .getKey(items.get(selected).getItem()).getPath();
+        return selected < 0 || selected >= items.size() ? "空手" : name(items.get(selected));
+    }
+
+    private static String name(ItemStack stack) {
+        return stack.isEmpty() ? "空手"
+                : net.minecraft.core.registries.BuiltInRegistries.ITEM
+                        .getKey(stack.getItem()).getPath();
     }
 
     /** 只认"什么物品、几个"——组件不进指纹,否则挖矿时每 tick 都算变了。 */

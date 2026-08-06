@@ -42,14 +42,14 @@ class InventoryBlockTest {
                 selected, offhand, 1L);
     }
 
-    // ==================== 主手 ====================
+    // ==================== 手上拿的 ====================
 
     @Test
     void theMainHandIsWhicheverSlotIsSelected() {
         assumeTrue(booted);
         String block = EntityAgentLoop.renderInventory(snapshot(1, ItemStack.EMPTY,
                 new ItemStack(Items.DIRT), new ItemStack(Items.IRON_PICKAXE)));
-        assertTrue(block.contains("main_hand=minecraft:iron_pickaxe"), block);
+        assertTrue(block.contains("main minecraft:iron_pickaxe"), block);
     }
 
     /** 空快照的 selectedSlot 会是 0 而 items 是空的——越界读不能炸。 */
@@ -57,7 +57,7 @@ class InventoryBlockTest {
     void aSelectedSlotWithNothingBehindItReadsAsEmpty() {
         assumeTrue(booted);
         String block = EntityAgentLoop.renderInventory(snapshot(4, ItemStack.EMPTY));
-        assertTrue(block.contains("main_hand=(empty)"), block);
+        assertTrue(block.contains("main (empty)"), block);
     }
 
     @Test
@@ -65,15 +65,31 @@ class InventoryBlockTest {
         assumeTrue(booted);
         String block = EntityAgentLoop.renderInventory(snapshot(0, ItemStack.EMPTY,
                 new ItemStack(Items.DIRT)));
-        assertTrue(block.contains("off_hand=(empty)"), block);
+        assertTrue(block.contains("off (empty)"), block);
+    }
+
+    /**
+     * 手上那份不带数量,而且明说已经算进总数了。实测她见过 {@code main_hand=furnace x64}
+     * 加 {@code carrying=furnace x64} 就当成两批、报成 128——总数只能有一处。
+     */
+    @Test
+    void whatSheHoldsIsNeverCountedTwice() {
+        assumeTrue(booted);
+        String block = EntityAgentLoop.renderInventory(snapshot(0, ItemStack.EMPTY,
+                new ItemStack(Items.FURNACE, 64)));
+        assertTrue(block.contains("carrying=minecraft:furnace x64"), block);
+        assertTrue(block.contains("holding (already counted above)=main minecraft:furnace"), block);
+        // 手上那份不能再带一次数量,否则它读起来就是另一堆
+        assertEquals(1, block.split("x64", -1).length - 1, block);
     }
 
     @Test
-    void aStackedOffHandCarriesItsCount() {
+    void theOffHandStackIsAlsoInTheTotalsAndNotRepeated() {
         assumeTrue(booted);
         String block = EntityAgentLoop.renderInventory(snapshot(0, new ItemStack(Items.TORCH, 12),
-                new ItemStack(Items.DIRT)));
-        assertTrue(block.contains("off_hand=minecraft:torch x12"), block);
+                new ItemStack(Items.DIRT, 3)));
+        assertTrue(block.contains("off minecraft:torch"), block);
+        assertFalse(block.contains("x12"), block);   // 副手是装备槽,不在 36 格总数里,也不另报数量
     }
 
     // ==================== 计数 ====================

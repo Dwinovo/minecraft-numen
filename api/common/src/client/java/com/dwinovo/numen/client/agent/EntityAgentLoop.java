@@ -1225,18 +1225,21 @@ public final class EntityAgentLoop {
             if (items.length() > 0) items.append(", ");
             items.append(id).append(" x").append(count);
         });
-        return "<inventory>This is what your body is carrying right now — trust it for what you have "
-                + "and how many, and do not spend a call on get_self_status just to rediscover it. "
+        // 手上那份不带数量,是刻意的:它本来就是 carrying 里的一堆,写上数量她会当成另一堆
+        // 加起来(实测她把主手 64 个熔炉和清单里同一批数成了 128)。总数只有一处,手只指
+        // 向它,结构上就没什么可重复计的。
+        return "<inventory>Everything your body carries right now, totalled across all 36 backpack "
+                + "slots — trust it and do not spend a call on get_self_status to rediscover it. "
                 + "Call inspect_gui only when exact slots matter. A newer tool result wins over this."
-                + "\nmain_hand=" + describe(snapshot.mainHand())
-                + "\noff_hand=" + describe(snapshot.offhand())
                 + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
+                + "\nholding (already counted above)=main " + describe(snapshot.mainHand())
+                + ", off " + describe(snapshot.offhand())
                 + "</inventory>";
     }
 
+    /** 手上拿的<b>是什么</b>,不含数量——数量归 {@code carrying} 一处管。 */
     private static String describe(net.minecraft.world.item.ItemStack stack) {
-        return stack.isEmpty() ? "(empty)"
-                : xml(itemId(stack)) + (stack.getCount() > 1 ? " x" + stack.getCount() : "");
+        return stack.isEmpty() ? "(empty)" : xml(itemId(stack));
     }
 
     private static String itemId(net.minecraft.world.item.ItemStack stack) {
