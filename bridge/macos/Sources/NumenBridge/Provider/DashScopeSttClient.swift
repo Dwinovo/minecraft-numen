@@ -54,7 +54,10 @@ struct DashScopeSttClient: Sendable {
         session.finish()
 
         let timeoutTask = Task {
-            try? await Task.sleep(for: timeout)
+            // 使用 clock.sleep(until:) 而非 Task.sleep(for:)，
+            // 规避 swiftlang/swift#86204 的 release 模式崩溃。
+            let clock = ContinuousClock()
+            try? await clock.sleep(until: clock.now.advanced(by: timeout))
             guard !Task.isCancelled else { return }
             await result.complete(.failure(SttError.timeout))
             session.cancel()

@@ -54,15 +54,14 @@ actor CaptureSocketController {
         case "capture.start":
             try await start()
         case "capture.stop":
-            try stop()
+            try await stop()
         default:
             throw CaptureSocketError.invalidCommand
         }
     }
 
     func disconnect() async {
-        timeoutTask?.cancel()
-        timeoutTask = nil
+        await cancelTimeout()
         if active {
             _ = try? capture.stop()
             active = false
@@ -88,16 +87,24 @@ actor CaptureSocketController {
         active = true
         await send(.started)
         timeoutTask = Task { [weak self, maximumDuration] in
-            try? await Task.sleep(for: maximumDuration)
+            // 注意：不能使用 Task.sleep(for:)。Xcode 26.x 工具链在 release 模式下
+            // 对它的特化存在已确认的运行时缺陷，任务释放时会在 swift_task_dealloc
+            // 触发 fatal error（swiftlang/swift#86204）。clock.sleep(until:) 不受影响。
+            let clock = ContinuousClock()
+            do {
+                try await clock.sleep(until: clock.now.advanced(by: maximumDuration))
+            } catch {
+                // 被取消：清理工作由 cancelTimeout() 的调用方负责。
+                return
+            }
             guard !Task.isCancelled else { return }
             await self?.timedOut()
         }
     }
 
-    private func stop() throws {
+    private func stop() async throws {
         guard active else { throw CaptureSocketError.notStarted }
-        timeoutTask?.cancel()
-        timeoutTask = nil
+        await cancelTimeout()
         do {
             try capture.stop()
             active = false
@@ -109,17 +116,25 @@ actor CaptureSocketController {
         }
     }
 
+    /// 唯一的超时任务清理入口：取出并置空属性，取消任务，并等待任务完全退出。
+    /// 这保证调用返回时 timeout task 已经结束，避免在任务仍可能处于
+    /// 取消/恢复中间状态时释放其引用（此前在 swift_task_dealloc 处触发 fatal error）。
+    private func cancelTimeout() async {
+        guard let task = timeoutTask else { return }
+        timeoutTask = nil
+        task.cancel()
+        await task.value
+    }
+
     private func providerEvent(_ event: TranscriptionEvent) async {
         switch event {
         case .partial(let text):
             await send(.delta(text))
         case .final(let text):
-            timeoutTask?.cancel()
-            timeoutTask = nil
+            await cancelTimeout()
             await send(.done(text))
         case .failure(let message):
-            timeoutTask?.cancel()
-            timeoutTask = nil
+            await cancelTimeout()
             if active {
                 _ = try? capture.stop()
                 active = false
@@ -129,6 +144,7 @@ actor CaptureSocketController {
     }
 
     private func timedOut() async {
+        timeoutTask = nil
         if active {
             _ = try? capture.stop()
             active = false
