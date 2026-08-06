@@ -38,14 +38,16 @@ public final class ScaffoldMaterialsTool implements NumenTool {
                 + "list WILL be consumed and never comes back, so list what you consider junk here and "
                 + "now: cobblestone is junk in a mineshaft and precious in the End. The reply always "
                 + "carries the full current list plus what you are carrying that is not on it, so one "
-                + "call is enough to decide. Your owner is told when you change it.";
+                + "call is enough to decide. Emptying the list is a real choice — do it when what you "
+                + "carry is earmarked for something (the dirt is for a build), and accept that she "
+                + "then cannot pillar or bridge at all. Your owner is told when you change it.";
     }
 
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object()
                 .optionalEnum("action", "add appends, delete removes, set replaces the whole list, "
-                        + "clear goes back to the built-in default. Omit to just read the list.",
+                        + "clear empties it so nothing at all may be spent. Omit to just read.",
                         "add", "delete", "set", "clear")
                 .optionalStringArray("block_ids", "Namespaced block ids, e.g. "
                         + "['minecraft:cobbled_deepslate']. Required for add / delete / set; "

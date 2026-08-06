@@ -41,9 +41,9 @@ public final class CompanionRegistry extends SavedData {
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
                         String deathCause, long diedAt, String skinValue, String skinSig,
                         String taskTool, String taskArgs, List<String> scaffoldMaterials) {
-        /** A live companion (not dead), no borrowed skin, idle. */
+        /** A live companion (not dead), no borrowed skin, idle, spending the default scaffolding. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", 0L, "", "", "", "", List.of());
+            this(name, owner, dimension, pos, "", 0L, "", "", "", "", DEFAULT_SCAFFOLD);
         }
 
         /** 她现在在做什么(工具名 + 当时的参数);空串 = 闲着。见 {@code TaskPersistence}。 */
@@ -66,9 +66,9 @@ public final class CompanionRegistry extends SavedData {
         }
 
         /**
-         * 她愿意拿来垫路的方块(namespaced id)。<b>空表 = 没自己定过</b>,用调用方的出厂
-         * 默认——所以老存档不会因为没有这个字段就垫不了路,出厂默认改了也能流到没定制过
-         * 的同伴身上。
+         * 她愿意拿来垫路的方块(namespaced id)。<b>存的就是清单</b>:空表意味着"一块都不许
+         * 垫",那是模型可以做的决定(背包里那些泥土留着盖房子),不是"没设过"——没设过由
+         * {@link #DEFAULT_SCAFFOLD} 在读取时兜住。
          */
         public Entry withScaffoldMaterials(List<String> materials) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
@@ -96,10 +96,26 @@ public final class CompanionRegistry extends SavedData {
                 Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig),
                 Codec.STRING.optionalFieldOf("taskTool", "").forGetter(Entry::taskTool),
                 Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskArgs),
-                Codec.STRING.listOf().optionalFieldOf("scaffold", List.of())
+                Codec.STRING.listOf().optionalFieldOf("scaffold", DEFAULT_SCAFFOLD)
                         .forGetter(Entry::scaffoldMaterials)
         ).apply(i, Entry::new));
     }
+
+    /**
+     * 新同伴、以及这个字段出现之前的老存档,拿到的垫路料清单。<b>存的就是清单</b>——空表
+     * 是"一块都不许垫"这个真实意图,不是"没设过",所以缺省值在这里给足,而不是让读的人去
+     * 猜空表的意思。
+     *
+     * <p>选料判据(遍地都是、没有功能、放下去不会掉)与它为什么是这些,写在消费方
+     * {@code ScaffoldMaterials} 那边;这里只负责它跟着同伴落盘。
+     */
+    public static final List<String> DEFAULT_SCAFFOLD = List.of(
+            "minecraft:dirt", "minecraft:coarse_dirt", "minecraft:rooted_dirt",
+            "minecraft:grass_block", "minecraft:podzol", "minecraft:mycelium", "minecraft:mud",
+            "minecraft:cobblestone", "minecraft:stone", "minecraft:granite", "minecraft:diorite",
+            "minecraft:andesite", "minecraft:tuff", "minecraft:calcite", "minecraft:deepslate",
+            "minecraft:cobbled_deepslate", "minecraft:netherrack", "minecraft:blackstone",
+            "minecraft:basalt", "minecraft:soul_soil", "minecraft:end_stone", "minecraft:snow_block");
 
     private static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Entry.CODEC)

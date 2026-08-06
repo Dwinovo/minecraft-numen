@@ -30,12 +30,14 @@ public final class ScaffoldOps {
         String verb = action == null || action.isBlank() ? "read" : action.trim().toLowerCase(java.util.Locale.ROOT);
         List<String> given = ScaffoldMaterials.normalize(blockIds);
 
+        boolean gaveNothing = blockIds == null || blockIds.isEmpty();
+
         switch (verb) {
             case "read" -> { }
             case "clear" -> ScaffoldMaterials.store(self, List.of());
             case "add" -> {
                 if (given.isEmpty()) {
-                    return error(self, "add needs block_ids, and none of what you gave is a real block id");
+                    return error(self, refusal("add", gaveNothing));
                 }
                 List<String> merged = new ArrayList<>(ScaffoldMaterials.effectiveIds(self));
                 for (String id : given) {
@@ -47,7 +49,7 @@ public final class ScaffoldOps {
             }
             case "delete" -> {
                 if (given.isEmpty()) {
-                    return error(self, "delete needs block_ids, and none of what you gave is a real block id");
+                    return error(self, refusal("delete", gaveNothing));
                 }
                 List<String> kept = new ArrayList<>(ScaffoldMaterials.effectiveIds(self));
                 kept.removeAll(given);
@@ -55,8 +57,9 @@ public final class ScaffoldOps {
             }
             case "set" -> {
                 if (given.isEmpty()) {
-                    return error(self, "set needs block_ids (use action=clear to go back to the default), "
-                            + "and none of what you gave is a real block id");
+                    return error(self, gaveNothing
+                            ? "set needs block_ids — use action=clear if you really mean an empty list"
+                            : refusal("set", false));
                 }
                 ScaffoldMaterials.store(self, given);
             }
@@ -90,10 +93,22 @@ public final class ScaffoldOps {
             carrying.add(o);
         }
         root.add("carrying_not_listed", carrying);
-        root.addProperty("message", verb.equals("read")
-                ? "these are the blocks you are willing to spend on scaffolding"
-                : "list updated — this is what pathfinding will spend from now on");
+        // 空清单不是出错,是她选的——但后果得说清,否则下一次 goto 撞墙她不知道是自己关的。
+        root.addProperty("message", materials.isEmpty()
+                ? "your scaffolding list is now EMPTY — pathfinding may not place a single block, "
+                        + "so any route needing a pillar, bridge or step up will fail until you add some back"
+                : verb.equals("read")
+                        ? "these are the blocks you are willing to spend on scaffolding"
+                        : "list updated — this is what pathfinding will spend from now on");
         return root.toString();
+    }
+
+    /** 参数为什么不合格:一个字都没给,还是给的全认不出。对模型是两个不同的下一步。 */
+    private static String refusal(String verb, boolean gaveNothing) {
+        return gaveNothing
+                ? verb + " needs block_ids and you gave none"
+                : verb + " got block_ids but none of them is a block that exists here — "
+                        + "check the spelling, and include the namespace (minecraft:cobblestone)";
     }
 
     /** 背包里能当方块放下、却不在清单上的东西,按数量从多到少。 */

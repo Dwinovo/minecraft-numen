@@ -27,37 +27,27 @@ import java.util.Set;
  * 圆石在矿洞里是垃圾、背到末地就是唯一的垫路料。所以清单归她自己管——模型看着背包和
  * 当下的处境用 {@code scaffold_materials} 增删,断料时的回执会把候选一并递到它面前。
  *
- * <h2>空表 = 没定制过</h2>
- * 存储里空表不代表"一块都不许垫",而是"没自己定过,用出厂默认"。这样老存档不会因为
- * 没有这个字段就寸步难行,出厂默认往后扩了也能流到没定制过的同伴身上。
+ * <h2>空表就是空表</h2>
+ * 清空之后她一块都不垫——那是模型可以做的决定(背包里那些泥土留着盖房子,别拿去填坑),
+ * 后果可见也可撤回。"没设过"由 {@link CompanionRegistry#DEFAULT_SCAFFOLD} 在读取时兜住,
+ * 不靠空表兼职表达。
+ *
+ * <h2>出厂默认的选料判据</h2>
+ * 遍地都是、没有功能、<b>放下去不会掉</b>——重力方块(沙/砂砾)一个不要,垫在半空会直接
+ * 落下去。清单本身跟着同伴落盘,住在 {@link CompanionRegistry}。
  */
 public final class ScaffoldMaterials {
 
-    /**
-     * 出厂默认:遍地都是、没有功能、放下去不会掉的方块。重力方块(沙/砂砾)不在其中——
-     * 垫在半空会直接落下去。
-     */
-    private static final List<Item> FACTORY_DEFAULT = List.of(
-            Items.DIRT, Items.COARSE_DIRT, Items.ROOTED_DIRT, Items.GRASS_BLOCK,
-            Items.PODZOL, Items.MYCELIUM, Items.MUD,
-            Items.COBBLESTONE, Items.STONE, Items.GRANITE, Items.DIORITE, Items.ANDESITE,
-            Items.TUFF, Items.CALCITE, Items.DEEPSLATE, Items.COBBLED_DEEPSLATE,
-            Items.NETHERRACK, Items.BLACKSTONE, Items.BASALT, Items.SOUL_SOIL,
-            Items.END_STONE, Items.SNOW_BLOCK);
-
     private ScaffoldMaterials() {}
 
-    /** 出厂默认的 id 形式——回执里要报给模型看。 */
+    /** 出厂默认的 id 形式。 */
     public static List<String> factoryDefaultIds() {
-        return FACTORY_DEFAULT.stream().map(ScaffoldMaterials::idOf).toList();
+        return CompanionRegistry.DEFAULT_SCAFFOLD;
     }
 
-    /** 这个同伴实际认可的垫路料。存储里没定制过就是出厂默认。 */
+    /** 这个同伴实际认可的垫路料。清空过就是空表——她垫不了任何东西,如她所愿。 */
     public static List<Item> of(ServerPlayer player) {
         List<String> stored = storedIds(player);
-        if (stored.isEmpty()) {
-            return FACTORY_DEFAULT;
-        }
         List<Item> out = new ArrayList<>(stored.size());
         for (String id : stored) {
             Item item = parse(id);
@@ -65,7 +55,7 @@ public final class ScaffoldMaterials {
                 out.add(item);
             }
         }
-        return out.isEmpty() ? FACTORY_DEFAULT : List.copyOf(out);
+        return List.copyOf(out);
     }
 
     /** 同上,但给出 id 形式(工具回执用)。 */
@@ -73,15 +63,15 @@ public final class ScaffoldMaterials {
         return of(player).stream().map(ScaffoldMaterials::idOf).toList();
     }
 
-    /** 存储里那份原样——空表表示"没定制过"。 */
+    /** 存储里那份原样。同伴还没落盘(无头测试的空壳身体)时给出厂默认。 */
     public static List<String> storedIds(ServerPlayer player) {
         CompanionRegistry.Entry entry = entry(player);
-        return entry == null ? List.of() : entry.scaffoldMaterials();
+        return entry == null ? CompanionRegistry.DEFAULT_SCAFFOLD : entry.scaffoldMaterials();
     }
 
     /**
-     * 落盘这份清单。传空表 = 恢复出厂默认(这就是 {@code clear} 的语义);无效 id 直接丢掉,
-     * 调用方回执报的是落盘后的实际结果,不是它请求的。
+     * 落盘这份清单。传空表 = 清空,她从此垫不了路;无效 id 直接丢掉,调用方回执报的是落盘后
+     * 读回来的实际结果,不是它请求的那份。
      */
     public static void store(ServerPlayer player, List<String> ids) {
         MinecraftServer server = serverOf(player);
@@ -136,6 +126,11 @@ public final class ScaffoldMaterials {
      */
     public static String shortageAdvice(ServerPlayer player) {
         List<Item> accepted = of(player);
+        if (accepted.isEmpty()) {
+            return " Your scaffolding list is EMPTY, so pathfinding may not place a single block —"
+                    + " no pillaring, bridging or stepping up. That was your own call; put blocks"
+                    + " back with scaffold_materials if this route needs them.";
+        }
         var inv = player.getInventory();
         Map<String, Integer> spare = new LinkedHashMap<>();
         for (int i = 0; i < inv.getContainerSize(); i++) {
