@@ -1178,8 +1178,9 @@ public final class EntityAgentLoop {
                 + tail + swap + "</current_task>";
     }
 
-    /** 上一次渲染背包块用的快照时间戳;{@code -1} = 还没渲染过。 */
-    private long inventoryRenderedAt = -1;
+    /** 上一次渲染背包块用的那份快照本身。收到新包时缓存会换一个新对象,比身份就够,
+     *  不用拿时间戳去凑版本号(同一毫秒两次推送会撞号,而且读起来像在判断时效)。 */
+    private ClientNumenInventory.Snapshot inventoryRenderedFrom;
     private String inventoryRendered = "";
     /** "请求里没背包"只说一次,别把每一轮都刷满。 */
     private boolean inventoryMissingLogged;
@@ -1205,10 +1206,12 @@ public final class EntityAgentLoop {
             return "";
         }
         inventoryMissingLogged = false;
-        if (snapshot.receivedAtMs() == inventoryRenderedAt) return inventoryRendered;
+        if (snapshot == inventoryRenderedFrom) return inventoryRendered;
         inventoryRendered = renderInventory(snapshot);
-        inventoryRenderedAt = snapshot.receivedAtMs();
-        Constants.LOG.info("[numen-inv] 背包块进请求:{} 字符,快照 {}ms 前收到",
+        inventoryRenderedFrom = snapshot;
+        // 这行只在快照真换了新的时才打,所以"年龄"读的是"这段时间背包没变过",不是延迟。
+        // 背包明明变了却不见这一行,才是链路断了。
+        Constants.LOG.info("[numen-inv] 背包块进请求:{} 字符,这份快照 {}ms 前收到",
                 inventoryRendered.length(), System.currentTimeMillis() - snapshot.receivedAtMs());
         return inventoryRendered;
     }

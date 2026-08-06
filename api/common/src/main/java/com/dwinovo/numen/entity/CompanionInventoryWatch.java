@@ -6,7 +6,9 @@ import com.dwinovo.numen.platform.Services;
 
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.Container;
 import net.minecraft.world.inventory.ContainerListener;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.HashMap;
@@ -28,17 +30,22 @@ import java.util.UUID;
  * {@code transfer} / {@code take_items} 搬东西的时候。{@code addSlotListener} 幂等,而且挂上
  * 时会立刻广播一次帮我们对齐基线。
  *
- * <h2>脏标记不等于该推</h2>
- * {@code ItemStack.matches} 连耐久和附魔都比,她每挥一镐都会响。所以 {@code slotChanged}
- * 只置脏标记;真正决定推不推的是"物品身份 + 数量"的指纹,而那个指纹<b>只在脏了之后才算</b>。
- * 组件级的变化到不了模型面前——它读的是"我有什么、几个",要精确到槽位和附魔时才调
- * {@code inspect_gui}。
+ * <h2>就地判断,不算全量</h2>
+ * {@code ItemStack.matches} 连耐久和附魔都比,她每挥一镐都会响。但原版顺手就告诉了我们
+ * <b>是哪一格、变成了什么</b>,所以判断就在那一格上做:只比"物品身份 + 数量",相同就当没
+ * 发生过。组件级的变化到不了模型面前——它读的是"我有什么、几个",要精确到槽位和附魔时
+ * 才调 {@code inspect_gui}。
+ *
+ * <p>顺带,{@link Slot#container} 一比就挡住了别人的容器:她开着箱子时箱子那些格子照样在
+ * 广播,但那不是她带着的东西。
  */
 public final class CompanionInventoryWatch implements ContainerListener {
 
     /** 最小推送间隔(tick)。她连续捡东西时压成一波,模型下一轮才读,晚半秒无感。 */
     private static final int MIN_INTERVAL_TICKS = 10;
-    private static final int MAIN_SLOTS = 36;
+    /** mirror 里"这一格还没见过"的占位;真实的 pack 值不会是负数。 */
+    private static final long UNSEEN = -1L;
+    private static final long[] EMPTY_MIRROR = new long[0];
 
     private static final Map<UUID, CompanionInventoryWatch> WATCHES = new HashMap<>();
 
@@ -48,10 +55,13 @@ public final class CompanionInventoryWatch implements ContainerListener {
     }
 
     private AbstractContainerMenu watched;
+    /** 这具身体的背包;{@link #slotChanged} 靠它认出"这一格是不是她自己的"。 */
+    private Container inventory;
+    /** 每格上次见到的"物品身份 + 数量";只有它变了才算数。 */
+    private long[] mirror = EMPTY_MIRROR;
     private boolean dirty = true;
     /** 只在 {@link #everSent} 为真时有意义——哨兵值参与减法会溢出,别给它哨兵。 */
     private long lastSentTick;
-    private int lastSentFingerprint;
     private boolean everSent;
 
     private CompanionInventoryWatch() {}
@@ -73,6 +83,11 @@ public final class CompanionInventoryWatch implements ContainerListener {
     }
 
     private void tickOne(NumenPlayer companion, long serverTick) {
+        if (inventory == null) {
+            inventory = companion.getInventory();
+            mirror = new long[inventory.getContainerSize()];
+            java.util.Arrays.fill(mirror, UNSEEN);
+        }
         AbstractContainerMenu menu = companion.containerMenu;
         if (menu != watched) {
             watched = menu;
@@ -91,12 +106,7 @@ public final class CompanionInventoryWatch implements ContainerListener {
             dirty = false;   // 主人不在线,推给谁;等他回来时 everSent 那条会补
             return;
         }
-        int fingerprint = fingerprint(companion);
         dirty = false;
-        if (everSent && fingerprint == lastSentFingerprint) {
-            return;   // 只是耐久掉了 / 附魔变了,模型不关心
-        }
-        lastSentFingerprint = fingerprint;
         lastSentTick = serverTick;
         boolean first = !everSent;
         everSent = true;
@@ -130,22 +140,27 @@ public final class CompanionInventoryWatch implements ContainerListener {
                         .getKey(stack.getItem()).getPath();
     }
 
-    /** 只认"什么物品、几个"——组件不进指纹,否则挖矿时每 tick 都算变了。 */
-    private static int fingerprint(NumenPlayer companion) {
-        var inv = companion.getInventory();
-        int hash = inv.selected;
-        for (int i = 0; i < MAIN_SLOTS; i++) {
-            hash = hash * 31 + stackHash(inv.getItem(i));
-        }
-        return hash * 31 + stackHash(companion.getOffhandItem());
-    }
-
-    private static int stackHash(ItemStack stack) {
-        return stack.isEmpty() ? 0 : System.identityHashCode(stack.getItem()) * 31 + stack.getCount();
+    /** 一格的"意义":什么物品、几个。耐久、附魔、其它组件一概不在内。 */
+    private static long pack(ItemStack stack) {
+        return stack.isEmpty() ? 0L
+                : ((long) System.identityHashCode(stack.getItem()) << 16) | (stack.getCount() & 0xFFFF);
     }
 
     @Override
-    public void slotChanged(AbstractContainerMenu menu, int slot, ItemStack stack) {
+    public void slotChanged(AbstractContainerMenu menu, int slotId, ItemStack stack) {
+        Slot slot = menu.getSlot(slotId);
+        if (slot.container != inventory) {
+            return;   // 她开着的箱子在广播它自己的格子,那不是她带着的东西
+        }
+        int index = slot.getContainerSlot();
+        if (index < 0 || index >= mirror.length) {
+            return;
+        }
+        long packed = pack(stack);
+        if (mirror[index] == packed) {
+            return;   // 只是耐久掉了 / 附魔变了
+        }
+        mirror[index] = packed;
         dirty = true;
     }
 
