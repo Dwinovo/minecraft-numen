@@ -93,6 +93,9 @@ public final class CompanionTickDispatcher {
                 if (owner != null && server.getPlayerList().getPlayer(owner) != null) {
                     CompanionChunkLoader.refresh(ap);
                 }
+                // 背包变了就推给主人一份。变化由原版的 ContainerListener 报,这里每 tick
+                // 只有一次引用比较(菜单换没换),见 CompanionInventoryWatch。
+                com.dwinovo.numen.entity.CompanionInventoryWatch.tick(ap, server.getTickCount());
                 CompanionBrain brain = brainFor(ap.getUUID());
                 if (!brain.boundTo(ap) && !brain.boundBodyGone()) {
                     // 同一个 UUID 同时有两具身体:上一具还在世界里,来的这具是重影。

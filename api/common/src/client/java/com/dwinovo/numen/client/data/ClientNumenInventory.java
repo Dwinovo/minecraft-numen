@@ -16,9 +16,19 @@ import java.util.UUID;
 public final class ClientNumenInventory {
 
     /** {@code loaded=false} = the body is asleep / not ours (no contents). foodLevel 0-20.
-     *  {@code craft} is the 2×2 crafting menu: indices 0-3 = grid, index 4 = result (may be empty). */
+     *  {@code craft} is the 2×2 crafting menu: indices 0-3 = grid, index 4 = result (may be empty).
+     *  {@code selectedSlot} indexes {@code items} for the main hand. */
     public record Snapshot(boolean loaded, List<ItemStack> items, List<ItemStack> craft,
-                           int foodLevel, float saturation, long receivedAtMs) {}
+                           int foodLevel, float saturation, int selectedSlot, ItemStack offhand,
+                           long receivedAtMs) {
+
+        /** 主手那一格;槽位越界(空快照)时给空栈。 */
+        public ItemStack mainHand() {
+            return selectedSlot >= 0 && selectedSlot < items.size()
+                    ? items.get(selectedSlot)
+                    : ItemStack.EMPTY;
+        }
+    }
 
     private static final Map<UUID, Snapshot> CACHE = new HashMap<>();
 

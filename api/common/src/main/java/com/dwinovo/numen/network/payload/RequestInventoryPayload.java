@@ -45,10 +45,23 @@ public record RequestInventoryPayload(UUID uuid) implements CustomPacketPayload 
     public static void handle(RequestInventoryPayload p, ServerPlayer player) {
         NumenPlayer numen = NumenPlayer.findByUuid(player.level().getServer(), p.uuid());
         if (numen == null || !numen.isOwnedByPlayer(player.getUUID())) {
-            Services.NETWORK.sendToPlayer(player,
-                    new NumenInventoryPayload(p.uuid(), false, List.of(), List.of(), 0, 0f));
+            Services.NETWORK.sendToPlayer(player, absent(p.uuid()));
             return;
         }
+        Services.NETWORK.sendToPlayer(player, snapshot(numen));
+    }
+
+    /** 身体不在(睡在未加载区块 / 不是你的):没有内容可给。 */
+    public static NumenInventoryPayload absent(java.util.UUID uuid) {
+        return new NumenInventoryPayload(uuid, false, List.of(), List.of(), 0, 0f,
+                0, ItemStack.EMPTY);
+    }
+
+    /**
+     * 这具身体此刻带着什么。应答面板的请求和背包变化时的主动推送共用这一份——两条路给出
+     * 不同的快照就等于两个真源。
+     */
+    public static NumenInventoryPayload snapshot(NumenPlayer numen) {
         Inventory inv = numen.getInventory();
         List<ItemStack> items = new ArrayList<>(MAIN_SLOTS);
         for (int i = 0; i < MAIN_SLOTS; i++) {
@@ -59,7 +72,8 @@ public record RequestInventoryPayload(UUID uuid) implements CustomPacketPayload 
         List<ItemStack> craft = new ArrayList<>(5);
         for (int i = 1; i <= 4; i++) craft.add(numen.inventoryMenu.getSlot(i).getItem().copy());
         craft.add(numen.inventoryMenu.getSlot(0).getItem().copy());
-        Services.NETWORK.sendToPlayer(player, new NumenInventoryPayload(p.uuid(), true, items, craft,
-                numen.getFoodData().getFoodLevel(), numen.getFoodData().getSaturationLevel()));
+        return new NumenInventoryPayload(numen.getUUID(), true, items, craft,
+                numen.getFoodData().getFoodLevel(), numen.getFoodData().getSaturationLevel(),
+                inv.selected, numen.getOffhandItem().copy());
     }
 }

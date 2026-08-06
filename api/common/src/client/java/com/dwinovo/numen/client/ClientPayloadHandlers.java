@@ -51,7 +51,7 @@ public final class ClientPayloadHandlers {
         ClientPayloadSink.inventory = p ->
                 ClientNumenInventory.update(p.uuid(), new ClientNumenInventory.Snapshot(
                         p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(),
-                        System.currentTimeMillis()));
+                        p.selectedSlot(), p.offhand(), System.currentTimeMillis()));
         ClientPayloadSink.locations = ClientPayloadHandlers::handleLocations;
         ClientPayloadSink.respawn = ClientPayloadHandlers::handleRespawn;
         ClientPayloadSink.pathDebug = PathDebugState::accept;

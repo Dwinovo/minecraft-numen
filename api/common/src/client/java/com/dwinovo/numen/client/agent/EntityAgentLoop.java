@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.agent;
 
+import com.dwinovo.numen.client.data.ClientNumenInventory;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.agent.llm.ConvoLog;
@@ -1138,7 +1139,16 @@ public final class EntityAgentLoop {
      * "历史上那条消息 + 此刻的状态"——一条从未被发送过的消息。
      */
     private List<ConvoState.Msg> modelContextSnapshot() {
-        return AgentRequestContext.attach(convo.snapshot(), currentTaskXml());
+        return AgentRequestContext.attach(convo.snapshot(), runtimeStateXml());
+    }
+
+    /**
+     * 这一轮临时挂载的运行期状态。全部现算,一个字都不入会话历史——包进同一个
+     * {@code <runtime_state>} 里,模型只需认一个信封。
+     */
+    private String runtimeStateXml() {
+        String body = currentTaskXml() + inventoryXml();
+        return body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
     }
 
     /** Live async-task state, recomputed for every worker request and never persisted. */
@@ -1161,11 +1171,61 @@ public final class EntityAgentLoop {
         String swap = " There is only ONE body: dispatching another body action REPLACES this one "
                 + "outright — you do NOT need to stop it first. Use task_stop only when the owner "
                 + "wants her to stop and do nothing.";
-        return "<runtime_state><current_task id=\"" + xml(task.id()) + "\" tool=\""
+        return "<current_task id=\"" + xml(task.id()) + "\" tool=\""
                 + xml(task.tool()) + "\" state=\"running\" standing=\"" + task.standing()
                 + "\" elapsed_s=\"" + elapsed
                 + "\">" + xml(truncate(task.describe(), 600)) + ". "
-                + tail + swap + "</current_task></runtime_state>";
+                + tail + swap + "</current_task>";
+    }
+
+    /** 上一次渲染背包块用的快照时间戳;{@code -1} = 还没渲染过。 */
+    private long inventoryRenderedAt = -1;
+    private String inventoryRendered = "";
+
+    /**
+     * 她此刻带着什么。服务端在背包真变化时推一份过来({@code CompanionInventoryWatch}),
+     * 这里只负责渲染——所以"换没换"只有一个信号:快照的时间戳。
+     *
+     * <p>放进请求而不是让她调 {@code get_self_status},省的是<b>一整轮</b>(请求 + 工具结果 +
+     * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该调 {@code inspect_gui}。
+     */
+    private String inventoryXml() {
+        var snapshot = ClientNumenInventory.get(entityUuid).orElse(null);
+        if (snapshot == null || !snapshot.loaded()) return "";
+        if (snapshot.receivedAtMs() == inventoryRenderedAt) return inventoryRendered;
+        inventoryRendered = renderInventory(snapshot);
+        inventoryRenderedAt = snapshot.receivedAtMs();
+        return inventoryRendered;
+    }
+
+    static String renderInventory(ClientNumenInventory.Snapshot snapshot) {
+        java.util.Map<String, Integer> totals = new java.util.TreeMap<>();
+        for (net.minecraft.world.item.ItemStack stack : snapshot.items()) {
+            if (!stack.isEmpty()) {
+                totals.merge(itemId(stack), stack.getCount(), Integer::sum);
+            }
+        }
+        StringBuilder items = new StringBuilder();
+        totals.forEach((id, count) -> {
+            if (items.length() > 0) items.append(", ");
+            items.append(id).append(" x").append(count);
+        });
+        return "<inventory>This is what your body is carrying right now — trust it for what you have "
+                + "and how many, and do not spend a call on get_self_status just to rediscover it. "
+                + "Call inspect_gui only when exact slots matter. A newer tool result wins over this."
+                + "\nmain_hand=" + describe(snapshot.mainHand())
+                + "\noff_hand=" + describe(snapshot.offhand())
+                + "\ncarrying=" + (items.length() == 0 ? "nothing" : items)
+                + "</inventory>";
+    }
+
+    private static String describe(net.minecraft.world.item.ItemStack stack) {
+        return stack.isEmpty() ? "(empty)"
+                : xml(itemId(stack)) + (stack.getCount() > 1 ? " x" + stack.getCount() : "");
+    }
+
+    private static String itemId(net.minecraft.world.item.ItemStack stack) {
+        return net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
     }
 
     private String composeSystemPrompt() {
