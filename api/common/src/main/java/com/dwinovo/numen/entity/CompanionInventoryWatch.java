@@ -49,7 +49,8 @@ public final class CompanionInventoryWatch implements ContainerListener {
 
     private AbstractContainerMenu watched;
     private boolean dirty = true;
-    private long lastSentTick = Long.MIN_VALUE;
+    /** 只在 {@link #everSent} 为真时有意义——哨兵值参与减法会溢出,别给它哨兵。 */
+    private long lastSentTick;
     private int lastSentFingerprint;
     private boolean everSent;
 
@@ -77,7 +78,12 @@ public final class CompanionInventoryWatch implements ContainerListener {
             watched = menu;
             menu.addSlotListener(this);   // 幂等;挂上即广播一次,基线自动对齐
         }
-        if (!dirty || serverTick - lastSentTick < MIN_INTERVAL_TICKS) {
+        if (!dirty) {
+            return;
+        }
+        // 节流只对"已经推过一次"成立。第一次必须放行:她一登场就该有一份快照,
+        // 而且用哨兵值去减会溢出成负数,那样条件永远成立、一个包也发不出去。
+        if (everSent && serverTick - lastSentTick < MIN_INTERVAL_TICKS) {
             return;
         }
         ServerPlayer owner = companion.resolveOwnerPlayer();
@@ -92,8 +98,33 @@ public final class CompanionInventoryWatch implements ContainerListener {
         }
         lastSentFingerprint = fingerprint;
         lastSentTick = serverTick;
+        boolean first = !everSent;
         everSent = true;
-        Services.NETWORK.sendToPlayer(owner, RequestInventoryPayload.snapshot(companion));
+        NumenInventoryPayload payload = RequestInventoryPayload.snapshot(companion);
+        Services.NETWORK.sendToPlayer(owner, payload);
+        // 一次推送一行。链路是"服务端推 → 客户端缓存 → 渲染进请求",出问题时得能一眼看出
+        // 断在哪一节;只记开始不记结果的日志上一轮已经害过我们一次。
+        com.dwinovo.numen.Constants.LOG.info(
+                "[numen-inv] {} → {} 种物品 / {} 格, 主手 {}{}",
+                companion.getName().getString(), kinds(payload), usedSlots(payload),
+                describe(payload.selectedSlot(), payload.items()), first ? " (首次)" : "");
+    }
+
+    private static int kinds(NumenInventoryPayload p) {
+        return (int) p.items().stream().filter(s -> !s.isEmpty())
+                .map(ItemStack::getItem).distinct().count();
+    }
+
+    private static int usedSlots(NumenInventoryPayload p) {
+        return (int) p.items().stream().filter(s -> !s.isEmpty()).count();
+    }
+
+    private static String describe(int selected, java.util.List<ItemStack> items) {
+        if (selected < 0 || selected >= items.size() || items.get(selected).isEmpty()) {
+            return "空手";
+        }
+        return net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getKey(items.get(selected).getItem()).getPath();
     }
 
     /** 只认"什么物品、几个"——组件不进指纹,否则挖矿时每 tick 都算变了。 */

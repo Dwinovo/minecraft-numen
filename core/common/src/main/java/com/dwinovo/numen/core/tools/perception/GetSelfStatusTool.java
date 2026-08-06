@@ -36,10 +36,12 @@ public final class GetSelfStatusTool implements NumenTool {
         // exposes no system-prompt injection channel to core, but every request
         // re-reads tool descriptions, so the model sees the current roster each
         // turn. Dynamic on purpose — switched-off reflexes drop out of the text.
-        String base = "Read your complete status in one call: name, game mode, HP / max HP, "
-                + "hunger / saturation, position, dimension, biome, the structures you "
-                + "are standing in, equipment, your full backpack inventory, and movement state. "
-                + "ALWAYS call this before combat or planning decisions. No arguments.";
+        String base = "Read your body's condition in one call: name, game mode, HP / max HP, "
+                + "hunger / saturation, position, dimension, biome, the structures you are "
+                + "standing in, what you are wearing, and movement state. ALWAYS call this before "
+                + "combat or planning decisions. It does NOT list your backpack — what you carry "
+                + "is already in front of you every turn; use inspect_gui when exact slots matter. "
+                + "No arguments.";
         String overview = com.dwinovo.numen.task.reflex.ReflexRegistry.overview();
         return overview.isEmpty() ? base : base + "\n\n" + overview;
     }
@@ -91,24 +93,19 @@ public final class GetSelfStatusTool implements NumenTool {
         }
         root.add("equipment", equipment);
 
+        // 背包不在这里。它是「状态」不是「事件」——工具结果会沉进对话历史,而历史里的
+        // 状态永远不会过期:十轮之后她读到那份快照,上面写的还是十轮前的东西,而且和这一轮
+        // 挂在请求里的实时背包对不上。全量背包只有一个来源(runtime_state 的 <inventory>),
+        // 那一份永远是现在。要精确到槽位就调 inspect_gui。
         var inv = self.getInventory();
-        JsonArray items = new JsonArray();
+        JsonObject slots = new JsonObject();
         int used = 0;
         for (int i = 0; i < inv.getContainerSize(); i++) {
-            ItemStack s = inv.getItem(i);
-            if (s.isEmpty()) continue;
-            used++;
-            JsonObject o = new JsonObject();
-            o.addProperty("slot", i);
-            o.addProperty("item", BuiltInRegistries.ITEM.getKey(s.getItem()).toString());
-            o.addProperty("count", s.getCount());
-            items.add(o);
+            if (!inv.getItem(i).isEmpty()) used++;
         }
-        JsonObject inventory = new JsonObject();
-        inventory.add("items", items);
-        inventory.addProperty("slots_used", used);
-        inventory.addProperty("slots_total", inv.getContainerSize());
-        root.add("inventory", inventory);
+        slots.addProperty("used", used);
+        slots.addProperty("total", inv.getContainerSize());
+        root.add("backpack_slots", slots);
 
         root.add("target", JsonNull.INSTANCE);
         root.addProperty("on_ground", self.onGround());

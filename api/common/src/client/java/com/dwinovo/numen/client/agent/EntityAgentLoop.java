@@ -1181,6 +1181,8 @@ public final class EntityAgentLoop {
     /** 上一次渲染背包块用的快照时间戳;{@code -1} = 还没渲染过。 */
     private long inventoryRenderedAt = -1;
     private String inventoryRendered = "";
+    /** "请求里没背包"只说一次,别把每一轮都刷满。 */
+    private boolean inventoryMissingLogged;
 
     /**
      * 她此刻带着什么。服务端在背包真变化时推一份过来({@code CompanionInventoryWatch}),
@@ -1191,10 +1193,23 @@ public final class EntityAgentLoop {
      */
     private String inventoryXml() {
         var snapshot = ClientNumenInventory.get(entityUuid).orElse(null);
-        if (snapshot == null || !snapshot.loaded()) return "";
+        if (snapshot == null || !snapshot.loaded()) {
+            // 链路断在客户端这一节:服务端没推过,或者推的是别的同伴。请求里就没有背包这回事,
+            // 她只能靠对话历史猜——这条日志的存在就是为了不用再靠猜去查它。只在进入这个
+            // 状态时说一次,别把每一轮都刷满。
+            if (!inventoryMissingLogged) {
+                inventoryMissingLogged = true;
+                Constants.LOG.info("[numen-inv] {} 请求里没有背包块({})", entityUuid,
+                        snapshot == null ? "客户端一份快照都没收到" : "身体未加载");
+            }
+            return "";
+        }
+        inventoryMissingLogged = false;
         if (snapshot.receivedAtMs() == inventoryRenderedAt) return inventoryRendered;
         inventoryRendered = renderInventory(snapshot);
         inventoryRenderedAt = snapshot.receivedAtMs();
+        Constants.LOG.info("[numen-inv] 背包块进请求:{} 字符,快照 {}ms 前收到",
+                inventoryRendered.length(), System.currentTimeMillis() - snapshot.receivedAtMs());
         return inventoryRendered;
     }
 
