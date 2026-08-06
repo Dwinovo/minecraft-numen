@@ -27,8 +27,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * selectThrowaway 的优先级与副手回退钉桩:
  * <ul>
- *   <li>快捷栏多种可用方块且槽位顺序与优先级不一致时,按 acceptableThrowawayItems
- *       的配置顺序选(默认泥土先于圆石先于下界岩先于石头),不按槽位顺序;</li>
+ *   <li>快捷栏多种可用方块且槽位顺序与优先级不一致时,按同伴垫路料清单
+ *       ({@code ScaffoldMaterials})的顺序选(出厂默认里泥土排在圆石之前),不按槽位顺序;</li>
  *   <li>快捷栏无可用耗材而副手有可垫路方块时,回退到副手并选一个空手/
  *       带 TOOL 组件的主手槽(剑/镐/斧/铲/锄右键不放置方块,右键走副手)。</li>
  * </ul>

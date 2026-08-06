@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.pathing.moves;
 
+import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
 import java.util.List;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
@@ -178,7 +179,7 @@ public class CalculationContext {
      * {@code allowInventory} 开启才查背包深处(9-35)。
      */
     private static boolean hasGenericThrowaway(ServerPlayer player, NavSettings settings) {
-        List<net.minecraft.world.item.Item> acceptable = settings.acceptableThrowawayItems();
+        List<net.minecraft.world.item.Item> acceptable = ScaffoldMaterials.of(player);
         var inv = player.getInventory();
         for (int i = 0; i < 9; i++) {
             ItemStack stack = inv.getItem(i);

@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
+import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
 import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 
 import java.util.List;
@@ -256,7 +257,7 @@ final class MovementPlacement {
      * 原版走副手放置。
      */
     static boolean selectThrowaway(ServerPlayer player, boolean select) {
-        List<Item> acceptable = NavSettings.get().acceptableThrowawayItems();
+        List<Item> acceptable = ScaffoldMaterials.of(player);
         Inventory inventory = player.getInventory();
         boolean allowInventory = NavSettings.get().allowInventory;
         // 免耗材画像的"伸手进创造物品栏":背包连一块耗材都没有时自动补一组

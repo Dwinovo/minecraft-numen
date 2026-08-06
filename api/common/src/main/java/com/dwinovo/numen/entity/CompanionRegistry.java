@@ -40,38 +40,49 @@ public final class CompanionRegistry extends SavedData {
      *  空串 = 无皮肤,客户端回落原版默认皮肤(按 UUID 哈希抽取)。 */
     public record Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos,
                         String deathCause, long diedAt, String skinValue, String skinSig,
-                        String taskTool, String taskArgs) {
+                        String taskTool, String taskArgs, List<String> scaffoldMaterials) {
         /** A live companion (not dead), no borrowed skin, idle. */
         public Entry(String name, UUID owner, ResourceKey<Level> dimension, BlockPos pos) {
-            this(name, owner, dimension, pos, "", 0L, "", "", "", "");
+            this(name, owner, dimension, pos, "", 0L, "", "", "", "", List.of());
         }
 
         /** 她现在在做什么(工具名 + 当时的参数);空串 = 闲着。见 {@code TaskPersistence}。 */
         public Entry doing(String tool, String args) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    tool == null ? "" : tool, args == null ? "" : args);
+                    tool == null ? "" : tool, args == null ? "" : args, scaffoldMaterials);
         }
 
         /** 刷新落点(休眠/移动时的 respawn 提示),皮肤与死亡状态原样保留。 */
         public Entry movedTo(ResourceKey<Level> dimension, BlockPos pos) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
-                    taskTool, taskArgs);
+                    taskTool, taskArgs, scaffoldMaterials);
         }
 
         /** 换上 Mojang 签名的皮肤数据(value+signature)。 */
         public Entry withSkin(String value, String sig) {
             return new Entry(name, owner, dimension, pos, deathCause, diedAt,
-                    value == null ? "" : value, sig == null ? "" : sig, taskTool, taskArgs);
+                    value == null ? "" : value, sig == null ? "" : sig, taskTool, taskArgs,
+                    scaffoldMaterials);
+        }
+
+        /**
+         * 她愿意拿来垫路的方块(namespaced id)。<b>空表 = 没自己定过</b>,用调用方的出厂
+         * 默认——所以老存档不会因为没有这个字段就垫不了路,出厂默认改了也能流到没定制过
+         * 的同伴身上。
+         */
+        public Entry withScaffoldMaterials(List<String> materials) {
+            return new Entry(name, owner, dimension, pos, deathCause, diedAt, skinValue, skinSig,
+                    taskTool, taskArgs, materials == null ? List.of() : List.copyOf(materials));
         }
 
         Entry dead(String cause, long at) {
             return new Entry(name, owner, dimension, pos, cause, at, skinValue, skinSig,
-                    taskTool, taskArgs);
+                    taskTool, taskArgs, scaffoldMaterials);
         }
 
         Entry alive() {
             return new Entry(name, owner, dimension, pos, "", 0L, skinValue, skinSig,
-                    taskTool, taskArgs);
+                    taskTool, taskArgs, scaffoldMaterials);
         }
 
         static final Codec<Entry> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -84,7 +95,9 @@ public final class CompanionRegistry extends SavedData {
                 Codec.STRING.optionalFieldOf("skinValue", "").forGetter(Entry::skinValue),
                 Codec.STRING.optionalFieldOf("skinSig", "").forGetter(Entry::skinSig),
                 Codec.STRING.optionalFieldOf("taskTool", "").forGetter(Entry::taskTool),
-                Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskArgs)
+                Codec.STRING.optionalFieldOf("taskArgs", "").forGetter(Entry::taskArgs),
+                Codec.STRING.listOf().optionalFieldOf("scaffold", List.of())
+                        .forGetter(Entry::scaffoldMaterials)
         ).apply(i, Entry::new));
     }
 

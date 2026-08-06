@@ -1,4 +1,5 @@
 package com.dwinovo.numen.core.task.move;
+import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
 import com.dwinovo.numen.core.FailureType;
 
 import com.dwinovo.numen.task.TaskState;
@@ -453,9 +454,13 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case FIND -> "the nearest " + r.block;
         };
         // Everything breakable is already on the table (priced by dig time), so the
-        // fix for a block is always geometry: nearer waypoint or scanning.
-        String advice = ". Try a nearer waypoint or scan_blocks for a way through.";
+        // fix for a block is usually geometry: nearer waypoint or scanning. Unless she
+        // simply had nothing to build WITH, which reads as the same dead end and isn't.
+        String advice = ScaffoldMaterials.shortageAdvice(player);
+        if (advice == null) {
+            advice = " Try a nearer waypoint or scan_blocks for a way through.";
+        }
         return "blocked: got within " + String.format("%.1f", remaining) + " blocks of " + where
-                + " (now on the ground at y=" + gy + "). " + failReason + advice;
+                + " (now on the ground at y=" + gy + "). " + failReason + "." + advice;
     }
 }

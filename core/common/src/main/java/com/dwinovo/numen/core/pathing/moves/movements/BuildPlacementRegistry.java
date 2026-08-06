@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.pathing.moves.movements;
 
+import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.build.BuildValidity;
@@ -169,7 +170,7 @@ public final class BuildPlacementRegistry {
                                                   float yaw, float pitch, boolean select) {
         Inventory inventory = player.getInventory();
         boolean allowInventory = NavSettings.get().allowInventory;
-        for (Item item : NavSettings.get().acceptableThrowawayItems()) {
+        for (Item item : ScaffoldMaterials.of(player)) {
             for (int i = 0; i < 9; i++) {
                 ItemStack stack = inventory.getItem(i);
                 if (!stack.isEmpty() && stack.getItem() == item

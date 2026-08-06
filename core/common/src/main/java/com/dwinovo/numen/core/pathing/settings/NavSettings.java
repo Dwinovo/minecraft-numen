@@ -211,7 +211,6 @@ public final class NavSettings {
 
     // ==================== 方块 / 物品清单(懒加载,首次访问才触碰注册表) ====================
 
-    private List<Item> acceptableThrowawayItems;
     private List<Block> blocksToAvoid;
     private List<Block> blocksToDisallowBreaking;
     private List<Block> blocksToAvoidBreaking;
@@ -220,15 +219,6 @@ public final class NavSettings {
     private List<Block> okIfAir;
     private List<String> buildIgnoreProperties;
     private Map<Block, List<Block>> buildValidSubstitutes;
-
-    /** 可用作垫路耗材的物品。 */
-    public List<Item> acceptableThrowawayItems() {
-        if (acceptableThrowawayItems == null) {
-            acceptableThrowawayItems = new ArrayList<>(List.of(
-                    Items.DIRT, Items.COBBLESTONE, Items.NETHERRACK, Items.STONE));
-        }
-        return acceptableThrowawayItems;
-    }
 
     /** 永不穿行的方块(额外拉黑清单)。 */
     public List<Block> blocksToAvoid() {
