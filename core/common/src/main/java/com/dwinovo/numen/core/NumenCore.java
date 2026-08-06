@@ -117,6 +117,7 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.BlueprintTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.BlueprintReadTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InteractAtTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.SleepTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.interact.InteractEntityTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.inventory.EatItemTool());
         ToolRegistry.register(new com.dwinovo.numen.task.TaskStatusTool());
