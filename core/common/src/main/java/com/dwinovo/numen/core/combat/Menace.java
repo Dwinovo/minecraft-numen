@@ -41,8 +41,11 @@ public final class Menace {
      */
     private static final double FUSING_WEIGHT = 5.0;
 
-    /** 还没开始倒计时的(没点火的爬行者、没被打的水晶)也值得让一让,但只是让一让。 */
-    private static final double IDLE_WEIGHT = 1.0;
+    /** 会炸但还没点着的:走近它就会点着,所以比寻常怪更该绕。 */
+    private static final double EXPLOSIVE_WEIGHT = 2.0;
+
+    /** 寻常敌对生物。进场是为了别一边躲爬行者一边撞进它怀里,不是为了绕着它走。 */
+    private static final double ORDINARY_WEIGHT = 1.0;
 
     /**
      * 势场强度。<b>调大</b>她更坚决地绕开,极端时宁可挖直线也不走近路;<b>调小</b>她会为了
@@ -72,20 +75,25 @@ public final class Menace {
     }
 
     /**
-     * 把一批实体折成势场里的威胁点。不该躲的直接不进场——势场里多一个无关的点,
-     * 她就会为了绕开一只普通僵尸多走冤枉路。
+     * 把一批实体折成势场里的威胁点。<b>给进来的都进场</b>——退避时要躲的是全体,
+     * 只把会炸的放进去,她就会一边躲爬行者一边撞进僵尸堆里。筛选是调用方的事。
      *
-     * @return 可能为空;空表示"没什么要躲的",调用方不该建躲避目标
+     * <p>权重分三档:引信已经在走的最重(它有明确的倒计时),会炸但还没点的次之
+     * (走近就会点),其余按寻常算。同样的距离,权重越大在势场里越贵,她越舍得绕远。
+     *
+     * @return 与入参一一对应(死了的除外);空表示无事可躲,调用方不该建躲避目标
      */
-    public static List<GoalAvoidEntities.Threat> threatsAmong(Iterable<? extends Entity> entities) {
+    public static List<GoalAvoidEntities.Threat> field(Iterable<? extends Entity> entities) {
         List<GoalAvoidEntities.Threat> threats = new ArrayList<>();
         for (Entity entity : entities) {
-            if (entity == null || !entity.isAlive() || !keepAwayFrom(entity)) {
+            if (entity == null || !entity.isAlive()) {
                 continue;
             }
             threats.add(new GoalAvoidEntities.Threat(
                     entity.getBlockX(), entity.getBlockY(), entity.getBlockZ(),
-                    fusing(entity) ? FUSING_WEIGHT : IDLE_WEIGHT));
+                    fusing(entity) ? FUSING_WEIGHT
+                            : keepAwayFrom(entity) ? EXPLOSIVE_WEIGHT
+                            : ORDINARY_WEIGHT));
         }
         return threats;
     }

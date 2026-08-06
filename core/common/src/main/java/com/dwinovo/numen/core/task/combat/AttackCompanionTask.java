@@ -349,15 +349,18 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private TaskState backAway() {
         if (nav == null) {
-            var threats = Menace.threatsAmong(List.of(target));
-            if (threats.isEmpty()) {
-                return TaskState.RUNNING;   // 它已经不是威胁了,下一刻判据自会改口
-            }
+            double safe = Menace.safeDistanceFrom(target);
             nav = PlayerNav.toGoal(player,
-                    () -> NavGoal.avoid(Menace.safeDistanceFrom(target), Menace.AVOID_PENALTY, threats),
+                    // 威胁快照<b>在 supplier 里面</b>取:它每次重规划调一次,坐标因此跟着刷新。
+                    // 放在外面就是把开路那一刻钉死,目标挪开之后她还按旧位置退。
+                    () -> {
+                        var field = Menace.field(List.of(target));
+                        return field.isEmpty() ? null
+                                : NavGoal.avoid(safe, Menace.AVOID_PENALTY, field);
+                    },
                     CHASE_SPEED,
                     () -> target == null || target.isRemoved()
-                            || player.distanceTo(target) >= Menace.safeDistanceFrom(target));
+                            || player.distanceTo(target) >= safe);
         }
         switch (nav.tick()) {
             case RUNNING -> { }

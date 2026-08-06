@@ -24,15 +24,17 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Autonomous threat-response survival chain. Polls for a hostile within a bounded
  * radius each tick (biased toward whatever last hurt the body); when one is present
- * it spikes above the LLM task and either fights back (healthy + armed) or flees
- * (too hurt, or unarmed — survival never auto-acquires a weapon). Bounded by the
- * scan radius: it engages what is near and gives up chasing anything that leaves,
- * never travelling across the world.
+ * it spikes above the LLM task and either fights back (healthy + armed) or backs away
+ * (too hurt, unarmed, or the thing explodes). Bounded by the scan radius: it engages
+ * what is near and gives up chasing anything that leaves, never travelling across the world.
+ *
+ * <p><b>退避只有一种。</b>"打不过要退"与"不该贴近要退"的动作是同一个,所以走同一段代码、
+ * 同一个势场目标;区别只在谁做的决定。
  *
  * <p>Drives the substrate primitives directly — {@link PlayerNav} to close on or
  * run from the mob, {@link Interaction#attackEntity} for the native cooldown-scaled
- * swing, {@link NavGoal#runAway} for the flee vector. No {@code AbstractCompanionTask}:
- * there is no result to build and the fight/flee logic is a per-tick decision, not a
+ * swing, {@link NavGoal#avoid} for the retreat field. No {@code AbstractCompanionTask}:
+ * there is no result to build and the fight/retreat logic is a per-tick decision, not a
  * nav-then-act script.
  */
 public final class MobDefenseChain implements Task, com.dwinovo.numen.task.reflex.Reflex {
@@ -45,10 +47,20 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
     private static final double CHASE_SPEED = 1.2;
     private static final double FLEE_SPEED = 1.3;
 
-    private enum Mode { NONE, CHASE, FLEE, AVOID }
+    /** 追上去打 / 拉开距离。<b>退避只有一种</b>——打不过要退和不该贴近要退,动作是同一个。 */
+    private enum Mode { NONE, CHASE, RETREAT }
 
     /** Consecutive nav failures on the current engagement before the leash fires. */
     private static final int MAX_ENGAGE_FAILS = 3;
+    /**
+     * 威胁离开扫描半径后还盯这么久,才算真的脱离接触。
+     *
+     * <p>没有它,一只跟她跑得几乎一样快的怪会在半径边界上一进一出,每进出一次就是一轮
+     * 完整的"交战 → 脱身",身体日记也就跟着发一条。实测二十秒里发了十七条。
+     */
+    private static final long DISENGAGE_GRACE_TICKS = 40;
+    /** {@link #threatLastSeenTick} 的"从没见过"哨兵。不参与减法,免得负溢出。 */
+    private static final long NEVER = Long.MIN_VALUE;
     /** How long an unreachable target is ignored / how long the whole chain cools down (ticks). */
     private static final long UNREACHABLE_COOLDOWN = 200;
     private static final long CHAIN_COOLDOWN = 100;
@@ -60,40 +72,50 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
 
     public MobDefenseChain() {
     }
-    /** Last known threat position, for the flee goal supplier (survives the mob despawning mid-flee). */
-    private BlockPos lastThreatPos;
-    /** Engagement leash: consecutive nav FAILEDs on the current fight/flee attempt. */
+    /** 最后一刻还看得见威胁的游戏时间,配合 {@link #DISENGAGE_GRACE_TICKS} 做脱离迟滞。 */
+    private long threatLastSeenTick = NEVER;
+    /** Engagement leash: consecutive nav FAILEDs on the current fight/retreat attempt. */
     private int consecutiveNavFails;
     /** Targets we provably can't path to, ignored until the stored gameTime (entity id → until). */
     private final java.util.Map<Integer, Long> unreachable = new java.util.HashMap<>();
-    /** Whole-chain cooldown after a failed (boxed-in) flee — hands the body back to the LLM. */
+    /** Whole-chain cooldown after a boxed-in retreat — hands the body back to the LLM. */
     private long cooldownUntilGameTime;
 
     @Override
     public boolean canRun(NumenPlayer companion) {
-        if (companion.level().getGameTime() < cooldownUntilGameTime) return false;
-        return SurvivalDecisions.mobDefenseTriggered(nearestThreat(companion) != null);
+        long now = companion.level().getGameTime();
+        if (now < cooldownUntilGameTime) return false;
+        if (SurvivalDecisions.mobDefenseTriggered(!threatsNear(companion).isEmpty())) return true;
+        // 宽限期内不撒手:怪刚出半径不代表甩掉了,这一刻放手下一刻就得重来。
+        return threatLastSeenTick != NEVER && now - threatLastSeenTick < DISENGAGE_GRACE_TICKS;
     }
 
     @Override
     public TaskState tick(NumenPlayer companion) {
+        long now = companion.level().getGameTime();
         LivingEntity threat = nearestThreat(companion);
         if (threat == null) {
+            // 宽限期内照旧退,别原地站住等它追上来。
+            if (threatLastSeenTick != NEVER && now - threatLastSeenTick < DISENGAGE_GRACE_TICKS) {
+                retreat(companion);
+                return TaskState.RUNNING;
+            }
             release(companion);
+            threatLastSeenTick = NEVER;
             return TaskState.RUNNING;
         }
+        threatLastSeenTick = now;
         if (threat != target) {
             noteOutcome(companion);   // the previous engagement just ended (e.g. target died)
             target = threat;
             consecutiveNavFails = 0;
             stopNav();   // re-plan for the new target
         }
-        lastThreatPos = threat.blockPosition();
 
         ThreatResponse resp = SurvivalDecisions.decideThreatResponse(
                 true, companion.getHealth(), hasWeapon(companion));   // pure carry-check; fight() arms
         if (resp != ThreatResponse.FIGHT) {
-            flee(companion);
+            retreat(companion);   // 打不过
             return TaskState.RUNNING;
         }
         switch (AttackPlan.decide(new AttackPlan.Situation(
@@ -105,9 +127,9 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
                 Menace.safeDistanceFrom(threat)))) {
             // 够不够得着由 fight() 内部照旧判(它还要看视线);判据在这里只回答打不打。
             case MELEE, CLOSE_IN -> fight(companion, threat);
-            // 本能的职责是别死,不是打赢。够不着、或不该贴上去,就拉开距离——真要打它,
+            // 本能的职责是别死,不是打赢。够不着、或不该贴上去,就退开——真要打它,
             // 让模型派 attack,那条路上才有弹道与拉弓。
-            case RANGED, AVOID, ABANDON -> keepAway(companion, threat);
+            case RANGED, AVOID, ABANDON -> retreat(companion);
         }
         return TaskState.RUNNING;
     }
@@ -131,7 +153,7 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
 
     @Override
     public String describe() {
-        return "被怪物攻击会反击;受伤太重或没武器就先逃开;会炸的东西一律拉开距离";
+        return "被怪物攻击会反击;打不过、或者对方会爆炸,就退开到安全距离";
     }
 
     // ---- fight ----
@@ -175,64 +197,51 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
         }
     }
 
-    // ---- keep away ----
+    // ---- retreat ----
 
     /**
-     * 与它保持距离(爬行者、末影水晶)。走带权重的势场目标——它认得完所有威胁,而且
-     * <b>有终点</b>:退到安全线就停,不必每 tick 判断"退够没有",也就不会在边界上抖。
+     * 拉开距离。<b>打不过要退、不该贴近要退,走的是同一段代码</b>——两者的动作本来就是
+     * 同一个,拆成两套只会得到两份各有各的残缺。
+     *
+     * <h2>为什么不是"背对着它跑"</h2>
+     * 旧的逃离目标只收一个坐标点,别的怪在它眼里不存在,于是背对着僵尸跑很可能一头撞进
+     * 另一只怀里。这里给的是势场:当前每一只威胁都进场、按危险程度配权重,绕开才便宜。
+     *
+     * <h2>为什么有终点</h2>
+     * 退到离每只威胁都够远就算脱身,链子随即把身体交还。旧的逃离目标"永不到达",只能一直
+     * 跑到寻路连续失败才停——中间这段时间模型派的任务一刻都轮不上。
      */
-    private void keepAway(NumenPlayer companion, LivingEntity threat) {
-        if (mode != Mode.AVOID) {
+    private void retreat(NumenPlayer companion) {
+        if (mode != Mode.RETREAT) {
             stopNav();
-            mode = Mode.AVOID;
-            com.dwinovo.numen.Constants.LOG.info(
-                    "[numen-defense] 保持距离 target={} type={} dist={} safe={}",
-                    threat.getId(), threat.getType().getDescription().getString(),
-                    String.format("%.1f", companion.distanceTo(threat)),
-                    Menace.safeDistanceFrom(threat));
+            mode = Mode.RETREAT;
+            com.dwinovo.numen.Constants.LOG.info("[numen-defense] 退开 从 {} 只威胁中拉开到 {} 格",
+                    threatsNear(companion).size(), (int) SCAN_RADIUS);
         }
         if (nav == null) {
-            var threats = Menace.threatsAmong(java.util.List.of(threat));
-            if (threats.isEmpty()) {
-                // 不在"该躲"之列(够不着的普通怪):原地别追,让 LLM 决定要不要打。
-                InputDriver.halt(companion);
-                return;
-            }
-            double safe = Menace.safeDistanceFrom(threat);
             nav = PlayerNav.toGoal(companion,
-                    () -> NavGoal.avoid(safe, Menace.AVOID_PENALTY, threats),
+                    // 威胁快照<b>在这里面</b>取:supplier 每次重规划调一次,坐标因此跟着刷新。
+                    // 放到外面就是把开路那一刻钉死,怪追上来之后她还按旧位置退。
+                    () -> {
+                        var field = Menace.field(threatsNear(companion));
+                        return field.isEmpty() ? null
+                                : NavGoal.avoid(SCAN_RADIUS, Menace.AVOID_PENALTY, field);
+                    },
                     FLEE_SPEED,
-                    () -> companion.distanceTo(threat) >= safe);
+                    () -> threatsNear(companion).isEmpty());
         }
         switch (nav.tick()) {
             case RUNNING -> { }
-            case ARRIVED, FAILED -> stopNav();
-        }
-    }
-
-    // ---- flee ----
-
-    private void flee(NumenPlayer companion) {
-        if (mode != Mode.FLEE) {
-            stopNav();
-            mode = Mode.FLEE;
-        }
-        if (nav == null) {
-            int maintainY = companion.blockPosition().getY();
-            nav = PlayerNav.toGoal(companion,
-                    () -> NavGoal.runAway(lastThreatPos, maintainY),
-                    FLEE_SPEED,
-                    () -> false);   // never "arrived" — keep running until the threat clears
-        }
-        if (nav.tick() == PlayerNav.Status.FAILED) {
-            stopNav();
-            // Boxed in with no escape plan: after a few failed attempts, stop
-            // spiking for a while — holding the body helps nobody, and the LLM
-            // (whose deadline resumes) may know a better way out.
-            if (++consecutiveNavFails >= MAX_ENGAGE_FAILS) {
-                cooldownUntilGameTime = companion.level().getGameTime() + CHAIN_COOLDOWN;
-                consecutiveNavFails = 0;
-                release(companion);
+            case ARRIVED -> stopNav();
+            case FAILED -> {
+                stopNav();
+                // 退无可退(被围住、被堵在死角)。攥着身体谁也帮不上,交还给模型——
+                // 它也许知道一条我们看不见的路。
+                if (++consecutiveNavFails >= MAX_ENGAGE_FAILS) {
+                    cooldownUntilGameTime = companion.level().getGameTime() + CHAIN_COOLDOWN;
+                    consecutiveNavFails = 0;
+                    release(companion);
+                }
             }
         }
     }
@@ -245,21 +254,11 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
      * near — the chain's only actionable, bounded threat signal.
      */
     private LivingEntity nearestThreat(NumenPlayer companion) {
-        AABB box = companion.getBoundingBox().inflate(SCAN_RADIUS);
         LivingEntity attacker = companion.getLastHurtByMob();
-        long now = companion.level().getGameTime();
         LivingEntity best = null;
         double bestDistSqr = Double.MAX_VALUE;
-        for (Monster m : companion.level().getEntitiesOfClass(Monster.class, box)) {
-            if (m.isRemoved() || m.isDeadOrDying()) continue;
-            // DEFENSE, not aggression: only a mob that is actually engaging us — it hurt
-            // us, or its AI has targeted us — counts. A neutral Monster (a calm zombified
-            // piglin drifting by) must not be attacked and provoked by a "defense" chain.
-            if (m != attacker && m.getTarget() != companion) continue;
-            // Skip targets we recently proved unreachable (the engagement leash).
-            if (unreachable.getOrDefault(m.getId(), 0L) > now) continue;
+        for (LivingEntity m : threatsNear(companion)) {
             double d = companion.distanceToSqr(m);
-            if (d > SCAN_RADIUS * SCAN_RADIUS) continue;
             // Bias toward the mob that hurt us: pretend it is closer so it wins ties.
             double weighted = (m == attacker) ? d - 1.0 : d;
             if (weighted < bestDistSqr) {
@@ -270,8 +269,31 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
         return best;
     }
 
+    /**
+     * 扫描半径内<b>所有</b>正在针对她的敌对生物。退避的势场要的是全体——只把最近那只
+     * 放进去,躲开它的路线就可能正好穿过第二只。
+     */
+    private java.util.List<LivingEntity> threatsNear(NumenPlayer companion) {
+        AABB box = companion.getBoundingBox().inflate(SCAN_RADIUS);
+        LivingEntity attacker = companion.getLastHurtByMob();
+        long now = companion.level().getGameTime();
+        java.util.List<LivingEntity> found = new java.util.ArrayList<>();
+        for (Monster m : companion.level().getEntitiesOfClass(Monster.class, box)) {
+            if (m.isRemoved() || m.isDeadOrDying()) continue;
+            // DEFENSE, not aggression: only a mob that is actually engaging us — it hurt
+            // us, or its AI has targeted us — counts. A neutral Monster (a calm zombified
+            // piglin drifting by) must not be attacked and provoked by a "defense" chain.
+            if (m != attacker && m.getTarget() != companion) continue;
+            // Skip targets we recently proved unreachable (the engagement leash).
+            if (unreachable.getOrDefault(m.getId(), 0L) > now) continue;
+            if (companion.distanceToSqr(m) > SCAN_RADIUS * SCAN_RADIUS) continue;
+            found.add(m);
+        }
+        return found;
+    }
+
     /** Does the body CARRY a melee weapon anywhere in inventory? Pure check — no hand
-     *  mutation; the swap happens only once FIGHT is actually chosen (a fleeing body
+     *  mutation; the swap happens only once FIGHT is actually chosen (a retreating body
      *  must not have its held tool silently replaced by a probe). */
     private static boolean hasWeapon(NumenPlayer companion) {
         var inv = companion.getInventory();
@@ -313,23 +335,14 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
             com.dwinovo.numen.event.NumenEvents.body(companion, "was attacked by a " + mob + " and killed it");
             return;
         }
-        if (mode == Mode.AVOID && nearestThreat(companion) == null) {
-            // 她刚被一个会炸的东西赶离了原地。<b>急件</b>:她多半正在挖矿/赶路,身体却已经
-            // 不在那儿了,不告诉她,她会照着旧位置继续算下一步。
-            com.dwinovo.numen.event.NumenEvents.emit(companion,
-                    com.dwinovo.numen.event.NumenEvents.Kind.BODY_LOG,
-                    java.util.Map.of("threat", mob),
-                    "你身边出现了" + mob + ",本能让你先拉开了距离,所以你已经不在刚才那个位置了。"
-                            + "要打它就得用弓弩,贴上去会被炸。", true);
-            return;
-        }
-        if (mode == Mode.FLEE && nearestThreat(companion) == null) {
-            // 打不过跑掉了 —— 同样是急件:她手上那件活多半因此黄了。
-            com.dwinovo.numen.event.NumenEvents.emit(companion,
-                    com.dwinovo.numen.event.NumenEvents.Kind.BODY_LOG,
-                    java.util.Map.of("threat", mob),
-                    "你打不过" + mob + ",本能带着你跑开了,现在安全但已经离开了原地。"
-                            + "手上那件活可能因此没做完。", true);
+        if (mode == Mode.RETREAT && threatsNear(companion).isEmpty()) {
+            // <b>不急</b>。她的后台任务照跑,黄了自有 task_finished 报;这条只是让主人
+            // 翻聊天流时看得懂她刚才为什么挪了二十格。攒着搭下一轮的车就够。
+            //
+            // 一次交战只发一条:发的时机是"宽限期过完、确实甩掉了",不是"这一刻没看见它"
+            // ——后者在半径边界上一两秒就成立一次。
+            com.dwinovo.numen.event.NumenEvents.body(companion,
+                    "backed away from a " + mob + " and is clear of it now");
         }
     }
 }
