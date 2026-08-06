@@ -357,7 +357,7 @@ public final class ModLanguageData {
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "Delete \"%s\"? Companions using it can't chat until rebound.");
         adder.add(Keys.PROVIDER_NO_KEY,         "no key");
         adder.add(Keys.PROVIDER_FORM_NAME,      "Name (required)");
-        adder.add(Keys.PROVIDER_FORM_PROVIDER,  "Provider");
+        adder.add(Keys.PROVIDER_FORM_PROVIDER,  "API protocol");
         adder.add(Keys.PROVIDER_FORM_BASE_URL,  "Base URL (optional)");
 
         // Proxy section
@@ -387,14 +387,14 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_FAIL,       "Signing failed: %s");
         adder.add(Keys.SKIN_SIGN_OK,         "\"%s\" signed");
         adder.add("numen.summon.mode",       "Mode");
-        adder.add("numen.bubble.thinking",   "Thinking");
+        adder.add("numen.bubble.thinking",   "✦ Thinking");
         adder.add("numen.chat.reasoning",    "Reasoning");
         adder.add("numen.summon.fetching_skin", "Fetching skin…");
         adder.add("numen.summon.persona_missing", "Chosen persona is gone (file deleted?), using the default");
         adder.add("numen.summon.voice_missing", "Chosen voice is gone (entry deleted?), she stays silent for now");
         adder.add("numen.summon.skin_failed", "Skin unavailable (%s), using default");
         adder.add("numen.skin.name_placeholder", "3-16 letters, digits or _");
-        adder.add("numen.bubble.doing",      "%s…");
+        adder.add("numen.bubble.doing",      "▸ %s");
         adder.add("numen.gui.list.deleted",  "Deleted \"%s\"");
         adder.add("numen.gui.list.cloned",   "Cloned as an editable copy");
         adder.add("numen.gui.list.unbound",  "The entry it was using was just deleted — now unbound");
@@ -449,31 +449,31 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_SUMMON_LABEL,   "Voice");
         adder.add(Keys.VOICE_SUMMON_EMPTY,   " (empty — create one in Settings → Voice)");
     
-        adder.add(Keys.GUI_INLINE_NEED_KEY             , "API key required");
-        adder.add(Keys.GUI_INLINE_REQUIRED             , "Required");
-        adder.add(Keys.GUI_PROVIDERS_BADGE_LOCAL       , "Local");
-        adder.add(Keys.GUI_PROVIDERS_CHECK             , "Check");
-        adder.add(Keys.GUI_PROVIDERS_CHECK_BAD_REQUEST , "Request rejected");
-        adder.add(Keys.GUI_PROVIDERS_CHECK_NETWORK     , "Can't connect — check network, proxy, or base URL");
-        adder.add(Keys.GUI_PROVIDERS_CHECK_NOT_FOUND   , "Wrong base URL or model — check both");
-        adder.add(Keys.GUI_PROVIDERS_CHECK_OK          , "Connected — the model responded");
+        adder.add(Keys.GUI_INLINE_NEED_KEY,             "API key required");
+        adder.add(Keys.GUI_INLINE_REQUIRED,             "Required");
+        adder.add(Keys.GUI_PROVIDERS_BADGE_LOCAL,       "Local");
+        adder.add(Keys.GUI_PROVIDERS_CHECK,             "Check");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_BAD_REQUEST, "Request rejected");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_NETWORK,     "Can't connect — check network, proxy, or base URL");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_NOT_FOUND,   "Wrong base URL or model — check both");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_OK,          "Connected — the model responded");
         adder.add(Keys.GUI_PROVIDERS_CHECK_RATE_LIMITED, "Rate limited — wait a bit or check your quota");
         adder.add(Keys.GUI_PROVIDERS_CHECK_SERVER_ERROR, "Provider-side error — try again later");
         adder.add(Keys.GUI_PROVIDERS_CHECK_UNAUTHORIZED, "Invalid key — check it's complete and belongs to this provider");
-        adder.add(Keys.GUI_PROVIDERS_CHECKING          , "Checking…");
-        adder.add(Keys.GUI_PROVIDERS_EFFORT            , "Reasoning effort");
-        adder.add(Keys.GUI_PROVIDERS_EFFORT_HIGH       , "High");
-        adder.add(Keys.GUI_PROVIDERS_EFFORT_LOW        , "Low");
-        adder.add(Keys.GUI_PROVIDERS_EFFORT_MEDIUM     , "Medium");
-        adder.add(Keys.GUI_PROVIDERS_PROXY             , "Proxy (optional)");
-        adder.add(Keys.GUI_PROVIDERS_PROXY_GLOBAL      , "Global proxy");
-        adder.add(Keys.GUI_PROVIDERS_PROXY_HINT        , "host:port, blank = global");
-        adder.add(Keys.GUI_PROVIDERS_THINKING          , "Reasoning");
-        adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO     , "Auto");
-        adder.add(Keys.GUI_PROVIDERS_THINKING_OFF      , "Off");
-        adder.add(Keys.GUI_PROVIDERS_THINKING_ON       , "On");
-        adder.add(Keys.RESPAWN_BLOCKED                 , "· waiting for room to land");
-}
+        adder.add(Keys.GUI_PROVIDERS_CHECKING,          "Checking…");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT,            "Reasoning effort");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_HIGH,       "High");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_LOW,        "Low");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_MEDIUM,     "Medium");
+        adder.add(Keys.GUI_PROVIDERS_PROXY,             "Proxy (optional)");
+        adder.add(Keys.GUI_PROVIDERS_PROXY_GLOBAL,      "Global proxy");
+        adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port, blank = global");
+        adder.add(Keys.GUI_PROVIDERS_THINKING,          "Reasoning");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO,     "Auto");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_OFF,      "Off");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_ON,       "On");
+        adder.add(Keys.RESPAWN_BLOCKED,                 "· waiting for room to land");
+    }
 
     private static void addZh(Adder adder) {
         adder.add(Keys.GUI_SETTINGS_TITLE,         "Numen 设置");
@@ -636,7 +636,7 @@ public final class ModLanguageData {
         adder.add(Keys.PROVIDER_DELETE_CONFIRM, "删除「%s」?正在使用它的同伴将无法对话,直到重新绑定。");
         adder.add(Keys.PROVIDER_NO_KEY,         "未填Key");
         adder.add(Keys.PROVIDER_FORM_NAME,      "名称(必填)");
-        adder.add(Keys.PROVIDER_FORM_PROVIDER,  "提供商");
+        adder.add(Keys.PROVIDER_FORM_PROVIDER,  "接口协议");
         adder.add(Keys.PROVIDER_FORM_BASE_URL,  "Base URL(可选)");
 
         // Proxy section
@@ -666,14 +666,14 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_FAIL,       "签名失败: %s");
         adder.add(Keys.SKIN_SIGN_OK,         "「%s」签名成功");
         adder.add("numen.summon.mode",       "模式");
-        adder.add("numen.bubble.thinking",   "正在思考中");
+        adder.add("numen.bubble.thinking",   "✦ 正在思考");
         adder.add("numen.chat.reasoning",    "思考过程");
         adder.add("numen.summon.fetching_skin", "正在获取皮肤…");
         adder.add("numen.summon.persona_missing", "选的人设没找到(文件被删?),先用默认人格");
         adder.add("numen.summon.voice_missing", "选的声线没找到(条目被删?),她暂时不会出声");
         adder.add("numen.summon.skin_failed", "没借到皮肤(%s),用默认皮肤");
         adder.add("numen.skin.name_placeholder", "3~16 位英文/数字/下划线");
-        adder.add("numen.bubble.doing",      "正在%s");
+        adder.add("numen.bubble.doing",      "▸ 正在%s");
         adder.add("numen.gui.list.deleted",  "已删除「%s」");
         adder.add("numen.gui.list.cloned",   "已克隆为可编辑副本");
         adder.add("numen.gui.list.unbound",  "刚才删掉的条目它正在用,现在已解绑");
@@ -728,30 +728,30 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_SUMMON_LABEL,   "声线");
         adder.add(Keys.VOICE_SUMMON_EMPTY,   "(空——到 设置 → 语音 新建)");
     
-        adder.add(Keys.KEY_CATEGORY_NUMEN              , "Numen");
-        adder.add(Keys.GUI_INLINE_NEED_KEY             , "请先填写密钥");
-        adder.add(Keys.GUI_INLINE_REQUIRED             , "必填");
-        adder.add(Keys.GUI_PROVIDERS_BADGE_LOCAL       , "本地");
-        adder.add(Keys.GUI_PROVIDERS_CHECK             , "检测");
-        adder.add(Keys.GUI_PROVIDERS_CHECK_BAD_REQUEST , "请求被拒");
-        adder.add(Keys.GUI_PROVIDERS_CHECK_NETWORK     , "连不上——检查网络、代理或基址");
-        adder.add(Keys.GUI_PROVIDERS_CHECK_NOT_FOUND   , "基址或模型名不对——检查 Base URL 与模型 ID");
-        adder.add(Keys.GUI_PROVIDERS_CHECK_OK          , "连接成功,模型响应正常");
+        adder.add(Keys.KEY_CATEGORY_NUMEN,              "Numen");
+        adder.add(Keys.GUI_INLINE_NEED_KEY,             "请先填写密钥");
+        adder.add(Keys.GUI_INLINE_REQUIRED,             "必填");
+        adder.add(Keys.GUI_PROVIDERS_BADGE_LOCAL,       "本地");
+        adder.add(Keys.GUI_PROVIDERS_CHECK,             "检测");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_BAD_REQUEST, "请求被拒");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_NETWORK,     "连不上——检查网络、代理或基址");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_NOT_FOUND,   "基址或模型名不对——检查 Base URL 与模型 ID");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_OK,          "连接成功,模型响应正常");
         adder.add(Keys.GUI_PROVIDERS_CHECK_RATE_LIMITED, "被限流了——稍等再试,或检查账户额度");
         adder.add(Keys.GUI_PROVIDERS_CHECK_SERVER_ERROR, "服务商侧故障——稍后再试");
         adder.add(Keys.GUI_PROVIDERS_CHECK_UNAUTHORIZED, "密钥无效——检查 API Key 是否复制完整、是否属于这家服务商");
-        adder.add(Keys.GUI_PROVIDERS_CHECKING          , "检测中…");
-        adder.add(Keys.GUI_PROVIDERS_EFFORT            , "推理强度");
-        adder.add(Keys.GUI_PROVIDERS_EFFORT_HIGH       , "高强度");
-        adder.add(Keys.GUI_PROVIDERS_EFFORT_LOW        , "低强度");
-        adder.add(Keys.GUI_PROVIDERS_EFFORT_MEDIUM     , "中强度");
-        adder.add(Keys.GUI_PROVIDERS_PROXY             , "代理（可选）");
-        adder.add(Keys.GUI_PROVIDERS_PROXY_GLOBAL      , "全局代理");
-        adder.add(Keys.GUI_PROVIDERS_PROXY_HINT        , "host:port，留空跟随全局");
-        adder.add(Keys.GUI_PROVIDERS_THINKING          , "推理");
-        adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO     , "自动");
-        adder.add(Keys.GUI_PROVIDERS_THINKING_OFF      , "关闭");
-        adder.add(Keys.GUI_PROVIDERS_THINKING_ON       , "开启");
-        adder.add(Keys.RESPAWN_BLOCKED                 , "· 周围太挤,等一个落脚点");
-}
+        adder.add(Keys.GUI_PROVIDERS_CHECKING,          "检测中…");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT,            "推理强度");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_HIGH,       "高强度");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_LOW,        "低强度");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_MEDIUM,     "中强度");
+        adder.add(Keys.GUI_PROVIDERS_PROXY,             "代理（可选）");
+        adder.add(Keys.GUI_PROVIDERS_PROXY_GLOBAL,      "全局代理");
+        adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port，留空跟随全局");
+        adder.add(Keys.GUI_PROVIDERS_THINKING,          "推理");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO,     "自动");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_OFF,      "关闭");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_ON,       "开启");
+        adder.add(Keys.RESPAWN_BLOCKED,                 "· 周围太挤,等一个落脚点");
+    }
 }

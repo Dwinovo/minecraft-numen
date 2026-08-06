@@ -106,7 +106,7 @@ interface Reflex {
 
 ## 六、异步任务与事件登记处
 
-长跑任务(move_to / auto_mine / melee_attack / collect_items / wait)受理即回执:
+长跑任务(move_to / auto_mine / attack / collect_items / wait)受理即回执:
 工具结果只承载 `{task_id, async:true}`,身体在后台跑,大脑当场自由——
 干活期间照常聊天、感知、规划。
 
