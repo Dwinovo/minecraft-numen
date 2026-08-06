@@ -70,28 +70,19 @@ public final class SleepOps {
     }
 
     /**
-     * 把原版的拒绝理由翻成"下一步该干什么"。
+     * 拒绝理由<b>用原版自己的话</b>——它已经足够具体("there are monsters nearby"、
+     * "the bed is too far away"、"you can only sleep at night and during thunderstorms"),
+     * 我们再翻一遍只会得到一份要跟着原版措辞走的硬编码。而且它跟着语言文件,主人也看得懂。
      *
-     * <p>枚举名本身就是判据({@code NOT_POSSIBLE_NOW} 是白天,{@code NOT_SAFE} 是附近有怪),
-     * 比 {@code getMessage()} 那句给玩家看的文案更适合模型据以决策——所以两样都给:先说
-     * 怎么办,再附上原版的原话(它跟着语言文件走,主人看得懂)。
+     * <p>{@code NOT_POSSIBLE_HERE} 与 {@code OTHER_PROBLEM} 原版没配文案({@code getMessage()}
+     * 是 {@code null},那两种它在别处另行处理),那时枚举名就是全部信息——不能因为 null 就炸,
+     * 那会把"她睡不着"变成"工具报错",而模型对后者无从下手。
      */
     static String explain(Player.BedSleepingProblem problem) {
-        String advice = switch (problem) {
-            case NOT_POSSIBLE_NOW ->
-                    "it is daytime — you can only sleep at night or during a thunderstorm; "
-                            + "set_timer if you want to be reminded when dusk comes";
-            case NOT_SAFE -> "there are monsters nearby — clear them out first, then try again";
-            case TOO_FAR_AWAY -> "you are too far from that bed — goto it first";
-            case OBSTRUCTED -> "the bed is obstructed — clear the space above or beside it";
-            case NOT_POSSIBLE_HERE -> "you cannot sleep in this dimension";
-            case OTHER_PROBLEM -> "the bed refused you (it may already be occupied)";
-        };
-        // 有几种拒绝原版没配文案(getMessage() 是 null,那几种它在别处另行处理),
-        // 所以枚举名才是能指望的那一半,原话只是锦上添花。
         var vanilla = problem.getMessage();
-        return advice + " [" + problem.name().toLowerCase(java.util.Locale.ROOT)
-                + (vanilla == null ? "" : ": " + vanilla.getString()) + "]";
+        return vanilla != null
+                ? vanilla.getString()
+                : "the bed refused you (" + problem.name().toLowerCase(java.util.Locale.ROOT) + ")";
     }
 
     /** 手边够得着的床(原版口径:床的任一半在 ±3/±2/±3 内),归一到床头。 */

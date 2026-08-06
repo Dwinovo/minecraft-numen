@@ -39,9 +39,9 @@ public final class SleepTool implements NumenTool {
                 + "asleep. It does NOT travel: find a bed with scan_blocks using #minecraft:beds (that "
                 + "one tag covers every colour), goto it, then call this. Give x/y/z to use one specific "
                 + "bed, or omit them for whichever bed is in reach. Succeeds only when the server "
-                + "confirms you are sleeping — otherwise it returns the real reason (daytime, the bed is "
-                + "occupied, monsters are nearby, you are too far). Returns the moment you lie down; "
-                + "night passes on its own and needs no tool.";
+                + "confirms you are sleeping; otherwise it hands back Minecraft's own reason — read it. "
+                + "\"Only at night\" means wait (set_timer), not retry. \"Too far away\" means goto. "
+                + "Returns the moment you lie down; night passes on its own and needs no tool.";
     }
 
     @Override
