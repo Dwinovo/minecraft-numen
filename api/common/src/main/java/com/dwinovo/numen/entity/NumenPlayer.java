@@ -59,6 +59,17 @@ public final class NumenPlayer extends ServerPlayer {
      */
     private boolean sleepingLastTick;
 
+    /**
+     * 她这一刻<b>主动在打</b>的那些实体 id(模型派的 attack 授权的整份清单)。
+     *
+     * <p>反射链据此让路:清单里的目标交给任务,别去抢身体——任务的判据比反射链细
+     * (它认得爬行者该退多远、够不着该换弓),而抢过去只会让它拉到一半的弓作废。
+     * 清单<b>外</b>的照旧归反射链:她打鸡的时候扑上来的僵尸,任务根本不认识。
+     *
+     * <p>跟着身体走,休眠回来是空的——不必另配一套离场清理。
+     */
+    private java.util.Set<Integer> combatFocus = java.util.Set.of();
+
     public NumenPlayer(MinecraftServer server, ServerLevel level, GameProfile profile,
                         ClientInformation clientInformation) {
         super(server, level, profile, clientInformation);
@@ -92,6 +103,17 @@ public final class NumenPlayer extends ServerPlayer {
         boolean woke = sleepingLastTick && !now;
         sleepingLastTick = now;
         return woke;
+    }
+
+    /** 模型派的战斗任务开工/收工时登记它授权的目标。见 {@link #combatFocus}。 */
+    public void setCombatFocus(java.util.Collection<Integer> entityIds) {
+        combatFocus = entityIds == null || entityIds.isEmpty()
+                ? java.util.Set.of() : java.util.Set.copyOf(entityIds);
+    }
+
+    /** 这个目标是不是已经有任务在打了。 */
+    public boolean isCombatFocus(int entityId) {
+        return combatFocus.contains(entityId);
     }
 
     /** The loaded companion body with this UUID, or {@code null} if not spawned. */

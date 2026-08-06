@@ -88,6 +88,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     @Override
     protected void onStart() {
         snapshotInventory(inventoryBaseline);
+        // 认领这批目标:本能链看见它们在别人手上就不来抢身体了。
+        player.setCombatFocus(r.entityIds);
     }
 
     @Override
@@ -447,6 +449,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     @Override
     protected void cleanup() {
+        player.setCombatFocus(java.util.List.of());   // 交回:这些目标不再有人管
         abortShot();
         InputDriver.halt(player);
         player.setShiftKeyDown(false);

@@ -85,7 +85,7 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
     public boolean canRun(NumenPlayer companion) {
         long now = companion.level().getGameTime();
         if (now < cooldownUntilGameTime) return false;
-        if (SurvivalDecisions.mobDefenseTriggered(!threatsNear(companion).isEmpty())) return true;
+        if (SurvivalDecisions.mobDefenseTriggered(!unhandledThreats(companion).isEmpty())) return true;
         // 宽限期内不撒手:怪刚出半径不代表甩掉了,这一刻放手下一刻就得重来。
         return threatLastSeenTick != NEVER && now - threatLastSeenTick < DISENGAGE_GRACE_TICKS;
     }
@@ -257,7 +257,7 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
         LivingEntity attacker = companion.getLastHurtByMob();
         LivingEntity best = null;
         double bestDistSqr = Double.MAX_VALUE;
-        for (LivingEntity m : threatsNear(companion)) {
+        for (LivingEntity m : unhandledThreats(companion)) {
             double d = companion.distanceToSqr(m);
             // Bias toward the mob that hurt us: pretend it is closer so it wins ties.
             double weighted = (m == attacker) ? d - 1.0 : d;
@@ -270,9 +270,30 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
     }
 
     /**
-     * 扫描半径内<b>所有</b>正在针对她的敌对生物。退避的势场要的是全体——只把最近那只
-     * 放进去,躲开它的路线就可能正好穿过第二只。
+     * 反射链<b>该管的</b>那些威胁:全部,减去模型派的战斗任务已经认领的目标。
+     *
+     * <p>让路的理由是任务的判据更细——它知道爬行者该退到几格、够不着该换弓,而反射链
+     * 抢过去只会让它拉到一半的弓作废,两层还会在边界上互相抢。清单外的照旧归反射链:
+     * 她打鸡时扑上来的僵尸,任务根本不认识。
+     *
+     * <p><b>命要紧时不让路</b>:血掉到濒死线以下,任务的判据里一个血量都没有,那一档
+     * 只有反射链看得见。
      */
+    private java.util.List<LivingEntity> unhandledThreats(NumenPlayer companion) {
+        java.util.List<LivingEntity> all = threatsNear(companion);
+        if (companion.getHealth() <= SurvivalDecisions.FLEE_HEALTH) {
+            return all;
+        }
+        java.util.List<LivingEntity> mine = new java.util.ArrayList<>();
+        for (LivingEntity m : all) {
+            if (!companion.isCombatFocus(m.getId())) {
+                mine.add(m);
+            }
+        }
+        return mine;
+    }
+
+    /** 扫描半径内<b>所有</b>正在针对她的敌对生物——退避的势场要的是全体,让不让路无关。 */
     private java.util.List<LivingEntity> threatsNear(NumenPlayer companion) {
         AABB box = companion.getBoundingBox().inflate(SCAN_RADIUS);
         LivingEntity attacker = companion.getLastHurtByMob();
@@ -335,7 +356,7 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
             com.dwinovo.numen.event.NumenEvents.body(companion, "was attacked by a " + mob + " and killed it");
             return;
         }
-        if (mode == Mode.RETREAT && threatsNear(companion).isEmpty()) {
+        if (mode == Mode.RETREAT && unhandledThreats(companion).isEmpty()) {
             // <b>不急</b>。她的后台任务照跑,黄了自有 task_finished 报;这条只是让主人
             // 翻聊天流时看得懂她刚才为什么挪了二十格。攒着搭下一轮的车就够。
             //
