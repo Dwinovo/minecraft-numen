@@ -5,22 +5,19 @@ import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.act.Interaction;
+import com.dwinovo.numen.core.combat.AttackPlan;
+import com.dwinovo.numen.core.combat.Loadout;
+import com.dwinovo.numen.core.combat.Menace;
+import com.dwinovo.numen.core.combat.WeaponDamage;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
-import com.dwinovo.numen.core.act.ToolSelect;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.ai.attributes.AttributeModifier;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Monster;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.ItemAttributeModifiers;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -48,7 +45,7 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
     private static final double CHASE_SPEED = 1.2;
     private static final double FLEE_SPEED = 1.3;
 
-    private enum Mode { NONE, CHASE, FLEE }
+    private enum Mode { NONE, CHASE, FLEE, AVOID }
 
     /** Consecutive nav failures on the current engagement before the leash fires. */
     private static final int MAX_ENGAGE_FAILS = 3;
@@ -95,10 +92,22 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
 
         ThreatResponse resp = SurvivalDecisions.decideThreatResponse(
                 true, companion.getHealth(), hasWeapon(companion));   // pure carry-check; fight() arms
-        if (resp == ThreatResponse.FIGHT) {
-            fight(companion, threat);
-        } else {
+        if (resp != ThreatResponse.FIGHT) {
             flee(companion);
+            return TaskState.RUNNING;
+        }
+        switch (AttackPlan.decide(new AttackPlan.Situation(
+                companion.distanceTo(threat),
+                ATTACK_REACH,
+                consecutiveNavFails < MAX_ENGAGE_FAILS,
+                Loadout.forTarget(companion, threat).hasRanged(),
+                Menace.keepAwayFrom(threat),
+                Menace.safeDistanceFrom(threat)))) {
+            // 够不够得着由 fight() 内部照旧判(它还要看视线);判据在这里只回答打不打。
+            case MELEE, CLOSE_IN -> fight(companion, threat);
+            // 本能的职责是别死,不是打赢。够不着、或不该贴上去,就拉开距离——真要打它,
+            // 让模型派 attack,那条路上才有弹道与拉弓。
+            case RANGED, AVOID, ABANDON -> keepAway(companion, threat);
         }
         return TaskState.RUNNING;
     }
@@ -122,7 +131,7 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
 
     @Override
     public String describe() {
-        return "被怪物攻击会反击,受伤太重或没武器就先逃开";
+        return "被怪物攻击会反击;受伤太重或没武器就先逃开;会炸的东西一律拉开距离";
     }
 
     // ---- fight ----
@@ -132,7 +141,10 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
             stopNav();
             mode = Mode.CHASE;
         }
-        ToolSelect.holdBestWeapon(companion);   // pathfinder may have swapped a block into the hand
+        // 按"对这只怪最狠"选,不是按攻击力常数选(亡灵杀手打僵尸强过一把更好的光板剑)。
+        // 顺带也修回寻路途中被换进手里的方块。
+        var melee = Loadout.forTarget(companion, threat).melee();
+        if (melee != null) companion.holdInHand(melee.slot());
         if (inReach(companion, threat)) {
             stopNav();
             consecutiveNavFails = 0;
@@ -160,6 +172,41 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
                     target = null;   // re-scan picks another threat, or none → dormant
                 }
             }
+        }
+    }
+
+    // ---- keep away ----
+
+    /**
+     * 与它保持距离(爬行者、末影水晶)。走带权重的势场目标——它认得完所有威胁,而且
+     * <b>有终点</b>:退到安全线就停,不必每 tick 判断"退够没有",也就不会在边界上抖。
+     */
+    private void keepAway(NumenPlayer companion, LivingEntity threat) {
+        if (mode != Mode.AVOID) {
+            stopNav();
+            mode = Mode.AVOID;
+            com.dwinovo.numen.Constants.LOG.info(
+                    "[numen-defense] 保持距离 target={} type={} dist={} safe={}",
+                    threat.getId(), threat.getType().getDescription().getString(),
+                    String.format("%.1f", companion.distanceTo(threat)),
+                    Menace.safeDistanceFrom(threat));
+        }
+        if (nav == null) {
+            var threats = Menace.threatsAmong(java.util.List.of(threat));
+            if (threats.isEmpty()) {
+                // 不在"该躲"之列(够不着的普通怪):原地别追,让 LLM 决定要不要打。
+                InputDriver.halt(companion);
+                return;
+            }
+            double safe = Menace.safeDistanceFrom(threat);
+            nav = PlayerNav.toGoal(companion,
+                    () -> NavGoal.avoid(safe, Menace.AVOID_PENALTY, threats),
+                    FLEE_SPEED,
+                    () -> companion.distanceTo(threat) >= safe);
+        }
+        switch (nav.tick()) {
+            case RUNNING -> { }
+            case ARRIVED, FAILED -> stopNav();
         }
     }
 
@@ -229,25 +276,9 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
     private static boolean hasWeapon(NumenPlayer companion) {
         var inv = companion.getInventory();
         for (int i = 0; i < inv.getContainerSize(); i++) {
-            if (stackAttackBonus(inv.getItem(i)) > 0.0) return true;
+            if (WeaponDamage.flatAttackDamage(inv.getItem(i)) > 0.0) return true;
         }
         return false;
-    }
-
-    /** Flat main-hand attack-damage a stack grants (mirrors {@code ToolSelect.weaponDamage}). */
-    private static double stackAttackBonus(ItemStack stack) {
-        if (stack.isEmpty()) return 0.0;
-        ItemAttributeModifiers mods = stack.getOrDefault(
-                DataComponents.ATTRIBUTE_MODIFIERS, ItemAttributeModifiers.EMPTY);
-        double sum = 0.0;
-        for (ItemAttributeModifiers.Entry e : mods.modifiers()) {
-            if (e.slot().test(EquipmentSlot.MAINHAND)
-                    && e.attribute().is(Attributes.ATTACK_DAMAGE)
-                    && e.modifier().operation() == AttributeModifier.Operation.ADD_VALUE) {
-                sum += e.modifier().amount();
-            }
-        }
-        return sum;
     }
 
     private boolean inReach(NumenPlayer companion, LivingEntity threat) {
@@ -278,9 +309,27 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
         if (target == null) return;
         String mob = target.getType().getDescription().getString();
         if (mode == Mode.CHASE && (target.isDeadOrDying() || target.isRemoved())) {
+            // 打赢了。她本来就在打,结果不改变她该做什么 —— 攒着搭车,别为此单开一轮。
             com.dwinovo.numen.event.NumenEvents.body(companion, "was attacked by a " + mob + " and killed it");
-        } else if (mode == Mode.FLEE && nearestThreat(companion) == null) {
-            com.dwinovo.numen.event.NumenEvents.body(companion, "fled from a " + mob + " to safety");
+            return;
+        }
+        if (mode == Mode.AVOID && nearestThreat(companion) == null) {
+            // 她刚被一个会炸的东西赶离了原地。<b>急件</b>:她多半正在挖矿/赶路,身体却已经
+            // 不在那儿了,不告诉她,她会照着旧位置继续算下一步。
+            com.dwinovo.numen.event.NumenEvents.emit(companion,
+                    com.dwinovo.numen.event.NumenEvents.Kind.BODY_LOG,
+                    java.util.Map.of("threat", mob),
+                    "你身边出现了" + mob + ",本能让你先拉开了距离,所以你已经不在刚才那个位置了。"
+                            + "要打它就得用弓弩,贴上去会被炸。", true);
+            return;
+        }
+        if (mode == Mode.FLEE && nearestThreat(companion) == null) {
+            // 打不过跑掉了 —— 同样是急件:她手上那件活多半因此黄了。
+            com.dwinovo.numen.event.NumenEvents.emit(companion,
+                    com.dwinovo.numen.event.NumenEvents.Kind.BODY_LOG,
+                    java.util.Map.of("threat", mob),
+                    "你打不过" + mob + ",本能带着你跑开了,现在安全但已经离开了原地。"
+                            + "手上那件活可能因此没做完。", true);
         }
     }
 }

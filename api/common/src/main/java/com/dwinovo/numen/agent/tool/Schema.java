@@ -108,6 +108,21 @@ public final class Schema {
             return this;
         }
 
+        /** Required array of integers, bounded at both ends (entity/slot id lists). */
+        public Builder intArray(String name, String desc, int minItems, int maxItems) {
+            Map<String, Object> items = new LinkedHashMap<>();
+            items.put("type", "integer");
+            Map<String, Object> arr = new LinkedHashMap<>();
+            arr.put("type", "array");
+            arr.put("description", desc);
+            arr.put("items", items);
+            if (minItems > 0) arr.put("minItems", minItems);
+            if (maxItems > 0) arr.put("maxItems", maxItems);
+            props.put(name, arr);
+            required.add(name);
+            return this;
+        }
+
         public Builder bool(String name, String desc) {
             props.put(name, base("boolean", desc));
             required.add(name);

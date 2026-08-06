@@ -14,10 +14,8 @@ import com.dwinovo.numen.core.task.inventory.EquipCompanionTask;
 import com.dwinovo.numen.core.task.inventory.EquipTaskRecord;
 import com.dwinovo.numen.core.task.fish.FishCompanionTask;
 import com.dwinovo.numen.core.task.fish.FishTaskRecord;
-import com.dwinovo.numen.core.task.combat.MeleeAttackCompanionTask;
-import com.dwinovo.numen.core.task.combat.MeleeAttackTaskRecord;
-import com.dwinovo.numen.core.task.combat.RangedAttackCompanionTask;
-import com.dwinovo.numen.core.task.combat.RangedAttackTaskRecord;
+import com.dwinovo.numen.core.task.combat.AttackCompanionTask;
+import com.dwinovo.numen.core.task.combat.AttackTaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractAtCompanionTask;
 import com.dwinovo.numen.core.task.interact.InteractAtTaskRecord;
 import com.dwinovo.numen.core.task.interact.InteractEntityCompanionTask;
@@ -104,8 +102,7 @@ public final class NumenCore {
         // Registration ORDER is preserved (backends with prompt-caching keyed off
         // the tool list cache stably across requests).
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.MoveToTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.MeleeAttackTool());
-        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.RangedAttackTool());
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.work.AttackTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.locate.LocateStructureTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.locate.LocateBiomeTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.CollectItemsTool());
@@ -152,8 +149,7 @@ public final class NumenCore {
         TaskFactory.register(EquipTaskRecord.class, (p, r) -> new EquipCompanionTask(p, r));
         TaskFactory.register(DropItemsTaskRecord.class, (p, r) -> new DropCompanionTask(p, r));
         TaskFactory.register(EatItemTaskRecord.class, (p, r) -> new EatCompanionTask(p, r));
-        TaskFactory.register(MeleeAttackTaskRecord.class, (p, r) -> new MeleeAttackCompanionTask(p, r));
-        TaskFactory.register(RangedAttackTaskRecord.class, (p, r) -> new RangedAttackCompanionTask(p, r));
+        TaskFactory.register(AttackTaskRecord.class, (p, r) -> new AttackCompanionTask(p, r));
         TaskFactory.register(CollectItemsTaskRecord.class, (p, r) -> new CollectItemsCompanionTask(p, r));
         TaskFactory.register(FishTaskRecord.class, (p, r) -> new FishCompanionTask(p, r));
         TaskFactory.register(BuildTaskRecord.class, (p, r) -> new BuildCompanionTask(p, r));

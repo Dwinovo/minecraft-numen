@@ -1,7 +1,10 @@
 package com.dwinovo.numen.core.pathing.calc;
 
+import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
 import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import net.minecraft.core.BlockPos;
+
+import java.util.List;
 
 /**
  * What the search is trying to reach. Until
@@ -188,6 +191,22 @@ public interface NavGoal {
      */
     static NavGoal runAway(BlockPos from, int maintainY) {
         return new RunAway(from, maintainY);
+    }
+
+    /**
+     * 躲开一组威胁,离每个都拉开 {@code distance} 就算脱身。与 {@link #runAway} 的两点差别:
+     * <b>它认得完所有威胁</b>(runAway 的估价只看最近那一个,两只怪一左一右时会直穿其中一只),
+     * 而且<b>它有终点</b>——走到安全位置就停,不必在上层每 tick 手动喊停。
+     *
+     * <p>威胁坐标是<b>快照</b>。实体走动由重规划跟上({@code PlayerNav} 比对 {@link #center()}
+     * 的位移),不由估价函数实时跟随——搜索途中变化的估价会让 A* 失去最优性保证。
+     *
+     * @param distance      离每个威胁多远算脱身
+     * @param penaltyFactor 势场强度,见 {@link GoalAvoidEntities}
+     */
+    static NavGoal avoid(double distance, double penaltyFactor,
+                         List<GoalAvoidEntities.Threat> threats) {
+        return new Avoid(distance, penaltyFactor, threats);
     }
 
     // ---- 工厂产物(具名,参数可读;行为与原匿名类逐字一致) ----
@@ -459,6 +478,43 @@ public interface NavGoal {
 
         @Override public BlockPos center() {
             return ore;
+        }
+    }
+
+    /**
+     * {@link #avoid} 的产物。判定与估价<b>都转交给内核目标</b>,不在这里再写一份公式——
+     * 同一片势场若两处各算各的,调参时必然只改到一处。
+     */
+    final class Avoid implements NavGoal {
+        public final GoalAvoidEntities engine;
+        private final BlockPos centroid;
+
+        Avoid(double distance, double penaltyFactor, List<GoalAvoidEntities.Threat> threats) {
+            this.engine = new GoalAvoidEntities(distance, penaltyFactor,
+                    threats.toArray(GoalAvoidEntities.Threat[]::new));
+            long x = 0;
+            long y = 0;
+            long z = 0;
+            for (GoalAvoidEntities.Threat t : threats) {
+                x += t.x();
+                y += t.y();
+                z += t.z();
+            }
+            int n = threats.size();
+            this.centroid = new BlockPos((int) (x / n), (int) (y / n), (int) (z / n));
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            return engine.isInGoal(feet.getX(), feet.getY(), feet.getZ());
+        }
+
+        @Override public double heuristic(BlockPos fromPos) {
+            return engine.heuristic(fromPos.getX(), fromPos.getY(), fromPos.getZ());
+        }
+
+        /** 威胁群的重心:它一挪动就触发重规划,快照因此不会用旧太久。 */
+        @Override public BlockPos center() {
+            return centroid;
         }
     }
 

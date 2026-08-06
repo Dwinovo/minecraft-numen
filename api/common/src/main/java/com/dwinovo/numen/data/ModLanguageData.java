@@ -286,9 +286,8 @@ public final class ModLanguageData {
         adder.add("numen.tool.locate_structure", "Locate structure");
         adder.add("numen.tool.look_around", "Look around");
         adder.add("numen.tool.lookup_recipe", "Look up recipe");
-        adder.add("numen.tool.melee_attack", "Melee attack");
+        adder.add("numen.tool.attack", "Attack");
         adder.add("numen.tool.mine", "Mine");
-        adder.add("numen.tool.ranged_attack", "Ranged attack");
         adder.add("numen.tool.scan_blocks", "Scan blocks");
         adder.add("numen.tool.scan_nearby_entities", "Scan entities");
         adder.add("numen.tool.todowrite", "Update plan");
@@ -541,9 +540,8 @@ public final class ModLanguageData {
         adder.add("numen.tool.locate_structure", "定位结构");
         adder.add("numen.tool.look_around", "环顾四周");
         adder.add("numen.tool.lookup_recipe", "查配方");
-        adder.add("numen.tool.melee_attack", "近战攻击");
+        adder.add("numen.tool.attack", "攻击");
         adder.add("numen.tool.mine", "挖掘");
-        adder.add("numen.tool.ranged_attack", "远程攻击");
         adder.add("numen.tool.scan_blocks", "扫描方块");
         adder.add("numen.tool.scan_nearby_entities", "扫描实体");
         adder.add("numen.tool.todowrite", "更新计划");

@@ -1,27 +1,23 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.tool.api.ToolContext;
-import com.dwinovo.numen.core.task.combat.MeleeAttackTaskRecord;
-import com.dwinovo.numen.core.task.combat.RangedAttackTaskRecord;
+import com.dwinovo.numen.core.task.combat.AttackTaskRecord;
 import com.dwinovo.numen.task.TaskRecord;
 
 import java.util.List;
 
-/** Creates the typed records for melee and ranged combat tasks. */
+/** 造 {@code attack} 的任务账本。 */
 public final class CombatOps {
 
-    public TaskRecord meleeAttack(List<Integer> entityIds, ToolContext ctx) {
-        List<Integer> ids = normalizeEntityIds(entityIds);
-        long timeout = Math.min(10L * 60L * 20L,
-                Math.max(120L * 20L, ids.size() * 60L * 20L));
-        return new MeleeAttackTaskRecord(ctx.toolCallId(), ctx.deadline(timeout), ids);
-    }
+    /** 每个目标给多久;总时长封顶十分钟。 */
+    private static final long PER_TARGET_TICKS = 75L * 20L;
+    private static final long MIN_TICKS = 120L * 20L;
+    private static final long MAX_TICKS = 10L * 60L * 20L;
 
-    public TaskRecord rangedAttack(List<Integer> entityIds, ToolContext ctx) {
+    public TaskRecord attack(List<Integer> entityIds, ToolContext ctx) {
         List<Integer> ids = normalizeEntityIds(entityIds);
-        long timeout = Math.min(10L * 60L * 20L,
-                Math.max(120L * 20L, ids.size() * 75L * 20L));
-        return new RangedAttackTaskRecord(ctx.toolCallId(), ctx.deadline(timeout), ids);
+        long timeout = Math.min(MAX_TICKS, Math.max(MIN_TICKS, ids.size() * PER_TARGET_TICKS));
+        return new AttackTaskRecord(ctx.toolCallId(), ctx.deadline(timeout), ids);
     }
 
     static List<Integer> normalizeEntityIds(List<Integer> entityIds) {

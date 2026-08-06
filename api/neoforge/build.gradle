@@ -35,6 +35,11 @@ neoForge {
     mods {
         "${mod_id}" {
             sourceSet sourceSets.main
+            // 发行 jar 把 ai / ui 的类平铺进来(见 api-loader.gradle 的 jar 块),运行时它们
+            // 就是本模组的一部分。开发期的 run 不走那个 jar,所以要在这里同样声明——否则
+            // 模组构造时找不到 IToolSpec,runData 直接起不来。
+            sourceSet project(':ai').sourceSets.main
+            sourceSet project(':ui').sourceSets.main
         }
     }
 }

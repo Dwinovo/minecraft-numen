@@ -22,7 +22,7 @@ import java.util.Map;
  * dropped items around here." The entity already auto-absorbs items within ~1
  * block ({@code setCanPickUpLoot}); this goal actively walks it to each
  * scattered drop with the pathfinder so nothing is left behind after a mine or a
- * melee_attack.
+ * attack.
  *
  * <h2>State machine (per tick)</h2>
  * <pre>

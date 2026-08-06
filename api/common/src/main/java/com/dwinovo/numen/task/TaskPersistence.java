@@ -5,6 +5,7 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.CompanionRegistry;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.event.NumenEvents;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.server.MinecraftServer;
@@ -74,8 +75,14 @@ public final class TaskPersistence {
         }
         NumenTool tool = ToolRegistry.get(e.taskTool());
         if (tool == null) {
+            // 工具在版本更新里没了(比如两个攻击工具并成了一个)。<b>不做兼容转接</b>——
+            // 旧参数未必对得上新工具的语义,猜错了她会去打错的东西。丢掉,然后告诉她:
+            // 她的历史里还留着"已受理,后台执行中"那句回执,不给个了结她会一直干等。
             Constants.LOG.warn("[numen-task] 重启前她在做的 {} 现在没有这个工具了,放弃恢复",
                     e.taskTool());
+            NumenEvents.taskFinished(companion, "restored-" + e.taskTool(), e.taskTool(), "failed",
+                    "这件活没能接回来:" + e.taskTool() + " 这个工具在这一版里已经不存在了。"
+                            + "看看现在有哪些工具,需要的话重新派一次。");
             forget(companion);
             return;
         }

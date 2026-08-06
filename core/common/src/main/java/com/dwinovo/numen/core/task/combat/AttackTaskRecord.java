@@ -9,46 +9,38 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 战斗类任务共享的进度账本:请求的实体 id 集、每个 id 的终态
- * (完成/丢失/不可达)与打击计数。melee 与 ranged 的记账结构与状态
- * 判定完全同一,只此一份;两者唯一的真实差异是回执用语
- * ("defeated"+"hits" vs "destroyed"+"shots"),由子类的词汇钩子提供,
- * 代码里一律用中性的 completed/strike。
+ * {@code attack} 的进度账本:请求的实体 id、每个 id 的终态(打倒/丢失/够不着)与出手次数。
+ *
+ * <p>近战与远程曾是两个工具、两份账本,差别只在措辞("defeated/hits" 对 "destroyed/shots"),
+ * 为此有三个抽象的词汇钩子。现在只有一个工具,措辞也就只有一套,钩子跟着消失。
  */
-public abstract class CombatTaskRecord extends TaskRecord {
+public final class AttackTaskRecord extends TaskRecord {
+
+    public static final String TOOL_NAME = "attack";
 
     public final List<Integer> entityIds;
 
-    private final Set<Integer> completed = new LinkedHashSet<>();
+    private final Set<Integer> defeated = new LinkedHashSet<>();
     private final Set<Integer> lost = new LinkedHashSet<>();
     private final Set<Integer> unreachable = new LinkedHashSet<>();
     private final Map<Integer, Integer> strikesByEntity = new LinkedHashMap<>();
     private int strikes;
 
-    protected CombatTaskRecord(String toolName, String toolCallId, long deadlineGameTime,
-                               List<Integer> entityIds) {
-        super(toolName, toolCallId, deadlineGameTime);
+    public AttackTaskRecord(String toolCallId, long deadlineGameTime, List<Integer> entityIds) {
+        super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.entityIds = List.copyOf(entityIds);
     }
 
-    /** 完成态的过去式用语(defeated / destroyed)——status 与回执键名用。 */
-    public abstract String completedWord();
-
-    /** 完成态的进行式用语(defeating / destroying)——超时/打断文案用。 */
-    public abstract String completingWord();
-
-    /** 打击计数的用语(hits / shots)——回执键名用。 */
-    public abstract String strikeWord();
-
-    public Set<Integer> completed() { return Set.copyOf(completed); }
+    public Set<Integer> defeated() { return Set.copyOf(defeated); }
     public Set<Integer> lost() { return Set.copyOf(lost); }
     public Set<Integer> unreachable() { return Set.copyOf(unreachable); }
     public int strikes() { return strikes; }
 
-    public void completed(int id) { completed.add(id); }
+    public void defeated(int id) { defeated.add(id); }
     public void lost(int id) { lost.add(id); }
     public void unreachable(int id) { unreachable.add(id); }
 
+    /** 出手一次(挥击或射出一箭)。 */
     public void strike(int id) {
         strikes++;
         strikesByEntity.merge(id, 1, Integer::sum);
@@ -57,22 +49,22 @@ public abstract class CombatTaskRecord extends TaskRecord {
     public int strikes(int id) { return strikesByEntity.getOrDefault(id, 0); }
 
     public String status(int id) {
-        if (completed.contains(id)) return completedWord();
+        if (defeated.contains(id)) return "defeated";
         if (lost.contains(id)) return "lost";
         if (unreachable.contains(id)) return "unreachable";
         return "pending";
     }
 
     public boolean terminal(int id) {
-        return completed.contains(id) || lost.contains(id) || unreachable.contains(id);
+        return defeated.contains(id) || lost.contains(id) || unreachable.contains(id);
     }
 
-    @Override
     /**
      * 一行人话 —— 这是<b>给主人看的</b>:头顶气泡、面板、task_status 印的都是它。
      * 工具 id 不写进来,需要它的地方(运行时状态的 tool 属性、派发回执)本来就有。
      */
+    @Override
     public String describe() {
-        return "战斗 " + completed.size() + "/" + entityIds.size();
+        return "战斗 " + defeated.size() + "/" + entityIds.size();
     }
 }

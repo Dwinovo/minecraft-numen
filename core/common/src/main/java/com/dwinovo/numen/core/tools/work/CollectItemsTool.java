@@ -32,7 +32,7 @@ public final class CollectItemsTool implements NumenTool {
                 + "(it auto-absorbs items it gets close to) until none remain in range — terrain is "
                 + "handled automatically: it digs and bridges on its own if drops landed in a pit or "
                 + "across a gap. Optionally restrict to specific item_ids (omit to collect everything). "
-                + "Optional radius (default 16). Use after ranged combat or manual interactions; melee_attack collects its own drops. "
+                + "Optional radius (default 16). Use after manual interactions; attack collects its own drops. "
                 + "BACKGROUND: acceptance means collection is already running; wait for task_finished, do not poll or resend unchanged.";
     }
 

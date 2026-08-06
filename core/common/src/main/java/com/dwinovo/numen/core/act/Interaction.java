@@ -23,7 +23,7 @@ import net.minecraft.world.phys.Vec3;
  * aim the eyes at a target, then "press"
  * one mouse button (left = ATTACK, right = USE) with a {@link Timing}. Every
  * higher-level action is a thin layer on top: {@code break_block} = ATTACK a
- * block (hold), {@code place_block} = USE a block (once), {@code melee_attack} = ATTACK an
+ * block (hold), {@code place_block} = USE a block (once), {@code attack} = ATTACK an
  * entity, eat/bow = hold USE in the air.
  *
  * <h2>Native dispatch (the same server entry points a real client's packets reach)</h2>
@@ -300,12 +300,14 @@ public final class Interaction {
         if (entity == null || !entity.isAlive()) return false;
         InputDriver.halt(player);
         InputDriver.lookAt(player, entity.getEyePosition());
-        if (entity instanceof net.minecraft.world.entity.LivingEntity living && living.hurtTime > 0) {
-            return false;                              // post-hit invulnerability window — wait for a full-damage hit
+        boolean recovering = entity instanceof net.minecraft.world.entity.LivingEntity living
+                && living.hurtTime > 0;
+        // 无敌帧与冷却的判据在 Swing 里,战斗任务用的是同一处。
+        if (!com.dwinovo.numen.core.combat.Swing.mayStrike(
+                false, recovering, player.getAttackStrengthScale(0.0f))) {
+            return false;
         }
-        if (player.getAttackStrengthScale(0.0f) < 0.95f) {
-            return false;                              // wait out the attack cooldown
-        }
+        player.setSprinting(false);                    // 疾跑会让原版取消暴击判定
         player.attack(entity);                         // native damage / cooldown / sweep / knockback (resets the ticker itself)
         player.swing(InteractionHand.MAIN_HAND);
         return true;

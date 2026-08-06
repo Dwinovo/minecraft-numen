@@ -15,7 +15,7 @@ Phase 4 of the dragon route. You need **12 pearls** for up to 12 eyes of ender (
 
 - **Your gaze does not anger them.** Look-aggro is a player-only mechanic — you're an entity. No pumpkin tricks needed; they turn hostile only when you hit them. (Warn your *owner* not to stare, though.)
 - 40 HP, melee-only (~7 dmg), teleport when struck — often behind you. Expected; keep swinging.
-- **They teleport away from arrows — `melee_attack` (melee), never `ranged_attack`.**
+- **They teleport away from arrows.** `attack` closes and swings whenever it can reach one, which is what you want here; keep the fight on ground it can walk to.
 - They teleport out of rain and away from water. Check `get_world_info`: raining → wait or fight in the Nether instead. Don't fight next to water.
 - Drop: 0–1 pearl per kill (avg 0.5) → expect **~24 kills** for 12 pearls.
 
@@ -33,7 +33,7 @@ Phase 4 of the dragon route. You need **12 pearls** for up to 12 eyes of ender (
 
 1. `equip_item(diamond_sword)`, food check (`get_self_status`).
 2. `scan_nearby_entities` to confirm endermen around; reposition with `goto` if the area is dry.
-3. scan nearby endermen, then call `melee_attack` with up to four returned runtime IDs; it collects each pearl before selecting the next target.
+3. scan nearby endermen, then call `attack` with up to four returned runtime IDs; it collects each pearl before selecting the next target.
 4. `get_self_status` between batches; HP ≤ 8 → disengage, eat.
 5. Repeat until ≥12 pearls.
 

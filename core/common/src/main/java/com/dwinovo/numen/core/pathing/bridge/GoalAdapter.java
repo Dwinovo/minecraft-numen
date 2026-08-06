@@ -39,8 +39,10 @@ import net.minecraft.core.BlockPos;
  *   <li>mineColumn → GoalTwoBlocks 族:maxBelow=0 → {@link GoalBlock},
  *       =1 → {@link GoalTwoBlocks},≥2 → {@link GoalComposite}(双格 +
  *       逐格补 {@link GoalBlock}),成员集与站位带逐格一致</li>
- *   <li>runAway → {@link GoalRunAway}(旧语义永不到达,新目标用
- *       {@link #NEVER_ARRIVE_DISTANCE} 兜底)</li>
+ *   <li>runAway → {@link GoalRunAway}(永不到达,用 {@link #NEVER_ARRIVE_DISTANCE} 表达。
+ *       调用方只剩分支挖矿——它要的就是"一直往外挖";战斗的后撤走
+ *       {@code avoid},那个有终点)</li>
+ *   <li>avoid → 门面持有的 {@code GoalAvoidEntities} 本体(不另建,势场公式只此一份)</li>
  * </ul>
  */
 public final class GoalAdapter {
@@ -56,6 +58,9 @@ public final class GoalAdapter {
 
     /** 把任务层目标映射/包装为内核目标。 */
     public static Goal toEngineGoal(NavGoal goal) {
+        if (goal instanceof NavGoal.Avoid g) {
+            return g.engine;   // 门面本来就持着内核目标,直接交出去
+        }
         if (goal instanceof NavGoal.Exact g) {
             return new GoalBlock(g.goal);
         }

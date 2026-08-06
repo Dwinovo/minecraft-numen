@@ -38,7 +38,7 @@ Notes:
 |---|---|---|
 | Cooked food | 32+ | Your healing |
 | Diamond sword + bow | 1 + 1 | Equip for combat only — hold the pickaxe while travelling (navigation digs with the held tool) |
-| Arrows | 32+ | `ranged_attack` consumes them (~6 per blaze); run low → switch to melee + extra food |
+| Arrows | 32+ | `attack` spends them only on what it cannot reach (~6 per blaze); run low → carry extra food and let it melee |
 | Diamond pickaxe (+ iron backup) | 1 + 1 | Obsidian, digging |
 | Cobblestone | 64+ | Navigation scaffold — bridging lava lakes eats it |
 | Gold helmet (worn) | 1 | Piglin truce; 5 gold ingots if you must craft one |
@@ -50,7 +50,7 @@ Notes:
 
 - **Don't dig straight down**; lava oceans sit under most terrain. Navigation bridges lava when it must — keep cobblestone stocked.
 - **Water doesn't exist here**: buckets won't place.
-- **Zombified piglins are pacifists until hit — and then they ALL swarm.** Never `melee_attack` them.
+- **Zombified piglins are pacifists until hit — and then they ALL swarm.** Never `attack` them.
 - **Ghasts** snipe from far; their fireballs can break the portal. On arrival, note the Nether-side portal coordinates (`get_self_status`) and report them to your owner. Overworld↔Nether coordinates map 8:1 horizontally.
 
 ## What to load next
