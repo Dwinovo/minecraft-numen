@@ -20,15 +20,25 @@ public final class AttackTaskRecord extends TaskRecord {
 
     public final List<Integer> entityIds;
 
+    /**
+     * 不点名,打退附近所有敌对生物。
+     *
+     * <p>按 id 授权在会分裂的怪面前根本行不通:打一只大史莱姆,它裂成四只<b>全新 id</b> 的
+     * 小史莱姆,原来那份清单当场作废,任务判"目标丢失"收工,而她还站在史莱姆堆里。
+     */
+    public final boolean indiscriminate;
+
     private final Set<Integer> defeated = new LinkedHashSet<>();
     private final Set<Integer> lost = new LinkedHashSet<>();
     private final Set<Integer> unreachable = new LinkedHashSet<>();
     private final Map<Integer, Integer> strikesByEntity = new LinkedHashMap<>();
     private int strikes;
 
-    public AttackTaskRecord(String toolCallId, long deadlineGameTime, List<Integer> entityIds) {
+    public AttackTaskRecord(String toolCallId, long deadlineGameTime,
+                            List<Integer> entityIds, boolean indiscriminate) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.entityIds = List.copyOf(entityIds);
+        this.indiscriminate = indiscriminate;
     }
 
     public Set<Integer> defeated() { return Set.copyOf(defeated); }
@@ -65,6 +75,8 @@ public final class AttackTaskRecord extends TaskRecord {
      */
     @Override
     public String describe() {
-        return "战斗 " + defeated.size() + "/" + entityIds.size();
+        return indiscriminate
+                ? "清场 已放倒 " + defeated.size()
+                : "战斗 " + defeated.size() + "/" + entityIds.size();
     }
 }

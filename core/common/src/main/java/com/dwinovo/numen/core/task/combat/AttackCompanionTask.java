@@ -85,6 +85,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private double followRadius = MAX_FIRING_RANGE - 8.0;
     private int lastPlanLogTick = -1000;
     private AttackPlan.Stance lastLoggedStance;
+    /** 上一刻的打法。近战迟滞要知道"是不是已经在打"。 */
+    private AttackPlan.Stance lastStance;
 
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
         super(player, record);
@@ -95,6 +97,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     protected void onStart() {
         snapshotInventory(inventoryBaseline);
         // 认领这批目标:本能链看见它们在别人手上就不来抢身体了。
+        // 无差别模式没有固定清单,认领的是"附近所有敌对生物",每 tick 刷新(见 onTick)。
         player.setCombatFocus(r.entityIds);
     }
 
@@ -103,10 +106,23 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         if (player.isDeadOrDying()) return TaskState.CANCELLED;
         if (phase == Phase.LOOT) return tickLoot();
 
+        if (r.indiscriminate) {
+            // 打谁不是事先定的,是这一刻谁在追她 —— 所以认领清单也要跟着刷新。
+            List<Integer> ids = new ArrayList<>();
+            for (var mob : chasersNow()) {
+                ids.add(mob.getId());
+            }
+            player.setCombatFocus(ids);
+        }
         validateCurrentTarget();
         Entity selected = selectTarget();
         if (selected == null) {
             InputDriver.halt(player);
+            if (r.indiscriminate) {
+                // 无差别模式的终点是"没人再追我",不是"名单打完了"。
+                succeed();
+                return TaskState.SUCCESS;
+            }
             if (!r.defeated().isEmpty()) return TaskState.SUCCESS;
             fail("none of the requested entity ids could be attacked", FailureType.TARGET_LOST);
             return TaskState.FAILED;
@@ -144,7 +160,19 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return previous.isRemoved() && r.strikes(previous.getId()) > 0;
     }
 
+    /**
+     * 挑下一个打谁。<b>当前目标还有效就不换</b>——按距离每 tick 重选的话,一群会分裂的
+     * 史莱姆里"最近那只"每刻都在变,她永远在转向,而每次转向都会拆掉刚算好的路径。
+     * 只有它死了、丢了、或被判够不着,才重新按距离挑。
+     */
     private Entity selectTarget() {
+        if (r.indiscriminate) {
+            return selectNearestChaser();
+        }
+        if (target != null && !r.terminal(target.getId()) && !target.isRemoved()
+                && !(target instanceof LivingEntity living && living.isDeadOrDying())) {
+            return target;
+        }
         List<Entity> candidates = new ArrayList<>();
         ServerLevel level = (ServerLevel) player.level();
         for (int id : r.entityIds) {
@@ -196,12 +224,14 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 loadout.hasRanged(),
                 keepAway,
                 Menace.safeDistanceFrom(target),
-                Menace.effectiveHealth(player));
+                Menace.effectiveHealth(player),
+                lastStance == AttackPlan.Stance.MELEE);
     }
 
     private TaskState engage() {
         Loadout loadout = Loadout.forTarget(player, target);
         AttackPlan.Stance stance = AttackPlan.decide(situationNow(loadout));
+        lastStance = stance;
         logStance(stance, loadout);
         return switch (stance) {
             case MELEE -> swingAt(loadout);
@@ -433,6 +463,29 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return TaskState.RUNNING;
     }
 
+    /**
+     * 无差别模式下打谁:<b>先打近的</b>,但选定之后打完再换(粘性同点名模式)。
+     * 名单每刻由"谁在追我"重算,所以会分裂的怪裂出来的新 id 自动进场。
+     */
+    private Entity selectNearestChaser() {
+        if (target != null && !target.isRemoved()
+                && !(target instanceof LivingEntity living && living.isDeadOrDying())
+                && !r.terminal(target.getId())
+                && player.distanceToSqr(target) <= AVOID_BYSTANDER_RADIUS * AVOID_BYSTANDER_RADIUS) {
+            return target;
+        }
+        Entity best = null;
+        double bestDistSqr = Double.MAX_VALUE;
+        for (var mob : chasersNow()) {
+            double d = player.distanceToSqr(mob);
+            if (d < bestDistSqr) {
+                bestDistSqr = d;
+                best = mob;
+            }
+        }
+        return best;
+    }
+
     /** 这一刻真正在追她的那些(锁定了她、或刚打了她)。 */
     private java.util.List<net.minecraft.world.entity.Mob> chasersNow() {
         java.util.List<net.minecraft.world.entity.Mob> out = new java.util.ArrayList<>();
@@ -531,14 +584,21 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     @Override
     protected Map<String, Object> resultData() {
+        // 逐个报账要覆盖<b>所有经手过的 id</b>,不能只遍历请求清单 —— 无差别模式那份是空的,
+        // 照旧遍历会把整场战果吞掉。
+        java.util.Set<Integer> touched = new java.util.LinkedHashSet<>(r.entityIds);
+        touched.addAll(r.defeated());
+        touched.addAll(r.lost());
+        touched.addAll(r.unreachable());
         Map<String, Object> byEntity = new LinkedHashMap<>();
-        for (int id : r.entityIds) {
+        for (int id : touched) {
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("status", r.status(id));
             entry.put("strikes", r.strikes(id));
             byEntity.put(String.valueOf(id), entry);
         }
         Map<String, Object> data = new LinkedHashMap<>();
+        data.put("mode", r.indiscriminate ? "nearby_hostiles" : "named_ids");
         data.put("requested_entity_ids", r.entityIds);
         data.put("defeated_entity_ids", r.defeated());
         data.put("lost_entity_ids", r.lost());
@@ -551,12 +611,17 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     }
 
     private String tally() {
-        return r.defeated().size() + "/" + r.entityIds.size()
-                + " requested entities, collected " + lootGained();
+        return (r.indiscriminate
+                ? r.defeated().size() + " hostiles"
+                : r.defeated().size() + "/" + r.entityIds.size() + " requested entities")
+                + ", collected " + lootGained();
     }
 
     @Override
     protected String successMessage() {
+        if (r.indiscriminate) {
+            return "fought off " + tally() + "; nothing is coming after you any more";
+        }
         int incomplete = r.lost().size() + r.unreachable().size();
         return "defeated " + tally()
                 + (incomplete == 0 ? "" : " (" + incomplete + " targets could not be completed)");

@@ -119,7 +119,8 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
                 Loadout.forTarget(companion, threat).hasRanged(),
                 Menace.keepAwayFrom(threat),
                 Menace.safeDistanceFrom(threat),
-                Menace.effectiveHealth(companion)))) {
+                Menace.effectiveHealth(companion),
+                mode == Mode.CHASE))) {   // 已经在追打就吃迟滞,别在够到线上横跳
             // 够不够得着由 fight() 内部照旧判(它还要看视线);判据在这里只回答打不打。
             case MELEE, CLOSE_IN -> {
                 // 生存层<b>从不主动去拿武器</b>,所以空手不还手 —— 这是反射链自己的政策

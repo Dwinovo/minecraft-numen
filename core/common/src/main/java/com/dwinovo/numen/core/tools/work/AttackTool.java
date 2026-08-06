@@ -38,15 +38,19 @@ public final class AttackTool implements NumenTool {
                 + "that explode. It also picks the strongest weapon you own AGAINST THAT TARGET "
                 + "(Smite matters against undead), and walks over the drops afterwards. Do not ask for "
                 + "a weapon — you cannot see the distance, the line of sight or the arrow count it "
-                + "decides from. BACKGROUND: acceptance means combat is already running; do not resend "
-                + "ids, poll, or launch another body action until task_finished reports the outcome.";
+                + "decides from. OMIT entity_ids to fight off EVERY hostile near you instead of named "
+                + "targets: that is the only way to handle things that split (slimes, magma cubes), "
+                + "because splitting replaces them with brand-new ids. It ends when nothing is coming "
+                + "after you any more. BACKGROUND: acceptance means combat is already running; do not "
+                + "resend ids, poll, or launch another body action until task_finished reports the outcome.";
     }
 
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object()
-                .intArray("entity_ids",
-                        "Runtime entity ids from scan_nearby_entities (1-20 distinct targets).",
+                .optionalIntArray("entity_ids",
+                        "Runtime entity ids from scan_nearby_entities (1-20 distinct targets). "
+                                + "Omit entirely to fight off every hostile near you.",
                         1, 20)
                 .build();
     }

@@ -49,6 +49,7 @@ public final class AttackPlan {
      * @param keepAway         这个目标够得着也不该贴上去,见 {@link Menace#keepAwayFrom}
      * @param keepAwayDistance 该保持的距离;{@code keepAway} 为假时不看
      * @param effectiveHealth  她按护甲折算后还扛得住多少,见 {@link Menace#effectiveHealth}
+     * @param alreadyInMelee   上一刻就在挥击 —— 迟滞用,见 {@link #MELEE_HYSTERESIS}
      */
     public record Situation(double distance,
                             double meleeReach,
@@ -56,7 +57,16 @@ public final class AttackPlan {
                             boolean hasRanged,
                             boolean keepAway,
                             double keepAwayDistance,
-                            double effectiveHealth) {}
+                            double effectiveHealth,
+                            boolean alreadyInMelee) {}
+
+    /**
+     * 已经在挥击时,够到距离往外放宽这么多才改判"要走过去"。
+     *
+     * <p>没有它,目标在够到线上微动就会让她"打一下 → 重新起步寻路 → 打一下",每次起步
+     * 都要拆掉刚算好的路径。实测这样刷了七十多次"新路径立刻判定到达"。
+     */
+    private static final double MELEE_HYSTERESIS = 1.0;
 
     /**
      * 低于这个有效血量就别打了。
@@ -86,7 +96,8 @@ public final class AttackPlan {
             }
             return s.hasRanged() ? Stance.RANGED : Stance.ABANDON;
         }
-        if (s.distance() <= s.meleeReach()) {
+        double meleeBand = s.alreadyInMelee() ? s.meleeReach() + MELEE_HYSTERESIS : s.meleeReach();
+        if (s.distance() <= meleeBand) {
             return Stance.MELEE;
         }
         if (s.reachable()) {

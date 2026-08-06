@@ -19,15 +19,15 @@ class AttackPlanTest {
     private static final double HEALTHY = 40.0;
 
     private static AttackPlan.Situation at(double distance, boolean reachable, boolean hasRanged) {
-        return new AttackPlan.Situation(distance, 4.0, reachable, hasRanged, false, 0.0, HEALTHY);
+        return new AttackPlan.Situation(distance, 4.0, reachable, hasRanged, false, 0.0, HEALTHY, false);
     }
 
     private static AttackPlan.Situation explosiveAt(double distance, boolean hasRanged) {
-        return new AttackPlan.Situation(distance, 4.0, true, hasRanged, true, 7.5, HEALTHY);
+        return new AttackPlan.Situation(distance, 4.0, true, hasRanged, true, 7.5, HEALTHY, false);
     }
 
     private static AttackPlan.Situation hurtTo(double effectiveHealth) {
-        return new AttackPlan.Situation(3.0, 4.0, true, true, false, 0.0, effectiveHealth);
+        return new AttackPlan.Situation(3.0, 4.0, true, true, false, 0.0, effectiveHealth, false);
     }
 
     // ==================== 够不够得着 ====================
@@ -85,6 +85,35 @@ class AttackPlanTest {
         assertEquals(Stance.RANGED, AttackPlan.decide(explosiveAt(7.5, true)));
     }
 
+    // ==================== 近战迟滞 ====================
+
+    /**
+     * 已经在挥击时,目标退开一点点不该让她立刻重新起步寻路。没有这道迟滞,目标在够到线上
+     * 微动就是"打一下 → 拆掉路径重新规划 → 打一下",实测刷了七十多次"新路径立刻到达"。
+     */
+    @Test
+    void onceSwingingSheKeepsSwingingThroughSmallDrift() {
+        AttackPlan.Situation drifted =
+                new AttackPlan.Situation(4.6, 4.0, true, false, false, 0.0, HEALTHY, true);
+        assertEquals(Stance.MELEE, AttackPlan.decide(drifted));
+    }
+
+    /** 但退得够远还是要追 —— 迟滞是一条带,不是无限期豁免。 */
+    @Test
+    void driftingWellOutOfBandStillMeansWalking() {
+        AttackPlan.Situation gone =
+                new AttackPlan.Situation(6.0, 4.0, true, false, false, 0.0, HEALTHY, true);
+        assertEquals(Stance.CLOSE_IN, AttackPlan.decide(gone));
+    }
+
+    /** 还没开打时不吃迟滞:同样 4.6 格,该走过去。 */
+    @Test
+    void beforeTheFirstSwingTheBandIsTheReachItself() {
+        AttackPlan.Situation approaching =
+                new AttackPlan.Situation(4.6, 4.0, true, false, false, 0.0, HEALTHY, false);
+        assertEquals(Stance.CLOSE_IN, AttackPlan.decide(approaching));
+    }
+
     // ==================== 扛不扛得住 ====================
 
     /**
@@ -116,7 +145,7 @@ class AttackPlanTest {
     @Test
     void breakingOffOutranksKeepingShootingDistance() {
         assertEquals(Stance.DISENGAGE, AttackPlan.decide(
-                new AttackPlan.Situation(3.0, 4.0, true, true, true, 7.5, 4.0)));
+                new AttackPlan.Situation(3.0, 4.0, true, true, true, 7.5, 4.0, false)));
     }
 
     // ==================== 边界 ====================
