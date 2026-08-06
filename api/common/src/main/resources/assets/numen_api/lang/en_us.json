@@ -128,6 +128,7 @@
   "numen.settings.add_site": "＋ Add site",
   "numen.settings.base_url": "Base URL",
   "numen.settings.custom_model": "Custom…",
+  "numen.settings.stt.base_url_required": "Required: service URL, e.g. https://api.openai.com",
   "numen.settings.nav.brain": "MCP Brain",
   "numen.settings.nav.connection": "Connection",
   "numen.settings.nav.llm": "Models",

@@ -88,6 +88,12 @@ public final class SttProviders {
         if (base == null || base.isBlank()) {
             base = opt.defaultBaseUrl();
         }
+        if (base.isBlank() && BACKEND_WHISPER_HTTP.equals(opt.backend())) {
+            // custom 这类无预设基址的 whisper-http provider：Base URL 必填，不能静默
+            // 回落缺省端点，否则用户会把 key 发到错误的服务上。抛错由调用方提示。
+            // （dashscope 走固定 WebSocket 地址，基址无意义，不受此限。）
+            throw new IllegalStateException("语音识别未配置 Base URL（设置→语音输入）");
+        }
         String model = cfg.getSttModel();
         if (model == null || model.isBlank()) {
             model = opt.defaultModel();

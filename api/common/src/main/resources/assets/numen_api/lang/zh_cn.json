@@ -128,6 +128,7 @@
   "numen.settings.add_site": "＋ 添加站点",
   "numen.settings.base_url": "Base URL",
   "numen.settings.custom_model": "自定义…",
+  "numen.settings.stt.base_url_required": "必填：服务地址，如 https://api.openai.com",
   "numen.settings.nav.brain": "外接大脑",
   "numen.settings.nav.connection": "连接",
   "numen.settings.nav.llm": "模型接入",

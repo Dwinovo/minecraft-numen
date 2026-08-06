@@ -130,7 +130,8 @@ public final class SttPanel {
         if (!bridge) {
             ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_BASE_URL);
             baseUrlField = ui.add(new TextField(baseUrl, v -> baseUrl = v)
-                    .placeholder(opt.defaultBaseUrl()));
+                    .placeholder(opt.defaultBaseUrl().isEmpty()
+                            ? t("numen.settings.stt.base_url_required") : opt.defaultBaseUrl()));
             baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
             ry += NumenStyle.ROW_PITCH;
         }

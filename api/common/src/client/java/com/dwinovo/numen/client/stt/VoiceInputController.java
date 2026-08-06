@@ -31,6 +31,20 @@ public final class VoiceInputController {
         return active || starting || MicrophoneManager.isRecording();
     }
 
+    /** {@link SttProviders#fromConfig} 的状态回调包装：未配置回通用文案，配置错误回具体原因。 */
+    private static SttBackend fromConfigOrStatus(INumenConfig cfg, Consumer<String> onStatus) {
+        try {
+            SttBackend backend = SttProviders.fromConfig(cfg);
+            if (backend == null) {
+                onStatus.accept(I18n.get(ModLanguageData.Keys.STT_NOT_CONFIGURED));
+            }
+            return backend;
+        } catch (IllegalStateException e) {
+            onStatus.accept(e.getMessage());
+            return null;
+        }
+    }
+
     /**
      * 对讲机式:按下开录,{@link #stop()} 松开收音。与 {@link #toggle} 的差别
      * 只在回调口径——增量与最终分开,方便"松开后拿最终转写直接发送"的用法。
@@ -41,9 +55,8 @@ public final class VoiceInputController {
         if (isBusy()) {
             return false;
         }
-        SttBackend backend = SttProviders.fromConfig(cfg);
+        SttBackend backend = fromConfigOrStatus(cfg, onStatus);
         if (backend == null) {
-            onStatus.accept(I18n.get(ModLanguageData.Keys.STT_NOT_CONFIGURED));
             return false;
         }
         boolean bridgeCapture = backend.capturesMicrophone();
@@ -138,9 +151,8 @@ public final class VoiceInputController {
             active = false;
             return;
         }
-        SttBackend backend = SttProviders.fromConfig(cfg);
+        SttBackend backend = fromConfigOrStatus(cfg, onStatus);
         if (backend == null) {
-            onStatus.accept(I18n.get(ModLanguageData.Keys.STT_NOT_CONFIGURED));
             return;
         }
         boolean bridgeCapture = backend.capturesMicrophone();
