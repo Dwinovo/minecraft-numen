@@ -20,12 +20,24 @@ package com.dwinovo.numen.core.pathing.goals;
  */
 public class GoalAvoidEntities implements Goal {
 
-    /** 一个威胁的快照。{@code weight} ≥ 1,越大越危险。 */
-    public record Threat(int x, int y, int z, double weight) {
+    /**
+     * 一个威胁的快照。
+     *
+     * @param weight    ≥ 1,越大越危险。同样的距离,权重越大势能越高,她越舍得绕远
+     * @param mustClear 要不要为它拉开整个安全距离才算脱身。<b>正在追她的</b>是 true;
+     *                  <b>还没盯上她的</b>是 false —— 路过要绕开(否则她逃跑时会从一只
+     *                  发呆的史莱姆身上碾过去),但不该为它多跑十几格
+     */
+    public record Threat(int x, int y, int z, double weight, boolean mustClear) {
         public Threat {
             if (weight <= 0.0) {
                 throw new IllegalArgumentException("威胁权重必须为正:" + weight);
             }
+        }
+
+        /** 默认是"必须拉开"——追着她的那种。 */
+        public Threat(int x, int y, int z, double weight) {
+            this(x, y, z, weight, true);
         }
     }
 
@@ -55,10 +67,18 @@ public class GoalAvoidEntities implements Goal {
         this.penaltyFactor = penaltyFactor;
     }
 
-    /** 离每个威胁的水平距离都够远才算脱身(竖直不计:头顶三格并不安全)。 */
+    /**
+     * 离<b>每个追着她的</b>威胁都够远才算脱身。旁观的敌对生物只进估价、不进这里——
+     * 否则一片沼泽里的史莱姆会让"脱身"永远不成立,她就一直跑到寻路失败为止。
+     *
+     * <p>竖直不计:爬行者的爆炸是球形的,头顶三格并不安全。
+     */
     @Override
     public boolean isInGoal(int x, int y, int z) {
         for (Threat t : threats) {
+            if (!t.mustClear()) {
+                continue;
+            }
             int dx = x - t.x();
             int dz = z - t.z();
             if (dx * dx + dz * dz < distanceSq) {

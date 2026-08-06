@@ -87,6 +87,38 @@ class GoalAvoidEntitiesTest {
         assertTrue(strong.heuristic(20, 64, 0) < strong.heuristic(6, 64, 0));
     }
 
+    // ==================== 追我的 vs 站着的 ====================
+
+    /**
+     * 还没盯上她的敌对生物<b>不该挡住"脱身"</b>。一片沼泽里的史莱姆若条条都要拉开
+     * 十二格,那个条件永远不成立,她就一路跑到寻路失败为止。
+     */
+    @Test
+    void aBystanderDoesNotBlockArrival() {
+        GoalAvoidEntities goal = new GoalAvoidEntities(5.0, 1.0,
+                new Threat(0, 64, 0, 1.0, true),      // 追她的
+                new Threat(20, 64, 0, 1.0, false));   // 站着的
+        assertTrue(goal.isInGoal(10, 64, 0), "离追我的够远就算脱身");
+        assertFalse(goal.isInGoal(2, 64, 0), "离追我的还近,不算");
+    }
+
+    /** 但它照样要绕开——否则她逃跑时会从一只发呆的史莱姆身上碾过去。 */
+    @Test
+    void aBystanderStillCostsToWalkThrough() {
+        Threat chaser = new Threat(0, 64, 0, 1.0, true);
+        var alone = new GoalAvoidEntities(5.0, 1.0, chaser);
+        var withBystander = new GoalAvoidEntities(5.0, 1.0, chaser,
+                new Threat(20, 64, 0, 1.0, false));
+        assertTrue(withBystander.heuristic(19, 64, 0) > alone.heuristic(19, 64, 0),
+                "贴着旁观者走应该更贵");
+    }
+
+    /** 不写第五个参数就是"追我的"——绝大多数调用都是这种。 */
+    @Test
+    void theShorthandMeansMustClear() {
+        assertTrue(new Threat(0, 0, 0, 1.0).mustClear());
+    }
+
     // ==================== 契约 ====================
 
     @Test

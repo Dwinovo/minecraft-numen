@@ -3,6 +3,8 @@ package com.dwinovo.numen.core.combat;
 import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
 
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.monster.Creeper;
 
@@ -75,26 +77,61 @@ public final class Menace {
     }
 
     /**
-     * 把一批实体折成势场里的威胁点。<b>给进来的都进场</b>——退避时要躲的是全体,
-     * 只把会炸的放进去,她就会一边躲爬行者一边撞进僵尸堆里。筛选是调用方的事。
+     * 敌对生物看的是 {@link Enemy} 这个标记接口,<b>不是 {@code Monster}</b>。
+     *
+     * <p>史莱姆、岩浆怪、恶魂、幻翼都 {@code extends Mob/FlyingMob implements Enemy},
+     * 疣猪兽甚至 {@code extends Animal} —— 按 {@code Monster} 扫会把它们整个漏掉,
+     * 于是她逃跑时从史莱姆身上碾过去,而且血线兜底也永远不触发(链子根本没被叫醒)。
+     */
+    public static boolean hostile(Entity entity) {
+        return entity instanceof Enemy;
+    }
+
+    /** 半径内所有活着的敌对生物,不管它有没有盯上她。 */
+    public static List<Mob> hostilesAround(Entity self, double radius) {
+        List<Mob> found = new ArrayList<>();
+        for (Mob m : self.level().getEntitiesOfClass(Mob.class,
+                self.getBoundingBox().inflate(radius))) {
+            if (m != self && hostile(m) && m.isAlive() && self.distanceToSqr(m) <= radius * radius) {
+                found.add(m);
+            }
+        }
+        return found;
+    }
+
+    /**
+     * 把两批实体折成势场。
      *
      * <p>权重分三档:引信已经在走的最重(它有明确的倒计时),会炸但还没点的次之
      * (走近就会点),其余按寻常算。同样的距离,权重越大在势场里越贵,她越舍得绕远。
      *
-     * @return 与入参一一对应(死了的除外);空表示无事可躲,调用方不该建躲避目标
+     * @param engaging   正在追她的 —— 要为它们拉开整个安全距离才算脱身
+     * @param bystanders 还没盯上她的 —— 路过绕开就行,不为它们多跑
+     * @return 空表示无事可躲,调用方不该建躲避目标
      */
-    public static List<GoalAvoidEntities.Threat> field(Iterable<? extends Entity> entities) {
+    public static List<GoalAvoidEntities.Threat> field(Iterable<? extends Entity> engaging,
+                                                       Iterable<? extends Entity> bystanders) {
         List<GoalAvoidEntities.Threat> threats = new ArrayList<>();
+        add(threats, engaging, true);
+        add(threats, bystanders, false);
+        return threats;
+    }
+
+    private static void add(List<GoalAvoidEntities.Threat> out,
+                            Iterable<? extends Entity> entities, boolean mustClear) {
+        if (entities == null) {
+            return;
+        }
         for (Entity entity : entities) {
             if (entity == null || !entity.isAlive()) {
                 continue;
             }
-            threats.add(new GoalAvoidEntities.Threat(
+            out.add(new GoalAvoidEntities.Threat(
                     entity.getBlockX(), entity.getBlockY(), entity.getBlockZ(),
                     fusing(entity) ? FUSING_WEIGHT
                             : keepAwayFrom(entity) ? EXPLOSIVE_WEIGHT
-                            : ORDINARY_WEIGHT));
+                            : ORDINARY_WEIGHT,
+                    mustClear));
         }
-        return threats;
     }
 }

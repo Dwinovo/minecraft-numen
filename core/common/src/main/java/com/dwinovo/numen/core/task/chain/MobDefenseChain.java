@@ -17,8 +17,7 @@ import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.monster.Monster;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -223,7 +222,9 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
                     // 威胁快照<b>在这里面</b>取:supplier 每次重规划调一次,坐标因此跟着刷新。
                     // 放到外面就是把开路那一刻钉死,怪追上来之后她还按旧位置退。
                     () -> {
-                        var field = Menace.field(threatsNear(companion));
+                        // 追她的要拉开整段距离;旁边发呆的只绕开 —— 否则一片沼泽的史莱姆
+                        // 会让"脱身"永远不成立,她一直跑到寻路失败为止。
+                        var field = Menace.field(threatsNear(companion), bystandersNear(companion));
                         return field.isEmpty() ? null
                                 : NavGoal.avoid(SCAN_RADIUS, Menace.AVOID_PENALTY, field);
                     },
@@ -293,24 +294,38 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
         return mine;
     }
 
-    /** 扫描半径内<b>所有</b>正在针对她的敌对生物——退避的势场要的是全体,让不让路无关。 */
+    /**
+     * 扫描半径内<b>正在针对她</b>的敌对生物——链子要不要醒、打哪一只,看的是这一份。
+     *
+     * <p>敌对与否问 {@link Menace#hostile}(认 {@code Enemy} 接口),不是 {@code Monster}:
+     * 史莱姆、恶魂、幻翼、疣猪兽都不在 {@code Monster} 之下,按它扫会把这些整个漏掉。
+     */
     private java.util.List<LivingEntity> threatsNear(NumenPlayer companion) {
-        AABB box = companion.getBoundingBox().inflate(SCAN_RADIUS);
         LivingEntity attacker = companion.getLastHurtByMob();
         long now = companion.level().getGameTime();
         java.util.List<LivingEntity> found = new java.util.ArrayList<>();
-        for (Monster m : companion.level().getEntitiesOfClass(Monster.class, box)) {
-            if (m.isRemoved() || m.isDeadOrDying()) continue;
+        for (Mob m : Menace.hostilesAround(companion, SCAN_RADIUS)) {
             // DEFENSE, not aggression: only a mob that is actually engaging us — it hurt
-            // us, or its AI has targeted us — counts. A neutral Monster (a calm zombified
+            // us, or its AI has targeted us — counts. A neutral hostile (a calm zombified
             // piglin drifting by) must not be attacked and provoked by a "defense" chain.
             if (m != attacker && m.getTarget() != companion) continue;
             // Skip targets we recently proved unreachable (the engagement leash).
             if (unreachable.getOrDefault(m.getId(), 0L) > now) continue;
-            if (companion.distanceToSqr(m) > SCAN_RADIUS * SCAN_RADIUS) continue;
             found.add(m);
         }
         return found;
+    }
+
+    /** 半径内还没盯上她的那些敌对生物:逃跑路上要绕开,但不必为它们多跑。 */
+    private java.util.List<Mob> bystandersNear(NumenPlayer companion) {
+        java.util.List<LivingEntity> engaging = threatsNear(companion);
+        java.util.List<Mob> rest = new java.util.ArrayList<>();
+        for (Mob m : Menace.hostilesAround(companion, SCAN_RADIUS)) {
+            if (!engaging.contains(m)) {
+                rest.add(m);
+            }
+        }
+        return rest;
     }
 
     /** Does the body CARRY a melee weapon anywhere in inventory? Pure check — no hand

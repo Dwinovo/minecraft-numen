@@ -66,6 +66,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private static final int MAX_MISFIRES = 2;
     /** 射击时与目标保持的最小距离——太近了弹道压得太平,而且白白挨打。 */
     private static final double RANGED_MIN_DISTANCE = 5.0;
+    /** 退开时把这个半径内别的敌对生物也算进势场,免得躲一只撞上另一只。 */
+    private static final double AVOID_BYSTANDER_RADIUS = 12.0;
 
     private Phase phase = Phase.COMBAT;
     private Entity target;
@@ -356,7 +358,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                     // 威胁快照<b>在 supplier 里面</b>取:它每次重规划调一次,坐标因此跟着刷新。
                     // 放在外面就是把开路那一刻钉死,目标挪开之后她还按旧位置退。
                     () -> {
-                        var field = Menace.field(List.of(target));
+                        // 退开这一只的路上,别撞进旁边别的敌对生物 —— 它们只绕开,不为它们多跑。
+                        var bystanders = Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS);
+                        bystanders.remove(target);
+                        var field = Menace.field(List.of(target), bystanders);
                         return field.isEmpty() ? null
                                 : NavGoal.avoid(safe, Menace.AVOID_PENALTY, field);
                     },
