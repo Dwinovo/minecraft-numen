@@ -25,7 +25,15 @@ final class BridgeState: ObservableObject {
         self.authorizer = authorizer
         self.credentials = credentials
         self.permission = authorizer.status()
-        self.providerReady = (try? credentials.isReady()) == true
+        self.providerReady = false
+    }
+
+    /// 在后台刷新凭据状态。绝不能在 init 或主线程同步读取钥匙串：
+    /// 若代码签名变化，SecurityAgent 会弹出授权对话框，同步调用会把整个 App 挂死。
+    func refreshProviderReady() async {
+        let creds = credentials
+        let ready = await Task.detached { (try? creds.isReady()) == true }.value
+        providerReady = ready
     }
 
     var headline: String {
