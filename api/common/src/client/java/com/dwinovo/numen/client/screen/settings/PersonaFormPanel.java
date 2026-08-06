@@ -19,6 +19,8 @@ import java.util.function.Consumer;
  * 名称即文件名,正文是自由 Markdown;两者留空都是内联校验错误。
  * 编辑的是 {@link Draft} 草稿,保存才落盘(与旧表单同语义)。
  */
+import com.dwinovo.numen.data.ModLanguageData;
+
 public final class PersonaFormPanel {
 
     /** 表单草稿(id 由宿主管理;名称即 persona/ 目录里的文件名)。 */
@@ -113,11 +115,11 @@ public final class PersonaFormPanel {
     private void save() {
         boolean ok = true;
         if (draft.name == null || draft.name.isBlank()) {
-            nameField.setError(t("numen.gui.inline.required"));   // 校验错误内联在错误发生处
+            nameField.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));   // 校验错误内联在错误发生处
             ok = false;
         }
         if (draft.text == null || draft.text.isBlank()) {
-            textArea.setError(t("numen.gui.inline.required"));
+            textArea.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));
             ok = false;
         }
         if (ok) onSave.accept(draft);

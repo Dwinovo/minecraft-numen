@@ -40,6 +40,34 @@ public final class ModLanguageData {
         public static final String GUI_SETTINGS_CANCEL      = "numen.gui.settings.cancel";
         public static final String GUI_SETTINGS_SAVED       = "numen.gui.settings.saved";
 
+
+        // 设置界面里服务商/表单那一片。运行时以前直接写字面量,键名散在六个文件里,
+        // 数据生成看不见它们,于是那份语言文件只能靠手改 —— 常量收在这里,两边同源。
+        public static final String GUI_INLINE_NEED_KEY              = "numen.gui.inline.need_key";
+        public static final String GUI_INLINE_REQUIRED              = "numen.gui.inline.required";
+        public static final String GUI_PROVIDERS_BADGE_LOCAL        = "numen.gui.providers.badge.local";
+        public static final String GUI_PROVIDERS_CHECK              = "numen.gui.providers.check";
+        public static final String GUI_PROVIDERS_CHECK_BAD_REQUEST  = "numen.gui.providers.check.bad_request";
+        public static final String GUI_PROVIDERS_CHECK_NETWORK      = "numen.gui.providers.check.network";
+        public static final String GUI_PROVIDERS_CHECK_NOT_FOUND    = "numen.gui.providers.check.not_found";
+        public static final String GUI_PROVIDERS_CHECK_OK           = "numen.gui.providers.check.ok";
+        public static final String GUI_PROVIDERS_CHECK_RATE_LIMITED = "numen.gui.providers.check.rate_limited";
+        public static final String GUI_PROVIDERS_CHECK_SERVER_ERROR = "numen.gui.providers.check.server_error";
+        public static final String GUI_PROVIDERS_CHECK_UNAUTHORIZED = "numen.gui.providers.check.unauthorized";
+        public static final String GUI_PROVIDERS_CHECKING           = "numen.gui.providers.checking";
+        public static final String GUI_PROVIDERS_EFFORT             = "numen.gui.providers.effort";
+        public static final String GUI_PROVIDERS_EFFORT_HIGH        = "numen.gui.providers.effort.high";
+        public static final String GUI_PROVIDERS_EFFORT_LOW         = "numen.gui.providers.effort.low";
+        public static final String GUI_PROVIDERS_EFFORT_MEDIUM      = "numen.gui.providers.effort.medium";
+        public static final String GUI_PROVIDERS_PROXY              = "numen.gui.providers.proxy";
+        public static final String GUI_PROVIDERS_PROXY_GLOBAL       = "numen.gui.providers.proxy.global";
+        public static final String GUI_PROVIDERS_PROXY_HINT         = "numen.gui.providers.proxy.hint";
+        public static final String GUI_PROVIDERS_THINKING           = "numen.gui.providers.thinking";
+        public static final String GUI_PROVIDERS_THINKING_AUTO      = "numen.gui.providers.thinking.auto";
+        public static final String GUI_PROVIDERS_THINKING_OFF       = "numen.gui.providers.thinking.off";
+        public static final String GUI_PROVIDERS_THINKING_ON        = "numen.gui.providers.thinking.on";
+        public static final String RESPAWN_BLOCKED                  = "numen.respawn.blocked";
+
         /** Hotkey: open the companion roster panel (shown in Controls settings). */
         public static final String KEY_OPEN_ROSTER = "key.numen.open_roster";
 
@@ -420,7 +448,32 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_BIND_NONE,      "None (silent)");
         adder.add(Keys.VOICE_SUMMON_LABEL,   "Voice");
         adder.add(Keys.VOICE_SUMMON_EMPTY,   " (empty — create one in Settings → Voice)");
-    }
+    
+        adder.add(Keys.GUI_INLINE_NEED_KEY             , "API key required");
+        adder.add(Keys.GUI_INLINE_REQUIRED             , "Required");
+        adder.add(Keys.GUI_PROVIDERS_BADGE_LOCAL       , "Local");
+        adder.add(Keys.GUI_PROVIDERS_CHECK             , "Check");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_BAD_REQUEST , "Request rejected");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_NETWORK     , "Can't connect — check network, proxy, or base URL");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_NOT_FOUND   , "Wrong base URL or model — check both");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_OK          , "Connected — the model responded");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_RATE_LIMITED, "Rate limited — wait a bit or check your quota");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_SERVER_ERROR, "Provider-side error — try again later");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_UNAUTHORIZED, "Invalid key — check it's complete and belongs to this provider");
+        adder.add(Keys.GUI_PROVIDERS_CHECKING          , "Checking…");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT            , "Reasoning effort");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_HIGH       , "High");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_LOW        , "Low");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_MEDIUM     , "Medium");
+        adder.add(Keys.GUI_PROVIDERS_PROXY             , "Proxy (optional)");
+        adder.add(Keys.GUI_PROVIDERS_PROXY_GLOBAL      , "Global proxy");
+        adder.add(Keys.GUI_PROVIDERS_PROXY_HINT        , "host:port, blank = global");
+        adder.add(Keys.GUI_PROVIDERS_THINKING          , "Reasoning");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO     , "Auto");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_OFF      , "Off");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_ON       , "On");
+        adder.add(Keys.RESPAWN_BLOCKED                 , "· waiting for room to land");
+}
 
     private static void addZh(Adder adder) {
         adder.add(Keys.GUI_SETTINGS_TITLE,         "Numen 设置");
@@ -674,5 +727,31 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_BIND_NONE,      "无(静音)");
         adder.add(Keys.VOICE_SUMMON_LABEL,   "声线");
         adder.add(Keys.VOICE_SUMMON_EMPTY,   "(空——到 设置 → 语音 新建)");
-    }
+    
+        adder.add(Keys.KEY_CATEGORY_NUMEN              , "Numen");
+        adder.add(Keys.GUI_INLINE_NEED_KEY             , "请先填写密钥");
+        adder.add(Keys.GUI_INLINE_REQUIRED             , "必填");
+        adder.add(Keys.GUI_PROVIDERS_BADGE_LOCAL       , "本地");
+        adder.add(Keys.GUI_PROVIDERS_CHECK             , "检测");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_BAD_REQUEST , "请求被拒");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_NETWORK     , "连不上——检查网络、代理或基址");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_NOT_FOUND   , "基址或模型名不对——检查 Base URL 与模型 ID");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_OK          , "连接成功,模型响应正常");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_RATE_LIMITED, "被限流了——稍等再试,或检查账户额度");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_SERVER_ERROR, "服务商侧故障——稍后再试");
+        adder.add(Keys.GUI_PROVIDERS_CHECK_UNAUTHORIZED, "密钥无效——检查 API Key 是否复制完整、是否属于这家服务商");
+        adder.add(Keys.GUI_PROVIDERS_CHECKING          , "检测中…");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT            , "推理强度");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_HIGH       , "高强度");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_LOW        , "低强度");
+        adder.add(Keys.GUI_PROVIDERS_EFFORT_MEDIUM     , "中强度");
+        adder.add(Keys.GUI_PROVIDERS_PROXY             , "代理（可选）");
+        adder.add(Keys.GUI_PROVIDERS_PROXY_GLOBAL      , "全局代理");
+        adder.add(Keys.GUI_PROVIDERS_PROXY_HINT        , "host:port，留空跟随全局");
+        adder.add(Keys.GUI_PROVIDERS_THINKING          , "推理");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO     , "自动");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_OFF      , "关闭");
+        adder.add(Keys.GUI_PROVIDERS_THINKING_ON       , "开启");
+        adder.add(Keys.RESPAWN_BLOCKED                 , "· 周围太挤,等一个落脚点");
+}
 }

@@ -33,6 +33,8 @@ import java.util.List;
  * <p>布局自适应:左栏宽随总宽收缩(下限保名字可读),行距紧凑——G 面板
  * 尺寸对标原版 GUI,寸土寸金。
  */
+import com.dwinovo.numen.data.ModLanguageData;
+
 public final class ProviderPanel {
 
     private final UiRoot ui = new UiRoot();
@@ -107,7 +109,7 @@ public final class ProviderPanel {
         ry += NumenStyle.ROW_PITCH;
 
         // 全局代理(档案留空时的回退,皮肤上传等非 LLM 流量也走它)。
-        ry = label(rx, ry, "numen.gui.providers.proxy.global");
+        ry = label(rx, ry, ModLanguageData.Keys.GUI_PROVIDERS_PROXY_GLOBAL);
         proxyField = ui.add(new TextField(cfg.getProxy(), v -> {
             cfg.setProxy(v);
             cfg.save();
@@ -117,7 +119,7 @@ public final class ProviderPanel {
 
         // 单一自适应思考控件(主流形态):力度型站点出 自动/关闭/低/中/高,
         // 开关型出 自动/开启/关闭,常开型隐藏——后端两参数的复杂度不泄漏给用户。
-        thinkingLabel = ui.add(new Label(t("numen.gui.providers.thinking"), Label.Role.MUTED));
+        thinkingLabel = ui.add(new Label(t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING), Label.Role.MUTED));
         thinkingLabel.setBounds(rx, ry, 100, 9);
         ry += NumenStyle.LABEL_PITCH;
         thinkingPick = ui.add(new Dropdown(List.of(), 0, this::onThinkingPicked));
@@ -126,7 +128,7 @@ public final class ProviderPanel {
         // 页面级 Alert:右栏左右居中、垂直偏上悬浮。
         resultAlert = ui.add(new InlineAlert());
         resultAlert.setBounds(rx, y + 2, rw, 24);
-        checkButton = ui.add(new Button(t("numen.gui.providers.check"),
+        checkButton = ui.add(new Button(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK),
                 Button.Style.ACCENT, this::runConnectivityCheck));
         checkButton.setBounds(rx + rw - 54, y + h - 16, 54, 15);
 
@@ -192,7 +194,7 @@ public final class ProviderPanel {
             bx += Badge.draw(s, "A", bx, rowY + 2, c.accent(), 0xFFFFFFFF) + 2;
         }
         if (site.baseUrl().startsWith("http://localhost")) {
-            Badge.draw(s, t("numen.gui.providers.badge.local"), bx, rowY + 2, c.success(), 0xFFFFFFFF);
+            Badge.draw(s, t(ModLanguageData.Keys.GUI_PROVIDERS_BADGE_LOCAL), bx, rowY + 2, c.success(), 0xFFFFFFFF);
         }
     }
 
@@ -228,9 +230,9 @@ public final class ProviderPanel {
         if (!none) {
             if (toggleOnly) {
                 thinkingPick.setItems(List.of(
-                        t("numen.gui.providers.thinking.auto"),
-                        t("numen.gui.providers.thinking.on"),
-                        t("numen.gui.providers.thinking.off")),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_AUTO),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_ON),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_OFF)),
                         switch (nz(stored)) {
                             case "off" -> 2;
                             case "low", "medium", "high" -> 1;
@@ -238,11 +240,11 @@ public final class ProviderPanel {
                         });
             } else {
                 thinkingPick.setItems(List.of(
-                        t("numen.gui.providers.thinking.auto"),
-                        t("numen.gui.providers.thinking.off"),
-                        t("numen.gui.providers.effort.low"),
-                        t("numen.gui.providers.effort.medium"),
-                        t("numen.gui.providers.effort.high")),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_AUTO),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_OFF),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_EFFORT_LOW),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_EFFORT_MEDIUM),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_EFFORT_HIGH)),
                         switch (nz(stored)) {
                             case "off" -> 1;
                             case "low" -> 2;
@@ -282,13 +284,13 @@ public final class ProviderPanel {
         if (checking) return;
         INumenConfig cfg = Services.CONFIG;
         if (cfg.getApiKey() == null || cfg.getApiKey().isBlank()) {
-            keyField.setError(t("numen.gui.inline.need_key"));
+            keyField.setError(t(ModLanguageData.Keys.GUI_INLINE_NEED_KEY));
             return;
         }
         checking = true;
         checkButton.setEnabled(false);
-        checkButton.setLabel(t("numen.gui.providers.checking"));
-        resultAlert.show(InlineAlert.Severity.INFO, t("numen.gui.providers.checking"));
+        checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
+        resultAlert.show(InlineAlert.Severity.INFO, t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
         LlmEndpoint ep = new LlmEndpoint(cfg.getProvider(), cfg.getModel(), cfg.getApiKey(),
                 cfg.getBaseUrl(), cfg.getProxy(), "auto");
         NumenLlmClient.forEndpoint(ep)
@@ -296,10 +298,10 @@ public final class ProviderPanel {
                 .whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
                     checking = false;
                     checkButton.setEnabled(true);
-                    checkButton.setLabel(t("numen.gui.providers.check"));
+                    checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK));
                     if (error == null) {
                         resultAlert.show(InlineAlert.Severity.SUCCESS,
-                                t("numen.gui.providers.check.ok"), 2_500);
+                                t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_OK), 2_500);
                     } else {
                         resultAlert.show(InlineAlert.Severity.ERROR, LlmErrorWords.classify(error));
                     }

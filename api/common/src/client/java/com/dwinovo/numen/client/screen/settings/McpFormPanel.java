@@ -18,6 +18,8 @@ import java.util.function.Consumer;
  * 已输入的值全保)+ 目标 + 附加项。名称/目标留空是内联校验错误;
  * spec 组装(命令切分/键值对解析)留在宿主。
  */
+import com.dwinovo.numen.data.ModLanguageData;
+
 public final class McpFormPanel {
 
     /** 表单草稿;{@code editOriginal} 非空 = 编辑替换该名字的条目。 */
@@ -130,11 +132,11 @@ public final class McpFormPanel {
     private void save() {
         boolean ok = true;
         if (draft.name == null || draft.name.isBlank()) {
-            nameField.setError(t("numen.gui.inline.required"));   // 校验错误内联在错误发生处
+            nameField.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));   // 校验错误内联在错误发生处
             ok = false;
         }
         if (draft.target == null || draft.target.isBlank()) {
-            targetField.setError(t("numen.gui.inline.required"));
+            targetField.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));
             ok = false;
         }
         if (ok) onSave.accept(draft);

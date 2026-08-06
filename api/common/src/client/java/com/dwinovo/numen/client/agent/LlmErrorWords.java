@@ -8,6 +8,8 @@ import net.minecraft.network.chat.Component;
  * (堆栈的去处是日志,传输层已经记全了)。设置屏的检测按钮与回合失败的
  * HUD/聊天栏播报共用这一张表——同一种错在哪里看到都是同一句话。
  */
+import com.dwinovo.numen.data.ModLanguageData;
+
 public final class LlmErrorWords {
 
     private LlmErrorWords() {}
@@ -19,13 +21,13 @@ public final class LlmErrorWords {
             cause = cause.getCause();
         }
         if (cause instanceof LlmHttpException http) {
-            if (http.isUnauthorized()) return t("numen.gui.providers.check.unauthorized");
-            if (http.statusCode() == 404) return t("numen.gui.providers.check.not_found");
-            if (http.isRateLimited()) return t("numen.gui.providers.check.rate_limited");
-            if (http.statusCode() >= 500) return t("numen.gui.providers.check.server_error");
-            return t("numen.gui.providers.check.bad_request") + " (HTTP " + http.statusCode() + ")";
+            if (http.isUnauthorized()) return t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_UNAUTHORIZED);
+            if (http.statusCode() == 404) return t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_NOT_FOUND);
+            if (http.isRateLimited()) return t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_RATE_LIMITED);
+            if (http.statusCode() >= 500) return t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_SERVER_ERROR);
+            return t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_BAD_REQUEST) + " (HTTP " + http.statusCode() + ")";
         }
-        return t("numen.gui.providers.check.network");
+        return t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_NETWORK);
     }
 
     private static String t(String key) {

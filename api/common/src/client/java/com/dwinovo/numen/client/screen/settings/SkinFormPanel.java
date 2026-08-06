@@ -196,7 +196,7 @@ public final class SkinFormPanel {
         if (signing) return;
         String name = draft.name.trim();
         if (name.isEmpty()) {
-            nameField.setError(t("numen.gui.inline.required"));   // 校验错误内联在错误发生处
+            nameField.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));   // 校验错误内联在错误发生处
             return;
         }
         // 皮肤名与同伴名同一套规则:它会原样发给 MineSkin,而那边有服务端

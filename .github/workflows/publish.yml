@@ -66,8 +66,9 @@ jobs:
             exit 1
           fi
 
+      # api 的语言文件也是生成出来的(ModLanguageData),不跑就打出一个没有任何翻译的包。
       - name: Run data generation
-        run: ./gradlew :core:fabric:runDatagen ${{ steps.loader.outputs.datagen }} --no-daemon
+        run: ./gradlew :api:fabric:runDatagen :api:neoforge:runData :core:fabric:runDatagen ${{ steps.loader.outputs.datagen }} --no-daemon
 
       - name: Build with Gradle
         run: ./gradlew :core:fabric:build ${{ steps.loader.outputs.build }} --no-daemon

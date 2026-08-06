@@ -319,7 +319,7 @@ public final class VoiceFormPanel {
 
     private void save() {
         if (draft.name == null || draft.name.isBlank()) {
-            nameField.setError(t("numen.gui.inline.required"));   // 校验错误内联在错误发生处
+            nameField.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));   // 校验错误内联在错误发生处
             return;
         }
         cancelPendingTest();

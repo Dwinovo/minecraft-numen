@@ -790,7 +790,7 @@ public final class NumenScreen extends Screen {
             // 倒计时归零还没回来 = 周围没有能站的地方,复活在重试。继续显示"0"就是
             // 一个数字卡死不动,教科书级的"看起来坏了"——说清楚在等什么。
             long rem = NumenRoster.instance().remainingMs(uuid);
-            String rs = rem <= 0 ? I18n.get("numen.respawn.blocked")
+            String rs = rem <= 0 ? I18n.get(ModLanguageData.Keys.RESPAWN_BLOCKED)
                     : I18n.get("numen.respawn", (int) Math.ceil(rem / 1000.0));
             if (afterName < headerLimit) {
                 txt(g, Component.literal(clip(rs, headerLimit - afterName)), afterName, top + 7, ON_BAND);

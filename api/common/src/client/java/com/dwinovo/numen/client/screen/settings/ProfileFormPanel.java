@@ -29,6 +29,8 @@ import java.util.function.Consumer;
  * 配置,创建同伴时自选。编辑的是 {@link Draft} 草稿,保存才落库(与旧表单
  * 同语义);检测直接测草稿当前值,存不存都能先试。
  */
+import com.dwinovo.numen.data.ModLanguageData;
+
 public final class ProfileFormPanel {
 
     /** 表单草稿:与 ProviderLibrary.Entry 的字段一一对应(id 由宿主管理)。 */
@@ -136,15 +138,15 @@ public final class ProfileFormPanel {
         ry += NumenStyle.ROW_PITCH;
 
         // 代理按档案走:国内外站点常需不同走线,留空跟随全局(/numen 里设)。
-        ry = label(x, ry, "numen.gui.providers.proxy");
+        ry = label(x, ry, ModLanguageData.Keys.GUI_PROVIDERS_PROXY);
         proxyField = ui.add(new TextField(draft.proxy, v -> draft.proxy = v)
-                .placeholder(t("numen.gui.providers.proxy.hint")));
+                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_PROXY_HINT)));
         proxyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         // 单一自适应思考控件(主流形态):力度型站点出 自动/关闭/低/中/高,
         // 开关型出 自动/开启/关闭,常开型隐藏——后端两参数的复杂度不泄漏给用户。
-        thinkingLabel = ui.add(new Label(t("numen.gui.providers.thinking"), Label.Role.MUTED));
+        thinkingLabel = ui.add(new Label(t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING), Label.Role.MUTED));
         thinkingLabel.setBounds(x, ry, 100, 9);
         ry += NumenStyle.LABEL_PITCH;
         thinkingPick = ui.add(new Dropdown(List.of(), 0, this::onThinkingPicked));
@@ -167,7 +169,7 @@ public final class ProfileFormPanel {
         // 页面级 Alert:表单区左右居中、垂直偏上悬浮——操作结果的家(字段错误才内联)。
         resultAlert = fixedUi.add(new InlineAlert());
         resultAlert.setBounds(x, y + 2, w, 24);
-        checkButton = fixedUi.add(new Button(t("numen.gui.providers.check"),
+        checkButton = fixedUi.add(new Button(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK),
                 Button.Style.NORMAL, this::runConnectivityCheck));
         checkButton.setBounds(x + w - 54 - 58, by, 54, 15);
         Button save = fixedUi.add(new Button(t("numen.gui.settings.save"),
@@ -309,9 +311,9 @@ public final class ProfileFormPanel {
         if (!none) {
             if (toggleOnly) {
                 thinkingPick.setItems(List.of(
-                        t("numen.gui.providers.thinking.auto"),
-                        t("numen.gui.providers.thinking.on"),
-                        t("numen.gui.providers.thinking.off")),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_AUTO),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_ON),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_OFF)),
                         switch (nz(draft.reasoningEffort)) {
                             case "off" -> 2;
                             case "low", "medium", "high" -> 1;
@@ -319,11 +321,11 @@ public final class ProfileFormPanel {
                         });
             } else {
                 thinkingPick.setItems(List.of(
-                        t("numen.gui.providers.thinking.auto"),
-                        t("numen.gui.providers.thinking.off"),
-                        t("numen.gui.providers.effort.low"),
-                        t("numen.gui.providers.effort.medium"),
-                        t("numen.gui.providers.effort.high")),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_AUTO),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_THINKING_OFF),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_EFFORT_LOW),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_EFFORT_MEDIUM),
+                        t(ModLanguageData.Keys.GUI_PROVIDERS_EFFORT_HIGH)),
                         switch (nz(draft.reasoningEffort)) {
                             case "off" -> 1;
                             case "low" -> 2;
@@ -386,7 +388,7 @@ public final class ProfileFormPanel {
 
     private void save() {
         if (draft.name == null || draft.name.isBlank()) {
-            nameField.setError(t("numen.gui.inline.required"));   // 校验错误内联在错误发生处
+            nameField.setError(t(ModLanguageData.Keys.GUI_INLINE_REQUIRED));   // 校验错误内联在错误发生处
             return;
         }
         onSave.accept(draft);
@@ -396,13 +398,13 @@ public final class ProfileFormPanel {
     private void runConnectivityCheck() {
         if (checking) return;
         if (draft.apiKey == null || draft.apiKey.isBlank()) {
-            keyField.setError(t("numen.gui.inline.need_key"));
+            keyField.setError(t(ModLanguageData.Keys.GUI_INLINE_NEED_KEY));
             return;
         }
         checking = true;
         checkButton.setEnabled(false);
-        checkButton.setLabel(t("numen.gui.providers.checking"));
-        resultAlert.show(InlineAlert.Severity.INFO, t("numen.gui.providers.checking"));
+        checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
+        resultAlert.show(InlineAlert.Severity.INFO, t(ModLanguageData.Keys.GUI_PROVIDERS_CHECKING));
         String proxy = draft.proxy != null && !draft.proxy.isBlank()
                 ? draft.proxy : Services.CONFIG.getProxy();
         LlmEndpoint ep = new LlmEndpoint(draft.provider, draft.model, draft.apiKey,
@@ -412,11 +414,11 @@ public final class ProfileFormPanel {
                 .whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
                     checking = false;
                     checkButton.setEnabled(true);
-                    checkButton.setLabel(t("numen.gui.providers.check"));
+                    checkButton.setLabel(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK));
                     if (error == null) {
                         // 成功=知道了就行,2.5s 自动淡出;失败驻留到被下次操作替换。
                         resultAlert.show(InlineAlert.Severity.SUCCESS,
-                                t("numen.gui.providers.check.ok"), 2_500);
+                                t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK_OK), 2_500);
                     } else {
                         resultAlert.show(InlineAlert.Severity.ERROR, LlmErrorWords.classify(error));
                     }
