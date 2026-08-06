@@ -8,6 +8,10 @@
     <string>Numen Bridge</string>
     <key>CFBundleExecutable</key>
     <string>NumenBridge</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.dwinovo.numen.bridge</string>
     <key>CFBundleInfoDictionaryVersion</key>

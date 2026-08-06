@@ -32,19 +32,42 @@ enum BridgeServer {
             guard tokenAuthorizer.allows(headerValue: request.headers[.authorization]) else {
                 throw HTTPError(.unauthorized, message: "Invalid local bridge token")
             }
-            guard let apiKey = try credentials.apiKey() else {
-                throw HTTPError(.serviceUnavailable, message: "DashScope API key is not configured")
-            }
             let payload = try await request.decode(as: SpeechRequest.self, context: context)
             guard payload.responseFormat == nil || payload.responseFormat == "wav" else {
                 throw HTTPError(.badRequest, message: "Only WAV speech output is supported")
             }
-            let client = DashScopeTtsClient(
-                apiKey: apiKey,
-                model: payload.model ?? BridgePreferences.ttsModel(),
-                voice: payload.voice ?? BridgePreferences.voice()
-            )
-            let wave = try await client.synthesize(payload.input)
+            let wave: Data
+            switch BridgePreferences.provider() {
+            case .dashscope:
+                guard let apiKey = try credentials.apiKey() else {
+                    throw HTTPError(.serviceUnavailable, message: "DashScope API key is not configured")
+                }
+                let client = DashScopeTtsClient(
+                    apiKey: apiKey,
+                    model: payload.model ?? BridgePreferences.ttsModel(),
+                    voice: payload.voice ?? BridgePreferences.voice()
+                )
+                wave = try await client.synthesize(payload.input)
+            case .custom:
+                guard let apiKey = try credentials.customApiKey() else {
+                    throw HTTPError(.serviceUnavailable, message: "Custom API key is not configured")
+                }
+                let baseURL = BridgePreferences.customBaseURL()
+                guard !baseURL.isEmpty else {
+                    throw HTTPError(.serviceUnavailable, message: "Custom base URL is not configured")
+                }
+                let model = payload.model ?? BridgePreferences.customTtsModel()
+                guard !model.isEmpty else {
+                    throw HTTPError(.badRequest, message: "Custom TTS model is not configured")
+                }
+                let client = OpenAiTtsClient(
+                    baseURL: baseURL,
+                    apiKey: apiKey,
+                    model: model,
+                    voice: payload.voice ?? BridgePreferences.customVoice()
+                )
+                wave = try await client.synthesize(payload.input)
+            }
             return Response(
                 status: .ok,
                 headers: [.contentType: "audio/wav"],
@@ -55,16 +78,33 @@ enum BridgeServer {
             guard tokenAuthorizer.allows(headerValue: request.headers[.authorization]) else {
                 throw HTTPError(.unauthorized, message: "Invalid local bridge token")
             }
-            guard let apiKey = try credentials.apiKey() else {
-                throw HTTPError(.serviceUnavailable, message: "DashScope API key is not configured")
-            }
             let buffer = try await request.body.collect(upTo: context.maxUploadSize)
             let wave = Data(buffer.readableBytesView)
-            let pcm = try WavePcmDecoder.decode(wave)
-            let text = try await DashScopeSttClient(
-                apiKey: apiKey,
-                model: BridgePreferences.sttModel()
-            ).transcribe(pcm: pcm)
+            let text: String
+            switch BridgePreferences.provider() {
+            case .dashscope:
+                guard let apiKey = try credentials.apiKey() else {
+                    throw HTTPError(.serviceUnavailable, message: "DashScope API key is not configured")
+                }
+                let pcm = try WavePcmDecoder.decode(wave)
+                text = try await DashScopeSttClient(
+                    apiKey: apiKey,
+                    model: BridgePreferences.sttModel()
+                ).transcribe(pcm: pcm)
+            case .custom:
+                guard let apiKey = try credentials.customApiKey() else {
+                    throw HTTPError(.serviceUnavailable, message: "Custom API key is not configured")
+                }
+                let baseURL = BridgePreferences.customBaseURL()
+                let model = BridgePreferences.customSttModel()
+                guard !baseURL.isEmpty, !model.isEmpty else {
+                    throw HTTPError(.serviceUnavailable,
+                                     message: "Custom base URL / STT model is not configured")
+                }
+                text = try await OpenAiSttClient(
+                    baseURL: baseURL, apiKey: apiKey, model: model
+                ).transcribe(wav: wave)
+            }
             return TranscriptionResponse(text: text)
         }
         let webSocketRouter = Router(context: BasicWebSocketRequestContext.self)
@@ -75,11 +115,23 @@ enum BridgeServer {
             }
             return .upgrade()
         } onUpgrade: { inbound, outbound, _ in
-            guard let apiKey = try credentials.apiKey() else { return }
-            let provider = DashScopeSttClient(
-                apiKey: apiKey,
-                model: BridgePreferences.sttModel()
-            ).open()
+            let provider: any StreamingTranscriptionSession
+            switch BridgePreferences.provider() {
+            case .dashscope:
+                guard let apiKey = try credentials.apiKey() else { return }
+                provider = DashScopeSttClient(
+                    apiKey: apiKey,
+                    model: BridgePreferences.sttModel()
+                ).open()
+            case .custom:
+                guard let apiKey = try credentials.customApiKey() else { return }
+                let baseURL = BridgePreferences.customBaseURL()
+                let model = BridgePreferences.customSttModel()
+                guard !baseURL.isEmpty, !model.isEmpty else { return }
+                provider = OpenAiSttClient(
+                    baseURL: baseURL, apiKey: apiKey, model: model
+                ).open()
+            }
             let controller = CaptureSocketController(
                 capture: microphoneCapture,
                 provider: provider,

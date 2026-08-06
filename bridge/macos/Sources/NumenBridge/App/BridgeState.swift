@@ -42,7 +42,11 @@ final class BridgeState: ObservableObject {
         if permission == .denied { return "麦克风权限已拒绝" }
         if permission == .restricted { return "麦克风权限受限" }
         if serverStatus != .running { return "本机服务正在启动" }
-        if !providerReady { return "请配置 DashScope API Key" }
+        if !providerReady {
+            return BridgePreferences.provider() == .custom
+                ? "请配置 Custom 服务的 Base URL 与 API Key"
+                : "请配置 DashScope API Key"
+        }
         return "Numen Bridge 已就绪"
     }
 
@@ -103,6 +107,16 @@ final class BridgeState: ObservableObject {
     func save(apiKey: String) throws {
         try credentials.save(apiKey: apiKey)
         providerReady = try credentials.isReady()
+    }
+
+    func save(customApiKey: String) throws {
+        try credentials.save(customApiKey: customApiKey)
+        providerReady = try credentials.isReady()
+    }
+
+    /// 设置页改了 provider/Base URL 这类不进钥匙串的配置后刷新就绪状态。
+    func refreshAfterSettingsChange() async {
+        await refreshProviderReady()
     }
 }
 
