@@ -267,6 +267,46 @@ public final class Companions {
                 "你进入了 " + dim + "。留意这个维度的环境和危险。", false);
     }
 
+    /**
+     * 她从床上醒了。<b>急件</b>——{@code sleep} 到躺下那一刻就返回了,不发这条的话她会一直
+     * 以为自己还睡着,躺在原地等一个不会来的结果。
+     *
+     * <p>成因取自原版自己的叫醒路径:{@code Player.tick} 里唯一的条件判定就是天亮
+     * ({@code ServerLevel} 跳过夜也归到这条,它先把时间拨过去再叫醒);此外
+     * {@code LivingEntity.hurt} 一挨打立刻醒。剩下的(床没了、被传送)没有共同标记,统称外力。
+     */
+    public static void onWoke(NumenPlayer body) {
+        // 睡着时一挨打就醒,所以"上一刻还在睡"配上"这一刻还在受伤硬直"只可能是这一下打的——
+        // 不是就近猜一个凶手:更早的伤根本不可能与"她还睡着"并存。
+        String attacker = null;
+        if (body.hurtTime > 0) {
+            var source = body.getLastDamageSource();
+            attacker = source == null ? "什么东西"
+                    : source.getEntity() != null ? source.getEntity().getName().getString()
+                    : source.type().msgId();
+        }
+        boolean day = body.level().isDay();
+        com.dwinovo.numen.event.NumenEvents.emit(body,
+                com.dwinovo.numen.event.NumenEvents.Kind.WOKE,
+                java.util.Map.of("cause", attacker != null ? "hurt" : day ? "daybreak" : "other"),
+                wokeText(day, attacker), true);
+    }
+
+    /**
+     * 醒来那句话。挨打排在天亮前面:两件都真时,挨她的那一下才是她该先处理的。
+     *
+     * @param attacker 打醒她的那个东西的名字;没挨打则 null
+     */
+    static String wokeText(boolean day, String attacker) {
+        if (attacker != null) {
+            return "你被" + attacker + "打醒了,已经不在床上。先看清楚周围再决定是打是躲"
+                    + (day ? ",天已经亮了。" : ",天还没亮。");
+        }
+        return day
+                ? "天亮了,你自己从床上醒来,夜过去了。接着做你原本要做的事。"
+                : "你从床上醒来了,可是天还没亮——是外力把你弄醒的(床没了、被传送都算)。先看看周围。";
+    }
+
     /** Save the companion to its {@code .dat} and remove it from the world (dormancy). */
     public static void dormant(MinecraftServer server, NumenPlayer body) {
         // Refresh the respawn hint before the body leaves.
@@ -302,6 +342,7 @@ public final class Companions {
         for (UUID uuid : uuids) {
             reg.remove(uuid);
             outbox.forget(uuid);   // 她攒的事件跟着走:没人会再收
+            CompanionInventoryWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了
         }
         ServerPlayer owner = ownerUuid == null ? null : server.getPlayerList().getPlayer(ownerUuid);
         if (owner != null) {

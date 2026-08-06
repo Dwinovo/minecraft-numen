@@ -51,6 +51,14 @@ public final class NumenPlayer extends ServerPlayer {
      */
     private String deathMessage;
 
+    /**
+     * 上一刻她在不在床上,{@link #pollWokeUp} 用它比出"刚醒"这一刻。
+     *
+     * <p><b>跟着身体走,不进静态表</b>:她休眠再回来是一具新身体,这一位天然是 false,
+     * 于是不会诈出一条"你醒了";记在按 UUID 索引的表里就得另配一套离场清理。
+     */
+    private boolean sleepingLastTick;
+
     public NumenPlayer(MinecraftServer server, ServerLevel level, GameProfile profile,
                         ClientInformation clientInformation) {
         super(server, level, profile, clientInformation);
@@ -64,6 +72,26 @@ public final class NumenPlayer extends ServerPlayer {
      */
     public void showAllSkinLayers() {
         getEntityData().set(DATA_PLAYER_MODE_CUSTOMISATION, (byte) 0x7f);
+    }
+
+    /**
+     * 她是不是<b>刚好在这一刻</b>从床上醒了。每服务端 tick 问一次(见 {@code CompanionTickDispatcher})。
+     *
+     * <p>为什么是轮询而不是挂钩子:两个加载器各有自己的"停止睡眠"事件,接起来是两份平台代码;
+     * 而这里要比的只有一位布尔,每 tick 一次读取在 50ms 的预算里看不见。
+     *
+     * <p>死着的时候不算醒——原版 {@code LivingEntity.die} 会先把睡眠停掉,不挡的话她每次
+     * 死在床上都会多出一条"你醒了"贴在死亡事件旁边。
+     */
+    public boolean pollWokeUp() {
+        if (!isAlive()) {
+            sleepingLastTick = false;
+            return false;
+        }
+        boolean now = isSleeping();
+        boolean woke = sleepingLastTick && !now;
+        sleepingLastTick = now;
+        return woke;
     }
 
     /** The loaded companion body with this UUID, or {@code null} if not spawned. */
