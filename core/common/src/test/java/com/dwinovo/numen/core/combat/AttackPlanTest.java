@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 
 import static com.dwinovo.numen.core.combat.AttackPlan.Stance;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 这一刻该怎么打。
@@ -13,12 +15,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 class AttackPlanTest {
 
+    /** 血量充裕 —— 这些用例检的是别的维度。 */
+    private static final double HEALTHY = 40.0;
+
     private static AttackPlan.Situation at(double distance, boolean reachable, boolean hasRanged) {
-        return new AttackPlan.Situation(distance, 4.0, reachable, hasRanged, false, 0.0);
+        return new AttackPlan.Situation(distance, 4.0, reachable, hasRanged, false, 0.0, HEALTHY);
     }
 
     private static AttackPlan.Situation explosiveAt(double distance, boolean hasRanged) {
-        return new AttackPlan.Situation(distance, 4.0, true, hasRanged, true, 7.5);
+        return new AttackPlan.Situation(distance, 4.0, true, hasRanged, true, 7.5, HEALTHY);
+    }
+
+    private static AttackPlan.Situation hurtTo(double effectiveHealth) {
+        return new AttackPlan.Situation(3.0, 4.0, true, true, false, 0.0, effectiveHealth);
     }
 
     // ==================== 够不够得着 ====================
@@ -74,6 +83,40 @@ class AttackPlanTest {
     @Test
     void theSafeLineItselfCounts() {
         assertEquals(Stance.RANGED, AttackPlan.decide(explosiveAt(7.5, true)));
+    }
+
+    // ==================== 扛不扛得住 ====================
+
+    /**
+     * 扛不住就脱离,<b>哪怕近在眼前、哪怕手里有武器</b>。她一直打到死那次,病根就是"打不过"
+     * 根本不在战斗判据里 —— 任务只管挥剑,而看得见血量的那条链没被叫醒。
+     */
+    @Test
+    void tooHurtMeansBreakOffEvenWithTheTargetInReach() {
+        assertEquals(Stance.DISENGAGE, AttackPlan.decide(hurtTo(4.0)));
+    }
+
+    /** 血够就照常打 —— 这一维不该把正常交战也拦下来。 */
+    @Test
+    void enoughLeftInTheTankMeansFightOn() {
+        assertEquals(Stance.MELEE, AttackPlan.decide(hurtTo(40.0)));
+    }
+
+    /**
+     * 比的是<b>按护甲折算后</b>的血。同样 8 点血,裸奔该退、下界合金该打 ——
+     * 这里只钉判据吃的是折算值,折算本身由 {@code Menace.effectiveHealth} 用原版公式做。
+     */
+    @Test
+    void theThresholdIsAboutEffectiveHealthNotRawHealth() {
+        assertTrue(AttackPlan.outmatched(8.0), "裸血 8 点:退");
+        assertFalse(AttackPlan.outmatched(8.0 * 5), "同样 8 点血,重甲折算后能扛五倍:打");
+    }
+
+    /** 扛不住排在"会不会炸"前面:两者都真时,脱离退得比保持输出距离更彻底。 */
+    @Test
+    void breakingOffOutranksKeepingShootingDistance() {
+        assertEquals(Stance.DISENGAGE, AttackPlan.decide(
+                new AttackPlan.Situation(3.0, 4.0, true, true, true, 7.5, 4.0)));
     }
 
     // ==================== 边界 ====================

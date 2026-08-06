@@ -28,10 +28,6 @@ public final class SurvivalDecisions {
     /** Food level at/below which the body is genuinely hungry (below 7 it can no longer sprint). */
     public static final int HUNGRY_LEVEL = 6;
 
-    // ---- threat thresholds ----
-    /** Health (of 20) at/below which we always flee rather than trade blows. */
-    public static final float FLEE_HEALTH = 8.0f;
-
     // ---- fall thresholds ----
     /** Fall distance (blocks) above which an MLG save is worth attempting (vanilla fall damage &gt; 1 heart). */
     public static final double MLG_FALL_TRIGGER = 4.0;
@@ -46,18 +42,6 @@ public final class SurvivalDecisions {
     }
 
     /** How the threat-response chain reacts to a present threat. */
-    public enum ThreatResponse { NONE, FIGHT, FLEE }
-
-    /**
-     * Fight-vs-flee: with a threat present, flee when too hurt to trade blows or
-     * when unarmed (survival never auto-acquires a weapon); otherwise fight back.
-     */
-    public static ThreatResponse decideThreatResponse(boolean threatPresent, float health, boolean armed) {
-        if (!threatPresent) return ThreatResponse.NONE;
-        if (health <= FLEE_HEALTH) return ThreatResponse.FLEE;
-        return armed ? ThreatResponse.FIGHT : ThreatResponse.FLEE;
-    }
-
     /** 有威胁就触发。 */
     public static boolean mobDefenseTriggered(boolean threatPresent) {
         return threatPresent;

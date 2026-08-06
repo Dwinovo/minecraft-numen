@@ -6,6 +6,7 @@ import com.dwinovo.numen.core.act.Ballistics;
 import com.dwinovo.numen.core.combat.AttackPlan;
 import com.dwinovo.numen.core.combat.Loadout;
 import com.dwinovo.numen.core.combat.Menace;
+import com.dwinovo.numen.core.combat.Pursuit;
 import com.dwinovo.numen.core.combat.Swing;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
@@ -75,6 +76,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private final Map<Integer, Integer> navFailures = new HashMap<>();
     private final Map<Item, Integer> inventoryBaseline = new HashMap<>();
     private final LootSweep loot;
+
+    /** 谁还在逼近她 —— 脱离的终止判据,见 {@link Pursuit}。 */
+    private final Pursuit pursuit = new Pursuit();
 
     private RangedShot shot;
     private int misfires;
@@ -191,7 +195,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                         || navFailures.get(target.getId()) < MAX_APPROACH_FAILURES,
                 loadout.hasRanged(),
                 keepAway,
-                Menace.safeDistanceFrom(target));
+                Menace.safeDistanceFrom(target),
+                Menace.effectiveHealth(player));
     }
 
     private TaskState engage() {
@@ -203,6 +208,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             case CLOSE_IN -> closeIn();
             case RANGED -> shootAt(loadout);
             case AVOID -> backAway();
+            case DISENGAGE -> disengage();
             case ABANDON -> abandonTarget();
         };
     }
@@ -374,6 +380,68 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             case ARRIVED, FAILED -> stopNav();
         }
         return TaskState.RUNNING;
+    }
+
+    /**
+     * 脱离接触:她扛不住了,先活下来。
+     *
+     * <p>终止条件<b>不是距离</b>,是 {@link Pursuit} 说的"没人还在逼近我"——十五格外一只
+     * 冲过来的蜘蛛比五格外一只卡住的僵尸危险得多,拿距离当判据会两头都判错。
+     *
+     * <p>势场收当前<b>所有</b>敌对生物:逃跑路上撞进第二只怪,是旧的单点逃离目标最典型的死法。
+     */
+    private TaskState disengage() {
+        long now = player.level().getGameTime();
+        var chasers = Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS);
+        Map<Integer, Double> distances = new LinkedHashMap<>();
+        for (var mob : chasers) {
+            if (mob.getTarget() == player || mob == player.getLastHurtByMob()) {
+                distances.put(mob.getId(), player.distanceToSqr(mob));
+            }
+        }
+        pursuit.observe(distances, now);
+        if (pursuit.escaped(now)) {
+            stopNav();
+            InputDriver.halt(player);
+            fail("broke off — too hurt to keep fighting; nothing is chasing you now",
+                    FailureType.TARGET_LOST);
+            return TaskState.FAILED;
+        }
+        if (nav == null) {
+            nav = PlayerNav.toGoal(player,
+                    () -> {
+                        var engaging = chasersNow();
+                        var field = Menace.field(engaging,
+                                Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS));
+                        return field.isEmpty() ? null
+                                : NavGoal.avoid(AVOID_BYSTANDER_RADIUS, Menace.AVOID_PENALTY, field);
+                    },
+                    CHASE_SPEED,
+                    () -> pursuit.escaped(player.level().getGameTime()));
+        }
+        switch (nav.tick()) {
+            case RUNNING -> { }
+            case ARRIVED -> stopNav();
+            case FAILED -> {
+                stopNav();
+                // 退无可退(被围住、堵在死角)。攥着身体谁也帮不上,把话说清楚交回给模型。
+                fail("cornered — too hurt to fight and there is no way out from here",
+                        FailureType.BOXED_IN);
+                return TaskState.FAILED;
+            }
+        }
+        return TaskState.RUNNING;
+    }
+
+    /** 这一刻真正在追她的那些(锁定了她、或刚打了她)。 */
+    private java.util.List<net.minecraft.world.entity.Mob> chasersNow() {
+        java.util.List<net.minecraft.world.entity.Mob> out = new java.util.ArrayList<>();
+        for (var mob : Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS)) {
+            if (mob.getTarget() == player || mob == player.getLastHurtByMob()) {
+                out.add(mob);
+            }
+        }
+        return out;
     }
 
     private TaskState abandonTarget() {

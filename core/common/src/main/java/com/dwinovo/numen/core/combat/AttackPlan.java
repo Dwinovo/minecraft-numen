@@ -30,8 +30,10 @@ public final class AttackPlan {
         CLOSE_IN,
         /** 拉开弓弩射它。 */
         RANGED,
-        /** 主动拉开距离——它够得着但不该贴上去。 */
+        /** 主动拉开距离——它够得着,但不该贴上去(会炸)。仍然想打它,只是不能贴身。 */
         AVOID,
+        /** 脱离接触——她扛不住了。不是"退到输出距离",是"走到没人还在逼近我"。 */
+        DISENGAGE,
         /** 这只打不了:走不到,又没有远程手段。 */
         ABANDON
     }
@@ -46,17 +48,37 @@ public final class AttackPlan {
      * @param hasRanged        背包里有能立刻用的弓弩(带箭,或已上弦的弩)
      * @param keepAway         这个目标够得着也不该贴上去,见 {@link Menace#keepAwayFrom}
      * @param keepAwayDistance 该保持的距离;{@code keepAway} 为假时不看
+     * @param effectiveHealth  她按护甲折算后还扛得住多少,见 {@link Menace#effectiveHealth}
      */
     public record Situation(double distance,
                             double meleeReach,
                             boolean reachable,
                             boolean hasRanged,
                             boolean keepAway,
-                            double keepAwayDistance) {}
+                            double keepAwayDistance,
+                            double effectiveHealth) {}
+
+    /**
+     * 低于这个有效血量就别打了。
+     *
+     * <p>比的是<b>折算后</b>的血:满血裸奔与满血下界合金曾经判得一模一样,而后者能多扛
+     * 四五倍。数值沿用一直以来的那条裸血线(八点,四颗心),只是喂进来的输入变实在了。
+     */
+    private static final double MIN_EFFECTIVE_HEALTH = 8.0;
 
     private AttackPlan() {}
 
+    /** 这点有效血量还够不够站着打。阈值只有这一处。 */
+    public static boolean outmatched(double effectiveHealth) {
+        return effectiveHealth <= MIN_EFFECTIVE_HEALTH;
+    }
+
     public static Stance decide(Situation s) {
+        // 扛不住排在最前面:一切"怎么打"的讨论都以她还站得住为前提。
+        // 会炸的那类不必单独判——它本来就不许贴身,而 DISENGAGE 退得比 AVOID 更彻底。
+        if (outmatched(s.effectiveHealth())) {
+            return Stance.DISENGAGE;
+        }
         if (s.keepAway()) {
             // 站得够远才谈得上出手;而近战对这种目标从来不是选项——贴上去就是进爆炸半径。
             if (s.distance() < s.keepAwayDistance()) {

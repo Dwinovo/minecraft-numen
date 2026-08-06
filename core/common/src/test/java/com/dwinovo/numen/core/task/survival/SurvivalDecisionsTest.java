@@ -1,6 +1,5 @@
 package com.dwinovo.numen.core.task.survival;
 
-import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -50,29 +49,18 @@ class SurvivalDecisionsTest {
         assertFalse(SurvivalDecisions.foodTriggered(20, 4.0f, true));
     }
 
-    // ---- 打还是跑 ----
+    // ---- 有没有威胁 ----
+    // 「打还是跑」不在这一层了:它按护甲折算的有效血量判,和"够不够得着""该不该贴近"
+    // 一起归 AttackPlan —— 战斗只有一份判据。这里只剩"要不要醒过来"。
 
     @Test
-    void noThreatIsNone() {
-        assertEquals(ThreatResponse.NONE, SurvivalDecisions.decideThreatResponse(false, 20.0f, true));
+    void noThreatDoesNotWake() {
         assertFalse(SurvivalDecisions.mobDefenseTriggered(false));
     }
 
     @Test
-    void healthyArmedFightsBack() {
-        assertEquals(ThreatResponse.FIGHT, SurvivalDecisions.decideThreatResponse(true, 20.0f, true));
+    void aThreatWakesTheChain() {
         assertTrue(SurvivalDecisions.mobDefenseTriggered(true));
-    }
-
-    @Test
-    void lowHealthFleesEvenWhenArmed() {
-        assertEquals(ThreatResponse.FLEE, SurvivalDecisions.decideThreatResponse(true, 4.0f, true));
-    }
-
-    @Test
-    void unarmedFleesEvenWhenHealthy() {
-        // 生存层从不主动去拿武器,所以空手就是跑
-        assertEquals(ThreatResponse.FLEE, SurvivalDecisions.decideThreatResponse(true, 20.0f, false));
     }
 
     // ---- 摔落缓冲 ----

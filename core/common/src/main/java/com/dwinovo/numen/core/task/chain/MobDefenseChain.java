@@ -13,7 +13,6 @@ import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.task.Task;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.core.task.survival.SurvivalDecisions;
-import com.dwinovo.numen.core.task.survival.SurvivalDecisions.ThreatResponse;
 import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.LivingEntity;
@@ -111,24 +110,29 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
             stopNav();   // re-plan for the new target
         }
 
-        ThreatResponse resp = SurvivalDecisions.decideThreatResponse(
-                true, companion.getHealth(), hasWeapon(companion));   // pure carry-check; fight() arms
-        if (resp != ThreatResponse.FIGHT) {
-            retreat(companion);   // 打不过
-            return TaskState.RUNNING;
-        }
+        // 「打不过」不再是判据层之前的一道前置闸,它就是判据的一维(有效血量)。
+        // 于是"打还是退"只在一处决定,反射链与 attack 工具问的是同一个函数。
         switch (AttackPlan.decide(new AttackPlan.Situation(
                 companion.distanceTo(threat),
                 ATTACK_REACH,
                 consecutiveNavFails < MAX_ENGAGE_FAILS,
                 Loadout.forTarget(companion, threat).hasRanged(),
                 Menace.keepAwayFrom(threat),
-                Menace.safeDistanceFrom(threat)))) {
+                Menace.safeDistanceFrom(threat),
+                Menace.effectiveHealth(companion)))) {
             // 够不够得着由 fight() 内部照旧判(它还要看视线);判据在这里只回答打不打。
-            case MELEE, CLOSE_IN -> fight(companion, threat);
-            // 本能的职责是别死,不是打赢。够不着、或不该贴上去,就退开——真要打它,
-            // 让模型派 attack,那条路上才有弹道与拉弓。
-            case RANGED, AVOID, ABANDON -> retreat(companion);
+            case MELEE, CLOSE_IN -> {
+                // 生存层<b>从不主动去拿武器</b>,所以空手不还手 —— 这是反射链自己的政策
+                // (模型派的 attack 用拳头打鸡是正当的,那条路不受这里影响)。
+                if (hasWeapon(companion)) {
+                    fight(companion, threat);
+                } else {
+                    retreat(companion);
+                }
+            }
+            // 本能的职责是别死,不是打赢。够不着、不该贴上去、或扛不住,就退开——
+            // 真要打它,让模型派 attack,那条路上才有弹道与拉弓。
+            case RANGED, AVOID, ABANDON, DISENGAGE -> retreat(companion);
         }
         return TaskState.RUNNING;
     }
@@ -282,8 +286,8 @@ public final class MobDefenseChain implements Task, com.dwinovo.numen.task.refle
      */
     private java.util.List<LivingEntity> unhandledThreats(NumenPlayer companion) {
         java.util.List<LivingEntity> all = threatsNear(companion);
-        if (companion.getHealth() <= SurvivalDecisions.FLEE_HEALTH) {
-            return all;
+        if (Menace.outmatched(companion)) {
+            return all;   // 扛不住了:任务认领与否都不作数,本能一律接管
         }
         java.util.List<LivingEntity> mine = new java.util.ArrayList<>();
         for (LivingEntity m : all) {

@@ -2,7 +2,11 @@ package com.dwinovo.numen.core.combat;
 
 import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
 
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.damagesource.CombatRules;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Enemy;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
@@ -68,6 +72,41 @@ public final class Menace {
             return CREEPER_SAFE_DISTANCE;
         }
         return entity instanceof EndCrystal ? CRYSTAL_SAFE_DISTANCE : 0.0;
+    }
+
+    /**
+     * 挨打时用来估算减伤的一记<b>代表性伤害</b>。原版的减伤率与来袭伤害有关(护甲韧性那一项),
+     * 所以"能扛多少"必须挑一个伤害档去评估;8 点约等于一只装备了武器的强怪一击。
+     */
+    private static final float NOMINAL_HIT = 8.0f;
+
+    /**
+     * 她还扛得住多少 —— <b>按护甲折算后的有效血量</b>。
+     *
+     * <p>光看血量会把"满血裸奔"和"满血下界合金"判成一样危险,而后者能多扛四五倍。
+     * 减伤不自己算:交给原版的 {@link CombatRules#getDamageAfterAbsorb},护甲、韧性、
+     * 以及模组改过的公式一并跟着走。传的伤害源不带武器,所以不会触发附魔那条分支,
+     * 也就没有副作用({@code LivingEntity.getDamageAfterArmorAbsorb} 会磨损护甲,不能用)。
+     *
+     * @return 折算后的有效血量;没有护甲时就等于血量本身
+     */
+    public static double effectiveHealth(LivingEntity self) {
+        float health = self.getHealth();
+        if (!(self.level() instanceof ServerLevel level)) {
+            return health;
+        }
+        float afterArmor = CombatRules.getDamageAfterAbsorb(self, NOMINAL_HIT,
+                level.damageSources().generic(),
+                self.getArmorValue(), (float) self.getAttributeValue(Attributes.ARMOR_TOUGHNESS));
+        if (afterArmor <= 0.0f) {
+            return Double.MAX_VALUE;   // 伤害被吃干净了:这一档她无敌
+        }
+        return health * (NOMINAL_HIT / afterArmor);
+    }
+
+    /** 她扛不住了吗。阈值在 {@link AttackPlan} 那一处,这里只是把它问一遍。 */
+    public static boolean outmatched(LivingEntity self) {
+        return AttackPlan.outmatched(effectiveHealth(self));
     }
 
     /** 引信正在涨——它已经在倒计时,不是"可能会炸"。 */
