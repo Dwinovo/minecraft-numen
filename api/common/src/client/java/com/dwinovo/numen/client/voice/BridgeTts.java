@@ -16,6 +16,17 @@ public final class BridgeTts implements TtsBackend {
     public static final String DEFAULT_MODEL = "qwen3-tts-flash-realtime";
     public static final String DEFAULT_VOICE = "Cherry";
 
+    /**
+     * Bridge 专用 HTTP/1.1 client。不能复用 {@code VoiceHttp.CLIENT}：JDK HttpClient
+     * 默认尝试 HTTP/2（明文 h2c upgrade），而 Bridge 的 Hummingbird 服务不支持，
+     * 直接断开连接，游戏侧表现为 {@code EOFException: EOF reached while reading}。
+     */
+    private static final HttpClient HTTP1_CLIENT = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .connectTimeout(Duration.ofSeconds(10))
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .build();
+
     private final BridgeDiscovery.Info discovery;
     private final String model;
     private final String voice;
@@ -23,7 +34,7 @@ public final class BridgeTts implements TtsBackend {
     private final Duration timeout;
 
     public BridgeTts(BridgeDiscovery.Info discovery, String model, String voice) {
-        this(discovery, model, voice, VoiceHttp.CLIENT, VoiceHttp.REQUEST_TIMEOUT);
+        this(discovery, model, voice, HTTP1_CLIENT, VoiceHttp.REQUEST_TIMEOUT);
     }
 
     BridgeTts(BridgeDiscovery.Info discovery, String model, String voice,
