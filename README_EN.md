@@ -114,6 +114,8 @@ Every mod you can name, the AI can play. It's a big promise — but every brick 
 3. **Summon a companion.** Click the **`+`** in the panel's left rail, give it a name, hit Enter.
 4. **Click its avatar to chat**, and tell it what to do. The rest is on it.
 
+On macOS, voice input/output can go through the standalone [Numen Bridge](bridge/macos/README.md): the Bridge owns the system microphone and the speech services (DashScope, or any OpenAI-compatible endpoint via Custom), and the Minecraft side never needs an STT server address.
+
 > The panel (press `G`) has three tabs: **Chat** (conversation + a live plan board), **Items** (a read-only character sheet styled like the vanilla inventory), and **Settings** (key and model). The left rail *is* your companion roster — click an avatar to switch, **`+`** to summon, **`✕`** to dismiss; you barely need commands at all. A small avatar HUD hugs the left screen edge, too — when a companion speaks, its avatar and a speech bubble slide out together.
 
 ## FAQ

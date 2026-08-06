@@ -114,7 +114,7 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 3. **召唤一个同伴。** 点面板左栏的 **`+`**，给它起个名字，回车。
 4. **点它的头像开聊**，把要做的事告诉它。剩下的，交给它。
 
-macOS 语音输入/输出可使用独立的 [Numen Bridge](bridge/macos/README.md)：Bridge 负责系统麦克风和 DashScope Realtime，Minecraft 端不填写 STT 服务器地址。
+macOS 语音输入/输出可使用独立的 [Numen Bridge](bridge/macos/README.md)：Bridge 负责系统麦克风与语音服务（DashScope，或 Custom 接入任意 OpenAI 兼容端点），Minecraft 端不填写 STT 服务器地址。
 
 > 按 `G` 的面板有三页：**Chat**（聊天 + 实时计划面板）、**Items**（一张仿原版背包的只读角色卡）、**Settings**（填 key 和模型）。左栏就是同伴名册——点头像切换、点 **`+`** 召唤、点 **`✕`** 注销，基本不用敲指令。左边缘还有个小头像 HUD——它说话时，头像和气泡会一起滑出来。
 
