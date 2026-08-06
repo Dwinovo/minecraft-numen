@@ -1,72 +1,51 @@
 package com.dwinovo.numen.core.combat;
 
+import com.dwinovo.numen.core.combat.Battlefield.Foe;
+
 /**
- * 这一刻该怎么打。<b>本能链与 {@code attack} 工具共用这一份</b>——爬行者该退多远,
- * 不该在反射里写一遍、在工具里再写一遍。
+ * 这一刻该做什么、对谁做。<b>本能派的仗与模型派的 {@code attack} 问的是同一个函数</b>
+ * ——爬行者该退多远,不该在反射里写一遍、在工具里再写一遍。
  *
- * <h2>两个维度,不是一张表</h2>
- * <ul>
- *   <li><b>够不够得着</b> → 决定拿什么武器。够得着就砍,够不着但走得到就走过去,
- *       走不到才用远程。</li>
- *   <li><b>该不该靠近</b> → 决定要不要保持距离。见 {@link Menace}。</li>
- * </ul>
+ * <h2>输入是整个局面,不是一个目标</h2>
+ * 见 {@link Battlefield}。"该不该躲"是全场的事,"打谁"也要看全场(挑最近的、跳过打不了的、
+ * 记得上一刻打的那只)。把这些挂在单目标的描述上,每加一个考量就多一个字段,而且顺序一乱
+ * 就出现"她在打史莱姆,苦力怕在旁边点火"这种局面。
  *
- * <h2>「会飞」不是一档</h2>
- * 它只是"够不着"的一个来源,而且是个会骗人的来源:幻翼会俯冲下来,站着等它下来一剑一个,
- * 比朝天上放空箭容易得多;恶魂则永远够不着。真判据是寻路走不走得到——
- * {@code PlayerNav} 的 {@code FAILED} 就是答案,不必先认识这只怪是什么。
- *
- * <h2>点火与否为什么不在这里</h2>
- * 因为它不改变结论。走近一只没点火的爬行者,它就会点火(原版 3 格内起爆倒计时),
- * 所以「该不该靠近」的答案与当前引信状态无关。引信只决定<b>躲得多急</b>,那是势场权重的事。
+ * <h2>它有记忆</h2>
+ * {@link #decide} 收上一刻的决定。两处需要:<b>迟滞</b>(已经在挥击时,目标退开一点点不该
+ * 让她立刻重新起步寻路)与<b>承诺</b>(选中一只就打完再换,否则一群会分裂的怪里"最近那只"
+ * 每刻都在变,她永远在转向)。没有记忆的判据只能靠调用方在外面打补丁。
  */
 public final class AttackPlan {
 
-    /** 这一刻走哪条路。 */
-    public enum Stance {
+    /** 这一刻做什么。 */
+    public enum Action {
         /** 就地挥击。 */
         MELEE,
         /** 走过去,近到能挥击为止。 */
         CLOSE_IN,
         /** 拉开弓弩射它。 */
         RANGED,
-        /** 主动拉开距离——它够得着,但不该贴上去(会炸)。仍然想打它,只是不能贴身。 */
+        /** 主动拉开距离——会炸的东西已经贴到爆炸范围里了。仍然想打,只是不能贴身。 */
         AVOID,
-        /** 脱离接触——她扛不住了。不是"退到输出距离",是"走到没人还在逼近我"。 */
+        /** 脱离接触——扛不住了,或这一架根本打不了。 */
         DISENGAGE,
-        /** 这只打不了:走不到,又没有远程手段。 */
-        ABANDON
+        /** 这一只打不了(走不到又没远程),换下一只。 */
+        ABANDON,
+        /** 没什么可打的了。 */
+        DONE
     }
 
     /**
-     * 判据的全部输入。<b>一个方法一个入参,没有重载</b>——一个状态若既能进这里又能当
-     * 补充参数传,迟早会出现两处不一致的调用。
+     * 决定。
      *
-     * @param distance         身体到目标的距离
-     * @param meleeReach       她这一刻的近战够到距离
-     * @param reachable        寻路还没判定"到不了"
-     * @param hasRanged        背包里有能立刻用的弓弩(带箭,或已上弦的弩)
-     * @param keepAway         这个目标够得着也不该贴上去,见 {@link Menace#keepAwayFrom}
-     * @param keepAwayDistance 该保持的距离;{@code keepAway} 为假时不看
-     * @param effectiveHealth  她按护甲折算后还扛得住多少,见 {@link Menace#effectiveHealth}
-     * @param alreadyInMelee   上一刻就在挥击 —— 迟滞用,见 {@link #MELEE_HYSTERESIS}
+     * @param action 做什么
+     * @param foeId  对谁做;{@link Action#AVOID}、{@link Action#DISENGAGE}、{@link Action#DONE}
+     *               是对全场的,此时为 {@link #NO_FOE}
      */
-    public record Situation(double distance,
-                            double meleeReach,
-                            boolean reachable,
-                            boolean hasRanged,
-                            boolean keepAway,
-                            double keepAwayDistance,
-                            double effectiveHealth,
-                            boolean alreadyInMelee) {}
+    public record Move(Action action, int foeId) {}
 
-    /**
-     * 已经在挥击时,够到距离往外放宽这么多才改判"要走过去"。
-     *
-     * <p>没有它,目标在够到线上微动就会让她"打一下 → 重新起步寻路 → 打一下",每次起步
-     * 都要拆掉刚算好的路径。实测这样刷了七十多次"新路径立刻判定到达"。
-     */
-    private static final double MELEE_HYSTERESIS = 1.0;
+    public static final int NO_FOE = Integer.MIN_VALUE;
 
     /**
      * 低于这个有效血量就别打了。
@@ -76,6 +55,21 @@ public final class AttackPlan {
      */
     private static final double MIN_EFFECTIVE_HEALTH = 8.0;
 
+    /**
+     * 已经在挥击时,够到距离往外放宽这么多才改判"要走过去"。
+     *
+     * <p>没有它,目标在够到线上微动就是"打一下 → 拆掉路径重新规划 → 打一下",
+     * 实测刷了七十多次"新路径立刻判定到达"。
+     */
+    private static final double MELEE_HYSTERESIS = 1.0;
+
+    /**
+     * 只有远程手段时,离目标近于这个距离就先拉开。
+     *
+     * <p>太近弹道压得平、还白白挨打;而手上没有近战武器时"贴上去用拳头"从来不是答案。
+     */
+    private static final double RANGED_MIN_DISTANCE = 5.0;
+
     private AttackPlan() {}
 
     /** 这点有效血量还够不够站着打。阈值只有这一处。 */
@@ -83,26 +77,108 @@ public final class AttackPlan {
         return effectiveHealth <= MIN_EFFECTIVE_HEALTH;
     }
 
-    public static Stance decide(Situation s) {
-        // 扛不住排在最前面:一切"怎么打"的讨论都以她还站得住为前提。
-        // 会炸的那类不必单独判——它本来就不许贴身,而 DISENGAGE 退得比 AVOID 更彻底。
-        if (outmatched(s.effectiveHealth())) {
-            return Stance.DISENGAGE;
+    /**
+     * @param last 上一刻的决定;第一次传 {@code null}
+     */
+    public static Move decide(Battlefield b, Move last) {
+        // ① 扛不住 —— 一切"怎么打"的讨论都以她还站得住为前提。
+        if (outmatched(b.effectiveHealth())) {
+            return new Move(Action.DISENGAGE, NO_FOE);
         }
-        if (s.keepAway()) {
-            // 站得够远才谈得上出手;而近战对这种目标从来不是选项——贴上去就是进爆炸半径。
-            if (s.distance() < s.keepAwayDistance()) {
-                return Stance.AVOID;
+        // ② 会炸的已经贴到爆炸范围里 —— <b>全场的事</b>,与她正在打谁无关。
+        //    单目标的判据看不见这一条,于是她一边打史莱姆一边被炸。
+        if (b.underBlastThreat()) {
+            return new Move(Action.AVOID, NO_FOE);
+        }
+        // ③ 两条路都没有:赤手对上会还手的东西不是一条出路,退开。
+        if (!b.hasMelee() && !b.hasRanged() && anyEngaging(b)) {
+            return new Move(Action.DISENGAGE, NO_FOE);
+        }
+
+        Foe foe = pick(b, last);
+        if (foe != null) {
+            return new Move(actionAgainst(b, foe, last), foe.id());
+        }
+        // 还有被授权的、只是这一只打不了(会炸而她没有弓弩)。说清楚是"打不了"而不是"打完了"
+        // ——模型对前者能做点什么(去拿把弓),对后者无从下手。
+        Foe blocked = nearestAuthorized(b);
+        return blocked != null
+                ? new Move(Action.ABANDON, blocked.id())
+                : new Move(Action.DONE, NO_FOE);
+    }
+
+    /**
+     * 打谁。<b>先打近的,但选定之后打完再换</b>——每刻按距离重选的话,一群会分裂的史莱姆里
+     * "最近那只"每刻都在变,她永远在转向,而每次转向都会拆掉刚算好的路径。
+     */
+    private static Foe pick(Battlefield b, Move last) {
+        Foe kept = last == null ? null : b.byId(last.foeId());
+        if (kept != null && fightable(b, kept)) {
+            return kept;
+        }
+        Foe best = null;
+        for (Foe f : b.foes()) {
+            if (!fightable(b, f)) {
+                continue;
             }
-            return s.hasRanged() ? Stance.RANGED : Stance.ABANDON;
+            if (best == null || f.distance() < best.distance()
+                    || (f.distance() == best.distance() && f.id() < best.id())) {
+                best = f;
+            }
         }
-        double meleeBand = s.alreadyInMelee() ? s.meleeReach() + MELEE_HYSTERESIS : s.meleeReach();
-        if (s.distance() <= meleeBand) {
-            return Stance.MELEE;
+        return best;
+    }
+
+    /**
+     * 这一只值不值得当目标。
+     *
+     * <p><b>会炸的东西,没有远程手段就根本不该当目标</b>:她要的是躲开它,不是打它。让它进
+     * 候选的话,判据会在安全线上一格 AVOID、一格 ABANDON 地来回跳——放弃后下一刻又被选回来,
+     * 实测每秒三轮。躲它归 ② 那一档,不归"打谁"。
+     */
+    private static boolean fightable(Battlefield b, Foe f) {
+        if (!f.authorized()) {
+            return false;
         }
-        if (s.reachable()) {
-            return Stance.CLOSE_IN;   // 走得到就走过去砍:这同时也是省箭的那一支
+        return !f.explosive() || b.hasRanged();
+    }
+
+    /** 对选定的这一只做什么。 */
+    private static Action actionAgainst(Battlefield b, Foe foe, Move last) {
+        if (foe.explosive()) {
+            // 会炸的只能远远射(能选中它就说明有弓弩);贴身在任何血量下都不是选项,
+            // 而"已经贴太近"那一档在 ② 就拦掉了。
+            return Action.RANGED;
         }
-        return s.hasRanged() ? Stance.RANGED : Stance.ABANDON;
+        // 近战可用 = 有近战武器,或者根本没有远程手段(那拳头也得上)。
+        boolean meleeAvailable = b.hasMelee() || !b.hasRanged();
+        if (!meleeAvailable) {
+            // 手上只有弓:太近先拉开,别拿拳头凑合。
+            return foe.distance() < RANGED_MIN_DISTANCE ? Action.AVOID : Action.RANGED;
+        }
+        boolean swinging = last != null && last.action() == Action.MELEE && last.foeId() == foe.id();
+        double band = swinging ? b.meleeReach() + MELEE_HYSTERESIS : b.meleeReach();
+        if (foe.distance() <= band) {
+            return Action.MELEE;
+        }
+        if (foe.reachable()) {
+            return Action.CLOSE_IN;   // 走得到就走过去砍:这同时也是省箭的那一支
+        }
+        return b.hasRanged() ? Action.RANGED : Action.ABANDON;
+    }
+
+    /** 被授权、但这一刻打不了的里面最近的那只。 */
+    private static Foe nearestAuthorized(Battlefield b) {
+        Foe best = null;
+        for (Foe f : b.foes()) {
+            if (f.authorized() && (best == null || f.distance() < best.distance())) {
+                best = f;
+            }
+        }
+        return best;
+    }
+
+    private static boolean anyEngaging(Battlefield b) {
+        return b.foes().stream().anyMatch(Foe::engaging);
     }
 }

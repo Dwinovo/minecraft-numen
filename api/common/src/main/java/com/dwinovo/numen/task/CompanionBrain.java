@@ -140,6 +140,11 @@ final class CompanionBrain {
         if (current.isEmpty() && !wasIdle) {
             TaskPersistence.forget(companion);
         }
+        if (current.isEmpty() && sync.isEmpty()) {
+            // 她闲下来了:被任务按住的本能一律解除。按住是临时的,不该指望谁去显式还
+            // —— 任务可能被抢占、被换掉、身体可能没了,那些路径上没人有机会解锁。
+            companion.resumeAllReflexes();
+        }
         wasIdle = current.isEmpty();
         shipResults(companion);
         syncCurrentTask(companion);

@@ -4,6 +4,7 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Ballistics;
 import com.dwinovo.numen.core.combat.AttackPlan;
+import com.dwinovo.numen.core.combat.Battlefield;
 import com.dwinovo.numen.core.combat.Loadout;
 import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.combat.Pursuit;
@@ -11,6 +12,7 @@ import com.dwinovo.numen.core.combat.Swing;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
+import com.dwinovo.numen.core.task.chain.MobDefenseChain;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskState;
@@ -67,8 +69,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private static final int MAX_MISFIRES = 2;
     /** 射击时与目标保持的最小距离——太近了弹道压得太平,而且白白挨打。 */
     private static final double RANGED_MIN_DISTANCE = 5.0;
-    /** 退开时把这个半径内别的敌对生物也算进势场,免得躲一只撞上另一只。 */
-    private static final double AVOID_BYSTANDER_RADIUS = 12.0;
+    /** 组装局面看多远:势场要绕开谁、无差别模式打谁,都取这个半径。 */
+    private static final double FIELD_RADIUS = 12.0;
 
     private Phase phase = Phase.COMBAT;
     private Entity target;
@@ -79,14 +81,19 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     /** 谁还在逼近她 —— 脱离的终止判据,见 {@link Pursuit}。 */
     private final Pursuit pursuit = new Pursuit();
+    /**
+     * 这一场经手过的 id。无差别模式没有事先的名单,不记下来就无处结算战果
+     * ——它打倒的东西会因为"不在请求清单里"而被整场吞掉。
+     */
+    private final java.util.Set<Integer> touchedIds = new java.util.LinkedHashSet<>();
 
     private RangedShot shot;
     private int misfires;
     private double followRadius = MAX_FIRING_RANGE - 8.0;
     private int lastPlanLogTick = -1000;
-    private AttackPlan.Stance lastLoggedStance;
-    /** 上一刻的打法。近战迟滞要知道"是不是已经在打"。 */
-    private AttackPlan.Stance lastStance;
+    private AttackPlan.Action lastLoggedAction;
+    /** 上一刻的决定。判据靠它做迟滞与承诺,见 {@link AttackPlan#decide}。 */
+    private AttackPlan.Move lastMove;
 
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
         super(player, record);
@@ -96,9 +103,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     @Override
     protected void onStart() {
         snapshotInventory(inventoryBaseline);
-        // 认领这批目标:本能链看见它们在别人手上就不来抢身体了。
-        // 无差别模式没有固定清单,认领的是"附近所有敌对生物",每 tick 刷新(见 onTick)。
-        player.setCombatFocus(r.entityIds);
+        // 这场仗归我管了 —— 本能链别再为同一件事抢身体。空闲时自动解除,不必显式还。
+        player.pauseReflex(MobDefenseChain.ID);
     }
 
     @Override
@@ -106,152 +112,156 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         if (player.isDeadOrDying()) return TaskState.CANCELLED;
         if (phase == Phase.LOOT) return tickLoot();
 
-        if (r.indiscriminate) {
-            // 打谁不是事先定的,是这一刻谁在追她 —— 所以认领清单也要跟着刷新。
-            List<Integer> ids = new ArrayList<>();
-            for (var mob : chasersNow()) {
-                ids.add(mob.getId());
+        Battlefield field = surveyField();
+        for (var f : field.foes()) {
+            if (f.authorized()) {
+                touchedIds.add(f.id());
             }
-            player.setCombatFocus(ids);
         }
-        validateCurrentTarget();
-        Entity selected = selectTarget();
-        if (selected == null) {
-            InputDriver.halt(player);
-            if (r.indiscriminate) {
-                // 无差别模式的终点是"没人再追我",不是"名单打完了"。
-                succeed();
-                return TaskState.SUCCESS;
-            }
-            if (!r.defeated().isEmpty()) return TaskState.SUCCESS;
-            fail("none of the requested entity ids could be attacked", FailureType.TARGET_LOST);
-            return TaskState.FAILED;
-        }
-        if (selected != target) {
+        settleFinishedTargets();
+        AttackPlan.Move move = AttackPlan.decide(field, lastMove);
+        lastMove = move;
+        logMove(move, field);
+
+        Entity chosen = move.foeId() == AttackPlan.NO_FOE ? null : liveEntity(move.foeId());
+        if (chosen != target) {
             stopNav();
             abortShot();
-            target = selected;
+            target = chosen;
             followRadius = MAX_FIRING_RANGE - 8.0;
         }
-        lastTargetPosition = target.position();
-        loot.rememberPreexisting(BlockPos.containing(lastTargetPosition));
-        return engage();
-    }
-
-    // ==================== 目标簿记 ====================
-
-    private void validateCurrentTarget() {
-        if (target == null) return;
-        ServerLevel level = (ServerLevel) player.level();
-        Entity current = level.getEntity(target.getId());
-        if (isDown(target, current)) {
-            r.defeated(target.getId());
-            beginLoot();
-        } else if (current != target || target.isRemoved()) {
-            r.lost(target.getId());
-            clearTarget();
+        if (target != null) {
+            lastTargetPosition = target.position();
+            loot.rememberPreexisting(BlockPos.containing(lastTargetPosition));
         }
+        return switch (move.action()) {
+            case MELEE -> swingAt(Loadout.forTarget(player, target));
+            case CLOSE_IN -> closeIn();
+            case RANGED -> shootAt(Loadout.forTarget(player, target));
+            case AVOID -> backAway();
+            case DISENGAGE -> disengage();
+            case ABANDON -> abandonTarget();
+            case DONE -> finish();
+        };
     }
 
-    /** 打倒了没有。末影水晶这类非生物没有"濒死",它是直接消失的,所以补一条"我打过它且它没了"。 */
-    private boolean isDown(Entity previous, Entity current) {
-        if (previous instanceof LivingEntity living && living.isDeadOrDying()) return true;
-        if (current instanceof LivingEntity living && living.isDeadOrDying()) return true;
-        return previous.isRemoved() && r.strikes(previous.getId()) > 0;
-    }
+    // ==================== 局面 ====================
 
     /**
-     * 挑下一个打谁。<b>当前目标还有效就不换</b>——按距离每 tick 重选的话,一群会分裂的
-     * 史莱姆里"最近那只"每刻都在变,她永远在转向,而每次转向都会拆掉刚算好的路径。
-     * 只有它死了、丢了、或被判够不着,才重新按距离挑。
+     * 把这一刻的世界折成 {@link Battlefield}。
+     *
+     * <p>点名模式下"被授权"是模型给的那份清单;无差别模式下是"这一刻在追我的"——会分裂的怪
+     * 裂出来的新 id 因此自动进场,而点名的清单一裂开就作废了。
      */
-    private Entity selectTarget() {
-        if (r.indiscriminate) {
-            return selectNearestChaser();
-        }
-        if (target != null && !r.terminal(target.getId()) && !target.isRemoved()
-                && !(target instanceof LivingEntity living && living.isDeadOrDying())) {
-            return target;
-        }
-        List<Entity> candidates = new ArrayList<>();
-        ServerLevel level = (ServerLevel) player.level();
-        for (int id : r.entityIds) {
-            if (r.terminal(id)) continue;
-            Entity entity = level.getEntity(id);
-            if (entity == null || entity == player) {
-                r.lost(id);
-                continue;
+    private Battlefield surveyField() {
+        List<Battlefield.Foe> foes = new ArrayList<>();
+        for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
+            boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
+            boolean authorized = r.indiscriminate ? engaging : r.entityIds.contains(mob.getId());
+            if (authorized && r.terminal(mob.getId())) {
+                authorized = false;   // 打完了、丢了、或判过够不着的,不再是候选
             }
-            if (entity instanceof LivingEntity living && living.isDeadOrDying()) {
-                r.defeated(id);
-                continue;
-            }
-            if (entity.isRemoved()) {
-                r.lost(id);
-                continue;
-            }
-            candidates.add(entity);
+            foes.add(new Battlefield.Foe(
+                    mob.getId(),
+                    player.distanceTo(mob),
+                    Menace.keepAwayFrom(mob),
+                    Menace.safeDistanceFrom(mob),
+                    engaging,
+                    reachable(mob.getId()),
+                    authorized));
         }
-        candidates.sort((a, b) -> {
-            int byDistance = Double.compare(player.distanceToSqr(a), player.distanceToSqr(b));
-            return byDistance != 0 ? byDistance : Integer.compare(a.getId(), b.getId());
-        });
-        return candidates.isEmpty() ? null : candidates.getFirst();
+        // 点名模式还可能被要求打不敌对的东西(一只鸡、一个末影水晶),它们不在敌对扫描里。
+        if (!r.indiscriminate) {
+            for (int id : r.entityIds) {
+                if (r.terminal(id) || containsId(foes, id)) {
+                    continue;
+                }
+                Entity e = liveEntity(id);
+                if (e != null) {
+                    foes.add(new Battlefield.Foe(id, player.distanceTo(e),
+                            Menace.keepAwayFrom(e), Menace.safeDistanceFrom(e),
+                            false, reachable(id), true));
+                }
+            }
+        }
+        Loadout loadout = Loadout.forTarget(player, player);
+        return new Battlefield(
+                Menace.effectiveHealth(player),
+                Swing.reachOf(player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE)),
+                loadout.hasMelee(), loadout.hasRanged(), foes);
     }
 
-    private void clearTarget() {
-        target = null;
-        stopNav();
-        abortShot();
+    private static boolean containsId(List<Battlefield.Foe> foes, int id) {
+        for (var f : foes) {
+            if (f.id() == id) return true;
+        }
+        return false;
+    }
+
+    private boolean reachable(int id) {
+        Integer fails = navFailures.get(id);
+        return fails == null || fails < MAX_APPROACH_FAILURES;
+    }
+
+    private Entity liveEntity(int id) {
+        Entity e = ((ServerLevel) player.level()).getEntity(id);
+        return e == null || e.isRemoved() || e == player ? null : e;
+    }
+
+    /** 把已经有结果的目标记进账本(死了 / 不见了)。 */
+    private void settleFinishedTargets() {
+        for (int id : r.indiscriminate ? List.copyOf(touchedIds) : r.entityIds) {
+            if (r.terminal(id)) {
+                continue;
+            }
+            Entity e = ((ServerLevel) player.level()).getEntity(id);
+            if (e == null || e.isRemoved()) {
+                if (r.strikes(id) > 0) {
+                    r.defeated(id);
+                    beginLoot(lastTargetPosition);
+                } else {
+                    r.lost(id);
+                }
+            } else if (e instanceof LivingEntity living && living.isDeadOrDying()) {
+                r.defeated(id);
+                beginLoot(lastTargetPosition);
+            }
+        }
     }
 
     private void noteApproachFailure(int id) {
         if (navFailures.merge(id, 1, Integer::sum) >= MAX_APPROACH_FAILURES) {
             r.unreachable(id);
-            clearTarget();
         }
     }
 
-    // ==================== 判据分派 ====================
-
-    private AttackPlan.Situation situationNow(Loadout loadout) {
-        boolean keepAway = Menace.keepAwayFrom(target);
-        return new AttackPlan.Situation(
-                player.distanceTo(target),
-                Swing.reachOf(player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE)),
-                !navFailures.containsKey(target.getId())
-                        || navFailures.get(target.getId()) < MAX_APPROACH_FAILURES,
-                loadout.hasRanged(),
-                keepAway,
-                Menace.safeDistanceFrom(target),
-                Menace.effectiveHealth(player),
-                lastStance == AttackPlan.Stance.MELEE);
+    /** 打完了 —— 名单清空(点名),或没人再追她(无差别)。 */
+    private TaskState finish() {
+        InputDriver.halt(player);
+        stopNav();
+        if (r.indiscriminate || !r.defeated().isEmpty()) {
+            succeed();
+            return TaskState.SUCCESS;
+        }
+        fail("none of the requested entity ids could be attacked", FailureType.TARGET_LOST);
+        return TaskState.FAILED;
     }
 
-    private TaskState engage() {
-        Loadout loadout = Loadout.forTarget(player, target);
-        AttackPlan.Stance stance = AttackPlan.decide(situationNow(loadout));
-        lastStance = stance;
-        logStance(stance, loadout);
-        return switch (stance) {
-            case MELEE -> swingAt(loadout);
-            case CLOSE_IN -> closeIn();
-            case RANGED -> shootAt(loadout);
-            case AVOID -> backAway();
-            case DISENGAGE -> disengage();
-            case ABANDON -> abandonTarget();
-        };
-    }
-
-    private void logStance(AttackPlan.Stance stance, Loadout loadout) {
-        if (stance == lastLoggedStance && player.tickCount - lastPlanLogTick < 40) return;
-        lastLoggedStance = stance;
+    private void logMove(AttackPlan.Move move, Battlefield field) {
+        if (move.action() == lastLoggedAction && player.tickCount - lastPlanLogTick < 40) return;
+        lastLoggedAction = move.action();
         lastPlanLogTick = player.tickCount;
-        Constants.LOG.info("[numen-attack] {} target={} dist={} melee={} ranged={} keep_away={}",
-                stance, target.getId(), String.format("%.1f", player.distanceTo(target)),
-                loadout.hasMelee() ? loadout.melee().stack().getItem() : "拳头",
-                loadout.hasRanged() ? loadout.ranged().stack().getItem() : "无",
-                Menace.keepAwayFrom(target));
+        Constants.LOG.info("[numen-attack] {} foe={} dist={} melee={} ranged={} hp_eff={} 场上={}",
+                move.action(), move.foeId(),
+                move.foeId() == AttackPlan.NO_FOE ? "-"
+                        : String.format("%.1f", distanceOf(field, move.foeId())),
+                field.hasMelee(), field.hasRanged(),
+                String.format("%.0f", field.effectiveHealth()), field.foes().size());
+    }
+
+    private static double distanceOf(Battlefield field, int id) {
+        var f = field.byId(id);
+        return f == null ? -1 : f.distance();
     }
 
     // ==================== 近战 ====================
@@ -312,7 +322,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         if (target == null || target.isRemoved()) {
             return null;
         }
-        var others = Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS);
+        var others = Menace.hostilesAround(player, FIELD_RADIUS);
         others.remove(target);
         return NavGoal.approachAvoiding(
                 NavGoal.near(target.blockPosition(), Math.max(0.0, radius)),
@@ -414,7 +424,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                     // 放在外面就是把开路那一刻钉死,目标挪开之后她还按旧位置退。
                     () -> {
                         // 退开这一只的路上,别撞进旁边别的敌对生物 —— 它们只绕开,不为它们多跑。
-                        var bystanders = Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS);
+                        var bystanders = Menace.hostilesAround(player, FIELD_RADIUS);
                         bystanders.remove(target);
                         var field = Menace.field(List.of(target), bystanders);
                         return field.isEmpty() ? null
@@ -441,7 +451,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private TaskState disengage() {
         long now = player.level().getGameTime();
-        var chasers = Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS);
+        var chasers = Menace.hostilesAround(player, FIELD_RADIUS);
         Map<Integer, Double> distances = new LinkedHashMap<>();
         for (var mob : chasers) {
             if (mob.getTarget() == player || mob == player.getLastHurtByMob()) {
@@ -461,9 +471,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                     () -> {
                         var engaging = chasersNow();
                         var field = Menace.field(engaging,
-                                Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS));
+                                Menace.hostilesAround(player, FIELD_RADIUS));
                         return field.isEmpty() ? null
-                                : NavGoal.avoid(AVOID_BYSTANDER_RADIUS, Menace.AVOID_PENALTY, field);
+                                : NavGoal.avoid(FIELD_RADIUS, Menace.AVOID_PENALTY, field);
                     },
                     CHASE_SPEED,
                     () -> pursuit.escaped(player.level().getGameTime()));
@@ -482,33 +492,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return TaskState.RUNNING;
     }
 
-    /**
-     * 无差别模式下打谁:<b>先打近的</b>,但选定之后打完再换(粘性同点名模式)。
-     * 名单每刻由"谁在追我"重算,所以会分裂的怪裂出来的新 id 自动进场。
-     */
-    private Entity selectNearestChaser() {
-        if (target != null && !target.isRemoved()
-                && !(target instanceof LivingEntity living && living.isDeadOrDying())
-                && !r.terminal(target.getId())
-                && player.distanceToSqr(target) <= AVOID_BYSTANDER_RADIUS * AVOID_BYSTANDER_RADIUS) {
-            return target;
-        }
-        Entity best = null;
-        double bestDistSqr = Double.MAX_VALUE;
-        for (var mob : chasersNow()) {
-            double d = player.distanceToSqr(mob);
-            if (d < bestDistSqr) {
-                bestDistSqr = d;
-                best = mob;
-            }
-        }
-        return best;
-    }
-
     /** 这一刻真正在追她的那些(锁定了她、或刚打了她)。 */
     private java.util.List<net.minecraft.world.entity.Mob> chasersNow() {
         java.util.List<net.minecraft.world.entity.Mob> out = new java.util.ArrayList<>();
-        for (var mob : Menace.hostilesAround(player, AVOID_BYSTANDER_RADIUS)) {
+        for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
             if (mob.getTarget() == player || mob == player.getLastHurtByMob()) {
                 out.add(mob);
             }
@@ -517,24 +504,30 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     }
 
     private TaskState abandonTarget() {
+        if (target == null) {
+            return TaskState.RUNNING;
+        }
         r.unreachable(target.getId());
-        Constants.LOG.info("[numen-attack] 放弃 target={} —— {}", target.getId(),
+        Constants.LOG.info("[numen-attack] 放弃 foe={} —— {}", target.getId(),
                 Menace.keepAwayFrom(target)
                         ? "不该贴近它,而我没有能用的弓弩"
                         : "走不到它,也没有能用的弓弩");
-        clearTarget();
+        stopNav();
+        abortShot();
+        target = null;
+        lastMove = null;
         return TaskState.RUNNING;
     }
 
     // ==================== 拾荒 ====================
 
-    private void beginLoot() {
+    private void beginLoot(Vec3 where) {
         stopNav();
         abortShot();
         InputDriver.halt(player);
-        loot.begin(BlockPos.containing(lastTargetPosition != null
-                ? lastTargetPosition : target.position()));
+        loot.begin(BlockPos.containing(where != null ? where : player.position()));
         target = null;
+        lastMove = null;   // 目标没了,承诺一并作废
         phase = Phase.LOOT;
     }
 
@@ -594,7 +587,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     @Override
     protected void cleanup() {
-        player.setCombatFocus(java.util.List.of());   // 交回:这些目标不再有人管
         abortShot();
         InputDriver.halt(player);
         player.setShiftKeyDown(false);

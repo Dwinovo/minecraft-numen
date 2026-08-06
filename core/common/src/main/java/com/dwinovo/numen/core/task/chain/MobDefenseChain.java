@@ -40,6 +40,9 @@ import java.util.List;
  */
 public final class MobDefenseChain implements Task, Reflex {
 
+    /** 本能名册里的 id。别处按住这条本能时用它,见 {@code NumenPlayer.pauseReflex}。 */
+    public static final String ID = "mob_defense";
+
     /** 看多远。超出这个半径的不算"身边"。 */
     private static final double SCAN_RADIUS = 12.0;
 
@@ -76,6 +79,11 @@ public final class MobDefenseChain implements Task, Reflex {
     @Override
     public boolean canRun(NumenPlayer companion) {
         long now = companion.level().getGameTime();
+        // 有人正在替这条本能干活(模型派的 attack),就别抢 —— 除非她已经扛不住,
+        // 那一档只有本能看得见。按住的是本能不是目标,所以会分裂的怪不会让它失效。
+        if (fight == null && companion.reflexPaused(ID) && !Menace.outmatched(companion)) {
+            return false;
+        }
         if (fight != null) {
             return true;   // 打着呢,打完再说
         }
@@ -153,7 +161,7 @@ public final class MobDefenseChain implements Task, Reflex {
 
     @Override
     public String name() {
-        return "mob_defense";
+        return ID;
     }
 
     // ---- Reflex roster paperwork (constitution §6) ----
@@ -181,15 +189,12 @@ public final class MobDefenseChain implements Task, Reflex {
      */
     private List<Mob> dangersNear(NumenPlayer companion) {
         LivingEntity attacker = companion.getLastHurtByMob();
-        boolean cannotTakeMore = Menace.outmatched(companion);
         List<Mob> near = new ArrayList<>();
         for (Mob m : Menace.hostilesAround(companion, SCAN_RADIUS)) {
             if (m != attacker && m.getTarget() != companion) {
                 continue;
             }
-            if (!cannotTakeMore && companion.isCombatFocus(m.getId())) {
-                continue;
-            }
+
             double danger = Math.max(Menace.safeDistanceFrom(m), MELEE_DANGER);
             if (companion.distanceTo(m) <= danger) {
                 near.add(m);

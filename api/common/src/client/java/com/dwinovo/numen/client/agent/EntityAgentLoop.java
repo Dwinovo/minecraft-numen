@@ -1269,6 +1269,13 @@ public final class EntityAgentLoop {
         if (!skillsXml.isEmpty()) {
             sb.append("\n\n").append(skillsXml);
         }
+        // 本能名册。宪法 §6 定的那份自述一直在注册表里躺着,从来没送到模型眼前 —— 于是它
+        // 不知道身体会自己做哪些事,既可能重复去做,也可能对"我怎么突然挪了二十格"毫无头绪。
+        // 名册是纯注册表内容、两端都注册,所以这里本地就算得出来,不需要任何网络。
+        String reflexes = com.dwinovo.numen.task.reflex.ReflexRegistry.overview();
+        if (!reflexes.isEmpty()) {
+            sb.append("\n\n<instincts>\n").append(reflexes).append("\n</instincts>");
+        }
         return sb.toString();
     }
 
