@@ -6,6 +6,7 @@ import com.dwinovo.numen.platform.Services;
 
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.HashMap;
@@ -40,7 +41,8 @@ public final class CompanionInventoryWatch {
 
     /** 最小推送间隔(tick)。她连续捡东西时压成一波,模型下一轮才读,晚半秒无感。 */
     private static final int MIN_INTERVAL_TICKS = 10;
-    private static final long[] EMPTY_MIRROR = new long[0];
+    private static final Item[] EMPTY_ITEMS = new Item[0];
+    private static final int[] EMPTY_COUNTS = new int[0];
 
     private static final Map<UUID, CompanionInventoryWatch> WATCHES = new HashMap<>();
 
@@ -49,8 +51,10 @@ public final class CompanionInventoryWatch {
         com.dwinovo.numen.platform.ServerLifecycle.onStopped(CompanionInventoryWatch::dropAll);
     }
 
-    /** 每格上次推送时的"物品身份 + 数量"。长度按背包实际大小来(36 主 + 4 甲 + 1 副手)。 */
-    private long[] mirror = EMPTY_MIRROR;
+    /** 每格上次见到的物品与数量。{@link Item} 是注册表单例,比引用就够——不必算哈希,
+     *  也就没有"把数量塞进低位、模组把堆叠上限调过 65535 就溢出"这种雷。 */
+    private Item[] lastItem = EMPTY_ITEMS;
+    private int[] lastCount = EMPTY_COUNTS;
     private int lastSelected = -1;
     private long lastSentTick;
     private boolean everSent;
@@ -105,15 +109,17 @@ public final class CompanionInventoryWatch {
     /** 一趟遍历:顺便把镜像更新到最新。返回"有没有模型在乎的变化"。 */
     private boolean changedSince(Inventory inv) {
         int size = inv.getContainerSize();
-        if (mirror.length != size) {
-            mirror = new long[size];
-            java.util.Arrays.fill(mirror, Long.MIN_VALUE);   // 首次全部算变化
+        if (lastItem.length != size) {
+            lastItem = new Item[size];   // 全 null,首格全部算变化
+            lastCount = new int[size];
         }
         boolean changed = false;
         for (int i = 0; i < size; i++) {
-            long packed = pack(inv.getItem(i));
-            if (mirror[i] != packed) {
-                mirror[i] = packed;
+            ItemStack stack = inv.getItem(i);
+            // 空栈的 getItem() 是 AIR、getCount() 是 0,和"这一格没东西"天然一致。
+            if (lastItem[i] != stack.getItem() || lastCount[i] != stack.getCount()) {
+                lastItem[i] = stack.getItem();
+                lastCount[i] = stack.getCount();
                 changed = true;   // 不 break:整趟走完,镜像才是完整的
             }
         }
@@ -125,11 +131,6 @@ public final class CompanionInventoryWatch {
         return changed;
     }
 
-    /** 一格的"意义":什么物品、几个。组件一概不在内。 */
-    private static long pack(ItemStack stack) {
-        return stack.isEmpty() ? 0L
-                : ((long) System.identityHashCode(stack.getItem()) << 16) | (stack.getCount() & 0xFFFF);
-    }
 
     private static int kinds(NumenInventoryPayload p) {
         return (int) p.items().stream().filter(s -> !s.isEmpty())
