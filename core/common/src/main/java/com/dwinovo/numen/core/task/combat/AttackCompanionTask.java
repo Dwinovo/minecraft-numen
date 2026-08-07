@@ -23,6 +23,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
@@ -34,6 +35,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * {@code attack}:打掉指定的实体,<b>近战还是远程由身体判,不由模型判</b>。
@@ -252,7 +254,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         lastLoggedAction = move.action();
         lastPlanLogTick = player.tickCount;
         Constants.LOG.info("[numen-attack] {} foe={} dist={} melee={} ranged={} hp_eff={} 场上={}",
-                move.action(), move.foeId(),
+                move.action(),
+                move.foeId() == AttackPlan.NO_FOE ? "全场" : move.foeId(),
                 move.foeId() == AttackPlan.NO_FOE ? "-"
                         : String.format("%.1f", distanceOf(field, move.foeId())),
                 field.hasMelee(), field.hasRanged(),
@@ -416,27 +419,99 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 拉开距离。走的是带权重的势场目标——它认得完所有威胁而且<b>有终点</b>,
      * 所以不必在这里每 tick 判断"退够了没有",也就不会在边界上来回抖。
      */
-    private TaskState backAway() {
+    /**
+     * 势场退避的<b>唯一实现</b>。{@code AVOID}(躲开会炸的)与 {@code DISENGAGE}(扛不住了脱离)
+     * 走的是同一段——动作本来就是同一个,区别只在躲谁、退多远、什么时候算完。
+     *
+     * <p>它们都是<b>全场的动作</b>,不指向某一只:退开的是所有该躲的,而不是"当前目标"。
+     * 按当前目标写会在这里出事——全局动作没有目标,取到的安全距离是零,到达判据当场成立,
+     * 于是她建一次导航、立刻"到达"、再建再到达,原地一动不动。
+     *
+     * @param mustClear 必须拉开的那些;空了就算退到位
+     * @param clearance 要拉开多远
+     * @return 导航这一刻的状态
+     */
+    private PlayerNav.Status driveRetreat(Supplier<List<Mob>> mustClear, double clearance) {
         if (nav == null) {
-            double safe = Menace.safeDistanceFrom(target);
+            Constants.LOG.info("[numen-attack] 退避 躲开 {} 个,间距 {} 格",
+                    mustClear.get().size(), String.format("%.1f", clearance));
             nav = PlayerNav.toGoal(player,
-                    // 威胁快照<b>在 supplier 里面</b>取:它每次重规划调一次,坐标因此跟着刷新。
-                    // 放在外面就是把开路那一刻钉死,目标挪开之后她还按旧位置退。
+                    // 威胁快照<b>在 supplier 里面</b>取:它每次重规划调一次,坐标跟着刷新。
+                    // 放在外面就是把开路那一刻钉死,它们追上来之后她还按旧位置退。
                     () -> {
-                        // 退开这一只的路上,别撞进旁边别的敌对生物 —— 它们只绕开,不为它们多跑。
+                        var must = mustClear.get();
+                        if (must.isEmpty()) {
+                            return null;
+                        }
+                        // 退开的路上别撞进旁边别的敌对生物 —— 它们只绕开,不为它们多跑。
                         var bystanders = Menace.hostilesAround(player, FIELD_RADIUS);
-                        bystanders.remove(target);
-                        var field = Menace.field(List.of(target), bystanders);
-                        return field.isEmpty() ? null
-                                : NavGoal.avoid(safe, Menace.AVOID_PENALTY, field);
+                        bystanders.removeAll(must);
+                        return NavGoal.avoid(clearance, Menace.AVOID_PENALTY,
+                                Menace.field(must, bystanders));
                     },
                     CHASE_SPEED,
-                    () -> target == null || target.isRemoved()
-                            || player.distanceTo(target) >= safe);
+                    () -> mustClear.get().isEmpty());
         }
-        switch (nav.tick()) {
-            case RUNNING -> { }
-            case ARRIVED, FAILED -> stopNav();
+        PlayerNav.Status status = nav.tick();
+        if (status != PlayerNav.Status.RUNNING) {
+            stopNav();
+        }
+        return status;
+    }
+
+    /** 身边<b>所有</b>已经进了自己安全距离的爆炸物。这是全场的事,与她正在打谁无关。 */
+    private List<Mob> blastsTooClose() {
+        List<Mob> out = new ArrayList<>();
+        for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
+            if (Menace.keepAwayFrom(mob) && player.distanceTo(mob) < Menace.safeDistanceFrom(mob)) {
+                out.add(mob);
+            }
+        }
+        return out;
+    }
+
+    /** 退出爆炸范围。退到位就回到正常判据——下一刻 {@code decide} 自会改口。 */
+    private TaskState backAway() {
+        List<Mob> blasts = blastsTooClose();
+        if (blasts.isEmpty()) {
+            stopNav();
+            return TaskState.RUNNING;
+        }
+        double clearance = 0.0;
+        for (var mob : blasts) {
+            clearance = Math.max(clearance, Menace.safeDistanceFrom(mob));
+        }
+        driveRetreat(this::blastsTooClose, clearance);
+        return TaskState.RUNNING;
+    }
+
+    /**
+     * 脱离接触:她扛不住了,先活下来。
+     *
+     * <p>终止条件<b>不是距离</b>,是 {@link Pursuit} 说的"没人还在逼近我"——十五格外一只
+     * 冲过来的蜘蛛比五格外一只卡住的僵尸危险得多,拿距离当判据会两头都判错。
+     */
+    private TaskState disengage() {
+        long now = player.level().getGameTime();
+        Map<Integer, Double> distances = new LinkedHashMap<>();
+        for (var mob : chasersNow()) {
+            distances.put(mob.getId(), player.distanceToSqr(mob));
+        }
+        pursuit.observe(distances, now);
+        if (pursuit.escaped(now)) {
+            stopNav();
+            InputDriver.halt(player);
+            Constants.LOG.info("[numen-attack] 脱离成功 —— 没有东西还在逼近");
+            fail("broke off — too hurt to keep fighting; nothing is chasing you now",
+                    FailureType.TARGET_LOST);
+            return TaskState.FAILED;
+        }
+        if (driveRetreat(this::chasersNow, FIELD_RADIUS) == PlayerNav.Status.FAILED) {
+            // 退无可退(被围住、堵在死角)。攥着身体谁也帮不上,把话说清楚交回给模型。
+            Constants.LOG.info("[numen-attack] 退无可退 —— 被围住了");
+            fail("cornered — too hurt to fight and there is no way out from here",
+                    FailureType.BOXED_IN);
+            return TaskState.FAILED;
         }
         return TaskState.RUNNING;
     }
@@ -449,52 +524,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      *
      * <p>势场收当前<b>所有</b>敌对生物:逃跑路上撞进第二只怪,是旧的单点逃离目标最典型的死法。
      */
-    private TaskState disengage() {
-        long now = player.level().getGameTime();
-        var chasers = Menace.hostilesAround(player, FIELD_RADIUS);
-        Map<Integer, Double> distances = new LinkedHashMap<>();
-        for (var mob : chasers) {
-            if (mob.getTarget() == player || mob == player.getLastHurtByMob()) {
-                distances.put(mob.getId(), player.distanceToSqr(mob));
-            }
-        }
-        pursuit.observe(distances, now);
-        if (pursuit.escaped(now)) {
-            stopNav();
-            InputDriver.halt(player);
-            fail("broke off — too hurt to keep fighting; nothing is chasing you now",
-                    FailureType.TARGET_LOST);
-            return TaskState.FAILED;
-        }
-        if (nav == null) {
-            nav = PlayerNav.toGoal(player,
-                    () -> {
-                        var engaging = chasersNow();
-                        var field = Menace.field(engaging,
-                                Menace.hostilesAround(player, FIELD_RADIUS));
-                        return field.isEmpty() ? null
-                                : NavGoal.avoid(FIELD_RADIUS, Menace.AVOID_PENALTY, field);
-                    },
-                    CHASE_SPEED,
-                    () -> pursuit.escaped(player.level().getGameTime()));
-        }
-        switch (nav.tick()) {
-            case RUNNING -> { }
-            case ARRIVED -> stopNav();
-            case FAILED -> {
-                stopNav();
-                // 退无可退(被围住、堵在死角)。攥着身体谁也帮不上,把话说清楚交回给模型。
-                fail("cornered — too hurt to fight and there is no way out from here",
-                        FailureType.BOXED_IN);
-                return TaskState.FAILED;
-            }
-        }
-        return TaskState.RUNNING;
-    }
 
     /** 这一刻真正在追她的那些(锁定了她、或刚打了她)。 */
-    private java.util.List<net.minecraft.world.entity.Mob> chasersNow() {
-        java.util.List<net.minecraft.world.entity.Mob> out = new java.util.ArrayList<>();
+    private List<Mob> chasersNow() {
+        List<Mob> out = new ArrayList<>();
         for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
             if (mob.getTarget() == player || mob == player.getLastHurtByMob()) {
                 out.add(mob);
