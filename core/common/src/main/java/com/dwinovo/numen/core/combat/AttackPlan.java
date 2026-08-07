@@ -61,7 +61,7 @@ public final class AttackPlan {
      * <p>没有它,目标在够到线上微动就是"打一下 → 拆掉路径重新规划 → 打一下",
      * 实测刷了七十多次"新路径立刻判定到达"。
      */
-    private static final double MELEE_HYSTERESIS = 1.0;
+    private static final double MELEE_HYSTERESIS = 1.5;
 
     /**
      * 只有远程手段时,离目标近于这个距离就先拉开。
@@ -82,7 +82,7 @@ public final class AttackPlan {
      */
     public static Move decide(Battlefield b, Move last) {
         // ① 扛不住 —— 一切"怎么打"的讨论都以她还站得住为前提。
-        if (outmatched(b.effectiveHealth())) {
+        if (outmatched(b.effectiveHealth()) && !b.cornered()) {
             return new Move(Action.DISENGAGE, NO_FOE);
         }
         // ② 会炸的已经贴到爆炸范围里 —— <b>全场的事</b>,与她正在打谁无关。
@@ -91,7 +91,7 @@ public final class AttackPlan {
             return new Move(Action.AVOID, NO_FOE);
         }
         // ③ 两条路都没有:赤手对上会还手的东西不是一条出路,退开。
-        if (!b.hasMelee() && !b.hasRanged() && anyEngaging(b)) {
+        if (!b.hasMelee() && !b.hasRanged() && anyEngaging(b) && !b.cornered()) {
             return new Move(Action.DISENGAGE, NO_FOE);
         }
 
@@ -99,8 +99,16 @@ public final class AttackPlan {
         if (foe != null) {
             return new Move(actionAgainst(b, foe, last), foe.id());
         }
-        // 还有被授权的、只是这一只打不了(会炸而她没有弓弩)。说清楚是"打不了"而不是"打完了"
-        // ——模型对前者能做点什么(去拿把弓),对后者无从下手。
+        // 打不了了。<b>还有东西在追她,那就不叫打完了。</b>
+        //
+        // 这一条曾经判成 DONE:苦力怕还跟着,她没弓打不了,于是候选空 → 宣布胜利收工,
+        // 回执还写着"没有东西再追你了"。反射链冷却完又开一场一模一样的,每轮放一次血。
+        // "没有能打的"与"没有危险了"在这种局面下正好相反。
+        if (anyEngaging(b)) {
+            return new Move(Action.DISENGAGE, NO_FOE);
+        }
+        // 它不追她,只是这一只碰不得(模型点名让她打一个够不着或会炸的东西)。说清楚是
+        // "打不了"而不是"打完了"——模型对前者能做点什么(去拿把弓),对后者无从下手。
         Foe blocked = nearestAuthorized(b);
         return blocked != null
                 ? new Move(Action.ABANDON, blocked.id())
@@ -140,14 +148,16 @@ public final class AttackPlan {
         if (!f.authorized()) {
             return false;
         }
-        return !f.explosive() || b.hasRanged();
+        // 引信没点着的爬行者就是一只普通怪:她够得着 4 格、它 3 格才点火,中间那条一格宽的
+        // 带能打到它而不触发。曾经"会炸的一律不当目标",于是她只会绕着走、永远解决不掉,
+        // 还在安全线上一格 AVOID 一格 ABANDON 地来回跳。
+        return !f.armed() || b.hasRanged();
     }
 
     /** 对选定的这一只做什么。 */
     private static Action actionAgainst(Battlefield b, Foe foe, Move last) {
-        if (foe.explosive()) {
-            // 会炸的只能远远射(能选中它就说明有弓弩);贴身在任何血量下都不是选项,
-            // 而"已经贴太近"那一档在 ② 就拦掉了。
+        if (foe.armed()) {
+            // 已经在倒计时的只能远远射(能选中它就说明有弓弩);"已经贴太近"那一档在 ② 拦掉了。
             return Action.RANGED;
         }
         // 近战可用 = 有近战武器,或者根本没有远程手段(那拳头也得上)。

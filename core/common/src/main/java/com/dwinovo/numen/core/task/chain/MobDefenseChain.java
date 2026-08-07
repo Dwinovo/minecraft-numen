@@ -61,9 +61,6 @@ public final class MobDefenseChain implements Task, Reflex {
      */
     private static final long CALM_GRACE_TICKS = 40;
 
-    /** 打完歇一会儿,把身体切实交回给模型。 */
-    private static final long CHAIN_COOLDOWN = 100;
-
     /** {@link #dangerLastSeenTick} 的"从没见过"哨兵。不参与减法,免得负溢出。 */
     private static final long NEVER = Long.MIN_VALUE;
 
@@ -71,11 +68,18 @@ public final class MobDefenseChain implements Task, Reflex {
     private AttackCompanionTask fight;
     /** 最后一刻还看得见危险的游戏时间。 */
     private long dangerLastSeenTick = NEVER;
-    private long cooldownUntilGameTime;
 
     public MobDefenseChain() {
     }
 
+    /**
+     * 危险来了就醒。<b>打完不设冷却</b>——没有危险时 {@link #dangersNear} 本来就是空的,
+     * 链子自然不会醒,冷却在这里没有作用,只有副作用:那几秒里新出现的危险她一动不动。
+     * 实测四次重伤都发生在这个窗口里。
+     *
+     * <p>冷却原本管的是"退无可退"(老注释:hands the body back to the LLM),但那件事的正解
+     * 不是等几秒再试一次,而是{@code cornered} 那一维——退不掉就打。
+     */
     @Override
     public boolean canRun(NumenPlayer companion) {
         long now = companion.level().getGameTime();
@@ -86,9 +90,6 @@ public final class MobDefenseChain implements Task, Reflex {
         }
         if (fight != null) {
             return true;   // 打着呢,打完再说
-        }
-        if (now < cooldownUntilGameTime) {
-            return false;
         }
         if (SurvivalDecisions.mobDefenseTriggered(!dangersNear(companion).isEmpty())) {
             return true;
@@ -138,7 +139,6 @@ public final class MobDefenseChain implements Task, Reflex {
     private void end(NumenPlayer companion, TaskState state) {
         String line = fight.result(state).message();
         fight = null;
-        cooldownUntilGameTime = companion.level().getGameTime() + CHAIN_COOLDOWN;
         dangerLastSeenTick = NEVER;
         InputDriver.halt(companion);
         companion.setShiftKeyDown(false);

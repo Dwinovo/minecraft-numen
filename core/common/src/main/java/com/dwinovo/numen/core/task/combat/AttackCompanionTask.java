@@ -10,6 +10,7 @@ import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.combat.Pursuit;
 import com.dwinovo.numen.core.combat.Swing;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
+import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.chain.MobDefenseChain;
@@ -49,9 +50,10 @@ import java.util.function.Supplier;
  * 挥击(冷却与无敌帧)、射击(弹道与拉弓)、躲避(势场),各自是真正不同的东西;
  * 选哪一套则只有一处判据 {@link AttackPlan},本能链用的也是同一处。
  *
- * <h2>爬行者</h2>
- * 它够得着,但贴上去就是进爆炸半径,所以它走"该不该靠近"那一维:有弓就退到引信会倒退的
- * 距离外射,没弓就明说打不了——而不是冲上去。详见 {@link Menace}。
+ * <h2>会炸的东西</h2>
+ * 爬行者<b>引信点着之前就是一只普通怪</b>:她够得着 4 格、它 3 格才点火,中间那条一格宽的带
+ * 能打到它而不触发。点着了再退也来得及——引信 30 刻,而爆炸伤害到 6 格就归零,从 3 格退出去
+ * 疾跑只要十来刻。末影水晶不适用:它没有引信,一打就炸。详见 {@link Menace}。
  */
 public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskRecord> {
 
@@ -88,6 +90,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * ——它打倒的东西会因为"不在请求清单里"而被整场吞掉。
      */
     private final java.util.Set<Integer> touchedIds = new java.util.LinkedHashSet<>();
+
+    /** 退避的寻路连续失败次数。够了就是"退不掉",判据据此改判背水一战。 */
+    private int retreatFailures;
 
     private RangedShot shot;
     private int misfires;
@@ -166,7 +171,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             foes.add(new Battlefield.Foe(
                     mob.getId(),
                     player.distanceTo(mob),
-                    Menace.keepAwayFrom(mob),
+                    Menace.explodes(mob),
+                    Menace.armed(mob),
                     Menace.safeDistanceFrom(mob),
                     engaging,
                     reachable(mob.getId()),
@@ -181,7 +187,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 Entity e = liveEntity(id);
                 if (e != null) {
                     foes.add(new Battlefield.Foe(id, player.distanceTo(e),
-                            Menace.keepAwayFrom(e), Menace.safeDistanceFrom(e),
+                            Menace.explodes(e), Menace.armed(e), Menace.safeDistanceFrom(e),
                             false, reachable(id), true));
                 }
             }
@@ -190,7 +196,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return new Battlefield(
                 Menace.effectiveHealth(player),
                 Swing.reachOf(player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE)),
-                loadout.hasMelee(), loadout.hasRanged(), foes);
+                loadout.hasMelee(), loadout.hasRanged(),
+                retreatFailures >= MAX_APPROACH_FAILURES, foes);
     }
 
     private static boolean containsId(List<Battlefield.Foe> foes, int id) {
@@ -300,7 +307,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private TaskState closeIn() {
         if (nav == null) {
             double reach = Swing.reachOf(player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE));
-            double maintain = Math.max(0.5, reach - 1.0);
+            double maintain = Menace.standoffFrom(target, reach);
             nav = PlayerNav.toGoal(player, () -> approachGoal(maintain), CHASE_SPEED,
                     () -> target == null || target.isRemoved());
         }
@@ -340,7 +347,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         if (weapon == null) {
             return abandonTarget();
         }
-        if (player.distanceTo(target) < RANGED_MIN_DISTANCE && !Menace.keepAwayFrom(target)) {
+        if (player.distanceTo(target) < RANGED_MIN_DISTANCE && !Menace.armed(target)) {
             abortShot();
             return backAway();
         }
@@ -450,20 +457,47 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                                 Menace.field(must, bystanders));
                     },
                     CHASE_SPEED,
-                    () -> mustClear.get().isEmpty());
+                    // 到达判据必须用<b>同一个 clearance</b>。曾经它问的是"还有没有该躲的"
+                    // (那用的是安全线本身),而目标要的是安全线加余量 —— 于是她走到安全线就
+                    // 判"到了",余量白加,继续在那条线上被顶着来回走。
+                    () -> clearOfAll(mustClear.get(), clearance));
         }
         PlayerNav.Status status = nav.tick();
         if (status != PlayerNav.Status.RUNNING) {
             stopNav();
         }
+        if (status == PlayerNav.Status.FAILED) {
+            retreatFailures++;
+        } else if (status == PlayerNav.Status.RUNNING) {
+            retreatFailures = 0;   // 走得动就不是被围住
+        }
         return status;
     }
 
-    /** 身边<b>所有</b>已经进了自己安全距离的爆炸物。这是全场的事,与她正在打谁无关。 */
+    /**
+     * 身边<b>所有</b>已经进了自己安全距离的爆炸物。这是全场的事,与她正在打谁无关。
+     *
+     * <p>"够不够远"问 {@link GoalAvoidEntities#clearOf} —— 与退避目标的到达判定<b>同一个
+     * 函数、同一套坐标</b>。两边各算各的时候,一个说"还在爆炸范围里"、另一个说"你已经到了",
+     * 导航一建就到达,她原地打转。
+     */
+    /** 离这批里的每一个都拉开了 {@code distance} 没有。与目标的到达判定同一个函数、同一套坐标。 */
+    private boolean clearOfAll(List<Mob> threats, double distance) {
+        for (var mob : threats) {
+            if (!GoalAvoidEntities.clearOf(player.getBlockX(), player.getBlockZ(),
+                    mob.getBlockX(), mob.getBlockZ(), distance)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private List<Mob> blastsTooClose() {
         List<Mob> out = new ArrayList<>();
         for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
-            if (Menace.keepAwayFrom(mob) && player.distanceTo(mob) < Menace.safeDistanceFrom(mob)) {
+            if (Menace.armed(mob) && !GoalAvoidEntities.clearOf(
+                    player.getBlockX(), player.getBlockZ(),
+                    mob.getBlockX(), mob.getBlockZ(), Menace.safeDistanceFrom(mob))) {
                 out.add(mob);
             }
         }
@@ -481,7 +515,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         for (var mob : blasts) {
             clearance = Math.max(clearance, Menace.safeDistanceFrom(mob));
         }
-        driveRetreat(this::blastsTooClose, clearance);
+        // <b>退到安全线之外再多留一截</b>:刚好压线就停的话,它走一步又进来,她会在那条线上
+        // 反复横跳、一次只挪一格。开始退用安全线,退到位用安全线加余量。
+        driveRetreat(this::blastsTooClose, clearance + Menace.BLAST_MARGIN);
         return TaskState.RUNNING;
     }
 
@@ -502,17 +538,17 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             stopNav();
             InputDriver.halt(player);
             Constants.LOG.info("[numen-attack] 脱离成功 —— 没有东西还在逼近");
-            fail("broke off — too hurt to keep fighting; nothing is chasing you now",
+            // 说清楚为什么脱离:扛不住,还是这一架根本打不了。模型对这两种能做的事不一样。
+            fail(Menace.outmatched(player)
+                            ? "broke off — too hurt to keep fighting; nothing is chasing you now"
+                            : "broke off — nothing here can be fought with what you carry "
+                                    + "(explosive, or out of reach with no bow); you are clear now",
                     FailureType.TARGET_LOST);
             return TaskState.FAILED;
         }
-        if (driveRetreat(this::chasersNow, FIELD_RADIUS) == PlayerNav.Status.FAILED) {
-            // 退无可退(被围住、堵在死角)。攥着身体谁也帮不上,把话说清楚交回给模型。
-            Constants.LOG.info("[numen-attack] 退无可退 —— 被围住了");
-            fail("cornered — too hurt to fight and there is no way out from here",
-                    FailureType.BOXED_IN);
-            return TaskState.FAILED;
-        }
+        // 退不掉不再是"任务失败"。它是判据的一个输入(cornered):下一刻 decide 会改判背水一战
+        // ——站着挨打是确定的死,打至少有机会。交还身体只会让她站在原地。
+        driveRetreat(this::chasersNow, FIELD_RADIUS);
         return TaskState.RUNNING;
     }
 
@@ -542,7 +578,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         r.unreachable(target.getId());
         Constants.LOG.info("[numen-attack] 放弃 foe={} —— {}", target.getId(),
-                Menace.keepAwayFrom(target)
+                Menace.armed(target)
                         ? "不该贴近它,而我没有能用的弓弩"
                         : "走不到它,也没有能用的弓弩");
         stopNav();

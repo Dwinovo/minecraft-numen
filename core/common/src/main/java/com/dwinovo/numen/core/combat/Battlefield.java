@@ -16,12 +16,16 @@ import java.util.List;
  * @param meleeReach      她这一刻够得着多远
  * @param hasMelee        背包里有近战武器(拳头不算——赤手对上会还手的东西不是一条出路)
  * @param hasRanged       有能立刻用的弓弩(带箭,或已上弦的弩)
+ * @param cornered        <b>退不掉</b>:退避的寻路连续失败。与 {@code Foe.reachable} 对称
+ *                        ——一个说"走得到吗"(决定该不该走过去打),一个说"退得掉吗"
+ *                        (决定该不该退)。退不掉时站着挨打是确定的死,背水一战至少有机会。
  * @param foes            场上的敌对生物,顺序不重要
  */
 public record Battlefield(double effectiveHealth,
                           double meleeReach,
                           boolean hasMelee,
                           boolean hasRanged,
+                          boolean cornered,
                           List<Foe> foes) {
 
     /**
@@ -29,8 +33,9 @@ public record Battlefield(double effectiveHealth,
      *
      * @param id         运行时实体 id
      * @param distance   离她多远
-     * @param explosive  会炸——贴上去就是进爆炸半径,见 {@link Menace#keepAwayFrom}
-     * @param clearance  会炸的话该离它多远;不会炸则 0
+     * @param explosive  它会炸,不管这一刻炸没炸——走近它要留余量,别踩进点火线
+     * @param armed      它<b>现在就要炸了</b>:引信在走,或者是一打就炸的末影水晶
+     * @param clearance  {@code armed} 时该离它多远;否则 0
      * @param engaging   正在针对她(锁定了她,或刚打了她)
      * @param reachable  寻路还没判定"到不了"
      * @param authorized 允许打它。点名模式下是模型给的那份清单,无差别模式下就是"在追我的"
@@ -38,18 +43,19 @@ public record Battlefield(double effectiveHealth,
     public record Foe(int id,
                       double distance,
                       boolean explosive,
+                      boolean armed,
                       double clearance,
                       boolean engaging,
                       boolean reachable,
                       boolean authorized) {
 
-        /** 它已经近到进了爆炸伤害范围。 */
+        /** 它已经在倒计时,而且还在爆炸伤害范围里。 */
         public boolean blastTooClose() {
-            return explosive && distance < clearance;
+            return armed && distance < clearance;
         }
     }
 
-    /** 场上有没有已经贴到爆炸范围里的东西——不管她正在打谁,这都是最先要处理的。 */
+    /** 场上有没有<b>已经在倒计时</b>而且还在爆炸范围里的——不管她在打谁,这都最先处理。 */
     public boolean underBlastThreat() {
         return foes.stream().anyMatch(Foe::blastTooClose);
     }

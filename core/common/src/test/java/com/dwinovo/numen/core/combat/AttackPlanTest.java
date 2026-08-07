@@ -24,15 +24,20 @@ class AttackPlanTest {
     private static final double REACH = 4.0;
 
     private static Foe mob(int id, double distance) {
-        return new Foe(id, distance, false, 0.0, true, true, true);
+        return new Foe(id, distance, false, false, 0.0, true, true, true);
     }
 
     private static Foe creeper(int id, double distance) {
-        return new Foe(id, distance, true, 7.5, true, true, true);
+        return new Foe(id, distance, true, true, 7.5, true, true, true);
+    }
+
+    /** 引信还没点着的爬行者 —— 判据眼里就是一只普通怪,只是走近它要留余量。 */
+    private static Foe idleCreeper(int id, double distance) {
+        return new Foe(id, distance, true, false, 7.5, true, true, true);
     }
 
     private static Battlefield field(boolean melee, boolean ranged, Foe... foes) {
-        return new Battlefield(HEALTHY, REACH, melee, ranged, List.of(foes));
+        return new Battlefield(HEALTHY, REACH, melee, ranged, false, List.of(foes));
     }
 
     // ==================== 够不够得着 ====================
@@ -54,13 +59,13 @@ class AttackPlanTest {
     /** 走不到才动用远程——恶魂、悬崖对面、柱子上的东西都归这一支。 */
     @Test
     void unreachableIsWhatBowsAreFor() {
-        Foe far = new Foe(1, 20.0, false, 0.0, true, false, true);
+        Foe far = new Foe(1, 20.0, false, false, 0.0, true, false, true);
         assertEquals(Action.RANGED, AttackPlan.decide(field(true, true, far), null).action());
     }
 
     @Test
     void unreachableWithNoBowIsGivenUp() {
-        Foe far = new Foe(1, 20.0, false, 0.0, true, false, true);
+        Foe far = new Foe(1, 20.0, false, false, 0.0, true, false, true);
         assertEquals(Action.ABANDON, AttackPlan.decide(field(true, false, far), null).action());
     }
 
@@ -96,13 +101,28 @@ class AttackPlanTest {
     }
 
     /**
-     * 没弓:它<b>根本不该当目标</b>。让它进候选的话,判据会在安全线上一格 AVOID、一格
-     * ABANDON 地来回跳——放弃后下一刻又被选回来,实测每秒三轮。
+     * 没弓,而它正追着她:<b>脱离</b>,不是"放弃"也不是"打完了"。
+     *
+     * <p>这一条曾经判成 DONE —— 苦力怕还跟着,候选空了就宣布胜利收工,回执还写着"没有东西再
+     * 追你了"。反射链冷却完又开一场一模一样的,每轮放一次血。"没有能打的"与"没有危险了"在
+     * 这种局面下正好相反。
      */
     @Test
-    void withoutABowAnExplosiveIsNeverPickedAsATarget() {
+    void anExplosiveChasingHerWithNoBowMeansBreakingOffNotFinishing() {
         Move m = AttackPlan.decide(field(true, false, creeper(1, 9.0)), null);
-        assertEquals(Action.ABANDON, m.action(), "说清楚是打不了,不是打完了");
+        assertEquals(Action.DISENGAGE, m.action());
+        assertEquals(AttackPlan.NO_FOE, m.foeId(), "脱离是对全场的");
+    }
+
+    /**
+     * 但它<b>没在追她</b>(模型点名让她打一个远处的苦力怕),那就只是这一只打不了:
+     * 说清楚"打不了"而不是"打完了"——模型对前者能做点什么(去拿把弓),对后者无从下手。
+     */
+    @Test
+    void anIdleExplosiveWithNoBowIsReportedAsUnfightable() {
+        Foe idle = new Foe(1, 9.0, true, true, 7.5, false, true, true);
+        Move m = AttackPlan.decide(field(true, false, idle), null);
+        assertEquals(Action.ABANDON, m.action());
         assertEquals(1, m.foeId());
     }
 
@@ -113,6 +133,31 @@ class AttackPlanTest {
         Move m = AttackPlan.decide(b, null);
         assertEquals(Action.CLOSE_IN, m.action());
         assertEquals(2, m.foeId(), "该去打那只僵尸,不是围着苦力怕打转");
+    }
+
+    /**
+     * <b>引信没点着的爬行者就是一只普通怪。</b>她够得着 4 格、它 3 格才点火,中间那条一格宽
+     * 的带能打到它而不触发。曾经"会炸的一律不当目标",于是她只会绕着走、永远解决不掉。
+     */
+    @Test
+    void aCreeperThatHasNotLitYetIsJustAMob() {
+        Move m = AttackPlan.decide(field(true, false, idleCreeper(1, 3.5)), null);
+        assertEquals(Action.MELEE, m.action());
+        assertEquals(1, m.foeId());
+    }
+
+    /** 远一点就走过去 —— 和别的怪没有区别。 */
+    @Test
+    void anUnlitCreeperIsWalkedUpToLikeAnythingElse() {
+        assertEquals(Action.CLOSE_IN,
+                AttackPlan.decide(field(true, false, idleCreeper(1, 9.0)), null).action());
+    }
+
+    /** 引信一点着,同一只立刻改判 —— 它已经在倒计时了。 */
+    @Test
+    void theMomentItLightsSheStopsFighting() {
+        Battlefield lit = field(true, false, creeper(1, 3.5));
+        assertEquals(Action.AVOID, AttackPlan.decide(lit, new Move(Action.MELEE, 1)).action());
     }
 
     // ==================== 打谁:先近的,但要有承诺 ====================
@@ -160,7 +205,7 @@ class AttackPlanTest {
     /** 退得够远还是要追——迟滞是一条带,不是无限期豁免。 */
     @Test
     void driftingWellOutOfBandStillMeansWalking() {
-        Battlefield b = field(true, false, mob(1, 6.0));
+        Battlefield b = field(true, false, mob(1, 7.0));
         assertEquals(Action.CLOSE_IN, AttackPlan.decide(b, new Move(Action.MELEE, 1)).action());
     }
 
@@ -191,7 +236,7 @@ class AttackPlanTest {
     /** 但赤手打一只不还手的东西是正当的(模型点名让她去打一只鸡)。 */
     @Test
     void barehandedAgainstSomethingHarmlessIsFine() {
-        Foe chicken = new Foe(1, 3.0, false, 0.0, false, true, true);
+        Foe chicken = new Foe(1, 3.0, false, false, 0.0, false, true, true);
         assertEquals(Action.MELEE,
                 AttackPlan.decide(field(false, false, chicken), null).action());
     }
@@ -201,7 +246,7 @@ class AttackPlanTest {
     /** 扛不住就脱离,哪怕近在眼前、哪怕手里有武器。 */
     @Test
     void tooHurtMeansBreakOffEvenWithTheTargetInReach() {
-        Battlefield b = new Battlefield(4.0, REACH, true, true, List.of(mob(1, 3.0)));
+        Battlefield b = new Battlefield(4.0, REACH, true, true, false, List.of(mob(1, 3.0)));
         assertEquals(Action.DISENGAGE, AttackPlan.decide(b, null).action());
     }
 
@@ -218,7 +263,27 @@ class AttackPlanTest {
     /** 扛不住排在一切前面,包括躲爆炸——两者都是退,但脱离退得更彻底。 */
     @Test
     void breakingOffOutranksEverything() {
-        Battlefield b = new Battlefield(4.0, REACH, true, true, List.of(creeper(1, 3.0)));
+        Battlefield b = new Battlefield(4.0, REACH, true, true, false, List.of(creeper(1, 3.0)));
+        assertEquals(Action.DISENGAGE, AttackPlan.decide(b, null).action());
+    }
+
+    /**
+     * <b>退不掉就打。</b>站着挨打是确定的死,背水一战至少有机会。这一维与 {@code reachable}
+     * 对称:一个说"走得到吗"(该不该走过去打),一个说"退得掉吗"(该不该退)。
+     *
+     * <p>它替掉的是链子那个 5 秒冷却 —— 那个冷却只是把死循环放慢,期间新来的危险她一动不动,
+     * 实测四次重伤都发生在那个窗口里。
+     */
+    @Test
+    void corneredMeansFightingInsteadOfStandingStill() {
+        Battlefield trapped = new Battlefield(4.0, REACH, true, true, true, List.of(mob(1, 3.0)));
+        assertEquals(Action.MELEE, AttackPlan.decide(trapped, null).action());
+    }
+
+    /** 退得掉就还是退 —— cornered 只在真被围住时才改判。 */
+    @Test
+    void withAWayOutSheStillBreaksOff() {
+        Battlefield b = new Battlefield(4.0, REACH, true, true, false, List.of(mob(1, 3.0)));
         assertEquals(Action.DISENGAGE, AttackPlan.decide(b, null).action());
     }
 
@@ -232,7 +297,7 @@ class AttackPlanTest {
     /** 没被授权的不算数——场上还有怪,但都不归这一场仗管。 */
     @Test
     void unauthorizedFoesDoNotKeepTheFightAlive() {
-        Foe stranger = new Foe(1, 3.0, false, 0.0, false, true, false);
+        Foe stranger = new Foe(1, 3.0, false, false, 0.0, false, true, false);
         assertEquals(Action.DONE, AttackPlan.decide(field(true, true, stranger), null).action());
     }
 }

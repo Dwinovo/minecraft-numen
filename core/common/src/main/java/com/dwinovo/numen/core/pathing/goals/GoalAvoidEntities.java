@@ -48,7 +48,7 @@ public class GoalAvoidEntities implements Goal {
     static final double ON_TOP_OF_THREAT = 1000.0;
 
     private final Threat[] threats;
-    private final int distanceSq;
+    private final double distance;
     private final double penaltyFactor;
 
     /**
@@ -63,8 +63,22 @@ public class GoalAvoidEntities implements Goal {
             throw new IllegalArgumentException("躲避目标至少需要一个威胁");
         }
         this.threats = threats;
-        this.distanceSq = (int) (distance * distance);
+        this.distance = distance;
         this.penaltyFactor = penaltyFactor;
+    }
+
+    /**
+     * 站在 {@code (x, z)} 这一格,算不算离 {@code (threatX, threatZ)} 够远。
+     *
+     * <p><b>这是"够不够远"的唯一定义</b>,目标与调用方都问它。曾经两边各算各的:判"要不要退"
+     * 用的是精确三维距离,判"退到了没有"用的是方块格水平距离、而且门槛还被截成整数
+     * ({@code (int) 7.5² = 56})。于是同一刻一个说"还在爆炸范围里",另一个说"你已经站在
+     * 合格的格子上了"——导航一建就到达,她原地打转。
+     */
+    public static boolean clearOf(int x, int z, int threatX, int threatZ, double distance) {
+        double dx = x - threatX;
+        double dz = z - threatZ;
+        return dx * dx + dz * dz >= distance * distance;
     }
 
     /**
@@ -76,12 +90,7 @@ public class GoalAvoidEntities implements Goal {
     @Override
     public boolean isInGoal(int x, int y, int z) {
         for (Threat t : threats) {
-            if (!t.mustClear()) {
-                continue;
-            }
-            int dx = x - t.x();
-            int dz = z - t.z();
-            if (dx * dx + dz * dz < distanceSq) {
+            if (t.mustClear() && !clearOf(x, z, t.x(), t.z(), distance)) {
                 return false;
             }
         }
@@ -103,7 +112,7 @@ public class GoalAvoidEntities implements Goal {
 
     @Override
     public String toString() {
-        return String.format("GoalAvoidEntities{n=%d,distSq=%d,k=%.1f}",
-                threats.length, distanceSq, penaltyFactor);
+        return String.format("GoalAvoidEntities{n=%d,dist=%.1f,k=%.1f}",
+                threats.length, distance, penaltyFactor);
     }
 }
