@@ -263,12 +263,19 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
             forward *= sneakSpeed;
             strafe *= sneakSpeed;
         }
-        // 移动方向按实体当前视角(已步进):vanilla travel 按 player.yaw
-        // 投影 zza/xxa,输入也必须按同一 yaw,否则 target 与 actual 的角差
-        // 经 remap 被当成转向补偿加进 xxa/zza,长距离累积成横向漂移。
-        // 视角步进到位前 forward 就只按当前朝向走,不预补偿。
-        float moveYaw = player.getYRot();
-        float[] impulse = AimProcessor.remapInput(strafe, forward, moveYaw, moveYaw);
+        // 按键是<b>相对路径方向</b>说的("往前"= 沿这一段路往前),而原版 travel 把 zza/xxa
+        // 投影到 player.yaw 上。两者不一致时必须换算 —— 这正是 remapInput 收两个 yaw 的
+        // 用意:身体朝 A、走向 B。
+        //
+        // 这里曾经两个参数传同一个值(恒等变换),等于假定"身体朝向 == 路径方向"。平时成立,
+        // 因为视角每刻朝路径步进;但只要有别的东西<b>持续</b>把脸拧走,这个假定就永久破裂:
+        // 拉弓要每刻瞄准目标,于是"往前"变成"朝目标往前" —— 实测她一路走进僵尸脸上,
+        // 五个采样全是「朝它」,而僵尸一动没动。挥刀只在出手那一刻转头,所以剑看不出来。
+        //
+        // 没有转向要求的段(纯直行)照旧恒等。
+        float bodyYaw = player.getYRot();
+        float pathYaw = t != null && t.hasRotation() ? t.getYaw() : bodyYaw;
+        float[] impulse = AimProcessor.remapInput(strafe, forward, pathYaw, bodyYaw);
         player.xxa = impulse[0];
         player.zza = impulse[1];
         player.setShiftKeyDown(sneak);
