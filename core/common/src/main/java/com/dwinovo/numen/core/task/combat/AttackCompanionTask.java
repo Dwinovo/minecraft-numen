@@ -438,10 +438,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // <b>举着盾照样挥刀</b> —— 原版这两件事不冲突。这条守卫本意是拦"正在拉弓",
         // 却写成了"手上用着任何东西";副手多了一面盾之后,它把攻击层整个锁死:
         // 实测她站在带里(距离 2.0~2.9、带 [2.02, 3.30])一刀不挥,看着像只躲不打。
+        // 武器是<b>可选的</b>:拳头一点伤害,鸡四血、羊八血、牛十血,照样打得动。
+        // 这里曾经"没有近战武器就直接返回" —— 那是按"打怪"写的前提(赤手对上会还手的
+        // 东西不是出路),模型让她打一只鸡时那个前提不成立,她会走到跟前站着不动。
         Loadout loadout = Loadout.forTarget(player, player);
-        if (!loadout.hasMelee()) {
-            return;
-        }
         Entity victim = null;
         double best = Double.MAX_VALUE;
         for (var f : field.foes()) {
@@ -462,7 +462,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             return;
         }
         ItemStack before = player.getMainHandItem();
-        player.holdInHand(loadout.melee().slot());
+        if (loadout.hasMelee()) {
+            player.holdInHand(loadout.melee().slot());
+        }
         boolean weaponChanged = player.getMainHandItem() != before;
         if (!Swing.mayStrike(weaponChanged, victim instanceof LivingEntity hurt && hurt.hurtTime > 0,
                 player.getAttackStrengthScale(0.0f))) {

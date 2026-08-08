@@ -98,6 +98,20 @@ public final class Menace {
         return entity instanceof EndCrystal || fusing(entity);
     }
 
+    /**
+     * 它会不会打她。<b>危险半径那一整套只对会打人的东西成立</b> —— 鸡牛羊村民不会,
+     * 走上去揍就是了,不必保持距离、不必举盾、不必绕路。
+     *
+     * <p>看两件事:天生敌对({@link #hostile}),或者<b>这一刻正针对着她</b> ——
+     * 后者接住被激怒的铁傀儡、狼、僵尸猪灵,它们不是 {@code Enemy} 但打起人来一样疼。
+     */
+    public static boolean threatens(Entity foe, Entity self) {
+        if (hostile(foe) || explodes(foe)) {
+            return true;
+        }
+        return foe instanceof Mob mob && mob.getTarget() == self;
+    }
+
     /** 引信正在涨——它已经在倒计时,不是"可能会炸"。 */
     public static boolean fusing(Entity entity) {
         return entity instanceof Creeper creeper
@@ -122,6 +136,9 @@ public final class Menace {
      * 引信有整整 30 刻,那时再退完全来得及。
      */
     public static double rawDangerRadius(Entity foe, Entity self) {
+        if (!threatens(foe, self)) {
+            return 0.0;   // 它不会打她 —— 走上去揍就是了
+        }
         if (armed(foe)) {
             return blastSpanOf(foe);   // 引信在走 / 一打就炸的水晶:怕的是爆炸波及多远
         }
