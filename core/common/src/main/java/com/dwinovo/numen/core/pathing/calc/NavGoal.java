@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.pathing.calc;
 
 import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
+import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import net.minecraft.core.BlockPos;
 
@@ -115,6 +116,17 @@ public interface NavGoal {
      */
     default double progressHeuristic(BlockPos from) {
         return heuristic(from);
+    }
+
+    /**
+     * 环形站位:离 {@code pos} 在 {@code [inner, outer]} 之间。
+     *
+     * <p>它给的不只是到达条件,更是<b>估价</b>:到<b>带</b>的距离,两侧都朝带递减。
+     * 用球形邻域的话估价只会说"越靠近中心越好",而弓那一套的合格落点全在远处 ——
+     * 搜索于是往怪身上挖,{@code bestSoFar} 挑出来的正是贴脸那一格。
+     */
+    static NavGoal ring(BlockPos pos, double inner, double outer) {
+        return new Ring(pos, inner, outer);
     }
 
     /** Any feet cell within {@code radius} (Euclidean, blocks) of {@code pos}. */
@@ -327,6 +339,41 @@ public interface NavGoal {
             // inadmissible, deliberately: aiming at the centre keeps node ordering
             // and the best-so-far partial stable.)
             return pointBound(goal, from);
+        }
+
+        @Override public BlockPos center() {
+            return goal;
+        }
+    }
+
+    /** {@link #ring} 的产物:环形站位带。 */
+    final class Ring implements NavGoal {
+        public final BlockPos goal;
+        public final double inner;
+        public final double outer;
+
+        Ring(BlockPos pos, double inner, double outer) {
+            this.goal = pos.immutable();
+            this.outer = outer;
+            this.inner = inner >= outer ? 0.0 : inner;
+        }
+
+        private double horizontal(BlockPos p) {
+            double dx = p.getX() - goal.getX();
+            double dz = p.getZ() - goal.getZ();
+            return Math.sqrt(dx * dx + dz * dz);
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            double d = horizontal(feet);
+            return d >= inner && d <= outer;
+        }
+
+        /** 到带的距离,不是到中心的距离 —— 太近往外、太远往里,两侧都有梯度。 */
+        @Override public double heuristic(BlockPos from) {
+            double d = horizontal(from);
+            double gap = d < inner ? inner - d : d > outer ? d - outer : 0.0;
+            return gap * NavSettings.get().costHeuristic;
         }
 
         @Override public BlockPos center() {

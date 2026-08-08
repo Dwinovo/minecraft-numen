@@ -10,6 +10,7 @@ import com.dwinovo.numen.core.pathing.goals.GoalApproachAvoiding;
 import com.dwinovo.numen.core.pathing.goals.GoalComposite;
 import com.dwinovo.numen.core.pathing.goals.GoalGetToBlock;
 import com.dwinovo.numen.core.pathing.goals.GoalNear;
+import com.dwinovo.numen.core.pathing.goals.GoalRing;
 import com.dwinovo.numen.core.pathing.goals.GoalRunAway;
 import com.dwinovo.numen.core.pathing.goals.GoalTwoBlocks;
 import com.dwinovo.numen.core.pathing.goals.GoalXZ;
@@ -29,6 +30,7 @@ import net.minecraft.core.BlockPos;
  *   <li>column(x,z) → {@link GoalXZ}</li>
  *   <li>yLevel → {@link GoalYLevel}</li>
  *   <li>near → {@link GoalNear}(半径平方以 double 保精度的子类)</li>
+ *   <li>ring → {@link GoalRing}(环形站位带:估价是到带的距离,两侧都有梯度)</li>
  *   <li>nearGround → {@link GoalNear} 子类(保留水平半径 + y±1 带,
  *       不退化为三维球——防"垫柱到目标旁悬空算到达"的几何回归)</li>
  *   <li>adjacent → {@link GoalGetToBlock}(成员集置换:同层正交贴邻
@@ -74,6 +76,9 @@ public final class GoalAdapter {
         }
         if (goal instanceof NavGoal.YLevel g) {
             return new GoalYLevel(g.level);
+        }
+        if (goal instanceof NavGoal.Ring g) {
+            return new GoalRing(g.goal, g.inner, g.outer);
         }
         if (goal instanceof NavGoal.Near g) {
             return new RadiusNear(g.goal, g.radiusSqr, false);
