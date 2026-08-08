@@ -91,6 +91,17 @@ final class RangedShot {
         return fired;
     }
 
+    /**
+     * 这一刻该不该转向瞄准。
+     *
+     * <p><b>拉弓的过程中不用瞄</b> —— 原版的箭朝哪飞只看<b>松手那一刻</b>的视线。而每刻转向
+     * 会把脚也带偏(移动是按朝向投影的),于是她一路走进目标脸上。只在快松手时转过去,
+     * 中间十几刻的走位就干净了 —— 挥刀早就是这么做的。
+     */
+    boolean aboutToRelease() {
+        return crossbow ? state == State.READY_TO_FIRE : held >= BOW_RELEASE_TICKS - 1;
+    }
+
     void abort() {
         if (player.isUsingItem()) {
             player.stopUsingItem();

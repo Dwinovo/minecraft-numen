@@ -61,7 +61,7 @@ class AttackPlanTest {
     @Test
     void unreachableIsWhatBowsAreFor() {
         Foe far = new Foe(1, 20.0, false, false, true, false, true);
-        assertEquals(Action.RANGED, AttackPlan.decide(field(true, true, far), null).action());
+        assertEquals(Action.BOW, AttackPlan.decide(field(true, true, far), null).action());
     }
 
     @Test
@@ -89,14 +89,14 @@ class AttackPlanTest {
     @Test
     void aLitCreeperIsHandledByTheRingNotByAnAction() {
         Move m = AttackPlan.decide(field(true, true, creeper(1, 3.0)), null);
-        assertEquals(Action.RANGED, m.action(), "有弓就远远射它");
+        assertEquals(Action.BOW, m.action(), "有弓就远远射它");
     }
 
     /** 有弓:退到安全线外射它。 */
     @Test
     void withABowAnExplosiveTargetIsShotFromOutside() {
         Move m = AttackPlan.decide(field(true, true, creeper(1, 9.0)), null);
-        assertEquals(Action.RANGED, m.action());
+        assertEquals(Action.BOW, m.action());
         assertEquals(1, m.foeId());
     }
 
@@ -193,17 +193,16 @@ class AttackPlanTest {
     // ==================== 手上有什么 ====================
 
     /**
-     * 只有弓、没有近战武器时,目标贴到脸上<b>不该用拳头凑合</b>——该拉开到能射的距离。
+     * 只有弓的时候<b>远近都是弓战斗</b>,不再按距离在两个动作之间切。
+     *
+     * <p>切换那一版的病:近了给 SKIRMISH,而剑的环把她往 3.3 格拉 —— 比弓要的五格还近,
+     * 于是她永远到不了射击距离,只会跟着怪一点点蹭。弓有自己的环,拉开这件事归它。
      */
     @Test
-    void withOnlyABowSheBacksOffInsteadOfPunching() {
-        assertEquals(Action.SKIRMISH,
+    void withOnlyABowItIsAlwaysABowFight() {
+        assertEquals(Action.BOW,
                 AttackPlan.decide(field(false, true, mob(1, 3.0)), null).action());
-    }
-
-    @Test
-    void withOnlyABowAtRangeSheShoots() {
-        assertEquals(Action.RANGED,
+        assertEquals(Action.BOW,
                 AttackPlan.decide(field(false, true, mob(1, 12.0)), null).action());
     }
 

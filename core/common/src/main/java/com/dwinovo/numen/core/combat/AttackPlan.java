@@ -29,10 +29,15 @@ public final class AttackPlan {
          */
         SKIRMISH,
         /**
-         * 站定拉弓。<b>战斗状态里唯一不走位的一支</b> —— 原版拉满弓要十五刻不能动,
-         * 那和"一直走位"是冲突的。不是规矩,是拉弓机制逼出来的。
+         * 弓战斗。和 {@link #SKIRMISH} <b>同一个形状,只是环换了一副</b>:内沿是"拉得开弓的
+         * 距离",外沿是射程。带内导航自然到达、她停下来,攻击层就把弓拉满 —— "什么时候该
+         * 站定"不用另写。
+         *
+         * <p>剑的环是 {@code [它够得着我 2.02, 我够得着它 3.30]},拿它给弓用的时候两者
+         * 打架:环把她往 3.3 拉,而弓要求五格开外,于是她永远到不了射击距离,只会跟着怪
+         * 一点点蹭 —— 那就是只给弓和箭时"边缘抖动"的来历。
          */
-        RANGED,
+        BOW,
         /** 脱离接触:打不过,跑。 */
         DISENGAGE,
         /** 没什么可打的了。 */
@@ -57,13 +62,6 @@ public final class AttackPlan {
      * 四五倍。数值沿用一直以来的那条裸血线(八点,四颗心),只是喂进来的输入变实在了。
      */
     private static final double MIN_EFFECTIVE_HEALTH = 8.0;
-
-    /**
-     * 只有远程手段时,离目标近于这个距离就先拉开。
-     *
-     * <p>太近弹道压得平、还白白挨打;而手上没有近战武器时"贴上去用拳头"从来不是答案。
-     */
-    private static final double RANGED_MIN_DISTANCE = 5.0;
 
     private AttackPlan() {}
 
@@ -151,23 +149,24 @@ public final class AttackPlan {
     }
 
     /** 对选定的这一只<b>怎么移动</b>。打不打不在这儿决定。 */
+    /**
+     * 用哪一套打这一只。<b>只看两件事:够不够得到它,以及手上有什么。</b>
+     *
+     * <pre>
+     * 走得到 且 有近战武器          → 剑战斗(省箭)
+     * 走不到,或者只有弓            → 弓战斗
+     * 引信在走的会炸物             → 弓战斗(贴上去等于自己引爆)
+     * 两样都没有                   → 拳头也得上,当剑战斗
+     * </pre>
+     */
     private static Action actionAgainst(Battlefield b, Foe foe) {
-        if (foe.armed()) {
-            // 已经在倒计时的只能远远射(能选中它就说明有弓弩);"已经贴太近"那一档在 ② 拦掉了。
-            return Action.RANGED;
+        if (!b.hasRanged()) {
+            return Action.SKIRMISH;   // 没弓:走得到走不到都只能凑近了打
         }
-        // 近战可用 = 有近战武器,或者根本没有远程手段(那拳头也得上)。
-        boolean meleeAvailable = b.hasMelee() || !b.hasRanged();
-        if (!meleeAvailable) {
-            // 手上只有弓:太近就走位(环会把她带出去),别拿拳头凑合;够远了才站定拉弓。
-            return foe.distance() < RANGED_MIN_DISTANCE ? Action.SKIRMISH : Action.RANGED;
+        if (foe.armed() || !foe.reachable() || !b.hasMelee()) {
+            return Action.BOW;
         }
-        // 走得到就走位 —— 太远往前、太近往后,都是同一个动作。够不够得着挥刀是攻击系统的事。
-        //
-        // 走不到(恶魂、悬崖对面、柱子上)才动用弓;<b>没弓也不放弃</b>,接着走位试 ——
-        // "够不着"曾经是永久判定,寻路抖三次就把两格外的普通僵尸标成够不着,于是拿着
-        // 下界合金剑的人一边跑一边说"我没有能打的东西"。
-        return !foe.reachable() && b.hasRanged() ? Action.RANGED : Action.SKIRMISH;
+        return Action.SKIRMISH;
     }
 
     private static boolean anyEngaging(Battlefield b) {

@@ -83,6 +83,24 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private static final double FLEE_SCAN_RADIUS = 40.0;
 
+    /**
+     * 弓战斗的环内沿:比这更近就拉不开弓 —— 弹道压得平,而且白白挨打。
+     *
+     * <p>它<b>就是</b>弓那一套的"危险半径",和剑那一套的 {@code Menace.rawDangerRadius}
+     * 同一个位置、不同的数。以前它是散在判据里的一个 {@code if},和剑的环互相打架。
+     *
+     * <p>八格,不是五格:<b>拉满一张弓要二十刻</b>,这二十刻里僵尸能走四格半。五格的话她刚
+     * 拉到一半人就贴脸了,只能中断重来 —— 实测她在 0.6~2.9 格里挣扎,最后被爬行者炸死。
+     * 内沿要装得下"拉一次弓的工夫对方能走多远"。
+     */
+    private static final double BOW_MIN_DISTANCE = 8.0;
+
+    /**
+     * 弓战斗的环外沿。<b>不是射程上限</b> —— 三十二格的话她能站在天边,而箭有下坠、目标
+     * 会走,那么远基本射不中。十二格是"稳稳能中、又够得开"的量级:太远就往回走。
+     */
+    private static final double BOW_MAX_DISTANCE = 12.0;
+
     /** 离落点这么近就算到了,该重新挑下一个。 */
     private static final double HAVEN_ARRIVED = 2.0;
 
@@ -122,7 +140,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     private RangedShot shot;
     private int misfires;
-    private double followRadius = MAX_FIRING_RANGE - 8.0;
     private int lastPlanLogTick = -1000;
     private AttackPlan.Action lastLoggedAction;
     /** 上一刻的决定。判据靠它做迟滞与承诺,见 {@link AttackPlan#decide}。 */
@@ -142,6 +159,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     /** 走位探针:上一次采样的位置与那一刻的游戏时间。 */
     private net.minecraft.world.phys.Vec3 skirmishMark;
     private long skirmishMarkTick;
+
+    /** 上一次采样时<b>目标</b>在哪。没有它就分不出"她凑上去"和"它追上来"。 */
+    private net.minecraft.world.phys.Vec3 skirmishFoeMark;
 
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
         super(player, record);
@@ -176,7 +196,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             stopNav();
             abortShot();
             target = chosen;
-            followRadius = MAX_FIRING_RANGE - 8.0;
         }
         if (target != null) {
             lastTargetPosition = target.position();
@@ -190,8 +209,14 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             stopNav();
         }
         return switch (move.action()) {
-            case SKIRMISH -> closeIn();
-            case RANGED -> shootAt(Loadout.forTarget(player, target));
+            case SKIRMISH -> {
+                bowFighting = false;
+                yield closeIn();
+            }
+            case BOW -> {
+                bowFighting = true;
+                yield bowFight();
+            }
             case DISENGAGE -> tickFlee();
             case DONE -> finish();
         };
@@ -373,6 +398,18 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return target instanceof LivingEntity living && living.hurtTime > 0;
     }
 
+    /**
+     * 弓战斗:<b>和剑战斗同一段走位</b>,只是环换了一副(内沿 {@link #BOW_MIN_DISTANCE},
+     * 外沿射程)。带内导航自然到达、她停下来,这时才拉弓 —— "什么时候该站定"不用另写。
+     */
+    private TaskState bowFight() {
+        // <b>两层并行</b>:脚一直在走位,手一直在拉弓。原版拉弓时本来就能走(只是慢),
+        // 是我在 shootAt 里主动 halt 的 —— 于是每刻建一次导航、拆一次,看着像被打断。
+        PlayerNav.Status status = driveApproach();
+        probeSkirmish(status);
+        return shootAt(Loadout.forTarget(player, target));
+    }
+
     private TaskState closeIn() {
         PlayerNav.Status status = driveApproach();
         probeSkirmish(status);
@@ -391,12 +428,28 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private void probeSkirmish(PlayerNav.Status status) {
         long now = player.level().getGameTime();
-        if (skirmishMark != null && now - skirmishMarkTick < 20) {
+        if (skirmishMark != null && now - skirmishMarkTick < 10) {
             return;
         }
         var here = player.position();
         String moved = skirmishMark == null ? "-"
                 : String.format("%.1f", here.distanceTo(skirmishMark));
+
+        // 分辨「她凑上去」和「它追上来」的唯一办法:两边的位移各记一份,再看
+        // 她这一步是<b>朝目标</b>还是<b>背离目标</b>。
+        var foeNow = target == null || target.isRemoved() ? null : target.position();
+        String foeMoved = foeNow == null || skirmishFoeMark == null ? "-"
+                : String.format("%.1f", foeNow.distanceTo(skirmishFoeMark));
+        String towards = "-";
+        if (foeNow != null && skirmishMark != null) {
+            var step = here.subtract(skirmishMark);
+            var toFoe = foeNow.subtract(here);
+            double len = step.horizontalDistance() * toFoe.horizontalDistance();
+            if (len > 1.0e-6) {
+                double dot = (step.x * toFoe.x + step.z * toFoe.z) / len;
+                towards = dot > 0.3 ? "朝它" : dot < -0.3 ? "背它" : "横move";
+            }
+        }
         String band;
         String dist;
         if (target == null || target.isRemoved()) {
@@ -413,14 +466,15 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             band = String.format("[%.2f, 无外沿]", inner);
         } else {
             dist = String.format("%.1f", player.distanceTo(target));
-            band = String.format("[%.2f, %.2f]",
-                    Menace.rawDangerRadius(target, player), reachToTarget());
+            band = String.format("[%.2f, %.2f]%s",
+                    skirmishInner(), skirmishOuter(), bowFighting ? " 弓" : " 剑");
         }
-        Constants.LOG.info("[numen-skirmish] {} 目标={} 距离={} 带={} 这一秒挪了 {} 格 "
-                        + "脚下={},{},{} 疾跑={} 导航={}",
-                status, target == null ? "无" : target.getId(), dist, band, moved,
-                (int) here.x, (int) here.y, (int) here.z,
+        Constants.LOG.info("[numen-skirmish] {} 目标={} 距离={} 带={} 我挪了 {} 格({}) "
+                        + "它挪了 {} 格 脚下={},{},{} 疾跑={} 导航={}",
+                status, target == null ? "无" : target.getId(), dist, band, moved, towards,
+                foeMoved, (int) here.x, (int) here.y, (int) here.z,
                 player.isSprinting(), nav == null ? "无" : "有");
+        skirmishFoeMark = foeNow;
         skirmishMark = here;
         skirmishMarkTick = now;
     }
@@ -458,6 +512,20 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * <p>大史莱姆宽 2.04,半宽就一格出头 —— 按 3.0 硬比会把它判成"够不着",而原版玩家
      * 打得到。判据的够到距离与站位的吸引半径必须是这同一个数。
      */
+    /** 这一刻走的是弓那一套吗。环的内外沿、以及攻击层用什么,都看它。 */
+    private boolean bowFighting;
+
+    /** 走位环的外沿:剑是够到距离,弓是 {@link #BOW_MAX_DISTANCE}。 */
+    private double skirmishOuter() {
+        return bowFighting ? BOW_MAX_DISTANCE : reachToTarget();
+    }
+
+    /** 走位环的内沿:剑是"它够得着我",弓是"拉得开弓的距离"。 */
+    private double skirmishInner() {
+        return bowFighting ? BOW_MIN_DISTANCE
+                : target == null ? 0.0 : Menace.rawDangerRadius(target, player);
+    }
+
     private double reachToTarget() {
         double native0 = player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE);
         return target == null || target.isRemoved()
@@ -506,9 +574,15 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 内沿用<b>裸</b>攻击距离(2.02),不加格量化补偿。带宽因此是 1.28 格,比格量化误差
         // 0.71 宽出一截 —— 当初算出"带只有 0.57 格、做不出来",是因为把补偿也叠进了内沿。
         return NavGoal.approachAvoiding(
-                NavGoal.near(target.blockPosition(), reachToTarget()),
+                NavGoal.ring(target.blockPosition(), skirmishInner(), skirmishOuter()),
                 Menace.AVOID_PENALTY,
-                Menace.field(player, field));
+                bowFighting
+                        ? Menace.field(player, field).stream()
+                                .map(x -> x.withClearance(
+                                        Math.max(x.clearance(), BOW_MIN_DISTANCE)))
+                                .toList()
+                        : Menace.field(player, field));
+        // 弓那一套的内沿对<b>每一只</b>都成立:她要跟所有怪保持五格,不只是当前目标。
     }
 
     /** 站位日志只在数字真的变了时打一行——每 tick 一行会把别的全冲掉。 */
@@ -521,25 +595,13 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         String line = target == null || target.isRemoved()
                 ? String.format("无目标(只拉开) 太近=%d 场上=%d", tooClose, field.size())
-                : String.format("目标=%d 距离=%.1f 够到=%.2f 危险半径=%.2f 太近=%d 场上=%d",
-                        target.getId(), player.distanceTo(target), reachToTarget(),
-                        Menace.dangerRadius(target, player), tooClose, field.size());
+                : String.format("%s 目标=%d 距离=%.1f 带=[%.2f, %.2f] 太近=%d 场上=%d",
+                        bowFighting ? "弓" : "剑", target.getId(), player.distanceTo(target),
+                        skirmishInner(), skirmishOuter(), tooClose, field.size());
         if (!line.equals(lastStandoffLog)) {
             lastStandoffLog = line;
             Constants.LOG.info("[numen-attack] 站位 {}", line);
         }
-    }
-
-    /** 远程找射击位:同一段站位,只是吸引半径由射程给,不是够到距离。 */
-    private NavGoal approachGoal(double radius) {
-        if (target == null || target.isRemoved()) {
-            return null;
-        }
-        return NavGoal.approachAvoiding(
-                NavGoal.near(target.blockPosition(), Math.max(0.0, radius)),
-                Menace.AVOID_PENALTY,
-                Menace.field(player, Menace.hostilesAround(player, FIELD_RADIUS))
-                        .stream().map(t -> t.withClearance(0.0)).toList());
     }
 
     // ==================== 远程 ====================
@@ -549,23 +611,34 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         if (weapon == null) {
             return closeIn();   // 弓没了:回去走位,别放弃这只
         }
-        if (player.distanceTo(target) < RANGED_MIN_DISTANCE && !Menace.armed(target)) {
-            abortShot();
-            return closeIn();   // 太近拉不开弓:交给走位环带出去
+        // <b>攻击层不管距离。</b>射程之内就射,拉开是寻路的事(环的内沿 BOW_MIN_DISTANCE)。
+        //
+        // 这里曾经"近于内沿就 abortShot":僵尸一走进八格,拉到一半的弓当场取消;她退开、
+        // 重新起手、僵尸又跟进来 —— 一箭都放不出去。距离是走位的判据,混进攻击层就成了
+        // 一个把自己打断的开关。
+        if (player.distanceTo(target) > BOW_MAX_DISTANCE) {
+            return TaskState.RUNNING;   // 射程外:不放,但<b>也不取消</b>,弓接着拉
         }
         boolean crossbow = RangedShot.isCrossbow(weapon);
         Ballistics.Aim aim = Ballistics.findArrowShot(player.level(), player, target,
                 shotVelocity(crossbow), ARROW_GRAVITY, ARROW_DRAG, ARROW_HITBOX_RADIUS,
                 MAX_FIRING_RANGE, !crossbow);
         if (aim == null) {
-            abortShot();
-            return seekShotWindow();   // 没有弹道窗口:挪个位置再看
+            // 这一刻算不出弹道。<b>弓接着拉</b> —— 脚一直在走位,下一刻位置变了自会有窗口,
+            // 取消了就白等一次拉满的时间。
+            return TaskState.RUNNING;
         }
 
-        stopNav();
+        // <b>不停脚。</b>攻击层与寻路层正交:挥刀不停脚,拉弓也不该停 —— 原版拉弓时本来
+        // 就能走。这里曾经 stopNav() + halt(),而 bowFight 上一行刚 driveApproach() 建好
+        // 导航,于是每刻建一次拆一次,箭一直拉不满。
         navFailures.remove(target.getId());
-        InputDriver.halt(player);
-        InputDriver.lookAt(player, aim.lookPoint());
+        // <b>只在快松手那一刻转过去。</b>原版的箭朝哪飞只看松手那一刻的视线,拉弓的十几刻
+        // 里瞄不瞄没有区别 —— 而每刻转向会把脚带偏(移动按朝向投影),她就一路走进目标脸上。
+        // 挥刀早就是这么做的,弓这一支一直没跟上。
+        if (shot != null && shot.aboutToRelease()) {
+            InputDriver.lookAt(player, aim.lookPoint());
+        }
 
         ItemStack before = player.getMainHandItem();
         player.holdInHand(weapon.slot());
@@ -599,25 +672,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private double shotVelocity(boolean crossbow) {
         return shot != null ? shot.projectileVelocity(BOW_FULL_SPEED, CROSSBOW_SPEED)
                 : crossbow ? CROSSBOW_SPEED : BOW_FULL_SPEED * RangedShot.bowPowerForTicks(15);
-    }
-
-    /** 射不到:逼近一档再看。逼到不能再逼还是没窗口,才算这只够不着。 */
-    private TaskState seekShotWindow() {
-        if (nav == null) {
-            nav = PlayerNav.trackGoal(player, () -> approachGoal(followRadius), CHASE_SPEED,
-                    () -> target == null || target.isRemoved());
-        }
-        switch (nav.tick()) {
-            case RUNNING -> { }
-            case ARRIVED, FAILED -> {
-                double next = Math.max(RANGED_MIN_DISTANCE + 1.0, followRadius - 5.0);
-                if (next < followRadius - 0.01) {
-                    followRadius = next;
-                }
-                stopNav();
-            }
-        }
-        return TaskState.RUNNING;
     }
 
     // ==================== 躲避 ====================
