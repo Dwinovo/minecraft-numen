@@ -100,6 +100,11 @@ public final class CompanionTickDispatcher {
                 if (ap.pollWokeUp()) {
                     Companions.onWoke(ap);
                 }
+                // 饿了说一声。她不会自己吃 —— 那条常驻链删了,交互本身就是目的。
+                if (ap.pollGotHungry()) {
+                    com.dwinovo.numen.event.NumenEvents.gotHungry(
+                            ap, ap.getFoodData().getFoodLevel());
+                }
                 CompanionBrain brain = brainFor(ap.getUUID());
                 if (!brain.boundTo(ap) && !brain.boundBodyGone()) {
                     // 同一个 UUID 同时有两具身体:上一具还在世界里,来的这具是重影。

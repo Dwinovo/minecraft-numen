@@ -52,7 +52,9 @@ public final class NumenEvents {
         /** 她自己定的表到点了(见 {@code TimerRegistry})。提醒而已,不代表那件事完成了。 */
         TIMER("timer"),
         /** 她从床上醒了。{@code sleep} 到躺下就返回,醒来这一刻只有这条事件说得出。 */
-        WOKE("woke");
+        WOKE("woke"),
+        /** 饿了 —— 她不会自己吃,得主人给或者叫她去弄。 */
+        HUNGRY("hungry");
 
         private final String kind;
 
@@ -66,6 +68,17 @@ public final class NumenEvents {
     }
 
     private NumenEvents() {}
+
+    /**
+     * 她饿了。<b>急</b> —— 她不会自己吃,主人不知道就没人管,饱食归零会开始掉血。
+     * 去抖在 {@code NumenPlayer.pollGotHungry}:一轮饥饿只发一条。
+     */
+    public static void gotHungry(NumenPlayer companion, int foodLevel) {
+        emit(companion, Kind.HUNGRY, null,
+                "you are hungry (" + foodLevel + "/20) and you do not eat on your own — "
+                        + "call eat with something from your inventory, or go get food",
+                true);
+    }
 
     /** 身体自理日记——常驻任务链的叙事出口。永远不急。 */
     public static void body(NumenPlayer companion, String text) {

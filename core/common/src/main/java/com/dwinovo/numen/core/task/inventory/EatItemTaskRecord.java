@@ -4,14 +4,14 @@ import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.item.Item;
 
 /**
- * Typed task descriptor for {@code eat_item}: consume a food / drink from the
+ * Typed task descriptor for {@code eat}: consume a food / drink from the
  * companion's inventory. {@link EatCompanionTask} eats it natively (the player
  * body's own held-use path), so hunger + saturation + consume effects apply
  * exactly as they do for a real player when the chew completes.
  */
 public final class EatItemTaskRecord extends TaskRecord {
 
-    public static final String TOOL_NAME = "eat_item";
+    public static final String TOOL_NAME = "eat";
 
     /** The food item to eat (one is consumed on completion). */
     public final Item item;

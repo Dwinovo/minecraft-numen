@@ -298,7 +298,7 @@ public final class ModLanguageData {
         adder.add("numen.tool.collect_items", "Collect items");
         adder.add("numen.tool.craft", "Craft");
         adder.add("numen.tool.drop_items", "Drop items");
-        adder.add("numen.tool.eat_item", "Eat");
+        adder.add("numen.tool.eat", "Eat");
         adder.add("numen.tool.equip_item", "Equip");
         adder.add("numen.tool.get_owner_status", "Owner status");
         adder.add("numen.tool.get_self_status", "Self status");
@@ -577,7 +577,7 @@ public final class ModLanguageData {
         adder.add("numen.tool.collect_items", "拾取掉落物");
         adder.add("numen.tool.craft", "合成");
         adder.add("numen.tool.drop_items", "丢出物品");
-        adder.add("numen.tool.eat_item", "进食");
+        adder.add("numen.tool.eat", "进食");
         adder.add("numen.tool.equip_item", "装备");
         adder.add("numen.tool.get_owner_status", "主人状态");
         adder.add("numen.tool.get_self_status", "自身状态");

@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * {@code eat_item} on the player body — a thin wrapper over the native held use. Hold the food and
+ * {@code eat} on the player body — a thin wrapper over the native held use. Hold the food and
  * run {@link Interaction#useInAir} on a {@code hold()} timing: that fires {@code gameMode.useItem},
  * and the body's own {@code aiStep} (ticked via {@code doTick}) drives the real eat to completion —
  * chewing animation/particles/sound, hunger + saturation + consume-effects on finish, modded foods,

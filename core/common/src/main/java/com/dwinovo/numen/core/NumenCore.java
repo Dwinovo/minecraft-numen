@@ -81,8 +81,6 @@ public final class NumenCore {
                 com.dwinovo.numen.core.task.chain.BreathChain::new);
         com.dwinovo.numen.task.BrainChains.register(30,
                 com.dwinovo.numen.core.task.chain.MobDefenseChain::new);
-        com.dwinovo.numen.task.BrainChains.register(40,
-                com.dwinovo.numen.core.task.chain.FoodChain::new);
         com.dwinovo.numen.task.BrainChains.register(50,
                 com.dwinovo.numen.core.task.chain.UnstuckChain::new);
     }

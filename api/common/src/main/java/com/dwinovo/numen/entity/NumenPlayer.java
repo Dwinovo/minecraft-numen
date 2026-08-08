@@ -60,6 +60,19 @@ public final class NumenPlayer extends ServerPlayer {
     private boolean sleepingLastTick;
 
     /**
+     * 已经为这一轮饥饿说过了。<b>饱食是持续状态,每刻都成立</b> —— 不去抖的话一条 urgent
+     * 会变成一串,把主人吵死(逃跑那次实测二十秒发了十七条)。回到 {@link #FED_LEVEL}
+     * 以上才重新武装。
+     */
+    private boolean hungerReported;
+
+    /** 饿到这个程度就说一声。原版低于 6 跑不动,低于 18 自然回血停。 */
+    private static final int HUNGRY_LEVEL = 6;
+
+    /** 回到这个程度才重新武装 —— 留一大段迟滞,免得在阈值上一条接一条。 */
+    private static final int FED_LEVEL = 14;
+
+    /**
      * 她这一刻<b>主动按住</b>的本能(按 {@code Reflex.id()})。
      *
      * <p>一件正在做的事若自己就会处理某条本能管的局面,就把那条按住,别让两边为同一件事抢
@@ -98,6 +111,26 @@ public final class NumenPlayer extends ServerPlayer {
      * <p>死着的时候不算醒——原版 {@code LivingEntity.die} 会先把睡眠停掉,不挡的话她每次
      * 死在床上都会多出一条"你醒了"贴在死亡事件旁边。
      */
+    /**
+     * 这一刻该不该跟主人说"我饿了"。<b>一轮饥饿只说一次</b>:说过就闭嘴,吃回
+     * {@link #FED_LEVEL} 以上才重新武装。
+     *
+     * <p>她<b>不会自己吃</b> —— 那条常驻链删了。饿了是主人该知道的事,交互本身就是目的;
+     * 而"我解决不了"才值得打断他,这跟逃跑那条一个道理:打赢了不吵他。
+     */
+    public boolean pollGotHungry() {
+        int food = getFoodData().getFoodLevel();
+        if (food >= FED_LEVEL) {
+            hungerReported = false;
+            return false;
+        }
+        if (food > HUNGRY_LEVEL || hungerReported || !isAlive()) {
+            return false;
+        }
+        hungerReported = true;
+        return true;
+    }
+
     public boolean pollWokeUp() {
         if (!isAlive()) {
             sleepingLastTick = false;

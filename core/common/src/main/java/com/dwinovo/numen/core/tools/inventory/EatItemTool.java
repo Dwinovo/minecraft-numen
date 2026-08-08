@@ -12,7 +12,10 @@ import com.google.gson.JsonObject;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/** World-action tool (raw NumenTool): eat/drink a consumable from the inventory. */
+/**
+ * 吃/喝背包里的东西。<b>异步</b> —— 咀嚼要三十二刻,一口一口吃到饱可能更久,
+ * 占着一轮对话不合理;完事发 task_finished。
+ */
 public final class EatItemTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
@@ -22,7 +25,7 @@ public final class EatItemTool implements NumenTool {
 
     @Override
     public String name() {
-        return "eat_item";
+        return "eat";
     }
 
     @Override
@@ -45,6 +48,6 @@ public final class EatItemTool implements NumenTool {
     @Override
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer companion, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        runSync(companion, impl.eatItem(a.item_id(), ctx(toolCallId, companion)), reply);
+        setTask(companion, impl.eatItem(a.item_id(), ctx(toolCallId, companion)), args, reply);
     }
 }
