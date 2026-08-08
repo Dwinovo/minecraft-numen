@@ -23,25 +23,18 @@ class AttackPlanTest {
     private static final double HEALTHY = 40.0;
     private static final double REACH = 4.0;
 
-    /** 一只寻常近战怪的危险半径(含格量化补偿),见 {@code Menace.dangerRadius}。 */
-    private static final double ORDINARY_DANGER = 2.73;
-
-    /** 原版爆炸伤害的边界:威力 3 的爬行者,六格外一点也挨不着。 */
-    private static final double BLAST_SPAN = 6.0;
-
     private static Foe mob(int id, double distance) {
-        return new Foe(id, distance, false, false, distance < ORDINARY_DANGER,
-                true, true, true);
+        return new Foe(id, distance, false, false, true, true, true);
     }
 
-    /** 引信在走:危险半径是爆炸波及范围,六格。 */
+    /** 引信在走的爬行者。 */
     private static Foe creeper(int id, double distance) {
-        return new Foe(id, distance, true, true, distance < BLAST_SPAN, true, true, true);
+        return new Foe(id, distance, true, true, true, true, true);
     }
 
-    /** 引信还没点着的爬行者 —— 判据眼里就是一只普通怪,只是危险半径是点火线。 */
+    /** 引信还没点着的爬行者 —— 判据眼里就是一只普通怪。 */
     private static Foe idleCreeper(int id, double distance) {
-        return new Foe(id, distance, true, false, distance < 3.0, true, true, true);
+        return new Foe(id, distance, true, false, true, true, true);
     }
 
     private static Battlefield field(boolean melee, boolean ranged, Foe... foes) {
@@ -67,13 +60,13 @@ class AttackPlanTest {
     /** 走不到才动用远程——恶魂、悬崖对面、柱子上的东西都归这一支。 */
     @Test
     void unreachableIsWhatBowsAreFor() {
-        Foe far = new Foe(1, 20.0, false, false, false, true, false, true);
+        Foe far = new Foe(1, 20.0, false, false, true, false, true);
         assertEquals(Action.RANGED, AttackPlan.decide(field(true, true, far), null).action());
     }
 
     @Test
     void unreachableWithNoBowIsGivenUp() {
-        Foe far = new Foe(1, 20.0, false, false, false, true, false, true);
+        Foe far = new Foe(1, 20.0, false, false, true, false, true);
         assertEquals(Action.SKIRMISH, AttackPlan.decide(field(true, false, far), null).action());
     }
 
@@ -108,17 +101,17 @@ class AttackPlanTest {
     }
 
     /**
-     * 没弓,而它正追着她:<b>脱离</b>,不是"放弃"也不是"打完了"。
+     * 挑不出目标但还有东西在追她 —— <b>照样走位,不是逃跑</b>。
      *
-     * <p>这一条曾经判成 DONE —— 苦力怕还跟着,候选空了就宣布胜利收工,回执还写着"没有东西再
-     * 追你了"。反射链冷却完又开一场一模一样的,每轮放一次血。"没有能打的"与"没有危险了"在
-     * 这种局面下正好相反。
+     * <p>这里曾经判 DISENGAGE:场上只剩一只点着的爬行者(她没弓打不了),拿着下界合金剑的
+     * 满血玩家直接跑三十二格,明明退七格引信就倒退了。顶层只判「打不过」:血量撑不住,
+     * 或者手上没有任何武器 —— "眼前这只暂时不能打"不属于那两条。
      */
     @Test
-    void anExplosiveChasingHerWithNoBowMeansBreakingOffNotFinishing() {
-        Move m = AttackPlan.decide(field(true, false, creeper(1, 9.0)), null);
-        assertEquals(Action.DISENGAGE, m.action());
-        assertEquals(AttackPlan.NO_FOE, m.foeId(), "脱离是对全场的");
+    void nothingWorthHittingIsStillNotAReasonToRun() {
+        Move m = AttackPlan.decide(field(true, false, creeper(1, 3.0)), null);
+        assertEquals(Action.SKIRMISH, m.action());
+        assertEquals(AttackPlan.NO_FOE, m.foeId(), "全场的动作,不指向某一只");
     }
 
     /** 没弓时它不该抢走本来能打的那只。 */
@@ -224,7 +217,7 @@ class AttackPlanTest {
     /** 但赤手打一只不还手的东西是正当的(模型点名让她去打一只鸡)。 */
     @Test
     void barehandedAgainstSomethingHarmlessIsFine() {
-        Foe chicken = new Foe(1, 3.0, false, false, false, false, true, true);
+        Foe chicken = new Foe(1, 3.0, false, false, false, true, true);
         assertEquals(Action.SKIRMISH,
                 AttackPlan.decide(field(false, false, chicken), null).action());
     }
@@ -285,7 +278,7 @@ class AttackPlanTest {
     /** 没被授权的不算数——场上还有怪,但都不归这一场仗管。 */
     @Test
     void unauthorizedFoesDoNotKeepTheFightAlive() {
-        Foe stranger = new Foe(1, 3.0, false, false, false, false, true, false);
+        Foe stranger = new Foe(1, 3.0, false, false, false, true, false);
         assertEquals(Action.DONE, AttackPlan.decide(field(true, true, stranger), null).action());
     }
 

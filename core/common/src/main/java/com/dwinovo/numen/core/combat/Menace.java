@@ -116,11 +116,12 @@ public final class Menace {
     /**
      * 不含格量化补偿的那一版,只在推导与测试里用。
      *
+     *
      * <p><b>引信没点着的爬行者按普通怪算</b>。按点火线(3.0)算的话,加上格量化补偿就是 3.71,
      * 已经超过她够得着的 3.30 —— 窗口是负的,她永远不能挥这一刀,只能绕着走。而点着之后
      * 引信有整整 30 刻,那时再退完全来得及。
      */
-    static double rawDangerRadius(Entity foe, Entity self) {
+    public static double rawDangerRadius(Entity foe, Entity self) {
         if (armed(foe)) {
             return blastSpanOf(foe);   // 引信在走 / 一打就炸的水晶:怕的是爆炸波及多远
         }
@@ -207,20 +208,19 @@ public final class Menace {
     }
 
     /**
-     * 把一批怪折成势场。每一只带上<b>自己的</b>危险半径:蜘蛛比僵尸够得远,
-     * 用一个统一的数只能取最大值,于是她躲僵尸也按蜘蛛的距离躲。
+     * 战斗走位用的威胁场:间距取<b>裸</b>危险半径(不含格量化补偿)。
      *
-     * @return 空表示无事可躲,调用方不该建躲避目标
+     * <p>这就是走位环的<b>内沿</b> —— 离每一只都出了它够得着的距离。外沿是她的够到距离,
+     * 由调用方给。带宽因此约 1.28 格,比格量化误差 0.71 宽出一截。
      */
     public static List<GoalAvoidEntities.Threat> field(LivingEntity victim,
                                                        Iterable<? extends Entity> mobs) {
         List<GoalAvoidEntities.Threat> threats = new ArrayList<>();
         for (Entity mob : mobs) {
-            if (mob == null || !mob.isAlive()) {
-                continue;
+            if (mob != null && mob.isAlive()) {
+                threats.add(new GoalAvoidEntities.Threat(mob.getX(), mob.getY(), mob.getZ(),
+                        dangerRadius(mob, victim), rawDangerRadius(mob, victim)));
             }
-            threats.add(new GoalAvoidEntities.Threat(
-                    mob.getX(), mob.getY(), mob.getZ(), dangerRadius(mob, victim)));
         }
         return threats;
     }
@@ -231,14 +231,4 @@ public final class Menace {
                 foe.getX(), foe.getZ(), dangerRadius(foe, self));
     }
 
-    /** 身边有没有已经进了危险半径的。 */
-    public static List<Mob> dangersAround(LivingEntity self, double radius) {
-        List<Mob> out = new ArrayList<>();
-        for (Mob m : hostilesAround(self, radius)) {
-            if (tooClose(m, self)) {
-                out.add(m);
-            }
-        }
-        return out;
-    }
 }

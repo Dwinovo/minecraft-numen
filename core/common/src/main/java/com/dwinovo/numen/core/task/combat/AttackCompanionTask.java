@@ -83,14 +83,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private static final double FLEE_SCAN_RADIUS = 40.0;
 
-    /**
-     * 走位环的宽度:外沿 = 目标的危险半径 + 这么多。
-     *
-     * <p>只要比格量化误差(√2/2 ≈ 0.71)宽出一截就行,两格是"别跟丢"的量级。它<b>不需要</b>
-     * 跟她的够到距离对齐 —— 打不打是攻击层的事。
-     */
-    private static final double SKIRMISH_BAND = 2.0;
-
     /** 离落点这么近就算到了,该重新挑下一个。 */
     private static final double HAVEN_ARRIVED = 2.0;
 
@@ -137,18 +129,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private AttackPlan.Move lastMove;
 
     /**
-     * 正在逃跑。<b>一旦开始,终点只有一条:{@link Menace#FLEE_DISTANCE} 格内没有敌对生物。</b>
-     *
-     * <p>中途不再问判据。判据的视野是十二格,她一跑出十二格,追她的那些就掉出视野,判据当场
-     * 宣布"没有东西再追你了"、任务成功收场、反射链下一刻又开一场 —— 实测她每次跑到十一二格
-     * 就停,那个三十二格的终点一次都没轮到。
-     *
-     * <p>与其把判据的视野也调到三十二(那只是把同一个数抄到第二处),不如让逃跑自己管自己的
-     * 终点:判据管打架,逃跑管跑掉,各有各的判据,谁也别替谁发言。
-     */
-    private boolean fleeing;
-
-    /**
      * 逃跑的<b>落点</b>。一次挑定,跑到才换 —— 方向的连续性就是不绕圈的全部原因。
      *
      * <p>路径本身仍然每次重规划都重算,新冒出来的怪由边成本({@code Avoidance.forGoal})
@@ -158,6 +138,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     /** 这一段逃跑路线是哪一刻算的。到点就重算,见 {@link #FLEE_REPLAN_TICKS}。 */
     private long havenPlannedAt;
+
+    /** 走位探针:上一次采样的位置与那一刻的游戏时间。 */
+    private net.minecraft.world.phys.Vec3 skirmishMark;
+    private long skirmishMarkTick;
 
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
         super(player, record);
@@ -176,10 +160,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         if (player.isDeadOrDying()) return TaskState.CANCELLED;
         if (phase == Phase.LOOT) return tickLoot();
 
-        // 逃跑中:只问那一条,不问判据。
-        if (fleeing) {
-            return tickFlee();
-        }
         Battlefield field = surveyField();
         for (var f : field.foes()) {
             if (f.authorized()) {
@@ -205,13 +185,14 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 攻击与移动<b>正交</b>:每刻先问一次"冷却好了吗、够得着谁吗",够得着就打 ——
         // 不管这一刻在靠近、在拉开、还是站着。攻击不影响寻路,最多让她回个头。
         tickWeapon(field);
+        if (move.action() != AttackPlan.Action.DISENGAGE && haven != null) {
+            haven = null;   // 不再逃跑了:落点作废,下次要跑再重新挑
+            stopNav();
+        }
         return switch (move.action()) {
             case SKIRMISH -> closeIn();
             case RANGED -> shootAt(Loadout.forTarget(player, target));
-            case DISENGAGE -> {
-                fleeing = true;
-                yield tickFlee();
-            }
+            case DISENGAGE -> tickFlee();
             case DONE -> finish();
         };
     }
@@ -237,7 +218,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                     player.distanceTo(mob),
                     Menace.explodes(mob),
                     Menace.armed(mob),
-                    Menace.tooClose(mob, player),
                     engaging,
                     reachable(mob.getId()),
                     authorized));
@@ -251,7 +231,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 Entity e = liveEntity(id);
                 if (e != null) {
                     foes.add(new Battlefield.Foe(id, player.distanceTo(e),
-                            Menace.explodes(e), Menace.armed(e), Menace.tooClose(e, player),
+                            Menace.explodes(e), Menace.armed(e),
                             false, reachable(id), true));
                 }
             }
@@ -394,8 +374,55 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     }
 
     private TaskState closeIn() {
-        driveApproach();
+        PlayerNav.Status status = driveApproach();
+        probeSkirmish(status);
         return TaskState.RUNNING;
+    }
+
+    /**
+     * 走位探针。每秒一行,回答四个只能靠位置分辨的问题:
+     *
+     * <ul>
+     *   <li><b>挪了 ≈ 0</b> —— 走不动。判据在喊走位而执行层什么都没做,或者目标当场就"到达"</li>
+     *   <li><b>距离在带内却挪个不停</b> —— 带算错了或者边界抖</li>
+     *   <li><b>距离一直大于外沿</b> —— 她被钉在打不到的地方</li>
+     *   <li><b>状态一直 FAILED</b> —— 目标不可达,寻路每刻白算</li>
+     * </ul>
+     */
+    private void probeSkirmish(PlayerNav.Status status) {
+        long now = player.level().getGameTime();
+        if (skirmishMark != null && now - skirmishMarkTick < 20) {
+            return;
+        }
+        var here = player.position();
+        String moved = skirmishMark == null ? "-"
+                : String.format("%.1f", here.distanceTo(skirmishMark));
+        String band;
+        String dist;
+        if (target == null || target.isRemoved()) {
+            double nearest = Double.MAX_VALUE;
+            double inner = 0.0;
+            for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
+                double d = player.distanceTo(mob);
+                if (d < nearest) {
+                    nearest = d;
+                    inner = Menace.rawDangerRadius(mob, player);
+                }
+            }
+            dist = nearest == Double.MAX_VALUE ? "-" : String.format("%.1f", nearest);
+            band = String.format("[%.2f, 无外沿]", inner);
+        } else {
+            dist = String.format("%.1f", player.distanceTo(target));
+            band = String.format("[%.2f, %.2f]",
+                    Menace.rawDangerRadius(target, player), reachToTarget());
+        }
+        Constants.LOG.info("[numen-skirmish] {} 目标={} 距离={} 带={} 这一秒挪了 {} 格 "
+                        + "脚下={},{},{} 疾跑={} 导航={}",
+                status, target == null ? "无" : target.getId(), dist, band, moved,
+                (int) here.x, (int) here.y, (int) here.z,
+                player.isSprinting(), nav == null ? "无" : "有");
+        skirmishMark = here;
+        skirmishMarkTick = now;
     }
 
     /**
@@ -404,23 +431,25 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * <p>{@code MELEE} 与 {@code CLOSE_IN} 共用这一段 —— 它们只差"要不要挥",站位是一样的。
      * 分开写的时候,姿态一变就会拆掉刚算好的路径,而击退每砍一刀就让姿态变一次。
      */
-    private void driveApproach() {
-        if (target == null) {
-            return;
-        }
+    private PlayerNav.Status driveApproach() {
         if (nav == null) {
+            // <b>没有目标也要走。</b>判据的 SKIRMISH 可以是"对全场的"(挑不出能打的,但还有
+            // 东西追她),那时该退开等机会 —— 这里曾经第一行就 {@code target == null} 早退,
+            // 于是判据每刻正确地喊"走位"、执行层每刻安静地什么都不做,日志看着一切正常,
+            // 直到她被苦力怕炸死。什么时候不用走由 standoffGoal 说(场上空了返回 null)。
+            //
             // 目标会动:要 trackGoal 而不是 toGoal —— 后者一旦到达就永久 ARRIVED,
             // 她会站在原地不再跟位,别的怪就能从容贴上来。
-            nav = PlayerNav.trackGoal(player, this::standoffGoal, CHASE_SPEED,
-                    () -> target == null || target.isRemoved());
+            nav = PlayerNav.trackGoal(player, this::standoffGoal, CHASE_SPEED, () -> false);
         }
-        switch (nav.tick()) {
-            case RUNNING, ARRIVED -> { }
-            case FAILED -> {
-                stopNav();
+        PlayerNav.Status status = nav.tick();
+        if (status == PlayerNav.Status.FAILED) {
+            stopNav();
+            if (target != null) {
                 noteApproachFailure(target.getId());
             }
         }
+        return status;
     }
 
     /**
@@ -445,7 +474,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 躲得掉爆炸却防不了偷袭,根子在这。
      *
      * <p>光靠这一条还不够:目标是开路那一刻的<b>快照</b>。真正每刻重问的是判据那一侧
-     * ({@code Battlefield.anyTooClose},用实时距离),这里管的是"落脚点别选在人家嘴边"。
+     * 这里管的是"落脚点别选在人家嘴边"。
      *
      * <h2>目标自己也在势场里</h2>
      * 它当然也会打她,所以不需要另画一条内沿:吸引项把她拉进够到距离,它自己的危险半径把她
@@ -456,22 +485,30 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 没有合格的格子也不会失败:引擎的七档 {@code bestSoFar} 会交出这次搜索里最好的一段。
      */
     private NavGoal standoffGoal() {
-        if (target == null || target.isRemoved()) {
+        var field = Menace.hostilesAround(player, FIELD_RADIUS);
+        if (field.isEmpty()) {
             return null;
         }
-        var field = Menace.hostilesAround(player, FIELD_RADIUS);
         logStandoff(field);
+        if (target == null || target.isRemoved()) {
+            // <b>没有目标也照样走位</b>:环退化成"离每一只都出了它的危险半径"。
+            // 场上只剩一只点着的爬行者(她没弓打不了)时走的就是这一支 —— 退开等引信熄,
+            // 而不是跑三十二格。
+            return NavGoal.avoid(Menace.AVOID_PENALTY, Menace.field(player, field));
+        }
         // 走位是<b>一个环</b>:外沿别跟丢,内沿是每一只都够不着她。太近自然往外走,太远
         // 自然往回走 —— "拉开"不是另一个动作。
         //
-        // <b>外沿不再被"够得着"绑死。</b>攻击层独立之后寻路不用负责"站到能打到的地方",
-        // 她路过时进了攻击距离攻击层自会打。以前外沿取够到距离(3.30)、内沿取危险半径
-        // (2.73),带只有 0.57 格宽而格量化误差 0.71 —— 表达不出来,于是寻路一直失败,
-        // 她停在边缘不动。现在带宽两三格,绰绰有余。
-        double outer = Menace.dangerRadius(target, player) + SKIRMISH_BAND;
+        // 外沿<b>就是她的够到距离</b>。寻路不负责"打",但必须把她送进打得到的范围,否则
+        // 攻击层一辈子没机会 —— 外沿放宽到 4.73 那一版,她走到 4.7 就"到位"停下,而够到
+        // 距离只有 3.30,于是站在那儿挨打,实测有效血量 8 掉到 5。
+        //
+        // 内沿用<b>裸</b>攻击距离(2.02),不加格量化补偿。带宽因此是 1.28 格,比格量化误差
+        // 0.71 宽出一截 —— 当初算出"带只有 0.57 格、做不出来",是因为把补偿也叠进了内沿。
         return NavGoal.approachAvoiding(
-                NavGoal.near(target.blockPosition(), outer),
-                Menace.AVOID_PENALTY, Menace.field(player, field));
+                NavGoal.near(target.blockPosition(), reachToTarget()),
+                Menace.AVOID_PENALTY,
+                Menace.field(player, field));
     }
 
     /** 站位日志只在数字真的变了时打一行——每 tick 一行会把别的全冲掉。 */
@@ -482,9 +519,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 tooClose++;
             }
         }
-        String line = String.format("目标=%d 距离=%.1f 够到=%.2f 危险半径=%.2f 太近=%d 场上=%d",
-                target.getId(), player.distanceTo(target), reachToTarget(),
-                Menace.dangerRadius(target, player), tooClose, field.size());
+        String line = target == null || target.isRemoved()
+                ? String.format("无目标(只拉开) 太近=%d 场上=%d", tooClose, field.size())
+                : String.format("目标=%d 距离=%.1f 够到=%.2f 危险半径=%.2f 太近=%d 场上=%d",
+                        target.getId(), player.distanceTo(target), reachToTarget(),
+                        Menace.dangerRadius(target, player), tooClose, field.size());
         if (!line.equals(lastStandoffLog)) {
             lastStandoffLog = line;
             Constants.LOG.info("[numen-attack] 站位 {}", line);
@@ -584,58 +623,26 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     // ==================== 躲避 ====================
 
     /**
-     * 拉开距离:站到离每一只都出了它<b>危险半径</b>的地方。
-     *
-     * <p>逃跑不走这儿 —— 那是"挑一个落点跑到底"({@link #tickFlee}),两件事的形状不一样:
-     * 拉扯的终点是一圈约束(两三格,退出去就能接着打),逃跑的终点是一个坐标。
-     *
-     * @param terminal 退到哪算完
-     * @return 导航这一刻的状态
-     */
-    private PlayerNav.Status driveRetreat(BooleanSupplier terminal) {
-        if (nav == null) {
-            Constants.LOG.info("[numen-attack] 退避 拉开 —— {} 只在危险半径内",
-                    Menace.dangersAround(player, FIELD_RADIUS).size());
-            // 威胁快照<b>在 supplier 里面</b>取:它每次重规划调一次,坐标跟着刷新。
-            // 放在外面就是把开路那一刻钉死,它们追上来之后她还按旧位置退。
-            nav = PlayerNav.trackGoal(player, () -> {
-                var field = Menace.hostilesAround(player, FIELD_RADIUS);
-                return field.isEmpty() ? null
-                        : NavGoal.avoid(Menace.AVOID_PENALTY, Menace.field(player, field));
-            }, CHASE_SPEED, terminal);
-        }
-        PlayerNav.Status status = nav.tick();
-        if (status != PlayerNav.Status.RUNNING) {
-            stopNav();
-        }
-        if (status == PlayerNav.Status.FAILED) {
-            retreatFailures++;
-        } else if (status == PlayerNav.Status.RUNNING) {
-            retreatFailures = 0;   // 走得动就不是被围住
-        }
-        return status;
-    }
-
-
-    /**
      * 脱离接触:她扛不住了,先活下来。
      *
      * <p>终止条件就是那 {@link Menace#FLEE_DISTANCE} 格 —— 与逃跑目标的到达条件同一个数。
      */
     /**
-     * 逃跑。<b>只有一个判据:三十二格内还有没有敌对生物。</b>
+     * 逃跑这一刻做什么:跑向落点。
      *
-     * <p>跑法是"挑一个落点跑到底",不是"越远越好":后者在十几只怪围着时目标无解,只能靠
-     * {@code bestSoFar},而逃跑势场 {@code 1/d²} 五格之后就平了,排序里几乎是噪声 ——
-     * 于是每次重规划挑的方向都不一样,她在二十来格见方的框里绕圈。
+     * <p><b>它不是一个"状态"。</b>顶层每刻重判"还打不打得过",打不过就再走一次这里,
+     * 血回来了下一刻自然回到战斗——曾经这里是一个闩锁({@code fleeing}),进去就把判据
+     * 整个短路,于是血回满了也一直跑,实测一次 DISENGAGE 配四十七行逃跑采样。
+     *
+     * <p>三十二格是<b>跑的目标</b>,不是状态的出口:跑到了就没什么可跑的,判据自会改口。
      */
     private TaskState tickFlee() {
         var around = Menace.hostilesAround(player, Menace.FLEE_DISTANCE);
         if (around.isEmpty()) {
-            endFlee();
+            clearHaven();
+            InputDriver.halt(player);
             Constants.LOG.info("[numen-attack] 脱离成功 —— {} 格内没有敌对生物",
                     (int) Menace.FLEE_DISTANCE);
-            // 说清楚为什么脱离:扛不住,还是这一架根本打不了。模型对这两种能做的事不一样。
             fail(Menace.outmatched(player)
                             ? "broke off — too hurt to keep fighting; nothing is near you now"
                             : "broke off — nothing here can be fought with what you carry "
@@ -650,9 +657,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                     haven, (int) Menace.FLEE_DISTANCE, around.size());
         }
         if (haven == null) {
-            // 四面八方都没有可站的落点(未加载、悬崖、水面)。交回判据,别挂在这儿。
-            endFlee();
-            Constants.LOG.info("[numen-attack] 没有可跑的方向 —— 交回判据");
+            Constants.LOG.info("[numen-attack] 没有可跑的方向");
             return TaskState.RUNNING;
         }
         long now = player.level().getGameTime();
@@ -660,8 +665,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             stopNav();   // 到点重算:落点不变,只让这一刻的怪进边成本
         }
         if (nav == null) {
-            // 目标是一个坐标,永远可达;<b>威胁表挂在目标上</b>,搜索器据此建边成本惩罚球
-            // ({@code Avoidance.forGoal})。间距给零 —— 它们只让路线变贵,不改变"到没到"。
             BlockPos landing = haven;
             havenPlannedAt = now;
             nav = PlayerNav.toGoal(player, () -> NavGoal.approachAvoiding(
@@ -670,22 +673,25 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                     CHASE_SPEED, () -> false);
         }
         PlayerNav.Status status = nav.tick();
-        probeFlee(player.level().getGameTime(), status);
+        probeFlee(now, status);
         if (status == PlayerNav.Status.FAILED) {
             stopNav();
             haven = null;   // 这个方向走不通,下一刻换一个
-            if (++retreatFailures >= MAX_APPROACH_FAILURES) {
-                endFlee();
-                Constants.LOG.info("[numen-attack] 跑不掉 —— 交回判据,背水一战");
-            }
-        } else if (status == PlayerNav.Status.ARRIVED) {
-            stopNav();
-            haven = null;   // 到了,下一刻重新挑
-            retreatFailures = 0;
+            retreatFailures++;
         } else {
+            if (status == PlayerNav.Status.ARRIVED) {
+                stopNav();
+                haven = null;
+            }
             retreatFailures = 0;
         }
         return TaskState.RUNNING;
+    }
+
+    /** 丢掉落点与导航。跑到了、跑不动了、或者判据改口不跑了,都过这里。 */
+    private void clearHaven() {
+        haven = null;
+        stopNav();
     }
 
     /**
@@ -697,14 +703,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return Menace.field(player, Menace.hostilesAround(player, FLEE_SCAN_RADIUS)).stream()
                 .map(t -> t.withClearance(0.0))
                 .toList();
-    }
-
-    /** 收掉逃跑状态。终点、跑不掉、没方向 —— 三个出口都过这里。 */
-    private void endFlee() {
-        fleeing = false;
-        haven = null;
-        stopNav();
-        InputDriver.halt(player);
     }
 
     /**

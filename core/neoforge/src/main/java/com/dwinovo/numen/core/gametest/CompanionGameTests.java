@@ -13,6 +13,14 @@ import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
+import com.dwinovo.numen.core.combat.Menace;
+import com.dwinovo.numen.core.combat.Swing;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.entity.monster.Creeper;
+import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.gametest.framework.StructureUtils;
@@ -54,6 +62,97 @@ public class CompanionGameTests {
      * 冒烟:同伴能在测试世界里存活并走完一段路。验证的是整条链路——假玩家生成
      * (载档→入场→落位)、任务入队、后台 A* 搜索、逐 tick 执行——在无头环境下全通。
      */
+    // ==================== 战斗 ====================
+
+    /**
+     * 走位带:她该稳在「它够不着我」与「我够得着它」之间,而且真的能砍到。
+     *
+     * <p>盯的是两个反复出错的地方:外沿一旦超过她的够到距离,她会停在打不到的位置站着挨打
+     * (实测在 4.0~4.8 之间摆、有效血量 8 掉到 5);内沿一旦叠上格量化补偿,带宽从 1.28 压到
+     * 0.57,格分辨率装不下,寻路一路失败,她停在边缘不动。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    public static void combat_holds_the_skirmish_band(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(3, 2, 3));
+        Zombie zombie = spawnZombie(helper, new BlockPos(11, 2, 11), companion);
+
+        double inner = Menace.rawDangerRadius(zombie, companion);
+        double outer = Swing.reachTo(
+                companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE),
+                zombie.getBbWidth());
+        float startHealth = zombie.getHealth();
+
+        int[] insideBand = {0};
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.isAlive(), "companion died to a single zombie");
+            double d = companion.distanceTo(zombie);
+            if (d >= inner && d <= outer) {
+                insideBand[0]++;
+            }
+            // 砍掉血就说明外沿确实在够得着的范围内 —— 站在打不到的地方是这条最先抓的病。
+            helper.assertTrue(zombie.getHealth() < startHealth || !zombie.isAlive()
+                            || insideBand[0] < 200,
+                    "companion never landed a hit: distance " + String.format("%.2f", d)
+                            + " band [" + String.format("%.2f", inner) + ", "
+                            + String.format("%.2f", outer) + "]");
+            helper.assertTrue(!zombie.isAlive(), "zombie still up");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 引信点着的爬行者:她该退开,不该站着被炸,也不该跑出半个世界。
+     *
+     * <p>没有弓时爬行者不进候选,判据给的是"对全场的走位"——执行层曾经在
+     * {@code target == null} 上早退,于是判据每刻正确地喊走位、执行层每刻什么都不做,
+     * 日志看着一切正常,直到她被炸死。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    public static void combat_backs_away_from_a_lit_creeper(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(8, 2, 8));
+        Creeper creeper = EntityType.CREEPER.create(level);
+        helper.assertTrue(creeper != null, "creeper did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 10));
+        creeper.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        creeper.setTarget(companion);
+        creeper.ignite();
+        level.addFreshEntity(creeper);
+
+        double[] furthest = {0.0};
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.isAlive(), "companion was blown up");
+            furthest[0] = Math.max(furthest[0], companion.distanceTo(creeper));
+            helper.assertTrue(furthest[0] >= 5.0,
+                    "companion never backed off (want >= 5.0): furthest "
+                            + String.format("%.2f", furthest[0]));
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    private static NumenPlayer armedCompanion(GameTestHelper helper, BlockPos rel) {
+        ServerLevel level = helper.getLevel();
+        BlockPos at = helper.absolutePos(rel);
+        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+                "gametest_fighter", UUID.randomUUID(), level,
+                new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
+        companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        companion.getFoodData().setFoodLevel(20);
+        return companion;
+    }
+
+    private static Zombie spawnZombie(GameTestHelper helper, BlockPos rel, NumenPlayer target) {
+        ServerLevel level = helper.getLevel();
+        Zombie zombie = EntityType.ZOMBIE.create(level);
+        helper.assertTrue(zombie != null, "zombie did not spawn");
+        BlockPos at = helper.absolutePos(rel);
+        zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setTarget(target);
+        level.addFreshEntity(zombie);
+        return zombie;
+    }
+
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_smoke")
     public static void companion_goto(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();

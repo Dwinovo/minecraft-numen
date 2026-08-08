@@ -99,13 +99,14 @@ public final class AttackPlan {
         if (foe != null) {
             return new Move(actionAgainst(b, foe), foe.id());
         }
-        // 打不了了。<b>还有东西在追她,那就不叫打完了。</b>
+        // 挑不出目标,但还有东西在追她 —— <b>这不是"打不过"</b>。她照样走位:环退化成
+        // "离每一只威胁都出了它的危险半径",引信熄了、或者别的怪凑上来,下一刻自会有目标。
         //
-        // 这一条曾经判成 DONE:苦力怕还跟着,她没弓打不了,于是候选空 → 宣布胜利收工,
-        // 回执还写着"没有东西再追你了"。反射链冷却完又开一场一模一样的,每轮放一次血。
-        // "没有能打的"与"没有危险了"在这种局面下正好相反。
+        // 这里曾经判 DISENGAGE。于是场上只剩一只点着的爬行者时,拿着下界合金剑的满血玩家
+        // 直接跑三十二格 —— 明明退七格引信就倒退了。<b>顶层只判打不过</b>:血量撑不住,
+        // 或者手上没有任何武器。"眼前这只暂时不能打"不属于那两条。
         if (anyEngaging(b)) {
-            return new Move(Action.DISENGAGE, NO_FOE);
+            return new Move(Action.SKIRMISH, NO_FOE);
         }
         return new Move(Action.DONE, NO_FOE);
     }
