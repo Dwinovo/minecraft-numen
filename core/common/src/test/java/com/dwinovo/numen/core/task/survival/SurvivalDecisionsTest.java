@@ -18,36 +18,10 @@ class SurvivalDecisionsTest {
 
     // ---- 进食 ----
 
-    @Test
-    void noEdibleNeverEats() {
-        // 身上没吃的:再饿也没有可做的事,抢了身体只是白站着
-        assertFalse(SurvivalDecisions.foodTriggered(0, 20.0f, false));
-        assertFalse(SurvivalDecisions.foodTriggered(0, 1.0f, false));
-    }
 
-    @Test
-    void fullAndHealthyDoesNotEat() {
-        assertFalse(SurvivalDecisions.foodTriggered(20, 20.0f, true));
-        assertFalse(SurvivalDecisions.foodTriggered(18, 20.0f, true));
-    }
 
-    @Test
-    void hungryEats() {
-        assertTrue(SurvivalDecisions.foodTriggered(SurvivalDecisions.HUNGRY_LEVEL, 20.0f, true));
-        assertTrue(SurvivalDecisions.foodTriggered(0, 20.0f, true));
-    }
 
-    @Test
-    void hurtEatsBackUpToTheRegenLine() {
-        // 受伤但还没到"饿"的线:吃回自然回血线(食物 ≥18)能把血换回来
-        assertTrue(SurvivalDecisions.foodTriggered(16, 6.0f, true));
-        assertFalse(SurvivalDecisions.foodTriggered(16, 20.0f, true), "满血不必为回血而吃");
-    }
 
-    @Test
-    void hurtButAlreadyAtTheRegenLineDoesNotEat() {
-        assertFalse(SurvivalDecisions.foodTriggered(20, 4.0f, true));
-    }
 
     // ---- 有没有威胁 ----
     // 「打还是跑」不在这一层了:它按护甲折算的有效血量判,和"够不够得着""该不该贴近"
@@ -66,25 +40,34 @@ class SurvivalDecisionsTest {
     // ---- 摔落缓冲 ----
 
     @Test
-    void onGroundNeverSaves() {
-        assertFalse(SurvivalDecisions.mlgTriggered(true, 100.0, true));
+    void groundedNeverSaves() {
+        // 落地、踩水、抓着梯子 —— 都不是"在摔"
+        assertFalse(SurvivalDecisions.mlgTriggered(true, -3.0, true));
     }
 
     @Test
-    void shortFallNeverSaves() {
-        assertFalse(SurvivalDecisions.mlgTriggered(false, 2.0, true));
+    void slowDescentNeverSaves() {
+        // 走下台阶、慢慢沉:掉得不够快就不该抢身体
+        assertFalse(SurvivalDecisions.mlgTriggered(false, -0.3, true));
+        assertFalse(SurvivalDecisions.mlgTriggered(false, 0.0, true));
     }
 
     @Test
-    void lethalFallWithAMeansSaves() {
-        assertTrue(SurvivalDecisions.mlgTriggered(false, 10.0, true));
-        assertTrue(SurvivalDecisions.mlgTriggered(false, SurvivalDecisions.MLG_FALL_TRIGGER, true));
+    void fastFallWithAMeansSaves() {
+        assertTrue(SurvivalDecisions.mlgTriggered(false, -3.0, true));
+        assertTrue(SurvivalDecisions.mlgTriggered(false, SurvivalDecisions.MLG_FALL_SPEED, true));
     }
 
     @Test
     void nothingToSaveWithMeansNoSave() {
         // 手上没水桶也没软方块:抢了身体也救不了自己,身体该留给别的反射
-        assertFalse(SurvivalDecisions.mlgTriggered(false, 50.0, false));
+        assertFalse(SurvivalDecisions.mlgTriggered(false, -3.0, false));
+    }
+
+    @Test
+    void settledSpeedIsSlowerThanTheFallTrigger() {
+        // 两条线必须分得开:还在自由落体时不能被当成"落进水里了,可以收桶"
+        assertTrue(SurvivalDecisions.MLG_SETTLED_SPEED > SurvivalDecisions.MLG_FALL_SPEED);
     }
 
     // ---- 换气 ----

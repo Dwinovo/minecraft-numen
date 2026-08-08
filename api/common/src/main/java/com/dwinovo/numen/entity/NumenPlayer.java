@@ -263,12 +263,23 @@ public final class NumenPlayer extends ServerPlayer {
             sl.getChunkSource().move(this);
         }
         super.tick();
+        // 摔落结算是玩家<b>唯一</b>由客户端权威的物理:{@code Entity.move} 里那一处被
+        // {@code isLocalInstanceAuthoritative()} 挡着(Player.isClientAuthoritative()
+        // 恒为 true,服务端算出来就是 false),真正结算的是收到移动包时的
+        // {@code doCheckFallDamage}。空壳玩家的连接是空的,那个包永远不来 —— 于是她既
+        // 不掉血,{@code fallDistance} 也永远是 0。和上面补 doTick() 是同一件事:
+        // 网络层漏掉的那一趟,按原版原样补回来。
+        net.minecraft.world.phys.Vec3 before = position();
         try {
             this.doTick();
         } catch (Exception ignored) {
             // fake-connection internals can NPE on edge cases; a swallowed tick
             // beats crashing the server for a cosmetic pass
         }
+        // 位移只框住上面这一段。召唤、重生、跨维度都发生在 tick 之外,下一刻 before 读到的
+        // 已经是新位置,位移天然为零 —— 不需要另写传送豁免。
+        net.minecraft.world.phys.Vec3 moved = position().subtract(before);
+        doCheckFallDamage(moved.x, moved.y, moved.z, onGround());
     }
 
     @Override

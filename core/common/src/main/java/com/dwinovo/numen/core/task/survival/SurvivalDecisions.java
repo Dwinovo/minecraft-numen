@@ -20,42 +20,44 @@ public final class SurvivalDecisions {
 
     private SurvivalDecisions() {}
 
-    // ---- food thresholds (vanilla FoodData is 0..20) ----
-    /** Natural regeneration needs food &ge; 18, so eating below this while hurt buys HP back. */
-    public static final int REGEN_FOOD_LEVEL = 18;
-    /** Health (of 20) at/below which we treat "hurt + not full food" as worth an eat for regen. */
-    public static final float LOW_HEALTH = 12.0f;
-    /** Food level at/below which the body is genuinely hungry (below 7 it can no longer sprint). */
-    public static final int HUNGRY_LEVEL = 6;
-
     // ---- fall thresholds ----
-    /** Fall distance (blocks) above which an MLG save is worth attempting (vanilla fall damage &gt; 1 heart). */
-    public static final double MLG_FALL_TRIGGER = 4.0;
-
     /**
-     * 进食触发条件:身上真有吃的,而且要么饿了、要么受伤且没到自然回血线。
+     * 下落速度(格/刻)到这个量级就是"正在摔"。
+     *
+     * <p>判<b>速度</b>而不是累计落差:玩家的摔落结算在原版里是客户端权威的
+     * ({@code Entity.move} 里那一处被 {@code isLocalInstanceAuthoritative} 挡着,真正
+     * 结算的是收到移动包时的 {@code doCheckFallDamage}),而 {@code fallDistance} 也在
+     * 同一处累加。空壳玩家没有客户端,那个量永远是 0。速度是服务端物理自己算的,拿它当
+     * 判据既躲开了这件事,也更贴近这条反射真正关心的东西——她这一刻掉得有多快。
+     *
+     * <p>原版重力 0.08/刻、阻力 0.98,自由落体约九刻到 0.7 格/刻,那时已经掉了三格出头
+     * ——正好压在摔伤起点(落差 3 格)上。
      */
-    public static boolean foodTriggered(int foodLevel, float health, boolean hasEdible) {
-        if (!hasEdible) return false;
-        if (health <= LOW_HEALTH && foodLevel < REGEN_FOOD_LEVEL) return true;   // 受伤了,吃回自然回血线
-        return foodLevel <= HUNGRY_LEVEL;
-    }
+    public static final double MLG_FALL_SPEED = -0.7;
 
-    /** How the threat-response chain reacts to a present threat. */
     /** 有威胁就触发。 */
     public static boolean mobDefenseTriggered(boolean threatPresent) {
         return threatPresent;
     }
 
     /**
-     * 摔落缓冲触发条件:人在空中、已经掉过致伤距离、并且手上有救命的东西
-     * (水桶或软方块)——三者缺一就没有可做的事。
+     * 摔落缓冲触发条件:人正在快速下落、并且手上有救命的东西(水桶或软方块)。
+     *
+     * @param grounded 脚落地了,或者人在水里/在爬梯藤——三者都不算"在摔"
+     * @param fallSpeed 竖直速度(格/刻),向下为负
+     * @param canSave  身上有水桶或软方块;没有的话抢了身体也救不了自己
      */
-    public static boolean mlgTriggered(boolean onGround, double fallDistance, boolean canSave) {
-        if (onGround) return false;
-        if (!canSave) return false;               // 手上没水桶也没软方块,抢了身体也没用
-        return fallDistance >= MLG_FALL_TRIGGER;
+    public static boolean mlgTriggered(boolean grounded, double fallSpeed, boolean canSave) {
+        if (grounded) return false;
+        if (!canSave) return false;
+        return fallSpeed <= MLG_FALL_SPEED;
     }
+
+    /**
+     * 水已经在减速她 —— 该收桶了。比 {@link #MLG_FALL_SPEED} 慢,所以"还在自由落体"
+     * 和"已经落进水里"分得开。
+     */
+    public static final double MLG_SETTLED_SPEED = -0.5;
 
     // ---- breath thresholds (vanilla air is 0..300 ticks; damage starts at 0) ----
     /**
