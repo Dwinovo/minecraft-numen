@@ -98,7 +98,7 @@ public class NumenNeoForgeClient {
     static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
         // 先掐大脑:作废在飞回合与工具链,别让上一个存档的回合漂进下一个存档
         com.dwinovo.numen.client.agent.AgentLoopRegistry.quiesceAll();
-        com.dwinovo.numen.client.data.ClientNumenInventory.clear();
+        com.dwinovo.numen.client.data.ClientNumenState.clear();
         com.dwinovo.numen.client.agent.KnownSkins.clear();
         com.dwinovo.numen.client.hud.SpeechBubbles.clear();
         com.dwinovo.numen.client.chat.SelectedCompanion.clear();

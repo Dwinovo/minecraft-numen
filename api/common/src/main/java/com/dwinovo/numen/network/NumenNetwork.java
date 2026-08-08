@@ -107,15 +107,15 @@ public final class NumenNetwork {
 
         // C→S: the Items tab asks for a companion's backpack (not client-synced).
         Services.NETWORK.registerClientToServer(
-                com.dwinovo.numen.network.payload.RequestInventoryPayload.TYPE,
-                com.dwinovo.numen.network.payload.RequestInventoryPayload.STREAM_CODEC,
-                com.dwinovo.numen.network.payload.RequestInventoryPayload::handle);
+                com.dwinovo.numen.network.payload.RequestStatePayload.TYPE,
+                com.dwinovo.numen.network.payload.RequestStatePayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.RequestStatePayload::handle);
 
         // S→C: the requested backpack contents.
         Services.NETWORK.registerServerToClient(
-                com.dwinovo.numen.network.payload.NumenInventoryPayload.TYPE,
-                com.dwinovo.numen.network.payload.NumenInventoryPayload.STREAM_CODEC,
-                com.dwinovo.numen.network.payload.NumenInventoryPayload::handle);
+                com.dwinovo.numen.network.payload.NumenStatePayload.TYPE,
+                com.dwinovo.numen.network.payload.NumenStatePayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.NumenStatePayload::handle);
 
         // C→S: the panel's "+" button asks to summon a companion by name.
         Services.NETWORK.registerClientToServer(

@@ -2,7 +2,7 @@ package com.dwinovo.numen.client.screen.items;
 
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
-import com.dwinovo.numen.client.data.ClientNumenInventory;
+import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.RoundRect;
@@ -59,7 +59,7 @@ public final class ItemsView {
                               int left, int top, int panelW, int panelH, int headerH,
                               int mouseX, int mouseY) {
         UiTheme th = UiTheme.current();
-        var snap = ClientNumenInventory.get(uuid).orElse(null);
+        var snap = ClientNumenState.get(uuid).orElse(null);
         AbstractClientPlayer e = ClientNumenLookup.resolve(uuid);
         List<ItemStack> craft = snap != null ? snap.craft() : List.of();
 

@@ -1,6 +1,6 @@
 package com.dwinovo.numen.client.agent;
 
-import com.dwinovo.numen.client.data.ClientNumenInventory;
+import com.dwinovo.numen.client.data.ClientNumenState;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -36,10 +36,94 @@ class InventoryBlockTest {
         }
     }
 
-    private static ClientNumenInventory.Snapshot snapshot(int selected, ItemStack offhand,
+    private static ClientNumenState.Snapshot snapshot(int selected, ItemStack offhand,
                                                           ItemStack... items) {
-        return new ClientNumenInventory.Snapshot(true, List.of(items), List.of(), 20, 5f,
-                selected, offhand, 1L);
+        return new ClientNumenState.Snapshot(true, List.of(items), List.of(), 20, 5f,
+                selected, offhand, List.of(), 1L);
+    }
+
+    // ==================== 身上在生效的 ====================
+
+    private static ClientNumenState.Snapshot withEffects(long receivedAtMs,
+            net.minecraft.world.effect.MobEffectInstance... effects) {
+        return new ClientNumenState.Snapshot(true, List.of(), List.of(), 20, 5f,
+                0, ItemStack.EMPTY, List.of(effects), receivedAtMs);
+    }
+
+    /** 原版 UI 的口径:内部 amplifier 0 显示为 I,所以一级不写数字、二级写 2。 */
+    @Test
+    void effectsCarryTheirLevelTheWayVanillaShowsIt() {
+        assumeTrue(booted);
+        String block = EntityAgentLoop.renderEffects(withEffects(0L,
+                new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.POISON, 200, 0),
+                new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE, 400, 1)), 0L);
+        assertTrue(block.contains("poison (10s left)"), block);
+        assertTrue(block.contains("resistance 2 (20s left)"), block);
+    }
+
+    /**
+     * 剩余时间按"收到至今"往下扣。服务端只在多了/少了/升级了时才重推,不扣的话她读到的
+     * 秒数会停在收到那一刻——一个理直气壮的错数。
+     */
+    @Test
+    void remainingTimeCountsDownFromWhenTheSnapshotArrived() {
+        assumeTrue(booted);
+        String block = EntityAgentLoop.renderEffects(withEffects(0L,
+                new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.POISON, 200, 0)), 5_000L);
+        assertTrue(block.contains("poison (5s left)"), block);
+    }
+
+    /** 收到之后已经走完的,一个字都不该印。 */
+    @Test
+    void effectsThatRanOutSinceTheSnapshotAreDropped() {
+        assumeTrue(booted);
+        String block = EntityAgentLoop.renderEffects(withEffects(0L,
+                new net.minecraft.world.effect.MobEffectInstance(
+                        net.minecraft.world.effect.MobEffects.POISON, 200, 0)), 60_000L);
+        assertEquals("", block);
+    }
+
+    // ==================== 瓶子里装的是什么 ====================
+
+    /** 三瓶不同的药水不能长成同一行 —— item id 全是 minecraft:potion,内容在组件里。 */
+    @Test
+    void potionsAreToldApartByWhatIsInThem() {
+        assumeTrue(booted);
+        String block = EntityAgentLoop.renderInventory(snapshot(0, ItemStack.EMPTY,
+                potion(net.minecraft.world.item.alchemy.Potions.HEALING),
+                potion(net.minecraft.world.item.alchemy.Potions.POISON)));
+        assertTrue(block.contains("minecraft:potion[healing]"), block);
+        assertTrue(block.contains("minecraft:potion[poison]"), block);
+    }
+
+    /** 强化/延长是不同的药水,不能被抹平成同一个名字。 */
+    @Test
+    void strengthAndDurationVariantsKeepTheirOwnNames() {
+        assumeTrue(booted);
+        String block = EntityAgentLoop.renderInventory(snapshot(0, ItemStack.EMPTY,
+                potion(net.minecraft.world.item.alchemy.Potions.STRONG_HEALING)));
+        assertTrue(block.contains("minecraft:potion[strong_healing]"), block);
+    }
+
+    /** 不带药水组件的东西一个字都不该多出来。 */
+    @Test
+    void ordinaryItemsGainNoSuffix() {
+        assumeTrue(booted);
+        String block = EntityAgentLoop.renderInventory(snapshot(0, ItemStack.EMPTY,
+                new ItemStack(Items.DIRT)));
+        assertTrue(block.contains("minecraft:dirt x1"), block);
+        assertFalse(block.contains("minecraft:dirt["), block);
+    }
+
+    private static ItemStack potion(
+            net.minecraft.core.Holder<net.minecraft.world.item.alchemy.Potion> potion) {
+        ItemStack stack = new ItemStack(Items.POTION);
+        stack.set(net.minecraft.core.component.DataComponents.POTION_CONTENTS,
+                new net.minecraft.world.item.alchemy.PotionContents(potion));
+        return stack;
     }
 
     // ==================== 手上拿的 ====================
@@ -148,10 +232,10 @@ class InventoryBlockTest {
     void mainHandIsBoundsCheckedOnTheSnapshot() {
         assumeTrue(booted);
         assertEquals(ItemStack.EMPTY,
-                new ClientNumenInventory.Snapshot(true, List.of(), List.of(), 20, 5f,
-                        3, ItemStack.EMPTY, 1L).mainHand());
+                new ClientNumenState.Snapshot(true, List.of(), List.of(), 20, 5f,
+                        3, ItemStack.EMPTY, List.of(), 1L).mainHand());
         assertEquals(ItemStack.EMPTY,
-                new ClientNumenInventory.Snapshot(true, List.of(), List.of(), 20, 5f,
-                        -1, ItemStack.EMPTY, 1L).mainHand());
+                new ClientNumenState.Snapshot(true, List.of(), List.of(), 20, 5f,
+                        -1, ItemStack.EMPTY, List.of(), 1L).mainHand());
     }
 }

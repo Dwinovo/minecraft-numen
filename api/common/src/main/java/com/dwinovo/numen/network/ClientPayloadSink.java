@@ -5,7 +5,7 @@ import com.dwinovo.numen.network.payload.CurrentTaskPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
-import com.dwinovo.numen.network.payload.NumenInventoryPayload;
+import com.dwinovo.numen.network.payload.NumenStatePayload;
 import com.dwinovo.numen.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.network.payload.NumenRespawnPayload;
 import com.dwinovo.numen.network.payload.PathDebugPayload;
@@ -27,7 +27,7 @@ public final class ClientPayloadSink {
     public static volatile Consumer<CurrentTaskPayload> currentTask = p -> {};
     public static volatile Consumer<NumenDeathPayload> death = p -> {};
     public static volatile Consumer<NumenEventPayload> event = p -> {};
-    public static volatile Consumer<NumenInventoryPayload> inventory = p -> {};
+    public static volatile Consumer<NumenStatePayload> state = p -> {};
     public static volatile Consumer<NumenLocationsPayload> locations = p -> {};
     public static volatile Consumer<NumenRespawnPayload> respawn = p -> {};
     public static volatile Consumer<PathDebugPayload> pathDebug = p -> {};

@@ -342,7 +342,7 @@ public final class Companions {
         for (UUID uuid : uuids) {
             reg.remove(uuid);
             outbox.forget(uuid);   // 她攒的事件跟着走:没人会再收
-            CompanionInventoryWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了
+            CompanionStateWatch.forget(uuid);   // 背包镜像同理:这个 UUID 不会再回来了
         }
         ServerPlayer owner = ownerUuid == null ? null : server.getPlayerList().getPlayer(ownerUuid);
         if (owner != null) {

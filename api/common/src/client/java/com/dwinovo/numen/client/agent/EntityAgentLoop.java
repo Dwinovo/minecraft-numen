@@ -1,6 +1,6 @@
 package com.dwinovo.numen.client.agent;
 
-import com.dwinovo.numen.client.data.ClientNumenInventory;
+import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.agent.llm.ConvoLog;
@@ -1147,7 +1147,7 @@ public final class EntityAgentLoop {
      * {@code <runtime_state>} 里,模型只需认一个信封。
      */
     private String runtimeStateXml() {
-        String body = currentTaskXml() + inventoryXml();
+        String body = currentTaskXml() + inventoryXml() + effectsXml();
         return body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
     }
 
@@ -1180,20 +1180,20 @@ public final class EntityAgentLoop {
 
     /** 上一次渲染背包块用的那份快照本身。收到新包时缓存会换一个新对象,比身份就够,
      *  不用拿时间戳去凑版本号(同一毫秒两次推送会撞号,而且读起来像在判断时效)。 */
-    private ClientNumenInventory.Snapshot inventoryRenderedFrom;
+    private ClientNumenState.Snapshot inventoryRenderedFrom;
     private String inventoryRendered = "";
     /** "请求里没背包"只说一次,别把每一轮都刷满。 */
     private boolean inventoryMissingLogged;
 
     /**
-     * 她此刻带着什么。服务端在背包真变化时推一份过来({@code CompanionInventoryWatch}),
+     * 她此刻带着什么。服务端在背包真变化时推一份过来({@code CompanionStateWatch}),
      * 这里只负责渲染——所以"换没换"只有一个信号:快照的时间戳。
      *
      * <p>放进请求而不是让她调 {@code get_self_status},省的是<b>一整轮</b>(请求 + 工具结果 +
      * 再请求)。合并同类计数,不报耐久附魔:要精确到槽位时她该调 {@code inspect_gui}。
      */
     private String inventoryXml() {
-        var snapshot = ClientNumenInventory.get(entityUuid).orElse(null);
+        var snapshot = ClientNumenState.get(entityUuid).orElse(null);
         if (snapshot == null || !snapshot.loaded()) {
             // 链路断在客户端这一节:服务端没推过,或者推的是别的同伴。请求里就没有背包这回事,
             // 她只能靠对话历史猜——这条日志的存在就是为了不用再靠猜去查它。只在进入这个
@@ -1216,7 +1216,41 @@ public final class EntityAgentLoop {
         return inventoryRendered;
     }
 
-    static String renderInventory(ClientNumenInventory.Snapshot snapshot) {
+    /**
+     * 她身上这一刻在生效的东西。<b>只能现挂,不能进历史</b> —— 它带倒计时,沉进对话历史
+     * 之后十轮再读到的不只是过时,是一个理直气壮的错秒数。
+     *
+     * <p>没有效果就一个字都不发:空块也是要读的 token,而"没写"和"写了没有"对模型是一样的。
+     */
+    private String effectsXml() {
+        var snapshot = ClientNumenState.get(entityUuid).orElse(null);
+        if (snapshot == null || !snapshot.loaded() || snapshot.effects().isEmpty()) {
+            return "";
+        }
+        return "<effects>" + renderEffects(snapshot, System.currentTimeMillis()) + "</effects>";
+    }
+
+    static String renderEffects(ClientNumenState.Snapshot snapshot, long nowMs) {
+        StringBuilder out = new StringBuilder();
+        for (var effect : snapshot.effects()) {
+            int left = snapshot.remainingTicks(effect, nowMs);
+            if (left == 0) {
+                continue;   // 收到之后已经走完了
+            }
+            if (out.length() > 0) {
+                out.append(", ");
+            }
+            out.append(effect.getEffect().unwrapKey()
+                    .map(key -> key.location().getPath()).orElse("unknown"));
+            if (effect.getAmplifier() > 0) {
+                out.append(" ").append(effect.getAmplifier() + 1);   // 原版 UI 的口径:0 级显示 I
+            }
+            out.append(left < 0 ? " (infinite)" : " (" + (left / 20) + "s left)");
+        }
+        return out.toString();
+    }
+
+    static String renderInventory(ClientNumenState.Snapshot snapshot) {
         java.util.Map<String, Integer> totals = new java.util.TreeMap<>();
         for (net.minecraft.world.item.ItemStack stack : snapshot.items()) {
             if (!stack.isEmpty()) {
@@ -1246,7 +1280,38 @@ public final class EntityAgentLoop {
     }
 
     private static String itemId(net.minecraft.world.item.ItemStack stack) {
-        return net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+        String id = net.minecraft.core.registries.BuiltInRegistries.ITEM
+                .getKey(stack.getItem()).toString();
+        String brew = brewLabel(stack);
+        return brew.isEmpty() ? id : id + "[" + brew + "]";
+    }
+
+    /**
+     * 瓶子里装的是什么。<b>治疗、剧毒、夜视的 item id 全都是 {@code minecraft:potion}</b> ——
+     * 内容在 {@code POTION_CONTENTS} 组件里,只印 id 的话她背包里三瓶完全不同的东西长得
+     * 一模一样,选不出该喝哪瓶。药箭同理。
+     *
+     * <p>印的是原版药水的<b>注册名</b>({@code strong_healing}、{@code long_poison}),不是
+     * "安全/危险"那种结论 —— 该不该喝是她的判断,身体只负责说清楚这是什么。喷溅型和滞留型
+     * 本来就是另外的 item id,照实印就分开了,不用另写判据。
+     */
+    private static String brewLabel(net.minecraft.world.item.ItemStack stack) {
+        var contents = stack.get(net.minecraft.core.component.DataComponents.POTION_CONTENTS);
+        if (contents == null) {
+            return "";
+        }
+        StringBuilder label = new StringBuilder();
+        contents.potion().ifPresent(held -> label.append(held.unwrapKey()
+                .map(key -> key.location().getPath()).orElse("unknown")));
+        // 酿造出来的、模组的药水没有预设名,效果只在自定义列表里 —— 两处都读,不用维护白名单。
+        for (var effect : contents.customEffects()) {
+            if (label.length() > 0) {
+                label.append('+');
+            }
+            label.append(effect.getEffect().unwrapKey()
+                    .map(key -> key.location().getPath()).orElse("unknown"));
+        }
+        return label.toString();
     }
 
     private String composeSystemPrompt() {

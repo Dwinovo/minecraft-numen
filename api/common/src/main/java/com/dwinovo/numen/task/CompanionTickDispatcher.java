@@ -94,8 +94,8 @@ public final class CompanionTickDispatcher {
                     CompanionChunkLoader.refresh(ap);
                 }
                 // 背包变了就推给主人一份。变化由原版的 ContainerListener 报,这里每 tick
-                // 只有一次引用比较(菜单换没换),见 CompanionInventoryWatch。
-                com.dwinovo.numen.entity.CompanionInventoryWatch.tick(ap, server.getTickCount());
+                // 只有一次引用比较(菜单换没换),见 CompanionStateWatch。
+                com.dwinovo.numen.entity.CompanionStateWatch.tick(ap, server.getTickCount());
                 // 她从床上醒了就开一轮:sleep 到躺下就返回,醒来这一刻没有别的东西说得出。
                 if (ap.pollWokeUp()) {
                     Companions.onWoke(ap);

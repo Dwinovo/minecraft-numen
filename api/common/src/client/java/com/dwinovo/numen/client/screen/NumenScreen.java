@@ -10,9 +10,9 @@ import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
-import com.dwinovo.numen.client.data.ClientNumenInventory;
+import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.data.ModLanguageData;
-import com.dwinovo.numen.network.payload.RequestInventoryPayload;
+import com.dwinovo.numen.network.payload.RequestStatePayload;
 import com.dwinovo.numen.persona.PersonaLibrary;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.platform.services.INumenConfig;
@@ -573,7 +573,7 @@ public final class NumenScreen extends Screen {
         // The payload's UUID stream-codec can't encode null, so this guard also prevents a crash.
         if (uuid == null) return;
         if (Minecraft.getInstance().getConnection() != null) {
-            Services.NETWORK.sendToServer(new RequestInventoryPayload(uuid));
+            Services.NETWORK.sendToServer(new RequestStatePayload(uuid));
         }
     }
 

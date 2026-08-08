@@ -5,7 +5,7 @@ import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.chat.ChatDisplayModes;
 import com.dwinovo.numen.client.chat.RawMessageMode;
-import com.dwinovo.numen.client.data.ClientNumenInventory;
+import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.client.data.ClientNumenLocations;
 import com.dwinovo.numen.client.debug.PathDebugState;
 import com.dwinovo.numen.client.hud.SpeechBubbles;
@@ -15,7 +15,7 @@ import com.dwinovo.numen.network.payload.ClientUiActionPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
-import com.dwinovo.numen.network.payload.NumenInventoryPayload;
+import com.dwinovo.numen.network.payload.NumenStatePayload;
 import com.dwinovo.numen.network.payload.NumenLocationsPayload;
 import com.dwinovo.numen.network.payload.NumenRespawnPayload;
 import com.dwinovo.numen.network.payload.PathDebugPayload;
@@ -52,10 +52,11 @@ public final class ClientPayloadHandlers {
         ClientPayloadSink.event = p ->
                 AgentLoopRegistry.getOrCreate(p.entityUuid())
                         .pushEvent(p.entryType(), p.text(), p.ts(), p.urgent());
-        ClientPayloadSink.inventory = p ->
-                ClientNumenInventory.update(p.uuid(), new ClientNumenInventory.Snapshot(
+        ClientPayloadSink.state = p ->
+                ClientNumenState.update(p.uuid(), new ClientNumenState.Snapshot(
                         p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(),
-                        p.selectedSlot(), p.offhand(), System.currentTimeMillis()));
+                        p.selectedSlot(), p.offhand(), p.effects(),
+                        System.currentTimeMillis()));
         ClientPayloadSink.locations = ClientPayloadHandlers::handleLocations;
         ClientPayloadSink.respawn = ClientPayloadHandlers::handleRespawn;
         ClientPayloadSink.pathDebug = PathDebugState::accept;
