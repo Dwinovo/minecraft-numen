@@ -74,22 +74,10 @@ class AttackPlanTest {
     @Test
     void unreachableWithNoBowIsGivenUp() {
         Foe far = new Foe(1, 20.0, false, false, false, true, false, true);
-        assertEquals(Action.ABANDON, AttackPlan.decide(field(true, false, far), null).action());
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(field(true, false, far), null).action());
     }
 
     // ==================== 全局的危险 ====================
-
-    /**
-     * <b>这条是这次重构的正主。</b>她在打三格外的史莱姆,苦力怕就在三点三格外——单目标的
-     * 判据一无所知,照旧判 MELEE。局面判据看得见,先退。
-     */
-    @Test
-    void aCreeperInBlastRangeOutranksWhateverSheIsFighting() {
-        Battlefield b = field(true, true, mob(1, 3.0), creeper(2, 3.3));
-        Move m = AttackPlan.decide(b, new Move(Action.SKIRMISH, 1));
-        assertEquals(Action.AVOID, m.action());
-        assertEquals(AttackPlan.NO_FOE, m.foeId(), "退是对全场的,不指向某一只");
-    }
 
     /** 它退到安全线外了,就该回去接着打原来那只。 */
     @Test
@@ -99,6 +87,17 @@ class AttackPlanTest {
     }
 
     // ==================== 会炸的东西 ====================
+
+    /**
+     * 点着的爬行者<b>不再是一个独立动作</b>。它的危险半径就是爆炸波及范围(6.71 格),
+     * 走位环的内沿自然把她顶到那之外 —— 曾经"躲爆炸"和"走位"是互斥的两个状态,
+     * 躲的那一支还不还手。
+     */
+    @Test
+    void aLitCreeperIsHandledByTheRingNotByAnAction() {
+        Move m = AttackPlan.decide(field(true, true, creeper(1, 3.0)), null);
+        assertEquals(Action.RANGED, m.action(), "有弓就远远射它");
+    }
 
     /** 有弓:退到安全线外射它。 */
     @Test
@@ -120,18 +119,6 @@ class AttackPlanTest {
         Move m = AttackPlan.decide(field(true, false, creeper(1, 9.0)), null);
         assertEquals(Action.DISENGAGE, m.action());
         assertEquals(AttackPlan.NO_FOE, m.foeId(), "脱离是对全场的");
-    }
-
-    /**
-     * 但它<b>没在追她</b>(模型点名让她打一个远处的苦力怕),那就只是这一只打不了:
-     * 说清楚"打不了"而不是"打完了"——模型对前者能做点什么(去拿把弓),对后者无从下手。
-     */
-    @Test
-    void anIdleExplosiveWithNoBowIsReportedAsUnfightable() {
-        Foe idle = new Foe(1, 9.0, true, true, false, false, true, true);   // 九格外,挨不着
-        Move m = AttackPlan.decide(field(true, false, idle), null);
-        assertEquals(Action.ABANDON, m.action());
-        assertEquals(1, m.foeId());
     }
 
     /** 没弓时它不该抢走本来能打的那只。 */
@@ -159,13 +146,6 @@ class AttackPlanTest {
     void anUnlitCreeperIsWalkedUpToLikeAnythingElse() {
         assertEquals(Action.SKIRMISH,
                 AttackPlan.decide(field(true, false, idleCreeper(1, 9.0)), null).action());
-    }
-
-    /** 引信一点着,同一只立刻改判 —— 它已经在倒计时了。 */
-    @Test
-    void theMomentItLightsSheStopsFighting() {
-        Battlefield lit = field(true, false, creeper(1, 3.5));
-        assertEquals(Action.AVOID, AttackPlan.decide(lit, new Move(Action.SKIRMISH, 1)).action());
     }
 
     // ==================== 打谁:先近的,但要有承诺 ====================
@@ -224,7 +204,7 @@ class AttackPlanTest {
      */
     @Test
     void withOnlyABowSheBacksOffInsteadOfPunching() {
-        assertEquals(Action.AVOID,
+        assertEquals(Action.SKIRMISH,
                 AttackPlan.decide(field(false, true, mob(1, 3.0)), null).action());
     }
 
@@ -321,7 +301,7 @@ class AttackPlanTest {
     @Test
     void someoneInsideHisRadiusMeansMovingFirst() {
         Battlefield b = field(true, true, mob(1, 5.0), mob(2, 2.0));
-        assertEquals(Action.AVOID, AttackPlan.decide(b, null).action());
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(b, null).action());
     }
 
     /**
@@ -333,7 +313,7 @@ class AttackPlanTest {
         Battlefield b = field(true, true, mob(1, 3.0));
         assertEquals(Action.SKIRMISH, AttackPlan.decide(b, null).action());
         assertEquals(Action.SKIRMISH,
-                AttackPlan.decide(b, new Move(Action.AVOID, AttackPlan.NO_FOE)).action());
+                AttackPlan.decide(b, new Move(Action.SKIRMISH, AttackPlan.NO_FOE)).action());
     }
 
     /** 退无可退时不许再退 —— 站着挨打是确定的死,打至少有机会。 */
@@ -376,7 +356,7 @@ class AttackPlanTest {
     /** 有武器才谈得上"换个地方打"。 */
     @Test
     void armedInsideTheRadiusIsAReposition() {
-        assertEquals(Action.AVOID,
+        assertEquals(Action.SKIRMISH,
                 AttackPlan.decide(field(true, false, mob(1, 2.0)), null).action());
     }
 }

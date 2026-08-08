@@ -28,14 +28,13 @@ public final class AttackPlan {
          * 也不挥刀 —— 她躲的时候不还手,骷髅一边后退一边射她也追不上。
          */
         SKIRMISH,
-        /** 拉开弓弩射它。 */
+        /**
+         * 站定拉弓。<b>战斗状态里唯一不走位的一支</b> —— 原版拉满弓要十五刻不能动,
+         * 那和"一直走位"是冲突的。不是规矩,是拉弓机制逼出来的。
+         */
         RANGED,
-        /** 主动拉开距离——会炸的东西已经贴到爆炸范围里了。仍然想打,只是不能贴身。 */
-        AVOID,
-        /** 脱离接触——扛不住了,或这一架根本打不了。 */
+        /** 脱离接触:打不过,跑。 */
         DISENGAGE,
-        /** 这一只打不了(走不到又没远程),换下一只。 */
-        ABANDON,
         /** 没什么可打的了。 */
         DONE
     }
@@ -44,7 +43,7 @@ public final class AttackPlan {
      * 决定。
      *
      * @param action 做什么
-     * @param foeId  对谁做;{@link Action#AVOID}、{@link Action#DISENGAGE}、{@link Action#DONE}
+     * @param foeId  对谁做;{@link Action#DISENGAGE}、{@link Action#DONE}
      *               是对全场的,此时为 {@link #NO_FOE}
      */
     public record Move(Action action, int foeId) {}
@@ -81,30 +80,21 @@ public final class AttackPlan {
         if (outmatched(b.effectiveHealth()) && !b.cornered()) {
             return new Move(Action.DISENGAGE, NO_FOE);
         }
-        // ② 会炸的已经贴到爆炸范围里 —— <b>全场的事</b>,与她正在打谁无关。
-        //    单目标的判据看不见这一条,于是她一边打史莱姆一边被炸。
-        if (b.underBlastThreat()) {
-            return new Move(Action.AVOID, NO_FOE);
-        }
-        // ③ 两条路都没有:赤手对上会还手的东西不是一条出路,退开。
+        // 「会炸的贴太近了」也不在这儿判。点着的爬行者<b>危险半径就是它的爆炸波及范围</b>
+        // (6.71 格),走位环的内沿自然把她顶到那之外 —— 曾经它是一个独立动作(AVOID),
+        // 于是"躲爆炸"和"走位"成了互斥的两个状态,躲的那一支还不还手。
         //
-        //    <b>必须排在 ④ 前面。</b>空手时"进了危险半径"该判 DISENGAGE 而不是 AVOID ——
-        //    AVOID 的意思是"还想打,只是不能在这儿打",她根本打不了,这句是假的。两条判据
-        //    先后触发的结果是:怪进半径出 AVOID、退半步出 DISENGAGE,在那条线上来回换,
-        //    而两个动作在执行层走不同分支、各自重建导航。实测空手时 35 次对 30 次,几乎 1:1。
+        // ③ 手上没有能打的东西:赤手对上会还手的东西不是一条出路,退开。
+        //
+        //    空手就该一路走脱离这一支,不该跟着距离线在两个动作之间换。
         if (!b.hasMelee() && !b.hasRanged() && anyEngaging(b) && !b.cornered()) {
             return new Move(Action.DISENGAGE, NO_FOE);
         }
-        // ④ 有人已经进了它的危险半径 —— <b>全场的事</b>,与她正在打谁无关。
-        //    寻路的目标是开路那一刻的快照,别的怪走近了它不会自己失效;这一条用的是<b>实时
-        //    距离</b>,每刻重问一遍,防偷袭真正靠得住的是它。
+        // 「太近了」不在这儿判。它是<b>寻路的事</b>:战斗的走位目标是一个环 —— 内沿是目标
+        // 够不着她,外沿是别跟丢,太近自然往外走、太远自然往回走。曾经它是一个独立动作
+        // (AVOID),于是"拉开"和"走位"成了互斥的两个状态,而拉开那一支还不挥刀。
         //
-        //    不需要迟滞:她的够到距离比对方的危险半径大出半格到一格(僵尸 3.30 对 2.73),
-        //    退到边缘就能打。这条缝是原版碰撞箱给的,不是调出来的。
-        if (b.anyTooClose() && !b.cornered()) {
-            return new Move(Action.AVOID, NO_FOE);
-        }
-
+        // 判据只回答两件事:<b>还打不打得过</b>(打不过就跑),以及<b>用弓还是走位</b>。
         Foe foe = pick(b, last);
         if (foe != null) {
             return new Move(actionAgainst(b, foe), foe.id());
@@ -117,12 +107,7 @@ public final class AttackPlan {
         if (anyEngaging(b)) {
             return new Move(Action.DISENGAGE, NO_FOE);
         }
-        // 它不追她,只是这一只碰不得(模型点名让她打一个够不着或会炸的东西)。说清楚是
-        // "打不了"而不是"打完了"——模型对前者能做点什么(去拿把弓),对后者无从下手。
-        Foe blocked = nearestAuthorized(b);
-        return blocked != null
-                ? new Move(Action.ABANDON, blocked.id())
-                : new Move(Action.DONE, NO_FOE);
+        return new Move(Action.DONE, NO_FOE);
     }
 
     /**
@@ -173,25 +158,15 @@ public final class AttackPlan {
         // 近战可用 = 有近战武器,或者根本没有远程手段(那拳头也得上)。
         boolean meleeAvailable = b.hasMelee() || !b.hasRanged();
         if (!meleeAvailable) {
-            // 手上只有弓:太近先拉开,别拿拳头凑合。
-            return foe.distance() < RANGED_MIN_DISTANCE ? Action.AVOID : Action.RANGED;
+            // 手上只有弓:太近就走位(环会把她带出去),别拿拳头凑合;够远了才站定拉弓。
+            return foe.distance() < RANGED_MIN_DISTANCE ? Action.SKIRMISH : Action.RANGED;
         }
         // 走得到就走位 —— 太远往前、太近往后,都是同一个动作。够不够得着挥刀是攻击系统的事。
-        if (foe.reachable()) {
-            return Action.SKIRMISH;
-        }
-        return b.hasRanged() ? Action.RANGED : Action.ABANDON;
-    }
-
-    /** 被授权、但这一刻打不了的里面最近的那只。 */
-    private static Foe nearestAuthorized(Battlefield b) {
-        Foe best = null;
-        for (Foe f : b.foes()) {
-            if (f.authorized() && (best == null || f.distance() < best.distance())) {
-                best = f;
-            }
-        }
-        return best;
+        //
+        // 走不到(恶魂、悬崖对面、柱子上)才动用弓;<b>没弓也不放弃</b>,接着走位试 ——
+        // "够不着"曾经是永久判定,寻路抖三次就把两格外的普通僵尸标成够不着,于是拿着
+        // 下界合金剑的人一边跑一边说"我没有能打的东西"。
+        return !foe.reachable() && b.hasRanged() ? Action.RANGED : Action.SKIRMISH;
     }
 
     private static boolean anyEngaging(Battlefield b) {

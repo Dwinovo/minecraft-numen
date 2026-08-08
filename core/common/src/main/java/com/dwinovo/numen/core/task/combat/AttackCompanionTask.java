@@ -83,6 +83,14 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private static final double FLEE_SCAN_RADIUS = 40.0;
 
+    /**
+     * 走位环的宽度:外沿 = 目标的危险半径 + 这么多。
+     *
+     * <p>只要比格量化误差(√2/2 ≈ 0.71)宽出一截就行,两格是"别跟丢"的量级。它<b>不需要</b>
+     * 跟她的够到距离对齐 —— 打不打是攻击层的事。
+     */
+    private static final double SKIRMISH_BAND = 2.0;
+
     /** 离落点这么近就算到了,该重新挑下一个。 */
     private static final double HAVEN_ARRIVED = 2.0;
 
@@ -200,12 +208,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return switch (move.action()) {
             case SKIRMISH -> closeIn();
             case RANGED -> shootAt(Loadout.forTarget(player, target));
-            case AVOID -> backAway();
             case DISENGAGE -> {
                 fleeing = true;
                 yield tickFlee();
             }
-            case ABANDON -> abandonTarget();
             case DONE -> finish();
         };
     }
@@ -455,18 +461,17 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         var field = Menace.hostilesAround(player, FIELD_RADIUS);
         logStandoff(field);
-        // 威胁的间距给<b>零</b>:它们只让经过的格子变贵(边成本)与影响估价,
-        // <b>不参与"到没到"</b>。
+        // 走位是<b>一个环</b>:外沿别跟丢,内沿是每一只都够不着她。太近自然往外走,太远
+        // 自然往回走 —— "拉开"不是另一个动作。
         //
-        // 带内沿的时候到达条件是"在够到距离内、且离每一只都出了它的危险半径" —— 对骷髅那是
-        // 一条 0.57 格宽的环(够到 3.30、它的危险半径 2.73),格分辨率下常常一格不剩;它还
-        // 一边拉弓一边后退,环一直在跑。目标不可达 → 寻路连续失败 → 判成"够不着" → 她停在
-        // 边缘再也不动。而"太近了"本来就该由判据每刻用<b>实时距离</b>问(anyTooClose → AVOID),
-        // 不该让寻路去够那条环。
+        // <b>外沿不再被"够得着"绑死。</b>攻击层独立之后寻路不用负责"站到能打到的地方",
+        // 她路过时进了攻击距离攻击层自会打。以前外沿取够到距离(3.30)、内沿取危险半径
+        // (2.73),带只有 0.57 格宽而格量化误差 0.71 —— 表达不出来,于是寻路一直失败,
+        // 她停在边缘不动。现在带宽两三格,绰绰有余。
+        double outer = Menace.dangerRadius(target, player) + SKIRMISH_BAND;
         return NavGoal.approachAvoiding(
-                NavGoal.near(target.blockPosition(), reachToTarget()),
-                Menace.AVOID_PENALTY,
-                Menace.field(player, field).stream().map(t -> t.withClearance(0.0)).toList());
+                NavGoal.near(target.blockPosition(), outer),
+                Menace.AVOID_PENALTY, Menace.field(player, field));
     }
 
     /** 站位日志只在数字真的变了时打一行——每 tick 一行会把别的全冲掉。 */
@@ -503,11 +508,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private TaskState shootAt(Loadout loadout) {
         Loadout.Pick weapon = loadout.ranged();
         if (weapon == null) {
-            return abandonTarget();
+            return closeIn();   // 弓没了:回去走位,别放弃这只
         }
         if (player.distanceTo(target) < RANGED_MIN_DISTANCE && !Menace.armed(target)) {
             abortShot();
-            return backAway();
+            return closeIn();   // 太近拉不开弓:交给走位环带出去
         }
         boolean crossbow = RangedShot.isCrossbow(weapon);
         Ballistics.Aim aim = Ballistics.findArrowShot(player.level(), player, target,
@@ -569,8 +574,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 double next = Math.max(RANGED_MIN_DISTANCE + 1.0, followRadius - 5.0);
                 if (next < followRadius - 0.01) {
                     followRadius = next;
-                } else if (target != null) {
-                    noteApproachFailure(target.getId());
                 }
                 stopNav();
             }
@@ -613,16 +616,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         return status;
     }
 
-    /**
-     * 挪出危险半径,然后接着打。判据说"该躲了"和这里说"躲够了"问的是<b>同一个函数</b>
-     * ({@code Menace.tooClose}),不会一个说还危险另一个说已经到位。
-     *
-     * <p>不留余量:够到距离比危险半径大出半格到一格,退到边缘她就能挥刀。
-     */
-    private TaskState backAway() {
-        driveRetreat(() -> Menace.dangersAround(player, FIELD_RADIUS).isEmpty());
-        return TaskState.RUNNING;
-    }
 
     /**
      * 脱离接触:她扛不住了,先活下来。
@@ -758,32 +751,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
     }
 
-    /** 这一刻真正在追她的那些(锁定了她、或刚打了她)。 */
-    private List<Mob> chasersNow() {
-        List<Mob> out = new ArrayList<>();
-        for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
-            if (mob.getTarget() == player || mob == player.getLastHurtByMob()) {
-                out.add(mob);
-            }
-        }
-        return out;
-    }
-
-    private TaskState abandonTarget() {
-        if (target == null) {
-            return TaskState.RUNNING;
-        }
-        r.unreachable(target.getId());
-        Constants.LOG.info("[numen-attack] 放弃 foe={} —— {}", target.getId(),
-                Menace.armed(target)
-                        ? "不该贴近它,而我没有能用的弓弩"
-                        : "走不到它,也没有能用的弓弩");
-        stopNav();
-        abortShot();
-        target = null;
-        lastMove = null;
-        return TaskState.RUNNING;
-    }
 
     // ==================== 拾荒 ====================
 
