@@ -10,125 +10,110 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 躲避势场。
- *
- * <p>最要紧的一条是<b>两个威胁一左一右时不能穿过其中一个</b>——只看最近那一个的目标
- * (旧的 {@code GoalRunAway})会把"贴着左边那只跑向右边"算成好路,因为它眼里右边不存在。
+ * 躲开一组威胁。钉的是三条:<b>每只按自己的危险半径</b>、<b>多个威胁一起算而不是只认最近的</b>、
+ * 以及<b>坐标是实体真坐标对格心</b>。
  */
 class GoalAvoidEntitiesTest {
 
-    private static GoalAvoidEntities avoid(double distance, Threat... threats) {
-        return new GoalAvoidEntities(distance, 1.0, threats);
+    /** 威胁站在格心上,这样距离好数。 */
+    private static Threat threat(double x, double z, double radius) {
+        return new Threat(x + 0.5, 64.0, z + 0.5, radius);
     }
 
-    // ==================== 到达 ====================
-
-    /** 离每个威胁都够远才算脱身,不是离最近那个够远。 */
-    @Test
-    void arrivalNeedsClearanceFromEveryThreat() {
-        GoalAvoidEntities goal = avoid(5.0,
-                new Threat(0, 64, 0, 1.0), new Threat(20, 64, 0, 1.0));
-        assertTrue(goal.isInGoal(10, 64, 0), "两边各 10 格,脱身了");
-        assertFalse(goal.isInGoal(18, 64, 0), "离左边远不代表安全,右边还有一个");
+    private static GoalAvoidEntities avoid(Threat... threats) {
+        return new GoalAvoidEntities(1.0, threats);
     }
 
-    /** 竖直不计:头顶三格并不安全,爆炸是球形的。 */
+    /** 出了半径才算脱身。 */
     @Test
-    void heightDoesNotCountAsClearance() {
-        assertFalse(avoid(5.0, new Threat(0, 64, 0, 1.0)).isInGoal(0, 74, 0));
-    }
-
-    // ==================== 势场 ====================
-
-    /** 越远越便宜——这是这片势场存在的全部意义。 */
-    @Test
-    void fartherIsCheaper() {
-        GoalAvoidEntities goal = avoid(5.0, new Threat(0, 64, 0, 1.0));
-        assertTrue(goal.heuristic(20, 64, 0) < goal.heuristic(5, 64, 0));
-    }
-
-    /** 权重大的威胁在同样距离上更贵——引信点着的爬行者就该比没点着的更催她走开。 */
-    @Test
-    void aHeavierThreatCostsMoreAtTheSameDistance() {
-        double light = avoid(5.0, new Threat(0, 64, 0, 1.0)).heuristic(6, 64, 0);
-        double heavy = avoid(5.0, new Threat(0, 64, 0, 5.0)).heuristic(6, 64, 0);
-        assertTrue(heavy > light, "点火的该更贵:" + heavy + " vs " + light);
+    void arrivalMeansOutsideEveryRadius() {
+        GoalAvoidEntities goal = avoid(threat(0, 0, 3.0));
+        assertFalse(goal.isInGoal(2, 64, 0));
+        assertTrue(goal.isInGoal(3, 64, 0));
     }
 
     /**
-     * 两个威胁一左一右,正中间必须比贴着任一个更便宜。<b>这一条只看最近威胁的实现是过不了的</b>
-     * ——在它眼里贴着左边那只时"离最近威胁 1 格",走到中间"离最近威胁 10 格",
-     * 可它算不出中间还有右边那只在拉扯。
+     * 每只用<b>自己的</b>半径。用一个统一的数只能取最大值,于是她躲僵尸也按蜘蛛的距离躲,
+     * 永远打不着。
      */
     @Test
-    void theMiddleBeatsHuggingEitherOne() {
-        GoalAvoidEntities goal = avoid(5.0,
-                new Threat(0, 64, 0, 1.0), new Threat(20, 64, 0, 1.0));
-        double middle = goal.heuristic(10, 64, 0);
-        assertTrue(middle < goal.heuristic(1, 64, 0), "贴着左边不该比走中间便宜");
-        assertTrue(middle < goal.heuristic(19, 64, 0), "贴着右边不该比走中间便宜");
+    void everyThreatBringsItsOwnRadius() {
+        GoalAvoidEntities goal = avoid(threat(0, 0, 2.0), threat(10, 0, 6.0));
+        assertTrue(goal.isInGoal(2, 64, 0));      // 离近的那只 2 格,够了
+        assertFalse(goal.isInGoal(5, 64, 0));     // 离远的那只 5 格,它要 6
+        assertTrue(goal.isInGoal(3, 64, 0));      // 两边都出了
     }
 
-    /** 站在威胁身上不能算出无穷:无穷会让所有"贴脸"的格子成为平手,搜索就没法在其中择优。 */
+    /** 竖直不豁免:爆炸是球形的,头顶三格并不安全。 */
     @Test
-    void standingOnTopOfAThreatIsExpensiveButStillComparable() {
-        double onTop = avoid(5.0, new Threat(0, 64, 0, 1.0)).heuristic(0, 64, 0);
-        assertTrue(Double.isFinite(onTop), "不能是无穷");
-        assertEquals(GoalAvoidEntities.ON_TOP_OF_THREAT, onTop, 1e-9);
+    void heightIsNotSafety() {
+        assertFalse(avoid(threat(0, 0, 3.0)).isInGoal(0, 70, 0));
     }
 
-    /** 势场强度是等比放大的:调它只改绕路的坚决程度,不改哪个位置更好。 */
+    /** 势场认得完所有威胁——两只一左一右时才不会直穿其中一只。 */
     @Test
-    void thePenaltyFactorScalesWithoutReorderingPositions() {
-        Threat t = new Threat(0, 64, 0, 1.0);
-        var weak = new GoalAvoidEntities(5.0, 1.0, t);
-        var strong = new GoalAvoidEntities(5.0, 40.0, t);
-        assertEquals(weak.heuristic(6, 64, 0) * 40.0, strong.heuristic(6, 64, 0), 1e-9);
-        assertTrue(strong.heuristic(20, 64, 0) < strong.heuristic(6, 64, 0));
+    void everyThreatCountsInTheField() {
+        Threat left = threat(0, 0, 3.0);
+        Threat right = threat(10, 0, 3.0);
+        double between = avoid(left, right).heuristic(5, 64, 0);
+        double outside = avoid(left, right).heuristic(20, 64, 0);
+        assertTrue(between > outside);
     }
 
-    // ==================== 追我的 vs 站着的 ====================
+    @Test
+    void closerIsAlwaysMoreExpensive() {
+        GoalAvoidEntities goal = avoid(threat(0, 0, 3.0));
+        assertTrue(goal.heuristic(1, 64, 0) > goal.heuristic(4, 64, 0));
+        assertTrue(goal.heuristic(4, 64, 0) > goal.heuristic(12, 64, 0));
+    }
 
     /**
-     * 还没盯上她的敌对生物<b>不该挡住"脱身"</b>。一片沼泽里的史莱姆若条条都要拉开
-     * 十二格,那个条件永远不成立,她就一路跑到寻路失败为止。
+     * 势能按<b>半径的倍数</b>算,所以贴在各自半径边上的两只势能相同——危险程度已经写在
+     * 半径里,不需要再开一个权重字段。
      */
     @Test
-    void aBystanderDoesNotBlockArrival() {
-        GoalAvoidEntities goal = new GoalAvoidEntities(5.0, 1.0,
-                new Threat(0, 64, 0, 1.0, true),      // 追她的
-                new Threat(20, 64, 0, 1.0, false));   // 站着的
-        assertTrue(goal.isInGoal(10, 64, 0), "离追我的够远就算脱身");
-        assertFalse(goal.isInGoal(2, 64, 0), "离追我的还近,不算");
+    void thePotentialScalesWithTheRadius() {
+        double small = avoid(threat(0, 0, 2.0)).heuristic(2, 64, 0);
+        double large = avoid(threat(0, 0, 6.0)).heuristic(6, 64, 0);
+        assertEquals(small, large, 1e-9);
     }
 
-    /** 但它照样要绕开——否则她逃跑时会从一只发呆的史莱姆身上碾过去。 */
+    /**
+     * 危险<b>相加</b>,不取平均。
+     *
+     * <p>曾经除以威胁个数,后果是人越多每一只越不值得躲:绕开一只贴脸的大史莱姆要多走一格
+     * (成本约 4.6),而场上四只时绕开只省下 4.49,恰好压在天平上——"有时候绕得开,有时候
+     * 直接从它身上穿过去"。穿过去就被顶住、每刻挨接触伤害。
+     */
     @Test
-    void aBystanderStillCostsToWalkThrough() {
-        Threat chaser = new Threat(0, 64, 0, 1.0, true);
-        var alone = new GoalAvoidEntities(5.0, 1.0, chaser);
-        var withBystander = new GoalAvoidEntities(5.0, 1.0, chaser,
-                new Threat(20, 64, 0, 1.0, false));
-        assertTrue(withBystander.heuristic(19, 64, 0) > alone.heuristic(19, 64, 0),
-                "贴着旁观者走应该更贵");
+    void dangerAddsUpInsteadOfAveragingOut() {
+        Threat one = threat(0, 0, 3.0);
+        Threat two = threat(0, 6, 3.0);
+        double alone = avoid(one).heuristic(2, 64, 0);
+        double crowded = avoid(one, two).heuristic(2, 64, 0);
+        assertTrue(crowded > alone, "多一只怪不该让这一格变便宜");
+
+        // 那一只自己的贡献不因为旁边多了谁而缩水
+        double contribution = crowded - avoid(two).heuristic(2, 64, 0);
+        assertEquals(alone, contribution, 1e-9);
     }
 
-    /** 不写第五个参数就是"追我的"——绝大多数调用都是这种。 */
+    /** 汇率只放大代价,不改变次序。 */
     @Test
-    void theShorthandMeansMustClear() {
-        assertTrue(new Threat(0, 0, 0, 1.0).mustClear());
+    void theExchangeRateScalesTheField() {
+        Threat t = threat(0, 0, 3.0);
+        double weak = new GoalAvoidEntities(1.0, t).heuristic(2, 64, 0);
+        double strong = new GoalAvoidEntities(40.0, t).heuristic(2, 64, 0);
+        assertEquals(weak * 40.0, strong, 1e-9);
     }
 
-    // ==================== 契约 ====================
-
     @Test
-    void aThreatMustCarryAPositiveWeight() {
-        assertThrows(IllegalArgumentException.class, () -> new Threat(0, 0, 0, 0.0));
+    void aRadiusCannotBeNegative() {
         assertThrows(IllegalArgumentException.class, () -> new Threat(0, 0, 0, -1.0));
     }
 
     @Test
-    void avoidingNothingIsAProgrammingErrorNotAnEmptyField() {
-        assertThrows(IllegalArgumentException.class, () -> new GoalAvoidEntities(5.0, 1.0));
+    void avoidingNothingIsNotAGoal() {
+        assertThrows(IllegalArgumentException.class, () -> new GoalAvoidEntities(1.0));
     }
 }

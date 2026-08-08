@@ -329,8 +329,10 @@ public final class PathingCore {
             primaryTimeout = settings.planAheadPrimaryTimeoutMS;
             failureTimeout = settings.planAheadFailureTimeoutMS;
         }
+        // 躲谁由目标说了算:战斗目标自带威胁表(位置+每只自己的危险半径),
+        // 别的导航照旧走全局开关(默认关)。
         Favoring favoring = new Favoring(current == null ? null : current.getPath(), context,
-                com.dwinovo.numen.core.pathing.astar.Avoidance.create(player));
+                com.dwinovo.numen.core.pathing.astar.Avoidance.forGoal(goal, player));
         // 真实脚位与展开起点同层且 XZ 各差 ≤1 时,假起点素材用脚位
         BlockPos feet = PathExecutor.playerFeet(player);
         BlockPos realStart = start;

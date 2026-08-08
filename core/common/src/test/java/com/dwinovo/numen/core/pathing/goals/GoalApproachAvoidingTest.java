@@ -4,44 +4,55 @@ import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities.Threat;
 
 import org.junit.jupiter.api.Test;
 
+import net.minecraft.core.BlockPos;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 走到目标跟前,路上绕开别的威胁。
  *
- * <p>钉的是两条:<b>绕路不改变终点</b>(到达判定只归吸引项),以及<b>贴着威胁走更贵</b>。
+ * <p>钉的是两条:<b>站位好不好是到达条件的一部分</b>(别的怪够得着的格子不算到位),
+ * 以及<b>贴着威胁走更贵</b>。
  */
 class GoalApproachAvoidingTest {
+
+    /** 危险半径给 0 的威胁只进边成本,不挡到达。 */
+    private static Threat fieldOnly(int x, int z) {
+        return new Threat(x + 0.5, 64.0, z + 0.5, 0.0);
+    }
+
+    private static Threat threat(int x, int z, double radius) {
+        return new Threat(x + 0.5, 64.0, z + 0.5, radius);
+    }
 
     private static Goal approachTo(int x, int y, int z) {
         return new GoalBlock(x, y, z);
     }
 
-    /** 到没到只问吸引项。势场再强也不能让"到了"变成"没到"。 */
+    /**
+     * 估价是<b>纯距离</b>。躲开谁不进估价,进的是边成本({@code Avoidance.forGoal})。
+     *
+     * <p>加在估价里就得在"强到能绕开"和"弱到不搞坏搜索"之间挑,两头都做不到:估价必须是
+     * 剩余成本的下界 A* 才敢剪枝,而"离怪多近"不随接近目标而下降。
+     */
     @Test
-    void arrivalIsDecidedByTheApproachAlone() {
-        Goal g = new GoalApproachAvoiding(approachTo(10, 64, 0),
-                new GoalAvoidEntities(0.0, 40.0, new Threat(10, 64, 0, 5.0, false)));
-        assertTrue(g.isInGoal(10, 64, 0), "站到目标格就算到了,哪怕那里势能很高");
+    void theEstimateIsPureDistance() {
+        Goal plain = approachTo(10, 64, 0);
+        Goal wrapped = new GoalApproachAvoiding(plain,
+                new GoalAvoidEntities(40.0, threat(5, 0, 3.0)));
+        assertEquals(plain.heuristic(0, 64, 0), wrapped.heuristic(0, 64, 0), 1e-9);
+        assertEquals(plain.heuristic(5, 64, 1), wrapped.heuristic(5, 64, 1), 1e-9);
     }
 
-    /** 同一个位置,旁边有威胁就该更贵——这才会让 A* 去绕。 */
+    /** 威胁表要交得出去——搜索器拿它建边成本的惩罚球。 */
     @Test
-    void walkingPastAThreatCostsMore() {
-        Goal plain = approachTo(20, 64, 0);
-        Goal avoiding = new GoalApproachAvoiding(approachTo(20, 64, 0),
-                new GoalAvoidEntities(0.0, 40.0, new Threat(10, 64, 0, 1.0, false)));
-        assertTrue(avoiding.heuristic(10, 64, 0) > plain.heuristic(10, 64, 0));
-    }
-
-    /** 离威胁远的那条路更便宜——绕开才有意义。 */
-    @Test
-    void theDetourIsCheaperThanThroughTheThreat() {
-        Goal g = new GoalApproachAvoiding(approachTo(20, 64, 0),
-                new GoalAvoidEntities(0.0, 40.0, new Threat(10, 64, 0, 1.0, false)));
-        assertTrue(g.heuristic(10, 64, 6) < g.heuristic(10, 64, 0), "从旁边绕比直穿便宜");
+    void theThreatsAreReadableBySearch() {
+        var field = new GoalAvoidEntities(40.0, threat(5, 0, 3.0));
+        Goal wrapped = new GoalApproachAvoiding(approachTo(10, 64, 0), field);
+        assertEquals(1, ((GoalApproachAvoiding) wrapped).repulsion().threats().length);
     }
 
     /** 没有要绕的东西就别白包一层——每个节点都要算势场,不该为空集付这个钱。 */
@@ -51,12 +62,28 @@ class GoalApproachAvoidingTest {
         assertSame(plain, GoalApproachAvoiding.wrap(plain, 40.0));
     }
 
-    /** 包了之后仍然认得出终点在哪。 */
+    /**
+     * 到达要两项都点头:走到了目标跟前,而且脚下这一格不在别人的危险半径里。
+     * 只问吸引项的时候,势场只影响路线不影响落脚点——而一旦到达,A* 再不搜索,那份估价
+     * 一次也用不上,她就停在被围着的那一格。
+     */
     @Test
-    void wrappingKeepsTheSameArrivalCells() {
-        Goal plain = approachTo(5, 64, 5);
-        Goal wrapped = GoalApproachAvoiding.wrap(plain, 40.0, new Threat(0, 64, 0, 1.0, false));
-        assertEquals(plain.isInGoal(5, 64, 5), wrapped.isInGoal(5, 64, 5));
-        assertEquals(plain.isInGoal(6, 64, 5), wrapped.isInGoal(6, 64, 5));
+    void arrivalAlsoNeedsRoomFromTheOthers() {
+        Goal plain = new GoalNear(new BlockPos(10, 64, 0), 3);
+        var crowded = new GoalApproachAvoiding(plain,
+                new GoalAvoidEntities(40.0, threat(9, 0, 2.5)));
+
+        assertTrue(plain.isInGoal(9, 64, 1));            // 吸引项:到了
+        assertFalse(crowded.isInGoal(9, 64, 1));         // 但那一格在另一只的危险半径里
+        assertTrue(crowded.isInGoal(12, 64, 0));         // 同样到得了目标,而且出了半径
+    }
+
+    /** 危险半径为零的东西只进估价,不挡到达。 */
+    @Test
+    void aFieldOnlyThreatDoesNotBlockArrival() {
+        Goal plain = new GoalNear(new BlockPos(10, 64, 0), 3);
+        var wrapped = new GoalApproachAvoiding(plain,
+                new GoalAvoidEntities(40.0, fieldOnly(9, 0)));
+        assertTrue(wrapped.isInGoal(9, 64, 1));
     }
 }

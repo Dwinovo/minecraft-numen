@@ -11,7 +11,7 @@ class SwingTest {
 
     @Test
     void reachNeverFallsBelowTheVanillaFloor() {
-        assertEquals(4.0, Swing.reachOf(2.5), 1e-9);
+        assertEquals(3.0, Swing.reachOf(2.5), 1e-9);   // 原版 ENTITY_INTERACTION_RANGE 默认 3.0
         assertEquals(6.0, Swing.reachOf(6.0), 1e-9);
     }
 

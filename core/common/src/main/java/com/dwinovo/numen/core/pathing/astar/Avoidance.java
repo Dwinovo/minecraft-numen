@@ -3,6 +3,9 @@ package com.dwinovo.numen.core.pathing.astar;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.dwinovo.numen.core.pathing.goals.Goal;
+import com.dwinovo.numen.core.pathing.goals.GoalApproachAvoiding;
+import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
@@ -54,6 +57,51 @@ public final class Avoidance {
         int dy = y - centerY;
         int dz = z - centerZ;
         return dx * dx + dy * dy + dz * dz <= radiusSq ? coefficient : 1.0D;
+    }
+
+    /**
+     * <b>躲谁由目标说了算</b>,不由全局设置说了算。
+     *
+     * <p>目标里带着威胁表({@code GoalAvoidEntities})时,直接拿它建惩罚球:位置是实体真坐标,
+     * 半径是每只自己的({@code Menace.dangerRadius},从碰撞箱推)。别的目标(挖矿、跟随、
+     * 建造)照旧走 {@link #create} 那条全局开关,默认关,行为不变。
+     *
+     * <p>这样"该躲多远"全仓只有一处定义,而且只在真要打架的那次导航上生效。
+     */
+    public static List<Avoidance> forGoal(Goal goal, ServerPlayer player) {
+        GoalAvoidEntities field = fieldOf(goal);
+        if (field == null) {
+            return create(player);
+        }
+        List<Avoidance> res = new ArrayList<>();
+        for (GoalAvoidEntities.Threat t : field.threats()) {
+            res.add(new Avoidance(
+                    (int) Math.floor(t.x()), (int) Math.floor(t.y()), (int) Math.floor(t.z()),
+                    IN_DANGER_COEFFICIENT, (int) Math.ceil(t.radius())));   // 半径不是到达距离
+        }
+        return res;
+    }
+
+    /**
+     * 走进一只怪的危险半径,这一步要贵几倍。
+     *
+     * <p>标定:危险半径三格上下,穿过去要连着走三格,每格贵三倍 —— 约合多绕九格。够贵到
+     * "宁可绕远也不从它身上过",又没贵到"宁可挖穿一座山"。
+     *
+     * <p>它加在<b>边成本</b>上,所以想多贵就多贵:A* 会逐格累加、正确剪枝,不像估价那样
+     * 一大就把搜索搞坏。
+     */
+    private static final double IN_DANGER_COEFFICIENT = 4.0;
+
+    /** 剥开包装,找出目标里的威胁表;没有就返回 null。 */
+    private static GoalAvoidEntities fieldOf(Goal goal) {
+        if (goal instanceof GoalAvoidEntities g) {
+            return g;
+        }
+        if (goal instanceof GoalApproachAvoiding g) {
+            return g.repulsion();
+        }
+        return null;
     }
 
     /**

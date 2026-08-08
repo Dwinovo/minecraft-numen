@@ -16,14 +16,31 @@ public final class Swing {
      */
     public static final float ATTACK_READY = 0.95f;
 
-    /** 原版给玩家的近战够到距离下限。属性被模组调低时不至于变成够不着任何东西。 */
-    private static final double MIN_REACH = 4.0;
+    /**
+     * 原版玩家的近战够到距离:{@code Attributes.ENTITY_INTERACTION_RANGE} 的默认值 3.0。
+     * 只作下限,属性被模组调高就跟着高;调低时不至于变成够不着任何东西。
+     */
+    private static final double MIN_REACH = 3.0;
 
     private Swing() {}
 
-    /** 她这一刻能够到多远。 */
+    /** 她这一刻能够到多远,<b>眼睛到碰撞箱</b>——原版那条射线的长度。 */
     public static double reachOf(double nativeInteractionRange) {
         return Math.max(MIN_REACH, nativeInteractionRange);
+    }
+
+    /**
+     * 她能够到 {@code target} 的<b>中心距离</b>。
+     *
+     * <p>原版那 3.0 格是从眼睛沿视线射到目标<b>碰撞箱</b>为止,而目标的箱子往她这边探出
+     * 半个宽度,所以中心距要加回来({@code Player} 里那句
+     * {@code entityInteractionRange() + distance} 就是这个意思)。
+     *
+     * <p>差别不小:大史莱姆宽 2.04,光半宽就一格出头。按 3.0 硬比会把它判成"够不着",
+     * 而原版玩家是打得到的——判据与站位都要这个数,不是那个 3.0。
+     */
+    public static double reachTo(double nativeInteractionRange, double targetWidth) {
+        return reachOf(nativeInteractionRange) + targetWidth / 2.0;
     }
 
     /**

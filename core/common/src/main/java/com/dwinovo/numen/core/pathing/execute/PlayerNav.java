@@ -64,6 +64,17 @@ public final class PlayerNav {
     /** 目标中心移动超过该距离平方(2 格)即重根。 */
     private static final double GOAL_MOVED_SQR = 4.0;
 
+    /**
+     * 活目标({@link #trackGoal})的<b>重规划节拍</b>(刻)。
+     *
+     * <p>只按 {@code center()} 位移触发是不够的:危险场那种目标,{@code center()} 只是她要打的
+     * 那一只,<b>别的怪走动完全不改变它</b>。而威胁坐标是开路那一刻的快照,于是她躲的是几秒前
+     * 那些怪站过的地方——场是对的,读数是旧的。
+     *
+     * <p>五刻约合怪走一格,短程 A* 一次很快,这个节拍买回来的是"滚动时域真的在滚"。
+     */
+    private static final int LIVE_GOAL_REPLAN_TICKS = 5;
+
     private final NumenPlayer player;
     private final Supplier<GoalCompiler.Compiled> compiledSupplier;
     private final BooleanSupplier reached;
@@ -105,6 +116,7 @@ public final class PlayerNav {
     private BlockPos plannedCenter;
 
     private int replans;
+    private int ticksSincePlan;
     private int stalledReplans;
     /** 脚下到过的最优(最低)目标启发值——停滞重规划的量尺。 */
     private double bestGoalH = Double.MAX_VALUE;
@@ -164,6 +176,18 @@ public final class PlayerNav {
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
                                    double speed, BooleanSupplier reached) {
         return new PlayerNav(player, speed, reached, bare(goalSupplier));
+    }
+
+    /**
+     * 目标<b>会动</b>的裸目标导航。两件事:每 tick 重新校验她还在不在目标里,走出去了就接着走;
+     * 每 {@link #LIVE_GOAL_REPLAN_TICKS} 刻重取一次目标,让威胁快照跟上。
+     *
+     * <p>{@link #toGoal} 一旦搜索满足就永久返回 {@code ARRIVED},不再驱动移动 —— 那对固定
+     * 坐标是对的,对"跟着一只怪保持站位"就成了站死。追击与近身走位都要这一个。
+     */
+    public static PlayerNav trackGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
+                                      double speed, BooleanSupplier reached) {
+        return new PlayerNav(player, speed, reached, bare(goalSupplier), true);
     }
 
     /** 把裸目标包成无 sacred 的编译契约(engineGoal 经词表映射同步派生)。 */
@@ -260,6 +284,15 @@ public final class PlayerNav {
         if (plannedCenter != null && navGoal.center().distSqr(plannedCenter) > GOAL_MOVED_SQR) {
             searchSatisfied = false;
             bestGoalH = Double.MAX_VALUE;
+            ticksSincePlan = 0;
+            plannedCenter = navGoal.center();
+            withSprintGate(() -> core.setGoalAndPath(compiled.engineGoal()));
+            return Status.RUNNING;
+        }
+        // 活目标:到点就重取一次。进度量尺不复位——那是给"卡住了"用的,不该被节拍抹平。
+        if (revalidateGoalEachTick && ++ticksSincePlan >= LIVE_GOAL_REPLAN_TICKS) {
+            ticksSincePlan = 0;
+            searchSatisfied = false;
             plannedCenter = navGoal.center();
             withSprintGate(() -> core.setGoalAndPath(compiled.engineGoal()));
             return Status.RUNNING;
@@ -357,7 +390,7 @@ public final class PlayerNav {
      */
     private Status accountReplan(NavGoal liveGoal) {
         BlockPos feet = PathExecutor.playerFeet(player);
-        double h = liveGoal.heuristic(feet);
+        double h = liveGoal.progressHeuristic(feet);
         if (bestGoalH - h >= REPLAN_PROGRESS_EPS_H) {
             bestGoalH = h;
             stalledReplans = 0;

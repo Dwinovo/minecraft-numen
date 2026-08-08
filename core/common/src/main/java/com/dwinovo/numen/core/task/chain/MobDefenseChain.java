@@ -195,8 +195,9 @@ public final class MobDefenseChain implements Task, Reflex {
                 continue;
             }
 
-            double danger = Math.max(Menace.safeDistanceFrom(m), MELEE_DANGER);
-            if (companion.distanceTo(m) <= danger) {
+            // "够危险了没有"与站位、退避问的是<b>同一个函数</b>:它自己的危险半径。
+            // 用一条固定的线时每种怪都判错——爬行者要七格,僵尸两格就够。
+            if (Menace.tooClose(m, companion)) {
                 near.add(m);
             }
         }

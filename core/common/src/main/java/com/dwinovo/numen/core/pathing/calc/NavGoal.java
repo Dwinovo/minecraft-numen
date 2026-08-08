@@ -106,6 +106,17 @@ public interface NavGoal {
         return new YLevel(level);
     }
 
+    /**
+     * 「离目标还有多远」——<b>卡住检测</b>专用的量尺,缺省就是估价本身。
+     *
+     * <p>估价里可以掺着别的项(比如危险场),而那些项在原地不动时也会随周围的怪进进出出而
+     * 大幅起落。拿它当进度,噪声会被读成"在前进",卡住永远检测不出来。进度只该问一件事:
+     * 她离要去的地方近了没有。
+     */
+    default double progressHeuristic(BlockPos from) {
+        return heuristic(from);
+    }
+
     /** Any feet cell within {@code radius} (Euclidean, blocks) of {@code pos}. */
     static NavGoal near(BlockPos pos, double radius) {
         return new Near(pos, radius);
@@ -194,27 +205,25 @@ public interface NavGoal {
     }
 
     /**
-     * 躲开一组威胁,离每个都拉开 {@code distance} 就算脱身。与 {@link #runAway} 的两点差别:
+     * 躲开一组威胁,站到每一只的危险半径之外。与 {@link #runAway} 的两点差别:
      * <b>它认得完所有威胁</b>(runAway 的估价只看最近那一个,两只怪一左一右时会直穿其中一只),
-     * 而且<b>它有终点</b>——走到安全位置就停,不必在上层每 tick 手动喊停。
+     * 而且<b>它有终点</b>——出了半径就停,不必在上层每 tick 手动喊停。
      *
      * <p>威胁坐标是<b>快照</b>。实体走动由重规划跟上({@code PlayerNav} 比对 {@link #center()}
      * 的位移),不由估价函数实时跟随——搜索途中变化的估价会让 A* 失去最优性保证。
      *
-     * @param distance      离每个威胁多远算脱身
      * @param penaltyFactor 势场强度,见 {@link GoalAvoidEntities}
      */
-    static NavGoal avoid(double distance, double penaltyFactor,
-                         List<GoalAvoidEntities.Threat> threats) {
-        return new Avoid(distance, penaltyFactor, threats);
+    static NavGoal avoid(double penaltyFactor, List<GoalAvoidEntities.Threat> threats) {
+        return new Avoid(penaltyFactor, threats);
     }
 
     /**
-     * 走到 {@code approach} 那儿,<b>路上绕开这些威胁</b>。到达判定完全归 {@code approach}
-     * ——绕路不改变终点在哪。
+     * 走到一个目标跟前,<b>路上绕开别的敌对生物</b>。到达要两项都点头:走到了,而且脚下这一格
+     * 不在任何一只的危险半径里。
      *
-     * <p>调用方必须把<b>要去的那个目标本身</b>排除在 {@code threats} 之外:她要打的那只也是
-     * 敌对生物,它若在势场里就会把她推开,于是永远走不到跟前。
+     * <p>调用方必须把<b>要去的那个目标本身</b>也放进 {@code threats}——它当然也会打她,
+     * 由它自己的危险半径把她顶在够不着的地方,中间那条缝就是拉扯的位置。
      *
      * @return {@code threats} 为空时直接返回 {@code approach},不白包一层
      */
@@ -503,19 +512,19 @@ public interface NavGoal {
         public final GoalAvoidEntities engine;
         private final BlockPos centroid;
 
-        Avoid(double distance, double penaltyFactor, List<GoalAvoidEntities.Threat> threats) {
-            this.engine = new GoalAvoidEntities(distance, penaltyFactor,
+        Avoid(double penaltyFactor, List<GoalAvoidEntities.Threat> threats) {
+            this.engine = new GoalAvoidEntities(penaltyFactor,
                     threats.toArray(GoalAvoidEntities.Threat[]::new));
-            long x = 0;
-            long y = 0;
-            long z = 0;
+            double x = 0.0;
+            double y = 0.0;
+            double z = 0.0;
             for (GoalAvoidEntities.Threat t : threats) {
                 x += t.x();
                 y += t.y();
                 z += t.z();
             }
             int n = threats.size();
-            this.centroid = new BlockPos((int) (x / n), (int) (y / n), (int) (z / n));
+            this.centroid = BlockPos.containing(x / n, y / n, z / n);
         }
 
         @Override public boolean isAt(BlockPos feet) {
@@ -540,19 +549,24 @@ public interface NavGoal {
         ApproachAvoiding(NavGoal approach, double penaltyFactor,
                          List<GoalAvoidEntities.Threat> threats) {
             this.approach = approach;
-            // 拉开距离那一项交给 approach 的到达判定,所以势场只要估价:距离给 0,
-            // 它的 isInGoal 恒真。
-            this.repulsion = new GoalAvoidEntities(0.0, penaltyFactor,
+            this.repulsion = new GoalAvoidEntities(penaltyFactor,
                     threats.toArray(GoalAvoidEntities.Threat[]::new));
         }
 
+        /** 走到了,而且脚下这一格不在任何一只的危险半径里。见 GoalApproachAvoiding。 */
         @Override public boolean isAt(BlockPos feet) {
-            return approach.isAt(feet);
+            return approach.isAt(feet)
+                    && repulsion.isInGoal(feet.getX(), feet.getY(), feet.getZ());
         }
 
         @Override public double heuristic(BlockPos fromPos) {
             return approach.heuristic(fromPos)
                     + repulsion.heuristic(fromPos.getX(), fromPos.getY(), fromPos.getZ());
+        }
+
+        /** 进度只看走没走近目标。危险场是"值不值得走那条路",不是"走到哪了"。 */
+        @Override public double progressHeuristic(BlockPos fromPos) {
+            return approach.progressHeuristic(fromPos);
         }
 
         /** 跟着要去的那个目标走:它一挪动就触发重规划。 */

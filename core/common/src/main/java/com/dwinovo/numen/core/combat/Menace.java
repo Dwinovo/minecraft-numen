@@ -2,10 +2,12 @@ package com.dwinovo.numen.core.combat;
 
 import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
 
+import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.CombatRules;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attribute;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.monster.Enemy;
@@ -16,100 +18,134 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 「该不该靠近」——与「够不够得着」正交的另一维。
+ * 「离它多近算危险」——每一只怪一个<b>危险半径</b>,判据和寻路都问这一个数。
  *
- * <p>{@link AttackPlan} 用够不够得着决定<b>拿什么武器</b>;这里决定<b>要不要保持距离</b>。
- * 爬行者恰恰是"完全够得着"的,只按前一维判就会直接判近战——那正是会被炸的那条路。
+ * <h2>半径不是写死的,是从碰撞箱推的</h2>
+ * 原版 {@code Mob.isWithinMeleeAttackRange} 判的是"它的碰撞箱水平撑开
+ * {@code DEFAULT_ATTACK_REACH} 之后与她的碰撞箱相交",所以够得着多远取决于<b>两边的宽度</b>
+ * ——蜘蛛宽 1.4、僵尸宽 0.6,差大半格。换个模组怪、换个体型,半径自己跟着变。
  *
- * <h2>爬行者的几条线都来自原版,不是调出来的</h2>
- * {@code SwellGoal.tick()} 里只有三条判定:目标进 3 格({@code distanceToSqr < 9.0})开始点火;
- * 拉开到 7 格外({@code > 49.0})<b>或</b>断掉视线,引信倒退;否则一路涨到
- * {@code maxSwell = 30} 刻炸。所以"退到 7 格外"不是保守估计,是引信真正开始倒走的那条线。
+ * <h2>会炸的按别的东西算</h2>
+ * 爬行者不近战,它的危险是引信:没点着时危险半径是<b>点火线</b>(走进去它就开始烧),
+ * 点着之后是<b>爆炸伤害范围</b>。两行,而且两个数都来自原版。
  *
- * <p>断视线那条同样有效而且更快(躲到方块后面比跑七格近得多),但它不进势场:
- * 给 A* 的每个候选格做一次射线检测太贵。绕到 7.5 格外的路径本来就常常顺带绕过了地形。
+ * <h2>只有一种度量</h2>
+ * 全部是<b>中心到中心的距离</b>。判据拿实体坐标比,寻路拿格心比,而半径里已经含了格心到
+ * 格内最远点那半格({@link #CELL_SLACK})——所以"格心算出来安全"就保证"实际位置也安全"。
+ * 两边各用各的度量时,判据说"快躲"、寻路说"你已经躲开了",导航一建就到达、一步不走,
+ * 她站在原地被打死。
  */
 public final class Menace {
 
-    /** 原版 {@code SwellGoal} 里引信开始倒退的距离(49 = 7²),加半格余量。 */
-    public static final double CREEPER_SAFE_DISTANCE = 7.5;
+    /** 原版 {@code Creeper.explosionRadius} 默认值;充能的翻倍。NBT 改过的少见,不追。 */
+    private static final double CREEPER_BLAST_RADIUS = 3.0;
+
+    /** 末影水晶被打碎时的爆炸威力,原版写死 {@code 6.0F}。它没有引信,打碎即炸。 */
+    private static final double CRYSTAL_BLAST_RADIUS = 6.0;
 
     /**
-     * 爬行者开始点火的距离:{@code SwellGoal.canUse} 里的 {@code distanceToSqr < 9.0}。
+     * 原版怪物近战判定往外扩的那一截:{@code Mob.DEFAULT_ATTACK_REACH}
+     * ({@code Math.sqrt(2.04) - 0.6} ≈ 0.83)。
      */
-    public static final double CREEPER_IGNITION_RANGE = 3.0;
-
-    /** 站在点火线外留的这半格,是"能打到它而它不点火"那条带的下沿。 */
-    private static final double IGNITION_MARGIN = 0.5;
+    private static final double MOB_ATTACK_REACH = Math.sqrt(2.04) - 0.6;
 
     /**
-     * 末影水晶被打碎时炸的威力是 {@code 6.0F},原版爆炸的伤害波及到威力的两倍远,
-     * 所以 12 格外才是真的挨不着。爬行者威力 3、半径 6,却只需退到 7.5——那条线不是按
-     * 爆炸半径画的,是按引信倒退画的,两者管的不是同一件事。
-     */
-    public static final double CRYSTAL_SAFE_DISTANCE = 12.0;
-
-    /**
-     * 正在点火的爬行者比寻常威胁危险几倍。倍数越大,同样的距离在势场里越贵,她越舍得绕远。
-     * 五倍是让"贴着一只点火爬行者过去"贵到几乎不会被选中,同时还没贵到宁可挖穿一座山。
-     */
-    private static final double FUSING_WEIGHT = 5.0;
-
-    /** 会炸但还没点着的:走近它就会点着,所以比寻常怪更该绕。 */
-    private static final double EXPLOSIVE_WEIGHT = 2.0;
-
-    /** 寻常敌对生物。进场是为了别一边躲爬行者一边撞进它怀里,不是为了绕着它走。 */
-    private static final double ORDINARY_WEIGHT = 1.0;
-
-    /**
-     * 躲爆炸时在安全距离之外<b>再多留的余量</b>。
+     * 格心到格内最远点的距离(√2/2 ≈ 0.71)。<b>不是手感参数,是几何常数</b>。
      *
-     * <p>没有它,"开始退"与"退到位"是同一条线:她刚过 7.5 就停,而它走一步又进来,于是在那条
-     * 线上反复横跳、一次只挪一格,还被顶着走。
-     *
-     * <p>一格半就够:退过 7 格引信本来就开始倒退({@link #CREEPER_SAFE_DISTANCE} 的来历),
-     * 再多跑纯属白跑。<b>这个数不该和"射击不被打断"共用</b>——那件事要的是"拉弓十五刻期间
-     * 对方能走多远"(约四格),两个用途借同一个常数,改一个就会弄坏另一个。
+     * <p>寻路只能按方块格算,而她实际站在格里的哪个角落是不定的。半径里含上这半格,
+     * "按格心算出来安全"才等价于"实际位置也安全"——否则两种度量最大差一格四,
+     * 判据与寻路会各说各话。
      */
-    public static final double BLAST_MARGIN = 1.5;
+    private static final double CELL_SLACK = Math.sqrt(2.0) / 2.0;
 
     /**
-     * 势场强度。<b>调大</b>她更坚决地绕开,极端时宁可挖直线也不走近路;<b>调小</b>她会为了
-     * 近路从爬行者边上擦过去,小到一定程度等于无视。
+     * 势场强度:把"贴着一只怪走"折成"多走几格路"的汇率。
+     *
+     * <p>标定的口径是<b>绕开一只贴在危险半径上的怪,值一格半的路</b>。势能按半径的倍数算,
+     * 从半径处退开一格势能掉四成半({@code 1 - (3.04/4.04)²}),乘 15 约合 7 点成本,
+     * 而走一格约 4.6 —— 正好一格半。
+     *
+     * <p><b>不能再大了</b>:势场只进估价({@code h}),不进边成本({@code g})。估价必须是剩余
+     * 成本的下界 A* 才敢剪枝,而这一项往人堆里走时会反向增长。它盖过路程量级之后搜索会烧光
+     * 节点预算返回无路 —— 取 800 那次实测连两格的退路都算不出来。
      */
-    public static final double AVOID_PENALTY = 40.0;
+    public static final double AVOID_PENALTY = 15.0;
+
+    /**
+     * 逃跑要拉开多远才算甩掉。
+     *
+     * <p>它必须<b>远大于</b>危险半径:后者是"退出去就能接着打"的两三格,前者是"它已经跟不动
+     * 了"。两件事共用一个数的时候,她退两格就判"跑掉了"、站住、被追上,于是走走停停。
+     *
+     * <p><b>这也是逃跑唯一的终点</b>:三十二格内没有敌对生物就算跑掉了。不再另设行为判据
+     * ——那种判据("还有没有人在逼近")在她一跑起来就必然成立,追兵按定义不再缩短距离,
+     * 于是起跑两秒后宣布脱离,而她身后两格还跟着三只。
+     */
+    public static final double FLEE_DISTANCE = 32.0;
 
     private Menace() {}
 
-    /** 它会炸——不管这一刻炸没炸。决定<b>站位要不要留余量</b>。 */
+    /** 它会炸——不管这一刻炸没炸。 */
     public static boolean explodes(Entity entity) {
         return entity instanceof Creeper || entity instanceof EndCrystal;
     }
 
     /**
-     * 它<b>现在就要炸了</b>,必须躲开。
-     *
-     * <h2>爬行者只在引信点着之后才算</h2>
-     * 之前是"会炸的一律不贴身",那是一条过度概括的规则:它把一只在远处溜达的爬行者也当成
-     * 不可近战,于是她只会绕着走,永远解决不掉。而按原版的数,点着之后再退完全来得及——
-     * 引信 30 刻,爆炸伤害到 6 格就归零({@code (1-d/6)} 那条公式),从 3 格退到 6 格疾跑
-     * 只要十来刻,余量三倍。退过 7 格引信还会倒退,她可以再回来接着打。
-     *
-     * <p>而且她够得着 4 格、它 3 格才点火,中间<b>有一格宽的窗口</b>能打到它而不触发。
-     *
-     * <h2>末影水晶不适用</h2>
-     * 它<b>没有引信</b>:你打它的那一刻就炸。没有"点着之前"这个阶段,所以无条件躲开。
+     * 它<b>现在就要炸了</b>。爬行者只在引信点着之后才算:点着之前它就是一只普通怪,
+     * 而末影水晶<b>没有引信</b>,打它的那一刻就炸,所以无条件成立。
      */
     public static boolean armed(Entity entity) {
         return entity instanceof EndCrystal || fusing(entity);
     }
 
-    /** 该离它多远。{@link #armed} 为假时问这个没有意义,返回 0。 */
-    public static double safeDistanceFrom(Entity entity) {
-        if (entity instanceof Creeper) {
-            return CREEPER_SAFE_DISTANCE;
+    /** 引信正在涨——它已经在倒计时,不是"可能会炸"。 */
+    public static boolean fusing(Entity entity) {
+        return entity instanceof Creeper creeper
+                && (creeper.getSwellDir() > 0 || creeper.isIgnited());
+    }
+
+    /**
+     * <b>危险半径</b>:离它比这更近,她就该躲。判据与寻路问的是同一个函数。
+     *
+     * <p>含 {@link #CELL_SLACK},所以可以直接拿格心去比。
+     */
+    public static double dangerRadius(Entity foe, Entity self) {
+        return rawDangerRadius(foe, self) + CELL_SLACK;
+    }
+
+    /**
+     * 不含格量化补偿的那一版,只在推导与测试里用。
+     *
+     * <p><b>引信没点着的爬行者按普通怪算</b>。按点火线(3.0)算的话,加上格量化补偿就是 3.71,
+     * 已经超过她够得着的 3.30 —— 窗口是负的,她永远不能挥这一刀,只能绕着走。而点着之后
+     * 引信有整整 30 刻,那时再退完全来得及。
+     */
+    static double rawDangerRadius(Entity foe, Entity self) {
+        if (armed(foe)) {
+            return blastSpanOf(foe);   // 引信在走 / 一打就炸的水晶:怕的是爆炸波及多远
         }
-        return entity instanceof EndCrystal ? CRYSTAL_SAFE_DISTANCE : 0.0;
+        return strikeRangeOf(foe, self);
+    }
+
+    /**
+     * {@code attacker} 能打到 {@code victim} 的<b>中心距离</b>。
+     *
+     * <p>原版判的是两个方框相交,那是个<b>方形</b>区域:每根轴上的间隙都小于
+     * {@code 半宽 + 0.83 + 半宽} 才挨得着。要从任何方位都够不着,得退到它的<b>外接圆</b>
+     * 之外,所以乘 √2 —— 用内切圆是错的,中心距 1.43 时若在对角方向,两轴间隙各 1.01,
+     * 照样打得到。
+     */
+    public static double strikeRangeOf(Entity attacker, Entity victim) {
+        double perAxis = attacker.getBbWidth() / 2.0 + MOB_ATTACK_REACH + victim.getBbWidth() / 2.0;
+        return perAxis * Math.sqrt(2.0);
+    }
+
+    /** 爆炸伤害波及多远:原版爆炸的伤害到威力的<b>两倍</b>远归零。 */
+    public static double blastSpanOf(Entity entity) {
+        if (entity instanceof Creeper creeper) {
+            return (creeper.isPowered() ? CREEPER_BLAST_RADIUS * 2.0 : CREEPER_BLAST_RADIUS) * 2.0;
+        }
+        return entity instanceof EndCrystal ? CRYSTAL_BLAST_RADIUS * 2.0 : 0.0;
     }
 
     /**
@@ -142,29 +178,9 @@ public final class Menace {
         return health * (NOMINAL_HIT / afterArmor);
     }
 
-    /**
-     * 走近它时该停在多远。
-     *
-     * <p>会炸的东西要停在它的<b>点火线之外</b>、同时仍在她够得着的范围内 —— 那条一格宽的带
-     * (点火 3 格、够到 4 格)正是"能打到它而它不点火"。停在点火线上就是零余量:她一飘进去
-     * 就点着,退出来又不点,反复横跳。
-     */
-    public static double standoffFrom(Entity entity, double reach) {
-        if (!explodes(entity)) {
-            return Math.max(0.5, reach - 1.0);
-        }
-        return Math.min(reach, CREEPER_IGNITION_RANGE + IGNITION_MARGIN);
-    }
-
     /** 她扛不住了吗。阈值在 {@link AttackPlan} 那一处,这里只是把它问一遍。 */
     public static boolean outmatched(LivingEntity self) {
         return AttackPlan.outmatched(effectiveHealth(self));
-    }
-
-    /** 引信正在涨——它已经在倒计时,不是"可能会炸"。 */
-    public static boolean fusing(Entity entity) {
-        return entity instanceof Creeper creeper
-                && (creeper.getSwellDir() > 0 || creeper.isIgnited());
     }
 
     /**
@@ -191,38 +207,38 @@ public final class Menace {
     }
 
     /**
-     * 把两批实体折成势场。
+     * 把一批怪折成势场。每一只带上<b>自己的</b>危险半径:蜘蛛比僵尸够得远,
+     * 用一个统一的数只能取最大值,于是她躲僵尸也按蜘蛛的距离躲。
      *
-     * <p>权重分三档:引信已经在走的最重(它有明确的倒计时),会炸但还没点的次之
-     * (走近就会点),其余按寻常算。同样的距离,权重越大在势场里越贵,她越舍得绕远。
-     *
-     * @param engaging   正在追她的 —— 要为它们拉开整个安全距离才算脱身
-     * @param bystanders 还没盯上她的 —— 路过绕开就行,不为它们多跑
      * @return 空表示无事可躲,调用方不该建躲避目标
      */
-    public static List<GoalAvoidEntities.Threat> field(Iterable<? extends Entity> engaging,
-                                                       Iterable<? extends Entity> bystanders) {
+    public static List<GoalAvoidEntities.Threat> field(LivingEntity victim,
+                                                       Iterable<? extends Entity> mobs) {
         List<GoalAvoidEntities.Threat> threats = new ArrayList<>();
-        add(threats, engaging, true);
-        add(threats, bystanders, false);
+        for (Entity mob : mobs) {
+            if (mob == null || !mob.isAlive()) {
+                continue;
+            }
+            threats.add(new GoalAvoidEntities.Threat(
+                    mob.getX(), mob.getY(), mob.getZ(), dangerRadius(mob, victim)));
+        }
         return threats;
     }
 
-    private static void add(List<GoalAvoidEntities.Threat> out,
-                            Iterable<? extends Entity> entities, boolean mustClear) {
-        if (entities == null) {
-            return;
-        }
-        for (Entity entity : entities) {
-            if (entity == null || !entity.isAlive()) {
-                continue;
+    /** 这一只此刻是不是已经进了它的危险半径。判据与寻路同一把尺子、同一套坐标。 */
+    public static boolean tooClose(Entity foe, LivingEntity self) {
+        return !GoalAvoidEntities.clearOf(self.getBlockX() + 0.5, self.getBlockZ() + 0.5,
+                foe.getX(), foe.getZ(), dangerRadius(foe, self));
+    }
+
+    /** 身边有没有已经进了危险半径的。 */
+    public static List<Mob> dangersAround(LivingEntity self, double radius) {
+        List<Mob> out = new ArrayList<>();
+        for (Mob m : hostilesAround(self, radius)) {
+            if (tooClose(m, self)) {
+                out.add(m);
             }
-            out.add(new GoalAvoidEntities.Threat(
-                    entity.getBlockX(), entity.getBlockY(), entity.getBlockZ(),
-                    fusing(entity) ? FUSING_WEIGHT
-                            : explodes(entity) ? EXPLOSIVE_WEIGHT
-                            : ORDINARY_WEIGHT,
-                    mustClear));
         }
+        return out;
     }
 }
