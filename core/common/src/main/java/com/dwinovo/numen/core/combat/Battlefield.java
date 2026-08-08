@@ -36,7 +36,8 @@ public record Battlefield(double effectiveHealth,
      * @param explosive  它会炸,不管这一刻炸没炸——走近它要留余量,别踩进点火线
      * @param armed      它<b>现在就要炸了</b>:引信在走,或者是一打就炸的末影水晶
      * @param engaging   正在针对她(锁定了她,或刚打了她)
-     * @param reachable  寻路还没判定"到不了"
+     * @param reachable  <b>上一段寻路搜得出路</b>。够不着是拓扑性质、不是距离性质,只有
+     *                   寻路自己说得清 —— 悬崖对面三格的骷髅离得很近却没有路
      * @param authorized 允许打它。点名模式下是模型给的那份清单,无差别模式下就是"在追我的"
      */
     public record Foe(int id,

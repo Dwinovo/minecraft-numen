@@ -62,7 +62,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private enum Phase { COMBAT, LOOT }
 
     private static final double CHASE_SPEED = 1.2;
-    private static final int MAX_APPROACH_FAILURES = 3;
+    /** 退避的寻路连续失败几次算"退不掉"。 */
+    private static final int MAX_RETREAT_FAILURES = 3;
 
     // 弹道常数:箭的物理与两种发射器的初速。
     private static final double MAX_FIRING_RANGE = 32.0;
@@ -118,7 +119,15 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private Phase phase = Phase.COMBAT;
     private Entity target;
     private Vec3 lastTargetPosition;
-    private final Map<Integer, Integer> navFailures = new HashMap<>();
+
+    /**
+     * 上一次搜索<b>搜不出路</b>的目标。够不着是拓扑性质,不是距离性质 —— 悬崖对面三格的
+     * 骷髅离得很近却没有路,所以只有寻路自己说得清。
+     *
+     * <p>每次重搜刷新:搜出路了就移出去。它不是一次判死,是"上一段搜索的结论"。
+     */
+    private final java.util.Set<Integer> noPath = new java.util.HashSet<>();
+
     private final Map<Item, Integer> inventoryBaseline = new HashMap<>();
     private final LootSweep loot;
 
@@ -237,8 +246,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
             boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
             boolean authorized = r.indiscriminate ? engaging : r.entityIds.contains(mob.getId());
-            if (authorized && r.terminal(mob.getId())) {
-                authorized = false;   // 打完了、丢了、或判过够不着的,不再是候选
+            if (r.terminal(mob.getId())) {
+                // 打完了、丢了、或者走不到又射不到的:<b>整只移出局面</b>。留着当"还有东西在
+                // 追我"的话,判据会永远喊走位 —— 一只在悬崖对面射她的骷髅就能把任务钉死。
+                // 躲它归寻路的势场管,那一层看的是场上的怪,不是这份名单。
+                continue;
             }
             foes.add(new Battlefield.Foe(
                     mob.getId(),
@@ -268,7 +280,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 Menace.effectiveHealth(player),
                 reachToTarget(),
                 loadout.hasMelee(), loadout.hasRanged(),
-                retreatFailures >= MAX_APPROACH_FAILURES, foes);
+                retreatFailures >= MAX_RETREAT_FAILURES, foes);
     }
 
     private static boolean containsId(List<Battlefield.Foe> foes, int id) {
@@ -279,8 +291,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     }
 
     private boolean reachable(int id) {
-        Integer fails = navFailures.get(id);
-        return fails == null || fails < MAX_APPROACH_FAILURES;
+        return !noPath.contains(id);
     }
 
     private Entity liveEntity(int id) {
@@ -309,10 +320,32 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
     }
 
-    private void noteApproachFailure(int id) {
-        if (navFailures.merge(id, 1, Integer::sum) >= MAX_APPROACH_FAILURES) {
-            r.unreachable(id);
+    /**
+     * 搜不出路那一刻裁一次:<b>射得到就改用弓,连弹道都没有就是无解</b>,这一只不打了。
+     *
+     * <pre>
+     * 有路           → 剑
+     * 没路 + 有弹道  → 弓
+     * 没路 + 没弹道  → 放弃这只(换下一只,没别的就收工)
+     * </pre>
+     *
+     * <p>只在 NO-PATH 落定那一刻取一次样。搜索烧完整个预算才给得出这个结论,不是抖出来
+     * 的;而"这一刻恰好没弹道"确实会抖,所以它不单独构成放弃 —— 两个条件同时成立才算。
+     */
+    private void judgeNoPath(Entity foe) {
+        noPath.add(foe.getId());
+        if (Loadout.forTarget(player, foe).hasRanged() && shotExistsTo(foe)) {
+            return;   // 走不到但射得到:顶层下一刻自然改判弓
         }
+        r.unreachable(foe.getId());
+        Constants.LOG.info("[numen-attack] 放弃 目标={} 走不到,也没有弹道", foe.getId());
+    }
+
+    /** 这一刻算不算得出一条能打到它的箭道。射不到的角落里的怪就是无解。 */
+    private boolean shotExistsTo(Entity foe) {
+        return Ballistics.findArrowShot(player.level(), player, foe,
+                BOW_FULL_SPEED * RangedShot.bowPowerForTicks(15), ARROW_GRAVITY, ARROW_DRAG,
+                ARROW_HITBOX_RADIUS, MAX_FIRING_RANGE, true) != null;
     }
 
     /** 打完了 —— 名单清空(点名),或没人再追她(无差别)。 */
@@ -581,10 +614,19 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             nav = PlayerNav.trackGoal(player, this::standoffGoal, CHASE_SPEED, () -> false);
         }
         PlayerNav.Status status = nav.tick();
+        // <b>只有真 NO-PATH 才算够不着</b>:搜索烧完整个预算也没找出路线。目标丢了、被围死、
+        // 重规划抖动都是另外的事,拿它们当够不着会把两格外的普通僵尸也判死。
+        boolean noRoute = status == PlayerNav.Status.FAILED
+                && nav.failType() == FailureType.NO_PATH;
         if (status == PlayerNav.Status.FAILED) {
             stopNav();
-            if (target != null) {
-                noteApproachFailure(target.getId());
+        }
+        // 弓那一套的环在 8~12 格,和近战的环问的不是同一个问题,它的成败说明不了可达性。
+        if (target != null && !bowFighting) {
+            if (noRoute) {
+                judgeNoPath(target);
+            } else {
+                noPath.remove(target.getId());
             }
         }
         return status;
@@ -716,7 +758,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // <b>不停脚。</b>攻击层与寻路层正交:挥刀不停脚,拉弓也不该停 —— 原版拉弓时本来
         // 就能走。这里曾经 stopNav() + halt(),而 bowFight 上一行刚 driveApproach() 建好
         // 导航,于是每刻建一次拆一次,箭一直拉不满。
-        navFailures.remove(target.getId());
         // <b>只在快松手那一刻转过去。</b>原版的箭朝哪飞只看松手那一刻的视线,拉弓的十几刻
         // 里瞄不瞄没有区别 —— 而每刻转向会把脚带偏(移动按朝向投影),她就一路走进目标脸上。
         // 挥刀早就是这么做的,弓这一支一直没跟上。

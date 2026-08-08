@@ -148,7 +148,6 @@ public final class AttackPlan {
         return !f.armed() || b.hasRanged();
     }
 
-    /** 对选定的这一只<b>怎么移动</b>。打不打不在这儿决定。 */
     /**
      * 用哪一套打这一只。<b>只看两件事:够不够得到它,以及手上有什么。</b>
      *
@@ -158,6 +157,9 @@ public final class AttackPlan {
      * 引信在走的会炸物             → 弓战斗(贴上去等于自己引爆)
      * 两样都没有                   → 拳头也得上,当剑战斗
      * </pre>
+     *
+     * <p><b>"走不到又射不到"不在这儿处理</b>:那一只根本不该还是目标。任务层在寻路判出
+     * NO-PATH 那一刻就把它撤了授权,{@link #fightable} 自然选不中它。
      */
     private static Action actionAgainst(Battlefield b, Foe foe) {
         if (!b.hasRanged()) {
