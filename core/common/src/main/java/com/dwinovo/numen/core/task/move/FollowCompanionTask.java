@@ -6,12 +6,14 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskState;
+import com.dwinovo.numen.core.FailureType;
 import net.minecraft.core.BlockPos;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 
 /**
- * 跟着主人——第一个<b>常驻</b>任务。
+ * 跟着走——第一个<b>常驻</b>任务。默认跟主人,点名了就跟那一只。
  *
  * <h2>它跟一次性任务差在哪</h2>
  * 只差一行:{@link #onTick} <b>永远不返终态</b>。同一个槽、同一套派发、同一个接口,
@@ -25,6 +27,11 @@ import net.minecraft.world.level.Level;
  * <h2>够不着也是休眠</h2>
  * 常驻任务没有"失败"这个终点,所以「够不着」只能表达成休眠 + 退避重试:主人飞起来、
  * 隔着断崖、换了维度,她就先放手,等条件回来自己醒。
+ *
+ * <h2>目标没了,主人和别人不一样</h2>
+ * <b>主人下线是暂时的</b>——他会回来,所以休眠等着,这也是常驻该有的样子。而点名跟的
+ * 那只羊死了、或者走出加载范围被卸载了,再等也不会回来:那时收尾报给模型,让它决定下
+ * 一步。一套逻辑通吃的话,要么她对着一只死羊站到天荒地老,要么主人一下线任务就没了。
  *
  * <p><b>{@code nav.tick()} 的返回值一个都不能丢</b>:{@link PlayerNav} 的 FAILED 是
  * <b>终局闩</b>(一经裁定即稳定持续)。主人一飞起来导航就判 NO_PATH,此后每一刻都返
@@ -59,14 +66,16 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
 
     @Override
     public boolean canRun(NumenPlayer companion) {
-        ServerPlayer owner = companion.resolveOwnerPlayer();
-        if (owner == null || owner.level() != companion.level()) {
-            return false;   // 不在线 / 不同维度:够不着,睡着等
+        Entity target = target(companion);
+        if (target == null) {
+            // 点名的目标没了:要放它跑一刻才收得了尾(canRun 返 false 的任务不会 tick,
+            // 也就永远报不出去)。跟的是主人就单纯睡着等他回来。
+            return r.entityId != null;
         }
         if (companion.level().getGameTime() < retryAtGameTime) {
             return false;   // 刚判过够不着,退避中——身体让给别人,别空转烧搜索预算
         }
-        double gap = companion.position().distanceTo(owner.position());
+        double gap = companion.position().distanceTo(target.position());
         // 迟滞:走出 keepWithin + margin 才起步,回到 keepWithin 之内才停——
         // 单阈值会让她在临界距离上一步一停地抖。
         return moving ? gap > r.keepWithin : gap > r.keepWithin + RESUME_MARGIN;
@@ -81,9 +90,15 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
 
     @Override
     protected TaskState onTick() {
-        ServerPlayer owner = player.resolveOwnerPlayer();
-        if (owner == null) {
-            return TaskState.RUNNING;   // canRun 已经挡住了,这里只是防御
+        Entity target = target(player);
+        if (target == null) {
+            if (r.entityId == null) {
+                return TaskState.RUNNING;   // 主人下线:canRun 已经挡住了,这里只是防御
+            }
+            stopNav();
+            fail("the entity you were following is gone (killed, or it left the loaded area)",
+                    FailureType.TARGET_LOST);
+            return TaskState.FAILED;
         }
         if (nav == null) {
             // 目标每次重规划时现取,所以主人边走她也跟得上。
@@ -121,14 +136,33 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
         retryAtGameTime = player.level().getGameTime() + wait;
     }
 
+    /**
+     * 跟着谁。没点名就是主人;点名了就按 id 现查——每次都查,因为它随时可能死掉或者
+     * 走出加载范围,而那两件事对我们是同一个答案:不在了。
+     *
+     * <p>不同维度天然落进 null:{@code ServerLevel.getEntity} 只认自己这一层。
+     */
+    private Entity target(NumenPlayer companion) {
+        if (r.entityId == null) {
+            var owner = companion.resolveOwnerPlayer();
+            return owner == null || owner.level() != companion.level() ? null : owner;
+        }
+        Entity e = ((ServerLevel) companion.level()).getEntity(r.entityId);
+        if (e == null || e.isRemoved() || e == companion) {
+            return null;
+        }
+        // id 对上还不够:重启之后同一个号可能发给了别的东西。
+        return r.targetUuid != null && !r.targetUuid.equals(e.getUUID()) ? null : e;
+    }
+
     private NavGoal goal() {
-        ServerPlayer owner = player.resolveOwnerPlayer();
-        BlockPos at = owner == null ? player.blockPosition() : anchor(owner);
+        Entity target = target(player);
+        BlockPos at = target == null ? player.blockPosition() : anchor(target);
         return NavGoal.nearGround(at, r.keepWithin);
     }
 
     /**
-     * 主人悬空(飞行/跳跃/坐船)时跟到他<b>脚下的地面</b>。
+     * 目标悬空(飞行/跳跃/坐船/本来就会飞)时跟到它<b>脚下的地面</b>。
      *
      * <p>{@link NavGoal#nearGround} 只认 ±1 格高差,直接追主人所在的那一格,人在半空就
      * 永远够不着——这正是「飞起来她就不跟了」的来源。往下找到第一块能站的地面,
@@ -137,9 +171,9 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
      * <p>找不到(悬在虚空/海面上)就返回扫到的最低点:那一格同样够不着,于是走退避,
      * 而不是假装找到了。
      */
-    private BlockPos anchor(ServerPlayer owner) {
-        BlockPos at = owner.blockPosition();
-        if (owner.onGround()) {
+    private BlockPos anchor(Entity target) {
+        BlockPos at = target.blockPosition();
+        if (target.onGround()) {
             return at;
         }
         Level level = player.level();
@@ -157,8 +191,8 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     }
 
     private boolean closeEnough() {
-        ServerPlayer owner = player.resolveOwnerPlayer();
-        return owner != null && player.position().distanceTo(owner.position()) <= r.keepWithin;
+        Entity target = target(player);
+        return target != null && player.position().distanceTo(target.position()) <= r.keepWithin;
     }
 
     @Override

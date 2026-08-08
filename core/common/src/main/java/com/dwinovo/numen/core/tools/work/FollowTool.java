@@ -13,10 +13,13 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 /**
- * 跟着主人——第一个纯<b>常驻</b>的工具:它没有"干完"这回事,只有被主人换掉。
+ * 跟着走——第一个纯<b>常驻</b>的工具:它没有"干完"这回事,只有被主人换掉。
  *
  * <p>所以它没有 count、没有期限。派下去之后她就一直跟着,直到主人让她做别的
  * ({@code mine} / {@code fish} / ……都会顶掉它)。
+ *
+ * <p>不给 {@code entity_id} 就是跟主人。给了就跟那一只——村民、狼、别的玩家都行。
+ * 两者<b>目标消失时的含义不同</b>,见 {@code FollowTaskRecord#entityId}。
  */
 public final class FollowTool implements NumenTool {
 
@@ -27,7 +30,7 @@ public final class FollowTool implements NumenTool {
     private static final double MIN_DISTANCE = 2.0;
     private static final double MAX_DISTANCE = 16.0;
 
-    private record Args(Integer distance) {}
+    private record Args(Integer distance, Integer entity_id, String entity_uuid) {}
 
     @Override
     public String name() {
@@ -36,10 +39,13 @@ public final class FollowTool implements NumenTool {
 
     @Override
     public String description() {
-        return "Stay with your owner, following them wherever they go. This is a STANDING job: "
-                + "there is nothing to finish, so you will keep at it until you are given "
-                + "something else to do. Use it when the owner asks you to come along or "
-                + "stick close. You go quiet while you are already beside them.";
+        return "Tag along with someone, following them wherever they go — your owner by "
+                + "default, or any entity you name. This is a STANDING job: there is nothing "
+                + "to finish, so you will keep at it until you are given something else to do. "
+                + "Use it when the owner asks you to come along or stick close, or to shadow a "
+                + "particular mob or player. You go quiet while you are already beside them. "
+                + "Following a named entity ends by itself if that entity dies or leaves the "
+                + "loaded area; following your owner just waits when they log off.";
     }
 
     @Override
@@ -48,6 +54,10 @@ public final class FollowTool implements NumenTool {
                 .optionalInteger("distance",
                         "How close to stay, in blocks. Defaults to " + (int) DEFAULT_DISTANCE + ".",
                         (int) MIN_DISTANCE, (int) MAX_DISTANCE)
+                .optionalInteger("entity_id",
+                        "Who to follow, by runtime entity id from scan_nearby_entities. "
+                                + "Leave it out to follow your owner.",
+                        1, Integer.MAX_VALUE)
                 .build();
     }
 
@@ -58,6 +68,24 @@ public final class FollowTool implements NumenTool {
         double distance = parsed == null || parsed.distance() == null
                 ? DEFAULT_DISTANCE
                 : Math.clamp(parsed.distance(), MIN_DISTANCE, MAX_DISTANCE);
-        setTask(companion, new FollowTaskRecord(toolCallId, distance), args, reply);
+        Integer entityId = parsed == null ? null : parsed.entity_id();
+        java.util.UUID targetUuid = null;
+        if (entityId != null) {
+            var target = ((net.minecraft.server.level.ServerLevel) companion.level())
+                    .getEntity(entityId);
+            if (target == null || target.isRemoved() || target == companion) {
+                reply.accept("no entity with id " + entityId
+                        + " is here — scan_nearby_entities first, ids do not survive restarts");
+                return;
+            }
+            // 把身份钉进 args:常驻任务跨重启是<b>重放这次调用</b>,而 id 每次开服重发。
+            // 不钉的话重放之后她可能一声不吭地跟上另一只。
+            targetUuid = target.getUUID();
+            args.addProperty("entity_uuid", targetUuid.toString());
+        } else if (parsed != null && parsed.entity_uuid() != null) {
+            targetUuid = java.util.UUID.fromString(parsed.entity_uuid());
+        }
+        setTask(companion, new FollowTaskRecord(toolCallId, distance, entityId, targetUuid),
+                args, reply);
     }
 }

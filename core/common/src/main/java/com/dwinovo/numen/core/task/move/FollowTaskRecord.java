@@ -3,13 +3,14 @@ package com.dwinovo.numen.core.task.move;
 import com.dwinovo.numen.task.TaskRecord;
 
 /**
- * 「跟着我」——她当前在做的事就是跟着主人。
+ * 「跟着」——她当前在做的事就是跟着某个东西走。默认是主人,给了 {@link #entityId}
+ * 就是跟着那一只。
  *
  * <p>没有"干完"这回事,所以 {@link com.dwinovo.numen.task.TaskRecord#NO_DEADLINE}:
  * 期限回答的是"该多久干完",而这件活的终点只有主人换掉它。
  *
  * <p>{@code keepWithin} 是跟到多近就算到位。到位之后任务<b>休眠</b>(而不是结束):
- * 身体让给别人,主人一走远它自己就醒过来。这跟原版 {@code Goal.canUse()} 是同一
+ * 身体让给别人,目标一走远它自己就醒过来。这跟原版 {@code Goal.canUse()} 是同一
  * 个道理——休眠不是失败。
  */
 public final class FollowTaskRecord extends TaskRecord {
@@ -19,9 +20,30 @@ public final class FollowTaskRecord extends TaskRecord {
     /** 跟到这么近就算到位(米)。 */
     public final double keepWithin;
 
-    public FollowTaskRecord(String toolCallId, double keepWithin) {
+    /**
+     * 跟着谁。{@code null} = 主人。
+     *
+     * <p>这两种目标<b>消失的含义不一样</b>,所以任务里分两支:主人下线是暂时的,他会
+     * 回来,那时该休眠等着;点名的实体死了或者被卸载就是没了,再等也不会回来,该收尾
+     * 报给模型。
+     */
+    public final Integer entityId;
+
+    /**
+     * 那一只的 UUID。<b>身份看这个,{@link #entityId} 只是查找键。</b>
+     *
+     * <p>常驻任务会跨重启重放(存的是当时那次调用的 args),而运行期 id 每次开服重新发,
+     * 只认 id 的话重放之后她可能一声不吭地跟上另一只完全不相干的东西。UUID 是稳的,
+     * 对不上就是目标没了。
+     */
+    public final java.util.UUID targetUuid;
+
+    public FollowTaskRecord(String toolCallId, double keepWithin, Integer entityId,
+                            java.util.UUID targetUuid) {
         super(TOOL_NAME, toolCallId, NO_DEADLINE);
         this.keepWithin = keepWithin;
+        this.entityId = entityId;
+        this.targetUuid = targetUuid;
     }
 
     @Override
@@ -30,6 +52,7 @@ public final class FollowTaskRecord extends TaskRecord {
      * 工具 id 不写进来,需要它的地方(运行时状态的 tool 属性、派发回执)本来就有。
      */
     public String describe() {
-        return "跟着你,保持 " + (int) keepWithin + " 米";
+        String who = entityId == null ? "你" : "实体 " + entityId;
+        return "跟着" + who + ",保持 " + (int) keepWithin + " 米";
     }
 }
