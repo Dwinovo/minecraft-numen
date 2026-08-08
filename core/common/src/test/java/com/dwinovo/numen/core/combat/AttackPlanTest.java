@@ -23,17 +23,25 @@ class AttackPlanTest {
     private static final double HEALTHY = 40.0;
     private static final double REACH = 4.0;
 
+    /** 一只寻常近战怪的危险半径(含格量化补偿),见 {@code Menace.dangerRadius}。 */
+    private static final double ORDINARY_DANGER = 2.73;
+
+    /** 原版爆炸伤害的边界:威力 3 的爬行者,六格外一点也挨不着。 */
+    private static final double BLAST_SPAN = 6.0;
+
     private static Foe mob(int id, double distance) {
-        return new Foe(id, distance, false, false, 0.0, true, true, true);
+        return new Foe(id, distance, false, false, distance < ORDINARY_DANGER,
+                true, true, true);
     }
 
+    /** 引信在走:危险半径是爆炸波及范围,六格。 */
     private static Foe creeper(int id, double distance) {
-        return new Foe(id, distance, true, true, 7.5, true, true, true);
+        return new Foe(id, distance, true, true, distance < BLAST_SPAN, true, true, true);
     }
 
-    /** 引信还没点着的爬行者 —— 判据眼里就是一只普通怪,只是走近它要留余量。 */
+    /** 引信还没点着的爬行者 —— 判据眼里就是一只普通怪,只是危险半径是点火线。 */
     private static Foe idleCreeper(int id, double distance) {
-        return new Foe(id, distance, true, false, 7.5, true, true, true);
+        return new Foe(id, distance, true, false, distance < 3.0, true, true, true);
     }
 
     private static Battlefield field(boolean melee, boolean ranged, Foe... foes) {
@@ -45,27 +53,27 @@ class AttackPlanTest {
     @Test
     void withinReachSheSwings() {
         Move m = AttackPlan.decide(field(true, true, mob(1, 3.0)), null);
-        assertEquals(Action.MELEE, m.action());
+        assertEquals(Action.SKIRMISH, m.action());
         assertEquals(1, m.foeId());
     }
 
     /** 有弓也照样走过去砍:走得到就不该花箭。 */
     @Test
     void reachableButFarSheWalksThereRatherThanSpendArrows() {
-        assertEquals(Action.CLOSE_IN,
+        assertEquals(Action.SKIRMISH,
                 AttackPlan.decide(field(true, true, mob(1, 20.0)), null).action());
     }
 
     /** 走不到才动用远程——恶魂、悬崖对面、柱子上的东西都归这一支。 */
     @Test
     void unreachableIsWhatBowsAreFor() {
-        Foe far = new Foe(1, 20.0, false, false, 0.0, true, false, true);
+        Foe far = new Foe(1, 20.0, false, false, false, true, false, true);
         assertEquals(Action.RANGED, AttackPlan.decide(field(true, true, far), null).action());
     }
 
     @Test
     void unreachableWithNoBowIsGivenUp() {
-        Foe far = new Foe(1, 20.0, false, false, 0.0, true, false, true);
+        Foe far = new Foe(1, 20.0, false, false, false, true, false, true);
         assertEquals(Action.ABANDON, AttackPlan.decide(field(true, false, far), null).action());
     }
 
@@ -78,7 +86,7 @@ class AttackPlanTest {
     @Test
     void aCreeperInBlastRangeOutranksWhateverSheIsFighting() {
         Battlefield b = field(true, true, mob(1, 3.0), creeper(2, 3.3));
-        Move m = AttackPlan.decide(b, new Move(Action.MELEE, 1));
+        Move m = AttackPlan.decide(b, new Move(Action.SKIRMISH, 1));
         assertEquals(Action.AVOID, m.action());
         assertEquals(AttackPlan.NO_FOE, m.foeId(), "退是对全场的,不指向某一只");
     }
@@ -87,7 +95,7 @@ class AttackPlanTest {
     @Test
     void onceTheBlastIsClearSheGoesBackToFighting() {
         Battlefield b = field(true, true, mob(1, 3.0), creeper(2, 9.0));
-        assertEquals(Action.MELEE, AttackPlan.decide(b, new Move(Action.MELEE, 1)).action());
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(b, new Move(Action.SKIRMISH, 1)).action());
     }
 
     // ==================== 会炸的东西 ====================
@@ -120,7 +128,7 @@ class AttackPlanTest {
      */
     @Test
     void anIdleExplosiveWithNoBowIsReportedAsUnfightable() {
-        Foe idle = new Foe(1, 9.0, true, true, 7.5, false, true, true);
+        Foe idle = new Foe(1, 9.0, true, true, false, false, true, true);   // 九格外,挨不着
         Move m = AttackPlan.decide(field(true, false, idle), null);
         assertEquals(Action.ABANDON, m.action());
         assertEquals(1, m.foeId());
@@ -131,7 +139,7 @@ class AttackPlanTest {
     void anUnfightableExplosiveDoesNotStealTheTurnFromAFightableMob() {
         Battlefield b = field(true, false, creeper(1, 8.0), mob(2, 9.0));
         Move m = AttackPlan.decide(b, null);
-        assertEquals(Action.CLOSE_IN, m.action());
+        assertEquals(Action.SKIRMISH, m.action());
         assertEquals(2, m.foeId(), "该去打那只僵尸,不是围着苦力怕打转");
     }
 
@@ -142,14 +150,14 @@ class AttackPlanTest {
     @Test
     void aCreeperThatHasNotLitYetIsJustAMob() {
         Move m = AttackPlan.decide(field(true, false, idleCreeper(1, 3.5)), null);
-        assertEquals(Action.MELEE, m.action());
+        assertEquals(Action.SKIRMISH, m.action());
         assertEquals(1, m.foeId());
     }
 
     /** 远一点就走过去 —— 和别的怪没有区别。 */
     @Test
     void anUnlitCreeperIsWalkedUpToLikeAnythingElse() {
-        assertEquals(Action.CLOSE_IN,
+        assertEquals(Action.SKIRMISH,
                 AttackPlan.decide(field(true, false, idleCreeper(1, 9.0)), null).action());
     }
 
@@ -157,7 +165,7 @@ class AttackPlanTest {
     @Test
     void theMomentItLightsSheStopsFighting() {
         Battlefield lit = field(true, false, creeper(1, 3.5));
-        assertEquals(Action.AVOID, AttackPlan.decide(lit, new Move(Action.MELEE, 1)).action());
+        assertEquals(Action.AVOID, AttackPlan.decide(lit, new Move(Action.SKIRMISH, 1)).action());
     }
 
     // ==================== 打谁:先近的,但要有承诺 ====================
@@ -175,7 +183,7 @@ class AttackPlanTest {
     @Test
     void sheStaysOnTheOneSheChose() {
         Battlefield b = field(true, true, mob(1, 9.0), mob(2, 4.5));
-        assertEquals(1, AttackPlan.decide(b, new Move(Action.CLOSE_IN, 1)).foeId(),
+        assertEquals(1, AttackPlan.decide(b, new Move(Action.SKIRMISH, 1)).foeId(),
                 "上一刻在打 1,就算 2 更近也别转向");
     }
 
@@ -183,7 +191,7 @@ class AttackPlanTest {
     @Test
     void whenTheChosenOneIsGoneShePicksAgain() {
         Battlefield b = field(true, true, mob(2, 4.5));
-        assertEquals(2, AttackPlan.decide(b, new Move(Action.MELEE, 1)).foeId());
+        assertEquals(2, AttackPlan.decide(b, new Move(Action.SKIRMISH, 1)).foeId());
     }
 
     // ==================== 近战迟滞 ====================
@@ -192,21 +200,21 @@ class AttackPlanTest {
     @Test
     void onceSwingingSheKeepsSwingingThroughSmallDrift() {
         Battlefield b = field(true, false, mob(1, 4.6));
-        assertEquals(Action.MELEE, AttackPlan.decide(b, new Move(Action.MELEE, 1)).action());
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(b, new Move(Action.SKIRMISH, 1)).action());
     }
 
     /** 还没开打时不吃迟滞:同样 4.6 格,该走过去。 */
     @Test
     void beforeTheFirstSwingTheBandIsTheReachItself() {
         Battlefield b = field(true, false, mob(1, 4.6));
-        assertEquals(Action.CLOSE_IN, AttackPlan.decide(b, null).action());
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(b, null).action());
     }
 
     /** 退得够远还是要追——迟滞是一条带,不是无限期豁免。 */
     @Test
     void driftingWellOutOfBandStillMeansWalking() {
         Battlefield b = field(true, false, mob(1, 7.0));
-        assertEquals(Action.CLOSE_IN, AttackPlan.decide(b, new Move(Action.MELEE, 1)).action());
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(b, new Move(Action.SKIRMISH, 1)).action());
     }
 
     // ==================== 手上有什么 ====================
@@ -236,8 +244,8 @@ class AttackPlanTest {
     /** 但赤手打一只不还手的东西是正当的(模型点名让她去打一只鸡)。 */
     @Test
     void barehandedAgainstSomethingHarmlessIsFine() {
-        Foe chicken = new Foe(1, 3.0, false, false, 0.0, false, true, true);
-        assertEquals(Action.MELEE,
+        Foe chicken = new Foe(1, 3.0, false, false, false, false, true, true);
+        assertEquals(Action.SKIRMISH,
                 AttackPlan.decide(field(false, false, chicken), null).action());
     }
 
@@ -277,7 +285,7 @@ class AttackPlanTest {
     @Test
     void corneredMeansFightingInsteadOfStandingStill() {
         Battlefield trapped = new Battlefield(4.0, REACH, true, true, true, List.of(mob(1, 3.0)));
-        assertEquals(Action.MELEE, AttackPlan.decide(trapped, null).action());
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(trapped, null).action());
     }
 
     /** 退得掉就还是退 —— cornered 只在真被围住时才改判。 */
@@ -297,7 +305,78 @@ class AttackPlanTest {
     /** 没被授权的不算数——场上还有怪,但都不归这一场仗管。 */
     @Test
     void unauthorizedFoesDoNotKeepTheFightAlive() {
-        Foe stranger = new Foe(1, 3.0, false, false, 0.0, false, true, false);
+        Foe stranger = new Foe(1, 3.0, false, false, false, false, true, false);
         assertEquals(Action.DONE, AttackPlan.decide(field(true, true, stranger), null).action());
+    }
+
+    // ==================== 有人贴到危险半径里了 ====================
+
+    /**
+     * 有人进了它的危险半径就该挪窝,<b>不管她在打谁</b>。
+     *
+     * <p>判据曾经只看血量和爆炸:寻路已经在按危险半径挑落脚点了,判据照样说"过去打",
+     * 吸引项一路把她往人堆里拉。而寻路的目标是<b>开路那一刻的快照</b>,别的怪走近了它不会
+     * 自己失效——每刻用实时距离重问一遍的,只有这里。
+     */
+    @Test
+    void someoneInsideHisRadiusMeansMovingFirst() {
+        Battlefield b = field(true, true, mob(1, 5.0), mob(2, 2.0));
+        assertEquals(Action.AVOID, AttackPlan.decide(b, null).action());
+    }
+
+    /**
+     * 出了半径就接着打,<b>不需要迟滞</b>——她的够到距离比对方的危险半径大出半格到一格
+     * (僵尸 3.30 对 2.73),退到边缘就够。那条缝是原版碰撞箱给的,不是调出来的。
+     */
+    @Test
+    void justOutsideTheRadiusSheFightsAgain() {
+        Battlefield b = field(true, true, mob(1, 3.0));
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(b, null).action());
+        assertEquals(Action.SKIRMISH,
+                AttackPlan.decide(b, new Move(Action.AVOID, AttackPlan.NO_FOE)).action());
+    }
+
+    /** 退无可退时不许再退 —— 站着挨打是确定的死,打至少有机会。 */
+    @Test
+    void corneredSheFightsAnyway() {
+        var boxedIn = new Battlefield(HEALTHY, REACH, true, true, true,
+                List.of(mob(1, 2.0), mob(2, 2.0)));
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(boxedIn, null).action());
+    }
+
+    /** 远处那些不该让她掉头就走 —— 只有进了半径的才算。 */
+    @Test
+    void distantMobsDoNotScareHer() {
+        Battlefield b = field(true, true, mob(1, 3.0), mob(2, 8.0), mob(3, 11.0));
+        assertEquals(Action.SKIRMISH, AttackPlan.decide(b, null).action());
+    }
+
+    // ==================== 空手 ====================
+
+    /**
+     * 空手时进了危险半径要判 <b>DISENGAGE 而不是 AVOID</b>。
+     *
+     * <p>AVOID 的意思是"还想打,只是不能在这儿打" —— 她根本打不了,这句是假的。两条判据
+     * 先后触发的结果是:怪进半径出 AVOID、退半步出 DISENGAGE,在那条线上来回换,而两个
+     * 动作在执行层走不同分支、各自重建导航。实测空手时 35 次对 30 次,几乎 1:1。
+     */
+    @Test
+    void barehandedInsideTheRadiusIsAnEscapeNotAReposition() {
+        assertEquals(Action.DISENGAGE,
+                AttackPlan.decide(field(false, false, mob(1, 2.0)), null).action());
+    }
+
+    /** 出了半径也一样 —— 空手就该一路走脱离这一条支,不该跟着半径线换动作。 */
+    @Test
+    void barehandedOutsideTheRadiusIsStillAnEscape() {
+        assertEquals(Action.DISENGAGE,
+                AttackPlan.decide(field(false, false, mob(1, 4.0)), null).action());
+    }
+
+    /** 有武器才谈得上"换个地方打"。 */
+    @Test
+    void armedInsideTheRadiusIsAReposition() {
+        assertEquals(Action.AVOID,
+                AttackPlan.decide(field(true, false, mob(1, 2.0)), null).action());
     }
 }

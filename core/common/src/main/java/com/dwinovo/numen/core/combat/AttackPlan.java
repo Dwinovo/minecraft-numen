@@ -20,10 +20,14 @@ public final class AttackPlan {
 
     /** 这一刻做什么。 */
     public enum Action {
-        /** 就地挥击。 */
-        MELEE,
-        /** 走过去,近到能挥击为止。 */
-        CLOSE_IN,
+        /**
+         * 走位。<b>这是一个移动动作,不是"打不打"</b> —— 打由攻击系统每刻独立判(冷却好了
+         * 且够得着就打),与她这一刻在靠近还是在拉开无关。
+         *
+         * <p>曾经这里分 MELEE 与 CLOSE_IN 两个动作,于是"靠近"那一支不挥刀、"拉开"那一支
+         * 也不挥刀 —— 她躲的时候不还手,骷髅一边后退一边射她也追不上。
+         */
+        SKIRMISH,
         /** 拉开弓弩射它。 */
         RANGED,
         /** 主动拉开距离——会炸的东西已经贴到爆炸范围里了。仍然想打,只是不能贴身。 */
@@ -56,14 +60,6 @@ public final class AttackPlan {
     private static final double MIN_EFFECTIVE_HEALTH = 8.0;
 
     /**
-     * 已经在挥击时,够到距离往外放宽这么多才改判"要走过去"。
-     *
-     * <p>没有它,目标在够到线上微动就是"打一下 → 拆掉路径重新规划 → 打一下",
-     * 实测刷了七十多次"新路径立刻判定到达"。
-     */
-    private static final double MELEE_HYSTERESIS = 1.5;
-
-    /**
      * 只有远程手段时,离目标近于这个距离就先拉开。
      *
      * <p>太近弹道压得平、还白白挨打;而手上没有近战武器时"贴上去用拳头"从来不是答案。
@@ -91,13 +87,27 @@ public final class AttackPlan {
             return new Move(Action.AVOID, NO_FOE);
         }
         // ③ 两条路都没有:赤手对上会还手的东西不是一条出路,退开。
+        //
+        //    <b>必须排在 ④ 前面。</b>空手时"进了危险半径"该判 DISENGAGE 而不是 AVOID ——
+        //    AVOID 的意思是"还想打,只是不能在这儿打",她根本打不了,这句是假的。两条判据
+        //    先后触发的结果是:怪进半径出 AVOID、退半步出 DISENGAGE,在那条线上来回换,
+        //    而两个动作在执行层走不同分支、各自重建导航。实测空手时 35 次对 30 次,几乎 1:1。
         if (!b.hasMelee() && !b.hasRanged() && anyEngaging(b) && !b.cornered()) {
             return new Move(Action.DISENGAGE, NO_FOE);
+        }
+        // ④ 有人已经进了它的危险半径 —— <b>全场的事</b>,与她正在打谁无关。
+        //    寻路的目标是开路那一刻的快照,别的怪走近了它不会自己失效;这一条用的是<b>实时
+        //    距离</b>,每刻重问一遍,防偷袭真正靠得住的是它。
+        //
+        //    不需要迟滞:她的够到距离比对方的危险半径大出半格到一格(僵尸 3.30 对 2.73),
+        //    退到边缘就能打。这条缝是原版碰撞箱给的,不是调出来的。
+        if (b.anyTooClose() && !b.cornered()) {
+            return new Move(Action.AVOID, NO_FOE);
         }
 
         Foe foe = pick(b, last);
         if (foe != null) {
-            return new Move(actionAgainst(b, foe, last), foe.id());
+            return new Move(actionAgainst(b, foe), foe.id());
         }
         // 打不了了。<b>还有东西在追她,那就不叫打完了。</b>
         //
@@ -154,8 +164,8 @@ public final class AttackPlan {
         return !f.armed() || b.hasRanged();
     }
 
-    /** 对选定的这一只做什么。 */
-    private static Action actionAgainst(Battlefield b, Foe foe, Move last) {
+    /** 对选定的这一只<b>怎么移动</b>。打不打不在这儿决定。 */
+    private static Action actionAgainst(Battlefield b, Foe foe) {
         if (foe.armed()) {
             // 已经在倒计时的只能远远射(能选中它就说明有弓弩);"已经贴太近"那一档在 ② 拦掉了。
             return Action.RANGED;
@@ -166,13 +176,9 @@ public final class AttackPlan {
             // 手上只有弓:太近先拉开,别拿拳头凑合。
             return foe.distance() < RANGED_MIN_DISTANCE ? Action.AVOID : Action.RANGED;
         }
-        boolean swinging = last != null && last.action() == Action.MELEE && last.foeId() == foe.id();
-        double band = swinging ? b.meleeReach() + MELEE_HYSTERESIS : b.meleeReach();
-        if (foe.distance() <= band) {
-            return Action.MELEE;
-        }
+        // 走得到就走位 —— 太远往前、太近往后,都是同一个动作。够不够得着挥刀是攻击系统的事。
         if (foe.reachable()) {
-            return Action.CLOSE_IN;   // 走得到就走过去砍:这同时也是省箭的那一支
+            return Action.SKIRMISH;
         }
         return b.hasRanged() ? Action.RANGED : Action.ABANDON;
     }
