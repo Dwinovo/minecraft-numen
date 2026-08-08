@@ -29,6 +29,7 @@ import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -203,6 +204,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         // 攻击与移动<b>正交</b>:每刻先问一次"冷却好了吗、够得着谁吗",够得着就打 ——
         // 不管这一刻在靠近、在拉开、还是站着。攻击不影响寻路,最多让她回个头。
+        tickShield();
         tickWeapon(field);
         if (move.action() != AttackPlan.Action.DISENGAGE && haven != null) {
             haven = null;   // 不再逃跑了:落点作废,下次要跑再重新挑
@@ -346,6 +348,80 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     // ==================== 近战 ====================
 
     /**
+     * 盾。与攻击、寻路并列的<b>第三层</b>,同样每刻问一次,同样不管别人在干嘛。
+     *
+     * <pre>
+     * 弓战斗中                       → 不碰(拉弓和举盾抢同一个 useItem,原版硬约束)
+     * 有谁进了它的危险半径 且 盾能举 → 举
+     * 否则                           → 放
+     * </pre>
+     *
+     * <p>不看攻击冷却:原版举着盾照样能挥刀,两件事不冲突;也不拦攻击层 —— 那样两层就又
+     * 耦上了。举着会减速,代价认了:能挡住的那一下比早退半格值。盾被斧子破了会进冷却,
+     * 那时她就正常跑。
+     *
+     * <p>同行没有可抄的(AltoClef 完全没有用盾逻辑,Meteor 管的是怎么破<b>对手</b>的盾),
+     * 这套判据与 PR #13 的 {@code ShieldCombatPolicy} 同源,只是去掉了"冷却好了放盾"
+     * 那一步 —— 既然能边举边砍,那一步是多余的。
+     */
+    private void tickShield() {
+        if (bowFighting) {
+            return;
+        }
+        boolean raised = shieldRaised();
+        boolean threatened = false;
+        for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
+            if (Menace.tooClose(mob, player)) {
+                threatened = true;
+                break;
+            }
+        }
+        if (!threatened) {
+            if (raised) {
+                player.releaseUsingItem();
+            }
+            return;
+        }
+        if (raised || player.isUsingItem()) {
+            return;   // 已经举着,或者手上占着别的东西
+        }
+        ItemStack shield = player.getOffhandItem().is(Items.SHIELD)
+                ? player.getOffhandItem() : equipShield();
+        if (shield.isEmpty() || player.getCooldowns().isOnCooldown(shield.getItem())) {
+            return;   // 没盾,或者被斧子破了还在冷却 —— 正常跑
+        }
+        player.startUsingItem(InteractionHand.OFF_HAND);
+    }
+
+    private boolean shieldRaised() {
+        return player.isUsingItem()
+                && player.getUsedItemHand() == InteractionHand.OFF_HAND
+                && player.getUseItem().is(Items.SHIELD);
+    }
+
+    /**
+     * 副手空着就从背包里拿一面盾装上 —— <b>剑早就能自动换手,盾没道理不能</b>。
+     *
+     * <p>只在副手<b>空着</b>时装:主人可能正指望那一格放别的东西,不该替他决定。
+     */
+    private ItemStack equipShield() {
+        if (!player.getOffhandItem().isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        var inventory = player.getInventory();
+        for (int slot = 0; slot < inventory.getContainerSize(); slot++) {
+            ItemStack stack = inventory.getItem(slot);
+            if (stack.is(Items.SHIELD)) {
+                ItemStack shield = stack.split(1);
+                player.setItemSlot(net.minecraft.world.entity.EquipmentSlot.OFFHAND, shield);
+                player.inventoryMenu.broadcastChanges();
+                return shield;
+            }
+        }
+        return ItemStack.EMPTY;
+    }
+
+    /**
      * 攻击系统。<b>与移动正交</b>:每刻问一次「冷却好了吗、够得着谁吗」,够得着就挥 ——
      * 不看她这一刻在靠近、在拉开还是站着,也不改变她的去向。
      *
@@ -356,9 +432,12 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * @param field 这一刻的局面,复用 onTick 已经扫好的那份
      */
     private void tickWeapon(Battlefield field) {
-        if (player.isUsingItem()) {
-            return;   // 正在拉弓,别打断
+        if (player.isUsingItem() && !shieldRaised()) {
+            return;   // 正在拉弓或吃东西,别打断
         }
+        // <b>举着盾照样挥刀</b> —— 原版这两件事不冲突。这条守卫本意是拦"正在拉弓",
+        // 却写成了"手上用着任何东西";副手多了一面盾之后,它把攻击层整个锁死:
+        // 实测她站在带里(距离 2.0~2.9、带 [2.02, 3.30])一刀不挥,看着像只躲不打。
         Loadout loadout = Loadout.forTarget(player, player);
         if (!loadout.hasMelee()) {
             return;
@@ -366,7 +445,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         Entity victim = null;
         double best = Double.MAX_VALUE;
         for (var f : field.foes()) {
-            if (!f.authorized() || f.armed() || f.distance() >= best) {
+            // <b>名单只决定去打谁,不决定砍不砍眼前的。</b>"够得着就打"本来就是攻击层的
+            // 定义,掺进"这只在不在名单里"就又把两层耦上了 —— 而且点名模式下路上被贴脸
+            // 也不还手,得挨完一路才到目标。
+            if (f.armed() || f.distance() >= best) {
                 continue;   // 引信在走的不碰:打它等于自己引爆
             }
             Entity e = liveEntity(f.id());
