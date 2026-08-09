@@ -54,7 +54,7 @@ import java.util.Set;
  * <ol>
  *   <li><b>knownOreLocations</b> — fed on demand from the shared {@link TargetIndex}
  *       (block-change-fed, lazily built), and {@link #prune} every tick (drop ones
- *       mined / no longer matching / blacklisted / hazardous), sorted by
+ *       mined / no longer matching / unworkable / hazardous), sorted by
  *       distance, capped at {@link #MAX_ORES}.</li>
  *   <li><b>in place</b> — any target the eyes can actually hit from where the body
  *       stands (centre or an exposed face, within block reach, unobstructed) is
@@ -64,9 +64,10 @@ import java.util.Set;
  *       one A* search over {@link NavGoal#composite} of {@link NavGoal#mine}
  *       stances, so it walks to the CLOSEST reachable ore (not greedy-nearest,
  *       which is often the walled-in one).</li>
- *   <li><b>blacklist</b> — when the path search fails, blacklist the nearest ore
- *       (presumed unreachable) and retry, so one walled-in ore can't stall the
- *       whole task.</li>
+ *   <li><b>够不着是一批的属性,不是某一格的罪</b> — 复合目标搜不出路,意思是
+ *       <b>这一刻这一批都到不了</b>,不是"最近那颗有问题"。所以这里不记账到任何一格:
+ *       重新规划就是了。既没挖掉一格、也没挪窝超过 {@link #STALL_TICKS} 刻,才收工,
+ *       并如实报告"剩下的走不到"。</li>
  *   <li><b>branch mine</b> — when no ore is known, head outward holding the
  *       y-level ({@link NavGoal#runAway}) to dig fresh tunnel and expose more,
  *       bounded by {@link #MAX_BRANCH_TICKS}.</li>
@@ -102,16 +103,20 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * companion the player expects to stay nearby. Flip this to enable the opt-in
      * explore mode (the bounded branch-mine below). */
     private static final boolean EXPLORE_FOR_BLOCKS = false;
-    /** Consecutive {@code NO_SHOT} dig ticks on ONE ore before it is blacklisted —
-     *  the reach test said it was workable, but no shot ever materialises (aim
-     *  quantisation, a lip over the stance). Without this the dig could
-     *  grind forever waiting for a shot that never comes. */
+    /** 同一格连续这么多刻拉不出射线,就记进 {@link #unworkable} —— 够到测试说它能挖,
+     *  可射线始终成不了(瞄准量化、站位上方有个檐口)。没有这条,挖掘会永远等一个
+     *  不会来的射线。 */
     private static final int MAX_NO_SHOT_TICKS = 20;
-    /** Consecutive ARRIVED-but-nothing-reachable-in-place ticks tolerated before the nearest ore is
-     *  blacklisted as a LAST resort. Below this the loop just re-evaluates (rescan / re-nav) instead of
-     *  discarding a possibly-fine ore — blacklisting belongs to genuinely failed paths, not arrivals.
-     *  ~2 s gives the periodic rescan several chances to re-stance first. */
-    private static final int MAX_ARRIVED_DUD = 40;
+    /**
+     * 既没挖掉一格、也没挪窝多远,持续这么多刻就算真卡住了(二十秒)。
+     *
+     * <p><b>两个条件同时成立才算</b>:她走三十秒的路去远处挖矿,一刻都不算卡 —— 她在动。
+     * 只有"站着不动又什么都没挖出来"才是卡住,而那种状态没有出口,只能收工报给主人。
+     */
+    private static final int STALL_TICKS = 400;
+
+    /** 挪出这么远就算"她在动",进度计时重新起算。 */
+    private static final double STALL_MOVE = 2.0;
 
     /** How long a just-broken target's cell stays a walk-over goal (ticks) — the drop
      *  takes a moment to spawn, and without this window the body sprints for the next
@@ -119,7 +124,17 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private static final int DROP_LOITER_TICKS = 5;
 
     private final List<BlockPos> knownOres = new ArrayList<>();
-    private final Set<BlockPos> blacklist = new HashSet<>();
+    /**
+     * 当前地形下挖不动的格子 —— <b>只有 {@code NO_SHOT} 进得来</b>:够到测试过了,却连续
+     * 二十刻拉不出射线(瞄准量化、站位上方有个檐口)。这是关于<b>这一格</b>的、可复现的事实。
+     *
+     * <p>"走不到"不进这里:那是一批的属性,不是某一格的罪。掉落物更不进 —— 够不着的掉落物
+     * 在复合目标下根本不会被选中。
+     *
+     * <p>而且它<b>不是永久的</b>:她成功挖掉任何一格,地形就变了(挡射线的那个檐口可能正好
+     * 被挖了),整份作废重来。
+     */
+    private final Set<BlockPos> unworkable = new HashSet<>();
     /** Targets pruned because no carried tool harvests them (force=false only) — kept so the
      *  terminal failure can name the tool problem instead of reporting an empty field. */
     private final Set<BlockPos> unharvestable = new HashSet<>();
@@ -152,8 +167,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** The ore currently returning {@code NO_SHOT}, and for how many consecutive ticks. */
     private BlockPos noShotPos;
     private int noShotTicks;
-    /** Consecutive ARRIVED-dud ticks (arrived at a stance but nothing mineable in place). */
-    private int arrivedDudTicks;
+    /** 上一次真有进展(挖掉一格)或明显挪窝的时刻与位置 —— 卡死判定的量尺。 */
+    private long lastProgressTick;
+    private BlockPos lastProgressPos;
 
     /** 地图不完整时连续无路的次数（见 {@link NoPathVerdict}）。 */
     private int coldMapFails;
@@ -205,6 +221,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             TargetIndex.register(sl, r.targets);
         }
         runQuery();
+        lastProgressTick = player.level().getGameTime();
+        lastProgressPos = player.blockPosition();
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
         com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] mine start targets={} count={} feet={} firstQuery={} hit(s) mapComplete={}",
@@ -260,7 +278,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         //    a tree gets mined from beside, never by digging under it.
         BlockPos reachable = reachableTarget();
         if (reachable != null) {
-            arrivedDudTicks = 0;   // mining in place = progress; the dud streak only counts consecutive stuck ticks
             // Mine in place with the nav merely PAUSED (inputs cleared each tick), never torn down:
             // the goal, current path segment, and any in-flight search stay warm, so when this dig
             // ends navigation resumes where it left off instead of cold-starting a fresh A* — that
@@ -277,6 +294,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         //    shaft opens up; drops are collected by walking over them (native pickup).
         if (!knownOres.isEmpty() || !drops.isEmpty()) {
             branchTicks = 0;
+            TaskState stalled = stalledOut();
+            if (stalled != null) {
+                return stalled;
+            }
             if (nav == null || navIsBranch) {
                 stopNav();
                 // Compiled front door: one composite over every known ore's stance plus nearby
@@ -284,7 +305,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 // progress (prune drops the cell, the drop members collect the item, and the
                 // tally counts inventory); see GoalCompiler.mineField.
                 // Revalidating: the ore field changes every few ticks (mined cells pruned,
-                // rescans merging, blacklists trimming), so hand the freshly compiled goal to
+                // rescans merging, unworkable cells trimming), so hand the freshly compiled goal to
                 // the engine EVERY tick — the current segment is kept unless its destination
                 // is no longer accepted by the new goal (then it soft-cancels and re-plans),
                 // and standing in a stance whose ore just got mined out resumes navigation
@@ -300,38 +321,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     // pauses the nav and digs. Only clear inputs here (pause), never tear the nav down:
                     // teardown would throw away the goal + any in-flight search and force a cold restart.
                     nav.pause();
-                    // Arrived at the stance goal but nothing is actually hittable from here (occluded,
-                    // or the target sits beyond reach above and we can't stand any closer).
-                    // Don't discard a possibly-fine ore for that: re-evaluate (rescan / re-nav) and only
-                    // if the body stays stuck arriving-but-never-mining for MAX_ARRIVED_DUD ticks
-                    // blacklist the nearest as a last resort, so a single dud can't strand good targets.
+                    // [ANCHOR arrived-dud] 到了站位,却什么都够不到。<b>这不构成关于任何一颗矿的
+                    // 证据</b>:最常见的两种成因根本不是故障 —— 她到的是复合目标里的<b>掉落物</b>
+                    // 成员(刚捡完东西,附近本来就没矿),或者这一刻人在空中(reachableTarget 第一行
+                    // 就要求 onGround)。剩下的"被别的矿包住、射线打不到"也只是<b>还没轮到它</b>,
+                    // 外层挖掉自己就露出来了。
+                    //
+                    // 所以这里只重新规划。真卡住了由 STALL_TICKS 那把尺子收工,不记账到某一格。
                     if (reachableTarget() == null && !knownOres.isEmpty()) {
-                        arrivedDudTicks++;
-                        // [ANCHOR arrived-dud] the EVENT (first stuck tick) logs at INFO; the rest of a
-                        // 5-9 tick streak goes to debug so a routine blip can't spam the release log.
-                        if (arrivedDudTicks == 1) {
-                            com.dwinovo.numen.core.Constants.LOG.info(
-                                    "[numen-task] mine ARRIVED-dud feet={} nearestOre={} — re-evaluating (not blacklisting)",
-                                    player.blockPosition().toShortString(), nearestOreInfo());
-                        } else {
-                            com.dwinovo.numen.core.Constants.LOG.debug(
-                                    "[numen-task] mine ARRIVED-dud feet={} streak={}/{} nearestOre={}",
-                                    player.blockPosition().toShortString(), arrivedDudTicks, MAX_ARRIVED_DUD,
-                                    nearestOreInfo());
-                        }
-                        if (arrivedDudTicks >= MAX_ARRIVED_DUD) {
-                            // [ANCHOR arrived-dud-giveup] persisted too long → last-resort blacklist.
-                            com.dwinovo.numen.core.Constants.LOG.info(
-                                    "[numen-task] mine ARRIVED-dud persisted {} ticks — blacklisting nearest as last resort",
-                                    arrivedDudTicks);
-                            blacklistNearest();
-                            arrivedDudTicks = 0;
-                            // The nav sits in a satisfied-goal state pointed at the field we just trimmed;
-                            // drop it so next tick re-plans fresh against the remaining targets.
-                            stopNav();
-                        }
-                    } else {
-                        arrivedDudTicks = 0;   // made it minable, or list emptied — clear the streak
+                        com.dwinovo.numen.core.Constants.LOG.debug(
+                                "[numen-task] mine ARRIVED 但够不到 feet={} nearestOre={} —— 重规划",
+                                player.blockPosition().toShortString(), nearestOreInfo());
+                        stopNav();
                     }
                     return TaskState.RUNNING;   // a reachable shaft is handled next tick
                 }
@@ -354,13 +355,15 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                         queryCooldown = 0;   // 下一刻就接着建图，别干等冷却
                         return TaskState.RUNNING;
                     }
-                    // [ANCHOR nav-failed] 完整图上真的没路 → 拉黑最近的那个。
-                    // failReason 里的 "toward X" 是复合目标的代表点，<b>不是</b>她奔的那个；
-                    // 她奔的是名单里最近的可达者，即下面的 nearestOre。
+                    // [ANCHOR nav-failed] 完整图上真的没路。
+                    //
+                    // <b>这句话的主语是"这一批",不是"最近那颗"。</b>复合目标撒在全部目标上,
+                    // 搜不出路的意思是一个都到不了 —— 拿"离脚最近的"顶罪只是猜,而猜错了不会
+                    // 报错(日志只会写"记下 X",而 X 看着完全合理)。所以这里什么都不记,
+                    // 重新规划;真的一直出不去,由 STALL_TICKS 收工。
                     com.dwinovo.numen.core.Constants.LOG.info(
-                            "[numen-task] mine nav failed ({}): {} | 复合目标 {} 个，nearestOre={}",
+                            "[numen-task] mine nav failed ({}): {} | 复合目标 {} 个,nearestOre={}",
                             nav.failType(), nav.failReason(), knownOres.size(), nearestOreInfo());
-                    blacklistNearest();
                     coldMapFails = 0;
                     stopNav();
                     return TaskState.RUNNING;
@@ -548,11 +551,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         for (ItemEntity ie : level.getEntitiesOfClass(ItemEntity.class, box)) {
             if (!dropItems.contains(ie.getItem().getItem())) continue;
             BlockPos p = ie.blockPosition();
-            if (blacklist.contains(p) || nearKnownOre(p)) continue;
+            if (nearKnownOre(p)) continue;
             out.add(p);
         }
         for (BlockPos p : anticipatedDrops.keySet()) {
-            if (blacklist.contains(p) || nearKnownOre(p)) continue;
+            if (nearKnownOre(p)) continue;
             out.add(p);
         }
         return out;
@@ -662,15 +665,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  the inventory each tick, not here — one block can yield several items, and the drops take a
      *  moment to be picked up.
      *
-     *  <p>Recovery: a PERSISTENT {@code NO_SHOT} (the ore passed the reach test but the dig
-     *  can never draw a shot at it) is counted, and after {@link #MAX_NO_SHOT_TICKS} the ore
-     *  is blacklisted and the loop moves on — matching how a failed path already blacklists
-     *  the nearest ore, instead of grinding forever waiting for a shot. */
+     *  <p>Recovery: 连续的 {@code NO_SHOT}(够到测试过了,可挖掘始终成不了射线)记数,满
+     *  {@link #MAX_NO_SHOT_TICKS} 就把<b>那一格</b>记进 {@link #unworkable} 继续往下走,
+     *  而不是永远等一个不会来的射线。<b>记的是这一格,不是猜一格</b> —— 这是唯一一处
+     *  按格记账的地方,因为它是唯一一件关于那一格的可复现事实。 */
     private void mineProgress(BlockPos pos) {
         switch (digger.digStep(pos)) {
             case BROKE_TARGET -> {
                 knownOres.remove(pos);
                 brokenTargets++;
+                noteProgress();
+                // 地形变了 —— 挡住射线的那个檐口可能正好就是这一格。旧的"挖不动"结论全部作废。
+                unworkable.clear();
                 if (WorkProfile.of(player).dropsLoot()) {
                     // 无掉落画像不登记逗留格:等一个永不出现的掉落物只会来回绕路
                     anticipatedDrops.put(pos.immutable(),
@@ -681,7 +687,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             case NO_SHOT -> {
                 if (pos.equals(noShotPos)) {
                     if (++noShotTicks >= MAX_NO_SHOT_TICKS) {
-                        blacklist.add(pos.immutable());
+                        unworkable.add(pos.immutable());
                         knownOres.remove(pos);
                         digger.cancel();   // release the in-progress-dig latch on this ore
                         clearNoShot();
@@ -797,7 +803,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         mergeHits(res.hits());
     }
 
-    /** Add fresh, non-blacklisted hits to knownOres, then prune (which re-validates
+    /** Add fresh, still-workable hits to knownOres, then prune (which re-validates
      *  every entry against the live world and keeps the nearest {@link #MAX_ORES}). */
     private void mergeHits(List<BlockPos> hits) {
         // One-off Set view for dedup: knownOres stays a distance-ordered list (prune sorts it),
@@ -806,7 +812,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         Set<BlockPos> seen = new HashSet<>(knownOres);
         for (BlockPos hit : hits) {
             BlockPos p = hit.immutable();
-            if (blacklist.contains(p) || !seen.add(p)) continue;
+            if (unworkable.contains(p) || !seen.add(p)) continue;
             knownOres.add(p);
         }
         prune();
@@ -818,7 +824,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         CalculationContext ctx = ContextFactory.forExecution(player);
         knownOres.removeIf(p -> {
             var state = level.getBlockState(p);
-            if (state.isAir() || !r.targets.contains(state.getBlock()) || blacklist.contains(p)
+            if (state.isAir() || !r.targets.contains(state.getBlock()) || unworkable.contains(p)
                     || !plausibleToBreak(ctx, p, state)) {
                 return true;
             }
@@ -861,30 +867,50 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 + " dist=" + String.format("%.1f", Math.sqrt(feet.distSqr(n)));
     }
 
-    private void blacklistNearest() {
-        BlockPos feet = player.blockPosition();
-        // 掉落物路过点与矿位同池:走不到的那个不管是矿还是掉落物都拉黑,
-        // 否则一个够不着的掉落物能让循环原地打转到超时。
-        List<BlockPos> pool = new ArrayList<>(knownOres);
-        pool.addAll(drops);
-        pool.stream()
-                .min(Comparator.comparingDouble(feet::distSqr))
-                .ifPresent(p -> {
-                    blacklist.add(p.immutable());
-                    knownOres.remove(p);
-                    com.dwinovo.numen.core.Constants.LOG.info(
-                            "[numen-task] mine blacklisted {} (feet={}, {} target(s) left,"
-                                    + " {} blacklisted)",
-                            p.toShortString(), feet.toShortString(), knownOres.size(),
-                            blacklist.size());
-                });
+
+    /** 挖掉了一格,或者明显挪了窝 —— 两者都算进展,卡死计时重新起算。 */
+    private void noteProgress() {
+        lastProgressTick = player.level().getGameTime();
+        lastProgressPos = player.blockPosition();
+    }
+
+    /**
+     * 真卡住了吗。<b>既没挖掉一格、也没挪出 {@link #STALL_MOVE} 格</b>,持续
+     * {@link #STALL_TICKS} 刻才算 —— 走远路去挖矿一刻都不算,她在动。
+     *
+     * @return 该收工就给终态,否则 null
+     */
+    private TaskState stalledOut() {
+        long now = player.level().getGameTime();
+        if (lastProgressPos == null
+                || player.blockPosition().distSqr(lastProgressPos) > STALL_MOVE * STALL_MOVE) {
+            noteProgress();
+            return null;
+        }
+        if (now - lastProgressTick < STALL_TICKS) {
+            return null;
+        }
+        com.dwinovo.numen.core.Constants.LOG.info(
+                "[numen-task] mine 卡住 {} 刻:没挖掉任何一格、也没挪窝 | feet={} 名单 {} 个",
+                now - lastProgressTick, player.blockPosition().toShortString(), knownOres.size());
+        String where = player.blockPosition().toShortString();
+        if (r.getMined() > 0) {
+            progressNote = "gathered " + r.getMined() + "/" + r.count + ", then got stuck at "
+                    + where + " — could not reach the remaining " + knownOres.size() + " "
+                    + r.label;
+            return TaskState.SUCCESS;
+        }
+        fail("found " + knownOres.size() + " " + r.label + " but could not reach any of them from "
+                + where + " — no path out, and nothing minable in place; gathered 0."
+                + " Move me somewhere else, or clear a way first.", FailureType.NO_PATH);
+        return TaskState.FAILED;
     }
 
     /** Terminal "nothing gathered, no ore left to go for" failure, distinguishing a
      *  genuinely empty field ({@code MINED_OUT} — widening the search or stopping is the
-     *  LLM's call) from a field that WAS found but every target got blacklisted as
-     *  unreachable ({@code NO_PATH} — the terrain, not the scan radius, is the problem),
-     *  with the counts. */
+     *  LLM's call) from a field that WAS found but every target turned out unworkable
+     *  ({@code NO_PATH} — 没有任何站位能对它拉出射线), with the counts.
+     *  「走不到」那一档不在这里 —— 它由 {@link #stalledOut} 收工。 */
     private TaskState noOreFailure() {
         if (!unharvestable.isEmpty()) {
             // Targets exist but the carried tools can't make them drop — the actionable
@@ -896,10 +922,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     FailureType.WRONG_TOOL);
             return TaskState.FAILED;
         }
-        if (!blacklist.isEmpty()) {
-            fail("found " + blacklist.size() + " " + r.label + " nearby but reached none of them"
-                    + " — all " + blacklist.size()
-                    + " were blacklisted as unreachable (no path / no clear shot); gathered 0",
+        if (!unworkable.isEmpty()) {
+            fail("found " + unworkable.size() + " " + r.label + " nearby but no clear shot at any"
+                    + " of them from any stance I could take; gathered 0",
                     FailureType.NO_PATH);
         } else {
             fail("no reachable " + r.label + " found in the loaded area around me",
