@@ -8,6 +8,9 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.function.Consumer;
 
 /**
@@ -46,6 +49,31 @@ public final class FakeConnection extends Connection {
         // channel's handler fires channelActive → sets this.channel, so the
         // pipeline setup inside placeNewPlayer has a channel to work on.
         new EmbeddedChannel(this);
+    }
+
+    /** 同伴连接对外报的地址。见 {@link #getRemoteAddress}。 */
+    private static final InetSocketAddress LOOPBACK =
+            new InetSocketAddress(InetAddress.getLoopbackAddress(), 0);
+
+    /**
+     * 回环地址。<b>不是装饰,是兼容性要求。</b>
+     *
+     * <p>内存通道的远端地址是 netty 自己的类型,而生态里大量代码把 {@code SocketAddress}
+     * <b>裸强转</b>成 {@link InetSocketAddress}(IP 白名单、登录风控、聊天桥接都这么写)。
+     * 转失败抛在玩家加入事件里、打断整个登录流程,表现是<b>真玩家也进不去服务器</b>,
+     * 客户端显示"无效的玩家数据"——存档没坏,是登录被异常中断了。这类崩溃只在装了别的
+     * 模组时才出现,本仓自己怎么跑都测不到。
+     *
+     * <p>不是我们独有的坑:原版单人世界与"对局域网开放"走的也是内存通道
+     * ({@code ServerConnectionListener.startMemoryChannel},地址是 netty 的
+     * {@code LocalAddress}),那些裸强转在原版面前一样炸。但能修的只有我们这一侧。
+     *
+     * <p>回环是<b>诚实</b>的答案:这具身体确实就在本机,没有远端。真玩家报的是公网 IP,
+     * 服主看日志一眼分得开。
+     */
+    @Override
+    public SocketAddress getRemoteAddress() {
+        return LOOPBACK;
     }
 
     /** Discard every outbound packet — there is no client to receive it.
