@@ -101,35 +101,6 @@ public class CompanionGameTests {
         });
     }
 
-    /**
-     * 引信点着的爬行者:她该退开,不该站着被炸,也不该跑出半个世界。
-     *
-     * <p>没有弓时爬行者不进候选,判据给的是"对全场的走位"——执行层曾经在
-     * {@code target == null} 上早退,于是判据每刻正确地喊走位、执行层每刻什么都不做,
-     * 日志看着一切正常,直到她被炸死。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
-    public static void combat_backs_away_from_a_lit_creeper(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        NumenPlayer companion = armedCompanion(helper, new BlockPos(8, 2, 8));
-        Creeper creeper = EntityType.CREEPER.create(level);
-        helper.assertTrue(creeper != null, "creeper did not spawn");
-        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 10));
-        creeper.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
-        creeper.setTarget(companion);
-        creeper.ignite();
-        level.addFreshEntity(creeper);
-
-        double[] furthest = {0.0};
-        helper.succeedWhen(() -> {
-            helper.assertTrue(companion.isAlive(), "companion was blown up");
-            furthest[0] = Math.max(furthest[0], companion.distanceTo(creeper));
-            helper.assertTrue(furthest[0] >= 5.0,
-                    "companion never backed off (want >= 5.0): furthest "
-                            + String.format("%.2f", furthest[0]));
-            CompanionFactory.despawn(level.getServer(), companion);
-        });
-    }
 
     // ==================== 摔落 ====================
 

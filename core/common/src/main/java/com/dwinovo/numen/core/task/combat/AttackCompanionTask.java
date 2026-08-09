@@ -143,11 +143,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     /** 上一行站位日志。数字没变就不再打,免得每 tick 一行把别的全冲掉。 */
     private String lastStandoffLog;
 
-    /** 逃跑探针:上一次采样时她在哪、最近的追兵多远、那一刻的游戏时间。 */
-    private net.minecraft.world.phys.Vec3 fleeMark;
-    private double fleeMarkNearest;
-    private long fleeMarkTick;
-
     private RangedShot shot;
     private int misfires;
     private int lastPlanLogTick = -1000;
@@ -165,13 +160,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     /** 这一段逃跑路线是哪一刻算的。到点就重算,见 {@link #FLEE_REPLAN_TICKS}。 */
     private long havenPlannedAt;
-
-    /** 走位探针:上一次采样的位置与那一刻的游戏时间。 */
-    private net.minecraft.world.phys.Vec3 skirmishMark;
-    private long skirmishMarkTick;
-
-    /** 上一次采样时<b>目标</b>在哪。没有它就分不出"她凑上去"和"它追上来"。 */
-    private net.minecraft.world.phys.Vec3 skirmishFoeMark;
 
     public AttackCompanionTask(NumenPlayer player, AttackTaskRecord record) {
         super(player, record);
@@ -519,82 +507,20 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 弓战斗:<b>和剑战斗同一段走位</b>,只是环换了一副(内沿 {@link #BOW_MIN_DISTANCE},
      * 外沿射程)。带内导航自然到达、她停下来,这时才拉弓 —— "什么时候该站定"不用另写。
      */
-    private TaskState bowFight() {
-        // <b>两层并行</b>:脚一直在走位,手一直在拉弓。原版拉弓时本来就能走(只是慢),
-        // 是我在 shootAt 里主动 halt 的 —— 于是每刻建一次导航、拆一次,看着像被打断。
-        PlayerNav.Status status = driveApproach();
-        probeSkirmish(status);
-        return shootAt(Loadout.forTarget(player, target));
-    }
-
     private TaskState closeIn() {
-        PlayerNav.Status status = driveApproach();
-        probeSkirmish(status);
+        driveApproach();
         return TaskState.RUNNING;
     }
 
-    /**
-     * 走位探针。每秒一行,回答四个只能靠位置分辨的问题:
-     *
-     * <ul>
-     *   <li><b>挪了 ≈ 0</b> —— 走不动。判据在喊走位而执行层什么都没做,或者目标当场就"到达"</li>
-     *   <li><b>距离在带内却挪个不停</b> —— 带算错了或者边界抖</li>
-     *   <li><b>距离一直大于外沿</b> —— 她被钉在打不到的地方</li>
-     *   <li><b>状态一直 FAILED</b> —— 目标不可达,寻路每刻白算</li>
-     * </ul>
-     */
-    private void probeSkirmish(PlayerNav.Status status) {
-        long now = player.level().getGameTime();
-        if (skirmishMark != null && now - skirmishMarkTick < 10) {
-            return;
-        }
-        var here = player.position();
-        String moved = skirmishMark == null ? "-"
-                : String.format("%.1f", here.distanceTo(skirmishMark));
-
-        // 分辨「她凑上去」和「它追上来」的唯一办法:两边的位移各记一份,再看
-        // 她这一步是<b>朝目标</b>还是<b>背离目标</b>。
-        var foeNow = target == null || target.isRemoved() ? null : target.position();
-        String foeMoved = foeNow == null || skirmishFoeMark == null ? "-"
-                : String.format("%.1f", foeNow.distanceTo(skirmishFoeMark));
-        String towards = "-";
-        if (foeNow != null && skirmishMark != null) {
-            var step = here.subtract(skirmishMark);
-            var toFoe = foeNow.subtract(here);
-            double len = step.horizontalDistance() * toFoe.horizontalDistance();
-            if (len > 1.0e-6) {
-                double dot = (step.x * toFoe.x + step.z * toFoe.z) / len;
-                towards = dot > 0.3 ? "朝它" : dot < -0.3 ? "背它" : "横move";
-            }
-        }
-        String band;
-        String dist;
-        if (target == null || target.isRemoved()) {
-            double nearest = Double.MAX_VALUE;
-            double inner = 0.0;
-            for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
-                double d = player.distanceTo(mob);
-                if (d < nearest) {
-                    nearest = d;
-                    inner = Menace.rawDangerRadius(mob, player);
-                }
-            }
-            dist = nearest == Double.MAX_VALUE ? "-" : String.format("%.1f", nearest);
-            band = String.format("[%.2f, 无外沿]", inner);
-        } else {
-            dist = String.format("%.1f", player.distanceTo(target));
-            band = String.format("[%.2f, %.2f]%s",
-                    skirmishInner(), skirmishOuter(), bowFighting ? " 弓" : " 剑");
-        }
-        Constants.LOG.info("[numen-skirmish] {} 目标={} 距离={} 带={} 我挪了 {} 格({}) "
-                        + "它挪了 {} 格 脚下={},{},{} 疾跑={} 导航={}",
-                status, target == null ? "无" : target.getId(), dist, band, moved, towards,
-                foeMoved, (int) here.x, (int) here.y, (int) here.z,
-                player.isSprinting(), nav == null ? "无" : "有");
-        skirmishFoeMark = foeNow;
-        skirmishMark = here;
-        skirmishMarkTick = now;
+    private TaskState bowFight() {
+        // <b>两层并行</b>:脚一直在走位,手一直在拉弓。原版拉弓时本来就能走(只是慢),
+        // 是我在 shootAt 里主动 halt 的 —— 于是每刻建一次导航、拆一次,看着像被打断。
+        driveApproach();
+        return shootAt(Loadout.forTarget(player, target));
     }
+
+
+
 
     /**
      * 走位:保持在目标够得着的距离上,同时离别的敌对生物远一点。
@@ -852,7 +778,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                     CHASE_SPEED, () -> false);
         }
         PlayerNav.Status status = nav.tick();
-        probeFlee(now, status);
         if (status == PlayerNav.Status.FAILED) {
             stopNav();
             haven = null;   // 这个方向走不通,下一刻换一个
@@ -892,41 +817,6 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * <p>势场收当前<b>所有</b>敌对生物:逃跑路上撞进第二只怪,是旧的单点逃离目标最典型的死法。
      */
 
-    /**
-     * 逃跑探针。每秒一行,回答三个只能靠位置分辨的问题:
-     *
-     * <ul>
-     *   <li><b>挪了几格 ≈ 0</b> —— 走不动,问题在执行层,不在判据</li>
-     *   <li><b>挪得动但最近距离不变</b> —— 跑得掉但甩不掉,是速度不够</li>
-     *   <li><b>最近距离在拉开</b> —— 逻辑对了,只是还没到窗口</li>
-     * </ul>
-     */
-    private void probeFlee(long now, PlayerNav.Status status) {
-        net.minecraft.world.phys.Vec3 here = player.position();
-        double nearest = Double.MAX_VALUE;
-        for (var mob : Menace.hostilesAround(player, Menace.FLEE_DISTANCE)) {
-            nearest = Math.min(nearest, player.distanceTo(mob));
-        }
-        if (fleeMark == null || now - fleeMarkTick >= 20) {
-            String moved = fleeMark == null ? "-"
-                    : String.format("%.1f", here.distanceTo(fleeMark));
-            String closing = fleeMark == null || fleeMarkNearest == Double.MAX_VALUE ? "-"
-                    : String.format("%+.1f", nearest - fleeMarkNearest);
-            Constants.LOG.info("[numen-flee] {} 脚下={},{},{} 这一秒挪了 {} 格 疾跑={} 饱食={} "
-                            + "最近敌人={} (变化 {}) 三十二格内={}",
-                    status,
-                    (int) here.x, (int) here.y, (int) here.z,
-                    moved,
-                    player.isSprinting(),
-                    player.getFoodData().getFoodLevel(),
-                    nearest == Double.MAX_VALUE ? "-" : String.format("%.1f", nearest),
-                    closing,
-                    Menace.hostilesAround(player, Menace.FLEE_DISTANCE).size());
-            fleeMark = here;
-            fleeMarkNearest = nearest;
-            fleeMarkTick = now;
-        }
-    }
 
 
     // ==================== 拾荒 ====================
