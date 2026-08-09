@@ -26,6 +26,9 @@ public final class TextField extends Widget {
     private Label labelWidget;
     /** 视窗左缘对应的字符下标(水平滚动)。 */
     private int viewStart;
+    /** 首词高亮的引导字符;0 = 不高亮。见 {@link #leadingToken}。 */
+    private char tokenMarker;
+    private int tokenColor;
 
     public TextField(String initial, Consumer<String> onChange) {
         if (initial != null) value.append(initial);
@@ -46,6 +49,18 @@ public final class TextField extends Widget {
     /** 认领标签:出错时自动收起它,免得两串文字在同一行叠着。 */
     public TextField withLabel(Label label) {
         this.labelWidget = label;
+        return this;
+    }
+
+    /**
+     * 首词高亮:文本以 {@code marker} 开头时,第一个词(到空白为止)换个颜色画。
+     *
+     * <p>斜杠命令用它把 {@code /名字} 和后面的参数分开——一眼看出自己打的是命令还是
+     * 一句话。掩码模式下不生效:那种场景里内容本来就不该被看出结构。
+     */
+    public TextField leadingToken(char marker, int argb) {
+        this.tokenMarker = marker;
+        this.tokenColor = argb;
         return this;
     }
 
@@ -102,12 +117,42 @@ public final class TextField extends Widget {
 
         ensureCursorVisible(s, display, innerW);
         String visible = clipToWidth(s, display.substring(viewStart), innerW);
-        s.drawText(visible, x + pad, textY(s), c.textPrimary(), false);
+        drawVisible(s, visible, x + pad, textY(s), c.textPrimary());
 
         if (isFocused() && (nowMs / 500) % 2 == 0) {   // 光标 1Hz 闪烁
             int cx = x + pad + s.textWidth(display.substring(viewStart, cursor));
             s.fillRect(cx, y + 3, 1, h - 6, c.textPrimary());
         }
+    }
+
+    /** 画可见的那一段。开了首词高亮就拆成两笔,否则一笔画完。 */
+    private void drawVisible(IDrawSurface s, String visible, int tx, int ty, int normal) {
+        int end = tokenEnd();
+        // end 是整串里的下标,visible 是从 viewStart 开始的那截 —— 换算到同一坐标系。
+        int cut = Math.max(0, Math.min(end - viewStart, visible.length()));
+        if (cut <= 0) {
+            s.drawText(visible, tx, ty, normal, false);
+            return;
+        }
+        String token = visible.substring(0, cut);
+        s.drawText(token, tx, ty, tokenColor, false);
+        if (cut < visible.length()) {
+            s.drawText(visible.substring(cut), tx + s.textWidth(token), ty, normal, false);
+        }
+    }
+
+    /** 首词在整串里的结束下标(不含);没开高亮或不是首词开头则 0。 */
+    private int tokenEnd() {
+        if (tokenMarker == 0 || masked || value.length() == 0
+                || value.charAt(0) != tokenMarker) {
+            return 0;
+        }
+        for (int i = 1; i < value.length(); i++) {
+            if (Character.isWhitespace(value.charAt(i))) {
+                return i;
+            }
+        }
+        return value.length();
     }
 
     private int textY(IDrawSurface s) {

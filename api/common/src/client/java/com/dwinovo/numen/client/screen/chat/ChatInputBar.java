@@ -50,6 +50,9 @@ public final class ChatInputBar {
 
     private static final int BTN_W = 22;
     private static final int GAP = 4;
+    /** 输入框里 {@code /命令} 那一截的颜色。定死不跟主题走——它标的是"这是命令不是话"
+     *  这件事,换主题不该让它变得像普通文字。 */
+    private static final int CMD_COLOR = 0xFFA6AEE9;
 
     private final UiRoot ui = new UiRoot();
     private final Host host;
@@ -60,8 +63,10 @@ public final class ChatInputBar {
     private ResourceLocation micIcon;
     private final ResourceLocation iconCompact, iconMic, iconStop, iconSend;
 
-    /** 输入框自己的几何(弹层要贴着它的上边长)。 */
-    private int fieldX, fieldY, fieldW;
+    /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
+    private int fieldX, fieldY, fieldW, fieldH;
+    /** 开着的选择面板;非 null 时它<b>取代</b>输入框,键盘整个归它。 */
+    private com.dwinovo.numen.client.ui.widget.SelectPanel panel;
     /** 当前补全候选。空 = 不弹层。 */
     private List<Completion> candidates = List.of();
     private int selected;
@@ -114,11 +119,13 @@ public final class ChatInputBar {
         field = ui.add(new TextField(draft, v -> {
             draft = v;
             refreshCandidates();
-        }).placeholder(host.hint()));
+        }).placeholder(host.hint())
+                .leadingToken(com.dwinovo.numen.client.command.ChatCommands.PREFIX, CMD_COLOR));
         field.setBounds(inX, y, inW, h);
         fieldX = inX;
         fieldY = y;
         fieldW = inW;
+        fieldH = h;
 
         sendBtn = ui.add(iconButton(iconSend, "numen.chat.send",
                 Button.Style.ACCENT, this::send));
@@ -136,12 +143,42 @@ public final class ChatInputBar {
     public void refreshEnablement() {
         if (field == null) return;
         boolean locked = host.inputLocked();
-        field.setEnabled(!locked);
+        boolean paged = panel != null;
+        // 面板在场时输入框让位(它就摆在输入框那格),旁边几颗键跟着停手——
+        // 叫停除外:那是主人的急刹车,任何时候都得能按。
+        field.setVisible(!paged);
+        field.setEnabled(!locked && !paged);
         field.placeholder(host.hint());
-        compactBtn.setEnabled(!locked && host.canCompact());
-        micBtn.setEnabled(!locked);
-        sendBtn.setEnabled(!locked);
-        stopBtn.setEnabled(host.canAbort());   // 叫停不随锁定禁用:急刹车永远可用
+        compactBtn.setEnabled(!locked && !paged && host.canCompact());
+        micBtn.setEnabled(!locked && !paged);
+        sendBtn.setEnabled(!locked && !paged);
+        stopBtn.setEnabled(host.canAbort());
+    }
+
+    // ---- 选择面板(取代输入框的那一层) ----
+
+    /**
+     * 打开一个面板。它摆在输入框那一格、底边对齐,<b>往上</b>长得更高——一次要看好几行,
+     * 而下面没有地方。
+     */
+    public void openPage(com.dwinovo.numen.client.ui.widget.SelectPanel.Page page) {
+        if (page == null || field == null) return;
+        panel = new com.dwinovo.numen.client.ui.widget.SelectPanel(page);
+        int ph = Math.max(fieldH, panel.preferredHeight());
+        panel.setBounds(fieldX, fieldY + fieldH - ph, fieldW, ph);
+        candidates = List.of();   // 补全弹层让位:一次只有一个东西吃键盘
+        refreshEnablement();
+    }
+
+    public boolean pageOpen() {
+        return panel != null;
+    }
+
+    /** 关面板回到输入框。文字清空——刚才那串 {@code /skills} 已经用过了。 */
+    private void closePage() {
+        panel = null;
+        setText("");
+        refreshEnablement();
     }
 
     // ---- 宿主转发面 ----
@@ -150,8 +187,10 @@ public final class ChatInputBar {
         refreshEnablement();
         IDrawSurface s = new McDrawSurface(g, Minecraft.getInstance().font);
         ui.render(s, c, mouseX, mouseY, nowMs);
-        // 弹层最后画:它要压在对话流上面。
-        if (popupOpen()) {
+        // 面板与弹层都最后画:它俩要压在对话流上面。同时只会有一个。
+        if (panel != null) {
+            panel.render(s, c, mouseX, mouseY, nowMs);
+        } else if (popupOpen()) {
             CommandPopup.render(s, c, candidates, selected, fieldX, fieldY - 2, fieldW);
         }
     }
@@ -169,6 +208,15 @@ public final class ChatInputBar {
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
+        // 面板在场:键盘整个归它,一个都不往下漏。Esc 是回输入框,不是关整个界面。
+        if (panel != null) {
+            if (keyCode == KeyCodes.ESCAPE) {
+                closePage();
+                return true;
+            }
+            panel.keyPressed(keyCode, modifiers);
+            return true;
+        }
         // 弹层在场时先归它:↑↓ 选、Tab 补/循环、Esc 收、回车先补再谈发送。
         if (popupOpen()) {
             switch (keyCode) {
@@ -257,7 +305,8 @@ public final class ChatInputBar {
     }
 
     public boolean charTyped(char ch) {
-        return ui.charTyped(ch);
+        // 面板在场时输入框是隐着的,打进去的字看不见也用不上——直接吞掉。
+        return panel != null || ui.charTyped(ch);
     }
 
     public boolean isFieldFocused() {
@@ -267,7 +316,7 @@ public final class ChatInputBar {
     // ---- 内部 ----
 
     private void send() {
-        if (field == null || host.inputLocked()) return;
+        if (field == null || panel != null || host.inputLocked()) return;
         String text = field.value() == null ? "" : field.value().trim();
         if (text.isEmpty()) return;
         host.onSend(text);

@@ -607,6 +607,16 @@ public final class NumenScreen extends Screen {
         // 斜杠命令是主人对客户端说的话:在本地跑完就结束,不往下走。所以它不过发言闸门
         // ——查技能、看清单这些事没有理由要求先配好 API key。
         if (com.dwinovo.numen.client.command.ChatCommands.isCommand(text)) {
+            var parsed = com.dwinovo.numen.client.command.ChatCommands.parse(text);
+            var command = parsed == null ? null
+                    : com.dwinovo.numen.client.command.ChatCommands.find(loop(), parsed.name());
+            // 面板类命令:多余的参数不理会——它要的不是参数,是一个能上下选的界面。
+            if (command instanceof com.dwinovo.numen.client.command.PageCommand page
+                    && inputBar != null) {
+                inputBar.openPage(page.page(loop()));
+                showCommandReply(null);
+                return;
+            }
             String reply = com.dwinovo.numen.client.command.ChatCommands.dispatch(loop(), text);
             if (inputBar != null) inputBar.setText("");
             showCommandReply(reply);

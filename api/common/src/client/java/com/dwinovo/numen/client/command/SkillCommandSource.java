@@ -18,9 +18,14 @@ final class SkillCommandSource implements CommandSource {
 
     @Override
     public List<ChatCommand> commands(EntityAgentLoop loop) {
+        SkillRegistry registry = SkillRegistry.instance();
         List<ChatCommand> out = new ArrayList<>();
-        for (SkillInfo info : SkillRegistry.instance().all()) {
-            out.add(new SkillCommand(info.name()));
+        for (SkillInfo info : registry.all()) {
+            // 关掉的技能不该还在补全里躺着:面板上把它关了,命令就得跟着消失,
+            // 否则打得出来、按下去却说"已经不在了"。
+            if (!registry.isDisabled(info.name())) {
+                out.add(new SkillCommand(info.name()));
+            }
         }
         return out;
     }
