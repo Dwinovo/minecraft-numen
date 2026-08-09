@@ -437,12 +437,10 @@ public final class NumenScreen extends Screen {
     private static final net.minecraft.resources.ResourceLocation ICON_SEND = chatIcon("icon_send");
     private static final net.minecraft.resources.ResourceLocation ICON_MIC = chatIcon("icon_mic");
     private static final net.minecraft.resources.ResourceLocation ICON_STOP = chatIcon("icon_stop");
-    private static final net.minecraft.resources.ResourceLocation ICON_COMPACT = chatIcon("icon_compact");
-
     private void buildChatWidgets() {
         int inputY = top + panelH - INPUT_H - PAD;
         inputBar = new com.dwinovo.numen.client.screen.chat.ChatInputBar(
-                new ChatBarHost(), ICON_COMPACT, ICON_MIC, ICON_SEND, ICON_STOP);
+                new ChatBarHost(), ICON_MIC, ICON_SEND, ICON_STOP);
         inputBar.build(left + PAD, inputY, panelW - PAD * 2, INPUT_H);
         if (!savedInput.isEmpty()) {
             inputBar.setText(savedInput);
@@ -456,11 +454,7 @@ public final class NumenScreen extends Screen {
 
         @Override public void onMicToggle() { NumenScreen.this.onMicToggle(); }
 
-        @Override public void onCompact() { loop().requestCompact(); }
-
         @Override public void onAbort() { loop().abort(); }
-
-        @Override public boolean canCompact() { return loop().canCompact(); }
 
         @Override public boolean canAbort() { return loop().canInterrupt(); }
 
@@ -607,13 +601,10 @@ public final class NumenScreen extends Screen {
         // 斜杠命令是主人对客户端说的话:在本地跑完就结束,不往下走。所以它不过发言闸门
         // ——查技能、看清单这些事没有理由要求先配好 API key。
         if (com.dwinovo.numen.client.command.ChatCommands.isCommand(text)) {
-            var parsed = com.dwinovo.numen.client.command.ChatCommands.parse(text);
-            var command = parsed == null ? null
-                    : com.dwinovo.numen.client.command.ChatCommands.find(loop(), parsed.name());
             // 面板类命令:多余的参数不理会——它要的不是参数,是一个能上下选的界面。
-            if (command instanceof com.dwinovo.numen.client.command.PageCommand page
-                    && inputBar != null) {
-                inputBar.openPage(page.page(loop()));
+            var page = com.dwinovo.numen.client.command.ChatCommands.pageFor(loop(), text);
+            if (page != null && inputBar != null) {
+                inputBar.openPage(page);
                 showCommandReply(null);
                 return;
             }
@@ -1127,8 +1118,17 @@ public final class NumenScreen extends Screen {
             txt(g, Component.literal(micNotice), left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
         }
 
-        // 斜杠命令的回话:输入框上方从下往上堆。它不进对话历史——这是客户端说的,不是她说的。
-        if (cmdReplyUntil > System.currentTimeMillis() && !cmdReply.isEmpty()) {
+        // 整理记忆:一条随摘要流回来的字数逼近满格的进度条。摘要多长事先不知道,所以它
+        // 报的是"还在动",不是"完成了百分之几"——永远差一点,收尾时整条消失。
+        if (loop().isCompacting()) {
+            double p = loop().compactProgress();
+            int bw = panelW - PAD * 2;
+            int by = top + panelH - INPUT_H - PAD - 8;
+            txt(g, Component.literal("整理记忆… " + Math.round(p * 100) + "%"),
+                    left + PAD, by - 11, TXT_MUTED);
+            g.fill(left + PAD, by, left + PAD + bw, by + 3, FIELD);
+            g.fill(left + PAD, by, left + PAD + (int) Math.round(bw * p), by + 3, ACCENT);
+        } else if (cmdReplyUntil > System.currentTimeMillis() && !cmdReply.isEmpty()) {
             int ly = top + panelH - INPUT_H - PAD - 11;
             for (int i = cmdReply.size() - 1; i >= 0 && ly > bodyY; i--, ly -= 10) {
                 txt(g, Component.literal(cmdReply.get(i)), left + PAD, ly, TXT_MUTED);

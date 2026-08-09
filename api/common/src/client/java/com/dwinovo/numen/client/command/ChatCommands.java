@@ -2,6 +2,7 @@ package com.dwinovo.numen.client.command;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.client.data.ClientPrefs;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,10 +35,14 @@ public final class ChatCommands {
 
     private static final List<CommandSource> SOURCES = new ArrayList<>();
 
+    /** "最近用过"记这么多条。够把常用的顶到前面,又不至于让列表变成一份流水账。 */
+    private static final int RECENT_CAP = 5;
+
     static {
         // 内置表自己也是一个来源——顶层于是只认识"来源",不认识两种东西。
         SOURCES.add(loop -> List.copyOf(BUILTIN.values()));
         SOURCES.add(new SkillCommandSource());
+        register(new CompactCommand());
         register(new SkillsCommand());
     }
 
@@ -145,11 +150,19 @@ public final class ChatCommands {
 
     private static List<Completion> commandCompletions(EntityAgentLoop loop, String prefix) {
         String p = prefix.toLowerCase(Locale.ROOT);
-        List<Completion> out = new ArrayList<>();
+        List<ChatCommand> matched = new ArrayList<>();
         for (ChatCommand c : all(loop)) {
-            if (!c.name().toLowerCase(Locale.ROOT).startsWith(p)) {
-                continue;
+            if (c.name().toLowerCase(Locale.ROOT).startsWith(p)) {
+                matched.add(c);
             }
+        }
+        // 最近用过的顶到前面。排序是稳定的,所以没用过的保持来源顺序不乱。
+        // 这也让"打个 / 直接回车"落在主人刚用过的那条上,而不是碰巧排第一的那条。
+        List<String> recent = ClientPrefs.recentCommands();
+        matched.sort(java.util.Comparator.comparingInt(c -> recentRank(recent, c.name())));
+
+        List<Completion> out = new ArrayList<>();
+        for (ChatCommand c : matched) {
             String hint = c.argHint();
             String why = c.unavailable(loop);
             out.add(new Completion(
@@ -163,6 +176,25 @@ public final class ChatCommands {
     }
 
     // ---- 分发 ----
+
+    /**
+     * 这串输入要打开的面板;不是面板命令(或命令不存在/此刻不可用)返回 {@code null}。
+     *
+     * <p>打开面板<b>就是</b>这条命令的执行,所以这里记一笔"最近用过"。
+     */
+    public static com.dwinovo.numen.client.ui.widget.SelectPanel.Page pageFor(
+            EntityAgentLoop loop, String text) {
+        Parsed p = parse(text);
+        if (p == null || p.name().isEmpty()) {
+            return null;
+        }
+        ChatCommand command = find(loop, p.name());
+        if (!(command instanceof PageCommand page) || command.unavailable(loop) != null) {
+            return null;
+        }
+        remember(command.name());
+        return page.page(loop);
+    }
 
     /**
      * 跑一条命令。<b>只在 {@link #isCommand} 为真时调用。</b>
@@ -182,6 +214,7 @@ public final class ChatCommands {
         if (why != null) {
             return why;
         }
+        remember(command.name());
         try {
             return command.run(loop, p.args());
         } catch (RuntimeException ex) {
@@ -190,6 +223,32 @@ public final class ChatCommands {
             Constants.LOG.warn("[numen-cmd] {}{} 抛了异常", PREFIX, p.name(), ex);
             return PREFIX + p.name() + " 出错了:" + ex;
         }
+    }
+
+    // ---- 最近用过 ----
+
+    /** 记一笔"刚用过"。最新在前、去重、只留 {@value #RECENT_CAP} 条。 */
+    public static void remember(String name) {
+        if (name == null || name.isBlank()) {
+            return;
+        }
+        List<String> recent = new ArrayList<>(ClientPrefs.recentCommands());
+        recent.removeIf(n -> n.equalsIgnoreCase(name));
+        recent.add(0, name);
+        while (recent.size() > RECENT_CAP) {
+            recent.remove(recent.size() - 1);
+        }
+        ClientPrefs.setRecentCommands(recent);
+    }
+
+    /** 在"最近用过"里的位次;没用过排到最后。 */
+    private static int recentRank(List<String> recent, String name) {
+        for (int i = 0; i < recent.size(); i++) {
+            if (recent.get(i).equalsIgnoreCase(name)) {
+                return i;
+            }
+        }
+        return Integer.MAX_VALUE;
     }
 
     /** 第一个空白字符的位置;没有返回 -1。 */

@@ -28,6 +28,8 @@ public final class ClientPrefs {
     private static String theme = "light";
     private static boolean talkHint = true;
     private static int initiative = EventQueue.DEFAULT_LEVEL;
+    /** 最近用过的斜杠命令名,最新在前。排序归命令层,这里只负责存。 */
+    private static final java.util.List<String> recentCommands = new java.util.ArrayList<>();
 
     private ClientPrefs() {}
 
@@ -42,6 +44,9 @@ public final class ClientPrefs {
             if (o.has("theme")) theme = o.get("theme").getAsString();
             if (o.has("talkHint")) talkHint = o.get("talkHint").getAsBoolean();
             if (o.has("initiative")) initiative = EventQueue.clampLevel(o.get("initiative").getAsInt());
+            if (o.has("recentCommands") && o.get("recentCommands").isJsonArray()) {
+                for (var el : o.getAsJsonArray("recentCommands")) recentCommands.add(el.getAsString());
+            }
         } catch (Exception e) {
             Constants.LOG.warn("[numen-prefs] ui.json 读不了,用默认值", e);
         }
@@ -79,6 +84,17 @@ public final class ClientPrefs {
         persist();
     }
 
+    /** 最近用过的斜杠命令,最新的在前。补全列表按它排序。 */
+    public static java.util.List<String> recentCommands() {
+        return java.util.List.copyOf(recentCommands);
+    }
+
+    public static void setRecentCommands(java.util.List<String> names) {
+        recentCommands.clear();
+        if (names != null) recentCommands.addAll(names);
+        persist();
+    }
+
     private static void persist() {
         if (file == null) {
             return;
@@ -89,6 +105,9 @@ public final class ClientPrefs {
             o.addProperty("theme", theme);
             o.addProperty("talkHint", talkHint);
             o.addProperty("initiative", initiative);
+            com.google.gson.JsonArray recent = new com.google.gson.JsonArray();
+            for (String name : recentCommands) recent.add(name);
+            o.add("recentCommands", recent);
             Files.writeString(file, o.toString());
         } catch (Exception e) {
             Constants.LOG.warn("[numen-prefs] ui.json 写不了,偏好没保存", e);

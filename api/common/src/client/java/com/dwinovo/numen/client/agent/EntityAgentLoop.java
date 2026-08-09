@@ -526,10 +526,35 @@ public final class EntityAgentLoop {
         return compacting;
     }
 
-    /** Manual compaction is actionable right now (drives the Compact button). */
-    public boolean canCompact() {
-        return !dead && !isBusy() && convo.snapshot().size() >= MIN_COMPACT_MESSAGES;
+    /** 已经流回来的摘要字数。流式回调在网络线程上加,渲染在主线程上读。 */
+    private final java.util.concurrent.atomic.AtomicInteger compactChars =
+            new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * 整理记忆的进度 0~1。
+     *
+     * <p><b>它不是"完成了百分之几"</b>——摘要多长事先不知道,没有分母。这是一条随
+     * 流回来的字数逼近 1 的曲线:永远差一点,收尾时整条消失。给的是"还在动"这个事实,
+     * 不是一个会食言的承诺。
+     */
+    public double compactProgress() {
+        if (!compacting) return 0.0;
+        return 1.0 - Math.exp(-(compactChars.get() / 4.0) / 1200.0);
     }
+
+    /**
+     * 现在不能整理记忆的理由;{@code null} = 能。
+     *
+     * <p>判据只有这一份。{@code /compact} 的补全行要把理由写出来,而"能不能"和"为什么
+     * 不能"是同一个问题——分成两处迟早说不到一块儿去。
+     */
+    public String compactProblem() {
+        if (dead) return "她已经不在了";
+        if (isBusy()) return "她正忙着,等这一轮完";
+        if (convo.snapshot().size() < MIN_COMPACT_MESSAGES) return "记录还太少,不值得整理";
+        return endpointProblem();   // 整理要发一次请求,没绑模型/没填 key 一样做不了
+    }
+
 
     /** Owner prompts are queued, waiting to flush into the conversation. */
     public boolean hasQueuedPrompts() {
@@ -986,19 +1011,20 @@ public final class EntityAgentLoop {
     // ---- compaction ----
 
     /**
-     * Owner pressed the GUI's Compact button. Runs the same machinery as the
-     * automatic path; silently ignored when a turn is in flight or there is
-     * too little history to be worth a summarization call.
+     * 主人要求整理记忆({@code /compact})。跟自动整理走同一套机器。
+     *
+     * @return 拒绝的理由;{@code null} = 已经开始了。判据全在 {@link #compactProblem},
+     *         这里不再自己加一条——原来那道额外的 apiKey 检查是静默 return 的,
+     *         表现就是"按了没反应"
      */
-    public void requestCompact() {
-        if (!canCompact()) {
-            Constants.LOG.info("[numen-entity#{}] manual compact ignored (busy={}, msgs={})",
-                    entityUuid, isBusy(), convo.snapshot().size());
-            return;
+    public String requestCompact() {
+        String problem = compactProblem();
+        if (problem != null) {
+            Constants.LOG.info("[numen-entity#{}] manual compact refused: {}", entityUuid, problem);
+            return problem;
         }
-        String apiKey = Services.CONFIG.getApiKey();
-        if (apiKey == null || apiKey.isBlank()) return;
         startCompaction(false);
+        return null;
     }
 
     /**
@@ -1008,15 +1034,18 @@ public final class EntityAgentLoop {
      */
     private void startCompaction(boolean auto) {
         compacting = true;
+        compactChars.set(0);
         List<ConvoState.Msg> request = new ArrayList<>(convo.snapshot());
         request.add(new ConvoState.Msg.User(COMPACT_PROMPT));
         Constants.LOG.info("[numen-entity#{}] compaction started ({}, {} msgs)",
                 entityUuid, auto ? "auto" : "manual", request.size() - 1);
         final int gen = turnGeneration;
         final long startMs = System.currentTimeMillis();
-        client().chatStreaming(request, List.of(), COMPACT_SYSTEM_PROMPT, null)
-                .whenComplete((res, err) -> Minecraft.getInstance().execute(
-                        () -> finishCompaction(gen, auto, startMs, res, err)));
+        client().chatStreaming(request, List.of(), COMPACT_SYSTEM_PROMPT, chunk -> {
+            String delta = com.dwinovo.numen.client.voice.VoicePipeline.extractContentDelta(chunk);
+            if (delta != null && !delta.isEmpty()) compactChars.addAndGet(delta.length());
+        }).whenComplete((res, err) -> Minecraft.getInstance().execute(
+                () -> finishCompaction(gen, auto, startMs, res, err)));
     }
 
     private void finishCompaction(int gen, boolean auto, long startMs,

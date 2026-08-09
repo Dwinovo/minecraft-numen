@@ -30,11 +30,7 @@ public final class ChatInputBar {
 
         void onMicToggle();
 
-        void onCompact();
-
         void onAbort();
-
-        boolean canCompact();
 
         boolean canAbort();
 
@@ -58,10 +54,12 @@ public final class ChatInputBar {
     private final Host host;
 
     private TextField field;
-    private Button compactBtn, micBtn, sendBtn, stopBtn;
+    private Button micBtn, sendBtn, stopBtn;
+    /** 右侧那一串键,顺序即布局。 */
+    private Button[] keys = new Button[0];
     private String draft = "";
     private ResourceLocation micIcon;
-    private final ResourceLocation iconCompact, iconMic, iconStop, iconSend;
+    private final ResourceLocation iconMic, iconStop, iconSend;
 
     /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
     private int fieldX, fieldY, fieldW, fieldH;
@@ -73,10 +71,9 @@ public final class ChatInputBar {
     /** 主人按了 Esc 收起弹层;一改文字就复位——收的是"这次",不是这个功能。 */
     private boolean dismissed;
 
-    public ChatInputBar(Host host, ResourceLocation iconCompact, ResourceLocation iconMic,
+    public ChatInputBar(Host host, ResourceLocation iconMic,
                         ResourceLocation iconSend, ResourceLocation iconStop) {
         this.host = host;
-        this.iconCompact = iconCompact;
         this.iconMic = iconMic;
         this.iconSend = iconSend;
         this.iconStop = iconStop;
@@ -106,40 +103,37 @@ public final class ChatInputBar {
         if (field != null) draft = field.value();   // 重建不丢已输入的文字
         ui.clear();
 
-        int inX = x + (BTN_W + GAP) * 2;
-        int inW = w - (BTN_W + GAP) * 4;
-
-        compactBtn = ui.add(iconButton(iconCompact, "numen.chat.tip.compact",
-                Button.Style.NORMAL, host::onCompact));
-        compactBtn.setBounds(x, y, BTN_W, h);
         micBtn = ui.add(iconButton(null, "numen.chat.tip.mic",
                 Button.Style.NORMAL, host::onMicToggle));
-        micBtn.setBounds(x + BTN_W + GAP, y, BTN_W, h);
+        sendBtn = ui.add(iconButton(iconSend, "numen.chat.send",
+                Button.Style.ACCENT, this::send));
+        stopBtn = ui.add(iconButton(iconStop, "numen.chat.tip.stop",
+                Button.Style.NORMAL, host::onAbort));
+        // 顺序即布局:输入框吃掉左边剩下的,这一串靠右排。加减一颗键只改这个数组,
+        // 不用回来重算"左几右几"那两个常数。
+        keys = new Button[]{micBtn, sendBtn, stopBtn};
 
+        int inW = w - (BTN_W + GAP) * keys.length;
         field = ui.add(new TextField(draft, v -> {
             draft = v;
             refreshCandidates();
         }).placeholder(host.hint())
                 .leadingToken(com.dwinovo.numen.client.command.ChatCommands.PREFIX, CMD_COLOR));
-        field.setBounds(inX, y, inW, h);
-        fieldX = inX;
+        field.setBounds(x, y, inW, h);
+        fieldX = x;
         fieldY = y;
         fieldW = inW;
         fieldH = h;
-
-        sendBtn = ui.add(iconButton(iconSend, "numen.chat.send",
-                Button.Style.ACCENT, this::send));
-        sendBtn.setBounds(inX + inW + GAP, y, BTN_W, h);
-        stopBtn = ui.add(iconButton(iconStop, "numen.chat.tip.stop",
-                Button.Style.NORMAL, host::onAbort));
-        stopBtn.setBounds(inX + inW + GAP * 2 + BTN_W, y, BTN_W, h);
+        for (int i = 0; i < keys.length; i++) {
+            keys[i].setBounds(x + inW + GAP + i * (BTN_W + GAP), y, BTN_W, h);
+        }
 
         ui.requestFocus(field);   // 开屏即可打字
         refreshCandidates();
         refreshEnablement();
     }
 
-    /** 每帧同步可按性与占位文案:压缩/叫停的可用性、锁定态都是活的。 */
+    /** 每帧同步可按性与占位文案:叫停的可用性、锁定态都是活的。 */
     public void refreshEnablement() {
         if (field == null) return;
         boolean locked = host.inputLocked();
@@ -149,7 +143,6 @@ public final class ChatInputBar {
         field.setVisible(!paged);
         field.setEnabled(!locked && !paged);
         field.placeholder(host.hint());
-        compactBtn.setEnabled(!locked && !paged && host.canCompact());
         micBtn.setEnabled(!locked && !paged);
         sendBtn.setEnabled(!locked && !paged);
         stopBtn.setEnabled(host.canAbort());
@@ -197,7 +190,7 @@ public final class ChatInputBar {
 
     /** 悬停的按钮提示文案(宿主自行绘制 tooltip:定位与样式是宿主的事)。 */
     public String tooltipAt(double mx, double my) {
-        for (Button b : new Button[]{compactBtn, micBtn, sendBtn, stopBtn}) {
+        for (Button b : keys) {
             if (b != null && b.enabled() && b.contains(mx, my)) return b.tooltip();
         }
         return null;
@@ -241,10 +234,11 @@ public final class ChatInputBar {
                     return true;
                 }
                 case KeyCodes.ENTER -> {
-                    // 补全优先于发送:半截命令按回车,主人要的是补完,不是把半截发出去。
-                    if (fillSelected()) {
-                        return true;
-                    }
+                    // 回车 = 就要选中这条,现在执行。想接着打参数请按 Tab。
+                    // 两颗键分工明确之后,"补全了没有"就不再影响回车干什么了。
+                    fillSelected();
+                    send();
+                    return true;
                 }
                 default -> { }
             }

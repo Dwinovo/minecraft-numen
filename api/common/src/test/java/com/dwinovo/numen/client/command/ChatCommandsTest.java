@@ -85,4 +85,31 @@ class ChatCommandsTest {
         assertTrue(ChatCommands.complete(null, "你好").isEmpty());
         assertTrue(ChatCommands.complete(null, "").isEmpty());
     }
+
+    @Test
+    void recentlyUsedCommandsFloatToTheTop() {
+        // 打一个 / 直接回车会落在第一条上,所以第一条必须是主人刚用过的那条,
+        // 而不是碰巧排在前面的那条 —— 否则手滑就执行了别的命令。
+        ChatCommands.remember("skills");
+        assertEquals("/skills", ChatCommands.complete(null, "/").get(0).label());
+        ChatCommands.remember("compact");
+        assertEquals("/compact", ChatCommands.complete(null, "/").get(0).label());
+        ChatCommands.remember("skills");
+        assertEquals("/skills", ChatCommands.complete(null, "/").get(0).label());
+    }
+
+    @Test
+    void rememberingTheSameCommandTwiceDoesNotDuplicateIt() {
+        ChatCommands.remember("skills");
+        ChatCommands.remember("skills");
+        List<Completion> rows = ChatCommands.complete(null, "/");
+        assertEquals(1, rows.stream().filter(r -> r.label().equals("/skills")).count());
+    }
+
+    @Test
+    void blankNamesAreNotRemembered() {
+        ChatCommands.remember(null);
+        ChatCommands.remember("  ");
+        assertFalse(ChatCommands.complete(null, "/").isEmpty());
+    }
 }
