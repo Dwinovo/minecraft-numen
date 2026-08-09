@@ -169,8 +169,9 @@ class EventQueueTest {
         q.push(EventTypes.EVENT, "<event>她挨打了</event>", T0, false);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
 
-        assertEquals(List.of("⌛ <query>回来</query>"), q.chatPreview(),
-                "事件不进聊天流——那是表里写的,不是这儿判断的");
+        assertEquals(List.of("<query>回来</query>"), q.chatPreview(),
+                "事件不进聊天流——那是表里写的,不是这儿判断的;"
+                        + "进得来的原样交出去,画成什么样是渲染那一层的事");
     }
 
     @Test

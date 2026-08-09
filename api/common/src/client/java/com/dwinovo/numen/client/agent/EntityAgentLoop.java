@@ -85,7 +85,7 @@ public final class EntityAgentLoop {
      * summarization call itself must still fit.
      */
     private static final int AUTO_COMPACT_BUFFER_TOKENS = 13_000;
-    /** Don't bother summarizing a conversation shorter than this. */
+    /** 自动整理的下限:短于这个数不值得自己动手。手动 {@code /compact} 不看它。 */
     private static final int MIN_COMPACT_MESSAGES = 8;
     /** Circuit breaker: stop auto-retrying after this many consecutive failures. */
     private static final int MAX_COMPACT_FAILURES = 3;
@@ -551,7 +551,8 @@ public final class EntityAgentLoop {
     public String compactProblem() {
         if (dead) return "她已经不在了";
         if (isBusy()) return "她正忙着,等这一轮完";
-        if (convo.snapshot().size() < MIN_COMPACT_MESSAGES) return "记录还太少,不值得整理";
+        // 不看记录长短:整理多少、什么时候整理是主人的事。条数门槛只属于自动整理
+        // ——那是替他省一次没意义的请求,不是替他做决定。
         return endpointProblem();   // 整理要发一次请求,没绑模型/没填 key 一样做不了
     }
 

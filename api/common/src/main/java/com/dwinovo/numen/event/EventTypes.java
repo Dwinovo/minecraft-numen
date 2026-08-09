@@ -56,7 +56,8 @@ public final class EventTypes {
     static final Type UNKNOWN = new Type("?", s -> s, s -> null, false, false);
 
     static {
-        register(new Type(QUERY, s -> s, s -> "⌛ " + s, true, true));
+        // chatPreview 只回答"这类进不进聊天流",长什么样归渲染那一层——沙漏是 ChatView 加的。
+        register(new Type(QUERY, s -> s, s -> s, true, true));
         register(new Type(EVENT, s -> s, s -> null, false, false));
     }
 
