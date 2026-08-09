@@ -224,7 +224,7 @@ class GoalAdapterTest {
         assertInstanceOf(GoalNear.class, near.engineGoal());
 
         GoalCompiler.Compiled mine = GoalCompiler.mineField(
-                List.of(GoalCompiler.Stance.at(T, 1)), List.of(T.offset(2, 0, 2)));
+                List.of(T), List.of(T.offset(2, 0, 2)));
         assertInstanceOf(GoalComposite.class, mine.engineGoal());
         // 挖矿目标不设神圣：站位本身常在目标柱子里，禁止路过砸掉会让站位不可达
         assertTrue(mine.sacred().isEmpty());

@@ -171,6 +171,22 @@ public interface NavGoal {
     }
 
     /**
+     * 挖它的站位:<b>身体贴着它,但不踩在它头上</b>。
+     *
+     * <p>贴着 = 它是脚那格或头那格的邻格,所以中间<b>按定义没有东西</b> —— 不必射线也知道
+     * 打得到。这正是挖掘那一侧"眼睛拉得出一条不被挡的射线"的下界近似,而射线太贵、不能
+     * 塞进 {@code isAt}(每展开一个节点跑一次)。
+     *
+     * <p><b>踩在它头上必须排除</b>:脚下那一格是她自己的地板,挖掘层永远不碰
+     * ({@code MineCompanionTask.reachableTarget} 里的 {@code ore.equals(support)}
+     * 那一条)。收进来就是死循环 —— 导航说"你已经站到位了",挖掘说"这格不能挖",
+     * 于是拆导航、重规划、脚下还是那格,实测能一直转下去。
+     */
+    static NavGoal mineStance(BlockPos ore) {
+        return new MineStance(ore);
+    }
+
+    /**
      * Any of several goals. Satisfied by reaching
      * ANY member; the heuristic is the minimum over members, so a single A* search
      * naturally heads for the CLOSEST reachable one. This is how mining targets a
@@ -439,6 +455,39 @@ public interface NavGoal {
     }
 
     /** {@link #getToBlock} 的产物:身高修正的 Manhattan 贴脸邻域。 */
+    /** {@link #mineStance} 的产物:贴着,且脚不高于它。 */
+    final class MineStance implements NavGoal {
+        public final BlockPos ore;
+
+        MineStance(BlockPos ore) {
+            this.ore = ore.immutable();
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            int dy = feet.getY() - ore.getY();
+            if (dy > 0) {
+                return false;   // 踩在它头上:那是自己的地板
+            }
+            int dx = Math.abs(feet.getX() - ore.getX());
+            int dz = Math.abs(feet.getZ() - ore.getZ());
+            // 两格高的身体:脚在下方时头那格也算贴着,所以负的 dy 折一格
+            int bodyDy = dy + 1 <= 0 ? dy + 1 : 0;
+            return dx + dz + Math.abs(bodyDy) <= 1;
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            return Math.max(0.0, pointBound(ore, from) - COST_HEURISTIC - JUMP_ONE_BLOCK);
+        }
+
+        @Override public BlockPos center() {
+            return ore;
+        }
+
+        @Override public String toString() {
+            return "MineStance{" + ore.toShortString() + "}";
+        }
+    }
+
     final class GetToBlock implements NavGoal {
         public final BlockPos goal;
 

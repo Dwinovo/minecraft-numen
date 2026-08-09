@@ -424,86 +424,15 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             // Degenerate frame (targets vanished between ticks): stand where we are.
             return GoalCompiler.standOn(player.blockPosition());
         }
-        CalculationContext ctx = ContextFactory.forExecution(player);
-        List<GoalCompiler.Stance> stances =
-                new ArrayList<>(knownOres.size());
-        for (BlockPos ore : knownOres) {
-            stances.add(coalesce(ctx, ore));
-        }
         return GoalCompiler.mineField(
-                stances, new ArrayList<>(drops));
+                new ArrayList<>(knownOres), new ArrayList<>(drops));
     }
 
-    /**
-     * Pick the mining-stance goal for one ore so the body never stands BELOW the
-     * bottom of a vein/trunk. A blind stance rule ("feet anywhere up to two below
-     * every ore") was the earlier bug: it made a tree's bottom log's −2 cell a
-     * valid stance, and bare-handed (logs dear, dirt cheap) A* dug under to it.
-     * The fix reads the vertical run: ask "is the block above / below this one
-     * ALSO something I'm mining?" — the bottom of a run (target above, plain
-     * ground below) gets an exact-feet goal, so the ore is mined from where you
-     * stand, never dug under.
-     *
-     * <p>The picked band then goes through {@link #extendToFloor}: a band whose
-     * bottom hangs in mid-air (a mined-out trunk column) is stretched down
-     * through the air to the first standable floor — as far as the ore stays
-     * overhead-hittable from there ({@link #MAX_STANCE_DEPTH}) — so such a
-     * target can be stood under and broken from the ground instead of demanding
-     * a mid-air stance nobody can reach without scaffolding.
-     */
-    private GoalCompiler.Stance coalesce(CalculationContext ctx, BlockPos loc) {
-        boolean assumeVerticalShaftMine =
-                !(player.level().getBlockState(loc.above()).getBlock()
-                        instanceof net.minecraft.world.level.block.FallingBlock);
-        boolean upwardGoal = internalMiningGoal(ctx, loc.above());
-        boolean downwardGoal = internalMiningGoal(ctx, loc.below());
-        boolean doubleDownwardGoal = internalMiningGoal(ctx, loc.below(2));
-        GoalCompiler.Stance stance;
-        if (upwardGoal == downwardGoal) {                       // symmetric vertically
-            stance = (doubleDownwardGoal && assumeVerticalShaftMine)
-                    ? GoalCompiler.Stance.at(loc, 2)   // feet up to 2 below the ore
-                    : GoalCompiler.Stance.at(loc, 1);  // feet at the ore or 1 below
-        } else if (upwardGoal) {                                // bottom of a run: stand in it
-            stance = GoalCompiler.Stance.at(loc, 0);   // feet EXACTLY at the ore
-        } else {
-            stance = (doubleDownwardGoal && assumeVerticalShaftMine) // top of a run, more below
-                    ? new GoalCompiler.Stance(loc, loc.below(), 1)  // feet at/1-below the block under it
-                    : new GoalCompiler.Stance(loc, loc.below(), 0); // feet exactly at the block under it
-        }
-        return extendToFloor(stance);
-    }
 
     /** 脚位到目标的最大垂直距离:站在目标正下方仰头,眼高 1.62 + 触及 4.5 ≈ 6.1,
      *  即目标底面在脚上 6 格内仍可命中——波段最多下探到此,再深就算站得住也打不到了。 */
     private static final int MAX_STANCE_DEPTH = 6;
 
-    /**
-     * Stretch a stance band whose bottom hangs in mid-air down to the first standable
-     * floor, capped so the ore stays overhead-hittable from the band bottom
-     * ({@link #MAX_STANCE_DEPTH}). The walk only descends through walkable air and
-     * stops the moment the band rests on ground — it never tunnels: a band already
-     * grounded (fresh trunk) or sitting in solid terrain (buried ore, dig-in
-     * semantics) is returned unchanged, so "never dug under" stays intact.
-     */
-    private GoalCompiler.Stance extendToFloor(GoalCompiler.Stance s) {
-        Level level = player.level();
-        int depth = s.maxBelow();
-        while (true) {
-            BlockPos feet = s.stanceBase().below(depth);
-            if (MovementHelper.canWalkOn(level, feet.below())) {
-                break;   // band bottom rests on a floor — grounded, done
-            }
-            if (s.ore().getY() - (feet.getY() - 1) > MAX_STANCE_DEPTH) {
-                break;   // one step deeper and the ore would leave overhead reach
-            }
-            if (!MovementHelper.canWalkThrough(level, feet.below())) {
-                break;   // something unstandable-yet-unpassable below — keep the band as is
-            }
-            depth++;
-        }
-        return depth == s.maxBelow() ? s
-                : new GoalCompiler.Stance(s.ore(), s.stanceBase(), depth);
-    }
 
     /**
      * Is {@code pos} also part of what we're mining — a known target, a filter
@@ -866,6 +795,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return n.toShortString() + " " + block + " dy=" + (dy >= 0 ? "+" + dy : dy)
                 + " dist=" + String.format("%.1f", Math.sqrt(feet.distSqr(n)));
     }
+
 
 
     /** 挖掉了一格,或者明显挪了窝 —— 两者都算进展,卡死计时重新起算。 */

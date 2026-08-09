@@ -62,12 +62,6 @@ public final class GoalCompiler {
      * lower — see {@code MineCompanionTask.coalesce}), and how far below that
      * base the feet may end ({@link NavGoal#mineColumn}).
      */
-    public record Stance(BlockPos ore, BlockPos stanceBase, int maxBelow) {
-        /** The common case: the stance band hangs from the ore itself. */
-        public static Stance at(BlockPos ore, int maxBelow) {
-            return new Stance(ore, ore, maxBelow);
-        }
-    }
 
     /**
      * Use/open/work at a block (crafting table, chest, furnace, door): end
@@ -128,10 +122,10 @@ public final class GoalCompiler {
      * is collected by the drop members, and progress counts inventory, not dig
      * events.
      */
-    public static Compiled mineField(List<Stance> stances, List<BlockPos> drops) {
-        List<NavGoal> members = new ArrayList<>(stances.size() + drops.size());
-        for (Stance s : stances) {
-            members.add(NavGoal.mineColumn(s.stanceBase(), s.maxBelow()));
+    public static Compiled mineField(List<BlockPos> ores, List<BlockPos> drops) {
+        List<NavGoal> members = new ArrayList<>(ores.size() + drops.size());
+        for (BlockPos ore : ores) {
+            members.add(NavGoal.mineStance(ore));
         }
         for (BlockPos drop : drops) {
             members.add(NavGoal.exact(drop));     // items, not blocks
