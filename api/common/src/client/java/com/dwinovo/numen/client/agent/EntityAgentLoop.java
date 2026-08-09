@@ -381,6 +381,34 @@ public final class EntityAgentLoop {
      *         当场就发出去了,界面却会写"排队中"。闸门以后再加几道,这里也不会跑偏。
      */
     public boolean submitPrompt(String text) {
+        return enqueueOwnerWords("<query>" + text + "</query>", text);
+    }
+
+    /**
+     * 主人打了一条斜杠命令(见 {@code ChatCommands})。
+     *
+     * <p>命令是主人对<b>客户端</b>说的话,展开成什么由客户端决定。两半分开放:
+     * <ul>
+     *   <li>{@code echo} 进 {@code <query>} 里 —— 聊天流显示的就是它
+     *       ({@link com.dwinovo.numen.client.chat.OwnerWordsMode} 只取标记内的内容);</li>
+     *   <li>{@code expanded} 跟在标记<b>外面</b> —— 模型看得到,聊天流不显示。</li>
+     * </ul>
+     * 技能正文几千字,塞进气泡里主人没法看;而模型必须拿到全文。一条消息两种读法,
+     * 正是 {@code <query>} 这个标记存在的意义。
+     *
+     * @param echo     主人打的原文,例如 {@code /build 在河边盖个木屋}
+     * @param expanded 客户端替他展开的内容(技能正文等);空则退化成一句普通的话
+     */
+    public boolean submitCommand(String echo, String expanded) {
+        String wire = "<query>" + echo + "</query>"
+                + (expanded == null || expanded.isBlank() ? "" : "\n" + expanded);
+        return enqueueOwnerWords(wire, echo);
+    }
+
+    /**
+     * 主人的话进队列。{@code wire} 是拼好的原文(模型看到的),{@code logged} 只用于日志。
+     */
+    private boolean enqueueOwnerWords(String wire, String logged) {
         boolean wasAborted = turnPause.isPaused();
         turnPause = AgentTurnPause.NONE;
         // Always buffer first; tryStartTurn() splices buffered prompts into the
@@ -393,13 +421,12 @@ public final class EntityAgentLoop {
         // Wrap the owner's words in <query> so the model can always tell real user input apart from
         // anything else numen injects into the same user turn (events, and future world-state/reminders).
         // 主人的话恒为急件:人说话了就该有回应。队列不区分类型,只看这个标记。
-        queue.push(EventTypes.QUERY, "<query>" + text + "</query>",
-                System.currentTimeMillis(), true);
+        queue.push(EventTypes.QUERY, wire, System.currentTimeMillis(), true);
         Constants.LOG.info("[numen-entity#{}] user prompt ({} chars){}{}: {}",
-                entityUuid, text.length(),
+                entityUuid, wire.length(),
                 wasAborted ? " — reset previous abort" : "",
                 deferred ? " — buffered (mid-turn)" : "",
-                truncate(text, 200));
+                truncate(logged, 200));
         tryStartTurn();
         return !awaitingLlmResponse;
     }

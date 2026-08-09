@@ -476,6 +476,28 @@ public final class NumenScreen extends Screen {
             if (micNotice != null && micNoticeUntil > System.currentTimeMillis()) return micNotice;
             return I18n.get("numen.chat.hint", name == null ? "" : name);
         }
+
+        @Override public java.util.List<com.dwinovo.numen.client.command.Completion>
+                completions(String text) {
+            return uuid == null
+                    ? java.util.List.of()
+                    : com.dwinovo.numen.client.command.ChatCommands.complete(loop(), text);
+        }
+    }
+
+    /** 斜杠命令回给主人的话,画在输入框上方,几秒后自己消失。 */
+    private java.util.List<String> cmdReply = java.util.List.of();
+    private long cmdReplyUntil;
+
+    private void showCommandReply(String reply) {
+        if (reply == null || reply.isBlank()) {
+            cmdReply = java.util.List.of();
+            cmdReplyUntil = 0;
+            return;
+        }
+        cmdReply = java.util.List.of(reply.split("\n"));
+        // 行数越多给的时间越长——一屏技能清单三秒看不完。
+        cmdReplyUntil = System.currentTimeMillis() + 4000L + cmdReply.size() * 600L;
     }
 
     /** 正常的输入框占位文案("说点什么…, {name}");麦克风状态提示消失后用它复位。 */
@@ -582,6 +604,15 @@ public final class NumenScreen extends Screen {
     private void submitChat(String text) {
         if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) return;
         if (text == null || text.isBlank()) return;
+        // 斜杠命令是主人对客户端说的话:在本地跑完就结束,不往下走。所以它不过发言闸门
+        // ——查技能、看清单这些事没有理由要求先配好 API key。
+        if (com.dwinovo.numen.client.command.ChatCommands.isCommand(text)) {
+            String reply = com.dwinovo.numen.client.command.ChatCommands.dispatch(loop(), text);
+            if (inputBar != null) inputBar.setText("");
+            showCommandReply(reply);
+            chatView.pinToBottom();
+            return;
+        }
         // Endpoint check for THIS companion (its provider entry, not the legacy global
         // key): unbound / keyless surfaces as a visible hint, never a crash or a
         // silent no-op — the no-provider safety net.
@@ -1084,6 +1115,14 @@ public final class NumenScreen extends Screen {
         // 框里已有文字时占位不显示,这条兜底行接管(用醒目的 FAIL 色)
         if (noticeLive && inputBar != null && !inputBar.text().isEmpty()) {
             txt(g, Component.literal(micNotice), left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
+        }
+
+        // 斜杠命令的回话:输入框上方从下往上堆。它不进对话历史——这是客户端说的,不是她说的。
+        if (cmdReplyUntil > System.currentTimeMillis() && !cmdReply.isEmpty()) {
+            int ly = top + panelH - INPUT_H - PAD - 11;
+            for (int i = cmdReply.size() - 1; i >= 0 && ly > bodyY; i--, ly -= 10) {
+                txt(g, Component.literal(cmdReply.get(i)), left + PAD, ly, TXT_MUTED);
+            }
         }
 
         // 输入行(NumenUI):四颗图标钮 + 输入框;悬停提示由屏幕层画(定位是宿主的事)。

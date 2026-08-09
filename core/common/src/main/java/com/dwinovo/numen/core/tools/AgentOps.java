@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.tools;
 
 import com.dwinovo.numen.agent.skill.SkillInfo;
+import com.dwinovo.numen.agent.skill.SkillInjection;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
@@ -22,8 +23,7 @@ public final class AgentOps {
             // 三级披露:正文引用的附属文件按需拉取
             try {
                 String text = registry.readSupportFile(name, file);
-                return "<skill_file skill=\"" + escapeXmlAttr(name) + "\" path=\""
-                        + escapeXmlAttr(file) + "\">\n" + text.trim() + "\n</skill_file>";
+                return SkillInjection.supportFile(name, file, text);
             } catch (IllegalArgumentException ex) {
                 return "{\"success\":false,\"error\":\"" + escapeJson(ex.getMessage()) + "\"}";
             }
@@ -38,14 +38,8 @@ public final class AgentOps {
                     + "\",\"available\":[" + available + "]}";
         }
 
-        SkillInfo info = maybe.get();
-        // Match opencode's <skill_content name="X"># Skill: X\n{content}\n</skill_content>
-        StringBuilder out = new StringBuilder(info.content().length() + 128);
-        out.append("<skill_content name=\"").append(escapeXmlAttr(info.name())).append("\">\n");
-        out.append("# Skill: ").append(info.name()).append("\n\n");
-        out.append(info.content().trim());
-        out.append("\n</skill_content>");
-        return out.toString();
+        // 成型交给 SkillInjection:主人打斜杠命令走的是另一条路,进上下文的东西必须一样。
+        return SkillInjection.body(maybe.get(), null);
     }
 
     private static String quote(String s) {
@@ -57,10 +51,6 @@ public final class AgentOps {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private static String escapeXmlAttr(String s) {
-        if (s == null) return "";
-        return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;");
-    }
 
     private static final Set<String> ALLOWED_STATUSES =
             Set.of("pending", "in_progress", "completed", "cancelled");

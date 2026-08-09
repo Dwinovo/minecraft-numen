@@ -60,6 +60,12 @@ public final class TextField extends Widget {
 
     public int cursor() { return cursor; }
 
+    /** 光标移到末尾。补全之后要接着往下打,光标留在原处会插在半截。 */
+    public void cursorToEnd() {
+        cursor = value.length();
+        viewStart = Math.min(viewStart, cursor);
+    }
+
     /** 标记校验错误(内联展示);用户一开始输入即自动清除——错误跟着修复走。 */
     public void setError(String message) {
         this.error = message == null || message.isBlank() ? null : message;
