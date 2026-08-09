@@ -124,7 +124,8 @@ class JsonlJournalTest {
         assertEquals(1, reopened.count(EventTypes.QUERY));
         // 年龄标在每一条身上(世界的事包在 <events> 里,主人的话跟在后面),
         // 所以看整段:时间戳过了磁盘一圈还得能算出年龄
-        String out = String.join("\n", reopened.drain(T0 + 3 * 3600_000L));
+        long now = T0 + 3 * 3600_000L;
+        String out = String.join("\n", EventQueue.render(reopened.takeEntries(now), now));
         assertTrue(out.contains("[发生于约3小时前] <event>矿挖完了</event>"), out);
         assertTrue(out.contains("[发生于约3小时前] <query>辛苦了</query>"), out);
     }
@@ -135,7 +136,7 @@ class JsonlJournalTest {
         EventQueue q = new EventQueue(journal);
         q.push(EventTypes.QUERY, "<query>喂</query>", T0, true);
 
-        q.drain(T0);
+        q.takeEntries(T0);
 
         assertFalse(Files.exists(file()));
         assertTrue(new EventQueue(journal).isEmpty(), "消费过的输入不该再冒出来");

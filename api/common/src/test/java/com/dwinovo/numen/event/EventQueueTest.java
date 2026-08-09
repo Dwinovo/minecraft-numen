@@ -106,7 +106,7 @@ class EventQueueTest {
 
         assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL));
         // 世界的事包成一块、主人的话跟在后面，所以是两段
-        assertEquals(2, q.drain(T0).size(), "锁期间攒的一起走");
+        assertEquals(2, EventQueue.render(q.takeEntries(T0), T0).size(), "锁期间攒的一起走");
     }
 
     @Test
@@ -163,40 +163,58 @@ class EventQueueTest {
         assertEquals(1, q.count(EventTypes.EVENT), "事实不因为按了停止就没发生");
     }
 
+    // ---- 先到先得 ----
+
     @Test
-    void takeMatchingLiftsOneTypeOutAndLeavesTheRest() {
+    void takeWhileStopsAtTheFirstEntryItCannotHandle() {
         // 有些条目到了安全点要做的不是"往 user 消息里添一段话"——整理记忆就是。
-        // 队列把那一类原样交出去,不知道也不关心接手的人拿它干什么。
+        // 排空按顺序走到它就停下:前面的先走完,它留在队首等下一次。
         EventQueue q = fresh();
         q.push(EventTypes.EVENT, "<event>她挨打了</event>", T0, false);
-        q.push(EventTypes.COMPACT, "整理记忆", T0, true);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
         q.push(EventTypes.COMPACT, "整理记忆", T0, true);
+        q.push(EventTypes.QUERY, "<query>整理完再说这句</query>", T0, true);
 
-        assertEquals(2, q.takeMatching(EventTypes.COMPACT).size(),
-                "重复按了两次,一次取走 —— 不该变成连着整理两遍");
-        assertEquals(0, q.count(EventTypes.COMPACT));
-        assertEquals(2, q.size(), "别人的条目原样留着");
+        List<EventQueue.Entry> head =
+                q.takeWhile(e -> !EventTypes.COMPACT.equals(e.type()), T0);
+
+        assertEquals(2, head.size(), "整理之前排着的两条先走");
+        assertEquals(2, q.size(), "整理和它后面那句原样留着");
+        assertEquals(EventTypes.COMPACT, q.entries().get(0).type(), "整理现在是队首");
     }
 
     @Test
-    void takeMatchingOnAnAbsentTypeChangesNothing() {
+    void takeWhileReturnsNothingWhenTheHeadDoesNotMatch() {
+        // 队首就是整理 —— 说明轮到它了,一条文本都不该被顺出去
         EventQueue q = fresh();
+        q.push(EventTypes.COMPACT, "整理记忆", T0, true);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
-        assertTrue(q.takeMatching(EventTypes.COMPACT).isEmpty());
-        assertTrue(q.takeMatching(null).isEmpty());
-        assertEquals(1, q.size());
+
+        assertTrue(q.takeWhile(e -> !EventTypes.COMPACT.equals(e.type()), T0).isEmpty());
+        assertTrue(q.takeWhile(null, T0).isEmpty());
+        assertEquals(2, q.size(), "什么都没取走");
+    }
+
+    @Test
+    void backToBackCompactsCollapseIntoOne() {
+        // 连着按了三次:它们是相邻的,合成一次不改变任何可观察的行为
+        EventQueue q = fresh();
+        for (int i = 0; i < 3; i++) q.push(EventTypes.COMPACT, "整理记忆", T0, true);
+        q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
+
+        assertEquals(3, q.takeWhile(e -> EventTypes.COMPACT.equals(e.type()), T0).size());
+        assertEquals(1, q.size(), "后面那句还排着");
     }
 
     @Test
     void compactEntriesNeverReachTheModelAsText() {
-        // toModel 回 null = "这条不是给模型看的文本",drain 因此跳过它。
+        // toModel 回 null = "这条不是给模型看的文本",render 因此跳过它。
         // 这是表里<b>已有</b>的表达,不是为整理新造的概念。
         EventQueue q = fresh();
         q.push(EventTypes.COMPACT, "整理记忆", T0, true);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
 
-        assertEquals(List.of("<query>回来</query>"), q.drain(T0));
+        assertEquals(List.of("<query>回来</query>"), EventQueue.render(q.takeEntries(T0), T0));
     }
 
     @Test
@@ -216,7 +234,7 @@ class EventQueueTest {
         EventQueue q = fresh();
         q.push("第三方模组的类型", "外面来的一条", T0, false);
 
-        assertEquals(List.of("<events>\n外面来的一条\n</events>"), q.drain(T0));
+        assertEquals(List.of("<events>\n外面来的一条\n</events>"), EventQueue.render(q.takeEntries(T0), T0));
     }
 
     @Test
@@ -228,7 +246,7 @@ class EventQueueTest {
 
         assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), "急不急看条目,不看类型");
         assertEquals(List.of("⚔ 村庄被围了"), q.chatPreview());
-        assertEquals(List.of("<events>\n[袭击] 村庄被围了\n</events>"), q.drain(T0));
+        assertEquals(List.of("<events>\n[袭击] 村庄被围了\n</events>"), EventQueue.render(q.takeEntries(T0), T0));
     }
 
     // ---- 排空 ----
@@ -242,7 +260,7 @@ class EventQueueTest {
         q.push(EventTypes.EVENT, "<event>后到的</event>", T0, false);
 
         assertEquals(List.of("<events>\n<event>后到的</event>\n</events>",
-                "<query>先说的</query>"), q.drain(T0));
+                "<query>先说的</query>"), EventQueue.render(q.takeEntries(T0), T0));
         assertTrue(q.isEmpty(), "倒完就空");
     }
 
@@ -255,7 +273,7 @@ class EventQueueTest {
         q.push(EventTypes.EVENT, "<event>先发生的</event>", T0, false);
 
         assertEquals(List.of("<events>\n<event>先发生的</event>\n"
-                + "<event>后发生的</event>\n</events>"), q.drain(T0 + 5_000L));
+                + "<event>后发生的</event>\n</events>"), EventQueue.render(q.takeEntries(T0 + 5_000L), T0 + 5_000L));
     }
 
     @Test
@@ -264,7 +282,7 @@ class EventQueueTest {
         EventQueue q = fresh();
         q.push(EventTypes.QUERY, "<query>去挖铁矿</query>", T0, true);
 
-        List<String> out = q.drain(T0 + 3 * 3600_000L);
+        List<String> out = EventQueue.render(q.takeEntries(T0 + 3 * 3600_000L), T0 + 3 * 3600_000L);
 
         assertEquals(1, out.size());
         assertTrue(out.get(0).startsWith("[发生于约3小时前] "), "实际:" + out.get(0));
@@ -275,7 +293,7 @@ class EventQueueTest {
     void freshInputIsNotLabelled() {
         EventQueue q = fresh();
         q.push(EventTypes.QUERY, "<query>刚说的</query>", T0, true);
-        assertEquals(List.of("<query>刚说的</query>"), q.drain(T0 + 60_000L), "十分钟内不标,免得吵");
+        assertEquals(List.of("<query>刚说的</query>"), EventQueue.render(q.takeEntries(T0 + 60_000L), T0 + 60_000L), "十分钟内不标,免得吵");
     }
 
     // ---- 上限 ----
@@ -289,7 +307,7 @@ class EventQueueTest {
             q.push(EventTypes.EVENT, "<event>第" + i + "件</event>", T0, false);
         }
 
-        List<String> out = q.drain(T0);
+        List<String> out = EventQueue.render(q.takeEntries(T0), T0);
 
         assertEquals(1, out.size(), "全是世界的事，包成一块");
         String block = out.get(0);
@@ -305,7 +323,7 @@ class EventQueueTest {
         q.push(EventTypes.EVENT, "<event>二</event>", T0, false);
         assertEquals(1, q.droppedCount());
 
-        q.drain(T0);
+        EventQueue.render(q.takeEntries(T0), T0);
         assertEquals(0, q.droppedCount(), "报过一次就清零,不该次次重复");
     }
 
@@ -352,7 +370,7 @@ class EventQueueTest {
         EventQueue q = new EventQueue(journal);
         q.push(EventTypes.QUERY, "<query>喂</query>", T0, true);
 
-        q.drain(T0);
+        EventQueue.render(q.takeEntries(T0), T0);
 
         assertTrue(disk.isEmpty(), "消费过的输入不该留在账本里");
         assertTrue(new EventQueue(journal).isEmpty(), "重进游戏也不该再冒出来");

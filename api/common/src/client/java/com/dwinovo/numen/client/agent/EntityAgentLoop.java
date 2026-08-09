@@ -899,15 +899,23 @@ public final class EntityAgentLoop {
      * joined with newlines into one message to avoid back-to-back {@code user}
      * messages that some backends reject.
      */
-    private void drainInbox() {
-        if (queue.isEmpty()) return;
-        // 整理记忆先行:它替换整段历史,主人的话该落在整理<b>之后</b>的历史上。取走之后
-        // 直接返回——其余条目留在队列里,整理收尾时会自己再开一轮把它们带上。
-        // 攒了几条只整理一次:重复按不该变成连着整理好几遍。
-        if (!queue.takeMatching(EventTypes.COMPACT).isEmpty()) {
+    private boolean drainInbox() {
+        if (queue.isEmpty()) return false;
+        long now = System.currentTimeMillis();
+        // 先到先得。遇到一条不该当文本处理的(整理记忆)就停下:前面排着的先走完,它留在
+        // 队首等下一个安全点。不插队——插队一旦开了口子,以后每加一种条目都要重新回答
+        // "它插不插队"。
+        List<EventQueue.Entry> text =
+                queue.takeWhile(e -> !EventTypes.COMPACT.equals(e.type()), now);
+        if (text.isEmpty()) {
+            // 队首就是整理,轮到它了。连着按的几次算一次。
+            //
+            // 返回 true 是<b>必须的</b>:调用方那道 compacting 闸在这句之前,这里再置位已经
+            // 拦不住它了——只从本方法 return 的话,整理会和一次普通请求并排跑起来。
+            queue.takeWhile(e -> EventTypes.COMPACT.equals(e.type()), now);
             Constants.LOG.info("[numen-entity#{}] 整理记忆:排到了,开始", entityUuid);
             startCompaction(false);
-            return;
+            return true;
         }
         List<String> parts = new ArrayList<>();
         // current_task is live runtime state. It is attached request-locally by
@@ -920,12 +928,13 @@ public final class EntityAgentLoop {
         if (!knownBlocks.isEmpty()) {
             parts.add(knownBlocks);
         }
-        parts.addAll(queue.drain(System.currentTimeMillis()));
+        parts.addAll(EventQueue.render(text, now));
         String merged = String.join("\n", parts);
         convo.addUser(merged);
         // A fresh owner directive starts a new tool-chain: restart the turn
         // counter (just log numbering now that the hard cap is gone).
         convo.resetTurnCount();
+        return false;
     }
 
     private void tryStartTurn() {
@@ -956,7 +965,8 @@ public final class EntityAgentLoop {
         // Safe point: no assistant reply in flight and no tool results
         // outstanding, so the conversation ends with either a tool result or a
         // final assistant message — a user message can now be appended legally.
-        drainInbox();
+        // 排空可能自己接管这一次(整理记忆):那就到此为止,别再叠一次普通请求上去。
+        if (drainInbox()) return;
         if (convo.snapshot().isEmpty()) return;
         // No hard cap on tool-call turns and no loop guard — a capable agent
         // legitimately chains many tasks, and resuming a timed-out move_to

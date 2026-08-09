@@ -152,10 +152,7 @@ public final class EventQueue {
         // 按发生时间排：入队顺序不等于发生顺序（服务端离线出箱里攒的那批、
         // 死亡期间锁着攒下的那批，都是后来才进队的）。稳定排序，同时刻保持入队先后。
         out.sort(java.util.Comparator.comparingLong(Entry::ts));
-        if (dropped > 0) {
-            out.add(new Entry(EventTypes.EVENT, droppedNote(dropped), now, false));
-            dropped = 0;
-        }
+        flushDropped(out, now);
         entries.clear();
         journal.save(entries);
         return out;
@@ -171,11 +168,20 @@ public final class EventQueue {
      *
      * <p>谁算哪一种由类型表说了算({@link EventTypes.Type#fromOwner}),这里不认 id。
      */
-    public List<String> drain(long now) {
-        List<Entry> taken = takeEntries(now);
+    /**
+     * 把已经取出来的条目拼成给模型看的几段。
+     *
+     * <p>与"取"分开,是因为按顺序排空时只会取走开头一段({@link #takeWhile}),而渲染规则
+     * 对取多少无关——两边共用这一份,不会说不到一块儿去。
+     *
+     * <p>{@code toModel} 回 null/空的条目在这里消失:那是类型表说"这条不是给模型看的文本"。
+     */
+    public static List<String> render(List<Entry> taken, long now) {
+        List<Entry> ordered = new ArrayList<>(taken);
+        ordered.sort(java.util.Comparator.comparingLong(Entry::ts));
         List<String> events = new ArrayList<>();
         List<String> owner = new ArrayList<>();
-        for (Entry e : taken) {
+        for (Entry e : ordered) {
             EventTypes.Type t = EventTypes.get(e.type());
             String rendered = t.toModel().apply(e.text());
             if (rendered == null || rendered.isBlank()) {
@@ -197,29 +203,38 @@ public final class EventQueue {
     }
 
     /**
-     * 取走某一类的全部条目并清空它们;其余原样留着。
+     * 按入队顺序取走<b>开头那一段</b>——一直取到第一条不满足 {@code keep} 的为止;
+     * 那一条及其之后的原样留在队里。
      *
-     * <p>给"这一类不是拼给模型的文本"的消费者用——比如整理记忆:它到了安全点要做的是
-     * 发起整理,不是往 user 消息里添一段话。队列不知道那意味着什么,只负责把该类交出去。
+     * <p>队列因此能<b>按顺序</b>排空:遇到一条不该当文本处理的(比如整理记忆),前面的先
+     * 走完,它留在队首等下一个安全点。没有插队,也就不用为以后每种新类型回答"它插不插队"。
      *
-     * @return 取走的条目,按入队顺序;一条都没有则空列表
+     * @return 取走的条目,按入队顺序;队首就不满足则空列表
      */
-    public List<Entry> takeMatching(String type) {
-        if (type == null) {
+    public List<Entry> takeWhile(java.util.function.Predicate<Entry> keep, long now) {
+        if (keep == null) {
             return List.of();
         }
-        List<Entry> taken = new ArrayList<>();
-        entries.removeIf(e -> {
-            if (!type.equals(e.type())) {
-                return false;
-            }
-            taken.add(e);
-            return true;
-        });
-        if (!taken.isEmpty()) {
-            journal.save(entries);
+        int n = 0;
+        while (n < entries.size() && keep.test(entries.get(n))) {
+            n++;
         }
+        if (n == 0) {
+            return List.of();
+        }
+        List<Entry> taken = new ArrayList<>(entries.subList(0, n));
+        entries.subList(0, n).clear();
+        flushDropped(taken, now);
+        journal.save(entries);
         return taken;
+    }
+
+    /** 因为满了丢掉、还没报告过的条数变成一条普通事件——丢弃可以,无声消失不行。 */
+    private void flushDropped(List<Entry> out, long now) {
+        if (dropped > 0) {
+            out.add(new Entry(EventTypes.EVENT, droppedNote(dropped), now, false));
+            dropped = 0;
+        }
     }
 
     /** 主人打断:按类型表清掉该清的(指令),留下不该清的(事实)。返回清掉几条。 */
