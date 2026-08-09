@@ -26,6 +26,16 @@ public final class EventTypes {
     public static final String QUERY = "query";
     /** 世界发生的事。急不急由发的人在 push 时定。 */
     public static final String EVENT = "event";
+    /**
+     * 主人要求整理记忆。
+     *
+     * <p>它<b>不是拼给模型的文本</b>——{@code toModel} 返回 null,{@link EventQueue#drain}
+     * 因此跳过它。队列只负责把它攒着、到点交出来;真去整理是取件那一方的事。
+     *
+     * <p>进队列而不是当场执行,是因为她忙的时候也该按得下:按了就一定会发生,
+     * 主人不必盯着什么时候能按。
+     */
+    public static final String COMPACT = "compact";
 
     /**
      * 一种条目的处理方式。
@@ -59,6 +69,8 @@ public final class EventTypes {
         // chatPreview 只回答"这类进不进聊天流",长什么样归渲染那一层——沙漏是 ChatView 加的。
         register(new Type(QUERY, s -> s, s -> s, true, true));
         register(new Type(EVENT, s -> s, s -> null, false, false));
+        // 不进模型文本(toModel 回 null),但进聊天流——主人得看见自己按的整理排着。
+        register(new Type(COMPACT, s -> null, s -> s, true, true));
     }
 
     private EventTypes() {}

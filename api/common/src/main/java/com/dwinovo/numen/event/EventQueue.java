@@ -196,6 +196,32 @@ public final class EventQueue {
         return "<event kind=\"body_log\">期间还发生了约 " + n + " 件事,没能记下来</event>";
     }
 
+    /**
+     * 取走某一类的全部条目并清空它们;其余原样留着。
+     *
+     * <p>给"这一类不是拼给模型的文本"的消费者用——比如整理记忆:它到了安全点要做的是
+     * 发起整理,不是往 user 消息里添一段话。队列不知道那意味着什么,只负责把该类交出去。
+     *
+     * @return 取走的条目,按入队顺序;一条都没有则空列表
+     */
+    public List<Entry> takeMatching(String type) {
+        if (type == null) {
+            return List.of();
+        }
+        List<Entry> taken = new ArrayList<>();
+        entries.removeIf(e -> {
+            if (!type.equals(e.type())) {
+                return false;
+            }
+            taken.add(e);
+            return true;
+        });
+        if (!taken.isEmpty()) {
+            journal.save(entries);
+        }
+        return taken;
+    }
+
     /** 主人打断:按类型表清掉该清的(指令),留下不该清的(事实)。返回清掉几条。 */
     public int clearInterrupted() {
         int before = entries.size();

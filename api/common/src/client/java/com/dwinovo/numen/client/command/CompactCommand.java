@@ -33,6 +33,10 @@ final class CompactCommand implements ChatCommand {
     @Override
     public String run(EntityAgentLoop loop, String args) {
         String refused = loop.requestCompact();
-        return refused != null ? refused : "开始整理记忆…";
+        if (refused != null) {
+            return refused;
+        }
+        // 空闲时进队列就当场走掉了,忙的时候才真排着——照实说哪一种。
+        return loop.isCompacting() ? "开始整理记忆…" : "整理记忆已排上,她手上这轮完就走";
     }
 }

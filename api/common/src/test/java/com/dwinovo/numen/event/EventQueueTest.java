@@ -164,6 +164,42 @@ class EventQueueTest {
     }
 
     @Test
+    void takeMatchingLiftsOneTypeOutAndLeavesTheRest() {
+        // 有些条目到了安全点要做的不是"往 user 消息里添一段话"——整理记忆就是。
+        // 队列把那一类原样交出去,不知道也不关心接手的人拿它干什么。
+        EventQueue q = fresh();
+        q.push(EventTypes.EVENT, "<event>她挨打了</event>", T0, false);
+        q.push(EventTypes.COMPACT, "整理记忆", T0, true);
+        q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
+        q.push(EventTypes.COMPACT, "整理记忆", T0, true);
+
+        assertEquals(2, q.takeMatching(EventTypes.COMPACT).size(),
+                "重复按了两次,一次取走 —— 不该变成连着整理两遍");
+        assertEquals(0, q.count(EventTypes.COMPACT));
+        assertEquals(2, q.size(), "别人的条目原样留着");
+    }
+
+    @Test
+    void takeMatchingOnAnAbsentTypeChangesNothing() {
+        EventQueue q = fresh();
+        q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
+        assertTrue(q.takeMatching(EventTypes.COMPACT).isEmpty());
+        assertTrue(q.takeMatching(null).isEmpty());
+        assertEquals(1, q.size());
+    }
+
+    @Test
+    void compactEntriesNeverReachTheModelAsText() {
+        // toModel 回 null = "这条不是给模型看的文本",drain 因此跳过它。
+        // 这是表里<b>已有</b>的表达,不是为整理新造的概念。
+        EventQueue q = fresh();
+        q.push(EventTypes.COMPACT, "整理记忆", T0, true);
+        q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
+
+        assertEquals(List.of("<query>回来</query>"), q.drain(T0));
+    }
+
+    @Test
     void chatPreviewShowsOnlyWhatTheTableSaysToShow() {
         EventQueue q = fresh();
         q.push(EventTypes.EVENT, "<event>她挨打了</event>", T0, false);

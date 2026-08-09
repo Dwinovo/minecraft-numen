@@ -550,8 +550,11 @@ public final class EntityAgentLoop {
      */
     public String compactProblem() {
         if (dead) return "她已经不在了";
-        if (isBusy()) return "她正忙着,等这一轮完";
-        // 不看记录长短:整理多少、什么时候整理是主人的事。条数门槛只属于自动整理
+        if (compacting) return "已经在整理了";
+        if (queue.count(EventTypes.COMPACT) > 0) return "整理已经排上了";
+        // 不看忙不忙:整理进队列排着,到安全点自己执行。按了就一定会发生,
+        // 主人不必盯着什么时候能按。
+        // 也不看记录长短:整理多少、什么时候整理是主人的事。条数门槛只属于自动整理
         // ——那是替他省一次没意义的请求,不是替他做决定。
         return endpointProblem();   // 整理要发一次请求,没绑模型/没填 key 一样做不了
     }
@@ -898,6 +901,14 @@ public final class EntityAgentLoop {
      */
     private void drainInbox() {
         if (queue.isEmpty()) return;
+        // 整理记忆先行:它替换整段历史,主人的话该落在整理<b>之后</b>的历史上。取走之后
+        // 直接返回——其余条目留在队列里,整理收尾时会自己再开一轮把它们带上。
+        // 攒了几条只整理一次:重复按不该变成连着整理好几遍。
+        if (!queue.takeMatching(EventTypes.COMPACT).isEmpty()) {
+            Constants.LOG.info("[numen-entity#{}] 整理记忆:排到了,开始", entityUuid);
+            startCompaction(false);
+            return;
+        }
         List<String> parts = new ArrayList<>();
         // current_task is live runtime state. It is attached request-locally by
         // modelContextSnapshot(), never written into conversation history or JSONL.
@@ -1012,11 +1023,13 @@ public final class EntityAgentLoop {
     // ---- compaction ----
 
     /**
-     * 主人要求整理记忆({@code /compact})。跟自动整理走同一套机器。
+     * 主人要求整理记忆({@code /compact})。
      *
-     * @return 拒绝的理由;{@code null} = 已经开始了。判据全在 {@link #compactProblem},
-     *         这里不再自己加一条——原来那道额外的 apiKey 检查是静默 return 的,
-     *         表现就是"按了没反应"
+     * <p>不当场执行,<b>进队列排着</b>:她忙的时候也按得下,到了安全点自己走。判据全在
+     * {@link #compactProblem}——原来那道额外的 apiKey 检查是静默 return 的,表现就是
+     * "按了没反应"。
+     *
+     * @return 拒绝的理由;{@code null} = 已经排上了
      */
     public String requestCompact() {
         String problem = compactProblem();
@@ -1024,7 +1037,9 @@ public final class EntityAgentLoop {
             Constants.LOG.info("[numen-entity#{}] manual compact refused: {}", entityUuid, problem);
             return problem;
         }
-        startCompaction(false);
+        // 恒为急件:主人明确要求的事不该跟世界事件一起攒着等阈值。
+        queue.push(EventTypes.COMPACT, "整理记忆", System.currentTimeMillis(), true);
+        maybeDrain();
         return null;
     }
 
