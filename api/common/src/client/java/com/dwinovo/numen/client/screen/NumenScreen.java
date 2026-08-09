@@ -1091,11 +1091,44 @@ public final class NumenScreen extends Screen {
         return tx;
     }
 
+    /** 画目标行;没有目标就一个像素都不占。返回正文该从哪儿开始。 */
+    private int renderGoalLine(GuiGraphics g, int bodyY, int w) {
+        var goal = loop().goal();
+        if (goal == null) {
+            return bodyY;
+        }
+        int color = switch (goal.status()) {
+            case ACTIVE -> RUN;
+            case COMPLETE -> OK;
+            case BLOCKED -> FAIL;
+            default -> TXT_MUTED;
+        };
+        String head = "◆ " + goal.status().label() + " · ";
+        String tail = "  " + com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(
+                goal.activeElapsedMs(System.currentTimeMillis()));
+        int room = w - font.width(head) - font.width(tail);
+        String body = goal.objective();
+        while (body.length() > 1 && font.width(body + "…") > room) {
+            body = body.substring(0, body.length() - 1);
+        }
+        if (!body.equals(goal.objective())) {
+            body = body + "…";
+        }
+        txt(g, Component.literal(head + body), left + PAD, bodyY, color);
+        txt(g, Component.literal(tail),
+                left + PAD + w - font.width(tail), bodyY, TXT_FAINT);
+        return bodyY + 11;
+    }
+
     private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
         int bodyY = top + HEADER_H + 4;
         int bodyBottom = top + panelH - INPUT_H - PAD - 6;
         int transX = left + PAD;
         int transW = panelW - PAD * 2 - PLAN_W - 8;
+
+        // 长期目标一行:她一轮接一轮在做的那件事。常驻在正文上方——目标是"现在的驱动力",
+        // 不是聊天记录里的一条,埋进对话流就翻不到了。
+        bodyY = renderGoalLine(g, bodyY, panelW - PAD * 2);
 
         // right-side PLAN card + the bubble transcript
         int planX = transX + transW + 8;

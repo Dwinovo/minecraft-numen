@@ -20,6 +20,9 @@ public class NumenFabricClient implements ClientModInitializer {
     public void onInitializeClient() {
         // 下行 payload 的处理体住在客户端源码集,先挂进主源码集的挂点
         com.dwinovo.numen.client.ClientPayloadHandlers.install();
+        // 目标工具够不着 core(它要客户端的 loop 注册表),所以在这儿登记
+        com.dwinovo.numen.agent.tool.ToolRegistry.register(
+                new com.dwinovo.numen.client.agent.goal.GoalTool());
         Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()
                 .resolve("config").resolve(Constants.MOD_ID);
         Path skillsDir = numenConfigRoot.resolve("skills");

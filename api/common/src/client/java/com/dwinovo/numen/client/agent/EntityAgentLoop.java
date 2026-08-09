@@ -130,6 +130,8 @@ public final class EntityAgentLoop {
     private final ConvoState convo;
     /** Functional-block coordinate memory, injected as {@code <known_blocks>}. */
     private final WorkBlockMemory workBlocks;
+    /** 长期目标;null = 没有。每轮收尾自己续上,见 {@link #steerToGoal}。 */
+    private com.dwinovo.numen.agent.goal.GoalState goal;
     /**
      * 收件箱(宪法 §4):主人的话与世界事件的统一进箱口。协议约束是它存在的
      * 底层原因——{@code assistant(tool_calls)} 后面必须直接跟 {@code tool}
@@ -252,6 +254,13 @@ public final class EntityAgentLoop {
         });
         this.workBlocks = WorkBlockMemory.forEntity(entityUuid);
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
+        // 目标跨重进游戏活着。进来先暂停:重进之后世界可能已经不是她离开时那样了,
+        // 让主人看一眼再 /goal resume,比她一上线就闷头接着跑安全。
+        this.goal = CompanionHome.goal(entityUuid);
+        if (this.goal != null && this.goal.pause(System.currentTimeMillis())) {
+            CompanionHome.setGoal(entityUuid, this.goal);
+            Constants.LOG.info("[numen-entity#{}] 目标随重进游戏暂停:{}", entityUuid, goal.objective());
+        }
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
@@ -548,6 +557,57 @@ public final class EntityAgentLoop {
      * <p>判据只有这一份。{@code /compact} 的补全行要把理由写出来,而"能不能"和"为什么
      * 不能"是同一个问题——分成两处迟早说不到一块儿去。
      */
+    // ---- 长期目标 ----
+
+    /** 当前的长期目标;{@code null} = 没有。 */
+    public com.dwinovo.numen.agent.goal.GoalState goal() {
+        return goal;
+    }
+
+    /** 换一个目标(传 null = 清掉)。落盘,并立刻看要不要接上。 */
+    public void setGoal(com.dwinovo.numen.agent.goal.GoalState next) {
+        this.goal = next;
+        CompanionHome.setGoal(entityUuid, next);
+        steerToGoal();
+    }
+
+    /** 目标自己变了状态(暂停/恢复/完成/卡住)之后叫一声:落盘 + 该接上就接上。 */
+    public void goalChanged() {
+        CompanionHome.setGoal(entityUuid, goal);
+        steerToGoal();
+    }
+
+    /**
+     * 目标还在跑就往队列里放一份续跑块。
+     *
+     * <p>每轮<b>重拼一份完整的</b>,不是拼一次常驻:进度永远是新的,整理记忆把旧的那份
+     * 丢掉也无所谓,主人改了目标下一轮立刻生效。
+     *
+     * <p>队列里还有别的排着就先不放——那些本来就会开起一轮,这一轮跑完再接。
+     */
+    private void steerToGoal() {
+        if (goal == null || !goal.isActive() || dead || queue.locked() || !queue.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (!goal.hasTurnsLeft()) {
+            // 到顶了就停下报告,不是闷头继续:她"以为没做完"是会无限循环的。
+            if (goal.markMaxTurns(now)) {
+                CompanionHome.setGoal(entityUuid, goal);
+                Constants.LOG.info("[numen-entity#{}] 目标跑够 {} 轮,停下等主人",
+                        entityUuid, com.dwinovo.numen.agent.goal.GoalState.MAX_GOAL_TURNS);
+                com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(),
+                        "目标跑够轮次了,/goal continue 再放一轮");
+            }
+            return;
+        }
+        goal.countTurn(now);
+        CompanionHome.setGoal(entityUuid, goal);
+        queue.push(EventTypes.GOAL,
+                com.dwinovo.numen.agent.goal.GoalPrompts.continuation(goal, now), now, true);
+        maybeDrain();
+    }
+
     public String compactProblem() {
         if (dead) return "她已经不在了";
         if (compacting) return "已经在整理了";
@@ -599,6 +659,12 @@ public final class EntityAgentLoop {
     }
 
     private void abort(boolean stopBody) {
+        // 主人按停止 = 不要她接着跑了。目标随之暂停,否则这一轮刚断下一轮又自己续上,
+        // 停止键就成了摆设。/goal resume 能接回来。
+        if (goal != null && goal.pause(System.currentTimeMillis())) {
+            CompanionHome.setGoal(entityUuid, goal);
+            Constants.LOG.info("[numen-entity#{}] 目标随打断暂停", entityUuid);
+        }
         // 语音无条件先闭嘴:不管打断的是在飞的 turn 还是排队的 prompt,
         // 主人按下 Stop 时还在播/待播的语音都不该继续。
         presenter.interruptVoice();
@@ -1550,6 +1616,8 @@ public final class EntityAgentLoop {
             lastPromptTokens = res.promptTokens();
         }
         tokens.add(res.freshTokens());
+        // 目标的账单:主人得看得见这个目标到现在烧了多少。
+        if (goal != null) goal.addTokens(res.freshTokens(), System.currentTimeMillis());
 
         convo.addAssistant(turn);
 
@@ -1581,6 +1649,9 @@ public final class EntityAgentLoop {
             // A prompt that arrived during this final turn was buffered; now that
             // the chain has settled, start a fresh turn to answer it.
             if (hasQueuedPrompts()) tryStartTurn();
+            // 链条收尾了——这正是长期目标该接上的时刻。放在这里而不是发请求前:
+            // "还没做完就接着做"要等这一轮真的说完才判断得了。
+            steerToGoal();
             return;
         }
 

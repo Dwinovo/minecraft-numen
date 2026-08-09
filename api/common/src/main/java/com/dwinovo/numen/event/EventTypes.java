@@ -36,6 +36,13 @@ public final class EventTypes {
      * 主人不必盯着什么时候能按。
      */
     public static final String COMPACT = "compact";
+    /**
+     * 长期目标的续跑块。
+     *
+     * <p>是文本(要拼给模型),但不进聊天流——那一大块 steering 给主人看没有意义,目标本身
+     * 在界面上另有一行。主人按停止就作废:那正是"我不要她接着跑了"。
+     */
+    public static final String GOAL = "goal";
 
     /**
      * 一种条目的处理方式。
@@ -71,6 +78,7 @@ public final class EventTypes {
         register(new Type(EVENT, s -> s, s -> null, false, false));
         // 不进模型文本(toModel 回 null),但进聊天流——主人得看见自己按的整理排着。
         register(new Type(COMPACT, s -> null, s -> s, true, true));
+        register(new Type(GOAL, s -> s, s -> null, true, true));
     }
 
     private EventTypes() {}

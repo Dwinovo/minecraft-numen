@@ -76,6 +76,7 @@ public final class CompanionHome {
     private static final String STATS = "stats.json";
     private static final String INBOX = "inbox.jsonl";
     private static final String BLOCKS = "blocks.json";
+    private static final String GOAL = "goal.json";
     private static final String WORLD = "world";
 
     /** 同伴数据的根;由各 loader 的客户端入口注入,见 {@link #init}。 */
@@ -142,6 +143,38 @@ public final class CompanionHome {
 
     public static Path blocks(UUID entityUuid) {
         return dir(entityUuid).resolve(BLOCKS);
+    }
+
+    // ---- 长期目标 ----
+
+    /** 读这只同伴的长期目标;没有(或正文为空)则 null。 */
+    public static com.dwinovo.numen.agent.goal.GoalState goal(UUID entityUuid) {
+        Path p = at(entityUuid).resolve(GOAL);
+        if (!Files.isRegularFile(p)) {
+            return null;
+        }
+        try {
+            return com.dwinovo.numen.agent.goal.GoalState.fromJson(
+                    JsonParser.parseString(Files.readString(p, StandardCharsets.UTF_8))
+                            .getAsJsonObject());
+        } catch (IOException | RuntimeException e) {
+            Constants.LOG.warn("[numen-home] 目标读不了 {}: {}", p, e.toString());
+            return null;
+        }
+    }
+
+    /** 写这只同伴的长期目标(null = 清掉,删文件不留空壳)。 */
+    public static void setGoal(UUID entityUuid, com.dwinovo.numen.agent.goal.GoalState goal) {
+        Path p = (goal == null ? at(entityUuid) : dir(entityUuid)).resolve(GOAL);
+        try {
+            if (goal == null) {
+                Files.deleteIfExists(p);
+                return;
+            }
+            Files.writeString(p, goal.toJson().toString(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            Constants.LOG.warn("[numen-home] 目标写入失败 {}: {}", p, e.toString());
+        }
     }
 
     // ---- 绑定 ----

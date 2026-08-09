@@ -43,6 +43,7 @@ public final class ChatCommands {
         SOURCES.add(loop -> List.copyOf(BUILTIN.values()));
         SOURCES.add(new SkillCommandSource());
         register(new CompactCommand());
+        register(new GoalCommand());
         register(new SkillsCommand());
     }
 
