@@ -73,10 +73,19 @@ public final class GoalPrompts {
                 %s: <one short sentence naming the evidence that proves it>
                 %s: <one short sentence naming what is still missing>
 
+                Write that sentence in the same language as the condition — the owner reads it.
+
                 Judge only from the evidence you are given. The physical state is authoritative — \
                 it is measured from the world, not reported by the companion, so prefer it over \
-                anything she claims. If the evidence does not prove the condition, answer %s."""
-                .formatted(MET, NOT_MET, NOT_MET);
+                anything she claims. If the evidence does not prove the condition, answer %s.
+
+                Mind the difference between doing something and already having it. "Mine 128 \
+                diamonds" asks for work to happen; an inventory that already held them proves \
+                nothing on its own, so look for evidence the work happened — finished-task \
+                results, tool outcomes, counts that went up. "Have 128 diamonds" is about the \
+                end state, and the inventory alone settles it. When the condition is about doing \
+                something and you can only see the end state, answer %s."""
+                .formatted(MET, NOT_MET, NOT_MET, NOT_MET);
     }
 
     /**

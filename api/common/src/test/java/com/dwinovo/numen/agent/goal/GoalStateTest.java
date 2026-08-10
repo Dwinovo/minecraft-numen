@@ -185,6 +185,21 @@ class GoalStateTest {
     }
 
     @Test
+    void theEvaluatorIsToldToSeparateDoingFromHaving() {
+        // "挖 128 个钻石"是要发生一件事,不是要背包里有那么多——她原来就有 176 个的话,
+        // 一根手指没动也会被判达成。判据得落在"活儿干过没有"上。
+        String sys = GoalPrompts.evaluatorSystem();
+        assertTrue(sys.contains("doing something") && sys.contains("already having it"), sys);
+        assertTrue(sys.contains("finished-task"), sys);
+    }
+
+    @Test
+    void theEvaluatorAnswersInTheOwnersLanguage() {
+        // 那句话是给主人看的,他写中文条件不该收到英文判词
+        assertTrue(GoalPrompts.evaluatorSystem().contains("same language as the condition"));
+    }
+
+    @Test
     void missingFactsAreSaidOutLoudNotLeftBlank() {
         String q = GoalPrompts.evaluatorQuery(goal(), "", "");
         assertTrue(q.contains("(unavailable)"), q);

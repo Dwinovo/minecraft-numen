@@ -1098,12 +1098,13 @@ public final class NumenScreen extends Screen {
             return bodyY;
         }
         // 目标只有"在"和"不在"两种,所以不需要状态色——它在,就是在跑。
-        // 正文显示评估器最近那句"还差什么":那才是她此刻在朝什么努力,比重复目标原文有用。
+        // 显示目标本身,不显示评估器那句"还差什么":没达成就静默接着干,不该每轮在主人
+        // 眼前刷一句判词。想知道进度就 /goal 主动问。
         String head = "◆ 第 " + goal.turnsExecuted() + " 轮 · ";
         String tail = "  " + com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(
                 goal.elapsedMs(System.currentTimeMillis()));
         int room = w - font.width(head) - font.width(tail);
-        String body = goal.lastReason() != null ? goal.lastReason() : goal.objective();
+        String body = goal.objective();
         String full = body;
         while (body.length() > 1 && font.width(body + "…") > room) {
             body = body.substring(0, body.length() - 1);

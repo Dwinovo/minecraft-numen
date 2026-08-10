@@ -53,9 +53,11 @@ final class GoalCommand implements ChatCommand {
             return "清掉了:" + goal.objective();
         }
         // 换掉一个还在跑的目标不静默:旧的那句原样说出来,想找回自己再贴一遍。
-        String replaced = goal == null ? "" : "换掉了原来的:" + goal.objective() + "\n";
-        loop.setGoal(GoalState.of(args, System.currentTimeMillis()));
-        return replaced + "目标:" + args + "\n她会一轮接一轮做下去,/goal clear 或按停止键收工。";
+        String replaced = goal == null ? null : "换掉了原来的:" + goal.objective();
+        loop.setGoal(GoalState.of(args, System.currentTimeMillis()),
+                ChatCommands.PREFIX + name() + " " + args);
+        // 目标本身不再复述一遍:聊天里已经有主人自己那条气泡,面板顶上也常驻一行。
+        return replaced;
     }
 
     /** 无参时看的东西:条件、跑了多久、判了几轮、烧了多少、<b>评估器最近说还差什么</b>。 */

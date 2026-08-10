@@ -565,8 +565,11 @@ public final class EntityAgentLoop {
 
     /**
      * 定一个目标。整份目标<b>只在这里</b>交给她一次;之后每轮只补评估器那句"还差什么"。
+     *
+     * @param echo 主人打的原文({@code /goal 挖 128 个钻石})。走 {@link #submitCommand} 是为了
+     *             聊天里有个气泡——他打了字就该看见自己打了什么,跟 {@code /build} 一个待遇
      */
-    public void setGoal(com.dwinovo.numen.agent.goal.GoalState next) {
+    public void setGoal(com.dwinovo.numen.agent.goal.GoalState next, String echo) {
         this.goal = next;
         CompanionHome.setGoal(entityUuid, next);
         if (next == null || dead || queue.locked()) {
@@ -574,10 +577,7 @@ public final class EntityAgentLoop {
         }
         next.countTurn();
         CompanionHome.setGoal(entityUuid, next);
-        queue.push(EventTypes.GOAL,
-                com.dwinovo.numen.agent.goal.GoalPrompts.initialDirective(next),
-                System.currentTimeMillis(), true);
-        maybeDrain();
+        submitCommand(echo, com.dwinovo.numen.agent.goal.GoalPrompts.initialDirective(next));
     }
 
     /**
