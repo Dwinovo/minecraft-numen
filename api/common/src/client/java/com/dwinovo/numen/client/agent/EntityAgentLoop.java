@@ -584,7 +584,8 @@ public final class EntityAgentLoop {
      * 收工。目标只有"在"和"不在"两种,所以做完、放弃、跑够轮次、主人喊停——<b>结果都是这里</b>,
      * 区别只在 {@code why} 那句话。
      *
-     * @param why 说给主人听的原因;{@code null} = 他自己清的,不用再说一遍
+     * @param why 收工的原因,只进日志。<b>不往聊天栏说</b>——目标是后台跑着的东西,
+     *            结束时不该弹一句打断主人;面板顶上那行消失本身就是信号,想追问 {@code /goal}
      */
     public void clearGoal(String why) {
         if (goal == null) {
@@ -594,9 +595,6 @@ public final class EntityAgentLoop {
                 entityUuid, goal.turnsExecuted(), why == null ? "主人清掉" : why, goal.objective());
         goal = null;
         CompanionHome.setGoal(entityUuid, null);
-        if (why != null) {
-            com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(), why);
-        }
     }
 
     /**
@@ -1418,8 +1416,11 @@ public final class EntityAgentLoop {
         String body = currentTaskXml() + inventoryXml() + effectsXml();
         String xml = body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
         // 原样打出来。"她看到的世界"平时完全不可见,于是"她怎么会这么说"只能靠猜——
-        // 而她说的数跟事件对不上时,分不清是她编的还是我们喂错了。这一行就是分界线。
-        Constants.LOG.info("[numen-ctx#{}] runtime_state → {}", entityUuid, xml);
+        // 而她说的数跟事件对不上时,分不清是她编的还是我们喂错了。开一次 debug 就有答案。
+        //
+        // (靠它抓到过一次:任务完成事件和 <current_task> 镜像在同一条请求里打架,
+        //  镜像还停在旧进度,于是她照着旧数说"还差一点"。)
+        Constants.LOG.debug("[numen-ctx#{}] runtime_state → {}", entityUuid, xml);
         return xml;
     }
 
