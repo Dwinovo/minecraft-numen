@@ -10,21 +10,25 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * 语音输入 provider 注册表(TouhouLittleMaid 式思路,numen 原生实现,镜像
- * {@code ProviderRegistry}):每个 provider 一个 OpenAI 兼容 base URL + 一组已知
- * transcription 模型 id;{@code backend} 选实现(目前只有 {@code whisper-http}
- * 批量,未来加流式只加实现+一条数据)。UI 下拉与 {@link #fromConfig} 工厂共用。
+ * 语音输入 provider 注册表:每个 provider 一个 base URL + 一组已知模型 id;{@code backend}
+ * 选实现——{@code whisper-http} 是批量上传,{@code doubao} 是流式 WebSocket。UI 下拉与
+ * {@link #fromConfig} 工厂共用。加一家 OpenAI 兼容的 = 改数据不改代码,和 LLM 的
+ * models.json 同构。
  *
  * <p>USER-EDITABLE:首次加载把内置 {@code /numen_stt.json} 拷到
- * {@code config/numen/stt.json},之后以用户文件为准(编辑它加自己的 provider/模型);
- * 用户文件坏了回退内置默认。加一家 = 改数据不改代码,和 LLM 的 models.json 同构。
+ * {@code config/numen/stt.json} 供编辑。加载时<b>内置打底、用户文件按 id 覆盖</b>:用户改过的
+ * 条目照他的算,同时我们以后新加的 provider 不会被早就落盘的那份快照挡在外面。
  */
 public final class SttProviders {
 
     public static final String BACKEND_WHISPER_HTTP = "whisper-http";
+    /** 豆包语音(火山引擎)大模型实时识别:流式 WebSocket,不是 OpenAI 兼容 REST。 */
+    public static final String BACKEND_DOUBAO = "doubao";
 
     public record Option(String id, String displayName, String backend,
                          String defaultBaseUrl, List<String> models) {
@@ -79,32 +83,50 @@ public final class SttProviders {
         }
         return switch (opt.backend()) {
             case BACKEND_WHISPER_HTTP -> new WhisperHttpStt(base, key, model);
-            default -> new WhisperHttpStt(base, key, model);
+            case BACKEND_DOUBAO -> new DoubaoStt(base, key, model);
+            default -> {
+                Constants.LOG.warn("[numen-stt] provider '{}' 的 backend='{}' 不认识,按 {} 处理",
+                        opt.id(), opt.backend(), BACKEND_WHISPER_HTTP);
+                yield new WhisperHttpStt(base, key, model);
+            }
         };
     }
 
-    // ---- loading (mirror of ProviderRegistry) ----
+    // ---- loading ----
 
+    /**
+     * 内置打底,用户文件按 id 覆盖,用户自定义的追加在后。
+     *
+     * <p>不是"有用户文件就只认用户文件"——那份文件是他第一次进游戏那天的快照,里面不会有我们
+     * 后来加的 provider,于是新服务商对所有老玩家永远不出现,而且不报错。
+     */
     private static List<Option> load() {
         String bundled = readBundled();
-        String json = bundled;
+        Map<String, Option> byId = new LinkedHashMap<>();
+        for (Option o : parse(bundled)) {
+            byId.put(o.id(), o);
+        }
+        for (Option o : parse(readOrSeedUserFile(bundled))) {
+            byId.put(o.id(), o);
+        }
+        return List.copyOf(byId.values());
+    }
+
+    /** 读 {@code config/numen/stt.json};没有就先拿内置的播一份下去供编辑。 */
+    private static String readOrSeedUserFile(String bundled) {
         try {
             Path file = Services.PLATFORM.getConfigDir().resolve("numen").resolve("stt.json");
             if (Files.exists(file)) {
-                json = Files.readString(file, StandardCharsets.UTF_8);   // user-authoritative
-            } else if (bundled != null) {
+                return Files.readString(file, StandardCharsets.UTF_8);
+            }
+            if (bundled != null) {
                 Files.createDirectories(file.getParent());
-                Files.writeString(file, bundled, StandardCharsets.UTF_8);  // seed for editing
+                Files.writeString(file, bundled, StandardCharsets.UTF_8);
             }
         } catch (Exception e) {
-            Constants.LOG.warn("[numen] couldn't read/seed config/numen/stt.json, using bundled", e);
+            Constants.LOG.warn("[numen] couldn't read/seed config/numen/stt.json", e);
         }
-        List<Option> out = parse(json);
-        if (out.isEmpty() && bundled != null && !bundled.equals(json)) {
-            Constants.LOG.warn("[numen] user stt.json yielded no providers, falling back to bundled");
-            out = parse(bundled);
-        }
-        return List.copyOf(out);
+        return null;
     }
 
     private static String readBundled() {
