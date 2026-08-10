@@ -31,13 +31,14 @@ public final class GoalTool implements NumenTool {
     @Override
     public String description() {
         return """
-                Read or update the active long-term goal. You may only mark it "complete" or "blocked" \
-                — pausing, resuming, replacing or clearing a goal is the owner's call via /goal.
+                Read or update the active long-term goal. You may only report it "complete" or \
+                "blocked" — replacing or clearing a goal is the owner's call via /goal.
 
                 Use action=get to read the current objective and progress.
-                Use status=complete only after the Completion Audit in the goal-steering block passes.
-                Use status=blocked with a concrete reason when no path forward exists; reporting the \
-                same reason three times in a row stops the goal and asks the owner for help.""";
+                Use status=complete only after the Completion Audit in the goal-steering block passes; \
+                the goal is then cleared.
+                Use status=blocked with a concrete reason when no path forward exists. Reporting the \
+                same reason three times in a row gives the goal up and tells the owner why.""";
     }
 
     @Override
@@ -75,7 +76,7 @@ public final class GoalTool implements NumenTool {
                 return;
             }
             if ("get".equals(action)) {
-                call.complete(report(goal, true, "").toString());
+                call.complete(report(goal, "").toString());
                 return;
             }
             call.complete(update(loop, goal, status, str(args, "reason")));
@@ -85,25 +86,24 @@ public final class GoalTool implements NumenTool {
     }
 
     private static String update(EntityAgentLoop loop, GoalState goal, String status, String reason) {
-        long now = System.currentTimeMillis();
         if (reason.isBlank()) {
             return fail("reason is required when updating a goal");
         }
         switch (status) {
             case "complete" -> {
-                if (!goal.complete(now)) {
-                    return fail("the goal is already complete");
-                }
-                loop.goalChanged();
-                return report(goal, true, "goal marked complete").toString();
+                JsonObject done = report(goal, "goal complete — it has been cleared");
+                loop.clearGoal("做完了:" + reason);
+                return done.toString();
             }
             case "blocked" -> {
                 // 一次挡住不算卡住:换个法子还能继续,每次都停下来问主人才是烦人。
-                boolean stopped = goal.reportBlocked(reason, now);
-                loop.goalChanged();
-                return report(goal, true, stopped
-                        ? "goal stopped — the owner has been asked for help"
-                        : "noted; keep trying other approaches").toString();
+                if (!goal.reportBlocked(reason)) {
+                    loop.goalChanged();
+                    return report(goal, "noted; keep trying other approaches").toString();
+                }
+                JsonObject gaveUp = report(goal, "goal given up — the owner has been told why");
+                loop.clearGoal("卡住了:" + reason);
+                return gaveUp.toString();
             }
             default -> {
                 return fail("status must be \"complete\" or \"blocked\"");
@@ -111,12 +111,11 @@ public final class GoalTool implements NumenTool {
         }
     }
 
-    private static JsonObject report(GoalState goal, boolean success, String message) {
+    private static JsonObject report(GoalState goal, String message) {
         JsonObject o = new JsonObject();
-        o.addProperty("success", success);
+        o.addProperty("success", true);
         o.addProperty("objective", goal.objective());
-        o.addProperty("status", goal.status().key());
-        o.addProperty("elapsed", GoalPrompts.elapsed(goal.activeElapsedMs(System.currentTimeMillis())));
+        o.addProperty("elapsed", GoalPrompts.elapsed(goal.elapsedMs(System.currentTimeMillis())));
         o.addProperty("turnsExecuted", goal.turnsExecuted());
         o.addProperty("tokensUsed", goal.tokensUsed());
         if (!message.isBlank()) {

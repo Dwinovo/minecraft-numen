@@ -254,13 +254,8 @@ public final class EntityAgentLoop {
         });
         this.workBlocks = WorkBlockMemory.forEntity(entityUuid);
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
-        // 目标跨重进游戏活着。进来先暂停:重进之后世界可能已经不是她离开时那样了,
-        // 让主人看一眼再 /goal resume,比她一上线就闷头接着跑安全。
+        // 目标跨重进游戏活着 —— 长期目标就该是长期的,重启不该把它弄丢。
         this.goal = CompanionHome.goal(entityUuid);
-        if (this.goal != null && this.goal.pause(System.currentTimeMillis())) {
-            CompanionHome.setGoal(entityUuid, this.goal);
-            Constants.LOG.info("[numen-entity#{}] 目标随重进游戏暂停:{}", entityUuid, goal.objective());
-        }
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, new ToolDispatcher.Sink() {
             @Override public void onResult(ToolInvocation inv, String resultJson) {
@@ -564,17 +559,35 @@ public final class EntityAgentLoop {
         return goal;
     }
 
-    /** 换一个目标(传 null = 清掉)。落盘,并立刻看要不要接上。 */
+    /** 定一个目标。落盘,并立刻接上。 */
     public void setGoal(com.dwinovo.numen.agent.goal.GoalState next) {
         this.goal = next;
         CompanionHome.setGoal(entityUuid, next);
         steerToGoal();
     }
 
-    /** 目标自己变了状态(暂停/恢复/完成/卡住)之后叫一声:落盘 + 该接上就接上。 */
+    /**
+     * 收工。目标只有"在"和"不在"两种,所以做完、放弃、跑够轮次、主人喊停——<b>结果都是这里</b>,
+     * 区别只在 {@code why} 那句话。
+     *
+     * @param why 说给主人听的原因;{@code null} = 他自己清的,不用再说一遍
+     */
+    public void clearGoal(String why) {
+        if (goal == null) {
+            return;
+        }
+        Constants.LOG.info("[numen-entity#{}] 目标收工({} 轮,{}):{}",
+                entityUuid, goal.turnsExecuted(), why == null ? "主人清掉" : why, goal.objective());
+        goal = null;
+        CompanionHome.setGoal(entityUuid, null);
+        if (why != null) {
+            com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(), why);
+        }
+    }
+
+    /** 目标的计数变了(撞墙次数)之后落盘;不改"在不在",所以不重新接上。 */
     public void goalChanged() {
         CompanionHome.setGoal(entityUuid, goal);
-        steerToGoal();
     }
 
     /**
@@ -586,7 +599,7 @@ public final class EntityAgentLoop {
      * <p>队列里还有别的排着就先不放——那些本来就会开起一轮,这一轮跑完再接。
      */
     private void steerToGoal() {
-        if (goal == null || !goal.isActive() || dead || queue.locked() || !queue.isEmpty()) {
+        if (goal == null || dead || queue.locked() || !queue.isEmpty()) {
             return;
         }
         // 身体还在干活就别催。
@@ -605,17 +618,12 @@ public final class EntityAgentLoop {
         }
         long now = System.currentTimeMillis();
         if (!goal.hasTurnsLeft()) {
-            // 到顶了就停下报告,不是闷头继续:她"以为没做完"是会无限循环的。
-            if (goal.markMaxTurns(now)) {
-                CompanionHome.setGoal(entityUuid, goal);
-                Constants.LOG.info("[numen-entity#{}] 目标跑够 {} 轮,停下等主人",
-                        entityUuid, com.dwinovo.numen.agent.goal.GoalState.MAX_GOAL_TURNS);
-                com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(),
-                        "目标跑够轮次了,/goal continue 再放一轮");
-            }
+            // 到顶了就收工,不是闷头继续:她"以为没做完"是会无限循环的。
+            clearGoal("跑够 " + com.dwinovo.numen.agent.goal.GoalState.MAX_GOAL_TURNS
+                    + " 轮还没完,先收工了 —— 想接着做再说一次 /goal");
             return;
         }
-        goal.countTurn(now);
+        goal.countTurn();
         CompanionHome.setGoal(entityUuid, goal);
         queue.push(EventTypes.GOAL,
                 com.dwinovo.numen.agent.goal.GoalPrompts.continuation(goal, now), now, true);
@@ -673,12 +681,9 @@ public final class EntityAgentLoop {
     }
 
     private void abort(boolean stopBody) {
-        // 主人按停止 = 不要她接着跑了。目标随之暂停,否则这一轮刚断下一轮又自己续上,
-        // 停止键就成了摆设。/goal resume 能接回来。
-        if (goal != null && goal.pause(System.currentTimeMillis())) {
-            CompanionHome.setGoal(entityUuid, goal);
-            Constants.LOG.info("[numen-entity#{}] 目标随打断暂停", entityUuid);
-        }
+        // 主人按停止 = 不要她接着跑了。目标跟着收工,否则这一轮刚断下一轮又自己续上,
+        // 停止键就成了摆设。想接着做再说一次 /goal,成本就是一句话。
+        clearGoal(goal == null ? null : "按停止收工了:" + goal.objective());
         // 语音无条件先闭嘴:不管打断的是在飞的 turn 还是排队的 prompt,
         // 主人按下 Stop 时还在播/待播的语音都不该继续。
         presenter.interruptVoice();
@@ -1631,7 +1636,7 @@ public final class EntityAgentLoop {
         }
         tokens.add(res.freshTokens());
         // 目标的账单:主人得看得见这个目标到现在烧了多少。
-        if (goal != null) goal.addTokens(res.freshTokens(), System.currentTimeMillis());
+        if (goal != null) goal.addTokens(res.freshTokens());
 
         convo.addAssistant(turn);
 

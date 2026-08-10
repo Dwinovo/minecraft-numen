@@ -1097,15 +1097,10 @@ public final class NumenScreen extends Screen {
         if (goal == null) {
             return bodyY;
         }
-        int color = switch (goal.status()) {
-            case ACTIVE -> RUN;
-            case COMPLETE -> OK;
-            case BLOCKED -> FAIL;
-            default -> TXT_MUTED;
-        };
-        String head = "◆ " + goal.status().label() + " · ";
+        // 目标只有"在"和"不在"两种,所以不需要状态色——它在,就是在跑。
+        String head = "◆ 第 " + goal.turnsExecuted() + " 轮 · ";
         String tail = "  " + com.dwinovo.numen.agent.goal.GoalPrompts.elapsed(
-                goal.activeElapsedMs(System.currentTimeMillis()));
+                goal.elapsedMs(System.currentTimeMillis()));
         int room = w - font.width(head) - font.width(tail);
         String body = goal.objective();
         while (body.length() > 1 && font.width(body + "…") > room) {
@@ -1114,7 +1109,7 @@ public final class NumenScreen extends Screen {
         if (!body.equals(goal.objective())) {
             body = body + "…";
         }
-        txt(g, Component.literal(head + body), left + PAD, bodyY, color);
+        txt(g, Component.literal(head + body), left + PAD, bodyY, RUN);
         txt(g, Component.literal(tail),
                 left + PAD + w - font.width(tail), bodyY, TXT_FAINT);
         return bodyY + 11;

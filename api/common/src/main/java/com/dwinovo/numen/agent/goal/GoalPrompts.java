@@ -58,7 +58,7 @@ public final class GoalPrompts {
 
                 Resume working now.
                 </goal-steering>"""
-                .formatted(goal.objective(), elapsed(goal.activeElapsedMs(nowMs)),
+                .formatted(goal.objective(), elapsed(goal.elapsedMs(nowMs)),
                         goal.tokensUsed(), goal.turnsExecuted());
     }
 
