@@ -589,6 +589,20 @@ public final class EntityAgentLoop {
         if (goal == null || !goal.isActive() || dead || queue.locked() || !queue.isEmpty()) {
             return;
         }
+        // 身体还在干活就别催。
+        //
+        // 我们的工具是异步的:派发回执立刻回来,链条当场收尾,而她其实动都还没动完。不拦
+        // 的话就是每隔一个 API 往返问一次"挖完了吗"——什么也没推进,纯烧 token。
+        //
+        // 醒来不用另写:任务干完会推 task_finished 进队列,那本来就会开起一轮;那一轮
+        // 收尾时再走到这里,currentTask 已经空了,续跑自然接上。
+        //
+        // 常驻任务(跟随这种)要放行:它永远不报完成,等它等于永远不续。
+        if (currentTask != null && !currentTask.standing()) {
+            Constants.LOG.debug("[numen-entity#{}] 目标续跑让位:身体在做 {}",
+                    entityUuid, currentTask.tool());
+            return;
+        }
         long now = System.currentTimeMillis();
         if (!goal.hasTurnsLeft()) {
             // 到顶了就停下报告,不是闷头继续:她"以为没做完"是会无限循环的。
