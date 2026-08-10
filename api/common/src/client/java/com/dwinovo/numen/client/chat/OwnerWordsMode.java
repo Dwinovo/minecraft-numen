@@ -54,7 +54,11 @@ public final class OwnerWordsMode implements ChatDisplayMode {
                 .replaceAll("(?s)<event\\b[^>]*/>", "")
                 .replaceAll("(?s)<env>.*?</env>", "")
                 .replaceAll("(?s)<current_task>.*?</current_task>", "")
-                .replaceAll("(?s)<known_blocks>.*?</known_blocks>", "");
+                .replaceAll("(?s)<known_blocks>.*?</known_blocks>", "")
+                // 目标的两块:设定时那份指令、续跑时那句"还差什么"。都是客户端注入的,
+                // 不是主人说的话;目标本身在面板顶上有常驻一行,不该再占一个气泡。
+                .replaceAll("(?s)<goal>.*?</goal>", "")
+                .replaceAll("(?s)<goal-progress\\b[^>]*>.*?</goal-progress>", "");
         return out.replaceAll("\\n\\s*\\n+", "\n").strip();
     }
 }

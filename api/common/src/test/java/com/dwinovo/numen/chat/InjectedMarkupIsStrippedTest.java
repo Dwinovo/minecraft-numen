@@ -33,6 +33,37 @@ class InjectedMarkupIsStrippedTest {
     }
 
     @Test
+    void goalInjectionsShowNothingToTheOwner() {
+        // 目标那两块也是客户端注入的:设定时那份指令、续跑时那句"还差什么"。
+        // 漏了就是一整块指令(连"别自己宣布做完"那几句)当成主人的气泡糊在面板上。
+        var goal = com.dwinovo.numen.agent.goal.GoalState.of("挖 64 个铁锭", T0);
+        EventQueue q = new EventQueue(EventQueue.Journal.NONE);
+        q.push(EventTypes.GOAL,
+                com.dwinovo.numen.agent.goal.GoalPrompts.initialDirective(goal), T0, true);
+
+        assertTrue(new OwnerWordsMode().userText(render(q)).isEmpty(), "设定那块漏出来了");
+
+        goal.countTurn();
+        q.push(EventTypes.GOAL,
+                com.dwinovo.numen.agent.goal.GoalPrompts.progress("只挖到 30 个", goal, T0),
+                T0, true);
+
+        assertTrue(new OwnerWordsMode().userText(render(q)).isEmpty(), "续跑那句漏出来了");
+    }
+
+    @Test
+    void ownerWordsSurviveAGoalInjectionInTheSameBatch() {
+        // 同一条消息里既有目标注入又有主人的话:剥掉前者,后者一个字不能少
+        var goal = com.dwinovo.numen.agent.goal.GoalState.of("挖 64 个铁锭", T0);
+        EventQueue q = new EventQueue(EventQueue.Journal.NONE);
+        q.push(EventTypes.GOAL,
+                com.dwinovo.numen.agent.goal.GoalPrompts.progress("只挖到 30 个", goal, T0), T0, true);
+        q.push(EventTypes.QUERY, "<query>先回来一下</query>", T0, true);
+
+        assertEquals("先回来一下", new OwnerWordsMode().userText(render(q)));
+    }
+
+    @Test
     void aPureEventBatchShowsNothingToTheOwner() {
         // 全是世界发生的事,主人一个字都没说 —— 面板上不该出现任何东西
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
