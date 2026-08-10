@@ -63,38 +63,43 @@ public final class GoalPrompts {
     public static final String MET = "MET";
     /** 判定不成立的回复前缀。 */
     public static final String NOT_MET = "NOT_MET";
+    /** 没达成,而且跟上一轮比毫无实质进展——她在原地打转。 */
+    public static final String STUCK = "STUCK";
 
     public static String evaluatorSystem() {
         return """
                 You decide whether a goal condition has been met. You are given the condition, the \
-                companion's measured physical state, and the last few messages of her conversation.
+                companion's measured physical state, everything that has happened since the goal \
+                was set, and the reason you gave last time.
 
                 Reply with exactly one line, nothing else:
                 %s: <one short sentence naming the evidence that proves it>
                 %s: <one short sentence naming what is still missing>
+                %s: <one short sentence naming what she is stuck on>
 
                 Write that sentence in the same language as the condition — the owner reads it.
 
-                Judge only from the evidence you are given. The physical state is authoritative — \
-                it is measured from the world, not reported by the companion, so prefer it over \
-                anything she claims. If the evidence does not prove the condition, answer %s.
+                Judge the condition by its end state. "Mine 128 iron" is satisfied when 128 iron \
+                are there; you do not need to prove every one of them was mined just now. Judge \
+                only from the evidence you are given, and prefer the physical state over anything \
+                she claims — it is measured from the world, not reported by her. If the evidence \
+                does not prove the condition, answer %s.
 
-                Mind the difference between doing something and already having it. "Mine 128 \
-                diamonds" asks for work to happen; an inventory that already held them proves \
-                nothing on its own, so look for evidence the work happened — finished-task \
-                results, tool outcomes, counts that went up. "Have 128 diamonds" is about the \
-                end state, and the inventory alone settles it. When the condition is about doing \
-                something and you can only see the end state, answer %s."""
-                .formatted(MET, NOT_MET, NOT_MET, NOT_MET);
+                Use %s instead of %s when this round changed nothing that matters: same obstacle \
+                as last time, same counts, tasks failing the same way. The owner would rather be \
+                told she cannot get there than watch her circle for another twenty rounds."""
+                .formatted(MET, NOT_MET, STUCK, NOT_MET, STUCK, NOT_MET);
     }
 
     /**
      * 评估器这一次要看的东西。
      *
      * @param facts  身体事实(背包/位置/当前任务),服务端推来的,不是她自述
-     * @param recent 最近几句对话,已拼好
+     * @param since  <b>目标设定以来</b>发生的事,已拼好。不是"最近几句"——她可能分三次
+     *               才凑够数,只看末尾就永远拼不出累计的证据
      */
-    public static String evaluatorQuery(GoalState goal, String facts, String recent) {
+    public static String evaluatorQuery(GoalState goal, String facts, String since) {
+        String last = goal.lastReason() == null ? "(first check)" : goal.lastReason();
         return """
                 %s
 
@@ -102,16 +107,21 @@ public final class GoalPrompts {
                 %s
                 </physical_state>
 
-                <recent_conversation>
+                <since_goal_was_set>
                 %s
-                </recent_conversation>"""
+                </since_goal_was_set>
+
+                <your_last_answer>
+                %s
+                </your_last_answer>"""
                 .formatted(objectiveBlock(goal.objective()),
                         facts.isBlank() ? "(unavailable)" : facts,
-                        recent.isBlank() ? "(nothing yet)" : recent);
+                        since.isBlank() ? "(nothing yet)" : since,
+                        last);
     }
 
-    /** 评估器的一句话回复。 */
-    public record Verdict(boolean met, String reason) {}
+    /** 评估器的一句话回复。{@code stuck} 蕴含没达成。 */
+    public record Verdict(boolean met, boolean stuck, String reason) {}
 
     /**
      * 读评估器的回复。
@@ -123,14 +133,18 @@ public final class GoalPrompts {
         String text = reply == null ? "" : reply.strip();
         for (String line : text.split("\n")) {
             String t = line.strip();
+            // NOT_MET 里含着 MET,STUCK 独立;先认长的、再认短的。
             if (t.regionMatches(true, 0, NOT_MET, 0, NOT_MET.length())) {
-                return new Verdict(false, tail(t, NOT_MET));
+                return new Verdict(false, false, tail(t, NOT_MET));
+            }
+            if (t.regionMatches(true, 0, STUCK, 0, STUCK.length())) {
+                return new Verdict(false, true, tail(t, STUCK));
             }
             if (t.regionMatches(true, 0, MET, 0, MET.length())) {
-                return new Verdict(true, tail(t, MET));
+                return new Verdict(true, false, tail(t, MET));
             }
         }
-        return new Verdict(false, text.isEmpty() ? "判不出来(评估器没回话)" : text);
+        return new Verdict(false, false, text.isEmpty() ? "判不出来(评估器没回话)" : text);
     }
 
     /** 去掉前缀和它后面的冒号/空白。 */

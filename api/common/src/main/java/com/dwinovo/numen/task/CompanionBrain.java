@@ -146,8 +146,17 @@ final class CompanionBrain {
             companion.resumeAllReflexes();
         }
         wasIdle = current.isEmpty();
-        shipResults(companion);
+        // 顺序有意义,别调回来:先让状态归位,再宣布结果。
+        //
+        // task_finished 一到客户端就<b>同步</b>开一轮(急件),而组装请求那一刻会读
+        // <current_task>。所以宣布在前的话,她拿到的必然是上一次推的旧进度——限速是
+        // 一秒一推,那份快照可能差着几十个。表现是任务明明干完了,她还在说"还差一点
+        // 我给你收尾",因为镜像那段的措辞("This background call is ACTIVE")比事件硬。
+        //
+        // 两个包在同一刻按调用序发出、按发出序到达,所以这不是偶发竞态:宣布在前就<b>每次</b>
+        // 都错。把清空排在前面,她读到的就是"已经空了"。
         syncCurrentTask(companion);
+        shipResults(companion);
     }
 
     /**
@@ -211,9 +220,10 @@ final class CompanionBrain {
     void finalizeActive(NumenPlayer companion) {
         sync.finalizeInline();
         current.finalizeInline();
-        shipResults(companion);
         holder = null;
+        // 同 tick():状态先归位再宣布结果 —— 结果一到就同步开轮,那一刻会读 <current_task>。
         syncCurrentTask(companion);
+        shipResults(companion);
     }
 
     // ---- 槽的代理:让选择器能像问一个 Task 那样问一个槽 ----

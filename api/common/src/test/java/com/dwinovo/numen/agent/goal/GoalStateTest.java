@@ -106,6 +106,7 @@ class GoalStateTest {
     void readsBothVerdicts() {
         var met = GoalPrompts.readVerdict("MET: 背包里有 64 个铁锭");
         assertTrue(met.met());
+        assertFalse(met.stuck());
         assertEquals("背包里有 64 个铁锭", met.reason());
 
         var no = GoalPrompts.readVerdict("NOT_MET: 只挖到 30 个");
@@ -180,17 +181,58 @@ class GoalStateTest {
     @Test
     void theEvaluatorIsToldToTrustMeasuredStateOverWhatSheSays() {
         String sys = GoalPrompts.evaluatorSystem();
-        assertTrue(sys.contains("authoritative"), sys);
+        assertTrue(sys.contains("prefer the physical state"), sys);
+        assertTrue(sys.contains("not reported by her"), sys);
         assertTrue(sys.contains(GoalPrompts.MET) && sys.contains(GoalPrompts.NOT_MET));
     }
 
     @Test
-    void theEvaluatorIsToldToSeparateDoingFromHaving() {
-        // "挖 128 个钻石"是要发生一件事,不是要背包里有那么多——她原来就有 176 个的话,
-        // 一根手指没动也会被判达成。判据得落在"活儿干过没有"上。
+    void theEvaluatorJudgesByEndStateNotByProvingEveryStep() {
+        // 反过来写过一版:要求证明"这些铁是这次挖的"。结果她背包早就够了,评估器咬定
+        // 缺过程证据,把她赶去满世界找矿四分钟。主人说"挖 128 个铁",要的是有 128 个铁。
         String sys = GoalPrompts.evaluatorSystem();
-        assertTrue(sys.contains("doing something") && sys.contains("already having it"), sys);
-        assertTrue(sys.contains("finished-task"), sys);
+        assertTrue(sys.contains("by its end state"), sys);
+        assertTrue(sys.contains("do not need to prove"), sys);
+    }
+
+    @Test
+    void theEvaluatorCanSaySheIsGoingInCircles() {
+        String sys = GoalPrompts.evaluatorSystem();
+        assertTrue(sys.contains(GoalPrompts.STUCK), sys);
+        assertTrue(sys.contains("same obstacle as last time"), sys);
+    }
+
+    @Test
+    void stuckNeedsToRepeatBeforeGivingUp() {
+        // 一轮没进展很正常(她可能正在走路),连着两轮同一堵墙才说明真过不去
+        GoalState g = goal();
+        assertFalse(g.noteStuck(true));
+        assertTrue(g.noteStuck(true));
+    }
+
+    @Test
+    void anyProgressResetsTheStuckStreak() {
+        GoalState g = goal();
+        g.noteStuck(true);
+        assertFalse(g.noteStuck(false), "有进展就重新数");
+        assertEquals(0, g.stuckStreak());
+        assertFalse(g.noteStuck(true), "从头数起");
+    }
+
+    @Test
+    void stuckIsAKindOfNotMet() {
+        var v = GoalPrompts.readVerdict("STUCK: 那些铁矿她够不着");
+        assertFalse(v.met());
+        assertTrue(v.stuck());
+        assertEquals("那些铁矿她够不着", v.reason());
+    }
+
+    @Test
+    void theEvaluatorSeesItsOwnLastAnswerSoItCanCompare() {
+        GoalState g = goal();
+        assertTrue(GoalPrompts.evaluatorQuery(g, "背包:空", "x").contains("(first check)"));
+        g.setLastReason("还差 30 个");
+        assertTrue(GoalPrompts.evaluatorQuery(g, "背包:空", "x").contains("还差 30 个"));
     }
 
     @Test
@@ -204,6 +246,7 @@ class GoalStateTest {
         String q = GoalPrompts.evaluatorQuery(goal(), "", "");
         assertTrue(q.contains("(unavailable)"), q);
         assertTrue(q.contains("(nothing yet)"), q);
+        assertTrue(q.contains("<since_goal_was_set>"), q);
     }
 
     @Test

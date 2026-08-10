@@ -87,10 +87,10 @@ public final class EntityAgentLoop {
     private static final int AUTO_COMPACT_BUFFER_TOKENS = 13_000;
     /** 自动整理的下限:短于这个数不值得自己动手。手动 {@code /compact} 不看它。 */
     private static final int MIN_COMPACT_MESSAGES = 8;
-    /** 给目标评估器看的最近几条消息。够它看出"她刚做了什么"就行,不需要整段历史。 */
-    private static final int JUDGE_RECENT_MESSAGES = 6;
+    /** 给目标评估器看的对话上限。够装下整个目标期间,又不至于把整段会话都发一遍。 */
+    private static final int JUDGE_WINDOW_CHARS = 8000;
     /** 每条截到这个长度:工具结果可能上千字,评估器不需要读完。 */
-    private static final int JUDGE_LINE_CHARS = 600;
+    private static final int JUDGE_LINE_CHARS = 400;
     /** Circuit breaker: stop auto-retrying after this many consecutive failures. */
     private static final int MAX_COMPACT_FAILURES = 3;
 
@@ -640,13 +640,13 @@ public final class EntityAgentLoop {
     private void judgeGoal() {
         var target = goal;
         String facts = runtimeStateXml();
-        String recent = recentForJudge();
+        String since = sinceGoalForJudge();
         goalJudging = true;
         final int gen = turnGeneration;
         client().chatStreaming(
                         List.of(new ConvoState.Msg.User(
                                 com.dwinovo.numen.agent.goal.GoalPrompts.evaluatorQuery(
-                                        target, facts, recent))),
+                                        target, facts, since))),
                         List.of(),
                         com.dwinovo.numen.agent.goal.GoalPrompts.evaluatorSystem(),
                         null)
@@ -670,10 +670,18 @@ public final class EntityAgentLoop {
         goal.addTokens(res.freshTokens());
         var verdict = com.dwinovo.numen.agent.goal.GoalPrompts.readVerdict(res.turn().content());
         goal.setLastReason(verdict.reason());
-        Constants.LOG.info("[numen-entity#{}] 目标评估 第{}轮 {}:{}",
-                entityUuid, goal.turnsExecuted(), verdict.met() ? "达成" : "还差", verdict.reason());
+        boolean giveUp = goal.noteStuck(verdict.stuck());
+        Constants.LOG.info("[numen-entity#{}] 目标评估 第{}轮 {}:{}", entityUuid, goal.turnsExecuted(),
+                verdict.met() ? "达成" : verdict.stuck() ? "打转 x" + goal.stuckStreak() : "还差",
+                verdict.reason());
         if (verdict.met()) {
             clearGoal("目标达成:" + verdict.reason());
+            return;
+        }
+        if (giveUp) {
+            // 连着几轮同一堵墙:告诉主人卡在哪,别再转了。判"没进展"的是评估器,不是她自报
+            // ——她报不准,前面验过。
+            clearGoal("过不去,先收工了:" + verdict.reason() + " —— 换个说法或者搭把手再 /goal");
             return;
         }
         if (!goal.hasTurnsLeft()) {
@@ -692,19 +700,35 @@ public final class EntityAgentLoop {
         maybeDrain();
     }
 
-    /** 给评估器看的最近几句。它只需要看得出"她刚做了什么",不需要整段历史。 */
-    private String recentForJudge() {
+    /**
+     * 给评估器看的:<b>目标设定以来</b>发生的一切。
+     *
+     * <p>不是"最近几句"。她可能分三次才凑够数,只看末尾就永远拼不出累计的证据——实测过
+     * 一次:第一轮挖到 64/128 那条早滚出窗口,后面几轮评估器咬定"没有挖矿证据",把她赶去
+     * 满世界找矿四分钟。
+     *
+     * <p>从末尾往回扫到目标设定那条({@code <goal>} 就在里面),字数封顶兜底——整理记忆
+     * 会把那条冲掉,不封顶就一路扫到会话开头。
+     */
+    private String sinceGoalForJudge() {
         List<ConvoState.Msg> all = convo.snapshot();
-        StringBuilder sb = new StringBuilder();
-        for (int i = Math.max(0, all.size() - JUDGE_RECENT_MESSAGES); i < all.size(); i++) {
-            String line = switch (all.get(i)) {
+        java.util.ArrayDeque<String> lines = new java.util.ArrayDeque<>();
+        int budget = JUDGE_WINDOW_CHARS;
+        for (int i = all.size() - 1; i >= 0 && budget > 0; i--) {
+            ConvoState.Msg msg = all.get(i);
+            String line = switch (msg) {
                 case ConvoState.Msg.User u -> "owner/system: " + u.content();
                 case ConvoState.Msg.Assistant a -> "companion: " + a.turn().content();
                 case ConvoState.Msg.Tool t -> "tool result: " + t.content();
             };
-            sb.append(truncate(line, JUDGE_LINE_CHARS)).append('\n');
+            line = truncate(line, JUDGE_LINE_CHARS);
+            lines.addFirst(line);
+            budget -= line.length();
+            if (msg instanceof ConvoState.Msg.User u && u.content().contains("<goal>")) {
+                break;   // 扫到目标设定那条了,再往前跟这个目标无关
+            }
         }
-        return sb.toString().strip();
+        return String.join("\n", lines).strip();
     }
 
     public String compactProblem() {
@@ -1392,7 +1416,11 @@ public final class EntityAgentLoop {
      */
     private String runtimeStateXml() {
         String body = currentTaskXml() + inventoryXml() + effectsXml();
-        return body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
+        String xml = body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
+        // 原样打出来。"她看到的世界"平时完全不可见,于是"她怎么会这么说"只能靠猜——
+        // 而她说的数跟事件对不上时,分不清是她编的还是我们喂错了。这一行就是分界线。
+        Constants.LOG.info("[numen-ctx#{}] runtime_state → {}", entityUuid, xml);
+        return xml;
     }
 
     /** Live async-task state, recomputed for every worker request and never persisted. */

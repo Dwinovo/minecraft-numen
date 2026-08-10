@@ -34,13 +34,17 @@ public final class GoalState {
     public static final int MAX_GOAL_TURNS = 30;
     /** 目标正文上限。 */
     public static final int MAX_OBJECTIVE_CHARS = 4000;
+    /** 评估器连着判这么多次"原地打转"就收工。 */
+    public static final int STUCK_STREAK_TO_GIVE_UP = 2;
 
     private String objective;
     private long startedAt;
     private int turnsExecuted;
     private long tokensUsed;
-    /** 评估器上一次给的理由。主人靠它知道"她接下来要朝什么努力"。 */
+    /** 评估器上一次给的理由。主人靠它知道"她接下来要朝什么努力",评估器靠它比出有没有进展。 */
     private String lastReason;
+    /** 评估器连着判"原地打转"的次数。 */
+    private int stuckStreak;
 
     private GoalState() {}
 
@@ -73,6 +77,23 @@ public final class GoalState {
         this.lastReason = reason == null || reason.isBlank() ? null : reason.strip();
     }
 
+    /**
+     * 记一次判词是不是"原地打转",返回该不该收工了。
+     *
+     * <p>要连着 {@value #STUCK_STREAK_TO_GIVE_UP} 次才算数:一轮没进展很正常(她可能正在
+     * 走路),连着两轮都是同一堵墙才说明真过不去。
+     *
+     * <p>这个数是<b>评估器</b>判的,不是她自报——她报不准,前面验过。
+     */
+    public boolean noteStuck(boolean stuck) {
+        stuckStreak = stuck ? stuckStreak + 1 : 0;
+        return stuckStreak >= STUCK_STREAK_TO_GIVE_UP;
+    }
+
+    public int stuckStreak() {
+        return stuckStreak;
+    }
+
     /** 从设定到现在多久。中途没有暂停这回事,所以就是一个减法。 */
     public long elapsedMs(long nowMs) {
         return Math.max(0L, nowMs - startedAt);
@@ -103,6 +124,7 @@ public final class GoalState {
         o.addProperty("startedAt", startedAt);
         o.addProperty("turnsExecuted", turnsExecuted);
         o.addProperty("tokensUsed", tokensUsed);
+        o.addProperty("stuckStreak", stuckStreak);
         if (lastReason != null) {
             o.addProperty("lastReason", lastReason);
         }
@@ -123,6 +145,7 @@ public final class GoalState {
         g.startedAt = num(o, "startedAt");
         g.turnsExecuted = (int) num(o, "turnsExecuted");
         g.tokensUsed = num(o, "tokensUsed");
+        g.stuckStreak = (int) num(o, "stuckStreak");
         g.lastReason = o.has("lastReason") && !o.get("lastReason").isJsonNull()
                 ? o.get("lastReason").getAsString() : null;
         return g;
