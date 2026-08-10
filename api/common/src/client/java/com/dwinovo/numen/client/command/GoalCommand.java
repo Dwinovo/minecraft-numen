@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.command;
 
+import com.dwinovo.numen.agent.goal.GoalPrompts;
 import com.dwinovo.numen.agent.goal.GoalState;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 
@@ -34,15 +35,17 @@ final class GoalCommand implements ChatCommand {
         return true;
     }
 
+    /** {@code clear} 的说法。主人想收工时脑子里冒出哪个词都算,不该让他猜对才行。 */
+    private static final java.util.Set<String> CLEAR_WORDS =
+            java.util.Set.of("clear", "stop", "off", "reset", "none", "cancel");
+
     @Override
     public String run(EntityAgentLoop loop, String args) {
         GoalState goal = loop.goal();
         if (args.isBlank()) {
-            return goal == null
-                    ? "还没有目标。直接说要做什么:/goal 把家门口那片林子清干净"
-                    : "目标:" + goal.objective() + "(第 " + goal.turnsExecuted() + " 轮)";
+            return status(goal);
         }
-        if (args.toLowerCase(Locale.ROOT).equals("clear")) {
+        if (CLEAR_WORDS.contains(args.toLowerCase(Locale.ROOT))) {
             if (goal == null) {
                 return "本来就没有目标。";
             }
@@ -53,5 +56,21 @@ final class GoalCommand implements ChatCommand {
         String replaced = goal == null ? "" : "换掉了原来的:" + goal.objective() + "\n";
         loop.setGoal(GoalState.of(args, System.currentTimeMillis()));
         return replaced + "目标:" + args + "\n她会一轮接一轮做下去,/goal clear 或按停止键收工。";
+    }
+
+    /** 无参时看的东西:条件、跑了多久、判了几轮、烧了多少、<b>评估器最近说还差什么</b>。 */
+    private static String status(GoalState goal) {
+        if (goal == null) {
+            return "还没有目标。直接说要做什么:/goal 把家门口那片林子清干净";
+        }
+        StringBuilder sb = new StringBuilder("目标:").append(goal.objective())
+                .append("\n跑了 ").append(GoalPrompts.elapsed(
+                        goal.elapsedMs(System.currentTimeMillis())))
+                .append(" · 第 ").append(goal.turnsExecuted()).append(" 轮")
+                .append(" · ").append(goal.tokensUsed()).append(" token");
+        if (goal.lastReason() != null) {
+            sb.append("\n还差:").append(goal.lastReason());
+        }
+        return sb.toString();
     }
 }

@@ -21,9 +21,12 @@ import com.google.gson.JsonObject;
  */
 public final class GoalState {
 
-    /** 连着撞同一堵墙几次就放弃。一次挡住只是这一步没走通,换个法子还能继续。 */
-    public static final int BLOCKED_CONSECUTIVE_THRESHOLD = 3;
-    /** 一个目标最多自动续这么多轮。防的是"她以为没做完"导致的无限循环。 */
+    /**
+     * 一个目标最多自动续这么多轮。
+     *
+     * <p>兜底,不是主要机制:想限制轮次直接写进条件("跑 20 轮还没好就收工"),评估器判得出来。
+     * 留这道硬线是因为她比命令行更容易陷进去,而主人可能根本没在看屏幕。
+     */
     public static final int MAX_GOAL_TURNS = 150;
     /** 目标正文上限。 */
     public static final int MAX_OBJECTIVE_CHARS = 4000;
@@ -32,8 +35,8 @@ public final class GoalState {
     private long startedAt;
     private int turnsExecuted;
     private long tokensUsed;
-    private int blockedAttempts;
-    private String lastBlockReason;
+    /** 评估器上一次给的理由。主人靠它知道"她接下来要朝什么努力"。 */
+    private String lastReason;
 
     private GoalState() {}
 
@@ -57,12 +60,13 @@ public final class GoalState {
         return tokensUsed;
     }
 
-    public int blockedAttempts() {
-        return blockedAttempts;
+    /** 评估器上一次说还差什么;还没评过则 {@code null}。 */
+    public String lastReason() {
+        return lastReason;
     }
 
-    public String lastBlockReason() {
-        return lastBlockReason;
+    public void setLastReason(String reason) {
+        this.lastReason = reason == null || reason.isBlank() ? null : reason.strip();
     }
 
     /** 从设定到现在多久。中途没有暂停这回事,所以就是一个减法。 */
@@ -87,19 +91,6 @@ public final class GoalState {
         }
     }
 
-    /**
-     * 她报告被挡住了。
-     *
-     * @return {@code true} = 同一个理由已经撞够 {@value #BLOCKED_CONSECUTIVE_THRESHOLD} 次,
-     *         该放弃了(清掉目标并告诉主人)
-     */
-    public boolean reportBlocked(String reason) {
-        String r = reason == null ? "" : reason.strip();
-        blockedAttempts = r.equals(lastBlockReason) ? blockedAttempts + 1 : 1;
-        lastBlockReason = r;
-        return blockedAttempts >= BLOCKED_CONSECUTIVE_THRESHOLD;
-    }
-
     // ---- 落盘 ----
 
     public JsonObject toJson() {
@@ -108,9 +99,8 @@ public final class GoalState {
         o.addProperty("startedAt", startedAt);
         o.addProperty("turnsExecuted", turnsExecuted);
         o.addProperty("tokensUsed", tokensUsed);
-        o.addProperty("blockedAttempts", blockedAttempts);
-        if (lastBlockReason != null) {
-            o.addProperty("lastBlockReason", lastBlockReason);
+        if (lastReason != null) {
+            o.addProperty("lastReason", lastReason);
         }
         return o;
     }
@@ -129,9 +119,8 @@ public final class GoalState {
         g.startedAt = num(o, "startedAt");
         g.turnsExecuted = (int) num(o, "turnsExecuted");
         g.tokensUsed = num(o, "tokensUsed");
-        g.blockedAttempts = (int) num(o, "blockedAttempts");
-        g.lastBlockReason = o.has("lastBlockReason") && !o.get("lastBlockReason").isJsonNull()
-                ? o.get("lastBlockReason").getAsString() : null;
+        g.lastReason = o.has("lastReason") && !o.get("lastReason").isJsonNull()
+                ? o.get("lastReason").getAsString() : null;
         return g;
     }
 

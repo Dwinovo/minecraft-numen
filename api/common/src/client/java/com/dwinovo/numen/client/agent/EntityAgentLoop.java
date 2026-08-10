@@ -87,6 +87,10 @@ public final class EntityAgentLoop {
     private static final int AUTO_COMPACT_BUFFER_TOKENS = 13_000;
     /** 自动整理的下限:短于这个数不值得自己动手。手动 {@code /compact} 不看它。 */
     private static final int MIN_COMPACT_MESSAGES = 8;
+    /** 给目标评估器看的最近几条消息。够它看出"她刚做了什么"就行,不需要整段历史。 */
+    private static final int JUDGE_RECENT_MESSAGES = 6;
+    /** 每条截到这个长度:工具结果可能上千字,评估器不需要读完。 */
+    private static final int JUDGE_LINE_CHARS = 600;
     /** Circuit breaker: stop auto-retrying after this many consecutive failures. */
     private static final int MAX_COMPACT_FAILURES = 3;
 
@@ -559,11 +563,21 @@ public final class EntityAgentLoop {
         return goal;
     }
 
-    /** 定一个目标。落盘,并立刻接上。 */
+    /**
+     * 定一个目标。整份目标<b>只在这里</b>交给她一次;之后每轮只补评估器那句"还差什么"。
+     */
     public void setGoal(com.dwinovo.numen.agent.goal.GoalState next) {
         this.goal = next;
         CompanionHome.setGoal(entityUuid, next);
-        steerToGoal();
+        if (next == null || dead || queue.locked()) {
+            return;
+        }
+        next.countTurn();
+        CompanionHome.setGoal(entityUuid, next);
+        queue.push(EventTypes.GOAL,
+                com.dwinovo.numen.agent.goal.GoalPrompts.initialDirective(next),
+                System.currentTimeMillis(), true);
+        maybeDrain();
     }
 
     /**
@@ -585,21 +599,16 @@ public final class EntityAgentLoop {
         }
     }
 
-    /** 目标的计数变了(撞墙次数)之后落盘;不改"在不在",所以不重新接上。 */
-    public void goalChanged() {
-        CompanionHome.setGoal(entityUuid, goal);
-    }
-
     /**
-     * 目标还在跑就往队列里放一份续跑块。
+     * 一轮收尾了:判一次目标达没达成。
      *
-     * <p>每轮<b>重拼一份完整的</b>,不是拼一次常驻:进度永远是新的,整理记忆把旧的那份
-     * 丢掉也无所谓,主人改了目标下一轮立刻生效。
+     * <p>判定<b>不由她自己做</b>——另开一次干净的调用(不带对话历史、不带人设、不带工具),
+     * 只看条件、身体事实和最近几句。执行的人和判定的人分开,她才骗不了自己。
      *
-     * <p>队列里还有别的排着就先不放——那些本来就会开起一轮,这一轮跑完再接。
+     * <p>队列里还有别的排着就先不判——那些本来就会开起一轮,那一轮收尾时再说。
      */
     private void steerToGoal() {
-        if (goal == null || dead || queue.locked() || !queue.isEmpty()) {
+        if (goal == null || dead || queue.locked() || !queue.isEmpty() || goalJudging) {
             return;
         }
         // 身体还在干活就别催。
@@ -616,18 +625,83 @@ public final class EntityAgentLoop {
                     entityUuid, currentTask.tool());
             return;
         }
-        long now = System.currentTimeMillis();
         if (!goal.hasTurnsLeft()) {
             // 到顶了就收工,不是闷头继续:她"以为没做完"是会无限循环的。
             clearGoal("跑够 " + com.dwinovo.numen.agent.goal.GoalState.MAX_GOAL_TURNS
                     + " 轮还没完,先收工了 —— 想接着做再说一次 /goal");
             return;
         }
+        judgeGoal();
+    }
+
+    /** 评估在飞:一轮只判一次,回来之前不再发第二次。 */
+    private boolean goalJudging;
+
+    /**
+     * 跑一次评估。用同伴自己绑的那个模型,但是<b>另一次调用</b>——"新鲜"指的是这个,
+     * 不是换个更小的模型。
+     */
+    private void judgeGoal() {
+        var target = goal;
+        String facts = runtimeStateXml();
+        String recent = recentForJudge();
+        goalJudging = true;
+        final int gen = turnGeneration;
+        client().chatStreaming(
+                        List.of(new ConvoState.Msg.User(
+                                com.dwinovo.numen.agent.goal.GoalPrompts.evaluatorQuery(
+                                        target, facts, recent))),
+                        List.of(),
+                        com.dwinovo.numen.agent.goal.GoalPrompts.evaluatorSystem(),
+                        null)
+                .whenComplete((res, err) -> Minecraft.getInstance().execute(
+                        () -> finishJudging(gen, target, res, err)));
+    }
+
+    private void finishJudging(int gen, com.dwinovo.numen.agent.goal.GoalState judged,
+                               NumenLlmClient.ChatResult res, Throwable err) {
+        goalJudging = false;
+        // 判的是上一个目标,或者中途被打断/换了目标 —— 这次结果作废。
+        if (gen != turnGeneration || goal == null || goal != judged) {
+            return;
+        }
+        if (err != null || res == null) {
+            // 判不出来不等于做完了。歇一轮,下次收尾再判。
+            Constants.LOG.warn("[numen-entity#{}] 目标评估失败,这一轮先不续:{}",
+                    entityUuid, unwrap(err));
+            return;
+        }
+        goal.addTokens(res.freshTokens());
+        var verdict = com.dwinovo.numen.agent.goal.GoalPrompts.readVerdict(res.turn().content());
+        goal.setLastReason(verdict.reason());
+        Constants.LOG.info("[numen-entity#{}] 目标评估 第{}轮 {}:{}",
+                entityUuid, goal.turnsExecuted(), verdict.met() ? "达成" : "还差", verdict.reason());
+        if (verdict.met()) {
+            clearGoal("目标达成:" + verdict.reason());
+            return;
+        }
+        long now = System.currentTimeMillis();
         goal.countTurn();
         CompanionHome.setGoal(entityUuid, goal);
         queue.push(EventTypes.GOAL,
-                com.dwinovo.numen.agent.goal.GoalPrompts.continuation(goal, now), now, true);
+                com.dwinovo.numen.agent.goal.GoalPrompts.progress(verdict.reason(), goal, now),
+                now, true);
         maybeDrain();
+    }
+
+    /** 给评估器看的最近几句。它只需要看得出"她刚做了什么",不需要整段历史。 */
+    private String recentForJudge() {
+        List<ConvoState.Msg> all = convo.snapshot();
+        StringBuilder sb = new StringBuilder();
+        for (int i = Math.max(0, all.size() - JUDGE_RECENT_MESSAGES); i < all.size(); i++) {
+            String line = switch (all.get(i)) {
+                case ConvoState.Msg.User u -> "owner/system: " + u.content();
+                case ConvoState.Msg.Assistant a -> "companion: " + a.turn().content();
+                case ConvoState.Msg.Tool t -> "tool result: " + t.content();
+            };
+            sb.append(truncate(line, JUDGE_LINE_CHARS)).append('\n');
+        }
+        return sb.toString().strip();
     }
 
     public String compactProblem() {
