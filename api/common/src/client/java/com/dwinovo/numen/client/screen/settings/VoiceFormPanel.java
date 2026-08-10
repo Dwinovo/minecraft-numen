@@ -64,13 +64,15 @@ public final class VoiceFormPanel {
             case VoiceLibrary.BACKEND_SOVITS -> com.dwinovo.numen.client.voice.GptSovitsTts.DEFAULT_BASE;
             case VoiceLibrary.BACKEND_MINIMAX -> com.dwinovo.numen.client.voice.MiniMaxTts.DEFAULT_BASE;
             case VoiceLibrary.BACKEND_FISH -> com.dwinovo.numen.client.voice.FishAudioTts.DEFAULT_BASE;
+            case VoiceLibrary.BACKEND_DASHSCOPE -> com.dwinovo.numen.client.voice.DashScopeTts.DEFAULT_BASE;
             default -> com.dwinovo.numen.client.voice.OpenAiCompatibleTts.DEFAULT_BASE;
         };
     }
 
     private static final List<String> BACKENDS = List.of(
             VoiceLibrary.BACKEND_OPENAI, VoiceLibrary.BACKEND_SOVITS,
-            VoiceLibrary.BACKEND_MINIMAX, VoiceLibrary.BACKEND_FISH);
+            VoiceLibrary.BACKEND_MINIMAX, VoiceLibrary.BACKEND_FISH,
+            VoiceLibrary.BACKEND_DASHSCOPE);
     private static final String TEST_SENTENCE = "你好,我是你的同伴,这是我的声音。";
 
     /** 滚动根:表单行(进裁剪区,可上下滚);固定根:✕/结果胶囊/按钮行(不动)。 */
@@ -135,7 +137,8 @@ public final class VoiceFormPanel {
                 t(ModLanguageData.Keys.VOICE_BACKEND_OPENAI),
                 t(ModLanguageData.Keys.VOICE_BACKEND_SOVITS),
                 t(ModLanguageData.Keys.VOICE_BACKEND_MINIMAX),
-                t(ModLanguageData.Keys.VOICE_BACKEND_FISH)),
+                t(ModLanguageData.Keys.VOICE_BACKEND_FISH),
+                t(ModLanguageData.Keys.VOICE_BACKEND_DASHSCOPE)),
                 Math.max(0, BACKENDS.indexOf(draft.backend)), this::onBackendPicked));
         backendPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
@@ -173,6 +176,16 @@ public final class VoiceFormPanel {
                         "fish.audio/m/… 或纯 ID", false, draft.voice, v -> draft.voice = v);
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_FISH_MODEL,
                         "s1 / s2.1-pro-free", false, draft.model, v -> draft.model = v);
+            }
+            case VoiceLibrary.BACKEND_DASHSCOPE -> {
+                ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_DASHSCOPE,
+                        "sk-…", true, draft.apiKey, v -> draft.apiKey = v);
+                ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_DASHSCOPE_MODEL,
+                        com.dwinovo.numen.client.voice.DashScopeTts.DEFAULT_MODEL,
+                        false, draft.model, v -> draft.model = v);
+                ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_DASHSCOPE_VOICE,
+                        com.dwinovo.numen.client.voice.DashScopeTts.DEFAULT_VOICE,
+                        false, draft.voice, v -> draft.voice = v);
             }
             default -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_OPENAI,

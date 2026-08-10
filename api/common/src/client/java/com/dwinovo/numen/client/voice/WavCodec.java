@@ -29,6 +29,44 @@ public final class WavCodec {
     public static final int MAX_SAMPLE_RATE = 48_000;
 
     /**
+     * 把裸 PCM(16-bit LE 单声道)裹上 44 字节 RIFF 头。
+     *
+     * <p>给流式 TTS 用:那类后端推回来的是一串不带头的 PCM 分片,拼完得补上头才认得出采样率。
+     *
+     * @throws IOException 采样率超出 {@link #MIN_SAMPLE_RATE}–{@link #MAX_SAMPLE_RATE},
+     *                     或 PCM 长度不是偶数(半个采样点说明流是断的)
+     */
+    public static byte[] encodeMono16(byte[] pcm, int sampleRate) throws IOException {
+        if (pcm == null || pcm.length == 0) {
+            throw new IOException("没有音频数据");
+        }
+        if ((pcm.length & 1) != 0) {
+            throw new IOException("16-bit PCM 长度应为偶数,实际=" + pcm.length);
+        }
+        if (sampleRate < MIN_SAMPLE_RATE || sampleRate > MAX_SAMPLE_RATE) {
+            throw new IOException("采样率超出支持范围(8k–48k): " + sampleRate);
+        }
+        final int channels = 1;
+        final int bits = 16;
+        return ByteBuffer.allocate(44 + pcm.length).order(ByteOrder.LITTLE_ENDIAN)
+                .putInt(0x46464952)                              // "RIFF"
+                .putInt(36 + pcm.length)
+                .putInt(0x45564157)                              // "WAVE"
+                .putInt(0x20746D66)                              // "fmt "
+                .putInt(16)                                      // fmt 块长度
+                .putShort((short) 1)                             // PCM
+                .putShort((short) channels)
+                .putInt(sampleRate)
+                .putInt(sampleRate * channels * bits / 8)        // byteRate
+                .putShort((short) (channels * bits / 8))         // blockAlign
+                .putShort((short) bits)
+                .putInt(0x61746164)                              // "data"
+                .putInt(pcm.length)
+                .put(pcm)
+                .array();
+    }
+
+    /**
      * 解码一段完整的 WAV 字节。
      *
      * @throws IOException 非 WAV、缺 fmt/data 块、或格式超出支持范围

@@ -23,6 +23,13 @@
       "models": ["whisper-large-v3-turbo", "whisper-large-v3", "distil-whisper-large-v3-en"]
     },
     {
+      "id": "dashscope",
+      "name": "阿里云百炼 (实时)",
+      "backend": "dashscope",
+      "baseUrl": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
+      "models": ["qwen-audio-3.0-asr-flash-streaming", "fun-asr-realtime", "fun-asr-flash-8k-realtime"]
+    },
+    {
       "id": "doubao",
       "name": "豆包语音 (火山引擎 实时)",
       "backend": "doubao",

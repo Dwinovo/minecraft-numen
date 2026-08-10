@@ -29,6 +29,8 @@ public final class SttProviders {
     public static final String BACKEND_WHISPER_HTTP = "whisper-http";
     /** 豆包语音(火山引擎)大模型实时识别:流式 WebSocket,不是 OpenAI 兼容 REST。 */
     public static final String BACKEND_DOUBAO = "doubao";
+    /** 阿里云百炼(DashScope)实时识别:流式 WebSocket,run-task 指令协议。 */
+    public static final String BACKEND_DASHSCOPE = "dashscope";
 
     public record Option(String id, String displayName, String backend,
                          String defaultBaseUrl, List<String> models) {
@@ -84,6 +86,7 @@ public final class SttProviders {
         return switch (opt.backend()) {
             case BACKEND_WHISPER_HTTP -> new WhisperHttpStt(base, key, model);
             case BACKEND_DOUBAO -> new DoubaoStt(base, key, model);
+            case BACKEND_DASHSCOPE -> new DashScopeStt(base, key, model);
             default -> {
                 Constants.LOG.warn("[numen-stt] provider '{}' 的 backend='{}' 不认识,按 {} 处理",
                         opt.id(), opt.backend(), BACKEND_WHISPER_HTTP);

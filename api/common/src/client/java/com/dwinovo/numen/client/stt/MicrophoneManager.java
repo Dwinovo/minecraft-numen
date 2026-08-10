@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client.stt;
 
+import com.dwinovo.numen.Constants;
+
 import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.DataLine;
 import javax.sound.sampled.LineUnavailableException;
@@ -47,11 +49,30 @@ public final class MicrophoneManager {
      * 就回调 {@code onChunk}(采集线程上)。返回 false 表示无可用麦克风或已在录。
      */
     public static boolean start(String deviceName, Consumer<byte[]> onChunk, Runnable onStop) {
-        if (!RECORDING.compareAndSet(false, true)) {
+        if (RECORDING.get()) {
             return false;
         }
         TargetDataLine line = openLine(deviceName);
-        if (line == null) {
+        return line != null && startLine(line, onChunk, onStop);
+    }
+
+    /**
+     * 打开设备并起采集线程。
+     *
+     * <p>{@code open()} 在<b>调用线程上做完才返回</b>:设备被别的程序独占、或枚举完到打开之间
+     * 被拔掉,都要当场答"没录上",上层才能提示。放到采集线程里开的话,这里已经答了"在录",
+     * 而失败只会变成一段空音频送去识别。
+     */
+    static boolean startLine(TargetDataLine line, Consumer<byte[]> onChunk, Runnable onStop) {
+        if (!RECORDING.compareAndSet(false, true)) {
+            return false;
+        }
+        try {
+            line.open(SttAudio.FORMAT);
+            line.start();
+        } catch (LineUnavailableException | RuntimeException e) {
+            Constants.LOG.warn("[numen-stt] 打不开麦克风", e);
+            closeQuietly(line);
             RECORDING.set(false);
             return false;
         }
@@ -71,8 +92,6 @@ public final class MicrophoneManager {
         long deadline = System.nanoTime() + MAX_RECORD_MS * 1_000_000L;
         byte[] buffer = new byte[CHUNK_BYTES];
         try {
-            line.open(SttAudio.FORMAT);
-            line.start();
             while (RECORDING.get() && System.nanoTime() < deadline) {
                 int read = line.read(buffer, 0, buffer.length);
                 if (read > 0) {
@@ -81,19 +100,23 @@ public final class MicrophoneManager {
                     onChunk.accept(chunk);
                 }
             }
-        } catch (LineUnavailableException | RuntimeException ignored) {
-            // fall through to cleanup + onStop
+        } catch (RuntimeException e) {
+            Constants.LOG.warn("[numen-stt] 采集中断", e);
         } finally {
-            try {
-                line.stop();
-                line.flush();
-                line.close();
-            } catch (RuntimeException ignored) {
-                // best effort
-            }
+            closeQuietly(line);
             RECORDING.set(false);
             thread = null;
             onStop.run();
+        }
+    }
+
+    private static void closeQuietly(TargetDataLine line) {
+        try {
+            line.stop();
+            line.flush();
+            line.close();
+        } catch (RuntimeException ignored) {
+            // best effort
         }
     }
     private static TargetDataLine openLine(String deviceName) {

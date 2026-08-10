@@ -152,6 +152,9 @@ public final class VoicePipeline {
                 Throwable failure = err;
                 if (err == null) {
                     try {
+                        if (wav == null || wav.length == 0) {
+                            throw new IllegalStateException("TTS 返回了空音频");
+                        }
                         // 归一化+用户增益烙进采样(MC 实例音量被引擎钳在 1.0,只能在这做响度)。
                         decoded = WavCodec.decode(wav).amplified(volume);
                     } catch (Exception ex) {
