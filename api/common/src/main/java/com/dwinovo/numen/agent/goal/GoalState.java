@@ -22,12 +22,16 @@ import com.google.gson.JsonObject;
 public final class GoalState {
 
     /**
-     * 一个目标最多自动续这么多轮。
+     * 一个目标最多推她这么多轮。
      *
-     * <p>兜底,不是主要机制:想限制轮次直接写进条件("跑 20 轮还没好就收工"),评估器判得出来。
-     * 留这道硬线是因为她比命令行更容易陷进去,而主人可能根本没在看屏幕。
+     * <p>兜底,不是主要机制:想精确限制直接写进条件("挖 64 个铁锭,或者跑 20 轮就收工"),
+     * 评估器判得出来。留这道硬线是因为她比命令行更容易陷进去,而主人可能根本没在看屏幕。
+     *
+     * <p>为什么是 30 而不是更大:她一轮的主请求是 18k~33k token(38 个工具的 schema +
+     * 系统提示 + 全部历史),30 轮已经六十万起。到顶不是失败,是<b>停下来让主人看一眼</b>
+     * 再决定要不要续——那比闷头烧下去有用。
      */
-    public static final int MAX_GOAL_TURNS = 150;
+    public static final int MAX_GOAL_TURNS = 30;
     /** 目标正文上限。 */
     public static final int MAX_OBJECTIVE_CHARS = 4000;
 

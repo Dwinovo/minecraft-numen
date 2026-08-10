@@ -625,12 +625,8 @@ public final class EntityAgentLoop {
                     entityUuid, currentTask.tool());
             return;
         }
-        if (!goal.hasTurnsLeft()) {
-            // 到顶了就收工,不是闷头继续:她"以为没做完"是会无限循环的。
-            clearGoal("跑够 " + com.dwinovo.numen.agent.goal.GoalState.MAX_GOAL_TURNS
-                    + " 轮还没完,先收工了 —— 想接着做再说一次 /goal");
-            return;
-        }
+        // 额度不在这儿拦:每一轮的成果都要判过再说。拦在判定前面的话,最后一轮白干——
+        // 而那恰恰是最可能已经做完的一轮。额度只管"还要不要再推下一轮",见 finishJudging。
         judgeGoal();
     }
 
@@ -678,6 +674,13 @@ public final class EntityAgentLoop {
                 entityUuid, goal.turnsExecuted(), verdict.met() ? "达成" : "还差", verdict.reason());
         if (verdict.met()) {
             clearGoal("目标达成:" + verdict.reason());
+            return;
+        }
+        if (!goal.hasTurnsLeft()) {
+            // 还没做完,但额度到顶了:停下来告诉主人,不是闷头继续——她"以为没做完"是
+            // 会一直转的,而每轮主请求两万 token 起。
+            clearGoal("跑够 " + com.dwinovo.numen.agent.goal.GoalState.MAX_GOAL_TURNS
+                    + " 轮还没完,先收工了(还差:" + verdict.reason() + ")—— 想接着做再说一次 /goal");
             return;
         }
         long now = System.currentTimeMillis();
