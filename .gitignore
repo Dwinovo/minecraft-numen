@@ -18,7 +18,11 @@ out
 .vscode/
 
 # gradle
-build
+# 别写成裸的 build:那会命中任意层级上任何叫 build 的目录,包括 Java 包
+# com/dwinovo/numen/core/build/ —— 新建的源码文件会被静默吞掉,本机照常编译,
+# 干净 clone 直接编译失败。判据是位置:构建产物在项目根下,包目录在 src/ 里面。
+build/
+!**/src/**/build/
 .gradle
 
 # other
