@@ -18,6 +18,7 @@ public final class TextField extends Widget {
     private final Consumer<String> onChange;
     private String placeholder = "";
     private boolean masked;
+    private boolean numericOnly;
     private int cursor;
     /** 内联校验错误:字段红边 + 标签行右侧红字,驻留到用户开始修改。 */
     private String error;
@@ -175,9 +176,30 @@ public final class TextField extends Widget {
         return text.substring(0, end);
     }
 
+    /**
+     * 只收数字。
+     *
+     * <p>在<b>输入这一刻</b>挡住,而不是事后 parse 兜底——端口那种字段,让字母进得来就意味着
+     * 保存时要多一条错误提示、还得想清楚那半截值算什么。挡在源头就没有这些问题。
+     */
+    public TextField numeric() {
+        this.numericOnly = true;
+        return this;
+    }
+
+    /** 当前值按整数读;空或读不动时返回 {@code fallback}。 */
+    public int intValue(int fallback) {
+        try {
+            return Integer.parseInt(value.toString().strip());
+        } catch (NumberFormatException notANumber) {
+            return fallback;
+        }
+    }
+
     @Override
     public boolean charTyped(char ch) {
         if (ch < ' ') return false;
+        if (numericOnly && (ch < '0' || ch > '9')) return false;
         value.insert(cursor, ch);
         cursor++;
         fireChange();
@@ -190,7 +212,10 @@ public final class TextField extends Widget {
             if (keyCode == KeyCodes.KEY_V) {
                 String paste = root == null ? "" : root.clipboard();
                 if (paste != null && !paste.isEmpty()) {
-                    String clean = paste.replaceAll("[\\r\\n]", "");
+                    // 数字字段的粘贴也要过同一道筛子,否则 Ctrl+V 绕开了 charTyped 那关
+                    String clean = numericOnly
+                            ? paste.replaceAll("[^0-9]", "")
+                            : paste.replaceAll("[\\r\\n]", "");
                     value.insert(cursor, clean);
                     cursor += clean.length();
                     fireChange();

@@ -249,6 +249,30 @@ public final class ModLanguageData {
         adder.add("numen.brain.guide_title", "Connect an external AI");
         adder.add("numen.brain.guide_step",
                 "Copy the setup prompt in Settings → MCP Brain, paste it to your AI, and it configures the rest.");
+        adder.add("numen.brain.running", "running");
+        adder.add("numen.brain.stopped", "stopped");
+        adder.add("numen.brain.status", "Status");
+        adder.add("numen.brain.settings", "Settings");
+        adder.add("numen.brain.settings_title", "External Brain · Settings");
+        adder.add("numen.brain.back", "Back");
+        adder.add("numen.brain.regenerate", "New token");
+        adder.add("numen.brain.regen_confirm_title", "Issue a new token?");
+        adder.add("numen.brain.regen_confirm_body",
+                "Any AI already connected is disconnected at once and needs the new setup prompt.");
+        adder.add("numen.brain.lan", "Allow connections from your local network");
+        adder.add("numen.brain.lan_warn",
+                "Anyone on your network can drive your companions — keep the token set.");
+        adder.add("numen.brain.lan_needs_token",
+                "A token is required once the network can reach it.");
+        adder.add("numen.brain.port", "Port");
+        adder.add("numen.brain.timeout", "Call timeout (s)");
+        adder.add("numen.brain.hidden_tools", "Tools kept from the outside AI");
+        adder.add("numen.brain.hidden_hint", "comma separated");
+        adder.add("numen.brain.save", "Save");
+        adder.add("numen.brain.save_restart", "Save & restart");
+        adder.add("numen.brain.saved", "✔ Saved");
+        adder.add("numen.brain.port_range", "Port must be between 1 and 65535.");
+        adder.add("numen.brain.port_taken", "Port %d is already in use.");
         adder.add("numen.settings.theme.title", "Theme");
         adder.add(Keys.STT_NAV, "Voice input");
         adder.add(Keys.STT_TITLE, "Voice input (STT)");
@@ -533,6 +557,28 @@ public final class ModLanguageData {
         adder.add("numen.brain.guide_title", "接入外部 AI");
         adder.add("numen.brain.guide_step",
                 "到「设置 → 外接大脑」复制接入提示词,粘贴给你的 AI,剩下的它会自己配好。");
+        adder.add("numen.brain.running", "运行中");
+        adder.add("numen.brain.stopped", "已停止");
+        adder.add("numen.brain.status", "连接状态");
+        adder.add("numen.brain.settings", "设置");
+        adder.add("numen.brain.settings_title", "外接大脑 · 设置");
+        adder.add("numen.brain.back", "返回");
+        adder.add("numen.brain.regenerate", "重新生成");
+        adder.add("numen.brain.regen_confirm_title", "换一个新令牌?");
+        adder.add("numen.brain.regen_confirm_body",
+                "已经接入的 AI 会立刻断开,需要重新复制接入提示词给它。");
+        adder.add("numen.brain.lan", "允许局域网连接");
+        adder.add("numen.brain.lan_warn", "局域网内任何人都能操控你的同伴,必须保留令牌。");
+        adder.add("numen.brain.lan_needs_token", "对局域网开放时必须有令牌。");
+        adder.add("numen.brain.port", "端口");
+        adder.add("numen.brain.timeout", "调用超时(秒)");
+        adder.add("numen.brain.hidden_tools", "不暴露给外部的工具");
+        adder.add("numen.brain.hidden_hint", "逗号分隔");
+        adder.add("numen.brain.save", "保存");
+        adder.add("numen.brain.save_restart", "保存并重启服务");
+        adder.add("numen.brain.saved", "✔ 已保存");
+        adder.add("numen.brain.port_range", "端口必须在 1 到 65535 之间。");
+        adder.add("numen.brain.port_taken", "端口 %d 已被占用。");
         adder.add("numen.settings.theme.title", "主题");
         adder.add(Keys.STT_NAV, "语音输入");
         adder.add(Keys.STT_TITLE, "语音输入 (STT)");

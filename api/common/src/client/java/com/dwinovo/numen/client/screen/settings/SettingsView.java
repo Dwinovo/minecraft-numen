@@ -364,6 +364,7 @@ public final class SettingsView {
         if (s == section) return;
         section = s;
         if (sttPanel != null) sttPanel.reseed();   // 进分区从已存配置重播种
+        if (brainPanel != null) brainPanel.reseed();   // 回概览页,丢掉没保存的草稿
         if (s == Section.PERSONA) {
             // 人设是目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
             PersonaLibrary.instance().reload();
@@ -421,8 +422,11 @@ public final class SettingsView {
                         left(), top(), panelW(), panelH());
                 if (addingSkin) buildSkinForm();
             }
-            case BRAIN -> brainPanel().build(secX(), secY0() - 2, secW(),
-                    secBottom() - secY0() + 2);
+            case BRAIN -> {
+                // 换令牌的确认卡要盖住整个设置面板,不是只盖这个分区
+                brainPanel().setDimBounds(left(), top(), panelW(), panelH());
+                brainPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2);
+            }
             case STT -> sttPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2);
             case THEME -> themePanel().build(secX(), secY0() - 2, secW(),
                     secBottom() - secY0() + 2);
@@ -1273,6 +1277,7 @@ public final class SettingsView {
             return skinListPanel().keyPressed(keyCode, modifiers);
         }
         if (section == Section.STT) return sttPanel().keyPressed(keyCode, modifiers);
+        if (section == Section.BRAIN) return brainPanel().keyPressed(keyCode, modifiers);
         if (section == Section.MCP) {
             if (addingMcp) return mcpForm().keyPressed(keyCode, modifiers);
             return mcpListPanel().keyPressed(keyCode, modifiers);
@@ -1286,6 +1291,7 @@ public final class SettingsView {
         if (section == Section.PERSONA && addingPersona) return personaForm().charTyped(ch);
         if (section == Section.SKIN && addingSkin) return skinForm().charTyped(ch);
         if (section == Section.STT) return sttPanel().charTyped(ch);
+        if (section == Section.BRAIN) return brainPanel().charTyped(ch);
         if (section == Section.MCP && addingMcp) return mcpForm().charTyped(ch);
         return false;
     }
