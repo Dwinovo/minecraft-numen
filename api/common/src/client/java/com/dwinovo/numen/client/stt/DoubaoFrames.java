@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.stt;
 
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -139,21 +140,45 @@ final class DoubaoFrames {
         return new Reply(last, null, textOf(body));
     }
 
-    /** 取 {@code {"result":{"text":"…"}}} 里那句话;取不到返回 {@code null}(=这帧没带文本)。 */
+    /**
+     * 取 {@code result} 里那句话;取不到返回 {@code null}(=这帧没带文本)。
+     *
+     * <p>{@code result} 两种形状都吃:识别 1.0 给的是一个对象,2.0 给的是一个数组。同一个端点
+     * 按 resource id 走不同模型,所以两种都会遇到。
+     */
     private static String textOf(String body) {
         try {
             JsonObject root = JsonParser.parseString(body).getAsJsonObject();
-            if (!root.has("result") || !root.get("result").isJsonObject()) {
+            if (!root.has("result")) {
                 return null;
             }
-            JsonObject result = root.getAsJsonObject("result");
-            if (!result.has("text") || result.get("text").isJsonNull()) {
-                return null;
+            JsonElement result = root.get("result");
+            if (result.isJsonArray()) {
+                StringBuilder joined = new StringBuilder();
+                for (JsonElement item : result.getAsJsonArray()) {
+                    String text = textOfObject(item);
+                    if (text != null) {
+                        joined.append(text);
+                    }
+                }
+                return joined.isEmpty() ? null : joined.toString();
             }
-            return result.get("text").getAsString();
+            return textOfObject(result);
         } catch (RuntimeException e) {
             return null;
         }
+    }
+
+    private static String textOfObject(JsonElement element) {
+        if (!element.isJsonObject()) {
+            return null;
+        }
+        JsonObject object = element.getAsJsonObject();
+        if (!object.has("text") || object.get("text").isJsonNull()) {
+            return null;
+        }
+        String text = object.get("text").getAsString();
+        return text.isEmpty() ? null : text;
     }
 
     private static void skip(ByteBuffer buf, int n) {

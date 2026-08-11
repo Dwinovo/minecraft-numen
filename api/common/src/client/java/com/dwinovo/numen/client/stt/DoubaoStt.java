@@ -9,6 +9,7 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -26,17 +27,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 首帧里的采样率、位深、声道数都从那个常量取,不另写一份。
  *
  * <h2>凭据</h2>
- * 它要三样:appid、access token、resource id。配置里只有一个 key 框,所以 appid 和 token
- * 写成 {@code appid:access_token} 挤在一起——控制台上这两个本来就是成对发的。resource id
- * 走 model 那一栏(它真正的 {@code model_name} 恒等于 {@code bigmodel},没得选),预设里给
- * 按时长和按并发两档。
+ * 新版控制台发一个 API Key(UUID 那样的一串),填进 key 框就行,走 {@code X-Api-Key} 头。
+ * 旧版控制台发的是 appid + access token 一对,这个端点也还认——写成 {@code appid:access_token}
+ * 即可,有冒号就按旧版那两个头发。两种写法互不干扰:API Key 里不会有冒号。
+ *
+ * <p>resource id 走 model 那一栏(它真正的 {@code model_name} 恒等于 {@code bigmodel},没得选),
+ * 预设里给按时长和按并发两档。
  */
 public final class DoubaoStt implements SttBackend {
 
     /** 大模型流式识别的固定入口。 */
     public static final String DEFAULT_URL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel";
-    /** 缺省资源档:按时长计费。另一档是 {@code volc.bigasr.sauc.concurrent}(按并发)。 */
-    public static final String DEFAULT_RESOURCE_ID = "volc.bigasr.sauc.duration";
+    /** 缺省资源档:流式识别 2.0 按时长。另一档是 {@code volc.seedasr.sauc.concurrent}(按并发)。 */
+    public static final String DEFAULT_RESOURCE_ID = "volc.seedasr.sauc.duration";
     /** 这个端点只有这一个模型名,不进 UI。 */
     private static final String MODEL_NAME = "bigmodel";
 
@@ -48,26 +51,28 @@ public final class DoubaoStt implements SttBackend {
             .build();
 
     private final String url;
-    private final String appId;
-    private final String accessToken;
+    private final String key;
     private final String resourceId;
 
     public DoubaoStt(String baseUrl, String apiKey, String resourceId) {
         this.url = baseUrl == null || baseUrl.isBlank() ? DEFAULT_URL : baseUrl.strip();
-        this.appId = part(apiKey, 0);
-        this.accessToken = part(apiKey, 1);
+        this.key = apiKey == null ? "" : apiKey.strip();
         this.resourceId = resourceId == null || resourceId.isBlank()
                 ? DEFAULT_RESOURCE_ID : resourceId.strip();
     }
 
-    /** 拆 {@code appid:access_token};没有冒号就整串当 token,appid 空——上层据此报错。 */
-    static String part(String apiKey, int index) {
-        String s = apiKey == null ? "" : apiKey.strip();
+    /**
+     * 鉴权头。新版控制台一个 API Key 走 {@code X-Api-Key};旧版控制台的 {@code appid:access_token}
+     * 拆成两个头。判据是有没有冒号——API Key 里不会有。
+     */
+    static Map<String, String> authHeaders(String key) {
+        String s = key == null ? "" : key.strip();
         int colon = s.indexOf(':');
         if (colon < 0) {
-            return index == 0 ? "" : s;
+            return Map.of("X-Api-Key", s);
         }
-        return (index == 0 ? s.substring(0, colon) : s.substring(colon + 1)).strip();
+        return Map.of("X-Api-App-Key", s.substring(0, colon).strip(),
+                "X-Api-Access-Key", s.substring(colon + 1).strip());
     }
 
     /** 首帧的会话参数。音频三项从 {@link SttAudio#FORMAT} 取,采集格式改了这里跟着改。 */
@@ -99,7 +104,8 @@ public final class DoubaoStt implements SttBackend {
 
     @Override
     public String describe() {
-        return "doubao-realtime(" + url + ", appid=" + appId + ", resource=" + resourceId + ")";
+        return "doubao-realtime(" + url + ", resource=" + resourceId
+                + ", auth=" + String.join("+", new java.util.TreeSet<>(authHeaders(key).keySet())) + ")";
     }
 
     /**
@@ -133,17 +139,17 @@ public final class DoubaoStt implements SttBackend {
         }
 
         private CompletableFuture<WebSocket> connect() {
-            if (appId.isBlank() || accessToken.isBlank()) {
-                return CompletableFuture.failedFuture(new IllegalStateException(
-                        "豆包语音的 API Key 要写成 appid:access_token 两段"));
+            if (key.isBlank()) {
+                return CompletableFuture.failedFuture(
+                        new IllegalStateException("豆包语音没填 API Key"));
             }
-            return CLIENT.newWebSocketBuilder()
-                    .header("X-Api-App-Key", appId)
-                    .header("X-Api-Access-Key", accessToken)
+            WebSocket.Builder builder = CLIENT.newWebSocketBuilder()
                     .header("X-Api-Resource-Id", resourceId)
-                    .header("X-Api-Connect-Id", UUID.randomUUID().toString())
-                    .connectTimeout(Duration.ofSeconds(10))
-                    .buildAsync(URI.create(url), new Frames())
+                    .header("X-Api-Request-Id", UUID.randomUUID().toString())
+                    .header("X-Api-Sequence", "-1")      // 文档要求的固定值
+                    .connectTimeout(Duration.ofSeconds(10));
+            authHeaders(key).forEach(builder::header);
+            return builder.buildAsync(URI.create(url), new Frames())
                     .thenCompose(ws -> sendOn(ws, DoubaoFrames.fullClientRequest(next(), sessionJson())));
         }
 

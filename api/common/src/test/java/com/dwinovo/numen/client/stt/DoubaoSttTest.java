@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -97,6 +98,17 @@ class DoubaoSttTest {
     }
 
     @Test
+    void resultIsReadWhetherItIsAnObjectOrAList() {
+        // 识别 1.0 给对象、2.0 给数组;同一个端点按 resource id 走不同模型,两种都会遇到
+        assertEquals("有了", DoubaoFrames.parse(
+                serverJson(0b0001, "{\"result\":{\"text\":\"有了\"}}")).text());
+        assertEquals("有了", DoubaoFrames.parse(
+                serverJson(0b0001, "{\"result\":[{\"text\":\"有了\"}]}")).text());
+        assertEquals("前半后半", DoubaoFrames.parse(
+                serverJson(0b0001, "{\"result\":[{\"text\":\"前半\"},{\"text\":\"后半\"}]}")).text());
+    }
+
+    @Test
     void aFrameWithoutAResultCarriesNoText() {
         // 握手回执、纯 ack 都长这样:不是错,只是这帧没带字,不该覆盖已有转写
         DoubaoFrames.Reply reply = DoubaoFrames.parse(serverJson(0b0001, "{\"audio_info\":{\"duration\":120}}"));
@@ -135,27 +147,33 @@ class DoubaoSttTest {
     // ---- 凭据 ----
 
     @Test
-    void credentialsSplitOnTheFirstColon() {
-        assertEquals("1234567890", DoubaoStt.part("1234567890:abcDEF", 0));
-        assertEquals("abcDEF", DoubaoStt.part("1234567890:abcDEF", 1));
-        assertEquals("1234567890", DoubaoStt.part("  1234567890 : abcDEF  ", 0), "两边空格不算内容");
-        assertEquals("abcDEF", DoubaoStt.part("  1234567890 : abcDEF  ", 1));
+    void aPlainApiKeyGoesOutAsTheNewConsoleHeader() {
+        // 新版控制台只发一串 UUID 样的 key,握手验过:这个头对、老的那两个头会 400
+        var headers = DoubaoStt.authHeaders("51e24a12-5224-41f5-838b-ce55ca639d27");
+        assertEquals(Map.of("X-Api-Key", "51e24a12-5224-41f5-838b-ce55ca639d27"), headers);
     }
 
     @Test
-    void tokensThatContainColonsStayIntact() {
-        // 只切第一个冒号:token 里再有冒号也是 token 的一部分
-        assertEquals("app", DoubaoStt.part("app:a:b:c", 0));
-        assertEquals("a:b:c", DoubaoStt.part("app:a:b:c", 1));
+    void oldConsoleCredentialsSplitOnTheFirstColon() {
+        var headers = DoubaoStt.authHeaders(" 1234567890 : abcDEF ");
+        assertEquals("1234567890", headers.get("X-Api-App-Key"));
+        assertEquals("abcDEF", headers.get("X-Api-Access-Key"));
+        assertFalse(headers.containsKey("X-Api-Key"), "旧版就别再发新版那个头");
     }
 
     @Test
-    void aKeyWithoutAColonLeavesTheAppIdEmpty() {
-        // 会话开头据此报"要写成 appid:access_token",而不是拿半份凭据去连然后收一个 4xx
-        assertEquals("", DoubaoStt.part("justatoken", 0));
-        assertEquals("justatoken", DoubaoStt.part("justatoken", 1));
-        assertEquals("", DoubaoStt.part(null, 0));
-        assertEquals("", DoubaoStt.part("", 1));
+    void onlyTheFirstColonSplits() {
+        // token 里再有冒号也是 token 的一部分
+        var headers = DoubaoStt.authHeaders("app:a:b:c");
+        assertEquals("app", headers.get("X-Api-App-Key"));
+        assertEquals("a:b:c", headers.get("X-Api-Access-Key"));
+    }
+
+    @Test
+    void anEmptyKeyStillProducesAWellFormedHeaderMap() {
+        // 空 key 由会话开头拦下报"没填 API Key",这里只要不炸
+        assertEquals(Map.of("X-Api-Key", ""), DoubaoStt.authHeaders(null));
+        assertEquals(Map.of("X-Api-Key", ""), DoubaoStt.authHeaders("   "));
     }
 
     // ---- 会话参数 ----
@@ -185,12 +203,14 @@ class DoubaoSttTest {
 
     @Test
     void theBackendFallsBackToTheDocumentedEndpointAndTier() {
-        assertTrue(new DoubaoStt("", "a:b", "").describe().contains(DoubaoStt.DEFAULT_URL));
-        assertTrue(new DoubaoStt(null, "a:b", null).describe().contains(DoubaoStt.DEFAULT_RESOURCE_ID));
+        assertTrue(new DoubaoStt("", "k", "").describe().contains(DoubaoStt.DEFAULT_URL));
+        assertTrue(new DoubaoStt(null, "k", null).describe().contains(DoubaoStt.DEFAULT_RESOURCE_ID));
+        assertTrue(DoubaoStt.DEFAULT_RESOURCE_ID.contains("seedasr"), "缺省档是识别 2.0");
     }
 
     @Test
-    void describeNeverLeaksTheToken() {
+    void describeNeverLeaksTheKey() {
+        assertFalse(new DoubaoStt("", "supersecret", "").describe().contains("supersecret"));
         assertFalse(new DoubaoStt("", "1234:supersecret", "").describe().contains("supersecret"));
     }
 

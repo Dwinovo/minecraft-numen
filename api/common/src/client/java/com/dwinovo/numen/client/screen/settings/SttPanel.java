@@ -95,10 +95,9 @@ public final class SttPanel {
         ry += NumenStyle.ROW_PITCH;
 
         ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_API_KEY);
-        // 豆包一个框装两样凭据,空框时用占位符把格式说清楚
         keyField = ui.add(new TextField(key, v -> key = v).masked(true)
                 .placeholder(SttProviders.BACKEND_DOUBAO.equals(opt.backend())
-                        ? "appid:access_token" : ""));
+                        ? "API Key(旧版控制台填 appid:access_token)" : ""));
         keyField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 

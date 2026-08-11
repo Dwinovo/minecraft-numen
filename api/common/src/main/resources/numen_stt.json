@@ -1,5 +1,5 @@
 {
-  "_comment": "Numen STT (voice-input) providers. backend='whisper-http' means OpenAI-compatible POST {base}/v1/audio/transcriptions (multipart file+model), batch: nothing is sent until you release the mic. backend='doubao' is Volcengine's realtime WebSocket ASR: audio streams while you speak and partial text lands in the input box; its API key field takes BOTH credentials as 'appid:access_token', and its 'model' entries are resource ids (billing tier), because the model name is always 'bigmodel'. Per provider: base URL + known model ids. Model lists refreshed from each provider's docs (2026-07); best-effort, may drift. USER-EDITABLE: this is copied to config/numen/stt.json on first run; edit that file to add your own providers/models or override URLs. Built-in providers are the base and your file overrides them by id, so providers added in later versions still show up. The settings 'custom' model escape hatch also accepts any id.",
+  "_comment": "Numen STT (voice-input) providers. backend='whisper-http' means OpenAI-compatible POST {base}/v1/audio/transcriptions (multipart file+model), batch: nothing is sent until you release the mic. backend='doubao' is Volcengine's realtime WebSocket ASR: audio streams while you speak and partial text lands in the input box. Its key field takes the single API Key from the new console (sent as X-Api-Key); old-console credentials still work if written as 'appid:access_token'. Its 'model' entries are resource ids (model generation + billing tier: seedasr = streaming ASR 2.0, bigasr = 1.0), because the model name is always 'bigmodel'. Per provider: base URL + known model ids. Model lists refreshed from each provider's docs (2026-07); best-effort, may drift. USER-EDITABLE: this is copied to config/numen/stt.json on first run; edit that file to add your own providers/models or override URLs. Built-in providers are the base and your file overrides them by id, so providers added in later versions still show up. The settings 'custom' model escape hatch also accepts any id.",
   "providers": [
     {
       "id": "siliconflow",
@@ -34,7 +34,7 @@
       "name": "豆包语音 (火山引擎 实时)",
       "backend": "doubao",
       "baseUrl": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
-      "models": ["volc.bigasr.sauc.duration", "volc.bigasr.sauc.concurrent"]
+      "models": ["volc.seedasr.sauc.duration", "volc.seedasr.sauc.concurrent", "volc.bigasr.sauc.duration", "volc.bigasr.sauc.concurrent"]
     },
     {
       "id": "custom",
