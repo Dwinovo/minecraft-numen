@@ -23,10 +23,32 @@ public final class MicrophoneManager {
     private static final int MAX_RECORD_MS = 60_000;
     private static final int CHUNK_BYTES = 3200;   // 100ms @ 16kHz/16-bit/mono
 
+    /**
+     * 整段录音的峰值不超过这个数(满量程 32767)就当没采到声音。
+     *
+     * <p>定得极低是有意的:这道判据只为逮"一个采样点都不动"那种——系统拒了麦克风权限、
+     * 设备被静音、选错了输入源,三种都是一片零。真人说话哪怕再小声也远在这之上,宁可漏判
+     * 也不能把一段正经录音判死。
+     */
+    private static final int SILENCE_PEAK = 8;
+
     private static final AtomicBoolean RECORDING = new AtomicBoolean();
     private static volatile Thread thread;
 
     private MicrophoneManager() {}
+
+    /**
+     * 一次采集的结局。
+     *
+     * <p>{@link #SILENT} 不是失败——设备开了、也读到数据了,只是里面什么都没有。这跟"打不开
+     * 设备"是两回事,给主人的话也不一样,所以分开报:一个让他查权限/静音,一个让他查设备。
+     */
+    public enum Outcome {
+        /** 采到了声音,可以送去识别。 */
+        HEARD,
+        /** 全程一片零。送去识别只会换回一个空串,不如直接说清楚。 */
+        SILENT
+    }
 
     public static boolean isRecording() {
         return RECORDING.get();
@@ -46,7 +68,8 @@ public final class MicrophoneManager {
 
     /**
      * 开始采集。{@code deviceName} 为空/找不到则用第一个可用设备。每采到一块 PCM
-     * 就回调 {@code onChunk}(采集线程上);开不了设备时回调 {@code onFailed}。
+     * 就回调 {@code onChunk}(采集线程上);录完回调 {@code onDone} 并告诉它这段里
+     * 到底有没有声音;开不了设备时回调 {@code onFailed}。
      *
      * <h2>为什么失败走回调而不是返回值</h2>
      * 设备枚举({@link AudioSystem#getMixerInfo})和 {@code line.open()} 在 Windows 上都要几十到
@@ -56,7 +79,7 @@ public final class MicrophoneManager {
      * @return 是否接下了这次请求;{@code false} 只意味着已经在录,不代表设备有问题
      */
     public static boolean start(String deviceName, Consumer<byte[]> onChunk,
-                                Runnable onStop, Runnable onFailed) {
+                                Consumer<Outcome> onDone, Runnable onFailed) {
         if (!RECORDING.compareAndSet(false, true)) {
             return false;
         }
@@ -68,7 +91,7 @@ public final class MicrophoneManager {
                 onFailed.run();
                 return;
             }
-            capture(line, onChunk, onStop);
+            capture(line, onChunk, onDone);
         }, "numen-stt-mic");
         t.setDaemon(true);
         thread = t;
@@ -94,18 +117,35 @@ public final class MicrophoneManager {
         }
     }
 
-    /** 停止采集(录音结束)。采集线程收尾后自然退出并回调 onStop。 */
+    /** 停止采集(录音结束)。采集线程收尾后自然退出并回调 onDone。 */
     public static void stop() {
         RECORDING.set(false);
     }
 
-    private static void capture(TargetDataLine line, Consumer<byte[]> onChunk, Runnable onStop) {
+    /** 一块 PCM 里的最大绝对振幅(16-bit 小端)。 */
+    static int peakOf(byte[] pcm, int length) {
+        int peak = 0;
+        for (int i = 0; i + 1 < length; i += 2) {
+            int sample = (short) ((pcm[i] & 0xFF) | (pcm[i + 1] << 8));
+            peak = Math.max(peak, Math.abs(sample));
+        }
+        return peak;
+    }
+
+    /** 整段录音的峰值够不够得上"有人说话"。 */
+    static Outcome outcomeOf(int peak) {
+        return peak > SILENCE_PEAK ? Outcome.HEARD : Outcome.SILENT;
+    }
+
+    private static void capture(TargetDataLine line, Consumer<byte[]> onChunk, Consumer<Outcome> onDone) {
         long deadline = System.nanoTime() + MAX_RECORD_MS * 1_000_000L;
         byte[] buffer = new byte[CHUNK_BYTES];
+        int peak = 0;
         try {
             while (RECORDING.get() && System.nanoTime() < deadline) {
                 int read = line.read(buffer, 0, buffer.length);
                 if (read > 0) {
+                    peak = Math.max(peak, peakOf(buffer, read));
                     byte[] chunk = new byte[read];
                     System.arraycopy(buffer, 0, chunk, 0, read);
                     onChunk.accept(chunk);
@@ -117,7 +157,13 @@ public final class MicrophoneManager {
             closeQuietly(line);
             RECORDING.set(false);
             thread = null;
-            onStop.run();
+            Outcome outcome = outcomeOf(peak);
+            if (outcome == Outcome.SILENT) {
+                // 一片零最常见的三个来源:系统拒了麦克风权限、设备被静音、选错了输入源。
+                // 三种在这一层分不开,但至少要说出"没采到声音",别让它变成一句"识别失败"。
+                Constants.LOG.warn("[numen-stt] 这段录音一点声音都没有(峰值 {}),没送去识别", peak);
+            }
+            onDone.accept(outcome);
         }
     }
 

@@ -184,6 +184,7 @@ public final class ModLanguageData {
         public static final String STT_MIC_DEFAULT    = "numen.stt.mic_default";
         public static final String STT_NOT_CONFIGURED = "numen.stt.not_configured";
         public static final String STT_NO_MIC         = "numen.stt.no_mic";
+        public static final String STT_SILENT         = "numen.stt.silent";
         public static final String STT_FAILED         = "numen.stt.failed";
     }
 
@@ -255,6 +256,7 @@ public final class ModLanguageData {
         adder.add(Keys.STT_MIC_DEFAULT, "(default microphone)");
         adder.add(Keys.STT_NOT_CONFIGURED, "Voice input not configured — set an STT API key in settings");
         adder.add(Keys.STT_NO_MIC, "No microphone available");
+        adder.add(Keys.STT_SILENT, "The microphone picked up nothing — check that it isn't muted and that the system allows it");
         adder.add(Keys.STT_FAILED, "Voice input failed: %s");
         adder.add("numen.settings.nav.persona", "Persona");
         adder.add("numen.persona.title", "Personas");
@@ -538,6 +540,7 @@ public final class ModLanguageData {
         adder.add(Keys.STT_MIC_DEFAULT, "（默认麦克风）");
         adder.add(Keys.STT_NOT_CONFIGURED, "未配置语音输入 —— 请在设置里填入 STT 的 API Key");
         adder.add(Keys.STT_NO_MIC, "无可用麦克风");
+        adder.add(Keys.STT_SILENT, "麦克风没采到声音 —— 看看是不是静音了，或者系统没放行");
         adder.add(Keys.STT_FAILED, "语音输入失败：%s");
         adder.add("numen.settings.nav.persona", "人设");
         adder.add("numen.persona.title", "人设库");

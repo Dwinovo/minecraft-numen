@@ -63,13 +63,35 @@ public final class VoiceInputController {
             }
         });
         session = s;
-        if (!MicrophoneManager.start(cfg.getSttMicrophone(), s::feed, s::finish, noMic(s, onStatus))) {
+        if (!MicrophoneManager.start(cfg.getSttMicrophone(), s::feed,
+                done(s, onStatus), noMic(s, onStatus))) {
             s.cancel();                       // 已经在录:这次请求不接,状态维持原样
             session = null;
             return false;
         }
         active = true;
         return true;
+    }
+
+    /**
+     * 录完的收尾。
+     *
+     * <p>采到的全是零就<b>不送去识别</b>:那趟往返只会换回一个空串,而主人看到的是"识别失败",
+     * 完全猜不到是权限、静音还是选错了设备。直接说"没采到声音"才是他能动手的信息。
+     */
+    private static Consumer<MicrophoneManager.Outcome> done(SttSession s, Consumer<String> onStatus) {
+        return outcome -> {
+            if (outcome == MicrophoneManager.Outcome.HEARD) {
+                s.finish();
+                return;
+            }
+            s.cancel();
+            onMain(() -> {
+                active = false;
+                session = null;
+                onStatus.accept(I18n.get(ModLanguageData.Keys.STT_SILENT));
+            });
+        };
     }
 
     /**
@@ -130,7 +152,8 @@ public final class VoiceInputController {
             }
         });
         session = s;
-        if (!MicrophoneManager.start(cfg.getSttMicrophone(), s::feed, s::finish, noMic(s, onStatus))) {
+        if (!MicrophoneManager.start(cfg.getSttMicrophone(), s::feed,
+                done(s, onStatus), noMic(s, onStatus))) {
             s.cancel();                       // 已经在录:这次请求不接,状态维持原样
             session = null;
             return;
