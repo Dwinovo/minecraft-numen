@@ -63,15 +63,26 @@ public final class VoiceInputController {
             }
         });
         session = s;
-        boolean started = MicrophoneManager.start(cfg.getSttMicrophone(), s::feed, s::finish);
-        if (!started) {
-            s.cancel();
-            active = false;
-            onStatus.accept(I18n.get(ModLanguageData.Keys.STT_NO_MIC));
+        if (!MicrophoneManager.start(cfg.getSttMicrophone(), s::feed, s::finish, noMic(s, onStatus))) {
+            s.cancel();                       // 已经在录:这次请求不接,状态维持原样
+            session = null;
             return false;
         }
         active = true;
         return true;
+    }
+
+    /**
+     * 设备开不了时的收尾。开设备在采集线程上做(渲染线程上做会卡一帧),所以这条是<b>异步</b>
+     * 回来的——录音状态先乐观置上,失败到了再撤。
+     */
+    private static Runnable noMic(SttSession s, Consumer<String> onStatus) {
+        return () -> onMain(() -> {
+            active = false;
+            session = null;
+            s.cancel();
+            onStatus.accept(I18n.get(ModLanguageData.Keys.STT_NO_MIC));
+        });
     }
 
     /** 对讲机式的松开:停采集,采集线程收尾时触发 session.finish() → onFinal。 */
@@ -119,11 +130,9 @@ public final class VoiceInputController {
             }
         });
         session = s;
-        boolean started = MicrophoneManager.start(cfg.getSttMicrophone(), s::feed, s::finish);
-        if (!started) {
-            s.cancel();
-            active = false;
-            onStatus.accept(I18n.get(ModLanguageData.Keys.STT_NO_MIC));
+        if (!MicrophoneManager.start(cfg.getSttMicrophone(), s::feed, s::finish, noMic(s, onStatus))) {
+            s.cancel();                       // 已经在录:这次请求不接,状态维持原样
+            session = null;
             return;
         }
         active = true;

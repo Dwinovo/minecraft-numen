@@ -46,41 +46,52 @@ public final class MicrophoneManager {
 
     /**
      * 开始采集。{@code deviceName} 为空/找不到则用第一个可用设备。每采到一块 PCM
-     * 就回调 {@code onChunk}(采集线程上)。返回 false 表示无可用麦克风或已在录。
-     */
-    public static boolean start(String deviceName, Consumer<byte[]> onChunk, Runnable onStop) {
-        if (RECORDING.get()) {
-            return false;
-        }
-        TargetDataLine line = openLine(deviceName);
-        return line != null && startLine(line, onChunk, onStop);
-    }
-
-    /**
-     * 打开设备并起采集线程。
+     * 就回调 {@code onChunk}(采集线程上);开不了设备时回调 {@code onFailed}。
      *
-     * <p>{@code open()} 在<b>调用线程上做完才返回</b>:设备被别的程序独占、或枚举完到打开之间
-     * 被拔掉,都要当场答"没录上",上层才能提示。放到采集线程里开的话,这里已经答了"在录",
-     * 而失败只会变成一段空音频送去识别。
+     * <h2>为什么失败走回调而不是返回值</h2>
+     * 设备枚举({@link AudioSystem#getMixerInfo})和 {@code line.open()} 在 Windows 上都要几十到
+     * 上百毫秒。这个方法是按下说话键时在<b>渲染线程</b>上调的,同步做完这两件事就是肉眼可见的
+     * 一顿。所以两件都挪进采集线程,失败异步报——上层照样收得到提示,只是晚一帧。
+     *
+     * @return 是否接下了这次请求;{@code false} 只意味着已经在录,不代表设备有问题
      */
-    static boolean startLine(TargetDataLine line, Consumer<byte[]> onChunk, Runnable onStop) {
+    public static boolean start(String deviceName, Consumer<byte[]> onChunk,
+                                Runnable onStop, Runnable onFailed) {
         if (!RECORDING.compareAndSet(false, true)) {
             return false;
         }
-        try {
-            line.open(SttAudio.FORMAT);
-            line.start();
-        } catch (LineUnavailableException | RuntimeException e) {
-            Constants.LOG.warn("[numen-stt] 打不开麦克风", e);
-            closeQuietly(line);
-            RECORDING.set(false);
-            return false;
-        }
-        Thread t = new Thread(() -> capture(line, onChunk, onStop), "numen-stt-mic");
+        Thread t = new Thread(() -> {
+            TargetDataLine line = openLine(deviceName);
+            if (line == null || !openForCapture(line)) {
+                RECORDING.set(false);
+                thread = null;
+                onFailed.run();
+                return;
+            }
+            capture(line, onChunk, onStop);
+        }, "numen-stt-mic");
         t.setDaemon(true);
         thread = t;
         t.start();
         return true;
+    }
+
+    /**
+     * 打开并启动一条输入线路。
+     *
+     * <p>开不了就是开不了(设备被别的程序独占、枚举完到打开之间被拔掉),必须答 {@code false}
+     * 让上层收工——不然界面显示"正在录音",实际送去识别的是一段空音频,主人只看到"识别失败"。
+     */
+    static boolean openForCapture(TargetDataLine line) {
+        try {
+            line.open(SttAudio.FORMAT);
+            line.start();
+            return true;
+        } catch (LineUnavailableException | RuntimeException e) {
+            Constants.LOG.warn("[numen-stt] 打不开麦克风", e);
+            closeQuietly(line);
+            return false;
+        }
     }
 
     /** 停止采集(录音结束)。采集线程收尾后自然退出并回调 onStop。 */

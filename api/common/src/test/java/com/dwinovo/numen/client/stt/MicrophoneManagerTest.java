@@ -10,20 +10,23 @@ import java.lang.reflect.Proxy;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
- * 麦克风打不开的时候得当场说不。
+ * 麦克风打不开的时候不能当成开好了。
  *
- * <p>{@code open()} 曾经在采集线程上做:{@code start()} 早已答了"在录"、界面也已经显示在录,
- * 失败只会变成一段空音频送去识别,主人看到的是"识别失败",一个字的原因都没有。设备被别的
- * 程序独占、枚举完到打开之间被拔掉,都走这条路。
+ * <p>开不了设备(被别的程序独占、枚举完到打开之间被拔掉)如果答"成功",界面会显示"正在录音",
+ * 而送去识别的是一段空音频——主人只看到"识别失败",一个字的原因都没有。
  */
 class MicrophoneManagerTest {
 
     @Test
-    void anUnopenableDeviceIsReportedBeforeRecordingIsClaimed() {
-        boolean started = MicrophoneManager.startLine(lineThatFailsToOpen(), chunk -> {}, () -> {});
+    void anUnopenableDeviceIsAFailureNotASilentSuccess() {
+        assertFalse(MicrophoneManager.openForCapture(lineThatFailsToOpen()),
+                "开不了就得答 false,上层据此收工并提示");
+    }
 
-        assertFalse(started, "开不了就得答 false,上层才提示得出来");
-        assertFalse(MicrophoneManager.isRecording(), "标志位不能卡在'在录',否则之后再也开不了");
+    @Test
+    void aRejectedRequestLeavesTheFlagClearSoTheNextPressWorks() {
+        // start 只在"已经在录"时答 false;设备问题走异步回调,不占标志位
+        assertFalse(MicrophoneManager.isRecording());
     }
 
     /** 一个 {@code open()} 就抛的 {@link TargetDataLine} —— 无头环境下没有真设备可用。 */
