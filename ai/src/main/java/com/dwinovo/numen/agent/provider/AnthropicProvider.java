@@ -137,24 +137,14 @@ public class AnthropicProvider implements LlmProvider {
             use.addProperty("type", "tool_use");
             use.addProperty("id", tc.id());
             use.addProperty("name", tc.name());
-            use.add("input", parseArgsObject(tc.arguments()));
+            // 本协议里 input 是对象;LlmToolCall 已经保证 arguments 是合法对象文本
+            use.add("input", JsonParser.parseString(tc.arguments()).getAsJsonObject());
             blocks.add(use);
         }
         JsonObject m = new JsonObject();
         m.addProperty("role", "assistant");
         m.add("content", blocks);
         return m;
-    }
-
-    /** 调用参数在本协议里是 JSON 对象;内部存的是字符串,解析失败退空对象。 */
-    private static JsonObject parseArgsObject(String argumentsJson) {
-        if (argumentsJson == null || argumentsJson.isBlank()) return new JsonObject();
-        try {
-            JsonElement el = JsonParser.parseString(argumentsJson);
-            return el.isJsonObject() ? el.getAsJsonObject() : new JsonObject();
-        } catch (RuntimeException ex) {
-            return new JsonObject();
-        }
     }
 
     @Override
