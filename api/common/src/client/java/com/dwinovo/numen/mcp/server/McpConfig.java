@@ -42,9 +42,16 @@ public record McpConfig(
     /** Tools the built-in brain manages for itself — never handed to an external driver. */
     private static final List<String> DEFAULT_HIDDEN = List.of("todowrite", "load_skill");
 
+    /**
+     * 读配置;没有就播一份默认的。
+     *
+     * <p>默认<b>带一个现生成的令牌</b>。空令牌只在回环上无害,而这个文件是可以手改的——
+     * 一旦有人把 host 改成 0.0.0.0(那是 issue 里被要求过的能力),空令牌就是无鉴权全开。
+     * 与其指望他改地址时记得再设一个,不如一开始就有。
+     */
     public static McpConfig load(Path file) {
         if (!Files.isRegularFile(file)) {
-            McpConfig def = new McpConfig(false, "127.0.0.1", 8765, "", 300, DEFAULT_HIDDEN);
+            McpConfig def = new McpConfig(false, LOOPBACK, 8765, mintToken(), 300, DEFAULT_HIDDEN);
             writeDefault(file, def);
             return def;
         }
@@ -68,14 +75,59 @@ public record McpConfig(
         return hiddenTools.contains(toolName);
     }
 
+    /** 只绑回环。默认值,也是"没开局域网"时的地址。 */
+    public static final String LOOPBACK = "127.0.0.1";
+    /** 绑所有网卡——局域网里别的机器就能连上来了。 */
+    public static final String ANY_HOST = "0.0.0.0";
+
     /** 配置文件还没读到时的占位(模式关闭),避免 {@link McpMode} 持 null 配置。 */
     static McpConfig disabledDefault() {
-        return new McpConfig(false, "127.0.0.1", 8765, "", 300, DEFAULT_HIDDEN);
+        return new McpConfig(false, LOOPBACK, 8765, "", 300, DEFAULT_HIDDEN);
     }
 
     /** 只改开关的副本——设置面板拨动开关时用,其余字段保持用户手改的值。 */
     McpConfig withEnabled(boolean on) {
         return new McpConfig(on, host, port, token, callTimeoutSeconds, hiddenTools);
+    }
+
+    /** 改端点与超时的副本(设置页保存时用)。 */
+    McpConfig withEndpoint(String host, int port, int callTimeoutSeconds) {
+        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools);
+    }
+
+    McpConfig withToken(String token) {
+        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools);
+    }
+
+    McpConfig withHiddenTools(List<String> hiddenTools) {
+        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, List.copyOf(hiddenTools));
+    }
+
+    /** 绑的是所有网卡吗——局域网里别人够得着。 */
+    public boolean lanExposed() {
+        return !LOOPBACK.equals(host) && !"localhost".equalsIgnoreCase(host);
+    }
+
+    /**
+     * 令牌为空且对局域网开放 = 无鉴权裸奔。
+     *
+     * <p>本类注释里那句 "Empty = no auth (fine on loopback)" 的前提是<b>回环</b>;地址一放开,
+     * 那个 fine 就不成立了。设置页据此拦住保存。
+     */
+    public boolean unguarded() {
+        return lanExposed() && (token == null || token.isBlank());
+    }
+
+    /**
+     * 生成一个新令牌。
+     *
+     * <p>用 {@link java.security.SecureRandom}——这串东西是外部 AI 操控同伴的唯一凭据,
+     * 拿可预测的随机数生成等于没有。
+     */
+    public static String mintToken() {
+        byte[] raw = new byte[18];
+        new java.security.SecureRandom().nextBytes(raw);
+        return "numen-" + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw);
     }
 
     /** 写回配置文件:游戏内拨的开关要跨会话记住。 */

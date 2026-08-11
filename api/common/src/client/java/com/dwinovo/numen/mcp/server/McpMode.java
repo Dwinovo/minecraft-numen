@@ -113,6 +113,38 @@ public final class McpMode {
         return true;
     }
 
+    /**
+     * 保存设置页改动。服务器在跑就<b>原地重开</b>——端点变了,旧的那个还占着老端口。
+     *
+     * <p>为什么是"保存"而不是边改边生效:端口是一个字符一个字符敲进来的,{@code 8}→{@code 87}
+     * →{@code 876}→{@code 8765},即时生效等于每敲一下真做一次 {@code bind()},前三次几乎必然
+     * 失败,错误提示被刷成噪音。占系统资源的字段只能攒着一次落地。
+     *
+     * @return 起服失败时 {@code false},原因见 {@link #lastError()}
+     */
+    public boolean applySettings(String host, int port, int callTimeoutSeconds,
+                                 java.util.List<String> hiddenTools, String token) {
+        boolean wasRunning = enabled;
+        if (wasRunning) {
+            stopServer();
+        }
+        config = config.withEndpoint(host, port, callTimeoutSeconds)
+                .withHiddenTools(hiddenTools)
+                .withToken(token);
+        boolean ok = true;
+        if (wasRunning) {
+            ok = startServer();
+        }
+        config = config.withEnabled(enabled);
+        if (configFile != null) config.save(configFile);
+        return ok;
+    }
+
+    /** 当前配置的只读快照——设置页据此填初值。 */
+    public McpConfig config() {
+        return config;
+    }
+
     private boolean startServer() {
         lastError = null;
         McpServer s = new McpServer(config);
