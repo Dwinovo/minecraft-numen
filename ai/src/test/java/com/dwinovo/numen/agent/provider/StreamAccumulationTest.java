@@ -4,6 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -41,6 +42,39 @@ class StreamAccumulationTest {
         assertEquals("c1", tc.id());
         assertEquals("move_to", tc.name());
         assertEquals("{\"x\":1}", tc.arguments());
+    }
+
+    @Test
+    void aStreamThatDiesMidArgumentsStillYieldsAUsableTurn() {
+        // 现场:模型把参数当 XML 写进了 content,tool_calls 只来了半截就没了下文。
+        // 这一帧收下什么,就会进对话历史、每轮回传、并落盘——所以它必须是能解析的。
+        OpenAIProvider p = new OpenAIProvider();
+        StreamAccumulator acc = new StreamAccumulator();
+        p.accumulateChunk(chunk("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,"
+                + "\"id\":\"c1\",\"function\":{\"name\":\"goto\",\"arguments\":\"{\\\"x\\\":\"}}]}}]}"), acc);
+        // 第二块永远没来
+
+        AssistantTurn turn = p.finalizeStream(acc);
+        LlmToolCall tc = turn.toolCalls().get(0);
+        assertEquals("c1", tc.id(), "id 要原样留着,否则上游对不上 tool_call_id");
+        assertEquals("goto", tc.name());
+        assertEquals(LlmToolCall.NO_ARGS, tc.arguments());
+        assertDoesNotThrow(() -> JsonParser.parseString(tc.arguments()));
+    }
+
+    @Test
+    void theAssistantMessageBuiltFromSuchATurnIsAcceptableToSendBack() {
+        // 回传体里带着残缺 JSON 的话,上游每一轮都 400,而 400 不重试、历史又不回滚
+        OpenAIProvider p = new OpenAIProvider();
+        StreamAccumulator acc = new StreamAccumulator();
+        p.accumulateChunk(chunk("{\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,"
+                + "\"id\":\"c1\",\"function\":{\"name\":\"goto\",\"arguments\":\"{\\\"x\\\":\"}}]}}]}"), acc);
+
+        JsonObject msg = p.assistantToRequestMessage(p.finalizeStream(acc));
+        String wire = msg.getAsJsonArray("tool_calls").get(0).getAsJsonObject()
+                .getAsJsonObject("function").get("arguments").getAsString();
+        assertEquals(LlmToolCall.NO_ARGS, wire);
+        assertDoesNotThrow(() -> JsonParser.parseString(wire));
     }
 
     @Test
