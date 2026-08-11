@@ -20,7 +20,9 @@ public class NumenMod implements ModInitializer {
                 (handler, sender, server) -> {
                     ServerPlayer player = handler.getPlayer();
                     if (player instanceof com.dwinovo.numen.entity.NumenPlayer) return;  // not the companion itself
-                    com.dwinovo.numen.entity.Companions.respawnAllOwnedBy(server, player.getUUID());
+                    // 只排队,不在这儿恢复:JOIN 跑在原版 placeNewPlayer 内部,在这里出的任何
+                    // 异常都会打断主人的入场,客户端只看到"无效的玩家数据"。
+                    com.dwinovo.numen.entity.Companions.scheduleRestoreFor(player.getUUID());
                     com.dwinovo.numen.entity.Companions.syncRosterToOwner(server, player);
                 });
 

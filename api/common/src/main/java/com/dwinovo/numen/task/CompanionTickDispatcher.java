@@ -76,6 +76,9 @@ public final class CompanionTickDispatcher {
             heartbeatLogged = true;
             com.dwinovo.numen.Constants.LOG.info("[numen-task] scheduler heartbeat online (first server tick)");
         }
+        // 登录时只记了一笔,恢复放在这儿做——那时 placeNewPlayer 早已返回,同伴出什么事
+        // 都落不到主人的入场流程上。见 Companions.scheduleRestoreFor。
+        Companions.restorePending(server);
         Companions.tickRespawns(server);   // timed death recoveries
         TimerRegistry.tick(server);        // 她自己定的表,到点发事件
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {

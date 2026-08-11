@@ -63,7 +63,9 @@ public class NumenMod {
         if (player instanceof com.dwinovo.numen.entity.NumenPlayer) return;  // not the companion itself
         MinecraftServer server = player.level().getServer();
         if (server != null) {
-            com.dwinovo.numen.entity.Companions.respawnAllOwnedBy(server, player.getUUID());
+            // 只排队,不在这儿恢复:本方法跑在原版 placeNewPlayer 内部,在这里出的任何异常
+            // 都会打断主人的入场,客户端只看到"无效的玩家数据"。
+            com.dwinovo.numen.entity.Companions.scheduleRestoreFor(player.getUUID());
             com.dwinovo.numen.entity.Companions.syncRosterToOwner(server, player);
         }
     }

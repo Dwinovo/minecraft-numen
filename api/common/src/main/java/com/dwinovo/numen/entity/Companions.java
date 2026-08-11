@@ -107,16 +107,81 @@ public final class Companions {
         return CompanionFactory.spawn(server, companionUuid, entry.name(), entry.owner(), level, null);
     }
 
+    /**
+     * 主人登录了,记一笔:他的同伴该回世界了。<b>真正的恢复不在这里做。</b>
+     *
+     * <h2>为什么必须推迟</h2>
+     * 登录事件是在原版 {@code PlayerList.placeNewPlayer()} <b>内部</b>触发的——那句还没返回。
+     * 在这里恢复同伴,等于把恢复期间的任何异常接到主人的入场流程上:一只同伴的 {@code .dat}
+     * 有毛病、或者别的模组在同伴的入场事件里抛了,冒泡上去打断的是<b>主人的登录</b>,客户端
+     * 看到的是"无效的玩家数据"——他会以为自己的存档毁了。
+     *
+     * <p>第二类堵不完:同伴入场会触发它自己的登录事件,装在这个世界里的任何模组都收得到,
+     * 而它们没想过"玩家"可能是假的。我们挡不住别人抛异常,只能不让那异常落在主人头上。
+     *
+     * <p>推迟到下一个服务端 tick({@link #restorePending})就彻底解耦了:那时 placeNewPlayer
+     * 早已返回,主人已经在世界里,同伴出什么事都只是同伴的事。
+     */
+    public static void scheduleRestoreFor(UUID ownerUuid) {
+        PENDING_RESTORE.add(ownerUuid);
+    }
+
+    /** 排队等恢复的主人。世界作废时一并清掉——排的是上一个存档的账。 */
+    private static final java.util.Set<UUID> PENDING_RESTORE =
+            java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    static {
+        com.dwinovo.numen.platform.ServerLifecycle.onStopped(PENDING_RESTORE::clear);
+    }
+
+    /**
+     * 每个服务端 tick 调一次:把记下的主人挨个恢复。
+     *
+     * <p>一个主人恢复失败不牵连下一个——他们之间毫无关系,没有理由一起倒。
+     */
+    public static void restorePending(MinecraftServer server) {
+        drainPending(ownerUuid -> respawnAllOwnedBy(server, ownerUuid));
+    }
+
+    /**
+     * 排空队列,逐个交给 {@code restore}。
+     *
+     * <p>两条不变式:<b>每个主人只恢复一次</b>(先摘牌再执行,否则失败的那个会每 tick 重试到
+     * 天荒地老),以及<b>一个失败不牵连下一个</b>(主人之间毫无关系,没有理由一起倒)。
+     *
+     * <p>纯逻辑,不碰 Minecraft——留这个缝是为了这两条能被单测钉住。
+     */
+    static void drainPending(java.util.function.Consumer<UUID> restore) {
+        if (PENDING_RESTORE.isEmpty()) {
+            return;
+        }
+        List<UUID> due = new ArrayList<>(PENDING_RESTORE);
+        PENDING_RESTORE.removeAll(due);
+        for (UUID ownerUuid : due) {
+            try {
+                restore.accept(ownerUuid);
+            } catch (RuntimeException ex) {
+                com.dwinovo.numen.Constants.LOG.error("[numen] 恢复 {} 的同伴时出错", ownerUuid, ex);
+            }
+        }
+    }
+
     /** When an owner logs in, bring back every companion of theirs. A companion that DIED while the owner
      *  was away (death state persisted in the registry — survives the logout) is respawned-at-owner now
-     *  AND told why it died; a live one is just restored from its {@code .dat}. */
+     *  AND told why it died; a live one is just restored from its {@code .dat}.
+     *
+     *  <p>逐只隔离:一只回不来是少一只同伴,不该把同一个主人的其余同伴也一起拖掉。 */
     public static void respawnAllOwnedBy(MinecraftServer server, UUID ownerUuid) {
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
-            if (e.getValue().diedAt() > 0L) {
-                if (owner != null) respawnDead(server, e.getKey(), e.getValue(), owner);
-            } else {
-                respawn(server, e.getKey());
+            try {
+                if (e.getValue().diedAt() > 0L) {
+                    if (owner != null) respawnDead(server, e.getKey(), e.getValue(), owner);
+                } else {
+                    respawn(server, e.getKey());
+                }
+            } catch (RuntimeException ex) {
+                com.dwinovo.numen.Constants.LOG.error("[numen] 同伴 {} 没能回到世界里,跳过", e.getKey(), ex);
             }
         }
         if (owner != null) {
