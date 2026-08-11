@@ -32,11 +32,20 @@ public final class SttProviders {
     /** 阿里云百炼(DashScope)实时识别:流式 WebSocket,run-task 指令协议。 */
     public static final String BACKEND_DASHSCOPE = "dashscope";
 
+    /**
+     * @param modelLabel 那一栏在设置里叫什么。多数服务商就是"模型",但也有名不副实的——豆包那一栏
+     *                   装的是资源档(计费方式),它真正的模型名恒等于 {@code bigmodel},没得选。
+     *                   留空即用默认的"模型"。
+     */
     public record Option(String id, String displayName, String backend,
-                         String defaultBaseUrl, List<String> models) {
+                         String defaultBaseUrl, List<String> models, String modelLabel) {
         /** First known model, or empty for a custom (free-text-only) provider. */
         public String defaultModel() {
             return models.isEmpty() ? "" : models.get(0);
+        }
+
+        public boolean hasModelLabel() {
+            return modelLabel != null && !modelLabel.isBlank();
         }
     }
 
@@ -61,7 +70,7 @@ public final class SttProviders {
             }
         }
         return PROVIDERS.isEmpty()
-                ? new Option("custom", "Custom (OpenAI-compatible)", BACKEND_WHISPER_HTTP, "", List.of())
+                ? new Option("custom", "Custom (OpenAI-compatible)", BACKEND_WHISPER_HTTP, "", List.of(), "")
                 : PROVIDERS.get(0);
     }
 
@@ -169,7 +178,8 @@ public final class SttProviders {
                         p.has("name") ? p.get("name").getAsString() : p.get("id").getAsString(),
                         p.has("backend") ? p.get("backend").getAsString() : BACKEND_WHISPER_HTTP,
                         p.has("baseUrl") ? p.get("baseUrl").getAsString() : "",
-                        List.copyOf(models)));
+                        List.copyOf(models),
+                        p.has("modelLabel") ? p.get("modelLabel").getAsString() : ""));
             }
         } catch (Exception e) {
             Constants.LOG.error("[numen] failed to parse stt.json", e);

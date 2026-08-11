@@ -1,40 +1,69 @@
 {
-  "_comment": "Numen STT (voice-input) providers. backend='whisper-http' means OpenAI-compatible POST {base}/v1/audio/transcriptions (multipart file+model), batch: nothing is sent until you release the mic. backend='doubao' is Volcengine's realtime WebSocket ASR: audio streams while you speak and partial text lands in the input box. Its key field takes the single API Key from the new console (sent as X-Api-Key); old-console credentials still work if written as 'appid:access_token'. Its 'model' entries are resource ids (model generation + billing tier: seedasr = streaming ASR 2.0, bigasr = 1.0), because the model name is always 'bigmodel'. Per provider: base URL + known model ids. Model lists refreshed from each provider's docs (2026-07); best-effort, may drift. USER-EDITABLE: this is copied to config/numen/stt.json on first run; edit that file to add your own providers/models or override URLs. Built-in providers are the base and your file overrides them by id, so providers added in later versions still show up. The settings 'custom' model escape hatch also accepts any id.",
+  "_comment": "Numen STT (voice-input) providers. backend='whisper-http' means OpenAI-compatible POST {base}/v1/audio/transcriptions (multipart file+model), batch: nothing is sent until you release the mic. backend='doubao' (Volcengine) and backend='dashscope' (Alibaba Model Studio) are realtime WebSocket ASR: audio streams while you speak and partial text lands in the input box as you talk. Per provider: base URL + known model ids; 'modelLabel' renames that field in the settings screen when 'model' would be a lie (Doubao's model name is always 'bigmodel', so the field carries the resource id instead). Model lists checked against each vendor's own docs (2026-08); best-effort, may drift. USER-EDITABLE: this is copied to config/numen/stt.json on first run; edit that file to add your own providers/models or override URLs. Built-in providers are the base and your file overrides them by id, so providers added in later versions still show up. The settings 'custom' model escape hatch also accepts any id.",
   "providers": [
     {
       "id": "siliconflow",
       "name": "SiliconFlow (硅基流动)",
       "backend": "whisper-http",
       "baseUrl": "https://api.siliconflow.cn",
-      "models": ["FunAudioLLM/SenseVoiceSmall"]
+      "models": ["FunAudioLLM/SenseVoiceSmall", "TeleAI/TeleSpeechASR"]
     },
     {
       "id": "openai",
-      "name": "OpenAI Whisper",
+      "name": "OpenAI",
       "backend": "whisper-http",
       "baseUrl": "https://api.openai.com",
-      "models": ["whisper-1", "gpt-4o-transcribe", "gpt-4o-mini-transcribe"]
+      "models": ["gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"]
     },
     {
       "id": "groq",
       "name": "Groq",
       "backend": "whisper-http",
       "baseUrl": "https://api.groq.com/openai",
-      "models": ["whisper-large-v3-turbo", "whisper-large-v3", "distil-whisper-large-v3-en"]
+      "models": ["whisper-large-v3-turbo", "whisper-large-v3"]
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "backend": "whisper-http",
+      "baseUrl": "https://openrouter.ai/api",
+      "models": [
+        "openai/gpt-transcribe",
+        "openai/gpt-4o-transcribe",
+        "openai/gpt-4o-mini-transcribe",
+        "openai/whisper-large-v3-turbo",
+        "openai/whisper-large-v3",
+        "openai/whisper-1",
+        "qwen/qwen3-asr-flash-2026-02-10",
+        "deepgram/nova-3",
+        "google/chirp-3",
+        "x-ai/grok-stt-1.0",
+        "microsoft/mai-transcribe-1.5",
+        "mistralai/voxtral-mini-transcribe",
+        "nvidia/parakeet-tdt-0.6b-v3",
+        "fish-audio/transcribe-1"
+      ]
     },
     {
       "id": "dashscope",
       "name": "阿里云百炼 (实时)",
       "backend": "dashscope",
       "baseUrl": "wss://dashscope.aliyuncs.com/api-ws/v1/inference",
-      "models": ["qwen-audio-3.0-asr-flash-streaming", "fun-asr-realtime", "fun-asr-flash-8k-realtime"]
+      "models": [
+        "qwen-audio-3.0-asr-flash-streaming",
+        "fun-asr-realtime",
+        "fun-asr-realtime-2026-02-28",
+        "fun-asr-realtime-2025-11-07",
+        "fun-asr-flash-8k-realtime"
+      ]
     },
     {
       "id": "doubao",
       "name": "豆包语音 (火山引擎 实时)",
       "backend": "doubao",
       "baseUrl": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
-      "models": ["volc.seedasr.sauc.duration", "volc.seedasr.sauc.concurrent", "volc.bigasr.sauc.duration", "volc.bigasr.sauc.concurrent"]
+      "modelLabel": "资源档 (计费方式)",
+      "models": ["volc.seedasr.sauc.duration", "volc.seedasr.sauc.concurrent"]
     },
     {
       "id": "custom",

@@ -102,7 +102,10 @@ public final class SttPanel {
         ry += NumenStyle.ROW_PITCH;
 
         // 模型双态:预设下拉(+自定义…) ↔ 输入框(+▾ 回预设);无预设纯输入框。
-        ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_MODEL);
+        // 名字由服务商自己说——豆包那一栏装的是资源档,叫"模型"读着就不对。
+        ry = opt.hasModelLabel()
+                ? labelText(x, ry, opt.modelLabel())
+                : label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_MODEL);
         modelIds = new ArrayList<>(opt.models());
         boolean hasPresets = !modelIds.isEmpty();
         if (hasPresets && !customModel) {
@@ -174,7 +177,12 @@ public final class SttPanel {
     // ---- 内部 ----
 
     private int label(int lx, int ly, String labelKey) {
-        Label l = ui.add(new Label(t(labelKey), Label.Role.MUTED));
+        return labelText(lx, ly, t(labelKey));
+    }
+
+    /** 现成的文字(服务商自带的字段名),不过语言表。 */
+    private int labelText(int lx, int ly, String text) {
+        Label l = ui.add(new Label(text, Label.Role.MUTED));
         l.setBounds(lx, ly, 140, 9);
         return ly + NumenStyle.LABEL_PITCH;
     }
