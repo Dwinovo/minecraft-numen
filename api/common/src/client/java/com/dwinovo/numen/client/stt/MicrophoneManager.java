@@ -137,11 +137,20 @@ public final class MicrophoneManager {
         }
         Mixer.Info use = chosen != null ? chosen : first;
         if (use == null) {
+            // 一台机器上没有能出 16kHz 单声道 PCM 的输入设备。这条以前是静默返回,
+            // 界面只说"没有可用麦克风",日志里查不到任何线索。
+            Constants.LOG.warn("[numen-stt] 没有支持 {} 的输入设备;系统里的混音器: {}",
+                    SttAudio.FORMAT, deviceNames());
             return null;
+        }
+        if (chosen == null && deviceName != null && !deviceName.isBlank()) {
+            Constants.LOG.warn("[numen-stt] 设置里选的麦克风 '{}' 不在了,改用 '{}'",
+                    deviceName, use.getName());
         }
         try {
             return (TargetDataLine) AudioSystem.getMixer(use).getLine(info);
         } catch (LineUnavailableException e) {
+            Constants.LOG.warn("[numen-stt] 取不到输入线路 '{}'", use.getName(), e);
             return null;
         }
     }

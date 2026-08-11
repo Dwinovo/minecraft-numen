@@ -208,6 +208,8 @@ public final class DoubaoStt implements SttBackend {
 
         private void fail(Throwable error) {
             if (settled.compareAndSet(false, true)) {
+                // 握手失败(key/资源档不对)也走这里,不打就只剩界面上一闪而过的一句
+                Constants.LOG.warn("[numen-stt] 豆包识别失败 resource={}", resourceId, error);
                 listener.onError(error);
             }
         }
@@ -267,7 +269,6 @@ public final class DoubaoStt implements SttBackend {
 
             @Override
             public void onError(WebSocket ws, Throwable error) {
-                Constants.LOG.warn("[numen-stt] 豆包实时识别连接出错", error);
                 fail(error);
             }
         }

@@ -70,11 +70,12 @@ public final class SttProviders {
      * baseUrl / model 留空时回落到所选预设的默认值。
      */
     public static SttBackend fromConfig(INumenConfig cfg) {
+        Option opt = byId(cfg.getSttProvider());
         String key = cfg.getSttApiKey();
         if (key == null || key.isBlank()) {
+            Constants.LOG.warn("[numen-stt] provider '{}' 没填 API Key,语音输入没开", opt.id());
             return null;
         }
-        Option opt = byId(cfg.getSttProvider());
         String base = cfg.getSttBaseUrl();
         if (base == null || base.isBlank()) {
             base = opt.defaultBaseUrl();
@@ -83,6 +84,13 @@ public final class SttProviders {
         if (model == null || model.isBlank()) {
             model = opt.defaultModel();
         }
+        SttBackend backend = build(opt, base, key, model);
+        // 每次开录都留一行:出问题时这行说明当时用的到底是哪一家、哪个模型/资源档
+        Constants.LOG.info("[numen-stt] {}", backend.describe());
+        return backend;
+    }
+
+    private static SttBackend build(Option opt, String base, String key, String model) {
         return switch (opt.backend()) {
             case BACKEND_WHISPER_HTTP -> new WhisperHttpStt(base, key, model);
             case BACKEND_DOUBAO -> new DoubaoStt(base, key, model);
