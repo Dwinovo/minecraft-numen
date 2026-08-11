@@ -8,9 +8,11 @@ import net.minecraft.client.Minecraft;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -250,15 +252,9 @@ public final class McpClientManager {
             client.connect(connectMs);
             List<JsonObject> tools = client.listTools(connectMs);
 
-            List<RemoteMcpTool> wrapped = new ArrayList<>();
+            List<RemoteMcpTool> wrapped = wrap(spec.name(), client, tools, callMs);
             List<String> names = new ArrayList<>();
-            for (JsonObject def : tools) {
-                if (def.has("name") && !def.get("name").isJsonNull()) {
-                    RemoteMcpTool tool = new RemoteMcpTool(spec.name(), client, def, callMs);
-                    wrapped.add(tool);
-                    names.add(tool.name());
-                }
-            }
+            for (RemoteMcpTool tool : wrapped) names.add(tool.name());
             if (handle != null) handle.transport = transport;
             registerOnMainThread(spec.name(), wrapped, names, handle);
             // Listen for server-pushed notifications and open the server→client stream (HTTP GET SSE).
@@ -291,27 +287,14 @@ public final class McpClientManager {
                 long listMs = spec.connectTimeoutSeconds() * 1000L;
                 long callMs = spec.callTimeoutSeconds() * 1000L;
                 List<JsonObject> tools = client.listTools(listMs);
-                List<RemoteMcpTool> wrapped = new ArrayList<>();
-                List<String> names = new ArrayList<>();
-                for (JsonObject def : tools) {
-                    if (def.has("name") && !def.get("name").isJsonNull()) {
-                        RemoteMcpTool tool = new RemoteMcpTool(spec.name(), client, def, callMs);
-                        wrapped.add(tool);
-                        names.add(tool.name());
-                    }
-                }
+                List<RemoteMcpTool> wrapped = wrap(spec.name(), client, tools, callMs);
                 runOnMain(() -> {
                     if (handle == null || handle.status != Status.CONNECTED) return;   // disabled meanwhile
                     for (String old : handle.toolNames) ToolRegistry.remove(old);
-                    for (RemoteMcpTool tool : wrapped) {
-                        try {
-                            ToolRegistry.register(tool);
-                        } catch (RuntimeException ignored) {
-                            // duplicate name across a refresh race — skip
-                        }
-                    }
-                    handle.toolNames = List.copyOf(names);
-                    Constants.LOG.info("[numen-mcp-client] '{}' now {} tool(s)", spec.name(), names.size());
+                    // 只记真的注册上的:记多了,下次刷新会去 remove 一个不存在的名字
+                    handle.toolNames = List.copyOf(registerEach(spec.name(), wrapped));
+                    Constants.LOG.info("[numen-mcp-client] '{}' now {} tool(s)",
+                            spec.name(), handle.toolNames.size());
                 });
             } catch (Exception ex) {
                 Constants.LOG.warn("[numen-mcp-client] '{}' tools refresh failed: {}", spec.name(), ex.toString());
@@ -329,6 +312,44 @@ public final class McpClientManager {
         }
     }
 
+    /**
+     * 把 {@code tools/list} 的原始条目包成工具。
+     *
+     * <p>名字由 {@link McpToolName} 统一铸出来:同一批共用一个已用名集合,洗过之后撞车的
+     * (例如 {@code my.server} 与 {@code my_server})在这里就分开了,不留到注册表去抛异常。
+     */
+    private static List<RemoteMcpTool> wrap(String server, McpClient client,
+                                            List<JsonObject> tools, long callMs) {
+        List<RemoteMcpTool> wrapped = new ArrayList<>();
+        Set<String> taken = new HashSet<>();
+        for (JsonObject def : tools) {
+            if (def.has("name") && !def.get("name").isJsonNull()) {
+                wrapped.add(new RemoteMcpTool(server, client, def, callMs, taken));
+            }
+        }
+        return wrapped;
+    }
+
+    /**
+     * 逐个注册,返回真的进了注册表的那些名字。
+     *
+     * <p>一个工具进不去不该带走整台服务器的其余工具——工具清单每轮都要发,少一个是少一个能力,
+     * 全没了是这台服务器白接。
+     */
+    private static List<String> registerEach(String server, List<RemoteMcpTool> tools) {
+        List<String> registered = new ArrayList<>();
+        for (RemoteMcpTool tool : tools) {
+            try {
+                ToolRegistry.register(tool);
+                registered.add(tool.name());
+            } catch (RuntimeException ex) {
+                Constants.LOG.warn("[numen-mcp-client] '{}' 跳过工具 {}: {}",
+                        server, tool.name(), ex.getMessage());
+            }
+        }
+        return registered;
+    }
+
     private static void registerOnMainThread(String server, List<RemoteMcpTool> tools,
                                              List<String> names, ServerHandle handle) {
         runOnMain(() -> {
@@ -337,15 +358,9 @@ public final class McpClientManager {
                 closeTransport(handle);
                 return;
             }
-            for (RemoteMcpTool tool : tools) {
-                try {
-                    ToolRegistry.register(tool);
-                } catch (RuntimeException ex) {
-                    Constants.LOG.warn("[numen-mcp-client] '{}' skip tool {}: {}", server, tool.name(), ex.getMessage());
-                }
-            }
+            List<String> registered = registerEach(server, tools);
             if (handle != null) {
-                handle.toolNames = List.copyOf(names);
+                handle.toolNames = List.copyOf(registered);
                 handle.status = Status.CONNECTED;
             }
         });

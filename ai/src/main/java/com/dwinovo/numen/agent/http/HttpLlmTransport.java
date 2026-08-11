@@ -1,6 +1,7 @@
 package com.dwinovo.numen.agent.http;
 
 import com.dwinovo.numen.ai.AiLog;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -224,6 +225,9 @@ public final class HttpLlmTransport {
             String body2 = resp.body() == null ? "" : resp.body();
             AiLog.LOG.warn("[numen-http][{}] ✗ {} in {}ms — body: {}",
                     requestId, status, elapsedMs, truncate(body2, 500));
+            if (!shouldRetryStatus(status, resp.headers())) {
+                logRejectedRequest(requestId, status, body);
+            }
             if (attempt < MAX_RETRIES && shouldRetryStatus(status, resp.headers())) {
                 long delay = retryAfterMs(resp.headers())
                         .filter(v -> v > 0 && v <= 60_000)
@@ -248,6 +252,30 @@ public final class HttpLlmTransport {
 
     /** SDK-consensus retryable statuses: {@code x-should-retry} override first, then
      *  408 (request timeout), 409 (lock timeout), 429 (rate limit), all 5xx. */
+    /**
+     * 上游拒收时,把我们自己发的东西记下来。
+     *
+     * <p>只在<b>不会重试</b>的状态码上打——那一类的意思是"请求本身不对",证据就在请求里;
+     * 限流和 5xx 是暂时性的,请求没毛病,打了只是噪音。
+     *
+     * <p>打的是<b>工具定义</b>而不是整个请求体:那是我们自己生成的部分,也是"某个字段不合上游
+     * 口味"最常见的出处;对话正文是主人的内容,不往日志里搬。少了这一行,上游说"第 21630 个
+     * 字符处不对"的时候,我们连自己发了什么都不知道。
+     */
+    private static void logRejectedRequest(String requestId, int status, JsonObject body) {
+        JsonElement tools = body.get("tools");
+        int messages = body.has("messages") && body.get("messages").isJsonArray()
+                ? body.getAsJsonArray("messages").size() : -1;
+        AiLog.LOG.warn("[numen-http][{}] 被拒的是我们发的请求 — status={} model={} 消息 {} 条,"
+                        + " 工具 {} 个,请求体 {} 字节",
+                requestId, status, body.has("model") ? body.get("model").getAsString() : "?",
+                messages, tools != null && tools.isJsonArray() ? tools.getAsJsonArray().size() : 0,
+                body.toString().length());
+        if (tools != null && tools.isJsonArray() && !tools.getAsJsonArray().isEmpty()) {
+            AiLog.LOG.warn("[numen-http][{}] 当时发出去的工具定义: {}", requestId, tools);
+        }
+    }
+
     private static boolean shouldRetryStatus(int status, java.net.http.HttpHeaders headers) {
         var override = headers.firstValue("x-should-retry");
         if (override.isPresent()) {

@@ -4,12 +4,14 @@ import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import net.minecraft.client.Minecraft;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * One external MCP tool, wrapped as a {@link NumenTool} so the built-in brain
@@ -34,10 +36,14 @@ public final class RemoteMcpTool implements NumenTool {
     private final Map<String, Object> schema;
     private final long callTimeoutMs;
 
-    public RemoteMcpTool(String serverName, McpClient client, JsonObject toolDef, long callTimeoutMs) {
+    /**
+     * @param takenNames 本批已用掉的模型侧工具名;构造时会把自己这个加进去(见 {@link McpToolName}）
+     */
+    public RemoteMcpTool(String serverName, McpClient client, JsonObject toolDef,
+                         long callTimeoutMs, Set<String> takenNames) {
         this.client = client;
         this.remoteName = toolDef.get("name").getAsString();
-        this.qualifiedName = sanitize(serverName) + "__" + remoteName;
+        this.qualifiedName = McpToolName.qualify(serverName, remoteName, takenNames);
         this.description = buildDescription(toolDef);
         this.schema = buildSchema(toolDef);
         this.callTimeoutMs = callTimeoutMs;
@@ -98,18 +104,29 @@ public final class RemoteMcpTool implements NumenTool {
      * kept as Gson {@link com.google.gson.JsonElement}s and stored directly —
      * {@code OpenAIProvider.mapToJson} does {@code GSON.toJsonTree(map)}, which
      * reproduces JsonElement values losslessly (no int→double drift).
+     *
+     * <h2>只补两样,别的原样转发</h2>
+     * 根上的 {@code type} 与 {@code properties} 是上游强制要求的,而 MCP server 漏掉它们很常见
+     * ——漏了不是这个工具不能用,是整个请求被打回。所以这两样缺了就补。
+     *
+     * <p>其余一律不动:{@code $ref}/{@code $defs}/{@code anyOf} 这些看着"多余",但把它们
+     * 按白名单重建过一遍的话,一个纯 {@code $ref} 的子 schema 会变成空对象,工具就废了。
+     * 宁可原样发上去让上游说不,也不要自作主张把它改坏。
      */
     private static Map<String, Object> buildSchema(JsonObject toolDef) {
         Map<String, Object> map = new LinkedHashMap<>();
         JsonObject input = toolDef.has("inputSchema") && toolDef.get("inputSchema").isJsonObject()
                 ? toolDef.getAsJsonObject("inputSchema")
                 : null;
-        if (input == null || input.entrySet().isEmpty()) {
-            map.put("type", "object");
-            map.put("properties", new JsonObject());
-            return map;
+        if (input != null) {
+            input.entrySet().forEach(e -> map.put(e.getKey(), e.getValue()));
         }
-        input.entrySet().forEach(e -> map.put(e.getKey(), e.getValue()));
+        if (!(map.get("type") instanceof JsonPrimitive p) || !"object".equals(p.getAsString())) {
+            map.put("type", "object");
+        }
+        if (!(map.get("properties") instanceof JsonObject)) {
+            map.put("properties", new JsonObject());
+        }
         return map;
     }
 
@@ -124,8 +141,4 @@ public final class RemoteMcpTool implements NumenTool {
         return m == null ? cur.getClass().getSimpleName() : m;
     }
 
-    /** Lowercase, keep only {@code [a-z0-9_]}, so the qualified name stays a valid snake_case tool name. */
-    private static String sanitize(String s) {
-        return s.toLowerCase().replaceAll("[^a-z0-9_]", "_");
-    }
 }

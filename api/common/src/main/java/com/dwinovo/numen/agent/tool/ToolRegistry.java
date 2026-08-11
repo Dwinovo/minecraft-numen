@@ -26,15 +26,29 @@ public final class ToolRegistry {
 
     private ToolRegistry() {}
 
+    /** 上游认的函数名形状。名字不合规,被打回的不是这个工具而是整个请求。 */
+    private static final java.util.regex.Pattern LEGAL_NAME =
+            java.util.regex.Pattern.compile("[a-zA-Z0-9_-]{1,64}");
+
     /**
      * Register a tool. Should only be called during mod init. Throws on
      * duplicate name — silent replacement would mask wiring bugs.
+     *
+     * <p>名字形状也在这里把关。工具清单每轮都随请求发出去,一个非法名字换来的是整轮 400,
+     * 而不是"这个工具用不了"——所以宁可在注册这一刻炸掉,也不能让它混进去。自家工具在初始化
+     * 时就会撞上;借来的工具由调用方接住并跳过(见 {@code McpClientManager})。
      */
     public static void register(NumenTool tool) {
-        NumenTool prior = TOOLS.put(tool.name(), tool);
+        String name = tool.name();
+        if (name == null || !LEGAL_NAME.matcher(name).matches()) {
+            throw new IllegalArgumentException(
+                    "工具名不合规(只允许 [a-zA-Z0-9_-],1~64 字符): '" + name
+                            + "' — " + tool.getClass().getName());
+        }
+        NumenTool prior = TOOLS.put(name, tool);
         if (prior != null) {
             throw new IllegalStateException(
-                    "Duplicate NumenTool name: " + tool.name()
+                    "Duplicate NumenTool name: " + name
                             + " (was " + prior.getClass().getName()
                             + ", now " + tool.getClass().getName() + ")");
         }
