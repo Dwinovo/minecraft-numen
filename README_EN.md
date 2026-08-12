@@ -151,7 +151,7 @@ Every tool and skill Numen ships is written entirely against the public API — 
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>" }
+dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21:<version>" }
 ```
 
 The public integration API is **MIT**-licensed — write tools, skills, and compat without LGPL strings attached. The getting-started guide, full examples, and version matrix live in [numen-api's README](https://github.com/Dwinovo/numen-api).
@@ -163,7 +163,7 @@ It's an open blueprint — bricks welcome:
 - 🐛 **Open an issue or PR.** Bugs, ideas, compat experiments — start a thread in [issues](https://github.com/Dwinovo/minecraft-numen/issues).
 - 📖 **Write a Skill.** One Markdown workflow teaches the AI a whole new playbook — zero code, anyone can write one. PR it to grow the community skill library.
 - 🔧 **Write a tool, bridge, or MCP.** Code against the public API ([numen-api](https://github.com/Dwinovo/numen-api)) and any mod author can graft their capability onto the AI's hands.
-- 🏗️ **Build it yourself.** Clone the repo and run `./gradlew :fabric:build` (or `:neoforge:build`); the architecture and full tool list live under `common/src/main/java/com/dwinovo/numen/`.
+- 🏗️ **Build it yourself.** On Windows run `build-fabric-1.21.bat`; elsewhere run `./gradlew :core:fabric:build :api:common:test :core:common:test -PfabricOnly --no-daemon -x javadoc`. The installable JAR is written to `core/fabric/build/libs/` with numen-api embedded.
 
 ## Roadmap
 

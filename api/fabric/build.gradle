@@ -5,7 +5,7 @@ plugins {
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
-    // Obfuscated MC (1.21.1) → loom remaps to Mojang names to match the common source set.
+    // Obfuscated MC (1.21) → loom remaps to Mojang names to match the common source set.
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
@@ -41,7 +41,83 @@ loom {
     }
 }
 
-sourceSets.main.resources { srcDir 'src/generated/resources' }
+def generatedLanguageResources = layout.buildDirectory.dir('generated/languageResources')
+def languageNamespace = mod_id.toString()
+
+sourceSets.main.resources {
+    srcDir generatedLanguageResources
+}
+
+tasks.register('generateLanguageResources', JavaExec) {
+    group = 'build'
+    description = 'Generate English and Simplified Chinese language JSON without starting Minecraft.'
+    dependsOn tasks.named('compileJava')
+    classpath = files(sourceSets.main.output.classesDirs)
+    mainClass.set('com.dwinovo.numen.data.LanguageJsonExporter')
+    inputs.files(
+            project(':api:common').file('src/main/java/com/dwinovo/numen/data/ModLanguageData.java'),
+            project(':api:common').file('src/main/java/com/dwinovo/numen/data/LanguageJsonExporter.java'))
+    outputs.files(
+            generatedLanguageResources.map { it.file("assets/${languageNamespace}/lang/en_us.json") },
+            generatedLanguageResources.map { it.file("assets/${languageNamespace}/lang/zh_cn.json") })
+    doFirst {
+        args = [generatedLanguageResources.get().asFile.absolutePath, languageNamespace]
+    }
+}
+
+tasks.named('processResources') {
+    dependsOn 'verifyLanguageResources'
+}
+
+tasks.register('verifyLanguageResources') {
+    group = 'verification'
+    description = 'Verify generated language files, matching keys, and required UI translations.'
+    dependsOn tasks.named('generateLanguageResources')
+    inputs.files(
+            generatedLanguageResources.map { it.file("assets/${languageNamespace}/lang/en_us.json") },
+            generatedLanguageResources.map { it.file("assets/${languageNamespace}/lang/zh_cn.json") })
+    doLast {
+        def langDir = generatedLanguageResources.get().file("assets/${languageNamespace}/lang").asFile
+        def enFile = new File(langDir, 'en_us.json')
+        def zhFile = new File(langDir, 'zh_cn.json')
+        if (!enFile.isFile() || !zhFile.isFile()) {
+            throw new GradleException("Missing generated language resources under ${langDir}")
+        }
+
+        def parser = new groovy.json.JsonSlurper()
+        Map en = (Map) parser.parse(enFile, 'UTF-8')
+        Map zh = (Map) parser.parse(zhFile, 'UTF-8')
+        if (en.keySet() != zh.keySet()) {
+            throw new GradleException('en_us.json and zh_cn.json have different key sets')
+        }
+        def invalid = { Map values ->
+            values.findAll { key, value ->
+                value == null || value.toString().trim().isEmpty() || value.toString() == key
+            }.keySet()
+        }
+        def invalidEn = invalid(en)
+        def invalidZh = invalid(zh)
+        if (!invalidEn.isEmpty() || !invalidZh.isEmpty()) {
+            throw new GradleException("Invalid translations: en=${invalidEn}, zh=${invalidZh}")
+        }
+        def requiredKeys = [
+                'numen.tab.chat',
+                'numen.tab.status',
+                'numen.tab.settings',
+                'numen.empty.no_companions',
+                'numen.provider.title',
+                'numen.settings.nav.brain',
+                'numen.brain.title',
+                'numen.brain.endpoint',
+                'numen.voice.title'
+        ]
+        def missing = requiredKeys.findAll { !en.containsKey(it) || !zh.containsKey(it) }
+        if (!missing.isEmpty()) {
+            throw new GradleException("Missing required UI translation keys: ${missing}")
+        }
+        logger.lifecycle("Verified ${en.size()} language keys in en_us.json and zh_cn.json")
+    }
+}
 
 // Implement mcgradleconventions loader attribute
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)

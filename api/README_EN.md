@@ -8,7 +8,7 @@
 
 [**English**](README_EN.md) · [简体中文](README.md)
 
-![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62B47A?style=flat-square)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.21-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
@@ -141,11 +141,11 @@ repositories {
 
 dependencies {
     // slim, stable API jar for compiling against — the Numen mod supplies the full engine at runtime
-    compileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.2-SNAPSHOT:api"
+    compileOnly "com.dwinovo.numen:numen-api-fabric-1.21:0.0.8-SNAPSHOT:api"
 }
 ```
 
-Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. This branch builds `1.21.1` on Java 21.
+Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. This branch builds `1.21` on Java 21.
 
 ---
 

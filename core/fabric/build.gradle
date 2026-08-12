@@ -5,7 +5,7 @@ plugins {
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
-    // Obfuscated MC (1.21.1) → loom remaps to Mojang names to match the common source set.
+    // Obfuscated MC (1.21) → loom remaps to Mojang names to match the common source set.
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
@@ -48,6 +48,20 @@ loom {
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+def apiLanguageResources = project(':api:fabric').layout.buildDirectory.dir('generated/languageResources')
+
+tasks.named('processResources') {
+    dependsOn project(':api:fabric').tasks.named('verifyLanguageResources')
+    from(apiLanguageResources) {
+        include 'assets/numen_api/lang/en_us.json'
+        include 'assets/numen_api/lang/zh_cn.json'
+        eachFile { details ->
+            details.path = details.path.replace('assets/numen_api/', 'assets/numen/')
+        }
+        includeEmptyDirs = false
+    }
+}
 
 // Implement mcgradleconventions loader attribute
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)

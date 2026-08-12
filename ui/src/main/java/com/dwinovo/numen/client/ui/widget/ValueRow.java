@@ -2,6 +2,7 @@ package com.dwinovo.numen.client.ui.widget;
 
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenTheme;
+import com.dwinovo.numen.client.ui.TextClip;
 
 import java.util.function.Supplier;
 
@@ -45,10 +46,14 @@ public final class ValueRow extends Widget {
         if (!visible) {
             return;
         }
-        s.drawText(label, x, y, c.textMuted(), false);
+        s.drawText(TextClip.ellipsize(s, label, Math.max(0, Math.min(LABEL_W - 4, w))),
+                x, y, c.textMuted(), false);
+        if (w <= LABEL_W) {
+            return;
+        }
         String text = value == null ? "" : value.get();
         boolean grey = dimmed != null && Boolean.TRUE.equals(dimmed.get());
-        s.drawText(text == null ? "" : text, x + LABEL_W, y,
+        s.drawText(TextClip.ellipsize(s, text, Math.max(0, w - LABEL_W)), x + LABEL_W, y,
                 grey ? c.textMuted() : c.textPrimary(), false);
     }
 

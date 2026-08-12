@@ -3,6 +3,7 @@ package com.dwinovo.numen.client.ui.widget;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
+import com.dwinovo.numen.client.ui.TextClip;
 
 /** 按钮。Style 选语义色:普通/强调(主操作)/危险(删除类)。 */
 public final class Button extends Widget {
@@ -26,12 +27,12 @@ public final class Button extends Widget {
     private String tooltip;
 
     public Button(String label, Style style, Runnable onClick) {
-        this.label = label;
+        this.label = label == null ? "" : label;
         this.style = style;
         this.onClick = onClick;
     }
 
-    public void setLabel(String label) { this.label = label; }
+    public void setLabel(String label) { this.label = label == null ? "" : label; }
 
     /** 图标钮:图标居中替代文字(label 退为无障碍/tooltip 文案)。 */
     public Button icon(int size, IconDrawer drawer) {
@@ -67,7 +68,8 @@ public final class Button extends Widget {
             }
             int ghostColor = !enabled ? c.textMuted()
                     : NumenStyle.mixColor(c.textSecondary(), c.textPrimary(), t);
-            s.drawText(label, x + (w - s.textWidth(label)) / 2,
+            String shown = TextClip.ellipsize(s, label, Math.max(0, w - 4));
+            s.drawText(shown, x + (w - s.textWidth(shown)) / 2,
                     y + (h - s.lineHeight()) / 2 + 1, ghostColor, false);
             return;
         }
@@ -89,9 +91,10 @@ public final class Button extends Widget {
             icon.draw(s, x + (w - iconSize) / 2, y + (h - iconSize) / 2, iconSize, textColor);
             return;
         }
-        int tx = x + (w - s.textWidth(label)) / 2;
+        String shown = TextClip.ellipsize(s, label, Math.max(0, w - 4));
+        int tx = x + (w - s.textWidth(shown)) / 2;
         int ty = y + (h - s.lineHeight()) / 2 + 1;
-        s.drawText(label, tx, ty, textColor, false);
+        s.drawText(shown, tx, ty, textColor, false);
     }
 
     @Override

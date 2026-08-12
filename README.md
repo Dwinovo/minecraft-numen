@@ -151,7 +151,7 @@ Numen 出厂的每一个工具、每一篇技能，全部只用公共 API 写成
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>" }
+dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21:<version>" }
 ```
 
 面向集成的公共对接 API 采用 **MIT** 授权——写工具、写技能、写兼容，不必被 LGPL 牵着走。上手指南、完整示例与版本矩阵，见 [numen-api 的 README](https://github.com/Dwinovo/numen-api)。
@@ -163,7 +163,7 @@ dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:<ve
 - 🐛 **提 issue / PR。** Bug、点子、兼容实验都欢迎——在 [issues](https://github.com/Dwinovo/minecraft-numen/issues) 开个帖子。
 - 📖 **写一篇技能（Skill）。** 一篇 Markdown 工作流就能教 AI 玩一套新东西，零代码、人人能写。写好提 PR，就能进社区技能库。
 - 🔧 **写工具 / 桥 / MCP。** 对着公共 API（[numen-api](https://github.com/Dwinovo/numen-api)）写，任何 mod 作者都能把自己的能力接上 AI 的手。
-- 🏗️ **自己构建。** 克隆仓库，`./gradlew :fabric:build`（或 `:neoforge:build`）；架构与完整工具清单都在 `common/src/main/java/com/dwinovo/numen/` 里。
+- 🏗️ **自己构建。** Windows 运行 `build-fabric-1.21.bat`；其他平台运行 `./gradlew :core:fabric:build :api:common:test :core:common:test -PfabricOnly --no-daemon -x javadoc`。可安装 JAR 会输出到 `core/fabric/build/libs/`，已内嵌 numen-api。
 
 ## 路线图
 

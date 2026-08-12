@@ -8,8 +8,9 @@
         "${mod_author}"
     ],
     "contact": {
-        "homepage": "https://fabricmc.net/",
-        "sources": "https://github.com/FabricMC/fabric-example-mod"
+        "homepage": "https://github.com/Dwinovo/minecraft-numen",
+        "sources": "https://github.com/Dwinovo/minecraft-numen",
+        "issues": "https://github.com/Dwinovo/minecraft-numen/issues"
     },
     "license": "${license}",
     "icon": "${mod_id}.png",
@@ -30,9 +31,9 @@
     ],
     "depends": {
         "fabricloader": ">=${fabric_loader_version}",
-        "fabric-api": "*",
+        "fabric-api": ">=${fabric_version}",
         "numen_api": "*",
-        "minecraft": "~${minecraft_version}",
+        "minecraft": "${minecraft_version}",
         "java": ">=${java_version}"
     }
 }

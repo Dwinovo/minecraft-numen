@@ -6,7 +6,7 @@ import net.fabricmc.fabric.api.datagen.v1.FabricDataGenerator;
 /**
  * Fabric data-generation entry point. Wired up via the {@code fabric-datagen}
  * entrypoint in {@code fabric.mod.json}; runs through
- * {@code ./gradlew :fabric:runDatagen}.
+ * {@code ./gradlew :api:fabric:runDatagen -PfabricOnly}.
  *
  * <p>Outputs land in {@code fabric/src/generated/resources/}, which the
  * Fabric subproject's {@code build.gradle} adds back to the main resource

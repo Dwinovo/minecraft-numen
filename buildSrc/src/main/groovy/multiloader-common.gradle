@@ -52,15 +52,17 @@ repositories {
     }
 }
 
+def artifactModName = mod_name.toString()
+
 sourcesJar {
     from(rootProject.file('LICENSE')) {
-        rename { "${it}_${mod_name}" }
+        rename { "${it}_${artifactModName}" }
     }
 }
 
 jar {
     from(rootProject.file('LICENSE')) {
-        rename { "${it}_${mod_name}" }
+        rename { "${it}_${artifactModName}" }
     }
 
     manifest {

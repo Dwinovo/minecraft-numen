@@ -1,6 +1,6 @@
 plugins {
     // see https://fabricmc.net/develop/ for new versions
-    // 1.21.1 is an obfuscated MC version → use the -remap loom variant (the plain
+    // 1.21 is an obfuscated MC version → use the -remap loom variant (the plain
     // net.fabricmc.fabric-loom is the unobf path used on 26.1+). Same 1.14.x line.
     id 'net.fabricmc.fabric-loom-remap' version '1.14.10' apply false
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
@@ -11,7 +11,7 @@ plugins {
 // 在此按家族显式指定。api 家族同时沿用自己的版本线——发布坐标 numen-api-*-<mc> 的
 // 版本号是第三方依赖的契约,与模组本体版本(0.1.x)各走各的。
 allprojects { ext.mod_id = 'numen' }
-['api:common', 'api:fabric', 'api:neoforge'].each { path ->
+['api:common', 'api:fabric', 'api:neoforge'].findAll { findProject(":" + it) != null }.each { path ->
     project(path) {
         version = '0.0.8-SNAPSHOT'
         ext.mod_id = 'numen_api'

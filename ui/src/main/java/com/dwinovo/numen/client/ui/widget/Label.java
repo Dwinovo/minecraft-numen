@@ -2,6 +2,7 @@ package com.dwinovo.numen.client.ui.widget;
 
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenTheme;
+import com.dwinovo.numen.client.ui.TextClip;
 
 /** 静态文本。Role 决定取哪个语义色槽。 */
 public final class Label extends Widget {
@@ -27,6 +28,6 @@ public final class Label extends Widget {
             case SECONDARY -> c.textSecondary();
             case MUTED -> c.textMuted();
         };
-        s.drawText(text, x, y, color, false);
+        s.drawText(TextClip.ellipsize(s, text, w), x, y, color, false);
     }
 }
