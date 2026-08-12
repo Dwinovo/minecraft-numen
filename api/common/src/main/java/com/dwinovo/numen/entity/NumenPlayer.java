@@ -262,7 +262,11 @@ public final class NumenPlayer extends ServerPlayer {
             this.connection.resetPosition();
             sl.getChunkSource().move(this);
         }
-        super.tick();
+        try {
+            super.tick();
+        } catch (RuntimeException ex) {
+            reportTickFailure(ex);
+        }
         // 摔落结算是玩家<b>唯一</b>由客户端权威的物理:{@code Entity.move} 里那一处被
         // {@code isLocalInstanceAuthoritative()} 挡着(Player.isClientAuthoritative()
         // 恒为 true,服务端算出来就是 false),真正结算的是收到移动包时的
@@ -272,14 +276,40 @@ public final class NumenPlayer extends ServerPlayer {
         net.minecraft.world.phys.Vec3 before = position();
         try {
             this.doTick();
-        } catch (Exception ignored) {
-            // fake-connection internals can NPE on edge cases; a swallowed tick
-            // beats crashing the server for a cosmetic pass
+        } catch (RuntimeException ex) {
+            reportTickFailure(ex);
         }
         // 位移只框住上面这一段。召唤、重生、跨维度都发生在 tick 之外,下一刻 before 读到的
         // 已经是新位置,位移天然为零 —— 不需要另写传送豁免。
         net.minecraft.world.phys.Vec3 moved = position().subtract(before);
         doCheckFallDamage(moved.x, moved.y, moved.z, onGround());
+    }
+
+    /** 同一具身体只吵一次:tick 每秒二十下,真炸起来就是每秒二十条,日志立刻没法看。 */
+    private boolean tickFailureLogged;
+
+    /**
+     * 这一 tick 炸了:咽下去,记一次。
+     *
+     * <h2>为什么不能让它冒上去</h2>
+     * 异常冒到 {@code ServerLevel} 的实体 tick 循环,原版会包成 {@code ReportedException} 掀掉
+     * 整个服务端主循环——看门狗六十秒后判定崩溃强制关服,一屋子玩家一起掉线。
+     *
+     * <h2>最常见的抛出方不是我们</h2>
+     * 同伴以"玩家"身份待在玩家列表里,别的模组收到它的生命周期事件时,没想过这个"玩家"没有
+     * 真实连接。这一类我们永远堵不完(堵掉一个具体原因,下一个模组会拿别的东西),只能不让
+     * 它掀桌子。
+     *
+     * <p>代价完全不对等:咽下去是这一 tick 白跑;不咽是整台服务器没了。
+     */
+    private void reportTickFailure(RuntimeException ex) {
+        if (tickFailureLogged) {
+            return;
+        }
+        tickFailureLogged = true;
+        com.dwinovo.numen.Constants.LOG.error(
+                "[numen] 同伴 {} 的 tick 抛了异常,这一 tick 跳过(之后不再重复记这一条)",
+                getUUID(), ex);
     }
 
     @Override
