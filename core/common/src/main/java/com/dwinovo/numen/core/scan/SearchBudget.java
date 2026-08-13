@@ -26,10 +26,14 @@ import net.minecraft.server.MinecraftServer;
  */
 public final class SearchBudget {
 
-    /** Cached presence checks are cheap; this caps loop work across ALL searches. */
+    /**
+     * Cached presence checks are cheap; this caps loop work across ALL searches.
+     *
+     * <p>查询一律只读已加载的东西,没有"为了查而加载"这档额度——限流限不住它:名额是<b>发起前</b>
+     * 检查的,一旦进了同步加载就再也收不回来,而一次冷区块的世界生成足以让单 tick 超过看门狗的
+     * 六十秒。所以那条路是删掉的,不是限住的。
+     */
     private static final int MAX_CHECKS_PER_TICK = 128;
-    /** STRUCTURE_STARTS chunk loads are the expensive fallback — strictly capped. */
-    private static final int MAX_CHUNK_LOADS_PER_TICK = 2;
     /**
      * Biome locator samples (pure climate-noise lookups, no chunk access; one
      * "sample" = one x/z column across all its Y probes). Cheaper than a
@@ -51,7 +55,6 @@ public final class SearchBudget {
 
     private static int stampTick = Integer.MIN_VALUE;
     private static int checksLeft;
-    private static int loadsLeft;
     private static int biomeSamplesLeft;
     private static int sectionScansLeft;
     private static long deadlineNanos;
@@ -70,7 +73,6 @@ public final class SearchBudget {
     public static void resetForTick(int tick) {
         stampTick = tick;
         checksLeft = MAX_CHECKS_PER_TICK;
-        loadsLeft = MAX_CHUNK_LOADS_PER_TICK;
         biomeSamplesLeft = MAX_BIOME_SAMPLES_PER_TICK;
         sectionScansLeft = MAX_SECTION_SCANS_PER_TICK;
         deadlineNanos = System.nanoTime() + MAX_NANOS_PER_TICK;
@@ -97,10 +99,4 @@ public final class SearchBudget {
         return true;
     }
 
-    /** Take one chunk-load permit (the expensive op); false = resume next tick. */
-    public static boolean tryChunkLoad() {
-        if (loadsLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
-        loadsLeft--;
-        return true;
-    }
 }
