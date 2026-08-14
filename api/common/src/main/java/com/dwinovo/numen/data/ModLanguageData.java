@@ -315,6 +315,7 @@ public final class ModLanguageData {
         adder.add("numen.chat.empty", "Say something to %s.");
         adder.add("numen.chat.compacting", "compacting history…");
         adder.add("numen.chat.compacted", "─── earlier conversation compacted to a summary (originals kept on disk) ───");
+        adder.add("numen.chat.cleared", "─── context cleared — she starts fresh (chat log kept) ───");
         adder.add("numen.chat.persona_changed", "─── persona switched ───");
         adder.add("numen.chat.steps", "%s steps");
         adder.add("numen.chat.plan", "PLAN");
@@ -621,6 +622,7 @@ public final class ModLanguageData {
         adder.add("numen.chat.empty", "对 %s 说点什么。");
         adder.add("numen.chat.compacting", "正在压缩历史…");
         adder.add("numen.chat.compacted", "─── 更早的对话已压缩为摘要（原文保留在磁盘） ───");
+        adder.add("numen.chat.cleared", "─── 上下文已清除，她从头开始（聊天记录保留） ───");
         adder.add("numen.chat.persona_changed", "─── 人设已切换 ───");
         adder.add("numen.chat.steps", "%s 步");
         adder.add("numen.chat.plan", "计划");

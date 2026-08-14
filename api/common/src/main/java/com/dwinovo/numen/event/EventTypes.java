@@ -37,6 +37,13 @@ public final class EventTypes {
      */
     public static final String COMPACT = "compact";
     /**
+     * 主人要求清空上下文。
+     *
+     * <p>与 {@link #COMPACT} 同一形状:不拼给模型({@code toModel} 回 null),进队列等安全点,
+     * 真去清是取件那一方的事。区别只在取到之后干什么——整理发一次摘要请求,清空同步完事。
+     */
+    public static final String CLEAR = "clear";
+    /**
      * 长期目标的续跑块。
      *
      * <p>是文本(要拼给模型),但不进聊天流——那一大块 steering 给主人看没有意义,目标本身
@@ -78,6 +85,7 @@ public final class EventTypes {
         register(new Type(EVENT, s -> s, s -> null, false, false));
         // 不进模型文本(toModel 回 null),但进聊天流——主人得看见自己按的整理排着。
         register(new Type(COMPACT, s -> null, s -> s, true, true));
+        register(new Type(CLEAR, s -> null, s -> s, true, true));
         register(new Type(GOAL, s -> s, s -> null, true, true));
     }
 
