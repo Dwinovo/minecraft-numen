@@ -36,9 +36,8 @@ final class ClearCommand implements ChatCommand {
         if (refused != null) {
             return refused;
         }
-        // 空闲时进队列就当场清掉了,忙的时候才真排着——照实说哪一种。
-        return loop.clearPending()
-                ? "清空已排上,她手上这轮完就清"
-                : "上下文清掉了。记录都留着,往上翻还能看";
+        // 成功不吭声:清完分隔线当场出现,排着时队列条目自己在聊天流里挂着——
+        // 画面已经说明了一切,再回一行字是重复。
+        return null;
     }
 }

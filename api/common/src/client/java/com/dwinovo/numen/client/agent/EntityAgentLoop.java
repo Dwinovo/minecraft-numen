@@ -747,16 +747,11 @@ public final class EntityAgentLoop {
         return null;
     }
 
-    /** 清空还排着没执行(命令回话用:排着 = 她手上这轮完才清)。 */
-    public boolean clearPending() {
-        return queue.count(EventTypes.CLEAR) > 0;
-    }
-
     /**
      * 主人要求清空上下文。与 {@link #requestCompact} 同一走法:急件进队列,到安全点执行,
      * 忙的时候也按得下。空闲时排空当场发生,调用返回时已经清完。
      *
-     * @return 拒绝的理由;{@code null} = 已排上(或已清完,问 {@link #clearPending})
+     * @return 拒绝的理由;{@code null} = 已排上(空闲时当场清完)
      */
     public String requestClearContext() {
         String problem = clearProblem();
