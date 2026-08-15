@@ -7,6 +7,7 @@ import com.dwinovo.numen.core.task.collect.CollectItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.DropItemsTaskRecord;
 import com.dwinovo.numen.core.task.inventory.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.inventory.EquipTaskRecord;
+import com.dwinovo.numen.core.task.inventory.UnequipTaskRecord;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -37,9 +38,18 @@ public final class InventoryOps {
     private static final long COLLECT_TIMEOUT_TICKS = 60 * 20;   // 1 min
 
     public TaskRecord equipItem(
+String action,
 String item_id,
 String slot,
             ToolContext ctx) {
+        if ("unequip".equalsIgnoreCase(action)) {
+            return new UnequipTaskRecord(ctx.toolCallId(), ctx.deadline(EQUIP_TIMEOUT_TICKS),
+                    readUnequipSlots(slot), slot.toLowerCase());
+        }
+        if (item_id == null || item_id.isBlank()) {
+            throw new IllegalArgumentException(
+                    "item_id is required to equip (to take gear off, use action=unequip with a slot)");
+        }
         EquipmentSlot equipSlot = readSlot(slot);
 
         Item item = ToolArgs.parseItem(item_id);
@@ -59,9 +69,24 @@ String slot,
             case "head" -> EquipmentSlot.HEAD;
             case "chest" -> EquipmentSlot.CHEST;
             case "legs" -> EquipmentSlot.LEGS;
+            case "armor" -> throw new IllegalArgumentException(
+                    "slot=armor is only for action=unequip (it means all four armor pieces)");
             case "feet" -> EquipmentSlot.FEET;
             default -> throw new IllegalArgumentException("unknown slot: " + name);
         };
+    }
+
+    /** 脱哪些槽:必填;{@code armor} 展开为四件甲。 */
+    private static List<EquipmentSlot> readUnequipSlots(String slot) {
+        if (slot == null || slot.isBlank()) {
+            throw new IllegalArgumentException(
+                    "slot is required for unequip ('armor' takes all four armor pieces off)");
+        }
+        if ("armor".equalsIgnoreCase(slot)) {
+            return List.of(EquipmentSlot.HEAD, EquipmentSlot.CHEST,
+                    EquipmentSlot.LEGS, EquipmentSlot.FEET);
+        }
+        return List.of(readSlot(slot));
     }
 
     public TaskRecord eatItem(

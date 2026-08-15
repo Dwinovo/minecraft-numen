@@ -32,6 +32,9 @@ import com.dwinovo.numen.task.TaskState;
 public enum FailureType {
     /** Out of blocks/items in inventory to place or use. Prerequisite — kick to LLM. */
     NO_MATERIAL,
+    /** No free inventory slot to stow into (unequipped gear, picked-up loot). Kick to
+     *  LLM: dropping or depositing something first is a strategic call. */
+    NO_SPACE,
     /** Nothing solid to place against at/around the target. In-ladder: try another support face. */
     NO_SUPPORT,
     /** A living/building-blocking entity occupies the target cell — vanilla refuses every
