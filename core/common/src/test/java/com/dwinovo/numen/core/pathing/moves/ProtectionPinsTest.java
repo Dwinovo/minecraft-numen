@@ -43,9 +43,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *   <li>功能方块软惩罚:箱子(在 NavSettings.blocksToAvoidBreaking 默认清单内)
  *       计 ×10 软成本(有限价,无路可走仍会破坏)
  *       (回到泥土一样的有限价);</li>
- *   <li>do_not_break 标签成员(数据包追加)在任何开关下都计 INF,
- *       默认清单为空,本测试通过 NavSettings
- *       .blocksToDisallowBreaking 钉一个方块验证;</li>
+ *   <li>do_not_break 标签成员在任何开关下都计 INF——硬禁挖的唯一真源。
+ *       这里钉<b>机制</b>(手动绑一个测试自声明的方块进标签);
+ *       默认成员(床/门/活板门/栅栏门)的真源在 ModBlockTagData,
+ *       由 ModBlockTagDataTest 另钉;</li>
  *   <li>sacred(导航自身目标格)必 INF;</li>
  *   <li>同地形普通方块(泥土)有限价——证明是保护在起作用,不是别的
  *       东西把边价推上去的;</li>
@@ -234,27 +235,32 @@ class ProtectionPinsTest {
     }
 
     @Test
-    void disallowBreakingHoldsInfinite() {
-        // blocksToDisallowBreaking(默认空)硬禁挖。钉一个方块到该清单
-        // 验证(用石头,与箱子软清单区分开)。
+    void doNotBreakTagHoldsInfinite() {
+        // do_not_break 硬禁挖。标签内容运行时来自数据包,无头引导不加载数据包,
+        // 所以手动绑一个测试自声明的方块(石头,与箱子软清单区分开)——同
+        // ScaffoldTagTestSupport 的路子,钉的是机制;默认成员另见 ModBlockTagDataTest。
         BlockPos stone = SRC.north();
         FakeView v = floored();
         v.set(stone, Blocks.STONE.defaultBlockState());
-        NavSettings s = NavSettings.get();
-        var savedDisallow = new java.util.ArrayList<>(s.blocksToDisallowBreaking());
-        var savedAvoid = new java.util.ArrayList<>(s.blocksToAvoidBreaking());
+        bindBlockTags(java.util.Map.of(com.dwinovo.numen.core.init.InitTag.DO_NOT_BREAK,
+                java.util.List.of(net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                        .wrapAsHolder(Blocks.STONE))));
         try {
-            s.blocksToDisallowBreaking().add(Blocks.STONE);
-            s.blocksToAvoidBreaking().clear();
-            assertTrue(MovementHelper.avoidBreaking(
+            assertTrue(MovementHelper.getMiningDurationTicks(
                     context(v, LongSets.emptySet()),
-                    stone.getX(), stone.getY(), stone.getZ(), v.getBlockState(stone)));
+                    stone.getX(), stone.getY(), stone.getZ(), false) >= COST_INF,
+                    "标签成员应计 INF");
         } finally {
-            s.blocksToDisallowBreaking().clear();
-            s.blocksToDisallowBreaking().addAll(savedDisallow);
-            s.blocksToAvoidBreaking().clear();
-            s.blocksToAvoidBreaking().addAll(savedAvoid);
+            bindBlockTags(java.util.Map.of());   // 回到无头引导的原态:方块标签全空
         }
+    }
+
+    /** 原版数据包加载走的同一条 bindTags 路,生产代码不为测试开口子。 */
+    @SuppressWarnings("unchecked")
+    private static void bindBlockTags(java.util.Map<net.minecraft.tags.TagKey<net.minecraft.world.level.block.Block>,
+            java.util.List<net.minecraft.core.Holder<net.minecraft.world.level.block.Block>>> tags) {
+        ((net.minecraft.core.MappedRegistry<net.minecraft.world.level.block.Block>)
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK).bindTags(tags);
     }
 
     @Test

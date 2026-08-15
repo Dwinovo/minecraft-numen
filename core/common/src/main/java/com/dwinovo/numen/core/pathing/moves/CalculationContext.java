@@ -307,8 +307,8 @@ public class CalculationContext {
      * 挖 (x,y,z) 的成本乘数。两层禁令,从严到宽:
      * <ol>
      *   <li>sacred(自身目标格)永远 INF,任何开关都不可穿透;</li>
-     *   <li>do_not_break 标签成员(数据包追加的硬禁挖方块)直接 INF,
-     *       任何开关都不可解除;</li>
+     *   <li>do_not_break 标签成员(默认设施类:床/门/活板门/栅栏门,
+     *       数据包可追加)直接 INF,任何开关都不可解除;</li>
      *   <li>总开关 {@code allowBreak} 关闭且不在例外清单 → INF。</li>
      * </ol>
      * 功能方块(工作台/熔炉/箱子等)的 ×10 软惩罚由 {@link ToolSet}

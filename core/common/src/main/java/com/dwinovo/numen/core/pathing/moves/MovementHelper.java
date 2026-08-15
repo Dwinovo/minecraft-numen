@@ -382,10 +382,11 @@ public final class MovementHelper {
     // ==================== 禁挖判定 ====================
 
     /**
-     * 挖 (x,y,z) 是否被禁止:世界边界外拒绝(内缩一格,边界外的方块
-     * 没法贴放/挖到);硬禁令清单(blocksToDisallowBreaking,
-     * 也不解除)、冰(挖了变水搅乱路径)、被虫蚀方块,以及上方/四个
-     * 水平邻格的液体与悬空落沙规则。
+     * 挖 (x,y,z) 是否被<b>物理上</b>禁止:世界边界外拒绝(内缩一格,边界外的方块
+     * 没法贴放/挖到);冰(挖了变水搅乱路径)、被虫蚀方块,以及上方/四个
+     * 水平邻格的液体与悬空落沙规则。保护性的硬禁挖(do_not_break 标签)不在
+     * 这里——那是 {@link CalculationContext#breakCostMultiplierAt} 的事,
+     * 硬禁挖的唯一真源是那个标签。
      */
     public static boolean avoidBreaking(CalculationContext context, int x, int y, int z, BlockState state) {
         if (context.worldBorder != null
@@ -396,9 +397,6 @@ public final class MovementHelper {
             return true;
         }
         Block b = state.getBlock();
-        if (NavSettings.get().blocksToDisallowBreaking().contains(b)) {
-            return true;
-        }
         return b == Blocks.ICE
                 || b instanceof InfestedBlock
                 || avoidAdjacentBreaking(context, x, y + 1, z, true)

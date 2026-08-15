@@ -47,8 +47,15 @@ public final class NavSettings {
     public boolean allowPlaceInFluidsFlow = true;
     /** 放置一个方块的成本罚金(省方块,不鼓励乱放)。 */
     public double blockPlacementPenalty = 20.0;
-    /** 每次挖掘的附加成本(除纯挖掘耗时外的定值)。 */
-    public double blockBreakAdditionalPenalty = 2.0;
+    /**
+     * 每次挖掘的附加成本(除纯挖掘耗时外的定值)。
+     *
+     * <p>30 ≈ 多走 6.5 格。她是住在别人世界里的客人:破坏该是绕不开时的下策,不是抄
+     * 近道的手段。穿一堵墙要拆脚和头两格 ≈ 走 17 格,十几格内有门就走门;地下无路可
+     * 绕时该挖照挖。参照系:挖掘型机器人拿这个值当平手判定(≈2,工具越好拆墙越接近
+     * 免费),定居型 NPC 根本没有破坏这个选项(∞)——同伴两头的活都要干,取中段。
+     */
+    public double blockBreakAdditionalPenalty = 30.0;
     /** 每次起跳的附加罚金。 */
     public double jumpPenalty = 2.0;
     /** 水面行走每格附加罚金。 */
@@ -212,7 +219,6 @@ public final class NavSettings {
     // ==================== 方块 / 物品清单(懒加载,首次访问才触碰注册表) ====================
 
     private List<Block> blocksToAvoid;
-    private List<Block> blocksToDisallowBreaking;
     private List<Block> blocksToAvoidBreaking;
     private List<Block> allowBreakAnyway;
     private List<Block> buildIgnoreBlocks;
@@ -226,14 +232,6 @@ public final class NavSettings {
             blocksToAvoid = new ArrayList<>();
         }
         return blocksToAvoid;
-    }
-
-    /** 永不挖掘的方块(硬禁令)。 */
-    public List<Block> blocksToDisallowBreaking() {
-        if (blocksToDisallowBreaking == null) {
-            blocksToDisallowBreaking = new ArrayList<>();
-        }
-        return blocksToDisallowBreaking;
     }
 
     /** 尽量不挖的功能方块:挖掘成本乘 1/{@link #avoidBreakingMultiplier}。 */

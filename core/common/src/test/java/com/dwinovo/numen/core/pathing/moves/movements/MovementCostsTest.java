@@ -268,8 +268,9 @@ class MovementCostsTest {
         v.set(0, 66, 0, Blocks.DIRT.defaultBlockState()); // 头顶两格处有泥土
         CalculationContext ctx = context(v);
         double cost = MovementPillar.cost(ctx, 0, 64, 0);
-        // 徒手(泥土物品)挖泥土:硬度 0.5 → 1/(2/30)=15 tick,再加挖掘附加罚金 2
-        assertEquals(25.1634 + 15 + 2, cost, EPS);
+        // 徒手(泥土物品)挖泥土:硬度 0.5 → 1/(2/30)=15 tick,再加挖掘附加罚金。
+        // 罚金引用设置真源:这条钉的是成本组成,罚金定多大是 NavSettings 的决定。
+        assertEquals(25.1634 + 15 + NavSettings.get().blockBreakAdditionalPenalty, cost, EPS);
     }
 
     // ==================== 原地下挖 ====================
@@ -281,7 +282,7 @@ class MovementCostsTest {
         v.set(0, 62, 0, Blocks.STONE.defaultBlockState()); // 再下一格可站
         CalculationContext ctx = context(v);
         double cost = MovementDownward.cost(ctx, 0, 64, 0);
-        assertEquals(5.6147 + 15 + 2, cost, EPS);
+        assertEquals(5.6147 + 15 + NavSettings.get().blockBreakAdditionalPenalty, cost, EPS);
     }
 
     // ==================== 跑酷 ====================
