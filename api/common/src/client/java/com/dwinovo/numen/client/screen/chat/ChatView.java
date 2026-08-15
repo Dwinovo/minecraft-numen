@@ -361,6 +361,11 @@ public final class ChatView {
                         lastSide = null;
                         continue;
                     }
+                    if (ConvoLog.CLEAR_DIVIDER.equals(u.content())) {
+                        notice(out, I18n.get("numen.chat.cleared"));
+                        lastSide = null;
+                        continue;
+                    }
                     String shown = ownerText(u.content());   // owner's words only, never injected content
                     if (shown.isEmpty()) continue;
                     boolean first = lastSide == null || !lastSide;

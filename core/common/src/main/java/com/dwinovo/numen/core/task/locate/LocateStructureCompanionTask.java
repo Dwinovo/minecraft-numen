@@ -12,19 +12,15 @@ import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
-import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
-import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureCheckResult;
-import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.placement.ConcentricRingsStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.RandomSpreadStructurePlacement;
 import net.minecraft.world.level.levelgen.structure.placement.StructurePlacement;
@@ -56,11 +52,12 @@ import java.util.Optional;
  *   <li>presence is checked with
  *       {@link net.minecraft.world.level.StructureManager#checkStructurePresence}
  *       (a cached lookup that does NOT generate chunks);</li>
- *   <li>only {@code CHUNK_LOAD_NEEDED} fallbacks pay a real
- *       {@code STRUCTURE_STARTS} chunk load, strictly budgeted via the
- *       GLOBAL {@link SearchBudget} shared by all searches.</li>
+ *   <li><b>一块区块都不加载</b>——见 {@code checkCandidate}:
+ *       {@code CHUNK_LOAD_NEEDED} 本身就是肯定答案,补一句排除区判据即可,
+ *       原版那次 {@code STRUCTURE_STARTS} 加载对我们纯属多余。</li>
  * </ul>
- * Worst case the answer takes a handful of ticks instead of hitching one.
+ * 于是这个搜索对服务端的全部成本就是 {@link SearchBudget} 框住的那点 CPU:
+ * 最坏情况是答案晚几 tick,而不是主线程卡在世界生成上等到看门狗把服务器杀掉。
  */
 public final class LocateStructureCompanionTask extends AbstractCompanionTask<LocateStructureTaskRecord> {
 
@@ -252,12 +249,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                 pendingCandidate = candidate;   // pool drained — resume next tick
                 return TaskState.RUNNING;
             }
-            Boolean hit = checkCandidate(sl, job, candidate);
-            if (hit == null) {
-                pendingCandidate = candidate;   // out of chunk-load budget — resume next tick
-                return TaskState.RUNNING;
-            }
-            if (hit) {
+            if (checkCandidate(sl, job, candidate)) {
                 consider(job.placement.getLocatePos(candidate));
                 jobIndex++;   // ring order ⇒ first hit is this job's nearest
             }
@@ -265,25 +257,35 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
     }
 
     /**
-     * Is one of the job's structures generating at {@code candidate}?
-     * {@code null} means the cached check was inconclusive and the global
-     * chunk-load budget for this tick is spent — call again next tick.
+     * 这一格上会不会长出这个任务要找的结构。
+     *
+     * <h2>一块区块都不加载</h2>
+     * {@code checkStructurePresence} 三种结果里,前两种来自内存缓存与存档 NBT,本来就是零成本的
+     * 权威答案。第三种 {@code CHUNK_LOAD_NEEDED} 听着像"得去加载",其实<b>它本身就是肯定答案</b>
+     * ——原版只在 {@code canCreateStructure()} 为真之后才返回它,而那个方法就是
+     * {@code findValidGenerationPoint(...).isPresent()},跟真正生成时用的是同一个判据。
+     *
+     * <p>原版接着还去 {@code getChunk(STRUCTURE_STARTS)},只为两件我们不需要的事:拿
+     * {@code start.getChunkPos()} 当坐标(而它在 {@code START_PRESENT} 快路径上用的就是
+     * {@code placement.getLocatePos(chunkPos)},同一个来源),以及 {@code skipKnownStructures}
+     * 时注册引用(我们传 false)。所以那一步对我们是纯粹多余的——而它正是同步生成区块的那一处:
+     * 未加载的区块会当场跑一遍世界生成,主线程干等,单 tick 超六十秒就被看门狗判定崩溃。
+     *
+     * <p>代价是要自己补 {@code isStructureChunk}:{@code checkStart} 只查了
+     * {@code applyAdditionalChunkRestrictions},漏了排除区那一项(原版靠 getChunk 里真跑一遍
+     * 生成来兜)。不补就会多报被排除区挡掉的结构。
      */
-    private Boolean checkCandidate(ServerLevel sl, Job job, ChunkPos candidate) {
-        ChunkAccess loaded = null;   // one load permit per candidate, shared by all its structures
+    private boolean checkCandidate(ServerLevel sl, Job job, ChunkPos candidate) {
         for (Structure structure : job.structures) {
             StructureCheckResult res = sl.structureManager()
                     .checkStructurePresence(candidate, structure, job.placement, false);
             if (res == StructureCheckResult.START_NOT_PRESENT) continue;
             if (res == StructureCheckResult.START_PRESENT) return true;
-            // CHUNK_LOAD_NEEDED — the expensive fallback, globally budgeted.
-            if (loaded == null) {
-                if (!SearchBudget.tryChunkLoad()) return null;
-                loaded = sl.getChunk(candidate.x, candidate.z, ChunkStatus.STRUCTURE_STARTS);
+            // CHUNK_LOAD_NEEDED:生成判据已经点头了,只差排除区这一项。
+            if (job.placement.isStructureChunk(
+                    sl.getChunkSource().getGeneratorState(), candidate.x, candidate.z)) {
+                return true;
             }
-            StructureStart start = sl.structureManager()
-                    .getStartForStructure(SectionPos.bottomOf(loaded), structure, loaded);
-            if (start != null && start.isValid()) return true;
         }
         return false;
     }

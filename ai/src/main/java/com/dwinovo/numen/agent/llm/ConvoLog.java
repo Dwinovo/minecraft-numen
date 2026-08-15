@@ -33,9 +33,10 @@ import java.util.UUID;
  *   <li><b>Header</b> — {@code {"type":"header","v":2,...}} — always line 1 of a v2 file.</li>
  *   <li><b>Messages</b> — the v1 shape, keyed by {@code role} = {@code user}/{@code assistant}/{@code tool},
  *       plus optional additive metadata ({@code ts}, and reserved {@code model}/{@code usage}).</li>
- *   <li><b>Events</b> — keyed by {@code type}, no {@code role}: {@code compact}, {@code persona-change},
- *       and the reserved {@code goal}. Events record <em>what happened, and when</em> — never a copy of
- *       configuration (bindings live in the companion's {@code binding.json}, persona text in the library).</li>
+ *   <li><b>Events</b> — keyed by {@code type}, no {@code role}: {@code compact}, {@code clear},
+ *       {@code persona-change}, and the reserved {@code goal}. Events record <em>what happened, and
+ *       when</em> — never a copy of configuration (bindings live in the companion's
+ *       {@code binding.json}, persona text in the library).</li>
  * </ul>
  * <b>Discriminator rule:</b> a record with a {@code type} field is an event; otherwise it's a message
  * dispatched on {@code role}. The legacy v1 {@code role:"compact"} line is read as a {@code compact} event.
@@ -71,10 +72,13 @@ public final class ConvoLog {
     public static final String COMPACT_DIVIDER = "[numen:compact-divider]";
     /** Persona-change sentinel in the DISPLAY view — drawn as a "人设已切换" divider. Never sent to the LLM. */
     public static final String PERSONA_DIVIDER = "[numen:persona-divider]";
+    /** Context-clear sentinel in the DISPLAY view — drawn as a "上下文已清除" divider. Never sent to the LLM. */
+    public static final String CLEAR_DIVIDER = "[numen:clear-divider]";
 
     // Event type discriminators.
     private static final String EV_HEADER = "header";
     private static final String EV_COMPACT = "compact";
+    private static final String EV_CLEAR = "clear";
     private static final String EV_PERSONA = "persona-change";
     private static final String EV_GOAL = "goal";   // reserved (recognized, no behavior yet)
 
@@ -123,6 +127,18 @@ public final class ConvoLog {
         if (meta != null && !meta.entrySet().isEmpty()) {
             o.add("meta", meta);
         }
+        o.addProperty("ts", System.currentTimeMillis());
+        writeLine(o);
+    }
+
+    /**
+     * 记一条"这里清空过上下文"的边界。{@link #load} 从它之后从零重放——对模型是真空白;
+     * {@link #loadDisplay} 渲染成 {@link #CLEAR_DIVIDER}。文件 append-only,清空不删任何历史,
+     * 之前的对话全部留档、界面照常能翻。
+     */
+    public void appendClearBoundary() {
+        JsonObject o = new JsonObject();
+        o.addProperty("type", EV_CLEAR);
         o.addProperty("ts", System.currentTimeMillis());
         writeLine(o);
     }
@@ -249,7 +265,8 @@ public final class ConvoLog {
     /**
      * Load the protocol-valid tail of the conversation for the LLM: messages only (events skipped), the
      * last {@code limit} extended backwards to the nearest {@code user} message so the slice starts at a
-     * turn boundary. A {@code compact} event restarts the replay from its summary + preserved tail.
+     * turn boundary. A {@code compact} event restarts the replay from its summary + preserved tail;
+     * a {@code clear} event restarts it from nothing.
      */
     public List<ConvoState.Msg> load(int limit) {
         if (!Files.isRegularFile(file)) return List.of();
@@ -274,6 +291,8 @@ public final class ConvoLog {
                                 if (m != null) all.add(m);
                             }
                         }
+                    } else if (EV_CLEAR.equals(type)) {
+                        all.clear();   // 白纸重来:无摘要、无保留
                     }
                     // header / persona-change / goal / unknown → not part of the LLM context
                     continue;
@@ -300,9 +319,10 @@ public final class ConvoLog {
     }
 
     /**
-     * Load the PHYSICAL tail for the chat GUI: messages in file order; {@code compact} and
-     * {@code persona-change} events become sentinel divider messages instead of restarting or vanishing.
-     * This is the "what actually happened" view — history is never lost to compaction.
+     * Load the PHYSICAL tail for the chat GUI: messages in file order; {@code compact}, {@code clear}
+     * and {@code persona-change} events become sentinel divider messages instead of restarting or
+     * vanishing. This is the "what actually happened" view — history is never lost to compaction
+     * or clearing.
      */
     public List<ConvoState.Msg> loadDisplay(int limit) {
         if (!Files.isRegularFile(file)) return List.of();
@@ -319,6 +339,7 @@ public final class ConvoLog {
                 String type = eventType(o);
                 if (type != null) {                              // event record
                     if (EV_COMPACT.equals(type)) all.add(new ConvoState.Msg.User(COMPACT_DIVIDER));
+                    else if (EV_CLEAR.equals(type)) all.add(new ConvoState.Msg.User(CLEAR_DIVIDER));
                     else if (EV_PERSONA.equals(type)) all.add(new ConvoState.Msg.User(PERSONA_DIVIDER));
                     // header / goal / unknown → not shown
                     continue;

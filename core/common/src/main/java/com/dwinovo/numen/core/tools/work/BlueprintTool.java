@@ -67,8 +67,10 @@ public final class BlueprintTool implements NumenTool {
         props.put("x", Map.of("type", "integer", "description", "build only: anchor minimum X."));
         props.put("y", Map.of("type", "integer", "description", "build only: anchor bottom Y (floor level)."));
         props.put("z", Map.of("type", "integer", "description", "build only: anchor minimum Z."));
-        props.put("rotation", Map.of("type", "integer", "enum", List.of(0, 90, 180, 270),
-                "description", "build only: optional clockwise rotation, default 0."));
+        // 值域写描述不写 enum:代码对任意整数取模,enum 在这儿不添约束,
+        // 而整数 enum 会被一部分只认字符串 enum 的上游拒收。
+        props.put("rotation", Map.of("type", "integer",
+                "description", "build only: optional clockwise rotation (0/90/180/270), default 0."));
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("type", "object");
         root.put("properties", props);

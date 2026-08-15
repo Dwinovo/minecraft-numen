@@ -740,6 +740,44 @@ public final class EntityAgentLoop {
         return endpointProblem();   // 整理要发一次请求,没绑模型/没填 key 一样做不了
     }
 
+    /** {@code /clear} 现在按不按得下。同 {@link #compactProblem} 的形状,但不查端点:清空不发请求。 */
+    public String clearProblem() {
+        if (dead) return "她已经不在了";
+        if (queue.count(EventTypes.CLEAR) > 0) return "清空已经排上了";
+        return null;
+    }
+
+    /**
+     * 主人要求清空上下文。与 {@link #requestCompact} 同一走法:急件进队列,到安全点执行,
+     * 忙的时候也按得下。空闲时排空当场发生,调用返回时已经清完。
+     *
+     * @return 拒绝的理由;{@code null} = 已排上(空闲时当场清完)
+     */
+    public String requestClearContext() {
+        String problem = clearProblem();
+        if (problem != null) {
+            Constants.LOG.info("[numen-entity#{}] manual clear refused: {}", entityUuid, problem);
+            return problem;
+        }
+        queue.push(EventTypes.CLEAR, "清空上下文", System.currentTimeMillis(), true);
+        maybeDrain();
+        return null;
+    }
+
+    /**
+     * 清空上下文——她带进下一轮的历史清成白纸,而<b>记录一个字不删</b>:日志 append-only,
+     * 落一条边界事件,重启后 {@code load} 从边界起步、{@code loadDisplay} 照常给全量。
+     * 绑定/人设/技能全不动:清的是对话,不是她是谁。只能在安全点调(排空路径保证)。
+     */
+    private void performClear() {
+        log.appendClearBoundary();
+        convo.replaceAll(List.of());
+        display.add(new ConvoState.Msg.User(ConvoLog.CLEAR_DIVIDER));
+        lastPromptTokens = 0;
+        compactFailures = 0;
+        Constants.LOG.info("[numen-entity#{}] 上下文清空(记录留档)", entityUuid);
+    }
+
 
     /** Owner prompts are queued, waiting to flush into the conversation. */
     public boolean hasQueuedPrompts() {
@@ -1086,17 +1124,22 @@ public final class EntityAgentLoop {
     private boolean drainInbox() {
         if (queue.isEmpty()) return false;
         long now = System.currentTimeMillis();
-        // 先到先得。遇到一条不该当文本处理的(整理记忆)就停下:前面排着的先走完,它留在
+        // 先到先得。遇到一条不该当文本处理的(整理/清空)就停下:前面排着的先走完,它留在
         // 队首等下一个安全点。不插队——插队一旦开了口子,以后每加一种条目都要重新回答
         // "它插不插队"。
-        List<EventQueue.Entry> text =
-                queue.takeWhile(e -> !EventTypes.COMPACT.equals(e.type()), now);
+        List<EventQueue.Entry> text = queue.takeWhile(e -> !isControlEntry(e.type()), now);
         if (text.isEmpty()) {
-            // 队首就是整理,轮到它了。连着按的几次算一次。
+            // 队首是控制条目,轮到它了。连着按的几次算一次;批里混着清空就清空说了算
+            // ——整理要的是腾地方,清空把地方全腾出来了。
             //
             // 返回 true 是<b>必须的</b>:调用方那道 compacting 闸在这句之前,这里再置位已经
             // 拦不住它了——只从本方法 return 的话,整理会和一次普通请求并排跑起来。
-            queue.takeWhile(e -> EventTypes.COMPACT.equals(e.type()), now);
+            // 清空虽是同步的也返回 true:排在它后面的话该进崭新的上下文,留给下一次排空。
+            List<EventQueue.Entry> control = queue.takeWhile(e -> isControlEntry(e.type()), now);
+            if (control.stream().anyMatch(e -> EventTypes.CLEAR.equals(e.type()))) {
+                performClear();
+                return true;
+            }
             Constants.LOG.info("[numen-entity#{}] 整理记忆:排到了,开始", entityUuid);
             startCompaction(false);
             return true;
@@ -1119,6 +1162,11 @@ public final class EntityAgentLoop {
         // counter (just log numbering now that the hard cap is gone).
         convo.resetTurnCount();
         return false;
+    }
+
+    /** 队列里不当文本、要在安全点单独处理的条目(整理/清空)。 */
+    private static boolean isControlEntry(String type) {
+        return EventTypes.COMPACT.equals(type) || EventTypes.CLEAR.equals(type);
     }
 
     private void tryStartTurn() {
