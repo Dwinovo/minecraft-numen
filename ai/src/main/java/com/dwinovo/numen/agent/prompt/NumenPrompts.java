@@ -38,7 +38,7 @@ public final class NumenPrompts {
 
             <operating_principles>
             - Act, don't narrate. A physical request means CALL TOOLS, not
-              describe them — "I'll mine the ore" is wrong; call auto_mine. Keep
+              describe them — "I'll mine the ore" is wrong; call mine. Keep
               calling tools until the goal is done or provably impossible, then
               report briefly.
             - But not everything is a task. Chit-chat, thanks, or a question you
@@ -53,8 +53,8 @@ public final class NumenPrompts {
             - Failed results teach. They say WHY and usually the next step (equip
               a tool, use a suggested coordinate, get a material) — follow it,
               don't repeat the same call unchanged.
-            - Long jobs run in the BACKGROUND. move_to / auto_mine / hunt /
-              collect_items / wait return a task_id immediately and the body works
+            - Long jobs run in the BACKGROUND. goto / mine / attack /
+              collect_items / fish / follow return a task_id immediately and the body works
               on its own — you are free to talk or think meanwhile. NEVER poll:
               a <event kind="task_finished"> arrives by itself (status done /
               failed / timeout — timeout reports progress; re-dispatch the same
@@ -92,7 +92,7 @@ public final class NumenPrompts {
             <examples>
             A physical goal → act:
             owner: 去挖10块铁
-            → equip_item(stone_pickaxe), auto_mine(iron_ore + deepslate_iron_ore, 10) … (act)
+            → equip_item(stone_pickaxe), mine(iron_ore + deepslate_iron_ore, 10) … (act)
             → "挖到了 10 块铁,已经带回来了。"
 
             owner: 用之前那个熔炉烧点铁

@@ -205,14 +205,6 @@ public final class Schema {
             return this;
         }
 
-        /** Optional ({@code required=false}) AND nullable enum string — the place_block facing/axis/half shape. */
-        public Builder optionalNullableEnum(String name, String desc, String... values) {
-            Map<String, Object> p = nul("string", desc);
-            p.put("enum", List.of(values));
-            props.put(name, p);
-            return this;
-        }
-
         private static Map<String, Object> base(String type, String desc) {
             Map<String, Object> p = new LinkedHashMap<>();
             p.put("type", type);

@@ -472,11 +472,10 @@ public final class EntityAgentLoop {
 
     /**
      * Pull functional-block coordinates out of successful tool results into
-     * {@link WorkBlockMemory}. The results already carry them — place_block
-     * reports the block it placed, interact_at reports the station it activated
-     * (a chest/furnace/table it opened) — this just stops the loop from
-     * forgetting them once the result scrolls out of context. Both tools report
-     * the same {@code block} + {@code x/y/z} shape; {@code workBlocks.record}
+     * {@link WorkBlockMemory}. The result already carries them — interact_at
+     * reports the station it activated (a chest/furnace/table it opened) as
+     * {@code block} + {@code x/y/z} — this just stops the loop from forgetting
+     * them once the result scrolls out of context. {@code workBlocks.record}
      * filters to tracked station types, so non-station interactions fall away.
      */
     private void harvestWorkBlocks(String toolName, String resultJson) {
@@ -488,7 +487,7 @@ public final class EntityAgentLoop {
             if (data == null) return;
 
             switch (toolName) {
-                case "place_block", "interact_at" -> {
+                case "interact_at" -> {
                     if (data.has("block") && data.has("x")) {
                         String path = data.get("block").getAsString();
                         int colon = path.indexOf(':');

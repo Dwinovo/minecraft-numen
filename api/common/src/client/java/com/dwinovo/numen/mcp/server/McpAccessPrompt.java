@@ -72,7 +72,7 @@ final class McpAccessPrompt {
 
                 - Every tool takes a `companion` argument (name or id), so each call targets one body. \
                 There is no take-control handshake — just call tools.
-                - Action tools (`move_to`, `auto_mine`, `build`, `fish`, …) are BACKGROUND tasks: they \
+                - Action tools (`goto`, `mine`, `build`, `fish`, …) are BACKGROUND tasks: they \
                 return a task id immediately. Poll `task_status` until the body goes idle — as an \
                 external driver you do NOT receive `task_finished` events, so polling is the only way \
                 to know it's done. `task_stop` cancels.
