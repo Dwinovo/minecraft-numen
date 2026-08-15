@@ -54,7 +54,9 @@ public final class NumenEvents {
         /** 她从床上醒了。{@code sleep} 到躺下就返回,醒来这一刻只有这条事件说得出。 */
         WOKE("woke"),
         /** 饿了 —— 她不会自己吃,得主人给或者叫她去弄。 */
-        HUNGRY("hungry");
+        HUNGRY("hungry"),
+        /** 主人挨打了(只报实体攻击)。急不急按主人血线分档,见 {@code ownerHurt}。 */
+        OWNER_HURT("owner_hurt");
 
         private final String kind;
 
@@ -83,6 +85,27 @@ public final class NumenEvents {
     /** 身体自理日记——常驻任务链的叙事出口。永远不急。 */
     public static void body(NumenPlayer companion, String text) {
         emit(companion, Kind.BODY_LOG, null, text, false);
+    }
+
+    /**
+     * 主人挨打了。急不急按血线分档:安全区只是消息(攒着搭车,她下次开口自然带一句);
+     * 跌进危险区(与饥饿同一条"原版跑不动"的线)才是急件。这条事件<b>不碰身体</b>——
+     * 去不去救永远是她的决定。检测与去抖在 {@code OwnerHurtWatch}。
+     */
+    public static void ownerHurt(NumenPlayer companion, String attacker,
+                                 float hp, float maxHp, double distance, boolean urgent) {
+        Map<String, String> attrs = new LinkedHashMap<>();
+        attrs.put("by", attacker);
+        attrs.put("owner_hp", Math.round(hp) + "/" + Math.round(maxHp));
+        attrs.put("distance", String.valueOf(Math.round(distance)));
+        String text = urgent
+                ? "your owner is in DANGER: " + attacker + " has them down to " + Math.round(hp)
+                        + "/" + Math.round(maxHp) + " HP, about " + Math.round(distance)
+                        + " blocks from you — decide now whether to go help"
+                : "your owner just took a hit from " + attacker + " (" + Math.round(hp) + "/"
+                        + Math.round(maxHp) + " HP, about " + Math.round(distance)
+                        + " blocks from you) — they can likely handle it; your call";
+        emit(companion, Kind.OWNER_HURT, attrs, text, urgent);
     }
 
     /** 异步任务收尾。{@code status} ∈ done / failed / timeout / stopped。

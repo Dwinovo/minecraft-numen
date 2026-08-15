@@ -93,7 +93,9 @@ public final class CompanionTickDispatcher {
                 // the owner is always online while the world runs, so this never gates there. See
                 // CompanionChunkLoader.
                 UUID owner = ap.getOwnerUuid();
-                if (owner != null && server.getPlayerList().getPlayer(owner) != null) {
+                net.minecraft.server.level.ServerPlayer ownerPlayer =
+                        owner == null ? null : server.getPlayerList().getPlayer(owner);
+                if (ownerPlayer != null) {
                     CompanionChunkLoader.refresh(ap);
                 }
                 // 背包变了就推给主人一份。变化由原版的 ContainerListener 报,这里每 tick
@@ -107,6 +109,12 @@ public final class CompanionTickDispatcher {
                 if (ap.pollGotHungry()) {
                     com.dwinovo.numen.event.NumenEvents.gotHungry(
                             ap, ap.getFoodData().getFoodLevel());
+                }
+                // 主人挨打了说一声——通知不接管,去不去救是她的决定。
+                NumenPlayer.OwnerHurt hurt = ap.pollOwnerHurt(ownerPlayer, server.getTickCount());
+                if (hurt != null) {
+                    com.dwinovo.numen.event.NumenEvents.ownerHurt(ap, hurt.attacker(),
+                            hurt.hp(), hurt.maxHp(), ap.distanceTo(ownerPlayer), hurt.urgent());
                 }
                 CompanionBrain brain = brainFor(ap.getUUID());
                 if (!brain.boundTo(ap) && !brain.boundBodyGone()) {

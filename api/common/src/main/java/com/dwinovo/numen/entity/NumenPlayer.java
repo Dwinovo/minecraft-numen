@@ -131,6 +131,36 @@ public final class NumenPlayer extends ServerPlayer {
         return true;
     }
 
+    /** 主人血量的看护(纯判定在 {@link OwnerHurtWatch},便于无头单测)。 */
+    private final OwnerHurtWatch ownerWatch = new OwnerHurtWatch();
+
+    /** 一次"主人挨打"报告:攻击者、血量与档位(urgent = 跌进危险区)。 */
+    public record OwnerHurt(String attacker, float hp, float maxHp, boolean urgent) {}
+
+    /**
+     * 主人这一刻有没有挨打值得说。每服务端 tick 问一次(见 {@code CompanionTickDispatcher});
+     * 主人不在线传 null,基线即重置。只报实体攻击,分档与去抖全在 {@link OwnerHurtWatch}。
+     */
+    public OwnerHurt pollOwnerHurt(ServerPlayer owner, long now) {
+        if (owner == null) {
+            ownerWatch.reset();
+            return null;
+        }
+        net.minecraft.world.damagesource.DamageSource src = owner.getLastDamageSource();
+        net.minecraft.world.entity.Entity attacker = src == null ? null : src.getEntity();
+        OwnerHurtWatch.Verdict verdict = ownerWatch.poll(
+                owner.getUUID(), owner.getHealth(), attacker != null, now);
+        if (verdict == OwnerHurtWatch.Verdict.NONE) {
+            return null;
+        }
+        String label = attacker instanceof net.minecraft.world.entity.player.Player p
+                ? p.getGameProfile().getName()
+                : net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE
+                        .getKey(attacker.getType()).getPath();
+        return new OwnerHurt(label, owner.getHealth(), owner.getMaxHealth(),
+                verdict == OwnerHurtWatch.Verdict.DANGER);
+    }
+
     public boolean pollWokeUp() {
         if (!isAlive()) {
             sleepingLastTick = false;
