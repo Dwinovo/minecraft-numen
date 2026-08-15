@@ -69,8 +69,10 @@ public final class BlueprintReadTool implements NumenTool {
                 "description", "Optional anchor minimum X — give all three to also get site progress."));
         props.put("y", Map.of("type", "integer", "description", "Optional anchor bottom Y."));
         props.put("z", Map.of("type", "integer", "description", "Optional anchor minimum Z."));
-        props.put("rotation", Map.of("type", "integer", "enum", List.of(0, 90, 180, 270),
-                "description", "Optional clockwise rotation, matching the build you plan."));
+        // 值域写描述不写 enum:代码对任意整数取模,enum 在这儿不添约束,
+        // 而整数 enum 会被一部分只认字符串 enum 的上游拒收。
+        props.put("rotation", Map.of("type", "integer",
+                "description", "Optional clockwise rotation (0/90/180/270), matching the build you plan."));
         Map<String, Object> root = new LinkedHashMap<>();
         root.put("type", "object");
         root.put("properties", props);
