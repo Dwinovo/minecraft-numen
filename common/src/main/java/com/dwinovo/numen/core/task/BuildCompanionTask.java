@@ -1298,6 +1298,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         scaffold.clear();
         spawnFixtures();
         nudgeSurroundingWater();
+        refreshConnectedBlocks();
         if (player.level() instanceof ServerLevel level) {
             level.sendParticles(ParticleTypes.HAPPY_VILLAGER,
                     (siteMin.getX() + siteMax.getX()) / 2.0 + 0.5,
@@ -1332,6 +1333,36 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             note = notes.isEmpty() ? "all requested cells match" : String.join("; ", notes);
         }
         return TaskState.SUCCESS;
+    }
+
+    /**
+     * 收尾时，对连接型方块（栅栏、玻璃板、铁栏杆等带 NORTH/EAST/SOUTH/WEST 属性的）
+     * 补一次邻居更新，让它们根据最终邻居重新算连接状态。
+     *
+     * <p>落位时刻意不带 {@code UPDATE_NEIGHBORS}（见 {@code PLACE_FLAGS}），那是为了
+     * 不让原版中途改写图纸。但连接型方块的状态天生依赖邻居，不更新就是一排孤立的
+     * 栅栏柱。收尾时所有格子都已落位，此时触发一次更新，连接状态正好一次算准。
+     */
+    private void refreshConnectedBlocks() {
+        net.minecraft.server.level.ServerLevel level =
+                (net.minecraft.server.level.ServerLevel) player.level();
+        for (BuildTaskRecord.Target target : r.targets) {
+            if (!target.desiredState().hasProperty(BlockStateProperties.NORTH)) {
+                continue;
+            }
+            BlockPos pos = target.pos();
+            BlockState state = level.getBlockState(pos);
+            if (state.isAir()) {
+                continue;
+            }
+            // 按 6 个方向算连接状态：updateShape 只更新当前方向对应的属性，
+            for (Direction dir : Direction.values()) {
+                BlockPos neighborPos = pos.relative(dir);
+                BlockState neighborState = level.getBlockState(neighborPos);
+                state = state.updateShape(dir, neighborState, level, pos, neighborPos);
+            }
+            level.setBlock(pos, state, PLACE_FLAGS);
+        }
     }
 
     // ------------------------------------------------------------------
