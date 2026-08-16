@@ -283,10 +283,88 @@ public final class BuildTool implements NumenTool {
         // 材料记账随能力画像:免耗材(创造)想建就建;否则消耗背包,开工前
         // 由任务预检并逐项报缺(见 BuildCompanionTask 的 checkMaterials)。
         boolean consume = !com.dwinovo.numen.core.task.WorkProfile.of(companion).freeMaterials();
+        if (!consume) {
+            // 创造（免耗材）：贴到地面众数高度，并在下方填 3 格泥土基座。泥土基座不扣料。
+            targets = adaptToGround(companion, targets);
+        }
         long timeout = timeoutTicksFor(targets.size(), consume);
         dispatchAsync(companion, new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), targets, replaceExisting,
                 consume), reply);
+    }
+
+    /**
+     * 创造模式的地面适配：把整栋建筑垂直贴到这块空地「地面高度的众数」，并在下方
+     * 填 3 格泥土基座——这样既不会悬空，也不会陷进个别坑里。
+     *
+     * <p>只对免耗材（创造）调用：生存模式填基座要扣泥土、盘料逻辑复杂，先不碰。
+     */
+    private static List<BuildTaskRecord.Target> adaptToGround(
+            NumenPlayer companion, List<BuildTaskRecord.Target> targets) {
+        net.minecraft.server.level.ServerLevel level =
+                (net.minecraft.server.level.ServerLevel) companion.level();
+
+        // 1) footprint 范围 + 蓝图最低实心 Y
+        int minX = Integer.MAX_VALUE, maxX = Integer.MIN_VALUE;
+        int minZ = Integer.MAX_VALUE, maxZ = Integer.MIN_VALUE;
+        int minY = Integer.MAX_VALUE;
+        for (BuildTaskRecord.Target t : targets) {
+            BlockPos p = t.pos();
+            minX = Math.min(minX, p.getX());
+            maxX = Math.max(maxX, p.getX());
+            minZ = Math.min(minZ, p.getZ());
+            maxZ = Math.max(maxZ, p.getZ());
+            if (!t.desiredState().isAir()) {
+                minY = Math.min(minY, p.getY());
+            }
+        }
+        if (minY == Integer.MAX_VALUE) {
+            return targets;   // 全是空气格，没有可贴地的实心内容
+        }
+
+        // 2) 每列 (x,z) 从蓝图最低 Y 往下找第一个非空气，作为该列地面高度
+        Map<Integer, Integer> groundCounts = new LinkedHashMap<>();
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                int gy = minY;
+                while (gy > level.getMinBuildHeight()
+                        && level.getBlockState(new BlockPos(x, gy, z)).isAir()) {
+                    gy--;
+                }
+                groundCounts.merge(gy, 1, Integer::sum);
+            }
+        }
+
+        // 3) 众数地面 Y（出现最多的那个高度）
+        int modeY = minY;
+        int modeCount = -1;
+        for (Map.Entry<Integer, Integer> e : groundCounts.entrySet()) {
+            if (e.getValue() > modeCount) {
+                modeY = e.getKey();
+                modeCount = e.getValue();
+            }
+        }
+        int dy = modeY - minY;
+
+        // 4) 整体垂直偏移 + 生成泥土基座
+        List<BuildTaskRecord.Target> out = new ArrayList<>(targets.size() + 64);
+        for (BuildTaskRecord.Target t : targets) {
+            BlockPos p = t.pos().offset(0, dy, 0);
+            out.add(new BuildTaskRecord.Target(t.desiredState(), t.item(), p, t.label(),
+                    t.facing(), t.axis(), t.topHalf()));
+        }
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = modeY - 1; y >= modeY - 3; y--) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    if (level.getBlockState(p).isAir()) {
+                        out.add(new BuildTaskRecord.Target(Blocks.DIRT, Items.DIRT, p,
+                                "基座", null, null, null));
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     /** 一条指令展开为目标格集。set/set_door 携带状态;体积算子单一方块类型。 */
