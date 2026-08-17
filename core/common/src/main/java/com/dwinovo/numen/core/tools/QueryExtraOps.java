@@ -16,14 +16,12 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.AbstractCookingRecipe;
-import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
-import net.minecraft.world.item.crafting.SingleRecipeInput;
 import net.minecraft.world.item.crafting.SmithingRecipe;
 import net.minecraft.world.item.crafting.SmithingRecipeInput;
 import net.minecraft.world.item.crafting.StonecutterRecipe;
@@ -142,60 +140,48 @@ String item_id,
             if (recipes.size() >= MAX_RECIPES) {
                 break;
             }
-            Recipe<?> r = holder.value();
-            if (r instanceof CraftingRecipe cr) {
-                // 1.21.1 has no PlacementInfo; a special recipe (firework, map-clone, …) has no
-                // static ingredient list — an empty list, or all-empty cells.
-                if (cr.getIngredients().isEmpty() || cr.getIngredients().stream().allMatch(Ingredient::isEmpty)) {
-                    continue;
+            // 每条配方自成一格:整合包里一条坏配方(产出为 null、输入表为 null)
+            // 只丢它自己,绝不让它杀掉整个查询。见 RecipeProbe。
+            try {
+                Recipe<?> r = holder.value();
+                if (r instanceof CraftingRecipe cr) {
+                    // 产出依赖输入的配方(烟花、镶零件的装备)静态描述答不了;
+                    // 1.21.1 没有 PlacementInfo,空输入表的老启发式一并保留。
+                    if (cr.isSpecial() || cr.getIngredients().isEmpty()
+                            || cr.getIngredients().stream().allMatch(Ingredient::isEmpty)) {
+                        continue;
+                    }
+                    ItemStack result = RecipeProbe.resultOf(cr, level.registryAccess());
+                    if (result.isEmpty() || result.getItem() != target) {
+                        continue;
+                    }
+                    recipes.add("[crafting] " + format(cr, result));
+                } else if (r instanceof AbstractCookingRecipe cook) {
+                    ItemStack result = RecipeProbe.resultOf(cook, level.registryAccess());
+                    if (result.isEmpty() || result.getItem() != target) {
+                        continue;
+                    }
+                    recipes.add(formatCooking(cook, result));
+                } else if (r instanceof StonecutterRecipe sc) {
+                    ItemStack result = RecipeProbe.resultOf(sc, level.registryAccess());
+                    if (result.isEmpty() || result.getItem() != target) {
+                        continue;
+                    }
+                    recipes.add("[stonecutter] " + describeIngredient(sc.getIngredients().get(0))
+                            + " -> makes " + result.getCount());
+                } else if (r instanceof SmithingRecipe sm) {
+                    // 锻造不走展示产出,保留空输入 assemble 的既有语义:变换配方
+                    // (下界合金升级)照样给出产物,纹饰配方产出(空的)基底、自然排除。
+                    ItemStack result = RecipeProbe.probe(() -> sm.assemble(new SmithingRecipeInput(
+                            ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY), level.registryAccess()));
+                    if (result.isEmpty() || result.getItem() != target) {
+                        continue;
+                    }
+                    recipes.add(formatSmithing(sm, result));
                 }
-                ItemStack result;
-                try {
-                    result = cr.assemble(CraftingInput.EMPTY, level.registryAccess());   // shaped/shapeless ignore input
-                } catch (RuntimeException inputDependent) {
-                    continue;
-                }
-                if (result.isEmpty() || result.getItem() != target) {
-                    continue;
-                }
-                recipes.add("[crafting] " + format(cr, result));
-            } else if (r instanceof AbstractCookingRecipe cook) {
-                ItemStack result;
-                try {
-                    result = cook.assemble(new SingleRecipeInput(ItemStack.EMPTY), level.registryAccess());   // ignores input
-                } catch (RuntimeException inputDependent) {
-                    continue;
-                }
-                if (result.isEmpty() || result.getItem() != target) {
-                    continue;
-                }
-                recipes.add(formatCooking(cook, result));
-            } else if (r instanceof StonecutterRecipe sc) {
-                ItemStack result;
-                try {
-                    result = sc.assemble(new SingleRecipeInput(ItemStack.EMPTY), level.registryAccess());     // ignores input
-                } catch (RuntimeException inputDependent) {
-                    continue;
-                }
-                if (result.isEmpty() || result.getItem() != target) {
-                    continue;
-                }
-                recipes.add("[stonecutter] " + describeIngredient(sc.getIngredients().get(0))
-                        + " -> makes " + result.getCount());
-            } else if (r instanceof SmithingRecipe sm) {
-                ItemStack result;
-                try {
-                    // Empty input: a transform recipe (netherite upgrade etc.) still yields its result
-                    // item; a cosmetic trim recipe yields the (empty) base, so it self-excludes.
-                    result = sm.assemble(new SmithingRecipeInput(
-                            ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY), level.registryAccess());
-                } catch (RuntimeException inputDependent) {
-                    continue;
-                }
-                if (result.isEmpty() || result.getItem() != target) {
-                    continue;
-                }
-                recipes.add(formatSmithing(sm, result));
+            } catch (RuntimeException broken) {
+                com.dwinovo.numen.core.Constants.LOG.debug(
+                        "[numen-recipe] 配方 {} 坏了,跳过: {}", holder.id(), broken.toString());
             }
         }
 

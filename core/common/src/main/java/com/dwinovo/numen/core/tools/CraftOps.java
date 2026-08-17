@@ -19,10 +19,10 @@ import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.level.block.CraftingTableBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -313,25 +313,31 @@ public final class CraftOps {
 
     private static List<Cand> candidatesFor(ServerLevel level, Item target) {
         List<Cand> out = new ArrayList<>();
-        for (RecipeHolder<?> holder : level.getRecipeManager().getRecipes()) {
-            if (!(holder.value() instanceof CraftingRecipe cr)) {
-                continue;
-            }
-            // A special recipe (firework, map-clone, …) has no static ingredient list — skip.
-            if (cr.getIngredients().isEmpty()
-                    || cr.getIngredients().stream().allMatch(Ingredient::isEmpty)) {
-                continue;
-            }
-            ItemStack result;
+        // 只取合成类型的表:模组自定义类型(机器配方)根本不进循环——执行层本来就
+        // 只会往标准合成格里摆料,几万条配方的整合包也省下全量遍历。
+        for (RecipeHolder<CraftingRecipe> holder
+                : level.getRecipeManager().getAllRecipesFor(RecipeType.CRAFTING)) {
+            CraftingRecipe cr = holder.value();
             try {
-                result = cr.assemble(CraftingInput.EMPTY, level.registryAccess());   // shaped/shapeless ignore input
-            } catch (RuntimeException inputDependent) {
-                continue;
+                // 产出依赖输入的配方(烟花、镶零件的装备)静态匹配答不了——模组
+                // 自己标的 isSpecial 就是这句话,原版合成书同样不列它们。
+                if (cr.isSpecial()) {
+                    continue;
+                }
+                ItemStack result = RecipeProbe.resultOf(cr, level.registryAccess());
+                if (result.isEmpty() || result.getItem() != target
+                        || !RecipeProbe.usableIngredients(cr)) {
+                    continue;
+                }
+                if (ingredientsOf(cr).isEmpty()) {
+                    continue;   // 没有实际输入的配方摆不进格子
+                }
+                out.add(new Cand(cr, result.getCount()));
+            } catch (RuntimeException broken) {
+                // 坏一条丢一条,记下 id 方便去上游反馈;绝不让它杀掉整个调用
+                com.dwinovo.numen.core.Constants.LOG.debug(
+                        "[numen-craft] 配方 {} 坏了,跳过: {}", holder.id(), broken.toString());
             }
-            if (result.isEmpty() || result.getItem() != target) {
-                continue;
-            }
-            out.add(new Cand(cr, result.getCount()));
         }
         return out;
     }
