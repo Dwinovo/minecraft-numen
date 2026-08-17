@@ -29,10 +29,9 @@ import java.util.UUID;
  * (placed tables/furnaces deliberately stay in the world for exactly this).
  *
  * <h2>How entries get here</h2>
- * Harvested by {@link EntityAgentLoop} from successful tool results: a
- * place_block of a tracked type reports the block it placed, and an interact_at
- * that opens a station reports the block it activated. No new tooling — the
- * results already carried the data; this just stops forgetting it.
+ * Harvested by {@link EntityAgentLoop} from successful tool results: an
+ * interact_at that opens a station reports the block it activated. No new
+ * tooling — the results already carried the data; this just stops forgetting it.
  *
  * <h2>Self-healing</h2>
  * The world changes behind our back (owner mines the furnace, a creeper
@@ -42,9 +41,9 @@ import java.util.UUID;
  * evidence of absence.
  *
  * <h2>Persistence</h2>
- * One small JSON file per entity at
- * {@code config/numen/memory/<uuid>.blocks.json}, write-through on change.
- * Client main thread only, like everything in this package.
+ * One small JSON file per entity at {@link CompanionHome#blocks},
+ * write-through on change. Client main thread only, like everything in this
+ * package.
  */
 public final class WorkBlockMemory {
 
@@ -72,14 +71,28 @@ public final class WorkBlockMemory {
         return new WorkBlockMemory(CompanionHome.blocks(entityUuid));
     }
 
-    /** Is this block id path a type we remember at all? */
-    public static boolean isTracked(String blockPath) {
-        return TRACKED_TYPES.contains(blockPath);
+    /**
+     * 方块 id → 记忆里的台面类型:去掉命名空间,取路径最后一段。模组原地替换原版
+     * 设施时惯用「自家命名空间 + 包一层原版路径」的注册名(实测有
+     * {@code <mod>:minecraft/crafting_table} 这种),最后一段就是它自述的台面类型。
+     * 记录与自愈对账都过这一个口——两边永远同一口径,不会自己记的自己认不出。
+     */
+    static String stationType(String blockId) {
+        int colon = blockId.indexOf(':');
+        String path = colon >= 0 ? blockId.substring(colon + 1) : blockId;
+        int slash = path.lastIndexOf('/');
+        return slash >= 0 ? path.substring(slash + 1) : path;
+    }
+
+    /** Is this block id a type we remember at all? Any id form works — see {@link #stationType}. */
+    public static boolean isTracked(String blockId) {
+        return TRACKED_TYPES.contains(stationType(blockId));
     }
 
     /** Remember (or refresh the recency of) a tracked block. Untracked types are ignored. */
-    public void record(String blockPath, BlockPos pos) {
-        if (!isTracked(blockPath)) return;
+    public void record(String blockId, BlockPos pos) {
+        if (!isTracked(blockId)) return;
+        String blockPath = stationType(blockId);
         long key = pos.asLong();
         String prev = blocks.remove(key);      // re-insert → newest
         blocks.put(key, blockPath);
@@ -111,8 +124,8 @@ public final class WorkBlockMemory {
                 Map.Entry<Long, String> e = it.next();
                 BlockPos pos = BlockPos.of(e.getKey());
                 if (!level.hasChunkAt(pos)) continue;   // unloaded — can't verify, keep
-                String actual = BuiltInRegistries.BLOCK
-                        .getKey(level.getBlockState(pos).getBlock()).getPath();
+                String actual = stationType(BuiltInRegistries.BLOCK
+                        .getKey(level.getBlockState(pos).getBlock()).getPath());
                 if (!actual.equals(e.getValue())) {
                     Constants.LOG.info("[numen-memory] forgot {} at {},{},{} (now {})",
                             e.getValue(), pos.getX(), pos.getY(), pos.getZ(), actual);

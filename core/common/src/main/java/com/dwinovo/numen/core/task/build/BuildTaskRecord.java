@@ -276,12 +276,36 @@ public final class BuildTaskRecord extends TaskRecord {
         }
     }
 
+    /**
+     * @param itemPlace 原生车道:这一格由<b>物品自己</b>像真右键那样落位,而不是照图直写。
+     *                  只给没提任何摆放要求的单格 set——那是"放一个工作台"这类玩家动作,
+     *                  朝向随她的视线,模组钩在物品放置上的转换照常发生。
+     */
     public record Target(BlockState desiredState, Item item, BlockPos pos, String label,
-                         Direction facing, Direction.Axis axis, Boolean topHalf) {
+                         Direction facing, Direction.Axis axis, Boolean topHalf,
+                         boolean itemPlace) {
+        public Target(BlockState desiredState, Item item, BlockPos pos, String label,
+                      Direction facing, Direction.Axis axis, Boolean topHalf) {
+            this(desiredState, item, pos, label, facing, axis, topHalf, false);
+        }
+
         public Target(Block block, Item item, BlockPos pos, String label,
                       Direction facing, Direction.Axis axis, Boolean topHalf) {
             this(applyHints(block.defaultBlockState(), facing, axis, topHalf),
                     item, pos, label, facing, axis, topHalf);
+        }
+
+        /**
+         * 进原生车道。放不出来的东西——清空格、液体、没有物品形态的方块——进不了,
+         * 原样返回:车道的前提是"手里有一件能放的东西"。
+         */
+        public Target asItemPlace() {
+            if (desiredState.isAir()
+                    || desiredState.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock
+                    || !(item instanceof net.minecraft.world.item.BlockItem)) {
+                return this;
+            }
+            return new Target(desiredState, item, pos, label, facing, axis, topHalf, true);
         }
 
         public Target {
@@ -386,6 +410,15 @@ public final class BuildTaskRecord extends TaskRecord {
         }
 
         public boolean matches(BlockState state) {
+            if (itemPlace) {
+                // 原生格的对账不看状态位:没提朝向的格子,朝向就不是工程量——游戏按
+                // 玩家规则给什么就是什么。方块种类按"自述名"对,不只按注册名:有模组
+                // 在放置时把原版设施原地换成自家实现(注册名变了,名字没变),按注册名
+                // 对账会判不符,拆了重放,和模组拉锯到天荒地老。
+                return !state.isAir() && (state.getBlock() == desiredState.getBlock()
+                        || state.getBlock().getDescriptionId()
+                                .equals(desiredState.getBlock().getDescriptionId()));
+            }
             return BuildValidity.valid(state, desiredState, false);
         }
 

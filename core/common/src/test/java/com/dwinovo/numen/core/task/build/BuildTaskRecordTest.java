@@ -271,6 +271,41 @@ class BuildTaskRecordTest {
     }
 
     @Test
+    void itemPlaceLaneOnlyForPlaceableItems() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过建造规则钉桩");
+        BuildTaskRecord.Target table = new BuildTaskRecord.Target(Blocks.CRAFTING_TABLE,
+                Blocks.CRAFTING_TABLE.asItem(), BlockPos.ZERO, "crafting_table", null, null, null);
+        assertTrue(table.asItemPlace().itemPlace());
+
+        // 清空格与液体没有"拿在手里放"这回事,原样回落图纸车道
+        BuildTaskRecord.Target air = new BuildTaskRecord.Target(Blocks.AIR,
+                Blocks.AIR.asItem(), BlockPos.ZERO, "air", null, null, null);
+        assertFalse(air.asItemPlace().itemPlace());
+        BuildTaskRecord.Target water = new BuildTaskRecord.Target(
+                Blocks.WATER.defaultBlockState(), Items.WATER_BUCKET,
+                BlockPos.ZERO, "water", null, null, null);
+        assertFalse(water.asItemPlace().itemPlace());
+    }
+
+    @Test
+    void itemPlaceMatchesByBlockIdentityNotState() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过建造规则钉桩");
+        // 原生格没提朝向,朝向就不是工程量:游戏按玩家规则给什么朝向都算建好
+        BuildTaskRecord.Target chest = new BuildTaskRecord.Target(Blocks.CHEST,
+                Blocks.CHEST.asItem(), BlockPos.ZERO, "chest", null, null, null).asItemPlace();
+        assertTrue(chest.matches(Blocks.CHEST.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)));
+        assertFalse(chest.matches(Blocks.TRAPPED_CHEST.defaultBlockState()), "别的方块不冒充");
+        assertFalse(chest.matches(Blocks.AIR.defaultBlockState()), "空格就是还没放");
+
+        // 提了朝向的格子是图纸语义,原判据一分不松
+        BuildTaskRecord.Target drafted = new BuildTaskRecord.Target(Blocks.CHEST,
+                Blocks.CHEST.asItem(), BlockPos.ZERO, "chest", Direction.NORTH, null, null);
+        assertFalse(drafted.matches(Blocks.CHEST.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST)));
+    }
+
+    @Test
     void buildContextPricesRequestedCells() {
         assumeTrue(booted, "Minecraft 引导不可用,跳过建造成本钉桩");
         BlockPos pos = new BlockPos(3, 65, 7);

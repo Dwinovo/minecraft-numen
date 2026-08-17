@@ -74,7 +74,9 @@ public final class BuildTool implements NumenTool {
         return "Construct or clear blocks as ONE background task, expressed as a single ordered `ops` stream — "
                 + "write ops in build order, later ops overwrite earlier cells. Load the building_design skill "
                 + "(load_skill) BEFORE designing anything non-trivial. Ops: `set` one cell (block_id, x,y,z, "
-                + "optional facing/axis/half/properties — precise details like stairs and torches); `box` "
+                + "optional facing/axis/half/properties — precise details like stairs and torches; a bare "
+                + "set with none of those is placed like a real player right-click: it faces her naturally "
+                + "and mods hooking item placement apply); `box` "
                 + "corners x1,y1,z1..x2,y2,z2 (hollow = outer shell); `walls` vertical perimeter ring only, NO "
                 + "top/bottom face — the right primitive for wall rings; `line` two points; `cylinder` bottom-"
                 + "center x1,y1,z1 + radius + height (hollow = tube); `sphere` center + radius (hollow = shell); "
@@ -283,8 +285,14 @@ public final class BuildTool implements NumenTool {
             if (spec.x() == null || spec.y() == null || spec.z() == null) {
                 throw new IllegalArgumentException("set needs x, y, z");
             }
-            return List.of(parseTarget(new BlockSpec(spec.block_id(), spec.x(), spec.y(), spec.z(),
-                    spec.facing(), spec.axis(), spec.half(), spec.properties())));
+            BuildTaskRecord.Target target = parseTarget(new BlockSpec(
+                    spec.block_id(), spec.x(), spec.y(), spec.z(),
+                    spec.facing(), spec.axis(), spec.half(), spec.properties()));
+            // 分岔线:提了任何摆放要求就是图纸语义(照图直写),什么都没提就是玩家
+            // 动作(物品原生落位,朝向随她视线,模组的放置钩子照常跑)。
+            boolean plain = spec.facing() == null && spec.axis() == null && spec.half() == null
+                    && (spec.properties() == null || spec.properties().isEmpty());
+            return List.of(plain ? target.asItemPlace() : target);
         }
         if ("set_door".equals(spec.op())) {
             return expandDoor(spec);

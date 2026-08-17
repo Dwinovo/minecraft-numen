@@ -489,10 +489,8 @@ public final class EntityAgentLoop {
             switch (toolName) {
                 case "interact_at" -> {
                     if (data.has("block") && data.has("x")) {
-                        String path = data.get("block").getAsString();
-                        int colon = path.indexOf(':');
-                        if (colon >= 0) path = path.substring(colon + 1);
-                        workBlocks.record(path, new net.minecraft.core.BlockPos(
+                        // id 的归一化(去命名空间、模组包一层的路径)全在 record 里做
+                        workBlocks.record(data.get("block").getAsString(), new net.minecraft.core.BlockPos(
                                 data.get("x").getAsInt(),
                                 data.get("y").getAsInt(),
                                 data.get("z").getAsInt()));

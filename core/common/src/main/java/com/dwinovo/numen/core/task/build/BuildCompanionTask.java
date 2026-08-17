@@ -532,6 +532,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return null;
         }
 
+        if (target.itemPlace()) {
+            placeWithItem(target, pos);
+            // 落没落成看世界,不看返回值:物品的 place 可以吃掉点击却什么都没放。
+            // 拒收(保护、事件被取消、立不住)就本遍放下——零进展遍机制照常裁决。
+            BlockState now = player.level().getBlockState(pos);
+            if (!target.matches(now)) {
+                return null;
+            }
+            r.placedOne();
+            markObserved(target, true);
+            return now;
+        }
+
         // 写不进去就什么都不算:setBlock 在超出建造高度时直接返回假、世界毫无变化。
         // 照样扣料 + 记一笔 placed 的后果是,那一格永远对不上、每遍重来,三遍下来
         // 材料凭空消失三倍,而进度报的比实际多三倍。hopeless 已经把这类格从分母里
@@ -632,6 +645,51 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         return false;
+    }
+
+    /**
+     * 原生车道:把这件物品拿在手里,对目标格来一次真右键({@code gameMode.useItemOn})。
+     *
+     * <p>图纸格照图直写是对的——精确落位是它的语义;而没提任何摆放要求的单格 set
+     * 要的是"放一个工作台",那是玩家动作:朝向随她的视线,模组钩在物品放置流程上的
+     * 转换(换方块、造方块实体)照常发生,放置事件可被领地类模组取消——她放不了的
+     * 地方,主人亲手也放不了。扣料也交给原版从手上的那叠扣,与
+     * {@code BuildInventory.consumeOne} 同一判据(都按 {@code hasInfiniteMaterials})。
+     *
+     * <p>只按主手,不走 {@code Interaction} 的双手按键:那是准星语义(主手没吃掉就轮
+     * 副手),在这里副手若拿着别的方块,会把错的东西放进格子。
+     *
+     * <p>命中点合成在格子中心:格内是可替换方块时 {@code BlockPlaceContext} 原地落位,
+     * 不需要邻面,悬空格也放得出——能不能立住由原版 {@code canSurvive} 说了算。
+     */
+    private void placeWithItem(BuildTaskRecord.Target target, BlockPos pos) {
+        ItemStack restore = null;
+        if (r.consumeMaterials) {
+            int slot = inv.findSlot(target.item(), true);
+            if (slot < 0) {
+                return;   // 付得起的闸门刚过,到这儿没了只可能是同刻竞态:这遍放下
+            }
+            player.holdInHand(slot);
+        } else {
+            // 免耗材:凭空一叠拿在手里,放完把原来的东西还回去,不动她的真背包
+            restore = player.getMainHandItem();
+            player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,
+                    new ItemStack(target.item()));
+        }
+        InputDriver.lookAt(player, Vec3.atCenterOf(pos));
+        try {
+            var result = player.gameMode.useItemOn(player, player.level(),
+                    player.getMainHandItem(), net.minecraft.world.InteractionHand.MAIN_HAND,
+                    new net.minecraft.world.phys.BlockHitResult(
+                            Vec3.atCenterOf(pos), net.minecraft.core.Direction.UP, pos, false));
+            if (result.consumesAction()) {
+                player.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+            }
+        } finally {
+            if (restore != null) {
+                player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND, restore);
+            }
+        }
     }
 
     /**

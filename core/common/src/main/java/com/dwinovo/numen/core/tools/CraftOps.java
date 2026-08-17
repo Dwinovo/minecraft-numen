@@ -11,6 +11,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.MenuProvider;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.CraftingContainer;
@@ -23,7 +24,8 @@ import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.ShapedRecipe;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.CraftingTableBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -157,17 +159,28 @@ public final class CraftOps {
                 return TaskResult.fail(name + "'s recipe needs a grid larger than 3x3 (modded station) — "
                         + "interact_at that station and use inspect_gui + transfer instead.").toJson();
             }
+            CraftingRecipe recipe = chosen.recipe();
             BlockPos table = BlockScanner.nearestBlock(level, self.blockPosition(),
-                    self.getEyePosition(), (int) Math.ceil(REACH), 3, REACH, Blocks.CRAFTING_TABLE);
+                    self.getEyePosition(), (int) Math.ceil(REACH), 3, REACH,
+                    (pos, state) -> state.getBlock() instanceof CraftingTableBlock);
+            if (table == null) {
+                // 类型认不出 ≠ 没有:有模组在放置时把工作台原地换成自家方块实体实现,
+                // 注册名、方块类、标签全变了,只有行为没变——所以第二遍问行为。
+                table = BlockScanner.nearestBlock(level, self.blockPosition(),
+                        self.getEyePosition(), (int) Math.ceil(REACH), 3, REACH,
+                        (pos, state) -> opensFittingGrid(level, pos, state, self, recipe));
+            }
             if (table == null) {
                 BlockPos hintPos = BlockScanner.nearestBlock(level, self.blockPosition(),
-                        self.getEyePosition(), HINT_H, HINT_V, Double.MAX_VALUE, Blocks.CRAFTING_TABLE);
+                        self.getEyePosition(), HINT_H, HINT_V, Double.MAX_VALUE,
+                        (pos, state) -> state.getBlock() instanceof CraftingTableBlock);
                 return TaskResult.fail(name + " is a 3x3 recipe — it needs a crafting table within reach "
                         + "(~4 blocks). " + (hintPos != null
                                 ? "Nearest one is at " + hintPos.getX() + "," + hintPos.getY() + ","
                                         + hintPos.getZ() + " — goto it, then craft again."
                                 : "None within " + HINT_H + " blocks — craft a crafting_table (4 planks, "
-                                        + "fits your own 2x2) and place_block it, then craft again.")).toJson();
+                                        + "fits your own 2x2) and build it (op `set`), then craft "
+                                        + "again.")).toJson();
             }
             // 开台走 act 的按键原语:看向、右键、挥手都是身体动作,不归工具层手搓。
             // 预解析命中(不走射线)保持既有语义——门禁是"够得着",不是"看得见"。
@@ -427,6 +440,34 @@ public final class CraftOps {
     }
 
     // ---- menu plumbing ----
+
+    /**
+     * 这一格右键能不能开出装得下这张配方的合成格——第二遍找台的判据只有这一条,
+     * 问的是行为不是类型。把它的菜单按标准生命周期造出来问一句格子多大,问完立刻
+     * 走 {@code removed} 收掉:构造时有副作用的(箱子把盖子计数加一)也就当场退掉,
+     * 世界里什么都没发生。菜单不按套路造的(构造即抛),当它不是工作台。
+     */
+    private static boolean opensFittingGrid(ServerLevel level, BlockPos pos, BlockState state,
+                                            NumenPlayer self, CraftingRecipe recipe) {
+        MenuProvider provider = state.getMenuProvider(level, pos);
+        if (provider == null) {
+            return false;
+        }
+        try {
+            AbstractContainerMenu menu = provider.createMenu(0, self.getInventory(), self);
+            if (menu == null) {
+                return false;
+            }
+            try {
+                Grid grid = findGrid(menu);
+                return grid != null && fits(recipe, grid.w(), grid.h());
+            } finally {
+                menu.removed(self);
+            }
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
 
     /** Detect a crafting surface generically: CraftingContainer-backed slots + the ResultSlot. */
     private static Grid findGrid(AbstractContainerMenu menu) {
