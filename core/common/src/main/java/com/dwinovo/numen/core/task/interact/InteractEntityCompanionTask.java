@@ -204,9 +204,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     }
 
     private boolean withinReach() {
-        // 与 interact_at 同一道理:水里与载具上没有 onGround,门只挡坠落中途的按键。
-        return (player.onGround() || player.isInWater() || player.isPassenger())
-                && entity != null
+        return bodySettled() && entity != null
                 && player.distanceToSqr(entity.position()) <= REACH_SQR;
     }
 

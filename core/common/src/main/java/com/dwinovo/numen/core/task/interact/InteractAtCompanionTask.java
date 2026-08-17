@@ -177,11 +177,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     private boolean withinReach() {
-        // "身体稳住了"不等于"站在地上":游在水面(放船、舀水正是这个姿势)和
-        // 坐在载具里都没有 onGround,原版对交互也从不要求脚踏实地。这个门挡的
-        // 只是坠落中途的按键。
-        return (player.onGround() || player.isInWater() || player.isPassenger())
-                && player.distanceToSqr(Vec3.atCenterOf(r.aim)) <= REACH_SQR;
+        return bodySettled() && player.distanceToSqr(Vec3.atCenterOf(r.aim)) <= REACH_SQR;
     }
 
     private String aimLabel() {
