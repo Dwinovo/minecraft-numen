@@ -17,10 +17,12 @@ public final class ClientNumenState {
 
     /** {@code loaded=false} = the body is asleep / not ours (no contents). foodLevel 0-20.
      *  {@code craft} is the 2×2 crafting menu: indices 0-3 = grid, index 4 = result (may be empty).
-     *  {@code selectedSlot} indexes {@code items} for the main hand. */
+     *  {@code selectedSlot} indexes {@code items} for the main hand.
+     *  {@code vehicleType} 空串 = 没骑任何东西({@code vehicleId} 相应为 -1)。 */
     public record Snapshot(boolean loaded, List<ItemStack> items, List<ItemStack> craft,
                            int foodLevel, float saturation, int selectedSlot, ItemStack offhand,
                            List<net.minecraft.world.effect.MobEffectInstance> effects,
+                           String vehicleType, int vehicleId,
                            long receivedAtMs) {
 
         /** 主手那一格;槽位越界(空快照)时给空栈。 */

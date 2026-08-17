@@ -78,6 +78,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** FIND(就近方块)子系统:扫描/入册/契约/轮换全在组件里,此处只驱动。 */
     private NearestBlockFinder finder;
 
+    /** 船腿:开工时坐在船上就先驾船,靠岸(或搁浅)后下船接步行。null = 没有/已交棒。 */
+    private com.dwinovo.numen.core.pathing.execute.BoatNav boatLeg;
+
     public MoveToCompanionTask(NumenPlayer player, MoveToTaskRecord record) {
         super(player, record);
         this.bx = record.x != null ? (int) Math.floor(record.x) : 0;
@@ -88,9 +91,26 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     @Override
     protected void onStart() {
-        // 她要走路,自然先下来——骑着船/矿车时寻路输入驱动的是载具不是腿,
-        // 而她自己没有"下船"这个按键,不在这儿下就永远困在座位上。
+        // 载具处置:坐在船上且有明确去处,先驾船——船腿走到离目标最近的水格,
+        // 靠岸后下船接步行(见 tickBoatLeg)。其余情况(矿车没有舵、马的寻路
+        // 仍按步行物理算、FIND 要先扫描)她要走路就先下来——她自己没有"下船"
+        // 这个按键,不在这儿下就永远困在座位上。
         if (player.isPassenger()) {
+            boolean drivable = player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat
+                    && (r.kind == MoveToTaskRecord.Kind.BLOCK
+                            || r.kind == MoveToTaskRecord.Kind.COLUMN);
+            if (drivable && !reached()) {
+                boatLeg = new com.dwinovo.numen.core.pathing.execute.BoatNav(
+                        player, blockTarget);
+                long extra = Math.min(MAX_EXTRA_TICKS,
+                        600 + (long) (repDistance() * TICKS_PER_BLOCK));
+                r.extendDeadlineTo(player.level().getGameTime() + extra);
+                leaseCapGameTime = player.level().getGameTime() + CHECK_IN_CAP_TICKS;
+                com.dwinovo.numen.core.Constants.LOG.info(
+                        "[numen-task] goto start kind={} target={},{},{} 驾船先行",
+                        r.kind, bx, by, bz);
+                return;
+            }
             player.stopRiding();
         }
         if (r.kind == MoveToTaskRecord.Kind.FIND) {
@@ -117,6 +137,14 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // onTick observes reached() and returns SUCCESS — same outcome as the old
         // start-time short-circuit, one tick later per the base's lifecycle.
         if (reached()) return;
+        startWalkingNav();
+    }
+
+    /**
+     * 步行段的启动:预算、租约、建导航。开工时走它,船腿靠岸后接力也走它——
+     * 两个入口一份逻辑。
+     */
+    private void startWalkingNav() {
         // Initial budget from straight-line distance (terrain difficulty is unknowable
         // here — the progress lease below takes over once the journey is under way).
         long extra = Math.min(MAX_EXTRA_TICKS, 600 + (long) (repDistance() * TICKS_PER_BLOCK));
@@ -213,6 +241,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // reached() is checked BEFORE the nav==null guard so an already-at-target start
         // (which never builds a nav) lands on SUCCESS rather than the defensive FAILED.
         if (reached()) return TaskState.SUCCESS;
+        if (boatLeg != null) {
+            return tickBoatLeg();
+        }
         if (r.kind == MoveToTaskRecord.Kind.FIND && nav == null) {
             TaskState pre = tickFindDiscovery();
             if (pre != null) {
@@ -285,6 +316,36 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 yield TaskState.FAILED;
             }
         };
+    }
+
+    /**
+     * 船腿的一刻:驾船朝目标推进,终态(靠岸或搁浅)都走同一条下船接力——
+     * 到不了目标的水路不算失败,只是"这条腿到此为止",剩下的路归步行段。
+     * 船留在原地,那是她的船,不是垃圾。
+     */
+    private TaskState tickBoatLeg() {
+        // 船腿的续约与步行段同一制式:还在消耗航线就把期限保持在租约窗口里
+        if (boatLeg.progressing() && leaseCapGameTime > 0) {
+            long now = player.level().getGameTime();
+            r.extendDeadlineTo(Math.min(now + PROGRESS_LEASE_TICKS, leaseCapGameTime));
+        }
+        var status = boatLeg.tick();
+        if (status == com.dwinovo.numen.core.pathing.execute.BoatNav.Status.RUNNING) {
+            return TaskState.RUNNING;
+        }
+        com.dwinovo.numen.core.Constants.LOG.info(
+                "[numen-task] 船腿结束({}),下船接步行 feet={}",
+                status == com.dwinovo.numen.core.pathing.execute.BoatNav.Status.ARRIVED
+                        ? "靠岸" : boatLeg.failReason(),
+                player.blockPosition().toShortString());
+        boatLeg.stop();
+        boatLeg = null;
+        player.stopRiding();
+        if (reached()) {
+            return TaskState.SUCCESS;
+        }
+        startWalkingNav();
+        return TaskState.RUNNING;
     }
 
     /** The retry rung's loosened goal — the destination widened to the SAME radius that
@@ -444,6 +505,10 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         super.cleanup();
         if (finder != null) {
             finder.cancelScan();
+        }
+        if (boatLeg != null) {
+            boatLeg.stop();   // 中途被取消/让位:收桨,别让船带着按下的前进键漂走
+            boatLeg = null;
         }
     }
 

@@ -109,6 +109,20 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
             return TaskState.FAILED;
         }
 
+        // 目标是她自己坐着的载具:右键的意图(上船)早已是事实,立即了结;左键
+        // 原版玩家也打不到自己的座驾。不拦的话,下面的准星确认要求"看见目标",
+        // 而从座位上看自己的船永远确认不了——任务空转到超时,实测就是这么挂的。
+        if (entity == player.getVehicle()) {
+            if (r.button == MouseButton.LEFT) {
+                fail("you are riding the " + targetName()
+                        + " — can't hit your own vehicle; any goto steps off first",
+                        FailureType.UNKNOWN);
+                return TaskState.FAILED;
+            }
+            successMsg = "already riding the " + targetName();
+            return TaskState.SUCCESS;
+        }
+
         // A fixed-duration hold completes on time even if the line of sight lapsed near the end.
         if (interaction != null && holdUntil >= 0 && player.level().getGameTime() >= holdUntil) {
             interaction.stop();

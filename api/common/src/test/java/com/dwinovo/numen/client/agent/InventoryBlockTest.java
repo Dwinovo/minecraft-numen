@@ -39,7 +39,7 @@ class InventoryBlockTest {
     private static ClientNumenState.Snapshot snapshot(int selected, ItemStack offhand,
                                                           ItemStack... items) {
         return new ClientNumenState.Snapshot(true, List.of(items), List.of(), 20, 5f,
-                selected, offhand, List.of(), 1L);
+                selected, offhand, List.of(), "", -1, 1L);
     }
 
     // ==================== 身上在生效的 ====================
@@ -47,7 +47,7 @@ class InventoryBlockTest {
     private static ClientNumenState.Snapshot withEffects(long receivedAtMs,
             net.minecraft.world.effect.MobEffectInstance... effects) {
         return new ClientNumenState.Snapshot(true, List.of(), List.of(), 20, 5f,
-                0, ItemStack.EMPTY, List.of(effects), receivedAtMs);
+                0, ItemStack.EMPTY, List.of(effects), "", -1, receivedAtMs);
     }
 
     /** 原版 UI 的口径:内部 amplifier 0 显示为 I,所以一级不写数字、二级写 2。 */
@@ -233,9 +233,9 @@ class InventoryBlockTest {
         assumeTrue(booted);
         assertEquals(ItemStack.EMPTY,
                 new ClientNumenState.Snapshot(true, List.of(), List.of(), 20, 5f,
-                        3, ItemStack.EMPTY, List.of(), 1L).mainHand());
+                        3, ItemStack.EMPTY, List.of(), "", -1, 1L).mainHand());
         assertEquals(ItemStack.EMPTY,
                 new ClientNumenState.Snapshot(true, List.of(), List.of(), 20, 5f,
-                        -1, ItemStack.EMPTY, List.of(), 1L).mainHand());
+                        -1, ItemStack.EMPTY, List.of(), "", -1, 1L).mainHand());
     }
 }

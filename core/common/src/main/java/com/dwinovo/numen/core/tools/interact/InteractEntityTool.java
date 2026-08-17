@@ -29,7 +29,9 @@ public final class InteractEntityTool implements NumenTool {
     public String description() {
         return "Press a mouse button on an ENTITY — the native interaction for moving targets. Auto-paths "
                 + "and FOLLOWS the entity (id from scan_nearby_entities), then acts once the crosshair "
-                + "reaches it (a wall in the way makes it re-position, not hit through).";
+                + "reaches it (a wall in the way makes it re-position, not hit through). right on a "
+                + "boat/rideable = board it (runtime_state then shows <riding>; goto pilots or steps "
+                + "off — never click your own vehicle again).";
     }
 
     @Override

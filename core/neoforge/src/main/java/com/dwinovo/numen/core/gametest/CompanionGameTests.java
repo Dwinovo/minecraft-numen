@@ -2913,4 +2913,91 @@ public class CompanionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /**
+     * 驾船横渡:坐在船上发 goto,她该把船开过水面、靠岸下船、走完最后一段。
+     * 守的是整条载具链——服务端权威开关(没有它船每刻被清零)、桨物理驱动、
+     * 水面 A*、靠岸后与步行导航的接力。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 2400, batch = "numen_vehicle")
+    public static void boat_goto_pilots_across_water(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        // 把地板挖成一条水道(x 5..11 × z 5..11),两岸是原地板
+        for (int x = 5; x <= 11; x++) {
+            for (int z = 5; z <= 11; z++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 1, z)),
+                        Blocks.WATER.defaultBlockState());
+            }
+        }
+        // 船放在水面高度(rel y1 的水,面在 +0.9),别沉进水里被浮力弹上天
+        BlockPos boatAt = helper.absolutePos(new BlockPos(6, 2, 8));
+        var boat = new net.minecraft.world.entity.vehicle.Boat(
+                level, boatAt.getX() + 0.5, boatAt.getY() - 1 + 0.9, boatAt.getZ() + 0.5);
+        level.addFreshEntity(boat);
+
+        NumenPlayer companion = spawnAt(helper, "gametest_pilot", new BlockPos(3, 2, 8), false);
+        BlockPos target = helper.absolutePos(new BlockPos(14, 2, 8));
+        double boatStartDist = boat.position().distanceTo(Vec3.atCenterOf(target));
+        helper.runAfterDelay(2, () -> {
+            companion.startRiding(boat, true);
+            TaskRecord record = (TaskRecord) new MovementOps().moveTo(
+                    (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
+                    TaskDispatch.ctx("gametest-pilot", companion));
+            TaskDispatch.setTask(companion, record, null, reply -> {});
+        });
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+                    "companion has not crossed the water to the target");
+            helper.assertTrue(!companion.isPassenger(), "companion is still in the boat");
+            // 结构可旋转,方向断言必须与坐标系无关:船开过就是离目标近了一大截
+            double now = boat.position().distanceTo(Vec3.atCenterOf(target));
+            helper.assertTrue(now < boatStartDist - 3.0,
+                    "the boat never drove toward the target (start " + boatStartDist
+                            + ", now " + now + ")");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 自载具守卫:对自己坐着的船再按右键必须立刻了结,不许挂死同步槽。
+     * 证据链用第三个动作闭合——守卫失效时按压永远等不到准星确认,后续的
+     * 同步破块也就永远轮不上;石头碎了 = 槽是活的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_vehicle")
+    public static void interact_own_vehicle_ends_immediately(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 6; x <= 9; x++) {
+            for (int z = 6; z <= 9; z++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 1, z)),
+                        Blocks.WATER.defaultBlockState());
+            }
+        }
+        BlockPos boatAt = helper.absolutePos(new BlockPos(7, 2, 7));
+        var boat = new net.minecraft.world.entity.vehicle.Boat(
+                level, boatAt.getX() + 0.5, boatAt.getY() - 1, boatAt.getZ() + 0.5);
+        level.addFreshEntity(boat);
+        BlockPos stone = helper.absolutePos(new BlockPos(7, 2, 5));
+        level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+
+        NumenPlayer companion = spawnAt(helper, "gametest_seated", new BlockPos(7, 2, 4), true);
+        helper.runAfterDelay(2, () -> {
+            companion.startRiding(boat, true);
+            TaskRecord press = new BlockActionOps().interactEntity("right", boat.getId(), null,
+                    null, TaskDispatch.ctx("gametest-selfclick", companion));
+            TaskDispatch.runSync(companion, press, reply -> {});
+        });
+        helper.runAfterDelay(30, () -> {
+            TaskRecord dig = new BlockActionOps().interactAt("left",
+                    stone.getX(), stone.getY(), stone.getZ(), null, null,
+                    TaskDispatch.ctx("gametest-afterclick", companion));
+            TaskDispatch.runSync(companion, dig, reply -> {});
+        });
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(level.getBlockState(stone).isAir(),
+                    "the follow-up dig never ran — the self-click press hung the sync slot");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }

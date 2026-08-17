@@ -4,8 +4,10 @@
   "package": "com.dwinovo.numen.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "BoatAccessor",
     "ChunkMapCompanionMixin",
     "MenuDataSlotsAccessor",
+    "MixinEntityVehicleControl",
     "MixinServerCommonPacketListener"
   ],
   "client": [

@@ -29,8 +29,6 @@ public final class InteractAtTaskRecord extends TaskRecord {
 
     public static final String TOOL_NAME = "interact_at";
 
-    
-
     public final MouseButton button;
     public final BlockPos aim;     // null → current facing (in-air use)
     public final int holdTicks;

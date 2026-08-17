@@ -1458,7 +1458,7 @@ public final class EntityAgentLoop {
      * {@code <runtime_state>} 里,模型只需认一个信封。
      */
     private String runtimeStateXml() {
-        String body = currentTaskXml() + inventoryXml() + effectsXml();
+        String body = currentTaskXml() + inventoryXml() + effectsXml() + ridingXml();
         String xml = body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
         // 原样打出来。"她看到的世界"平时完全不可见,于是"她怎么会这么说"只能靠猜——
         // 而她说的数跟事件对不上时,分不清是她编的还是我们喂错了。开一次 debug 就有答案。
@@ -1546,6 +1546,22 @@ public final class EntityAgentLoop {
             return "";
         }
         return "<effects>" + renderEffects(snapshot, System.currentTimeMillis()) + "</effects>";
+    }
+
+    /**
+     * 她这一刻骑没骑着东西。与效果同一纪律:<b>只能现挂,不能进历史</b>——上下船是
+     * 随时翻转的身体事实,沉进历史就成了理直气壮的错。没骑就一个字都不发。
+     * 有这一行,模型不会再对自己坐着的船发第二次 interact_entity,也知道 goto
+     * 会驾着它走或按需下船。
+     */
+    private String ridingXml() {
+        var snapshot = ClientNumenState.get(entityUuid).orElse(null);
+        if (snapshot == null || !snapshot.loaded() || snapshot.vehicleId() < 0) {
+            return "";
+        }
+        return "<riding>" + xml(snapshot.vehicleType()) + " (entity id " + snapshot.vehicleId()
+                + "). goto pilots a boat over water toward the target, or steps off to walk — "
+                + "no need to click the vehicle again.</riding>";
     }
 
     static String renderEffects(ClientNumenState.Snapshot snapshot, long nowMs) {

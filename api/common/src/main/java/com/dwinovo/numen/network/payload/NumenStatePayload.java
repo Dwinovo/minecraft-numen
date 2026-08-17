@@ -29,11 +29,14 @@ import java.util.UUID;
  * 饱食度、选中槽、副手早就在里面了 —— 它一直是<b>这具身体此刻的样子</b>,只是原来叫背包。
  * 身上的效果同理:模型每一轮都要读它才知道自己中没中毒、有没有抗性,而这类东西<b>一进对话
  * 历史就永远不会过期</b>,只能每次现挂。同一条通道、同一份快照,不必为每样状态另开一路。
+ * 骑乘同理:她坐没坐在船上决定了"再点一次船"是不是废话、goto 会驾船还是走路,
+ * 模型必须实时看见。{@code vehicleType} 空串 = 没骑任何东西,{@code vehicleId} 相应为 -1。
  */
 public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items,
                                 List<ItemStack> craft, int foodLevel, float saturation,
                                 int selectedSlot, ItemStack offhand,
-                                List<MobEffectInstance> effects)
+                                List<MobEffectInstance> effects,
+                                String vehicleType, int vehicleId)
         implements CustomPacketPayload {
 
     public static final Type<NumenStatePayload> TYPE = new Type<>(
@@ -53,6 +56,8 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
         ByteBufCodecs.VAR_INT.encode(buf, p.selectedSlot());
         ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, p.offhand());
         MobEffectInstance.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buf, p.effects());
+        ByteBufCodecs.STRING_UTF8.encode(buf, p.vehicleType());
+        ByteBufCodecs.VAR_INT.encode(buf, p.vehicleId());
     }
 
     private static NumenStatePayload read(RegistryFriendlyByteBuf buf) {
@@ -66,8 +71,10 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
         ItemStack offhand = ItemStack.OPTIONAL_STREAM_CODEC.decode(buf);
         List<MobEffectInstance> effects =
                 MobEffectInstance.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buf);
+        String vehicleType = ByteBufCodecs.STRING_UTF8.decode(buf);
+        int vehicleId = ByteBufCodecs.VAR_INT.decode(buf);
         return new NumenStatePayload(uuid, loaded, items, craft, foodLevel, saturation,
-                selectedSlot, offhand, effects);
+                selectedSlot, offhand, effects, vehicleType, vehicleId);
     }
 
     @Override

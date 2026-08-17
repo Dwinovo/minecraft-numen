@@ -63,6 +63,8 @@ public final class CompanionStateWatch {
     private int lastSelected = -1;
     /** 上次见到的效果:每条编码成"效果 + 等级",不含剩余时间。 */
     private java.util.Set<String> lastEffects = java.util.Set.of();
+    /** 上次见到的载具实体 id;-1 = 没骑。上下船是模型必须实时知道的身体事实。 */
+    private int lastVehicleId = -1;
     private long lastSentTick;
     private boolean everSent;
 
@@ -96,10 +98,11 @@ public final class CompanionStateWatch {
         if (everSent && serverTick - lastSentTick < MIN_INTERVAL_TICKS) {
             return;
         }
-        // 两趟都要走:短路的话背包变了就不再看效果,镜像会漏掉这一次的效果变化。
+        // 各趟都要走:短路的话背包变了就不再看别的,镜像会漏掉同一波里的其余变化。
         boolean invChanged = changedSince(companion.getInventory());
         boolean effectsChanged = effectsChangedSince(companion);
-        if (!invChanged && !effectsChanged) {
+        boolean vehicleChanged = vehicleChangedSince(companion);
+        if (!invChanged && !effectsChanged && !vehicleChanged) {
             return;
         }
         lastSentTick = serverTick;
@@ -110,10 +113,12 @@ public final class CompanionStateWatch {
         // 一次推送一行。链路是"服务端推 → 客户端缓存 → 渲染进请求",出问题时得能一眼看出
         // 断在哪一节;只记开始不记结果的日志已经害过我们一次。
         com.dwinovo.numen.Constants.LOG.info(
-                "[numen-state] {} → {} 种物品 / {} 格, 主手 {}, 副手 {}, 效果 {}{}",
+                "[numen-state] {} → {} 种物品 / {} 格, 主手 {}, 副手 {}, 效果 {}{}{}",
                 companion.getName().getString(), kinds(payload), usedSlots(payload),
                 slotName(payload.selectedSlot(), payload.items()), name(payload.offhand()),
-                payload.effects().size(), first ? " (首次)" : "");
+                payload.effects().size(),
+                payload.vehicleId() >= 0 ? ", 骑 " + payload.vehicleType() : "",
+                first ? " (首次)" : "");
     }
 
     /** 一趟遍历:顺便把镜像更新到最新。返回"有没有模型在乎的变化"。 */
@@ -154,6 +159,17 @@ public final class CompanionStateWatch {
             return false;
         }
         lastEffects = now;
+        return true;
+    }
+
+    /** 上没上/下没下载具。比实体 id 就够:换了一条船也是一次上下船。 */
+    private boolean vehicleChangedSince(NumenPlayer companion) {
+        var vehicle = companion.getVehicle();
+        int nowId = vehicle == null ? -1 : vehicle.getId();
+        if (nowId == lastVehicleId) {
+            return false;
+        }
+        lastVehicleId = nowId;
         return true;
     }
 

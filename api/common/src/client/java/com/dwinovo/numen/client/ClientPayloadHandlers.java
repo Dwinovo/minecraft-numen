@@ -56,6 +56,7 @@ public final class ClientPayloadHandlers {
                 ClientNumenState.update(p.uuid(), new ClientNumenState.Snapshot(
                         p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(),
                         p.selectedSlot(), p.offhand(), p.effects(),
+                        p.vehicleType(), p.vehicleId(),
                         System.currentTimeMillis()));
         ClientPayloadSink.locations = ClientPayloadHandlers::handleLocations;
         ClientPayloadSink.respawn = ClientPayloadHandlers::handleRespawn;
