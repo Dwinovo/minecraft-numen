@@ -9,6 +9,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Interaction;
+import com.dwinovo.numen.core.act.PressReceipt;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.base.GoToThenDoTask;
 import com.dwinovo.numen.core.task.base.Precondition;
@@ -37,6 +38,9 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
      *  so an accepted stance is still within interact reach). Never wider than the goal. */
 
     private Interaction interaction;
+    /** 按键前的世界快照,收尾时对账出"真发生了什么"(见 {@link PressReceipt})。 */
+    private PressReceipt receipt;
+    private java.util.List<String> changes = List.of();
     // ---- bounded recovery state (fields, so a Suspendable mid-rung suspend/resume
     //      picks straight back up: the counter and the rebuilt nav both survive) ----
     /** The FIRST nav failure's reason, preserved so the final give-up keeps the original wording. */
@@ -90,9 +94,12 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             HitResult hit = Interaction.nativeRaytrace(player, REACH);
             // 目标格本身是实心方块、而准星实际落在别的方块上 = 被遮挡:
             // 拒绝并点名遮挡物(点下去只会交互到错误对象还谎报成功)。
-            // 目标格是空气的瞄点(朝某处投掷等)保持准星穿透语义。
+            // 目标格是空气或流体的瞄点保持准星穿透语义——流体本来就不该被准星
+            // 点中,对水面右键的原版含义正是"射线穿过去,物品自己找水"(桶、船)。
             if (r.aim != null
                     && !player.level().getBlockState(r.aim).isAir()
+                    && !(player.level().getBlockState(r.aim).getBlock()
+                            instanceof net.minecraft.world.level.block.LiquidBlock)
                     && hit instanceof net.minecraft.world.phys.BlockHitResult blockedHit
                     && !blockedHit.getBlockPos().equals(r.aim)) {
                 var blocker = blockedHit.getBlockPos();
@@ -122,7 +129,13 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                 activatedBlockId = BuiltInRegistries.BLOCK
                         .getKey(player.level().getBlockState(activatedBlock).getBlock()).getPath();
             }
-            interaction = Interaction.forHit(player, hit, button(), r.holdTicks);
+            // 兜底开关:身体约束物品(食物、末影珍珠)在任何一只手上都不落到物品
+            // 自用——否则点一块石头没反应,同一次按键会把她自己喂了或传送走。
+            boolean fallthroughOk =
+                    InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
+                    && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
+            receipt = PressReceipt.before(player, r.aim);
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk);
             if (interaction == null) {       // left-click on air — a swing, nothing to do
                 successMsg = "nothing under the aim (left-click in the air)";
                 return TaskState.SUCCESS;
@@ -135,12 +148,12 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
         // A fixed-duration hold ends when its window elapses: release the button.
         if (holdUntil >= 0 && player.level().getGameTime() >= holdUntil) {
             interaction.stop();
-            successMsg = describeDone();
+            successMsg = describeDone() + settle();
             return TaskState.SUCCESS;
         }
         return switch (interaction.tick()) {
             case DONE -> {
-                successMsg = describeDone();
+                successMsg = describeDone() + settle();
                 yield TaskState.SUCCESS;
             }
             case FAILED -> {
@@ -164,7 +177,10 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     private boolean withinReach() {
-        return player.onGround()
+        // "身体稳住了"不等于"站在地上":游在水面(放船、舀水正是这个姿势)和
+        // 坐在载具里都没有 onGround,原版对交互也从不要求脚踏实地。这个门挡的
+        // 只是坠落中途的按键。
+        return (player.onGround() || player.isInWater() || player.isPassenger())
                 && player.distanceToSqr(Vec3.atCenterOf(r.aim)) <= REACH_SQR;
     }
 
@@ -175,6 +191,20 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     private String describeDone() {
         String verb = r.button == MouseButton.LEFT ? "left-clicked" : "right-clicked";
         return verb + (r.aim != null ? " " + aimLabel() : " (forward)");
+    }
+
+    /**
+     * 收尾对账:回执只报事实,不判成败。"按键被消费"不等于"发生了什么"——
+     * 船可以吃掉点击却因站位碰撞一无所成,此前这里会报一句裸的成功,模型
+     * 就当船已经放下了。什么都没变时明说,她自己决定挪个位置再试还是放弃。
+     */
+    private String settle() {
+        changes = receipt == null ? List.of() : receipt.diff(player);
+        if (changes.isEmpty()) {
+            return " — but nothing visibly changed (hands, aimed block, nearby entities all "
+                    + "as before). If you expected an effect, reposition or rethink.";
+        }
+        return " — " + String.join("; ", changes);
     }
 
     /** Release the interaction, then the nav + overlay (base default). */
@@ -200,6 +230,9 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             data.put("x", activatedBlock.getX());
             data.put("y", activatedBlock.getY());
             data.put("z", activatedBlock.getZ());
+        }
+        if (!changes.isEmpty()) {
+            data.put("changes", changes);
         }
         return data;
     }

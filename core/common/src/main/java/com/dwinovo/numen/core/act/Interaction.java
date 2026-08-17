@@ -22,9 +22,8 @@ import net.minecraft.world.phys.Vec3;
  * The most-native interaction primitive for a fake-player body:
  * aim the eyes at a target, then "press"
  * one mouse button (left = ATTACK, right = USE) with a {@link Timing}. Every
- * higher-level action is a thin layer on top: {@code break_block} = ATTACK a
- * block (hold), {@code place_block} = USE a block (once), {@code attack} = ATTACK an
- * entity, eat/bow = hold USE in the air.
+ * higher-level action is a thin layer on top: mining = ATTACK a block (hold),
+ * {@code attack} = ATTACK an entity, eat/bow = hold USE in the air.
  *
  * <h2>Native dispatch (the same server entry points a real client's packets reach)</h2>
  * <ul>
@@ -34,6 +33,10 @@ import net.minecraft.world.phys.Vec3;
  *   <li>USE + entity    → {@code entity.interact} then {@code player.interactOn} (trade / breed / mount), both hands</li>
  *   <li>USE + air       → {@code gameMode.useItem} (+ a hold for food / bow)</li>
  * </ul>
+ *
+ * <p>准星语义的 USE({@link #forHit} 建的)另有一步收尾:方块/实体没吃掉点击时落到
+ * 物品自用——真客户端的完整右键顺序,见 {@link #fallthroughUse}。指定命中面的外科
+ * 原语({@link #useBlock(NumenPlayer, BlockHitResult, InteractionHand)})没有这一步。
  *
  * <h2>Timing</h2>
  * {@link Timing#once()} taps once; {@link Timing#repeat} taps N times spaced by an
@@ -103,6 +106,14 @@ public final class Interaction {
 
     private final BlockDigger digger; // only for ATTACK + block
     private BlockHitResult presetHit; // USE+block: an exact hit the caller already resolved (placement)
+    /**
+     * 准星语义的 USE 才有的兜底:方块/实体没吃掉点击时,同一次按键落到物品自用
+     * ({@code gameMode.useItem})——真客户端就是这个顺序(useItemOn 不消费就发
+     * ServerboundUseItemPacket),桶找水、船找水面、掷物出手都住在那条路上。
+     * 外科原语(指定命中面的放置、开台)不设兜底:那里落空就该落空,兜底会把
+     * 手里的东西扔出去。false = 兜底关闭或被任务层否决(身体约束物品)。
+     */
+    private boolean itemFallthrough;
     private int fires;
     private int cooldown;             // ticks until the next discrete press
     private boolean started;          // USE+air: the hold has begun
@@ -152,11 +163,6 @@ public final class Interaction {
         return i;
     }
 
-    /** Right-click an entity: trade / breed / mount / name. */
-    public static Interaction useEntity(NumenPlayer p, Entity target, InteractionHand hand) {
-        return new Interaction(p, Button.USE, null, target, hand, Timing.once());
-    }
-
     /** Right-click in the air with the held item, on the given {@link Timing}
      *  ({@code hold()} eats food / {@code hold(n)} draws and looses a bow). */
     public static Interaction useInAir(NumenPlayer p, InteractionHand hand, Timing timing) {
@@ -202,8 +208,13 @@ public final class Interaction {
      * {@code holdTicks}: 0 = tap, &gt;0 / -1 = hold. The block/entity hit is used as-is (the
      * native raytrace already resolved the exact face/point — no re-raycast). The caller drives
      * the returned object to completion and enforces the hold duration.
+     *
+     * @param itemFallthrough USE 的准星兜底开关(见 {@link #itemFallthrough}):方块/实体
+     *                        没吃掉点击就落到物品自用。任务层拿它挡身体约束物品——
+     *                        手里是食物/末影珍珠时传 false,免得点了块石头把自己喂了。
      */
-    public static Interaction forHit(NumenPlayer p, HitResult hit, Button button, int holdTicks) {
+    public static Interaction forHit(NumenPlayer p, HitResult hit, Button button, int holdTicks,
+                                     boolean itemFallthrough) {
         boolean hold = holdTicks != 0;
         switch (hit.getType()) {
             case BLOCK -> {
@@ -215,6 +226,7 @@ public final class Interaction {
                         InteractionHand.MAIN_HAND,
                         hold ? Timing.repeat(CONTINUOUS, RIGHT_CLICK_DELAY) : Timing.once());
                 i.presetHit = bh;   // use the robust native hit, no re-raycast
+                i.itemFallthrough = itemFallthrough;
                 return i;
             }
             case ENTITY -> {
@@ -222,8 +234,10 @@ public final class Interaction {
                 if (button == Button.ATTACK) {
                     return attackEntity(p, e, hold ? Timing.repeat(CONTINUOUS, 1) : Timing.once());
                 }
-                return new Interaction(p, Button.USE, null, e, InteractionHand.MAIN_HAND,
+                Interaction i = new Interaction(p, Button.USE, null, e, InteractionHand.MAIN_HAND,
                         hold ? Timing.repeat(CONTINUOUS, RIGHT_CLICK_DELAY) : Timing.once());
+                i.itemFallthrough = itemFallthrough;
+                return i;
             }
             default -> {   // MISS = air
                 if (button == Button.ATTACK) {
@@ -342,9 +356,36 @@ public final class Interaction {
             if (outcome.length() > 0) outcome.append(", ");
             outcome.append(handName).append('=').append(res);
         }
+        if (fallthroughUse()) {
+            return true;
+        }
         // Nothing consumed (e.g. empty hand on a non-interactive block) — still a press.
         lastUseOutcome = outcome.toString();
         return true;
+    }
+
+    /**
+     * 准星 USE 的收尾一步:方块/实体都没吃掉点击时,把同一次按键落到物品自用——
+     * 与真客户端一致(useItemOn 不消费就发 ServerboundUseItemPacket → Item.use)。
+     * 桶、船、钓竿这类物品的行为全写在 Item.use 里,自带各自的流体射线,
+     * 所以准星根本不需要点中水。开关见 {@link #itemFallthrough}。
+     *
+     * @return true = 有一只手的物品吃掉了这次按键
+     */
+    private boolean fallthroughUse() {
+        if (!itemFallthrough) {
+            return false;
+        }
+        for (InteractionHand h : HANDS) {
+            if (player.gameMode.useItem(player, player.level(),
+                    player.getItemInHand(h), h).consumesAction()) {
+                player.swing(h);
+                lastUseOutcome = "consumed (item self-use, "
+                        + (h == InteractionHand.MAIN_HAND ? "main_hand" : "off_hand") + ")";
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -375,7 +416,8 @@ public final class Interaction {
                 return true;
             }
         }
-        return true;   // a press with no effect is still a press
+        fallthroughUse();          // 实体没吃掉点击:真客户端同样落到物品自用
+        return true;               // a press with no effect is still a press
     }
 
     /** Raycast from the eyes along the current look; the hit must be the target block. */

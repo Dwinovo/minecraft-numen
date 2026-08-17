@@ -27,10 +27,15 @@ public final class InteractAtTool implements NumenTool {
 
     @Override
     public String description() {
-        return "Aim at a world point and press one mouse button — the native crosshair interaction for "
-                + "BLOCKS and the AIR (moving entities use interact_entity). It does NOT travel: you must "
-                + "ALREADY be within working reach (~4.5 blocks) of the aim point — goto stops you right "
-                + "beside a block, which is in reach. Farther away it fails and tells you to goto first.";
+        return "Aim at a world point and press one mouse button — the full native click for BLOCKS, "
+                + "FLUIDS and the AIR (moving entities use interact_entity). right = use/place/activate; "
+                + "if the aimed block doesn't respond, the held item acts on its own, exactly like a real "
+                + "right-click — so aiming at WATER with a bucket scoops it, with a boat places it. "
+                + "left = attack/break (prefer mine for digging). The result reports what actually "
+                + "changed (hands, aimed block, new entities); no change listed = the click did nothing. "
+                + "It does NOT travel: you must ALREADY be within working reach (~4.5 blocks) of the aim "
+                + "point — goto stops you right beside a block, which is in reach. Farther away it fails "
+                + "and tells you to goto first.";
     }
 
     @Override

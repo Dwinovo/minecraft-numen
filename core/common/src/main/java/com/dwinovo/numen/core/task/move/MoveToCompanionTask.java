@@ -88,6 +88,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
 
     @Override
     protected void onStart() {
+        // 她要走路,自然先下来——骑着船/矿车时寻路输入驱动的是载具不是腿,
+        // 而她自己没有"下船"这个按键,不在这儿下就永远困在座位上。
+        if (player.isPassenger()) {
+            player.stopRiding();
+        }
         if (r.kind == MoveToTaskRecord.Kind.FIND) {
             // 就近方块:解析 id → 离线扫描附近候选;导航等首批候选到手再建
             var id = net.minecraft.resources.ResourceLocation.tryParse(r.block);

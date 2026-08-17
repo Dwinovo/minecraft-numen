@@ -49,6 +49,9 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     /** The FIRST nav failure's reason, preserved so the final give-up keeps the original wording. */
     private String firstNavFailReason;
     private Interaction interaction;
+    /** 按键前的世界快照,收尾时对账出"真发生了什么"。 */
+    private com.dwinovo.numen.core.act.PressReceipt receipt;
+    private List<String> changes = List.of();
     private long holdUntil = -1;
     private boolean acted = false;     // landed at least one press (death then = success, not failure)
     private String successMsg = "done";
@@ -109,7 +112,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         // A fixed-duration hold completes on time even if the line of sight lapsed near the end.
         if (interaction != null && holdUntil >= 0 && player.level().getGameTime() >= holdUntil) {
             interaction.stop();
-            successMsg = describeDone();
+            successMsg = describeDone() + settle();
             return TaskState.SUCCESS;
         }
 
@@ -127,7 +130,13 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
             if (r.item != null) {
                 player.holdInHand(PlayerInv.findSlot(player.getInventory(), r.item));
             }
-            interaction = Interaction.forHit(player, hit, button(), r.holdTicks);
+            // 兜底开关与 interact_at 同一条身体约束(政策的唯一出处在那份记录上):
+            // 实体没吃掉点击才轮到物品自用,手里是食物/珍珠时宁可不兜。
+            boolean fallthroughOk =
+                    InteractAtTaskRecord.bodyBoundReason(player.getMainHandItem().getItem()) == null
+                    && InteractAtTaskRecord.bodyBoundReason(player.getOffhandItem().getItem()) == null;
+            receipt = com.dwinovo.numen.core.act.PressReceipt.before(player, null);
+            interaction = Interaction.forHit(player, hit, button(), r.holdTicks, fallthroughOk);
             if (r.holdTicks > 0) {
                 holdUntil = player.level().getGameTime() + r.holdTicks;
             }
@@ -136,7 +145,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
 
         return switch (interaction.tick()) {
             case DONE -> {
-                successMsg = describeDone();
+                successMsg = describeDone() + settle();
                 yield TaskState.SUCCESS;
             }
             case FAILED -> {
@@ -195,7 +204,8 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
     }
 
     private boolean withinReach() {
-        return player.onGround()
+        // 与 interact_at 同一道理:水里与载具上没有 onGround,门只挡坠落中途的按键。
+        return (player.onGround() || player.isInWater() || player.isPassenger())
                 && entity != null
                 && player.distanceToSqr(entity.position()) <= REACH_SQR;
     }
@@ -215,6 +225,15 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         return verb + " " + targetName();
     }
 
+    /** 收尾对账,与 interact_at 同款:只报事实,判断留给读回执的人。 */
+    private String settle() {
+        changes = receipt == null ? List.of() : receipt.diff(player);
+        if (changes.isEmpty()) {
+            return "";   // 实体交互多数不留可见痕迹(交易开了界面、动物进了求爱态),不硬报"没变"
+        }
+        return " — " + String.join("; ", changes);
+    }
+
     /** Release the interaction, then the nav + overlay (base default). */
     @Override
     protected void cleanup() {
@@ -227,6 +246,9 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         Map<String, Object> data = new HashMap<>();
         data.put("button", r.button == MouseButton.LEFT ? "left" : "right");
         data.put("entity_id", r.entityId);
+        if (!changes.isEmpty()) {
+            data.put("changes", changes);
+        }
         return data;
     }
 
