@@ -543,7 +543,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // <b>只有真 NO-PATH 才算够不着</b>:搜索烧完整个预算也没找出路线。目标丢了、被围死、
         // 重规划抖动都是另外的事,拿它们当够不着会把两格外的普通僵尸也判死。
         boolean noRoute = status == PlayerNav.Status.FAILED
-                && nav.failType() == FailureType.NO_PATH;
+                && (nav.failType() == FailureType.NO_PATH
+                        || nav.failType() == FailureType.TERRAIN_BLOCKED);
         if (status == PlayerNav.Status.FAILED) {
             stopNav();
         }

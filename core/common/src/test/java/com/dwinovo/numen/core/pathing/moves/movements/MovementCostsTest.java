@@ -6,6 +6,7 @@ import java.util.Map;
 
 import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
+import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
@@ -193,7 +194,7 @@ class MovementCostsTest {
     }
 
     private static CalculationContext context(FakeView view) {
-        return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, true);
+        return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, true, TerrainPermit.TERRAFORM);
     }
 
     // ==================== 平移 ====================

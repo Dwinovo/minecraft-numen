@@ -224,7 +224,7 @@ public class CompanionGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
 
         TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, false,
                 TaskDispatch.ctx("gametest-goto", companion));
         TaskDispatch.runSync(companion, record, reply -> {});
 
@@ -268,7 +268,7 @@ public class CompanionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_shutin", new BlockPos(3, 2, 3), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
         TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, false,
                 TaskDispatch.ctx("gametest-door", companion));
         TaskDispatch.runSync(companion, record, reply -> {});
         helper.succeedWhen(() -> {
@@ -2494,7 +2494,7 @@ public class CompanionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
         TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, false,
                 TaskDispatch.ctx("gametest-cgoto", companion));
         TaskDispatch.runSync(companion, record, reply -> {});
         helper.succeedWhen(() -> {
@@ -2594,6 +2594,7 @@ public class CompanionGameTests {
      * 空手创造爬井:1×1 黑曜石竖井(徒手黑曜石按不可破计价,四面无路),
      * 背包全空——唯一出路是免耗材画像自动补脚手架泥土后原地垫柱。守两件事:
      * 规划器敢想放置路线(hasThrowaway 画像位)+ 执行层自动补料与垫柱动作。
+     * 垫柱是改地形,goto 带 may_alter_terrain——不带的版本见 goto_refuses_to_tunnel_by_default。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
     public static void creative_pillar_out_empty_handed(GameTestHelper helper) {
@@ -2610,7 +2611,7 @@ public class CompanionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 3), true);
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
         TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, true,
                 TaskDispatch.ctx("gametest-climb", companion));
         TaskDispatch.runSync(companion, record, reply -> {});
         helper.succeedWhen(() -> {
@@ -2941,7 +2942,7 @@ public class CompanionGameTests {
         helper.runAfterDelay(2, () -> {
             companion.startRiding(boat, true);
             TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                    (double) target.getX(), (double) target.getY(), (double) target.getZ(), null,
+                    (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, false,
                     TaskDispatch.ctx("gametest-pilot", companion));
             TaskDispatch.setTask(companion, record, null, reply -> {});
         });
@@ -3031,6 +3032,183 @@ public class CompanionGameTests {
             helper.assertTrue(!companion.isPassenger(), "companion is still sitting in the minecart");
             helper.assertTrue(stand.isRemoved(),
                     "the armor stand was never reached — walking did not step off the vehicle");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    // ==================== 地形许可:走路不改世界 ====================
+
+    /** 一间 5×5、三格高、无顶的木板屋,她在屋里。生存、空手:垫不高,只能拆墙或不出去。 */
+    private static void plankRoomAround(GameTestHelper helper, int cx, int cz) {
+        ServerLevel level = helper.getLevel();
+        for (int x = cx - 2; x <= cx + 2; x++) {
+            for (int z = cz - 2; z <= cz + 2; z++) {
+                boolean perimeter = x == cx - 2 || x == cx + 2 || z == cz - 2 || z == cz + 2;
+                if (!perimeter) continue;
+                for (int y = 2; y <= 4; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
+                            Blocks.OAK_PLANKS.defaultBlockState());
+                }
+            }
+        }
+    }
+
+    private static int plankCount(GameTestHelper helper, int cx, int cz) {
+        ServerLevel level = helper.getLevel();
+        int n = 0;
+        for (int x = cx - 2; x <= cx + 2; x++) {
+            for (int z = cz - 2; z <= cz + 2; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    if (level.getBlockState(helper.absolutePos(new BlockPos(x, y, z))).is(Blocks.OAK_PLANKS)) {
+                        n++;
+                    }
+                }
+            }
+        }
+        return n;
+    }
+
+    /**
+     * 默认不开路:被木板屋关住,目标在屋外,goto 不带 may_alter_terrain。她不能拆墙;
+     * 回执必须是 TERRAIN_BLOCKED 的清单——点名 oak_planks、给出授权方式——而且墙一块不少。
+     * 这就是"挖穿主人的房子"那类投诉的根治点:路上动地形从引擎顺手干,变成模型点头才干。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_refuses_to_tunnel_by_default(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        plankRoomAround(helper, 7, 7);
+        int planksBefore = plankCount(helper, 7, 7);
+        NumenPlayer companion = spawnAt(helper, "gametest_guest", new BlockPos(7, 2, 7), false);
+        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
+        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, false,
+                TaskDispatch.ctx("gametest-guest", companion));
+        TaskDispatch.runSync(companion, record, r -> {});
+
+        helper.succeedWhen(() -> {
+            String reply = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(reply != null, "goto has not finished");
+            helper.assertTrue(reply.contains("oak_planks"),
+                    "the refusal does not name the blocks in the way: " + reply);
+            helper.assertTrue(reply.contains("may_alter_terrain"),
+                    "the refusal does not tell the model how to consent: " + reply);
+            helper.assertTrue(plankCount(helper, 7, 7) == planksBefore,
+                    "the wall was damaged without consent");
+            helper.assertTrue(companion.blockPosition().distSqr(target) > 3 * 3,
+                    "companion got out without altering terrain?!");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 授权了就开路:同一间屋,goto 带 may_alter_terrain=true。她拆墙出去到达目标,
+     * 回执如实记账(En route … break … oak_planks),墙上确实少了木板。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_terraforms_when_permitted(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        plankRoomAround(helper, 7, 7);
+        int planksBefore = plankCount(helper, 7, 7);
+        NumenPlayer companion = spawnAt(helper, "gametest_digger", new BlockPos(7, 2, 7), false);
+        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
+        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, true,
+                TaskDispatch.ctx("gametest-digger", companion));
+        TaskDispatch.runSync(companion, record, r -> {});
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+                    "companion has not reached the target with consent to dig");
+            helper.assertTrue(plankCount(helper, 7, 7) < planksBefore, "no plank was broken");
+            String reply = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(reply != null && reply.contains("En route") && reply.contains("oak_planks"),
+                    "the reply does not report what was broken en route: " + reply);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 有路就绕:一道横贯的木板墙,远端留一个缺口。手里拿着钻石斧——开路按成本算比
+     * 绕路便宜得多——但没有授权,她必须绕过去,墙一块不少,回执没有 En route。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_detours_instead_of_digging(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x <= 15; x++) {
+            if (x == 14) continue;   // the gap
+            for (int y = 2; y <= 4; y++) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, 8)),
+                        Blocks.OAK_PLANKS.defaultBlockState());
+            }
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_walker", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.DIAMOND_AXE));
+        BlockPos target = helper.absolutePos(new BlockPos(3, 2, 12));
+        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
+                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, false,
+                TaskDispatch.ctx("gametest-walker", companion));
+        TaskDispatch.runSync(companion, record, r -> {});
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
+                    "companion has not walked around the wall");
+            for (int x = 0; x <= 15; x++) {
+                if (x == 14) continue;
+                for (int y = 2; y <= 4; y++) {
+                    helper.assertTrue(level.getBlockState(helper.absolutePos(new BlockPos(x, y, 8)))
+                            .is(Blocks.OAK_PLANKS), "the wall was cut through instead of walked around");
+                }
+            }
+            String reply = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(reply != null && !reply.contains("En route"),
+                    "the reply claims terrain was altered: " + reply);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 接近类动作从不动世界:盔甲架关在玻璃罩里,interact_entity 左键它。她到不了触及
+     * 距离内的视线位,任务失败并把挡路的玻璃点名(goto 开路是模型的决定),玻璃一块不碎。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void approach_never_breaks(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos standAt = helper.absolutePos(new BlockPos(8, 2, 8));
+        var stand = new net.minecraft.world.entity.decoration.ArmorStand(
+                level, standAt.getX() + 0.5, standAt.getY(), standAt.getZ() + 0.5);
+        level.addFreshEntity(stand);
+        // 玻璃罩:3×3×3,盔甲架在正中
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                for (int y = 2; y <= 4; y++) {
+                    boolean inside = dx == 0 && dz == 0 && y <= 3;
+                    if (inside) continue;
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8 + dx, y, 8 + dz)),
+                            Blocks.GLASS.defaultBlockState());
+                }
+            }
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_knocker", new BlockPos(3, 2, 3), true);
+        TaskRecord hit = new BlockActionOps().interactEntity("left", stand.getId(), null,
+                null, TaskDispatch.ctx("gametest-knocker", companion));
+        TaskDispatch.runSync(companion, hit, r -> {});
+
+        helper.succeedWhen(() -> {
+            String reply = hit.getResult() == null ? null : hit.getResult().message();
+            helper.assertTrue(reply != null, "interact_entity has not finished");
+            helper.assertTrue(stand.isAlive(), "the armor stand was hit through/after breaking glass");
+            helper.assertTrue(reply.contains("glass"),
+                    "the failure does not name the glass in the way: " + reply);
+            int glass = 0;
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    for (int y = 2; y <= 4; y++) {
+                        if (level.getBlockState(helper.absolutePos(new BlockPos(8 + dx, y, 8 + dz)))
+                                .is(Blocks.GLASS)) glass++;
+                    }
+                }
+            }
+            helper.assertTrue(glass == 25, "glass was broken: " + glass + "/25 left");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

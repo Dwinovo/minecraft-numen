@@ -13,6 +13,7 @@ import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.Movement;
+import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.entity.NumenPlayer;
 
@@ -71,9 +72,10 @@ public final class PathingCore {
 
     public PathingCore(NumenPlayer player, SearchDispatcher dispatcher,
                        Supplier<CalculationContext> searchContextFactory,
-                       Supplier<CalculationContext> executionContextFactory) {
+                       Supplier<CalculationContext> executionContextFactory,
+                       TerrainPermit permit) {
         this.player = player;
-        this.harness = new ExecHarness(player);
+        this.harness = new ExecHarness(player, permit);
         this.dispatcher = dispatcher;
         this.searchContextFactory = searchContextFactory;
         this.executionContextFactory = executionContextFactory;
@@ -85,8 +87,8 @@ public final class PathingCore {
      * 路径必须走双工厂构造(执行侧供活世界上下文),此构造仅限测试。
      */
     public PathingCore(NumenPlayer player, SearchDispatcher dispatcher,
-                       Supplier<CalculationContext> contextFactory) {
-        this(player, dispatcher, contextFactory, null);
+                       Supplier<CalculationContext> contextFactory, TerrainPermit permit) {
+        this(player, dispatcher, contextFactory, null, permit);
     }
 
     // ==================== 对外 API ====================
@@ -153,6 +155,11 @@ public final class PathingCore {
     /** 当前是否可安全中断(悬空放置、跑酷空中等时刻为 false)。 */
     public boolean isSafeToCancel() {
         return current == null || safeToCancel;
+    }
+
+    /** 本状态机的执行器至今真动过的地形(账本住在执行器里,这里只是递出去)。 */
+    public TerrainBill ledger() {
+        return harness.ledger();
     }
 
     /** 上一 tick 是否有一次首段计算以失败告终。 */

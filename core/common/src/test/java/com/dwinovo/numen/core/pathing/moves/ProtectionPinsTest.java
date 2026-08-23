@@ -200,7 +200,7 @@ class ProtectionPinsTest {
 
     private static CalculationContext context(FakeView view, LongSet sacred) {
         return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, false,
-                sacred, LongSets.emptySet());
+                sacred, LongSets.emptySet(), TerrainPermit.TERRAFORM);
     }
 
     private static LongSet sacredOf(BlockPos pos) {
@@ -279,6 +279,25 @@ class ProtectionPinsTest {
                 dirt.getX(), dirt.getY(), dirt.getZ(), false) >= COST_INF);
     }
 
+    // ==================== 地形许可:PRESERVE 下挖与放处处 INF ====================
+
+    @Test
+    void preservePermitMakesEveryBreakAndPlaceInfinite() {
+        BlockPos dirt = SRC.north();
+        FakeView v = floored();
+        v.set(dirt, Blocks.DIRT.defaultBlockState());
+        CalculationContext preserve = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
+                false, LongSets.emptySet(), LongSets.emptySet(), TerrainPermit.PRESERVE);
+        // 同一块泥土,TERRAFORM 有限价(见上),PRESERVE 无限价——翻成 INF 的只是许可
+        assertTrue(MovementHelper.getMiningDurationTicks(preserve,
+                dirt.getX(), dirt.getY(), dirt.getZ(), false) >= COST_INF);
+        BlockPos cell = SRC.north().above();
+        assertEquals(COST_INF, preserve.costOfPlacingAt(
+                cell.getX(), cell.getY(), cell.getZ(), v.getBlockState(cell)));
+        assertFalse(preserve.allowBreak);
+        assertFalse(preserve.hasThrowaway);
+    }
+
     // ==================== 放置保护 / 贴面一把尺 ====================
 
     @Test
@@ -293,7 +312,7 @@ class ProtectionPinsTest {
         LongSet denied = new LongOpenHashSet();
         denied.add(cell.asLong());
         CalculationContext deniedCtx = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
-                false, LongSets.emptySet(), denied);
+                false, LongSets.emptySet(), denied, TerrainPermit.TERRAFORM);
         assertEquals(COST_INF, deniedCtx.costOfPlacingAt(
                 cell.getX(), cell.getY(), cell.getZ(), v.getBlockState(cell)));
     }

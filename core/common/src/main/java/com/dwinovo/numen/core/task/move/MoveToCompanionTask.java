@@ -135,6 +135,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         startWalkingNav();
     }
 
+    /** 这次 goto 的地形许可:模型点头了才开路,否则只走不改。四处建导航都从这儿取。 */
+    private PlayerNav.ContextProvider terrain() {
+        return r.mayAlterTerrain ? PlayerNav.ContextProvider.TERRAFORM : PlayerNav.ContextProvider.DEFAULT;
+    }
+
     /**
      * 步行段的启动:预算、租约、建导航。开工时走它,船腿靠岸后接力也走它——
      * 两个入口一份逻辑。
@@ -148,9 +153,10 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // BLOCK targets go through the compiled front door so the target cell is
         // SACRED when solid — the route may neither dig through nor bury the very
         // block it was asked to reach. COLUMN/YLEVEL have no block objective.
-        nav = r.kind == MoveToTaskRecord.Kind.BLOCK
-                ? PlayerNav.to(player, this::blockCompiled, WALK_SPEED, this::reached)
-                : PlayerNav.toGoal(player, this::goal, WALK_SPEED, this::reached);
+        nav = (r.kind == MoveToTaskRecord.Kind.BLOCK
+                ? PlayerNav.to(player, this::blockCompiled, WALK_SPEED, this::reached, terrain())
+                : PlayerNav.toGoal(player, this::goal, WALK_SPEED, this::reached, terrain()))
+                .withTerrainProbe();
         com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] goto start kind={} target={},{},{} solid={}",
                 r.kind, bx, by, bz,
@@ -275,7 +281,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 // FIND:打不通就近候选 -> 除名,朝余下候选重开导航
                 if (r.kind == MoveToTaskRecord.Kind.FIND && finder.rotateAfterFailure()) {
                     stopNav();
-                    nav = PlayerNav.to(player, finder::contract, WALK_SPEED, this::reached);
+                    nav = PlayerNav.to(player, finder::contract, WALK_SPEED, this::reached, terrain())
+                            .withTerrainProbe();
                     yield TaskState.RUNNING;
                 }
                 // The planner can't get closer. In water, keep waiting while the body is
@@ -300,7 +307,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                     nearRetried = true;
                     stopNav();
                     NavGoal retry = nearRetryGoal();
-                    nav = PlayerNav.toGoal(player, () -> retry, WALK_SPEED, this::closeEnoughToSucceed);
+                    nav = PlayerNav.toGoal(player, () -> retry, WALK_SPEED, this::closeEnoughToSucceed,
+                            terrain()).withTerrainProbe();
                     yield TaskState.RUNNING;
                 }
                 String also = nearRetried
@@ -415,7 +423,8 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     private TaskState tickFindDiscovery() {
         finder.drain();
         if (finder.hasCandidates()) {
-            nav = PlayerNav.to(player, finder::contract, WALK_SPEED, this::reached);
+            nav = PlayerNav.to(player, finder::contract, WALK_SPEED, this::reached, terrain())
+                    .withTerrainProbe();
             return null;
         }
         if (finder.exhausted()) {
@@ -520,12 +529,15 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
             case YLEVEL -> "elevation y=" + by;
             case FIND -> "the nearest " + r.block;
         };
-        // Everything breakable is already on the table (priced by dig time), so the
-        // fix for a block is usually geometry: nearer waypoint or scanning. Unless she
-        // simply had nothing to build WITH, which reads as the same dead end and isn't.
-        String advice = ScaffoldMaterials.shortageAdvice(player);
-        if (advice == null) {
-            advice = " Try a nearer waypoint or scan_blocks for a way through.";
+        // 地形封路的验尸自带下一步(清单 + 重发提示),不再叠几何建议;其余无路才是
+        // 几何问题:换近一点的路点或扫描。除非她只是没有垫路的料——读起来同样是死路,
+        // 其实不是。
+        String advice = "";
+        if (nav.failType() != FailureType.TERRAIN_BLOCKED) {
+            advice = ScaffoldMaterials.shortageAdvice(player);
+            if (advice == null) {
+                advice = " Try a nearer waypoint or scan_blocks for a way through.";
+            }
         }
         return "blocked: got within " + String.format("%.1f", remaining) + " blocks of " + where
                 + " (now on the ground at y=" + gy + "). " + failReason + "." + advice;

@@ -5,6 +5,7 @@ import com.dwinovo.numen.core.pathing.cache.LoadedChunks;
 import com.dwinovo.numen.core.pathing.cache.PathCaches;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
+import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
@@ -32,7 +33,8 @@ public final class ContextFactory {
     @FunctionalInterface
     public interface ContextBuilder {
         CalculationContext create(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
-                                  boolean safeForThreadedUse, LongSet sacred, LongSet deniedPlace);
+                                  boolean safeForThreadedUse, LongSet sacred, LongSet deniedPlace,
+                                  TerrainPermit permit);
     }
 
     /**
@@ -41,23 +43,25 @@ public final class ContextFactory {
      *
      * @param sacred      不可挖不可埋的自身目标格({@code BlockPos.asLong} 键)
      * @param deniedPlace 执行层证明放不上的格
+     * @param permit      这次移动对地形的许可(没有缺省值:每次导航都得说清自己的意图)
      */
     public static CalculationContext forSearch(ServerPlayer player, LongSet sacred,
-                                               LongSet deniedPlace) {
-        return forSearch(player, sacred, deniedPlace, CalculationContext::new);
+                                               LongSet deniedPlace, TerrainPermit permit) {
+        return forSearch(player, sacred, deniedPlace, permit, CalculationContext::new);
     }
 
     public static CalculationContext forSearch(ServerPlayer player, LongSet sacred,
-                                               LongSet deniedPlace, ContextBuilder builder) {
+                                               LongSet deniedPlace, TerrainPermit permit,
+                                               ContextBuilder builder) {
         ServerLevel level = (ServerLevel) player.level();
         LoadedChunks loaded = PathCaches.ensureSnapshot(level, player.blockPosition());
         CachedNavView view = new CachedNavView(loaded, level);
-        return builder.create(player, view, view::isLoaded, true, sacred, deniedPlace);
+        return builder.create(player, view, view::isLoaded, true, sacred, deniedPlace, permit);
     }
 
-    /** 无语义开关的搜索用冻结上下文。 */
-    public static CalculationContext forSearch(ServerPlayer player) {
-        return forSearch(player, LongSets.emptySet(), LongSets.emptySet());
+    /** 无目标格/禁放格开关的搜索用冻结上下文。 */
+    public static CalculationContext forSearch(ServerPlayer player, TerrainPermit permit) {
+        return forSearch(player, LongSets.emptySet(), LongSets.emptySet(), permit);
     }
 
     /**
@@ -67,20 +71,21 @@ public final class ContextFactory {
      * 装配期重算。
      */
     public static CalculationContext forExecution(ServerPlayer player, LongSet sacred,
-                                                  LongSet deniedPlace) {
-        return forExecution(player, sacred, deniedPlace, CalculationContext::new);
+                                                  LongSet deniedPlace, TerrainPermit permit) {
+        return forExecution(player, sacred, deniedPlace, permit, CalculationContext::new);
     }
 
     public static CalculationContext forExecution(ServerPlayer player, LongSet sacred,
-                                                  LongSet deniedPlace, ContextBuilder builder) {
+                                                  LongSet deniedPlace, TerrainPermit permit,
+                                                  ContextBuilder builder) {
         var view = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
         ChunkLoadedTest loaded = view instanceof com.dwinovo.numen.core.pathing.cache.LoadedOnlyView v
                 ? v::isLoaded : ChunkLoadedTest.ALWAYS;
-        return builder.create(player, view, loaded, false, sacred, deniedPlace);
+        return builder.create(player, view, loaded, false, sacred, deniedPlace, permit);
     }
 
-    /** 无语义开关的执行期实时上下文。 */
-    public static CalculationContext forExecution(ServerPlayer player) {
-        return forExecution(player, LongSets.emptySet(), LongSets.emptySet());
+    /** 无目标格/禁放格开关的执行期实时上下文。 */
+    public static CalculationContext forExecution(ServerPlayer player, TerrainPermit permit) {
+        return forExecution(player, LongSets.emptySet(), LongSets.emptySet(), permit);
     }
 }

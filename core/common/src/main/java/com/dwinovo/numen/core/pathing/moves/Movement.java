@@ -318,6 +318,9 @@ public abstract class Movement {
 
         /** 应用单个按键。 */
         void applyInput(Input input, boolean held);
+
+        /** 这次导航对地形的许可:执行期"顺手"的放置(跑酷落点补块)只在可改地形时做。 */
+        TerrainPermit permit();
     }
 
     private ExecutionDelegate executionDelegate;
@@ -353,6 +356,11 @@ public abstract class Movement {
         if (executionDelegate != null) {
             executionDelegate.applyInput(input, held);
         }
+    }
+
+    /** 执行期能不能改地形;未注入代理(纯规划)按不能算——规划已由上下文成本裁决。 */
+    protected boolean mayAlterTerrain() {
+        return executionDelegate != null && executionDelegate.permit().mayAlter();
     }
 
     // ==================== 元数据 ====================

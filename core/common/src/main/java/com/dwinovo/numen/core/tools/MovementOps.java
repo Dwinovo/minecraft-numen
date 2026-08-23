@@ -15,16 +15,15 @@ public final class MovementOps {
     /** Base budget: 30 seconds at vanilla 20 tps (the goal extends it by distance at runtime). */
     private static final long DEFAULT_TIMEOUT_TICKS = 30 * 20;
 
-    public TaskRecord moveTo(
-Double x,
-Double y,
-Double z,
-            String block,
-            ToolContext ctx) {
+    /**
+     * @param mayAlterTerrain 模型是否授权路上挖/放方块;null 即 false——不说就是不许
+     */
+    public TaskRecord moveTo(Double x, Double y, Double z, String block, Boolean mayAlterTerrain,
+                             ToolContext ctx) {
         // MoveToTaskRecord validates the x/y/z/block combination, throwing a
         // teaching error for an ambiguous one (e.g. only x given, or block
         // combined with coordinates).
         return new MoveToTaskRecord(ctx.toolCallId(), ctx.deadline(DEFAULT_TIMEOUT_TICKS),
-                x, y, z, block);
+                x, y, z, block, Boolean.TRUE.equals(mayAlterTerrain));
     }
 }

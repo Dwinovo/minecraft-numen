@@ -80,7 +80,12 @@ public final class BlockDigger {
         /** An OCCLUDER in the way broke this tick (not the target) — a step toward it. */
         BROKE_OCCLUDER,
         /** No face of the target is reachable and nothing safe occludes it — stuck (maps to OCCLUDED). */
-        NO_SHOT
+        NO_SHOT;
+
+        /** 本 tick 有方块真的没了(目标或遮挡物)。 */
+        public boolean broke() {
+            return this == BROKE_TARGET || this == BROKE_OCCLUDER;
+        }
     }
 
     /** Legacy boolean shim: {@code true} only on the tick the TARGET breaks. Kept so

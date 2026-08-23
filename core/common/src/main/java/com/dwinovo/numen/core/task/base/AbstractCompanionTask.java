@@ -66,6 +66,12 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     protected final R r;
     /** The active navigation, if any — owned here so {@link #stopNav()} / {@link #cleanup()} can release it. */
     protected PlayerNav nav;
+    /**
+     * 本任务历次导航累计真动过的地形(每条导航停下时并入)。回执末尾如实相告——
+     * 不论成败、不论任务,"路上挖了什么放了什么"只在这一处说一次。
+     */
+    private final com.dwinovo.numen.core.pathing.execute.TerrainBill journey =
+            new com.dwinovo.numen.core.pathing.execute.TerrainBill();
 
     /** Model-facing reason for a terminal FAILED; also the fallback result message. */
     private String doneReason = "done";
@@ -166,11 +172,13 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     @Override
     public final TaskResult result(TaskState finalState) {
         cleanup();
+        // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,拆了什么就说什么
+        String enRoute = journey.isEmpty() ? "" : " En route I had to " + journey.describe() + ".";
         return switch (finalState) {
-            case SUCCESS   -> TaskResult.ok(successMessage(), resultData());
-            case TIMEOUT   -> new TaskResult(false, timeoutMessage(), true, false, resultData());
-            case CANCELLED -> new TaskResult(false, cancelledMessage(), false, true, resultData());
-            default        -> TaskResult.fail(doneReason, resultData());   // FAILED and any stray state
+            case SUCCESS   -> TaskResult.ok(successMessage() + enRoute, resultData());
+            case TIMEOUT   -> new TaskResult(false, timeoutMessage() + enRoute, true, false, resultData());
+            case CANCELLED -> new TaskResult(false, cancelledMessage() + enRoute, false, true, resultData());
+            default        -> TaskResult.fail(doneReason + enRoute, resultData());   // FAILED and any stray state
         };
     }
 
@@ -253,9 +261,10 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     // Nav ownership
     // ---------------------------------------------------------------------
 
-    /** Stop and forget the active nav (idempotent). */
+    /** Stop and forget the active nav (idempotent); its terrain ledger joins the task's journey. */
     protected void stopNav() {
         if (nav != null) {
+            journey.addAll(nav.ledger());
             nav.stop();
             nav = null;
         }

@@ -20,6 +20,11 @@ import com.dwinovo.numen.task.TaskRecord;
  * </ul>
  * Coordinates are nullable ({@code null} = "not supplied"); the deadline-based
  * timeout is handled by the base class.
+ *
+ * <p>{@code mayAlterTerrain} is the model's explicit consent to dig through, bridge
+ * or pillar on the way. Without it the walk never changes a block (see
+ * {@code TerrainPermit}); when the only route would, the failure lists exactly which
+ * blocks and the model decides whether to re-send with consent.
  */
 public final class MoveToTaskRecord extends TaskRecord {
 
@@ -34,15 +39,18 @@ public final class MoveToTaskRecord extends TaskRecord {
     /** Namespaced block id to walk to the nearest of; null when coordinates drive. */
     public final String block;
     public final Kind kind;
+    /** Consent to dig / bridge / pillar en route. False = the walk leaves every block as it was. */
+    public final boolean mayAlterTerrain;
 
     public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
-                            Double x, Double y, Double z, String block) {
+                            Double x, Double y, Double z, String block, boolean mayAlterTerrain) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.x = x;
         this.y = y;
         this.z = z;
         this.block = block == null || block.isBlank() ? null : block.trim();
         this.kind = resolveKind(x, y, z, this.block);
+        this.mayAlterTerrain = mayAlterTerrain;
     }
 
     /**
@@ -80,11 +88,12 @@ public final class MoveToTaskRecord extends TaskRecord {
      * 工具 id 不写进来,需要它的地方(运行时状态的 tool 属性、派发回执)本来就有。
      */
     public String describe() {
-        return switch (kind) {
+        String where = switch (kind) {
             case BLOCK -> "走向 " + (int) (double) x + "," + (int) (double) y + "," + (int) (double) z;
             case COLUMN -> "走向 x=" + (int) (double) x + " z=" + (int) (double) z;
             case YLEVEL -> "下到 y=" + (int) (double) y;
             case FIND -> "去找 " + block;
         };
+        return mayAlterTerrain ? where + "(可开路)" : where;
     }
 }

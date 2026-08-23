@@ -4,6 +4,7 @@ import com.dwinovo.numen.core.build.BuildValidity;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
+import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 
@@ -26,9 +27,10 @@ final class BuildCalculationContext extends CalculationContext {
     private final boolean replaceExisting;
     BuildCalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                             boolean safeForThreadedUse, LongSet sacred, LongSet deniedPlace,
+                            TerrainPermit permit,
                             Map<Long, BuildTaskRecord.Target> activeTargets,
                             Set<BlockState> availableStates, boolean replaceExisting) {
-        super(player, view, loadedTest, safeForThreadedUse, sacred, deniedPlace);
+        super(player, view, loadedTest, safeForThreadedUse, sacred, deniedPlace, permit);
         this.activeTargets = Map.copyOf(activeTargets);
         this.availableStates = Set.copyOf(availableStates);
         this.replaceExisting = replaceExisting;

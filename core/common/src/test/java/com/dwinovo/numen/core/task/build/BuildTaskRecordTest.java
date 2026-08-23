@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
+import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import it.unimi.dsi.fastutil.longs.LongSets;
@@ -314,7 +315,8 @@ class BuildTaskRecordTest {
         FakeView view = new FakeView();
         view.set(pos, Blocks.AIR.defaultBlockState());
         BuildCalculationContext ctx = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
-                true, LongSets.emptySet(), LongSets.emptySet(), Map.of(pos.asLong(), target),
+                true, LongSets.emptySet(), LongSets.emptySet(), TerrainPermit.TERRAFORM,
+                Map.of(pos.asLong(), target),
                 Set.of(Blocks.OBSIDIAN.defaultBlockState()), true);
 
         assertEquals(0.0, ctx.costOfPlacingAt(pos.getX(), pos.getY(), pos.getZ(),
@@ -339,7 +341,8 @@ class BuildTaskRecordTest {
         FakeView view = new FakeView();
         view.set(pos, Blocks.AIR.defaultBlockState());
         BuildCalculationContext ctx = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
-                true, LongSets.emptySet(), LongSets.emptySet(), Map.of(pos.asLong(), target),
+                true, LongSets.emptySet(), LongSets.emptySet(), TerrainPermit.TERRAFORM,
+                Map.of(pos.asLong(), target),
                 Set.of(Blocks.DIRT.defaultBlockState()), true);
 
         assertEquals(NavSettings.get().blockPlacementPenalty
@@ -358,7 +361,8 @@ class BuildTaskRecordTest {
         FakeView view = new FakeView();
         view.set(pos, Blocks.DIRT.defaultBlockState());
         BuildCalculationContext ctx = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
-                true, LongSets.emptySet(), LongSets.emptySet(), Map.of(pos.asLong(), target),
+                true, LongSets.emptySet(), LongSets.emptySet(), TerrainPermit.TERRAFORM,
+                Map.of(pos.asLong(), target),
                 Set.of(Blocks.OBSIDIAN.defaultBlockState()), true);
 
         assertEquals(ActionCosts.COST_INF, ctx.breakCostMultiplierAt(pos.getX(), pos.getY(), pos.getZ(),

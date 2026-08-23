@@ -83,7 +83,8 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         // Arrival = within reach AND a clear line of sight: nav keeps walking (toward the entity)
         // until BOTH hold, so a wall between us and the target is cleared by re-positioning rather
         // than stood in front of forever.
-        return new PlayerNav(player, () -> entity.blockPosition(), WALK_SPEED, this::inReachAndLos);
+        return new PlayerNav(player, () -> entity.blockPosition(), WALK_SPEED, this::inReachAndLos)
+                .withTerrainProbe();
     }
 
     /** Act this tick when the target is gone (report the outcome), a fixed hold has elapsed, or we're
@@ -194,7 +195,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
             nav = PlayerNav.toGoal(player,
                     () -> (entity == null || !entity.isAlive()) ? null
                             : NavGoal.near(entity.blockPosition(), REPOSITION_RADIUS),
-                    WALK_SPEED, this::inReachAndLos);
+                    WALK_SPEED, this::inReachAndLos).withTerrainProbe();
             return TaskState.RUNNING;
         }
         String original = firstNavFailReason != null ? firstNavFailReason : reason;
@@ -208,7 +209,8 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
 
     /** In-ladder nav causes the reposition rung handles; anything else kicks straight back to the LLM. */
     private static boolean repositionable(FailureType type) {
-        return type == FailureType.NO_PATH || type == FailureType.BOXED_IN
+        return type == FailureType.NO_PATH || type == FailureType.TERRAIN_BLOCKED
+                || type == FailureType.BOXED_IN
                 || type == FailureType.OUT_OF_REACH || type == FailureType.STANCE_DUD;
     }
 

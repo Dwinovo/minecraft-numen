@@ -67,7 +67,7 @@ Numen:  Got 64 raw iron — want me to smelt it?
 Close to thirty tools make up its hands and eyes right now:
 
 - ⛏️ **Work** — mining, logging, gathering, building, precise placement and breaking, crafting from recipes, smelting in furnaces, and sorting loot into chests.
-- 🧭 **Movement** — a server-side pathfinding engine that bridges gaps, pillars up, tunnels through, staircases down, and swims. "Go to those coordinates" means it literally: it will mine its way to diamond level, or carve a path back to the surface from the bottom of a shaft.
+- 🧭 **Movement** — a server-side pathfinding engine that jumps, swims, climbs, opens doors, parkours and pilots boats, and can bridge gaps, pillar up, tunnel through and staircase down. Walking never alters the world by default — walls, floors, other people's builds and the landscape stay as they were; when the only route would need digging or bridging it lists exactly which blocks, and only proceeds once the model consents (`may_alter_terrain`). Every result reports what was actually broken or placed en route.
 - ⚔️ **Combat** — vanilla player melee and archery, with real cooldowns and real crits; it eats when hurt and swims up when it's about to drown.
 - 🔭 **Perception** — scan blocks, scan entities, query state, look up recipes, locate structures and biomes, and read what's inside a machine without opening its GUI.
 - 🗣️ **Voice** — speech in, speech out, plus a persona, a skin, and a voice you pick yourself.

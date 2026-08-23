@@ -9,6 +9,7 @@ import com.dwinovo.numen.core.pathing.moves.Input;
 import com.dwinovo.numen.core.pathing.moves.Movement;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
+import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -20,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
@@ -57,6 +59,13 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     private final NumenPlayer player;
     private final AimProcessor aim;
     private final BlockDigger digger;
+    /** 这次导航对地形的许可(与搜索/执行上下文同一来源:PlayerNav 的 ContextProvider)。 */
+    private final TerrainPermit permit;
+    /**
+     * 这次导航真挖了什么、真放了什么。执行器是唯一动手的地方,账也只记在这儿:
+     * 任务回执末尾如实相告(en route: broke …; placed …),模型事后至少知道自己干过什么。
+     */
+    private final TerrainBill ledger = new TerrainBill();
 
     /** 本 tick 的按键表(跨 tick 保留,移动原语每 tick 清空重设)。 */
     private final EnumMap<Input, Boolean> keys = new EnumMap<>(Input.class);
@@ -70,10 +79,21 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     /** 本 tick 是否有任何记录待落地。 */
     private boolean dirty;
 
-    public ExecHarness(NumenPlayer player) {
+    public ExecHarness(NumenPlayer player, TerrainPermit permit) {
         this.player = player;
+        this.permit = permit;
         this.aim = new AimProcessor();
         this.digger = new BlockDigger(player);
+    }
+
+    @Override
+    public TerrainPermit permit() {
+        return permit;
+    }
+
+    /** 这次导航至今真动过的地形(只读视图;空账 = 一块没动)。 */
+    public TerrainBill ledger() {
+        return ledger;
     }
 
     // ==================== ExecutionDelegate 四钩子 ====================
@@ -224,14 +244,20 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
                     // 重挖——任由它抖,两格谁都永远挖不穿。已在挖的格子还实心、准星
                     // 只是滑到紧邻格(仍看着原目标方向)时,继续挖原目标不换靶;挖穿
                     // 或目标失效后自然跟随准星。
-                    digger.digStep(cur);
+                    BlockState was = player.level().getBlockState(cur);
+                    if (digger.digStep(cur).broke()) {
+                        ledger.addBreak(cur, was);
+                    }
                 } else {
                     if (!hit.getBlockPos().equals(cur)) {
                         com.dwinovo.numen.core.Constants.LOG.debug("[numen-path] exec dig {} ({})",
                                 hit.getBlockPos().toShortString(),
                                 player.level().getBlockState(hit.getBlockPos()).getBlock());
                     }
-                    digger.digStep(hit);
+                    BlockState was = player.level().getBlockState(hit.getBlockPos());
+                    if (digger.digStep(hit).broke()) {
+                        ledger.addBreak(hit.getBlockPos(), was);
+                    }
                 }
                 digTicked = true;
             } else if (digger.current() != null) {
@@ -311,10 +337,17 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
             return; // 未命中方块或被实体遮挡:不对空挥右键,也不扣冷却
         }
         rightClickCooldown = NavSettings.get().rightClickSpeed - 1;
+        // 放置落点 = 命中面前方那格(贴面放置);开门/交互不会让它从可替换变成实心
+        BlockPos placeAt = hit.getBlockPos().relative(hit.getDirection());
+        boolean emptyBefore = level.getBlockState(placeAt).canBeReplaced();
         for (InteractionHand hand : HANDS) {
             ItemStack stack = player.getItemInHand(hand);
             if (player.gameMode.useItemOn(player, level, stack, hand, hit).consumesAction()) {
                 player.swing(hand);
+                BlockState now = level.getBlockState(placeAt);
+                if (emptyBefore && !now.canBeReplaced()) {
+                    ledger.addPlace(placeAt, now.getBlock());
+                }
                 return;
             }
             if (!stack.isEmpty()

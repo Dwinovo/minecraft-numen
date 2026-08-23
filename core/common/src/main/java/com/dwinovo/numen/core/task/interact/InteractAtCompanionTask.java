@@ -167,7 +167,8 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
 
     /** In-ladder nav causes the reposition rung handles; anything else kicks straight back to the LLM. */
     private static boolean repositionable(FailureType type) {
-        return type == FailureType.NO_PATH || type == FailureType.BOXED_IN
+        return type == FailureType.NO_PATH || type == FailureType.TERRAIN_BLOCKED
+                || type == FailureType.BOXED_IN
                 || type == FailureType.OUT_OF_REACH || type == FailureType.STANCE_DUD;
     }
 

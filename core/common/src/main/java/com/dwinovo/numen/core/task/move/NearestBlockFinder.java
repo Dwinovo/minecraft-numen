@@ -89,8 +89,10 @@ final class NearestBlockFinder {
         hits = null;
         scanDrained = true;
         // 入册前过与 mine 同一道目标剪枝:挖不动/禁挖(贴液体等)/基岩上下
-        // 夹死的格不作候选——省得选中一个走近了也没法处置的目标。
-        var ctx = ContextFactory.forExecution(player);
+        // 夹死的格不作候选——省得选中一个走近了也没法处置的目标。问的是这块
+        // "能不能被处置",与她怎么走过去无关,按可改地形算。
+        var ctx = ContextFactory.forExecution(player,
+                com.dwinovo.numen.core.pathing.moves.TerrainPermit.TERRAFORM);
         found.stream()
                 .sorted(Comparator.comparingDouble(BlockScanner.Hit::distance))
                 .map(h -> h.pos().immutable())

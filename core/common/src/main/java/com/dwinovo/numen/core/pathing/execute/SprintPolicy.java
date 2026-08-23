@@ -98,8 +98,7 @@ final class SprintPolicy {
                     // 霜行者只在贴地跨过方块边缘时结冰,可能冲过头;下一步
                     // 同向平走/跑酷时强制慢速直进(跑酷且有耗材可放置替代除外)
                     if (next instanceof MovementTraverse || next instanceof MovementParkour) {
-                        boolean couldPlaceInstead = NavSettings.get().allowPlace
-                                && context.hasThrowaway && next instanceof MovementParkour;
+                        boolean couldPlaceInstead = context.hasThrowaway && next instanceof MovementParkour;
                         boolean sameFlatDirection =
                                 !current.getDirection().above().offset(next.getDirection()).equals(BlockPos.ZERO)
                                 && current.getDirection().above().cross(next.getDirection()).equals(BlockPos.ZERO);

@@ -311,7 +311,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 // and standing in a stance whose ore just got mined out resumes navigation
                 // instead of reporting a stale arrival.
                 nav = PlayerNav.toRevalidating(player, this::oreFieldCompiled, MINE_SPEED,
-                        () -> reachableTarget() != null);
+                        () -> reachableTarget() != null, PlayerNav.ContextProvider.TERRAFORM);
                 navIsBranch = false;
             }
             switch (nav.tick()) {
@@ -404,7 +404,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         if (nav == null || !navIsBranch) {
             stopNav();
             nav = PlayerNav.toGoal(player, () -> NavGoal.runAway(branchPoint, branchY),
-                    MINE_SPEED, () -> false);
+                    MINE_SPEED, () -> false, PlayerNav.ContextProvider.TERRAFORM);
             navIsBranch = true;
         }
         switch (nav.tick()) {
@@ -750,7 +750,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private void prune() {
         Level level = player.level();
         BlockPos feet = player.blockPosition();
-        CalculationContext ctx = ContextFactory.forExecution(player);
+        // 问的是"挖不挖得成",按可改地形算——这是挖矿任务,许可本来就是 TERRAFORM
+        CalculationContext ctx = ContextFactory.forExecution(player,
+                com.dwinovo.numen.core.pathing.moves.TerrainPermit.TERRAFORM);
         knownOres.removeIf(p -> {
             var state = level.getBlockState(p);
             if (state.isAir() || !r.targets.contains(state.getBlock()) || unworkable.contains(p)

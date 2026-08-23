@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
+import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.Input;
 import com.dwinovo.numen.core.pathing.moves.Movement;
@@ -60,8 +61,9 @@ public class MovementFall extends Movement {
 
     /** 重算坠落分档:本次坠落是否需要空中放水桶。 */
     private boolean willPlaceBucket() {
+        // 只问要不要放水桶(hasWaterBucket),与地形许可无关;MLG 放水再收回,不改世界
         CalculationContext context = new CalculationContext(player, player.level(),
-                ChunkLoadedTest.ALWAYS, false);
+                ChunkLoadedTest.ALWAYS, false, TerrainPermit.PRESERVE);
         MutableMoveResult result = new MutableMoveResult();
         return MovementDescend.dynamicFallCost(context, src.getX(), src.getY(), src.getZ(),
                 dest.getX(), dest.getZ(), 0,

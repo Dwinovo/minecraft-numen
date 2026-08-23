@@ -47,6 +47,11 @@ public enum FailureType {
     BOXED_IN,
     /** A* returned nothing to the target. In-ladder: try a looser goal (near/adjacent). */
     NO_PATH,
+    /** No route WITHOUT altering terrain, but one exists if she may dig / bridge / pillar —
+     *  the reason lists exactly which blocks that route would break or place. In-ladder like
+     *  NO_PATH (a looser stance may still avoid it); the final verdict hands the list to the
+     *  LLM, which decides whether to re-send with consent. */
+    TERRAIN_BLOCKED,
     /** Never got within interaction reach of the target. In-ladder: reposition. */
     OUT_OF_REACH,
     /** The search's goal membership IS satisfied at the feet, but the task's richer

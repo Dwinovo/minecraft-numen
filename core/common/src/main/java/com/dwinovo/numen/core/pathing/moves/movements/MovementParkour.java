@@ -11,7 +11,6 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
-import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -268,7 +267,7 @@ public class MovementParkour extends Movement {
         } else if (!feet.equals(src)) {
             if (feet.equals(src.relative(direction)) || player.getY() - src.getY() > 0.0001) {
                 // 已跳出第一格或已离地
-                if (NavSettings.get().allowPlace
+                if (mayAlterTerrain()
                         && MovementPlacement.selectForLocation(player, dest.below(), false)
                         && !MovementHelper.canWalkOn(player.level(), dest.below())
                         && !player.onGround()

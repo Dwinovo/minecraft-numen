@@ -34,7 +34,8 @@ import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
  * 因中途改设置得到自相矛盾的路径。
  *
  * <p>世界读取走注入的 {@link BlockGetter} 视图 + {@link ChunkLoadedTest}
- * 谓词;两个语义开关:{@code sacred}(自身目标格,不可挖不可埋,
+ * 谓词;三个语义开关:{@code permit}(这次移动能不能改地形,见
+ * {@link TerrainPermit})、{@code sacred}(自身目标格,不可挖不可埋,
  * 不可穿透)、{@code deniedPlace}(执行层证明放不上的格)。
  */
 public class CalculationContext {
@@ -88,6 +89,8 @@ public class CalculationContext {
     public final boolean allowPlaceInFluidsSource;
     public final boolean allowPlaceInFluidsFlow;
 
+    /** 这次移动对地形的许可;{@link #allowBreak}/{@link #hasThrowaway} 已把它折进去。 */
+    public final TerrainPermit permit;
     /** 不可挖不可埋的自身目标格(BlockPos.asLong 键),不可穿透。 */
     public final LongSet sacred;
     /** 执行层证明无支撑放不上的格:放置成本直接 INF。 */
@@ -103,29 +106,32 @@ public class CalculationContext {
      */
     public final WorldBorder worldBorder;
 
-    /** 便捷构造:无语义开关的活世界上下文。 */
+    /** 便捷构造:无目标格/禁放格开关,只带许可。 */
     public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
-                              boolean safeForThreadedUse) {
+                              boolean safeForThreadedUse, TerrainPermit permit) {
         this(player, view, loadedTest, safeForThreadedUse,
-                LongSets.emptySet(), LongSets.emptySet());
+                LongSets.emptySet(), LongSets.emptySet(), permit);
     }
 
     public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
                               boolean safeForThreadedUse,
-                              LongSet sacred, LongSet deniedPlace) {
+                              LongSet sacred, LongSet deniedPlace, TerrainPermit permit) {
         NavSettings settings = NavSettings.get();
         this.safeForThreadedUse = safeForThreadedUse;
         this.player = player;
         this.view = view;
         this.loadedTest = loadedTest;
+        this.permit = permit;
         this.sacred = sacred;
         this.deniedPlace = deniedPlace;
         this.toolSet = new ToolSet(player);
         // 免耗材画像(创造)恒有耗材:执行层选料时会自动补一组(伸手进创造
         // 物品栏的代码版),规划器因此敢想所有需要垫方块的路线——不然空手
         // 创造同伴会挖坑出不来(离目标 2 格报 NO-PATH)。
-        this.hasThrowaway = settings.allowPlace && (hasGenericThrowaway(player, settings)
-                || com.dwinovo.numen.core.WorkProfile.of(player).freeMaterials());
+        // 许可与总开关同折:PRESERVE 下没有耗材这回事,放置成本处处 INF
+        this.hasThrowaway = permit.mayAlter() && settings.allowPlace
+                && (hasGenericThrowaway(player, settings)
+                        || com.dwinovo.numen.core.WorkProfile.of(player).freeMaterials());
         this.hasWaterBucket = settings.allowWaterBucketFall
                 && hotbarHasWaterBucket(player)
                 && player.level().dimension() != Level.NETHER;
@@ -134,7 +140,7 @@ public class CalculationContext {
                 && (!com.dwinovo.numen.core.WorkProfile.of(player).hasHunger()
                         || player.getFoodData().getFoodLevel() > 6);
         this.placeBlockCost = settings.blockPlacementPenalty;
-        this.allowBreak = settings.allowBreak;
+        this.allowBreak = permit.mayAlter() && settings.allowBreak;
         this.allowBreakAnyway = List.copyOf(settings.allowBreakAnyway());
         this.allowParkour = settings.allowParkour;
         this.allowParkourPlace = settings.allowParkourPlace;
@@ -280,7 +286,7 @@ public class CalculationContext {
      * 否则放置罚金。
      */
     public double costOfPlacingAt(int x, int y, int z, BlockState current) {
-        if (!hasThrowaway) { // 构造时已含 allowPlace 判定
+        if (!hasThrowaway) { // 构造时已含许可与 allowPlace 判定
             return COST_INF;
         }
         long key = BlockPos.asLong(x, y, z);
@@ -309,7 +315,7 @@ public class CalculationContext {
      *   <li>sacred(自身目标格)永远 INF,任何开关都不可穿透;</li>
      *   <li>do_not_break 标签成员(默认设施类:床/门/活板门/栅栏门,
      *       数据包可追加)直接 INF,任何开关都不可解除;</li>
-     *   <li>总开关 {@code allowBreak} 关闭且不在例外清单 → INF。</li>
+     *   <li>许可为 PRESERVE、或总开关 {@code allowBreak} 关闭,且不在例外清单 → INF。</li>
      * </ol>
      * 功能方块(工作台/熔炉/箱子等)的 ×10 软惩罚由 {@link ToolSet}
      * 的 {@code avoidanceMultiplier}(NavSettings.blocksToAvoidBreaking)

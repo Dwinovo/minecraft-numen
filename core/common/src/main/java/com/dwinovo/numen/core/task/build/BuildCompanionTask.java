@@ -1328,18 +1328,24 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     @Override
     public CalculationContext forSearch(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
-        return ContextFactory.forSearch(player, union(sacred), union(deniedPlace),
-                (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
-                        p, view, loaded, safe, s, denied, targetByPos, inv.availableStates(true),
-                        r.replaceExisting));
+        return ContextFactory.forSearch(player, union(sacred), union(deniedPlace), permit(),
+                (p, view, loaded, safe, s, denied, permit) -> new BuildCalculationContext(
+                        p, view, loaded, safe, s, denied, permit, targetByPos,
+                        inv.availableStates(true), r.replaceExisting));
     }
 
     @Override
     public CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
-        return ContextFactory.forExecution(player, union(sacred), union(deniedPlace),
-                (p, view, loaded, safe, s, denied) -> new BuildCalculationContext(
-                        p, view, loaded, safe, s, denied, targetByPos, inv.availableStates(true),
-                        r.replaceExisting));
+        return ContextFactory.forExecution(player, union(sacred), union(deniedPlace), permit(),
+                (p, view, loaded, safe, s, denied, permit) -> new BuildCalculationContext(
+                        p, view, loaded, safe, s, denied, permit, targetByPos,
+                        inv.availableStates(true), r.replaceExisting));
+    }
+
+    /** 施工就是改地形:挖错块、搭脚手架、被自己封顶时拆一块出去,都是这个任务的本分。 */
+    @Override
+    public com.dwinovo.numen.core.pathing.moves.TerrainPermit permit() {
+        return com.dwinovo.numen.core.pathing.moves.TerrainPermit.TERRAFORM;
     }
 
     @Override
