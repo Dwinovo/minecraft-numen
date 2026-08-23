@@ -533,7 +533,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             // <b>没有目标也要走。</b>判据的 SKIRMISH 可以是"对全场的"(挑不出能打的,但还有
             // 东西追她),那时该退开等机会 —— 这里曾经第一行就 {@code target == null} 早退,
             // 于是判据每刻正确地喊"走位"、执行层每刻安静地什么都不做,日志看着一切正常,
-            // 直到她被苦力怕炸死。什么时候不用走由 standoffGoal 说(场上空了返回 null)。
+            // 直到她被苦力怕炸死。什么时候不用走由 standoffGoal 说(既无目标也无怪才返回 null)。
             //
             // 目标会动:要 trackGoal 而不是 toGoal —— 后者一旦到达就永久 ARRIVED,
             // 她会站在原地不再跟位,别的怪就能从容贴上来。
@@ -546,6 +546,12 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 && (nav.failType() == FailureType.NO_PATH
                         || nav.failType() == FailureType.TERRAIN_BLOCKED);
         if (status == PlayerNav.Status.FAILED) {
+            // 别的失败也要留声:走位导航当刻就失败、下一刻重建,在日志里是一片安静的
+            // SKIRMISH——站着不动却什么都没说,排查时只能靠猜。
+            if (!noRoute) {
+                Constants.LOG.info("[numen-attack] 走位导航失败({}),重建: {}",
+                        nav.failType(), nav.failReason());
+            }
             stopNav();
         }
         // 弓那一套的环在 8~12 格,和近战的环问的不是同一个问题,它的成败说明不了可达性。
@@ -606,12 +612,16 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 没有合格的格子也不会失败:引擎的七档 {@code bestSoFar} 会交出这次搜索里最好的一段。
      */
     private NavGoal standoffGoal() {
+        // 躲避场只收敌对生物:它们才有危险半径。目标本身归下面的环管——点名的猪牛鸡不是
+        // 敌对生物,不在这份名单里,但照样是要走过去打的目标。"有没有目标"与"附近有没有怪"
+        // 是两个问题,这里早退只看前者是否也为空:既无目标也无怪,才真的没处可站。
         var field = Menace.hostilesAround(player, FIELD_RADIUS);
-        if (field.isEmpty()) {
+        boolean haveTarget = target != null && !target.isRemoved();
+        if (!haveTarget && field.isEmpty()) {
             return null;
         }
         logStandoff(field);
-        if (target == null || target.isRemoved()) {
+        if (!haveTarget) {
             // <b>没有目标也照样走位</b>:环退化成"离每一只都出了它的危险半径"。
             // 场上只剩一只点着的爬行者(她没弓打不了)时走的就是这一支 —— 退开等引信熄,
             // 而不是跑三十二格。

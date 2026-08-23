@@ -102,6 +102,30 @@ public class CompanionGameTests {
     }
 
 
+    /**
+     * 点名打不敌对的东西:一头猪,附近一只怪都没有。她必须走过去把它打掉——走位目标由
+     * "有没有目标"决定,不由"附近有没有怪"决定;后者只是躲避场。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    public static void attack_hunts_a_named_passive_target(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
+        var pig = EntityType.PIG.create(level);
+        helper.assertTrue(pig != null, "pig did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
+        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.setNoAi(true);   // 站着别跑,这条测的是她走不走过去,不是追逐
+        level.addFreshEntity(pig);
+        TaskRecord record = new com.dwinovo.numen.core.tools.CombatOps().attack(
+                List.of(pig.getId()), TaskDispatch.ctx("gametest-hunt", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(!pig.isAlive(), "the pig is still alive — she never walked over to hit it");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     // ==================== 摔落 ====================
 
     /**
