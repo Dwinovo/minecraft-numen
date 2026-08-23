@@ -15,20 +15,41 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
+import java.util.Set;
 
 /**
- * 聊天输入行——NumenUI 版的瓤:[压缩][麦克风] 输入框 [发送][叫停]。
- * 四颗图标钮走组件库的 Button 图标形态(贴图由本层注入,组件库不认识贴图);
+ * 聊天输入行——NumenUI 版的瓤:[麦克风] 输入框 [发送][叫停]。
+ * 图标钮走组件库的 Button 图标形态(贴图由本层注入,组件库不认识贴图);
  * 输入框走 TextField(Enter 发送)。锁定态(外接大脑模式)整排禁用只留叫停
  * ——那是主人的急刹车,外部 AI 抽风时更需要它。
+ *
+ * <p>斜杠命令整个归这条输入行:补全弹层、面板类命令(/skills)在原位开面板、发送时
+ * 的拦截("是 / 开头?在本地跑完,不往下走",见 {@code ChatCommands})。宿主只收到
+ * 两样东西:真正要说给她的话({@link Host#onSend})和命令的回话
+ * ({@link Host#onCommandReply})。G 面板和 Y 快捷对话用的是同一条输入行,差别只在
+ * 宿主和带哪几颗键({@link Key}):快捷对话不带麦克风——快捷语音有自己的按住说话键,
+ * 不搞两条语音路。
  */
 public final class ChatInputBar {
 
-    /** 宿主回调面:发送/麦克风/压缩/叫停,以及"这几颗键此刻可不可按"。 */
+    /** 输入框右侧可选的几颗键;顺序即布局。 */
+    public enum Key { MIC, SEND, STOP }
+
+    private static final ResourceLocation ICON_MIC = icon("icon_mic");
+    private static final ResourceLocation ICON_SEND = icon("icon_send");
+    private static final ResourceLocation ICON_STOP = icon("icon_stop");
+
+    private static ResourceLocation icon(String name) {
+        return ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, name);
+    }
+
+    /** 宿主回调面:说话/麦克风/叫停,以及"这几颗键此刻可不可按"。 */
     public interface Host {
+        /** 主人真要说给她的话(斜杠命令不会走到这儿,已在输入行本地跑完)。 */
         void onSend(String text);
 
-        void onMicToggle();
+        /** 只有带 {@link Key#MIC} 的输入行会调。 */
+        default void onMicToggle() {}
 
         void onAbort();
 
@@ -40,8 +61,11 @@ public final class ChatInputBar {
         /** 输入框占位文案(随锁定态/麦克风状态变)。 */
         String hint();
 
-        /** 这串输入对应的斜杠命令补全候选;空 = 不弹层。输入行不认识命令是什么。 */
-        List<Completion> completions(String text);
+        /** 这条输入行对着的那位的大脑;null = 没选同伴(不补全、不跑命令)。 */
+        com.dwinovo.numen.client.agent.EntityAgentLoop loop();
+
+        /** 斜杠命令跑完回给主人的话;null = 这条命令不吭声(或已在原位开了面板)。画在哪、留多久是宿主的事。 */
+        void onCommandReply(String reply);
     }
 
     private static final int BTN_W = 22;
@@ -52,14 +76,16 @@ public final class ChatInputBar {
 
     private final UiRoot ui = new UiRoot();
     private final Host host;
+    /** 这条输入行带哪几颗键。 */
+    private final Set<Key> wanted;
 
     private TextField field;
+    /** 缺席的键为 null(不在 {@link #wanted} 里)。 */
     private Button micBtn, sendBtn, stopBtn;
     /** 右侧那一串键,顺序即布局。 */
     private Button[] keys = new Button[0];
     private String draft = "";
-    private ResourceLocation micIcon;
-    private final ResourceLocation iconMic, iconStop, iconSend;
+    private ResourceLocation micIcon = ICON_MIC;
 
     /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
     private int fieldX, fieldY, fieldW, fieldH;
@@ -71,13 +97,9 @@ public final class ChatInputBar {
     /** 主人按了 Esc 收起弹层;一改文字就复位——收的是"这次",不是这个功能。 */
     private boolean dismissed;
 
-    public ChatInputBar(Host host, ResourceLocation iconMic,
-                        ResourceLocation iconSend, ResourceLocation iconStop) {
+    public ChatInputBar(Host host, Set<Key> keys) {
         this.host = host;
-        this.iconMic = iconMic;
-        this.iconSend = iconSend;
-        this.iconStop = iconStop;
-        this.micIcon = iconMic;
+        this.wanted = Set.copyOf(keys);
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
@@ -96,22 +118,23 @@ public final class ChatInputBar {
 
     /** 录音中:麦克风图标换成停止方块——同一颗键,两种含义都一眼可读。 */
     public void setRecording(boolean recording) {
-        micIcon = recording ? iconStop : iconMic;
+        micIcon = recording ? ICON_STOP : ICON_MIC;
     }
 
     public void build(int x, int y, int w, int h) {
         if (field != null) draft = field.value();   // 重建不丢已输入的文字
         ui.clear();
 
-        micBtn = ui.add(iconButton(null, "numen.chat.tip.mic",
-                Button.Style.NORMAL, host::onMicToggle));
-        sendBtn = ui.add(iconButton(iconSend, "numen.chat.send",
-                Button.Style.ACCENT, this::send));
-        stopBtn = ui.add(iconButton(iconStop, "numen.chat.tip.stop",
-                Button.Style.NORMAL, host::onAbort));
+        micBtn = wanted.contains(Key.MIC) ? ui.add(iconButton(null, "numen.chat.tip.mic",
+                Button.Style.NORMAL, host::onMicToggle)) : null;
+        sendBtn = wanted.contains(Key.SEND) ? ui.add(iconButton(ICON_SEND, "numen.chat.send",
+                Button.Style.ACCENT, this::send)) : null;
+        stopBtn = wanted.contains(Key.STOP) ? ui.add(iconButton(ICON_STOP, "numen.chat.tip.stop",
+                Button.Style.NORMAL, host::onAbort)) : null;
         // 顺序即布局:输入框吃掉左边剩下的,这一串靠右排。加减一颗键只改这个数组,
         // 不用回来重算"左几右几"那两个常数。
-        keys = new Button[]{micBtn, sendBtn, stopBtn};
+        keys = java.util.stream.Stream.of(micBtn, sendBtn, stopBtn)
+                .filter(java.util.Objects::nonNull).toArray(Button[]::new);
 
         int inW = w - (BTN_W + GAP) * keys.length;
         field = ui.add(new TextField(draft, v -> {
@@ -143,9 +166,9 @@ public final class ChatInputBar {
         field.setVisible(!paged);
         field.setEnabled(!locked && !paged);
         field.placeholder(host.hint());
-        micBtn.setEnabled(!locked && !paged);
-        sendBtn.setEnabled(!locked && !paged);
-        stopBtn.setEnabled(host.canAbort());
+        if (micBtn != null) micBtn.setEnabled(!locked && !paged);
+        if (sendBtn != null) sendBtn.setEnabled(!locked && !paged);
+        if (stopBtn != null) stopBtn.setEnabled(host.canAbort());
     }
 
     // ---- 选择面板(取代输入框的那一层) ----
@@ -262,7 +285,9 @@ public final class ChatInputBar {
     private void refreshCandidates() {
         dismissed = false;
         String text = field != null ? field.value() : draft;
-        candidates = host.completions(text == null ? "" : text);
+        var loop = host.loop();
+        candidates = loop == null ? List.of()
+                : com.dwinovo.numen.client.command.ChatCommands.complete(loop, text == null ? "" : text);
         selected = firstEnabled();
     }
 
@@ -313,6 +338,22 @@ public final class ChatInputBar {
         if (field == null || panel != null || host.inputLocked()) return;
         String text = field.value() == null ? "" : field.value().trim();
         if (text.isEmpty()) return;
+        // 斜杠命令是主人对客户端说的话:在本地跑完就结束,不往下走。所以它不过宿主的
+        // 发言闸门——查技能、看清单这些事没有理由要求先配好 API key。
+        var loop = host.loop();
+        if (loop != null && com.dwinovo.numen.client.command.ChatCommands.isCommand(text)) {
+            // 面板类命令:多余的参数不理会——它要的不是参数,是一个能上下选的界面。
+            var page = com.dwinovo.numen.client.command.ChatCommands.pageFor(loop, text);
+            if (page != null) {
+                openPage(page);
+                host.onCommandReply(null);
+                return;
+            }
+            String reply = com.dwinovo.numen.client.command.ChatCommands.dispatch(loop, text);
+            setText("");
+            host.onCommandReply(reply);
+            return;
+        }
         host.onSend(text);
     }
 

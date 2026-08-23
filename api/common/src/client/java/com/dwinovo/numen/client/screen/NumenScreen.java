@@ -430,17 +430,10 @@ public final class NumenScreen extends Screen {
     }
 
 
-    private static net.minecraft.resources.ResourceLocation chatIcon(String n) {
-        return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(
-                com.dwinovo.numen.Constants.MOD_ID, n);
-    }
-    private static final net.minecraft.resources.ResourceLocation ICON_SEND = chatIcon("icon_send");
-    private static final net.minecraft.resources.ResourceLocation ICON_MIC = chatIcon("icon_mic");
-    private static final net.minecraft.resources.ResourceLocation ICON_STOP = chatIcon("icon_stop");
     private void buildChatWidgets() {
         int inputY = top + panelH - INPUT_H - PAD;
-        inputBar = new com.dwinovo.numen.client.screen.chat.ChatInputBar(
-                new ChatBarHost(), ICON_MIC, ICON_SEND, ICON_STOP);
+        inputBar = new com.dwinovo.numen.client.screen.chat.ChatInputBar(new ChatBarHost(),
+                java.util.EnumSet.allOf(com.dwinovo.numen.client.screen.chat.ChatInputBar.Key.class));
         inputBar.build(left + PAD, inputY, panelW - PAD * 2, INPUT_H);
         if (!savedInput.isEmpty()) {
             inputBar.setText(savedInput);
@@ -471,11 +464,13 @@ public final class NumenScreen extends Screen {
             return I18n.get("numen.chat.hint", name == null ? "" : name);
         }
 
-        @Override public java.util.List<com.dwinovo.numen.client.command.Completion>
-                completions(String text) {
-            return uuid == null
-                    ? java.util.List.of()
-                    : com.dwinovo.numen.client.command.ChatCommands.complete(loop(), text);
+        @Override public EntityAgentLoop loop() {
+            return uuid == null ? null : NumenScreen.this.loop();
+        }
+
+        @Override public void onCommandReply(String reply) {
+            showCommandReply(reply);
+            chatView.pinToBottom();
         }
     }
 
@@ -594,26 +589,11 @@ public final class NumenScreen extends Screen {
     }
 
     /** 发言闸门:模式开着时一并挡掉(回车绕过了被禁用的发送键,否则消息会进
-     *  内置大脑的收件箱、在模式关闭后突然诈尸开轮)。 */
+     *  内置大脑的收件箱、在模式关闭后突然诈尸开轮)。斜杠命令到不了这儿——输入行
+     *  在本地跑完了。 */
     private void submitChat(String text) {
         if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) return;
         if (text == null || text.isBlank()) return;
-        // 斜杠命令是主人对客户端说的话:在本地跑完就结束,不往下走。所以它不过发言闸门
-        // ——查技能、看清单这些事没有理由要求先配好 API key。
-        if (com.dwinovo.numen.client.command.ChatCommands.isCommand(text)) {
-            // 面板类命令:多余的参数不理会——它要的不是参数,是一个能上下选的界面。
-            var page = com.dwinovo.numen.client.command.ChatCommands.pageFor(loop(), text);
-            if (page != null && inputBar != null) {
-                inputBar.openPage(page);
-                showCommandReply(null);
-                return;
-            }
-            String reply = com.dwinovo.numen.client.command.ChatCommands.dispatch(loop(), text);
-            if (inputBar != null) inputBar.setText("");
-            showCommandReply(reply);
-            chatView.pinToBottom();
-            return;
-        }
         // Endpoint check for THIS companion (its provider entry, not the legacy global
         // key): unbound / keyless surfaces as a visible hint, never a crash or a
         // silent no-op — the no-provider safety net.
@@ -899,8 +879,6 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.SETTINGS && !dismissOpen() && !summoning) {
             settings.renderOverlays(g, mouseX, mouseY);
         }
-        // (Chat-input placeholder is the FlatEditBox hint now — drawn shadowless and under the
-        // caret in the widget pass, so it can't paint over the caret like a screen-side draw did.)
         // Summon warn — shown only when 创建 was clicked and something is missing
         // (error at the action, never ambient text). Takes the hint line's spot.
         if (summoning && warnUntil > System.currentTimeMillis() && warnText != null) {
