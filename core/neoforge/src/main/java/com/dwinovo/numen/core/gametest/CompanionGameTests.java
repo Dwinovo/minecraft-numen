@@ -3212,4 +3212,64 @@ public class CompanionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /** 盔甲架立在一根 4 高的石柱顶上:不垫不挖就够不着。 */
+    private static net.minecraft.world.entity.decoration.ArmorStand standOnPillar(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int y = 2; y <= 5; y++) {
+            level.setBlockAndUpdate(helper.absolutePos(new BlockPos(10, y, 8)), Blocks.STONE.defaultBlockState());
+        }
+        BlockPos top = helper.absolutePos(new BlockPos(10, 6, 8));
+        var stand = new net.minecraft.world.entity.decoration.ArmorStand(
+                level, top.getX() + 0.5, top.getY(), top.getZ() + 0.5);
+        level.addFreshEntity(stand);
+        return stand;
+    }
+
+    /**
+     * 跟不上就以结果收场:目标在够不着的柱顶,follow 不带授权。任务必须 FAILED,
+     * 回执点名要动的方块和授权方式——不是退避着站在原地空算,主人和模型都蒙在鼓里。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void follow_reports_when_terrain_blocks(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var stand = standOnPillar(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_tail", new BlockPos(3, 2, 8), true);
+        var rec = new com.dwinovo.numen.core.task.move.FollowTaskRecord("gametest-tail", 3.0,
+                stand.getId(), stand.getUUID(), false);
+        TaskDispatch.setTask(companion, rec, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(rec.getState() == com.dwinovo.numen.task.TaskState.FAILED,
+                    "follow should end with a result, state=" + rec.getState());
+            String said = rec.getResult() == null ? "" : rec.getResult().message();
+            helper.assertTrue(said.contains("altering terrain") && said.contains("may_alter_terrain"),
+                    "the reason must name the terrain and how to consent, got: " + said);
+            helper.assertTrue(level.getBlockState(helper.absolutePos(new BlockPos(10, 5, 8))).is(Blocks.STONE),
+                    "the pillar was touched without consent");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 授权了就跟得上:同一根柱,follow 带 may_alter_terrain=true(创造画像免耗材),
+     * 她垫上去站到柱顶旁,任务照常常驻。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void follow_climbs_when_permitted(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var stand = standOnPillar(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_tail2", new BlockPos(3, 2, 8), true);
+        var rec = new com.dwinovo.numen.core.task.move.FollowTaskRecord("gametest-tail2", 3.0,
+                stand.getId(), stand.getUUID(), true);
+        TaskDispatch.setTask(companion, rec, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(rec.getState() != com.dwinovo.numen.task.TaskState.FAILED,
+                    "follow failed despite consent: " + (rec.getResult() == null ? "" : rec.getResult().message()));
+            helper.assertTrue(companion.position().distanceTo(stand.position()) <= 3.0,
+                    "companion has not climbed up beside the target");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }

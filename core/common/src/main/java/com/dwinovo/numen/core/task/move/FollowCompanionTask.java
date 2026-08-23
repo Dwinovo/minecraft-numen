@@ -24,9 +24,12 @@ import net.minecraft.world.level.Level;
  * 反射拿去吃东西),主人一走远它自己就醒过来。这跟原版 {@code Goal.canUse()} 是
  * 同一个道理——<b>休眠不是失败</b>,不发结果、不腾槽、不惊动模型。
  *
- * <h2>够不着也是休眠</h2>
- * 常驻任务没有"失败"这个终点,所以「够不着」只能表达成休眠 + 退避重试:主人飞起来、
- * 隔着断崖、换了维度,她就先放手,等条件回来自己醒。
+ * <h2>够不着就报出去</h2>
+ * 跟着走默认不动世界(见 {@code TerrainPermit}),于是"没有路"多半不是暂时的:隔着断崖、
+ * 在屋里、差几格高——退避多少次都一样。那就以失败收场,把原因连同要动的方块清单交给
+ * 模型,它决定带 {@code may_alter_terrain} 重发、换个办法、或者告诉主人。一个明确的失败
+ * 原因不能攥在手里站着空算。主人飞在半空时跟的是他脚下的地面({@link #anchor}),
+ * 一般够得着;真够不着也照样报。
  *
  * <h2>目标没了,主人和别人不一样</h2>
  * <b>主人下线是暂时的</b>——他会回来,所以休眠等着,这也是常驻该有的样子。而点名跟的
@@ -34,10 +37,8 @@ import net.minecraft.world.level.Level;
  * 一步。一套逻辑通吃的话,要么她对着一只死羊站到天荒地老,要么主人一下线任务就没了。
  *
  * <p><b>{@code nav.tick()} 的返回值一个都不能丢</b>:{@link PlayerNav} 的 FAILED 是
- * <b>终局闩</b>(一经裁定即稳定持续)。主人一飞起来导航就判 NO_PATH,此后每一刻都返
- * FAILED——没人接住并重建的话,她<b>永久定在原地</b>,主人落回地面也不会自愈。而
- * {@code task_status} 照样说"执行中"(常驻任务按定义永远 RUNNING),主人完全看不出
- * 她卡住了。
+ * <b>终局闩</b>(一经裁定即稳定持续),不接住就是她永久定在原地而 {@code task_status}
+ * 照说"执行中"——主人完全看不出她卡住了。这里接住的方式就是把它变成任务的结果。
  */
 public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskRecord> {
 
@@ -45,20 +46,11 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     /** 比 {@code keepWithin} 多出这么远才重新起步,免得在临界距离上抖着走走停停。 */
     private static final double RESUME_MARGIN = 2.0;
 
-    /** 够不着之后第一次重试等多久(刻)。 */
-    private static final int RETRY_BASE_TICKS = 20;
-    /** 连续够不着时退避上限(刻)。一次失败的搜索会烧光整个预算,主人飞五分钟不该重算三百次。 */
-    private static final int RETRY_MAX_TICKS = 200;
     /** 主人悬空时,往下找地面最多找几格。 */
     private static final int GROUND_SCAN = 64;
 
     /** 上一刻是不是在走——用来只在真正起步/到位时重建导航。 */
     private boolean moving;
-
-    /** 够不着时休眠到这个游戏刻;0 = 没在退避。 */
-    private long retryAtGameTime;
-    /** 连续够不着的次数,只用来算退避时长。 */
-    private int unreachableStreak;
 
     public FollowCompanionTask(NumenPlayer player, FollowTaskRecord record) {
         super(player, record);
@@ -72,9 +64,6 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
             // 也就永远报不出去)。跟的是主人就单纯睡着等他回来。
             return r.entityId != null;
         }
-        if (companion.level().getGameTime() < retryAtGameTime) {
-            return false;   // 刚判过够不着,退避中——身体让给别人,别空转烧搜索预算
-        }
         double gap = companion.position().distanceTo(target.position());
         // 迟滞:走出 keepWithin + margin 才起步,回到 keepWithin 之内才停——
         // 单阈值会让她在临界距离上一步一停地抖。
@@ -84,8 +73,6 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
     @Override
     protected void onStart() {
         moving = false;
-        retryAtGameTime = 0;
-        unreachableStreak = 0;
     }
 
     @Override
@@ -101,8 +88,11 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
             return TaskState.FAILED;
         }
         if (nav == null) {
-            // 目标每次重规划时现取,所以主人边走她也跟得上。
-            nav = PlayerNav.toGoal(player, this::goal, WALK_SPEED, this::closeEnough);
+            // 目标每次重规划时现取,所以主人边走她也跟得上。地形许可按记录来,默认只走不改;
+            // 探针开着——跟不上的时候回执里要有"会动哪些方块"的清单
+            nav = PlayerNav.toGoal(player, this::goal, WALK_SPEED, this::closeEnough,
+                    r.mayAlterTerrain ? PlayerNav.ContextProvider.TERRAFORM
+                            : PlayerNav.ContextProvider.DEFAULT).withTerrainProbe();
         }
         moving = true;
         switch (nav.tick()) {
@@ -110,30 +100,22 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
             case ARRIVED -> {
                 stopNav();
                 moving = false;
-                unreachableStreak = 0;
             }
-            case FAILED -> backOff();
+            case FAILED -> {
+                // 够不着就是这件活的结果:原因与清单交给模型,别攥着站在原地空算
+                String why = nav.failReason();
+                FailureType type = nav.failType();
+                stopNav();
+                fail("can't keep up: " + why, type);
+                return TaskState.FAILED;
+            }
         }
         if (closeEnough()) {
             stopNav();
             moving = false;
-            unreachableStreak = 0;
         }
-        // 永远不返终态 —— 这一行就是"常驻"的全部含义。
+        // 不返终态就是"常驻"的全部含义;只有够不着和目标没了才收场。
         return TaskState.RUNNING;
-    }
-
-    /**
-     * 现在够不着:拆掉导航(FAILED 是终局闩,不拆就永远失败)、放手、退避一会儿再试。
-     * 退避按连续失败次数翻倍到上限——主人在天上飞的那几分钟里,每秒重算一次全预算
-     * 搜索是纯浪费,而她真落地时最多晚 10 秒就跟上。
-     */
-    private void backOff() {
-        stopNav();
-        moving = false;
-        unreachableStreak++;
-        int wait = Math.min(RETRY_MAX_TICKS, RETRY_BASE_TICKS << Math.min(unreachableStreak - 1, 4));
-        retryAtGameTime = player.level().getGameTime() + wait;
     }
 
     /**
@@ -168,7 +150,7 @@ public final class FollowCompanionTask extends AbstractCompanionTask<FollowTaskR
      * 永远够不着——这正是「飞起来她就不跟了」的来源。往下找到第一块能站的地面,
      * 「就近跟随」在他头顶下方成立。
      *
-     * <p>找不到(悬在虚空/海面上)就返回扫到的最低点:那一格同样够不着,于是走退避,
+     * <p>找不到(悬在虚空/海面上)就返回扫到的最低点:那一格同样够不着,于是照实报,
      * 而不是假装找到了。
      */
     private BlockPos anchor(Entity target) {

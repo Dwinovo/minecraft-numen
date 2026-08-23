@@ -12,6 +12,9 @@ import com.dwinovo.numen.task.TaskRecord;
  * <p>{@code keepWithin} 是跟到多近就算到位。到位之后任务<b>休眠</b>(而不是结束):
  * 身体让给别人,目标一走远它自己就醒过来。这跟原版 {@code Goal.canUse()} 是同一
  * 个道理——休眠不是失败。
+ *
+ * <p>{@code mayAlterTerrain} 与 goto 同名同义:跟着走默认不挖不垫;跟不上时任务以失败
+ * 收场并列出要动的方块,模型(或主人)点头了再带上它重发。
  */
 public final class FollowTaskRecord extends TaskRecord {
 
@@ -38,12 +41,16 @@ public final class FollowTaskRecord extends TaskRecord {
      */
     public final java.util.UUID targetUuid;
 
+    /** 路上可以挖/垫/架桥。默认 false:跟着走不动世界。 */
+    public final boolean mayAlterTerrain;
+
     public FollowTaskRecord(String toolCallId, double keepWithin, Integer entityId,
-                            java.util.UUID targetUuid) {
+                            java.util.UUID targetUuid, boolean mayAlterTerrain) {
         super(TOOL_NAME, toolCallId, NO_DEADLINE);
         this.keepWithin = keepWithin;
         this.entityId = entityId;
         this.targetUuid = targetUuid;
+        this.mayAlterTerrain = mayAlterTerrain;
     }
 
     @Override
@@ -53,6 +60,6 @@ public final class FollowTaskRecord extends TaskRecord {
      */
     public String describe() {
         String who = entityId == null ? "你" : "实体 " + entityId;
-        return "跟着" + who + ",保持 " + (int) keepWithin + " 米";
+        return "跟着" + who + ",保持 " + (int) keepWithin + " 米" + (mayAlterTerrain ? "(可开路)" : "");
     }
 }
