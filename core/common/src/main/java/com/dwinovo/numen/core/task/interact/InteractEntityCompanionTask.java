@@ -115,7 +115,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         if (entity == player.getVehicle()) {
             if (r.button == MouseButton.LEFT) {
                 fail("you are riding the " + targetName()
-                        + " — can't hit your own vehicle; any goto steps off first",
+                        + " — can't hit your own vehicle; a goto somewhere else steps off first",
                         FailureType.UNKNOWN);
                 return TaskState.FAILED;
             }

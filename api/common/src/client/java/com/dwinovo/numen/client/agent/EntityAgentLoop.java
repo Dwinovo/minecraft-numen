@@ -1552,7 +1552,7 @@ public final class EntityAgentLoop {
      * 她这一刻骑没骑着东西。与效果同一纪律:<b>只能现挂,不能进历史</b>——上下船是
      * 随时翻转的身体事实,沉进历史就成了理直气壮的错。没骑就一个字都不发。
      * 有这一行,模型不会再对自己坐着的船发第二次 interact_entity,也知道 goto
-     * 会驾着它走或按需下船。
+     * 会驾着它走、任何要走路的动作都会自己下来。
      */
     private String ridingXml() {
         var snapshot = ClientNumenState.get(entityUuid).orElse(null);
@@ -1560,8 +1560,8 @@ public final class EntityAgentLoop {
             return "";
         }
         return "<riding>" + xml(snapshot.vehicleType()) + " (entity id " + snapshot.vehicleId()
-                + "). goto pilots a boat over water toward the target, or steps off to walk — "
-                + "no need to click the vehicle again.</riding>";
+                + "). goto pilots a boat over water toward the target; any action that needs "
+                + "walking steps off by itself — no need to click the vehicle again.</riding>";
     }
 
     static String renderEffects(ClientNumenState.Snapshot snapshot, long nowMs) {

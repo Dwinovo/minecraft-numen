@@ -269,6 +269,12 @@ public final class PlayerNav {
             failType = FailureType.TARGET_LOST;
             return Status.FAILED;
         }
+        // 步行导航驱动的是脚下的身体:坐着任何载具都先下来——乘客的行走输入对载具
+        // 无效,不在这儿下就坐着"走"到失速。全仓步行任务共用这一处,别在任务层各判各的。
+        // 放在 reached 之后:已经到位就不惊动座驾(跟主人同船漂着的 follow 不该把她甩下去)。
+        if (player.isPassenger()) {
+            player.stopRiding();
+        }
 
         // goal 与 sacred 一体拉取——两者是同一份契约
         long tCompile = NavProfiler.begin();

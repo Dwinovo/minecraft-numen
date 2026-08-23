@@ -3000,4 +3000,38 @@ public class CompanionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /**
+     * 步行即下座驾,且只有一处说了算(PlayerNav):坐在矿车里对远处的盔甲架发
+     * interact_entity,这不是 goto,任务层没有任何载具处置——她必须自己下车、走过去
+     * 把它打掉(创造模式一下即碎)。乘客的行走输入对载具无效,没有这条规则她会坐着
+     * "走"到失速。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_vehicle")
+    public static void walking_task_steps_off_vehicle(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos cartAt = helper.absolutePos(new BlockPos(3, 2, 8));
+        var cart = new net.minecraft.world.entity.vehicle.Minecart(
+                level, cartAt.getX() + 0.5, cartAt.getY(), cartAt.getZ() + 0.5);
+        level.addFreshEntity(cart);
+        BlockPos standAt = helper.absolutePos(new BlockPos(11, 2, 8));
+        var stand = new net.minecraft.world.entity.decoration.ArmorStand(
+                level, standAt.getX() + 0.5, standAt.getY(), standAt.getZ() + 0.5);
+        level.addFreshEntity(stand);
+
+        NumenPlayer companion = spawnAt(helper, "gametest_rider", new BlockPos(3, 2, 6), true);
+        helper.runAfterDelay(2, () -> {
+            companion.startRiding(cart, true);
+            TaskRecord hit = new BlockActionOps().interactEntity("left", stand.getId(), null,
+                    null, TaskDispatch.ctx("gametest-rider", companion));
+            TaskDispatch.runSync(companion, hit, reply -> {});
+        });
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(!companion.isPassenger(), "companion is still sitting in the minecart");
+            helper.assertTrue(stand.isRemoved(),
+                    "the armor stand was never reached — walking did not step off the vehicle");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }
