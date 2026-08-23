@@ -119,6 +119,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private Phase phase = Phase.COMBAT;
     private Entity target;
     private Vec3 lastTargetPosition;
+    /**
+     * 这一刻 {@link #FIELD_RADIUS} 内活着的敌对生物——<b>一刻只扫一次</b>,在 {@link #surveyField}
+     * 里;举盾、走位的躲避场都读这一份。"场上有哪些怪"各算各的,就会出现判据说打、腿说没人的局面。
+     */
+    private List<Mob> hostiles = List.of();
 
     /**
      * 上一次搜索<b>搜不出路</b>的目标。够不着是拓扑性质,不是距离性质 —— 悬崖对面三格的
@@ -230,8 +235,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * 裂出来的新 id 因此自动进场,而点名的清单一裂开就作废了。
      */
     private Battlefield surveyField() {
+        hostiles = Menace.hostilesAround(player, FIELD_RADIUS);
         List<Battlefield.Foe> foes = new ArrayList<>();
-        for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
+        for (var mob : hostiles) {
             boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
             boolean authorized = r.indiscriminate ? engaging : r.entityIds.contains(mob.getId());
             if (r.terminal(mob.getId())) {
@@ -391,7 +397,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         boolean raised = shieldRaised();
         boolean threatened = false;
-        for (var mob : Menace.hostilesAround(player, FIELD_RADIUS)) {
+        for (var mob : hostiles) {
             if (Menace.tooClose(mob, player)) {
                 threatened = true;
                 break;
@@ -615,7 +621,8 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         // 躲避场只收敌对生物:它们才有危险半径。目标本身归下面的环管——点名的猪牛鸡不是
         // 敌对生物,不在这份名单里,但照样是要走过去打的目标。"有没有目标"与"附近有没有怪"
         // 是两个问题,这里早退只看前者是否也为空:既无目标也无怪,才真的没处可站。
-        var field = Menace.hostilesAround(player, FIELD_RADIUS);
+        // 两份材料都引用本刻的判断:目标是判据选的那一只,怪是 surveyField 扫的那一份。
+        var field = hostiles;
         boolean haveTarget = target != null && !target.isRemoved();
         if (!haveTarget && field.isEmpty()) {
             return null;
