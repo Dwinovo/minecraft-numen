@@ -1,8 +1,24 @@
 plugins {
-    // 1.20.4 toolchain runs on Java 17; the modern fabric-loom-remap 1.14.x line
-    // requires Java 21, so pin loom to the 1.6 line (Java 17-compatible, MC 1.20.4).
-    // 1.20.4 uses official Mojang mappings, so the plain fabric-loom (not -remap) is correct.
+    // 1.20.1 toolchain runs on Java 17; the modern fabric-loom-remap 1.14.x line
+    // requires Java 21, so pin loom to the 1.6 line (Java 17-compatible).
+    // 1.20.1 uses official Mojang mappings, so the plain fabric-loom (not -remap) is correct.
     id 'fabric-loom' version '1.6-SNAPSHOT' apply false
     // Forge (ForgeGradle) and common (VanillaGradle) declare their plugins inline
     // in their own build.gradle, so nothing else is needed here.
+}
+
+// mod_id 因家族而异(core=numen,api=numen_api),不能放全树共享的 gradle.properties,
+// 在此按家族显式指定。api 家族同时沿用自己的版本线——发布坐标 numen-api-*-<mc> 的
+// 版本号是第三方依赖的契约,与模组本体版本(0.1.x)各走各的。
+allprojects { ext.mod_id = 'numen' }
+['api:common', 'api:fabric', 'api:forge'].each { path ->
+    project(path) {
+        version = '0.0.8-SNAPSHOT'
+        ext.mod_id = 'numen_api'
+        // 内部模块身份必须与 core 家族区分:两家子项目同名(common/fabric/forge),
+        // 若 group 也相同,Gradle 会把 project(':api:common') 依赖按"同一模块"做版本
+        // 冲突解析,直接指回 core 自己形成任务自环。发布坐标不受影响——api-common.gradle
+        // 的 publication 显式写 groupId。
+        group = 'com.dwinovo.numen.api'
+    }
 }

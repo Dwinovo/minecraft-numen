@@ -198,5 +198,71 @@ core 内嵌 api 用 **ForgeGradle jarJar**:`jarJar.enable()` + `jarJar(group,nam
 **FG6 的 jarJar 产物带 `-all` classifier** → 可分发的 Forge 单文件是 `numen-forge-1.20.4-0.0.3-all.jar`(内嵌 api),
 plain `numen-forge-1.20.4-0.0.3.jar` 是不含 api 的 reobf jar。**发布/CI 要发 `-all.jar`。**
 
-## 1.20.4 → 1.20.2 / 1.20.2 → 1.20.1
-_待移植时填写（同为 Forge/Java17，预计更小）_
+## 1.20.4 → 1.20.2 ✓（纯旋钮档）
+
+老 tag 之间 **零源码差异**,只有 `gradle.properties`:MC `1.20.2` / range `[1.20.2, 1.21)` /
+Fabric `0.91.0+1.20.2` / loader `0.15.0` / Forge `48.0.49`(+ core 三个 build.gradle 的 api 坐标 → 1.20.2)。
+
+## 1.20.2 → 1.20.1 ✓（最老支持版；Forge/Java17;双 loader 编译 + 出包通过）
+
+构建旋钮:MC `1.20.1` / range `[1.20.1, 1.21)` / Fabric `0.92.1+1.20.1` / loader `0.15.11` / Forge `47.2.30`。
+1.20.1 **早于 1.20.2 的 configuration phase 和 sprite GuiGraphics**,所以多处 API 回退(基本全在 api,core 少量)。
+
+### api ❗
+```java
+// GuiCompat shim（新文件）：1.20.1 的 GuiGraphics 没有 blitSprite(ResourceLocation,…)（sprite blit 是 1.20.2+）。
+//   自己按 PNG 头读尺寸 + mcmeta nine_slice 拼 blit。所有 g.blitSprite(sprite,…) → GuiCompat.blitSprite(g, sprite,…)（24 处/6 屏）。
+//   附带 1.20.1 屏幕回退：skin 用 ResourceLocation、mouseScrolled 3 参、renderEntityInInventory 锚点式。
+// config-phase 回退：
+new NumenPlayer(server, level, profile, ClientInformation.createDefault()) → new NumenPlayer(server, level, profile)
+placeNewPlayer(conn, player, CommonListenerCookie.createInitial(profile)) → placeNewPlayer(conn, player)   // 2 参
+CompanionRegistry: 去 SavedData.Factory → getDataStorage().computeIfAbsent(::load, ::new, "numen_companions")
+FakeConnection: 换 1.20.1 版本体（send(Packet, PacketSendListener) 两参,无 runOnceConnected/flushChannel）
+// mixin 换目标：ServerCommonPacketListenerImpl（config-phase 类，1.20.1 没有）→ ServerGamePacketListenerImpl；改 mixins.json
+// Forge 网络：Forge 47.x classic —— NetworkRegistry.newSimpleChannel（不是 ChannelBuilder）+ registerMessage + NetworkEvent.Context
+```
+
+### ❗ 最大的坑:`CustomPacketPayload` 1.20.1 不存在
+`net.minecraft.network.protocol.common.custom.CustomPacketPayload` 是 1.20.2 configuration-phase 引入的,1.20.1 没有。
+api 引入 mod-local 接口 `com.dwinovo.numen.network.NumenPayload`(`ResourceLocation id()` + `write(FriendlyByteBuf)`),
+把 api 的 13 个 payload + `INetworkChannel` + 两端通道 + **core 的 3 个 net payload**(ExecuteTool/TaskResult/CancelTasks)
+的 `implements CustomPacketPayload` 全换成 `implements NumenPayload`(`id()/write()/static read()` 不变)。
+
+### core ❗
+```java
+// 除上面的 payload → NumenPayload 外：
+// RecipeHolder 1.20.1 不存在,getRecipes() 直接返回 Recipe<?>（QueryExtraTools）：
+for (RecipeHolder<?> h : mgr.getRecipes()) { Recipe<?> r = h.value(); … }
+   → for (Recipe<?> r : mgr.getRecipes()) { … }   // 去掉 import RecipeHolder
+```
+
+### 1.20.1 落地实录(2026-08 并仓迁移新踩的坑,1.20.2/1.20.4 分支照抄)❗
+```groovy
+// ① 同仓 api 的 mixin 在 Forge 开发运行里不会自动注册：api 以源码集进运行,
+//    没有 mod jar 的 MixinConfigs MANIFEST 项 → BoatAccessor 等运行期根本没打进去
+//    （表现为 Boat cannot be cast to BoatAccessor,载具/穿门两条 GameTest 挂）。
+//    core/forge 每个 run 显式挂（发行物不受影响,api jar MANIFEST 已带 MixinConfigs,jarJar 进 core）：
+minecraft.runs.configureEach {
+    args '--mixin.config', 'numen_api.mixins.json'
+    args '--mixin.config', 'numen_api.forge.mixins.json'
+}
+```
+```groovy
+// ①b FG6 双输出共目录的任务竞态：api/forge 把 classes+resources 重定向进同一个
+//    build/sourcesSets/main，跨项目 classpath 的 builtBy 只挂 compileJava →
+//    :core:forge:compileJava 与 :api:forge:processResources 写/读同目录无依赖边，
+//    Gradle 8 验证器看调度顺序间歇性报 implicit_dependency 把构建直接判死。
+//    产出侧一行治好所有消费方（api/forge/build.gradle 重定向块之后）：
+tasks.named('compileJava') { dependsOn tasks.named('processResources') }
+```
+```java
+// ② GameTest 夹具的三个 1.20.1 数据形态（1.21 形态写进去就是静默空数据）：
+//    旗帜花纹：Patterns 短哈希 + 染料序数（不是 patterns + 注册名/颜色名）
+layer.putString("Pattern", "ts"); layer.putInt("Color", 14);   // stripe_top / 红
+//    物品 NBT 的数量是 byte "Count"（int "count" 读出来是空叠）：
+stack.putByte("Count", (byte) 1);
+//    潜影盒内容在 tag.BlockEntityTag.Items（不是 components.minecraft:container）,
+//    自定义名在 tag.display.Name。
+// ③ 1.20.1 空花纹也会写出 Patterns:[] —— 断言"花纹存活"必须查列表非空,光查键名会假绿：
+!saved.getList("Patterns", Tag.TAG_COMPOUND).isEmpty()
+```

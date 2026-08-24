@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.dwinovo.numen.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "refmap": "numen_api.refmap.json",
+  "mixins": [
+    "BoatAccessor",
+    "ChunkMapCompanionMixin",
+    "MenuDataSlotsAccessor",
+    "MixinEntityVehicleControl",
+    "MixinServerGamePacketListener"
+  ],
+  "client": [
+    "ChatComponentAccessor",
+    "GuiIconsAccessor",
+    "MixinKeyboardInput",
+    "MixinPlayerRenderer"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

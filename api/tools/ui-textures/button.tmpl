@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 24px; height: 20px; overflow: hidden; background: #00000000; }
+      /* Cottage button — nine_slice source (3px border = corners, middle stretches). FILL set by token. */
+      .btn { position: absolute; inset: 0; background: __FILL__; border: 3px solid #352818; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="1"
+         data-width="24" data-height="20"
+         style="position: relative; width: 24px; height: 20px; overflow: hidden;">
+      <div class="clip" data-start="0" data-duration="1" data-track-index="1" style="position: absolute; inset: 0;">
+        <div class="btn"></div>
+      </div>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+    </script>
+  </body>
+</html>

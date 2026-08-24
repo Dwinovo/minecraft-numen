@@ -34,17 +34,8 @@ tasks.withType(JavaCompile).configureEach {
 
 repositories {
     mavenCentral()
-    // Published numen-api engine. Local file repo first (fast iteration on this
-    // machine after `gradlew publish`); the public raw maven is the fallback so
-    // fresh clones / other people resolve it too.
-    maven {
-        name = 'localNumen'
-        url = uri(findProperty('local_maven_url') ?: 'file:///D:/01_Projects/numen-maven')
-    }
-    maven {
-        name = 'numenRemote'
-        url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main'
-    }
+    // numen-api 已并入本仓 api/ 子树,以 project 依赖直连——本地 maven 中转与
+    // SNAPSHOT 缓存补丁均已随之退役。
     // https://docs.gradle.org/current/userguide/declaring_repositories.html#declaring_content_exclusively_found_in_one_repository
     exclusiveContent {
         forRepository {
@@ -59,14 +50,6 @@ repositories {
         name = 'BlameJared'
         url = 'https://maven.blamejared.com'
     }
-}
-
-// numen-api is consumed as a SNAPSHOT during co-development. Gradle caches
-// changing modules for 24h by default; drop that to 0 so a freshly republished
-// numen-api is re-resolved (and Loom re-remaps it) on the very next build —
-// no more stale-jar surprises when iterating on the engine.
-configurations.all {
-    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
 }
 
 sourcesJar {
@@ -107,8 +90,8 @@ processResources {
             'license'                      : license,
             'description'                  : project.description,
             'forge_version'                : forge_version,
-            'forge_loader_version_range'   : forge_loader_version_range,
             'forge_version_range'          : forge_version_range,
+            'forge_loader_version_range'   : forge_loader_version_range,
             'credits'                      : credits,
             'java_version'                 : java_version
     ]

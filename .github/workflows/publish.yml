@@ -53,27 +53,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [ -d neoforge ]; then
+          if [ -d core/neoforge ]; then
             echo "name=neoforge"             >> "$GITHUB_OUTPUT"
-            echo "datagen=:neoforge:runData" >> "$GITHUB_OUTPUT"
-            echo "build=:neoforge:build"     >> "$GITHUB_OUTPUT"
-          elif [ -d forge ]; then
+            echo "datagen=:core:neoforge:runData" >> "$GITHUB_OUTPUT"
+            echo "build=:core:neoforge:build"     >> "$GITHUB_OUTPUT"
+          elif [ -d core/forge ]; then
             echo "name=forge"          >> "$GITHUB_OUTPUT"
-            # No :forge:Data - the forge jar packages the Fabric module's datagen output
-            # (identical providers over common tag data; FML can't boot the Data run
-            # without the api mod on the FG6 dev classpath).
-            echo "datagen="            >> "$GITHUB_OUTPUT"
-            echo "build=:forge:build"  >> "$GITHUB_OUTPUT"
+            echo "datagen=:core:forge:Data" >> "$GITHUB_OUTPUT"
+            echo "build=:core:forge:build"  >> "$GITHUB_OUTPUT"
           else
             echo "No forge/ or neoforge/ subproject found on this branch" >&2
             exit 1
           fi
 
+      # api 的语言文件也是生成出来的(ModLanguageData),不跑就打出一个没有任何翻译的包。
       - name: Run data generation
-        run: ./gradlew :fabric:runDatagen ${{ steps.loader.outputs.datagen }} --no-daemon
+        run: ./gradlew :api:fabric:runDatagen :api:neoforge:runData :core:fabric:runDatagen ${{ steps.loader.outputs.datagen }} --no-daemon
 
       - name: Build with Gradle
-        run: ./gradlew :fabric:build ${{ steps.loader.outputs.build }} --no-daemon
+        run: ./gradlew :core:fabric:build ${{ steps.loader.outputs.build }} --no-daemon
 
       - name: Prepare publish metadata
         id: meta
@@ -85,7 +83,8 @@ jobs:
             grep -E "^${key}=" gradle.properties | head -n1 | cut -d= -f2-
           }
 
-          mod_id="$(read_prop mod_id)"
+          # mod_id 随并仓迁去了根 build.gradle(按 core/api 家族指定),properties 里已无此键
+          mod_id="numen"
           mod_version="$(read_prop version)"
           minecraft_version="$(read_prop minecraft_version)"
           second_loader="${{ steps.loader.outputs.name }}"
@@ -117,8 +116,8 @@ jobs:
               | LC_ALL=C sort | head -n1
           }
 
-          fabric_file="$(find_loader_jar fabric)"
-          second_file="$(find_loader_jar "${second_loader}")"
+          fabric_file="$(find_loader_jar core/fabric)"
+          second_file="$(find_loader_jar "core/${second_loader}")"
 
           if [ -z "${fabric_file}" ] && [ -z "${second_file}" ]; then
             echo "No publishable loader jars found"
@@ -204,7 +203,7 @@ jobs:
           version-type: ${{ steps.meta.outputs.version_type }}
           github-prerelease: ${{ steps.meta.outputs.github_prerelease }}
 
-          # 同 Fabric 步骤:CF 环境组必选(Forge 的 toml 无环境字段,必须显式)。
+          # 同 Fabric 步骤:CF 环境组必选(NeoForge/Forge 的 toml 无环境字段,必须显式)。
           environment: client|server
 
           # TODO: same CurseForge project id as the Fabric step.

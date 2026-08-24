@@ -1,0 +1,191 @@
+plugins {
+    id 'multiloader-loader'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7-SNAPSHOT'
+}
+
+// Forge 1.20.1 运行期是 SRG 名,而 mixin 源码按官方名写——必须生成 refmap 把
+// @Accessor("nibble") 之类的字符串引用翻译过去,否则运行期找不到字段直接崩。
+// (Fabric 那边由 loom 在 remapJar 期改写注解,机制不同,见 fabric/build.gradle。)
+mixin {
+    add(sourceSets.main, "${mod_id}.refmap.json")
+    config("${mod_id}.mixins.json")
+}
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+    copyIdeResources = true // Calls processResources when in dev
+
+    // Automatically enable forge AccessTransformers if the file exists.
+    // This location is hardcoded in Forge and can not be changed.
+    def at = file('src/main/resources/META-INF/accesstransformer.cfg')
+    if (at.exists()) {
+        accessTransformer = at
+    }
+
+    runs {
+        client {
+            workingDirectory file('runs/client')
+            ideaModule "${rootProject.name}.core.${project.name}.main"
+            taskName 'Client'
+            mods {
+                modClientRun { source sourceSets.main }
+                modClientApiRun {
+                    source project(':api:forge').sourceSets.main
+                    source project(':ai').sourceSets.main
+                    source project(':ui').sourceSets.main
+                }
+            }
+            // See the data run: the api mod's SRG refmap vs. official-named runtime.
+            property 'mixin.env.disableRefMap', 'true'
+        }
+        server {
+            workingDirectory file('runs/server')
+            ideaModule "${rootProject.name}.core.${project.name}.main"
+            taskName 'Server'
+            mods {
+                modServerRun { source sourceSets.main }
+                modServerApiRun {
+                    source project(':api:forge').sourceSets.main
+                    source project(':ai').sourceSets.main
+                    source project(':ui').sourceSets.main
+                }
+            }
+            property 'mixin.env.disableRefMap', 'true'
+        }
+        data {
+            workingDirectory file('runs/data')
+            ideaModule "${rootProject.name}.core.${project.name}.main"
+            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+            taskName 'Data'
+            mods {
+                modDataRun { source sourceSets.main }
+                modDataApiRun {
+                    source project(':api:forge').sourceSets.main
+                    source project(':ai').sourceSets.main
+                    source project(':ui').sourceSets.main
+                }
+            }
+            // In-repo sibling projects are official-named in dev, and their mixin sources
+            // are written against official names too — skipping the refmap makes them apply.
+            property 'mixin.env.disableRefMap', 'true'
+        }
+        gameTestServer {
+            workingDirectory file('runs/gametestserver')
+            ideaModule "${rootProject.name}.core.${project.name}.main"
+            taskName 'GameTestServer'
+            mods {
+                modGameTestServerRun { source sourceSets.main }
+                modGameTestServerApiRun {
+                    source project(':api:forge').sourceSets.main
+                    source project(':ai').sourceSets.main
+                    source project(':ui').sourceSets.main
+                }
+            }
+            property 'mixin.env.disableRefMap', 'true'
+            // 只跑本模组命名空间下的用例,别把原版那几百个也拖进来。
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
+    }
+}
+
+// 所有运行配置都指向仓库内的 SNBT 模板目录:无头跑批用,开发客户端里
+// /test run <用例> 现场围观也用(见 CompanionGameTests 静态块)。
+minecraft.runs.configureEach {
+    property 'numen.gametest.structures', file('gameteststructures').absolutePath
+    // api 以同仓源码集进运行(不是带 MANIFEST 的 mod jar),它的 mixin 配置没人替它
+    // 声明——发行物里由 api jar 的 MixinConfigs 清单项接手,开发运行在这里显式挂。
+    args '--mixin.config', 'numen_api.mixins.json'
+    args '--mixin.config', 'numen_api.forge.mixins.json'
+}
+
+// 跑批世界必须是<b>超平坦</b>,而且每次从头生成。
+//
+// 本 loader 的无头跑批入口是普通专用服务器,不建世界就默认开一个正常主世界:
+// 用例场地被埋在深板岩里,四周还散布着天然矿脉。而用例里"种四块金矿石然后
+// 让她挖掉"这类断言默认场地周围没有同种方块——搜索半径一撑开就够到天然矿,
+// 免耗材画像又允许垫柱上行,于是同伴垫着方块爬五十格去挖别人的矿,种下的
+// 那四块一块没动。高版本的跑批入口自带超平坦世界,不会碰到这一出。
+//
+// 这里把世界配平,而不是去改用例:场地悬空、没有天然矿、没有结构,断言才
+// 是在测它自己声称要测的东西。level.dat 会记住生成器,所以旧世界一并删掉。
+tasks.matching { it.name == 'GameTestServer' }.configureEach {
+    doFirst {
+        def runDir = file('runs/gametestserver')
+        runDir.mkdirs()
+        delete fileTree(dir: new File(runDir, 'world'))
+        new File(runDir, 'server.properties').text = [
+                'level-type=minecraft\\:flat',
+                'generate-structures=false',
+                'level-seed=numen',
+                'spawn-monsters=false',
+                'spawn-npcs=false',
+                'spawn-animals=false',
+                'online-mode=false',
+                'sync-chunk-writes=false',
+        ].join('\n') + '\n'
+        new File(runDir, 'eula.txt').text = 'eula=true\n'
+    }
+}
+
+// Package this module's own datagen output (`./gradlew :core:forge:Data` writes it there).
+sourceSets.main.resources.srcDir 'src/generated/resources'
+sourceSets.main.resources.exclude '.cache/**'
+
+// Bundle numen-api into core's Forge jar (Jar-in-Jar).
+jarJar.enable()
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // refmap 由 mixin 注解处理器在编译期生成——AP 必须显式挂上,否则 mixin 照样编译
+    // 通过、jar 照样打出来,只是里面没有 refmap,运行期才炸(与 api 的 forge 模块同款声明)。
+    annotationProcessor 'org.spongepowered:mixin:0.8.5-SNAPSHOT:processor'
+    // common 用到 MixinExtras;Forge 运行期自带,dev 编译期需要在 classpath 上。
+    compileOnly 'io.github.llamalad7:mixinextras-common:0.3.5'
+    annotationProcessor 'io.github.llamalad7:mixinextras-common:0.3.5'
+    // The numen-api engine, now a sibling ForgeGradle project in this build (same official
+    // mappings in dev). compileOnly: the api classes are provided at runtime by the bundled
+    // numen-api mod (the runs above load it from the sibling source sets).
+    compileOnly project(':api:forge')
+    // Bundle the Forge build of the api into META-INF/jarjar/ so one file ships both mods.
+    // transitive=false: only the api jar is nested — its Forge/Minecraft deps are provided
+    // by the loader at runtime and must NOT be embedded (that would bloat the jar to ~94MB).
+    jarJar(project(':api:forge')) {
+        transitive = false
+        jarJar.ranged(it, '[0.0.0,)')
+    }
+}
+
+jar.finalizedBy('reobfJar')
+// jarJar 打的是 :api:forge 的 build/libs 产物;必须等它被 reobfJar 原地改写成 SRG 之后再打包,
+// 否则嵌进去的是 official 名的 dev jar,线上加载直接崩。finalizer 不构成消费方的依赖边,这里补上。
+tasks.matching { it.name == 'jarJar' }.configureEach {
+    dependsOn ':api:forge:reobfJar'
+}
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'forge')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant ->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'forge')
+            }
+        }
+    }
+}
+
+// ForgeGradle quirk: classes + resources share one output dir so the dev launcher and the
+// mixin refmap see them together.
+sourceSets.each {
+    def dir = layout.buildDirectory.dir("sourcesSets/$it.name")
+    it.output.resourcesDir = dir
+    it.java.destinationDirectory = dir
+}
