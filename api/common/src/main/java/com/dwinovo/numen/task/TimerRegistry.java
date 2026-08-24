@@ -76,8 +76,11 @@ public final class TimerRegistry extends SavedData {
             Codec.LONG.optionalFieldOf("nextId", 1L).forGetter(r -> r.nextId)
     ).apply(i, TimerRegistry::new));
 
-    // 1.20.1 predates SavedData.Factory and the HolderLookup-aware save/load; register via
-    // the classic computeIfAbsent(loadFn, factory, name); CODEC (de)serialisation is ours.
+    // 1.20.2 has SavedData.Factory (pre-HolderLookup save/load shape); register via the
+    // Factory overload and (de)serialise through CODEC ourselves.
+    private static final SavedData.Factory<TimerRegistry> FACTORY = new SavedData.Factory<>(
+            TimerRegistry::new, TimerRegistry::load,
+            net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 
     private final Map<String, Timer> timers = new LinkedHashMap<>();
     private long nextId;
@@ -93,7 +96,7 @@ public final class TimerRegistry extends SavedData {
     }
 
     public static TimerRegistry get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(TimerRegistry::load, TimerRegistry::new, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
     }
 
     // ---- 定 / 查 / 撤 ----

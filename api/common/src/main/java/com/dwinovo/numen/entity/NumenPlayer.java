@@ -4,6 +4,7 @@ import com.mojang.authlib.GameProfile;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -86,8 +87,9 @@ public final class NumenPlayer extends ServerPlayer {
      */
     private java.util.Set<String> pausedReflexes = java.util.Set.of();
 
-    public NumenPlayer(MinecraftServer server, ServerLevel level, GameProfile profile) {
-        super(server, level, profile);   // 1.20.1: no ClientInformation (pre-configuration-phase)
+    public NumenPlayer(MinecraftServer server, ServerLevel level, GameProfile profile,
+                        ClientInformation clientInformation) {
+        super(server, level, profile, clientInformation);
     }
 
     /**

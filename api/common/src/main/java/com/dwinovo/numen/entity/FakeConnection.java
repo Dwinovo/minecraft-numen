@@ -37,6 +37,12 @@ import java.net.SocketAddress;
  * keep-alive timeout is neutralised via the no-op {@code disconnect} (a fake
  * player never answers keep-alive). Lifecycle is governed by
  * {@code CompanionLifecycle}, not by connection state.
+ *
+ * <p>1.20.2 introduced the configuration phase: the packet codec now lives in
+ * channel ATTRIBUTES ({@code ATTRIBUTE_*_PROTOCOL}), and
+ * {@code ServerGamePacketListenerImpl}'s ctor reads them immediately — a bare
+ * embedded channel NPEs there, so both attributes are seeded with the PLAY
+ * codec below.
  */
 @com.dwinovo.numen.api.Internal
 public final class FakeConnection extends Connection {
@@ -46,7 +52,13 @@ public final class FakeConnection extends Connection {
         // Registering this Connection (a netty inbound handler) as the embedded
         // channel's handler fires channelActive → sets this.channel, so the
         // pipeline setup inside placeNewPlayer has a channel to work on.
-        new EmbeddedChannel(this);
+        EmbeddedChannel ch = new EmbeddedChannel(this);
+        // 1.20.2 起协议编解码挂在 channel attribute 上,placeNewPlayer →
+        // ServerGamePacketListenerImpl 构造即读取,不种直接 NPE。
+        ch.attr(Connection.ATTRIBUTE_SERVERBOUND_PROTOCOL)
+                .set(net.minecraft.network.ConnectionProtocol.PLAY.codec(PacketFlow.SERVERBOUND));
+        ch.attr(Connection.ATTRIBUTE_CLIENTBOUND_PROTOCOL)
+                .set(net.minecraft.network.ConnectionProtocol.PLAY.codec(PacketFlow.CLIENTBOUND));
     }
 
     /** 同伴连接对外报的地址。见 {@link #getRemoteAddress}。 */

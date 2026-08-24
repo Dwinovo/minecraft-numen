@@ -9,7 +9,7 @@
     "ChunkMapCompanionMixin",
     "MenuDataSlotsAccessor",
     "MixinEntityVehicleControl",
-    "MixinServerGamePacketListener"
+    "MixinServerCommonPacketListener"
   ],
   "client": [
     "ChatComponentAccessor",

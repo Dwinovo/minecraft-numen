@@ -120,8 +120,11 @@ public final class CompanionRegistry extends SavedData {
             Codec.STRING.optionalFieldOf("worldId", "").forGetter(d -> d.worldId)
     ).apply(i, CompanionRegistry::new));
 
-    // 1.20.1 predates SavedData.Factory and the HolderLookup-aware save/load; register via
-    // the classic computeIfAbsent(loadFn, factory, name); CODEC (de)serialisation is ours.
+    // 1.20.2 has SavedData.Factory (pre-HolderLookup save/load shape); register via the
+    // Factory overload and (de)serialise through CODEC ourselves.
+    private static final SavedData.Factory<CompanionRegistry> FACTORY = new SavedData.Factory<>(
+            CompanionRegistry::new, CompanionRegistry::load,
+            net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 
     @Override
     public CompoundTag save(CompoundTag tag) {
@@ -150,7 +153,7 @@ public final class CompanionRegistry extends SavedData {
     }
 
     public static CompanionRegistry get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(CompanionRegistry::load, CompanionRegistry::new, "numen_companions");
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_companions");
     }
 
     /**

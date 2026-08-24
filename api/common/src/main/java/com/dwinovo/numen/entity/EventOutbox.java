@@ -45,8 +45,11 @@ public final class EventOutbox extends SavedData {
                     .xmap(EventOutbox::fromEntries, EventOutbox::toEntries)
                     .fieldOf("outboxes").codec();
 
-    // 1.20.1 predates SavedData.Factory and the HolderLookup-aware save/load; register via
-    // the classic computeIfAbsent(loadFn, factory, name); CODEC (de)serialisation is ours.
+    // 1.20.2 has SavedData.Factory (pre-HolderLookup save/load shape); register via the
+    // Factory overload and (de)serialise through CODEC ourselves.
+    private static final SavedData.Factory<EventOutbox> FACTORY = new SavedData.Factory<>(
+            EventOutbox::new, EventOutbox::load,
+            net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 
     @Override
     public CompoundTag save(CompoundTag tag) {
@@ -90,7 +93,7 @@ public final class EventOutbox extends SavedData {
     }
 
     public static EventOutbox get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(EventOutbox::load, EventOutbox::new, "numen_event_outbox");
+        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_event_outbox");
     }
 
     /** 这只同伴的暂存队列(没有则建)。 */
