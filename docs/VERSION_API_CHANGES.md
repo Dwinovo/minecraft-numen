@@ -90,17 +90,95 @@ registryAccess().registryOrThrow(Registries.STRUCTURE)  → registryAccess().loo
    需 `import net.minecraft.world.item.crafting.PlacementInfo;`
 波及：`LookupRecipeTool`（主要）。
 
-### Client / UI 渲染（待移植时逐条补全）
-老分支这一档还改了下列客户端文件，多为渲染签名（GuiGraphics / 文本测量 / 颜色）调整，
-移植到新架构的 `client/` 时按编译错误对照补：
-`NumenScreen`(老 `TulpaScreen`)、`Dropdown`、`ProviderDropdown`、`FlatEditBox`、
-`SimpleButton`、`PathVizRenderer`、`NumenToasts`。
-<!-- TODO: 实际移植时把每个渲染 API 变动写到这里 -->
+### Client / UI 渲染（并仓迁移时逐条验证）
+1. **blitSprite 家族带 RenderType 函数首参**：
+   ```java
+   g.blitSprite(SPRITE, x, y, w, h)
+     → g.blitSprite(RenderType::guiTextured, SPRITE, x, y, w, h)
+   ```
+   波及所有 GUI sprite 绘制（`NumenScreen`、`ChatView`、`ChatInputBar`、`ItemsView`、
+   `SimpleButton`、`FlatEditBox` 等）。`GuiGraphics.setColor` 没了——染色改走
+   blitSprite 的末位 ARGB tint 重载。
+2. **自定义 core shader 管线重写**（RoundRect 圆角 SDF）：`ShaderInstance` 没了，
+   程序是一个 `ShaderProgram` **键**（configId 带 `core/` 前缀，POSITION_COLOR +
+   `ShaderDefines.EMPTY`），编译由 ShaderManager 随资源加载完成——它扫描资源树里
+   全部 `shaders/` 配置，**无需加载器注册**：
+   - fabric 的 `CoreShaderRegistrationCallback` 已删,直接删注册块；
+   - NeoForge `RegisterShadersEvent.registerShader(PROGRAM)` 只登记键做预热；
+   - 每次绘制 `CompiledShaderProgram sh = RenderSystem.setShader(PROGRAM)` 键查表取
+     编译实例（null → 降级方角）；shader json 去掉 `blend`/`attributes` 段,
+     vertex/fragment 路径带 `core/` 前缀,vsh/fsh 本体不动。
+3. **输入容器拆分**：`net.minecraft.client.player.Input` → `ClientInput`
+   （可变冲量 + 不可变 `net.minecraft.world.entity.player.Input` 按键记录 `keyPresses`,
+   整条重建而非逐字段赋值）；`KeyboardInput.tick()` 不再收潜行参数——潜行减速由
+   `LocalPlayer.aiStep` 在 `input.tick()` 之后自己乘。波及 `MixinKeyboardInput`、
+   `CompanionWheelScreen.feedMovement`。
+4. **PlayerFaceRenderer** 的 ResourceLocation 版签名补 `(hat, upsideDown, tint)`：
+   `draw(g, face, x, y, size)` → `draw(g, face, x, y, size, true, false, -1)`（原版默认）。
+5. **世界渲染**：`LevelRenderer.renderLineBox` → `ShapeRenderer.renderLineBox`
+   （`net.minecraft.client.renderer.ShapeRenderer`）；`getMinBuildHeight/getMaxBuildHeight`
+   → `getMinY/getMaxY`（PathDebugRenderer）。
+6. **客户端 reload listener（NeoForge）**：`RegisterClientReloadListenersEvent.registerReloadListener(l)`
+   → `AddClientReloadListenersEvent.addListener(ResourceLocation, l)`（带键）。
+7. **同构负结果**：SpeechBubble/顶点链（`addVertex().setColor().setUv().setLight()`）、
+   `GuiGraphics.fill/drawString`、文本测量、`Tesselator.begin/BufferUploader.drawWithShader`
+   均不动。
 
 ### 其它
-`BlockDigger`、`NavSnapshot`、`CachedNavView`、`ScanBlocksJob`、`EquipCompanionTask`、
-`ShootCompanionTask`、`EatCompanionTask`、`InteractAtTaskRecord` 有零星签名微调（各 1–4 行）。
-<!-- TODO: 移植时确认并记录 -->
+- `getMinBuildHeight/getMaxBuildHeight` → `getMinY/getMaxY` 全面改名
+  （**语义变了：getMaxY 含端 = 旧 getMaxBuildHeight − 1**;含自家 NavView 接口与测试
+  FakeView 一并跟随改名）；`getMinSection` → `getMinSectionY`（语义不变）。
+- `Direction.getNormal()` → `getUnitVec3i()`；`Direction.getNearest(x,y,z)` 需补
+  fallback 参：`getNearest(dx, 0, dz, Direction.NORTH)`。
+- `Entity.spawnAtLocation(stack)` → `spawnAtLocation(serverLevel, stack)`。
+- `ItemCooldowns.isOnCooldown(Item)` → `isOnCooldown(ItemStack)`（冷却按组件分组）。
+- `EntityType.create(level)` / `create(nbt, level)` 补 `EntitySpawnReason`
+  （结构/蓝图放实体用 `STRUCTURE`,与原版 StructureTemplate 同路）。
+- `BlockEntity.onlyOpCanSetNbt()` 挪到 **BlockEntityType** 上：`be.getType().onlyOpCanSetNbt()`。
+- `Block.getCloneItemStack(level, pos, state)`（public）变 protected 四参；公开入口在
+  `BlockStateBase`：`state.getCloneItemStack(level, pos, includeData)`。
+- `Ingredient`：`getItems()`(ItemStack[]) → `items()`(Stream<Holder<Item>>)；
+  `Ingredient.EMPTY` 已删（空格位在 shaped 里是 `Optional.empty()`）。
+- 服务端**没有按类型取配方表的公开口**（`RecipeManager.recipeMap()` 非 public）,
+  按类型枚举只能 `recipeAccess().getRecipes()` 全量遍历 + instanceof 过滤。
+- `Recipe.getResultItem(registries)` 已删；枚举产出改空输入 `assemble`
+  （shaped/shapeless 用 `CraftingInput.EMPTY`,熔炼/切石用 `new SingleRecipeInput(EMPTY)`,
+  null/异常折 EMPTY——RecipeProbe 封装）。`AbstractCookingRecipe` 改继承
+  `SingleItemRecipe`（`input()`/`cookingTime()`）；`SmithingRecipe` 有了
+  `template/base/additionIngredient()` 的 Optional getter（本分支不需要,仅记录）。
+
+### 1.21.4 落地实录（并仓迁移）
+2026-08 从 1.21.1 @ b550494c 整树落底后的增量,只记上面没有的新坑：
+
+- **GameTest 相对坐标基准变了**❗：1.21.1 的 `helper.absolutePos(rel)` 以**结构方块位**
+  起算（内容首层 = rel y1）；1.21.2+ 改以**内容原点**起算（内容首层 = rel y0）。
+  按旧约定写的用例整体"高一格"——门悬空（脚下空、头顶门）、沉地水凸出地面、生成点
+  悬空坠落,红的全是依赖地板关系的用例（门/攀爬/水桶/放船 5 条）,其余用例内部
+  自洽照样绿,极具迷惑性。修法：所有 SNBT 模板底部垫一层（size y+1、data 整体 y+1、
+  原 y0 层复刻为新底层）,恢复 rel y1=地板约定,用例源码一行不动。
+- **冻结注册表拒绝直写标签**：单测夹具的 `MappedRegistry.bindTags(map)` 在 1.21.4 是
+  `bindTag`（逐条）,且冻结后走 `validateWrite` 直接抛。原版数据包加载对冻结注册表
+  走 `prepareTagReload(new TagLoader.LoadResult<>(registryKey, map)).apply()`——夹具
+  改走同一条路。症状同样迷惑：`@BeforeAll` 吞异常置 booted=false,多数类静默跳过
+  （核对 skipped 数!）,个别类的 `@AfterEach` 没有 assume 护栏才炸出 NPE。
+- **船族拆层级**：`Boat` 拆成 `AbstractBoat`（共用桨物理/输入字段/`controlBoat`/`setInput`）
+  ← `Boat`/`Raft`/`AbstractChestBoat`。1.21.1 `instanceof Boat`（涵盖木筏、箱船）的语义
+  对应本代 `AbstractBoat`——BoatAccessor mixin 目标、驾驶/上下船的类型判断全部上移;
+  每种木船各自成 EntityType（`EntityType.OAK_BOAT` 等）,`new Boat(level,x,y,z)` 位置
+  构造器没了,生成走 `create(level, reason)` + `setInitialPos`（Minecart 同）。
+- **NeoForge datagen**：run type `data()` → `clientData()`（MDG 拆分）；
+  `GatherDataEvent` → `GatherDataEvent.Client`；`BlockTagsProvider` 构造器去掉
+  ExistingFileHelper 参（`neoforge.common.data.ItemTagsProvider` 本代仍没有,继续用
+  vanilla 的）。
+- **运行时库版本**：gson 2.10.1 → 2.11.0,slf4j-api 2.0.9 → 2.0.16（ai 模块声明跟随）。
+- **同构负结果**（核实过不动的面）：FakeConnection/CommonListenerCookie/`placeNewPlayer`
+  假玩家生成链、SavedData、ChunkMap mixin 注入点、`Entity.isControlledByLocalInstance`
+  载具权威开关（travel 的门与 1.21.1 同構,vehicle 三用例实证）、GameTest 仍是注解制、
+  附魔/数据组件/StreamCodec/ResourceLocation 工厂、SpeechBubble 顶点链、Fabric
+  `MixinSoundEngine` 的 `SoundBufferLibrary.getStream` INVOKE 注入点（vanilla 1.21.4
+  仍无 SoundInstance 官方钩子）。SNBT 夹具 DataVersion 3955 由 DFU 升到 4189 无恙,
+  方块/物品名无需改。
+- 验收数字：单测 867 全绿（0 跳过）,gametest 65/65 连续 3 轮全绿。
 
 ---
 
