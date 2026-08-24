@@ -71,19 +71,6 @@ public final class PlayerInv {
         return -1;
     }
 
-    /** Remove up to {@code max} of {@code item}; returns how many were removed. */
-    public static int remove(Inventory inv, Item item, int max) {
-        int removed = 0;
-        for (int i = 0; i < inv.getContainerSize() && removed < max; i++) {
-            ItemStack s = inv.getItem(i);
-            if (s.isEmpty() || !s.is(item)) continue;
-            int take = Math.min(s.getCount(), max - removed);
-            s.shrink(take);
-            removed += take;
-        }
-        inv.setChanged();
-        return removed;
-    }
 
     /**
      * Add {@code stack} to the inventory; returns whatever didn't fit (empty if
