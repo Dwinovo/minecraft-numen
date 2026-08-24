@@ -198,5 +198,115 @@ core 内嵌 api 用 **ForgeGradle jarJar**:`jarJar.enable()` + `jarJar(group,nam
 **FG6 的 jarJar 产物带 `-all` classifier** → 可分发的 Forge 单文件是 `numen-forge-1.20.4-0.0.3-all.jar`(内嵌 api),
 plain `numen-forge-1.20.4-0.0.3.jar` 是不含 api 的 reobf jar。**发布/CI 要发 `-all.jar`。**
 
-## 1.20.4 → 1.20.2 / 1.20.2 → 1.20.1
-_待移植时填写（同为 Forge/Java17，预计更小）_
+### 1.20.4 落地实录(并仓迁移,1.20.1 树向上走两档时新踩的)❗
+
+只记本次新碰到的;上面各节已有的(config-phase、CustomPacketPayload、GuiCompat、
+RecipeHolder、ChannelBuilder)反着用即可,不重复。
+
+**① Forge 49 的 dev 运行会为模块层做 JPMS 校验**——并仓布局特有的死局:runs 的
+mods 块把 ai/ui 源码集聚进 numen_api 模组模块,而 api 的 `api project(':ai')`
+又把 numen-ai.jar 拖上运行 classpath 当自动模块,同包双模块直接拒启
+(`ResolutionException: Modules numen_api and numen.ai.SNAPSHOT export package …`)。
+Forge 47(1.20.1)没有这道校验,同一份配置好好的。修法在 api/forge 与 core/forge:
+```groovy
+configurations.named('runtimeClasspath') {
+    exclude module: 'ai'   // 兄弟工程 group 与本模块不同——带 group 的规则匹配不上,按 module 名来
+    exclude module: 'ui'
+}
+```
+类经 MOD_CLASSES(源码集输出)进运行一个不少;编译与打包不受影响。
+排查提示:FG6 的 MinecraftRunTask 在**任务动作里**才组装 classpath,配置期改
+`JavaExec.classpath` 是无效的;真实 java 命令行用 `--info` 抓。
+
+**② gametest 注解与模板管线整套换**(Forge 49 ≠ 47):
+- `PrefixGameTestTemplate` 没了,拆成 `GameTestDontPrefix`/`GameTestPrefix`;且本代把
+  批次名与模板名交给同一套前缀逻辑(`GameTestHolder` 的值同时前缀到两者)。解法不用
+  新注解:**模板名写 `numen:floor16`(带冒号直接按完整路径用、跳过前缀)**,批次照常
+  前缀以满足 `forge.enabledGameTestNamespaces` 筛选。
+- 模板一律问 `StructureTemplateManager` 要;"测试模板目录"这个来源只在
+  `SharedConstants.IS_RUNNING_IN_IDE` 为真时登记,无头跑批里是假的(1.20.1 的
+  `StructureUtils.spawnStructure` 自己读盘,没这一出;NeoForge 1.20.6 也没有)。
+  解法:CompanionGameTests 静态块把仓库 SNBT `NbtUtils.snbtToStructure` 转成结构
+  NBT 喂进存档 `generated/numen/structures/`(开闸口令 `numen.gametest.generated`
+  只在 GameTestServer 运行配置上设)——仓库仍只存文本,不提交二进制。
+
+**③ 1.20.2/1.20.3 的三处小刀**(向下手册没记,因为老树在那些点位不用这些 API):
+```java
+Recipe.getId()                     // 1.20.2 移除,id 归 RecipeHolder.id()(单测匿名配方覆写它会编译失败)
+NbtIo.readCompressed(File)         // 1.20.3 移除:走 Path + NbtAccounter.unlimitedHeap()(原版读结构模板同款额度);writeCompressed 同步只收 Path
+Blocks.GRASS → Blocks.SHORT_GRASS  // 1.20.3 改名(TALL_GRASS/GRASS_BLOCK 不变)
+FlowerPotBlock.getContent() → getPotted()   // 仅 1.20.3/1.20.4 这一窗口叫 getPotted,1.20.2- 与 1.20.5+ 都叫 getContent
+```
+
+**④ ChunkMap 的同伴静默 mixin 换注入点**(1.20.2 合并了逐 chunk 跟踪):
+`updateChunkTracking` → `applyChunkTrackingView`,取消前先
+`player.setChunkTrackingView(ChunkTrackingView.EMPTY)`,恢复跟踪时才不会整圈重放。
+
+## 1.20.4 → 1.20.2 ✓（纯旋钮档）
+
+老 tag 之间 **零源码差异**,只有 `gradle.properties`:MC `1.20.2` / range `[1.20.2, 1.21)` /
+Fabric `0.91.0+1.20.2` / loader `0.15.0` / Forge `48.0.49`(+ core 三个 build.gradle 的 api 坐标 → 1.20.2)。
+
+## 1.20.2 → 1.20.1 ✓（最老支持版；Forge/Java17;双 loader 编译 + 出包通过）
+
+构建旋钮:MC `1.20.1` / range `[1.20.1, 1.21)` / Fabric `0.92.1+1.20.1` / loader `0.15.11` / Forge `47.2.30`。
+1.20.1 **早于 1.20.2 的 configuration phase 和 sprite GuiGraphics**,所以多处 API 回退(基本全在 api,core 少量)。
+
+### api ❗
+```java
+// GuiCompat shim（新文件）：1.20.1 的 GuiGraphics 没有 blitSprite(ResourceLocation,…)（sprite blit 是 1.20.2+）。
+//   自己按 PNG 头读尺寸 + mcmeta nine_slice 拼 blit。所有 g.blitSprite(sprite,…) → GuiCompat.blitSprite(g, sprite,…)（24 处/6 屏）。
+//   附带 1.20.1 屏幕回退：skin 用 ResourceLocation、mouseScrolled 3 参、renderEntityInInventory 锚点式。
+// config-phase 回退：
+new NumenPlayer(server, level, profile, ClientInformation.createDefault()) → new NumenPlayer(server, level, profile)
+placeNewPlayer(conn, player, CommonListenerCookie.createInitial(profile)) → placeNewPlayer(conn, player)   // 2 参
+CompanionRegistry: 去 SavedData.Factory → getDataStorage().computeIfAbsent(::load, ::new, "numen_companions")
+FakeConnection: 换 1.20.1 版本体（send(Packet, PacketSendListener) 两参,无 runOnceConnected/flushChannel）
+// mixin 换目标：ServerCommonPacketListenerImpl（config-phase 类，1.20.1 没有）→ ServerGamePacketListenerImpl；改 mixins.json
+// Forge 网络：Forge 47.x classic —— NetworkRegistry.newSimpleChannel（不是 ChannelBuilder）+ registerMessage + NetworkEvent.Context
+```
+
+### ❗ 最大的坑:`CustomPacketPayload` 1.20.1 不存在
+`net.minecraft.network.protocol.common.custom.CustomPacketPayload` 是 1.20.2 configuration-phase 引入的,1.20.1 没有。
+api 引入 mod-local 接口 `com.dwinovo.numen.network.NumenPayload`(`ResourceLocation id()` + `write(FriendlyByteBuf)`),
+把 api 的 13 个 payload + `INetworkChannel` + 两端通道 + **core 的 3 个 net payload**(ExecuteTool/TaskResult/CancelTasks)
+的 `implements CustomPacketPayload` 全换成 `implements NumenPayload`(`id()/write()/static read()` 不变)。
+
+### core ❗
+```java
+// 除上面的 payload → NumenPayload 外：
+// RecipeHolder 1.20.1 不存在,getRecipes() 直接返回 Recipe<?>（QueryExtraTools）：
+for (RecipeHolder<?> h : mgr.getRecipes()) { Recipe<?> r = h.value(); … }
+   → for (Recipe<?> r : mgr.getRecipes()) { … }   // 去掉 import RecipeHolder
+```
+
+### 1.20.1 落地实录(2026-08 并仓迁移新踩的坑,1.20.2/1.20.4 分支照抄)❗
+```groovy
+// ① 同仓 api 的 mixin 在 Forge 开发运行里不会自动注册：api 以源码集进运行,
+//    没有 mod jar 的 MixinConfigs MANIFEST 项 → BoatAccessor 等运行期根本没打进去
+//    （表现为 Boat cannot be cast to BoatAccessor,载具/穿门两条 GameTest 挂）。
+//    core/forge 每个 run 显式挂（发行物不受影响,api jar MANIFEST 已带 MixinConfigs,jarJar 进 core）：
+minecraft.runs.configureEach {
+    args '--mixin.config', 'numen_api.mixins.json'
+    args '--mixin.config', 'numen_api.forge.mixins.json'
+}
+```
+```groovy
+// ①b FG6 双输出共目录的任务竞态：api/forge 把 classes+resources 重定向进同一个
+//    build/sourcesSets/main，跨项目 classpath 的 builtBy 只挂 compileJava →
+//    :core:forge:compileJava 与 :api:forge:processResources 写/读同目录无依赖边，
+//    Gradle 8 验证器看调度顺序间歇性报 implicit_dependency 把构建直接判死。
+//    产出侧一行治好所有消费方（api/forge/build.gradle 重定向块之后）：
+tasks.named('compileJava') { dependsOn tasks.named('processResources') }
+```
+```java
+// ② GameTest 夹具的三个 1.20.1 数据形态（1.21 形态写进去就是静默空数据）：
+//    旗帜花纹：Patterns 短哈希 + 染料序数（不是 patterns + 注册名/颜色名）
+layer.putString("Pattern", "ts"); layer.putInt("Color", 14);   // stripe_top / 红
+//    物品 NBT 的数量是 byte "Count"（int "count" 读出来是空叠）：
+stack.putByte("Count", (byte) 1);
+//    潜影盒内容在 tag.BlockEntityTag.Items（不是 components.minecraft:container）,
+//    自定义名在 tag.display.Name。
+// ③ 1.20.1 空花纹也会写出 Patterns:[] —— 断言"花纹存活"必须查列表非空,光查键名会假绿：
+!saved.getList("Patterns", Tag.TAG_COMPOUND).isEmpty()
+```

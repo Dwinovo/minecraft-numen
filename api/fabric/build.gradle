@@ -1,0 +1,69 @@
+plugins {
+    id 'api-loader'
+    id 'fabric-loom'
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    // Obfuscated MC (1.20.4) → loom remaps to Mojang names to match the common source set.
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+}
+
+loom {
+    mixin {
+        // mixins.json 声明的 refmap 名是 ${mod_id}.refmap.json,loom 默认按归档名生成
+        // ${mod_id}-fabric-1.20.4-refmap.json,运行期按声明的名字读不到,这里显式对齐。
+        defaultRefmapName = "${mod_id}.refmap.json"
+    }
+    def aw = project(':api:common').file("src/main/resources/${mod_id}.accesswidener")
+    if (aw.exists()) {
+        accessWidenerPath.set(aw)
+    }
+    runs {
+        client {
+            client()
+            setConfigName('Fabric Client')
+            ideConfigGenerated(true)
+            runDir('runs/client')
+        }
+        server {
+            server()
+            setConfigName('Fabric Server')
+            ideConfigGenerated(true)
+            runDir('runs/server')
+        }
+        datagen {
+            inherit client
+            setConfigName('Fabric Data Generation')
+            ideConfigGenerated(true)
+            runDir('runs/datagen')
+            vmArg("-Dfabric-api.datagen")
+            vmArg("-Dfabric-api.datagen.output-dir=${file('src/generated/resources')}")
+            vmArg("-Dfabric-api.datagen.modid=${mod_id}")
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
+    // loom 1.6 没有的配置名(如 includeInternal)直接跳过——matching 不触发未知名报错
+    configurations.matching { it.name == variant }.configureEach {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'fabric')
+            }
+        }
+    }
+}

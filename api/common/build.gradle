@@ -1,0 +1,130 @@
+plugins {
+    id 'api-common'
+    id 'org.spongepowered.gradle.vanilla' version '0.2.1-SNAPSHOT'
+}
+
+minecraft {
+    version(minecraft_version)
+    // Automatically enable AccessWideners if the file exists
+    def aw = file("src/main/resources/${mod_id}.accesswidener")
+    if (aw.exists()) {
+        accessWideners(aw)
+    }
+}
+
+// 客户端专属源码集(issue #9):src/client/java 只被客户端消费,主源码集
+// 的 classpath 上物理上没有这些类——服务端代码引用客户端类从"运行时才炸"
+// 变成"import 就编译不过"。
+sourceSets {
+    client {
+        compileClasspath += sourceSets.main.compileClasspath
+        compileClasspath += sourceSets.main.output
+    }
+}
+
+dependencies {
+    // LLM 连接层(纯 JVM)住 ai 模块;api 配置让 llm/model 等仍在本模块的
+    // 消费方以及下游 loader 都能透视到 ai 的类型。
+    api project(':ai')
+    // UI 组件库(纯 JVM,零 MC 依赖):client 源码集的屏幕组装层消费它;
+    // api 配置让下游 loader 也透视得到 widget/令牌类型。
+    api project(':ui')
+
+    compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
+    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
+    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
+    // 客户端 mixin 迁到 client 源码集,注解在编译它时也要在场
+    clientCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
+    clientCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+configurations {
+    commonJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonClientJava {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+    commonResources {
+        canBeResolved = false
+        canBeConsumed = true
+    }
+}
+
+artifacts {
+    commonJava sourceSets.main.java.sourceDirectories.singleFile
+    commonClientJava sourceSets.client.java.sourceDirectories.singleFile
+    commonResources sourceSets.main.resources.sourceDirectories.singleFile
+}
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'common')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'common')
+            }
+        }
+    }
+}
+
+sourceSets {
+    test {
+        compileClasspath += sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+        // 声线库/分句器等客户端类的 headless 测试要看得见 client 源码集
+        compileClasspath += sourceSets.client.output
+        runtimeClasspath += sourceSets.client.output
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
+
+// 服务端安全门:主源码集不得引用 Minecraft 客户端类。源码集隔离挡得住
+// "引用我们自己的客户端类"(classpath 上没有,import 即编译错),但挡不住
+// 直接 import 原版客户端类——common 编译用的是合并的客户端 MC jar,
+// net.minecraft.client 永远在场。这道检查把缺口补上:出现即 fail,
+// 该代码应移入 src/client/java。
+tasks.register('checkServerSafe') {
+    group = 'verification'
+    description = 'Fail if src/main references Minecraft client-only classes.'
+    def srcDir = file('src/main/java')
+    inputs.dir(srcDir)
+    outputs.upToDateWhen { false }
+    doLast {
+        def offenders = []
+        srcDir.eachFileRecurse(groovy.io.FileType.FILES) { f ->
+            if (!f.name.endsWith('.java')) return
+            int no = 0
+            f.eachLine('UTF-8') { line ->
+                no++
+                if (line.contains('net.minecraft.client') || line.contains('com.mojang.blaze3d')) {
+                    offenders << "${f}:${no}: ${line.trim()}"
+                }
+            }
+        }
+        if (!offenders.isEmpty()) {
+            throw new GradleException(
+                    "src/main 引用了 Minecraft 客户端类(专用服务端上不存在,会 ClassNotFound)。\n"
+                    + "把这些代码移进 src/client/java:\n  " + offenders.join('\n  '))
+        }
+    }
+}
+tasks.named('check') { dependsOn 'checkServerSafe' }

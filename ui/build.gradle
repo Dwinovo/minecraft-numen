@@ -1,0 +1,72 @@
+// numen-ui:游戏内 UI 组件库,纯 JVM——零 Minecraft 依赖、零 numen-api 回引。
+// 三层架构的中间层:上面是每版本 ~60 行的画布适配器(IDrawSurface 实现,住在
+// 各版本分支里),下面是屏幕组装层(允许 import MC)。本模块与 Minecraft 版本
+// 无关:十一个版本分支共用同一份 numen-ui,改一处全家族生效。
+//
+// 现住户:令牌(NumenTheme 色彩 / NumenStyle 几何与动效)、画布契约 IDrawSurface、
+// 键码常量 KeyCodes(GLFW 数值,不 import GLFW)、缓动 Animation、排版 TextWrap、
+// 控件树 widget(UiRoot 焦点与浮层通道 + 十余个控件)。
+//
+// 纪律:本模块的 classpath 里没有 Minecraft——"零 MC import"由编译器保证,
+// 不再靠自觉。宿主能力(剪贴板/时间/翻译文本/主题色)一律由组装层注入。
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+// api 家族的版本线(发布坐标契约);group 无同名冲突,直接用对外 group。
+group = 'com.dwinovo.numen'
+version = '0.0.8-SNAPSHOT'
+
+base {
+    archivesName = 'numen-ui'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+    // 低版本分支(1.20.1 一代)跑 Java 17:按 17 编译,21 独有的 API(Math.clamp 等)
+    // 在这里就会编译失败,漂移不到消费端才发现。
+    options.release = 17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            // 刻意不带 MC 版本后缀:本模块与 Minecraft 版本无关,全分支同坐标。
+            artifactId = 'numen-ui'
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'localNumen'
+            url = uri(findProperty('local_maven_url') ?: 'file:///D:/01_Projects/numen-maven')
+        }
+    }
+}

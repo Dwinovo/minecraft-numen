@@ -43,8 +43,12 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
-// This should match the folder name of the project, or else IDEA may complain (see https://youtrack.jetbrains.com/issue/IDEA-317606)
 rootProject.name = 'Numen'
-include('common')
-include('fabric')
-include('forge')
+include('core:common')
+include('core:fabric')
+include('core:forge')
+include('api:common')
+include('api:fabric')
+include('api:forge')
+include('ai')
+include('ui')
