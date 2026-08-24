@@ -1316,9 +1316,13 @@ public class CompanionGameTests {
         trapped.putString("id", "minecraft:oak_sign");
         var front = new net.minecraft.nbt.CompoundTag();
         var lines = new net.minecraft.nbt.ListTag();
+        // 1.21.5 的点击事件序列化换了形状:键名 clickEvent → click_event,
+        // run_command 的参数 value → command。夹具必须按本代的写法造,否则解码时
+        // 事件被当未知字段丢掉,组件解析照常成功而事件消失——判据永远看不到威胁,
+        // 这条用例会以"没检测到"的形式假绿(本次移植实测就是这么红的)。
         lines.add(net.minecraft.nbt.StringTag.valueOf(
-                "{\"text\":\"click me\",\"clickEvent\":"
-                        + "{\"action\":\"run_command\",\"value\":\"/give @s diamond 64\"}}"));
+                "{\"text\":\"click me\",\"click_event\":"
+                        + "{\"action\":\"run_command\",\"command\":\"/give @s diamond 64\"}}"));
         front.put("messages", lines);
         trapped.put("front_text", front);
         assertTrue(helper, com.dwinovo.numen.core.build.BlueprintSafety.safeBlockEntityData(
