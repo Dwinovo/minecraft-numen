@@ -11,7 +11,7 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import java.util.UUID;
 
 /**
- * Forge 侧的语音声音工厂:Forge 1.20.1 的补丁把 {@code SoundEngine.play} 的
+ * Forge 侧的语音声音工厂:Forge 1.20.4 的补丁把 {@code SoundEngine.play} 的
  * 取数改成调用 {@code SoundInstance.getStream} 补丁钩子(vanilla 形状的
  * {@code SoundBufferLibrary.getStream} INVOKE 在其运行时字节码里不存在,
  * @Redirect 会 0 目标掀桌),所以返回覆写了该钩子的子类,零 mixin。

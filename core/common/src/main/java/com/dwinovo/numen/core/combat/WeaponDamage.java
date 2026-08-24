@@ -15,7 +15,7 @@ import net.minecraft.world.item.enchantment.EnchantmentHelper;
  *
  * <h2>为什么不能只读物品的攻击力</h2>
  * 攻击力是个与目标无关的常数,于是一把亡灵杀手 V 的铁剑打僵尸会输给一把光板钻石剑,
- * 而实际正相反。这一代(1.20.1)的锋利/亡灵/节肢加成走
+ * 而实际正相反。这一代(1.20.4)的锋利/亡灵/节肢加成走
  * {@link EnchantmentHelper#getDamageBonus} 按目标 {@link MobType} 取值——原版近战
  * 结算用的就是这条,这里不自己抄加成表,模组附魔只要挂进这套机制同样被认得。
  *
@@ -43,7 +43,7 @@ public final class WeaponDamage {
         if (base <= 0.0) {
             return 0.0;   // 不是近战武器:方块、食物、以及伤害在箭上的弓弩
         }
-        // 1.20.1:附魔加成按目标的 MobType 档位取(亡灵/节肢/水生/无),非生物按无档。
+        // 1.20.4:附魔加成按目标的 MobType 档位取(亡灵/节肢/水生/无),非生物按无档。
         MobType type = target instanceof LivingEntity living ? living.getMobType() : MobType.UNDEFINED;
         return base + EnchantmentHelper.getDamageBonus(weapon, type);
     }
@@ -56,7 +56,7 @@ public final class WeaponDamage {
         if (stack.isEmpty()) {
             return 0.0;
         }
-        // 1.20.1:属性修饰符是 (Attribute → Modifier) 的 multimap,不是组件。
+        // 1.20.4:属性修饰符是 (Attribute → Modifier) 的 multimap,不是组件。
         double damage = 0.0;
         for (AttributeModifier modifier
                 : stack.getAttributeModifiers(EquipmentSlot.MAINHAND).get(Attributes.ATTACK_DAMAGE)) {

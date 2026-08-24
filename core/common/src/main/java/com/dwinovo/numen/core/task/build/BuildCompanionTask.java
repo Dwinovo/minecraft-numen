@@ -1277,7 +1277,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             copy.putInt("x", pos.getX());
             copy.putInt("y", pos.getY());
             copy.putInt("z", pos.getZ());
-            be.load(copy);   // 1.20.1:方块实体读档不带注册表参数
+            be.load(copy);   // 1.20.4:方块实体读档不带注册表参数
             be.setChanged();
             // setChanged 只把区块标脏,不发同步包;而 PLACE_FLAGS 那一包在装数据
             // <b>之前</b>就已经发出去了,里面还没有方块实体的载荷。不补这一下,

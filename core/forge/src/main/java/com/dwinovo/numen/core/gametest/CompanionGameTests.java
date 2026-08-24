@@ -113,7 +113,7 @@ public class CompanionGameTests {
         Zombie zombie = spawnZombie(helper, new BlockPos(11, 2, 11), companion);
 
         double inner = Menace.rawDangerRadius(zombie, companion);
-        // 1.20.1:生存实体交互距离固定 3.0(属性是 1.20.5+ 的)
+        // 1.20.4:生存实体交互距离固定 3.0(属性是 1.20.5+ 的)
         double outer = Swing.reachTo(3.0D, zombie.getBbWidth());
         float startHealth = zombie.getHealth();
 
@@ -195,7 +195,7 @@ public class CompanionGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_courier", new BlockPos(4, 2, 4), false);
         ItemStack pick = new ItemStack(Items.DIAMOND_PICKAXE);
-        // 1.20.1:附魔还是注册表常量直用,效率叫 BLOCK_EFFICIENCY
+        // 1.20.4:附魔还是注册表常量直用,效率叫 BLOCK_EFFICIENCY
         pick.enchant(net.minecraft.world.item.enchantment.Enchantments.BLOCK_EFFICIENCY, 3);
         companion.getInventory().add(pick);
         TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().dropItems(
@@ -798,7 +798,7 @@ public class CompanionGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_banner", new BlockPos(2, 2, 2), true);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 7));
-        // 1.20.1 的花纹是短哈希 + 染料序数:stripe_top = "ts",红 = 14
+        // 1.20.4 的花纹是短哈希 + 染料序数:stripe_top = "ts",红 = 14
         var patterns = new net.minecraft.nbt.ListTag();
         var one = new net.minecraft.nbt.CompoundTag();
         one.putInt("Color", 14);
@@ -823,7 +823,7 @@ public class CompanionGameTests {
             helper.assertTrue(be instanceof net.minecraft.world.level.block.entity.BannerBlockEntity,
                     "banner has no block entity");
             var saved = be.saveWithoutMetadata();
-            // 1.20.1 空花纹也会写出 Patterns:[],光查键名会假绿——按"列表非空"钉
+            // 1.20.4 空花纹也会写出 Patterns:[],光查键名会假绿——按"列表非空"钉
             helper.assertTrue(!saved.getList("Patterns", net.minecraft.nbt.Tag.TAG_COMPOUND).isEmpty(),
                     "the blueprint's banner pattern must survive placement, got " + saved);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -1154,7 +1154,7 @@ public class CompanionGameTests {
         ServerLevel level = helper.getLevel();
 
         // 一面绣了花纹的旗帜:方块实体里那份 Patterns 该原样进白名单
-        // (1.20.1 的花纹是短哈希 + 染料序数:stripe_top = "ts",红 = 14)
+        // (1.20.4 的花纹是短哈希 + 染料序数:stripe_top = "ts",红 = 14)
         var patterns = new net.minecraft.nbt.ListTag();
         var layer = new net.minecraft.nbt.CompoundTag();
         layer.putString("Pattern", "ts");
@@ -1406,7 +1406,7 @@ public class CompanionGameTests {
     @GameTest(template = "numen:floor16", timeoutTicks = 300, batch = "numen_build")
     public static void only_four_item_components_ride_along(GameTestHelper helper) {
 
-        // 一个装了东西的潜影盒挂在展示框里(1.20.1:内容在 tag.BlockEntityTag.Items,
+        // 一个装了东西的潜影盒挂在展示框里(1.20.4:内容在 tag.BlockEntityTag.Items,
         // 自定义名在 tag.display.Name)
         var box = new net.minecraft.nbt.CompoundTag();
         box.putString("id", "minecraft:shulker_box");

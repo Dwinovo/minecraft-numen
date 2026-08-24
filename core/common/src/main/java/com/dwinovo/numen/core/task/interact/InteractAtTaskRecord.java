@@ -51,7 +51,7 @@ public final class InteractAtTaskRecord extends TaskRecord {
         if (item == null) {
             return null;
         }
-        if (item.getFoodProperties() != null) {   // 1.20.1:食物属性在 Item 上,不是组件
+        if (item.getFoodProperties() != null) {   // 1.20.4:食物属性在 Item 上,不是组件
             return BuiltInRegistries.ITEM.getKey(item).getPath()
                     + " is a consumable — use eat (using it through the world body wouldn't heal you).";
         }

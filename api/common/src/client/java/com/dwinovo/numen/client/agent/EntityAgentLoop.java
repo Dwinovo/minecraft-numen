@@ -1588,7 +1588,7 @@ public final class EntityAgentLoop {
             if (out.length() > 0) {
                 out.append(", ");
             }
-            // 1.20.1:getEffect() 直接给 MobEffect(没有 Holder),注册名走注册表反查。
+            // 1.20.4:getEffect() 直接给 MobEffect(没有 Holder),注册名走注册表反查。
             var effectKey = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT
                     .getKey(effect.getEffect());
             out.append(effectKey == null ? "unknown" : effectKey.getPath());
@@ -1646,7 +1646,7 @@ public final class EntityAgentLoop {
      * 本来就是另外的 item id,照实印就分开了,不用另写判据。
      */
     private static String brewLabel(net.minecraft.world.item.ItemStack stack) {
-        // 1.20.1:药水内容在 NBT 里,经 PotionUtils 读(组件系统是 1.20.5+ 的)。
+        // 1.20.4:药水内容在 NBT 里,经 PotionUtils 读(组件系统是 1.20.5+ 的)。
         var potion = net.minecraft.world.item.alchemy.PotionUtils.getPotion(stack);
         StringBuilder label = new StringBuilder();
         if (potion != net.minecraft.world.item.alchemy.Potions.EMPTY) {

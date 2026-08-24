@@ -108,7 +108,7 @@ public final class PathDebugRenderer {
         float nx = dx / len;
         float ny = dy / len;
         float nz = dz / len;
-        // 1.20.1 代差:顶点写入是旧 API(vertex/color/normal/endVertex,法线经
+        // 1.20.4 代差:顶点写入是旧 API(vertex/color/normal/endVertex,法线经
         // pose.normal() 矩阵),语义与 1.21.1 的 addVertex/setColor/setNormal 一致。
         vc.vertex(pose.pose(), (float) x1, (float) y1, (float) z1)
                 .color(color[0], color[1], color[2], 0.9f)

@@ -4,7 +4,7 @@ plugins {
     id 'org.spongepowered.mixin' version '0.7-SNAPSHOT'
 }
 
-// Forge 1.20.1 运行期是 SRG 名,而 mixin 源码按官方名写——必须生成 refmap 把
+// Forge 1.20.4 运行期是 SRG 名,而 mixin 源码按官方名写——必须生成 refmap 把
 // 字符串引用翻译过去,否则运行期找不到字段直接崩。
 mixin {
     add(sourceSets.main, "${mod_id}.refmap.json")

@@ -8,7 +8,7 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * Forge 侧的试听 2D 播放:与 {@link ForgeEntityVoiceSound} 同理,覆写 Forge
- * 1.20.1 补丁的 {@code SoundInstance.getStream} 取数钩子,零 mixin。
+ * 1.20.4 补丁的 {@code SoundInstance.getStream} 取数钩子,零 mixin。
  */
 public final class ForgeVoicePreviewSound extends VoicePreviewSound {
 

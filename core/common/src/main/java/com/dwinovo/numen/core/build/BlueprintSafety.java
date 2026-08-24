@@ -214,7 +214,7 @@ public final class BlueprintSafety {
 
     /**
      * 物品数据白名单:一件物品身上<b>只有这四样</b>可以随图纸走——附魔、药水成分、耐久、
-     * 自定义名。其余一概剥掉。这一代(1.20.1)物品数据是 NBT 键,不是组件,白名单落在键上:
+     * 自定义名。其余一概剥掉。这一代(1.20.4)物品数据是 NBT 键,不是组件,白名单落在键上:
      * 附魔 = {@code Enchantments},药水成分 = {@code Potion}/{@code CustomPotionEffects}/
      * {@code CustomPotionColor},耐久 = {@code Damage},自定义名 = {@code display.Name}
      * ({@code display} 里的 Lore/染色不在白名单,单独剥,见实现)。
@@ -268,7 +268,7 @@ public final class BlueprintSafety {
         if (tag.isEmpty()) {
             return;   // 空槽位
         }
-        // 1.20.1:ItemStack.of 读不出来折成 EMPTY,不抛
+        // 1.20.4:ItemStack.of 读不出来折成 EMPTY,不抛
         net.minecraft.world.item.ItemStack stack =
                 withUnsafeComponentsDiscarded(net.minecraft.world.item.ItemStack.of(tag));
         if (!stack.isEmpty()) {

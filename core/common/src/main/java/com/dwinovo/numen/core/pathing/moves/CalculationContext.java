@@ -222,7 +222,7 @@ public class CalculationContext {
     private static int equipmentEnchantLevel(ServerPlayer player) {
         int level = 0;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            // 1.20.1:直接查附魔等级,无 Holder/组件。
+            // 1.20.4:直接查附魔等级,无 Holder/组件。
             int lvl = EnchantmentHelper.getItemEnchantmentLevel(
                     Enchantments.FROST_WALKER, player.getItemBySlot(slot));
             if (lvl > 0) {
@@ -234,7 +234,7 @@ public class CalculationContext {
 
     /** 按装备的水下移动效率附魔,把水中步速在水速与平走速之间插值。 */
     private static double computeWaterWalkSpeed(ServerPlayer player) {
-        // 1.20.1:水下移动效率即深海探索者附魔,乘数 = level/3(1.21 的
+        // 1.20.4:水下移动效率即深海探索者附魔,乘数 = level/3(1.21 的
         // WATER_MOVEMENT_EFFICIENCY 属性效果同曲线),无附魔保持 1.0 与原逻辑一致。
         int depthStrider = EnchantmentHelper.getDepthStrider(player);
         float waterSpeedMultiplier = depthStrider > 0

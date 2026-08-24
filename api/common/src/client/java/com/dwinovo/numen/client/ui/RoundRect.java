@@ -59,7 +59,7 @@ public final class RoundRect {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShader(() -> sh);
-        // 1.20.1 顶点 API(getBuilder/begin/endVertex/end)——1.21 的 begin(...)/buildOrThrow 尚不存在。
+        // 1.20.4 顶点 API(getBuilder/begin/endVertex/end)——1.21 的 begin(...)/buildOrThrow 尚不存在。
         BufferBuilder bb = Tesselator.getInstance().getBuilder();
         bb.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
         bb.vertex(pose, x1, y1, 0).color(r, gr, b, a).endVertex();

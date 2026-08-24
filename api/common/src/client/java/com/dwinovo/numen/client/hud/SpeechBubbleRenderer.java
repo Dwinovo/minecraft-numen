@@ -76,7 +76,7 @@ public final class SpeechBubbleRenderer {
         // 锚点在名牌上方:小方尾的尖端落在这里,气泡向上生长
         poseStack.translate(0, body.getBbHeight() + 0.95, 0);
         poseStack.mulPose(mc.getEntityRenderDispatcher().cameraOrientation());
-        // X 与 Y 同时取反:与原版名牌同一套手性(1.20.1 代)。只翻 Y 会让行列式
+        // X 与 Y 同时取反:与原版名牌同一套手性(1.20.4 代)。只翻 Y 会让行列式
         // 为负——整个空间被镜像,所有面的绕序随之翻转而被背面剔除(自己的方块
         // 可以双面画糊过去,原版画的字形不能,结果就是"有框没字")。
         poseStack.scale(-SCALE, -SCALE, SCALE);

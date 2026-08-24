@@ -260,7 +260,7 @@ final class MovementPlacement {
         // 免耗材画像的"伸手进创造物品栏":背包连一块耗材都没有时自动补一组
         // 泥土——原版创造玩家放置也得先手持方块,真人是从创造栏抓,假玩家
         // 没有那个 GUI,这里就是那只手。生存画像不进此分支。
-        if (player.getAbilities().instabuild && !hasAnyThrowaway(player, acceptable)) {   // 1.20.1 无 hasInfiniteMaterials()
+        if (player.getAbilities().instabuild && !hasAnyThrowaway(player, acceptable)) {   // 1.20.4 无 hasInfiniteMaterials()
             ItemStack restock = new ItemStack(net.minecraft.world.item.Items.DIRT, 64);
             if (!inventory.add(restock)) {
                 return false;   // 背包满还没耗材:罕见,按无料处理
@@ -354,7 +354,7 @@ final class MovementPlacement {
     static int frostWalkerLevel(ServerPlayer player) {
         int level = 0;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            // 1.20.1:直接查附魔等级,无 Holder/组件。
+            // 1.20.4:直接查附魔等级,无 Holder/组件。
             level = Math.max(level, net.minecraft.world.item.enchantment.EnchantmentHelper
                     .getItemEnchantmentLevel(Enchantments.FROST_WALKER, player.getItemBySlot(slot)));
         }

@@ -17,7 +17,7 @@ public final class FabricDataGenerators implements DataGeneratorEntrypoint {
     @Override
     public void onInitializeDataGenerator(FabricDataGenerator generator) {
         FabricDataGenerator.Pack pack = generator.createPack();
-        // 1.20.1 Fabric API: the single-arg (FabricDataOutput) provider factory.
+        // 1.20.4 Fabric API: the single-arg (FabricDataOutput) provider factory.
         pack.addProvider((FabricDataGenerator.Pack.Factory<FabricModLanguageProvider>)
                 output -> new FabricModLanguageProvider(output, "en_us"));
         pack.addProvider((FabricDataGenerator.Pack.Factory<FabricModLanguageProvider>)

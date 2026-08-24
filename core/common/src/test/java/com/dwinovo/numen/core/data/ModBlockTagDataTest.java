@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  * 成员的入选判据见那边的注释;这里只保证"设施类默认受硬保护"不被悄悄改掉。
  * 标签→INF 的机制另由 ProtectionPinsTest 钉。
  *
- * <p>录制假 Appender,只经手 TagKey。这一代(1.20.1)创建 TagKey 会连带初始化
+ * <p>录制假 Appender,只经手 TagKey。这一代(1.20.4)创建 TagKey 会连带初始化
  * 注册表类,而注册表类要求先引导——所以照别的钉桩一样先引导再跑。
  */
 @Tag("mc")

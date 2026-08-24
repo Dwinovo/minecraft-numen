@@ -15,7 +15,7 @@ import net.minecraftforge.eventbus.api.IEventBus;
 import java.nio.file.Path;
 
 /**
- * Client entry point for Forge 1.20.1. Forge keeps separate mod and game event
+ * Client entry point for Forge 1.20.4. Forge keeps separate mod and game event
  * buses (mirroring the NeoForge reference this was ported from): registration
  * events (key mappings / GUI overlays / reload listeners) go on the mod bus,
  * while the per-tick / world-render / disconnect hooks go on the game bus

@@ -9,7 +9,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Forge 侧的同伴 3D 语音:Forge 1.20.1 的补丁把 {@code SoundEngine.play} 的取数
+ * Forge 侧的同伴 3D 语音:Forge 1.20.4 的补丁把 {@code SoundEngine.play} 的取数
  * 改成了调用 {@code SoundInstance.getStream(SoundBufferLibrary, Sound, boolean)}
  * 补丁钩子(字节码里 vanilla 形状的 {@code SoundBufferLibrary.getStream} INVOKE
  * 已不存在,@Redirect 扫不到目标会掀桌)——覆写该钩子返回 {@link #openStream()}

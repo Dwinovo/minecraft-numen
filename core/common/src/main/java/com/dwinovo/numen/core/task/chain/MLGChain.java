@@ -205,7 +205,7 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
      */
     private static BlockHitResult bucketRay(NumenPlayer companion, ClipContext.Fluid fluids) {
         Vec3 eye = companion.getEyePosition();
-        // 1.20.1:getViewVector(1) 即按当前俯仰/偏航算视线;方块交互距离固定 4.5
+        // 1.20.4:getViewVector(1) 即按当前俯仰/偏航算视线;方块交互距离固定 4.5
         Vec3 end = eye.add(companion.getViewVector(1.0F).scale(4.5D));
         return companion.level().clip(new ClipContext(
                 eye, end, ClipContext.Block.OUTLINE, fluids, companion));

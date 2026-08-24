@@ -177,7 +177,7 @@ public final class Menace {
      *
      * <p>光看血量会把"满血裸奔"和"满血下界合金"判成一样危险,而后者能多扛四五倍。
      * 减伤不自己算:交给原版的 {@link CombatRules#getDamageAfterAbsorb},护甲、韧性、
-     * 一并跟着走。这一代(1.20.1)的公式只收数值,没有伤害源参数,天然无副作用
+     * 一并跟着走。这一代(1.20.4)的公式只收数值,没有伤害源参数,天然无副作用
      * ({@code LivingEntity.getDamageAfterArmorAbsorb} 会磨损护甲,不能用)。
      *
      * @return 折算后的有效血量;没有护甲时就等于血量本身
