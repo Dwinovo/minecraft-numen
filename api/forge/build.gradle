@@ -107,3 +107,12 @@ sourceSets.each {
 // 共目录之后,跨项目 classpath 的 builtBy 只挂着 compileJava:把资源拷贝排在编译前,
 // 消费方(如 :core:forge:compileJava)拿到目录时两类内容都已就位,不再竞态。
 tasks.named('compileJava') { dependsOn tasks.named('processResources') }
+
+// Forge 49 起 dev 启动为 GAME 模块层做 JPMS 校验:ai/ui 兄弟 jar 若上了运行
+// classpath,会以自动模块身份与聚合进 numen_api 模组模块(runs 的 mods 块)的
+// 同名包冲突,直接拒启。从运行用的 runtimeClasspath 里排除这两个工件——
+// 它们的类经 MOD_CLASSES(源码集输出)进运行,一个不少;编译、打包不受影响。
+configurations.named('runtimeClasspath') {
+    exclude module: 'ai'
+    exclude module: 'ui'
+}
