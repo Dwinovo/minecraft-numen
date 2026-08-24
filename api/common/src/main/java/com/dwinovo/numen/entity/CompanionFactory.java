@@ -59,11 +59,12 @@ public final class CompanionFactory {
         // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
         // apply it AFTER the join: placeNewPlayer internally re-applies the saved .dat, which would otherwise
         // clobber the spawn pos and send a died-then-revived companion back to its death location instead of
-        // to its owner. Same-level setPos via moveTo — NOT the teleportTo(ServerLevel,…) dimension-travel
-        // overload, which fires EntityTravelToDimensionEvent (tripping some world-protection mods) even for a
-        // same-level move. A respawn from dormancy passes null and keeps exactly what the .dat restored.
+        // to its owner. Same-level setPos via snapTo (1.21.5 renamed moveTo → snapTo) — NOT the
+        // teleportTo(ServerLevel,…) dimension-travel overload, which fires EntityTravelToDimensionEvent
+        // (tripping some world-protection mods) even for a same-level move. A respawn from dormancy passes
+        // null and keeps exactly what the .dat restored.
         if (pos != null) {
-            player.moveTo(pos.x, pos.y, pos.z, player.getYRot(), player.getXRot());
+            player.snapTo(pos.x, pos.y, pos.z, player.getYRot(), player.getXRot());
         }
         // 假玩家没有客户端上报的模型定制:点亮全部皮肤覆盖层与披风,否则只显示单层基础皮肤。
         // 每次 spawn(首建与重生)都重设——该字节是同步实体数据、不随 .dat 存取。
@@ -74,8 +75,10 @@ public final class CompanionFactory {
         // (面板芯片 / /gamemode 指令,存在 .dat 的 playerGameType 里),但只认
         // 生存/创造两档,其余一律归生存。placeNewPlayer 之后强制,保证胜出。
         GameType mode = GameType.SURVIVAL;
-        if (savedTag != null && savedTag.contains("playerGameType")
-                && GameType.byId(savedTag.getInt("playerGameType")) == GameType.CREATIVE) {
+        // 1.21.5 的 CompoundTag 读取 codec 化:getInt 返回 Optional<Integer>,
+        // "键存在且值为创造" 一步表达,语义与旧代 contains + getInt 完全一致。
+        if (savedTag != null && savedTag.getInt("playerGameType")
+                .map(id -> GameType.byId(id) == GameType.CREATIVE).orElse(false)) {
             mode = GameType.CREATIVE;
         }
         player.setGameMode(mode);

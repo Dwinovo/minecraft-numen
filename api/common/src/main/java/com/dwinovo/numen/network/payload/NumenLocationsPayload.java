@@ -43,26 +43,20 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
             return new Snapshot(uuid, true, false, x, y, z, dimension, 0, 0);
         }
 
-        // 1.21.4: StreamCodec.composite caps at 8 fields; this record has 9, so encode by hand.
+        // 1.21.5: StreamCodec.composite 上限回到 9 字段,正好装下本 record;线格式与
+        // 逐字段手写完全一致(同序同码,writeUtf(256) ≡ stringUtf8(256))。
         static final StreamCodec<RegistryFriendlyByteBuf, Snapshot> CODEC =
-                StreamCodec.of(
-                        (buf, s) -> {
-                            UUIDUtil.STREAM_CODEC.encode(buf, s.uuid());
-                            buf.writeBoolean(s.found());
-                            buf.writeBoolean(s.loaded());
-                            buf.writeDouble(s.x());
-                            buf.writeDouble(s.y());
-                            buf.writeDouble(s.z());
-                            buf.writeUtf(s.dimension(), 256);
-                            buf.writeFloat(s.hp());
-                            buf.writeFloat(s.maxHp());
-                        },
-                        buf -> new Snapshot(
-                                UUIDUtil.STREAM_CODEC.decode(buf),
-                                buf.readBoolean(), buf.readBoolean(),
-                                buf.readDouble(), buf.readDouble(), buf.readDouble(),
-                                buf.readUtf(256),
-                                buf.readFloat(), buf.readFloat()));
+                StreamCodec.composite(
+                        UUIDUtil.STREAM_CODEC, Snapshot::uuid,
+                        ByteBufCodecs.BOOL, Snapshot::found,
+                        ByteBufCodecs.BOOL, Snapshot::loaded,
+                        ByteBufCodecs.DOUBLE, Snapshot::x,
+                        ByteBufCodecs.DOUBLE, Snapshot::y,
+                        ByteBufCodecs.DOUBLE, Snapshot::z,
+                        ByteBufCodecs.stringUtf8(256), Snapshot::dimension,
+                        ByteBufCodecs.FLOAT, Snapshot::hp,
+                        ByteBufCodecs.FLOAT, Snapshot::maxHp,
+                        Snapshot::new);
     }
 
     public static final Type<NumenLocationsPayload> TYPE = new Type<>(

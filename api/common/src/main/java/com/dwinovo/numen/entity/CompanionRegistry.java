@@ -3,16 +3,13 @@ package com.dwinovo.numen.entity;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -115,30 +112,20 @@ public final class CompanionRegistry extends SavedData {
      */
     public static final List<String> DEFAULT_SCAFFOLD = List.of("#numen:scaffolds");
 
-    private static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
+    // 包内可见:持久化是这个类最要命的部分(解析失败 = 全世界同伴静默消失),
+    // 得让单测够得着。
+    static final Codec<CompanionRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, Entry.CODEC)
                     .fieldOf("companions").forGetter(d -> d.entries),
             Codec.STRING.optionalFieldOf("worldId", "").forGetter(d -> d.worldId)
     ).apply(i, CompanionRegistry::new));
 
-    // 1.21.4 predates the codec-based SavedDataType; register with the old SavedData.Factory
-    // (Supplier + deserializer + DataFixType) and drive (de)serialization through CODEC ourselves.
-    private static final SavedData.Factory<CompanionRegistry> FACTORY = new SavedData.Factory<>(
-            CompanionRegistry::new, CompanionRegistry::load,
+    // 1.21.5 codec 化的 SavedDataType:名字 + 构造器 + CODEC + datafix 类型,存储层自己驱动
+    // (反)序列化,save()/load() 重写不复存在。解析失败由存储层兜底:readSavedData 记日志
+    // 返 null,computeIfAbsent 落回构造器 —— "垃圾降级为空注册表"的语义与旧代一致。
+    private static final SavedDataType<CompanionRegistry> TYPE = new SavedDataType<>(
+            "numen_companions", CompanionRegistry::new, CODEC,
             net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
-
-    @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
-        CODEC.encodeStart(NbtOps.INSTANCE, this).result()
-                .ifPresent(t -> { if (t instanceof CompoundTag c) tag.merge(c); });
-        return tag;
-    }
-
-    // 包内可见:持久化是这个类最要命的部分(解析失败 = 全世界同伴静默消失),
-    // 得让单测够得着。
-    static CompanionRegistry load(CompoundTag tag, HolderLookup.Provider registries) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElseGet(CompanionRegistry::new);
-    }
 
     private final Map<UUID, Entry> entries;
     private String worldId;
@@ -154,7 +141,7 @@ public final class CompanionRegistry extends SavedData {
     }
 
     public static CompanionRegistry get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_companions");
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     /**

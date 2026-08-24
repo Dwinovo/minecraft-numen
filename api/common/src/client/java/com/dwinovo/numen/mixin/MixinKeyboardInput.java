@@ -22,6 +22,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * {@code Input} 按键记录),{@code tick()} 也不再收潜行参数——潜行减速由
  * {@code LocalPlayer.aiStep} 在 {@code input.tick()} 之后自己乘。所以这里
  * 只负责把"这一 tick 的移动意图"重建出来,减速仍走原版那一处,行为不变。
+ *
+ * <p>1.21.5:两个冲量字段并成受保护的 {@code moveVector}。本类继承
+ * {@code ClientInput},在自身实例上写得进该字段,于是由屏幕算出向量、这里落盘。
  */
 @Mixin(KeyboardInput.class)
 public abstract class MixinKeyboardInput extends ClientInput {
@@ -32,7 +35,7 @@ public abstract class MixinKeyboardInput extends ClientInput {
         // 只喂本地玩家的真输入:Freecam 之类会给玩家换假输入对象,别喂错人
         if (mc.player != null && mc.player.input == (Object) this
                 && mc.screen instanceof CompanionWheelScreen) {
-            CompanionWheelScreen.feedMovement(this);
+            this.moveVector = CompanionWheelScreen.feedMovement(this);
         }
     }
 }

@@ -2,6 +2,7 @@ package com.dwinovo.numen.entity;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.world.level.Level;
 import org.junit.jupiter.api.Test;
 
@@ -15,8 +16,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 注册表的持久化——这个类是"谁存在"的唯一权威,读档解析一旦失败,
- * {@code load} 会静默地退回一个<b>空</b>注册表:整个存档的同伴一次性蒸发,
+ * 存储层会静默地退回一个<b>空</b>注册表:整个存档的同伴一次性蒸发,
  * 连报错都没有。所以每次动 codec 都必须有这一层兜着。
+ * 1.21.5 起(反)序列化由 SavedDataType 的存储层直接驱动 CODEC,
+ * 这里也直接对 CODEC 往返——测的就是生产在用的那一条路。
  */
 class CompanionRegistryTest {
 
@@ -29,8 +32,13 @@ class CompanionRegistryTest {
         return new CompanionRegistry.Entry(name, owner, Level.OVERWORLD, new BlockPos(1, 2, 3));
     }
 
+    private static CompoundTag encode(CompanionRegistry reg) {
+        return (CompoundTag) CompanionRegistry.CODEC.encodeStart(NbtOps.INSTANCE, reg)
+                .result().orElseThrow();
+    }
+
     private static CompanionRegistry roundTrip(CompanionRegistry reg) {
-        return CompanionRegistry.load(reg.save(new CompoundTag(), null), null);
+        return CompanionRegistry.CODEC.parse(NbtOps.INSTANCE, encode(reg)).result().orElseThrow();
     }
 
     // ---- 持久化 ----
@@ -60,21 +68,23 @@ class CompanionRegistryTest {
         // load 静默返回空注册表 —— 全世界的同伴一起消失。
         CompanionRegistry reg = new CompanionRegistry();
         reg.put(A, entry("小焰", OWNER));
-        CompoundTag tag = reg.save(new CompoundTag(), null);
+        CompoundTag tag = encode(reg);
         tag.remove("worldId");
         assertFalse(tag.contains("worldId"));
 
-        CompanionRegistry back = CompanionRegistry.load(tag, null);
+        CompanionRegistry back =
+                CompanionRegistry.CODEC.parse(NbtOps.INSTANCE, tag).result().orElseThrow();
 
         assertEquals("小焰", back.find(A).name(), "老存档必须照常读出来");
         assertFalse(back.worldId().isBlank(), "缺的世界身份现补一个");
     }
 
     @Test
-    void garbageTagDegradesToEmptyRatherThanCrashing() {
-        // 读档失败不该把服务器带崩;代价是这一档同伴丢了,但那是没得选的
-        CompanionRegistry back = CompanionRegistry.load(new CompoundTag(), null);
-        assertNull(back.find(A));
+    void garbageTagFailsCleanlyRatherThanCrashing() {
+        // 读档失败不该把服务器带崩。1.21.5 起兜底住在存储层:readSavedData 解析失败
+        // 记日志返 null,computeIfAbsent 落回构造器给空注册表。我们守自己这半边:
+        // 垃圾输入只能表现为"解析失败"这种可兜的结果,不许抛异常穿透读档。
+        assertTrue(CompanionRegistry.CODEC.parse(NbtOps.INSTANCE, new CompoundTag()).isError());
     }
 
     // ---- 世界身份 ----

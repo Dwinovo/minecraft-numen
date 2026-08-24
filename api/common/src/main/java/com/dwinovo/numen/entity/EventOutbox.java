@@ -3,12 +3,10 @@ package com.dwinovo.numen.entity;
 import com.dwinovo.numen.event.EventQueue;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,26 +39,17 @@ public final class EventOutbox extends SavedData {
             Codec.BOOL.optionalFieldOf("urgent", false).forGetter(EventQueue.Entry::urgent)
     ).apply(i, EventQueue.Entry::new));
 
-    private static final Codec<EventOutbox> CODEC =
+    // 包内可见:持久化是这个类的全部价值,得让单测够得着。
+    static final Codec<EventOutbox> CODEC =
             Codec.unboundedMap(UUIDUtil.STRING_CODEC, ENTRY_CODEC.listOf())
                     .xmap(EventOutbox::fromEntries, EventOutbox::toEntries)
                     .fieldOf("outboxes").codec();
 
-    private static final SavedData.Factory<EventOutbox> FACTORY = new SavedData.Factory<>(
-            EventOutbox::new, EventOutbox::load,
+    // 1.21.5 codec 化的 SavedDataType:存储层自己驱动(反)序列化,save()/load() 重写不复存在;
+    // 解析失败由存储层兜底(readSavedData 记日志返 null,computeIfAbsent 落回构造器)。
+    private static final SavedDataType<EventOutbox> TYPE = new SavedDataType<>(
+            "numen_event_outbox", EventOutbox::new, CODEC,
             net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
-
-    @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
-        CODEC.encodeStart(NbtOps.INSTANCE, this).result()
-                .ifPresent(t -> { if (t instanceof CompoundTag c) tag.merge(c); });
-        return tag;
-    }
-
-    // 包内可见:持久化是这个类的全部价值,得让单测够得着。
-    static EventOutbox load(CompoundTag tag, HolderLookup.Provider registries) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElseGet(EventOutbox::new);
-    }
 
     private final Map<UUID, EventQueue> queues;
 
@@ -92,7 +81,7 @@ public final class EventOutbox extends SavedData {
     }
 
     public static EventOutbox get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_event_outbox");
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     /** 这只同伴的暂存队列(没有则建)。 */

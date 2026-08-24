@@ -14,11 +14,11 @@ import net.neoforged.neoforge.common.NeoForge;
 import java.nio.file.Path;
 
 /**
- * Client entry point. 1.21.4 still has SEPARATE mod and game event buses
- * (1.21.5 merged them), so a single {@code @EventBusSubscriber} can't carry both
- * — registration events (key mappings / GUI layers / reload listeners) are mod-bus,
- * the tick / world-render / disconnect hooks are game-bus. We register each on its
- * own bus from the mod constructor, mirroring {@link NumenMod}.
+ * Client entry point. 1.21.5 merged the mod and game event buses; registering
+ * registration events (key mappings / GUI layers / reload listeners) on the mod bus
+ * and the tick / world-render / disconnect hooks on {@code NeoForge.EVENT_BUS} from
+ * the mod constructor still compiles and behaves identically (only the
+ * {@code @EventBusSubscriber(bus=…)} attribute is deprecated), mirroring {@link NumenMod}.
  */
 @Mod(value = Constants.MOD_ID, dist = Dist.CLIENT)
 public class NumenNeoForgeClient {
@@ -52,7 +52,8 @@ public class NumenNeoForgeClient {
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
         modBus.addListener(NumenNeoForgeClient::registerReloadListeners);
-        modBus.addListener(NumenNeoForgeClient::registerShaders);
+        // GUI 圆角 SDF shader 无需任何注册:1.21.5 改代码定义的 RenderPipeline,
+        // 首次使用时懒编译(RegisterShadersEvent 已随 JSON shader 体系一并删除)。
         // Game bus — per-tick / world-render / disconnect.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
@@ -107,12 +108,6 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.client.agent.NumenRoster.instance().clear();
         com.dwinovo.numen.client.agent.CompanionHome.onDisconnect();
         com.dwinovo.numen.client.debug.PathDebugState.clear();
-    }
-
-    static void registerShaders(net.neoforged.neoforge.client.event.RegisterShadersEvent event) {
-        // GUI 圆角 SDF shader——1.21.2+ 只注册 ShaderProgram 键,编译由 ShaderManager
-        // 随资源加载完成;RoundRect 每次绘制经键查编译实例,查不到自动降级方角 fill。
-        event.registerShader(com.dwinovo.numen.client.ui.RoundRect.PROGRAM);
     }
 
     static void registerReloadListeners(AddClientReloadListenersEvent event) {

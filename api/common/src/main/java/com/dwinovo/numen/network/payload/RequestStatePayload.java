@@ -85,7 +85,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
                         .getKey(vehicle.getType()).getPath();
         return new NumenStatePayload(numen.getUUID(), true, items, craft,
                 numen.getFoodData().getFoodLevel(), numen.getFoodData().getSaturationLevel(),
-                inv.selected, numen.getOffhandItem().copy(), effects,
+                inv.getSelectedSlot(), numen.getOffhandItem().copy(), effects,
                 vehicleType, vehicle == null ? -1 : vehicle.getId());
     }
 }

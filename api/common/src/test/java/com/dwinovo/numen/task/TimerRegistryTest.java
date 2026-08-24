@@ -1,6 +1,6 @@
 package com.dwinovo.numen.task;
 
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
@@ -22,8 +22,12 @@ class TimerRegistryTest {
     private static final UUID SHE = UUID.fromString("11111111-1111-1111-1111-111111111111");
     private static final UUID OTHER = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
+    // 1.21.5 起(反)序列化由 SavedDataType 的存储层直接驱动 CODEC,这里也直接对
+    // CODEC 往返——测的就是生产在用的那一条路。
     private static TimerRegistry roundTrip(TimerRegistry registry) {
-        return TimerRegistry.load(registry.save(new CompoundTag(), null), null);
+        return TimerRegistry.CODEC.parse(NbtOps.INSTANCE,
+                TimerRegistry.CODEC.encodeStart(NbtOps.INSTANCE, registry).result().orElseThrow())
+                .result().orElseThrow();
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.dwinovo.numen.entity;
 import com.dwinovo.numen.event.EventQueue;
 import com.dwinovo.numen.event.EventTypes;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -24,8 +25,12 @@ class EventOutboxTest {
     private static final UUID B = UUID.fromString("22222222-2222-2222-2222-222222222222");
     private static final long T0 = 1_000_000L;
 
+    // 1.21.5 起(反)序列化由 SavedDataType 的存储层直接驱动 CODEC,这里也直接对
+    // CODEC 往返——测的就是生产在用的那一条路。
     private static EventOutbox roundTrip(EventOutbox box) {
-        return EventOutbox.load(box.save(new CompoundTag(), null), null);
+        return EventOutbox.CODEC.parse(NbtOps.INSTANCE,
+                EventOutbox.CODEC.encodeStart(NbtOps.INSTANCE, box).result().orElseThrow())
+                .result().orElseThrow();
     }
 
     @Test
@@ -106,7 +111,9 @@ class EventOutboxTest {
     }
 
     @Test
-    void garbageTagDegradesToEmpty() {
-        assertTrue(EventOutbox.load(new CompoundTag(), null).peek(A).isEmpty());
+    void garbageTagFailsCleanlyRatherThanCrashing() {
+        // 1.21.5 起"垃圾降级为空"的兜底住在存储层(readSavedData 解析失败返 null,
+        // computeIfAbsent 落回构造器)。我们守自己这半边:解析失败不许抛异常。
+        assertTrue(EventOutbox.CODEC.parse(NbtOps.INSTANCE, new CompoundTag()).isError());
     }
 }

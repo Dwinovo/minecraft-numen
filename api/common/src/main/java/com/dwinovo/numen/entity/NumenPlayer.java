@@ -239,10 +239,10 @@ public final class NumenPlayer extends ServerPlayer {
         }
         var inv = getInventory();
         if (net.minecraft.world.entity.player.Inventory.isHotbarSlot(slot)) {
-            inv.selected = slot;
+            inv.setSelectedSlot(slot);   // 1.21.5: selected 字段私有化,走读写方法
             return;
         }
-        int selected = inv.selected;
+        int selected = inv.getSelectedSlot();
         net.minecraft.world.item.ItemStack held = inv.getItem(selected);
         inv.setItem(selected, inv.getItem(slot));
         inv.setItem(slot, held);
@@ -364,13 +364,13 @@ public final class NumenPlayer extends ServerPlayer {
     public void addAdditionalSaveData(CompoundTag output) {
         super.addAdditionalSaveData(output);
         if (ownerUuid != null) {
-            output.putUUID(NBT_KEY_OWNER, ownerUuid);   // 1.21.4: no CompoundTag.store(Codec)
+            output.store(NBT_KEY_OWNER, UUIDUtil.CODEC, ownerUuid);   // 1.21.5 codec 化的 NBT 读写
         }
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag input) {
         super.readAdditionalSaveData(input);
-        if (input.hasUUID(NBT_KEY_OWNER)) this.ownerUuid = input.getUUID(NBT_KEY_OWNER);
+        input.read(NBT_KEY_OWNER, UUIDUtil.CODEC).ifPresent(uuid -> this.ownerUuid = uuid);
     }
 }

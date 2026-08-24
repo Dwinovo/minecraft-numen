@@ -139,8 +139,8 @@ public final class CompanionStateWatch {
             }
         }
         // 换手不动任何格子的内容,但块里的 holding 会变——所以选中槽自成一处状态。
-        if (inv.selected != lastSelected) {
-            lastSelected = inv.selected;
+        if (inv.getSelectedSlot() != lastSelected) {
+            lastSelected = inv.getSelectedSlot();
             changed = true;
         }
         return changed;

@@ -4,8 +4,6 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
 import net.minecraft.world.level.ChunkPos;
 
-import java.util.Comparator;
-
 /**
  * Keeps a small, self-expiring pad of chunks loaded and ticking around a companion,
  * so a {@link NumenPlayer} can path / mine / fight away from any real player WITHOUT
@@ -43,8 +41,16 @@ public final class CompanionChunkLoader {
      */
     private static final int TIMEOUT_TICKS = 40;
 
-    private static final TicketType<ChunkPos> TICKET =
-            TicketType.create("numen_companion", Comparator.comparingLong(ChunkPos::toLong), TIMEOUT_TICKS);
+    /**
+     * 1.21.5 起 {@code TicketType} 是不带泛型的 record(超时 / 是否入档 / 用途三元组),不再由
+     * {@code TicketType.create} 造带比较器的泛型键。这里直接构造:超时同为 {@value #TIMEOUT_TICKS}
+     * tick,{@code persist=false} —— {@code TicketStorage.packTickets} 只序列化 persist 的票据,
+     * 所以这张票不入档,也就不需要进 {@code BuiltInRegistries.TICKET_TYPE}(未注册时
+     * {@code Util.getRegisteredName} 回落 "[unregistered]",只影响 toString)。
+     * {@code LOADING_AND_SIMULATION} 对应旧代「加载 + 实体 tick」的语义。
+     */
+    private static final TicketType TICKET =
+            new TicketType(TIMEOUT_TICKS, false, TicketType.TicketUse.LOADING_AND_SIMULATION);
 
     private CompanionChunkLoader() {}
 
@@ -92,7 +98,9 @@ public final class CompanionChunkLoader {
             }
             st.chunk = packed;
             st.countdown = REFRESH_TICKS;
-            level.getChunkSource().addRegionTicket(TICKET, pos, RADIUS, pos);
+            // 1.21.5:addRegionTicket(type,pos,radius,value) → addTicketWithRadius(type,pos,radius)。
+            // 票级算法两代一致(ChunkLevel.byStatus(FULL) - 半径),重复添加同型同级票照旧 resetTicksLeft()。
+            level.getChunkSource().addTicketWithRadius(TICKET, pos, RADIUS);
         }
     }
 }

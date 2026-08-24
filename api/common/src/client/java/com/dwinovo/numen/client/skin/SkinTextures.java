@@ -33,7 +33,9 @@ public final class SkinTextures {
             NativeImage img = NativeImage.read(in);
             rl = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID,
                     "skin_preview/" + id.toLowerCase(Locale.ROOT));
-            Minecraft.getInstance().getTextureManager().register(rl, new DynamicTexture(img));
+            // 1.21.5:DynamicTexture 构造器新增调试名首参
+            Minecraft.getInstance().getTextureManager().register(rl,
+                    new DynamicTexture(() -> "numen_api skin preview " + id, img));
         } catch (IOException | RuntimeException e) {
             Constants.LOG.warn("[numen-skin] 预览纹理加载失败 {}: {}", id, e.toString());
         }

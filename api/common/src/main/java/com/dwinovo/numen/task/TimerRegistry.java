@@ -6,12 +6,10 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.event.NumenEvents;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.saveddata.SavedData;
+import net.minecraft.world.level.saveddata.SavedDataType;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -71,14 +69,17 @@ public final class TimerRegistry extends SavedData {
             Codec.STRING.fieldOf("reason").forGetter(Timer::reason)
     ).apply(i, Timer::new));
 
-    private static final Codec<TimerRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
+    // 包内可见:持久化是这个类的全部价值,得让单测够得着。
+    static final Codec<TimerRegistry> CODEC = RecordCodecBuilder.create(i -> i.group(
             TIMER_CODEC.listOf().optionalFieldOf("timers", List.of())
                     .forGetter(r -> new ArrayList<>(r.timers.values())),
             Codec.LONG.optionalFieldOf("nextId", 1L).forGetter(r -> r.nextId)
     ).apply(i, TimerRegistry::new));
 
-    private static final SavedData.Factory<TimerRegistry> FACTORY = new SavedData.Factory<>(
-            TimerRegistry::new, TimerRegistry::load,
+    // 1.21.5 codec 化的 SavedDataType:存储层自己驱动(反)序列化,save()/load() 重写不复存在;
+    // 解析失败由存储层兜底(readSavedData 记日志返 null,computeIfAbsent 落回构造器)。
+    private static final SavedDataType<TimerRegistry> TYPE = new SavedDataType<>(
+            DATA_NAME, TimerRegistry::new, CODEC,
             net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 
     private final Map<String, Timer> timers = new LinkedHashMap<>();
@@ -95,7 +96,7 @@ public final class TimerRegistry extends SavedData {
     }
 
     public static TimerRegistry get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, DATA_NAME);
+        return server.overworld().getDataStorage().computeIfAbsent(TYPE);
     }
 
     // ---- 定 / 查 / 撤 ----
@@ -193,21 +194,4 @@ public final class TimerRegistry extends SavedData {
         }
     }
 
-    // ---- 落盘 ----
-
-    @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
-        CODEC.encodeStart(NbtOps.INSTANCE, this).result()
-                .ifPresent(t -> {
-                    if (t instanceof CompoundTag c) {
-                        tag.merge(c);
-                    }
-                });
-        return tag;
-    }
-
-    // 包内可见:持久化是这个类的全部价值,得让单测够得着。
-    static TimerRegistry load(CompoundTag tag, HolderLookup.Provider registries) {
-        return CODEC.parse(NbtOps.INSTANCE, tag).result().orElseGet(TimerRegistry::new);
-    }
 }

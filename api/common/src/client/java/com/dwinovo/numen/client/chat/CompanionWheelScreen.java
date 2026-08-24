@@ -96,8 +96,13 @@ public class CompanionWheelScreen extends Screen {
      * 潜行减速由 {@code LocalPlayer.aiStep} 在 {@code input.tick()} 之后自己乘,
      * 这里不再重复施加。疾跑位沿用原版本 tick 采到的值——与旧代一致(疾跑键本
      * 就随开屏失活,靠的是移动意图不断档来保住已在跑的状态)。
+     *
+     * <p>1.21.5:两个冲量字段合并成一个 {@code protected Vec2 moveVector},包外写不进,
+     * 所以这里只重建按键记录并把移动向量 <b>返回</b>,由 {@code MixinKeyboardInput}(它继承
+     * {@code ClientInput},能写受保护字段)落盘。向量算法逐字照抄原版 tick:两轴冲量
+     * 各取 ±1/0 后整体 {@code normalized()},斜向不再快于直向。
      */
-    public static void feedMovement(net.minecraft.client.player.ClientInput input) {
+    public static net.minecraft.world.phys.Vec2 feedMovement(net.minecraft.client.player.ClientInput input) {
         Minecraft mc = Minecraft.getInstance();
         long window = mc.getWindow().getWindow();
         boolean up = physicallyDown(window, mc.options.keyUp);
@@ -108,8 +113,9 @@ public class CompanionWheelScreen extends Screen {
         boolean shift = physicallyDown(window, mc.options.keyShift);
         input.keyPresses = new net.minecraft.world.entity.player.Input(
                 up, down, left, right, jump, shift, input.keyPresses.sprint());
-        input.forwardImpulse = (up ? 1f : 0f) - (down ? 1f : 0f);
-        input.leftImpulse = (left ? 1f : 0f) - (right ? 1f : 0f);
+        float forward = (up ? 1f : 0f) - (down ? 1f : 0f);
+        float strafe = (left ? 1f : 0f) - (right ? 1f : 0f);
+        return new net.minecraft.world.phys.Vec2(strafe, forward).normalized();
     }
 
     private float step() {

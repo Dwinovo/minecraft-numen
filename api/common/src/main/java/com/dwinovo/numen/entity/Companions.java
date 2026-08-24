@@ -368,7 +368,7 @@ public final class Companions {
                     : source.getEntity() != null ? source.getEntity().getName().getString()
                     : source.type().msgId();
         }
-        boolean day = body.level().isDay();
+        boolean day = body.level().isBrightOutside();   // 1.21.5: isDay → isBrightOutside
         com.dwinovo.numen.event.NumenEvents.emit(body,
                 com.dwinovo.numen.event.NumenEvents.Kind.WOKE,
                 java.util.Map.of("cause", attacker != null ? "hurt" : day ? "daybreak" : "other"),
