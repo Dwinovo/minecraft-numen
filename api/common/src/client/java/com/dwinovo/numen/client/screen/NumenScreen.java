@@ -111,8 +111,6 @@ public final class NumenScreen extends Screen {
     }
     private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME = railSpr("avatar_frame");
     private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME_ACTIVE = railSpr("avatar_frame_active");
-    private static final net.minecraft.resources.ResourceLocation SUMMON_SPRITE = railSpr("summon");
-    private static final net.minecraft.resources.ResourceLocation SUMMON_ACTIVE = railSpr("summon_active");
     private static final net.minecraft.resources.ResourceLocation CHEVRON_UP = railSpr("chevron_up");
     private static final net.minecraft.resources.ResourceLocation CHEVRON_DOWN = railSpr("chevron_down");
 
@@ -937,13 +935,23 @@ public final class NumenScreen extends Screen {
                 txt(g, Component.literal("✕"), bx + 2, by + 1, ON_BAND);
             }
         }
-        // "+" summon tile (baked "+" glyph), pinned to the rail bottom
+        // "+" 召唤格:纯代码绘制(圆角卡 + 双矩形十字),跟主题走色——十字是几何,烘焙成
+        // 贴图换主题就变色盲。像素画类贴图(头像框/箭头/心饼)不在此列,那是刻意的像素风。
+        // 召唤流程开着或悬停时边框与十字亮 CTA。
         int py = top + panelH - PAD - RAIL_AV;
         // scroll cues — gold chevrons when the roster overflows the rail in either direction
         int cx = ax + RAIL_AV / 2;
         if (railScroll > 0) chevron(g, cx, top + 1, true);
         if (railScroll < maxRailScroll()) chevron(g, cx, py - 9, false);
-        com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, summoning ? SUMMON_ACTIVE : SUMMON_SPRITE, ax, py, RAIL_AV, RAIL_AV);
+        boolean plusHot = summoning || (mouseX >= ax && mouseX < ax + RAIL_AV
+                && mouseY >= py && mouseY < py + RAIL_AV);
+        com.dwinovo.numen.client.ui.RoundRect.card(g, ax, py, ax + RAIL_AV, py + RAIL_AV, 3,
+                FIELD, plusHot ? CTA : BORDER);
+        int pcx = ax + RAIL_AV / 2;
+        int pcy = py + RAIL_AV / 2;
+        int plusColor = plusHot ? CTA : TXT_MUTED;
+        g.fill(pcx - 5, pcy - 1, pcx + 5, pcy + 1, plusColor);
+        g.fill(pcx - 1, pcy - 5, pcx + 1, pcy + 5, plusColor);
     }
 
     /** Scroll-affordance chevron sprite (amber pixel-art triangle, up = more above / down = more below).

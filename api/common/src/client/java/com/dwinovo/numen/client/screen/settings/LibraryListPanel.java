@@ -22,6 +22,10 @@ import java.util.function.Supplier;
  * (名称/元信息/✎✕ 热区/可选行首绑定 ●)、删除走 {@link ConfirmDialog} 模态闸。
  * 模型配置/声线/皮肤同构——差异全在构造参数(取数、行文案、删除动作),
  * 面板只管几何与交互。行体与 ✎ 同义(点行即编辑);✕ 先确认再删。
+ *
+ * <p>开了 {@link #withBind} 的库,行首多一列绑定点:● = 当前同伴在用,○ = 点击换绑
+ * 给它;有解绑动作的库再点 ● 即解绑(回默认)。改绑即时生效——这就是"已创建同伴的
+ * 配置也能增删改查"的"改"字,不用遣散重召。
  */
 public final class LibraryListPanel<T> {
 
@@ -37,6 +41,8 @@ public final class LibraryListPanel<T> {
     }
 
     private static final int ROW_H = 24;
+    /** 行首绑定点的热区宽(开了 withBind 的库,行内容整体右移这么多)。 */
+    private static final int BIND_ZONE = 14;
     /** 行尾图标热区左缘距行右缘:✕ 最右,✎ 在其左(与旧版热区同宽,肌肉记忆不换)。 */
     private static final int DEL_ZONE = 14;
     private static final int EDIT_ZONE = 26;
@@ -80,6 +86,9 @@ public final class LibraryListPanel<T> {
     private static final int TOGGLE_ZONE = 40;
     // 可选的预设行克隆动作(人格库的 ⧉)。
     private Consumer<T> onClone;
+    // 可选的行首绑定动作:点 ○ 绑给当前同伴;onUnbind 为 null 的库不许解绑(必须有一个)。
+    private Consumer<T> onBind;
+    private Consumer<T> onUnbind;
     // 可选的标题行附加按钮(人格库的 ↻ 重扫)。
     private String titleActionLabel;
     private Runnable titleAction;
@@ -142,6 +151,17 @@ public final class LibraryListPanel<T> {
     /** 预设行(Row.preset)的 ⧉ 动作:克隆成可编辑副本并刷新列表。 */
     public LibraryListPanel<T> withPresetClone(Consumer<T> onClone) {
         this.onClone = onClone;
+        return this;
+    }
+
+    /**
+     * 行首绑定点:{@code onBind} 把该条目绑给当前同伴(即时生效);{@code onUnbind} 为
+     * null 表示这库不许解绑(如模型档案——同伴必须有一个端点)。只在 Row.marked 非 null
+     * (= 有同伴被选中)的行显示与响应。
+     */
+    public LibraryListPanel<T> withBind(Consumer<T> onBind, Consumer<T> onUnbind) {
+        this.onBind = onBind;
+        this.onUnbind = onUnbind;
         return this;
     }
 
@@ -253,11 +273,22 @@ public final class LibraryListPanel<T> {
     private void renderRow(IDrawSurface s, NumenTheme.Colors c, T e, int index,
                            int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
         Row row = rowOf.apply(e);   // 行悬停底由 ListView 统一画(带淡入),这里只画内容
-        if (Boolean.TRUE.equals(row.marked())) {
+        int tx = rx + 4;
+        if (onBind != null && row.marked() != null) {
+            // 绑定点列:● 在用 / ○ 可绑(悬停亮 CTA)。整库行一起缩进,列内对齐不乱。
+            boolean bound = Boolean.TRUE.equals(row.marked());
+            boolean overBind = hovered && mouseX >= rx && mouseX < rx + BIND_ZONE;
+            int dy = ry + (rh - 6) / 2;
+            int color = bound || overBind ? c.accent() : c.textMuted();
+            s.fillRoundRect(rx + 4, dy, 6, 6, 3, color);
+            if (!bound) {
+                s.fillRoundRect(rx + 5, dy + 1, 4, 4, 2, c.panelBg());   // 空心 = 未绑定
+            }
+            tx = rx + BIND_ZONE;
+        } else if (Boolean.TRUE.equals(row.marked())) {
             // 绑定标记 = 行左缘 accent 侧条,不占缩进(行内容与无标记库同列对齐)。
             s.fillRect(rx, ry + 2, 2, rh - 4, c.accent());
         }
-        int tx = rx + 4;
         if (rowIcon != null) {
             rowIcon.draw(s, e, rx + 2, ry + (rh - rowIconSize) / 2, rowIconSize);
             tx = rx + 2 + rowIconSize + 4;
@@ -309,7 +340,24 @@ public final class LibraryListPanel<T> {
     private boolean rowClicked(int index, double xInRow) {
         if (index < 0 || index >= entries.size()) return false;
         T e = entries.get(index);
-        if (rowOf.apply(e).preset()) {   // 预设行:只有 ⧉ 热区有动作,行体吞掉不编辑
+        Row row = rowOf.apply(e);
+        // 绑定点最先判(预设行也能绑——预设人设一样可以给同伴用)。
+        if (onBind != null && row.marked() != null && xInRow < BIND_ZONE) {
+            if (Boolean.TRUE.equals(row.marked())) {
+                if (onUnbind != null) {
+                    onUnbind.accept(e);
+                    refresh();
+                    noticeSuccess(t("numen.gui.list.bind_cleared"));
+                }
+            } else {
+                onBind.accept(e);
+                refresh();
+                noticeSuccess(net.minecraft.network.chat.Component
+                        .translatable("numen.gui.list.bound", row.name()).getString());
+            }
+            return true;
+        }
+        if (row.preset()) {   // 预设行:只有 ⧉ 热区有动作,行体吞掉不编辑
             if (xInRow >= listW - DEL_ZONE && onClone != null) {
                 onClone.accept(e);
                 refresh();

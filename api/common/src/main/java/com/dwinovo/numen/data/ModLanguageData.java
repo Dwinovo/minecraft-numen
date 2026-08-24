@@ -507,6 +507,8 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port, blank = global");
         adder.add(Keys.GUI_PROVIDERS_CTX,               "Context length (optional)");
         adder.add(Keys.GUI_PROVIDERS_CTX_HINT,          "tokens; blank = auto by model");
+        adder.add("numen.gui.list.bound",               "Now using: %s");
+        adder.add("numen.gui.list.bind_cleared",        "Unbound — back to default");
         adder.add(Keys.GUI_PROVIDERS_THINKING,          "Reasoning");
         adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO,     "Auto");
         adder.add(Keys.GUI_PROVIDERS_THINKING_OFF,      "Off");
@@ -817,6 +819,8 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port，留空跟随全局");
         adder.add(Keys.GUI_PROVIDERS_CTX,               "上下文长度（可选）");
         adder.add(Keys.GUI_PROVIDERS_CTX_HINT,          "tokens；留空按模型表自动");
+        adder.add("numen.gui.list.bound",               "已换用：%s");
+        adder.add("numen.gui.list.bind_cleared",        "已解绑，回到默认");
         adder.add(Keys.GUI_PROVIDERS_THINKING,          "推理");
         adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO,     "自动");
         adder.add(Keys.GUI_PROVIDERS_THINKING_OFF,      "关闭");
