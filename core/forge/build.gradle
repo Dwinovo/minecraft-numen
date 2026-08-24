@@ -93,6 +93,10 @@ minecraft {
 // /test run <用例> 现场围观也用(见 CompanionGameTests 静态块)。
 minecraft.runs.configureEach {
     property 'numen.gametest.structures', file('gameteststructures').absolutePath
+    // api 以同仓源码集进运行(不是带 MANIFEST 的 mod jar),它的 mixin 配置没人替它
+    // 声明——发行物里由 api jar 的 MixinConfigs 清单项接手,开发运行在这里显式挂。
+    args '--mixin.config', 'numen_api.mixins.json'
+    args '--mixin.config', 'numen_api.forge.mixins.json'
 }
 
 // 跑批世界必须是<b>超平坦</b>,而且每次从头生成。

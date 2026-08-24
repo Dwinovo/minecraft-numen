@@ -703,14 +703,15 @@ public class CompanionGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_banner", new BlockPos(2, 2, 2), true);
         BlockPos at = helper.absolutePos(new BlockPos(7, 2, 7));
+        // 1.20.1 的花纹是短哈希 + 染料序数:stripe_top = "ts",红 = 14
         var patterns = new net.minecraft.nbt.ListTag();
         var one = new net.minecraft.nbt.CompoundTag();
-        one.putString("color", "red");
-        one.putString("pattern", "minecraft:stripe_top");
+        one.putInt("Color", 14);
+        one.putString("Pattern", "ts");
         patterns.add(one);
         var bannerData = new net.minecraft.nbt.CompoundTag();
         bannerData.putString("id", "minecraft:banner");
-        bannerData.put("patterns", patterns);
+        bannerData.put("Patterns", patterns);
 
         var targets = List.of(new BuildTaskRecord.Target(Blocks.WHITE_BANNER, Items.WHITE_BANNER,
                 at, "banner", null, null, null));
@@ -727,7 +728,8 @@ public class CompanionGameTests {
             helper.assertTrue(be instanceof net.minecraft.world.level.block.entity.BannerBlockEntity,
                     "banner has no block entity");
             var saved = be.saveWithoutMetadata();
-            helper.assertTrue(saved.contains("patterns"),
+            // 1.20.1 空花纹也会写出 Patterns:[],光查键名会假绿——按"列表非空"钉
+            helper.assertTrue(!saved.getList("Patterns", net.minecraft.nbt.Tag.TAG_COMPOUND).isEmpty(),
                     "the blueprint's banner pattern must survive placement, got " + saved);
             CompanionFactory.despawn(level.getServer(), companion);
         });
