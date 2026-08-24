@@ -152,6 +152,37 @@ public class CompanionGameTests {
         });
     }
 
+    /**
+     * 丢出去的是原物:附魔镐 drop_items 之后,地上的掉落物必须还带着那条附魔。
+     * 曾经按数量销毁再按种类重造,附魔/耐久/改名全部蒸发——主人递来的神器一进一出成白板。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void dropped_items_keep_their_components(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_courier", new BlockPos(4, 2, 4), false);
+        ItemStack pick = new ItemStack(Items.DIAMOND_PICKAXE);
+        var efficiency = level.registryAccess()
+                .registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
+                .getHolderOrThrow(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY);
+        pick.enchant(efficiency, 3);
+        companion.getInventory().add(pick);
+        TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().dropItems(
+                "minecraft:diamond_pickaxe", 1, TaskDispatch.ctx("gametest-courier", companion));
+        TaskDispatch.runSync(companion, record, reply -> {});
+
+        helper.succeedWhen(() -> {
+            var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                    companion.getBoundingBox().inflate(8));
+            helper.assertTrue(!drops.isEmpty(), "nothing was dropped");
+            ItemStack landed = drops.get(0).getItem();
+            helper.assertTrue(landed.is(Items.DIAMOND_PICKAXE), "wrong item dropped: " + landed);
+            var enchants = net.minecraft.world.item.enchantment.EnchantmentHelper.getEnchantmentsForCrafting(landed);
+            helper.assertTrue(enchants.getLevel(efficiency) == 3,
+                    "the enchantment did not survive the toss: " + enchants);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     // ==================== 摔落 ====================
 
     /**

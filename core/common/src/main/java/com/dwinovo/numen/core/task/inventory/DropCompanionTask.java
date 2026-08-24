@@ -40,18 +40,22 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
         Inventory inv = player.getInventory();
         int have = PlayerInv.count(inv, r.item);
         dropped = Math.min(r.count, have);
-        PlayerInv.remove(inv, r.item, dropped);
 
+        // 丢的是背包里<b>真实的那几叠</b>:从格子里拆出来的栈带着自己的全部组件
+        // (附魔/耐久/改名/容器内容物)。曾经按数量销毁再 new ItemStack 重造,附魔镐
+        // 丢出来变白板——凭空重造只属于创造模式的 take_items,不属于这里。
         // Toss like a real player: native Player.drop(stack, false) throws each stack in the facing
         // direction with vanilla motion + pickup delay and fires the drop event (mods watching item
         // tosses see it) — instead of hand-building an ItemEntity with a made-up velocity.
-        int max = new ItemStack(r.item).getMaxStackSize();
         int remaining = dropped;
-        while (remaining > 0) {
-            int lump = Math.min(remaining, max);
-            remaining -= lump;
-            player.drop(new ItemStack(r.item, lump), false);
+        for (int i = 0; i < inv.getContainerSize() && remaining > 0; i++) {
+            ItemStack s = inv.getItem(i);
+            if (s.isEmpty() || !s.is(r.item)) continue;
+            ItemStack out = inv.removeItem(i, Math.min(s.getCount(), remaining));
+            remaining -= out.getCount();
+            player.drop(out, false);
         }
+        inv.setChanged();
         doneMessage = "dropped " + dropped + "x " + r.label
                 + (dropped < r.count ? " (only had " + dropped + ")" : "");
         succeed();   // work is done — finalize this same tick, before a Stop can mislabel it
