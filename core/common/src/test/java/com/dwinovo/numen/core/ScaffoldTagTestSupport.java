@@ -32,8 +32,13 @@ public final class ScaffoldTagTestSupport {
     /** 幂等:每个测试类的 {@code @BeforeAll} 都可以调。 */
     @SuppressWarnings("unchecked")
     public static void bind() {
-        ((MappedRegistry<Item>) BuiltInRegistries.ITEM).bindTag(   // 1.21.2+ 按标签逐条绑
-                InitTag.SCAFFOLDS,
-                MATERIALS.stream().map(BuiltInRegistries.ITEM::wrapAsHolder).toList());
+        // 1.21.2+ 冻结后的注册表拒绝直写标签(bindTag 走 validateWrite);
+        // 原版数据包加载对冻结注册表走 prepareTagReload → apply,同一条路。
+        ((MappedRegistry<Item>) BuiltInRegistries.ITEM).prepareTagReload(
+                new net.minecraft.tags.TagLoader.LoadResult<>(
+                        net.minecraft.core.registries.Registries.ITEM,
+                        java.util.Map.of(InitTag.SCAFFOLDS,
+                                MATERIALS.stream().map(BuiltInRegistries.ITEM::wrapAsHolder).toList())))
+                .apply();
     }
 }

@@ -255,13 +255,16 @@ class ProtectionPinsTest {
         }
     }
 
-    /** 原版数据包加载走的同一条 bindTag 路(1.21.2+ 按标签逐条绑),生产代码不为测试开口子。 */
+    /** 原版数据包加载对冻结注册表走的同一条 prepareTagReload→apply 路(1.21.2+
+     *  直写 bindTag 会被 validateWrite 拒),生产代码不为测试开口子。 */
     @SuppressWarnings("unchecked")
     private static void bindBlockTags(java.util.Map<net.minecraft.tags.TagKey<net.minecraft.world.level.block.Block>,
             java.util.List<net.minecraft.core.Holder<net.minecraft.world.level.block.Block>>> tags) {
-        var reg = (net.minecraft.core.MappedRegistry<net.minecraft.world.level.block.Block>)
-                net.minecraft.core.registries.BuiltInRegistries.BLOCK;
-        tags.forEach(reg::bindTag);
+        ((net.minecraft.core.MappedRegistry<net.minecraft.world.level.block.Block>)
+                net.minecraft.core.registries.BuiltInRegistries.BLOCK)
+                .prepareTagReload(new net.minecraft.tags.TagLoader.LoadResult<>(
+                        net.minecraft.core.registries.Registries.BLOCK, tags))
+                .apply();
     }
 
     @Test
