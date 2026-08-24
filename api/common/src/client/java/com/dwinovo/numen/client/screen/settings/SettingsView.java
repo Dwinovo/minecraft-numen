@@ -117,7 +117,11 @@ public final class SettingsView {
                         String meta = (nb(e.provider()) ? e.provider() : "?") + " · "
                                 + (nb(e.model()) ? e.model() : "?")
                                 + (hasKey ? "" : " · " + I18n.get(ModLanguageData.Keys.PROVIDER_NO_KEY));
-                        return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta, !hasKey, null);
+                        // 行首绑定点:● = 当前同伴走这份档案(召唤后也能换,即时生效)
+                        Boolean marked = host.uuid() == null ? null : e.id().equals(
+                                com.dwinovo.numen.client.agent.CompanionHome
+                                        .binding(host.uuid()).providerId());
+                        return new LibraryListPanel.Row(e.name() == null ? "" : e.name(), meta, !hasKey, marked);
                     },
                     e -> Component.translatable(ModLanguageData.Keys.PROVIDER_DELETE_CONFIRM,
                             e.name() == null ? "" : e.name()).getString(),
@@ -128,7 +132,13 @@ public final class SettingsView {
                         providerDraft = new ProfileFormPanel.Draft();
                         host.rebuild();
                     },
-                    this::beginEditProvider);
+                    this::beginEditProvider)
+                    // 换绑走 setProviderEntry(下一次请求即生效);不许解绑——同伴必须有端点
+                    .withBind(e -> {
+                        if (host.uuid() != null) {
+                            AgentLoopRegistry.getOrCreate(host.uuid()).setProviderEntry(e.id());
+                        }
+                    }, null);
         }
         return profileList;
     }
@@ -149,7 +159,7 @@ public final class SettingsView {
                         else detail = nb(e.model()) ? e.model() : "?";
                         String meta = (nb(e.backend()) ? e.backend() : "openai") + " · " + detail
                                 + " · vol " + Math.round(e.volume() * 5.0f);
-                        // 行首 ● = 本同伴正在用的声线(召唤时选定);只读标记,不提供事后换绑。
+                        // 行首绑定点:● = 本同伴正在用的声线;○ 点击换绑,再点 ● 解绑(闭嘴)。
                         Boolean marked = host.uuid() == null ? null : e.id().equals(
                                 com.dwinovo.numen.client.agent.CompanionHome.binding(host.uuid()).voiceId());
                         return new LibraryListPanel.Row(e.name(), meta, false, marked);
@@ -164,6 +174,22 @@ public final class SettingsView {
                         host.rebuild();
                     },
                     this::beginEditVoice)
+                    // 换绑/解绑写进 CompanionHome 绑定,下一句话就用新声线(VoiceLibrary 现查)
+                    .withBind(
+                            e -> {
+                                if (host.uuid() != null) {
+                                    com.dwinovo.numen.client.agent.CompanionHome.bind(host.uuid(),
+                                            com.dwinovo.numen.client.agent.CompanionHome
+                                                    .binding(host.uuid()).withVoice(e.id()));
+                                }
+                            },
+                            e -> {
+                                if (host.uuid() != null) {
+                                    com.dwinovo.numen.client.agent.CompanionHome.bind(host.uuid(),
+                                            com.dwinovo.numen.client.agent.CompanionHome
+                                                    .binding(host.uuid()).withVoice(null));
+                                }
+                            })
                     .withToggle(ModLanguageData.Keys.VOICE_ENABLED,
                             () -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().enabled(),
                             v -> com.dwinovo.numen.client.voice.VoiceLibrary.instance().setEnabled(v));
@@ -562,7 +588,11 @@ public final class SettingsView {
                         String badge = p.preset() ? I18n.get("numen.persona.preset_badge") + " · " : "";
                         // 正文预览压成单行(MD 里的换行在 24px 行里没有意义)。
                         String meta = (badge + p.text()).replace('\n', ' ');
-                        return new LibraryListPanel.Row(p.name(), meta, false, null, p.preset());
+                        // 行首绑定点:● = 本同伴的人设;预设行同样可绑
+                        Boolean marked = host.uuid() == null ? null : p.id().equals(
+                                com.dwinovo.numen.client.agent.CompanionHome
+                                        .binding(host.uuid()).personaId());
+                        return new LibraryListPanel.Row(p.name(), meta, false, marked, p.preset());
                     },
                     p -> Component.translatable("numen.persona.delete_confirm", p.name()).getString(),
                     p -> PersonaLibrary.instance().remove(p.id()),
@@ -573,6 +603,18 @@ public final class SettingsView {
                         host.rebuild();
                     },
                     this::beginEditPersona)
+                    // 换绑 = setPersona(活切,聊天流插分隔记号);解绑回默认人设
+                    .withBind(
+                            p -> {
+                                if (host.uuid() != null) {
+                                    AgentLoopRegistry.getOrCreate(host.uuid()).setPersona(p.id());
+                                }
+                            },
+                            p -> {
+                                if (host.uuid() != null) {
+                                    AgentLoopRegistry.getOrCreate(host.uuid()).setPersona(null);
+                                }
+                            })
                     .withPresetClone(p -> PersonaLibrary.instance().clonePersona(p.id()))
                     // ↻ 重扫 persona/ 目录——外部编辑器改完 md 不用重开面板。
                     .withTitleAction("↻", () -> PersonaLibrary.instance().reload());
