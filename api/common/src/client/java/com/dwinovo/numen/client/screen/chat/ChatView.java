@@ -20,6 +20,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
+import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.FormattedCharSequence;
@@ -175,8 +176,8 @@ public final class ChatView {
         if (lastMaxScroll > 0) {
             int thumbH = Math.max(12, h * h / (h + lastMaxScroll));
             int thumbY = y + Math.round((h - thumbH) * (scrollPos / lastMaxScroll));
-            com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
-            com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
+            g.blitSprite(SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
+            g.blitSprite(SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
         }
     }
 
@@ -557,7 +558,7 @@ public final class ChatView {
             draw(g, Nb.colored(b.label(), MUTED).getVisualOrderText(), bx + 2, y);
         }
         if (b.showAvatar()) {
-            com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, AVATAR_FRAME, avX - 2, bubTop - 2, AV + 4, AV + 4);
+            g.blitSprite(AVATAR_FRAME, avX - 2, bubTop - 2, AV + 4, AV + 4);
             PlayerFaceRenderer.draw(g, skin(b.own()), avX, bubTop, AV);
         }
         RoundRect.card(g, bx, bubTop, bx + bw, bubTop + bh, RADIUS, b.fill(), b.border());
@@ -597,12 +598,11 @@ public final class ChatView {
         Nb.text(g, font, seq, x, y);
     }
 
-    private ResourceLocation skin(boolean own) {
-        // 1.20.1:皮肤就是贴图位置(PlayerSkin 记录是 1.20.2+ 的)
+    private PlayerSkin skin(boolean own) {
         if (own) {
             AbstractClientPlayer p = Minecraft.getInstance().player;
-            if (p != null) return p.getSkinTextureLocation();
-            return DefaultPlayerSkin.getDefaultSkin(uuid.get());
+            if (p != null) return p.getSkin();
+            return DefaultPlayerSkin.get(uuid.get());
         }
         return com.dwinovo.numen.client.agent.KnownSkins.of(uuid.get());
     }

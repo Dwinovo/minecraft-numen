@@ -10,6 +10,7 @@ import net.minecraft.network.protocol.PacketFlow;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.util.function.Consumer;
 
 /**
  * A channel-less {@link Connection} for a companion fake {@code ServerPlayer}.
@@ -89,8 +90,14 @@ public final class FakeConnection extends Connection {
     /** Discard every outbound packet — there is no client to receive it.
      *  The 1-arg and 2-arg {@code send} overloads route through this one. */
     @Override
-    public void send(Packet<?> packet, PacketSendListener listener) {
+    public void send(Packet<?> packet, PacketSendListener listener, boolean flush) {
         // no-op: drop it on the floor (no channel, no pendingActions growth)
+    }
+
+    /** Vanilla queues these until "connected"; we never connect, so run nothing. */
+    @Override
+    public void runOnceConnected(Consumer<Connection> action) {
+        // no-op
     }
 
     /**
@@ -118,6 +125,11 @@ public final class FakeConnection extends Connection {
 
     @Override
     public void handleDisconnection() {
+        // no-op
+    }
+
+    @Override
+    public void flushChannel() {
         // no-op
     }
 

@@ -11,6 +11,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 
@@ -45,14 +46,13 @@ public final class ItemsView {
     private static final int AGENT_H = 46;                // Agent 状态带
     private static final int COMP_H = TOP_H + 6 + AGENT_H;
 
-    // 心与鸡腿:这一代的 HUD 图标没有各自的 sprite id,还整片拼在原版 HUD 图集上,
-    // 原版自己也是按 UV 从图集里取格子画的——照抄它的 UV,不往 mod 资源里复制贴图。
-    // 同一行里空/满/半三格的横坐标是固定的三档,心在第 0 行、鸡腿在第 27 行。
-    private static final int U_EMPTY = 16;
-    private static final int U_FULL = 52;
-    private static final int U_HALF = 61;
-    private static final int V_HEART = 0;
-    private static final int V_FOOD = 27;
+    // 原版 HUD 贴图:心与鸡腿
+    private static final ResourceLocation HEART_BG = new ResourceLocation("hud/heart/container");
+    private static final ResourceLocation HEART_FULL = new ResourceLocation("hud/heart/full");
+    private static final ResourceLocation HEART_HALF = new ResourceLocation("hud/heart/half");
+    private static final ResourceLocation FOOD_BG = new ResourceLocation("hud/food_empty");
+    private static final ResourceLocation FOOD_FULL = new ResourceLocation("hud/food_full");
+    private static final ResourceLocation FOOD_HALF = new ResourceLocation("hud/food_half");
 
     private ItemsView() {}
 
@@ -83,19 +83,17 @@ public final class ItemsView {
         RoundRect.card(g, startX + 22, cTop, startX + LEFT_W, cTop + TOP_H, 4,
                 th.surface(), th.surfaceBorder());
         if (e != null) {
-            // 1.20.1 签名:定位点 + 相对鼠标偏移(1.21 的包围盒版本尚不存在)。
-            // 包围盒版按 42 的 scale 居中于卡内;这里换算成底边中点定位。
-            int posX = startX + 22 + (LEFT_W - 22) / 2;
-            int posY = cTop + TOP_H - 8;
             net.minecraft.client.gui.screens.inventory.InventoryScreen
-                    .renderEntityInInventoryFollowsMouse(g, posX, posY, 42,
-                            (float) posX - mouseX, (float) (posY - TOP_H * 0.6f) - mouseY, e);
+                    .renderEntityInInventoryFollowsMouse(g, startX + 24, cTop + 2,
+                            startX + LEFT_W - 2, cTop + TOP_H - 2, 42, 0.0625f,
+                            (float) mouseX, (float) mouseY, e);
         }
 
         // ---- 右块顶行:体征(原版心/鸡腿)左侧,2×2 合成 + 结果右侧 ----
-        if (e != null) renderStatRow(g, rightX, cTop, e.getHealth(), e.getMaxHealth(), V_HEART);
+        if (e != null) renderStatRow(g, rightX, cTop, e.getHealth(), e.getMaxHealth(),
+                HEART_FULL, HEART_HALF, HEART_BG);
         int food = (snap != null && snap.loaded()) ? snap.foodLevel() : 0;
-        renderStatRow(g, rightX, cTop + ICON + 2, food, 20, V_FOOD);
+        renderStatRow(g, rightX, cTop + ICON + 2, food, 20, FOOD_FULL, FOOD_HALF, FOOD_BG);
 
         for (int i = 0; i < 4; i++) {
             int cx = rightX + 96 + (i % 2) * SLOT, cy = cTop + (i / 2) * SLOT;
@@ -216,19 +214,16 @@ public final class ItemsView {
         g.fill(x + 1, y + 1, x + SLOT - 1, y + SLOT - 1, UiTheme.mix(th.ground(), th.border(), 0.34f));
     }
 
-    /**
-     * A row of segmented icons for a 0..max stat (2 units per icon), drawn from the vanilla HUD
-     * atlas. {@code vRow} picks the icon family (hearts / hunger shanks); the empty slot is always
-     * painted first and the full/half overlay goes on top — same two-pass order vanilla uses.
-     */
-    private static void renderStatRow(GuiGraphics g, int x, int y, float value, float max, int vRow) {
+    /** A row of segmented icons for a 0..max stat (2 units per icon): vanilla HUD sprites. */
+    private static void renderStatRow(GuiGraphics g, int x, int y, float value, float max,
+                                      ResourceLocation full, ResourceLocation half, ResourceLocation empty) {
         int units = Math.max(1, (int) Math.ceil(max / 2f));
         for (int i = 0; i < units; i++) {
             int ix = x + i * ICON_STEP;
-            com.dwinovo.numen.client.screen.GuiCompat.blitHudIcon(g, ix, y, U_EMPTY, vRow, ICON, ICON);
+            g.blitSprite(empty, ix, y, ICON, ICON);
             float v = value - i * 2f;
-            if (v >= 2f)      com.dwinovo.numen.client.screen.GuiCompat.blitHudIcon(g, ix, y, U_FULL, vRow, ICON, ICON);
-            else if (v >= 1f) com.dwinovo.numen.client.screen.GuiCompat.blitHudIcon(g, ix, y, U_HALF, vRow, ICON, ICON);
+            if (v >= 2f)      g.blitSprite(full, ix, y, ICON, ICON);
+            else if (v >= 1f) g.blitSprite(half, ix, y, ICON, ICON);
         }
     }
 

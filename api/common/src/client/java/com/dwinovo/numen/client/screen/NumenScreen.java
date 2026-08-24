@@ -29,6 +29,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
+import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -837,7 +838,7 @@ public final class NumenScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mx, double my, double sy) {   // 1.20.1: single scroll delta (no horizontal axis)
+    public boolean mouseScrolled(double mx, double my, double sx, double sy) {
         // 模态确认卡在场:背景(侧栏名册/设置列表)不响应滚轮。
         if (dismissOpen()) {
             return false;
@@ -862,7 +863,7 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.CHAT && sy != 0) {
             return chatView.mouseScrolled(sy);
         }
-        return super.mouseScrolled(mx, my, sy);
+        return super.mouseScrolled(mx, my, sx, sy);
     }
 
     // ---- render ----
@@ -1026,7 +1027,7 @@ public final class NumenScreen extends Screen {
             NumenRoster.Entry e = entries.get(i);
             boolean active = e.uuid().equals(uuid);
             // textured socket behind the head (gold-bordered when active), then the avatar, then a status LED
-            com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
+            g.blitSprite(active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
             PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
             if (e.dead()) {                                           // dead — dim veil + respawn countdown
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
@@ -1062,7 +1063,7 @@ public final class NumenScreen extends Screen {
     /** Scroll-affordance chevron sprite (amber pixel-art triangle, up = more above / down = more below).
      *  Blitted at its native 11×6 so the pixels stay crisp (no scaling, no AA). */
     private void chevron(GuiGraphics g, int cx, int y, boolean up) {
-        com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, 
+        g.blitSprite(
                 up ? CHEVRON_UP : CHEVRON_DOWN, cx - 5, y, 11, 6);
     }
 
@@ -1107,7 +1108,7 @@ public final class NumenScreen extends Screen {
         }).orElse(TXT_FAINT);
     }
 
-    private static net.minecraft.resources.ResourceLocation skinFor(UUID u) {
+    private static PlayerSkin skinFor(UUID u) {
         return com.dwinovo.numen.client.agent.KnownSkins.of(u);
     }
 

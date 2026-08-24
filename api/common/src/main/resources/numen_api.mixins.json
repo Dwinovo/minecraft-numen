@@ -13,7 +13,6 @@
   ],
   "client": [
     "ChatComponentAccessor",
-    "GuiIconsAccessor",
     "MixinKeyboardInput",
     "MixinPlayerRenderer"
   ],
