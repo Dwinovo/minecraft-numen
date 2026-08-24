@@ -564,8 +564,167 @@ artifactId 要逐个核对,不是只核对版本号。
   gametest 日志的 3 条 `BlockAttachedEntity … invalid position: null` ERROR 与 1.21.5
   分支逐条相同，非回归。运行时 gson 2.11.0 / slf4j-api 2.0.16 与 1.21.5 同。
 
-## 1.21.8 → 1.21.10
-_待移植时填写_
+## 1.21.8 → 1.21.10 ✓（已验证：并仓树双 loader 编译 + 出包 + datagen 四路 + 867 单测 + 65 条游戏内用例 ×3；跳过 1.21.9）
+
+含 1.21.9 的**输入 API 重构 + NeoForge Transfer 重写 + authlib 9**。构建旋钮：MC `1.21.10` /
+range `[1.21.10, 1.21.11)` / NeoForm `1.21.10-20251010.172816` / Fabric `0.138.4+1.21.10` / NeoForge `21.10.64`。
+
+### 客户端输入 ❗（api：三个 Screen 子类全套事件化）
+```java
+keyPressed(int, int, int)             → keyPressed(KeyEvent)                    // event.key()/scancode()/modifiers()
+keyReleased(int, int, int)            → keyReleased(KeyEvent)
+charTyped(char, int)                  → charTyped(CharacterEvent)               // (char) event.codepoint()
+mouseClicked(double, double, int)     → mouseClicked(MouseButtonEvent, boolean) // event.x()/y()/button()
+mouseReleased(double, double, int)    → mouseReleased(MouseButtonEvent)
+mouseDragged(double,double,int,double,double) → mouseDragged(MouseButtonEvent, double, double)
+mouseScrolled(double,double,double,double)    → 不变
+KeyMapping.matches(int, int)          → KeyMapping.matches(KeyEvent)
+// 方法开头取局部变量保持方法体不变;super 调用透传 event;import net.minecraft.client.input.*
+// 只有 Screen 子类受影响(NumenScreen/CompanionChatScreen/CompanionWheelScreen);
+// 自有 (mx,my) 辅助类(ChatView/Dropdown/SettingsView/各 Panel)都不是 GuiEventListener,不动。
+// SafeUi 护栏拆出的 mouseClickedInner 同步换 (MouseButtonEvent, boolean) 并在开头取局部量。
+```
+
+### 其它客户端（api）
+```java
+// KeyMapping 分类:字符串翻译键 → KeyMapping.Category.register(RL("numen_api","companions"))(NumenKeys;默认键保持 N);
+//   语言键随 Category.label() 推导键走:key.categories.numen → key.category.numen_api.companions(datagen 语言源同改)
+// PlayerSkin 迁包:net.minecraft.client.resources → net.minecraft.world.entity.player(KnownSkins/ChatView/NumenScreen)
+// GuiElementRenderState.buildVertices(VertexConsumer, float z) → buildVertices(VertexConsumer)
+//   addVertexWith2DPose(pose, x, y, z) → addVertexWith2DPose(pose, x, y)(RoundRect$State,z 由体系管理)
+// ShapeRenderer.renderLineBox 首参 PoseStack → PoseStack.Pose(传 poseStack.last(),PathDebugRenderer)
+// 窗口句柄不再裸 long:mc.getWindow().getWindow() → mc.getWindow().handle();
+//   InputConstants.isKeyDown(long,int) → isKeyDown(Window,int);GLFW.glfwGetMouseButton 仍收 long,
+//   传 window.handle()(CompanionWheelScreen 物理按键采样)
+// Fabric 世界渲染事件:...rendering.v1.WorldRenderEvents → ...rendering.v1.world.WorldRenderEvents
+//   AFTER_TRANSLUCENT 与 ctx.camera() 均被撤:挂 BEFORE_DEBUG_RENDER(原版调试线绘制点),
+//   ctx.matrixStack()→ctx.matrices(),相机走 Minecraft.getInstance().gameRenderer.getMainCamera()
+// NeoForge RenderLevelStageEvent 子事件也撤了 getCamera() → 同样走 getMainCamera()
+// SoundEngine.play 返回类型 void → PlayResult(MixinSoundEngine 按名匹配,不受影响)
+```
+
+### 渲染换成提交式管线 ❗（api：MixinLivingEntityRenderer、SpeechBubbleRenderer）
+——头顶气泡走的就是实体渲染尾部，本档整条通道换了形状：
+```java
+// 挂载点:即时绘制 → 提交式
+LivingEntityRenderer.render(S, PoseStack, MultiBufferSource, int)
+    → LivingEntityRenderer.submit(S, PoseStack, SubmitNodeCollector, CameraRenderState)
+// 玩家渲染状态改名(同一个包)
+PlayerRenderState → AvatarRenderState        // .id 字段仍在,取本体的写法不变
+// 几何:不再直取 VertexConsumer
+buffers.getBuffer(RenderType.text(tex)) → collector.submitCustomGeometry(poseStack, RenderType.text(tex),
+        (PoseStack.Pose pose, VertexConsumer vc) -> { ... })   // 回调内用 vc.addVertex(pose, x, y, z)
+//   注:提交时内部已 pose.copy(),回调是延后执行的,因此参与计算的局部变量要 final
+// 文字:
+font.drawInBatch(str, x, y, color, shadow, matrix, buffers, mode, bg, light)
+    → collector.submitText(poseStack, x, y, FormattedCharSequence, shadow, Font.DisplayMode,
+                              light, color, bgColor, outlineColor)   // 字符串要先 forward(s, Style.EMPTY)
+// 相机朝向:广告牌旋转的来源换人
+mc.getEntityRenderDispatcher().cameraOrientation() → CameraRenderState.orientation
+//   (submit 的末位入参就是它;原版名牌 NameTagFeatureRenderer 用的也是这一个)
+// 0.1.1 的正文/状态双行、statusFrom 分色逐行 submitText,功能面一字不动。
+```
+
+### authlib 9 ❗（api：CompanionFactory）
+```java
+// GameProfile 变不可变 record:getProperties()/getId()/getName() → properties()/id()/name();
+// 要带 textures 构造,只能建 Multimap → new PropertyMap(map) → new GameProfile(uuid, name, propMap)
+// 换肤流程不另受影响:皮肤真源在注册表,换肤本就整只重建身体(dormant→respawn),构造时注入即可。
+```
+
+### 存档 load（api：CompanionFactory）❗
+```java
+getPlayerList().load(player, reporter).ifPresent(player::load)   // 1.21.8 形态
+  → getPlayerList().loadPlayerData(new NameAndId(player.getGameProfile()))
+        .map(tag -> TagValueInput.create(ProblemReporter.DISCARDING, player.registryAccess(), tag))
+        .ifPresent(player::load)
+```
+
+### 召唤 join 流程重构 ❗（api：MixinPlayerListCompanionSpawn 退役）
+```java
+// 1.21.9+ 把「等区块(waitForChunkAndEntities→改名 waitForEntities)+ 挪出生点 + 内部读档」
+// 整段从 placeNewPlayer 搬去配置期的 PrepareSpawnTask(只有真实登录走):
+// placeNewPlayer(Connection, ServerPlayer, CommonListenerCookie) 签名未变,但不再阻塞、
+// 不再挪位、不再碰 .dat。
+// → 1.21.8 治 gametest 饿死的 MixinPlayerListCompanionSpawn 注入靶点消失,饿死路径同时消失:
+//   整只退役,NumenPlayer.intendedSpawnPos 脚手架一并删除;工厂直接 join,显式落点仍在
+//   join 后 snapTo(语义与旧代一字不变)。gametest 65 条 ×3 验证无饿死。
+```
+
+### 实体（api/core）
+```java
+startRiding(Entity, boolean)  → startRiding(Entity, boolean, boolean emitEvents)
+// 第三参 = 是否发 ENTITY_MOUNT 游戏事件与骑乘进度触发;原版单参便捷重载默认 true。
+// NumenPlayer 覆写透传;gametest 三处直调点补第三参 true。
+Entity.getServer() 删除       → companion.level().getServer()   // BlueprintTool
+```
+
+### NeoForge 平台（api）❗
+```java
+// Transfer API 重写(NeoForgeBlockCapabilityReader 整体重写,整搬旧 1.21.10 分支已迁版,零改动成立):
+IItemHandler/IFluidHandler + Capabilities.ItemHandler/FluidHandler.BLOCK
+   → ResourceHandler<ItemResource>/<FluidResource> + Capabilities.Item/Fluid.BLOCK
+     (size()/getResource(i)/getAmountAsLong(i)/getCapacityAsLong(i,res))
+IEnergyStorage + Capabilities.EnergyStorage.BLOCK → EnergyHandler + Capabilities.Energy.BLOCK
+   canReceive()/canExtract() 没了 → 在回滚的 Transaction 里模拟 insert/extract 探测方向
+// FMLLoader.isProduction() → FMLLoader.getCurrent().isProduction()(NeoForgePlatformHelper)
+```
+
+### NeoForge 核心入口（core：NumenCoreNeoForge）❗
+```java
+// FMLEnvironment.dist(静态字段没了)→ FMLLoader.getCurrent().getDist()
+// IModFile.findResource 一直在变 → classloader 资源解析:
+Path.of(NumenCoreNeoForge.class.getResource("/skills").toURI())   // 防御式 try/catch
+```
+
+### TicketType 二度变形 ❗（api：CompanionChunkLoader）
+——1.21.5 刚把它改成 record，1.21.9 又把「是否入档 + 用途」合并成一个位图：
+```java
+new TicketType(timeout, /*persist*/ false, TicketType.TicketUse.LOADING_AND_SIMULATION)
+    → new TicketType(timeout, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION)
+// 位:PERSIST=1 LOADING=2 SIMULATION=4 KEEP_DIMENSION_ACTIVE=8 CAN_EXPIRE_IF_UNLOADED=16
+// 不置 PERSIST 即不入档,与旧代 persist=false 逐字等价;addTicketWithRadius 未变。
+```
+
+### 同构负结果（0.1.1 并仓树里不存在的旧触点，一句话记录）
+- EditBox.setFormatter → addFormatter:0.1.1 无 EditBox 格式化器触点,整条免掉。
+- server.getProfileCache()/getSessionService() 收进 services():皮肤查询 0.1.1 已整体搬到
+  客户端 HTTP(MojangSkinLookup),服务端会话服务栈零触点,整条免掉。
+- api 构件坐标:并仓树 archivesName = "${mod_id}-${project.name}-${minecraft_version}"
+  模板自动带版本,旧独立仓要手改的三处 artifactId 不存在。
+- 旧分支的 MixinTitleScreen 在 0.1.1 已不存在。
+
+### 陷阱与免动项
+- **反编译源是 NeoForge 补丁后的** ❗:补丁把后续 MC 的 `SoundInstance.getStream` 官方钩子
+  提前引入,光看补丁源会误判 vanilla 已有钩子而错删 fabric 的 MixinSoundEngine;官方
+  mappings 证实 vanilla 1.21.10 仍无该钩子、`SoundBufferLibrary.getStream(RL,boolean)` 原样,
+  redirect 靶点成立,mixin 保留(IVoiceSoundFactory 双轨照旧)。
+- `isLocalInstanceAuthoritative` 的 final + isClientAuthoritative 双分支形态与 1.21.8
+  一字不差,MixinEntityVehicleControl 原样成立(@Inject 不受 final 影响)。
+- 其余 mixin 靶点(skipPlayer/applyChunkTrackingView/send(Packet)/controlBoat/dataSlots/
+  allMessages+refreshTrimmedMessages/nibble/updatePOIOnBlockStateChange)对过 1.21.10
+  反编译源逐一全在;AW/AT 三条(guiRenderState/scissorStack/ScissorStack)原样。
+- `StreamCodec.composite` 上限仍 11 字段;运行时 gson 2.11.0 / slf4j-api 2.0.16 与 1.21.8 同。
+- 夹具 .snbt 全为 DataVersion 3955(1.21.1 源出),`readStructure` 走 DFU 正向升到本代,
+  三轮 gametest 无恙——不硬盖,硬盖反而跳过修数据器。
+
+### 只在真机客户端才能目视验证的部分
+头顶气泡换到提交式管线后的**实际观感**(层次先后、小方尾位置、文字与底图的 z 关系、
+与名牌的相对位置)、转盘的物理按键接管与不断步、GUI 圆角 SDF 的渲染结果、
+快捷对话/语音三件套的手感——编译、mixin 靶点(已逐条核对 1.21.10 反编译源/官方
+mappings)、datagen、gametest、单测都覆盖不到,只能开客户端看。
+
+### 1.21.10 落地实录（并仓迁移，0.1.1 功能面 = 1.21.1 b550494c）
+
+树落底 1.21.8 尖(510e77c5)后单跳本档,跨 1.21.9。提交序列:树落底 → build 旋钮 →
+api → core,双 loader 出包 + datagen 四路 + 867 单测零跳过 + gametest
+"All 66 required tests passed" ×3(首轮即过,无回归)。前三档整套适配在本档原样成立,
+一处未动;旧独立仓 1.21.10 分支(api@87dd5e7 / core@1fa056b3)的输入事件、authlib9、
+Transfer 重写、提交式管线形态整搬/照抄成立。本档并仓树**新**碰到的只有两条:
+「召唤 join 流程重构」(placeNewPlayer 不再阻塞,1.21.8 的召唤站位 mixin 整只退役)与
+「startRiding 三参」(载具功能 0.1.1 新有,旧分支没趟过)——都已并入上文;其余即
+负结果与陷阱清单。语言键 key.category.numen_api.companions 由 datagen 语言源与
+Category 注册两头同改,生成物核对含新键。
 
 ## 1.21.10 → 1.21.11
 _待移植时填写_
