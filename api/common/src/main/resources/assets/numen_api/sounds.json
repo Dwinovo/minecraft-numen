@@ -1,0 +1,11 @@
+{
+  "companion_voice": {
+    "sounds": [
+      {
+        "name": "minecraft:random/click",
+        "stream": true,
+        "attenuation_distance": 16
+      }
+    ]
+  }
+}

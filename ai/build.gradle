@@ -1,0 +1,69 @@
+// numen-ai:大脑与 LLM 服务商之间的连接层,纯 JVM 库——零 Minecraft 依赖、
+// 零 numen-api 回引。这意味着它与 Minecraft 版本无关:十一个版本分支共用
+// 同一份 numen-ai,provider 层的修复改一处全家族生效。
+//
+// 现住户:agent.http(传输:SSE 流式/重试退避/空闲看门狗)、agent.prompt(提示词)、
+// agent.provider(线格式适配 + IToolSpec 工具描述面 + 站点注册表 ProviderRegistry,
+// 用户文件落点由宿主引导期注入)、agent.llm(客户端/会话状态/会话日志)。
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+// api 家族的版本线(发布坐标契约);group 无同名冲突,直接用对外 group。
+group = 'com.dwinovo.numen'
+version = '0.0.8-SNAPSHOT'
+
+base {
+    archivesName = 'numen-ai'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 与 MC 1.21.5 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
+    api 'com.google.code.gson:gson:2.11.0'
+    api 'org.slf4j:slf4j-api:2.0.16'
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            // 刻意不带 MC 版本后缀:本模块与 Minecraft 版本无关,全分支同坐标。
+            artifactId = 'numen-ai'
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'localNumen'
+            url = uri(findProperty('local_maven_url') ?: 'file:///D:/01_Projects/numen-maven')
+        }
+    }
+}
