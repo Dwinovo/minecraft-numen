@@ -119,4 +119,160 @@ _待移植时填写_
 _待移植时填写_
 
 ## 1.21.11 → 26.1.2
+_（升级链的完整配方在各上行分支的本文件里；本分支是从 1.21.1 向下分出的）_
+
+---
+
+# 向下移植（↓ 低于 1.21.1）
+
+新架构基线在 1.21.1;往下是把 1.21.1 的新 API **改回**旧 API。参考物同样是老架构 tag diff,
+方向取 `git diff v0.0.2-1.21.1-beta v0.0.2-1.20.x-beta` 的 `+` 侧(即 1.20.x 的写法)。
+
+## 1.21.1 → 1.20.6 ✓（已验证,双 loader 编译 + 出包 + datagen + 230 单测 + 47 条游戏内用例全绿）
+
+构建旋钮:MC `1.20.6` / range `[1.20.6, 1.21)` / NeoForm `1.20.6-20240627.102356` /
+Fabric `0.100.8+1.20.6` / **Fabric loader `0.16.10`** / NeoForge `20.6.139`。Java 仍 21;fabric/build.gradle 仍 remap loom(不动)。
+
+### 反向 MC delta
+```java
+// ResourceLocation 工厂 → 公开构造器(1.20.6 构造器是 public;工厂是 1.21+)。大量文件(payload/screen/entity)：
+ResourceLocation.fromNamespaceAndPath(ns, path) → new ResourceLocation(ns, path)
+//   注意全限定写法要修正为 new net.minecraft.resources.ResourceLocation(...)（别写成 net.minecraft.resources.new …）
+// 配方 assemble → getResultItem（1.20.6 无 CraftingInput/SingleRecipeInput/SmithingRecipeInput）：
+cr.assemble(CraftingInput.EMPTY, ra) → cr.getResultItem(ra)
+cook/sc.assemble(new SingleRecipeInput(ItemStack.EMPTY), ra) → .getResultItem(ra)
+sm.assemble(new SmithingRecipeInput(EMPTY,EMPTY,EMPTY), ra) → sm.assemble(new SimpleContainer(3), ra)
+//   ⚠ 锻造别换 getResultItem:本代 SmithingTrimRecipe.getResultItem 是带纹饰的铁胸甲预览
+//   (非空),会把纹饰配方错列成产物。空容器 assemble 与 1.21.1 空输入语义逐位一致
+//   (变换/纹饰对空底座都折成 EMPTY)。删掉那三个 crafting.*Input import。
+// VertexConsumer 旧链式（PathVizRenderer）：
+vc.addVertex(pose,…).setColor(c).setNormal(pose,…)
+  → vc.vertex(pose.pose(),…).color(c).normal(pose,…).endVertex()
+// FakeConnection：删 disconnect(DisconnectionDetails) 重写（1.21+ 才有）+ 其 import；保留 disconnect(Component)。
+```
+
+> ⚠ **NeoForge publish 需在线**:1.20.6 的 NeoForm runtime 依赖 `log4j:2.11.+`(动态版本),
+> `--offline` 解析不了 → publish 用**在线**(非 MC 下载,只拉 maven 制品)。
+
+### 0.1.1 功能面移植追加(1.21.1 的 118 文件搬到 1.20.6 时新碰到的)
+
+1.20.6 是**夹心版本**:加载器与语言层面(NeoForge、Java 21)、组件系统、网络层
+(`StreamCodec` / `CustomPacketPayload.Type` / `RegistryFriendlyByteBuf`)都已经是
+1.21 那一族的形态,但 MC 本体在 **1.21.2 那一刀之前**。所以 0.1.1 的整套代码搬过来
+只有下面四条要改,主仓 118 文件里改到源码的只有 3 处。
+
+**`MinecraftServer#getServerDirectory` 返回 `File`** ❗(`BlueprintStore`)——1.21 起才是
+`Path`。取图纸目录要先转:
+```java
+server.getServerDirectory().resolve("schematics")
+    → server.getServerDirectory().toPath().resolve("schematics")
+```
+
+**`ResourceLocation` 的两个工厂本代都没有** ❗(`BuildTool`、`CompanionGameTests`)——
+除了已记在上面的 `fromNamespaceAndPath`,0.1.1 还新用了两个:
+```java
+ResourceLocation.parse("minecraft:igloo/top")   → new ResourceLocation("minecraft:igloo/top")
+ResourceLocation.withDefaultNamespace("hud/heart/full") → new ResourceLocation("hud/heart/full")
+```
+
+**标签目录是复数形态** 🔁(`InitTag` 的注释、datagen 产物)——本代 `TagManager` 里写死的是
+`tags/blocks` / `tags/items`(1.21 才改成单数)。datagen 自己会写对路径,但**注释里的示例
+路径**要按本代写,否则照着注释去数据包里放 json 会放到一个永远不会被读的目录。
+
+**头顶气泡的手性跟本代名牌走** 🔁(api 侧 `SpeechBubbleRenderer`)——1.20.6 的
+`EntityRenderer#renderNameTag` 是 `scale(-0.025F, -0.025F, 0.025F)`(1.21.1 是
+`scale(0.025F, …)`)。气泡要和名牌同一套手性:
+```java
+poseStack.scale(SCALE, -SCALE, SCALE)  → poseStack.scale(-SCALE, -SCALE, SCALE)
+// 层次也跟着翻:边框/填充/文字的 z 由 +0.02/+0.04/+0.06 改成 -0.02/-0.04/-0.06
+```
+只翻 Y 的话行列式为负、整个空间被镜像,所有面的绕序随之翻转而被背面剔除——自己画的方块
+可以双面画糊过去,原版画的字形不能,结果就是"有框没字"。
+
+### 1.21.2 那一刀的哪些条目在本代**不**适用
+
+`1.21.1 → 1.21.4` 小节里记的绝大多数条目在这里**不存在**,不要照搬:
+注册表 `get` → `getValue`/`Optional`、配方 `PlacementInfo`/`CraftingInput`、
+`Level#getMinBuildHeight` → `getMinY`、渲染状态化(`EntityRenderState`)、
+`ClientInput` 拆容器、gametest 数据驱动化、`CompoundTag` getter 的 Optional 化、
+`ItemStack.parse`/`save` 删除、`Component.Serializer` 删除——本代统统还是老形态。
+
+反过来,1.20.x 那三档为"**没有**组件系统"做的降级改写也一概**不**适用:
+NBT 键白名单、`isSameItemSameTags`、`ItemStack.of`、去掉 `HolderLookup.Provider` 参数线
+——本代 `DataComponents` / `ItemStack.parse(registries, tag)` /
+`ItemStack.isSameItemSameComponents` / `BlockEntity#loadWithComponents` 全都在,
+0.1.1 的原始写法原样编译通过。
+
+### gametest:本代不需要任何绕行
+
+- 框架是**注解式**(`@GameTestHolder` / `@PrefixGameTestTemplate` / `@GameTest`),
+  不是 1.21.5 起那套数据驱动测试实例。
+- `StructureTemplateManager` 的 `.snbt` 源确实仍然只在 `SharedConstants.IS_RUNNING_IN_IDE`
+  为真时登记(与 1.21.1 完全相同的一行判断),但 NeoForge 的 `runGameTestServer` 开发跑批里
+  这个开关是真的,所以 `StructureUtils.testStructuresDir` 这条通路直接可用——**不需要**
+  1.20.4 那套"另存 .nbt 喂进存档 generated/" 的绕行。
+- `GameTestHelper#absolutePos` 本代仍以 `getStructureBlockPos()` 为基准(1.21.4 起才改成
+  `getTestOrigin()`,高一格),坐标不用挪。
+- `GameTestServer` 自带固定的平坦 "Test Level",**不需要**在 build.gradle 里写
+  `server.properties`。
+- 模板 SNBT 的 `DataVersion` 要重盖成本代的 **3839**(`SharedConstants.WORLD_VERSION`):
+  向下移植没有数据修复器可依靠。palette 里的方块名逐条核实——本代已是 `short_grass`
+  (1.20.3 起改名),这类错不报编译错、断言数目也不变、测试照样全绿,只是该长草的地方
+  变成空气。
+
+### 单测夹具
+
+`SynchedEntityData` 在 **1.20.5 起**就已经是 `Builder` 组装 + `build()` 校验"每个 id 都已
+定义",与 1.21.x 同形,所以 1.21.4 那份夹具补丁(补 `Abilities` 与满血 `SynchedEntityData`)
+在本代**原样成立**。1.20.x 那三档的公开构造器写法不适用于本代。
+
+### 1.20.6 落地实录(并仓迁移,全量对齐 1.21.1 时新踩的)❗
+
+只记本次新碰到的;上面各节已有的不重复。
+
+**附魔整族回等级查询**——1.21 数据驱动附魔的读法(`EnchantmentEffectComponents` /
+`enchantment.effects.*` / `Holder<Enchantment>` 键集遍历)本代都不存在,`Enchantments.*`
+是 Enchantment 本体(不是 ResourceKey):
+```java
+// 效率挖速(ToolSet):MINING_EFFICIENCY 属性效果 → 经典公式(同曲线):
+speed += eff * eff + 1;  // eff = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.EFFICIENCY, item)
+// 深海探索者(CalculationContext):WATER_MOVEMENT_EFFICIENCY 属性 →
+EnchantmentHelper.getDepthStrider(player);  // 乘数 = min(1, level/3),同曲线
+// 霜行者/精准采集(CalculationContext、MovementPlacement、ToolSet):Holder 键集遍历 →
+EnchantmentHelper.getItemEnchantmentLevel(Enchantments.FROST_WALKER / SILK_TOUCH, stack)
+// 迅捷潜行(ExecHarness):Attributes.SNEAKING_SPEED 本代不存在 →
+Mth.clamp(0.3f + EnchantmentHelper.getSneakingSpeedBonus(player), 0.0f, 1.0f)
+// 附魔伤害排序(WeaponDamage):
+EnchantmentHelper.modifyDamage(level, stack, target, source, base)
+  → base + EnchantmentHelper.getDamageBonus(stack, target.getType())   // 收 EntityType,1.20.5 已不是 MobType
+// gametest 夹具:不需要 registry.getHolderOrThrow(key)——
+ItemStack.enchant(Enchantment, int) / ItemEnchantments.getLevel(Enchantment) 直接收本体
+```
+
+**战斗类签名**:
+```java
+CombatRules.getDamageAfterAbsorb(self, dmg, src, armor, tough) → getDamageAfterAbsorb(dmg, src, armor, tough)  // 去实体参
+Item.getAttackDamageBonus(Entity target, float dmg, DamageSource src) → getAttackDamageBonus(Player attacker, float dmg)
+CrossbowItem.getChargeDuration(stack, entity) → getChargeDuration(stack)
+```
+
+**配方接口本代已收 HolderLookup.Provider**(1.20.5 那刀):`Recipe#assemble/getResultItem`
+的注册表参数与 1.21.1 同形,走 `getResultItem` 的枚举代码原样编译。泛型仍是
+`Recipe<C extends Container>`:单测里的匿名配方 `Recipe<CraftingInput>` → `Recipe<Container>`,
+`matches/assemble` 的输入参数跟着换。锻造空输入的正确改法见上面反向 delta 的 ⚠。
+
+**1.21 实验性内容的类本代存在**:`MaceItem` 等 1.21 内容 1.20.5/6 已随包(实验性 flag 关闭),
+`instanceof MaceItem` 照常编译、运行时恒 false——不必删。
+
+**工具材质标签只有 stone 一个**:`wooden/iron/gold/diamond/netherite_tool_materials`
+是 1.21 加的,本代 `stack.is(tag)` 对不存在的标签恒 false——ToolSet 材质廉价度排序
+退化为平速先到先得(注释已说明),不必改代码。
+
+**gametest 前必须先跑 datagen(core 的也要)**:同伴的蓝图数据携带
+(`numen:safe_block_entity_data`)与垫路选料(`numen:scaffolds`)都是 datagen 生成的
+数据包标签,生成物已 gitignore——干净 worktree 直接 `runGameTestServer` 会挂 5 条
+(蓝图告示牌/旗帜、爬塔跟随、创造徒手垫路),报错口吻全是"标签空/无路可走",
+看着像寻路回归,其实是 `:core:neoforge:runData` 没跑。
+
+## 1.20.6 → 1.20.4 / 1.20.4 → 1.20.2 / 1.20.2 → 1.20.1
 _待移植时填写_
