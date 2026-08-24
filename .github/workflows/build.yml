@@ -47,12 +47,9 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Compile both loaders
-        run: >-
-          ./gradlew
-          :core:neoforge:compileJava
-          :core:fabric:compileJava
-          --no-daemon -x javadoc
+      # assemble = 全部模块出 jar,不点名 loader 模块——Forge/NeoForge 分支同一份步骤。
+      - name: Assemble all loaders
+        run: ./gradlew assemble --no-daemon -x javadoc
 
       # 纯 JVM 测试,不起游戏,几十秒。GameTest 要拉整个客户端,留给发版流水线。
       - name: Run JVM tests
