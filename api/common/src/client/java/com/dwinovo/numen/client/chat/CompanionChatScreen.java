@@ -127,7 +127,7 @@ public class CompanionChatScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
+    public void renderBackground(GuiGraphics g) {
         // 刻意留空:super.render 默认会画菜单模糊+压暗遮罩,面对面说话
         // 不该把世界糊掉——她就站在你面前
     }

@@ -30,7 +30,7 @@ class CompanionRegistryTest {
     }
 
     private static CompanionRegistry roundTrip(CompanionRegistry reg) {
-        return CompanionRegistry.load(reg.save(new CompoundTag(), null), null);
+        return CompanionRegistry.load(reg.save(new CompoundTag()));
     }
 
     // ---- 持久化 ----
@@ -60,11 +60,11 @@ class CompanionRegistryTest {
         // load 静默返回空注册表 —— 全世界的同伴一起消失。
         CompanionRegistry reg = new CompanionRegistry();
         reg.put(A, entry("小焰", OWNER));
-        CompoundTag tag = reg.save(new CompoundTag(), null);
+        CompoundTag tag = reg.save(new CompoundTag());
         tag.remove("worldId");
         assertFalse(tag.contains("worldId"));
 
-        CompanionRegistry back = CompanionRegistry.load(tag, null);
+        CompanionRegistry back = CompanionRegistry.load(tag);
 
         assertEquals("小焰", back.find(A).name(), "老存档必须照常读出来");
         assertFalse(back.worldId().isBlank(), "缺的世界身份现补一个");
@@ -73,7 +73,7 @@ class CompanionRegistryTest {
     @Test
     void garbageTagDegradesToEmptyRatherThanCrashing() {
         // 读档失败不该把服务器带崩;代价是这一档同伴丢了,但那是没得选的
-        CompanionRegistry back = CompanionRegistry.load(new CompoundTag(), null);
+        CompanionRegistry back = CompanionRegistry.load(new CompoundTag());
         assertNull(back.find(A));
     }
 

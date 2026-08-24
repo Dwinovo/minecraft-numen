@@ -244,13 +244,13 @@ public class CompanionWheelScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollY) {   // 1.20.1: single scroll delta
         if (!entries.isEmpty()) {
             int n = entries.size();
             index = ((index + (scrollY < 0 ? 1 : -1)) % n + n) % n;
             return true;
         }
-        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        return super.mouseScrolled(mouseX, mouseY, scrollY);
     }
 
     @Override
@@ -301,7 +301,7 @@ public class CompanionWheelScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
+    public void renderBackground(GuiGraphics g) {
         // 刻意留空:不要菜单模糊(render 里自画一层轻压暗)
     }
 

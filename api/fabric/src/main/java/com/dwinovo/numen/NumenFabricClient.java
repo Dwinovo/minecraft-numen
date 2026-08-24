@@ -47,7 +47,7 @@ public class NumenFabricClient implements ClientModInitializer {
         // Skills live under config/numen/skills. Hook the resource reload
         // pipeline so /reload picks up newly added SKILL.md files without a
         // client restart.
-        ResourceLocation skillLoaderId = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "skill_loader");
+        ResourceLocation skillLoaderId = new ResourceLocation(Constants.MOD_ID, "skill_loader");
         ResourceManagerHelper.get(PackType.CLIENT_RESOURCES)
                 .registerReloadListener(new SimpleSynchronousResourceReloadListener() {
                     @Override
@@ -68,7 +68,7 @@ public class NumenFabricClient implements ClientModInitializer {
                 .register(context -> {
                     try {
                         context.register(
-                                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "rendertype_round_rect"),
+                                new ResourceLocation(Constants.MOD_ID, "rendertype_round_rect"),
                                 com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR,
                                 com.dwinovo.numen.client.ui.RoundRect::setShader);
                     } catch (Exception e) {

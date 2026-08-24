@@ -29,7 +29,6 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
-import net.minecraft.client.resources.PlayerSkin;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -108,7 +107,7 @@ public final class NumenScreen extends Screen {
         FAIL = t.fail();
     }
     private static net.minecraft.resources.ResourceLocation railSpr(String n) {
-        return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, n);
+        return new net.minecraft.resources.ResourceLocation(com.dwinovo.numen.Constants.MOD_ID, n);
     }
     private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME = railSpr("avatar_frame");
     private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME_ACTIVE = railSpr("avatar_frame_active");
@@ -745,7 +744,7 @@ public final class NumenScreen extends Screen {
     }
 
     @Override
-    public boolean mouseScrolled(double mx, double my, double sx, double sy) {
+    public boolean mouseScrolled(double mx, double my, double sy) {   // 1.20.1: single scroll delta (no horizontal axis)
         // 模态确认卡在场:背景(侧栏名册/设置列表)不响应滚轮。
         if (dismissOpen()) {
             return false;
@@ -769,7 +768,7 @@ public final class NumenScreen extends Screen {
         if (tab == Tab.CHAT && sy != 0) {
             return chatView.mouseScrolled(sy);
         }
-        return super.mouseScrolled(mx, my, sx, sy);
+        return super.mouseScrolled(mx, my, sy);
     }
 
     // ---- render ----
@@ -913,7 +912,7 @@ public final class NumenScreen extends Screen {
             NumenRoster.Entry e = entries.get(i);
             boolean active = e.uuid().equals(uuid);
             // textured socket behind the head (gold-bordered when active), then the avatar, then a status LED
-            g.blitSprite(active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
+            com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
             PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
             if (e.dead()) {                                           // dead — dim veil + respawn countdown
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
@@ -944,13 +943,13 @@ public final class NumenScreen extends Screen {
         int cx = ax + RAIL_AV / 2;
         if (railScroll > 0) chevron(g, cx, top + 1, true);
         if (railScroll < maxRailScroll()) chevron(g, cx, py - 9, false);
-        g.blitSprite(summoning ? SUMMON_ACTIVE : SUMMON_SPRITE, ax, py, RAIL_AV, RAIL_AV);
+        com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, summoning ? SUMMON_ACTIVE : SUMMON_SPRITE, ax, py, RAIL_AV, RAIL_AV);
     }
 
     /** Scroll-affordance chevron sprite (amber pixel-art triangle, up = more above / down = more below).
      *  Blitted at its native 11×6 so the pixels stay crisp (no scaling, no AA). */
     private void chevron(GuiGraphics g, int cx, int y, boolean up) {
-        g.blitSprite(
+        com.dwinovo.numen.client.screen.GuiCompat.blitSprite(g, 
                 up ? CHEVRON_UP : CHEVRON_DOWN, cx - 5, y, 11, 6);
     }
 
@@ -1010,7 +1009,7 @@ public final class NumenScreen extends Screen {
         }).orElse(TXT_FAINT);
     }
 
-    private static PlayerSkin skinFor(UUID u) {
+    private static net.minecraft.resources.ResourceLocation skinFor(UUID u) {
         return com.dwinovo.numen.client.agent.KnownSkins.of(u);
     }
 

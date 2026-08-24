@@ -3,7 +3,7 @@ package com.dwinovo.numen.client.agent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.client.resources.DefaultPlayerSkin;
-import net.minecraft.client.resources.PlayerSkin;
+import net.minecraft.resources.ResourceLocation;
 
 import java.util.Map;
 import java.util.UUID;
@@ -23,24 +23,24 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class KnownSkins {
 
-    private static final Map<UUID, PlayerSkin> LAST = new ConcurrentHashMap<>();
+    private static final Map<UUID, ResourceLocation> LAST = new ConcurrentHashMap<>();
 
     private KnownSkins() {}
 
     /** The companion's skin: player-info table first (distance-independent, and
      *  remembered), else last known, else default. */
-    public static PlayerSkin of(UUID uuid) {
+    public static ResourceLocation of(UUID uuid) {
         var conn = Minecraft.getInstance().getConnection();
         if (conn != null) {
             PlayerInfo info = conn.getPlayerInfo(uuid);
             if (info != null) {
-                PlayerSkin s = info.getSkin();
+                ResourceLocation s = info.getSkinLocation();   // 1.20.1:皮肤即贴图位置
                 LAST.put(uuid, s);
                 return s;
             }
         }
-        PlayerSkin cached = LAST.get(uuid);
-        return cached != null ? cached : DefaultPlayerSkin.get(uuid);
+        ResourceLocation cached = LAST.get(uuid);
+        return cached != null ? cached : DefaultPlayerSkin.getDefaultSkin(uuid);
     }
 
     /** World left — cached textures die with the connection. */

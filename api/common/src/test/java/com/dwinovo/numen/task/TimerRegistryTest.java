@@ -23,7 +23,7 @@ class TimerRegistryTest {
     private static final UUID OTHER = UUID.fromString("22222222-2222-2222-2222-222222222222");
 
     private static TimerRegistry roundTrip(TimerRegistry registry) {
-        return TimerRegistry.load(registry.save(new CompoundTag(), null), null);
+        return TimerRegistry.load(registry.save(new CompoundTag()));
     }
 
     @Test
@@ -32,7 +32,7 @@ class TimerRegistryTest {
         TimerRegistry.Timer t = registry.set(SHE, 1_000L, 30, "回来收炉子里的铁");
 
         assertTrue(registry.dueAt(1_599L).isEmpty(), "差一刻就不算到");
-        assertEquals(t.id(), registry.dueAt(1_600L).getFirst().id());
+        assertEquals(t.id(), registry.dueAt(1_600L).get(0).id());
         assertEquals(30L, TimerRegistry.remainingSeconds(t, 1_000L));
         assertEquals(0L, TimerRegistry.remainingSeconds(t, 9_999L));
     }
@@ -46,7 +46,7 @@ class TimerRegistryTest {
         TimerRegistry back = roundTrip(registry);
 
         // 世界跑到 1900 刻(已过 45 秒),剩下的该是 15 秒,不是重新的 60 秒
-        assertEquals(15L, TimerRegistry.remainingSeconds(back.list(SHE).getFirst(), 1_900L));
+        assertEquals(15L, TimerRegistry.remainingSeconds(back.list(SHE).get(0), 1_900L));
     }
 
     @Test
@@ -97,6 +97,6 @@ class TimerRegistryTest {
         registry.set(SHE, 0L, 600, "晚的");
         registry.set(SHE, 0L, 30, "早的");
 
-        assertEquals("早的", registry.list(SHE).getFirst().reason());
+        assertEquals("早的", registry.list(SHE).get(0).reason());
     }
 }

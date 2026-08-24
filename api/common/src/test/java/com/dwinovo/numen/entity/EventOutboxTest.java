@@ -25,7 +25,7 @@ class EventOutboxTest {
     private static final long T0 = 1_000_000L;
 
     private static EventOutbox roundTrip(EventOutbox box) {
-        return EventOutbox.load(box.save(new CompoundTag(), null), null);
+        return EventOutbox.load(box.save(new CompoundTag()));
     }
 
     @Test
@@ -107,6 +107,6 @@ class EventOutboxTest {
 
     @Test
     void garbageTagDegradesToEmpty() {
-        assertTrue(EventOutbox.load(new CompoundTag(), null).peek(A).isEmpty());
+        assertTrue(EventOutbox.load(new CompoundTag()).peek(A).isEmpty());
     }
 }

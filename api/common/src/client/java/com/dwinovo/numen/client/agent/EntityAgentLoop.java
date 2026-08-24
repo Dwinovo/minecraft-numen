@@ -1580,8 +1580,10 @@ public final class EntityAgentLoop {
             if (out.length() > 0) {
                 out.append(", ");
             }
-            out.append(effect.getEffect().unwrapKey()
-                    .map(key -> key.location().getPath()).orElse("unknown"));
+            // 1.20.1:getEffect() 直接给 MobEffect(没有 Holder),注册名走注册表反查。
+            var effectKey = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT
+                    .getKey(effect.getEffect());
+            out.append(effectKey == null ? "unknown" : effectKey.getPath());
             if (effect.getAmplifier() > 0) {
                 out.append(" ").append(effect.getAmplifier() + 1);   // 原版 UI 的口径:0 级显示 I
             }
@@ -1628,7 +1630,7 @@ public final class EntityAgentLoop {
 
     /**
      * 瓶子里装的是什么。<b>治疗、剧毒、夜视的 item id 全都是 {@code minecraft:potion}</b> ——
-     * 内容在 {@code POTION_CONTENTS} 组件里,只印 id 的话她背包里三瓶完全不同的东西长得
+     * 内容在药水 NBT({@code Potion} 标签)里,只印 id 的话她背包里三瓶完全不同的东西长得
      * 一模一样,选不出该喝哪瓶。药箭同理。
      *
      * <p>印的是原版药水的<b>注册名</b>({@code strong_healing}、{@code long_poison}),不是
@@ -1636,20 +1638,21 @@ public final class EntityAgentLoop {
      * 本来就是另外的 item id,照实印就分开了,不用另写判据。
      */
     private static String brewLabel(net.minecraft.world.item.ItemStack stack) {
-        var contents = stack.get(net.minecraft.core.component.DataComponents.POTION_CONTENTS);
-        if (contents == null) {
-            return "";
-        }
+        // 1.20.1:药水内容在 NBT 里,经 PotionUtils 读(组件系统是 1.20.5+ 的)。
+        var potion = net.minecraft.world.item.alchemy.PotionUtils.getPotion(stack);
         StringBuilder label = new StringBuilder();
-        contents.potion().ifPresent(held -> label.append(held.unwrapKey()
-                .map(key -> key.location().getPath()).orElse("unknown")));
+        if (potion != net.minecraft.world.item.alchemy.Potions.EMPTY) {
+            var potionKey = net.minecraft.core.registries.BuiltInRegistries.POTION.getKey(potion);
+            label.append(potionKey == null ? "unknown" : potionKey.getPath());
+        }
         // 酿造出来的、模组的药水没有预设名,效果只在自定义列表里 —— 两处都读,不用维护白名单。
-        for (var effect : contents.customEffects()) {
+        for (var effect : net.minecraft.world.item.alchemy.PotionUtils.getCustomEffects(stack)) {
             if (label.length() > 0) {
                 label.append('+');
             }
-            label.append(effect.getEffect().unwrapKey()
-                    .map(key -> key.location().getPath()).orElse("unknown"));
+            var effectKey = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT
+                    .getKey(effect.getEffect());
+            label.append(effectKey == null ? "unknown" : effectKey.getPath());
         }
         return label.toString();
     }

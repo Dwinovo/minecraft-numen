@@ -21,7 +21,7 @@ public interface VoicePcmSource {
 
     /** 共用的 sounds.json 占位声音事件(见 {@link EntityVoiceSound} 的说明)。 */
     ResourceLocation SOUND_LOCATION =
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "companion_voice");
+            new ResourceLocation(Constants.MOD_ID, "companion_voice");
     SoundEvent SOUND_EVENT = SoundEvent.createVariableRangeEvent(SOUND_LOCATION);
 
     /** 这句语音的数据源——语义对应更高 MC 版本 {@code SoundInstance#getStream} 官方钩子。 */

@@ -88,7 +88,7 @@ class InventoryBlockTest {
 
     // ==================== 瓶子里装的是什么 ====================
 
-    /** 三瓶不同的药水不能长成同一行 —— item id 全是 minecraft:potion,内容在组件里。 */
+    /** 三瓶不同的药水不能长成同一行 —— item id 全是 minecraft:potion,内容在药水 NBT 里。 */
     @Test
     void potionsAreToldApartByWhatIsInThem() {
         assumeTrue(booted);
@@ -118,12 +118,10 @@ class InventoryBlockTest {
         assertFalse(block.contains("minecraft:dirt["), block);
     }
 
-    private static ItemStack potion(
-            net.minecraft.core.Holder<net.minecraft.world.item.alchemy.Potion> potion) {
-        ItemStack stack = new ItemStack(Items.POTION);
-        stack.set(net.minecraft.core.component.DataComponents.POTION_CONTENTS,
-                new net.minecraft.world.item.alchemy.PotionContents(potion));
-        return stack;
+    private static ItemStack potion(net.minecraft.world.item.alchemy.Potion potion) {
+        // 1.20.1:药水内容写在 NBT 里(PotionUtils),组件系统是 1.20.5+ 的。
+        return net.minecraft.world.item.alchemy.PotionUtils.setPotion(
+                new ItemStack(Items.POTION), potion);
     }
 
     // ==================== 手上拿的 ====================

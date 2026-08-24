@@ -52,9 +52,9 @@ public final class ChatLines {
     public static void owner(String companionName, String text, boolean voice, boolean queued) {
         MutableComponent line = Component.literal(
                 "你 → " + companionName + ":" + (voice ? "(语音) " : "") + text)
-                .withColor(OWN);
+                .withStyle(s -> s.withColor(OWN));
         if (queued) {
-            line.append(Component.literal("  (排队中,她忙完就看)").withColor(TOOL));
+            line.append(Component.literal("  (排队中,她忙完就看)").withStyle(s -> s.withColor(TOOL)));
         }
         add(line);
     }
@@ -65,14 +65,14 @@ public final class ChatLines {
         if (flat.isEmpty()) {
             return;
         }
-        add(name(companionName).append(Component.literal(flat).withColor(TEXT)));
+        add(name(companionName).append(Component.literal(flat).withStyle(s -> s.withColor(TEXT))));
     }
 
     /** 系统性提醒(连接失败/配置问题):琥珀警示行——玩家必须知道发生了什么,
      *  不能让失败沉进日志里变成"已读不回"。 */
     public static void notice(String companionName, String text) {
-        add(Component.literal("⚠ " + companionName + ":").withColor(0xE0A53A)
-                .append(Component.literal(text).withColor(OWN)));
+        add(Component.literal("⚠ " + companionName + ":").withStyle(s -> s.withColor(0xE0A53A))
+                .append(Component.literal(text).withStyle(s -> s.withColor(OWN))));
     }
 
     /**
@@ -86,8 +86,8 @@ public final class ChatLines {
             ChatComponentAccessor acc = (ChatComponentAccessor) chat;
             removeLive(acc, companion);
             MutableComponent line = name(companionName)
-                    .append(Component.literal(partial).withColor(TEXT))
-                    .append(Component.literal("▌").withColor(OWN));
+                    .append(Component.literal(partial).withStyle(s -> s.withColor(TEXT)))
+                    .append(Component.literal("▌").withStyle(s -> s.withColor(OWN)));
             chat.addMessage(line);
             List<GuiMessage> all = acc.numen$allMessages();
             if (!all.isEmpty()) {
@@ -118,9 +118,9 @@ public final class ChatLines {
 
     /** 加粗的主题色名字前缀——同伴行的视觉锚点。 */
     private static MutableComponent name(String companionName) {
+        // 这一代的 MutableComponent 还没有 withColor(int),等价写法是直接改样式里的颜色。
         return Component.literal(companionName + ":")
-                .withColor(UiTheme.current().reply() & 0xFFFFFF)
-                .withStyle(s -> s.withBold(true));
+                .withStyle(s -> s.withColor(UiTheme.current().reply() & 0xFFFFFF).withBold(true));
     }
 
     private static void add(Component line) {

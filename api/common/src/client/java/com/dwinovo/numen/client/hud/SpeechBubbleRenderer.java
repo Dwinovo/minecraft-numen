@@ -36,7 +36,7 @@ import java.util.List;
 public final class SpeechBubbleRenderer {
 
     private static final ResourceLocation WHITE =
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/white.png");
+            new ResourceLocation(Constants.MOD_ID, "textures/gui/white.png");
 
     private static final float SCALE = 0.025f;
     private static final int MAX_WIDTH = 130;     // 文本换行宽(px)
@@ -76,7 +76,10 @@ public final class SpeechBubbleRenderer {
         // 锚点在名牌上方:小方尾的尖端落在这里,气泡向上生长
         poseStack.translate(0, body.getBbHeight() + 0.95, 0);
         poseStack.mulPose(mc.getEntityRenderDispatcher().cameraOrientation());
-        poseStack.scale(SCALE, -SCALE, SCALE);
+        // X 与 Y 同时取反:与原版名牌同一套手性(1.20.1 代)。只翻 Y 会让行列式
+        // 为负——整个空间被镜像,所有面的绕序随之翻转而被背面剔除(自己的方块
+        // 可以双面画糊过去,原版画的字形不能,结果就是"有框没字")。
+        poseStack.scale(-SCALE, -SCALE, SCALE);
         drawBubble(poseStack, buffers, mc.font, bubble, body.getUUID());
         poseStack.popPose();
     }
@@ -84,7 +87,7 @@ public final class SpeechBubbleRenderer {
     /**
      * 局部坐标:+y 朝下(朝说话者),气泡主体在 y∈[-boxH,0],小方尾从
      * 底边中央伸到 (0,TAIL_H)。层次靠 z 拉开——名牌 billboard 空间里
-     * <b>+z 朝观察者</b>:阴影垫底(0)、边框、填充逐层抬高,文字最前。
+     * <b>+z 朝屏幕里</b>:阴影垫底(0),边框、填充、文字逐层往负 z 压,越靠前越负。
      */
     private static void drawBubble(PoseStack poseStack, MultiBufferSource buffers,
                                    Font font, SpeechBubbles.View bubble, java.util.UUID uuid) {
@@ -122,17 +125,17 @@ public final class SpeechBubbleRenderer {
         quad(vc, m, x0 + SHADOW_OFF, y0 + SHADOW_OFF, x1 + SHADOW_OFF, y1 + SHADOW_OFF,
                 0.0f, th.border());
         // 粗边:比填充大一圈的同心方
-        quad(vc, m, x0 - 1, y0 - 1, x1 + 1, y1 + 1, 0.02f, th.border());
+        quad(vc, m, x0 - 1, y0 - 1, x1 + 1, y1 + 1, -0.02f, th.border());
         // 有话说就是"说话泡"(奶油底),纯状态是"状态泡"(纸面底,退后一档)
         int fill = bubble.hasText() ? th.aiFill() : th.surface();
-        quad(vc, m, x0, y0, x1, y1, 0.04f, fill);
+        quad(vc, m, x0, y0, x1, y1, -0.04f, fill);
         // 小方尾:边框菱形在后,填充菱形在前,尖端指向说话者
-        diamond(vc, m, 0, y1, 5, TAIL_H + 1, 0.02f, th.border());
-        diamond(vc, m, 0, y1 - 1, 4, TAIL_H, 0.04f, fill);
+        diamond(vc, m, 0, y1, 5, TAIL_H + 1, -0.02f, th.border());
+        diamond(vc, m, 0, y1 - 1, 4, TAIL_H, -0.04f, fill);
 
         // 文字压最前(drawInBatch 没有 z 参,用矩阵抬)
         poseStack.pushPose();
-        poseStack.translate(0, 0, 0.06f);
+        poseStack.translate(0, 0, -0.06f);
         float ty = y0 + PAD_Y + 1;
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
@@ -157,19 +160,21 @@ public final class SpeechBubbleRenderer {
 
     private static void quad(VertexConsumer vc, Matrix4f m,
                              float x0, float y0, float x1, float y1, float z, int argb) {
-        vc.addVertex(m, x0, y0, z).setColor(argb).setUv(0f, 0f).setLight(FULL_BRIGHT);
-        vc.addVertex(m, x0, y1, z).setColor(argb).setUv(0f, 1f).setLight(FULL_BRIGHT);
-        vc.addVertex(m, x1, y1, z).setColor(argb).setUv(1f, 1f).setLight(FULL_BRIGHT);
-        vc.addVertex(m, x1, y0, z).setColor(argb).setUv(1f, 0f).setLight(FULL_BRIGHT);
+        // 这一代顶点是「链式设值 + endVertex 提交」,顺序必须跟顶点格式一致:
+        // 位置 → 颜色(ARGB) → uv0 → 光照(uv2)
+        vc.vertex(m, x0, y0, z).color(argb).uv(0f, 0f).uv2(FULL_BRIGHT).endVertex();
+        vc.vertex(m, x0, y1, z).color(argb).uv(0f, 1f).uv2(FULL_BRIGHT).endVertex();
+        vc.vertex(m, x1, y1, z).color(argb).uv(1f, 1f).uv2(FULL_BRIGHT).endVertex();
+        vc.vertex(m, x1, y0, z).color(argb).uv(1f, 0f).uv2(FULL_BRIGHT).endVertex();
     }
 
     /** 以 (cx, top) 为上顶点的下指菱形(方尾)。 */
     private static void diamond(VertexConsumer vc, Matrix4f m,
                                 float cx, float top, float halfW, float h, float z, int argb) {
-        vc.addVertex(m, cx - halfW, top, z).setColor(argb).setUv(0f, 0f).setLight(FULL_BRIGHT);
-        vc.addVertex(m, cx, top + h, z).setColor(argb).setUv(0f, 1f).setLight(FULL_BRIGHT);
-        vc.addVertex(m, cx + halfW, top, z).setColor(argb).setUv(1f, 1f).setLight(FULL_BRIGHT);
-        vc.addVertex(m, cx, top - 1, z).setColor(argb).setUv(1f, 0f).setLight(FULL_BRIGHT);
+        vc.vertex(m, cx - halfW, top, z).color(argb).uv(0f, 0f).uv2(FULL_BRIGHT).endVertex();
+        vc.vertex(m, cx, top + h, z).color(argb).uv(0f, 1f).uv2(FULL_BRIGHT).endVertex();
+        vc.vertex(m, cx + halfW, top, z).color(argb).uv(1f, 1f).uv2(FULL_BRIGHT).endVertex();
+        vc.vertex(m, cx, top - 1, z).color(argb).uv(1f, 0f).uv2(FULL_BRIGHT).endVertex();
     }
 
     /** 逐像素贪心换行(CJK 友好),超行数截断并补省略号。 */
