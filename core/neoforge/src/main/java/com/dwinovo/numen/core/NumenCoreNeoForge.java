@@ -1,0 +1,71 @@
+package com.dwinovo.numen.core;
+
+import com.dwinovo.numen.agent.skill.SkillRegistry;
+import com.dwinovo.numen.core.debug.DebugCommands;
+import com.dwinovo.numen.core.debug.PathDebugRenderer;
+import com.dwinovo.numen.core.pathing.cache.PathCaches;
+import com.dwinovo.numen.task.CompanionTickDispatcher;
+import com.dwinovo.numen.core.scan.BlockSearch;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModList;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+
+import java.nio.file.Path;
+
+/**
+ * NeoForge entry point for the numen-core tool pack. Registers the tools and
+ * task runners into the numen-api engine, then wires the server-tick work its
+ * tools need (budget-sliced block scans, the off-thread pathfinder's chunk
+ * snapshots). The engine itself is brought up by the separate numen-api mod,
+ * which core depends on.
+ */
+@Mod(Constants.MOD_ID)
+public class NumenCoreNeoForge {
+
+    public NumenCoreNeoForge(IEventBus eventBus, ModContainer container) {
+        NumenCore.init();
+
+        NeoForge.EVENT_BUS.addListener(NumenCoreNeoForge::onServerTickPost);
+        // Debug verbs merged into the /numen root registered by the engine mod.
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
+                DebugCommands.register(e.getDispatcher()));
+
+        // 游戏内用例的登记。1.21.5 起 gametest 不再有注解入口,用例要主动注册成
+        // test_instance 条目;注册本身只在开了 gametest 的开发环境里生效(引擎侧
+        // RegisterGameTestsEvent 自己把关),正式环境不会有任何动作。
+        com.dwinovo.numen.core.gametest.NumenGameTests.register(eventBus);
+
+        // Client-only: declare core's built-in skills, read in place from the
+        // skills/ dir bundled in this jar. Skills feed the client-side LLM, so
+        // this never runs on a dedicated server.
+        if (FMLEnvironment.dist == Dist.CLIENT) {
+            declareBundledSkills();
+        }
+
+        Constants.LOG.info("numen-core initialised on NeoForge.");
+    }
+
+    private static void declareBundledSkills() {
+        Path root = ModList.get().getModFileById(Constants.MOD_ID).getFile().findResource("skills");
+        if (root != null) {
+            SkillRegistry.instance().declareBundled(root);
+        } else {
+            Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
+        }
+    }
+
+    private static void onServerTickPost(ServerTickEvent.Post event) {
+        // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
+        BlockSearch.tick(event.getServer());
+        PathCaches.serverTick(event.getServer());
+        // Periodic eviction sweep for the target-block index (entries of unloaded chunks).
+        com.dwinovo.numen.core.scan.TargetIndex.serverTick(event.getServer());
+        // Debug particles for pathing state, sent only to players with debug on.
+        PathDebugRenderer.serverTick(event.getServer());
+    }
+}
