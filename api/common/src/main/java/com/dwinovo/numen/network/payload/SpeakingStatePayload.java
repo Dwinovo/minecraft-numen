@@ -20,7 +20,7 @@ import java.util.UUID;
 public record SpeakingStatePayload(UUID entityUuid, boolean speaking) implements CustomPacketPayload {
 
     public static final Type<SpeakingStatePayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "speaking_state"));
+            new ResourceLocation(Constants.MOD_ID, "speaking_state"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SpeakingStatePayload> STREAM_CODEC =
             StreamCodec.composite(

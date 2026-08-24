@@ -33,7 +33,7 @@ public record CurrentTaskPayload(UUID entityUuid, String taskId, String tool,
         implements CustomPacketPayload {
 
     public static final Type<CurrentTaskPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "current_task"));
+            new ResourceLocation(Constants.MOD_ID, "current_task"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, CurrentTaskPayload> STREAM_CODEC =
             StreamCodec.composite(

@@ -97,7 +97,7 @@ public final class ChatView {
     }
 
     private static ResourceLocation spr(String n) {
-        return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, n);
+        return new ResourceLocation(Constants.MOD_ID, n);
     }
     private static final ResourceLocation AVATAR_FRAME = spr("avatar_frame");
     private static final ResourceLocation SCROLL_TRACK = spr("scroll_track");

@@ -3,7 +3,6 @@ package com.dwinovo.numen.entity;
 import net.minecraft.network.PacketSendListener;
 import io.netty.channel.embedded.EmbeddedChannel;
 import net.minecraft.network.Connection;
-import net.minecraft.network.DisconnectionDetails;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
@@ -106,15 +105,10 @@ public final class FakeConnection extends Connection {
         // no-op
     }
 
-    /** Neutralise the keep-alive timeout (and any other) disconnect — both overloads. */
+    /** Neutralise the keep-alive timeout (and any other) disconnect — 1.20.6 只有 Component 单参重载. */
     @Override
     public void disconnect(Component message) {
         // no-op: the companion is removed via CompanionLifecycle, never by the wire
-    }
-
-    @Override
-    public void disconnect(DisconnectionDetails details) {
-        // no-op
     }
 
     @Override

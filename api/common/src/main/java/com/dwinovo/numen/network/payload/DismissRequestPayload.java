@@ -24,7 +24,7 @@ import java.util.UUID;
 public record DismissRequestPayload(UUID uuid) implements CustomPacketPayload {
 
     public static final Type<DismissRequestPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "dismiss_request"));
+            new ResourceLocation(Constants.MOD_ID, "dismiss_request"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, DismissRequestPayload> STREAM_CODEC =
             StreamCodec.composite(UUIDUtil.STREAM_CODEC, DismissRequestPayload::uuid, DismissRequestPayload::new);

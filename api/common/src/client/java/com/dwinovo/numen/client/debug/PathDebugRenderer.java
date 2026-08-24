@@ -108,11 +108,14 @@ public final class PathDebugRenderer {
         float nx = dx / len;
         float ny = dy / len;
         float nz = dz / len;
-        vc.addVertex(pose, (float) x1, (float) y1, (float) z1)
-                .setColor(color[0], color[1], color[2], 0.9f)
-                .setNormal(pose, nx, ny, nz);
-        vc.addVertex(pose, (float) x2, (float) y2, (float) z2)
-                .setColor(color[0], color[1], color[2], 0.9f)
-                .setNormal(pose, nx, ny, nz);
+        // 本代顶点是旧链式:vertex(Matrix4f,…)/color/normal + endVertex 提交。
+        vc.vertex(pose.pose(), (float) x1, (float) y1, (float) z1)
+                .color(color[0], color[1], color[2], 0.9f)
+                .normal(pose, nx, ny, nz)
+                .endVertex();
+        vc.vertex(pose.pose(), (float) x2, (float) y2, (float) z2)
+                .color(color[0], color[1], color[2], 0.9f)
+                .normal(pose, nx, ny, nz)
+                .endVertex();
     }
 }

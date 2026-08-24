@@ -107,7 +107,7 @@ public final class NumenScreen extends Screen {
         FAIL = t.fail();
     }
     private static net.minecraft.resources.ResourceLocation railSpr(String n) {
-        return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, n);
+        return new net.minecraft.resources.ResourceLocation(com.dwinovo.numen.Constants.MOD_ID, n);
     }
     private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME = railSpr("avatar_frame");
     private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME_ACTIVE = railSpr("avatar_frame_active");

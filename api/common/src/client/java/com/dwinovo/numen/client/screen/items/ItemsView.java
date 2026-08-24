@@ -46,12 +46,12 @@ public final class ItemsView {
     private static final int COMP_H = TOP_H + 6 + AGENT_H;
 
     // 原版 HUD 贴图:心与鸡腿
-    private static final ResourceLocation HEART_BG = ResourceLocation.withDefaultNamespace("hud/heart/container");
-    private static final ResourceLocation HEART_FULL = ResourceLocation.withDefaultNamespace("hud/heart/full");
-    private static final ResourceLocation HEART_HALF = ResourceLocation.withDefaultNamespace("hud/heart/half");
-    private static final ResourceLocation FOOD_BG = ResourceLocation.withDefaultNamespace("hud/food_empty");
-    private static final ResourceLocation FOOD_FULL = ResourceLocation.withDefaultNamespace("hud/food_full");
-    private static final ResourceLocation FOOD_HALF = ResourceLocation.withDefaultNamespace("hud/food_half");
+    private static final ResourceLocation HEART_BG = new ResourceLocation("hud/heart/container");
+    private static final ResourceLocation HEART_FULL = new ResourceLocation("hud/heart/full");
+    private static final ResourceLocation HEART_HALF = new ResourceLocation("hud/heart/half");
+    private static final ResourceLocation FOOD_BG = new ResourceLocation("hud/food_empty");
+    private static final ResourceLocation FOOD_FULL = new ResourceLocation("hud/food_full");
+    private static final ResourceLocation FOOD_HALF = new ResourceLocation("hud/food_half");
 
     private ItemsView() {}
 

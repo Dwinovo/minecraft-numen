@@ -30,7 +30,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
     public static final int MAIN_SLOTS = 36;
 
     public static final Type<RequestStatePayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "request_state"));
+            new ResourceLocation(Constants.MOD_ID, "request_state"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, RequestStatePayload> STREAM_CODEC =
             StreamCodec.composite(UUIDUtil.STREAM_CODEC, RequestStatePayload::uuid,

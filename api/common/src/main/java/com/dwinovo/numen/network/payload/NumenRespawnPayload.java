@@ -20,7 +20,7 @@ import java.util.UUID;
 public record NumenRespawnPayload(UUID entityUuid, String cause) implements CustomPacketPayload {
 
     public static final Type<NumenRespawnPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_respawn"));
+            new ResourceLocation(Constants.MOD_ID, "numen_respawn"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, NumenRespawnPayload> STREAM_CODEC =
             StreamCodec.composite(

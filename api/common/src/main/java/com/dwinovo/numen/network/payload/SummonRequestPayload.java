@@ -30,7 +30,7 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
     public static final int MAX_SKIN_SIG = 2048;
 
     public static final Type<SummonRequestPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "summon_request"));
+            new ResourceLocation(Constants.MOD_ID, "summon_request"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SummonRequestPayload> STREAM_CODEC =
             StreamCodec.composite(

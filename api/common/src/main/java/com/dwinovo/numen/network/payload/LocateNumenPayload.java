@@ -33,7 +33,7 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
     public static final int MAX_UUIDS = 16;
 
     public static final Type<LocateNumenPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "locate_numen"));
+            new ResourceLocation(Constants.MOD_ID, "locate_numen"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, LocateNumenPayload> STREAM_CODEC =
             StreamCodec.composite(

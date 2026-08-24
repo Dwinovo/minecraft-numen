@@ -29,7 +29,7 @@ public record PathDebugPayload(UUID companionId,
         implements CustomPacketPayload {
 
     public static final Type<PathDebugPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "path_debug"));
+            new ResourceLocation(Constants.MOD_ID, "path_debug"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PathDebugPayload> STREAM_CODEC =
             StreamCodec.of(PathDebugPayload::write, PathDebugPayload::read);

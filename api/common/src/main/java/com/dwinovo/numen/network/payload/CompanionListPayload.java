@@ -43,7 +43,7 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
     }
 
     public static final Type<CompanionListPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "companion_list"));
+            new ResourceLocation(Constants.MOD_ID, "companion_list"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, CompanionListPayload> STREAM_CODEC =
             StreamCodec.composite(

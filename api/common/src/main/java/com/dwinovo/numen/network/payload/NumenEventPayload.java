@@ -31,7 +31,7 @@ public record NumenEventPayload(UUID entityUuid, String entryType, String text, 
         implements CustomPacketPayload {
 
     public static final Type<NumenEventPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_event"));
+            new ResourceLocation(Constants.MOD_ID, "numen_event"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, NumenEventPayload> STREAM_CODEC =
             StreamCodec.composite(

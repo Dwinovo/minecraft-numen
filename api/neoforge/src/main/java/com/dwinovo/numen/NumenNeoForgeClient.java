@@ -83,10 +83,10 @@ public class NumenNeoForgeClient {
         // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」;
         // toast 横幅同层(错误分类话术等,玩家不开面板也看得见)。
         event.registerAboveAll(
-                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "talk_hint"),
+                new ResourceLocation(Constants.MOD_ID, "talk_hint"),
                 (g, delta) -> com.dwinovo.numen.client.hud.TalkHint.render(g));
         event.registerAboveAll(
-                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
+                new ResourceLocation(Constants.MOD_ID, "numen_toasts"),
                 (g, delta) -> com.dwinovo.numen.client.hud.NumenHudToasts.render(g));
     }
 
@@ -114,7 +114,7 @@ public class NumenNeoForgeClient {
         try {
             event.registerShader(new net.minecraft.client.renderer.ShaderInstance(
                             event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "rendertype_round_rect"),
+                            new ResourceLocation(Constants.MOD_ID, "rendertype_round_rect"),
                             com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR),
                     com.dwinovo.numen.client.ui.RoundRect::setShader);
         } catch (Exception e) {

@@ -66,7 +66,7 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
     }
 
     public static final Type<NumenLocationsPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_locations"));
+            new ResourceLocation(Constants.MOD_ID, "numen_locations"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, NumenLocationsPayload> STREAM_CODEC =
             StreamCodec.composite(

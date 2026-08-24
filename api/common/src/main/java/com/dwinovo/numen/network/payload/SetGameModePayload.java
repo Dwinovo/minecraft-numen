@@ -24,7 +24,7 @@ import java.util.UUID;
 public record SetGameModePayload(UUID uuid, boolean creative) implements CustomPacketPayload {
 
     public static final Type<SetGameModePayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "set_game_mode"));
+            new ResourceLocation(Constants.MOD_ID, "set_game_mode"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SetGameModePayload> STREAM_CODEC =
             StreamCodec.composite(

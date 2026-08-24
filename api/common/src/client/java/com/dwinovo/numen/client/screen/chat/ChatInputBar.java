@@ -40,7 +40,7 @@ public final class ChatInputBar {
     private static final ResourceLocation ICON_STOP = icon("icon_stop");
 
     private static ResourceLocation icon(String name) {
-        return ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, name);
+        return new ResourceLocation(com.dwinovo.numen.Constants.MOD_ID, name);
     }
 
     /** 宿主回调面:说话/麦克风/叫停,以及"这几颗键此刻可不可按"。 */

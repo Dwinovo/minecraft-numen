@@ -30,7 +30,7 @@ public record ChangeSkinPayload(UUID uuid, String skinValue, String skinSig)
         implements CustomPacketPayload {
 
     public static final Type<ChangeSkinPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "change_skin"));
+            new ResourceLocation(Constants.MOD_ID, "change_skin"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ChangeSkinPayload> STREAM_CODEC =
             StreamCodec.composite(
