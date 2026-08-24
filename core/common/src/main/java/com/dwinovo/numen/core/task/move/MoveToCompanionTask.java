@@ -21,10 +21,10 @@ import java.util.Map;
  *   <li>{@link MoveToTaskRecord.Kind#COLUMN} → {@link NavGoal#column}:
  *       reach the (x,z) location at any height — the default "go there", a wrong/
  *       absent Y can never make it unreachable;</li>
- *   <li>{@link MoveToTaskRecord.Kind#BLOCK} → {@link NavGoal#exact} when the
- *       cell is enterable, {@link NavGoal#getToBlock} when a solid block occupies
- *       it — the caller means "get to that block" (a chest, a crafting table),
- *       so standing adjacent counts as arrival and the block stays untouched;</li>
+ *   <li>{@link MoveToTaskRecord.Kind#BLOCK} → {@link NavGoal#exact}: occupy exactly
+ *       that cell; whatever occupies it has to be dug out, which only a goto with
+ *       may_alter_terrain may do (the block form is how the caller says "walk up
+ *       beside it instead");</li>
  *   <li>{@link MoveToTaskRecord.Kind#YLEVEL} → {@link NavGoal#yLevel}:
  *       reach a target elevation.</li>
  * </ul>

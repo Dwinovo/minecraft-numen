@@ -38,6 +38,19 @@ public final class PlayerInv {
         return n;
     }
 
+    /**
+     * 背着的数量:只数 36 个主格(含快捷栏),穿在身上和副手握着的不算。
+     * "它离开了背包"这类判断要用这一个——{@link #count} 含盔甲槽,头盔从手里挪到头上数量不变。
+     */
+    public static int carriedCount(Inventory inv, Item item) {
+        int n = 0;
+        for (int i = 0; i < Math.min(BUILDABLE_SLOTS, inv.items.size()); i++) {
+            ItemStack s = inv.items.get(i);
+            if (!s.isEmpty() && s.is(item)) n += s.getCount();
+        }
+        return n;
+    }
+
     /** 建造口径的存量:只数 {@link #BUILDABLE_SLOTS} 格。报价与实扣共用这一个。 */
     public static int buildableCount(Inventory inv, Item item) {
         int limit = Math.min(BUILDABLE_SLOTS, inv.items.size());

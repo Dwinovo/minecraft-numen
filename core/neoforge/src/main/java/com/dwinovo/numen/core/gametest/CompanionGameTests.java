@@ -126,6 +126,32 @@ public class CompanionGameTests {
         });
     }
 
+    // ==================== 穿戴 ====================
+
+    /**
+     * 穿盔甲的回执要说真话:不给 slot 的 equip_item 走原版右键换装,头盔确实到了头上,
+     * 回执必须说 "in head"。曾经用含盔甲槽的总数比对来确认"离开了背包",头盔从手里挪到
+     * 头上数量不变,于是判没穿上、兜底报 "holding … in main hand"——穿对了话说错了。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_armor_reply_names_the_slot(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_dresser", new BlockPos(4, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.DIAMOND_HELMET));
+        TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().equipItem(
+                null, "minecraft:diamond_helmet", null, TaskDispatch.ctx("gametest-dress", companion));
+        TaskDispatch.runSync(companion, record, reply -> {});
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.DIAMOND_HELMET), "the helmet is not on her head");
+            String said = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(said != null && said.contains("in head"),
+                    "the reply must say where it went, got: " + said);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     // ==================== 摔落 ====================
 
     /**

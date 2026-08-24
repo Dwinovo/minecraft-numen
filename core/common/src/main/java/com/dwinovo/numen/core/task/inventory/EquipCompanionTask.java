@@ -64,12 +64,14 @@ public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRec
 
         // Default: equip via a native right-click. The held item's use behaviour equips it — vanilla
         // armor (Equippable), or a Curios/Trinkets accessory (its mod's right-click handler) — to the
-        // right slot, with sound + events. Confirmed by the item leaving the inventory.
+        // right slot, with sound + events. Confirmed by the item leaving the 36 carried slots
+        // (a count that includes the armor slots never changes: the helmet only moved from the
+        // hotbar to the head, and the reply would then lie "holding … in main hand").
         Item want = inv.getItem(invSlot).getItem();
-        int before = PlayerInv.count(inv, want);
+        int before = PlayerInv.carriedCount(inv, want);
         player.holdInHand(invSlot);
         player.gameMode.useItem(player, player.level(), player.getMainHandItem(), InteractionHand.MAIN_HAND);
-        if (PlayerInv.count(inv, want) < before) {
+        if (PlayerInv.carriedCount(inv, want) < before) {
             succeed("equipped " + r.label + slotSuffix(want), foundVanillaSlot(want));
             return;
         }

@@ -819,6 +819,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             noteProgress();
             return null;
         }
+        // 规划器在飞的刻不算卡住:搜索按真实时间给预算,而这把尺子数的是游戏刻。tick 远快于
+        // 真实时间时(/tick rate 200、不限速的测试服),往下挖 170 格的搜索还没回来,400 刻已经
+        // 烧完——她被判"够不着",其实只是在等路。与任务 deadline 的同一条保护(AbstractCompanionTask)。
+        if (nav != null && nav.planningInFlight()) {
+            lastProgressTick++;
+            return null;
+        }
         if (now - lastProgressTick < STALL_TICKS) {
             return null;
         }
