@@ -9,7 +9,7 @@ import com.dwinovo.numen.core.task.inventory.EatItemTaskRecord;
 import com.dwinovo.numen.core.task.inventory.EquipTaskRecord;
 import com.dwinovo.numen.core.task.inventory.UnequipTaskRecord;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.Item;
 
@@ -118,7 +118,7 @@ Integer radius,
         if (item_ids != null) {
             for (String el : item_ids) {
                 if (el == null) continue;
-                ResourceLocation id = ResourceLocation.tryParse(el);
+                Identifier id = Identifier.tryParse(el);
                 if (id != null && BuiltInRegistries.ITEM.containsKey(id)) {
                     filter.add(BuiltInRegistries.ITEM.getValue(id));
                 }

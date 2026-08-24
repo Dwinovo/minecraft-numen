@@ -103,7 +103,7 @@ public final class BuildPalette {
                     + " — block_id takes a plain block id; put the state in `properties`"
                     + " (e.g. block_id \"spruce_stairs\" with properties {facing: south})");
         }
-        var rl = net.minecraft.resources.ResourceLocation.tryParse(trimmed);
+        var rl = net.minecraft.resources.Identifier.tryParse(trimmed);
         if (rl == null) {
             throw new IllegalArgumentException("not a valid block id: " + trimmed);
         }

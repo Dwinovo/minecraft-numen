@@ -226,7 +226,7 @@ public final class BlueprintStore {
             beData.remove(world.asLong());
             needs.remove(world.asLong());
             byPos.put(world.asLong(), new BuildTaskRecord.Target(state, payItem, world,
-                    state.getBlock().builtInRegistryHolder().key().location().getPath(),
+                    state.getBlock().builtInRegistryHolder().key().identifier().getPath(),
                     null, null, null));
             // 方块实体数据只搬装饰性的那部分(告示牌的字、旗帜的花纹);容器内容一律
             // 不搬——图纸是文件,照搬等于凭空造物品

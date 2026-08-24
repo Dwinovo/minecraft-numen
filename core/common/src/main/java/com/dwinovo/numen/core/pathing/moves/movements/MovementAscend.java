@@ -203,7 +203,7 @@ public class MovementAscend extends Movement {
                     src.toShortString(), dest.toShortString(), feet.toShortString(),
                     String.format("%.2f", flatDistToNext), String.format("%.2f", sideDist),
                     String.format("%.3f", lateralMotion), headBonkClear(), player.onGround(),
-                    jumpingOnto.getBlock().builtInRegistryHolder().key().location().getPath());
+                    jumpingOnto.getBlock().builtInRegistryHolder().key().identifier().getPath());
         }
         if (Math.abs(lateralMotion) > 0.1) {
             return state; // 横向还在漂,先走正再跳

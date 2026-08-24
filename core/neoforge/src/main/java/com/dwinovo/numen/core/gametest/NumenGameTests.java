@@ -10,7 +10,7 @@ import net.minecraft.gametest.framework.GameTestInstance;
 import net.minecraft.gametest.framework.TestData;
 import net.minecraft.gametest.framework.StructureUtils;
 import net.minecraft.gametest.framework.TestEnvironmentDefinition;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.level.block.Rotation;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.event.RegisterGameTestsEvent;
@@ -142,12 +142,12 @@ public final class NumenGameTests {
 
             TestData<Holder<TestEnvironmentDefinition>> data = new TestData<>(
                     env,
-                    ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, spec.template()),
+                    Identifier.fromNamespaceAndPath(Constants.MOD_ID, spec.template()),
                     spec.timeoutTicks(),
                     0,                  // setupTicks:旧代没有这一档
                     true,               // required:旧代 @GameTest 的默认值
                     Rotation.NONE);
-            event.registerTest(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name),
+            event.registerTest(Identifier.fromNamespaceAndPath(Constants.MOD_ID, name),
                     new NumenTestInstance(name, data));
         }
         Constants.LOG.info("[numen-gametest] registered {} tests in {} batches",
@@ -156,7 +156,7 @@ public final class NumenGameTests {
 
     private static Holder<TestEnvironmentDefinition> environmentFor(RegisterGameTestsEvent event,
                                                                    String batch) {
-        ResourceLocation id = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, batch);
+        Identifier id = Identifier.fromNamespaceAndPath(Constants.MOD_ID, batch);
         if (NO_SETUP_BATCHES.contains(batch)) {
             // 空环境:与旧代"这个批次没有 @BeforeBatch"逐字等价。
             return event.registerEnvironment(id, new TestEnvironmentDefinition.AllOf(List.of()));

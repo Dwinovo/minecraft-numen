@@ -6,7 +6,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.vehicle.AbstractBoat;
+import net.minecraft.world.entity.vehicle.boat.AbstractBoat;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 

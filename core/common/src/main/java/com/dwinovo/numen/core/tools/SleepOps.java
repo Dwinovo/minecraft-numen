@@ -74,15 +74,15 @@ public final class SleepOps {
      * "the bed is too far away"、"you can only sleep at night and during thunderstorms"),
      * 我们再翻一遍只会得到一份要跟着原版措辞走的硬编码。而且它跟着语言文件,主人也看得懂。
      *
-     * <p>{@code NOT_POSSIBLE_HERE} 与 {@code OTHER_PROBLEM} 原版没配文案({@code getMessage()}
-     * 是 {@code null},那两种它在别处另行处理),那时枚举名就是全部信息——不能因为 null 就炸,
-     * 那会把"她睡不着"变成"工具报错",而模型对后者无从下手。
+     * <p>{@code OTHER_PROBLEM} 原版没配文案({@code message()} 是 {@code null},它在别处
+     * 另行处理),那时只剩"拒了但没说为什么"——不能因为 null 就炸,那会把"她睡不着"
+     * 变成"工具报错",而模型对后者无从下手。
      */
     static String explain(Player.BedSleepingProblem problem) {
-        var vanilla = problem.getMessage();
+        var vanilla = problem.message();
         return vanilla != null
                 ? vanilla.getString()
-                : "the bed refused you (" + problem.name().toLowerCase(java.util.Locale.ROOT) + ")";
+                : "the bed refused you (no reason given)";
     }
 
     /** 手边够得着的床(原版口径:床的任一半在 ±3/±2/±3 内),归一到床头。 */

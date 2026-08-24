@@ -17,7 +17,7 @@ import com.dwinovo.numen.core.combat.Swing;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Creeper;
-import net.minecraft.world.entity.monster.Zombie;
+import net.minecraft.world.entity.monster.zombie.Zombie;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -2000,7 +2000,7 @@ public class CompanionGameTests {
                         continue;
                     }
                     checked++;
-                    var id = net.minecraft.resources.ResourceLocation.tryParse("minecraft:" + word);
+                    var id = net.minecraft.resources.Identifier.tryParse("minecraft:" + word);
                     boolean known = id != null
                             && (net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(id)
                             || net.minecraft.core.registries.BuiltInRegistries.ITEM.containsKey(id));
@@ -2368,7 +2368,7 @@ public class CompanionGameTests {
         java.util.function.BiFunction<String, List<BlockPos>, List<BuildTaskRecord.Target>> vol =
                 (id, cells) -> {
                     var item = net.minecraft.core.registries.BuiltInRegistries.ITEM
-                            .getValue(net.minecraft.resources.ResourceLocation.parse(id));
+                            .getValue(net.minecraft.resources.Identifier.parse(id));
                     var block = item instanceof net.minecraft.world.item.BlockItem bi
                             ? bi.getBlock() : Blocks.AIR;
                     List<BuildTaskRecord.Target> out = new ArrayList<>();
@@ -2455,7 +2455,7 @@ public class CompanionGameTests {
         var server = level.getServer();
         try {
             var template = server.getStructureManager()
-                    .get(net.minecraft.resources.ResourceLocation.parse("minecraft:igloo/top")).orElseThrow();
+                    .get(net.minecraft.resources.Identifier.parse("minecraft:igloo/top")).orElseThrow();
             var tag = template.save(new net.minecraft.nbt.CompoundTag());
             java.nio.file.Path dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(server);
             net.minecraft.nbt.NbtIo.writeCompressed(tag, dir.resolve("igloo_top.nbt"));
@@ -2977,7 +2977,7 @@ public class CompanionGameTests {
         });
 
         helper.succeedWhen(() -> {
-            var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.AbstractBoat.class,
+            var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.boat.AbstractBoat.class,
                     new net.minecraft.world.phys.AABB(
                             helper.absolutePos(new BlockPos(6, 1, 6)).getCenter(),
                             helper.absolutePos(new BlockPos(10, 4, 10)).getCenter()));

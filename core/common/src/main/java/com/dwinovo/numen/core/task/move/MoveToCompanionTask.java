@@ -95,7 +95,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // 靠岸后接步行(见 tickBoatLeg)。其余情况(矿车没有舵、马的寻路仍按步行
         // 物理算、FIND 要先扫描)直接走步行段;下座驾是步行导航自己的事(PlayerNav)。
         if (player.isPassenger()
-                && player.getVehicle() instanceof net.minecraft.world.entity.vehicle.AbstractBoat
+                && player.getVehicle() instanceof net.minecraft.world.entity.vehicle.boat.AbstractBoat
                 && (r.kind == MoveToTaskRecord.Kind.BLOCK || r.kind == MoveToTaskRecord.Kind.COLUMN)
                 && !reached()) {
             boatLeg = new com.dwinovo.numen.core.pathing.execute.BoatNav(player, blockTarget);
@@ -110,7 +110,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         }
         if (r.kind == MoveToTaskRecord.Kind.FIND) {
             // 就近方块:解析 id → 离线扫描附近候选;导航等首批候选到手再建
-            var id = net.minecraft.resources.ResourceLocation.tryParse(r.block);
+            var id = net.minecraft.resources.Identifier.tryParse(r.block);
             var b = id == null ? null : net.minecraft.core.registries.BuiltInRegistries.BLOCK.getValue(id);
             if (b == null || b == net.minecraft.world.level.block.Blocks.AIR) {
                 fail("unknown block id '" + r.block

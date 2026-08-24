@@ -6,7 +6,7 @@ import com.dwinovo.numen.entity.CompanionRegistry;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.tags.TagKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
@@ -117,7 +117,7 @@ public final class ScaffoldMaterials {
         if (raw == null || raw.isBlank()) {
             return null;
         }
-        ResourceLocation id = ResourceLocation.tryParse(raw.trim().toLowerCase(java.util.Locale.ROOT));
+        Identifier id = Identifier.tryParse(raw.trim().toLowerCase(java.util.Locale.ROOT));
         if (id == null) {
             return null;
         }

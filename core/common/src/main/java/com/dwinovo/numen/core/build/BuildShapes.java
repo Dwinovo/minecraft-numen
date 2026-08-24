@@ -448,7 +448,7 @@ public final class BuildShapes {
         tries.add(p + "_slab");
         for (String t : tries) {
             Block b = BuiltInRegistries.BLOCK.getValue(
-                    net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(id.getNamespace(), t));
+                    net.minecraft.resources.Identifier.fromNamespaceAndPath(id.getNamespace(), t));
             if (b instanceof SlabBlock) {
                 return b;
             }

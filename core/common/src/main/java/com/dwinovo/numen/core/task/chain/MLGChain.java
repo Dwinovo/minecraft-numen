@@ -123,8 +123,10 @@ public final class MLGChain implements Task, com.dwinovo.numen.task.reflex.Refle
             return TaskState.RUNNING;   // 还够不着,或者这一刻没瞄准 —— 下一刻更近
         }
 
-        // 下界的水一倒就蒸发,倒下去只是白扔一个桶。
-        int bucket = companion.level().dimensionType().ultraWarm()
+        // 下界的水一倒就蒸发,倒下去只是白扔一个桶。判据与原版倒桶同源:
+        // 落点处的 WATER_EVAPORATES 环境属性(BucketItem 蒸发分支即此查询)。
+        int bucket = companion.level().environmentAttributes().getValue(
+                        net.minecraft.world.attribute.EnvironmentAttributes.WATER_EVAPORATES, ground)
                 ? -1 : waterBucketSlot(companion);
         if (bucket >= 0) {
             companion.holdInHand(bucket);

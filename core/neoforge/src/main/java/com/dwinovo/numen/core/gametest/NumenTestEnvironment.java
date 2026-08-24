@@ -31,9 +31,10 @@ public record NumenTestEnvironment(int time) implements TestEnvironmentDefinitio
         // 而验收要的是「所有格<b>同时</b>就位」的那一瞬,先落的草在最后一格落定前
         // 就已经退化,那一瞬永远不会到来(实测 5857 格里稳定差这 163 格)。
         // 这和上面两条同类:排除与被测行为无关的环境随机性,不改任何被测逻辑。
-        level.getGameRules()
-                .getRule(net.minecraft.world.level.GameRules.RULE_RANDOMTICKING)
-                .set(0, level.getServer());
+        // 1.21.11 把游戏规则挪进 net.minecraft.world.level.gamerules 并改成
+        // GameRule<T> + map 形态:取规则对象再 set(值, server),语义与旧代一致。
+        level.getGameRules().set(
+                net.minecraft.world.level.gamerules.GameRules.RANDOM_TICK_SPEED, 0, level.getServer());
     }
 
     @Override

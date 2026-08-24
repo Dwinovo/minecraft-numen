@@ -8,7 +8,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
@@ -126,7 +126,7 @@ int z,
 
         boolean sameDimension = self.level().dimension().equals(player.level().dimension());
         root.addProperty("same_dimension", sameDimension);
-        root.addProperty("owner_dimension", player.level().dimension().location().toString());
+        root.addProperty("owner_dimension", player.level().dimension().identifier().toString());
         if (sameDimension) {
             root.addProperty("distance_to_me", self.distanceTo(player));
         } else {
@@ -148,7 +148,7 @@ int z,
         var level = self.level();
 
         JsonObject root = new JsonObject();
-        root.addProperty("dimension", level.dimension().location().toString());
+        root.addProperty("dimension", level.dimension().identifier().toString());
         root.addProperty("game_time", level.getLevelData().getGameTime());
         root.addProperty("is_bright_outside", level.isBrightOutside());
         root.addProperty("is_dark_outside", level.isDarkOutside());

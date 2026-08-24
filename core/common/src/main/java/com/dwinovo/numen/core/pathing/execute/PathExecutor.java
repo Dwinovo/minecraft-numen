@@ -597,7 +597,7 @@ public final class PathExecutor {
     /** 方块的短名(排障日志用)。 */
     private String blockName(BlockPos pos) {
         return player.level().getBlockState(pos).getBlock()
-                .builtInRegistryHolder().key().location().getPath();
+                .builtInRegistryHolder().key().identifier().getPath();
     }
 
     /** 移动的人话描述(失败原因素材):类型 + 起讫格。 */
@@ -705,7 +705,7 @@ public final class PathExecutor {
         for (BlockPos p : m.toBreak(view)) {
             toBreak.append(p.toShortString()).append('=')
                     .append(player.level().getBlockState(p).getBlock().builtInRegistryHolder()
-                            .key().location().getPath()).append(' ');
+                            .key().identifier().getPath()).append(' ');
         }
         return pathPosition + "/" + path.length() + " " + m.getClass().getSimpleName()
                 + " " + m.getSrc().toShortString() + "->" + m.getDest().toShortString()

@@ -13,7 +13,7 @@ import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.TagKey;
@@ -175,7 +175,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
         var registry = sl.registryAccess().lookupOrThrow(Registries.STRUCTURE);
         List<Holder<Structure>> out = new ArrayList<>();
         if (arg.startsWith("#")) {
-            ResourceLocation tagId = ResourceLocation.tryParse(arg.substring(1));
+            Identifier tagId = Identifier.tryParse(arg.substring(1));
             if (tagId == null) {
                 failReason = "invalid structure tag: " + arg;
                 return null;
@@ -192,7 +192,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             set.get().forEach(out::add);
             return out;
         }
-        ResourceLocation id = ResourceLocation.tryParse(arg);
+        Identifier id = Identifier.tryParse(arg);
         Optional<? extends Holder<Structure>> holder = id == null ? Optional.empty()
                 : registry.get(ResourceKey.create(Registries.STRUCTURE, id));
         if (holder.isEmpty()) {
@@ -202,7 +202,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                 return null;
             }
             String suggestion = IdSuggest.closest(
-                    registry.listElements().map(ref -> ref.key().location()), arg);
+                    registry.listElements().map(ref -> ref.key().identifier()), arg);
             failReason = "unknown structure: " + arg
                     + (suggestion != null
                             ? " — did you mean " + suggestion + "?"
@@ -215,12 +215,12 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
         return out;
     }
 
-    private static boolean isBiomeId(ServerLevel sl, ResourceLocation id) {
+    private static boolean isBiomeId(ServerLevel sl, Identifier id) {
         return sl.registryAccess().lookupOrThrow(Registries.BIOME)
                 .get(ResourceKey.create(Registries.BIOME, id)).isPresent();
     }
 
-    private static boolean isBiomeTag(ServerLevel sl, ResourceLocation tagId) {
+    private static boolean isBiomeTag(ServerLevel sl, Identifier tagId) {
         return sl.registryAccess().lookupOrThrow(Registries.BIOME)
                 .get(TagKey.create(Registries.BIOME, tagId)).isPresent();
     }
@@ -336,7 +336,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
                     + " blocks). goto the x/z (pick a sensible y for the terrain), "
                     + "then scan_blocks to find its actual blocks.";
         }
-        String dim = player.level().dimension().location().getPath();
+        String dim = player.level().dimension().identifier().getPath();
         int searched = searchedRadiusBlocks();
         return searched == 0
                 ? r.structure + " does not generate IN THIS DIMENSION ("
