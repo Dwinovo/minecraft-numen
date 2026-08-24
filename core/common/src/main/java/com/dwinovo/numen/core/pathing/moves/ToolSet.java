@@ -141,13 +141,13 @@ public class ToolSet {
     private static boolean isWeapon(ItemStack itemStack) {
         Item item = itemStack.getItem();
         return item instanceof SwordItem || item instanceof AxeItem
-                // 1.20.4:无重锤(Mace 是 1.20.5+)。
+                // 1.20.2:无重锤(Mace 是 1.20.5+)。
                 || item instanceof TridentItem;
     }
 
     /** 该物品是否带精准采集附魔。 */
     public boolean hasSilkTouch(ItemStack stack) {
-        // 1.20.4:直接查附魔等级,无 Holder/组件。
+        // 1.20.2:直接查附魔等级,无 Holder/组件。
         return EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SILK_TOUCH, stack) > 0;
     }
 
@@ -239,7 +239,7 @@ public class ToolSet {
 
         float speed = item.getDestroySpeed(state);
         if (speed > 1) {
-            // 1.20.4:效率加成走经典公式 level²+1(1.21 的 MINING_EFFICIENCY
+            // 1.20.2:效率加成走经典公式 level²+1(1.21 的 MINING_EFFICIENCY
             // 属性效果对效率附魔的 calculate(level) 就是这条曲线)。
             int eff = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.BLOCK_EFFICIENCY, item);
             if (eff > 0) {

@@ -17,7 +17,7 @@ import com.dwinovo.numen.platform.Services;
  * <h2>Adding a new payload</h2>
  * <ol>
  *   <li>Define a record under {@code com.dwinovo.numen.network.payload}
- *       implementing {@code CustomPacketPayload} (1.20.4 shape: {@code write} +
+ *       implementing {@code CustomPacketPayload} (1.20.2 shape: {@code write} +
  *       {@code id}) with a public {@code ID} and a static {@code read}.</li>
  *   <li>Add one {@code registerClientToServer(...)} or
  *       {@code registerServerToClient(...)} call here.</li>

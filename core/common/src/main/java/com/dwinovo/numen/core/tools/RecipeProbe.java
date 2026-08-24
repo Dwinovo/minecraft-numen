@@ -20,7 +20,7 @@ public final class RecipeProbe {
     private RecipeProbe() {}
 
     /** 展示产出——枚举配方表用它,不用空输入 assemble(那是出合同的问法)。 */
-    public static ItemStack resultOf(Recipe<?> recipe, RegistryAccess registries) {   // 1.20.4:展示产出收 RegistryAccess
+    public static ItemStack resultOf(Recipe<?> recipe, RegistryAccess registries) {   // 1.20.2:展示产出收 RegistryAccess
         return probe(() -> recipe.getResultItem(registries));
     }
 

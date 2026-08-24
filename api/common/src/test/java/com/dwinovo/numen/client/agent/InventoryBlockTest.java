@@ -119,7 +119,7 @@ class InventoryBlockTest {
     }
 
     private static ItemStack potion(net.minecraft.world.item.alchemy.Potion potion) {
-        // 1.20.4:药水内容写在 NBT 里(PotionUtils),组件系统是 1.20.5+ 的。
+        // 1.20.2:药水内容写在 NBT 里(PotionUtils),组件系统是 1.20.5+ 的。
         return net.minecraft.world.item.alchemy.PotionUtils.setPotion(
                 new ItemStack(Items.POTION), potion);
     }

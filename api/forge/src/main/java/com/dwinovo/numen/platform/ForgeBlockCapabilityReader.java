@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Forge (1.20.4) implementation of {@link IBlockCapabilityReader} — reads a
+ * Forge (1.20.2) implementation of {@link IBlockCapabilityReader} — reads a
  * block's item/fluid/energy contents through the classic Forge capability
  * system.
  *

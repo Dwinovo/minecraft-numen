@@ -116,7 +116,7 @@ final class RangedShot {
                 tickReadyToFire(aim, target);
             } else if (!player.isUsingItem()) {
                 state = State.SETTLING;
-            } else if (++held >= CrossbowItem.getChargeDuration(weapon)) {   // 1.20.4:时长只看弩(快速装填在里面)
+            } else if (++held >= CrossbowItem.getChargeDuration(weapon)) {   // 1.20.2:时长只看弩(快速装填在里面)
                 player.releaseUsingItem();
                 state = State.READY_TO_FIRE;
                 settle = 0;

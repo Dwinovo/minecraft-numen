@@ -151,7 +151,7 @@ public final class CompanionStateWatch {
     private boolean effectsChangedSince(NumenPlayer companion) {
         java.util.Set<String> now = new java.util.HashSet<>();
         for (var effect : companion.getActiveEffects()) {
-            // 1.20.4: getEffect() 直接给 MobEffect(不是 Holder),id 走注册表反查
+            // 1.20.2: getEffect() 直接给 MobEffect(不是 Holder),id 走注册表反查
             var key = net.minecraft.core.registries.BuiltInRegistries.MOB_EFFECT
                     .getKey(effect.getEffect());
             now.add((key == null ? "unknown" : key.toString()) + '@' + effect.getAmplifier());

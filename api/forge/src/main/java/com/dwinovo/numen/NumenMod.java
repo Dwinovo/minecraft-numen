@@ -14,7 +14,7 @@ import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 
 /**
- * Forge mod entry for 1.20.4. Forge keeps separate mod and game event buses,
+ * Forge mod entry for 1.20.2. Forge keeps separate mod and game event buses,
  * just like the NeoForge reference this was ported from — registration-type
  * events go on the mod bus (from the constructor here), while the per-tick /
  * world lifecycle events go on {@link MinecraftForge#EVENT_BUS}.

@@ -1,7 +1,7 @@
 plugins {
-    // 1.20.4 toolchain runs on Java 17; the modern fabric-loom-remap 1.14.x line
+    // 1.20.2 toolchain runs on Java 17; the modern fabric-loom-remap 1.14.x line
     // requires Java 21, so pin loom to the 1.6 line (Java 17-compatible).
-    // 1.20.4 uses official Mojang mappings, so the plain fabric-loom (not -remap) is correct.
+    // 1.20.2 uses official Mojang mappings, so the plain fabric-loom (not -remap) is correct.
     id 'fabric-loom' version '1.6-SNAPSHOT' apply false
     // Forge (ForgeGradle) and common (VanillaGradle) declare their plugins inline
     // in their own build.gradle, so nothing else is needed here.

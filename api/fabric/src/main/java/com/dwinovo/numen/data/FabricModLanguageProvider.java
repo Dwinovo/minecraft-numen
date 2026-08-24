@@ -12,7 +12,7 @@ public final class FabricModLanguageProvider extends FabricLanguageProvider {
 
     private final String locale;
 
-    // 1.20.4 Fabric API: (FabricDataOutput, String) ctor; no CompletableFuture<Provider> arg.
+    // 1.20.2 Fabric API: (FabricDataOutput, String) ctor; no CompletableFuture<Provider> arg.
     public FabricModLanguageProvider(FabricDataOutput output, String locale) {
         super(output, locale);
         this.locale = locale;

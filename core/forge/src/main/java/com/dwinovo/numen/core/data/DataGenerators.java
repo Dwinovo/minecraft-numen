@@ -27,7 +27,7 @@ public final class DataGenerators {
     @SubscribeEvent
     public static void gatherData(GatherDataEvent event) {
         DataGenerator generator = event.getGenerator();
-        PackOutput output = generator.getPackOutput();   // 1.20.4: PackOutput is on the generator, not the event
+        PackOutput output = generator.getPackOutput();   // 1.20.2: PackOutput is on the generator, not the event
         CompletableFuture<HolderLookup.Provider> lookup = event.getLookupProvider();
         ExistingFileHelper efh = event.getExistingFileHelper();
 

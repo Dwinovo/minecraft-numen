@@ -18,10 +18,10 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Forge 1.20.4 implementation of {@link INetworkChannel}.
+ * Forge 1.20.2 implementation of {@link INetworkChannel}.
  *
  * <h2>Why an envelope instead of one Forge message per payload</h2>
- * Forge 1.20.4 routes on a {@link SimpleChannel} keyed by the message's runtime
+ * Forge 1.20.2 routes on a {@link SimpleChannel} keyed by the message's runtime
  * {@code Class}. The cross-loader interface registers payloads by
  * {@code ResourceLocation}, so this channel registers a <em>single</em> Forge
  * message — an {@link Envelope} carrying {@code (payload id, serialised bytes)} —

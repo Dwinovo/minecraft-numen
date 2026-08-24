@@ -73,7 +73,7 @@ public final class TakeItemsTool implements NumenTool {
         // 按满栈分批塞;背包塞不下的原版 add 会留在栈里,掉在脚下(与描述一致)
         int remaining = want;
         while (remaining > 0) {
-            int n = Math.min(remaining, item.getMaxStackSize());   // 1.20.4:上限在 Item 上
+            int n = Math.min(remaining, item.getMaxStackSize());   // 1.20.2:上限在 Item 上
             ItemStack stack = new ItemStack(item, n);
             if (!companion.getInventory().add(stack) && !stack.isEmpty()) {
                 companion.drop(stack, false);

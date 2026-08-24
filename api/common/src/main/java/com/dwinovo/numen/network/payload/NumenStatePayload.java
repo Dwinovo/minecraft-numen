@@ -60,7 +60,7 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
         buf.writeFloat(saturation);
         buf.writeVarInt(selectedSlot);
         buf.writeItem(offhand);
-        // 效果按 NBT 走:1.20.4 没有 MobEffectInstance 的流编解码器,save/load 是它的原生序列化
+        // 效果按 NBT 走:1.20.2 没有 MobEffectInstance 的流编解码器,save/load 是它的原生序列化
         int en = Math.min(effects.size(), MAX_EFFECTS);
         buf.writeVarInt(en);
         for (int i = 0; i < en; i++) {

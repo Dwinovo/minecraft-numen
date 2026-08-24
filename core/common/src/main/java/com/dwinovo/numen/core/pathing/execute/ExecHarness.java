@@ -283,7 +283,7 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
                 + (isKeyRequested(Input.MOVE_RIGHT) ? -1.0f : 0.0f);
         boolean sneak = isKeyRequested(Input.SNEAK);
         if (sneak) {
-            // 潜行冲量乘数:基值 0.3,迅捷潜行附魔会提高(1.20.4 无 SNEAKING_SPEED
+            // 潜行冲量乘数:基值 0.3,迅捷潜行附魔会提高(1.20.2 无 SNEAKING_SPEED
             // 属性,原版 LocalPlayer 就是这条 clamp(0.3 + bonus) 公式)
             float sneakSpeed = net.minecraft.util.Mth.clamp(
                     0.3f + net.minecraft.world.item.enchantment.EnchantmentHelper

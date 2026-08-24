@@ -72,7 +72,7 @@ class ThrowawaySelectionTest {
         abilities.set(p, new net.minecraft.world.entity.player.Abilities());   // 默认生存画像
         Field entityData = net.minecraft.world.entity.Entity.class.getDeclaredField("entityData");
         entityData.setAccessible(true);
-        // 1.20.4 的 SynchedEntityData 直接 new + define,没有 Builder,也不校验
+        // 1.20.2 的 SynchedEntityData 直接 new + define,没有 Builder,也不校验
         // 「每个 id 都已定义」——只定义要断言的血量一项即可。
         net.minecraft.network.syncher.SynchedEntityData synched =
                 new net.minecraft.network.syncher.SynchedEntityData(p);

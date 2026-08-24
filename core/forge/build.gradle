@@ -4,7 +4,7 @@ plugins {
     id 'org.spongepowered.mixin' version '0.7-SNAPSHOT'
 }
 
-// Forge 1.20.4 运行期是 SRG 名,而 mixin 源码按官方名写——必须生成 refmap 把
+// Forge 1.20.2 运行期是 SRG 名,而 mixin 源码按官方名写——必须生成 refmap 把
 // @Accessor("nibble") 之类的字符串引用翻译过去,否则运行期找不到字段直接崩。
 // (Fabric 那边由 loom 在 remapJar 期改写注解,机制不同,见 fabric/build.gradle。)
 mixin {

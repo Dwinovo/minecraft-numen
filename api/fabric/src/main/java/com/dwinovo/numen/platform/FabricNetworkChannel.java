@@ -15,7 +15,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Fabric implementation of {@link INetworkChannel} for MC 1.20.4. Uses the
+ * Fabric implementation of {@link INetworkChannel} for MC 1.20.2. Uses the
  * raw {@code ResourceLocation}+{@code FriendlyByteBuf} networking API
  * ({@code ServerPlayNetworking} / {@code ClientPlayNetworking}) — the
  * {@code CustomPacketPayload}-typed {@code PayloadTypeRegistry} is a 1.20.5+

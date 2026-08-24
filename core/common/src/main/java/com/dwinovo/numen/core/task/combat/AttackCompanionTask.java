@@ -97,7 +97,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private static final double BOW_MIN_DISTANCE = 8.0;
 
-    /** 1.20.4:生存模式实体交互距离是固定 3.0(ENTITY_INTERACTION_RANGE 属性是 1.20.5+ 的)。 */
+    /** 1.20.2:生存模式实体交互距离是固定 3.0(ENTITY_INTERACTION_RANGE 属性是 1.20.5+ 的)。 */
     private static final double ENTITY_REACH = 3.0;
 
     /**

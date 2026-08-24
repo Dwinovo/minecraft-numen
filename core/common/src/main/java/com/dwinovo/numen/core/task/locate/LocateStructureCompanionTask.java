@@ -278,7 +278,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
     private boolean checkCandidate(ServerLevel sl, Job job, ChunkPos candidate) {
         for (Structure structure : job.structures) {
             StructureCheckResult res = sl.structureManager()
-                    .checkStructurePresence(candidate, structure, false);   // 1.20.4:不收 placement 参数
+                    .checkStructurePresence(candidate, structure, false);   // 1.20.2:不收 placement 参数
             if (res == StructureCheckResult.START_NOT_PRESENT) continue;
             if (res == StructureCheckResult.START_PRESENT) return true;
             // CHUNK_LOAD_NEEDED:生成判据已经点头了,只差排除区这一项。

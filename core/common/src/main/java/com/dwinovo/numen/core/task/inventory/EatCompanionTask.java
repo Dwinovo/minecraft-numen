@@ -50,7 +50,7 @@ public final class EatCompanionTask extends AbstractCompanionTask<EatItemTaskRec
                         : new Precondition.Failure("no " + r.label + " in inventory to eat",
                                 FailureType.NO_MATERIAL),
                 // Native "is this consumable?" — covers food, potions, milk, and modded consumables alike.
-                () -> r.item.getFoodProperties() != null ? null   // 1.20.4:食物属性在 Item 上,不是组件
+                () -> r.item.getFoodProperties() != null ? null   // 1.20.2:食物属性在 Item 上,不是组件
                         : new Precondition.Failure(r.label + " can't be eaten or drunk",
                                 FailureType.UNKNOWN));
     }

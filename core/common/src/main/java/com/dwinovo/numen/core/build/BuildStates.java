@@ -241,7 +241,7 @@ public final class BuildStates {
      * 活。按一面白旗收料就是把那份活白送。所以收的是<b>带着这些花纹的那面旗帜本身</b>。
      *
      * <p>做法是把方块实体那份数据借道 {@code BlockEntityTag} 挂到物品上,而不是手搭:
-     * 这一代(1.20.4)方块实体里那份 {@code Patterns} 和旗帜物品 {@code BlockEntityTag}
+     * 这一代(1.20.2)方块实体里那份 {@code Patterns} 和旗帜物品 {@code BlockEntityTag}
      * 里那份本来就是同一套编码,借道过去必然一致,手搭迟早会在某个版本上错位。
      *
      * @return 要精确收的那一叠;这一格不需要精确返回 null

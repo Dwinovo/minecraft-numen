@@ -15,8 +15,8 @@ import java.util.function.Function;
  * {@code SimpleChannel} so feature code in {@code common} can declare a payload,
  * its decoder, and its handler once and have it work on both loaders.
  *
- * <h2>Payload definition (MC 1.20.4)</h2>
- * A payload is a record implementing {@link CustomPacketPayload} — the 1.20.4
+ * <h2>Payload definition (MC 1.20.2)</h2>
+ * A payload is a record implementing {@link CustomPacketPayload} — the 1.20.2
  * shape: a {@code void write(FriendlyByteBuf)} that serialises the record and a
  * {@code ResourceLocation id()} identifying the channel. Its reverse (a static
  * {@code read(FriendlyByteBuf)}) is passed to {@code register*} as the decoder.

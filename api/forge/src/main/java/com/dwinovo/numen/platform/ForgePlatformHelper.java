@@ -6,7 +6,7 @@ import net.minecraftforge.fml.loading.FMLEnvironment;
 import net.minecraftforge.fml.loading.FMLPaths;
 
 /**
- * Forge 1.20.4 implementation of {@link IPlatformHelper}. Mirrors the behaviour
+ * Forge 1.20.2 implementation of {@link IPlatformHelper}. Mirrors the behaviour
  * of {@code FabricPlatformHelper} / the NeoForge reference, just against Forge's
  * {@code ModList} / {@code FMLPaths} / {@code FMLEnvironment}.
  */

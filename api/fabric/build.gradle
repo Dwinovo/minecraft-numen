@@ -5,7 +5,7 @@ plugins {
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
-    // Obfuscated MC (1.20.4) → loom remaps to Mojang names to match the common source set.
+    // Obfuscated MC (1.20.2) → loom remaps to Mojang names to match the common source set.
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
@@ -14,7 +14,7 @@ dependencies {
 loom {
     mixin {
         // mixins.json 声明的 refmap 名是 ${mod_id}.refmap.json,loom 默认按归档名生成
-        // ${mod_id}-fabric-1.20.4-refmap.json,运行期按声明的名字读不到,这里显式对齐。
+        // ${mod_id}-fabric-1.20.2-refmap.json,运行期按声明的名字读不到,这里显式对齐。
         defaultRefmapName = "${mod_id}.refmap.json"
     }
     def aw = project(':api:common').file("src/main/resources/${mod_id}.accesswidener")

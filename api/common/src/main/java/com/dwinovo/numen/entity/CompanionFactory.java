@@ -93,7 +93,7 @@ public final class CompanionFactory {
      */
     /** @return 载入的 .dat(供上层读 playerGameType 等玩家级字段);首次召唤无档返回 null */
     private static net.minecraft.nbt.CompoundTag loadPlayerData(MinecraftServer server, NumenPlayer player) {
-        // 1.20.4: PlayerList.load(player) returns a nullable CompoundTag (predates both the
+        // 1.20.2: PlayerList.load(player) returns a nullable CompoundTag (predates both the
         // Optional wrapper and the ValueInput IO refactor). It already applies the tag to the
         // player internally and returns it; re-applying via Entity.load(CompoundTag) is a no-op-safe
         // belt-and-braces restore of position/inventory for a hand-built fake player.
