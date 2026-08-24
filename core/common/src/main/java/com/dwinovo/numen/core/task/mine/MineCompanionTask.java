@@ -373,8 +373,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
         // 3) No ore known and nothing dropped nearby. An incomplete index (cold area
         //    still building under the per-query budget) means "don't know yet", not
-        //    "nothing there" — wait for full coverage before any verdict.
+        //    "nothing there" — wait for full coverage before any verdict. 等扫描的刻
+        //    不烧任务预算:索引按真实时间分摊构建,而期限数游戏刻——tick 远快于真实
+        //    时间时(/tick rate、不限速的测试服),期限会在首查返回前烧光,任务无声
+        //    TIMEOUT。与 nav 规划在飞的冻结(AbstractCompanionTask)同一条保护。
         if (!lastQueryComplete) {
+            r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
             return TaskState.RUNNING;
         }
         //    Default: stop here — only the
