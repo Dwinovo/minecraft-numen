@@ -6,3 +6,19 @@ plugins {
     // see https://projects.neoforged.net/neoforged/moddevgradle for new versions
     id 'net.neoforged.moddev' version '2.0.141' apply false
 }
+
+// mod_id 因家族而异(core=numen,api=numen_api),不能放全树共享的 gradle.properties,
+// 在此按家族显式指定。api 家族同时沿用自己的版本线——发布坐标 numen-api-*-<mc> 的
+// 版本号是第三方依赖的契约,与模组本体版本(0.1.x)各走各的。
+allprojects { ext.mod_id = 'numen' }
+['api:common', 'api:fabric', 'api:neoforge'].each { path ->
+    project(path) {
+        version = '0.0.8-SNAPSHOT'
+        ext.mod_id = 'numen_api'
+        // 内部模块身份必须与 core 家族区分:两家子项目同名(common/fabric/neoforge),
+        // 若 group 也相同,Gradle 会把 project(':api:common') 依赖按"同一模块"做版本
+        // 冲突解析,直接指回 core 自己形成任务自环。发布坐标不受影响——api-common.gradle
+        // 的 publication 显式写 groupId。
+        group = 'com.dwinovo.numen.api'
+    }
+}
