@@ -255,13 +255,22 @@ public final class TargetIndex {
                         long key = SectionPos.asLong(cx, sy, cz);
                         SectionEntry e = idx.sections.get(key);
                         if (e == null || e.version != idx.version) {
-                            if (budget <= 0) {
-                                complete = false;
-                                break outer;
+                            // 预算只计两趟扫描(计数+收位)的真构建。palette 预筛排除的段
+                            // (纯空气/不含目标)是 O(palette) 的,记零成本直接落缓存——
+                            // 常驻加载的大片空段(出生区块、平坦世界)按真构建计价的话,
+                            // 预算会在空气上烧光,覆盖永远到不了头。
+                            if (triviallyEmpty(secs[si], idx)) {
+                                e = new SectionEntry(idx.version);
+                                idx.sections.put(key, e);
+                            } else {
+                                if (budget <= 0) {
+                                    complete = false;
+                                    break outer;
+                                }
+                                budget--;
+                                e = build(secs[si], idx);
+                                idx.sections.put(key, e);
                             }
-                            budget--;
-                            e = build(secs[si], idx);
-                            idx.sections.put(key, e);
                         }
                         collect(e, secs[si], cx, sy, cz, targets, want, out);
                         while (fed < out.size()) {
@@ -277,14 +286,20 @@ public final class TargetIndex {
         return new Result(out, complete);
     }
 
+    /** palette 预筛:这个 section 一定不含任何目标(纯空气,或调色板里就没有)。 */
+    private static boolean triviallyEmpty(LevelChunkSection section, LevelIndex idx) {
+        var targets = idx.targetRefs.keySet();
+        return section == null || section.hasOnlyAir()
+                || !section.maybeHas(state -> targets.contains(state.getBlock()));
+    }
+
     /** 构建一个 section 的条目:palette 预筛 → 一趟计数定饱和 → 一趟收位。 */
     private static SectionEntry build(LevelChunkSection section, LevelIndex idx) {
         SectionEntry e = new SectionEntry(idx.version);
-        var targets = idx.targetRefs.keySet();
-        if (section == null || section.hasOnlyAir()
-                || !section.maybeHas(state -> targets.contains(state.getBlock()))) {
+        if (triviallyEmpty(section, idx)) {
             return e;
         }
+        var targets = idx.targetRefs.keySet();
         Reference2IntOpenHashMap<Block> counts = new Reference2IntOpenHashMap<>();
         section.getStates().count((state, n) -> {
             Block b = state.getBlock();
