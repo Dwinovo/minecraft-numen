@@ -214,11 +214,12 @@ public final class BuildStates {
         // 带花的花盆:盆一件,花一件。盆里那株是什么,问方块自己——中键取方块给的正是
         // 那株植物。不写死一张"哪个盆装哪种花"的对照表(那张表在别处是二十多行的
         // switch),模组的花盆也照样认。
+        // 1.20.2 叫 getContent(getPotted 仅存在于 1.20.3/1.20.4 这一窗口)。
         if (state.getBlock() instanceof net.minecraft.world.level.block.FlowerPotBlock pot
-                && pot.getPotted() != Blocks.AIR) {
+                && pot.getContent() != Blocks.AIR) {
             net.minecraft.world.item.Item plant = materialItem(state, level, probe);
             if (plant == net.minecraft.world.item.Items.AIR) {
-                plant = pot.getPotted().asItem();
+                plant = pot.getContent().asItem();
             }
             if (plant == net.minecraft.world.item.Items.AIR
                     || plant == net.minecraft.world.item.Items.FLOWER_POT) {

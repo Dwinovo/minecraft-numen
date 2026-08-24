@@ -84,7 +84,7 @@ public class CompanionGameTests {
                         name = name.substring(0, name.length() - ".snbt".length());
                         net.minecraft.nbt.CompoundTag tag = net.minecraft.nbt.NbtUtils
                                 .snbtToStructure(java.nio.file.Files.readString(p));
-                        net.minecraft.nbt.NbtIo.writeCompressed(tag, out.resolve(name + ".nbt"));
+                        net.minecraft.nbt.NbtIo.writeCompressed(tag, out.resolve(name + ".nbt").toFile());
                     }
                 }
             } catch (Exception e) {
@@ -842,7 +842,7 @@ public class CompanionGameTests {
     @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_build")
     public static void replace_modes_let_through_what_they_say(GameTestHelper helper) {
         BlockState air = Blocks.AIR.defaultBlockState();
-        BlockState soft = Blocks.SHORT_GRASS.defaultBlockState();   // 1.20.3 起草改名 SHORT_GRASS
+        BlockState soft = Blocks.GRASS.defaultBlockState();   // 1.20.2 还叫 GRASS(1.20.3 才改名 SHORT_GRASS)
         BlockState solid = Blocks.STONE.defaultBlockState();
         BlockState torch = Blocks.TORCH.defaultBlockState();
 
@@ -1001,7 +1001,7 @@ public class CompanionGameTests {
         blocks.add(cellTag(2, 1, 0, 3));   // 门上半
         root.put("blocks", blocks);
         var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
-        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_halves.nbt"));
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_halves.nbt").toFile());
 
         BlockPos anchor = helper.absolutePos(new BlockPos(2, 2, 2));
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
@@ -1090,7 +1090,7 @@ public class CompanionGameTests {
         entities.add(entityTag(2.5, 0.0, 2.5, stand));
         root.put("entities", entities);
         var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
-        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_hangers.nbt"));
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_hangers.nbt").toFile());
 
         BlockPos anchor = helper.absolutePos(new BlockPos(4, 2, 4));
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
@@ -1849,7 +1849,7 @@ public class CompanionGameTests {
         root.put("entities", entities);
         net.minecraft.nbt.NbtIo.writeCompressed(root,
                 com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer())
-                        .resolve(name + ".nbt"));
+                        .resolve(name + ".nbt").toFile());
     }
 
     /**
@@ -1886,7 +1886,7 @@ public class CompanionGameTests {
         blocks.add(cellTag(1, 0, 0, 7));      // 越界
         blocks.add(cellTag(2, 0, 0, -1));     // 负下标
         root.put("blocks", blocks);
-        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_badindex.nbt"));
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_badindex.nbt").toFile());
 
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
                 level, "fixture_badindex", anchor, 0);
@@ -1917,7 +1917,7 @@ public class CompanionGameTests {
         region.putLongArray("BlockStates", new long[]{0L});
         regions.put("bomb", region);
         lite.put("Regions", regions);
-        net.minecraft.nbt.NbtIo.writeCompressed(lite, dir.resolve("fixture_bomb.litematic"));
+        net.minecraft.nbt.NbtIo.writeCompressed(lite, dir.resolve("fixture_bomb.litematic").toFile());
 
         boolean refused = false;
         try {
@@ -2518,7 +2518,7 @@ public class CompanionGameTests {
                     .get(new net.minecraft.resources.ResourceLocation("minecraft:igloo/top")).orElseThrow();
             var tag = template.save(new net.minecraft.nbt.CompoundTag());
             java.nio.file.Path dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(server);
-            net.minecraft.nbt.NbtIo.writeCompressed(tag, dir.resolve("igloo_top.nbt"));
+            net.minecraft.nbt.NbtIo.writeCompressed(tag, dir.resolve("igloo_top.nbt").toFile());
         } catch (java.io.IOException e) {
             throw new RuntimeException(e);
         }
@@ -2794,7 +2794,7 @@ public class CompanionGameTests {
         regions.put("main", region);
         var liteRoot = new net.minecraft.nbt.CompoundTag();
         liteRoot.put("Regions", regions);
-        net.minecraft.nbt.NbtIo.writeCompressed(liteRoot, dir.resolve("fixture_lite.litematic"));
+        net.minecraft.nbt.NbtIo.writeCompressed(liteRoot, dir.resolve("fixture_lite.litematic").toFile());
 
         BlockPos anchor = helper.absolutePos(new BlockPos(4, 4, 4));
         var lite = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_lite", anchor, 0);
@@ -2820,7 +2820,7 @@ public class CompanionGameTests {
         spal.putInt("minecraft:oak_stairs[facing=north]", 1);
         schemRoot.put("Palette", spal);
         schemRoot.putByteArray("BlockData", new byte[]{1, 1, 0, 1});
-        net.minecraft.nbt.NbtIo.writeCompressed(schemRoot, dir.resolve("fixture_schem.schem"));
+        net.minecraft.nbt.NbtIo.writeCompressed(schemRoot, dir.resolve("fixture_schem.schem").toFile());
 
         var schem = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_schem", anchor, 0);
         helper.assertTrue(schem.targets().size() == 3, "schem: expect 3 non-air cells, got "

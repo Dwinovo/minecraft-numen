@@ -7,7 +7,6 @@ import net.minecraft.core.Vec3i;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.Tag;
@@ -285,8 +284,10 @@ public final class BlueprintStore {
             Path litematic = base.resolve(name + ".litematic");
             Path schem = base.resolve(name + ".schem");
             try {
+                // 1.20.2 的 NbtIo 还是 File 形态(Path+NbtAccounter 重载是 1.20.3 引入),
+                // readCompressed(File) 内部即无限额度,语义同 unlimitedHeap。
                 if (Files.exists(nbt)) {
-                    return NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap());
+                    return NbtIo.readCompressed(nbt.toFile());
                 }
                 if (Files.exists(snbt)) {
                     return NbtUtils.snbtToStructure(Files.readString(snbt));
@@ -294,11 +295,11 @@ public final class BlueprintStore {
                 // 社区格式:读出 gzip NBT 后转成原版结构形态,下游管线无感
                 if (Files.exists(litematic)) {
                     return BlueprintFormats.fromLitematic(
-                            NbtIo.readCompressed(litematic, NbtAccounter.unlimitedHeap()));
+                            NbtIo.readCompressed(litematic.toFile()));
                 }
                 if (Files.exists(schem)) {
                     return BlueprintFormats.fromSchem(
-                            NbtIo.readCompressed(schem, NbtAccounter.unlimitedHeap()));
+                            NbtIo.readCompressed(schem.toFile()));
                 }
             } catch (Exception e) {
                 throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);
