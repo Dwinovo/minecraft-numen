@@ -68,7 +68,7 @@ public final class BlueprintStore {
 
     /** 主目录:社区通用的 {@code schematics/}(不存在则建,新图纸也写这里)。 */
     public static Path dir(MinecraftServer server) {
-        Path dir = server.getServerDirectory().resolve("schematics");
+        Path dir = server.getServerDirectory().toPath().resolve("schematics");
         try {
             Files.createDirectories(dir);
         } catch (IOException e) {
@@ -81,7 +81,7 @@ public final class BlueprintStore {
     private static List<Path> searchRoots(MinecraftServer server) {
         List<Path> roots = new ArrayList<>(2);
         roots.add(dir(server));
-        Path legacy = server.getServerDirectory().resolve("config").resolve("numen").resolve("blueprints");
+        Path legacy = server.getServerDirectory().toPath().resolve("config").resolve("numen").resolve("blueprints");
         if (Files.isDirectory(legacy)) {
             roots.add(legacy);
         }

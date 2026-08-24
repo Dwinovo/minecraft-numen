@@ -7,22 +7,17 @@ import java.util.function.Function;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
-import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.MaceItem;
 import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.item.TridentItem;
-import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.item.enchantment.ItemEnchantments;
-import net.minecraft.world.item.enchantment.effects.EnchantmentAttributeEffect;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -128,7 +123,7 @@ public class ToolSet {
 
     private static TagKey<Item> materialTag(String name) {
         return TagKey.create(net.minecraft.core.registries.Registries.ITEM,
-                net.minecraft.resources.ResourceLocation.withDefaultNamespace(name));
+                new net.minecraft.resources.ResourceLocation(name));
     }
 
     private static int getMaterialCost(ItemStack itemStack) {
@@ -149,13 +144,8 @@ public class ToolSet {
 
     /** 该物品是否带精准采集附魔。 */
     public boolean hasSilkTouch(ItemStack stack) {
-        ItemEnchantments enchantments = stack.getEnchantments();
-        for (Holder<Enchantment> enchant : enchantments.keySet()) {
-            if (enchant.is(Enchantments.SILK_TOUCH) && enchantments.getLevel(enchant) > 0) {
-                return true;
-            }
-        }
-        return false;
+        // 本代直接查附魔等级,无 Holder 键集。
+        return EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SILK_TOUCH, stack) > 0;
     }
 
     public int getBestSlot(Block b, boolean preferSilkTouch) {
@@ -246,17 +236,11 @@ public class ToolSet {
 
         float speed = item.getDestroySpeed(state);
         if (speed > 1) {
-            ItemEnchantments itemEnchantments = item.getEnchantments();
-            OUTER:
-            for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
-                List<EnchantmentAttributeEffect> effects =
-                        enchant.value().getEffects(EnchantmentEffectComponents.ATTRIBUTES);
-                for (EnchantmentAttributeEffect e : effects) {
-                    if (e.attribute().is(Attributes.MINING_EFFICIENCY.unwrapKey().orElseThrow())) {
-                        speed += e.amount().calculate(itemEnchantments.getLevel(enchant));
-                        break OUTER;
-                    }
-                }
+            // 本代效率加成走经典公式 level²+1(1.21 的 MINING_EFFICIENCY
+            // 属性效果对效率附魔的 calculate(level) 就是这条曲线)。
+            int eff = EnchantmentHelper.getItemEnchantmentLevel(Enchantments.EFFICIENCY, item);
+            if (eff > 0) {
+                speed += eff * eff + 1;
             }
         }
 

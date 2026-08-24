@@ -12,15 +12,13 @@ import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -356,12 +354,9 @@ final class MovementPlacement {
     static int frostWalkerLevel(ServerPlayer player) {
         int level = 0;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemEnchantments itemEnchantments = player.getItemBySlot(slot).getEnchantments();
-            for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
-                if (enchant.is(Enchantments.FROST_WALKER)) {
-                    level = Math.max(level, itemEnchantments.getLevel(enchant));
-                }
-            }
+            // 本代直接查附魔等级,无 Holder 键集。
+            level = Math.max(level, EnchantmentHelper.getItemEnchantmentLevel(
+                    Enchantments.FROST_WALKER, player.getItemBySlot(slot)));
         }
         return level;
     }

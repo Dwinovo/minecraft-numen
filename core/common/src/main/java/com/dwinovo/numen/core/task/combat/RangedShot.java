@@ -116,7 +116,7 @@ final class RangedShot {
                 tickReadyToFire(aim, target);
             } else if (!player.isUsingItem()) {
                 state = State.SETTLING;
-            } else if (++held >= CrossbowItem.getChargeDuration(weapon, player)) {
+            } else if (++held >= CrossbowItem.getChargeDuration(weapon)) {
                 player.releaseUsingItem();
                 state = State.READY_TO_FIRE;
                 settle = 0;

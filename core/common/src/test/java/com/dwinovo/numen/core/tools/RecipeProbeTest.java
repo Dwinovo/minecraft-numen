@@ -3,9 +3,9 @@ package com.dwinovo.numen.core.tools;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.NonNullList;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.world.Container;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeSerializer;
@@ -62,10 +62,10 @@ class RecipeProbeTest {
     }
 
     /** 最小假配方:产出与输入表按参数给,null 就还 null——坏配方就长这样。 */
-    private static Recipe<CraftingInput> recipe(NonNullList<Ingredient> ings, ItemStack result) {
+    private static Recipe<Container> recipe(NonNullList<Ingredient> ings, ItemStack result) {
         return new Recipe<>() {
-            @Override public boolean matches(CraftingInput input, Level level) { return false; }
-            @Override public ItemStack assemble(CraftingInput input, HolderLookup.Provider registries) {
+            @Override public boolean matches(Container input, Level level) { return false; }
+            @Override public ItemStack assemble(Container input, HolderLookup.Provider registries) {
                 return result;
             }
             @Override public boolean canCraftInDimensions(int width, int height) { return true; }

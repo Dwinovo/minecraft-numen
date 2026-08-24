@@ -187,7 +187,7 @@ public final class Menace {
         if (!(self.level() instanceof ServerLevel level)) {
             return health;
         }
-        float afterArmor = CombatRules.getDamageAfterAbsorb(self, NOMINAL_HIT,
+        float afterArmor = CombatRules.getDamageAfterAbsorb(NOMINAL_HIT,
                 level.damageSources().generic(),
                 self.getArmorValue(), (float) self.getAttributeValue(Attributes.ARMOR_TOUGHNESS));
         if (afterArmor <= 0.0f) {

@@ -9,6 +9,7 @@ import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Monster;
@@ -23,7 +24,6 @@ import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.crafting.SmithingRecipe;
-import net.minecraft.world.item.crafting.SmithingRecipeInput;
 import net.minecraft.world.item.crafting.StonecutterRecipe;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -172,8 +172,11 @@ String item_id,
                 } else if (r instanceof SmithingRecipe sm) {
                     // 锻造不走展示产出,保留空输入 assemble 的既有语义:变换配方
                     // (下界合金升级)照样给出产物,纹饰配方产出(空的)基底、自然排除。
-                    ItemStack result = RecipeProbe.probe(() -> sm.assemble(new SmithingRecipeInput(
-                            ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY), level.registryAccess()));
+                    // 本代锻造输入是 Container,空的三格容器与空输入同义。不能换成
+                    // getResultItem:本代纹饰配方的展示产出是带纹饰的铁胸甲预览,不为空,
+                    // 会被错列成产物。
+                    ItemStack result = RecipeProbe.probe(() -> sm.assemble(
+                            new SimpleContainer(3), level.registryAccess()));
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }

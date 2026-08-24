@@ -161,9 +161,8 @@ public class CompanionGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_courier", new BlockPos(4, 2, 4), false);
         ItemStack pick = new ItemStack(Items.DIAMOND_PICKAXE);
-        var efficiency = level.registryAccess()
-                .registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
-                .getHolderOrThrow(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY);
+        // 本代附魔按本体传,无 Holder 键集。
+        var efficiency = net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY;
         pick.enchant(efficiency, 3);
         companion.getInventory().add(pick);
         TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().dropItems(
@@ -2382,7 +2381,7 @@ public class CompanionGameTests {
         java.util.function.BiFunction<String, List<BlockPos>, List<BuildTaskRecord.Target>> vol =
                 (id, cells) -> {
                     var item = net.minecraft.core.registries.BuiltInRegistries.ITEM
-                            .get(net.minecraft.resources.ResourceLocation.parse(id));
+                            .get(new net.minecraft.resources.ResourceLocation(id));
                     var block = item instanceof net.minecraft.world.item.BlockItem bi
                             ? bi.getBlock() : Blocks.AIR;
                     List<BuildTaskRecord.Target> out = new ArrayList<>();
@@ -2482,7 +2481,7 @@ public class CompanionGameTests {
         var server = level.getServer();
         try {
             var template = server.getStructureManager()
-                    .get(net.minecraft.resources.ResourceLocation.parse("minecraft:igloo/top")).orElseThrow();
+                    .get(new net.minecraft.resources.ResourceLocation("minecraft:igloo/top")).orElseThrow();
             var tag = template.save(new net.minecraft.nbt.CompoundTag());
             java.nio.file.Path dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(server);
             net.minecraft.nbt.NbtIo.writeCompressed(tag, dir.resolve("igloo_top.nbt"));

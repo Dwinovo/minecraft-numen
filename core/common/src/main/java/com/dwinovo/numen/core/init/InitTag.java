@@ -17,7 +17,7 @@ import net.minecraft.world.level.block.Block;
  *
  * <h2>Why not derive at runtime</h2>
  * Tags are referenced from pathfinder hot paths where a fresh
- * {@link ResourceLocation#fromNamespaceAndPath} per call would allocate. Caching
+ * {@link ResourceLocation#ResourceLocation(String, String)} per call would allocate. Caching
  * the {@link TagKey} as a {@code static final} field amortises that cost
  * and gives the JIT a constant pool reference.
  */
@@ -26,7 +26,7 @@ public final class InitTag {
     /**
      * Foods that may be used to feed/heal a companion. Datapack-driven so server
      * admins can extend the list without code changes — see
-     * {@code data/numen/tags/item/tame_foods.json}.
+     * {@code data/numen/tags/items/tame_foods.json}.
      */
     public static final TagKey<Item> TAME_FOODS = item("tame_foods");
 
@@ -35,7 +35,7 @@ public final class InitTag {
      * travelling — bridging gaps, stepping up, and pillaring. The pathfinder only
      * ever places a block in this tag, so it never burns the player's valuables.
      * Datapack-driven so packs can add their own cheap blocks — see
-     * {@code data/numen/tags/item/scaffolds.json}.
+     * {@code data/numen/tags/items/scaffolds.json}.
      */
     public static final TagKey<Item> SCAFFOLDS = item("scaffolds");
 
@@ -47,7 +47,7 @@ public final class InitTag {
      * stations (crafting table, stonecutter, smithing table, …) that the
      * BlockEntity proxy can't catch; container blocks are still covered by that
      * proxy on top. Datapack-driven so packs extend it freely — see
-     * {@code data/numen/tags/block/do_not_break.json}.
+     * {@code data/numen/tags/blocks/do_not_break.json}.
      */
     public static final TagKey<Block> DO_NOT_BREAK = block("do_not_break");
 
@@ -65,7 +65,7 @@ public final class InitTag {
      *
      * <p>Named vanilla tags are preferred over listing members: {@code
      * #minecraft:banners} keeps meaning "banners" across versions. See
-     * {@code data/numen/tags/block/safe_block_entity_data.json}.
+     * {@code data/numen/tags/blocks/safe_block_entity_data.json}.
      */
     public static final TagKey<Block> SAFE_BLOCK_ENTITY_DATA = block("safe_block_entity_data");
 
@@ -92,11 +92,11 @@ public final class InitTag {
 
     private static TagKey<Item> item(String name) {
         return TagKey.create(Registries.ITEM,
-                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name));
+                new ResourceLocation(Constants.MOD_ID, name));
     }
 
     private static TagKey<Block> block(String name) {
         return TagKey.create(Registries.BLOCK,
-                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, name));
+                new ResourceLocation(Constants.MOD_ID, name));
     }
 }
