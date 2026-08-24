@@ -25,10 +25,15 @@ public final class NumenKeys {
     /** Dedicated vanilla Controls category so the binding is easy to find and rebind (Options → Controls → Numen). */
     public static final String CATEGORY = com.dwinovo.numen.data.ModLanguageData.Keys.KEY_CATEGORY_NUMEN;
 
-    /** G — open the companion roster panel (or straight into chat with a single pet). */
+    /**
+     * N — open the companion roster panel (or straight into chat with a single pet).
+     * 1.21.6+ vanilla binds Quick Actions to G by default, and vanilla's key lookup
+     * is one-mapping-per-key (Fabric keeps it; only NeoForge patches in multi-dispatch),
+     * so a G default would never receive clicks on Fabric.
+     */
     public static final KeyMapping OPEN_ROSTER = new KeyMapping(
             com.dwinovo.numen.data.ModLanguageData.Keys.KEY_OPEN_ROSTER,
-            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_G,
+            InputConstants.Type.KEYSYM, GLFW.GLFW_KEY_N,
             CATEGORY);
 
     /** R(按住)— 同伴轮盘:滚轮/指向选中当前交互对象,松开确认。 */

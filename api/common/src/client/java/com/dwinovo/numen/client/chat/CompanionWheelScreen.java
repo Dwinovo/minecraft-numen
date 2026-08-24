@@ -203,16 +203,18 @@ public class CompanionWheelScreen extends Screen {
                     : 1f;
             float scale = sizePx[i] / AVATAR * breath * open;
 
-            g.pose().pushPose();
-            g.pose().translate(ax, ay, 0);
-            g.pose().scale(scale, scale, 1f);
+            // 1.21.6+ GuiGraphics.pose() 是 2D 仿射的 Matrix3x2fStack:push/popMatrix,
+            // translate/scale 只有两轴(GUI 本来就没用过 z)。
+            g.pose().pushMatrix();
+            g.pose().translate(ax, ay);
+            g.pose().scale(scale, scale);
             int half = AVATAR / 2;
             if (!atTop) {
                 RoundRect.fill(g, -half - 2, -half - 2, half + 2, half + 2, 4, th.border());
             }
             PlayerFaceRenderer.draw(g, KnownSkins.of(entries.get(i).uuid()),
                     -half, -half, AVATAR);
-            g.pose().popPose();
+            g.pose().popMatrix();
         }
 
         if (open > 0.4f) {

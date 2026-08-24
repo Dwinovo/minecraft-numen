@@ -2,7 +2,8 @@ package com.dwinovo.numen.entity;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.UUIDUtil;
-import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.level.storage.ValueOutput;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
@@ -361,15 +362,15 @@ public final class NumenPlayer extends ServerPlayer {
     }
 
     @Override
-    public void addAdditionalSaveData(CompoundTag output) {
+    protected void addAdditionalSaveData(ValueOutput output) {
         super.addAdditionalSaveData(output);
         if (ownerUuid != null) {
-            output.store(NBT_KEY_OWNER, UUIDUtil.CODEC, ownerUuid);   // 1.21.5 codec 化的 NBT 读写
+            output.store(NBT_KEY_OWNER, UUIDUtil.CODEC, ownerUuid);   // codec 化的 NBT 读写(1.21.6+ 走 ValueOutput)
         }
     }
 
     @Override
-    public void readAdditionalSaveData(CompoundTag input) {
+    protected void readAdditionalSaveData(ValueInput input) {
         super.readAdditionalSaveData(input);
         input.read(NBT_KEY_OWNER, UUIDUtil.CODEC).ifPresent(uuid -> this.ownerUuid = uuid);
     }

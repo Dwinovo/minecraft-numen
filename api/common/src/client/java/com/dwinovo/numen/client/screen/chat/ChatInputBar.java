@@ -365,7 +365,7 @@ public final class ChatInputBar {
                 .icon(12, (s, ix, iy, size, argb) -> {
                     ResourceLocation icon = sprite != null ? sprite : micIcon;
                     if (s instanceof McDrawSurface mc) {
-                        mc.graphics().blitSprite(net.minecraft.client.renderer.RenderType::guiTextured, icon, ix, iy, size, size);
+                        mc.graphics().blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, icon, ix, iy, size, size);
                     }
                 })
                 .tooltip(t(tipKey));

@@ -1,41 +1,35 @@
 package com.dwinovo.numen.client.ui;
 
 import com.dwinovo.numen.Constants;
-import com.mojang.blaze3d.buffers.BufferType;
-import com.mojang.blaze3d.buffers.BufferUsage;
-import com.mojang.blaze3d.buffers.GpuBuffer;
 import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import com.mojang.blaze3d.platform.DepthTestFunction;
 import com.mojang.blaze3d.shaders.UniformType;
-import com.mojang.blaze3d.systems.RenderPass;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
+import net.minecraft.client.gui.render.TextureSetup;
+import net.minecraft.client.gui.render.state.GuiElementRenderState;
 import net.minecraft.resources.ResourceLocation;
-import org.joml.Matrix4f;
-import org.joml.Vector4f;
-
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
+import org.joml.Matrix3x2f;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * Anti-aliased rounded-rectangle fill via a tiny SDF core shader
  * ({@code assets/numen_api/shaders/core/rendertype_round_rect.vsh/.fsh}).
- * 1.21.5 render pipeline: shader programs are code-defined {@link RenderPipeline}s
- * (the 1.21.2–1.21.4 JSON shader configs are gone); the GLSL sources are looked up
- * from the resource tree by the locations given to the builder, and the pipeline is
- * compiled lazily on first use — no loader-side registration at all. Custom uniforms
- * are only settable on a raw {@link RenderPass}, so each fill flushes the GUI batch
- * and issues its own pass against the main render target (GUI drawing is still
- * immediate-mode on 1.21.5). If the pipeline fails to compile (a pack replaced the
- * GLSL with garbage) every call degrades to a plain square fill, so the GUI never
- * breaks — it just loses its corners.
+ * 1.21.6+ deferred GUI: GuiGraphics no longer draws immediately — elements are
+ * collected as {@link GuiElementRenderState}s and batched by the GuiRenderer at
+ * frame end, with meshes built in each state's pipeline's own vertex format and
+ * only the standard UBOs (DynamicTransforms/Projection) bound. Custom uniforms
+ * are therefore gone entirely: the SDF parameters ride vertex attributes instead
+ * (UV0 = local offset from the rect centre; UV1 = half-size ×16; UV2.x = radius
+ * ×16, flat-interpolated), so fills batch like any vanilla element. If the
+ * pipeline fails to compile (a pack replaced the GLSL with garbage) every call
+ * degrades to a plain square fill, so the GUI never breaks — it just loses its
+ * corners.
  */
 public final class RoundRect {
 
@@ -44,19 +38,16 @@ public final class RoundRect {
             .withLocation(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "pipeline/round_rect"))
             .withVertexShader(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"))
             .withFragmentShader(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"))
-            .withUniform("ModelViewMat", UniformType.MATRIX4X4)
-            .withUniform("ProjMat", UniformType.MATRIX4X4)
-            .withUniform("ColorModulator", UniformType.VEC4)
-            .withUniform("u_Rect", UniformType.VEC4)
-            .withUniform("u_Radius", UniformType.FLOAT)
-            .withVertexFormat(DefaultVertexFormat.POSITION_COLOR, VertexFormat.Mode.QUADS)
+            .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
+            .withUniform("Projection", UniformType.UNIFORM_BUFFER)
+            .withVertexFormat(DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.QUADS)
             .withBlend(BlendFunction.TRANSLUCENT)
             .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
             .withCull(false)
             .build();
 
-    /** 复用的 4 顶点 VBO(POSITION_COLOR 每顶点 16 字节);GL 后端命令即刻执行,写-画-写-画安全。 */
-    private static GpuBuffer vertexBuffer;
+    /** SDF 参数的定点倍率(short 属性,1/16 px 精度,尺寸上限 ±2047px)。 */
+    private static final int FP = 16;
 
     private RoundRect() {}
 
@@ -72,57 +63,64 @@ public final class RoundRect {
             g.fill(x1, y1, x2, y2, argb);
             return;
         }
-        // 编译失败(资源包换了坏 GLSL)→ 降级方角。getOrCompile 有缓存,重复调用只是查表。
+        // 编译失败(资源包换了坏 GLSL)→ 降级方角。precompilePipeline 有缓存,重复调用只是查表。
         if (!RenderSystem.getDevice().precompilePipeline(PIPELINE).isValid()) {
             g.fill(x1, y1, x2, y2, argb);
             return;
         }
-        g.flush();
+        g.guiRenderState.submitGuiElement(new State(
+                new Matrix3x2f(g.pose()), x1, y1, x2, y2, radius, argb, g.scissorStack.peek()));
+    }
 
-        Matrix4f pose = g.pose().last().pose();
-        // u_Rect must be in the same space as the baked vertex positions (pose is translation-only here)
-        Vector4f center = pose.transform(new Vector4f((x1 + x2) / 2f, (y1 + y2) / 2f, 0f, 1f));
+    /** 单个圆角矩形的延迟渲染状态;同管线的连续状态会被 GuiRenderer 合并成一批。 */
+    private record State(Matrix3x2f pose, int x0, int y0, int x1, int y1, float radius, int argb,
+                         @Nullable ScreenRectangle scissorArea, @Nullable ScreenRectangle bounds)
+            implements GuiElementRenderState {
 
-        float a = (argb >>> 24) / 255f;
-        float r = (argb >> 16 & 0xFF) / 255f;
-        float gr = (argb >> 8 & 0xFF) / 255f;
-        float b = (argb & 0xFF) / 255f;
-
-        BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
-        bb.addVertex(pose, x1, y1, 0).setColor(r, gr, b, a);
-        bb.addVertex(pose, x1, y2, 0).setColor(r, gr, b, a);
-        bb.addVertex(pose, x2, y2, 0).setColor(r, gr, b, a);
-        bb.addVertex(pose, x2, y1, 0).setColor(r, gr, b, a);
-
-        try (MeshData mesh = bb.buildOrThrow()) {
-            if (vertexBuffer == null || vertexBuffer.isClosed()) {
-                vertexBuffer = RenderSystem.getDevice().createBuffer(
-                        () -> "numen_api round rect vertices", BufferType.VERTICES, BufferUsage.STREAM_WRITE,
-                        mesh.vertexBuffer());
-            } else {
-                RenderSystem.getDevice().createCommandEncoder().writeToBuffer(vertexBuffer, mesh.vertexBuffer(), 0);
-            }
+        State(Matrix3x2f pose, int x0, int y0, int x1, int y1, float radius, int argb,
+              @Nullable ScreenRectangle scissorArea) {
+            this(pose, x0, y0, x1, y1, radius, argb, scissorArea,
+                    computeBounds(x0, y0, x1, y1, pose, scissorArea));
         }
 
-        RenderSystem.AutoStorageIndexBuffer sequential = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS);
-        GpuBuffer indexBuffer = sequential.getBuffer(6);
+        @Override
+        public void buildVertices(VertexConsumer vc, float z) {
+            float hw = (x1 - x0) / 2f;
+            float hh = (y1 - y0) / 2f;
+            int h16x = Math.round(hw * FP);
+            int h16y = Math.round(hh * FP);
+            int r16 = Math.round(radius * FP);
+            vertex(vc, z, x0, y0, -hw, -hh, h16x, h16y, r16);
+            vertex(vc, z, x0, y1, -hw, hh, h16x, h16y, r16);
+            vertex(vc, z, x1, y1, hw, hh, h16x, h16y, r16);
+            vertex(vc, z, x1, y0, hw, -hh, h16x, h16y, r16);
+        }
 
-        var target = Minecraft.getInstance().getMainRenderTarget();
-        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                target.getColorTexture(), OptionalInt.empty(),
-                target.getDepthTexture(), OptionalDouble.empty())) {
-            pass.setPipeline(PIPELINE);
-            pass.setUniform("ModelViewMat", RenderSystem.getModelViewMatrix());
-            pass.setUniform("ProjMat", RenderSystem.getProjectionMatrix());
-            pass.setUniform("ColorModulator", 1f, 1f, 1f, 1f);
-            pass.setUniform("u_Rect", center.x(), center.y(), (x2 - x1) / 2f, (y2 - y1) / 2f);
-            pass.setUniform("u_Radius", radius);
-            if (RenderSystem.SCISSOR_STATE.isEnabled()) {
-                pass.enableScissor(RenderSystem.SCISSOR_STATE);
-            }
-            pass.setVertexBuffer(0, vertexBuffer);
-            pass.setIndexBuffer(indexBuffer, sequential.type());
-            pass.drawIndexed(0, 6);
+        private void vertex(VertexConsumer vc, float z, float x, float y,
+                            float lx, float ly, int h16x, int h16y, int r16) {
+            vc.addVertexWith2DPose(pose, x, y, z)
+                    .setColor(argb)
+                    .setUv(lx, ly)
+                    .setUv1(h16x, h16y)
+                    .setUv2(r16, 0)
+                    .setNormal(0f, 0f, 1f);
+        }
+
+        @Override
+        public RenderPipeline pipeline() {
+            return PIPELINE;
+        }
+
+        @Override
+        public TextureSetup textureSetup() {
+            return TextureSetup.noTexture();
+        }
+
+        private static @Nullable ScreenRectangle computeBounds(int x0, int y0, int x1, int y1,
+                                                               Matrix3x2f pose,
+                                                               @Nullable ScreenRectangle scissor) {
+            ScreenRectangle rect = new ScreenRectangle(x0, y0, x1 - x0, y1 - y0).transformMaxBounds(pose);
+            return scissor != null ? scissor.intersection(rect) : rect;
         }
     }
 }

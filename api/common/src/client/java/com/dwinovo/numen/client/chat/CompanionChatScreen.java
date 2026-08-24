@@ -151,7 +151,7 @@ public class CompanionChatScreen extends Screen {
 
         String tip = inputBar.tooltipAt(mouseX, mouseY);
         if (tip != null) {
-            g.renderTooltip(this.font, Component.literal(tip), mouseX, mouseY);
+            g.setTooltipForNextFrame(this.font, Component.literal(tip), mouseX, mouseY);
         }
         super.render(g, mouseX, mouseY, partialTicks);
     }

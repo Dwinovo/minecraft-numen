@@ -1006,7 +1006,7 @@ public final class NumenScreen extends Screen {
 
         // Hovered MCP / skill row tooltip — drawn last so nothing paints over it.
         if (pendingTip != null && !dismissOpen()) {
-            g.renderComponentTooltip(font, pendingTip, pendingTipX, pendingTipY);
+            g.setComponentTooltipForNextFrame(font, pendingTip, pendingTipX, pendingTipY);
         }
     }
 
@@ -1026,7 +1026,7 @@ public final class NumenScreen extends Screen {
             NumenRoster.Entry e = entries.get(i);
             boolean active = e.uuid().equals(uuid);
             // textured socket behind the head (gold-bordered when active), then the avatar, then a status LED
-            g.blitSprite(net.minecraft.client.renderer.RenderType::guiTextured, active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
+            g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
             PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
             if (e.dead()) {                                           // dead — dim veil + respawn countdown
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
@@ -1062,7 +1062,7 @@ public final class NumenScreen extends Screen {
     /** Scroll-affordance chevron sprite (amber pixel-art triangle, up = more above / down = more below).
      *  Blitted at its native 11×6 so the pixels stay crisp (no scaling, no AA). */
     private void chevron(GuiGraphics g, int cx, int y, boolean up) {
-        g.blitSprite(net.minecraft.client.renderer.RenderType::guiTextured, 
+        g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, 
                 up ? CHEVRON_UP : CHEVRON_DOWN, cx - 5, y, 11, 6);
     }
 
@@ -1159,7 +1159,7 @@ public final class NumenScreen extends Screen {
         int tx = tabX[0] - 10 - font.width(s);
         txt(g, Component.literal(s), tx, top + 7, TXT_FAINT);
         if (mouseX >= tx && mouseX < tabX[0] - 10 && mouseY >= top + 5 && mouseY < top + 17) {
-            g.renderComponentTooltip(font, List.of(
+            g.setComponentTooltipForNextFrame(font, List.of(
                     Component.translatable("numen.chat.usage_tip.context"),
                     Component.translatable("numen.chat.usage_tip.tokens"),
                     Component.translatable("numen.chat.usage_tip.cache")), mouseX, mouseY);

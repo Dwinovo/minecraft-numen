@@ -12,7 +12,9 @@ dependencies {
 }
 
 loom {
-    def aw = project(':api:common').file("src/main/resources/${mod_id}.accesswidener")
+    // AW 与 fabric.mod.json 的声明同资源根——下游 loom 项目(core:fabric)按声明
+    // 就地找文件,放 common 会找不到。
+    def aw = file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {
         accessWidenerPath.set(aw)
     }

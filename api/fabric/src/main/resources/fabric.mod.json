@@ -1,5 +1,6 @@
 {
     "schemaVersion": 1,
+    "accessWidener": "numen_api.accesswidener",
     "id": "${mod_id}",
     "version": "${version}",
     "name": "${mod_name}",

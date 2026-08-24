@@ -60,19 +60,16 @@ public class NumenNeoForgeClient {
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
     }
 
-    static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
-        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后)。
+    static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterTranslucentBlocks event) {
+        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后;1.21.8 起按 stage 子事件分发)。
         // 头顶气泡不在这里——它走玩家实体渲染尾部(MixinLivingEntityRenderer),
         // 与名牌同管线,光影下才正常。
-        if (event.getStage() == net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage
-                .AFTER_TRANSLUCENT_BLOCKS) {
-            com.dwinovo.numen.client.debug.PathDebugRenderer.render(
-                    event.getPoseStack(), event.getCamera());
-        }
+        com.dwinovo.numen.client.debug.PathDebugRenderer.render(
+                event.getPoseStack(), event.getCamera());
     }
 
     static void registerKeyMappings(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {
-        // G → companion roster panel (chat entry + settings/reset live in there).
+        // N → companion roster panel (chat entry + settings/reset live in there).
         event.register(com.dwinovo.numen.client.NumenKeys.OPEN_ROSTER);
         // R(hold) → companion wheel; Y → quick chat; V(hold) → quick voice.
         event.register(com.dwinovo.numen.client.NumenKeys.COMPANION_WHEEL);

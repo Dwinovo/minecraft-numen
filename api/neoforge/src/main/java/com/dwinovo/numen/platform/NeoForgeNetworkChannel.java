@@ -58,9 +58,8 @@ public final class NeoForgeNetworkChannel implements INetworkChannel {
             com.dwinovo.numen.Constants.LOG.warn("[numen] 无连接,丢弃 C2S 包 {}", payload.type().id());
             return;
         }
-        // 1.21.5: the dedicated client ClientPacketDistributor doesn't exist yet;
-        // the common PacketDistributor.sendToServer routes through the client connection.
-        net.neoforged.neoforge.network.PacketDistributor.sendToServer(payload);
+        // 1.21.8: client->server sends moved to the client-only ClientPacketDistributor.
+        net.neoforged.neoforge.client.network.ClientPacketDistributor.sendToServer(payload);
     }
 
     @Override

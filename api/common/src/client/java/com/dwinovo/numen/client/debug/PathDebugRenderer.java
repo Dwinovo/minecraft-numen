@@ -38,7 +38,7 @@ public final class PathDebugRenderer {
         if (mc.level == null) {
             return;
         }
-        Vec3 cam = camera.getPosition();
+        Vec3 cam = camera.position();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
         VertexConsumer vc = buffers.getBuffer(RenderType.lines());
         poseStack.pushPose();

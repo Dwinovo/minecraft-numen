@@ -75,7 +75,7 @@ public final class CompanionFactory {
         // (面板芯片 / /gamemode 指令,存在 .dat 的 playerGameType 里),但只认
         // 生存/创造两档,其余一律归生存。placeNewPlayer 之后强制,保证胜出。
         GameType mode = GameType.SURVIVAL;
-        // 1.21.5 的 CompoundTag 读取 codec 化:getInt 返回 Optional<Integer>,
+        // 1.21.6+ 的 ValueInput 读取:getInt 返回 Optional<Integer>,
         // "键存在且值为创造" 一步表达,语义与旧代 contains + getInt 完全一致。
         if (savedTag != null && savedTag.getInt("playerGameType")
                 .map(id -> GameType.byId(id) == GameType.CREATIVE).orElse(false)) {
@@ -92,11 +92,11 @@ public final class CompanionFactory {
      * skips this for hand-constructed players, so we invoke the same load
      * ourselves. No-op on first summon (no file yet).
      */
-    /** @return 载入的 .dat(供上层读 playerGameType 等玩家级字段);首次召唤无档返回 null */
-    private static net.minecraft.nbt.CompoundTag loadPlayerData(MinecraftServer server, NumenPlayer player) {
-        // 1.21.5: PlayerList.load(player) returns Optional<CompoundTag> (predates the
-        // ValueInput IO refactor); Entity.load(CompoundTag) consumes it directly.
-        var maybe = server.getPlayerList().load(player);
+    /** @return 载入的存档视图(供上层读 playerGameType 等玩家级字段);首次召唤无档返回 null */
+    private static net.minecraft.world.level.storage.ValueInput loadPlayerData(MinecraftServer server, NumenPlayer player) {
+        // 1.21.6+ ValueInput IO refactor: PlayerList.load wants a ProblemReporter and
+        // hands back the ValueInput the entity loads from.
+        var maybe = server.getPlayerList().load(player, net.minecraft.util.ProblemReporter.DISCARDING);
         maybe.ifPresent(player::load);
         return maybe.orElse(null);
     }
