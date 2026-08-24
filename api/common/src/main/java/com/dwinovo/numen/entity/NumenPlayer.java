@@ -38,6 +38,26 @@ public final class NumenPlayer extends ServerPlayer {
     /** Owner's player UUID. Null only transiently before the first assignment. */
     private UUID ownerUuid;
 
+    /**
+     * 召唤方指定的落点,仅在 {@code placeNewPlayer} 的 join 流程内有效。1.21.8 的
+     * {@code PlayerList.placeNewPlayer} 会阻塞等 {@code player.chunkPosition()} 的
+     * 区块连实体一起就绪;无 .dat 的新召唤在等待前被 vanilla 先挪去世界出生点,
+     * 等的因此是出生点区块——gametest / 繁忙 tick 里区块任务因超预算不被轮询,
+     * 这一等就是永远。等待前把身体先站到真实落点(已被主人/测试加载的区块),
+     * 等待条件立即满足(见 {@code MixinPlayerListCompanionSpawn};Carpet 假玩家
+     * 的 fixStartingPosition 同一做法)。用后即清,不参与存档。
+     */
+    private net.minecraft.world.phys.Vec3 intendedSpawnPos;
+
+    /** join 流程外恒为 null。 */
+    public net.minecraft.world.phys.Vec3 intendedSpawnPos() {
+        return intendedSpawnPos;
+    }
+
+    public void setIntendedSpawnPos(net.minecraft.world.phys.Vec3 pos) {
+        this.intendedSpawnPos = pos;
+    }
+
     /** Latched once we've handled this body's death, so the post-death routine runs exactly once. */
     private boolean deathHandled;
 

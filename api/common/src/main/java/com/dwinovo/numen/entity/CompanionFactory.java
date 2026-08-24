@@ -54,8 +54,17 @@ public final class CompanionFactory {
         if (player.getOwnerUuid() == null) {
             player.setOwnerUuid(ownerUuid);
         }
-        server.getPlayerList().placeNewPlayer(connection, player,
-                CommonListenerCookie.createInitial(profile, false));
+        // join 流程会阻塞等身体所在区块连实体一起就绪(1.21.8 起),而无 .dat 的
+        // 新召唤在等待前被 vanilla 挪去世界出生点——把召唤方的落点先挂在身上,
+        // MixinPlayerListCompanionSpawn 在等待前让身体站过去,等的就是已加载的
+        // 目标区块。join 一结束就摘掉,不留跨流程状态。
+        player.setIntendedSpawnPos(pos);
+        try {
+            server.getPlayerList().placeNewPlayer(connection, player,
+                    CommonListenerCookie.createInitial(profile, false));
+        } finally {
+            player.setIntendedSpawnPos(null);
+        }
         // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
         // apply it AFTER the join: placeNewPlayer internally re-applies the saved .dat, which would otherwise
         // clobber the spawn pos and send a died-then-revived companion back to its death location instead of
