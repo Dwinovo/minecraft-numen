@@ -14,7 +14,7 @@ public final class ModBlockTagsProvider extends BlockTagsProvider {
 
     public ModBlockTagsProvider(PackOutput output,
                                 CompletableFuture<HolderLookup.Provider> lookupProvider) {
-        super(output, lookupProvider, Constants.MOD_ID);   // 1.21.4 BlockTagsProvider dropped the EFH param
+        super(output, lookupProvider, Constants.MOD_ID);   // 1.21.4+ BlockTagsProvider has no EFH param
     }
 
     @Override

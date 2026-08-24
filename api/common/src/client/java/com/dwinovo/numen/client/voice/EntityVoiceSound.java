@@ -33,7 +33,7 @@ import java.util.concurrent.CompletableFuture;
  * "换取数"这一步两侧机制不同,所以实例经
  * {@link com.dwinovo.numen.platform.services.IVoiceSoundFactory} 创建：
  * <ul>
- *   <li><b>NeoForge</b> — 其 1.21.4 补丁已提前引入后续 MC 版本的
+ *   <li><b>NeoForge</b> — 其 1.21.4 代补丁起提前引入了后续 MC 版本的
  *       {@code SoundInstance.getStream(SoundBufferLibrary, Sound, boolean)}
  *       官方钩子,{@code SoundEngine.play} 直接调它。工厂返回覆写了该钩子的
  *       {@code NeoEntityVoiceSound},零 mixin——这已是官方钩子的最终形态;</li>

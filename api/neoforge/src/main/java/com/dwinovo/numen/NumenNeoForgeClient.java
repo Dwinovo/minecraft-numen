@@ -111,7 +111,7 @@ public class NumenNeoForgeClient {
     }
 
     static void registerReloadListeners(AddClientReloadListenersEvent event) {
-        // 1.21.4 uses AddClientReloadListenersEvent.addListener(ResourceLocation, listener) —
+        // 1.21.4+ uses AddClientReloadListenersEvent.addListener(ResourceLocation, listener) —
         // the keyed API (1.21.1 was RegisterClientReloadListenersEvent.registerReloadListener,
         // no key).
         Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()
