@@ -74,7 +74,7 @@ public final class GetSelfStatusTool implements NumenTool {
 
         JsonArray structures = new JsonArray();
         if (self.level() instanceof ServerLevel sl) {
-            Registry<Structure> reg = sl.registryAccess().registryOrThrow(Registries.STRUCTURE);
+            Registry<Structure> reg = sl.registryAccess().lookupOrThrow(Registries.STRUCTURE);
             for (Structure s : sl.structureManager().getAllStructuresAt(self.blockPosition()).keySet()) {
                 ResourceLocation key = reg.getKey(s);
                 if (key != null) structures.add(key.toString());

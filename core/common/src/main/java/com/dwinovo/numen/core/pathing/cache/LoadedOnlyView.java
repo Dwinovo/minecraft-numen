@@ -74,7 +74,7 @@ public final class LoadedOnlyView implements BlockGetter {
     }
 
     @Override
-    public int getMinBuildHeight() {
-        return level.getMinBuildHeight();
+    public int getMinY() {
+        return level.getMinY();
     }
 }

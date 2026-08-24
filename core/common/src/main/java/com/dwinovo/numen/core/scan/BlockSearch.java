@@ -119,8 +119,8 @@ public final class BlockSearch {
                 SectionPos.blockToSectionCoord(center.getX() + radius) - centerChunkX,
                 centerChunkX - SectionPos.blockToSectionCoord(center.getX() - radius));
         this.sectionOrder = SearchGeometry.sectionOrder(
-                SectionPos.blockToSectionCoord(Math.max(center.getY() - radius, level.getMinBuildHeight())),
-                SectionPos.blockToSectionCoord(Math.min(center.getY() + radius, level.getMaxBuildHeight())),
+                SectionPos.blockToSectionCoord(Math.max(center.getY() - radius, level.getMinY())),
+                SectionPos.blockToSectionCoord(Math.min(center.getY() + radius, level.getMaxY())),
                 SectionPos.blockToSectionCoord(center.getY()));
         this.bound = new SearchGeometry.NearestBound(want);
         int side = 2 * maxRing + 1;

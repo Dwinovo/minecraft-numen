@@ -167,8 +167,8 @@ public class CalculationContext {
         this.walkOnWaterOnePenalty = settings.walkOnWaterOnePenalty;
         this.allowPlaceInFluidsSource = settings.allowPlaceInFluidsSource;
         this.allowPlaceInFluidsFlow = settings.allowPlaceInFluidsFlow;
-        this.worldBottom = view.getMinBuildHeight();
-        this.worldHeight = view.getMaxBuildHeight();
+        this.worldBottom = view.getMinY();
+        this.worldHeight = view.getMaxY();
         WorldBorder border = null;
         if (player != null) {
             try {

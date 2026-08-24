@@ -219,10 +219,10 @@ public final class ItemsView {
         int units = Math.max(1, (int) Math.ceil(max / 2f));
         for (int i = 0; i < units; i++) {
             int ix = x + i * ICON_STEP;
-            g.blitSprite(empty, ix, y, ICON, ICON);
+            g.blitSprite(net.minecraft.client.renderer.RenderType::guiTextured, empty, ix, y, ICON, ICON);
             float v = value - i * 2f;
-            if (v >= 2f)      g.blitSprite(full, ix, y, ICON, ICON);
-            else if (v >= 1f) g.blitSprite(half, ix, y, ICON, ICON);
+            if (v >= 2f)      g.blitSprite(net.minecraft.client.renderer.RenderType::guiTextured, full, ix, y, ICON, ICON);
+            else if (v >= 1f) g.blitSprite(net.minecraft.client.renderer.RenderType::guiTextured, half, ix, y, ICON, ICON);
         }
     }
 

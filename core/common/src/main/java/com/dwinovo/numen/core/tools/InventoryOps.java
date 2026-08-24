@@ -120,7 +120,7 @@ Integer radius,
                 if (el == null) continue;
                 ResourceLocation id = ResourceLocation.tryParse(el);
                 if (id != null && BuiltInRegistries.ITEM.containsKey(id)) {
-                    filter.add(BuiltInRegistries.ITEM.get(id));
+                    filter.add(BuiltInRegistries.ITEM.getValue(id));
                 }
             }
         }

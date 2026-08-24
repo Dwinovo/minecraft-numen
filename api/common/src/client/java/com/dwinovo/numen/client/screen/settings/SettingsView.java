@@ -874,8 +874,9 @@ public final class SettingsView {
                         var lib = com.dwinovo.numen.client.skin.SkinLibrary.instance();
                         var face = com.dwinovo.numen.client.skin.SkinTextures.faceOf(e.id(), lib.pngPath(e.id()));
                         if (face != null) {
+                            // 1.21.2+ 的 ResourceLocation 版签名带 (hat, upsideDown, tint)——照原版默认 (true, false, -1)。
                             net.minecraft.client.gui.components.PlayerFaceRenderer.draw(
-                                    mc.graphics(), face, ix, iy, size);
+                                    mc.graphics(), face, ix, iy, size, true, false, -1);
                         }
                     });
         }

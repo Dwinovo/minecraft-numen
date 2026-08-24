@@ -110,7 +110,7 @@ public final class BuildPalette {
         if (!net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(rl)) {
             throw new IllegalArgumentException("unknown block: " + trimmed);
         }
-        Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(rl);
+        Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getValue(rl);
         // 能不能建走同一个判据(图纸入口那边拿它当跳过条件,这边拿它当拒绝理由)
         String no = com.dwinovo.numen.core.build.BuildStates
                 .unbuildableReason(block.defaultBlockState());

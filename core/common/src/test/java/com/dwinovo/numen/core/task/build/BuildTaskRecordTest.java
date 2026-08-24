@@ -384,7 +384,7 @@ class BuildTaskRecordTest {
             return getBlockState(pos).getFluidState();
         }
         @Override public int getHeight() { return 384; }
-        @Override public int getMinBuildHeight() { return -64; }
+        @Override public int getMinY() { return -64; }
     }
 }
 

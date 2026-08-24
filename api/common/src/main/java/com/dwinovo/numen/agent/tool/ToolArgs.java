@@ -116,7 +116,7 @@ public final class ToolArgs {
         if (rl == null) {
             throw new IllegalArgumentException("not a valid item id: " + id);
         }
-        Item item = BuiltInRegistries.ITEM.get(rl);
+        Item item = BuiltInRegistries.ITEM.getValue(rl);
         if (item == null || item == Items.AIR) {
             throw new IllegalArgumentException("unknown item: " + id);
         }
@@ -137,7 +137,7 @@ public final class ToolArgs {
             if (el == null || el.isJsonNull()) continue;
             ResourceLocation id = ResourceLocation.tryParse(el.getAsString());
             if (id != null && BuiltInRegistries.ITEM.containsKey(id)) {
-                out.add(BuiltInRegistries.ITEM.get(id));
+                out.add(BuiltInRegistries.ITEM.getValue(id));
             }
         }
         return out;

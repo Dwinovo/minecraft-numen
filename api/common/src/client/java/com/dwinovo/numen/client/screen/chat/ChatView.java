@@ -175,8 +175,8 @@ public final class ChatView {
         if (lastMaxScroll > 0) {
             int thumbH = Math.max(12, h * h / (h + lastMaxScroll));
             int thumbY = y + Math.round((h - thumbH) * (scrollPos / lastMaxScroll));
-            g.blitSprite(SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
-            g.blitSprite(SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
+            g.blitSprite(net.minecraft.client.renderer.RenderType::guiTextured, SCROLL_TRACK, x + w - SB_W, y, SB_W, h);
+            g.blitSprite(net.minecraft.client.renderer.RenderType::guiTextured, SCROLL_THUMB, x + w - SB_W, thumbY, SB_W, thumbH);
         }
     }
 
@@ -555,7 +555,7 @@ public final class ChatView {
             draw(g, Nb.colored(b.label(), MUTED).getVisualOrderText(), bx + 2, y);
         }
         if (b.showAvatar()) {
-            g.blitSprite(AVATAR_FRAME, avX - 2, bubTop - 2, AV + 4, AV + 4);
+            g.blitSprite(net.minecraft.client.renderer.RenderType::guiTextured, AVATAR_FRAME, avX - 2, bubTop - 2, AV + 4, AV + 4);
             PlayerFaceRenderer.draw(g, skin(b.own()), avX, bubTop, AV);
         }
         RoundRect.card(g, bx, bubTop, bx + bw, bubTop + bh, RADIUS, b.fill(), b.border());

@@ -179,7 +179,7 @@ class MovementCostsTest {
             return getBlockState(pos).getFluidState();
         }
         @Override public int getHeight() { return 384; }
-        @Override public int getMinBuildHeight() { return -64; }
+        @Override public int getMinY() { return -64; }
     }
 
     /** SRC 周围 5×5 的石头地板(脚下 y=63)。 */

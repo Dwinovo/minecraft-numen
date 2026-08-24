@@ -91,27 +91,25 @@ public class CompanionWheelScreen extends Screen {
      * 意图全是零——这里按 GLFW 物理按键状态原样重建,奔跑不为选人断步,
      * 开盘前就按住的 W 也无缝接上。不碰 {@code KeyMapping} 状态,键位
      * 冲突类模组无感。鼠标视角仍锁定(被转盘征用),武器轮盘式取舍。
+     *
+     * <p>1.21.2+:按键意图搬进不可变的 {@code Input} 记录,整条重建而非逐字段赋值;
+     * 潜行减速由 {@code LocalPlayer.aiStep} 在 {@code input.tick()} 之后自己乘,
+     * 这里不再重复施加。疾跑位沿用原版本 tick 采到的值——与旧代一致(疾跑键本
+     * 就随开屏失活,靠的是移动意图不断档来保住已在跑的状态)。
      */
-    public static void feedMovement(net.minecraft.client.player.Input input,
-                                    float sneakingSpeedMultiplier) {
+    public static void feedMovement(net.minecraft.client.player.ClientInput input) {
         Minecraft mc = Minecraft.getInstance();
         long window = mc.getWindow().getWindow();
         boolean up = physicallyDown(window, mc.options.keyUp);
         boolean down = physicallyDown(window, mc.options.keyDown);
         boolean left = physicallyDown(window, mc.options.keyLeft);
         boolean right = physicallyDown(window, mc.options.keyRight);
-        input.up = up;
-        input.down = down;
-        input.left = left;
-        input.right = right;
+        boolean jump = physicallyDown(window, mc.options.keyJump);
+        boolean shift = physicallyDown(window, mc.options.keyShift);
+        input.keyPresses = new net.minecraft.world.entity.player.Input(
+                up, down, left, right, jump, shift, input.keyPresses.sprint());
         input.forwardImpulse = (up ? 1f : 0f) - (down ? 1f : 0f);
         input.leftImpulse = (left ? 1f : 0f) - (right ? 1f : 0f);
-        input.jumping = physicallyDown(window, mc.options.keyJump);
-        input.shiftKeyDown = physicallyDown(window, mc.options.keyShift);
-        if (input.shiftKeyDown) {
-            input.forwardImpulse *= sneakingSpeedMultiplier;
-            input.leftImpulse *= sneakingSpeedMultiplier;
-        }
     }
 
     private float step() {

@@ -199,7 +199,7 @@ public final class BlockDigger {
         if (!started) {
             started = true;
             player.gameMode.handleBlockBreakAction(pos,
-                    ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, side, level.getMaxBuildHeight(), -1);
+                    ServerboundPlayerActionPacket.Action.START_DESTROY_BLOCK, side, level.getMaxY(), -1);
             player.swing(InteractionHand.MAIN_HAND);
             if (player.getAbilities().instabuild) {
                 // creative: START 即破,连挖不设间隔(每 tick 一格)
@@ -227,7 +227,7 @@ public final class BlockDigger {
             // STOP → server destroys. Do NOT clear the crack: the block vanishing
             // removes it (no intact-for-a-frame flicker).
             player.gameMode.handleBlockBreakAction(pos,
-                    ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, side, level.getMaxBuildHeight(), -1);
+                    ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, side, level.getMaxY(), -1);
             blockHitDelay = postBreakDelay();
             reset();
             return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
@@ -260,7 +260,7 @@ public final class BlockDigger {
             if (started) {
                 player.gameMode.handleBlockBreakAction(pos,
                         ServerboundPlayerActionPacket.Action.ABORT_DESTROY_BLOCK,
-                        Direction.DOWN, player.level().getMaxBuildHeight(), -1);
+                        Direction.DOWN, player.level().getMaxY(), -1);
             }
             player.level().destroyBlockProgress(CRACK_ID, pos, -1);   // clear the crack
         }

@@ -183,7 +183,7 @@ class ProtectionPinsTest {
             return getBlockState(pos).getFluidState();
         }
         @Override public int getHeight() { return 384; }
-        @Override public int getMinBuildHeight() { return -64; }
+        @Override public int getMinY() { return -64; }
     }
 
     /** SRC 周边 5×5 铺石地板,横向移动都有落脚。 */

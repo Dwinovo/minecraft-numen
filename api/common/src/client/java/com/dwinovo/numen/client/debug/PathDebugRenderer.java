@@ -8,7 +8,6 @@ import java.util.List;
 
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
@@ -45,8 +44,8 @@ public final class PathDebugRenderer {
         poseStack.pushPose();
         poseStack.translate(-cam.x, -cam.y, -cam.z);
         PoseStack.Pose pose = poseStack.last();
-        int minY = mc.level.getMinBuildHeight();
-        int maxY = mc.level.getMaxBuildHeight();
+        int minY = mc.level.getMinY();
+        int maxY = mc.level.getMaxY();
         for (PathDebugPayload p : snapshots) {
             drawPolyline(vc, pose, p.currentPath(), RED);
             drawPolyline(vc, pose, p.nextPath(), MAGENTA);
@@ -88,7 +87,7 @@ public final class PathDebugRenderer {
 
     private static void drawBox(PoseStack poseStack, VertexConsumer vc, long packed, float[] color) {
         BlockPos pos = BlockPos.of(packed);
-        LevelRenderer.renderLineBox(poseStack, vc,
+        net.minecraft.client.renderer.ShapeRenderer.renderLineBox(poseStack, vc,
                 pos.getX() + 0.02, pos.getY() + 0.02, pos.getZ() + 0.02,
                 pos.getX() + 0.98, pos.getY() + 0.98, pos.getZ() + 0.98,
                 color[0], color[1], color[2], 0.9f);

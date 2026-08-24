@@ -8,7 +8,7 @@ import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
+import net.neoforged.neoforge.client.event.AddClientReloadListenersEvent;
 import net.neoforged.neoforge.common.NeoForge;
 
 import java.nio.file.Path;
@@ -110,27 +110,23 @@ public class NumenNeoForgeClient {
     }
 
     static void registerShaders(net.neoforged.neoforge.client.event.RegisterShadersEvent event) {
-        // GUI 圆角 SDF shader;加载失败仅告警——RoundRect 会自动降级成方角 fill。
-        try {
-            event.registerShader(new net.minecraft.client.renderer.ShaderInstance(
-                            event.getResourceProvider(),
-                            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "rendertype_round_rect"),
-                            com.mojang.blaze3d.vertex.DefaultVertexFormat.POSITION_COLOR),
-                    com.dwinovo.numen.client.ui.RoundRect::setShader);
-        } catch (Exception e) {
-            Constants.LOG.warn("round rect shader failed to load, falling back to square corners", e);
-        }
+        // GUI 圆角 SDF shader——1.21.2+ 只注册 ShaderProgram 键,编译由 ShaderManager
+        // 随资源加载完成;RoundRect 每次绘制经键查编译实例,查不到自动降级方角 fill。
+        event.registerShader(com.dwinovo.numen.client.ui.RoundRect.PROGRAM);
     }
 
-    static void registerReloadListeners(RegisterClientReloadListenersEvent event) {
-        // 1.21.1 uses RegisterClientReloadListenersEvent.registerReloadListener(listener) — no
-        // ResourceLocation key (that's the 1.21.4 AddClientReloadListenersEvent API).
+    static void registerReloadListeners(AddClientReloadListenersEvent event) {
+        // 1.21.4 uses AddClientReloadListenersEvent.addListener(ResourceLocation, listener) —
+        // the keyed API (1.21.1 was RegisterClientReloadListenersEvent.registerReloadListener,
+        // no key).
         Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()
                 .resolve("config").resolve(Constants.MOD_ID);
         Path skillsDir = numenConfigRoot.resolve("skills");
 
-        event.registerReloadListener((ResourceManagerReloadListener) rm -> {
-            SkillRegistry.instance().scan(skillsDir);
-        });
+        event.addListener(
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "skill_loader"),
+                (ResourceManagerReloadListener) rm -> {
+                    SkillRegistry.instance().scan(skillsDir);
+                });
     }
 }

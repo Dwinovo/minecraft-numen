@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.ui;
 
+import com.dwinovo.numen.Constants;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
@@ -7,28 +8,32 @@ import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.client.renderer.CompiledShaderProgram;
+import net.minecraft.client.renderer.ShaderDefines;
+import net.minecraft.client.renderer.ShaderProgram;
+import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
 
 /**
  * Anti-aliased rounded-rectangle fill via a tiny SDF core shader
- * ({@code assets/numen_api/shaders/core/rendertype_round_rect}). The shader is
- * loader-registered (RegisterShadersEvent / CoreShaderRegistrationCallback) and
- * handed in through {@link #setShader}; while it's absent (load failure, or a
+ * ({@code assets/numen_api/shaders/core/rendertype_round_rect.json}). 1.21.2+
+ * shader pipeline: the program is a {@link ShaderProgram} KEY compiled by the
+ * ShaderManager on resource load — it SCANS every {@code shaders/} config in the
+ * resource tree, so no loader-side registration is needed at all (NeoForge's
+ * RegisterShadersEvent is used only as a startup preload hint). We look the
+ * compiled instance up by key per draw. While it's absent (load failure, or a
  * pack replaced it with garbage) every call degrades to a plain square fill, so
  * the GUI never breaks — it just loses its corners.
  */
 public final class RoundRect {
 
-    private static ShaderInstance shader;
+    /** 程序键:configId 带 core/ 前缀——ShaderManager 按 {@code shaders/<path>.json} 找配置。 */
+    public static final ShaderProgram PROGRAM = new ShaderProgram(
+            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"),
+            DefaultVertexFormat.POSITION_COLOR, ShaderDefines.EMPTY);
 
     private RoundRect() {}
-
-    /** Loader-side registration callback target. */
-    public static void setShader(ShaderInstance s) {
-        shader = s;
-    }
 
     /** A bordered card: 1px border colour ring + inset body fill, same corner family. */
     public static void card(GuiGraphics g, int x1, int y1, int x2, int y2, float radius, int fill, int border) {
@@ -37,13 +42,20 @@ public final class RoundRect {
     }
 
     public static void fill(GuiGraphics g, int x1, int y1, int x2, int y2, float radius, int argb) {
-        ShaderInstance sh = shader;
         radius = Math.min(radius, Math.min(x2 - x1, y2 - y1) / 2f);
-        if (sh == null || radius <= 0) {
+        if (radius <= 0) {
             g.fill(x1, y1, x2, y2, argb);
             return;
         }
         g.flush();
+
+        // 键查表取编译实例并设为当前(ShaderManager 已在资源重载时编译了资源树里
+        // 的全部 shader 配置);加载失败返回 null → 降级方角。
+        CompiledShaderProgram sh = RenderSystem.setShader(PROGRAM);
+        if (sh == null) {
+            g.fill(x1, y1, x2, y2, argb);
+            return;
+        }
 
         Matrix4f pose = g.pose().last().pose();
         // u_Rect must be in the same space as the baked vertex positions (pose is translation-only here)
@@ -58,7 +70,6 @@ public final class RoundRect {
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
-        RenderSystem.setShader(() -> sh);
         BufferBuilder bb = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
         bb.addVertex(pose, x1, y1, 0).setColor(r, gr, b, a);
         bb.addVertex(pose, x1, y2, 0).setColor(r, gr, b, a);

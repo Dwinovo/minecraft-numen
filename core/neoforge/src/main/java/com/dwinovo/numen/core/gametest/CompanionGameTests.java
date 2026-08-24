@@ -162,8 +162,8 @@ public class CompanionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_courier", new BlockPos(4, 2, 4), false);
         ItemStack pick = new ItemStack(Items.DIAMOND_PICKAXE);
         var efficiency = level.registryAccess()
-                .registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
-                .getHolderOrThrow(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY);
+                .lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
+                .getOrThrow(net.minecraft.world.item.enchantment.Enchantments.EFFICIENCY);
         pick.enchant(efficiency, 3);
         companion.getInventory().add(pick);
         TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().dropItems(
