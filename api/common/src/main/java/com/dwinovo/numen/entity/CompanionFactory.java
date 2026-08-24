@@ -1,0 +1,131 @@
+package com.dwinovo.numen.entity;
+
+import com.mojang.authlib.GameProfile;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ClientInformation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.phys.Vec3;
+
+import java.util.UUID;
+
+/**
+ * Spawns and despawns companion {@link NumenPlayer} bodies through the vanilla
+ * player-join path — entirely public API, no loader-specific construction needed
+ * (the only fake piece is {@link FakeConnection}, which is common).
+ *
+ * <p>{@link net.minecraft.server.players.PlayerList#placeNewPlayer} adds the body
+ * to the player list (→ chunk loading for free) and to the level, but does NOT
+ * load a hand-built fake player's {@code .dat} (that path is tied to the real
+ * login flow) — so {@link #spawn} restores position / inventory / owner from disk
+ * explicitly afterwards.
+ * {@link net.minecraft.server.players.PlayerList#remove} saves that data back and
+ * removes the body — so despawn is a clean, persisted dormancy.
+ */
+@com.dwinovo.numen.api.Internal
+public final class CompanionFactory {
+
+    private CompanionFactory() {}
+
+    /**
+     * Bring a companion into the world. On first creation pass a {@code pos}
+     * (the spawn location, e.g. beside the owner); on a respawn from dormancy
+     * pass {@code null} to keep the position restored from its {@code .dat}.
+     */
+    public static NumenPlayer spawn(MinecraftServer server, UUID companionUuid, String name,
+                                     UUID ownerUuid, ServerLevel level, Vec3 pos) {
+        // 借来的正版皮肤(Mojang 签名的 textures,注册表持久化)注入档案——客户端只认
+        // 签过名的皮肤数据;没有则回落原版默认皮肤(按 UUID 哈希抽取)。
+        // authlib 9(1.21.9+)把 GameProfile 变成不可变 record,属性只能在构造时给全。
+        CompanionRegistry.Entry reg = CompanionRegistry.get(server).find(companionUuid);
+        GameProfile profile;
+        if (reg != null && !reg.skinValue().isEmpty()) {
+            com.google.common.collect.Multimap<String, com.mojang.authlib.properties.Property> props =
+                    com.google.common.collect.LinkedHashMultimap.create();
+            props.put("textures", new com.mojang.authlib.properties.Property(
+                    "textures", reg.skinValue(), reg.skinSig().isEmpty() ? null : reg.skinSig()));
+            profile = new GameProfile(companionUuid, name,
+                    new com.mojang.authlib.properties.PropertyMap(props));
+        } else {
+            profile = new GameProfile(companionUuid, name);
+        }
+        NumenPlayer player = new NumenPlayer(server, level, profile, ClientInformation.createDefault());
+        FakeConnection connection = new FakeConnection();
+        // Restore saved state (position, inventory, health, owner) before joining so the body is at its
+        // real location as early as possible. (This explicit restore is kept because placeNewPlayer's own
+        // player-data load has not reliably restored a hand-built fake player's .dat in this setup; it is
+        // idempotent if placeNewPlayer does load.)
+        var savedTag = loadPlayerData(server, player);
+        // First spawn has no .dat to restore the owner from; set it explicitly.
+        if (player.getOwnerUuid() == null) {
+            player.setOwnerUuid(ownerUuid);
+        }
+        // 1.21.9+ 把「等区块 + 挪出生点 + 内部读档」整段搬去了配置期的
+        // PrepareSpawnTask(只有真实登录走),placeNewPlayer 不再阻塞、不再挪位、
+        // 也不再碰 .dat——手工构造的身体直接 join,位置由上面的显式恢复与下面的
+        // 显式落点全权负责。
+        server.getPlayerList().placeNewPlayer(connection, player,
+                CommonListenerCookie.createInitial(profile, false));
+        // 原版在客户端上报"加载完成"之前把玩家判为全伤害无敌(isInvulnerableTo 的
+        // hasClientLoaded 门,新建连接自带 60 tick 宽限计时)。假玩家没有客户端,这个
+        // 上报永远不会来——和补 doTick() 同一件事:网络层漏掉的那一趟按原版原样补回来,
+        // 否则每次出生都带 3 秒无敌窗口(#56"假玩家伤害全免疫"就是这道门的形态)。
+        player.connection.handleAcceptPlayerLoad(
+                new net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket());
+        // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
+        // apply it AFTER the join. Same-level setPos via snapTo (1.21.5 renamed moveTo → snapTo) — NOT the
+        // teleportTo(ServerLevel,…) dimension-travel overload, which fires EntityTravelToDimensionEvent
+        // (tripping some world-protection mods) even for a same-level move. A respawn from dormancy passes
+        // null and keeps exactly what the .dat restored.
+        if (pos != null) {
+            player.snapTo(pos.x, pos.y, pos.z, player.getYRot(), player.getXRot());
+        }
+        // 假玩家没有客户端上报的模型定制:点亮全部皮肤覆盖层与披风,否则只显示单层基础皮肤。
+        // 每次 spawn(首建与重生)都重设——该字节是同步实体数据、不随 .dat 存取。
+        player.showAllSkinLayers();
+        // 模式策略:首次召唤一律生存——不继承创造世界的默认档,同伴的整套设计
+        // (采集掉落/真实战斗/可恢复死亡)是生存形状的,placeNewPlayer 会把
+        // 创造世界的默认档连秒破无掉落一起塞过来。老同伴尊重主人上次设的档
+        // (面板芯片 / /gamemode 指令,存在 .dat 的 playerGameType 里),但只认
+        // 生存/创造两档,其余一律归生存。placeNewPlayer 之后强制,保证胜出。
+        GameType mode = GameType.SURVIVAL;
+        // 1.21.6+ 的 ValueInput 读取:getInt 返回 Optional<Integer>,
+        // "键存在且值为创造" 一步表达,语义与旧代 contains + getInt 完全一致。
+        if (savedTag != null && savedTag.getInt("playerGameType")
+                .map(id -> GameType.byId(id) == GameType.CREATIVE).orElse(false)) {
+            mode = GameType.CREATIVE;
+        }
+        player.setGameMode(mode);
+        return player;
+    }
+
+    /**
+     * Restore a fake player's saved state from its playerdata {@code .dat}
+     * ({@link net.minecraft.server.players.PlayerList#loadPlayerData} +
+     * {@link net.minecraft.world.entity.Entity#load}). {@code placeNewPlayer}
+     * skips this for hand-constructed players, so we invoke the same load
+     * ourselves. No-op on first summon (no file yet).
+     */
+    /** @return 载入的存档视图(供上层读 playerGameType 等玩家级字段);首次召唤无档返回 null */
+    private static net.minecraft.world.level.storage.ValueInput loadPlayerData(MinecraftServer server, NumenPlayer player) {
+        // 1.21.9+ 拆掉了 PlayerList.load(player, reporter):改为按 NameAndId 读回原始
+        // CompoundTag,再自己包一层 TagValueInput 喂给 player.load。
+        var maybe = server.getPlayerList()
+                .loadPlayerData(new net.minecraft.server.players.NameAndId(player.getGameProfile()))
+                .map(tag -> (net.minecraft.world.level.storage.ValueInput)
+                        net.minecraft.world.level.storage.TagValueInput.create(
+                                net.minecraft.util.ProblemReporter.DISCARDING, player.registryAccess(), tag));
+        maybe.ifPresent(player::load);
+        return maybe.orElse(null);
+    }
+
+    /** Save the companion's data and remove it from the world (dormancy). */
+    public static void despawn(MinecraftServer server, NumenPlayer player) {
+        // Tell tool packs the body is leaving so they can finalize their own
+        // per-companion work (e.g. clear a mining crack overlay) instead of leaving
+        // it orphaned once the body drops out of the tick loop's player list.
+        CompanionLifecycle.fireRemove(player);
+        server.getPlayerList().remove(player);
+    }
+}

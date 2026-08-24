@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.dwinovo.numen.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [
+    "MixinSoundEngine",
+    "MixinVoicePcmFabricSound"
+  ],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
