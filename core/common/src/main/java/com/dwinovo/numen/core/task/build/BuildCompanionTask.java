@@ -1277,7 +1277,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             copy.putInt("x", pos.getX());
             copy.putInt("y", pos.getY());
             copy.putInt("z", pos.getZ());
-            be.loadWithComponents(copy, player.level().registryAccess());
+            // 1.21.6+ 方块实体读取入口换 ValueInput,NBT 过 BuildFixtures.asInput 桥。
+            be.loadWithComponents(BuildFixtures.asInput(copy, player.level().registryAccess()));
             be.setChanged();
             // setChanged 只把区块标脏,不发同步包;而 PLACE_FLAGS 那一包在装数据
             // <b>之前</b>就已经发出去了,里面还没有方块实体的载荷。不补这一下,

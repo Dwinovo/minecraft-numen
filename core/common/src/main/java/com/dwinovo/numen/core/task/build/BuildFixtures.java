@@ -110,7 +110,8 @@ final class BuildFixtures {
                     nbt.putByte("Facing", (byte) spawn.rotation().rotate(facing).get3DDataValue());
                 }
                 // 1.21.2+ 要生成原因;蓝图放置与原版结构放实体同路,取 STRUCTURE
-                var created = net.minecraft.world.entity.EntityType.create(nbt, level,
+                var created = net.minecraft.world.entity.EntityType.create(
+                        asInput(nbt, level.registryAccess()), level,
                         net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
                 if (created.isEmpty()) {
                     continue;
@@ -147,7 +148,8 @@ final class BuildFixtures {
         if (!(player.level() instanceof ServerLevel level)) {
             return false;
         }
-        var type = net.minecraft.world.entity.EntityType.by(spawn.nbt());
+        var type = net.minecraft.world.entity.EntityType.by(
+                asInput(spawn.nbt(), level.registryAccess()));
         if (type.isEmpty()) {
             return false;
         }
@@ -177,5 +179,17 @@ final class BuildFixtures {
                 .filter(pos -> level.isLoaded(pos) && level.getFluidState(pos).is(Fluids.WATER))
                 .forEach(pos -> level.scheduleTick(pos.immutable(), Fluids.WATER,
                         Fluids.WATER.getTickDelay(level)));
+    }
+
+    /**
+     * 手里的 NBT 包成一次性只读视图。1.21.6+ 的存档 IO 重构把实体与方块实体的读取入口
+     * 从 {@code CompoundTag} 换成了 {@code ValueInput},这里做的只是形状适配:
+     * 问题上报丢弃(旧代同样是读坏了就当没读到),内容与旧代直接喂 NBT 完全一致。
+     */
+    static net.minecraft.world.level.storage.ValueInput asInput(
+            net.minecraft.nbt.CompoundTag tag,
+            net.minecraft.core.HolderLookup.Provider registries) {
+        return net.minecraft.world.level.storage.TagValueInput.create(
+                net.minecraft.util.ProblemReporter.DISCARDING, registries, tag);
     }
 }

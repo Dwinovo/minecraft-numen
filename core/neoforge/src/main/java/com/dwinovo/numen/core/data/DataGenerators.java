@@ -16,7 +16,7 @@ import net.neoforged.neoforge.data.event.GatherDataEvent;
 // 1.21.5 merged the buses (the bus attribute below is only deprecated); GatherDataEvent is
 // split into Client/Server variants since 1.21.4, which also dropped the ExistingFileHelper
 // from tag providers.
-@EventBusSubscriber(modid = Constants.MOD_ID, bus = EventBusSubscriber.Bus.MOD)
+@EventBusSubscriber(modid = Constants.MOD_ID)
 public final class DataGenerators {
 
     private DataGenerators() {}

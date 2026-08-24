@@ -19,7 +19,8 @@ public final class FabricModBlockTagsProvider extends FabricTagProvider.BlockTag
     @Override
     protected void addTags(HolderLookup.Provider provider) {
         ModBlockTagData.addBlockTags(key -> {
-            var b = getOrCreateTagBuilder(key);
+            // 1.21.8:getOrCreateTagBuilder → valueLookupBuilder。
+            var b = valueLookupBuilder(key);
             // 引用原版标签走 forceAddTag:Fabric 的 addTag 会校验"被引用的标签是不是
             // 这个 provider 自己定义过的",而 #minecraft:banners 显然不是,于是 datagen
             // 直接抛"missing following references"。NeoForge 那边没有这道校验,所以

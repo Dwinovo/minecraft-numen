@@ -106,9 +106,17 @@ public final class BlueprintSafety {
     /** 这段文本组件里有点击事件吗(递归看子组件)——有就是个能跑命令的口子。 */
     private static boolean hasClickEvent(String json) {
         try {
-            var component = net.minecraft.network.chat.Component.Serializer.fromJson(
-                    json.isEmpty() ? "\"\"" : json, net.minecraft.core.RegistryAccess.EMPTY);
-            return component != null && hasClickEvent(component);
+            // 1.21.6+ 删掉了 Component.Serializer,文本组件的 JSON 解码统一走
+            // ComponentSerialization.CODEC(空注册表上下文,与旧代同参)。
+            var parsed = net.minecraft.network.chat.ComponentSerialization.CODEC.parse(
+                    net.minecraft.core.RegistryAccess.EMPTY.createSerializationContext(
+                            com.mojang.serialization.JsonOps.INSTANCE),
+                    com.google.gson.JsonParser.parseString(json.isEmpty() ? "\"\"" : json));
+            var component = parsed.result().orElse(null);
+            if (component == null) {
+                return true;   // 读不懂的文本按有事件处理(codec 不抛异常,失败要显式拒收)
+            }
+            return hasClickEvent(component);
         } catch (RuntimeException e) {
             return true;   // 读不懂的文本按有事件处理
         }
@@ -250,10 +258,30 @@ public final class BlueprintSafety {
         if (tag.isEmpty()) {
             return;   // 空槽位
         }
-        net.minecraft.world.item.ItemStack.parse(registries, tag)
+        parseItem(registries, tag)
                 .map(BlueprintSafety::withUnsafeComponentsDiscarded)
                 .filter(s -> !s.isEmpty())
                 .ifPresent(out::add);
+    }
+
+    /**
+     * 一叠物品的 NBT ⇄ 对象互转。1.21.6+ 删掉了 {@code ItemStack.parse/save} 这对便捷
+     * 方法,读写统一走 {@code ItemStack.CODEC} 加注册表序列化上下文——就是旧方法自己
+     * 的实现,语义一字不差(读不懂返回 empty、空叠不允许编码)。
+     */
+    static java.util.Optional<net.minecraft.world.item.ItemStack> parseItem(
+            net.minecraft.core.HolderLookup.Provider registries, net.minecraft.nbt.Tag tag) {
+        return net.minecraft.world.item.ItemStack.CODEC
+                .parse(registries.createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE), tag)
+                .resultOrPartial();
+    }
+
+    static net.minecraft.nbt.Tag saveItem(
+            net.minecraft.core.HolderLookup.Provider registries,
+            net.minecraft.world.item.ItemStack stack) {
+        return net.minecraft.world.item.ItemStack.CODEC
+                .encodeStart(registries.createSerializationContext(net.minecraft.nbt.NbtOps.INSTANCE), stack)
+                .getOrThrow();
     }
 
     /** 把载荷里每一叠的组件按白名单剥一遍,就地写回——计价和落位读的因此是同一份。 */
@@ -287,10 +315,10 @@ public final class BlueprintSafety {
         if (tag.isEmpty()) {
             return null;
         }
-        var cleaned = net.minecraft.world.item.ItemStack.parse(registries, tag)
+        var cleaned = parseItem(registries, tag)
                 .map(BlueprintSafety::withUnsafeComponentsDiscarded)
                 .filter(s -> !s.isEmpty());
-        return cleaned.isEmpty() ? null : cleaned.get().save(registries);
+        return cleaned.isEmpty() ? null : saveItem(registries, cleaned.get());
     }
 
     /** 把摆设身上带的东西整个拿掉——付不起的时候用,框空着比框里凭空多件东西好。 */

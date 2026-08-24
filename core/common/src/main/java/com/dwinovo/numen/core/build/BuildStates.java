@@ -265,7 +265,8 @@ public final class BuildStates {
         net.minecraft.nbt.CompoundTag components = new net.minecraft.nbt.CompoundTag();
         components.put("minecraft:banner_patterns", safeData.get("patterns").copy());
         itemTag.put("components", components);
-        return net.minecraft.world.item.ItemStack.parse(registries, itemTag)
+        // 1.21.6+ 没有 ItemStack.parse 便捷方法了,codec 互转统一放 BlueprintSafety。
+        return BlueprintSafety.parseItem(registries, itemTag)
                 .filter(s -> !s.isEmpty())
                 .orElse(null);
     }
