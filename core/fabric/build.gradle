@@ -1,17 +1,16 @@
 plugins {
     id 'multiloader-loader'
-    id 'net.fabricmc.fabric-loom-remap'
+    id 'net.fabricmc.fabric-loom'
 }
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
-    // Obfuscated MC (1.21.11) → loom remaps to Mojang names to match the common source set.
-    mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
-    // The numen-api engine, now a sibling loom project in this build. namedElements
-    // exposes the dev-mappings jar directly — no remap round-trip through a maven repo.
-    implementation project(path: ':api:fabric', configuration: 'namedElements')
+    // 26.1+ Fabric is Mojang-mapped natively — plain loom, no remap / mappings block.
+    implementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    // The numen-api engine, a sibling loom project in this build. Native loom has no
+    // remap step — the plain jar is already Mojang-mapped, so an ordinary project dep works.
+    implementation project(':api:fabric')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get
     // both mods — exactly like including a library mod such as GeckoLib.
     include project(':api:fabric')
