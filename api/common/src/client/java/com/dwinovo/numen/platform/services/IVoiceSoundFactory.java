@@ -11,9 +11,9 @@ import java.util.UUID;
  * 语音声音实例的平台工厂。语音的 PCM 取数在两个 loader 上走不同机制,
  * 所以实例创建必须分家:
  * <ul>
- *   <li><b>NeoForge</b> — 1.21.1 的 NeoForge 补丁已提前引入后续 MC 版本的
+ *   <li><b>NeoForge</b> — 1.21.4 的 NeoForge 补丁已提前引入后续 MC 版本的
  *       {@code SoundInstance.getStream(SoundBufferLibrary, Sound, boolean)}
- *       官方钩子(vanilla 1.21.1 没有),其 {@code SoundEngine.play} 直接调它。
+ *       官方钩子(vanilla 1.21.4 没有),其 {@code SoundEngine.play} 直接调它。
  *       该侧返回覆写了这个钩子的子类
  *       ({@code NeoEntityVoiceSound} / {@code NeoVoicePreviewSound}),零 mixin;</li>
  *   <li><b>Fabric</b> — 运行 vanilla 字节码,取数仍是

@@ -10,7 +10,7 @@ import net.minecraft.data.tags.TagsProvider;
  * NeoForge-side item tag provider. Forwards to {@link ModItemTagData} so tag
  * content stays loader-agnostic in {@code common/}.
  *
- * <p>1.21.1 has no {@code net.neoforged.neoforge.common.data.ItemTagsProvider}
+ * <p>NeoForge on 1.21.4 still has no {@code net.neoforged.neoforge.common.data.ItemTagsProvider}
  * (only {@code BlockTagsProvider}), so we extend the vanilla
  * {@link net.minecraft.data.tags.ItemTagsProvider}. It can copy block tags into
  * item tags via a block-tag lookup; we copy none, so an empty lookup is fed.

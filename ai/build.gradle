@@ -39,9 +39,9 @@ repositories {
 }
 
 dependencies {
-    // 与 MC 1.21.1 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
-    api 'com.google.code.gson:gson:2.10.1'
-    api 'org.slf4j:slf4j-api:2.0.9'
+    // 与 MC 1.21.4 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
+    api 'com.google.code.gson:gson:2.11.0'
+    api 'org.slf4j:slf4j-api:2.0.16'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
