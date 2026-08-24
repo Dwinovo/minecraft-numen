@@ -825,5 +825,195 @@ core → test(SleepOpsTest record 化) → fix(#56 加载上报) → build(ai �
 两条(AbstractBoat/Zombie)、1.21.1 功能面首碰两处(ultraWarm/BedSleepingProblem)、
 #56 根因(hasClientLoaded 门)顺手修掉。
 
-## 1.21.11 → 26.1.2
-_待移植时填写_
+## 1.21.11 → 26.1.2 ✓（已验证：并仓树双 loader 编译 + 出包 + datagen 四路 + 867 单测 + 65 条游戏内用例 ×5；跨版本纪元:渲染第四震 + Java 25 + Fabric 原生 loom）
+
+构建旋钮:MC `26.1.2` / range `[26.1.2, 26.2)` / NeoForm `26.1.2-1` / Fabric `0.148.2+26.1.2` /
+**Fabric loader `0.19.2`** / NeoForge `26.1.2.50-beta`。运行时库 gson `2.13.2` / slf4j-api
+`2.0.17` 与 1.21.11 完全同版(manifest 逐条核过),ai/build.gradle 数字不动只改口径。
+
+### ⚠ Java 25 ❗（环境级）
+26.1 要求 **Gradle JVM 本身是 Java 25**(不是 toolchain)。`java_version=21 → 25`;构建时
+`JAVA_HOME` 指 JDK 25(本机可用 gradle 自供给的 `~/.gradle/jdks/eclipse_adoptium-25-*`)。
+CI 无需改:workflow 的 setup-java 动态读 gradle.properties 的 java_version。
+mixin 的 `compatibilityLevel` 保持 `JAVA_21` 即可(required:true 下 gametest 起得来即为实证)。
+
+### 渲染第四震:GuiGraphics → GuiGraphicsExtractor（api,render-state 提取模型)
+```java
+GuiGraphics → GuiGraphicsExtractor(类型+import,全量机械替换;并仓树 21 文件)
+Screen.render → extractRenderState(+super);renderBackground → extractBackground
+AbstractWidget: w.render(…) → w.extractRenderState(…);抽象 renderWidget → extractWidgetRenderState
+AbstractButton.renderContents → extractContents
+g.drawString → g.text;drawCenteredString → centeredText;renderItem → item;
+renderItemDecorations → itemDecorations(fill/blitSprite/setTooltipForNextFrame 不变)
+PlayerFaceRenderer → PlayerFaceExtractor(.draw → .extractRenderState,同参,三种重载都在)
+InventoryScreen.renderEntityInInventoryFollowsMouse → extractEntityInInventoryFollowsMouse
+net.minecraft.client.GuiMessage → net.minecraft.client.multiplayer.chat.GuiMessage
+ChatComponent.addMessage(Component) 删除 → addClientSystemMessage(Component)
+  // 加行链路 addClientSystemMessage → addMessage → addMessageToQueue,第一句仍是
+  // allMessages.addFirst(msg)——新行落 0 位,流式打字机"取 0 位句柄"的前提继续成立。
+net.minecraft.client.renderer.state.CameraRenderState → …state.level.CameraRenderState
+  // SpeechBubbleRenderer 签名与 MixinLivingEntityRenderer 的 method 描述符都要跟
+```
+自定义 render 方法(NumenUI 面板/视图层)**保名**,只有原版覆写与原版控件调用点改名。
+并仓树的覆写点收敛在三个 Screen(CompanionChatScreen/CompanionWheelScreen/NumenScreen)
++ NumenScreen 的 w.render 循环——IDrawSurface 架构把其余 UI 隔在版本中立层。
+McDrawSurface(画布适配器)机械替换即可,enableScissor/disableScissor/pose() 均健在。
+
+RoundRect(自定义 GuiElementRenderState):接口迁包 `client.gui.render.state →
+client.renderer.state.gui`(buildVertices/pipeline/textureSetup/scissorArea 方法面不变,
+extends ScreenArea 供 bounds;addGuiElement 提交,原 submitGuiElement 改名);RenderPipeline 建造器
+`withBlend(BlendFunction) → withColorTargetState(new ColorTargetState(BlendFunction))`、
+`withDepthTestFunction(DepthTestFunction) → withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true))`
+(BlendFunction 迁 blaze3d.pipeline;DepthTestFunction 类删除);顶点格式 `NEW_ENTITY → ENTITY`。
+顶点属性面(addVertexWith2DPose/setUv1/setUv2/setNormal)一字未动。
+
+**AW 命名空间 `named → official`**(原生 Mojang 映射下 official 即 Mojang 名,loom 会拒 named);
+AW/AT 目标类 GuiGraphics→GuiGraphicsExtractor,AW 里 guiRenderState 字段的描述符跟着
+GuiRenderState 迁包(`client/renderer/state/gui/GuiRenderState`);guiRenderState/scissorStack
+字段名不变,ScissorStack 内部类随迁。并仓树 AW 仍住 api/fabric 资源根(下游按声明就地找)。
+
+### Fabric 原生 loom + Fabric API 大迁移
+构建:根 build.gradle 插件声明 `fabric-loom-remap → fabric-loom`(同一 1.14.x 线),两个
+fabric/build.gradle 同步换插件、删 mappings 块、`modImplementation → implementation`;
+core 对 api 的 project 依赖不再走 `namedElements`(原生 loom 无 remap,普通 project 依赖
+即 Mojang 名),`include project(':api:fabric')` JiJ 不变;root/settings 其余不动。API:
+```java
+KeyBindingHelper(keybinding.v1) → KeyMappingHelper(keymapping.v1).registerKeyMapping
+HudRenderCallback.EVENT → hud.HudElementRegistry.addLast(Identifier, HudElement)
+  (HudElement.extractRenderState(GuiGraphicsExtractor, DeltaTracker),lambda 兼容;
+   talk_hint 一层带 TalkHint + NumenHudToasts 两个绘制体,与 neoforge 侧图层同名)
+rendering.v1.world.WorldRenderEvents → rendering.v1.level.LevelRenderEvents
+  (BEFORE_DEBUG_RENDER 没了 → BEFORE_GIZMOS,ctx.matrices() → ctx.poseStack(),相机仍走 gameRenderer)
+ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD → ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL
+PayloadTypeRegistry.playC2S/playS2C → serverboundPlay/clientboundPlay
+FabricDataOutput → FabricPackOutput;FabricTagProvider.BlockTagProvider → FabricTagsProvider.BlockTagsProvider
+  (ItemTagProvider → ItemTagsProvider 同理;FabricDataGenerators 的 createPack/addProvider 不变)
+```
+NeoForge 侧本档零改动(FMLLoader.getCurrent() 健在,loader 9 静态化预警未兑现;
+moddev 2.0.141 原版本直吃 26.1.2-1)。fabric 侧 MixinSoundEngine 的 @Redirect 目标
+`SoundBufferLibrary.getStream(Identifier,Z)` 在 26.1.2 逐字节确认仍在,SoundInstance
+仍无可覆写的 getStream 钩子——双保险原样成立。
+
+### core/api 侧代差
+```java
+ClickType → ContainerInput(常量同名;ContainerOps/CraftOps/MenuOps)
+ChunkPos.asLong(x,z) → pack(x,z);.toLong() → .pack();.x/.z 私有化 → x()/z()
+Entity.interact / Player.interactOn 增加实体相对命中点 Vec3(中身高点为安全默认)
+Recipe.assemble 去掉 registryAccess 参数(crafting/single/smithing 全 family;RecipeProbe 跟着断参)
+Recipe.group()/showNotification() 由默认实现变抽象(单测的匿名假配方要补;按原版默认 ""/true)
+WaterlilyBlock → LilyPadBlock;FarmBlock → FarmlandBlock
+SavedDataType 名参 String → Identifier——并仓树三处:CompanionRegistry 沿用旧分支
+  numen:companions(保存档兼容),TimerRegistry → numen:timers、EventOutbox →
+  numen:event_outbox(两者 26.1.2 均首发,无兼容包袱,取同一命名法)
+ServerLevel.getDayTime() 整个删除 → 世界时钟读侧:Level.getOverworldClockTime()
+  (读 WorldClocks.OVERWORLD 时钟总刻,即旧 dayTime 的共享日历语义;NumenEvents 的
+   事件时间戳与 EntityAgentLoop 的时辰提示都走它;写侧见 gametest 环境一节)
+```
+BuildValidity 的对账仍是 AUTHORED_PROPERTIES 白名单(版本中立),getValues()/getProperties()
+两不碰,本档零触点。authlib 7.0.63:GameProfile 三参构造/name() 访问器与 1.21.11 同形,
+MojangSkinLookup/CompanionFactory/NumenPlayer 零改动。载具 mixin 的
+isLocalInstanceAuthoritative 在 26.1 变 final——@Inject 不受 final 影响,原样成立;
+#56 的 MixinServerCommonPacketListener(send 单参 + connection 字段)逐字健在。
+
+### ⚠ 测试环境:组件绑定迁数据包加载期 ❗
+26.1 的 Item 不再自持 DataComponentMap(Item.components() 反委托 holder),绑定发生在
+数据包加载(DataComponentInitializers)。headless 测试只跑 Bootstrap.bootStrap() 会在
+ItemStack 构造时抛 "Components not bound yet" —— 引导后调
+`McTestComponents.bindAll()`(官方 DATA_COMPONENT_INITIALIZERS.build(...).apply() 管线)。
+**上下文必须带数据包注册表**:`RegistryAccess.fromRegistryOfRegistries` 只有静态注册表,
+防火物品的初始化器查 damage_type 的 `minecraft:is_fire` 标签直接抛 Missing tag,被
+@BeforeAll 的 catch 吞掉后整类被 assumeTrue 静默跳过(报告不红,只是没跑)。用
+`VanillaRegistries.createLookup()`:静态+全部数据包注册表的引导内容合成一份 provider,
+任何标签一律空集(datagen 语义),组件照常绑定。并仓树 core/api 两个测试源码集各持一份
+夹具(跨模块不可见),全部 10 个引导点在 bootStrap() 后接 bindAll(),867 条全跑零跳过。
+
+### ⚠ gametest:测试环境泛型化 + 时刻迁世界时钟 ❗
+```java
+TestEnvironmentDefinition → TestEnvironmentDefinition<SavedDataType>
+  setup(ServerLevel) 由 void 改为返回 SavedDataType;新增 teardown(ServerLevel, SavedDataType)
+  // 注册面同步泛型化:DeferredRegister<MapCodec<? extends TestEnvironmentDefinition<?>>>、
+  //   Holder<TestEnvironmentDefinition<?>>、TestData<Holder<TestEnvironmentDefinition<?>>>
+ServerLevel.setDayTime(int) 整个删除 → 世界时钟(WorldClock / ServerClockManager):
+  level.dimensionTypeRegistration().value().defaultClock()
+       .ifPresent(clock -> level.clockManager().setTotalTicks(clock, 6000));
+```
+`teardown` **刻意留空**(存档类型取 `Unit`)。26.1 给的是"批次收尾还原现场"的能力,
+但这三样前置的本意就是整轮压住环境随机性——尤其随机刻:批间还原成 3,上一批留在
+世界里的草方块会在下一批的 setup 重新压住之前退化成泥土,正是这套前置要防的那个坑。
+
+### ⚠ gametest:测试结构目录由平铺改成资源包布局 ❗
+26.1 把 `StructureUtils.testStructuresDir` 拆成 `testStructuresSourceDir`(读)/
+`testStructuresTargetDir`(写),读侧走 `DirectoryTemplateSource(dir, PackType.SERVER_DATA,
+FileToIdConverter("structure", ".snbt"))`——即**当成资源包根目录**解析:
+```
+gameteststructures/data/numen/structure/floor20.snbt      ← 26.1 布局
+gameteststructures/floor20.snbt                            ← 1.21.11 平铺布局
+```
+不改布局的后果是全部用例 tick 0 即 `Failed to place test structure`。图纸夹具
+`japanese_cottage.litematic` 按路径直接读、不走模板系统,仍留在根下;
+copyCottageFixture 的读侧跟着走 `testStructuresSourceDir`。结构模板 DataVersion 4189
+原样保留,`readStructure` 的 DFU 正向修到 26.1.2,65 条全绿即为实证。
+
+### ⚠ gametest:26.1 的同步加载票据"未载先过期"——常驻 tick 身体不许站在未加载区块里 ❗
+本档最大的一坑,现象是**随机批次卡死 → 8G 堆 OOM**(堆里 345 万 ChunkHolder、5794 万条
+排队的 ChunkTaskDispatcher 任务,主线程整刻困在 DistanceManager.runAllUpdates 的等级传播)。
+逐层取证(临时 mixin 钉 TicketStorage.addTicket 计数+抽样调用栈)后的完整链条:
+
+1. **泄漏源**:四条用例(quote_and_gate / blueprint_second_run / blueprint_restock /
+   running_out_of_materials)只 spawn 不 despawn,通过后同伴永久留场;
+2. **暴露面**:gametest 同伴无主人,pad 按设计不发票(主人离线不占块);批次结束
+   runner 把 forceLoad 全撤,孤儿同伴站进未加载区块;
+3. **26.1 独有的引爆器**:玩家类身体不受区块门控、每刻必 tick,原版 tick 的方块读取
+   (Entity.isInWall 等)对未加载区块做**同步加载**(UNKNOWN 票,timeout 1 且
+   `FLAG_CAN_EXPIRE_IF_UNLOADED`——**区块没载完票也过期**,这个 flag 是 26.1 新引入);
+   于是"同步加载→票过期→卸载→再加载"每刻一轮,单个孤儿实测把同一格 chunk 抽了 36 万次,
+   任务队列只增不减直至 OOM;后续批次的结构区块永远到不了 entity-ticking,测试全部
+   卡在 GameTestInfo.tick 的区块门上(不超时、不失败、只冻结)。
+   1.21.11 同一泄漏是**良性**的:那代票据须等区块载毕才可过期,稳态收敛,故全绿。
+
+修法(两层,都是根治):**NumenPlayer.tick() 开头加休眠门**——所在区块未加载即整刻
+返回,把设计注释里"pad 失效她就闲置"落到实处(生产面同险:服务器上主人离线的同伴
+就是同一颗雷);四条用例补 despawn(全 65 条 spawn/despawn 配对审计过)。修后 66 条
+连过 5 轮(远/近坐标都覆盖),单轮 8–9 秒。
+
+**同构负结果**:pad 票据(关掉照炸)、skipPlayer 门(26.1 仍在且 mixin 命中)、
+玩家票 PlayerTicketTracker(同伴根本不进 playersPerChunk)、TicketType 位图
+(record 形参与 5 个 flag 与 1.21.11 逐字一致)、落位远近(26.1 的 GameTestServer
+随机落在 ±1500 万,1.21.11 也一样,远坐标只是批次顺序运气的错觉)——都排查过,均非因。
+**上一档手册"失败残留世界导致死亡螺旋、清目录即愈"的结论由此作废**:同一签名的雪崩
+在全新世界照样随机出现,病根是本节的泄漏+引爆器,清目录只是重掷了批次顺序的骰子。
+
+### 未发生的预警项
+- NeoForge loader 9 静态化没有兑现,neoforge 侧零改动;
+- Java 25 只是环境级,mixins.json 不动;
+- 权限集/游戏规则/TicketType/ClientInput.moveVector/TagValueInput 桥/CompoundTag
+  Optional 化/数据驱动 gametest 框架的注册面——前五档整套适配原样成立,一处未动;
+- BlockPos.asLong() 未删(过时的是别的 Stream 方法),WorkBlockMemory 零改动;
+- StreamCodec.composite 上限仍 12 字段,NumenLocationsPayload 只改注释口径。
+
+### 版本口径与不迁项
+- `skills/tier_progression/SKILL.md` 的 `## Where ores live` 口径 `1.21+ → 1.21+ / 26.x`
+  (26.1.2 的 OrePlacements 与 1.21 分布一致,旧分支逐条对过,同一 MC 版本结论直接沿用);
+- 注释里的 1.21.11 字样逐条按仍真/不真处理:ShapeRenderer 无 renderLineBox(仍真,改
+  本代口径)、vanilla 无 SoundInstance.getStream 钩子(仍真)、McDrawSurface 实现口径
+  改 26.1.2、MixinSoundEngine 的优先级实证改本代措辞。
+
+### 只在真机客户端才能目视验证的部分
+与上一档同一份清单,且本档在渲染语义上只做了签名/包名的机械替换,没有改绘制逻辑:
+头顶气泡的实际观感、转盘的物理按键接管、GUI 圆角 SDF 的渲染结果、快捷对话/语音三件套、
+编辑卡/绑定点/召唤卡/Y 输入行在提取模型下的形态。本档另加两项因为换了 API 才需要重看:
+HUD 图层换 `HudElementRegistry.addLast` 后快捷对话提醒的层级与位置;调试线换挂
+`LevelRenderEvents.BEFORE_GIZMOS` 后寻路调试覆盖层的深度关系。
+
+### 26.1.2 落地实录（并仓迁移）
+树落底 1.21.11 尖(d5364657)后单跳本档。提交序列:树落底 → build(旋钮/原生 loom/
+AW official/Java 25/CI 门)→ api(渲染第四震/Fabric API 迁移/世界时钟/SavedDataType)
+→ core(ContainerInput/ChunkPos/assemble/gametest 泛型化与资源包布局/单测补绑)→
+fix(未加载区块身体休眠 + 四条用例补 despawn)。双 loader 出包 + datagen 四路(生成物
+零漂移)+ 867 单测零跳过 + gametest "All 66 required tests passed" ×5。旧独立仓
+26.1.2 分支(api@c4a3c78 / core@59fd3fd8)的 GuiGraphicsExtractor 形态、loom 构建
+文件、AW/AT 全部照抄成立;本档并仓树**新**碰到的是:世界时钟的**读侧**
+(getOverworldClockTime,旧分支只趟过写侧)、SavedDataType 多出的两处(计时器/事件
+暂存箱,0.1.1 后新增)、Recipe.group()/showNotification() 抽象化咬到单测假配方、
+RecipeProbe 断参,以及上面整节的同步加载票据雪崩——前几样五分钟的事,最后一个吃掉
+了本档大半排障时间,也推翻了上一档的一条旧结论。
