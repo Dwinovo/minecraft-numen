@@ -9,6 +9,7 @@ import com.dwinovo.numen.client.screen.NumenScreen;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.resources.ResourceLocation;
 import org.lwjgl.glfw.GLFW;
 
 /**
@@ -23,7 +24,8 @@ import org.lwjgl.glfw.GLFW;
 public final class NumenKeys {
 
     /** Dedicated vanilla Controls category so the binding is easy to find and rebind (Options → Controls → Numen). */
-    public static final String CATEGORY = com.dwinovo.numen.data.ModLanguageData.Keys.KEY_CATEGORY_NUMEN;
+    public static final KeyMapping.Category CATEGORY =
+            KeyMapping.Category.register(ResourceLocation.fromNamespaceAndPath("numen_api", "companions"));
 
     /**
      * N — open the companion roster panel (or straight into chat with a single pet).

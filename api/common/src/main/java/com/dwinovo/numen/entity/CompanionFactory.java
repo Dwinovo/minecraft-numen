@@ -35,13 +35,20 @@ public final class CompanionFactory {
      */
     public static NumenPlayer spawn(MinecraftServer server, UUID companionUuid, String name,
                                      UUID ownerUuid, ServerLevel level, Vec3 pos) {
-        GameProfile profile = new GameProfile(companionUuid, name);
         // 借来的正版皮肤(Mojang 签名的 textures,注册表持久化)注入档案——客户端只认
         // 签过名的皮肤数据;没有则回落原版默认皮肤(按 UUID 哈希抽取)。
+        // authlib 9(1.21.9+)把 GameProfile 变成不可变 record,属性只能在构造时给全。
         CompanionRegistry.Entry reg = CompanionRegistry.get(server).find(companionUuid);
+        GameProfile profile;
         if (reg != null && !reg.skinValue().isEmpty()) {
-            profile.getProperties().put("textures", new com.mojang.authlib.properties.Property(
+            com.google.common.collect.Multimap<String, com.mojang.authlib.properties.Property> props =
+                    com.google.common.collect.LinkedHashMultimap.create();
+            props.put("textures", new com.mojang.authlib.properties.Property(
                     "textures", reg.skinValue(), reg.skinSig().isEmpty() ? null : reg.skinSig()));
+            profile = new GameProfile(companionUuid, name,
+                    new com.mojang.authlib.properties.PropertyMap(props));
+        } else {
+            profile = new GameProfile(companionUuid, name);
         }
         NumenPlayer player = new NumenPlayer(server, level, profile, ClientInformation.createDefault());
         FakeConnection connection = new FakeConnection();
@@ -54,21 +61,14 @@ public final class CompanionFactory {
         if (player.getOwnerUuid() == null) {
             player.setOwnerUuid(ownerUuid);
         }
-        // join 流程会阻塞等身体所在区块连实体一起就绪(1.21.8 起),而无 .dat 的
-        // 新召唤在等待前被 vanilla 挪去世界出生点——把召唤方的落点先挂在身上,
-        // MixinPlayerListCompanionSpawn 在等待前让身体站过去,等的就是已加载的
-        // 目标区块。join 一结束就摘掉,不留跨流程状态。
-        player.setIntendedSpawnPos(pos);
-        try {
-            server.getPlayerList().placeNewPlayer(connection, player,
-                    CommonListenerCookie.createInitial(profile, false));
-        } finally {
-            player.setIntendedSpawnPos(null);
-        }
+        // 1.21.9+ 把「等区块 + 挪出生点 + 内部读档」整段搬去了配置期的
+        // PrepareSpawnTask(只有真实登录走),placeNewPlayer 不再阻塞、不再挪位、
+        // 也不再碰 .dat——手工构造的身体直接 join,位置由上面的显式恢复与下面的
+        // 显式落点全权负责。
+        server.getPlayerList().placeNewPlayer(connection, player,
+                CommonListenerCookie.createInitial(profile, false));
         // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
-        // apply it AFTER the join: placeNewPlayer internally re-applies the saved .dat, which would otherwise
-        // clobber the spawn pos and send a died-then-revived companion back to its death location instead of
-        // to its owner. Same-level setPos via snapTo (1.21.5 renamed moveTo → snapTo) — NOT the
+        // apply it AFTER the join. Same-level setPos via snapTo (1.21.5 renamed moveTo → snapTo) — NOT the
         // teleportTo(ServerLevel,…) dimension-travel overload, which fires EntityTravelToDimensionEvent
         // (tripping some world-protection mods) even for a same-level move. A respawn from dormancy passes
         // null and keeps exactly what the .dat restored.
@@ -103,9 +103,13 @@ public final class CompanionFactory {
      */
     /** @return 载入的存档视图(供上层读 playerGameType 等玩家级字段);首次召唤无档返回 null */
     private static net.minecraft.world.level.storage.ValueInput loadPlayerData(MinecraftServer server, NumenPlayer player) {
-        // 1.21.6+ ValueInput IO refactor: PlayerList.load wants a ProblemReporter and
-        // hands back the ValueInput the entity loads from.
-        var maybe = server.getPlayerList().load(player, net.minecraft.util.ProblemReporter.DISCARDING);
+        // 1.21.9+ 拆掉了 PlayerList.load(player, reporter):改为按 NameAndId 读回原始
+        // CompoundTag,再自己包一层 TagValueInput 喂给 player.load。
+        var maybe = server.getPlayerList()
+                .loadPlayerData(new net.minecraft.server.players.NameAndId(player.getGameProfile()))
+                .map(tag -> (net.minecraft.world.level.storage.ValueInput)
+                        net.minecraft.world.level.storage.TagValueInput.create(
+                                net.minecraft.util.ProblemReporter.DISCARDING, player.registryAccess(), tag));
         maybe.ifPresent(player::load);
         return maybe.orElse(null);
     }

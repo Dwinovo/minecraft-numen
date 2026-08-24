@@ -27,9 +27,12 @@ import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
-import net.minecraft.client.resources.PlayerSkin;
+import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -695,11 +698,13 @@ public final class NumenScreen extends Screen {
     // ---- input ----
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyEvent event) {
+        int keyCode = event.key();
+        int modifiers = event.modifiers();
         int k = keyCode;
         if (dismissOpen()) {   // 确认卡在场:Esc = 取消(UiRoot 浮层通道保证),其余键不下传
             if (overlayUi.keyPressed(keyCode, modifiers)) { rebuild(); return true; }
-            return super.keyPressed(keyCode, scanCode, modifiers);
+            return super.keyPressed(event);
         }
         // 设置页的模态(删除确认卡 / 新建编辑表单卡):Esc 收起卡片而不是关掉整个面板。
         if (k == 256 && tab == Tab.SETTINGS && !modalOpen()
@@ -713,21 +718,22 @@ public final class NumenScreen extends Screen {
         if (summoning) {
             if (k == 256) { summoning = false; rebuild(); return true; } // Esc cancels (doesn't close panel)
             if (summonPanel().keyPressed(keyCode, modifiers)) return true;
-            return super.keyPressed(keyCode, scanCode, modifiers);
+            return super.keyPressed(event);
         }
         if (editing) {
             if (k == 256) { editing = false; rebuild(); return true; } // Esc 收卡,不关面板
             if (editPanel().keyPressed(keyCode, modifiers)) return true;
-            return super.keyPressed(keyCode, scanCode, modifiers);
+            return super.keyPressed(event);
         }
         if (tab == Tab.CHAT && inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
     }
 
     @Override
-    public boolean charTyped(char ch, int modifiers) {
+    public boolean charTyped(CharacterEvent event) {
+        char ch = (char) event.codepoint();
         if (tab == Tab.SETTINGS && !modalOpen() && settings.charTyped(ch)) {
             return true;
         }
@@ -740,17 +746,20 @@ public final class NumenScreen extends Screen {
         if (editing && editPanel().charTyped(ch)) {
             return true;
         }
-        return super.charTyped(ch, modifiers);
+        return super.charTyped(event);
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         // 崩溃护栏:点击处理出错按"未消费"降级,面板还能继续用
         return com.dwinovo.numen.client.ui.SafeUi.click("panel-click",
-                () -> mouseClickedInner(mouseX, mouseY, button));
+                () -> mouseClickedInner(event, doubleClick));
     }
 
-    private boolean mouseClickedInner(double mouseX, double mouseY, int button) {
+    private boolean mouseClickedInner(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        int button = event.button();
         if (dismissOpen()) {   // 确认卡:卡上按钮生效,卡外点击一律吞掉(危险操作不给误触留门)
             boolean handled = overlayUi.mouseClicked(mouseX, mouseY, button);
             if (!dismissOpen()) rebuild();   // 卡关了(取消/确认):背景 widget 复位
@@ -760,7 +769,7 @@ public final class NumenScreen extends Screen {
             // 设置页的表单模态:先给表单自己的下拉路由,其余只放行 widget 通道
             // (卡上字段/按钮),侧栏/页签/背景列表全部屏蔽。
             if (button == 0 && settings.mouseClicked(mouseX, mouseY)) return true;
-            return super.mouseClicked(mouseX, mouseY, button);
+            return super.mouseClicked(event, doubleClick);
         }
         if (button == 0) {
             // Summon dropdowns get first pick (their open lists overlay the panel).
@@ -798,7 +807,7 @@ public final class NumenScreen extends Screen {
             if (modalOpen()) {
                 // 召唤模态:页签/聊天/设置全在暗幕之下,只放行 widget 通道(卡上控件);
                 // 侧栏的 +/头像在上面已处理(保留为模态的逃生口)。
-                return super.mouseClicked(mouseX, mouseY, button);
+                return super.mouseClicked(event, doubleClick);
             }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
             int my = (int) mouseY;
@@ -816,24 +825,29 @@ public final class NumenScreen extends Screen {
             }
             if (tab == Tab.CHAT && chatView.mouseClicked(mouseX, mouseY)) return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override
-    public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+    public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
+        double mx = event.x();
+        double my = event.y();
         // 声线表单的音量滑条拖动(NumenUI 面板)。
         if (tab == Tab.SETTINGS && !modalOpen() && settings.mouseDragged(mx, my, dx, dy)) {
             return true;
         }
-        return super.mouseDragged(mx, my, button, dx, dy);
+        return super.mouseDragged(event, dx, dy);
     }
 
     @Override
-    public boolean mouseReleased(double mx, double my, int button) {
+    public boolean mouseReleased(MouseButtonEvent event) {
+        double mx = event.x();
+        double my = event.y();
+        int button = event.button();
         if (tab == Tab.SETTINGS && !modalOpen() && settings.mouseReleased(mx, my, button)) {
             return true;
         }
-        return super.mouseReleased(mx, my, button);
+        return super.mouseReleased(event);
     }
 
     @Override

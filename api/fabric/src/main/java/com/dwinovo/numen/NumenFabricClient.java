@@ -101,14 +101,16 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.debug.PathDebugState.clear();
                 });
 
-        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后)。
+        // 寻路调试覆盖层:世界空间画线。挂 BEFORE_DEBUG_RENDER(原版调试线
+        // 的绘制点,语义一致),相机走 gameRenderer.getMainCamera()。
         // 头顶气泡不在这里——它走玩家实体渲染尾部(MixinLivingEntityRenderer),
         // 与名牌同管线,光影下才正常。
-        net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents.AFTER_TRANSLUCENT
+        net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.BEFORE_DEBUG_RENDER
                 .register(context -> {
-                    if (context.matrixStack() != null) {
+                    if (context.matrices() != null) {
                         com.dwinovo.numen.client.debug.PathDebugRenderer.render(
-                                context.matrixStack(), context.camera());
+                                context.matrices(),
+                                net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera());
                     }
                 });
     }

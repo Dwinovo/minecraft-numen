@@ -42,15 +42,16 @@ public final class CompanionChunkLoader {
     private static final int TIMEOUT_TICKS = 40;
 
     /**
-     * 1.21.5 起 {@code TicketType} 是不带泛型的 record(超时 / 是否入档 / 用途三元组),不再由
-     * {@code TicketType.create} 造带比较器的泛型键。这里直接构造:超时同为 {@value #TIMEOUT_TICKS}
-     * tick,{@code persist=false} —— {@code TicketStorage.packTickets} 只序列化 persist 的票据,
+     * 1.21.5 起 {@code TicketType} 是不带泛型的 record,1.21.9 又把「是否入档 + 用途」
+     * 合并成一个 {@code flags} 位图。这里直接构造:超时同为 {@value #TIMEOUT_TICKS}
+     * tick,标志取 {@code FLAG_LOADING | FLAG_SIMULATION}(旧代
+     * {@code TicketUse.LOADING_AND_SIMULATION},即「加载 + 实体 tick」),不置
+     * {@code FLAG_PERSIST} —— {@code TicketStorage.packTickets} 只序列化 persist 的票据,
      * 所以这张票不入档,也就不需要进 {@code BuiltInRegistries.TICKET_TYPE}(未注册时
      * {@code Util.getRegisteredName} 回落 "[unregistered]",只影响 toString)。
-     * {@code LOADING_AND_SIMULATION} 对应旧代「加载 + 实体 tick」的语义。
      */
-    private static final TicketType TICKET =
-            new TicketType(TIMEOUT_TICKS, false, TicketType.TicketUse.LOADING_AND_SIMULATION);
+    private static final TicketType TICKET = new TicketType(
+            TIMEOUT_TICKS, TicketType.FLAG_LOADING | TicketType.FLAG_SIMULATION);
 
     private CompanionChunkLoader() {}
 

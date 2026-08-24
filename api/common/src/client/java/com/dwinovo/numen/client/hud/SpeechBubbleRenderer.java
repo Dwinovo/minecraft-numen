@@ -9,10 +9,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.language.I18n;
-import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.SubmitNodeCollector;
+import net.minecraft.network.chat.Style;
 import net.minecraft.resources.ResourceLocation;
-import org.joml.Matrix4f;
+import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,14 +57,16 @@ public final class SpeechBubbleRenderer {
      * 没有气泡的实体(包括所有真人玩家)一次 map 查询即返回。
      */
     public static void render(AbstractClientPlayer body, PoseStack poseStack,
-                              MultiBufferSource buffers) {
+                              SubmitNodeCollector collector,
+                              net.minecraft.client.renderer.state.CameraRenderState camera) {
         // 崩溃护栏:实体渲染通道里的异常会带走整个渲染线程——这里绝不外抛
         com.dwinovo.numen.client.ui.SafeUi.run("speech-bubble",
-                () -> renderInner(body, poseStack, buffers));
+                () -> renderInner(body, poseStack, collector, camera));
     }
 
     private static void renderInner(AbstractClientPlayer body, PoseStack poseStack,
-                                    MultiBufferSource buffers) {
+                                    SubmitNodeCollector collector,
+                                    net.minecraft.client.renderer.state.CameraRenderState camera) {
         SpeechBubbles.View bubble = SpeechBubbles.view(body.getUUID());
         if (bubble == null || body.isInvisible()) {
             return;
@@ -75,9 +78,10 @@ public final class SpeechBubbleRenderer {
         poseStack.pushPose();
         // 锚点在名牌上方:小方尾的尖端落在这里,气泡向上生长
         poseStack.translate(0, body.getBbHeight() + 0.95, 0);
-        poseStack.mulPose(mc.getEntityRenderDispatcher().cameraOrientation());
+        // 1.21.9+ 相机朝向从渲染状态里取(与原版名牌同一个来源)。
+        poseStack.mulPose(camera.orientation);
         poseStack.scale(SCALE, -SCALE, SCALE);
-        drawBubble(poseStack, buffers, mc.font, bubble, body.getUUID());
+        drawBubble(poseStack, collector, mc.font, bubble, body.getUUID());
         poseStack.popPose();
     }
 
@@ -86,7 +90,7 @@ public final class SpeechBubbleRenderer {
      * 底边中央伸到 (0,TAIL_H)。层次靠 z 拉开——名牌 billboard 空间里
      * <b>+z 朝观察者</b>:阴影垫底(0)、边框、填充逐层抬高,文字最前。
      */
-    private static void drawBubble(PoseStack poseStack, MultiBufferSource buffers,
+    private static void drawBubble(PoseStack poseStack, SubmitNodeCollector collector,
                                    Font font, SpeechBubbles.View bubble, java.util.UUID uuid) {
         UiTheme th = UiTheme.current();
         // 两条线各自成行:正文在上(她说的话),状态在下(此刻在干什么)。
@@ -111,26 +115,31 @@ public final class SpeechBubbleRenderer {
         }
         int boxW = textW + PAD_X * 2;
         int boxH = lines.size() * LINE_H + PAD_Y * 2;
-        float x0 = -boxW / 2.0f;
-        float x1 = boxW / 2.0f;
-        float y0 = -boxH;
-        float y1 = 0;
+        final float x0 = -boxW / 2.0f;
+        final float x1 = boxW / 2.0f;
+        final float y0 = -boxH;
+        final float y1 = 0;
 
-        VertexConsumer vc = buffers.getBuffer(RenderType.text(WHITE));
-        Matrix4f m = poseStack.last().pose();
-        // 硬偏移阴影垫底(整体,含尾影由主影覆盖)
-        quad(vc, m, x0 + SHADOW_OFF, y0 + SHADOW_OFF, x1 + SHADOW_OFF, y1 + SHADOW_OFF,
-                0.0f, th.border());
-        // 粗边:比填充大一圈的同心方
-        quad(vc, m, x0 - 1, y0 - 1, x1 + 1, y1 + 1, 0.02f, th.border());
         // 有话说就是"说话泡"(奶油底),纯状态是"状态泡"(纸面底,退后一档)
-        int fill = bubble.hasText() ? th.aiFill() : th.surface();
-        quad(vc, m, x0, y0, x1, y1, 0.04f, fill);
-        // 小方尾:边框菱形在后,填充菱形在前,尖端指向说话者
-        diamond(vc, m, 0, y1, 5, TAIL_H + 1, 0.02f, th.border());
-        diamond(vc, m, 0, y1 - 1, 4, TAIL_H, 0.04f, fill);
+        final int fill = bubble.hasText() ? th.aiFill() : th.surface();
+        final int border = th.border();
+        // 1.21.9+ 提交式渲染:实体通道不再直取 VertexConsumer,几何交给
+        // SubmitNodeCollector。一次 submitCustomGeometry 把整个气泡(阴影/边框/
+        // 填充/小方尾)写进同一个节点,层次仍由 z 拉开;回调延后执行,
+        // 参与计算的局部量全部 final。
+        collector.submitCustomGeometry(poseStack, RenderType.text(WHITE), (pose, vc) -> {
+            // 硬偏移阴影垫底(整体,含尾影由主影覆盖)
+            quad(vc, pose, x0 + SHADOW_OFF, y0 + SHADOW_OFF, x1 + SHADOW_OFF, y1 + SHADOW_OFF,
+                    0.0f, border);
+            // 粗边:比填充大一圈的同心方
+            quad(vc, pose, x0 - 1, y0 - 1, x1 + 1, y1 + 1, 0.02f, border);
+            quad(vc, pose, x0, y0, x1, y1, 0.04f, fill);
+            // 小方尾:边框菱形在后,填充菱形在前,尖端指向说话者
+            diamond(vc, pose, 0, y1, 5, TAIL_H + 1, 0.02f, border);
+            diamond(vc, pose, 0, y1 - 1, 4, TAIL_H, 0.04f, fill);
+        });
 
-        // 文字压最前(drawInBatch 没有 z 参,用矩阵抬)
+        // 文字压最前(submitText 没有 z 参,用矩阵抬)
         poseStack.pushPose();
         poseStack.translate(0, 0, 0.06f);
         float ty = y0 + PAD_Y + 1;
@@ -139,8 +148,9 @@ public final class SpeechBubbleRenderer {
             // 状态行暗一档:它是旁白,正文才是她说的话
             int color = i >= statusFrom ? th.textDim() : th.text();
             float tx = -font.width(line) / 2.0f;
-            font.drawInBatch(line, tx, ty, color, false, poseStack.last().pose(), buffers,
-                    Font.DisplayMode.NORMAL, 0, FULL_BRIGHT);
+            collector.submitText(poseStack, tx, ty,
+                    FormattedCharSequence.forward(line, Style.EMPTY), false,
+                    Font.DisplayMode.NORMAL, FULL_BRIGHT, color, 0, 0);
             ty += LINE_H;
         }
         poseStack.popPose();
@@ -155,7 +165,7 @@ public final class SpeechBubbleRenderer {
         };
     }
 
-    private static void quad(VertexConsumer vc, Matrix4f m,
+    private static void quad(VertexConsumer vc, PoseStack.Pose m,
                              float x0, float y0, float x1, float y1, float z, int argb) {
         vc.addVertex(m, x0, y0, z).setColor(argb).setUv(0f, 0f).setLight(FULL_BRIGHT);
         vc.addVertex(m, x0, y1, z).setColor(argb).setUv(0f, 1f).setLight(FULL_BRIGHT);
@@ -164,7 +174,7 @@ public final class SpeechBubbleRenderer {
     }
 
     /** 以 (cx, top) 为上顶点的下指菱形(方尾)。 */
-    private static void diamond(VertexConsumer vc, Matrix4f m,
+    private static void diamond(VertexConsumer vc, PoseStack.Pose m,
                                 float cx, float top, float halfW, float h, float z, int argb) {
         vc.addVertex(m, cx - halfW, top, z).setColor(argb).setUv(0f, 0f).setLight(FULL_BRIGHT);
         vc.addVertex(m, cx, top + h, z).setColor(argb).setUv(0f, 1f).setLight(FULL_BRIGHT);

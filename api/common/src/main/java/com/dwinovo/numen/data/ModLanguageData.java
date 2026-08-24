@@ -82,8 +82,8 @@ public final class ModLanguageData {
         /** Hotkey (hold): push-to-talk voice to the current interaction target. */
         public static final String KEY_QUICK_VOICE = "key.numen.quick_voice";
 
-        /** Dedicated Minecraft Controls category so the hotkey gets its own "Numen" section. */
-        public static final String KEY_CATEGORY_NUMEN = "key.categories.numen";
+        /** Dedicated Minecraft Controls category("Numen" 区);键名 = KeyMapping.Category.label() 由注册 id 推导。 */
+        public static final String KEY_CATEGORY_NUMEN = "key.category.numen_api.companions";
 
         // Model-config (provider library) section: nav label, list, form.
         public static final String PROVIDER_TITLE          = "numen.provider.title";

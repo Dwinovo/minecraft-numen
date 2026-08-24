@@ -13,6 +13,9 @@ import com.dwinovo.numen.client.ui.RoundRect;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.phys.EntityHitResult;
@@ -157,29 +160,29 @@ public class CompanionChatScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyEvent event) {
         // 输入行先拿:弹层的上下/Tab/回车、面板的整个键盘、回车发送。它不要的(比如
         // 没开面板时的 Esc)才落到屏幕——Esc 关屏
-        if (inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {
+        if (inputBar != null && inputBar.keyPressed(event.key(), event.modifiers())) {
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
     }
 
     @Override
-    public boolean charTyped(char ch, int modifiers) {
-        if (inputBar != null && inputBar.charTyped(ch)) {
+    public boolean charTyped(CharacterEvent event) {
+        if (inputBar != null && inputBar.charTyped((char) event.codepoint())) {
             return true;
         }
-        return super.charTyped(ch, modifiers);
+        return super.charTyped(event);
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (inputBar != null && inputBar.mouseClicked(mouseX, mouseY, button)) {
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (inputBar != null && inputBar.mouseClicked(event.x(), event.y(), event.button())) {
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(event, doubleClick);
     }
 
     @Override

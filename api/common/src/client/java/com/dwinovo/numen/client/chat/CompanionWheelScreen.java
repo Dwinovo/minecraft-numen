@@ -10,8 +10,11 @@ import com.dwinovo.numen.client.ui.Anim;
 import com.dwinovo.numen.client.ui.RoundRect;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.platform.Window;
 
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
@@ -74,13 +77,13 @@ public class CompanionWheelScreen extends Screen {
         }
     }
 
-    private static boolean physicallyDown(long window, KeyMapping k) {
+    private static boolean physicallyDown(Window window, KeyMapping k) {
         if (k.isUnbound()) {
             return false;
         }
         InputConstants.Key key = InputConstants.getKey(k.saveString());
         if (key.getType() == InputConstants.Type.MOUSE) {
-            return GLFW.glfwGetMouseButton(window, key.getValue()) == GLFW.GLFW_PRESS;
+            return GLFW.glfwGetMouseButton(window.handle(), key.getValue()) == GLFW.GLFW_PRESS;
         }
         return InputConstants.isKeyDown(window, key.getValue());
     }
@@ -104,7 +107,7 @@ public class CompanionWheelScreen extends Screen {
      */
     public static net.minecraft.world.phys.Vec2 feedMovement(net.minecraft.client.player.ClientInput input) {
         Minecraft mc = Minecraft.getInstance();
-        long window = mc.getWindow().getWindow();
+        Window window = mc.getWindow();
         boolean up = physicallyDown(window, mc.options.keyUp);
         boolean down = physicallyDown(window, mc.options.keyDown);
         boolean left = physicallyDown(window, mc.options.keyLeft);
@@ -259,9 +262,11 @@ public class CompanionWheelScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (button != 0 || entries.isEmpty()) {
-            return super.mouseClicked(mouseX, mouseY, button);
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        double mouseX = event.x();
+        double mouseY = event.y();
+        if (event.button() != 0 || entries.isEmpty()) {
+            return super.mouseClicked(event, doubleClick);
         }
         // 命中检测与渲染同一套席位坐标
         int cx = this.width / 2;
@@ -285,13 +290,13 @@ public class CompanionWheelScreen extends Screen {
     }
 
     @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
+    public boolean keyReleased(KeyEvent event) {
         // 按住开、松开定:轮盘键抬起即确认(对讲机手感)
-        if (NumenKeys.COMPANION_WHEEL.matches(keyCode, scanCode) && !entries.isEmpty()) {
+        if (NumenKeys.COMPANION_WHEEL.matches(event) && !entries.isEmpty()) {
             confirm();
             return true;
         }
-        return super.keyReleased(keyCode, scanCode, modifiers);
+        return super.keyReleased(event);
     }
 
     private void confirm() {

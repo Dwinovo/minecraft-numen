@@ -61,11 +61,13 @@ public class NumenNeoForgeClient {
     }
 
     static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterTranslucentBlocks event) {
-        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后;1.21.8 起按 stage 子事件分发)。
+        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后,按 stage 子事件分发)。
+        // stage 子事件不带相机,相机走 gameRenderer 主相机。
         // 头顶气泡不在这里——它走玩家实体渲染尾部(MixinLivingEntityRenderer),
         // 与名牌同管线,光影下才正常。
         com.dwinovo.numen.client.debug.PathDebugRenderer.render(
-                event.getPoseStack(), event.getCamera());
+                event.getPoseStack(),
+                net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera());
     }
 
     static void registerKeyMappings(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {

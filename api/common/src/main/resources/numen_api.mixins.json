@@ -8,7 +8,6 @@
     "ChunkMapCompanionMixin",
     "MenuDataSlotsAccessor",
     "MixinEntityVehicleControl",
-    "MixinPlayerListCompanionSpawn",
     "MixinServerCommonPacketListener"
   ],
   "client": [

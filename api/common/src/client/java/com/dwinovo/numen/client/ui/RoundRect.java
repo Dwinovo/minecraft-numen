@@ -84,21 +84,21 @@ public final class RoundRect {
         }
 
         @Override
-        public void buildVertices(VertexConsumer vc, float z) {
+        public void buildVertices(VertexConsumer vc) {
             float hw = (x1 - x0) / 2f;
             float hh = (y1 - y0) / 2f;
             int h16x = Math.round(hw * FP);
             int h16y = Math.round(hh * FP);
             int r16 = Math.round(radius * FP);
-            vertex(vc, z, x0, y0, -hw, -hh, h16x, h16y, r16);
-            vertex(vc, z, x0, y1, -hw, hh, h16x, h16y, r16);
-            vertex(vc, z, x1, y1, hw, hh, h16x, h16y, r16);
-            vertex(vc, z, x1, y0, hw, -hh, h16x, h16y, r16);
+            vertex(vc, x0, y0, -hw, -hh, h16x, h16y, r16);
+            vertex(vc, x0, y1, -hw, hh, h16x, h16y, r16);
+            vertex(vc, x1, y1, hw, hh, h16x, h16y, r16);
+            vertex(vc, x1, y0, hw, -hh, h16x, h16y, r16);
         }
 
-        private void vertex(VertexConsumer vc, float z, float x, float y,
+        private void vertex(VertexConsumer vc, float x, float y,
                             float lx, float ly, int h16x, int h16y, int r16) {
-            vc.addVertexWith2DPose(pose, x, y, z)
+            vc.addVertexWith2DPose(pose, x, y)
                     .setColor(argb)
                     .setUv(lx, ly)
                     .setUv1(h16x, h16y)

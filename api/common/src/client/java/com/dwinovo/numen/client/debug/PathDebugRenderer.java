@@ -87,7 +87,7 @@ public final class PathDebugRenderer {
 
     private static void drawBox(PoseStack poseStack, VertexConsumer vc, long packed, float[] color) {
         BlockPos pos = BlockPos.of(packed);
-        net.minecraft.client.renderer.ShapeRenderer.renderLineBox(poseStack, vc,
+        net.minecraft.client.renderer.ShapeRenderer.renderLineBox(poseStack.last(), vc,
                 pos.getX() + 0.02, pos.getY() + 0.02, pos.getZ() + 0.02,
                 pos.getX() + 0.98, pos.getY() + 0.98, pos.getZ() + 0.98,
                 color[0], color[1], color[2], 0.9f);
