@@ -59,6 +59,7 @@ class BuildTaskRecordTest {
         try {
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
+            com.dwinovo.numen.core.testutil.McTestComponents.bindAll();
             com.dwinovo.numen.core.ScaffoldTagTestSupport.bind();
             player = allocatePlayer();
             booted = true;

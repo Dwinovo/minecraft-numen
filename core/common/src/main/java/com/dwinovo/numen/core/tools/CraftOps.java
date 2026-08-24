@@ -13,7 +13,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.CraftingContainer;
 import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.inventory.Slot;
@@ -255,7 +255,7 @@ public final class CraftOps {
                 break;
             }
             int have0 = PlayerInv.count(self.getInventory(), target);
-            menu.clicked(grid.result(), 0, ClickType.QUICK_MOVE, self);   // vanilla mass-craft + onTake
+            menu.clicked(grid.result(), 0, ContainerInput.QUICK_MOVE, self);   // vanilla mass-craft + onTake
             self.swing(InteractionHand.MAIN_HAND);
             sweepGrid(menu, self, grid);
             int gained = PlayerInv.count(self.getInventory(), target) - have0;
@@ -325,7 +325,7 @@ public final class CraftOps {
                 if (cr.isSpecial()) {
                     continue;
                 }
-                ItemStack result = RecipeProbe.resultOf(cr, level.registryAccess());
+                ItemStack result = RecipeProbe.resultOf(cr);
                 if (result.isEmpty() || result.getItem() != target
                         || !RecipeProbe.usableIngredients(cr)) {
                     continue;
@@ -564,7 +564,7 @@ public final class CraftOps {
         }
         for (int idx : grid.cells()) {
             if (idx >= 0 && idx < menu.slots.size() && !menu.slots.get(idx).getItem().isEmpty()) {
-                menu.clicked(idx, 0, ClickType.QUICK_MOVE, self);
+                menu.clicked(idx, 0, ContainerInput.QUICK_MOVE, self);
             }
         }
     }
@@ -579,7 +579,7 @@ public final class CraftOps {
                 continue;
             }
             if (slot.getItem().isEmpty()) {
-                menu.clicked(slot.index, 0, ClickType.PICKUP, self);
+                menu.clicked(slot.index, 0, ContainerInput.PICKUP, self);
                 return menu.getCarried().isEmpty();
             }
         }

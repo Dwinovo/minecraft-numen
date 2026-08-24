@@ -711,7 +711,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             return;
         }
         if (knownOres.size() < QUERY_LOW_WATER
-                || ChunkPos.asLong(player.blockPosition()) != lastQueryChunk
+                || ChunkPos.pack(player.blockPosition()) != lastQueryChunk
                 || heartbeatTimer <= 0
                 || !lastQueryComplete) {
             runQuery();
@@ -723,7 +723,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         if (!(player.level() instanceof ServerLevel sl)) {
             return;
         }
-        lastQueryChunk = ChunkPos.asLong(player.blockPosition());
+        lastQueryChunk = ChunkPos.pack(player.blockPosition());
         heartbeatTimer = QUERY_HEARTBEAT_TICKS;
         queryCooldown = QUERY_MIN_GAP_TICKS;
         TargetIndex.Result res = TargetIndex.query(sl, player.blockPosition(), r.targets,

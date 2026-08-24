@@ -4,7 +4,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.ResultSlot;
 import net.minecraft.world.item.ItemStack;
 
@@ -80,7 +80,7 @@ List<Move> moves,
             }
             return "slot " + from + " is empty — nothing to move.";
         }
-        menu.clicked(from, 0, ClickType.QUICK_MOVE, entity);
+        menu.clicked(from, 0, ContainerInput.QUICK_MOVE, entity);
         ItemStack after = menu.slots.get(from).getItem();
         int moved = before.getCount() - (sameItem(before, after) ? after.getCount() : 0);
         String note = (count != null) ? " (count ignored — routing moves the whole stack; give `to` "
@@ -117,10 +117,10 @@ List<Move> moves,
             int want = Math.min(count, fromBefore.getCount());
             MenuOps.dripInto(menu, entity, from, to, want);
         } else {
-            menu.clicked(from, 0, ClickType.PICKUP, entity);          // grab the stack
-            menu.clicked(to, 0, ClickType.PICKUP, entity);            // place / merge / swap
+            menu.clicked(from, 0, ContainerInput.PICKUP, entity);          // grab the stack
+            menu.clicked(to, 0, ContainerInput.PICKUP, entity);            // place / merge / swap
             if (!menu.getCarried().isEmpty()) {
-                menu.clicked(from, 0, ClickType.PICKUP, entity);      // settle leftover / swapped item back
+                menu.clicked(from, 0, ContainerInput.PICKUP, entity);      // settle leftover / swapped item back
             }
         }
 

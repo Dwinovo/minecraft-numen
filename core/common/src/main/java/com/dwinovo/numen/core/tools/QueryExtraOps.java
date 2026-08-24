@@ -151,19 +151,19 @@ String item_id,
                             || cr.placementInfo().ingredients().isEmpty()) {
                         continue;
                     }
-                    ItemStack result = RecipeProbe.resultOf(cr, level.registryAccess());
+                    ItemStack result = RecipeProbe.resultOf(cr);
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }
                     recipes.add("[crafting] " + format(cr, result));
                 } else if (r instanceof AbstractCookingRecipe cook) {
-                    ItemStack result = RecipeProbe.resultOf(cook, level.registryAccess());
+                    ItemStack result = RecipeProbe.resultOf(cook);
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }
                     recipes.add(formatCooking(cook, result));
                 } else if (r instanceof StonecutterRecipe sc) {
-                    ItemStack result = RecipeProbe.resultOf(sc, level.registryAccess());
+                    ItemStack result = RecipeProbe.resultOf(sc);
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }
@@ -173,7 +173,7 @@ String item_id,
                     // 锻造不走展示产出,保留空输入 assemble 的既有语义:变换配方
                     // (下界合金升级)照样给出产物,纹饰配方产出(空的)基底、自然排除。
                     ItemStack result = RecipeProbe.probe(() -> sm.assemble(new SmithingRecipeInput(
-                            ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY), level.registryAccess()));
+                            ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY)));
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }

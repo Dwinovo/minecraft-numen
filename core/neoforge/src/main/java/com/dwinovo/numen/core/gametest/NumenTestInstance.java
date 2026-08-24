@@ -37,7 +37,7 @@ public final class NumenTestInstance extends GameTestInstance {
     private final String method;
     private final Consumer<GameTestHelper> body;
 
-    public NumenTestInstance(String method, TestData<Holder<TestEnvironmentDefinition>> info) {
+    public NumenTestInstance(String method, TestData<Holder<TestEnvironmentDefinition<?>>> info) {
         super(info);
         this.method = method;
         this.body = NumenGameTests.body(method);

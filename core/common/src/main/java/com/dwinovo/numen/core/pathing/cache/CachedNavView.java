@@ -63,7 +63,7 @@ public final class CachedNavView implements BlockGetter, BlockEntityAware {
         int chunkZ = SectionPos.blockToSectionCoord(z);
         // Great cache locality: A* expands locally, so reads usually land in the same chunk as the previous one.
         LevelChunk chunk = prev;
-        if (chunk == null || chunk.getPos().x != chunkX || chunk.getPos().z != chunkZ) {
+        if (chunk == null || chunk.getPos().x() != chunkX || chunk.getPos().z() != chunkZ) {
             chunk = loaded.at(chunkX, chunkZ);
             if (chunk != null) {
                 prev = chunk;   // cache hits only; unloaded stays a cheap re-miss

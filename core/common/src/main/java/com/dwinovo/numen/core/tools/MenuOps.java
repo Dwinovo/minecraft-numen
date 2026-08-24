@@ -2,7 +2,7 @@ package com.dwinovo.numen.core.tools;
 
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 
 /**
  * 菜单点击原语。精确挪 N 个的"抓起-逐个右键-归还余数"序列此前在
@@ -20,13 +20,13 @@ public final class MenuOps {
      * 调用方自己核对落位数量:菜单可能拒收(装不下/槽位过滤)。
      */
     public static void dripInto(AbstractContainerMenu menu, Player who, int from, int to, int count) {
-        menu.clicked(from, 0, ClickType.PICKUP, who);            // grab the stack
+        menu.clicked(from, 0, ContainerInput.PICKUP, who);            // grab the stack
         int drops = Math.min(count, menu.getCarried().getCount());
         for (int i = 0; i < drops; i++) {
-            menu.clicked(to, 1, ClickType.PICKUP, who);          // drop ONE (merges / fills)
+            menu.clicked(to, 1, ContainerInput.PICKUP, who);          // drop ONE (merges / fills)
         }
         if (!menu.getCarried().isEmpty()) {
-            menu.clicked(from, 0, ClickType.PICKUP, who);        // return the remainder
+            menu.clicked(from, 0, ContainerInput.PICKUP, who);        // return the remainder
         }
     }
 }

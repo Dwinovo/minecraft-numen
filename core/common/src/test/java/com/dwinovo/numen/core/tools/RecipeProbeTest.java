@@ -1,7 +1,5 @@
 package com.dwinovo.numen.core.tools;
 
-import net.minecraft.core.HolderLookup;
-import net.minecraft.core.RegistryAccess;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.CraftingBookCategory;
@@ -37,6 +35,7 @@ class RecipeProbeTest {
         try {
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
+            com.dwinovo.numen.core.testutil.McTestComponents.bindAll();
             booted = true;
         } catch (Throwable t) {
             booted = false;
@@ -51,7 +50,7 @@ class RecipeProbeTest {
         assertTrue(RecipeProbe.probe(() -> {
             throw new IllegalStateException("modded recipe exploded");
         }).isEmpty());
-        assertTrue(RecipeProbe.resultOf(recipe(null, null), RegistryAccess.EMPTY).isEmpty());
+        assertTrue(RecipeProbe.resultOf(recipe(null, null)).isEmpty());
     }
 
     @Test
@@ -66,9 +65,12 @@ class RecipeProbeTest {
     private static CraftingRecipe recipe(List<Ingredient> ings, ItemStack result) {
         return new CraftingRecipe() {
             @Override public boolean matches(CraftingInput input, Level level) { return false; }
-            @Override public ItemStack assemble(CraftingInput input, HolderLookup.Provider registries) {
+            @Override public ItemStack assemble(CraftingInput input) {
                 return result;
             }
+            // 26.1:group()/showNotification() 由带默认实现变为抽象——按原版默认补上
+            @Override public String group() { return ""; }
+            @Override public boolean showNotification() { return true; }
             @Override public PlacementInfo placementInfo() {
                 // 1.21.2+ 输入表经 PlacementInfo 暴露;坏配方的 null 就在这一层还 null
                 return ings == null ? null : PlacementInfo.create(ings);

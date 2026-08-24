@@ -1,17 +1,17 @@
 package com.dwinovo.numen.core.data;
 
 import java.util.concurrent.CompletableFuture;
-import net.fabricmc.fabric.api.datagen.v1.FabricDataOutput;
-import net.fabricmc.fabric.api.datagen.v1.provider.FabricTagProvider;
+import net.fabricmc.fabric.api.datagen.v1.FabricPackOutput;
+import net.fabricmc.fabric.api.datagen.v1.provider.FabricTagsProvider;
 import net.minecraft.core.HolderLookup;
 
 /**
  * Fabric-side block tag provider. Forwards to {@link ModBlockTagData} so the tag
  * content lives in {@code common/} and stays loader-agnostic.
  */
-public final class FabricModBlockTagsProvider extends FabricTagProvider.BlockTagProvider {
+public final class FabricModBlockTagsProvider extends FabricTagsProvider.BlockTagsProvider {
 
-    public FabricModBlockTagsProvider(FabricDataOutput output,
+    public FabricModBlockTagsProvider(FabricPackOutput output,
                                       CompletableFuture<HolderLookup.Provider> registries) {
         super(output, registries);
     }

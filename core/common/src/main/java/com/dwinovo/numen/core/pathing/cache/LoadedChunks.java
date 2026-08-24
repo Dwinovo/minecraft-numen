@@ -36,7 +36,7 @@ public final class LoadedChunks {
     /** The loaded chunk at the given chunk coordinates, or {@code null} if it wasn't loaded when this
      *  snapshot was taken (→ the reader treats it as unknown / AIR). */
     public LevelChunk at(int chunkX, int chunkZ) {
-        return chunks.get(ChunkPos.asLong(chunkX, chunkZ));
+        return chunks.get(ChunkPos.pack(chunkX, chunkZ));
     }
 
     /** Whether a block entity occupied {@code pos} when this snapshot was taken. Only meaningful for a

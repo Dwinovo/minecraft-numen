@@ -28,6 +28,7 @@ class ScaffoldMaterialsTest {
         try {
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
+            com.dwinovo.numen.core.testutil.McTestComponents.bindAll();
             booted = true;
         } catch (Throwable t) {
             booted = false;

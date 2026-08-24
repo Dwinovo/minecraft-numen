@@ -123,7 +123,7 @@ public final class PathCaches {
                 for (int dz = -RADIUS_CHUNKS; dz <= RADIUS_CHUNKS; dz++) {
                     int cx = ccx + dx;
                     int cz = ccz + dz;
-                    long key = ChunkPos.asLong(cx, cz);
+                    long key = ChunkPos.pack(cx, cz);
                     if (!map.containsKey(key)) {
                         LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
                         if (chunk != null) {

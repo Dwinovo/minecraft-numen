@@ -32,6 +32,7 @@ class FrozenToolSetThreadingTest {
         try {
             net.minecraft.SharedConstants.tryDetectVersion();
             net.minecraft.server.Bootstrap.bootStrap();
+            com.dwinovo.numen.core.testutil.McTestComponents.bindAll();
             booted = true;
         } catch (Throwable t) {
             booted = false;   // 环境无法引导——跳过,不判失败

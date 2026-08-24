@@ -2804,9 +2804,9 @@ public class CompanionGameTests {
 
     /** 图纸夹具从测试结构目录拷进蓝图目录(幂等)。 */
     private static void copyCottageFixture(ServerLevel level) throws Exception {
-        // 1.21.5:testStructuresDir 由 String 改成 Path
-        java.nio.file.Path src = StructureUtils.testStructuresDir
-                .resolve("japanese_cottage.litematic");
+        // 1.21.5:testStructuresDir 已经是 Path;26.1 拆成读/写两个字段,读走 source
+        java.nio.file.Path src =
+                StructureUtils.testStructuresSourceDir.resolve("japanese_cottage.litematic");
         java.nio.file.Files.copy(src,
                 com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer())
                         .resolve("japanese_cottage.litematic"),

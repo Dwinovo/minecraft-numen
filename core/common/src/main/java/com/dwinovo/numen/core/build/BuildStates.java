@@ -187,7 +187,7 @@ public final class BuildStates {
             net.minecraft.world.level.block.Block block) {
         // 耕地与土径是拿锄/锹在土上加工出来的。它们自述的是自己(那两件物品存在),
         // 但人手上没有"一块耕地"可放。
-        if (block instanceof net.minecraft.world.level.block.FarmBlock
+        if (block instanceof net.minecraft.world.level.block.FarmlandBlock
                 || block instanceof net.minecraft.world.level.block.DirtPathBlock) {
             return net.minecraft.world.item.Items.DIRT;
         }

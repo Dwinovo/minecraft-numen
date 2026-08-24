@@ -150,8 +150,8 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             if (job.placement instanceof RandomSpreadStructurePlacement spread) {
                 job.spread = spread;
                 job.seed = state.getLevelSeed();
-                job.centerRegX = Math.floorDiv(here.x, spread.spacing());
-                job.centerRegZ = Math.floorDiv(here.z, spread.spacing());
+                job.centerRegX = Math.floorDiv(here.x(), spread.spacing());
+                job.centerRegZ = Math.floorDiv(here.z(), spread.spacing());
                 job.maxRing = SEARCH_RADIUS_RINGS;
                 jobs.add(job);
             } else if (job.placement instanceof ConcentricRingsStructurePlacement rings) {
@@ -283,7 +283,7 @@ public final class LocateStructureCompanionTask extends AbstractCompanionTask<Lo
             if (res == StructureCheckResult.START_PRESENT) return true;
             // CHUNK_LOAD_NEEDED:生成判据已经点头了,只差排除区这一项。
             if (job.placement.isStructureChunk(
-                    sl.getChunkSource().getGeneratorState(), candidate.x, candidate.z)) {
+                    sl.getChunkSource().getGeneratorState(), candidate.x(), candidate.z())) {
                 return true;
             }
         }

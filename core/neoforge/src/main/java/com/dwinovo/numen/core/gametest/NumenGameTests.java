@@ -67,7 +67,11 @@ public final class NumenGameTests {
         String dir = System.getProperty("numen.gametest.structures");
         if (dir != null) {
             // 1.21.5:testStructuresDir 由 String 改成 Path
-            StructureUtils.testStructuresDir = java.nio.file.Paths.get(dir);
+            // 26.1:再拆成"读"(source,模板从这里加载)与"写"(target,导出落这里)两个字段。
+            // 我们这一份目录两头都用(读 .snbt 模板 + 读图纸夹具),原样两个都指过去。
+            java.nio.file.Path structures = java.nio.file.Paths.get(dir);
+            StructureUtils.testStructuresSourceDir = structures;
+            StructureUtils.testStructuresTargetDir = structures;
         }
 
         // 自带的实例类型 / 环境类型编解码器。两个都是 BuiltInRegistries 里的简单注册表,
@@ -77,7 +81,7 @@ public final class NumenGameTests {
         instanceTypes.register("function", () -> NumenTestInstance.CODEC);
         instanceTypes.register(modBus);
 
-        DeferredRegister<MapCodec<? extends TestEnvironmentDefinition>> envTypes =
+        DeferredRegister<MapCodec<? extends TestEnvironmentDefinition<?>>> envTypes =
                 DeferredRegister.create(Registries.TEST_ENVIRONMENT_DEFINITION_TYPE, Constants.MOD_ID);
         envTypes.register("batch", () -> NumenTestEnvironment.CODEC);
         envTypes.register(modBus);
@@ -96,7 +100,7 @@ public final class NumenGameTests {
 
     private static void onRegisterGameTests(RegisterGameTestsEvent event) {
         // 批次名 → 环境。用 LinkedHashMap 保住声明顺序,批次跑的先后与旧代一致。
-        Map<String, Holder<TestEnvironmentDefinition>> environments = new LinkedHashMap<>();
+        Map<String, Holder<TestEnvironmentDefinition<?>>> environments = new LinkedHashMap<>();
         List<Method> tests = new ArrayList<>();
 
         for (Method m : CompanionGameTests.class.getDeclaredMethods()) {
@@ -116,7 +120,7 @@ public final class NumenGameTests {
 
         for (Method m : tests) {
             NumenTest spec = m.getAnnotation(NumenTest.class);
-            Holder<TestEnvironmentDefinition> env = environments.computeIfAbsent(spec.batch(),
+            Holder<TestEnvironmentDefinition<?>> env = environments.computeIfAbsent(spec.batch(),
                     batch -> environmentFor(event, batch));
 
             String name = m.getName();
@@ -140,7 +144,7 @@ public final class NumenGameTests {
                 }
             });
 
-            TestData<Holder<TestEnvironmentDefinition>> data = new TestData<>(
+            TestData<Holder<TestEnvironmentDefinition<?>>> data = new TestData<>(
                     env,
                     Identifier.fromNamespaceAndPath(Constants.MOD_ID, spec.template()),
                     spec.timeoutTicks(),
@@ -154,8 +158,8 @@ public final class NumenGameTests {
                 tests.size(), environments.size());
     }
 
-    private static Holder<TestEnvironmentDefinition> environmentFor(RegisterGameTestsEvent event,
-                                                                   String batch) {
+    private static Holder<TestEnvironmentDefinition<?>> environmentFor(RegisterGameTestsEvent event,
+                                                                      String batch) {
         Identifier id = Identifier.fromNamespaceAndPath(Constants.MOD_ID, batch);
         if (NO_SETUP_BATCHES.contains(batch)) {
             // 空环境:与旧代"这个批次没有 @BeforeBatch"逐字等价。
