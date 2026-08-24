@@ -6,11 +6,11 @@
 
 [English](README.md) · [简体中文](README_CN.md)
 
-![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11-62B47A?style=flat-square)
-![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20NeoForge-DE7C36?style=flat-square)
-![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.1.2-62B47A?style=flat-square)
+![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
+![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-4B6BFB?style=flat-square)
-![Status](https://img.shields.io/badge/status-早期%20%2F%20愿景-A8731E?style=flat-square)
+![Status](https://img.shields.io/badge/status-Beta-A8731E?style=flat-square)
 
 ---
 
@@ -31,9 +31,15 @@ Numen： 拿到 64 个粗铁——要我熔了吗？
 
 ## 愿景
 
-让 AI 玩通原版，只是起点。
+Numen 已经是一个货真价实的 **agent**：你给一个目标，它自己拆解、自己规划、自己动手、自己从失败里纠错。原版生存里一个玩家会干的活，**它能替你干八成**——从开局撸树，到下矿、建造、战斗、熔炼、囤货，一路到进末地屠龙。
 
-Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动、应用能源（AE2）的存储网络、Mekanism 的工厂流水线……成千上万的玩家把无数个小时浇灌进这些系统。**Numen 的终极目标，是让 AI 通达这整个宇宙**——不只是看得懂，而是能亲手玩转：你说一句"给我建一套自动化铁工厂"，它能跨着机械动力和 AE2 把它真正搭出来。
+而这，只是起点。
+
+Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动、应用能源（AE2）的存储网络、Mekanism 的工厂流水线……成千上万的玩家把无数个小时浇灌进这些系统。**Numen 的下一个目标，是让 AI 亲手玩转这整个宇宙**：你说一句"给我建一套自动化铁工厂"，它能跨着机械动力和 AE2 把它真正搭出来。
+
+模组宇宙再往外，是**现实世界**。在 AI 眼里，"挖一块铁"和"发一条推特"是同一种东西——都只是一只手（下面"通达"一节会讲为什么）。半夜基地被苦力怕炸了个洞，它在 **Discord** 上 @ 你："家里出事了，我先把洞补上了"；造完一座城堡，它自己截图、配文、**发条推**炫耀；开直播，把弹幕接进来，观众一人一句指挥它干活；而通过 MCP，你电脑上的 Claude 也能反向伸手进游戏，把世界当成自己的沙盘——桥是双向的。**Minecraft 是离"完整世界"最近的地方，Numen 要把这个世界和现实彻底接通。**
+
+托着这一切的引擎，已经作为独立项目 [numen-api](https://github.com/Dwinovo/numen-api) 分离出来——agent loop、LLM 传输、工具调度、技能系统、假玩家身体，全部打包成一块任何 mod 都能踩上去的地基。你现在装的这个 mod，是这台引擎上跑的**第一个 agent**；同一块地基上还能长出会讨价还价的 NPC、有自己作息的村民、读得懂玩家话语的服务器管家、拿整个世界当考场的具身智能评测……**我们在做的，是 Minecraft 的 AI 层（the AI layer）**：让每一个 mod、每一种玩法，都能长出自己的智能。
 
 这条路很长，我们才刚上路。但方向，无比清晰。
 
@@ -52,6 +58,8 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 
 在这一切之上，**大脑跑在你自己的机器上**：agent loop 在 owner 的客户端、用 owner 的 API key 调 LLM，每个玩家各付各的用量，服主不必替所有人买单，你也不必上交 key。而且它**零第三方运行时依赖**——LLM 传输只用 JDK 的 `HttpClient` + Gson（毕竟 Java 的 AI 生态，你懂的，我只能手搓）。
 
+这层脚手架，如今是名副其实的**两层**：引擎（[numen-api](https://github.com/Dwinovo/numen-api)）只负责调度——把工具亮给模型、递送调用、把结果写回对话，对"工具到底干了什么"保持全盲；而你装的这个 mod（**numen-core**）是跑在引擎上的**内容包**——近三十个工具、十篇内置技能，拼成一个完整的 agent。引擎与内容分层意味着一件事：**Numen 自己的每一分能力，第三方开发者同样拿得到。**
+
 ## 通达
 
 让 AI 玩通原版只是开胃菜。我们真正想啃下的，是模组——这才是 Minecraft 的深水区。
@@ -68,9 +76,15 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 > 有些 mod，一篇 Skill 就够了：原版的双手已经够它伸，它缺的只是一份说明书。
 > 而机械动力、AE2、Mekanism 这种自成一个宇宙的大块头——先用 MCP 把它接进来，再用 Skill 教会它怎么玩。**接通 + 调教，合体即通达。**
 
-你叫得出名字的每一个 mod，AI 都能玩转。这是大饼，但每一块砖都在往上垒。
+更重要的是，这两件法宝**不再只握在我们手里**。引擎分离之后，任何 mod 作者都可以在自己的 mod 里注册工具、随 jar 附带技能——就像今天给 JEI 写一页配方集成那样，给 AI 写一份"我这个 mod 怎么玩"。适配不必等任何人排期，生态自己会生长（见下方"给开发者"）。
+
+这只手能伸的范围，比模组还要更远。AI 的每一只"手"（工具）都遵守同一份契约，而契约里刻意**一个 Minecraft 概念都没有**：一只手可以伸向矿脉，也可以伸向互联网——Discord、推特、直播弹幕、智能家居，上面"愿景"里那些画面，起点都只是一个普通的工具。
+
+你叫得出名字的每一个 mod、每一个连着网线的服务，AI 都能玩转。这是大饼，但每一块砖都在往上垒。
 
 ## 快速开始
+
+你在哪个版本玩，Numen 就在哪个版本等你：**Minecraft 1.20.1 ~ 26.1.2 共 11 个版本，横跨 Fabric / Forge / NeoForge 三家加载器**——从服务器钉子户的 1.20.1，到刚出炉的 26.1.2。
 
 1. **安装** mod（Fabric 端另需 [Fabric API](https://modrinth.com/mod/fabric-api)），启动一次。
 2. **填入 API key。** 按 **`G`** → **设置**，选 provider，粘贴你自己的 key（OpenAI、DeepSeek、Kimi、Qwen、豆包…… 任意 OpenAI 兼容后端都行）。
@@ -81,7 +95,7 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 
 ## 能做什么
 
-给它一个意图，它会自己拆成几十步动作、一口气干完——规划路线、选对工具、判断距离、随机应变，全程不用你盯着。
+给它一个意图，它会自己拆成几十步动作、一口气干完——规划路线、选对工具、判断距离、随机应变，全程不用你盯着。**这就是 agent 该有的样子：你说目标，它管过程。**
 
 - ⛏️ **干真活**——挖矿、伐木、采集、建造、精确放置与破坏、照配方手搓合成、用熔炉熔炼、把战利品分门别类塞进箱子。
 - 🧭 **真走位**——服务端寻路引擎：会搭桥、垫脚、搭柱上升、挖隧道、下挖楼梯、游泳。"去那个坐标"就是字面意思——哪怕一路挖到钻石层，或者从深井底自己凿一条路回地面。
@@ -96,12 +110,34 @@ Minecraft 真正的宇宙在模组里：机械动力（Create）的齿轮传动�
 
 两者叠着用，它就能从玩通原版，一路走向玩转整个模组宇宙。
 
+## 给开发者
+
+Numen 的引擎是一个独立、可依赖的项目：[numen-api](https://github.com/Dwinovo/numen-api)。它向你开放的，正是 numen-core 自己站着的那块地基——我们的 28 个工具、10 篇技能全部只用公共 API 写成，**没有任何私有通道**：
+
+- 🔧 **注册一个工具。** 实现 `NumenTool` 的四个方法（`name` / `description` / `parameterSchema` / `invoke`），丢进 `ToolRegistry`，你 mod 的能力就长在了 AI 的手上。契约里刻意**不含任何 Minecraft 概念**——怎么完成调用（同步、异步、发包、调外部服务）完全由工具自己做主。
+- 📖 **随 jar 附带技能。** 一句 `SkillRegistry.instance().declareBundled(root)`，你 jar 里的 `/skills` 目录就成了内置技能——玩家装上你的 mod，AI 自动学会怎么玩它；玩家 `config/numen/skills/` 里的同名技能永远优先，调教权始终在玩家手里。
+- 🏗️ **或者，造一个完全不同的 AI。** 假玩家身体、agent loop、LLM 传输、全套 UI 都是公共地基——AI NPC、剧情角色、服务器管家，随你想象。
+
+```gradle
+repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
+dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.1-SNAPSHOT" }
+```
+
+面向集成的公共对接 API 采用 **MIT** 授权——写工具、写技能、写兼容，不必被 LGPL 牵着走。上手指南、完整示例与版本矩阵，见 [numen-api 的 README](https://github.com/Dwinovo/numen-api)。
+
 ## 路线图
 
-Numen 还很年轻。原版玩法已经跑得很顺；而"让 AI 通达整个模组宇宙"的故事，正一行行被写出来。我们想去的地方：
+Numen 还很年轻，但地基已经浇好了两大块：
+
+- ✅ **全版本、全加载器。** Minecraft 1.20.1 ~ 26.1.2 共 11 个版本，Fabric / Forge / NeoForge——已经做到了。
+- ✅ **引擎分离（numen-api）。** 工具契约与技能注册已对所有开发者开放。
+
+接下来想去的地方：
 
 - **为大模组接通（MCP）。** 机械动力、AE2、Mekanism 这些自成宇宙的科技 mod，专门的 MCP 兼容模块会把它们的内部结构接进 AI 的感官与双手。`inspect_block_storage` 那一眼透视，是第一块砖。
 - **长成一座技能图书馆（Skill）。** 让"教 AI 玩一个新 mod"简单到只需写一篇 Markdown，由社区共建共享——和 MCP 叠着用，就能把 AI 从"接通"一路带到"精通"。
+- **把现实世界接进来。** Discord 汇报、社交账号、弹幕指挥、MCP 双向桥——它的手，伸出游戏之外。
+- **公共 API 走向 1.0。** 随着第一批第三方集成落地，把工具与技能契约打磨到敢做稳定性承诺。
 - **越玩越像个老玩家。** 更深的世界记忆与长程规划。
 
 欢迎贡献代码、提交技能、做兼容实验。这是一张敞开的蓝图——**也是一份正在被兑现的邀请函。**
@@ -110,6 +146,6 @@ Numen 还很年轻。原版玩法已经跑得很顺；而"让 AI 通达整个模
 
 想自己构建、看完整工具清单或架构设计？都在源码里——从 `common/src/main/java/com/dwinovo/numen/` 看起。
 
-**授权**（参照 AE2 拆分）：源代码采用 [LGPL-3.0](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE)——你分发的修改版必须以同协议继续开源。面向兼容模块 / MCP 桥接的**公共对接 API**（即将提供）采用 [MIT](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE-API)，让任何人都能自由地写 mod 兼容。美术与资源为 [保留所有权利](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE-ASSETS)，"Numen" / "言出法随" 名称亦予保留。基于 [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template) 构建。
+**授权**（参照 AE2 拆分）：源代码采用 [LGPL-3.0](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE)——你分发的修改版必须以同协议继续开源。面向兼容模块 / MCP 桥接的**公共对接 API**（已随 [numen-api](https://github.com/Dwinovo/numen-api) 提供）采用 [MIT](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE-API)，让任何人都能自由地写 mod 兼容。美术与资源为 [保留所有权利](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE-ASSETS)，"Numen" / "言出法随" 名称亦予保留。基于 [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template) 构建。
 
 寻路的**规划层**基于启发式搜索文献实现：加权 A*、预算化的部分路径提交、以及 RTAA* 式跨段启发学习（Koenig & Likhachev, *Real-Time Adaptive A\**, AAMAS 2006），附独立于游戏的单元测试。**路径跟随层**（沿计划路径的进度追踪与偏差恢复）参考机器人学与游戏 AI 的路径跟随文献：Pure Pursuit 前瞻点跟随（Coulter, *Implementation of the Pure Pursuit Path Tracking Algorithm*, CMU-RI-TR-92-01, 1992）、参数连贯（coherence）定位（Millington, *AI for Games*），以及 Recast/Detour 走廊跟随与 ROS 2 Nav2 进度检查的工业实践。**执行层**与 [Baritone](https://github.com/cabaletta/baritone) 的根本区别在于运行位置：Baritone 是纯客户端模组、操控本机玩家；Numen 驱动的是**服务端假玩家**，移动/挖掘/放置全部经服务端 API 实现——设计思路上借鉴了其公开机制，**未复制、移植或改写其任何源码**。本项目代码采用 LGPL-3.0 属自主选择，与 Baritone（同为 LGPL-3.0）无衍生关系。

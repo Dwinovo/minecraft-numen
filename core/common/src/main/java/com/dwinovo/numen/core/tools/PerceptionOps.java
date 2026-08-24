@@ -1,0 +1,164 @@
+package com.dwinovo.numen.core.tools;
+
+import com.dwinovo.numen.entity.NumenPlayer;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonNull;
+import com.google.gson.JsonObject;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Registry;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
+import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.phys.Vec3;
+
+/**
+ * Perception tool implementations — the business half of {@code InspectBlockTool},
+ * {@code GetOwnerStatusTool} and {@code GetWorldInfoTool}, which own the LLM-facing
+ * name / description / schema and delegate here.
+ */
+public final class PerceptionOps {
+
+    /** Vanilla {@code block_interaction_range} for players is 4.5. */
+    private static final double REACH_SQR = 4.5 * 4.5;
+
+    @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() carries Mojang's
+                                     // "deprecated for override" marker, not phased out.
+    public String inspectBlock(int x,
+int y,
+int z,
+                               NumenPlayer self) {
+        BlockPos pos = new BlockPos(x, y, z);
+        BlockState state = self.level().getBlockState(pos);
+
+        JsonObject root = new JsonObject();
+        root.addProperty("x", x);
+        root.addProperty("y", y);
+        root.addProperty("z", z);
+        root.addProperty("block", BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString());
+        // Block-state properties (e.g. end_portal_frame's has_eye/facing, so the
+        // model can tell which of the 12 frames still need an ender_eye; stairs
+        // facing; etc.). Omitted when the block has no properties.
+        if (!state.getProperties().isEmpty()) {
+            JsonObject props = new JsonObject();
+            for (Property<?> p : state.getProperties()) {
+                props.addProperty(p.getName(), propValue(state, p));
+            }
+            root.add("properties", props);
+        }
+        root.addProperty("is_air", state.isAir());
+        root.addProperty("is_solid", state.isSolid());
+        root.addProperty("is_liquid", !state.getFluidState().isEmpty());
+
+        float hardness = state.getDestroySpeed(self.level(), pos);
+        root.addProperty("hardness", hardness);
+        root.addProperty("unbreakable", hardness < 0);
+
+        boolean needsTool = state.requiresCorrectToolForDrops();
+        root.addProperty("needs_correct_tool", needsTool);
+        ItemStack hand = self.getMainHandItem();
+        boolean handIsRightTool = hand.isCorrectToolForDrops(state);
+        root.addProperty("current_hand_correct_tool", handIsRightTool);
+
+        if (!state.isAir() && hardness >= 0) {
+            float toolSpeed = hand.getDestroySpeed(state);
+            if (toolSpeed <= 0.0F) toolSpeed = 1.0F;
+            // Vanilla rule: a block that doesn't require the correct tool
+            // always uses the fast divisor.
+            boolean fast = !needsTool || handIsRightTool;
+            float divisor = fast ? 30.0F : 100.0F;
+            int ticks = hardness == 0.0F
+                    ? 1
+                    : Math.max(1, (int) Math.ceil(hardness * divisor / toolSpeed));
+            root.addProperty("estimated_mining_ticks", ticks);
+        }
+
+        Vec3 center = Vec3.atCenterOf(pos);
+        double distSqr = self.distanceToSqr(center);
+        root.addProperty("distance_to_me", Math.sqrt(distSqr));
+        root.addProperty("in_reach", distSqr <= REACH_SQR);
+
+        return root.toString();
+    }
+
+    /** Serialized value of one block-state property (e.g. "true", "north"). */
+    private static <T extends Comparable<T>> String propValue(BlockState state, Property<T> p) {
+        return p.getName(state.getValue(p));
+    }
+
+    public String getOwnerStatus(NumenPlayer self) {
+        JsonObject root = new JsonObject();
+        java.util.UUID ownerUuid = self.getOwnerUuid();
+        if (ownerUuid == null) {
+            root.addProperty("online", false);
+            root.addProperty("message", "no owner (untamed)");
+            return root.toString();
+        }
+        root.addProperty("owner_uuid", ownerUuid.toString());
+
+        // Server-wide resolution: vanilla getOwner() is scoped to the PET's
+        // level and would report a cross-dimension owner as "offline".
+        Player player = self.resolveOwnerPlayer();
+        if (player == null) {
+            root.addProperty("online", false);
+            root.addProperty("message", "owner offline");
+            return root.toString();
+        }
+
+        root.addProperty("online", true);
+        root.addProperty("name", player.getName().getString());
+        root.addProperty("hp", player.getHealth());
+        root.addProperty("max_hp", player.getMaxHealth());
+        root.addProperty("hunger", player.getFoodData().getFoodLevel());
+        root.addProperty("saturation", player.getFoodData().getSaturationLevel());
+
+        JsonObject pos = new JsonObject();
+        pos.addProperty("x", player.getX());
+        pos.addProperty("y", player.getY());
+        pos.addProperty("z", player.getZ());
+        root.add("position", pos);
+
+        boolean sameDimension = self.level().dimension().equals(player.level().dimension());
+        root.addProperty("same_dimension", sameDimension);
+        root.addProperty("owner_dimension", player.level().dimension().location().toString());
+        if (sameDimension) {
+            root.addProperty("distance_to_me", self.distanceTo(player));
+        } else {
+            root.addProperty("note", "owner is in a different dimension — their "
+                    + "position is in THAT dimension's coordinates, not yours");
+        }
+        root.addProperty("main_hand", itemKey(player.getMainHandItem()));
+        root.addProperty("off_hand", itemKey(player.getOffhandItem()));
+
+        return root.toString();
+    }
+
+    private static String itemKey(ItemStack stack) {
+        if (stack.isEmpty()) return "minecraft:air";
+        return BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+    }
+
+    public String getWorldInfo(NumenPlayer self) {
+        var level = self.level();
+
+        JsonObject root = new JsonObject();
+        root.addProperty("dimension", level.dimension().location().toString());
+        root.addProperty("game_time", level.getLevelData().getGameTime());
+        root.addProperty("is_bright_outside", level.isDay());
+        root.addProperty("is_dark_outside", level.isNight());
+
+        String weather;
+        if (level.isThundering()) weather = "thunder";
+        else if (level.isRaining()) weather = "rain";
+        else weather = "clear";
+        root.addProperty("weather", weather);
+
+        return root.toString();
+    }
+}

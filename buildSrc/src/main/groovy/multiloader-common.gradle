@@ -34,29 +34,8 @@ tasks.withType(JavaCompile).configureEach {
 
 repositories {
     mavenCentral()
-    // DEV MACHINES: resolve numen-api from the LOCAL numen-maven working tree when it
-    // exists as a sibling checkout — `./gradlew publish` in numen-api lands there
-    // directly, so the debug loop (publish → build → deploy) needs no push and no
-    // network. Declared FIRST so it wins; SNAPSHOT re-resolution is forced so every
-    // iteration picks the fresh jar. CI checkouts have no sibling numen-maven, so CI
-    // still resolves exclusively from the pushed remote. Formal releases: push
-    // numen-maven as before — the local tree and the remote are the same git repo.
-    def localNumenMaven = rootProject.projectDir.parentFile.toPath().resolve('numen-maven')
-    if (java.nio.file.Files.isDirectory(localNumenMaven)) {
-        maven {
-            name = 'numenLocalDebug'
-            url = "file:///${localNumenMaven.toString().replace('\\', '/')}"
-        }
-        configurations.configureEach {
-            resolutionStrategy.cacheChangingModulesFor(0, 'seconds')
-        }
-    }
-    // Published numen-api engine — always resolved from the public raw maven so
-    // this build (and CI) uses exactly what's been pushed, never a stale local copy.
-    maven {
-        name = 'numenRemote'
-        url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main'
-    }
+    // numen-api 已并入本仓 api/ 子树,以 project 依赖直连——本地 maven 中转与
+    // SNAPSHOT 缓存补丁均已随之退役。
     // https://docs.gradle.org/current/userguide/declaring_repositories.html#declaring_content_exclusively_found_in_one_repository
     exclusiveContent {
         forRepository {
@@ -71,14 +50,6 @@ repositories {
         name = 'BlameJared'
         url = 'https://maven.blamejared.com'
     }
-}
-
-// numen-api is consumed as a SNAPSHOT during co-development. Gradle caches
-// changing modules for 24h by default; drop that to 0 so a freshly republished
-// numen-api is re-resolved (and Loom re-remaps it) on the very next build —
-// no more stale-jar surprises when iterating on the engine.
-configurations.all {
-    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
 }
 
 sourcesJar {
@@ -118,9 +89,8 @@ processResources {
             'mod_id'                       : mod_id,
             'license'                      : license,
             'description'                  : project.description,
-            'forge_version'                : forge_version,
-            'forge_loader_version_range'   : forge_loader_version_range,
-            'forge_version_range'          : forge_version_range,
+            'neoforge_version'             : neoforge_version,
+            'neoforge_loader_version_range': neoforge_loader_version_range,
             'credits'                      : credits,
             'java_version'                 : java_version
     ]
@@ -129,7 +99,7 @@ processResources {
         key, value -> [(key): value instanceof String ? value.replace("\n", "\\\\n") : value]
     }
 
-    filesMatching(['META-INF/mods.toml']) {
+    filesMatching(['META-INF/mods.toml', 'META-INF/neoforge.mods.toml']) {
         expand expandProps
     }
 
