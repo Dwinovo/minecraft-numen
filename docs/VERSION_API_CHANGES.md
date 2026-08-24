@@ -404,9 +404,165 @@ controlBoat/dataSlots/allMessages+refreshTrimmedMessages/nibble)目标逐一对�
 1.21.5 字节码,全部还在。
 
 
-## 1.21.5 → 1.21.8
-<!-- 约 24 文件 -->
-_待移植时填写_
+## 1.21.5 → 1.21.8 ✓（已验证：并仓树双 loader 编译 + 出包 + datagen 四路 + 867 单测 + 65 条游戏内用例 ×3）
+
+
+**跨过 1.21.6/1.21.7**，含 1.21.6 的 GUI 深绘制 + IO 大改。构建旋钮：MC `1.21.8` / range `[1.21.8, 1.21.9)` /
+NeoForm `1.21.8-20250717.133445` / Fabric `0.136.1+1.21.8` / NeoForge `21.8.47`。
+
+### GUI 深绘制(api,1.21.6 GuiRenderState 重构)❗ 渲染第三震
+GuiGraphics 不再即时绘制:元素收集为 `GuiElementRenderState`,GuiRenderer 帧末统一
+批渲染(按 pipeline+textureSetup 分组,mesh 用**各管线自带的顶点格式**构建,只喂标准
+UBO)。自定义 uniform 通道彻底消失:
+```java
+// RoundRect:弃"flush 后自开 RenderPass 直绘",改自定义 GuiElementRenderState 提交:
+g.guiRenderState.submitGuiElement(state)         // guiRenderState/scissorStack 是 private
+//   → common AT(META-INF/accesstransformer.cfg) + fabric AW(numen_api.accesswidener) 开放,
+//     fabric.mod.json 需声明 "accessWidener";零 mixin
+// SDF 参数从 uniform 迁顶点属性(NEW_ENTITY 格式):UV0=局部偏移(线性插值),
+//   UV1=(半宽,半高)×16,UV2.x=圆角×16(flat varying);GLSL 迁 std140 UBO
+//   (DynamicTransforms/Projection,照抄 vanilla core/gui 的内联写法)
+// pose 变 Matrix3x2f(2D 仿射):顶点走 addVertexWith2DPose(pose,x,y,z);
+//   scissor 从 g.scissorStack.peek() 取,bounds=transformMaxBounds+intersection
+g.blitSprite(RenderType::guiTextured, …)   → g.blitSprite(RenderPipelines.GUI_TEXTURED, …)
+g.renderTooltip(font, st, mx, my)          → g.setTooltipForNextFrame(font, st, mx, my)
+g.renderComponentTooltip(font, list, x, y) → g.setComponentTooltipForNextFrame(font, list, x, y)
+camera.getPosition()                        → camera.position()
+// MultiLineEditBox 构造器包私有化 → builder()(setShowBackground(false) 可关原版方框底);
+//   自绘控件底只能走 Screen.renderBackground 底层通道(控件在 super.render 先画,视图压不到底)
+```
+
+### 存档 / IO(api,1.21.6 ValueInput/ValueOutput 重构)❗
+```java
+public void addAdditionalSaveData(CompoundTag)  → protected void addAdditionalSaveData(ValueOutput)
+public void readAdditionalSaveData(CompoundTag) → protected void readAdditionalSaveData(ValueInput)
+// store/read(key,CODEC) 同名可用。import net.minecraft.world.level.storage.ValueInput/ValueOutput
+getPlayerList().load(player)   → getPlayerList().load(player, ProblemReporter.DISCARDING)
+send(Packet, PacketSendListener, boolean) → send(Packet, ChannelFutureListener, boolean)  // io.netty
+```
+
+### 通用(core)
+```java
+player.serverLevel()  → player.level()   // 1.21.6 起 ServerPlayer.level() 协变返回 ServerLevel
+```
+
+### NeoForge loader
+```java
+@EventBusSubscriber(modid, bus = Bus.MOD)  → @EventBusSubscriber(modid)   // 总线合并,bus 属性删除
+onRenderLevel(RenderLevelStageEvent e){ if(getStage()!=…) return; } → onRenderLevel(RenderLevelStageEvent.AfterTranslucentBlocks e)
+PacketDistributor.sendToServer(payload)    → ClientPacketDistributor.sendToServer(payload)  // client.network
+```
+
+### 数据生成(core)
+```java
+getOrCreateTagBuilder(key)  → valueLookupBuilder(key)                       // Fabric
+extends net.minecraft.data.tags.ItemTagsProvider + 空 block-tag lookup
+    → extends net.neoforged.neoforge.common.data.ItemTagsProvider, super(output, lookup, MOD_ID)
+```
+
+### 树替换陷阱 ❗
+`git checkout <src> -- .` 不删除目标分支独有文件——替换后必须
+`comm -23 <(git ls-tree -r HEAD --name-only|sort) <(git ls-tree -r <src> --name-only|sort)`
+清点并 `git rm` 残留(本档 api 清了 14 个、core 清了 47 个旧 0.0.x 文件)。
+
+### 0.1.1 功能面移植追加(1.21.5 的十一个提交搬到 1.21.8 时新碰到的)
+
+上一档的整套适配(gametest 数据驱动、CompoundTag Optional 化、Inventory 私有化、
+snapTo、TicketType record、ClientInput moveVector)在本档**原样成立,一处未动**;
+47 条用例方法体与 8 个批次一字未改。本档新增的只有下面几条。
+
+**`ItemStack.parse` / `ItemStack.save` 双双删除** ❗(`BuildStates`)——这对便捷方法没了,
+读写改直接用它们自己的实现,语义一字不差:
+```java
+ItemStack.parse(registries, tag)
+    → ItemStack.CODEC.parse(registries.createSerializationContext(NbtOps.INSTANCE), tag)
+              .resultOrPartial()                       // 旧方法内部就是这句(外加一行日志)
+stack.save(registries)
+    → ItemStack.CODEC.encodeStart(registries.createSerializationContext(NbtOps.INSTANCE), stack)
+              .getOrThrow()                            // 空叠不允许编码,调用点先 filter 非空
+```
+
+**`Component.Serializer` 整个内部类删除** ❗(`BuildStates.hasClickEvent`)——文本组件的
+JSON 解码统一走 codec:
+```java
+Component.Serializer.fromJson(json, RegistryAccess.EMPTY)   // 返回 @Nullable MutableComponent
+    → ComponentSerialization.CODEC.parse(
+          RegistryAccess.EMPTY.createSerializationContext(JsonOps.INSTANCE),
+          JsonParser.parseString(json)).result()
+```
+**判据方向要留意**:这是"告示牌带点击事件就拒收"的安全判据,解不出来必须当作"有事件"
+(拒收)。旧代靠 `fromJson` 抛 `JsonParseException` 走 catch 落到 true;新代 codec 不抛异常、
+只返回失败的 `DataResult`,所以要显式 `if (component == null) return true;` 把这条路补回来
+——漏了就变成"解析失败 = 安全",安全判据整个反过来。
+
+**`CompoundTag` → `ValueInput` 的桥** ❗(`BuildCompanionTask`,摆设落位与方块实体装数据)
+——1.21.6 的 IO 重构把实体/方块实体的**读取入口**也换了,手上是 NBT 时要现包一层:
+```java
+EntityType.create(CompoundTag, level, reason) → EntityType.create(ValueInput, level, reason)
+EntityType.by(CompoundTag)                    → EntityType.by(ValueInput)
+be.loadWithComponents(CompoundTag, RegistryAccess) → be.loadWithComponents(ValueInput)
+// 桥:TagValueInput.create(ProblemReporter.DISCARDING, registries, tag)
+//    (反向是 TagValueOutput.createWithContext(...).buildResult())
+```
+
+**api 构件坐标:主仓 `common/build.gradle` 指着上一档的 artifactId** ❗——1.21.8 分支的
+基线里 fabric/neoforge 已经是 `numen-api-*-1.21.8`,唯独 common 还留着
+`numen-api-common-1.21.5`。上一档发过这个坐标,所以它能解析、也**照样编译得过**
+(实测:本档改回 1.21.5 依旧 BUILD SUCCESSFUL)——主仓 common 恰好没碰到两代之间
+签名有别的那几个 api 方法。也正因为如此它**毫无征兆**:编译不报错、跑测试不报错,
+主仓 common 却是拿另一代 MC 编出来的 api 类在编译,哪天用到 `NumenPlayer` 存档一类
+1.21.6 改过签名的成员就会突然炸,而且看不出跟坐标有关。三个 build.gradle 的
+artifactId 要逐个核对,不是只核对版本号。
+
+### 只在真机客户端才能目视验证的部分
+本档 api 侧的 GUI 深绘制(RoundRect 的 SDF 顶点属性化、圆角/描边/裁剪的实际观感、
+人设编辑框的圆角底与聚焦环、轮盘的缩放与呼吸动画)与头顶气泡的位姿,
+编译、mixin 目标(已 javap 逐条核对描述符)、datagen、gametest 都覆盖不到,
+只能开客户端看。
+
+
+### 1.21.8 落地实录（并仓迁移，0.1.1 → 0.1.2 功能面 = 1.21.1 b550494c）
+
+树落底 1.21.5 尖（78c0ec54）后单跳本档。上面整节（0.1.1 时代趟平的路）在并仓树上
+**全部原样成立**；本实录只记并仓/0.1.2 新碰到的。
+
+**同伴召唤冻死 gametest 服务器** ❗——1.21.8 的 `PlayerList.placeNewPlayer` 在建网络
+会话前新增 `ServerLevel.waitForChunkAndEntities(player.chunkPosition(), 1)`：阻塞等身体
+所在区块**连实体存储一起**就绪。两个事实叠出死锁：无 .dat 的新召唤在等待前被 vanilla
+先 snap 去世界出生点（等的是出生点区块，不是召唤点）；`managedBlock` 只在
+`haveTime()` 时轮询区块任务，gametest 的繁忙 tick 预算耗尽后区块加载永不推进——
+服务器线程从此停摆（线程转储：`MinecraftServer.waitForTasks` ← `waitForChunkAndEntities`
+← `placeNewPlayer`），且**间歇复现**（首轮 66 条全过、次轮冻死）。治法照 Carpet 假玩家
+的 `fixStartingPosition`：`NumenPlayer` 挂 `intendedSpawnPos`，新 mixin
+`MixinPlayerListCompanionSpawn` 注在 `waitForChunkAndEntities` 调用前把身体先站到召唤
+落点（主人身边/测试结构，区块必然已加载且实体就绪），等待条件当场满足。休眠原位
+苏醒（pos=null）不动，与真玩家登入未加载区块同一风险面，vanilla 口径。
+
+**AW 落位（并仓 loom 专属）** ❗——`core:fabric` 以 `namedElements` 直连消费
+`api:fabric` 时，loom 按 api 的 fabric.mod.json 声明**就地**找 `numen_api.accesswidener`；
+放 api/common 资源根（旧独立仓的位置）会让 core:fabric 配置期直接炸
+"Could not find"。AW 必须放 `api/fabric/src/main/resources/`（与 fabric.mod.json 同资源
+根），`accessWidenerPath` 也指这里；AT 照旧住 api/common 的 META-INF（common/neoforge
+的接线都是"文件存在即生效"，放对位置零改构建）。
+
+**0.1.2 功能面复核**（上面 0.1.1 追加节之外的新代码）：
+- 编辑卡/G 面板/绑定点这批新 UI 全程走 GuiGraphics 正路（fill/drawString/blitSprite/
+  enableScissor），无一处 flush/Tesselator/RenderPass 直绘残留,深绘制面机械替换即净；
+  `MultiLineEditBox` 在 0.1.2 **零调用**（人设编辑重构进编辑卡），builder 迁移整条免掉。
+- `player.serverLevel()` 在 0.1.2 树零调用点，core 通用条免掉。
+- 载具面：`isLocalInstanceAuthoritative` 的 final + isLocalClientAuthoritative/
+  isClientAuthoritative 双分支形态 1.21.5 与 1.21.8 一字不差，MixinEntityVehicleControl
+  原样成立；AbstractBoat 族、BoatAccessor(controlBoat) 同样未动。
+- 头顶气泡：`LivingEntityRenderer.render(LivingEntityRenderState,PoseStack,
+  MultiBufferSource,I)V` 签名未变，`PlayerRenderState.id` 仍在，PlayerRenderer 仍无
+  render override——挂载点不用挪。
+- 九只 mixin（skipPlayer/applyChunkTrackingView/send/play/controlBoat/dataSlots/
+  allMessages+refreshTrimmedMessages/nibble/updatePOIOnBlockStateChange）目标逐一对过
+  1.21.8 反编译源，全部还在。
+- `StreamCodec.composite` 上限扩到 11 字段（1.21.5 是 9）；`hasChunkAt` 两代同为
+  @Deprecated,非本档新增。datagen 四路产物与 1.21.5 树 committed 生成物零 diff。
+  gametest 日志的 3 条 `BlockAttachedEntity … invalid position: null` ERROR 与 1.21.5
+  分支逐条相同，非回归。运行时 gson 2.11.0 / slf4j-api 2.0.16 与 1.21.5 同。
 
 ## 1.21.8 → 1.21.10
 _待移植时填写_

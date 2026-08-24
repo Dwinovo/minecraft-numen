@@ -39,7 +39,7 @@ repositories {
 }
 
 dependencies {
-    // 与 MC 1.21.5 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
+    // 与 MC 1.21.8 运行时同版:游戏进程里由平台提供,发布 pom 里如实声明。
     api 'com.google.code.gson:gson:2.11.0'
     api 'org.slf4j:slf4j-api:2.0.16'
 
