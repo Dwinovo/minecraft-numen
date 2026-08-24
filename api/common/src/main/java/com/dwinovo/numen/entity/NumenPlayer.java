@@ -300,6 +300,16 @@ public final class NumenPlayer extends ServerPlayer {
 
     @Override
     public void tick() {
+        // 休眠:所在区块未加载就整刻不动——pad 失效(主人离线)时她本就该"闲置",这里把
+        // 闲置落实为不跑任何原版物理。26.1 起这是安全线不是优化:玩家类身体不受区块门控、
+        // 每刻必 tick,而原版 tick 里的方块读取(isInWall 等)会对未加载区块做同步加载,
+        // 同步加载的票据(UNKNOWN,可未载先过期)一刻后即失效——一具站在未加载区块里的
+        // 常驻 tick 身体,就是"同步加载→票过期→卸载→再加载"的每刻抽水机,任务队列只增
+        // 不减,足以把区块系统拖进 OOM(gametest 实测 5794 万条排队任务)。
+        if (level() instanceof ServerLevel lvl
+                && lvl.getChunkSource().getChunkNow(chunkPosition().x(), chunkPosition().z()) == null) {
+            return;
+        }
         // A fake player isn't auto-removed on death (no client to send a respawn packet), so it would
         // sit at 0 HP forever. Detect death once, hand off to the recoverable-death routine (stop the
         // brain, schedule a respawn at the owner), and skip the normal movement/AI tick for this corpse.

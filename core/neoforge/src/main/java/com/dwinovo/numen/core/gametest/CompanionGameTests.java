@@ -1527,6 +1527,7 @@ public class CompanionGameTests {
                                         + " have spent nothing, but " + left + " remain");
                     }
                 })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
                 .thenSucceed();
     }
 
@@ -1654,6 +1655,7 @@ public class CompanionGameTests {
                                         + item + " was set aside but " + left + " remain");
                     }
                 })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
                 .thenSucceed();
     }
 
@@ -1691,6 +1693,7 @@ public class CompanionGameTests {
         assertTrue(helper, whole != buildable,
                 "if these two ever agree this test has stopped proving anything —"
                         + " the offhand stack must actually be in play");
+        CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         helper.succeed();
     }
 
@@ -1747,6 +1750,7 @@ public class CompanionGameTests {
                             "the reason must be materials and must say what to gather, got: "
                                     + said);
                 })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
                 .thenSucceed();
     }
 
