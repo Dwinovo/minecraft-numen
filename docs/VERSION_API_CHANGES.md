@@ -247,6 +247,14 @@ minecraft.runs.configureEach {
     args '--mixin.config', 'numen_api.forge.mixins.json'
 }
 ```
+```groovy
+// ①b FG6 双输出共目录的任务竞态：api/forge 把 classes+resources 重定向进同一个
+//    build/sourcesSets/main，跨项目 classpath 的 builtBy 只挂 compileJava →
+//    :core:forge:compileJava 与 :api:forge:processResources 写/读同目录无依赖边，
+//    Gradle 8 验证器看调度顺序间歇性报 implicit_dependency 把构建直接判死。
+//    产出侧一行治好所有消费方（api/forge/build.gradle 重定向块之后）：
+tasks.named('compileJava') { dependsOn tasks.named('processResources') }
+```
 ```java
 // ② GameTest 夹具的三个 1.20.1 数据形态（1.21 形态写进去就是静默空数据）：
 //    旗帜花纹：Patterns 短哈希 + 染料序数（不是 patterns + 注册名/颜色名）

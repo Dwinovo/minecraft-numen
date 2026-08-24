@@ -104,3 +104,6 @@ sourceSets.each {
     it.output.resourcesDir = dir
     it.java.destinationDirectory = dir
 }
+// 共目录之后,跨项目 classpath 的 builtBy 只挂着 compileJava:把资源拷贝排在编译前,
+// 消费方(如 :core:forge:compileJava)拿到目录时两类内容都已就位,不再竞态。
+tasks.named('compileJava') { dependsOn tasks.named('processResources') }
