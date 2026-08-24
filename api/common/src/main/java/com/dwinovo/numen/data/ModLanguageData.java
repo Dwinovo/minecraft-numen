@@ -62,6 +62,8 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_PROXY              = "numen.gui.providers.proxy";
         public static final String GUI_PROVIDERS_PROXY_GLOBAL       = "numen.gui.providers.proxy.global";
         public static final String GUI_PROVIDERS_PROXY_HINT         = "numen.gui.providers.proxy.hint";
+        public static final String GUI_PROVIDERS_CTX                = "numen.gui.providers.ctx";
+        public static final String GUI_PROVIDERS_CTX_HINT           = "numen.gui.providers.ctx.hint";
         public static final String GUI_PROVIDERS_THINKING           = "numen.gui.providers.thinking";
         public static final String GUI_PROVIDERS_THINKING_AUTO      = "numen.gui.providers.thinking.auto";
         public static final String GUI_PROVIDERS_THINKING_OFF       = "numen.gui.providers.thinking.off";
@@ -503,6 +505,8 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_PROXY,             "Proxy (optional)");
         adder.add(Keys.GUI_PROVIDERS_PROXY_GLOBAL,      "Global proxy");
         adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port, blank = global");
+        adder.add(Keys.GUI_PROVIDERS_CTX,               "Context length (optional)");
+        adder.add(Keys.GUI_PROVIDERS_CTX_HINT,          "tokens; blank = auto by model");
         adder.add(Keys.GUI_PROVIDERS_THINKING,          "Reasoning");
         adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO,     "Auto");
         adder.add(Keys.GUI_PROVIDERS_THINKING_OFF,      "Off");
@@ -811,6 +815,8 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_PROXY,             "代理（可选）");
         adder.add(Keys.GUI_PROVIDERS_PROXY_GLOBAL,      "全局代理");
         adder.add(Keys.GUI_PROVIDERS_PROXY_HINT,        "host:port，留空跟随全局");
+        adder.add(Keys.GUI_PROVIDERS_CTX,               "上下文长度（可选）");
+        adder.add(Keys.GUI_PROVIDERS_CTX_HINT,          "tokens；留空按模型表自动");
         adder.add(Keys.GUI_PROVIDERS_THINKING,          "推理");
         adder.add(Keys.GUI_PROVIDERS_THINKING_AUTO,     "自动");
         adder.add(Keys.GUI_PROVIDERS_THINKING_OFF,      "关闭");

@@ -7,6 +7,7 @@ import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.event.EventQueue;
 import com.dwinovo.numen.event.EventTypes;
 import com.dwinovo.numen.event.JsonlJournal;
+import com.dwinovo.numen.agent.llm.CompactSplit;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
@@ -85,6 +86,11 @@ public final class EntityAgentLoop {
      * summarization call itself must still fit.
      */
     private static final int AUTO_COMPACT_BUFFER_TOKENS = 13_000;
+    /**
+     * 压缩时原文保留的近段预算(tokens,估算口径见 {@link CompactSplit})。参考 pi 的
+     * keepRecentTokens:摘要只替换更早的部分,主人刚说的话逐字跨过压缩边界。
+     */
+    private static final int KEEP_RECENT_TOKENS = 20_000;
     /** 自动整理的下限:短于这个数不值得自己动手。手动 {@code /compact} 不看它。 */
     private static final int MIN_COMPACT_MESSAGES = 8;
     /** 给目标评估器看的对话上限。够装下整个目标期间,又不至于把整段会话都发一遍。 */
@@ -104,8 +110,9 @@ public final class EntityAgentLoop {
      * Minecraft body must never forget: coordinates, inventory, lessons.
      */
     private static final String COMPACT_PROMPT = """
-            请将以上整段对话压缩成一份详细摘要。这份摘要将完全替代之前的对话历史，\
-            成为你后续行动的唯一记忆——任何没写进摘要的信息都会永久丢失，所以请把还会用到的信息全部保留。
+            请将以上对话（这是完整历史中较早的部分，最近的消息会原文保留、跟在摘要之后）\
+            压缩成一份详细摘要。这份摘要将完全替代这些较早的消息——任何没写进摘要的信息都会永久丢失，\
+            所以请把还会用到的信息全部保留。
 
             分两步完成：
 
@@ -296,8 +303,16 @@ public final class EntityAgentLoop {
      *       the next prompt doesn't create back-to-back user messages.</li>
      * </ul>
      */
-    /** 与自动压缩闸门同一口径的模型上下文窗口。 */
-    private static int modelWindow() {
+    /**
+     * 与自动压缩闸门同一口径的模型上下文窗口。真源是<b>这只同伴绑定的档案</b>
+     * ({@link com.dwinovo.numen.agent.llm.ProviderLibrary.Entry#contextWindow()}),
+     * 请求走哪份档案窗口就按哪份算;没有档案(遗留同伴)才回落旧的全局配置。
+     */
+    private int modelWindow() {
+        var entry = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerEntryId);
+        if (entry != null) {
+            return entry.contextWindow();
+        }
         return com.dwinovo.numen.agent.provider.ProviderRegistry.contextWindow(
                 com.dwinovo.numen.client.screen.LlmProviders.normalize(
                         com.dwinovo.numen.platform.Services.CONFIG.getProvider()),
@@ -1283,27 +1298,41 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * Fire the summarization call: full history + the compact prompt as the
-     * final user message, NO tools, a minimal system prompt (skills XML and the
-     * persona would only waste the very tokens we're trying to reclaim).
+     * Fire the summarization call: the OLDER span of the history + the compact
+     * prompt as the final user message, NO tools, a minimal system prompt (skills
+     * XML and the persona would only waste the very tokens we're trying to
+     * reclaim). 最近约 {@link #KEEP_RECENT_TOKENS} 的消息不进请求也不被替换——
+     * 它们原文跟在摘要之后(切分规则见 {@link CompactSplit})。整段都在近段预算内
+     * 时(基本只有手动 /compact 会遇到)退化为全量总结,只逐字保留末尾那句回答。
      */
     private void startCompaction(boolean auto) {
         compacting = true;
         compactChars.set(0);
-        List<ConvoState.Msg> request = new ArrayList<>(convo.snapshot());
+        CompactSplit.Split split = CompactSplit.byRecentBudget(convo.snapshot(), KEEP_RECENT_TOKENS);
+        final List<ConvoState.Msg> toSummarize;
+        final List<ConvoState.Msg> kept;
+        if (split.toSummarize().isEmpty()) {
+            toSummarize = new ArrayList<>(convo.snapshot());
+            kept = preservedTail();
+            toSummarize.removeAll(kept);
+        } else {
+            toSummarize = new ArrayList<>(split.toSummarize());
+            kept = split.kept();
+        }
+        List<ConvoState.Msg> request = new ArrayList<>(toSummarize);
         request.add(new ConvoState.Msg.User(COMPACT_PROMPT));
-        Constants.LOG.info("[numen-entity#{}] compaction started ({}, {} msgs)",
-                entityUuid, auto ? "auto" : "manual", request.size() - 1);
+        Constants.LOG.info("[numen-entity#{}] compaction started ({}, summarizing {} msgs, keeping {} verbatim)",
+                entityUuid, auto ? "auto" : "manual", toSummarize.size(), kept.size());
         final int gen = turnGeneration;
         final long startMs = System.currentTimeMillis();
         client().chatStreaming(request, List.of(), COMPACT_SYSTEM_PROMPT, chunk -> {
             String delta = com.dwinovo.numen.client.voice.VoicePipeline.extractContentDelta(chunk);
             if (delta != null && !delta.isEmpty()) compactChars.addAndGet(delta.length());
         }).whenComplete((res, err) -> Minecraft.getInstance().execute(
-                () -> finishCompaction(gen, auto, startMs, res, err)));
+                () -> finishCompaction(gen, auto, startMs, kept, res, err)));
     }
 
-    private void finishCompaction(int gen, boolean auto, long startMs,
+    private void finishCompaction(int gen, boolean auto, long startMs, List<ConvoState.Msg> kept,
                                   NumenLlmClient.ChatResult res, Throwable err) {
         if (gen != turnGeneration) {
             Constants.LOG.info("[numen-entity#{}] discarding interrupted compaction (gen {} != {})",
@@ -1326,11 +1355,9 @@ public final class EntityAgentLoop {
 
         tokens.add(res.freshTokens());   // 压缩调用同样烧 token,计入累计
         String wrapped = SUMMARY_HEADER + summary.strip();
-        // The summary is lossy, but the very next prompt is usually a follow-up
-        // to the model's LAST reply ("那第三点展开讲讲") — so that reply crosses
-        // the boundary VERBATIM, not summarized. Same as Claude Code's
-        // preservedMessages whitelist: far history lossy, last output lossless.
-        List<ConvoState.Msg> preserved = preservedTail();
+        // 近段原文跨过压缩边界(startCompaction 切好的那份):压缩只在空闲时跑,期间
+        // compacting 闸挡住新回合,历史不会在等待摘要的路上变化。
+        List<ConvoState.Msg> preserved = kept;
         // Accounting for the boundary line (Claude Code's compactMetadata):
         // the summarization call's own prompt_tokens IS the exact size of the
         // history being compacted — more precise than the previous turn's count.
@@ -1400,26 +1427,9 @@ public final class EntityAgentLoop {
      * matters is that the auto gate fires AT ALL without a usage frame.
      */
     private static int estimateContextTokens(List<ConvoState.Msg> history) {
-        long cjk = 0, ascii = 0;
-        for (ConvoState.Msg msg : history) {
-            String text = switch (msg) {
-                case ConvoState.Msg.User u -> u.content();
-                case ConvoState.Msg.Tool t -> t.content();
-                case ConvoState.Msg.Assistant a -> {
-                    StringBuilder sb = new StringBuilder(
-                            a.turn().content() == null ? "" : a.turn().content());
-                    for (LlmToolCall tc : a.turn().toolCalls()) {
-                        sb.append(tc.name()).append(tc.arguments());
-                    }
-                    yield sb.toString();
-                }
-            };
-            if (text == null) continue;
-            for (int i = 0; i < text.length(); i++) {
-                if (text.charAt(i) > 0x2E7F) cjk++; else ascii++;
-            }
-        }
-        return (int) (cjk + ascii / 4 + history.size() * 8L) + ESTIMATED_FIXED_OVERHEAD_TOKENS;
+        // 字尺只有一把:与压缩切分共用 CompactSplit 的估算(CJK ~1 token/字、ASCII ~4 字符/token、
+        // 每条 8 token 结构开销),这里只加系统提示/工具表的固定开销。
+        return CompactSplit.estimateTokens(history) + ESTIMATED_FIXED_OVERHEAD_TOKENS;
     }
 
     /**

@@ -173,13 +173,14 @@ public final class SettingsView {
 
     private void onProfileSave(ProfileFormPanel.Draft d) {
         var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
+        int ctx = parseCtx(d.ctx);
         if (providerEditId != null) {
             lib.update(new com.dwinovo.numen.agent.llm.ProviderLibrary.Entry(
                     providerEditId, d.name.trim(), d.provider, d.model.trim(),
-                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort, d.proxy.trim()));
+                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort, d.proxy.trim(), ctx));
         } else {
             lib.create(d.name.trim(), d.provider, d.model.trim(),
-                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort, d.proxy.trim());
+                    d.apiKey.trim(), d.baseUrl.trim(), d.reasoningEffort, d.proxy.trim(), ctx);
         }
         addingProvider = false;
         providerEditId = null;
@@ -992,7 +993,18 @@ public final class SettingsView {
         providerDraft.baseUrl = e.baseUrl() == null ? "" : e.baseUrl();
         providerDraft.reasoningEffort = e.reasoningEffort() == null ? "" : e.reasoningEffort();
         providerDraft.proxy = e.proxy() == null ? "" : e.proxy();
+        providerDraft.ctx = e.ctx() > 0 ? String.valueOf(e.ctx()) : "";
         host.rebuild();
+    }
+
+    /** 档案的上下文长度输入:空/非数字/非正数一律 0(= 按模型表自动)。 */
+    private static int parseCtx(String raw) {
+        try {
+            int v = Integer.parseInt(raw == null ? "" : raw.trim());
+            return Math.max(0, v);
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     // ---- MCP section: external server list with a live on/off switch per row ----

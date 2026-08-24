@@ -41,6 +41,8 @@ public final class ProfileFormPanel {
         public String apiKey = "";
         public String baseUrl = "";
         public String reasoningEffort = "";
+        /** 上下文长度(tokens);空 = 按模型表自动。 */
+        public String ctx = "";
         public String proxy = "";
     }
 
@@ -60,7 +62,7 @@ public final class ProfileFormPanel {
     private Draft draft = new Draft();
     private List<ProviderRegistry.Provider> sites = List.of();
 
-    private TextField nameField, keyField, modelField, baseUrlField, proxyField;
+    private TextField nameField, keyField, modelField, baseUrlField, proxyField, ctxField;
     private Dropdown sitePick, modelDropdown, thinkingPick;
     private Button modelBackBtn;
     private Label thinkingLabel;
@@ -135,6 +137,14 @@ public final class ProfileFormPanel {
         ry = label(x, ry, "numen.gui.settings.base_url");
         baseUrlField = ui.add(new TextField(draft.baseUrl, v -> draft.baseUrl = v));
         baseUrlField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH;
+
+        // 上下文长度:自定义端点/表里没有的模型才需要填;空着按模型表走,查不到 64k。
+        // 压缩闸门与面板水位都按这个窗口算——填错太小会提前压缩,填错太大会顶爆上游。
+        ry = label(x, ry, ModLanguageData.Keys.GUI_PROVIDERS_CTX);
+        ctxField = ui.add(new TextField(draft.ctx, v -> draft.ctx = v).numeric()
+                .placeholder(t(ModLanguageData.Keys.GUI_PROVIDERS_CTX_HINT)));
+        ctxField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
         // 代理按档案走:国内外站点常需不同走线,留空跟随全局(/numen 里设)。

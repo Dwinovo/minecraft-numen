@@ -28,7 +28,23 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
      *  fallback of any kind). */
     public record Entry(String id, String name, String provider, String model,
                         String apiKey, String baseUrl, String reasoningEffort,
-                        String proxy) {}
+                        String proxy, int ctx) {
+
+        /**
+         * 这份档案的模型上下文窗口——<b>压缩闸门与水位显示的唯一口径</b>。
+         * 档案显式填了就用填的(自定义端点/表里没有的模型);没填按模型表查,
+         * 表里也没有落 {@code DEFAULT_CTX}。请求走哪份档案,窗口就按哪份档案算,
+         * 不再看旧的全局配置——那是"发请求用档案、算窗口用全局"的双源,DeepSeek
+         * 的 1M 窗口被按 64k 对待、五万 tokens 就开始压缩,病根即此。
+         */
+        public int contextWindow() {
+            if (ctx > 0) {
+                return ctx;
+            }
+            return com.dwinovo.numen.agent.provider.ProviderRegistry.contextWindow(
+                    com.dwinovo.numen.agent.provider.ProviderRegistry.canonicalId(provider), model);
+        }
+    }
 
     private static ProviderLibrary instance;
 
@@ -63,9 +79,10 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
 
     /** Create an entry — only the name is required; everything else may be blank. */
     public Entry create(String name, String provider, String model,
-                        String apiKey, String baseUrl, String reasoningEffort, String proxy) {
+                        String apiKey, String baseUrl, String reasoningEffort, String proxy,
+                        int ctx) {
         Entry e = new Entry(freshId("prov"), name, provider, model, apiKey, baseUrl,
-                reasoningEffort, proxy);
+                reasoningEffort, proxy, ctx);
         putAndSave(e);
         return e;
     }
@@ -107,7 +124,8 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
     protected Entry readEntry(JsonObject o) {
         return new Entry(strOrNull(o, "id"), strOrNull(o, "name"), strOrNull(o, "provider"),
                 strOrNull(o, "model"), strOrNull(o, "api_key"), strOrNull(o, "base_url"),
-                strOrNull(o, "reasoning_effort"), strOrNull(o, "proxy"));
+                strOrNull(o, "reasoning_effort"), strOrNull(o, "proxy"),
+                o.has("ctx") && o.get("ctx").isJsonPrimitive() ? o.get("ctx").getAsInt() : 0);
     }
 
     @Override
@@ -121,6 +139,7 @@ public final class ProviderLibrary extends JsonLibrary<ProviderLibrary.Entry> {
         if (nb(e.baseUrl())) o.addProperty("base_url", e.baseUrl());
         if (nb(e.reasoningEffort())) o.addProperty("reasoning_effort", e.reasoningEffort());
         if (nb(e.proxy())) o.addProperty("proxy", e.proxy());
+        if (e.ctx() > 0) o.addProperty("ctx", e.ctx());
         return o;
     }
 
