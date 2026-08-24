@@ -1,0 +1,90 @@
+package com.dwinovo.numen.task;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+
+import java.util.Map;
+
+/**
+ * Outcome a task hands back to the LLM agent loop. Serialised as the
+ * {@code content} of a {@code role:tool} message in the next chat completion
+ * request.
+ *
+ * <h2>Why four flags and not one</h2>
+ * "Did it work" is not one question. A move_to can succeed, fail (unreachable),
+ * run out of time, or get cancelled — and the model's next move differs in each
+ * case, so each gets its own field rather than being folded into a message the
+ * model has to parse. The {@code data} map carries whatever else that particular
+ * task knows (move_to reports {@code final_x/y/z}). Keys are lowercase
+ * snake_case; values must be Gson-serialisable.
+ *
+ * @param success      did the task achieve its goal? Distinct from
+ *                     {@code !timedOut && !interrupted}: a moveTo can succeed,
+ *                     fail (unreachable), time out, or get cancelled.
+ * @param message      short human-readable summary. Visible in agent logs and
+ *                     useful for the LLM to reason about what happened
+ *                     ("path ended before reaching target").
+ * @param timedOut     whether the work ran out of time.
+ * @param interrupted  whether the work was cancelled (e.g. owner interrupt).
+ * @param data         task-specific structured payload. Empty map for no extras.
+ */
+public record TaskResult(boolean success,
+                         String message,
+                         boolean timedOut,
+                         boolean interrupted,
+                         Map<String, Object> data) {
+
+    private static final Gson GSON = new Gson();
+
+    public static TaskResult ok(String message, Map<String, Object> data) {
+        return new TaskResult(true, message, false, false, data);
+    }
+
+    public static TaskResult ok(String message) {
+        return new TaskResult(true, message, false, false, Map.of());
+    }
+
+    public static TaskResult fail(String message, Map<String, Object> data) {
+        return new TaskResult(false, message, false, false, data);
+    }
+
+    public static TaskResult fail(String message) {
+        return new TaskResult(false, message, false, false, Map.of());
+    }
+
+    public static TaskResult timeout(String message) {
+        return new TaskResult(false, message, true, false, Map.of());
+    }
+
+    public static TaskResult cancelled(String message) {
+        return new TaskResult(false, message, false, true, Map.of());
+    }
+
+    /**
+     * Render this result as the JSON string consumed by the LLM. The shape
+     * mirrors the field names exactly so a model trained on common
+     * tool-result conventions can read it without a custom system prompt.
+     */
+    public String toJson() {
+        JsonObject root = new JsonObject();
+        root.addProperty("success", success);
+        root.addProperty("message", message == null ? "" : message);
+        if (timedOut) root.addProperty("timed_out", true);
+        if (interrupted) root.addProperty("interrupted", true);
+        if (data != null && !data.isEmpty()) {
+            JsonObject dataObj = new JsonObject();
+            for (Map.Entry<String, Object> e : data.entrySet()) {
+                Object v = e.getValue();
+                if (v instanceof Number n) dataObj.addProperty(e.getKey(), n);
+                else if (v instanceof Boolean b) dataObj.addProperty(e.getKey(), b);
+                // 列表/映射按 JSON 展开:塞进去的结构必须以结构的样子到达模型,
+                // 落成 Java 的 toString 就成了它读不动的 [{k=v}]。
+                else if (v instanceof java.util.Collection<?> || v instanceof Map<?, ?>) {
+                    dataObj.add(e.getKey(), GSON.toJsonTree(v));
+                } else if (v != null) dataObj.addProperty(e.getKey(), v.toString());
+            }
+            root.add("data", dataObj);
+        }
+        return root.toString();
+    }
+}
