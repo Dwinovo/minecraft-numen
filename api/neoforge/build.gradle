@@ -20,7 +20,7 @@ neoForge {
             gameDirectory = this.mkdir(this.file("runs/client"))
         }
         data {
-            data() // NeoForge 21.1 (1.21.1) has no clientData() run type — the combined data() run + --all covers it
+            clientData() // MDG on NeoForge 1.21.4+ split the data run; clientData + --all still emits our providers
             gameDirectory = this.mkdir(this.file("runs/data"))
             // DataGen can be run by - "./gradlew :neoforge:runData" in Terminal.
             // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.

@@ -5,7 +5,6 @@ import java.util.concurrent.CompletableFuture;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.data.PackOutput;
 import net.neoforged.neoforge.common.data.BlockTagsProvider;
-import net.neoforged.neoforge.common.data.ExistingFileHelper;
 
 /**
  * NeoForge-side block tag provider. Forwards to {@link ModBlockTagData} so tag
@@ -14,9 +13,8 @@ import net.neoforged.neoforge.common.data.ExistingFileHelper;
 public final class ModBlockTagsProvider extends BlockTagsProvider {
 
     public ModBlockTagsProvider(PackOutput output,
-                                CompletableFuture<HolderLookup.Provider> lookupProvider,
-                                ExistingFileHelper existingFileHelper) {
-        super(output, lookupProvider, Constants.MOD_ID, existingFileHelper);   // 1.21.1 BlockTagsProvider needs the EFH
+                                CompletableFuture<HolderLookup.Provider> lookupProvider) {
+        super(output, lookupProvider, Constants.MOD_ID);   // 1.21.4 BlockTagsProvider dropped the EFH param
     }
 
     @Override
