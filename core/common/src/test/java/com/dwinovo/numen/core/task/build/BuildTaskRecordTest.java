@@ -115,7 +115,12 @@ class BuildTaskRecordTest {
         ServerPlayer p = (ServerPlayer) unsafe.allocateInstance(ServerPlayer.class);
         Field inventory = Player.class.getDeclaredField("inventory");
         inventory.setAccessible(true);
-        inventory.set(p, new Inventory(p));
+        // 1.21.5: 盔甲/副手迁入 EntityEquipment,Inventory 与实体共享同一实例
+        var equipment = new net.minecraft.world.entity.EntityEquipment();
+        Field equipmentField = net.minecraft.world.entity.LivingEntity.class.getDeclaredField("equipment");
+        equipmentField.setAccessible(true);
+        equipmentField.set(p, equipment);
+        inventory.set(p, new Inventory(p, equipment));
         Field foodData = Player.class.getDeclaredField("foodData");
         foodData.setAccessible(true);
         foodData.set(p, new FoodData());
@@ -155,7 +160,7 @@ class BuildTaskRecordTest {
         entityData.set(p, synched);
         synched.set(dataKey(net.minecraft.world.entity.LivingEntity.class, "DATA_HEALTH_ID"),
                 20.0f);   // 满血
-        p.getInventory().items.set(0, new net.minecraft.world.item.ItemStack(Blocks.OBSIDIAN.asItem()));
+        p.getInventory().getNonEquipmentItems().set(0, new net.minecraft.world.item.ItemStack(Blocks.OBSIDIAN.asItem()));
         return p;
     }
 
@@ -334,7 +339,7 @@ class BuildTaskRecordTest {
     @Test
     void buildContextAllowsTemporaryBlocksInAirTargetCells() {
         assumeTrue(booted, "Minecraft 引导不可用,跳过建造成本钉桩");
-        player.getInventory().items.set(1, new net.minecraft.world.item.ItemStack(Items.DIRT));
+        player.getInventory().getNonEquipmentItems().set(1, new net.minecraft.world.item.ItemStack(Items.DIRT));
         BlockPos pos = new BlockPos(3, 65, 7);
         BuildTaskRecord.Target target = new BuildTaskRecord.Target(Blocks.AIR,
                 Blocks.AIR.asItem(), pos, "air", null, null, null);

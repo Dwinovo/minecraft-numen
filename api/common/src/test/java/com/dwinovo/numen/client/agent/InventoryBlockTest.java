@@ -58,7 +58,7 @@ class InventoryBlockTest {
                 new net.minecraft.world.effect.MobEffectInstance(
                         net.minecraft.world.effect.MobEffects.POISON, 200, 0),
                 new net.minecraft.world.effect.MobEffectInstance(
-                        net.minecraft.world.effect.MobEffects.DAMAGE_RESISTANCE, 400, 1)), 0L);
+                        net.minecraft.world.effect.MobEffects.RESISTANCE, 400, 1)), 0L);
         assertTrue(block.contains("poison (10s left)"), block);
         assertTrue(block.contains("resistance 2 (20s left)"), block);
     }
