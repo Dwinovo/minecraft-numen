@@ -1,0 +1,41 @@
+package com.dwinovo.numen.client.ui;
+
+/**
+ * NumenUI 设计令牌:主题 = 一张全语义色表。组件只引用语义槽位
+ * (textPrimary/hover/...),永不硬编码色值——换主题、调配色都只动这里。
+ */
+public enum NumenTheme {
+    DARK,
+    LIGHT;
+
+    /** 全部语义槽位。新增控件先问"现有槽位够不够",不够才添——槽位膨胀即失控。 */
+    public record Colors(
+            int panelBg, int sectionBg, int divider,
+            int textPrimary, int textSecondary, int textMuted,
+            int accent, int danger, int success, int warning,
+            int inputBg, int inputBorder,
+            int hover, int selected,
+            int badgeBg, int badgeText,
+            int toastInfoBg, int toastWarnBg, int toastErrorBg, int toastText) {}
+
+    public Colors colors() {
+        return switch (this) {
+            case DARK -> new Colors(
+                    0xF0191A20, 0xFF23242B, 0xFF383A44,
+                    0xFFF0F1F4, 0xFFA9ADBB, 0xFF707585,
+                    0xFF5B9CFF, 0xFFE5534B, 0xFF4CBB5A, 0xFFD9A23C,
+                    0xFF272932, 0xFF414453,
+                    0xFF2E313B, 0xFF35507F,
+                    0xFF333644, 0xFFCDD2E0,
+                    0xF0203528, 0xF038301C, 0xF03A2321, 0xFFF0F1F4);
+            case LIGHT -> new Colors(
+                    0xF0F4F4F6, 0xFFFFFFFF, 0xFFDDDDE2,
+                    0xFF1E1E24, 0xFF55555E, 0xFF9090A0,
+                    0xFF3B78E7, 0xFFC7392F, 0xFF3E8E41, 0xFFB98617,
+                    0xFFECECEF, 0xFFCFCFD8,
+                    0xFFE6E6EB, 0xFFBDD3F7,
+                    0xFFE2E2E8, 0xFF3A3A44,
+                    0xF0E7F5EA, 0xF0FDF3D9, 0xF0FBE5E2, 0xFF1E1E24);
+        };
+    }
+}

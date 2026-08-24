@@ -1,0 +1,11 @@
+{
+  "name": "numen-tex",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes hyperframes@0.6.110 preview",
+    "check": "npx --yes hyperframes@0.6.110 lint && npx --yes hyperframes@0.6.110 validate && npx --yes hyperframes@0.6.110 inspect",
+    "render": "npx --yes hyperframes@0.6.110 render",
+    "publish": "npx --yes hyperframes@0.6.110 publish"
+  }
+}
