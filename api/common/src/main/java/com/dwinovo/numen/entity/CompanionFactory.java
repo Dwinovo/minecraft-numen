@@ -67,6 +67,12 @@ public final class CompanionFactory {
         // 显式落点全权负责。
         server.getPlayerList().placeNewPlayer(connection, player,
                 CommonListenerCookie.createInitial(profile, false));
+        // 原版在客户端上报"加载完成"之前把玩家判为全伤害无敌(isInvulnerableTo 的
+        // hasClientLoaded 门,新建连接自带 60 tick 宽限计时)。假玩家没有客户端,这个
+        // 上报永远不会来——和补 doTick() 同一件事:网络层漏掉的那一趟按原版原样补回来,
+        // 否则每次出生都带 3 秒无敌窗口(#56"假玩家伤害全免疫"就是这道门的形态)。
+        player.connection.handleAcceptPlayerLoad(
+                new net.minecraft.network.protocol.game.ServerboundPlayerLoadedPacket());
         // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
         // apply it AFTER the join. Same-level setPos via snapTo (1.21.5 renamed moveTo → snapTo) — NOT the
         // teleportTo(ServerLevel,…) dimension-travel overload, which fires EntityTravelToDimensionEvent
