@@ -726,8 +726,104 @@ Transfer 重写、提交式管线形态整搬/照抄成立。本档并仓树**�
 负结果与陷阱清单。语言键 key.category.numen_api.companions 由 datagen 语言源与
 Category 注册两头同改,生成物核对含新键。
 
-## 1.21.10 → 1.21.11
-_待移植时填写_
+## 1.21.10 → 1.21.11 ✓（已验证：并仓树双 loader 编译 + 出包 + datagen 四路 + 867 单测 + 65 条游戏内用例 ×3）
+
+构建旋钮:MC `1.21.11` / range `[1.21.11, 1.22)` / NeoForm `1.21.11-20251209.172050` /
+Fabric `0.139.5+1.21.11` / NeoForge `21.11.42`。运行时库跟着跳了一档:
+gson `2.13.2` / slf4j-api `2.0.17`(ai/build.gradle 的"与 MC 运行时同版"声明要跟表,
+1.21.10 还是 2.11.0/2.0.16——错了不报错,launcher manifest 是唯一真源)。
+
+### Mojang 大改名（机械替换但要逐点确认）❗
+```java
+ResourceLocation → Identifier                      // 类改名,包仍 net.minecraft.resources,工厂方法全保留;并仓树 165 处/53 文件
+ResourceKey.location() → identifier()              // 19 处:dimension().location()/ref.key().location()/unwrapKey k.location()/builtInRegistryHolder().key().location()
+net.minecraft.Util → net.minecraft.util.Util       // 迁包,28 处(import 与全限定名都要改)
+RenderType → net.minecraft.client.renderer.rendertype.RenderTypes   // 移包+复数化;lines()/text() 同名保留,2 文件
+```
+- `SkillRegistry` 的 `info.location()` 是自有 record 访问器(返回 `Path`),3 处**不要**跟着替换——
+  逐调用点看接收者是不是 ResourceKey。
+- **脚本替换必须大小写敏感** ❗:PowerShell `-replace` 默认不敏感,`net\.minecraft\.Util`
+  会咬到 `net.minecraft.util.*`(炸出 `util.Util.FormattedCharSequence`),`monster\.Zombie`
+  会咬到刚替换出的 `monster.zombie.` 新包名。用 `[regex]::Replace`,替换完全树复核。
+- **排除 gradle build 目录的过滤器别误伤源码包** ❗:`core/build/`、`core/task/build/`
+  两个蓝图建造包就叫 build,`-notmatch '\\build\\'` 会把它们整包漏掉(BuildPalette/
+  BuildShapes 的全限定 ResourceLocation 因此漏网,编译才现形)。
+
+### GUI（api）
+```java
+AbstractButton.renderWidget → renderContents       // 本树零触点:NumenUI 不走 AbstractButton,EditBox 系仍 renderWidget
+KeyMapping 构造第 4 参 Category                     // 上档已就位,确认即可
+ShapeRenderer.renderLineBox 整个删除                // → PathDebugRenderer 12 棱 seg() 自绘(seg 本来就有,drawBox 改内联 12 条)
+```
+
+### 实体类包重组（api/core,共 8 文件）
+```java
+net.minecraft.world.entity.monster.Spider          → monster.spider.Spider          // CaveSpider 同包(本树未用)
+net.minecraft.world.entity.monster.Zombie          → monster.zombie.Zombie          // ❗路书外:本体也迁了(gametest 在用)
+net.minecraft.world.entity.monster.ZombifiedPiglin → monster.zombie.ZombifiedPiglin
+net.minecraft.world.entity.vehicle.AbstractBoat    → vehicle.boat.AbstractBoat      // ❗路书外:旧树只用具体类 Boat 没趟过;instanceof 语义不漂移
+// Creeper/EnderMan/Enemy/Monster 未动
+```
+
+### 玩家权限等级换成权限集 ❗（api:Companions.applyGameMode、NumenScreen ×2）
+```java
+player.hasPermissions(2)
+    → player.permissions().hasPermission(net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER)
+// 客户端 LocalPlayer 同一写法(原版已同步);判据语义不变:创造档仍是「有 gamemode 权限 或 主人在创造」放行。
+```
+
+### 游戏规则迁包 + 规则对象化 ❗（core:NumenTestEnvironment）
+```java
+net.minecraft.world.level.GameRules → net.minecraft.world.level.gamerules.GameRules
+level.getGameRules().getRule(RULE_RANDOMTICKING).set(0, server)
+    → level.getGameRules().set(GameRules.RANDOM_TICK_SPEED, 0, server)   // 取值侧 getInt(RULE) → get(RULE)
+```
+不停摆就重演 1.21.8 的坑:图纸草方块被随机刻退化,「所有格同时就位」永远不到来。
+
+### 1.21.1 功能面首次趟到的两处（路书没列——旧 0.1.1 树无此代码,以反编译源为准）
+- **`DimensionType.ultraWarm()` 删除**(core:MLGChain)→ 环境属性表:
+  `level.environmentAttributes().getValue(EnvironmentAttributes.WATER_EVAPORATES, pos)`,
+  与原版 `BucketItem` 蒸发分支同源同判。
+- **`Player.BedSleepingProblem` 枚举 → record**(core:SleepOps/SleepOpsTest)——
+  `record BedSleepingProblem(@Nullable Component message)`:`getMessage()` → `message()`,
+  `name()`/`values()` 没了;常量剩 TOO_FAR_AWAY/OBSTRUCTED/OTHER_PROBLEM/NOT_SAFE,
+  "白天不能睡"类拒绝改由 BED_RULE 环境属性 `asProblem()` 供文案(仍带原话);
+  null 文案只剩 OTHER_PROBLEM。测试改点名常量。
+
+### #56 两条症状在本树的判定 ❗
+- **假玩家伤害免疫**:根因是 1.21.x 的客户端加载门——`ServerPlayer.isInvulnerableTo`
+  含 `!connection.hasClientLoaded()`,新建连接自带 60 tick 宽限倒计时(在
+  `ServerPlayer.tick()` 里递减)。本树 NumenPlayer.tick 走 super.tick,计时会走完,
+  故只剩**每次出生 3 秒无敌窗口**;已在 CompanionFactory 出生时替客户端补
+  `handleAcceptPlayerLoad(new ServerboundPlayerLoadedPacket())` 上报,窗口归零。
+  `fall_damage_reaches_the_body` ×3 过。注意 vanilla 的 `markClientLoaded()` 是
+  **private**——NeoForge 补丁源里 public,又一例"反编译源是补丁后的"陷阱
+  (common 对 vanilla NeoForm 编译,得走 handleAcceptPlayerLoad 公开门)。
+- **传送门寻路**:本树判定链(canWalkThroughBlockState 无点名 →
+  `isPathfindable(LAND)` 默认 = 非整格碰撞 → 可通行)对 nether_portal 与 1.21.1
+  同判;NetherPortalBlock 两版都无 isPathfindable 覆写,blocksToAvoid 默认空。
+  旧树症状出自已退役引擎。测试套无传送门用例,穿门全程真机未验。
+
+### 同构负结果与免动项
+- `StreamCodec.composite` 上限 11 → 12 字段(本 record 9 个两版都装下,仅注释口径)。
+- vanilla `SoundInstance` 仍无 `getStream` 钩子(官方 mappings 证实),fabric
+  MixinSoundEngine 靶点原样;`Sound.getLocation()/getPath()` 未改名(SoundInstance
+  的 `getLocation()` 改成了 `getIdentifier()`,本树零触点)。
+- AT/AW 三条(guiRenderState/scissorStack/ScissorStack)原样;mixin 全家靶点在
+  (气泡 submit 四参、载具 isLocalInstanceAuthoritative 双分支与 1.21.10 一字不差)。
+- FMLLoader.getCurrent() 中转在 21.11.42 仍在;GuiRenderState/RoundRect 接口面零变化。
+- 夹具 .snbt 仍 DataVersion 3955,DFU 正向升到本代,不硬盖。
+- HitResult.getLocation()(Vec3)与大改名无关,别误替换。
+
+### 1.21.11 落地实录（并仓迁移,0.1.1 功能面 = 1.21.1 b550494c）
+
+树落底 1.21.10 尖(20afd821)后单跳本档。提交序列:树落底 → build 旋钮 → api →
+core → test(SleepOpsTest record 化) → fix(#56 加载上报) → build(ai 库对表)。
+双 loader 出包 + datagen 四路(生成物零漂移)+ 867 单测零跳过 + gametest
+"All 66 required tests passed" ×3 再 +1(修复后复验)。上一档整套适配原样成立,
+一处未动;api 构件坐标模板自动带版本。本档新趟出的都在上文:实体迁包比路书多
+两条(AbstractBoat/Zombie)、1.21.1 功能面首碰两处(ultraWarm/BedSleepingProblem)、
+#56 根因(hasClientLoaded 门)顺手修掉。
 
 ## 1.21.11 → 26.1.2
 _待移植时填写_
