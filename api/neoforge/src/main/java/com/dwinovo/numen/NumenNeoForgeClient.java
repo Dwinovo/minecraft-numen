@@ -17,8 +17,8 @@ import java.nio.file.Path;
  * Client entry point. 1.21.5 merged the mod and game event buses; registering
  * registration events (key mappings / GUI layers / reload listeners) on the mod bus
  * and the tick / world-render / disconnect hooks on {@code NeoForge.EVENT_BUS} from
- * the mod constructor still compiles and behaves identically (only the
- * {@code @EventBusSubscriber(bus=…)} attribute is deprecated), mirroring {@link NumenMod}.
+ * the mod constructor still compiles and behaves identically (1.21.8 removed the
+ * {@code @EventBusSubscriber(bus=…)} attribute outright), mirroring {@link NumenMod}.
  */
 @Mod(value = Constants.MOD_ID, dist = Dist.CLIENT)
 public class NumenNeoForgeClient {

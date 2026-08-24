@@ -13,7 +13,7 @@ import net.neoforged.neoforge.data.event.GatherDataEvent;
  * Outputs land in {@code neoforge/src/generated/resources/}, already wired into
  * the main resource source set by the subproject's {@code build.gradle}.
  */
-// 1.21.5 merged the buses (the bus attribute below is only deprecated); GatherDataEvent is
+// 1.21.5 merged the buses (1.21.8 removed the bus attribute outright); GatherDataEvent is
 // split into Client/Server variants since 1.21.4, which also dropped the ExistingFileHelper
 // from tag providers.
 @EventBusSubscriber(modid = Constants.MOD_ID)
