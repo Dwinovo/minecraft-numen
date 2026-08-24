@@ -26,6 +26,7 @@ import net.minecraft.network.chat.Component;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import net.minecraft.util.Mth;
 
 /**
  * The Settings tab of {@link com.dwinovo.numen.client.screen.NumenScreen}, extracted whole: a
@@ -531,7 +532,7 @@ public final class SettingsView {
         d.promptText = nv(e.promptText());
         d.textLang = nv(e.textLang());
         // 存储的是增益(0.2~2.0),表单显示 1~10 档。
-        d.volume = Math.round(Math.clamp(e.volume(), 0.2f, 2.0f) * 5.0f);
+        d.volume = Math.round(Mth.clamp(e.volume(), 0.2f, 2.0f) * 5.0f);
         voiceDraft = d;
         host.rebuild();
     }

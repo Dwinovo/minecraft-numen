@@ -1,11 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
@@ -29,20 +26,24 @@ import java.util.UUID;
  * {@code cause} is the vanilla death message ("X was slain by a zombie") for that tool result.
  */
 public record NumenDeathPayload(UUID entityUuid, String cause)
-        implements CustomPacketPayload {
+        implements NumenPayload {
 
-    public static final Type<NumenDeathPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_death"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, NumenDeathPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    UUIDUtil.STREAM_CODEC, NumenDeathPayload::entityUuid,
-                    ByteBufCodecs.STRING_UTF8, NumenDeathPayload::cause,
-                    NumenDeathPayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "numen_death");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUUID(entityUuid);
+        buf.writeUtf(cause);
+    }
+
+    public static NumenDeathPayload read(FriendlyByteBuf buf) {
+        return new NumenDeathPayload(buf.readUUID(), buf.readUtf());
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

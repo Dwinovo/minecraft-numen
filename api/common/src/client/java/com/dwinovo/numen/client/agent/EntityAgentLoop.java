@@ -711,11 +711,15 @@ public final class EntityAgentLoop {
         int budget = JUDGE_WINDOW_CHARS;
         for (int i = all.size() - 1; i >= 0 && budget > 0; i--) {
             ConvoState.Msg msg = all.get(i);
-            String line = switch (msg) {
-                case ConvoState.Msg.User u -> "owner/system: " + u.content();
-                case ConvoState.Msg.Assistant a -> "companion: " + a.turn().content();
-                case ConvoState.Msg.Tool t -> "tool result: " + t.content();
-            };
+            // Java 17:类型模式 switch 是预览特性,改 if/else instanceof
+            String line;
+            if (msg instanceof ConvoState.Msg.User u) {
+                line = "owner/system: " + u.content();
+            } else if (msg instanceof ConvoState.Msg.Assistant a) {
+                line = "companion: " + a.turn().content();
+            } else {
+                line = "tool result: " + ((ConvoState.Msg.Tool) msg).content();
+            }
             line = truncate(line, JUDGE_LINE_CHARS);
             lines.addFirst(line);
             budget -= line.length();
@@ -1402,18 +1406,20 @@ public final class EntityAgentLoop {
     private static int estimateContextTokens(List<ConvoState.Msg> history) {
         long cjk = 0, ascii = 0;
         for (ConvoState.Msg msg : history) {
-            String text = switch (msg) {
-                case ConvoState.Msg.User u -> u.content();
-                case ConvoState.Msg.Tool t -> t.content();
-                case ConvoState.Msg.Assistant a -> {
-                    StringBuilder sb = new StringBuilder(
-                            a.turn().content() == null ? "" : a.turn().content());
-                    for (LlmToolCall tc : a.turn().toolCalls()) {
-                        sb.append(tc.name()).append(tc.arguments());
-                    }
-                    yield sb.toString();
+            // Java 17:类型模式 switch 是预览特性,改 if/else instanceof
+            String text;
+            if (msg instanceof ConvoState.Msg.User u) {
+                text = u.content();
+            } else if (msg instanceof ConvoState.Msg.Tool t) {
+                text = t.content();
+            } else {
+                AssistantTurn turn = ((ConvoState.Msg.Assistant) msg).turn();
+                StringBuilder sb = new StringBuilder(turn.content() == null ? "" : turn.content());
+                for (LlmToolCall tc : turn.toolCalls()) {
+                    sb.append(tc.name()).append(tc.arguments());
                 }
-            };
+                text = sb.toString();
+            }
             if (text == null) continue;
             for (int i = 0; i < text.length(); i++) {
                 if (text.charAt(i) > 0x2E7F) cjk++; else ascii++;

@@ -34,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import net.minecraft.util.Mth;
 
 /**
  * Query tool implementations — the business half of {@code LookupRecipeTool},
@@ -51,7 +52,7 @@ public final class QueryExtraOps {
 double radius,
 String type_filter,
             NumenPlayer self) {
-        radius = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
+        radius = Mth.clamp(radius, MIN_RADIUS, MAX_RADIUS);
         String filter = readEnum("type_filter", type_filter,
                 List.of("hostile", "passive", "player", "all"));
 

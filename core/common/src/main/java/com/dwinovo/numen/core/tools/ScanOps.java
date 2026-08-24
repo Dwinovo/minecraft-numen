@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
+import net.minecraft.util.Mth;
 
 /**
  * The {@code scan_blocks} implementation — the business half of
@@ -31,7 +32,7 @@ public final class ScanOps {
 int radius,
 List<String> block_ids,
             NumenPlayer self, Consumer<String> reply) {
-        int r = Math.clamp(radius, MIN_RADIUS, MAX_RADIUS);
+        int r = Mth.clamp(radius, MIN_RADIUS, MAX_RADIUS);
         Set<Block> targets = ToolParse.parseBlocks(block_ids);
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("no valid block_ids provided");

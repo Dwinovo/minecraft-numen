@@ -17,6 +17,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.List;
 import java.util.function.Consumer;
+import net.minecraft.util.Mth;
 
 /**
  * 声线的编辑表单——NumenUI 版的瓤:后端下拉切换字段行(MiniMax 最多八行,
@@ -51,7 +52,7 @@ public final class VoiceFormPanel {
 
     /** 草稿 → 库条目(档位换算增益;试听与保存共用同一转换,试出来的就是存进去的)。 */
     public static VoiceLibrary.Entry entryOf(Draft d, String id, String name) {
-        float vol = Math.clamp(d.volume, 1, 10) / 5.0f;
+        float vol = Mth.clamp(d.volume, 1, 10) / 5.0f;
         return new VoiceLibrary.Entry(id, name, d.backend,
                 d.url.trim(), d.apiKey.trim(), d.groupId.trim(),
                 d.model.trim(), d.voice.trim(),
@@ -320,7 +321,7 @@ public final class VoiceFormPanel {
 
     /** 选型变了:行随之换(草稿字段全保);URL 只覆盖"空或还是旧默认"的值。 */
     private void onBackendPicked(int index) {
-        String sel = BACKENDS.get(Math.clamp(index, 0, BACKENDS.size() - 1));
+        String sel = BACKENDS.get(Mth.clamp(index, 0, BACKENDS.size() - 1));
         if (sel.equals(draft.backend)) return;
         if (draft.url.isBlank() || draft.url.equals(defaultUrl(draft.backend))) {
             draft.url = defaultUrl(sel);

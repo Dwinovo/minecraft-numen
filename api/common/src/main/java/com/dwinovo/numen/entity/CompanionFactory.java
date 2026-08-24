@@ -2,9 +2,7 @@ package com.dwinovo.numen.entity;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.network.CommonListenerCookie;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 
@@ -43,7 +41,7 @@ public final class CompanionFactory {
             profile.getProperties().put("textures", new com.mojang.authlib.properties.Property(
                     "textures", reg.skinValue(), reg.skinSig().isEmpty() ? null : reg.skinSig()));
         }
-        NumenPlayer player = new NumenPlayer(server, level, profile, ClientInformation.createDefault());
+        NumenPlayer player = new NumenPlayer(server, level, profile);
         FakeConnection connection = new FakeConnection();
         // Restore saved state (position, inventory, health, owner) before joining so the body is at its
         // real location as early as possible. (This explicit restore is kept because placeNewPlayer's own
@@ -54,8 +52,8 @@ public final class CompanionFactory {
         if (player.getOwnerUuid() == null) {
             player.setOwnerUuid(ownerUuid);
         }
-        server.getPlayerList().placeNewPlayer(connection, player,
-                CommonListenerCookie.createInitial(profile, false));
+        // 1.20.1: placeNewPlayer is 2-arg (no CommonListenerCookie — pre-configuration-phase).
+        server.getPlayerList().placeNewPlayer(connection, player);
         // An explicit pos (fresh summon, or respawn-at-owner) must WIN over whatever the .dat restored, so
         // apply it AFTER the join: placeNewPlayer internally re-applies the saved .dat, which would otherwise
         // clobber the spawn pos and send a died-then-revived companion back to its death location instead of
@@ -91,11 +89,15 @@ public final class CompanionFactory {
      */
     /** @return 载入的 .dat(供上层读 playerGameType 等玩家级字段);首次召唤无档返回 null */
     private static net.minecraft.nbt.CompoundTag loadPlayerData(MinecraftServer server, NumenPlayer player) {
-        // 1.21.5: PlayerList.load(player) returns Optional<CompoundTag> (predates the
-        // ValueInput IO refactor); Entity.load(CompoundTag) consumes it directly.
-        var maybe = server.getPlayerList().load(player);
-        maybe.ifPresent(player::load);
-        return maybe.orElse(null);
+        // 1.20.1: PlayerList.load(player) returns a nullable CompoundTag (predates both the
+        // Optional wrapper and the ValueInput IO refactor). It already applies the tag to the
+        // player internally and returns it; re-applying via Entity.load(CompoundTag) is a no-op-safe
+        // belt-and-braces restore of position/inventory for a hand-built fake player.
+        net.minecraft.nbt.CompoundTag tag = server.getPlayerList().load(player);
+        if (tag != null) {
+            player.load(tag);
+        }
+        return tag;
     }
 
     /** Save the companion's data and remove it from the world (dormancy). */

@@ -1,13 +1,11 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,7 +15,7 @@ import java.util.UUID;
  * {@code found=false} otherwise. The client drops them into
  * {@link ClientNumenLocations} for the roster panel / vitals strip to read.
  */
-public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomPacketPayload {
+public record NumenLocationsPayload(List<Snapshot> snapshots) implements NumenPayload {
 
     /**
      * Wire shape of one located (or not) companion. {@code loaded=false} with
@@ -43,40 +41,51 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
             return new Snapshot(uuid, true, false, x, y, z, dimension, 0, 0);
         }
 
-        // 1.21.4: StreamCodec.composite caps at 8 fields; this record has 9, so encode by hand.
-        static final StreamCodec<RegistryFriendlyByteBuf, Snapshot> CODEC =
-                StreamCodec.of(
-                        (buf, s) -> {
-                            UUIDUtil.STREAM_CODEC.encode(buf, s.uuid());
-                            buf.writeBoolean(s.found());
-                            buf.writeBoolean(s.loaded());
-                            buf.writeDouble(s.x());
-                            buf.writeDouble(s.y());
-                            buf.writeDouble(s.z());
-                            buf.writeUtf(s.dimension(), 256);
-                            buf.writeFloat(s.hp());
-                            buf.writeFloat(s.maxHp());
-                        },
-                        buf -> new Snapshot(
-                                UUIDUtil.STREAM_CODEC.decode(buf),
-                                buf.readBoolean(), buf.readBoolean(),
-                                buf.readDouble(), buf.readDouble(), buf.readDouble(),
-                                buf.readUtf(256),
-                                buf.readFloat(), buf.readFloat()));
+        void write(FriendlyByteBuf buf) {
+            buf.writeUUID(uuid);
+            buf.writeBoolean(found);
+            buf.writeBoolean(loaded);
+            buf.writeDouble(x);
+            buf.writeDouble(y);
+            buf.writeDouble(z);
+            buf.writeUtf(dimension, 256);
+            buf.writeFloat(hp);
+            buf.writeFloat(maxHp);
+        }
+
+        static Snapshot read(FriendlyByteBuf buf) {
+            return new Snapshot(buf.readUUID(),
+                    buf.readBoolean(), buf.readBoolean(),
+                    buf.readDouble(), buf.readDouble(), buf.readDouble(),
+                    buf.readUtf(256),
+                    buf.readFloat(), buf.readFloat());
+        }
     }
 
-    public static final Type<NumenLocationsPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_locations"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, NumenLocationsPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    Snapshot.CODEC.apply(ByteBufCodecs.list(LocateNumenPayload.MAX_UUIDS)),
-                    NumenLocationsPayload::snapshots,
-                    NumenLocationsPayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "numen_locations");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        int n = Math.min(snapshots.size(), LocateNumenPayload.MAX_UUIDS);
+        buf.writeVarInt(n);
+        for (int i = 0; i < n; i++) {
+            snapshots.get(i).write(buf);
+        }
+    }
+
+    public static NumenLocationsPayload read(FriendlyByteBuf buf) {
+        int n = Math.min(buf.readVarInt(), LocateNumenPayload.MAX_UUIDS);
+        List<Snapshot> list = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            list.add(Snapshot.read(buf));
+        }
+        return new NumenLocationsPayload(list);
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

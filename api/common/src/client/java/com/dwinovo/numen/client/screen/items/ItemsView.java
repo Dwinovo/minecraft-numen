@@ -17,6 +17,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.List;
 import java.util.UUID;
+import net.minecraft.util.Mth;
 
 /**
  * Items 页:同伴的"人物卡",布局贴着原版物品栏的肌肉记忆走——左边
@@ -159,7 +160,7 @@ public final class ItemsView {
         if (loop != null) {
             // 记忆行:水位条(绿→琥珀→红)+ 条数与累计消耗
             Nb.text(g, font, "记忆", c2, ly, th.textDim());
-            int barX = c2 + 26, barW = 46, pct = Math.clamp(loop.contextPercent(), 0, 100);
+            int barX = c2 + 26, barW = 46, pct = Mth.clamp(loop.contextPercent(), 0, 100);
             RoundRect.fill(g, barX, ly + 1, barX + barW, ly + 7, 2, th.field());
             int barColor = pct < 60 ? th.ok() : pct < 85 ? th.run() : th.fail();
             if (pct > 0) {

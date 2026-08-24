@@ -1,10 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
 /**
@@ -15,22 +13,25 @@ import net.minecraft.resources.ResourceLocation;
  * inherently client-local. The server command just fires this packet at the
  * caller and their client does the rest.
  */
-public record ClientUiActionPayload(Action action) implements CustomPacketPayload {
+public record ClientUiActionPayload(Action action) implements NumenPayload {
 
     public enum Action { OPEN_SETTINGS, RESET_LOOPS, DEBUG_TEXT_ON, DEBUG_TEXT_OFF }
 
-    public static final Type<ClientUiActionPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "client_ui_action"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, ClientUiActionPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.VAR_INT.map(i -> Action.values()[i], a -> a.ordinal()),
-                    ClientUiActionPayload::action,
-                    ClientUiActionPayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "client_ui_action");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeVarInt(action.ordinal());
+    }
+
+    public static ClientUiActionPayload read(FriendlyByteBuf buf) {
+        return new ClientUiActionPayload(Action.values()[buf.readVarInt()]);
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

@@ -33,15 +33,16 @@ final class AgentRequestContext {
 
         List<ConvoState.Msg> out = new ArrayList<>(cleaned);
         int last = out.size() - 1;
-        switch (out.get(last)) {
-            case ConvoState.Msg.User user ->
-                    out.set(last, new ConvoState.Msg.User(user.content() + "\n\n" + runtimeXml));
-            case ConvoState.Msg.Assistant assistant -> {
-                if (!assistant.turn().hasToolCalls()) {
-                    out.add(new ConvoState.Msg.User(runtimeXml));
-                }
+        // Java 17:类型模式 switch 是预览特性,改 if/else instanceof(密封层级不变)
+        ConvoState.Msg tail = out.get(last);
+        if (tail instanceof ConvoState.Msg.User user) {
+            out.set(last, new ConvoState.Msg.User(user.content() + "\n\n" + runtimeXml));
+        } else if (tail instanceof ConvoState.Msg.Assistant assistant) {
+            if (!assistant.turn().hasToolCalls()) {
+                out.add(new ConvoState.Msg.User(runtimeXml));
             }
-            case ConvoState.Msg.Tool ignored -> out.add(new ConvoState.Msg.User(runtimeXml));
+        } else {
+            out.add(new ConvoState.Msg.User(runtimeXml));
         }
         return List.copyOf(out);
     }

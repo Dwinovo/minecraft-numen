@@ -3,10 +3,8 @@ package com.dwinovo.numen.network.payload;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.platform.Services;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
@@ -24,21 +22,26 @@ import java.util.UUID;
  * <p>Only the owner of a LOADED companion gets the contents; otherwise the reply
  * is {@code loaded=false} (asleep / not yours — no inventory oracle).
  */
-public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
+public record RequestStatePayload(UUID uuid) implements NumenPayload {
 
     /** The 36 main backpack slots (hotbar + storage); equipment is already client-synced. */
     public static final int MAIN_SLOTS = 36;
 
-    public static final Type<RequestStatePayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "request_state"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, RequestStatePayload> STREAM_CODEC =
-            StreamCodec.composite(UUIDUtil.STREAM_CODEC, RequestStatePayload::uuid,
-                    RequestStatePayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "request_state");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUUID(uuid);
+    }
+
+    public static RequestStatePayload read(FriendlyByteBuf buf) {
+        return new RequestStatePayload(buf.readUUID());
     }
 
     /** Server main thread. */

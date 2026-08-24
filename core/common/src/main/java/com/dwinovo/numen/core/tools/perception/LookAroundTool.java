@@ -16,6 +16,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Map;
 import java.util.function.Consumer;
+import net.minecraft.util.Mth;
 
 /**
  * Egocentric spatial view: renders the blocks around the companion as an
@@ -85,7 +86,7 @@ public final class LookAroundTool implements NumenTool {
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         int radius = DEFAULT_RADIUS;
         if (args != null && args.has("radius") && args.get("radius").isJsonPrimitive()) {
-            radius = Math.clamp(args.get("radius").getAsInt(), MIN_RADIUS, MAX_RADIUS);
+            radius = Mth.clamp(args.get("radius").getAsInt(), MIN_RADIUS, MAX_RADIUS);
         }
         reply.accept(render(self, radius));
     }

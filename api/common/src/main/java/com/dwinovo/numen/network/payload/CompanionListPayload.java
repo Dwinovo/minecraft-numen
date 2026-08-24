@@ -1,13 +1,11 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -24,7 +22,7 @@ import java.util.UUID;
  *
  * <p>推送时机:主人登录、召唤、遣散、死亡、复活——任何"存在或存活状态"的变化。
  */
-public record CompanionListPayload(String worldId, List<Entry> companions) implements CustomPacketPayload {
+public record CompanionListPayload(String worldId, List<Entry> companions) implements NumenPayload {
 
     /** Cap defends against absurd input; nobody owns hundreds of companions. */
     public static final int MAX = 64;
@@ -32,26 +30,37 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
     /** 一行。{@code respawnInMs} = {@link com.dwinovo.numen.entity.CompanionRoster#ALIVE} 是活着,
      *  ≥0 是死了、还有这么久复活。 */
     public record Entry(UUID uuid, String name, long respawnInMs) {
-        static final StreamCodec<RegistryFriendlyByteBuf, Entry> CODEC =
-                StreamCodec.composite(
-                        UUIDUtil.STREAM_CODEC, Entry::uuid,
-                        ByteBufCodecs.stringUtf8(256), Entry::name,
-                        ByteBufCodecs.VAR_LONG, Entry::respawnInMs,
-                        Entry::new);
     }
 
-    public static final Type<CompanionListPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "companion_list"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, CompanionListPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.stringUtf8(64), CompanionListPayload::worldId,
-                    Entry.CODEC.apply(ByteBufCodecs.list(MAX)), CompanionListPayload::companions,
-                    CompanionListPayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "companion_list");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUtf(worldId, 64);
+        int n = Math.min(companions.size(), MAX);
+        buf.writeVarInt(n);
+        for (int i = 0; i < n; i++) {
+            Entry e = companions.get(i);
+            buf.writeUUID(e.uuid());
+            buf.writeUtf(e.name(), 256);
+            buf.writeVarLong(e.respawnInMs());
+        }
+    }
+
+    public static CompanionListPayload read(FriendlyByteBuf buf) {
+        String worldId = buf.readUtf(64);
+        int n = Math.min(buf.readVarInt(), MAX);
+        List<Entry> list = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            list.add(new Entry(buf.readUUID(), buf.readUtf(256), buf.readVarLong()));
+        }
+        return new CompanionListPayload(worldId, list);
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

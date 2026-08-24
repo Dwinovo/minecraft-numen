@@ -36,6 +36,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import net.minecraft.util.Mth;
 
 /**
  * The {@code craft} tool: the whole craft flow in one call — pick a recipe whose
@@ -71,7 +72,7 @@ public final class CraftOps {
 
     public String craft(String item_id, Integer count, NumenPlayer self) {
         Item target = ToolArgs.parseItem(item_id);
-        int want = count == null ? 1 : Math.clamp(count, 1, 256);
+        int want = count == null ? 1 : Mth.clamp(count, 1, 256);
         if (!(self.level() instanceof ServerLevel level)) {
             return TaskResult.fail("crafting needs a server level.").toJson();
         }

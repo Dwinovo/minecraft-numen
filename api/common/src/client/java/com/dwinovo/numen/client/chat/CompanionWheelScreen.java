@@ -21,6 +21,7 @@ import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.List;
+import net.minecraft.util.Mth;
 
 /**
  * 同伴转盘:抽奖转盘的操作模型——顶槽固定(金环 + 指针 ▼),滚轮转动
@@ -124,7 +125,7 @@ public class CompanionWheelScreen extends Screen {
     }
 
     private int radius() {
-        return Math.clamp(Math.min(this.width, this.height) / 5, 56, 104);
+        return Mth.clamp(Math.min(this.width, this.height) / 5, 56, 104);
     }
 
     /** i 号此刻的方位角(弧度,顶槽为 -90°)。 */

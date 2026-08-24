@@ -12,6 +12,7 @@ import com.google.gson.JsonObject;
 
 import java.util.Map;
 import java.util.function.Consumer;
+import net.minecraft.util.Mth;
 
 /** Fish from a nearby water surface using the vanilla fishing-rod interaction. */
 public final class FishTool implements NumenTool {
@@ -58,7 +59,7 @@ public final class FishTool implements NumenTool {
             setTask(companion, new FishTaskRecord(toolCallId, com.dwinovo.numen.task.TaskRecord.NO_DEADLINE, 0), args, reply);
             return;
         }
-        int count = Math.clamp(parsed.count(), 1, MAX_COUNT);
+        int count = Mth.clamp(parsed.count(), 1, MAX_COUNT);
         long timeout = Math.max(MIN_TIMEOUT_TICKS, count * TICKS_PER_CATCH);
         setTask(companion, new FishTaskRecord(toolCallId, context.deadline(timeout), count), args, reply);
     }

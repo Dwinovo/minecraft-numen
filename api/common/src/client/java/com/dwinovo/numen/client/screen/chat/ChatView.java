@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import net.minecraft.util.Mth;
 
 /**
  * The chat transcript as a conversation: the owner's messages are right-aligned
@@ -160,7 +161,7 @@ public final class ChatView {
         int content = totalHeight(blocks);
         lastMaxScroll = Math.max(0, content - h);
         if (pinBottom) scrollTarget = lastMaxScroll;
-        scrollTarget = Math.clamp(scrollTarget, 0, lastMaxScroll);
+        scrollTarget = Mth.clamp(scrollTarget, 0, lastMaxScroll);
         scrollPos = Anim.approach(scrollPos, scrollTarget, SCROLL_RATE, dt);
 
         g.enableScissor(x, y, x + w, y + h);
@@ -256,7 +257,7 @@ public final class ChatView {
 
     /** Wheel anywhere on the chat tab scrolls the transcript (parity with the old list). */
     public boolean mouseScrolled(double sy) {
-        scrollTarget = Math.clamp((long) (scrollTarget - sy * LINE_H * 3), 0, lastMaxScroll);
+        scrollTarget = (int) Math.max(0L, Math.min((long) lastMaxScroll, (long) (scrollTarget - sy * LINE_H * 3)));
         pinBottom = scrollTarget >= lastMaxScroll;
         return true;
     }
@@ -300,11 +301,14 @@ public final class ChatView {
     }
 
     private int heightOf(Block b) {
-        return switch (b) {
-            case Bubble bb -> (bb.label() != null ? LABEL_H : 0) + bb.lines().size() * LINE_H + PAD_V * 2;
-            case Chip c -> c.rows().size() * LINE_H + PAD_V * 2;
-            case Notice ignored -> LINE_H;
-        };
+        // Java 17:类型模式 switch 是预览特性,改 if/else instanceof(密封层级不变)
+        if (b instanceof Bubble bb) {
+            return (bb.label() != null ? LABEL_H : 0) + bb.lines().size() * LINE_H + PAD_V * 2;
+        }
+        if (b instanceof Chip c) {
+            return c.rows().size() * LINE_H + PAD_V * 2;
+        }
+        return LINE_H;
     }
 
     private int totalHeight(List<Block> blocks) {
@@ -348,8 +352,8 @@ public final class ChatView {
         int msgIndex = -1;
         for (ConvoState.Msg msg : source) {
             msgIndex++;
-            switch (msg) {
-                case ConvoState.Msg.User u -> {
+            // Java 17:类型模式 switch 是预览特性,改 if/else instanceof
+            if (msg instanceof ConvoState.Msg.User u) {
                     flushTools(out, group, done, failed, bubbleMaxW);
                     if (ConvoLog.PERSONA_DIVIDER.equals(u.content())) {
                         notice(out, I18n.get("numen.chat.persona_changed"));
@@ -371,8 +375,7 @@ public final class ChatView {
                     boolean first = lastSide == null || !lastSide;
                     out.add(bubble(true, null, shown, TXT, OWN_FILL, OWN_BORDER, innerW, first));
                     lastSide = true;
-                }
-                case ConvoState.Msg.Assistant a -> {
+            } else if (msg instanceof ConvoState.Msg.Assistant a) {
                     AssistantTurn turn = a.turn();
                     // 思考在说话之前:落库的思考默认折叠(它是过程不是结论,想看再展开)。
                     String reasoned = turn.reasoning();
@@ -389,9 +392,8 @@ public final class ChatView {
                         lastSide = false;
                     }
                     group.addAll(turn.toolCalls());
-                }
-                case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
             }
+            // Tool 消息不画块:它驱动 done/fail 状态,不产出气泡
         }
         flushTools(out, group, done, failed, bubbleMaxW);
         // 在飞的思考流:展开着实时长(它正在发生,折起来就看不见了);回合落库后
@@ -529,13 +531,14 @@ public final class ChatView {
     // ---- drawing ----
 
     private void drawBlock(GuiGraphics g, Block b, int x, int y, int w) {
-        switch (b) {
-            case Notice n -> {
-                int tw = font.width(n.text());
-                draw(g, n.text(), x + (w - SB_W - tw) / 2, y);
-            }
-            case Bubble bb -> drawBubble(g, bb, x, y, w);
-            case Chip c -> drawChip(g, c, x, y);
+        // Java 17:类型模式 switch 是预览特性,改 if/else instanceof
+        if (b instanceof Notice n) {
+            int tw = font.width(n.text());
+            draw(g, n.text(), x + (w - SB_W - tw) / 2, y);
+        } else if (b instanceof Bubble bb) {
+            drawBubble(g, bb, x, y, w);
+        } else if (b instanceof Chip c) {
+            drawChip(g, c, x, y);
         }
     }
 

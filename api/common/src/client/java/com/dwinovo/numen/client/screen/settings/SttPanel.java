@@ -19,6 +19,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.util.Mth;
 
 /**
  * 语音输入(STT)分区——NumenUI 版的瓤:服务商下拉联动(换商预填模型/基址)、
@@ -142,7 +143,7 @@ public final class SttPanel {
         }
         Dropdown micPick = ui.add(new Dropdown(micNames,
                 Math.max(0, micIds.indexOf(mic)),
-                i -> mic = micIds.get(Math.clamp(i, 0, micIds.size() - 1))));
+                i -> mic = micIds.get(Mth.clamp(i, 0, micIds.size() - 1))));
         micPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
 
         saved = ui.add(new InlineAlert());
@@ -189,7 +190,7 @@ public final class SttPanel {
 
     /** 换服务商:模型/基址跟着换成该商预设(仍可改);自定义商直接自由输入。 */
     private void onProviderPicked(int index) {
-        String id = providerIds.get(Math.clamp(index, 0, providerIds.size() - 1));
+        String id = providerIds.get(Mth.clamp(index, 0, providerIds.size() - 1));
         if (id.equals(provider)) return;
         provider = id;
         SttProviders.Option o = SttProviders.byId(id);

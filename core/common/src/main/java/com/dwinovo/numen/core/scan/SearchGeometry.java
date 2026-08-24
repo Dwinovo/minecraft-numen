@@ -2,6 +2,7 @@ package com.dwinovo.numen.core.scan;
 
 import java.util.Comparator;
 import java.util.PriorityQueue;
+import net.minecraft.util.Mth;
 
 /**
  * "由近及远"的两条判据,全仓找方块的地方共用:<b>哪一节先看</b>,和
@@ -36,7 +37,7 @@ public final class SearchGeometry {
         }
         int n = maxSectionY - minSectionY + 1;
         int[] out = new int[n];
-        int centre = Math.clamp(centerSectionY, minSectionY, maxSectionY);
+        int centre = Mth.clamp(centerSectionY, minSectionY, maxSectionY);
         int at = 0;
         out[at++] = centre;
         for (int d = 1; at < n; d++) {

@@ -1,11 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
@@ -30,20 +27,7 @@ import java.util.UUID;
  */
 public record CurrentTaskPayload(UUID entityUuid, String taskId, String tool,
                                  String describe, boolean standing, long elapsedMs)
-        implements CustomPacketPayload {
-
-    public static final Type<CurrentTaskPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "current_task"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, CurrentTaskPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    UUIDUtil.STREAM_CODEC, CurrentTaskPayload::entityUuid,
-                    ByteBufCodecs.STRING_UTF8, CurrentTaskPayload::taskId,
-                    ByteBufCodecs.STRING_UTF8, CurrentTaskPayload::tool,
-                    ByteBufCodecs.STRING_UTF8, CurrentTaskPayload::describe,
-                    ByteBufCodecs.BOOL, CurrentTaskPayload::standing,
-                    ByteBufCodecs.VAR_LONG, CurrentTaskPayload::elapsedMs,
-                    CurrentTaskPayload::new);
+        implements NumenPayload {
 
     /** 她闲着。 */
     public static CurrentTaskPayload idle(UUID entityUuid) {
@@ -54,9 +38,27 @@ public record CurrentTaskPayload(UUID entityUuid, String taskId, String tool,
         return taskId.isEmpty();
     }
 
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "current_task");
+
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUUID(entityUuid);
+        buf.writeUtf(taskId);
+        buf.writeUtf(tool);
+        buf.writeUtf(describe);
+        buf.writeBoolean(standing);
+        buf.writeVarLong(elapsedMs);
+    }
+
+    public static CurrentTaskPayload read(FriendlyByteBuf buf) {
+        return new CurrentTaskPayload(buf.readUUID(), buf.readUtf(), buf.readUtf(),
+                buf.readUtf(), buf.readBoolean(), buf.readVarLong());
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that). */

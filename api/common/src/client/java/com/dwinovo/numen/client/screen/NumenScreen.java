@@ -40,6 +40,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import net.minecraft.util.Mth;
 
 /**
  * The owner-facing companion panel: one tabbed screen per Numen (Chat / Items /
@@ -244,8 +245,8 @@ public final class NumenScreen extends Screen {
     protected void init() {
         // 窗口留 12px 边距后能给多大给多大,夹在上下限之间;窗口比下限还小时
         // railX/top 至少钳到 0,保证头部(标题/tab/关闭途径)永远可见可点。
-        panelW = Math.clamp(this.width - RAIL_W - 24, PANEL_MIN_W, PANEL_MAX_W);
-        panelH = Math.clamp(this.height - 24, PANEL_MIN_H, PANEL_MAX_H);
+        panelW = Mth.clamp(this.width - RAIL_W - 24, PANEL_MIN_W, PANEL_MAX_W);
+        panelH = Mth.clamp(this.height - 24, PANEL_MIN_H, PANEL_MAX_H);
         int composite = RAIL_W + panelW;        // rail flush against the panel — one merged sprite
         this.railX = Math.max(0, (this.width - composite) / 2);
         this.left = railX + RAIL_W;
@@ -762,7 +763,7 @@ public final class NumenScreen extends Screen {
         if (sy != 0 && tab == Tab.SETTINGS && settings.mouseScrolledEarly(mx, my, sy)) return true;
         // Wheel over the left rail column scrolls the roster (works on any tab).
         if (sy != 0 && mx >= railX && mx < railX + RAIL_W && maxRailScroll() > 0) {
-            railScroll = Math.clamp((long) (railScroll - sy), 0, maxRailScroll());
+            railScroll = (int) Math.max(0L, Math.min((long) maxRailScroll(), (long) (railScroll - sy)));
             return true;
         }
         if (tab == Tab.CHAT && sy != 0) {
@@ -903,7 +904,7 @@ public final class NumenScreen extends Screen {
     private void renderRail(GuiGraphics g, int mouseX, int mouseY) {
         List<NumenRoster.Entry> entries = NumenRoster.instance().entries();
         int ax = railX + (RAIL_W - RAIL_AV) / 2;
-        railScroll = Math.clamp(railScroll, 0, maxRailScroll());     // keep valid as the roster grows/shrinks
+        railScroll = Mth.clamp(railScroll, 0, maxRailScroll());     // keep valid as the roster grows/shrinks
         int first = railScroll;
         int startY = railStartY();
         for (int i = first; i < entries.size(); i++) {
@@ -983,7 +984,7 @@ public final class NumenScreen extends Screen {
     private UUID railCloseAt(int mx, int my) {
         int ax = railX + (RAIL_W - RAIL_AV) / 2;
         List<NumenRoster.Entry> entries = NumenRoster.instance().entries();
-        int first = Math.clamp(railScroll, 0, maxRailScroll());
+        int first = Mth.clamp(railScroll, 0, maxRailScroll());
         int startY = railStartY();
         for (int i = first; i < entries.size(); i++) {
             int ay = startY + (i - first) * RAIL_SLOT;
@@ -1018,7 +1019,7 @@ public final class NumenScreen extends Screen {
         int ax = railX + (RAIL_W - RAIL_AV) / 2;
         if (mx < ax || mx >= ax + RAIL_AV) return -1;
         List<NumenRoster.Entry> entries = NumenRoster.instance().entries();
-        int first = Math.clamp(railScroll, 0, maxRailScroll());
+        int first = Mth.clamp(railScroll, 0, maxRailScroll());
         int startY = railStartY();
         for (int i = first; i < entries.size(); i++) {
             int ay = startY + (i - first) * RAIL_SLOT;

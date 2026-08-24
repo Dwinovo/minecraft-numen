@@ -6,11 +6,8 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -57,26 +54,33 @@ import java.util.UUID;
 public record ExecuteToolPayload(UUID entityUuid,
                                   String toolCallId,
                                   String toolName,
-                                  String argumentsJson) implements CustomPacketPayload {
+                                  String argumentsJson) implements NumenPayload {
 
     public static final int MAX_TOOL_CALL_ID_LENGTH = 128;
     public static final int MAX_TOOL_NAME_LENGTH = 128;
     public static final int MAX_ARGUMENTS_JSON_LENGTH = 16 * 1024;
 
-    public static final Type<ExecuteToolPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "execute_tool"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, ExecuteToolPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    UUIDUtil.STREAM_CODEC, ExecuteToolPayload::entityUuid,
-                    ByteBufCodecs.stringUtf8(MAX_TOOL_CALL_ID_LENGTH), ExecuteToolPayload::toolCallId,
-                    ByteBufCodecs.stringUtf8(MAX_TOOL_NAME_LENGTH), ExecuteToolPayload::toolName,
-                    ByteBufCodecs.stringUtf8(MAX_ARGUMENTS_JSON_LENGTH), ExecuteToolPayload::argumentsJson,
-                    ExecuteToolPayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "execute_tool");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUUID(entityUuid);
+        buf.writeUtf(toolCallId, MAX_TOOL_CALL_ID_LENGTH);
+        buf.writeUtf(toolName, MAX_TOOL_NAME_LENGTH);
+        buf.writeUtf(argumentsJson, MAX_ARGUMENTS_JSON_LENGTH);
+    }
+
+    public static ExecuteToolPayload read(FriendlyByteBuf buf) {
+        return new ExecuteToolPayload(buf.readUUID(),
+                buf.readUtf(MAX_TOOL_CALL_ID_LENGTH),
+                buf.readUtf(MAX_TOOL_NAME_LENGTH),
+                buf.readUtf(MAX_ARGUMENTS_JSON_LENGTH));
     }
 
     /** Handler invoked on the server main thread. */

@@ -3,7 +3,6 @@ package com.dwinovo.numen.entity;
 import com.dwinovo.numen.event.EventQueue;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
@@ -46,19 +45,18 @@ public final class EventOutbox extends SavedData {
                     .xmap(EventOutbox::fromEntries, EventOutbox::toEntries)
                     .fieldOf("outboxes").codec();
 
-    private static final SavedData.Factory<EventOutbox> FACTORY = new SavedData.Factory<>(
-            EventOutbox::new, EventOutbox::load,
-            net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
+    // 1.20.1 predates SavedData.Factory and the HolderLookup-aware save/load; register via
+    // the classic computeIfAbsent(loadFn, factory, name); CODEC (de)serialisation is ours.
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+    public CompoundTag save(CompoundTag tag) {
         CODEC.encodeStart(NbtOps.INSTANCE, this).result()
                 .ifPresent(t -> { if (t instanceof CompoundTag c) tag.merge(c); });
         return tag;
     }
 
     // 包内可见:持久化是这个类的全部价值,得让单测够得着。
-    static EventOutbox load(CompoundTag tag, HolderLookup.Provider registries) {
+    static EventOutbox load(CompoundTag tag) {
         return CODEC.parse(NbtOps.INSTANCE, tag).result().orElseGet(EventOutbox::new);
     }
 
@@ -92,7 +90,7 @@ public final class EventOutbox extends SavedData {
     }
 
     public static EventOutbox get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_event_outbox");
+        return server.overworld().getDataStorage().computeIfAbsent(EventOutbox::load, EventOutbox::new, "numen_event_outbox");
     }
 
     /** 这只同伴的暂存队列(没有则建)。 */

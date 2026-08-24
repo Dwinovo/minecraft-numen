@@ -105,22 +105,25 @@ public final class PathDebugRenderer {
     }
 
     private static void packGoal(Goal goal, List<Long> boxes, List<Long> columns) {
-        switch (goal) {
-            case null -> { }
-            case GoalBlock g -> boxes.add(g.getGoalPos().asLong());
-            case GoalTwoBlocks g -> {
-                boxes.add(g.getGoalPos().asLong());
-                boxes.add(g.getGoalPos().above().asLong());
+        // Java 17:类型模式 switch 是预览特性,改 if/else instanceof(语义同款,含 null 早退)
+        if (goal == null) {
+            return;
+        }
+        if (goal instanceof GoalTwoBlocks g) {
+            boxes.add(g.getGoalPos().asLong());
+            boxes.add(g.getGoalPos().above().asLong());
+        } else if (goal instanceof GoalBlock g) {
+            boxes.add(g.getGoalPos().asLong());
+        } else if (goal instanceof GoalGetToBlock g) {
+            boxes.add(g.getGoalPos().asLong());
+        } else if (goal instanceof GoalXZ g) {
+            columns.add(BlockPos.asLong(g.x, 0, g.z));
+        } else if (goal instanceof GoalComposite g) {
+            for (Goal sub : g.goals()) {
+                packGoal(sub, boxes, columns);
             }
-            case GoalGetToBlock g -> boxes.add(g.getGoalPos().asLong());
-            case GoalXZ g -> columns.add(BlockPos.asLong(g.x, 0, g.z));
-            case GoalComposite g -> {
-                for (Goal sub : g.goals()) {
-                    packGoal(sub, boxes, columns);
-                }
-            }
-            case GoalInverted g -> packGoal(g.origin, boxes, columns);
-            default -> { }
+        } else if (goal instanceof GoalInverted g) {
+            packGoal(g.origin, boxes, columns);
         }
     }
 }

@@ -10,6 +10,7 @@ import net.minecraft.world.item.Items;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
+import net.minecraft.util.Mth;
 
 /**
  * Shared argument readers for {@link NumenTool} implementations. Every tool hand-parses
@@ -40,7 +41,7 @@ public final class ToolArgs {
 
     /** A required integer, clamped into {@code [min, max]}. */
     public static int requireInt(JsonObject args, String key, int min, int max) {
-        return Math.clamp(requireInt(args, key), min, max);
+        return Mth.clamp(requireInt(args, key), min, max);
     }
 
     /** A nullable integer arg: {@code null} when absent or JSON null. */
@@ -77,7 +78,7 @@ public final class ToolArgs {
 
     /** A required numeric arg, clamped into {@code [min, max]}. */
     public static double requireDouble(JsonObject args, String key, double min, double max) {
-        return Math.clamp(requireDouble(args, key), min, max);
+        return Mth.clamp(requireDouble(args, key), min, max);
     }
 
     /** A nullable numeric arg: {@code null} when absent or JSON null. */

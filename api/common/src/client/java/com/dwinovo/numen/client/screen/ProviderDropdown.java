@@ -6,6 +6,7 @@ import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import net.minecraft.util.Mth;
 
 /**
  * A screen-driven provider picker: a collapsed box showing the current provider, expanding to the live
@@ -87,7 +88,7 @@ public final class ProviderDropdown {
 
         if (open) {
             int rows = rowsShown();
-            scrollOff = Math.clamp(scrollOff, 0, rowCount() - rows);
+            scrollOff = Mth.clamp(scrollOff, 0, rowCount() - rows);
             int oy = listTop();
             com.dwinovo.numen.client.ui.RoundRect.card(g, x, oy, x + w, oy + rows * ROW + 4, 5,
                     th.aiFill(), th.aiBorder());
@@ -121,7 +122,7 @@ public final class ProviderDropdown {
             for (int i = 0; i < rows; i++) {
                 int ry = oy + i * ROW;
                 if (mx >= x && mx < x + w && my >= ry && my < ry + ROW) {
-                    selectedId = idAt(Math.clamp(scrollOff, 0, rowCount() - rows) + i);
+                    selectedId = idAt(Mth.clamp(scrollOff, 0, rowCount() - rows) + i);
                     open = false;
                     return true;
                 }
@@ -140,7 +141,7 @@ public final class ProviderDropdown {
         if (rows >= rowCount()) return false;
         int oy = listTop();
         if (mx < x || mx >= x + w || my < oy || my >= oy + rows * ROW + 4) return false;
-        scrollOff = Math.clamp(scrollOff - (int) Math.signum(sy), 0, rowCount() - rows);
+        scrollOff = Mth.clamp(scrollOff - (int) Math.signum(sy), 0, rowCount() - rows);
         return true;
     }
 }

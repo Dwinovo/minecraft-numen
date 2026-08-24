@@ -13,6 +13,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.Map;
 import java.util.function.Consumer;
+import net.minecraft.util.Mth;
 
 /**
  * 创造画像专属:凭空取物入背包——原版创造玩家有创造物品栏 GUI,假玩家
@@ -68,7 +69,7 @@ public final class TakeItemsTool implements NumenTool {
             reply.accept(GSON.toJson(out));
             return;
         }
-        int want = Math.clamp(a.count() == null ? 1 : a.count(), 1, MAX_COUNT);
+        int want = Mth.clamp(a.count() == null ? 1 : a.count(), 1, MAX_COUNT);
         // 按满栈分批塞;背包塞不下的原版 add 会留在栈里,掉在脚下(与描述一致)
         int remaining = want;
         while (remaining > 0) {

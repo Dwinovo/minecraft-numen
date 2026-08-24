@@ -4,10 +4,8 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.CompanionRegistry;
 import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.NumenPlayer;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -21,17 +19,23 @@ import java.util.UUID;
  * (registry entry removed, won't return on login). A dormant (unloaded) companion has no body to drop
  * from, so it's just forgotten (its orphaned {@code .dat} keeps the items but nothing respawns it).
  */
-public record DismissRequestPayload(UUID uuid) implements CustomPacketPayload {
+public record DismissRequestPayload(UUID uuid) implements NumenPayload {
 
-    public static final Type<DismissRequestPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "dismiss_request"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, DismissRequestPayload> STREAM_CODEC =
-            StreamCodec.composite(UUIDUtil.STREAM_CODEC, DismissRequestPayload::uuid, DismissRequestPayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "dismiss_request");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUUID(uuid);
+    }
+
+    public static DismissRequestPayload read(FriendlyByteBuf buf) {
+        return new DismissRequestPayload(buf.readUUID());
     }
 
     /** Server main thread. */

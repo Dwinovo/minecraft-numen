@@ -16,6 +16,7 @@ import net.minecraft.world.item.Item;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import net.minecraft.util.Mth;
 
 /**
  * Inventory-management tool implementations — the business half of
@@ -102,7 +103,7 @@ String item_id,
 int count,
             ToolContext ctx) {
         Item item = ToolArgs.parseItem(item_id);
-        count = Math.clamp(count, 1, DROP_MAX_COUNT);
+        count = Mth.clamp(count, 1, DROP_MAX_COUNT);
         String label = BuiltInRegistries.ITEM.getKey(item).getPath();
         return new DropItemsTaskRecord(ctx.toolCallId(), ctx.deadline(DROP_TIMEOUT_TICKS),
                 item, count, label);

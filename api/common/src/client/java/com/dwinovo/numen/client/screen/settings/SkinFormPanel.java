@@ -16,6 +16,7 @@ import net.minecraft.network.chat.Component;
 
 import java.util.List;
 import java.util.function.Consumer;
+import net.minecraft.util.Mth;
 
 /**
  * 皮肤的编辑表单——NumenUI 版的瓤:名称 + 手臂模型下拉 + 「选择文件…」
@@ -90,7 +91,7 @@ public final class SkinFormPanel {
                 t(ModLanguageData.Keys.SKIN_VARIANT_CLASSIC),
                 t(ModLanguageData.Keys.SKIN_VARIANT_SLIM)),
                 Math.max(0, VARIANTS.indexOf(draft.variant)),
-                i -> draft.variant = VARIANTS.get(Math.clamp(i, 0, VARIANTS.size() - 1))));
+                i -> draft.variant = VARIANTS.get(Mth.clamp(i, 0, VARIANTS.size() - 1))));
         variantPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH + 4;
 

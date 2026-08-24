@@ -6,10 +6,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.network.codec.StreamCodec;
 
 /**
  * Server → Client: one companion's live pathing state for debug overlay
@@ -26,15 +25,19 @@ public record PathDebugPayload(UUID companionId,
                                List<Long> currentPath, List<Long> nextPath, List<Long> bestPath,
                                List<Long> toBreak, List<Long> toPlace, List<Long> toWalkInto,
                                List<Long> goalBoxes, List<Long> goalColumns)
-        implements CustomPacketPayload {
+        implements NumenPayload {
 
-    public static final Type<PathDebugPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "path_debug"));
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "path_debug");
 
-    public static final StreamCodec<RegistryFriendlyByteBuf, PathDebugPayload> STREAM_CODEC =
-            StreamCodec.of(PathDebugPayload::write, PathDebugPayload::read);
+    @Override
+    public ResourceLocation id() {
+        return ID;
+    }
 
-    private static void write(RegistryFriendlyByteBuf buf, PathDebugPayload p) {
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        PathDebugPayload p = this;
         buf.writeUUID(p.companionId);
         writeLongs(buf, p.currentPath);
         writeLongs(buf, p.nextPath);
@@ -46,32 +49,27 @@ public record PathDebugPayload(UUID companionId,
         writeLongs(buf, p.goalColumns);
     }
 
-    private static PathDebugPayload read(RegistryFriendlyByteBuf buf) {
+    public static PathDebugPayload read(FriendlyByteBuf buf) {
         return new PathDebugPayload(buf.readUUID(),
                 readLongs(buf), readLongs(buf), readLongs(buf),
                 readLongs(buf), readLongs(buf), readLongs(buf),
                 readLongs(buf), readLongs(buf));
     }
 
-    private static void writeLongs(RegistryFriendlyByteBuf buf, List<Long> list) {
+    private static void writeLongs(FriendlyByteBuf buf, List<Long> list) {
         buf.writeVarInt(list.size());
         for (long v : list) {
             buf.writeLong(v);
         }
     }
 
-    private static List<Long> readLongs(RegistryFriendlyByteBuf buf) {
+    private static List<Long> readLongs(FriendlyByteBuf buf) {
         int n = buf.readVarInt();
         List<Long> list = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             list.add(buf.readLong());
         }
         return list;
-    }
-
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
     }
 
     /** Client-side handler (client main thread): stash for the frame renderer. */

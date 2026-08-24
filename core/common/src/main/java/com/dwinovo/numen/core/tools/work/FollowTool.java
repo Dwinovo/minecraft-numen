@@ -11,6 +11,7 @@ import com.google.gson.JsonObject;
 
 import java.util.Map;
 import java.util.function.Consumer;
+import net.minecraft.util.Mth;
 
 /**
  * 跟着走——第一个纯<b>常驻</b>的工具:它没有"干完"这回事,只有被主人换掉。
@@ -76,7 +77,7 @@ public final class FollowTool implements NumenTool {
         Args parsed = GSON.fromJson(args, Args.class);
         double distance = parsed == null || parsed.distance() == null
                 ? DEFAULT_DISTANCE
-                : Math.clamp(parsed.distance(), MIN_DISTANCE, MAX_DISTANCE);
+                : Mth.clamp(parsed.distance(), MIN_DISTANCE, MAX_DISTANCE);
         Integer entityId = parsed == null ? null : parsed.entity_id();
         java.util.UUID targetUuid = null;
         if (entityId != null) {

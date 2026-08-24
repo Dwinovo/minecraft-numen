@@ -14,6 +14,7 @@ import net.minecraft.world.level.block.Block;
 
 import java.util.List;
 import java.util.Set;
+import net.minecraft.util.Mth;
 
 /**
  * Block-action tool implementations — the business half of {@code AutoMineTool},
@@ -39,7 +40,7 @@ public final class BlockActionOps {
         if (targets.isEmpty()) {
             throw new IllegalArgumentException("block_ids contained no valid block ids");
         }
-        int clampedCount = Math.clamp(count, 1, MAX_COUNT);
+        int clampedCount = Mth.clamp(count, 1, MAX_COUNT);
         String label = labelFor(targets);
         long timeout = Math.max(MIN_TIMEOUT_TICKS, (long) clampedCount * TICKS_PER_BLOCK);
         long deadline = ctx.deadline(timeout);

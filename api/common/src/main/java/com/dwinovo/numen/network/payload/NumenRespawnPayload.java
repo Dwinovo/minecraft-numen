@@ -1,11 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
@@ -17,20 +14,24 @@ import java.util.UUID;
  * in-memory death state. The owner's {@link com.dwinovo.numen.client.agent.EntityAgentLoop} is created
  * if needed and reawakened with a death {@code <event>}.
  */
-public record NumenRespawnPayload(UUID entityUuid, String cause) implements CustomPacketPayload {
+public record NumenRespawnPayload(UUID entityUuid, String cause) implements NumenPayload {
 
-    public static final Type<NumenRespawnPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_respawn"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, NumenRespawnPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    UUIDUtil.STREAM_CODEC, NumenRespawnPayload::entityUuid,
-                    ByteBufCodecs.STRING_UTF8, NumenRespawnPayload::cause,
-                    NumenRespawnPayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "numen_respawn");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUUID(entityUuid);
+        buf.writeUtf(cause);
+    }
+
+    public static NumenRespawnPayload read(FriendlyByteBuf buf) {
+        return new NumenRespawnPayload(buf.readUUID(), buf.readUtf());
     }
 
     /** Client-side handler. Runs on the client main thread (network layer arranges that).

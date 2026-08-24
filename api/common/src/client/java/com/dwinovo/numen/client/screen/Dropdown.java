@@ -5,6 +5,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import net.minecraft.util.Mth;
 
 /**
  * A generic screen-driven dropdown (collapsed box → list on click), the data-agnostic sibling of
@@ -72,7 +73,7 @@ public final class Dropdown {
 
         if (open) {
             int rows = rowsShown();
-            scrollOff = Math.clamp(scrollOff, 0, items.size() - rows);
+            scrollOff = Mth.clamp(scrollOff, 0, items.size() - rows);
             int oy = listTop();
             com.dwinovo.numen.client.ui.RoundRect.card(g, x, oy, x + w, oy + rows * ROW + 4, 5,
                     th.aiFill(), th.aiBorder());
@@ -105,7 +106,7 @@ public final class Dropdown {
             for (int i = 0; i < rows; i++) {
                 int ry = oy + i * ROW;
                 if (mx >= x && mx < x + w && my >= ry && my < ry + ROW) {
-                    selectedId = items.get(Math.clamp(scrollOff, 0, items.size() - rows) + i).id();
+                    selectedId = items.get(Mth.clamp(scrollOff, 0, items.size() - rows) + i).id();
                     open = false;
                     return true;
                 }
@@ -124,7 +125,7 @@ public final class Dropdown {
         if (rows >= items.size()) return false;
         int oy = listTop();
         if (mx < x || mx >= x + w || my < oy || my >= oy + rows * ROW + 4) return false;
-        scrollOff = Math.clamp(scrollOff - (int) Math.signum(sy), 0, items.size() - rows);
+        scrollOff = Mth.clamp(scrollOff - (int) Math.signum(sy), 0, items.size() - rows);
         return true;
     }
 }

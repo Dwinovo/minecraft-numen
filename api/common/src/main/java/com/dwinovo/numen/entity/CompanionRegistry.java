@@ -3,7 +3,6 @@ package com.dwinovo.numen.entity;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.HolderLookup;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -121,14 +120,11 @@ public final class CompanionRegistry extends SavedData {
             Codec.STRING.optionalFieldOf("worldId", "").forGetter(d -> d.worldId)
     ).apply(i, CompanionRegistry::new));
 
-    // 1.21.4 predates the codec-based SavedDataType; register with the old SavedData.Factory
-    // (Supplier + deserializer + DataFixType) and drive (de)serialization through CODEC ourselves.
-    private static final SavedData.Factory<CompanionRegistry> FACTORY = new SavedData.Factory<>(
-            CompanionRegistry::new, CompanionRegistry::load,
-            net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
+    // 1.20.1 predates SavedData.Factory and the HolderLookup-aware save/load; register via
+    // the classic computeIfAbsent(loadFn, factory, name); CODEC (de)serialisation is ours.
 
     @Override
-    public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
+    public CompoundTag save(CompoundTag tag) {
         CODEC.encodeStart(NbtOps.INSTANCE, this).result()
                 .ifPresent(t -> { if (t instanceof CompoundTag c) tag.merge(c); });
         return tag;
@@ -136,7 +132,7 @@ public final class CompanionRegistry extends SavedData {
 
     // 包内可见:持久化是这个类最要命的部分(解析失败 = 全世界同伴静默消失),
     // 得让单测够得着。
-    static CompanionRegistry load(CompoundTag tag, HolderLookup.Provider registries) {
+    static CompanionRegistry load(CompoundTag tag) {
         return CODEC.parse(NbtOps.INSTANCE, tag).result().orElseGet(CompanionRegistry::new);
     }
 
@@ -154,7 +150,7 @@ public final class CompanionRegistry extends SavedData {
     }
 
     public static CompanionRegistry get(MinecraftServer server) {
-        return server.overworld().getDataStorage().computeIfAbsent(FACTORY, "numen_companions");
+        return server.overworld().getDataStorage().computeIfAbsent(CompanionRegistry::load, CompanionRegistry::new, "numen_companions");
     }
 
     /**

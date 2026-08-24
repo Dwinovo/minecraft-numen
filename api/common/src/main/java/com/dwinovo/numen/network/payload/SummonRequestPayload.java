@@ -2,10 +2,8 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.Companions;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -21,7 +19,7 @@ import net.minecraft.server.level.ServerPlayer;
  * 同名正版玩家,查到穿其皮肤,查不到静默回落默认皮肤(日志可查,不打扰玩家)。
  */
 public record SummonRequestPayload(String name, String skinValue, String skinSig, boolean creative)
-        implements CustomPacketPayload {
+        implements NumenPayload {
 
     public static final int MAX_NAME = 16;
     /** Mojang 签名 textures 的尺寸上限:value 是带皮肤/披风 URL 的 base64 JSON,
@@ -29,20 +27,25 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
     public static final int MAX_SKIN_VALUE = 8192;
     public static final int MAX_SKIN_SIG = 2048;
 
-    public static final Type<SummonRequestPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "summon_request"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, SummonRequestPayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    ByteBufCodecs.stringUtf8(MAX_NAME), SummonRequestPayload::name,
-                    ByteBufCodecs.stringUtf8(MAX_SKIN_VALUE), SummonRequestPayload::skinValue,
-                    ByteBufCodecs.stringUtf8(MAX_SKIN_SIG), SummonRequestPayload::skinSig,
-                    ByteBufCodecs.BOOL, SummonRequestPayload::creative,
-                    SummonRequestPayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "summon_request");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUtf(name, MAX_NAME);
+        buf.writeUtf(skinValue, MAX_SKIN_VALUE);
+        buf.writeUtf(skinSig, MAX_SKIN_SIG);
+        buf.writeBoolean(creative);
+    }
+
+    public static SummonRequestPayload read(FriendlyByteBuf buf) {
+        return new SummonRequestPayload(buf.readUtf(MAX_NAME), buf.readUtf(MAX_SKIN_VALUE),
+                buf.readUtf(MAX_SKIN_SIG), buf.readBoolean());
     }
 
     /** 正在异步召唤中的 owner/name 键——皮肤查询窗口内吃掉重复请求,防双击造重。 */

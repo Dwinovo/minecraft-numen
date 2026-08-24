@@ -2,11 +2,8 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.CompanionSpeech;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -17,20 +14,24 @@ import java.util.UUID;
  * 纯姿态信号——身体据此在说话期间注视主人(闲时链消费),不承载任何
  * 逻辑状态,丢了漂了都无害。只在状态翻转时发,不逐 tick 刷。
  */
-public record SpeakingStatePayload(UUID entityUuid, boolean speaking) implements CustomPacketPayload {
+public record SpeakingStatePayload(UUID entityUuid, boolean speaking) implements NumenPayload {
 
-    public static final Type<SpeakingStatePayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "speaking_state"));
-
-    public static final StreamCodec<RegistryFriendlyByteBuf, SpeakingStatePayload> STREAM_CODEC =
-            StreamCodec.composite(
-                    UUIDUtil.STREAM_CODEC, SpeakingStatePayload::entityUuid,
-                    ByteBufCodecs.BOOL, SpeakingStatePayload::speaking,
-                    SpeakingStatePayload::new);
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "speaking_state");
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public ResourceLocation id() {
+        return ID;
+    }
+
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUUID(entityUuid);
+        buf.writeBoolean(speaking);
+    }
+
+    public static SpeakingStatePayload read(FriendlyByteBuf buf) {
+        return new SpeakingStatePayload(buf.readUUID(), buf.readBoolean());
     }
 
     /** Server main thread. 只认主人本人发来的状态。 */

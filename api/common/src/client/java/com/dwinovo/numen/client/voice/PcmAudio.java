@@ -1,4 +1,5 @@
 package com.dwinovo.numen.client.voice;
+import net.minecraft.util.Mth;
 
 /**
  * 一段解码完成的 PCM 音频：16-bit 有符号、小端、单声道。
@@ -36,7 +37,7 @@ public record PcmAudio(int sampleRate, byte[] data) {
         byte[] out = new byte[data.length];
         for (int i = 0; i + 1 < data.length; i += 2) {
             int s = (short) ((data[i] & 0xFF) | (data[i + 1] << 8));
-            int v = Math.clamp(Math.round(s * scale), -32768, 32767);
+            int v = Mth.clamp(Math.round(s * scale), -32768, 32767);
             out[i] = (byte) v;
             out[i + 1] = (byte) (v >> 8);
         }

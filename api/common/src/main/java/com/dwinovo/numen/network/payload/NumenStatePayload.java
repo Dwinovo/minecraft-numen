@@ -1,15 +1,14 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import net.minecraft.core.UUIDUtil;
-import net.minecraft.network.RegistryFriendlyByteBuf;
-import net.minecraft.network.codec.ByteBufCodecs;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.item.ItemStack;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -37,49 +36,79 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
                                 int selectedSlot, ItemStack offhand,
                                 List<MobEffectInstance> effects,
                                 String vehicleType, int vehicleId)
-        implements CustomPacketPayload {
+        implements NumenPayload {
 
-    public static final Type<NumenStatePayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_state"));
+    public static final ResourceLocation ID =
+            new ResourceLocation(Constants.MOD_ID, "numen_state");
 
-    /** 手写而不是 {@code composite}:后者最多拼 6 个分量,这里有九个。 */
-    public static final StreamCodec<RegistryFriendlyByteBuf, NumenStatePayload> STREAM_CODEC =
-            StreamCodec.of(NumenStatePayload::write, NumenStatePayload::read);
+    /** 物品清单的护栏:36 主格 + 2×2 合成栏,64 远超实际上限,防的是恶意长度。 */
+    private static final int MAX_ITEMS = 64;
+    private static final int MAX_EFFECTS = 64;
 
-    private static void write(RegistryFriendlyByteBuf buf, NumenStatePayload p) {
-        UUIDUtil.STREAM_CODEC.encode(buf, p.uuid());
-        ByteBufCodecs.BOOL.encode(buf, p.loaded());
-        ItemStack.OPTIONAL_LIST_STREAM_CODEC.encode(buf, p.items());
-        ItemStack.OPTIONAL_LIST_STREAM_CODEC.encode(buf, p.craft());
-        ByteBufCodecs.VAR_INT.encode(buf, p.foodLevel());
-        ByteBufCodecs.FLOAT.encode(buf, p.saturation());
-        ByteBufCodecs.VAR_INT.encode(buf, p.selectedSlot());
-        ItemStack.OPTIONAL_STREAM_CODEC.encode(buf, p.offhand());
-        MobEffectInstance.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buf, p.effects());
-        ByteBufCodecs.STRING_UTF8.encode(buf, p.vehicleType());
-        ByteBufCodecs.VAR_INT.encode(buf, p.vehicleId());
+    @Override
+    public ResourceLocation id() {
+        return ID;
     }
 
-    private static NumenStatePayload read(RegistryFriendlyByteBuf buf) {
-        UUID uuid = UUIDUtil.STREAM_CODEC.decode(buf);
-        boolean loaded = ByteBufCodecs.BOOL.decode(buf);
-        List<ItemStack> items = ItemStack.OPTIONAL_LIST_STREAM_CODEC.decode(buf);
-        List<ItemStack> craft = ItemStack.OPTIONAL_LIST_STREAM_CODEC.decode(buf);
-        int foodLevel = ByteBufCodecs.VAR_INT.decode(buf);
-        float saturation = ByteBufCodecs.FLOAT.decode(buf);
-        int selectedSlot = ByteBufCodecs.VAR_INT.decode(buf);
-        ItemStack offhand = ItemStack.OPTIONAL_STREAM_CODEC.decode(buf);
-        List<MobEffectInstance> effects =
-                MobEffectInstance.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buf);
-        String vehicleType = ByteBufCodecs.STRING_UTF8.decode(buf);
-        int vehicleId = ByteBufCodecs.VAR_INT.decode(buf);
+    @Override
+    public void write(FriendlyByteBuf buf) {
+        buf.writeUUID(uuid);
+        buf.writeBoolean(loaded);
+        writeItems(buf, items);
+        writeItems(buf, craft);
+        buf.writeVarInt(foodLevel);
+        buf.writeFloat(saturation);
+        buf.writeVarInt(selectedSlot);
+        buf.writeItem(offhand);
+        // 效果按 NBT 走:1.20.1 没有 MobEffectInstance 的流编解码器,save/load 是它的原生序列化
+        int en = Math.min(effects.size(), MAX_EFFECTS);
+        buf.writeVarInt(en);
+        for (int i = 0; i < en; i++) {
+            buf.writeNbt(effects.get(i).save(new CompoundTag()));
+        }
+        buf.writeUtf(vehicleType);
+        buf.writeVarInt(vehicleId);
+    }
+
+    public static NumenStatePayload read(FriendlyByteBuf buf) {
+        UUID uuid = buf.readUUID();
+        boolean loaded = buf.readBoolean();
+        List<ItemStack> items = readItems(buf);
+        List<ItemStack> craft = readItems(buf);
+        int foodLevel = buf.readVarInt();
+        float saturation = buf.readFloat();
+        int selectedSlot = buf.readVarInt();
+        ItemStack offhand = buf.readItem();
+        int en = Math.min(buf.readVarInt(), MAX_EFFECTS);
+        List<MobEffectInstance> effects = new ArrayList<>(en);
+        for (int i = 0; i < en; i++) {
+            CompoundTag tag = buf.readNbt();
+            MobEffectInstance e = tag == null ? null : MobEffectInstance.load(tag);
+            if (e != null) {
+                effects.add(e);
+            }
+        }
+        String vehicleType = buf.readUtf();
+        int vehicleId = buf.readVarInt();
         return new NumenStatePayload(uuid, loaded, items, craft, foodLevel, saturation,
                 selectedSlot, offhand, effects, vehicleType, vehicleId);
     }
 
-    @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    private static void writeItems(FriendlyByteBuf buf, List<ItemStack> list) {
+        int n = Math.min(list.size(), MAX_ITEMS);
+        buf.writeVarInt(n);
+        for (int i = 0; i < n; i++) {
+            buf.writeItem(list.get(i));
+        }
+    }
+
+    private static List<ItemStack> readItems(FriendlyByteBuf buf) {
+        int n = Math.min(buf.readVarInt(), MAX_ITEMS);
+        List<ItemStack> list = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            list.add(buf.readItem());
+        }
+        return list;
     }
 
     /** Client main thread. */
