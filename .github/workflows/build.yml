@@ -6,13 +6,12 @@ name: Build
 # 2026-08-01 有两个源码文件被 .gitignore 的裸 build 规则吞掉,本机照常编译,干净 clone 必然
 # 失败;因为当时只有推 tag 才跑 CI,这事十天没人发现,最后是两个外部用户报上来的。
 #
-# 暂时只挂 1.21.1:其余十个分支还是"主仓 + 外部 numen-api"的两仓结构,runner 上解不开那份
-# 依赖,挂上去只会得到一排红叉。等它们并仓了再放开。
+# 本分支已并仓(api/core/ui/ai 单一构建),挂本分支;仍是两仓结构的分支各自保持关闭。
 on:
   push:
-    branches: ["1.21.1"]
+    branches: ["1.20.2"]
   pull_request:
-    branches: ["1.21.1"]
+    branches: ["1.20.2"]
   workflow_dispatch:
 
 # 连着推几次时只留最后一次,前面的直接取消。
