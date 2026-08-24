@@ -152,7 +152,7 @@ public final class CompanionStateWatch {
         java.util.Set<String> now = new java.util.HashSet<>();
         for (var effect : companion.getActiveEffects()) {
             now.add(effect.getEffect().unwrapKey()
-                    .map(key -> key.location().toString()).orElse("unknown")
+                    .map(key -> key.identifier().toString()).orElse("unknown")
                     + '@' + effect.getAmplifier());
         }
         if (now.equals(lastEffects)) {

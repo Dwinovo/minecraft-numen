@@ -22,7 +22,7 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.client.resources.language.I18n;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
@@ -96,12 +96,12 @@ public final class ChatView {
         TRACE_BAR = t.surfaceBorder();
     }
 
-    private static ResourceLocation spr(String n) {
-        return ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, n);
+    private static Identifier spr(String n) {
+        return Identifier.fromNamespaceAndPath(Constants.MOD_ID, n);
     }
-    private static final ResourceLocation AVATAR_FRAME = spr("avatar_frame");
-    private static final ResourceLocation SCROLL_TRACK = spr("scroll_track");
-    private static final ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
+    private static final Identifier AVATAR_FRAME = spr("avatar_frame");
+    private static final Identifier SCROLL_TRACK = spr("scroll_track");
+    private static final Identifier SCROLL_THUMB = spr("scroll_thumb");
 
     private final Font font;
     private final Supplier<EntityAgentLoop> loop;

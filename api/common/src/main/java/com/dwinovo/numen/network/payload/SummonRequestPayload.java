@@ -6,7 +6,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -30,7 +30,7 @@ public record SummonRequestPayload(String name, String skinValue, String skinSig
     public static final int MAX_SKIN_SIG = 2048;
 
     public static final Type<SummonRequestPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "summon_request"));
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "summon_request"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, SummonRequestPayload> STREAM_CODEC =
             StreamCodec.composite(

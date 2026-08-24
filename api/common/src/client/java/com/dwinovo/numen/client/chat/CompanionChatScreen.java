@@ -150,7 +150,7 @@ public class CompanionChatScreen extends Screen {
         RoundRect.card(g, x - 4, y + 1, x - 4 + tagW, y + INPUT_H - 1, 3, th.band(), th.border());
         Nb.text(g, this.font, companionName, x + 2, y + (INPUT_H - this.font.lineHeight) / 2 + 1,
                 th.onBand());
-        inputBar.render(g, mouseX, mouseY, net.minecraft.Util.getMillis(), HostThemeColors.current());
+        inputBar.render(g, mouseX, mouseY, net.minecraft.util.Util.getMillis(), HostThemeColors.current());
 
         String tip = inputBar.tooltipAt(mouseX, mouseY);
         if (tip != null) {

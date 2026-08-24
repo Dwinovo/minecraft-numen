@@ -1585,7 +1585,7 @@ public final class EntityAgentLoop {
                 out.append(", ");
             }
             out.append(effect.getEffect().unwrapKey()
-                    .map(key -> key.location().getPath()).orElse("unknown"));
+                    .map(key -> key.identifier().getPath()).orElse("unknown"));
             if (effect.getAmplifier() > 0) {
                 out.append(" ").append(effect.getAmplifier() + 1);   // 原版 UI 的口径:0 级显示 I
             }
@@ -1646,14 +1646,14 @@ public final class EntityAgentLoop {
         }
         StringBuilder label = new StringBuilder();
         contents.potion().ifPresent(held -> label.append(held.unwrapKey()
-                .map(key -> key.location().getPath()).orElse("unknown")));
+                .map(key -> key.identifier().getPath()).orElse("unknown")));
         // 酿造出来的、模组的药水没有预设名,效果只在自定义列表里 —— 两处都读,不用维护白名单。
         for (var effect : contents.customEffects()) {
             if (label.length() > 0) {
                 label.append('+');
             }
             label.append(effect.getEffect().unwrapKey()
-                    .map(key -> key.location().getPath()).orElse("unknown"));
+                    .map(key -> key.identifier().getPath()).orElse("unknown"));
         }
         return label.toString();
     }

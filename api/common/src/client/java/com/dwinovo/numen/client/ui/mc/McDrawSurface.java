@@ -5,7 +5,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 
 /**
- * IDrawSurface 的 1.21.10 实现——本类是 NumenUI 在每个版本分支上唯一需要
+ * IDrawSurface 的 1.21.11 实现——本类是 NumenUI 在每个版本分支上唯一需要
  * 重写的文件。保持薄:只做坐标与 API 形态的转译,不藏任何布局/状态逻辑。
  */
 public final class McDrawSurface implements IDrawSurface {

@@ -9,7 +9,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
@@ -33,7 +33,7 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
     public static final int MAX_UUIDS = 16;
 
     public static final Type<LocateNumenPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "locate_numen"));
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "locate_numen"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, LocateNumenPayload> STREAM_CODEC =
             StreamCodec.composite(
@@ -55,7 +55,7 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
             if (numen != null && numen.isOwnedByPlayer(player.getUUID())) {
                 out.add(NumenLocationsPayload.Snapshot.live(uuid,
                         numen.getX(), numen.getY(), numen.getZ(),
-                        numen.level().dimension().location().toString(),
+                        numen.level().dimension().identifier().toString(),
                         numen.getHealth(), numen.getMaxHealth()));
                 continue;
             }
@@ -68,7 +68,7 @@ public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacket
                 var pos = entry.pos();
                 out.add(NumenLocationsPayload.Snapshot.lastSeen(uuid,
                         pos.getX(), pos.getY(), pos.getZ(),
-                        entry.dimension().location().toString()));
+                        entry.dimension().identifier().toString()));
                 continue;
             }
             out.add(NumenLocationsPayload.Snapshot.notFound(uuid));

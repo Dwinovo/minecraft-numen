@@ -533,14 +533,14 @@ public final class SettingsView {
         if (addingVoice) {
             // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压上。
             voiceListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
+                    -10000, -10000, net.minecraft.util.Util.getMillis());
             formModal(g, Component.translatable(ModLanguageData.Keys.VOICE_TITLE));
             voiceForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
+                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.util.Util.getMillis());
             return;
         }
         voiceListPanel().render(surface, HostThemeColors.current(),
-                mouseX, mouseY, net.minecraft.Util.getMillis());
+                mouseX, mouseY, net.minecraft.util.Util.getMillis());
     }
 
     private void beginEditVoice(com.dwinovo.numen.client.voice.VoiceLibrary.Entry e) {
@@ -817,7 +817,7 @@ public final class SettingsView {
 
     private void renderSkillsSection(GuiGraphics g, int mouseX, int mouseY) {
         skillsListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                HostThemeColors.current(), mouseX, mouseY, net.minecraft.util.Util.getMillis());
         // 悬停行体 → tooltip:技能名 + 完整描述(行内被 clip 过)。
         var sk = skillsListPanel().entryAtBody(mouseX, mouseY);
         if (sk != null && sk.description() != null) {
@@ -831,7 +831,7 @@ public final class SettingsView {
             java.nio.file.Path dir = Minecraft.getInstance().gameDirectory.toPath()
                     .resolve("config").resolve(com.dwinovo.numen.Constants.MOD_ID).resolve("skills");
             java.nio.file.Files.createDirectories(dir);
-            net.minecraft.Util.getPlatform().openUri(dir.toUri());
+            net.minecraft.util.Util.getPlatform().openUri(dir.toUri());
         } catch (Exception ex) {
             com.dwinovo.numen.Constants.LOG.warn("[numen] open skills folder failed: {}", ex.toString());
         }
@@ -874,7 +874,7 @@ public final class SettingsView {
                         var lib = com.dwinovo.numen.client.skin.SkinLibrary.instance();
                         var face = com.dwinovo.numen.client.skin.SkinTextures.faceOf(e.id(), lib.pngPath(e.id()));
                         if (face != null) {
-                            // 1.21.2+ 的 ResourceLocation 版签名带 (hat, upsideDown, tint)——照原版默认 (true, false, -1)。
+                            // 1.21.2+ 的 Identifier 版签名带 (hat, upsideDown, tint)——照原版默认 (true, false, -1)。
                             net.minecraft.client.gui.components.PlayerFaceRenderer.draw(
                                     mc.graphics(), face, ix, iy, size, true, false, -1);
                         }
@@ -926,14 +926,14 @@ public final class SettingsView {
         var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingSkin) {
             skinListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
+                    -10000, -10000, net.minecraft.util.Util.getMillis());
             formModal(g, Component.translatable(ModLanguageData.Keys.SKIN_TITLE));
             skinForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
+                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.util.Util.getMillis());
             return;
         }
         skinListPanel().render(surface, HostThemeColors.current(),
-                mouseX, mouseY, net.minecraft.Util.getMillis());
+                mouseX, mouseY, net.minecraft.util.Util.getMillis());
     }
 
     /** 皮肤 png 从系统拖进游戏窗口(皮肤表单打开时)。64×64 或旧版 64×32。 */
@@ -989,7 +989,7 @@ public final class SettingsView {
                 left() + 5, top() + HEADER_H + 2, left() + panelW() - 5, top() + panelH() - 5,
                 6, th.surface(), th.surfaceBorder());
         navPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                HostThemeColors.current(), mouseX, mouseY, net.minecraft.util.Util.getMillis());
         int dx = left() + PAD + NAV_W + 3;
         g.fill(dx, secY0() - 2, dx + 1, secBottom(), BORDER);   // 导航与正文的竖分隔线
         switch (section) {
@@ -1002,11 +1002,11 @@ public final class SettingsView {
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
             case BRAIN -> brainPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.util.Util.getMillis());
             case STT -> sttPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.util.Util.getMillis());
             case THEME -> themePanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.util.Util.getMillis());
         }
     }
 
@@ -1015,14 +1015,14 @@ public final class SettingsView {
         if (addingProvider) {
             // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压在上面。
             profileList().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
+                    -10000, -10000, net.minecraft.util.Util.getMillis());
             formModal(g, Component.translatable(ModLanguageData.Keys.PROVIDER_TITLE));
             providerForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
+                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.util.Util.getMillis());
             return;
         }
         profileList().render(surface, HostThemeColors.current(),
-                mouseX, mouseY, net.minecraft.Util.getMillis());
+                mouseX, mouseY, net.minecraft.util.Util.getMillis());
     }
 
     private void beginEditProvider(com.dwinovo.numen.agent.llm.ProviderLibrary.Entry e) {
@@ -1056,14 +1056,14 @@ public final class SettingsView {
         var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingMcp) {
             mcpListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
+                    -10000, -10000, net.minecraft.util.Util.getMillis());
             formModal(g, Component.translatable("numen.mcp.title"));
             mcpForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
+                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.util.Util.getMillis());
             return;
         }
         mcpListPanel().render(surface, HostThemeColors.current(),
-                mouseX, mouseY, net.minecraft.Util.getMillis());
+                mouseX, mouseY, net.minecraft.util.Util.getMillis());
         // 悬停行体 → tooltip:工具名 + url/命令 + 错误(行尾动作热区上不弹)。
         var hovered = mcpListPanel().entryAtBody(mouseX, mouseY);
         if (hovered != null) {
@@ -1114,14 +1114,14 @@ public final class SettingsView {
         var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingPersona) {
             personaListPanel().render(surface, HostThemeColors.current(),
-                    -10000, -10000, net.minecraft.Util.getMillis());
+                    -10000, -10000, net.minecraft.util.Util.getMillis());
             formModal(g, Component.translatable("numen.persona.title"));
             personaForm().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.Util.getMillis());
+                    HostThemeColors.current(), rawMouseX, rawMouseY, net.minecraft.util.Util.getMillis());
             return;
         }
         personaListPanel().render(surface, HostThemeColors.current(),
-                mouseX, mouseY, net.minecraft.Util.getMillis());
+                mouseX, mouseY, net.minecraft.util.Util.getMillis());
     }
 
     private void beginEditPersona(PersonaLibrary.Persona p) {

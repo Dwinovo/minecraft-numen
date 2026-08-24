@@ -11,7 +11,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.language.I18n;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 
@@ -46,12 +46,12 @@ public final class ItemsView {
     private static final int COMP_H = TOP_H + 6 + AGENT_H;
 
     // 原版 HUD 贴图:心与鸡腿
-    private static final ResourceLocation HEART_BG = ResourceLocation.withDefaultNamespace("hud/heart/container");
-    private static final ResourceLocation HEART_FULL = ResourceLocation.withDefaultNamespace("hud/heart/full");
-    private static final ResourceLocation HEART_HALF = ResourceLocation.withDefaultNamespace("hud/heart/half");
-    private static final ResourceLocation FOOD_BG = ResourceLocation.withDefaultNamespace("hud/food_empty");
-    private static final ResourceLocation FOOD_FULL = ResourceLocation.withDefaultNamespace("hud/food_full");
-    private static final ResourceLocation FOOD_HALF = ResourceLocation.withDefaultNamespace("hud/food_half");
+    private static final Identifier HEART_BG = Identifier.withDefaultNamespace("hud/heart/container");
+    private static final Identifier HEART_FULL = Identifier.withDefaultNamespace("hud/heart/full");
+    private static final Identifier HEART_HALF = Identifier.withDefaultNamespace("hud/heart/half");
+    private static final Identifier FOOD_BG = Identifier.withDefaultNamespace("hud/food_empty");
+    private static final Identifier FOOD_FULL = Identifier.withDefaultNamespace("hud/food_full");
+    private static final Identifier FOOD_HALF = Identifier.withDefaultNamespace("hud/food_half");
 
     private ItemsView() {}
 
@@ -215,7 +215,7 @@ public final class ItemsView {
 
     /** A row of segmented icons for a 0..max stat (2 units per icon): vanilla HUD sprites. */
     private static void renderStatRow(GuiGraphics g, int x, int y, float value, float max,
-                                      ResourceLocation full, ResourceLocation half, ResourceLocation empty) {
+                                      Identifier full, Identifier half, Identifier empty) {
         int units = Math.max(1, (int) Math.ceil(max / 2f));
         for (int i = 0; i < units; i++) {
             int ix = x + i * ICON_STEP;

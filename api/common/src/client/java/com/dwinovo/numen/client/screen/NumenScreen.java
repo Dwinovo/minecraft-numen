@@ -109,13 +109,13 @@ public final class NumenScreen extends Screen {
         RUN = t.run();
         FAIL = t.fail();
     }
-    private static net.minecraft.resources.ResourceLocation railSpr(String n) {
-        return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, n);
+    private static net.minecraft.resources.Identifier railSpr(String n) {
+        return net.minecraft.resources.Identifier.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, n);
     }
-    private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME = railSpr("avatar_frame");
-    private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME_ACTIVE = railSpr("avatar_frame_active");
-    private static final net.minecraft.resources.ResourceLocation CHEVRON_UP = railSpr("chevron_up");
-    private static final net.minecraft.resources.ResourceLocation CHEVRON_DOWN = railSpr("chevron_down");
+    private static final net.minecraft.resources.Identifier AVATAR_FRAME = railSpr("avatar_frame");
+    private static final net.minecraft.resources.Identifier AVATAR_FRAME_ACTIVE = railSpr("avatar_frame_active");
+    private static final net.minecraft.resources.Identifier CHEVRON_UP = railSpr("chevron_up");
+    private static final net.minecraft.resources.Identifier CHEVRON_DOWN = railSpr("chevron_down");
 
     private UUID uuid;       // active companion (mutable — the rail switches it in place)
     private String name;
@@ -350,9 +350,10 @@ public final class NumenScreen extends Screen {
         }
 
         @Override public boolean canChooseMode() {
-            // 有 gamemode 权限(等级 2,原版已同步到客户端)才给下拉自选。
+            // 有 gamemode 权限(COMMANDS_GAMEMASTER,原版已同步到客户端)才给下拉自选。
             return minecraft != null && minecraft.player != null
-                    && minecraft.player.hasPermissions(2);
+                    && minecraft.player.permissions().hasPermission(
+                            net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER);
         }
 
         @Override public boolean ownerCreative() {
@@ -391,7 +392,9 @@ public final class NumenScreen extends Screen {
         @Override public boolean canChooseMode() {
             // 与服务端 applyGameMode 的门同一判据:有 gamemode 权限,或主人本人在创造。
             return minecraft != null && minecraft.player != null
-                    && (minecraft.player.hasPermissions(2) || minecraft.player.isCreative());
+                    && (minecraft.player.permissions().hasPermission(
+                            net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER)
+                        || minecraft.player.isCreative());
         }
 
         @Override public boolean currentCreative() {
@@ -952,7 +955,7 @@ public final class NumenScreen extends Screen {
                     UiTheme.current().aiFill(), UiTheme.current().aiBorder());
             summonPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
-                    mouseX, mouseY, net.minecraft.Util.getMillis());
+                    mouseX, mouseY, net.minecraft.util.Util.getMillis());
             String modeTip = summonPanel().modeTooltipAt(mouseX, mouseY);
             if (modeTip != null) {
                 pendingTip = java.util.List.of(Component.literal(modeTip));
@@ -972,7 +975,7 @@ public final class NumenScreen extends Screen {
             }
             editPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
-                    mouseX, mouseY, net.minecraft.Util.getMillis());
+                    mouseX, mouseY, net.minecraft.util.Util.getMillis());
             String modeTip = editPanel().modeTooltipAt(mouseX, mouseY);
             if (modeTip != null) {
                 pendingTip = java.util.List.of(Component.literal(modeTip));
@@ -1016,7 +1019,7 @@ public final class NumenScreen extends Screen {
         // 屏幕级浮层(遣散确认卡):暗幕+卡压在一切之上,tooltip 之前。
         overlayUi.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                 com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
-                mouseX, mouseY, net.minecraft.Util.getMillis());
+                mouseX, mouseY, net.minecraft.util.Util.getMillis());
 
         // Hovered MCP / skill row tooltip — drawn last so nothing paints over it.
         if (pendingTip != null && !dismissOpen()) {
@@ -1258,7 +1261,7 @@ public final class NumenScreen extends Screen {
 
         // 输入行(NumenUI):四颗图标钮 + 输入框;悬停提示由屏幕层画(定位是宿主的事)。
         if (inputBar != null) {
-            inputBar.render(g, mouseX, mouseY, net.minecraft.Util.getMillis(),
+            inputBar.render(g, mouseX, mouseY, net.minecraft.util.Util.getMillis(),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current());
             String tip = inputBar.tooltipAt(mouseX, mouseY);
             if (tip != null) {

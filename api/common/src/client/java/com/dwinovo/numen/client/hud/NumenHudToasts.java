@@ -3,7 +3,7 @@ package com.dwinovo.numen.client.hud;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.ui.mc.McDrawSurface;
-import net.minecraft.Util;
+import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 

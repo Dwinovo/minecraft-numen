@@ -6,7 +6,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.List;
 import java.util.UUID;
@@ -43,7 +43,7 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
             return new Snapshot(uuid, true, false, x, y, z, dimension, 0, 0);
         }
 
-        // StreamCodec.composite 上限 11 字段(1.21.10),装下本 record 的 9 个;线格式与
+        // StreamCodec.composite 上限 12 字段(1.21.11),装下本 record 的 9 个;线格式与
         // 逐字段手写完全一致(同序同码,writeUtf(256) ≡ stringUtf8(256))。
         static final StreamCodec<RegistryFriendlyByteBuf, Snapshot> CODEC =
                 StreamCodec.composite(
@@ -60,7 +60,7 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
     }
 
     public static final Type<NumenLocationsPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_locations"));
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "numen_locations"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, NumenLocationsPayload> STREAM_CODEC =
             StreamCodec.composite(

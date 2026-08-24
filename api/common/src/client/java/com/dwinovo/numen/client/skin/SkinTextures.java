@@ -4,7 +4,7 @@ import com.dwinovo.numen.Constants;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.DynamicTexture;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,17 +21,17 @@ import java.util.Map;
  */
 public final class SkinTextures {
 
-    private static final Map<String, ResourceLocation> CACHE = new HashMap<>();
+    private static final Map<String, Identifier> CACHE = new HashMap<>();
 
     private SkinTextures() {}
 
     /** 条目原图的纹理位置;读不到图返回 null(调用方跳过头像)。 */
-    public static ResourceLocation faceOf(String id, Path png) {
+    public static Identifier faceOf(String id, Path png) {
         if (CACHE.containsKey(id)) return CACHE.get(id);   // 含"读取失败"的 null 负缓存
-        ResourceLocation rl = null;
+        Identifier rl = null;
         try (InputStream in = Files.newInputStream(png)) {
             NativeImage img = NativeImage.read(in);
-            rl = ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID,
+            rl = Identifier.fromNamespaceAndPath(Constants.MOD_ID,
                     "skin_preview/" + id.toLowerCase(Locale.ROOT));
             // 1.21.5:DynamicTexture 构造器新增调试名首参
             Minecraft.getInstance().getTextureManager().register(rl,
@@ -45,7 +45,7 @@ public final class SkinTextures {
 
     /** 换图/删除后作废(纹理管理器里的旧注册随之释放)。 */
     public static void evict(String id) {
-        ResourceLocation rl = CACHE.remove(id);
+        Identifier rl = CACHE.remove(id);
         if (rl != null) {
             Minecraft.getInstance().getTextureManager().release(rl);
         }

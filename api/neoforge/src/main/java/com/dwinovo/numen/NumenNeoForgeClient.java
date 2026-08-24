@@ -3,7 +3,7 @@ package com.dwinovo.numen;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.mcp.client.McpClientManager;
 import net.minecraft.client.Minecraft;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
@@ -83,10 +83,10 @@ public class NumenNeoForgeClient {
         // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」;
         // toast 横幅同层(错误分类话术等,玩家不开面板也看得见)。
         event.registerAboveAll(
-                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "talk_hint"),
+                Identifier.fromNamespaceAndPath(Constants.MOD_ID, "talk_hint"),
                 (g, delta) -> com.dwinovo.numen.client.hud.TalkHint.render(g));
         event.registerAboveAll(
-                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
+                Identifier.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
                 (g, delta) -> com.dwinovo.numen.client.hud.NumenHudToasts.render(g));
     }
 
@@ -110,7 +110,7 @@ public class NumenNeoForgeClient {
     }
 
     static void registerReloadListeners(AddClientReloadListenersEvent event) {
-        // 1.21.4+ uses AddClientReloadListenersEvent.addListener(ResourceLocation, listener) —
+        // 1.21.4+ uses AddClientReloadListenersEvent.addListener(Identifier, listener) —
         // the keyed API (1.21.1 was RegisterClientReloadListenersEvent.registerReloadListener,
         // no key).
         Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()
@@ -118,7 +118,7 @@ public class NumenNeoForgeClient {
         Path skillsDir = numenConfigRoot.resolve("skills");
 
         event.addListener(
-                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "skill_loader"),
+                Identifier.fromNamespaceAndPath(Constants.MOD_ID, "skill_loader"),
                 (ResourceManagerReloadListener) rm -> {
                     SkillRegistry.instance().scan(skillsDir);
                 });

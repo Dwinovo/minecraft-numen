@@ -13,7 +13,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.render.TextureSetup;
 import net.minecraft.client.gui.render.state.GuiElementRenderState;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.joml.Matrix3x2f;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,9 +35,9 @@ public final class RoundRect {
 
     /** 管线定义:着色器位置指 {@code assets/numen_api/shaders/core/rendertype_round_rect.*}。 */
     public static final RenderPipeline PIPELINE = RenderPipeline.builder()
-            .withLocation(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "pipeline/round_rect"))
-            .withVertexShader(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"))
-            .withFragmentShader(ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"))
+            .withLocation(Identifier.fromNamespaceAndPath(Constants.MOD_ID, "pipeline/round_rect"))
+            .withVertexShader(Identifier.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"))
+            .withFragmentShader(Identifier.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"))
             .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
             .withUniform("Projection", UniformType.UNIFORM_BUFFER)
             .withVertexFormat(DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.QUADS)

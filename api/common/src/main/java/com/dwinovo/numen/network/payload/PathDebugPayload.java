@@ -8,7 +8,7 @@ import java.util.UUID;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.network.codec.StreamCodec;
 
 /**
@@ -29,7 +29,7 @@ public record PathDebugPayload(UUID companionId,
         implements CustomPacketPayload {
 
     public static final Type<PathDebugPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "path_debug"));
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "path_debug"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, PathDebugPayload> STREAM_CODEC =
             StreamCodec.of(PathDebugPayload::write, PathDebugPayload::read);

@@ -4,7 +4,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 
@@ -112,7 +112,7 @@ public final class ToolArgs {
 
     /** Parse a raw namespaced item id (e.g. {@code minecraft:diamond}) into a real item. */
     public static Item parseItem(String id) {
-        ResourceLocation rl = ResourceLocation.tryParse(id);
+        Identifier rl = Identifier.tryParse(id);
         if (rl == null) {
             throw new IllegalArgumentException("not a valid item id: " + id);
         }
@@ -135,7 +135,7 @@ public final class ToolArgs {
         }
         for (JsonElement el : args.getAsJsonArray(key)) {
             if (el == null || el.isJsonNull()) continue;
-            ResourceLocation id = ResourceLocation.tryParse(el.getAsString());
+            Identifier id = Identifier.tryParse(el.getAsString());
             if (id != null && BuiltInRegistries.ITEM.containsKey(id)) {
                 out.add(BuiltInRegistries.ITEM.getValue(id));
             }

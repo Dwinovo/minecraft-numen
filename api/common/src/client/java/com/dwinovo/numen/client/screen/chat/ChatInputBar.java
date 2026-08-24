@@ -12,7 +12,7 @@ import com.dwinovo.numen.client.ui.widget.UiRoot;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.List;
 import java.util.Set;
@@ -35,12 +35,12 @@ public final class ChatInputBar {
     /** 输入框右侧可选的几颗键;顺序即布局。 */
     public enum Key { MIC, SEND, STOP }
 
-    private static final ResourceLocation ICON_MIC = icon("icon_mic");
-    private static final ResourceLocation ICON_SEND = icon("icon_send");
-    private static final ResourceLocation ICON_STOP = icon("icon_stop");
+    private static final Identifier ICON_MIC = icon("icon_mic");
+    private static final Identifier ICON_SEND = icon("icon_send");
+    private static final Identifier ICON_STOP = icon("icon_stop");
 
-    private static ResourceLocation icon(String name) {
-        return ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, name);
+    private static Identifier icon(String name) {
+        return Identifier.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, name);
     }
 
     /** 宿主回调面:说话/麦克风/叫停,以及"这几颗键此刻可不可按"。 */
@@ -85,7 +85,7 @@ public final class ChatInputBar {
     /** 右侧那一串键,顺序即布局。 */
     private Button[] keys = new Button[0];
     private String draft = "";
-    private ResourceLocation micIcon = ICON_MIC;
+    private Identifier micIcon = ICON_MIC;
 
     /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
     private int fieldX, fieldY, fieldW, fieldH;
@@ -359,11 +359,11 @@ public final class ChatInputBar {
 
     /** 图标钮:贴图绘制由本层(允许 import MC)注入,组件库只管几何与状态色。
      *  {@code sprite} 传 null = 用活的麦克风图标(录音中换停止方块)。 */
-    private Button iconButton(ResourceLocation sprite, String tipKey,
+    private Button iconButton(Identifier sprite, String tipKey,
                               Button.Style style, Runnable action) {
         return new Button(t(tipKey), style, action)
                 .icon(12, (s, ix, iy, size, argb) -> {
-                    ResourceLocation icon = sprite != null ? sprite : micIcon;
+                    Identifier icon = sprite != null ? sprite : micIcon;
                     if (s instanceof McDrawSurface mc) {
                         mc.graphics().blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, icon, ix, iy, size, size);
                     }

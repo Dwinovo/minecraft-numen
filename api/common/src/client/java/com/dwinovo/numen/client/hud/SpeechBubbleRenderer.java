@@ -9,10 +9,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.language.I18n;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.network.chat.Style;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 
 import java.util.ArrayList;
@@ -24,7 +24,7 @@ import java.util.List;
  *
  * <p>从玩家实体渲染尾部进入(mixin,与名牌同一条管线):实体通道是
  * 光影/着色器正确处理的路径,世界渲染阶段的裸几何在 Iris 下会被管线
- * 吃掉只剩残影。几何一律挂在名牌同款的 {@code RenderType.text} 上
+ * 吃掉只剩残影。几何一律挂在名牌同款的 {@code RenderTypes.text} 上
  * (白色底图 + 顶点着色),文字全亮度——夜里也得看得清她在说什么。
  *
  * <p>视觉沿用 GUI 的 BlockFrame 方言:方角、粗边、硬偏移阴影,配色取
@@ -36,8 +36,8 @@ import java.util.List;
  */
 public final class SpeechBubbleRenderer {
 
-    private static final ResourceLocation WHITE =
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/white.png");
+    private static final Identifier WHITE =
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "textures/gui/white.png");
 
     private static final float SCALE = 0.025f;
     private static final int MAX_WIDTH = 130;     // 文本换行宽(px)
@@ -127,7 +127,7 @@ public final class SpeechBubbleRenderer {
         // SubmitNodeCollector。一次 submitCustomGeometry 把整个气泡(阴影/边框/
         // 填充/小方尾)写进同一个节点,层次仍由 z 拉开;回调延后执行,
         // 参与计算的局部量全部 final。
-        collector.submitCustomGeometry(poseStack, RenderType.text(WHITE), (pose, vc) -> {
+        collector.submitCustomGeometry(poseStack, RenderTypes.text(WHITE), (pose, vc) -> {
             // 硬偏移阴影垫底(整体,含尾影由主影覆盖)
             quad(vc, pose, x0 + SHADOW_OFF, y0 + SHADOW_OFF, x1 + SHADOW_OFF, y1 + SHADOW_OFF,
                     0.0f, border);

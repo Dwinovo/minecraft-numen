@@ -6,7 +6,7 @@ import com.dwinovo.numen.client.voice.VoicePreviewSound;
 import net.fabricmc.fabric.api.client.sound.v1.FabricSoundInstance;
 import net.minecraft.client.sounds.AudioStream;
 import net.minecraft.client.sounds.SoundBufferLibrary;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import org.spongepowered.asm.mixin.Mixin;
 
 import java.util.concurrent.CompletableFuture;
@@ -25,7 +25,7 @@ public abstract class MixinVoicePcmFabricSound implements FabricSoundInstance {
 
     @Override
     public CompletableFuture<AudioStream> getAudioStream(SoundBufferLibrary loader,
-                                                         ResourceLocation id, boolean repeatInstantly) {
+                                                         Identifier id, boolean repeatInstantly) {
         return ((VoicePcmSource) (Object) this).openStream();
     }
 }

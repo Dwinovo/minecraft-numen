@@ -5,7 +5,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * Server → Client: ask the receiving owner's client to perform a local UI action.
@@ -20,7 +20,7 @@ public record ClientUiActionPayload(Action action) implements CustomPacketPayloa
     public enum Action { OPEN_SETTINGS, RESET_LOOPS, DEBUG_TEXT_ON, DEBUG_TEXT_OFF }
 
     public static final Type<ClientUiActionPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "client_ui_action"));
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "client_ui_action"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ClientUiActionPayload> STREAM_CODEC =
             StreamCodec.composite(

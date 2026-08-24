@@ -323,12 +323,14 @@ public final class Companions {
 
     /**
      * 游戏模式落地,召唤表单和编辑卡同一道门。创造档过权限门:主人有 /gamemode
-     * 权限(等级 2)<b>或本人就在创造</b>(无权限时客户端继承主人档)都放行;
+     * 权限(COMMANDS_GAMEMASTER)<b>或本人就在创造</b>(无权限时客户端继承主人档)都放行;
      * 都不满足(伪造/竞态)按生存并说明——同伴的模式上限 = 主人的上限。
      */
     public static void applyGameMode(ServerPlayer owner, NumenPlayer body, boolean creative) {
         if (body == null) return;
-        if (creative && !owner.hasPermissions(2) && !owner.isCreative()) {
+        if (creative && !owner.permissions().hasPermission(
+                net.minecraft.server.permissions.Permissions.COMMANDS_GAMEMASTER)
+                && !owner.isCreative()) {
             owner.sendSystemMessage(net.minecraft.network.chat.Component.literal(
                     "[Numen] 创造档需要作弊/OP 权限,已按生存"));
             creative = false;
@@ -343,7 +345,7 @@ public final class Companions {
      * spending a fresh LLM call just to note the move. Called from each loader's dimension-change hook.
      */
     public static void onDimensionChanged(NumenPlayer body) {
-        String dim = body.level().dimension().location().toString();
+        String dim = body.level().dimension().identifier().toString();
         com.dwinovo.numen.event.NumenEvents.emit(body,
                 com.dwinovo.numen.event.NumenEvents.Kind.DIMENSION_CHANGE,
                 java.util.Map.of("to", dim),

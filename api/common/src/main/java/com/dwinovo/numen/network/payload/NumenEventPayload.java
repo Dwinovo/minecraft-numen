@@ -6,7 +6,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 import java.util.UUID;
 
@@ -31,7 +31,7 @@ public record NumenEventPayload(UUID entityUuid, String entryType, String text, 
         implements CustomPacketPayload {
 
     public static final Type<NumenEventPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_event"));
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "numen_event"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, NumenEventPayload> STREAM_CODEC =
             StreamCodec.composite(

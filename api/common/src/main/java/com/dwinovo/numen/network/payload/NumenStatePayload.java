@@ -6,7 +6,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.item.ItemStack;
 
@@ -40,7 +40,7 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
         implements CustomPacketPayload {
 
     public static final Type<NumenStatePayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_state"));
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "numen_state"));
 
     /** 手写而不是 {@code composite}:后者最多拼 6 个分量,这里有九个。 */
     public static final StreamCodec<RegistryFriendlyByteBuf, NumenStatePayload> STREAM_CODEC =

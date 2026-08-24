@@ -9,7 +9,7 @@ import java.util.List;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
@@ -40,7 +40,7 @@ public final class PathDebugRenderer {
         }
         Vec3 cam = camera.position();
         MultiBufferSource.BufferSource buffers = mc.renderBuffers().bufferSource();
-        VertexConsumer vc = buffers.getBuffer(RenderType.lines());
+        VertexConsumer vc = buffers.getBuffer(RenderTypes.lines());
         poseStack.pushPose();
         poseStack.translate(-cam.x, -cam.y, -cam.z);
         PoseStack.Pose pose = poseStack.last();
@@ -70,7 +70,7 @@ public final class PathDebugRenderer {
             }
         }
         poseStack.popPose();
-        buffers.endBatch(RenderType.lines());
+        buffers.endBatch(RenderTypes.lines());
     }
 
     /** 折线:相邻格心连线段。 */
@@ -85,12 +85,24 @@ public final class PathDebugRenderer {
         }
     }
 
+    /** 线框盒:12 条棱走 {@link #seg}(1.21.11 起 ShapeRenderer 不再提供 renderLineBox)。 */
     private static void drawBox(PoseStack poseStack, VertexConsumer vc, long packed, float[] color) {
         BlockPos pos = BlockPos.of(packed);
-        net.minecraft.client.renderer.ShapeRenderer.renderLineBox(poseStack.last(), vc,
-                pos.getX() + 0.02, pos.getY() + 0.02, pos.getZ() + 0.02,
-                pos.getX() + 0.98, pos.getY() + 0.98, pos.getZ() + 0.98,
-                color[0], color[1], color[2], 0.9f);
+        PoseStack.Pose pose = poseStack.last();
+        double x0 = pos.getX() + 0.02, y0 = pos.getY() + 0.02, z0 = pos.getZ() + 0.02;
+        double x1 = pos.getX() + 0.98, y1 = pos.getY() + 0.98, z1 = pos.getZ() + 0.98;
+        seg(vc, pose, x0, y0, z0, x1, y0, z0, color);
+        seg(vc, pose, x1, y0, z0, x1, y0, z1, color);
+        seg(vc, pose, x1, y0, z1, x0, y0, z1, color);
+        seg(vc, pose, x0, y0, z1, x0, y0, z0, color);
+        seg(vc, pose, x0, y1, z0, x1, y1, z0, color);
+        seg(vc, pose, x1, y1, z0, x1, y1, z1, color);
+        seg(vc, pose, x1, y1, z1, x0, y1, z1, color);
+        seg(vc, pose, x0, y1, z1, x0, y1, z0, color);
+        seg(vc, pose, x0, y0, z0, x0, y1, z0, color);
+        seg(vc, pose, x1, y0, z0, x1, y1, z0, color);
+        seg(vc, pose, x1, y0, z1, x1, y1, z1, color);
+        seg(vc, pose, x0, y0, z1, x0, y1, z1, color);
     }
 
     /** 一条线段(法线取线段方向,lines 渲染管线要求)。 */

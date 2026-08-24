@@ -10,7 +10,7 @@ import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -30,7 +30,7 @@ public record ChangeSkinPayload(UUID uuid, String skinValue, String skinSig)
         implements CustomPacketPayload {
 
     public static final Type<ChangeSkinPayload> TYPE = new Type<>(
-            ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "change_skin"));
+            Identifier.fromNamespaceAndPath(Constants.MOD_ID, "change_skin"));
 
     public static final StreamCodec<RegistryFriendlyByteBuf, ChangeSkinPayload> STREAM_CODEC =
             StreamCodec.composite(
