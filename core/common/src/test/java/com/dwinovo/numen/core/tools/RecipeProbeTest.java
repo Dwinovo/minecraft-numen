@@ -62,7 +62,8 @@ class RecipeProbeTest {
 
     /** 最小假配方:产出与输入表按参数给,null 就还 null——坏配方就长这样。 */
     private static Recipe<Container> recipe(NonNullList<Ingredient> ings, ItemStack result) {
-        // 1.20.1:配方泛型是 Container(CraftingInput 是 1.21 的),产出/匹配收 RegistryAccess。
+        // 本代:配方泛型是 Container(CraftingInput 是 1.21 的),产出/匹配收 RegistryAccess;
+        // 配方自身没有 id(1.20.2 起归 RecipeHolder)。
         return new Recipe<>() {
             @Override public boolean matches(Container input, Level level) { return false; }
             @Override public ItemStack assemble(Container input, RegistryAccess registries) {
@@ -71,9 +72,6 @@ class RecipeProbeTest {
             @Override public boolean canCraftInDimensions(int width, int height) { return true; }
             @Override public ItemStack getResultItem(RegistryAccess registries) { return result; }
             @Override public NonNullList<Ingredient> getIngredients() { return ings; }
-            @Override public net.minecraft.resources.ResourceLocation getId() {
-                return new net.minecraft.resources.ResourceLocation("numen", "test_probe");
-            }
             @Override public RecipeSerializer<?> getSerializer() { return null; }
             @Override public RecipeType<?> getType() { return null; }
         };

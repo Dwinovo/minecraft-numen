@@ -215,10 +215,10 @@ public final class BuildStates {
         // 那株植物。不写死一张"哪个盆装哪种花"的对照表(那张表在别处是二十多行的
         // switch),模组的花盆也照样认。
         if (state.getBlock() instanceof net.minecraft.world.level.block.FlowerPotBlock pot
-                && pot.getContent() != Blocks.AIR) {
+                && pot.getPotted() != Blocks.AIR) {
             net.minecraft.world.item.Item plant = materialItem(state, level, probe);
             if (plant == net.minecraft.world.item.Items.AIR) {
-                plant = pot.getContent().asItem();
+                plant = pot.getPotted().asItem();
             }
             if (plant == net.minecraft.world.item.Items.AIR
                     || plant == net.minecraft.world.item.Items.FLOWER_POT) {

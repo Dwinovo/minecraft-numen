@@ -30,31 +30,66 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.gametest.GameTestHolder;
-import net.minecraftforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 import java.util.UUID;
 
 /**
- * 同伴行为的游戏内自动化用例(无头 gameTestServer 运行,{@code gradlew :neoforge:runGameTestServer}):
+ * 同伴行为的游戏内自动化用例(无头 gameTestServer 运行,{@code gradlew :core:forge:GameTestServer}):
  * 在结构模板圈出的场地里,用真实的生成路径拉起同伴、经真实任务队列下发指令,按 tick 轮询断言
  * 世界状态——退出码 = 失败用例数,可直接进 CI。
  *
- * <p>结构模板以 SNBT 文本存于仓库 {@code neoforge/gameteststructures/}(运行配置经系统属性
- * {@code numen.gametest.structures} 指路),不提交二进制 .nbt。注意两件事:模板必须是
- * gametest 的"打包" SNBT 形态(palette 为字符串、方块表叫 {@code data}——裸结构 NBT 形态
- * 会被 {@code NbtUtils.unpackStructureTemplate} 静默丢弃,一块不放);且模板方块落位在
- * {@code 测试原点+1+rel},而 {@link GameTestHelper#absolutePos} 只加 {@code rel}——引用
- * 模板内 rel y 的格子时要再 +1。
+ * <p>结构模板以 SNBT 文本存于仓库 {@code core/forge/gameteststructures/},不提交二进制
+ * .nbt。本代模板一律问 {@code StructureTemplateManager} 要,"测试模板目录"这个来源只在
+ * {@code SharedConstants.IS_RUNNING_IN_IDE} 为真时才登记,无头跑批里它是假的——所以静态块
+ * 把 SNBT 转成结构 NBT 喂进存档的 {@code generated/numen/structures/}(永远登记的来源);
+ * {@code numen.gametest.structures} 仍指仓库目录,供 IDE 里 {@code /test run} 与按路径读
+ * 夹具用。注意两件事:SNBT 必须是 gametest 的"打包"形态(palette 为字符串、方块表叫
+ * {@code data}——裸结构 NBT 形态会被 {@code NbtUtils.unpackStructureTemplate} 静默丢弃,
+ * 一块不放);且模板方块落位在 {@code 测试原点+1+rel},而 {@link GameTestHelper#absolutePos}
+ * 只加 {@code rel}——引用模板内 rel y 的格子时要再 +1。
+ *
+ * <p><b>模板名为什么写成 {@code numen:xxx}</b>:本代加载器把批次名与模板名交给同一套
+ * 前缀逻辑——{@link GameTestHolder} 的值会同时前缀到两者上。批次名<b>必须</b>带上这个前缀,
+ * 无头跑批靠 {@code forge.enabledGameTestNamespaces} 按前缀筛选,不带就一个用例都不跑;
+ * 而模板名一旦被前缀成 {@code numen.floor16},当成 {@code ResourceLocation} 解析就是
+ * {@code minecraft:numen.floor16},根本不存在。加载器对<b>含冒号</b>的模板名直接按原样当
+ * 完整路径用、跳过前缀——写成 {@code numen:floor16} 正好一次满足两边:批次照常前缀,模板
+ * 解析成 {@code numen:floor16},落到 {@code generated/numen/structures/floor16.nbt}。
  */
 @GameTestHolder(Constants.MOD_ID)
-@PrefixGameTestTemplate(false)
 public class CompanionGameTests {
 
     static {
         String dir = System.getProperty("numen.gametest.structures");
         if (dir != null) {
             StructureUtils.testStructuresDir = dir;
+        }
+        // 本代 gametest 模板一律问 StructureTemplateManager 要,它认三个来源:资源包、
+        // 存档 generated 目录、以及"测试模板目录"——最后那个只在
+        // SharedConstants.IS_RUNNING_IN_IDE 为真时才登记,无头跑批里它是假的,
+        // numen:floor16 会一个都找不到。跑批运行配置(仅 GameTestServer)用
+        // numen.gametest.generated 指向存档 generated 目录,这里把仓库的 SNBT 模板
+        // 转成结构 NBT 喂进去——仓库仍只存文本,不提交二进制。
+        String feed = System.getProperty("numen.gametest.generated");
+        if (dir != null && feed != null) {
+            try {
+                java.nio.file.Path out = java.nio.file.Path.of(feed);
+                java.nio.file.Files.createDirectories(out);
+                try (java.util.stream.Stream<java.nio.file.Path> files =
+                             java.nio.file.Files.list(java.nio.file.Path.of(dir))) {
+                    for (java.nio.file.Path p : files
+                            .filter(f -> f.getFileName().toString().endsWith(".snbt")).toList()) {
+                        String name = p.getFileName().toString();
+                        name = name.substring(0, name.length() - ".snbt".length());
+                        net.minecraft.nbt.CompoundTag tag = net.minecraft.nbt.NbtUtils
+                                .snbtToStructure(java.nio.file.Files.readString(p));
+                        net.minecraft.nbt.NbtIo.writeCompressed(tag, out.resolve(name + ".nbt"));
+                    }
+                }
+            } catch (Exception e) {
+                throw new IllegalStateException("gametest 模板喂进存档 generated 目录失败", e);
+            }
         }
     }
 
@@ -71,7 +106,7 @@ public class CompanionGameTests {
      * (实测在 4.0~4.8 之间摆、有效血量 8 掉到 5);内沿一旦叠上格量化补偿,带宽从 1.28 压到
      * 0.57,格分辨率装不下,寻路一路失败,她停在边缘不动。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_combat")
     public static void combat_holds_the_skirmish_band(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(3, 2, 3));
@@ -105,7 +140,7 @@ public class CompanionGameTests {
      * 点名打不敌对的东西:一头猪,附近一只怪都没有。她必须走过去把它打掉——走位目标由
      * "有没有目标"决定,不由"附近有没有怪"决定;后者只是躲避场。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_combat")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_combat")
     public static void attack_hunts_a_named_passive_target(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
@@ -132,7 +167,7 @@ public class CompanionGameTests {
      * 回执必须说 "in head"。曾经用含盔甲槽的总数比对来确认"离开了背包",头盔从手里挪到
      * 头上数量不变,于是判没穿上、兜底报 "holding … in main hand"——穿对了话说错了。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void equip_armor_reply_names_the_slot(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_dresser", new BlockPos(4, 2, 4), false);
@@ -155,7 +190,7 @@ public class CompanionGameTests {
      * 丢出去的是原物:附魔镐 drop_items 之后,地上的掉落物必须还带着那条附魔。
      * 曾经按数量销毁再按种类重造,附魔/耐久/改名全部蒸发——主人递来的神器一进一出成白板。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_inventory")
     public static void dropped_items_keep_their_components(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_courier", new BlockPos(4, 2, 4), false);
@@ -185,7 +220,7 @@ public class CompanionGameTests {
      * textures,而 UUID 与背包(经 .dat)原样回来——换的是皮,不是人。
      * ChangeSkinPayload 对活体执行的正是这一串。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_inventory")
+    @GameTest(template = "numen:floor16", timeoutTicks = 400, batch = "numen_inventory")
     public static void reskin_recycle_keeps_identity_and_items(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
@@ -231,7 +266,7 @@ public class CompanionGameTests {
      * 那个包永远不来 —— 她从任意高度跳下去毫发无伤,而 {@code fallDistance} 恒为 0,
      * 靠它触发的东西一律是死的。这条守 {@code NumenPlayer.tick()} 里补回来的那一趟。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_survival")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_survival")
     public static void fall_damage_reaches_the_body(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = plainCompanion(helper, new BlockPos(4, 2, 4));
@@ -253,7 +288,7 @@ public class CompanionGameTests {
      *
      * <p>收水是这条的重点 —— 桶是消耗品,放完不收就只能救一次,第二次直接摔死。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_survival")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_survival")
     public static void mlg_breaks_the_fall_and_takes_the_water_back(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = plainCompanion(helper, new BlockPos(11, 2, 11));
@@ -322,7 +357,7 @@ public class CompanionGameTests {
         return zombie;
     }
 
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_smoke")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_smoke")
     public static void companion_goto(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -350,7 +385,7 @@ public class CompanionGameTests {
      * 走"规划穿门 + 执行层右键开门"这条链。守的是 MovementTraverse 的
      * 门交互与 canWalkThroughBlockState 的木门可通行假定。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_smoke")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_smoke")
     public static void goto_through_closed_door(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 周界石墙 rel x,z ∈ [1,5]、y 2..4;南墙中央 (3,*,5) 留门洞
@@ -392,7 +427,7 @@ public class CompanionGameTests {
      * 不再是廉价选项)关住矿工,矿在屋外,唯一通路是关着的橡木门。验证
      * 挖掘任务的站位寻路复用同一条开门链;收工后墙体完好(确实没打洞)。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_mine")
     public static void mine_through_closed_door(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 1; x <= 5; x++) {
@@ -454,7 +489,7 @@ public class CompanionGameTests {
      * 一次 200ms 的真实搜索在这里折合上百游戏刻,超时必须覆盖"搜索墙钟 × tps"的放大。走完整生产链路——目标索引注册与
      * 查询、复合站位、眼及就地挖掘、探底波段、掉落拾取、背包计数。
      */
-    @GameTest(template = "real_spruce_forest", timeoutTicks = 100000, batch = "numen_mine")
+    @GameTest(template = "numen:real_spruce_forest", timeoutTicks = 100000, batch = "numen_mine")
     public static void mine_spruce_forest(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(new BlockPos(1, 15, 1));
@@ -544,7 +579,7 @@ public class CompanionGameTests {
 
     /** 形状 DSL:空心圆柱(半径 3、高 4 的塔筒)。几何由 build_shape 的展开器
      *  生成,走常规建造任务(消耗材料),验"搭积木"路线的地基。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_build")
     public static void build_shape_cylinder(GameTestHelper helper) {
         BlockPos center = new BlockPos(10, 2, 10);
         List<BlockPos> rel = com.dwinovo.numen.core.build.BuildShapes.shapeCells(
@@ -564,7 +599,7 @@ public class CompanionGameTests {
      * 对的格自动跳过。计划不需要存——<b>世界本身就是进度</b>。这条一旦坏掉,续建
      * 会变成在旧墙上叠新墙,所以必须有回归锁。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_build")
     public static void survival_build_resumes_after_restock(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_hauler", new BlockPos(2, 2, 2), false);
@@ -623,7 +658,7 @@ public class CompanionGameTests {
      * <p>液体则相反:那是真的不做,所以错误信息必须说是边界,不能回一句"未知方块"
      * ——名字明明是对的,模型只会以为自己拼错了。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 400, batch = "numen_build")
     public static void build_block_ids_and_material_counts(GameTestHelper helper) {
         for (String id : new String[]{"air", "minecraft:air", "dirt_path", "farmland", "tall_grass"}) {
             com.dwinovo.numen.core.build.BuildPalette.parse(id);
@@ -700,7 +735,7 @@ public class CompanionGameTests {
      * 文件,可以任意编辑、可以从网上下载,照搬容器内容意味着一张塞满钻石的图纸
      * 建出来就是白送。这不是保守,是这条线必须画在这里。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1400, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 1400, batch = "numen_build")
     public static void blueprint_block_entity_contents_survive(GameTestHelper helper) {
         // 白名单先在纯函数层验:同一份数据,告示牌留字、箱子什么都不留
         var signData = new net.minecraft.nbt.CompoundTag();
@@ -804,10 +839,10 @@ public class CompanionGameTests {
      * <p>"软"用 {@code canBeReplaced()} 判(草、花、雪层、火):原版自己判断"能不能
      * 直接盖上去"用的就是它,不必另立一套近似判据。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_build")
     public static void replace_modes_let_through_what_they_say(GameTestHelper helper) {
         BlockState air = Blocks.AIR.defaultBlockState();
-        BlockState soft = Blocks.GRASS.defaultBlockState();   // 1.20.1:草还叫 GRASS
+        BlockState soft = Blocks.SHORT_GRASS.defaultBlockState();   // 1.20.3 起草改名 SHORT_GRASS
         BlockState solid = Blocks.STONE.defaultBlockState();
         BlockState torch = Blocks.TORCH.defaultBlockState();
 
@@ -860,7 +895,7 @@ public class CompanionGameTests {
      * 比对时忽略什么,这边管落位前清掉什么。所以归一必须在<b>每个目标格都要过的
      * 那道口</b>上做一次,而不是让工具入口和图纸入口各清各的。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_build")
     public static void blueprint_runtime_state_is_normalized(GameTestHelper helper) {
         BlockState ripe = Blocks.WHEAT.defaultBlockState()
                 .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.AGE_7, 7);
@@ -930,7 +965,7 @@ public class CompanionGameTests {
      *
      * <p>所以判据落在加载期:次半从来不是我们放的,不该占一格待办,也不该占分母。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 300, batch = "numen_build")
     public static void blueprint_secondary_halves_are_not_targets(GameTestHelper helper)
             throws Exception {
         ServerLevel level = helper.getLevel();
@@ -966,7 +1001,7 @@ public class CompanionGameTests {
         blocks.add(cellTag(2, 1, 0, 3));   // 门上半
         root.put("blocks", blocks);
         var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
-        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_halves.nbt").toFile());
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_halves.nbt"));
 
         BlockPos anchor = helper.absolutePos(new BlockPos(2, 2, 2));
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
@@ -1006,7 +1041,7 @@ public class CompanionGameTests {
      * 故意把源世界的锚点写成十万格开外——加载器该把它连位置一起剥掉,由落位方按落位
      * 坐标重写。剥漏了或者重写漏了,这里就一只摆设都看不见。
      */
-    @GameTest(template = "floor16", timeoutTicks = 1200, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 1200, batch = "numen_build")
     public static void blueprint_fixtures_hang_where_they_belong(GameTestHelper helper)
             throws Exception {
         ServerLevel level = helper.getLevel();
@@ -1055,7 +1090,7 @@ public class CompanionGameTests {
         entities.add(entityTag(2.5, 0.0, 2.5, stand));
         root.put("entities", entities);
         var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
-        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_hangers.nbt").toFile());
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_hangers.nbt"));
 
         BlockPos anchor = helper.absolutePos(new BlockPos(4, 2, 4));
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
@@ -1114,7 +1149,7 @@ public class CompanionGameTests {
      * <p>牌子上的字照搬:那是纯文本,玩家自己写也是白写的,搬过来不产出任何东西。
      * 三者的差别不在"是不是装饰",而在<b>还原它等不等于凭空产出</b>。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 300, batch = "numen_build")
     public static void blueprint_handiwork_is_not_free(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
 
@@ -1194,7 +1229,7 @@ public class CompanionGameTests {
      * 那个方块的 {@code asItem()} 恰好是什么。这条测试的意义不是"证明我们对",是把这几行
      * 分歧写在明处——哪天有人照通行做法"修正"回去,得先来改这里的字。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 300, batch = "numen_build")
     public static void material_accounting_divergences_are_deliberate(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos probe = helper.absolutePos(new BlockPos(1, 2, 1));
@@ -1283,7 +1318,7 @@ public class CompanionGameTests {
      * 活着的方块实体,里面不可能有外来键;我们读的是文件,手改一张图纸就能往一块牌子上塞
      * 一个 Items。牌子自己会忽略它,但"哪些方块实体读哪些键"是开放集合,不该赌。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 300, batch = "numen_build")
     public static void safe_block_entity_data_is_a_datapack_tag(GameTestHelper helper) {
         var tag = com.dwinovo.numen.core.init.InitTag.SAFE_BLOCK_ENTITY_DATA;
 
@@ -1368,7 +1403,7 @@ public class CompanionGameTests {
      * 一边、落位照放原始那一份,就等于文件里塞一个装满钻石的潜影盒 → 按空盒收料 → 放进
      * 框里是满的。收什么放什么。
      */
-    @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 300, batch = "numen_build")
     public static void only_four_item_components_ride_along(GameTestHelper helper) {
 
         // 一个装了东西的潜影盒挂在展示框里(1.20.1:内容在 tag.BlockEntityTag.Items,
@@ -1431,7 +1466,7 @@ public class CompanionGameTests {
      * {@code placed()} 与 {@code broken()} 都必须是 0——不是"结果看起来一样",而是
      * <b>一次动作都没发生</b>。
      */
-    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_blueprint")
+    @GameTest(template = "numen:floor16", timeoutTicks = 6000, batch = "numen_blueprint")
     public static void blueprint_second_run_changes_nothing(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         writeSmallHouse(level, "fixture_twice");
@@ -1559,7 +1594,7 @@ public class CompanionGameTests {
      * <p>顺带压住摆设的数量:第一遍失败退出时它们不该生成(生成在收工那一步),
      * 而第二遍补上之后必须各只有一只。
      */
-    @GameTest(template = "floor16", timeoutTicks = 12000, batch = "numen_blueprint")
+    @GameTest(template = "numen:floor16", timeoutTicks = 12000, batch = "numen_blueprint")
     public static void blueprint_restock_and_resend_continues(GameTestHelper helper)
             throws Exception {
         ServerLevel level = helper.getLevel();
@@ -1682,7 +1717,7 @@ public class CompanionGameTests {
      * <p>所以口径定义在一个地方({@code PlayerInv.BUILDABLE_SLOTS}),两边都调它。这条
      * 用例钉的就是"同源"本身:同一个背包状态,两个函数必须给同一个数。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_build")
     public static void quote_and_gate_count_the_same_slots(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_offhand", new BlockPos(1, 2, 1), false);
         var inv = companion.getInventory();
@@ -1718,7 +1753,7 @@ public class CompanionGameTests {
      * <p>这条用例把两件事一起钉住:失败要快(给一个远大于"当场"、又远小于旧路径的刻数
      * 上限),以及失败的理由要对(NO_MATERIAL,而不是被拖成超时或"她站不住")。
      */
-    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_blueprint")
+    @GameTest(template = "numen:floor16", timeoutTicks = 2000, batch = "numen_blueprint")
     public static void running_out_of_materials_is_reported_at_once(GameTestHelper helper)
             throws Exception {
         ServerLevel level = helper.getLevel();
@@ -1814,7 +1849,7 @@ public class CompanionGameTests {
         root.put("entities", entities);
         net.minecraft.nbt.NbtIo.writeCompressed(root,
                 com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer())
-                        .resolve(name + ".nbt").toFile());
+                        .resolve(name + ".nbt"));
     }
 
     /**
@@ -1830,7 +1865,7 @@ public class CompanionGameTests {
      *       所以遍历有独立于格数的体积上限。</li>
      * </ul>
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_blueprint")
+    @GameTest(template = "numen:floor16", timeoutTicks = 400, batch = "numen_blueprint")
     public static void corrupt_blueprints_fail_cleanly(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
@@ -1851,7 +1886,7 @@ public class CompanionGameTests {
         blocks.add(cellTag(1, 0, 0, 7));      // 越界
         blocks.add(cellTag(2, 0, 0, -1));     // 负下标
         root.put("blocks", blocks);
-        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_badindex.nbt").toFile());
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_badindex.nbt"));
 
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
                 level, "fixture_badindex", anchor, 0);
@@ -1882,7 +1917,7 @@ public class CompanionGameTests {
         region.putLongArray("BlockStates", new long[]{0L});
         regions.put("bomb", region);
         lite.put("Regions", regions);
-        net.minecraft.nbt.NbtIo.writeCompressed(lite, dir.resolve("fixture_bomb.litematic").toFile());
+        net.minecraft.nbt.NbtIo.writeCompressed(lite, dir.resolve("fixture_bomb.litematic"));
 
         boolean refused = false;
         try {
@@ -1940,7 +1975,7 @@ public class CompanionGameTests {
      * 方块/物品注册表里查得到,要么是我们自己的词汇(op 名、参数名、方块状态键、
      * 形制名)。两边都不是就是错字。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 400, batch = "numen_build")
     public static void skill_docs_name_real_blocks(GameTestHelper helper) {
         // 我们自己的词汇:工具、op、参数、状态键、形制名。它们和方块名共用反引号,
         // 但不该去注册表里找。
@@ -2066,7 +2101,7 @@ public class CompanionGameTests {
      *       抬一个,脊步十举抬两个。抬太少是个平台,抬太多是金字塔。</li>
      * </ol>
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_build")
     public static void roof_slab_technique(GameTestHelper helper) {
         int y0 = 100;
         int halfSpan = 8;
@@ -2118,7 +2153,7 @@ public class CompanionGameTests {
      * 只在角上放一个疙瘩,又把正脊嵌进最后一层里齐平——所以四坡顶怎么调都不像
      * 中式,而这两处恰恰是最认得出的一笔。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_build")
     public static void roof_ridges_stand_proud(GameTestHelper helper) {
         int y0 = 200;
         int bx = 20;
@@ -2173,7 +2208,7 @@ public class CompanionGameTests {
      * 不再收(脊沿长轴跑满)。顺带锁住"上段更陡":上段若把举架曲线重新从五举起算,
      * 腰以上会比檐口还缓,而真实歇山恰恰相反。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_build")
     public static void roof_xieshan_and_shed(GameTestHelper helper) {
         int y0 = 400;
         int bx = 16;
@@ -2219,7 +2254,7 @@ public class CompanionGameTests {
      * 就报成两扇门的料——玩家按清单备齐了,建到一半照样停下。两处判据同源
      * ({@code Target.costsMaterial}),这条用例就是那份同源的证据。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_blueprint")
+    @GameTest(template = "numen:floor16", timeoutTicks = 400, batch = "numen_blueprint")
     public static void blueprint_read_matches_what_gets_spent(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         copyCottageFixture(level);
@@ -2289,7 +2324,7 @@ public class CompanionGameTests {
      * <p>顺带把别名也跑一遍:{@code gable/hip/half_hip/pyramid} 是四种正名的西式
      * 叫法,走的必须是同一套引擎,不能有一个名字漏挂。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 400, batch = "numen_build")
     public static void roof_leaves_no_hole(GameTestHelper helper) {
         String[][] cases = {
                 {"xuanshan", "straight"}, {"xuanshan", "concave"}, {"gable", "concave"},
@@ -2341,7 +2376,7 @@ public class CompanionGameTests {
      * 也就是大多数房子。派发层与施工层<b>必须共用同一个速率公式</b>,各拍各的
      * 就会重演。
      */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    @GameTest(template = "numen:floor16", timeoutTicks = 200, batch = "numen_build")
     public static void build_deadline_covers_pace(GameTestHelper helper) {
         for (int cells : new int[]{50, 500, 1440, 5859, 16384}) {
             for (boolean survival : new boolean[]{true, false}) {
@@ -2366,7 +2401,7 @@ public class CompanionGameTests {
      * 南面 1x2 门洞、玻璃窗、屋内火把),后写覆盖先写——与 build 工具的混排语义
      * 完全一致,免材料模式。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_cottage")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_build_cottage")
     public static void build_medieval_cottage(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -2474,7 +2509,7 @@ public class CompanionGameTests {
      * 再经 BlueprintStore 展开成建造任务。覆盖 .nbt 读取、精确状态落位(门/床双格、
      * 火把贴附)、骨架先行贴附后置的阶段序,以及免材料模式。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_blueprint")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_blueprint")
     public static void blueprint_igloo(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var server = level.getServer();
@@ -2483,7 +2518,7 @@ public class CompanionGameTests {
                     .get(new net.minecraft.resources.ResourceLocation("minecraft:igloo/top")).orElseThrow();
             var tag = template.save(new net.minecraft.nbt.CompoundTag());
             java.nio.file.Path dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(server);
-            net.minecraft.nbt.NbtIo.writeCompressed(tag, dir.resolve("igloo_top.nbt").toFile());
+            net.minecraft.nbt.NbtIo.writeCompressed(tag, dir.resolve("igloo_top.nbt"));
         } catch (java.io.IOException e) {
             throw new RuntimeException(e);
         }
@@ -2515,7 +2550,7 @@ public class CompanionGameTests {
 
     /** 单块悬置:目标在头部高度、上方为空——真实世界曾整任务卡死的最小场景
      *  (站在旁边就该侧身放上,不接受任何"找不到角度")。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_build")
     public static void build_single_block(GameTestHelper helper) {
         runBuildCase(helper, "gametest_handyman",
                 List.of(new BlockPos(6, 3, 6)), 1);
@@ -2523,28 +2558,28 @@ public class CompanionGameTests {
 
 
     /** 实心 5x5x5(125 格):逐层实心浇筑,身体要在自己刚铺的层面上走位。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_heavy")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_build_heavy")
     public static void build_solid_cube(GameTestHelper helper) {
         runBuildCase(helper, "gametest_mason",
                 boxCells(new BlockPos(7, 2, 7), 5, 5, 5, false), 4);
     }
 
     /** 一堵 10x4 的墙(40 格):长条高结构,沿线往返 + 够高处的格子。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_build")
     public static void build_wall(GameTestHelper helper) {
         runBuildCase(helper, "gametest_waller",
                 boxCells(new BlockPos(5, 2, 10), 10, 4, 1, false), 2);
     }
 
     /** 2x2x8 高塔(32 格):细高结构,自体脚手架式攀升,收尾要从塔顶回地面。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_build")
     public static void build_pillar(GameTestHelper helper) {
         runBuildCase(helper, "gametest_towerer",
                 boxCells(new BlockPos(9, 2, 9), 2, 8, 2, false), 2);
     }
 
     /** 9x9 平台(81 格):纯水平铺面,不触发分层,考横向站位与边铺边退。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_build")
     public static void build_platform(GameTestHelper helper) {
         runBuildCase(helper, "gametest_paver",
                 boxCells(new BlockPos(5, 2, 5), 9, 1, 9, false), 3);
@@ -2554,7 +2589,7 @@ public class CompanionGameTests {
      * 真实深板岩矿袋(袋内 26 颗钻石矿):站在顶面,手持铁镐向下挖入,采得 2 颗钻石。
      * 覆盖埋矿的挖入站位语义与索引查询。
      */
-    @GameTest(template = "real_diamond_pocket", timeoutTicks = 100000, batch = "numen_mine")
+    @GameTest(template = "numen:real_diamond_pocket", timeoutTicks = 100000, batch = "numen_mine")
     public static void mine_diamond_pocket(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos spawn = helper.absolutePos(new BlockPos(8, 17, 8));
@@ -2598,7 +2633,7 @@ public class CompanionGameTests {
     }
 
     /** 创造 goto:无畏/无饥饿画像下移动与疾跑门照常工作。 */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_mode")
     public static void creative_goto(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
@@ -2619,7 +2654,7 @@ public class CompanionGameTests {
      * (生存下金矿需铁镐,空手会 WRONG_TOOL 拒工)、无掉落画像按"破坏的
      * 目标方块"计数(背包增量恒零)、以及确实没有掉落物入包。
      */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_mode")
     public static void creative_mine_no_drops(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         List<BlockPos> ores = List.of(
@@ -2647,7 +2682,7 @@ public class CompanionGameTests {
     }
 
     /** 创造建造:背包全空 + 免耗材记账,想建就建;建完背包依旧全空。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_mode")
     public static void creative_build_empty_inventory(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_cmason", new BlockPos(2, 2, 2), true);
@@ -2671,7 +2706,7 @@ public class CompanionGameTests {
     }
 
     /** 生存缺料拒工:空背包 + 消耗记账 → 开工前盘料失败,回执逐项报缺。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_mode")
     public static void survival_build_missing_materials(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_broke", new BlockPos(2, 2, 2), false);
@@ -2706,7 +2741,7 @@ public class CompanionGameTests {
      * 规划器敢想放置路线(hasThrowaway 画像位)+ 执行层自动补料与垫柱动作。
      * 垫柱是改地形,goto 带 may_alter_terrain——不带的版本见 goto_refuses_to_tunnel_by_default。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_mode")
     public static void creative_pillar_out_empty_handed(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int y = 2; y <= 4; y++) {
@@ -2736,7 +2771,7 @@ public class CompanionGameTests {
      * 稀疏丢空气)与 .schem v2(varint 数据、带属性的调色板键),写进蓝图目录
      * 经 BlueprintStore 统一管线加载,逐格断言。不提交二进制夹具。
      */
-    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    @GameTest(template = "numen:floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void blueprint_community_formats(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         java.nio.file.Path dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
@@ -2759,7 +2794,7 @@ public class CompanionGameTests {
         regions.put("main", region);
         var liteRoot = new net.minecraft.nbt.CompoundTag();
         liteRoot.put("Regions", regions);
-        net.minecraft.nbt.NbtIo.writeCompressed(liteRoot, dir.resolve("fixture_lite.litematic").toFile());
+        net.minecraft.nbt.NbtIo.writeCompressed(liteRoot, dir.resolve("fixture_lite.litematic"));
 
         BlockPos anchor = helper.absolutePos(new BlockPos(4, 4, 4));
         var lite = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_lite", anchor, 0);
@@ -2785,7 +2820,7 @@ public class CompanionGameTests {
         spal.putInt("minecraft:oak_stairs[facing=north]", 1);
         schemRoot.put("Palette", spal);
         schemRoot.putByteArray("BlockData", new byte[]{1, 1, 0, 1});
-        net.minecraft.nbt.NbtIo.writeCompressed(schemRoot, dir.resolve("fixture_schem.schem").toFile());
+        net.minecraft.nbt.NbtIo.writeCompressed(schemRoot, dir.resolve("fixture_schem.schem"));
 
         var schem = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_schem", anchor, 0);
         helper.assertTrue(schem.targets().size() == 3, "schem: expect 3 non-air cells, got "
@@ -2812,7 +2847,7 @@ public class CompanionGameTests {
      * 那一格在目标集之外:一件料换三块床方块,还可能覆写掉已砌好的内墙。所以这个
      * 差额不是解码丢了格,恰恰是它没丢:{@code 5857 + 2 == TotalBlocks}。
      */
-    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    @GameTest(template = "numen:floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void blueprint_japanese_cottage_decode(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         copyCottageFixture(level);
@@ -2860,7 +2895,7 @@ public class CompanionGameTests {
      * 格子最终也得补上。
      */
     // 时限给得远远宽于实际用时。考的是"能不能盖完",不是"多快盖完"。
-    @GameTest(template = "floor52", timeoutTicks = 400000, batch = "numen_cottage_jp")
+    @GameTest(template = "numen:floor52", timeoutTicks = 400000, batch = "numen_cottage_jp")
     public static void build_japanese_cottage(GameTestHelper helper) throws Exception {
         ServerLevel level = helper.getLevel();
         copyCottageFixture(level);
@@ -2881,7 +2916,7 @@ public class CompanionGameTests {
     }
 
     /** 创造取物:take_items 凭空取 100 钻石入背包(创造物品栏 GUI 的假体)。 */
-    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    @GameTest(template = "numen:floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void creative_take_items(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
@@ -2902,7 +2937,7 @@ public class CompanionGameTests {
     }
 
     /** 生存取物拒绝:take_items 在生存画像下吃诚实拒绝,背包不动。 */
-    @GameTest(template = "floor16", timeoutTicks = 6000, batch = "numen_mode")
+    @GameTest(template = "numen:floor16", timeoutTicks = 6000, batch = "numen_mode")
     public static void survival_take_items_refused(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
@@ -2923,7 +2958,7 @@ public class CompanionGameTests {
     }
 
     /** 生存耗料建造:恰好给足一组圆石,9 格平台建成且背包精确少 9。 */
-    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mode")
+    @GameTest(template = "numen:floor20", timeoutTicks = 100000, batch = "numen_mode")
     public static void survival_build_consumes(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_frugal", new BlockPos(2, 2, 2), false);
@@ -2955,7 +2990,7 @@ public class CompanionGameTests {
      * 靠的是"方块没吃掉点击就落到物品自用"那步兜底。守住它:没有兜底时
      * 对水右键永远空手,工具却报成功。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    @GameTest(template = "numen:floor16", timeoutTicks = 400, batch = "numen_interact")
     public static void interact_bucket_scoops_aimed_water(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 沉进地板的一格水:四邻就是地板块,天然围住;地表水盆的沿会挡住
@@ -2988,7 +3023,7 @@ public class CompanionGameTests {
      * 生成位与身体重叠还会被原版 noCollision 静默拒绝——所以她站在岸上、
      * 瞄几格外的池心。守的是同一步兜底 + "放出去的船真的存在"。
      */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    @GameTest(template = "numen:floor16", timeoutTicks = 400, batch = "numen_interact")
     public static void interact_boat_places_on_aimed_water(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 3x3 水池,外圈一格石堤
@@ -3030,7 +3065,7 @@ public class CompanionGameTests {
      * 守的是整条载具链——服务端权威开关(没有它船每刻被清零)、桨物理驱动、
      * 水面 A*、靠岸后与步行导航的接力。
      */
-    @GameTest(template = "floor16", timeoutTicks = 2400, batch = "numen_vehicle")
+    @GameTest(template = "numen:floor16", timeoutTicks = 2400, batch = "numen_vehicle")
     public static void boat_goto_pilots_across_water(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         // 把地板挖成一条水道(x 5..11 × z 5..11),两岸是原地板
@@ -3075,7 +3110,7 @@ public class CompanionGameTests {
      * 证据链用第三个动作闭合——守卫失效时按压永远等不到准星确认,后续的
      * 同步破块也就永远轮不上;石头碎了 = 槽是活的。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_vehicle")
+    @GameTest(template = "numen:floor16", timeoutTicks = 600, batch = "numen_vehicle")
     public static void interact_own_vehicle_ends_immediately(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 6; x <= 9; x++) {
@@ -3118,7 +3153,7 @@ public class CompanionGameTests {
      * 把它打掉(创造模式一下即碎)。乘客的行走输入对载具无效,没有这条规则她会坐着
      * "走"到失速。
      */
-    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_vehicle")
+    @GameTest(template = "numen:floor16", timeoutTicks = 600, batch = "numen_vehicle")
     public static void walking_task_steps_off_vehicle(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos cartAt = helper.absolutePos(new BlockPos(3, 2, 8));
@@ -3183,7 +3218,7 @@ public class CompanionGameTests {
      * 回执必须是 TERRAIN_BLOCKED 的清单——点名 oak_planks、给出授权方式——而且墙一块不少。
      * 这就是"挖穿主人的房子"那类投诉的根治点:路上动地形从引擎顺手干,变成模型点头才干。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void goto_refuses_to_tunnel_by_default(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         plankRoomAround(helper, 7, 7);
@@ -3214,7 +3249,7 @@ public class CompanionGameTests {
      * 授权了就开路:同一间屋,goto 带 may_alter_terrain=true。她拆墙出去到达目标,
      * 回执如实记账(En route … break … oak_planks),墙上确实少了木板。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void goto_terraforms_when_permitted(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         plankRoomAround(helper, 7, 7);
@@ -3241,7 +3276,7 @@ public class CompanionGameTests {
      * 有路就绕:一道横贯的木板墙,远端留一个缺口。手里拿着钻石斧——开路按成本算比
      * 绕路便宜得多——但没有授权,她必须绕过去,墙一块不少,回执没有 En route。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void goto_detours_instead_of_digging(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         for (int x = 0; x <= 15; x++) {
@@ -3280,7 +3315,7 @@ public class CompanionGameTests {
      * 接近类动作从不动世界:盔甲架关在玻璃罩里,interact_entity 左键它。她到不了触及
      * 距离内的视线位,任务失败并把挡路的玻璃点名(goto 开路是模型的决定),玻璃一块不碎。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void approach_never_breaks(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos standAt = helper.absolutePos(new BlockPos(8, 2, 8));
@@ -3340,7 +3375,7 @@ public class CompanionGameTests {
      * 跟不上就以结果收场:目标在够不着的柱顶,follow 不带授权。任务必须 FAILED,
      * 回执点名要动的方块和授权方式——不是退避着站在原地空算,主人和模型都蒙在鼓里。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void follow_reports_when_terrain_blocks(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var stand = standOnPillar(helper);
@@ -3365,7 +3400,7 @@ public class CompanionGameTests {
      * 授权了就跟得上:同一根柱,follow 带 may_alter_terrain=true(创造画像免耗材),
      * 她垫上去站到柱顶旁,任务照常常驻。
      */
-    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    @GameTest(template = "numen:floor16", timeoutTicks = 100000, batch = "numen_terrain")
     public static void follow_climbs_when_permitted(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         var stand = standOnPillar(helper);
