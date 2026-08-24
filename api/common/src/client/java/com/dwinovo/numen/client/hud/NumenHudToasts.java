@@ -5,7 +5,7 @@ import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import net.minecraft.util.Util;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 /**
  * 游戏内 HUD 的 toast 宿主。玩家活在面板外(Y/V 快捷对话是对话正门),
@@ -24,7 +24,7 @@ public final class NumenHudToasts {
     }
 
     /** loader 的 HUD 层每帧调用。 */
-    public static void render(GuiGraphics g) {
+    public static void render(GuiGraphicsExtractor g) {
         if (TOASTS.isIdle()) return;
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui) return;

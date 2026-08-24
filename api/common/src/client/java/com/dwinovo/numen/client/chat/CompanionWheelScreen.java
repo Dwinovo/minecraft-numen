@@ -16,8 +16,8 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -140,7 +140,7 @@ public class CompanionWheelScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTicks) {
         // 崩溃护栏:轮盘渲染出错直接关盘,不带走游戏
         if (!com.dwinovo.numen.client.ui.SafeUi.run("wheel-render",
                 () -> renderInner(g, mouseX, mouseY))) {
@@ -148,7 +148,7 @@ public class CompanionWheelScreen extends Screen {
         }
     }
 
-    private void renderInner(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderInner(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         if (entries.isEmpty()) {
             onClose();
             return;
@@ -206,7 +206,7 @@ public class CompanionWheelScreen extends Screen {
                     : 1f;
             float scale = sizePx[i] / AVATAR * breath * open;
 
-            // 1.21.6+ GuiGraphics.pose() 是 2D 仿射的 Matrix3x2fStack:push/popMatrix,
+            // 1.21.6+ GuiGraphicsExtractor.pose() 是 2D 仿射的 Matrix3x2fStack:push/popMatrix,
             // translate/scale 只有两轴(GUI 本来就没用过 z)。
             g.pose().pushMatrix();
             g.pose().translate(ax, ay);
@@ -215,7 +215,7 @@ public class CompanionWheelScreen extends Screen {
             if (!atTop) {
                 RoundRect.fill(g, -half - 2, -half - 2, half + 2, half + 2, 4, th.border());
             }
-            PlayerFaceRenderer.draw(g, KnownSkins.of(entries.get(i).uuid()),
+            PlayerFaceExtractor.extractRenderState(g, KnownSkins.of(entries.get(i).uuid()),
                     -half, -half, AVATAR);
             g.pose().popMatrix();
         }
@@ -311,8 +311,8 @@ public class CompanionWheelScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
-        // 刻意留空:不要菜单模糊(render 里自画一层轻压暗)
+    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTicks) {
+        // 刻意留空:不要菜单模糊(extractRenderState 里自画一层轻压暗)
     }
 
     @Override

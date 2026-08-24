@@ -22,11 +22,11 @@ import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
@@ -509,12 +509,12 @@ public final class NumenScreen extends Screen {
     // Shadowless text — BlockFrame is flat, and a drop shadow on DARK text over a LIGHT ground makes
     // the glyph merge with its own shadow ("smudged"). This build's shadowless path ignores the colour
     // PARAM, so we bake the colour into the text's Style instead.
-    private void txt(GuiGraphics g, Component c, int x, int y, int color) {
+    private void txt(GuiGraphicsExtractor g, Component c, int x, int y, int color) {
         Nb.text(g, font, c, x, y, color);
     }
 
     /** The FormattedCharSequence must already carry its colour in its Style. */
-    private void txt(GuiGraphics g, FormattedCharSequence c, int x, int y, int color) {
+    private void txt(GuiGraphicsExtractor g, FormattedCharSequence c, int x, int y, int color) {
         Nb.text(g, font, c, x, y);
     }
 
@@ -606,7 +606,7 @@ public final class NumenScreen extends Screen {
     }
 
     /** Shadowless placeholder for an empty, unfocused field — the EditBox's own hint renders with a shadow. */
-    private void placeholder(GuiGraphics g, EditBox f, String text) {
+    private void placeholder(GuiGraphicsExtractor g, EditBox f, String text) {
         if (f != null && f.visible && f.getValue().isEmpty() && !f.isFocused()
                 && text != null && !text.isEmpty()) {
             txt(g, Component.literal(text), f.getX(), f.getY(), TXT_FAINT);
@@ -622,7 +622,7 @@ public final class NumenScreen extends Screen {
     /** BlockFrame workspace chrome, drawn procedurally from the CURRENT theme — border frame,
      *  rail column, header band + underline, panel ground with the 16px dot grid. Replaces the
      *  old WARM-baked workspace sprite so a theme switch recolours the whole frame. */
-    private void drawWorkspace(GuiGraphics g) {
+    private void drawWorkspace(GuiGraphicsExtractor g) {
         UiTheme t = UiTheme.current();
         int x0 = railX, y0 = top, x1 = railX + RAIL_W + panelW, y1 = top + panelH;
         g.fill(x0, y0, x1, y1, t.border());                          // frame + rail divider base
@@ -885,17 +885,17 @@ public final class NumenScreen extends Screen {
     // ---- render ----
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partial) {
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
         // 崩溃护栏:面板渲染的任何异常都不许带走游戏——降级成一行红字
         if (!com.dwinovo.numen.client.ui.SafeUi.run("panel-render",
                 () -> renderInner(g, mouseX, mouseY, partial))) {
-            g.drawString(font, "Numen 面板渲染出错,已兜底——详情见 latest.log",
+            g.text(font, "Numen 面板渲染出错,已兜底——详情见 latest.log",
                     left + 10, top + 10, 0xFFFF6B6B, true);
         }
     }
 
-    private void renderInner(GuiGraphics g, int mouseX, int mouseY, float partial) {
-        super.render(g, mouseX, mouseY, partial);
+    private void renderInner(GuiGraphicsExtractor g, int mouseX, int mouseY, float partial) {
+        super.extractRenderState(g, mouseX, mouseY, partial);
         pendingTip = null;   // recollected each frame by the section renderers
 
         drawWorkspace(g);                // rail column + panel chrome, in the CURRENT theme's colours
@@ -964,14 +964,14 @@ public final class NumenScreen extends Screen {
             }
         }
         if (editing) {
-            // 编辑模态:同款暗幕 + 居中卡;标题左侧的头像由屏幕补画(面板不碰 GuiGraphics)。
+            // 编辑模态:同款暗幕 + 居中卡;标题左侧的头像由屏幕补画(面板不碰 GuiGraphicsExtractor)。
             g.fill(railX, top, railX + RAIL_W + panelW, top + panelH,
                     (UiTheme.current().border() & 0xFFFFFF) | 0x99000000);
             com.dwinovo.numen.client.ui.RoundRect.card(g, modalCardX(), modalCardY(),
                     modalCardX() + modalCardW(), modalCardBottom(), 6,
                     UiTheme.current().aiFill(), UiTheme.current().aiBorder());
             if (uuid != null) {
-                PlayerFaceRenderer.draw(g, skinFor(uuid), modalX(), modalY0() + 6, 18);
+                PlayerFaceExtractor.extractRenderState(g, skinFor(uuid), modalX(), modalY0() + 6, 18);
             }
             editPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
@@ -1002,7 +1002,7 @@ public final class NumenScreen extends Screen {
             }
         }
         for (AbstractWidget w : overlay) {
-            w.render(g, mouseX, mouseY, partial);
+            w.extractRenderState(g, mouseX, mouseY, partial);
         }
         // Settings-tab overlay pass: field placeholders, voice-form row labels, and the form
         // dropdowns' open lists (drawn last so they sit above the fields) — see SettingsView.
@@ -1013,7 +1013,7 @@ public final class NumenScreen extends Screen {
         // Summon warn — shown only when 创建 was clicked and something is missing
         // (error at the action, never ambient text). Takes the hint line's spot.
         if (summoning && warnUntil > System.currentTimeMillis() && warnText != null) {
-            g.drawString(font, warnText, modalX(), modalY0() + 186, 0xFFCC6666, false);
+            g.text(font, warnText, modalX(), modalY0() + 186, 0xFFCC6666, false);
         }
 
         // 屏幕级浮层(遣散确认卡):暗幕+卡压在一切之上,tooltip 之前。
@@ -1031,7 +1031,7 @@ public final class NumenScreen extends Screen {
 
     /** The folded-in roster (on the merged sprite's rail column): one avatar head per companion below the
      *  green header, active one framed gold, a status dot each, + tile at the bottom. */
-    private void renderRail(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderRail(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         List<NumenRoster.Entry> entries = NumenRoster.instance().entries();
         int ax = railX + (RAIL_W - RAIL_AV) / 2;
         railScroll = Math.clamp(railScroll, 0, maxRailScroll());     // keep valid as the roster grows/shrinks
@@ -1044,7 +1044,7 @@ public final class NumenScreen extends Screen {
             boolean active = e.uuid().equals(uuid);
             // textured socket behind the head (gold-bordered when active), then the avatar, then a status LED
             g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
-            PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
+            PlayerFaceExtractor.extractRenderState(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
             if (e.dead()) {                                           // dead — dim veil + respawn countdown
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
                 long rem = e.remainingMs();
@@ -1078,7 +1078,7 @@ public final class NumenScreen extends Screen {
 
     /** Scroll-affordance chevron sprite (amber pixel-art triangle, up = more above / down = more below).
      *  Blitted at its native 11×6 so the pixels stay crisp (no scaling, no AA). */
-    private void chevron(GuiGraphics g, int cx, int y, boolean up) {
+    private void chevron(GuiGraphicsExtractor g, int cx, int y, boolean up) {
         g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, 
                 up ? CHEVRON_UP : CHEVRON_DOWN, cx - 5, y, 11, 6);
     }
@@ -1143,12 +1143,12 @@ public final class NumenScreen extends Screen {
         return -1;
     }
 
-    private void emptyHint(GuiGraphics g) {
+    private void emptyHint(GuiGraphicsExtractor g) {
         txt(g, Component.translatable("numen.empty.no_companions"),
                 left + PAD, top + HEADER_H + 10, TXT_FAINT);
     }
 
-    private void renderTabs(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderTabs(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         String[] labels = tabLabels();
         for (int i = 0; i < 3; i++) {
             boolean active = tab == Tab.values()[i];
@@ -1166,7 +1166,7 @@ public final class NumenScreen extends Screen {
 
     /** 头部右侧(tab 左边)的上下文水位+累计消耗。恒定淡色——这是信息不是警报,
      *  临近水位线会自动压缩,不需要玩家做任何事。返回文字左边界,标题据此让位。 */
-    private int renderUsage(GuiGraphics g, int mouseX, int mouseY) {
+    private int renderUsage(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         int pct = loop().contextPercent();
         long total = loop().totalTokensUsed();
         if (pct <= 0 && total <= 0) return tabX[0];
@@ -1185,7 +1185,7 @@ public final class NumenScreen extends Screen {
     }
 
     /** 画目标行;没有目标就一个像素都不占。返回正文该从哪儿开始。 */
-    private int renderGoalLine(GuiGraphics g, int bodyY, int w) {
+    private int renderGoalLine(GuiGraphicsExtractor g, int bodyY, int w) {
         var goal = loop().goal();
         if (goal == null) {
             return bodyY;
@@ -1211,7 +1211,7 @@ public final class NumenScreen extends Screen {
         return bodyY + 11;
     }
 
-    private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderChat(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         int bodyY = top + HEADER_H + 4;
         int bodyBottom = top + panelH - INPUT_H - PAD - 6;
         int transX = left + PAD;

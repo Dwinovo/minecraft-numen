@@ -8,7 +8,7 @@ import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.RoundRect;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.resources.Identifier;
@@ -55,7 +55,7 @@ public final class ItemsView {
 
     private ItemsView() {}
 
-    public static void render(GuiGraphics g, Font font, UUID uuid,
+    public static void render(GuiGraphicsExtractor g, Font font, UUID uuid,
                               int left, int top, int panelW, int panelH, int headerH,
                               int mouseX, int mouseY) {
         UiTheme th = UiTheme.current();
@@ -83,7 +83,7 @@ public final class ItemsView {
                 th.surface(), th.surfaceBorder());
         if (e != null) {
             net.minecraft.client.gui.screens.inventory.InventoryScreen
-                    .renderEntityInInventoryFollowsMouse(g, startX + 24, cTop + 2,
+                    .extractEntityInInventoryFollowsMouse(g, startX + 24, cTop + 2,
                             startX + LEFT_W - 2, cTop + TOP_H - 2, 42, 0.0625f,
                             (float) mouseX, (float) mouseY, e);
         }
@@ -137,7 +137,7 @@ public final class ItemsView {
         int lw = COMP_W / 2 - 16;
         int ly = aY + 6;
         // 人设行:8px 小脸 + 名字
-        net.minecraft.client.gui.components.PlayerFaceRenderer.draw(
+        net.minecraft.client.gui.components.PlayerFaceExtractor.extractRenderState(
                 g, com.dwinovo.numen.client.agent.KnownSkins.of(uuid), c1, ly - 1, 8);
         String persona = loop != null && loop.personaName() != null && !loop.personaName().isBlank()
                 ? loop.personaName() : "默认人设";
@@ -208,13 +208,13 @@ public final class ItemsView {
 
     /** 统一凹槽:从当前主题的地色向边框色压暗两档(边更深、内浅一档)——
      *  深色但同一家谱,切主题跟着换装,不是生硬的半透黑。 */
-    private static void slot(GuiGraphics g, UiTheme th, int x, int y) {
+    private static void slot(GuiGraphicsExtractor g, UiTheme th, int x, int y) {
         g.fill(x, y, x + SLOT, y + SLOT, UiTheme.mix(th.ground(), th.border(), 0.62f));
         g.fill(x + 1, y + 1, x + SLOT - 1, y + SLOT - 1, UiTheme.mix(th.ground(), th.border(), 0.34f));
     }
 
     /** A row of segmented icons for a 0..max stat (2 units per icon): vanilla HUD sprites. */
-    private static void renderStatRow(GuiGraphics g, int x, int y, float value, float max,
+    private static void renderStatRow(GuiGraphicsExtractor g, int x, int y, float value, float max,
                                       Identifier full, Identifier half, Identifier empty) {
         int units = Math.max(1, (int) Math.ceil(max / 2f));
         for (int i = 0; i < units; i++) {
@@ -227,18 +227,18 @@ public final class ItemsView {
     }
 
     /** 画物品并收集悬停(不在此画 tooltip——会被后画的槽位盖住)。 */
-    private static void collect(GuiGraphics g, Font font, ItemStack st, int x, int y,
+    private static void collect(GuiGraphicsExtractor g, Font font, ItemStack st, int x, int y,
                                 int mouseX, int mouseY, ItemStack[] hover) {
         if (st == null || st.isEmpty()) return;
-        g.renderItem(st, x, y);
-        g.renderItemDecorations(font, st, x, y);
+        g.item(st, x, y);
+        g.itemDecorations(font, st, x, y);
         if (mouseX >= x && mouseX < x + 16 && mouseY >= y && mouseY < y + 16) {
             hover[0] = st;
         }
     }
 
     /** 整页收尾:悬停物品的 tooltip 压最上层画。 */
-    private static void tooltipLast(GuiGraphics g, Font font, ItemStack[] hover,
+    private static void tooltipLast(GuiGraphicsExtractor g, Font font, ItemStack[] hover,
                                     int mouseX, int mouseY) {
         if (!hover[0].isEmpty()) {
             g.setTooltipForNextFrame(font, hover[0], mouseX, mouseY);

@@ -30,7 +30,7 @@ import java.util.UUID;
  * 到期时刻记的是主世界的 {@code gameTime}:世界不跑,表就不走。单机退出存档一整夜,
  * 回来时炉子里的矿也没烧,表跟着一起停才是对的。
  *
- * <p>用 {@code getGameTime()} 而不是 {@code getDayTime()}——后者能被 {@code /time set}
+ * <p>用 {@code getGameTime()} 而不是世界时钟时间——后者能被 {@code /time set}
  * 改,一条指令就能让全部的表提前炸或者永不到期。
  *
  * <h2>存的是绝对到期刻</h2>
@@ -55,7 +55,8 @@ public final class TimerRegistry extends SavedData {
     /** 最长一个 MC 日(现实 20 分钟)。熔炼、酿造、等天亮都在这个尺度内。 */
     public static final int MAX_SECONDS = 1200;
 
-    private static final String DATA_NAME = "numen_timers";
+    private static final net.minecraft.resources.Identifier DATA_NAME =
+            net.minecraft.resources.Identifier.fromNamespaceAndPath("numen", "timers");
     /** 一秒扫一次。表的精度是秒级,没必要每刻遍历。 */
     private static final long SWEEP_INTERVAL_TICKS = 20L;
 

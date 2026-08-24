@@ -48,7 +48,8 @@ public final class EventOutbox extends SavedData {
     // 1.21.5 codec 化的 SavedDataType:存储层自己驱动(反)序列化,save()/load() 重写不复存在;
     // 解析失败由存储层兜底(readSavedData 记日志返 null,computeIfAbsent 落回构造器)。
     private static final SavedDataType<EventOutbox> TYPE = new SavedDataType<>(
-            "numen_event_outbox", EventOutbox::new, CODEC,
+            net.minecraft.resources.Identifier.fromNamespaceAndPath("numen", "event_outbox"),
+            EventOutbox::new, CODEC,
             net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 
     private final Map<UUID, EventQueue> queues;

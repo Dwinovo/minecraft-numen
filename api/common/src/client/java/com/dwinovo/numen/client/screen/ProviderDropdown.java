@@ -1,7 +1,7 @@
 package com.dwinovo.numen.client.screen;
 
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.network.chat.Component;
 
@@ -76,7 +76,7 @@ public final class ProviderDropdown {
         return options.isEmpty() ? selectedId : options.get(0).displayName();
     }
 
-    public void render(GuiGraphics g, Font font, int mouseX, int mouseY) {
+    public void render(GuiGraphicsExtractor g, Font font, int mouseX, int mouseY) {
         UiTheme th = UiTheme.current();
         // 收起框与字段同款圆角卡;展开时边框亮 CTA 提示"正处于选择中"。
         com.dwinovo.numen.client.ui.RoundRect.card(g, x, y, x + w, y + h, 5,

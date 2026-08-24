@@ -10,7 +10,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -29,7 +29,7 @@ public final class PlanCard {
 
     private PlanCard() {}
 
-    public static void render(GuiGraphics g, Font font, EntityAgentLoop loop,
+    public static void render(GuiGraphicsExtractor g, Font font, EntityAgentLoop loop,
                               int x, int y, int w, int bottom) {
         // 每帧从当前主题取色——设置页切主题即时生效。
         UiTheme th = UiTheme.current();

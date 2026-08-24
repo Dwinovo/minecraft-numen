@@ -1,7 +1,7 @@
 package com.dwinovo.numen.data;
 
 import java.util.concurrent.CompletableFuture;
-import net.fabricmc.fabric.api.datagen.v1.FabricDataOutput;
+import net.fabricmc.fabric.api.datagen.v1.FabricPackOutput;
 import net.fabricmc.fabric.api.datagen.v1.provider.FabricLanguageProvider;
 import net.minecraft.core.HolderLookup;
 
@@ -14,7 +14,7 @@ public final class FabricModLanguageProvider extends FabricLanguageProvider {
 
     private final String locale;
 
-    public FabricModLanguageProvider(FabricDataOutput output, String locale,
+    public FabricModLanguageProvider(FabricPackOutput output, String locale,
                                      CompletableFuture<HolderLookup.Provider> registries) {
         super(output, locale, registries);
         this.locale = locale;

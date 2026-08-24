@@ -2,17 +2,19 @@ package com.dwinovo.numen.client.ui;
 
 import com.dwinovo.numen.Constants;
 import com.mojang.blaze3d.pipeline.BlendFunction;
+import com.mojang.blaze3d.pipeline.ColorTargetState;
+import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.platform.DepthTestFunction;
+import com.mojang.blaze3d.platform.CompareOp;
 import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.render.TextureSetup;
-import net.minecraft.client.gui.render.state.GuiElementRenderState;
+import net.minecraft.client.renderer.state.gui.GuiElementRenderState;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix3x2f;
 import org.jetbrains.annotations.Nullable;
@@ -20,7 +22,7 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Anti-aliased rounded-rectangle fill via a tiny SDF core shader
  * ({@code assets/numen_api/shaders/core/rendertype_round_rect.vsh/.fsh}).
- * 1.21.6+ deferred GUI: GuiGraphics no longer draws immediately — elements are
+ * 1.21.6+ deferred GUI: GuiGraphicsExtractor no longer draws immediately — elements are
  * collected as {@link GuiElementRenderState}s and batched by the GuiRenderer at
  * frame end, with meshes built in each state's pipeline's own vertex format and
  * only the standard UBOs (DynamicTransforms/Projection) bound. Custom uniforms
@@ -40,9 +42,9 @@ public final class RoundRect {
             .withFragmentShader(Identifier.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"))
             .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
             .withUniform("Projection", UniformType.UNIFORM_BUFFER)
-            .withVertexFormat(DefaultVertexFormat.NEW_ENTITY, VertexFormat.Mode.QUADS)
-            .withBlend(BlendFunction.TRANSLUCENT)
-            .withDepthTestFunction(DepthTestFunction.LEQUAL_DEPTH_TEST)
+            .withVertexFormat(DefaultVertexFormat.ENTITY, VertexFormat.Mode.QUADS)
+            .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+            .withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true))
             .withCull(false)
             .build();
 
@@ -52,12 +54,12 @@ public final class RoundRect {
     private RoundRect() {}
 
     /** A bordered card: 1px border colour ring + inset body fill, same corner family. */
-    public static void card(GuiGraphics g, int x1, int y1, int x2, int y2, float radius, int fill, int border) {
+    public static void card(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, float radius, int fill, int border) {
         fill(g, x1, y1, x2, y2, radius, border);
         fill(g, x1 + 1, y1 + 1, x2 - 1, y2 - 1, Math.max(0f, radius - 1f), fill);
     }
 
-    public static void fill(GuiGraphics g, int x1, int y1, int x2, int y2, float radius, int argb) {
+    public static void fill(GuiGraphicsExtractor g, int x1, int y1, int x2, int y2, float radius, int argb) {
         radius = Math.min(radius, Math.min(x2 - x1, y2 - y1) / 2f);
         if (radius <= 0) {
             g.fill(x1, y1, x2, y2, argb);
@@ -68,7 +70,7 @@ public final class RoundRect {
             g.fill(x1, y1, x2, y2, argb);
             return;
         }
-        g.guiRenderState.submitGuiElement(new State(
+        g.guiRenderState.addGuiElement(new State(
                 new Matrix3x2f(g.pose()), x1, y1, x2, y2, radius, argb, g.scissorStack.peek()));
     }
 

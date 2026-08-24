@@ -124,7 +124,8 @@ public final class CompanionRegistry extends SavedData {
     // (反)序列化,save()/load() 重写不复存在。解析失败由存储层兜底:readSavedData 记日志
     // 返 null,computeIfAbsent 落回构造器 —— "垃圾降级为空注册表"的语义与旧代一致。
     private static final SavedDataType<CompanionRegistry> TYPE = new SavedDataType<>(
-            "numen_companions", CompanionRegistry::new, CODEC,
+            net.minecraft.resources.Identifier.fromNamespaceAndPath("numen", "companions"),
+            CompanionRegistry::new, CODEC,
             net.minecraft.util.datafix.DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 
     private final Map<UUID, Entry> entries;

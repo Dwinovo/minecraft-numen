@@ -85,7 +85,7 @@ public final class PathDebugRenderer {
         }
     }
 
-    /** 线框盒:12 条棱走 {@link #seg}(1.21.11 起 ShapeRenderer 不再提供 renderLineBox)。 */
+    /** 线框盒:12 条棱走 {@link #seg}(本代 ShapeRenderer 不提供 renderLineBox)。 */
     private static void drawBox(PoseStack poseStack, VertexConsumer vc, long packed, float[] color) {
         BlockPos pos = BlockPos.of(packed);
         PoseStack.Pose pose = poseStack.last();

@@ -87,7 +87,7 @@ public final class CompanionEditPanel {
 
         int half = (w - 6) / 2;
         int ry = y;
-        // 头像由屏幕画在标题左侧(面板不碰 GuiGraphics),文字给它让出 24px。
+        // 头像由屏幕画在标题左侧(面板不碰 GuiGraphicsExtractor),文字给它让出 24px。
         Label title = ui.add(new Label(
                 t(ModLanguageData.Keys.EDIT_TITLE) + " · " + host.name(), Label.Role.PRIMARY));
         title.setBounds(x + 24, ry + 5, w - 24, 9);

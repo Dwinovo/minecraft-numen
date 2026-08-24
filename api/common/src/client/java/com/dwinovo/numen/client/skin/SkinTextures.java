@@ -16,7 +16,7 @@ import java.util.Map;
 
 /**
  * 皮肤库条目的预览纹理缓存:把 {@code config/numen/skins/<id>.png} 注册成
- * 动态纹理,供列表行画头像(PlayerFaceRenderer)。按条目 id 缓存,换图/删除
+ * 动态纹理,供列表行画头像(PlayerFaceExtractor)。按条目 id 缓存,换图/删除
  * 时 {@link #evict} 作废。仅客户端渲染线程使用。
  */
 public final class SkinTextures {

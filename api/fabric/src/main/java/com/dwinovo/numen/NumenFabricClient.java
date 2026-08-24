@@ -4,7 +4,7 @@ import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.mcp.client.McpClientManager;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
 import net.minecraft.client.Minecraft;
@@ -67,15 +67,17 @@ public class NumenFabricClient implements ClientModInitializer {
         // fabric 侧无需(也已无)注册 API——RoundRect 自持管线即可。
 
         // N → companion roster panel (chat entry + settings/reset live in there).
-        KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.OPEN_ROSTER);
+        KeyMappingHelper.registerKeyMapping(com.dwinovo.numen.client.NumenKeys.OPEN_ROSTER);
         // R(hold) → companion wheel; Y → quick chat; V(hold) → quick voice.
-        KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.COMPANION_WHEEL);
-        KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.TALK_COMPANION);
-        KeyBindingHelper.registerKeyBinding(com.dwinovo.numen.client.NumenKeys.QUICK_VOICE);
+        KeyMappingHelper.registerKeyMapping(com.dwinovo.numen.client.NumenKeys.COMPANION_WHEEL);
+        KeyMappingHelper.registerKeyMapping(com.dwinovo.numen.client.NumenKeys.TALK_COMPANION);
+        KeyMappingHelper.registerKeyMapping(com.dwinovo.numen.client.NumenKeys.QUICK_VOICE);
 
         // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」;
         // toast 横幅同层(错误分类话术等,玩家不开面板也看得见)。
-        net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback.EVENT.register(
+        // 26.1 fabric-api 撤掉 HudRenderCallback,改走 HudElementRegistry 的图层 API。
+        net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.addLast(
+                Identifier.fromNamespaceAndPath(Constants.MOD_ID, "talk_hint"),
                 (g, delta) -> {
                     com.dwinovo.numen.client.hud.TalkHint.render(g);
                     com.dwinovo.numen.client.hud.NumenHudToasts.render(g);
@@ -101,15 +103,16 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.debug.PathDebugState.clear();
                 });
 
-        // 寻路调试覆盖层:世界空间画线。挂 BEFORE_DEBUG_RENDER(原版调试线
-        // 的绘制点,语义一致),相机走 gameRenderer.getMainCamera()。
+        // 寻路调试覆盖层:世界空间画线。26.1 fabric-api 迁 rendering.v1.level 的
+        // LevelRenderEvents:挂 BEFORE_GIZMOS(原版调试图元 gizmo 的绘制点,语义一致),
+        // 相机走 gameRenderer.getMainCamera()。
         // 头顶气泡不在这里——它走玩家实体渲染尾部(MixinLivingEntityRenderer),
         // 与名牌同管线,光影下才正常。
-        net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents.BEFORE_DEBUG_RENDER
+        net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents.BEFORE_GIZMOS
                 .register(context -> {
-                    if (context.matrices() != null) {
+                    if (context.poseStack() != null) {
                         com.dwinovo.numen.client.debug.PathDebugRenderer.render(
-                                context.matrices(),
+                                context.poseStack(),
                                 net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera());
                     }
                 });

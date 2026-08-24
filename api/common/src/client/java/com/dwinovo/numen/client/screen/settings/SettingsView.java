@@ -17,7 +17,7 @@ import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.platform.services.INumenConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.resources.language.I18n;
@@ -350,7 +350,7 @@ public final class SettingsView {
     private int fBottom() { return cardY1() - 10; }
 
     /** 表单模态的暗幕 + 近全幅圆角卡 + 卡顶标题。 */
-    private void formModal(GuiGraphics g, Component title) {
+    private void formModal(GuiGraphicsExtractor g, Component title) {
         UiTheme t = UiTheme.current();
         g.fill(host.railX(), top(), left() + panelW(), top() + panelH(),
                 (t.border() & 0xFFFFFF) | 0x99000000);
@@ -361,12 +361,12 @@ public final class SettingsView {
 
     // ---- shared draw helpers (private copies — see NumenScreen's originals) ----
 
-    private void txt(GuiGraphics g, Component c, int x, int y, int color) {
+    private void txt(GuiGraphicsExtractor g, Component c, int x, int y, int color) {
         Nb.text(g, font(), c, x, y, color);
     }
 
     /** Shadowless placeholder for an empty, unfocused field — the EditBox's own hint renders with a shadow. */
-    private void placeholder(GuiGraphics g, EditBox f, String text) {
+    private void placeholder(GuiGraphicsExtractor g, EditBox f, String text) {
         if (f != null && f.visible && f.getValue().isEmpty() && !f.isFocused()
                 && text != null && !text.isEmpty()) {
             txt(g, Component.literal(text), f.getX(), f.getY(), TXT_FAINT);
@@ -528,7 +528,7 @@ public final class SettingsView {
         host.rebuild();
     }
 
-    private void renderVoiceSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderVoiceSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingVoice) {
             // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压上。
@@ -815,7 +815,7 @@ public final class SettingsView {
         return skillsListPanel;
     }
 
-    private void renderSkillsSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderSkillsSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         skillsListPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                 HostThemeColors.current(), mouseX, mouseY, net.minecraft.util.Util.getMillis());
         // 悬停行体 → tooltip:技能名 + 完整描述(行内被 clip 过)。
@@ -875,7 +875,7 @@ public final class SettingsView {
                         var face = com.dwinovo.numen.client.skin.SkinTextures.faceOf(e.id(), lib.pngPath(e.id()));
                         if (face != null) {
                             // 1.21.2+ 的 Identifier 版签名带 (hat, upsideDown, tint)——照原版默认 (true, false, -1)。
-                            net.minecraft.client.gui.components.PlayerFaceRenderer.draw(
+                            net.minecraft.client.gui.components.PlayerFaceExtractor.extractRenderState(
                                     mc.graphics(), face, ix, iy, size, true, false, -1);
                         }
                     });
@@ -922,7 +922,7 @@ public final class SettingsView {
         host.rebuild();
     }
 
-    private void renderSkinSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderSkinSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingSkin) {
             skinListPanel().render(surface, HostThemeColors.current(),
@@ -970,7 +970,7 @@ public final class SettingsView {
 
     // ---- render (nav + active section) ----
 
-    public void render(GuiGraphics g, int mouseX, int mouseY) {
+    public void render(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         loadPalette();
         // 任一模态(确认卡/表单卡)在场时整体屏蔽悬停坐标——暗幕下的列表行/导航
         // 不该亮悬停底,MCP 行 tooltip 也不该浮到暗幕上。
@@ -1010,7 +1010,7 @@ public final class SettingsView {
         }
     }
 
-    private void renderProviderSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderProviderSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingProvider) {
             // 表单模态:列表照常渲染作背景(不响应 hover),暗幕+表单卡压在上面。
@@ -1052,7 +1052,7 @@ public final class SettingsView {
 
     // ---- MCP section: external server list with a live on/off switch per row ----
 
-    private void renderMcpSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderMcpSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingMcp) {
             mcpListPanel().render(surface, HostThemeColors.current(),
@@ -1110,7 +1110,7 @@ public final class SettingsView {
 
     // ---- Persona section render + hit-test ----
 
-    private void renderPersonaSection(GuiGraphics g, int mouseX, int mouseY) {
+    private void renderPersonaSection(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font());
         if (addingPersona) {
             personaListPanel().render(surface, HostThemeColors.current(),
@@ -1351,7 +1351,7 @@ public final class SettingsView {
         return false;
     }
 
-    public void renderOverlays(GuiGraphics g, int mouseX, int mouseY) {
+    public void renderOverlays(GuiGraphicsExtractor g, int mouseX, int mouseY) {
         loadPalette();
     }
 }

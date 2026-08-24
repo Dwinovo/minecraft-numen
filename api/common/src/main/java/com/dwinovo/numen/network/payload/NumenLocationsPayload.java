@@ -43,7 +43,7 @@ public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomP
             return new Snapshot(uuid, true, false, x, y, z, dimension, 0, 0);
         }
 
-        // StreamCodec.composite 上限 12 字段(1.21.11),装下本 record 的 9 个;线格式与
+        // StreamCodec.composite 上限 12 字段(26.1.2),装下本 record 的 9 个;线格式与
         // 逐字段手写完全一致(同序同码,writeUtf(256) ≡ stringUtf8(256))。
         static final StreamCodec<RegistryFriendlyByteBuf, Snapshot> CODEC =
                 StreamCodec.composite(

@@ -16,8 +16,8 @@ import com.dwinovo.numen.client.ui.RoundRect;
 import com.dwinovo.numen.mcp.server.McpMode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.world.entity.player.PlayerSkin;
@@ -149,7 +149,7 @@ public final class ChatView {
 
     // ---- render ----
 
-    public void render(GuiGraphics g, int x, int y, int w, int h) {
+    public void render(GuiGraphicsExtractor g, int x, int y, int w, int h) {
         gx = x; gy = y; gw = w; gh = h;
         loadPalette();
         long now = System.currentTimeMillis();
@@ -190,7 +190,7 @@ public final class ChatView {
      * <p>数据来自 {@link McpMode.ActivityFeed} 的只读快照(HTTP 线程写、这里读),
      * 纯内存不持久化;还没人接入时这里改显示接入向导。
      */
-    public void renderConsole(GuiGraphics g, int x, int y, int w, int h) {
+    public void renderConsole(GuiGraphicsExtractor g, int x, int y, int w, int h) {
         loadPalette();
         McpMode mcp = McpMode.instance();
         int cx = x + EDGE;
@@ -227,7 +227,7 @@ public final class ChatView {
     }
 
     /** 还没有调用记录时的引导:连上了就等它动手,没连过就讲怎么接。 */
-    private void renderConsoleGuide(GuiGraphics g, McpMode mcp, int cx, int cy, int cw, boolean connected) {
+    private void renderConsoleGuide(GuiGraphicsExtractor g, McpMode mcp, int cx, int cy, int cw, boolean connected) {
         if (connected) {
             line(g, I18n.get("numen.brain.console_empty"), cx, cy, FAINT);
             return;
@@ -244,7 +244,7 @@ public final class ChatView {
         }
     }
 
-    private void line(GuiGraphics g, String text, int x, int y, int color) {
+    private void line(GuiGraphicsExtractor g, String text, int x, int y, int color) {
         draw(g, Nb.colored(text, color).getVisualOrderText(), x, y);
     }
 
@@ -528,7 +528,7 @@ public final class ChatView {
 
     // ---- drawing ----
 
-    private void drawBlock(GuiGraphics g, Block b, int x, int y, int w) {
+    private void drawBlock(GuiGraphicsExtractor g, Block b, int x, int y, int w) {
         switch (b) {
             case Notice n -> {
                 int tw = font.width(n.text());
@@ -539,7 +539,7 @@ public final class ChatView {
         }
     }
 
-    private void drawBubble(GuiGraphics g, Bubble b, int x, int y, int w) {
+    private void drawBubble(GuiGraphicsExtractor g, Bubble b, int x, int y, int w) {
         int bw = b.maxLineW() + PAD_H * 2;
         int bh = b.lines().size() * LINE_H + PAD_V * 2;
         int bubTop = y + (b.label() != null ? LABEL_H : 0);
@@ -556,7 +556,7 @@ public final class ChatView {
         }
         if (b.showAvatar()) {
             g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, AVATAR_FRAME, avX - 2, bubTop - 2, AV + 4, AV + 4);
-            PlayerFaceRenderer.draw(g, skin(b.own()), avX, bubTop, AV);
+            PlayerFaceExtractor.extractRenderState(g, skin(b.own()), avX, bubTop, AV);
         }
         RoundRect.card(g, bx, bubTop, bx + bw, bubTop + bh, RADIUS, b.fill(), b.border());
         int ty = bubTop + PAD_V + 1;
@@ -571,7 +571,7 @@ public final class ChatView {
      * 极淡底,没有气泡的实底、圆角与头像。过程与话分得开,读者才不会把旁白
      * 当成模型的输出。几何取自 {@link NumenStyle} 的 TRACE_* 令牌。
      */
-    private void drawChip(GuiGraphics g, Chip c, int x, int y) {
+    private void drawChip(GuiGraphicsExtractor g, Chip c, int x, int y) {
         int maxW = 0;
         for (ChipRow r : c.rows()) maxW = Math.max(maxW, font.width(r.text()));
         int cx = x + EDGE + AV + AV_GAP;
@@ -591,7 +591,7 @@ public final class ChatView {
     }
 
     /** Shadowless draw — the colour is baked into the sequence's Style (see {@link Nb}). */
-    private void draw(GuiGraphics g, FormattedCharSequence seq, int x, int y) {
+    private void draw(GuiGraphicsExtractor g, FormattedCharSequence seq, int x, int y) {
         Nb.text(g, font, seq, x, y);
     }
 

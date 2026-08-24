@@ -85,7 +85,7 @@ public final class CompanionChunkLoader {
         }
         if (companion.level() instanceof ServerLevel level) {
             ChunkPos pos = companion.chunkPosition();
-            long packed = pos.toLong();
+            long packed = pos.pack();
             PadState st = states.computeIfAbsent(companion.getUUID(), k -> new PadState());
             boolean crossed = st.chunk != packed;
             if (!crossed && --st.countdown > 0) {
@@ -95,7 +95,7 @@ public final class CompanionChunkLoader {
                 // pad 中心迁移打点(debug 级:诊断用,走路的同伴几秒跨一个 chunk,不该刷正式日志;
                 // 需要时开 debug.log 或调日志级别即可看到)。
                 com.dwinovo.numen.Constants.LOG.debug("[numen-pad] {} pad center -> chunk {},{}",
-                        companion.getName().getString(), pos.x, pos.z);
+                        companion.getName().getString(), pos.x(), pos.z());
             }
             st.chunk = packed;
             st.countdown = REFRESH_TICKS;

@@ -154,7 +154,8 @@ public final class NumenEvents {
 
     /** 组装 XML,盖上游戏内时间戳。 */
     private static String compose(MinecraftServer server, Kind kind, Map<String, String> attrs, String text) {
-        return compose(server.overworld().getDayTime(), kind, attrs, text);
+        // 26.1 世界时钟:getOverworldClockTime 读 OVERWORLD 时钟的总刻,即旧 dayTime 语义。
+        return compose(server.overworld().getOverworldClockTime(), kind, attrs, text);
     }
 
     /**

@@ -10,7 +10,7 @@ import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
@@ -199,7 +199,7 @@ public final class ChatInputBar {
 
     // ---- 宿主转发面 ----
 
-    public void render(GuiGraphics g, int mouseX, int mouseY, long nowMs, NumenTheme.Colors c) {
+    public void render(GuiGraphicsExtractor g, int mouseX, int mouseY, long nowMs, NumenTheme.Colors c) {
         refreshEnablement();
         IDrawSurface s = new McDrawSurface(g, Minecraft.getInstance().font);
         ui.render(s, c, mouseX, mouseY, nowMs);

@@ -58,7 +58,7 @@ public final class SpeechBubbleRenderer {
      */
     public static void render(AbstractClientPlayer body, PoseStack poseStack,
                               SubmitNodeCollector collector,
-                              net.minecraft.client.renderer.state.CameraRenderState camera) {
+                              net.minecraft.client.renderer.state.level.CameraRenderState camera) {
         // 崩溃护栏:实体渲染通道里的异常会带走整个渲染线程——这里绝不外抛
         com.dwinovo.numen.client.ui.SafeUi.run("speech-bubble",
                 () -> renderInner(body, poseStack, collector, camera));
@@ -66,7 +66,7 @@ public final class SpeechBubbleRenderer {
 
     private static void renderInner(AbstractClientPlayer body, PoseStack poseStack,
                                     SubmitNodeCollector collector,
-                                    net.minecraft.client.renderer.state.CameraRenderState camera) {
+                                    net.minecraft.client.renderer.state.level.CameraRenderState camera) {
         SpeechBubbles.View bubble = SpeechBubbles.view(body.getUUID());
         if (bubble == null || body.isInvisible()) {
             return;

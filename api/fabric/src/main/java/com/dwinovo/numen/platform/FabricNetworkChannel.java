@@ -36,7 +36,7 @@ public final class FabricNetworkChannel implements INetworkChannel {
             CustomPacketPayload.Type<T> type,
             StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
             BiConsumer<T, ServerPlayer> handler) {
-        PayloadTypeRegistry.playC2S().register(type, codec);
+        PayloadTypeRegistry.serverboundPlay().register(type, codec);
         ServerPlayNetworking.registerGlobalReceiver(type, (payload, context) -> {
             MinecraftServer server = context.server();
             ServerPlayer player = context.player();
@@ -63,7 +63,7 @@ public final class FabricNetworkChannel implements INetworkChannel {
             CustomPacketPayload.Type<T> type,
             StreamCodec<? super RegistryFriendlyByteBuf, T> codec,
             Consumer<T> handler) {
-        PayloadTypeRegistry.playS2C().register(type, codec);
+        PayloadTypeRegistry.clientboundPlay().register(type, codec);
         if (FabricLoader.getInstance().getEnvironmentType() == EnvType.CLIENT) {
             registerClientReceiverImpl(type, handler);
         }

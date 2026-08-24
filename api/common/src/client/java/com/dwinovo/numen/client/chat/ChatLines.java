@@ -3,7 +3,7 @@ package com.dwinovo.numen.client.chat;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.mixin.ChatComponentAccessor;
 
-import net.minecraft.client.GuiMessage;
+import net.minecraft.client.multiplayer.chat.GuiMessage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Component;
@@ -88,10 +88,10 @@ public final class ChatLines {
             MutableComponent line = name(companionName)
                     .append(Component.literal(partial).withColor(TEXT))
                     .append(Component.literal("▌").withColor(OWN));
-            chat.addMessage(line);
+            chat.addClientSystemMessage(line);
             List<GuiMessage> all = acc.numen$allMessages();
             if (!all.isEmpty()) {
-                LIVE.put(companion, all.get(0));   // addMessage 把新行放在 0 位
+                LIVE.put(companion, all.get(0));   // 加行走 allMessages.addFirst,新行落 0 位
             }
         });
     }
@@ -124,6 +124,6 @@ public final class ChatLines {
     }
 
     private static void add(Component line) {
-        Minecraft.getInstance().gui.getChat().addMessage(line);
+        Minecraft.getInstance().gui.getChat().addClientSystemMessage(line);
     }
 }

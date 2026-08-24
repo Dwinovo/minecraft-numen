@@ -962,7 +962,8 @@ public final class EntityAgentLoop {
         // 位置从矿洞变成了主人身边、手上的任务没了、血量装备全变了。这不分"任务中死"
         // 还是"空闲死",所以这里没有任何判据。
         AbstractClientPlayer body = resolveEntity();
-        long dayTime = body != null ? body.level().getDayTime() : 0L;
+        // 26.1 世界时钟:任意维度读 OVERWORLD 时钟,与旧 dayTime 的共享日历语义一致。
+        long dayTime = body != null ? body.level().getOverworldClockTime() : 0L;
         pushEvent(EventTypes.EVENT, com.dwinovo.numen.event.NumenEvents.compose(
                 dayTime, com.dwinovo.numen.event.NumenEvents.Kind.DEATH, null,
                 "你刚才死了(" + cause + "),背包里的东西全掉在死亡地点了;"

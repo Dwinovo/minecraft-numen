@@ -11,7 +11,7 @@ import com.dwinovo.numen.client.screen.settings.HostThemeColors;
 import com.dwinovo.numen.client.ui.RoundRect;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
@@ -130,13 +130,13 @@ public class CompanionChatScreen extends Screen {
     }
 
     @Override
-    public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
-        // 刻意留空:super.render 默认会画菜单模糊+压暗遮罩,面对面说话
+    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTicks) {
+        // 刻意留空:super.extractRenderState 默认会画菜单模糊+压暗遮罩,面对面说话
         // 不该把世界糊掉——她就站在你面前
     }
 
     @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTicks) {
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTicks) {
         UiTheme th = UiTheme.current();
         int x = (this.width - INPUT_W) / 2;
         int y = this.height - 44;
@@ -156,7 +156,7 @@ public class CompanionChatScreen extends Screen {
         if (tip != null) {
             g.setTooltipForNextFrame(this.font, Component.literal(tip), mouseX, mouseY);
         }
-        super.render(g, mouseX, mouseY, partialTicks);
+        super.extractRenderState(g, mouseX, mouseY, partialTicks);
     }
 
     @Override

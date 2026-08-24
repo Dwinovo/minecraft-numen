@@ -27,7 +27,7 @@ public class NumenMod implements ModInitializer {
                 });
 
         // The companion crossed a portal on its own — tell its brain (ambient world event).
-        net.fabricmc.fabric.api.entity.event.v1.ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register(
+        net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents.AFTER_PLAYER_CHANGE_LEVEL.register(
                 (player, origin, destination) -> {
                     if (player instanceof com.dwinovo.numen.entity.NumenPlayer ap) {
                         com.dwinovo.numen.entity.Companions.onDimensionChanged(ap);

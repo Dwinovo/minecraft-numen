@@ -6,7 +6,7 @@ import com.dwinovo.numen.client.screen.UiTheme;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.player.AbstractClientPlayer;
 
 /**
@@ -27,12 +27,12 @@ public final class TalkHint {
         flashUntilMs = System.currentTimeMillis() + lifeMs;
     }
 
-    public static void render(GuiGraphics g) {
+    public static void render(GuiGraphicsExtractor g) {
         // 崩溃护栏:HUD 层逐帧执行,异常绝不外抛
         com.dwinovo.numen.client.ui.SafeUi.run("talk-hint", () -> renderInner(g));
     }
 
-    private static void renderInner(GuiGraphics g) {
+    private static void renderInner(GuiGraphicsExtractor g) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.screen != null || mc.options.hideGui) {
             return;
@@ -64,10 +64,10 @@ public final class TalkHint {
                 0xFFFFFFFF);
     }
 
-    private static void draw(GuiGraphics g, Minecraft mc, String text, int color) {
+    private static void draw(GuiGraphicsExtractor g, Minecraft mc, String text, int color) {
         Font font = mc.font;
         int x = (g.guiWidth() - font.width(text)) / 2;
         int y = g.guiHeight() / 2 + 16;   // 准星正下方一点,不挡视线焦点
-        g.drawString(font, text, x, y, color, true);
+        g.text(font, text, x, y, color, true);
     }
 }
