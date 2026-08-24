@@ -1,14 +1,14 @@
 plugins {
     id 'api-common'
-    id 'net.neoforged.moddev'
+    id 'org.spongepowered.gradle.vanilla' version '0.2.1-SNAPSHOT'
 }
 
-neoForge {
-    neoFormVersion = neo_form_version
-    // Automatically enable AccessTransformers if the file exists
-    def at = file('src/main/resources/META-INF/accesstransformer.cfg')
-    if (at.exists()) {
-        accessTransformers.from(at.absolutePath)
+minecraft {
+    version(minecraft_version)
+    // Automatically enable AccessWideners if the file exists
+    def aw = file("src/main/resources/${mod_id}.accesswidener")
+    if (aw.exists()) {
+        accessWideners(aw)
     }
 }
 
@@ -21,7 +21,6 @@ sourceSets {
         compileClasspath += sourceSets.main.output
     }
 }
-neoForge.addModdingDependenciesTo(sourceSets.client)
 
 dependencies {
     // LLM 连接层(纯 JVM)住 ai 模块;api 配置让 llm/model 等仍在本模块的
@@ -33,11 +32,11 @@ dependencies {
 
     compileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
     // fabric and neoforge both bundle mixinextras, so it is safe to use it in common
-    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
-    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+    compileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
+    annotationProcessor group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
     // 客户端 mixin 迁到 client 源码集,注解在编译它时也要在场
     clientCompileOnly group: 'org.spongepowered', name: 'mixin', version: '0.8.5'
-    clientCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.5.3'
+    clientCompileOnly group: 'io.github.llamalad7', name: 'mixinextras-common', version: '0.3.5'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

@@ -1,17 +1,22 @@
 plugins {
     id 'api-loader'
-    id 'net.fabricmc.fabric-loom-remap'
+    id 'fabric-loom'
 }
 
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
-    // Obfuscated MC (1.21.1) → loom remaps to Mojang names to match the common source set.
+    // Obfuscated MC (1.20.1) → loom remaps to Mojang names to match the common source set.
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
 }
 
 loom {
+    mixin {
+        // mixins.json 声明的 refmap 名是 ${mod_id}.refmap.json,loom 默认按归档名生成
+        // ${mod_id}-fabric-1.20.1-refmap.json,运行期按声明的名字读不到,这里显式对齐。
+        defaultRefmapName = "${mod_id}.refmap.json"
+    }
     def aw = project(':api:common').file("src/main/resources/${mod_id}.accesswidener")
     if (aw.exists()) {
         accessWidenerPath.set(aw)
@@ -46,7 +51,8 @@ sourceSets.main.resources { srcDir 'src/generated/resources' }
 // Implement mcgradleconventions loader attribute
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
 ['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
-    configurations.named("$variant") {
+    // loom 1.6 没有的配置名(如 includeInternal)直接跳过——matching 不触发未知名报错
+    configurations.matching { it.name == variant }.configureEach {
         attributes {
             attribute(loaderAttribute, 'fabric')
         }

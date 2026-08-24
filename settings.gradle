@@ -11,6 +11,29 @@ pluginManagement {
             }
             filter {
                 includeGroupAndSubgroups('net.fabricmc')
+                includeGroup('fabric-loom')
+            }
+        }
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = 'Forge'
+                    url = uri('https://maven.minecraftforge.net')
+                }
+            }
+            filter {
+                includeGroupAndSubgroups('net.minecraftforge')
+            }
+        }
+        exclusiveContent {
+            forRepository {
+                maven {
+                    name = 'Sponge Snapshots'
+                    url = uri('https://repo.spongepowered.org/repository/maven-public')
+                }
+            }
+            filter {
+                includeGroupAndSubgroups('org.spongepowered')
             }
         }
     }
@@ -20,16 +43,12 @@ plugins {
     id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
 }
 
-// This should match the folder name of the project, or else IDEA may complain (see https://youtrack.jetbrains.com/issue/IDEA-317606)
 rootProject.name = 'Numen'
-// 三兄弟布局:core/(模组本体)、api/(引擎,曾是独立仓)、ai/(LLM 连接层,纯 JVM)。
-// 单一构建:core 直接以 project 依赖消费 api,api 消费 ai,不经 maven 中转。
 include('core:common')
 include('core:fabric')
-include('core:neoforge')
+include('core:forge')
 include('api:common')
 include('api:fabric')
-include('api:neoforge')
-// numen-ai:LLM 连接层,纯 JVM、与 MC 版本无关(详见 ai/build.gradle 头注)。
+include('api:forge')
 include('ai')
 include('ui')
