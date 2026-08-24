@@ -152,7 +152,9 @@ public final class SummonPanel {
             modeBoxY = rowY;
             modeBoxW = half;
         } else {
-            Dropdown modePick = ui.add(new Dropdown(List.of("生存", "创造"),
+            Dropdown modePick = ui.add(new Dropdown(
+                    List.of(t(ModLanguageData.Keys.SUMMON_MODE_SURVIVAL),
+                            t(ModLanguageData.Keys.SUMMON_MODE_CREATIVE)),
                     draft.creative ? 1 : 0, i -> draft.creative = i == 1));
             modePick.setBounds(x + half + 6, rowY, half, NumenStyle.CONTROL_H);
         }
@@ -219,7 +221,9 @@ public final class SummonPanel {
         if (modeInherited) {   // 置灰的继承档(不是控件:点不了才是本意)
             NumenStyle.fieldCard(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
                     c.sectionBg(), c.inputBorder());
-            s.drawText((draft.creative ? "创造" : "生存") + "(继承)",
+            s.drawText(I18n.get(ModLanguageData.Keys.SUMMON_MODE_INHERITED,
+                            t(draft.creative ? ModLanguageData.Keys.SUMMON_MODE_CREATIVE
+                                    : ModLanguageData.Keys.SUMMON_MODE_SURVIVAL)),
                     modeBoxX + 5, modeBoxY + (NumenStyle.CONTROL_H - s.lineHeight()) / 2 + 1,
                     c.textMuted(), false);
         }
@@ -231,7 +235,7 @@ public final class SummonPanel {
         if (!modeInherited) return null;
         boolean over = mx >= modeBoxX && mx < modeBoxX + modeBoxW
                 && my >= modeBoxY && my < modeBoxY + NumenStyle.CONTROL_H;
-        return over ? "没有 gamemode 权限——同伴将继承你当前的模式" : null;
+        return over ? t(ModLanguageData.Keys.SUMMON_MODE_INHERIT_TIP) : null;
     }
 
     public boolean mouseClicked(double mx, double my, int button) {

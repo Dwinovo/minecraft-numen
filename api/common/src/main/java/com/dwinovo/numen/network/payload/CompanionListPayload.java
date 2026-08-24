@@ -28,8 +28,9 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
     public static final int MAX = 64;
 
     /** 一行。{@code respawnInMs} = {@link com.dwinovo.numen.entity.CompanionRoster#ALIVE} 是活着,
-     *  ≥0 是死了、还有这么久复活。 */
-    public record Entry(UUID uuid, String name, long respawnInMs) {
+     *  ≥0 是死了、还有这么久复活。{@code creative} 是此刻的游戏模式(不在场按生存),
+     *  编辑卡的模式格用它显示当前值。 */
+    public record Entry(UUID uuid, String name, long respawnInMs, boolean creative) {
     }
 
     public static final ResourceLocation ID =
@@ -50,6 +51,7 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
             buf.writeUUID(e.uuid());
             buf.writeUtf(e.name(), 256);
             buf.writeVarLong(e.respawnInMs());
+            buf.writeBoolean(e.creative());
         }
     }
 
@@ -58,7 +60,8 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
         int n = Math.min(buf.readVarInt(), MAX);
         List<Entry> list = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            list.add(new Entry(buf.readUUID(), buf.readUtf(256), buf.readVarLong()));
+            list.add(new Entry(buf.readUUID(), buf.readUtf(256), buf.readVarLong(),
+                    buf.readBoolean()));
         }
         return new CompanionListPayload(worldId, list);
     }

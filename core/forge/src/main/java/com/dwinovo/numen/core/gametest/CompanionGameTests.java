@@ -180,6 +180,37 @@ public class CompanionGameTests {
         });
     }
 
+    /**
+     * 换肤走的是"改注册表 + 原地回收":休眠存盘、按注册表重建之后,GameProfile 挂上
+     * textures,而 UUID 与背包(经 .dat)原样回来——换的是皮,不是人。
+     * ChangeSkinPayload 对活体执行的正是这一串。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_inventory")
+    public static void reskin_recycle_keeps_identity_and_items(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        BlockPos spawn = helper.absolutePos(new BlockPos(4, 2, 4));
+        NumenPlayer first = com.dwinovo.numen.entity.Companions.summon(server, UUID.randomUUID(),
+                "gametest_reskin", level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        UUID uuid = first.getUUID();
+        first.getInventory().add(new ItemStack(Items.DIAMOND));
+        var reg = com.dwinovo.numen.entity.CompanionRegistry.get(server);
+        reg.put(uuid, reg.find(uuid).withSkin("ZmFrZQ==", ""));
+        com.dwinovo.numen.entity.Companions.dormant(server, first);
+        com.dwinovo.numen.entity.Companions.respawn(server, uuid);
+
+        helper.succeedWhen(() -> {
+            NumenPlayer live = NumenPlayer.findByUuid(server, uuid);
+            helper.assertTrue(live != null, "the body did not come back");
+            helper.assertTrue(live.getGameProfile().getProperties().containsKey("textures"),
+                    "the new skin is not on the rebuilt profile");
+            helper.assertTrue(live.getInventory().hasAnyMatching(s -> s.is(Items.DIAMOND)),
+                    "her inventory did not survive the recycle");
+            com.dwinovo.numen.entity.Companions.dismiss(server, live);
+        });
+    }
+
     // ==================== 摔落 ====================
 
     /**

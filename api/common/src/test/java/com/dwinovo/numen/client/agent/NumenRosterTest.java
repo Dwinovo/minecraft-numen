@@ -56,7 +56,7 @@ class NumenRosterTest {
     @Test
     void aliveCompanionHasNoCountdown() {
         NumenRoster.instance().replaceAll("w1",
-                List.of(NumenRoster.toEntry(A, "小焰", CompanionRoster.ALIVE)));
+                List.of(NumenRoster.toEntry(A, "小焰", CompanionRoster.ALIVE, false)));
 
         assertFalse(NumenRoster.instance().isDead(A));
         assertEquals(-1L, NumenRoster.instance().remainingMs(A));
@@ -65,7 +65,7 @@ class NumenRosterTest {
     @Test
     void deadCompanionCountsDownFromTheServersNumber() {
         NumenRoster.instance().replaceAll("w1",
-                List.of(NumenRoster.toEntry(A, "小焰", 30_000L)));
+                List.of(NumenRoster.toEntry(A, "小焰", 30_000L, false)));
 
         assertTrue(NumenRoster.instance().isDead(A));
         long rem = NumenRoster.instance().remainingMs(A);
@@ -75,7 +75,7 @@ class NumenRosterTest {
     @Test
     void overdueRespawnStillCountsAsDead() {
         // 服务端说 0 = 时候到了但还没找到安全落点。这时候她仍然不在世界里,面板要继续变灰
-        NumenRoster.instance().replaceAll("w1", List.of(NumenRoster.toEntry(A, "小焰", 0L)));
+        NumenRoster.instance().replaceAll("w1", List.of(NumenRoster.toEntry(A, "小焰", 0L, false)));
 
         assertTrue(NumenRoster.instance().isDead(A), "0 不是活着");
         assertEquals(0L, NumenRoster.instance().remainingMs(A));

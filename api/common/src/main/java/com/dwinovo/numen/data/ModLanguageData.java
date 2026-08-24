@@ -107,6 +107,18 @@ public final class ModLanguageData {
         public static final String SUMMON_WARN_NAME_FORMAT = "numen.summon.warn_name_format";
         public static final String SUMMON_SKIN             = "numen.summon.skin";
         public static final String SUMMON_SKIN_DEFAULT     = "numen.summon.skin_default";
+        public static final String SUMMON_MODE_SURVIVAL    = "numen.summon.mode_survival";
+        public static final String SUMMON_MODE_CREATIVE    = "numen.summon.mode_creative";
+        public static final String SUMMON_MODE_INHERITED   = "numen.summon.mode_inherited";
+        public static final String SUMMON_MODE_INHERIT_TIP = "numen.summon.mode_inherit_tip";
+
+        // Edit card: click the active avatar to open; every pick applies immediately.
+        public static final String EDIT_TITLE            = "numen.edit.title";
+        public static final String EDIT_CLOSE            = "numen.edit.close";
+        public static final String EDIT_DISMISS          = "numen.edit.dismiss";
+        public static final String EDIT_SKIN_KEEP        = "numen.edit.skin_keep";
+        public static final String EDIT_PROVIDER_UNBOUND = "numen.edit.provider_unbound";
+        public static final String EDIT_MODE_LOCKED      = "numen.edit.mode_locked";
 
         // Skin library tab (upload png → MineSkin-signed textures).
         public static final String SKIN_TITLE           = "numen.skin.title";
@@ -405,6 +417,16 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "Needs 3-16 letters, digits or _");
         adder.add(Keys.SUMMON_SKIN,             "Skin");
         adder.add(Keys.SUMMON_SKIN_DEFAULT,     "Default (by name)");
+        adder.add(Keys.SUMMON_MODE_SURVIVAL,    "Survival");
+        adder.add(Keys.SUMMON_MODE_CREATIVE,    "Creative");
+        adder.add(Keys.SUMMON_MODE_INHERITED,   "%s (inherited)");
+        adder.add(Keys.SUMMON_MODE_INHERIT_TIP, "No gamemode permission — she inherits your current mode");
+        adder.add(Keys.EDIT_TITLE,            "Edit");
+        adder.add(Keys.EDIT_CLOSE,            "Close");
+        adder.add(Keys.EDIT_DISMISS,          "Dismiss");
+        adder.add(Keys.EDIT_SKIN_KEEP,        "Keep current");
+        adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(unbound)");
+        adder.add(Keys.EDIT_MODE_LOCKED,      "No cheat/OP permission — her mode can't be changed");
         adder.add(Keys.SKIN_TITLE,           "Skins");
         adder.add(Keys.SKIN_ADD,             "New");
         adder.add(Keys.SKIN_EMPTY,           "No skins yet. Click New, then drag a skin png into the window.");
@@ -716,6 +738,16 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_WARN_NAME_FORMAT, "需 3~16 位英文/数字/下划线");
         adder.add(Keys.SUMMON_SKIN,             "皮肤");
         adder.add(Keys.SUMMON_SKIN_DEFAULT,     "默认(按名字)");
+        adder.add(Keys.SUMMON_MODE_SURVIVAL,    "生存");
+        adder.add(Keys.SUMMON_MODE_CREATIVE,    "创造");
+        adder.add(Keys.SUMMON_MODE_INHERITED,   "%s(继承)");
+        adder.add(Keys.SUMMON_MODE_INHERIT_TIP, "没有 gamemode 权限——同伴将继承你当前的模式");
+        adder.add(Keys.EDIT_TITLE,            "编辑");
+        adder.add(Keys.EDIT_CLOSE,            "关闭");
+        adder.add(Keys.EDIT_DISMISS,          "遣散");
+        adder.add(Keys.EDIT_SKIN_KEEP,        "保持现状");
+        adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(未绑定)");
+        adder.add(Keys.EDIT_MODE_LOCKED,      "没有作弊/OP 权限,改不了同伴的模式");
         adder.add(Keys.SKIN_TITLE,           "皮肤库");
         adder.add(Keys.SKIN_ADD,             "新建");
         adder.add(Keys.SKIN_EMPTY,           "还没有皮肤。点右上角\"新建\",再把皮肤 png 拖进游戏窗口。");

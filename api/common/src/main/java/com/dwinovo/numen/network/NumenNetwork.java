@@ -123,10 +123,22 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.SummonRequestPayload::read,
                 com.dwinovo.numen.network.payload.SummonRequestPayload::handle);
 
-        // C→S: the rail ✕ → confirm asks to permanently delete a companion (drops its inventory first).
+        // C→S: the edit card's dismiss → confirm asks to permanently delete a companion (drops its inventory first).
         Services.NETWORK.registerClientToServer(
                 com.dwinovo.numen.network.payload.DismissRequestPayload.ID,
                 com.dwinovo.numen.network.payload.DismissRequestPayload::read,
                 com.dwinovo.numen.network.payload.DismissRequestPayload::handle);
+
+        // C→S: the edit card flips an existing companion between survival/creative.
+        Services.NETWORK.registerClientToServer(
+                com.dwinovo.numen.network.payload.SetGameModePayload.ID,
+                com.dwinovo.numen.network.payload.SetGameModePayload::read,
+                com.dwinovo.numen.network.payload.SetGameModePayload::handle);
+
+        // C→S: the edit card reskins an existing companion (registry + body recycle).
+        Services.NETWORK.registerClientToServer(
+                com.dwinovo.numen.network.payload.ChangeSkinPayload.ID,
+                com.dwinovo.numen.network.payload.ChangeSkinPayload::read,
+                com.dwinovo.numen.network.payload.ChangeSkinPayload::handle);
     }
 }

@@ -32,12 +32,13 @@ public final class NumenRoster {
     /**
      * 一只存在的同伴。{@code respawnAtMs} 为 0 = 活着;否则是复活的绝对时刻
      * (毫秒),面板据此画倒计时——存绝对时刻而不是剩余量,两次推送之间也走得动。
+     * {@code creative} 是服务端推来的此刻游戏模式,编辑卡的模式格显示当前值用。
      */
-    public record Entry(UUID uuid, String name, long respawnAtMs) {
+    public record Entry(UUID uuid, String name, long respawnAtMs, boolean creative) {
 
         /** 活着的一行。 */
         public Entry(UUID uuid, String name) {
-            this(uuid, name, 0L);
+            this(uuid, name, 0L, false);
         }
 
         public boolean dead() {
@@ -112,8 +113,8 @@ public final class NumenRoster {
     }
 
     /** 名册行 → 客户端条目:把"还有多久"换算成绝对时刻。 */
-    public static Entry toEntry(UUID uuid, String name, long respawnInMs) {
+    public static Entry toEntry(UUID uuid, String name, long respawnInMs, boolean creative) {
         return new Entry(uuid, name,
-                respawnInMs < 0L ? 0L : System.currentTimeMillis() + respawnInMs);
+                respawnInMs < 0L ? 0L : System.currentTimeMillis() + respawnInMs, creative);
     }
 }
