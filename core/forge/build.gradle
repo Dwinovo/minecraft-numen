@@ -85,6 +85,9 @@ minecraft {
             property 'mixin.env.disableRefMap', 'true'
             // 只跑本模组命名空间下的用例,别把原版那几百个也拖进来。
             property 'forge.enabledGameTestNamespaces', mod_id
+            // 模板喂进存档 generated 目录的开闸口令(见 CompanionGameTests 静态块):
+            // 只有无头跑批需要——IDE 运行走 testStructuresDir 那个来源。
+            property 'numen.gametest.generated', 'world/generated/numen/structures'
         }
     }
 }
