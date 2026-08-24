@@ -29,8 +29,8 @@ import net.minecraft.world.Difficulty;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.GameTestHolder;
-import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import net.minecraftforge.gametest.GameTestHolder;
+import net.minecraftforge.gametest.PrefixGameTestTemplate;
 
 import java.util.List;
 import java.util.UUID;
@@ -78,9 +78,8 @@ public class CompanionGameTests {
         Zombie zombie = spawnZombie(helper, new BlockPos(11, 2, 11), companion);
 
         double inner = Menace.rawDangerRadius(zombie, companion);
-        double outer = Swing.reachTo(
-                companion.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE),
-                zombie.getBbWidth());
+        // 1.20.1:生存实体交互距离固定 3.0(属性是 1.20.5+ 的)
+        double outer = Swing.reachTo(3.0D, zombie.getBbWidth());
         float startHealth = zombie.getHealth();
 
         int[] insideBand = {0};
@@ -668,7 +667,7 @@ public class CompanionGameTests {
         var stack = new net.minecraft.nbt.CompoundTag();
         stack.putByte("Slot", (byte) 0);
         stack.putString("id", "minecraft:diamond");
-        stack.putInt("count", 64);
+        stack.putByte("Count", (byte) 64);
         var items = new net.minecraft.nbt.ListTag();
         items.add(stack);
         chestData.put("Items", items);
@@ -684,22 +683,20 @@ public class CompanionGameTests {
         frame.putByte("Facing", (byte) 3);
         var held = new net.minecraft.nbt.CompoundTag();
         held.putString("id", "minecraft:diamond_sword");
-        held.putInt("count", 1);
+        held.putByte("Count", (byte) 1);
         frame.put("Item", held);
-        var keptFrame = com.dwinovo.numen.core.build.BlueprintSafety.safeEntityData(
-                frame, helper.getLevel().registryAccess());
+        var keptFrame = com.dwinovo.numen.core.build.BlueprintSafety.safeEntityData(frame);
         helper.assertTrue(keptFrame != null && keptFrame.contains("Facing"),
                 "an item frame is part of the building; its shell must be spawned");
         helper.assertTrue(keptFrame != null && keptFrame.contains("Item"),
                 "what hangs in it stays — but it becomes a requirement for that exact item");
         helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety
-                        .payloadStacks(keptFrame, helper.getLevel().registryAccess()).size() == 1,
+                        .payloadStacks(keptFrame).size() == 1,
                 "and that requirement has to be readable, or nobody ever gets charged for it");
 
         var cow = new net.minecraft.nbt.CompoundTag();
         cow.putString("id", "minecraft:cow");
-        helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeEntityData(
-                        cow, helper.getLevel().registryAccess()) == null,
+        helper.assertTrue(com.dwinovo.numen.core.build.BlueprintSafety.safeEntityData(cow) == null,
                 "a cow stored in a blueprint is not a design; copying it conjures livestock");
 
         // 再在世界里走一遍:旗帜的花纹要真的落到方块实体上
@@ -729,7 +726,7 @@ public class CompanionGameTests {
             var be = level.getBlockEntity(at);
             helper.assertTrue(be instanceof net.minecraft.world.level.block.entity.BannerBlockEntity,
                     "banner has no block entity");
-            var saved = be.saveWithoutMetadata(level.registryAccess());
+            var saved = be.saveWithoutMetadata();
             helper.assertTrue(saved.contains("patterns"),
                     "the blueprint's banner pattern must survive placement, got " + saved);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -748,7 +745,7 @@ public class CompanionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
     public static void replace_modes_let_through_what_they_say(GameTestHelper helper) {
         BlockState air = Blocks.AIR.defaultBlockState();
-        BlockState soft = Blocks.SHORT_GRASS.defaultBlockState();
+        BlockState soft = Blocks.GRASS.defaultBlockState();   // 1.20.1:草还叫 GRASS
         BlockState solid = Blocks.STONE.defaultBlockState();
         BlockState torch = Blocks.TORCH.defaultBlockState();
 
@@ -907,7 +904,7 @@ public class CompanionGameTests {
         blocks.add(cellTag(2, 1, 0, 3));   // 门上半
         root.put("blocks", blocks);
         var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
-        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_halves.nbt"));
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_halves.nbt").toFile());
 
         BlockPos anchor = helper.absolutePos(new BlockPos(2, 2, 2));
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
@@ -980,7 +977,7 @@ public class CompanionGameTests {
         // 框里的物品:必须被剥掉,图纸不能凭空造钻石
         var loot = new net.minecraft.nbt.CompoundTag();
         loot.putString("id", "minecraft:diamond");
-        loot.putInt("count", 1);
+        loot.putByte("Count", (byte) 1);
         frame.put("Item", loot);
 
         var stand = new net.minecraft.nbt.CompoundTag();
@@ -996,7 +993,7 @@ public class CompanionGameTests {
         entities.add(entityTag(2.5, 0.0, 2.5, stand));
         root.put("entities", entities);
         var dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer());
-        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_hangers.nbt"));
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_hangers.nbt").toFile());
 
         BlockPos anchor = helper.absolutePos(new BlockPos(4, 2, 4));
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
@@ -1009,7 +1006,7 @@ public class CompanionGameTests {
         }
         // 框里那颗钻石不白送,也不静默丢掉:它变成一笔"要一模一样那件东西"的料
         var carried = loaded.entities().stream()
-                .flatMap(s -> s.payload(level.registryAccess()).stream()).toList();
+                .flatMap(s -> s.payload().stream()).toList();
         helper.assertTrue(carried.size() == 1 && carried.get(0).is(Items.DIAMOND),
                 "the frame's diamond must show up as a material requirement, got " + carried);
         // 免耗材同伴不付料,所以框里那颗钻石照放——收什么放什么,这一档收的是零
@@ -1058,35 +1055,35 @@ public class CompanionGameTests {
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
     public static void blueprint_handiwork_is_not_free(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        var registries = level.registryAccess();
 
-        // 一面绣了花纹的旗帜:方块实体里那份 patterns 该原样进白名单
+        // 一面绣了花纹的旗帜:方块实体里那份 Patterns 该原样进白名单
+        // (1.20.1 的花纹是短哈希 + 染料序数:stripe_top = "ts",红 = 14)
         var patterns = new net.minecraft.nbt.ListTag();
         var layer = new net.minecraft.nbt.CompoundTag();
-        layer.putString("pattern", "minecraft:stripe_top");
-        layer.putString("color", "red");
+        layer.putString("Pattern", "ts");
+        layer.putInt("Color", 14);
         patterns.add(layer);
         var bannerData = new net.minecraft.nbt.CompoundTag();
         bannerData.putString("id", "minecraft:banner");
-        bannerData.put("patterns", patterns);
+        bannerData.put("Patterns", patterns);
 
         BlockState banner = Blocks.WHITE_BANNER.defaultBlockState();
         var safeBanner = com.dwinovo.numen.core.build.BlueprintSafety
                 .safeBlockEntityData(banner, bannerData);
-        helper.assertTrue(safeBanner != null && safeBanner.contains("patterns"),
+        helper.assertTrue(safeBanner != null && safeBanner.contains("Patterns"),
                 "a banner's patterns are part of the design and must be carried over");
 
         // 而料要收的是"带着这些花纹的那面旗帜",不是一面白旗
         var exact = com.dwinovo.numen.core.build.BuildStates
-                .strictItem(banner, safeBanner, registries);
+                .strictItem(banner, safeBanner);
         helper.assertTrue(exact != null && exact.is(Items.WHITE_BANNER),
                 "the requirement should be a white banner stack, got " + exact);
-        helper.assertTrue(!net.minecraft.world.item.ItemStack.isSameItemSameComponents(
+        helper.assertTrue(!net.minecraft.world.item.ItemStack.isSameItemSameTags(
                         exact, new net.minecraft.world.item.ItemStack(Items.WHITE_BANNER)),
                 "a plain white banner must NOT satisfy it — that hands out the loom work for free");
         helper.assertTrue(net.minecraft.world.item.ItemStack.isSameItem(
                         exact, new net.minecraft.world.item.ItemStack(Items.WHITE_BANNER)),
-                "it is still a white banner by type; only the components differ");
+                "it is still a white banner by type; only the item tag differs");
 
         // 陶罐的纹样不搬:碎片是稀有掉落,还原它就是凭空产出
         var potData = new net.minecraft.nbt.CompoundTag();
@@ -1111,9 +1108,9 @@ public class CompanionGameTests {
         frame.putString("id", "minecraft:item_frame");
         var sword = new net.minecraft.nbt.CompoundTag();
         sword.putString("id", "minecraft:diamond_sword");
-        sword.putInt("count", 1);
+        sword.putByte("Count", (byte) 1);
         frame.put("Item", sword);
-        var carried = com.dwinovo.numen.core.build.BlueprintSafety.payloadStacks(frame, registries);
+        var carried = com.dwinovo.numen.core.build.BlueprintSafety.payloadStacks(frame);
         helper.assertTrue(carried.size() == 1 && carried.get(0).is(Items.DIAMOND_SWORD),
                 "what a frame carries must be read out as its own requirement, got " + carried);
         helper.succeed();
@@ -1311,45 +1308,46 @@ public class CompanionGameTests {
      */
     @GameTest(template = "floor16", timeoutTicks = 300, batch = "numen_build")
     public static void only_four_item_components_ride_along(GameTestHelper helper) {
-        var registries = helper.getLevel().registryAccess();
 
-        // 一个装了东西的潜影盒挂在展示框里
+        // 一个装了东西的潜影盒挂在展示框里(1.20.1:内容在 tag.BlockEntityTag.Items,
+        // 自定义名在 tag.display.Name)
         var box = new net.minecraft.nbt.CompoundTag();
         box.putString("id", "minecraft:shulker_box");
-        box.putInt("count", 1);
-        var components = new net.minecraft.nbt.CompoundTag();
+        box.putByte("Count", (byte) 1);
+        var tag = new net.minecraft.nbt.CompoundTag();
+        var beTag = new net.minecraft.nbt.CompoundTag();
         var contents = new net.minecraft.nbt.ListTag();
         var diamond = new net.minecraft.nbt.CompoundTag();
         diamond.putString("id", "minecraft:diamond");
-        diamond.putInt("count", 64);
-        var slot = new net.minecraft.nbt.CompoundTag();
-        slot.putInt("slot", 0);
-        slot.put("item", diamond);
-        contents.add(slot);
-        components.put("minecraft:container", contents);
-        components.putString("minecraft:custom_name", "\"Loot Box\"");
-        box.put("components", components);
+        diamond.putByte("Count", (byte) 64);
+        diamond.putByte("Slot", (byte) 0);
+        contents.add(diamond);
+        beTag.put("Items", contents);
+        tag.put("BlockEntityTag", beTag);
+        var display = new net.minecraft.nbt.CompoundTag();
+        display.putString("Name", "\"Loot Box\"");
+        tag.put("display", display);
+        box.put("tag", tag);
 
         var frame = new net.minecraft.nbt.CompoundTag();
         frame.putString("id", "minecraft:item_frame");
         frame.put("Item", box);
 
-        var safe = com.dwinovo.numen.core.build.BlueprintSafety.safeEntityData(frame, registries);
+        var safe = com.dwinovo.numen.core.build.BlueprintSafety.safeEntityData(frame);
         helper.assertTrue(safe != null, "the frame itself is part of the building");
         // 剥在数据本身上:落位读的这份里已经没有那箱钻石了
-        var carriedNbt = safe.getCompound("Item").getCompound("components");
-        helper.assertTrue(!carriedNbt.contains("minecraft:container"),
-                "a container component must be stripped from the DATA, not just from the price"
+        var carriedNbt = safe.getCompound("Item").getCompound("tag");
+        helper.assertTrue(!carriedNbt.contains("BlockEntityTag"),
+                "the container payload must be stripped from the DATA, not just from the price"
                         + " — otherwise the frame goes up holding 64 diamonds nobody paid for");
-        helper.assertTrue(carriedNbt.contains("minecraft:custom_name"),
+        helper.assertTrue(carriedNbt.getCompound("display").contains("Name"),
                 "a custom name carries nothing, so it stays");
 
         // 计价那一边读的是同一份
-        var priced = com.dwinovo.numen.core.build.BlueprintSafety.payloadStacks(safe, registries);
+        var priced = com.dwinovo.numen.core.build.BlueprintSafety.payloadStacks(safe);
         helper.assertTrue(priced.size() == 1 && priced.get(0).is(Items.SHULKER_BOX),
                 "the frame's contents are one shulker box to pay for, got " + priced);
-        helper.assertTrue(priced.get(0).get(
-                        net.minecraft.core.component.DataComponents.CONTAINER) == null,
+        helper.assertTrue(priced.get(0).getTagElement("BlockEntityTag") == null,
                 "and it is an empty one — charge and placement must read the same stack");
         helper.succeed();
     }
@@ -1744,7 +1742,7 @@ public class CompanionGameTests {
         frameNbt.putByte("Facing", (byte) net.minecraft.core.Direction.SOUTH.get3DDataValue());
         var held = new net.minecraft.nbt.CompoundTag();
         held.putString("id", "minecraft:diamond");
-        held.putInt("count", 1);
+        held.putByte("Count", (byte) 1);
         frameNbt.put("Item", held);
         var standNbt = new net.minecraft.nbt.CompoundTag();
         standNbt.putString("id", "minecraft:armor_stand");
@@ -1754,7 +1752,7 @@ public class CompanionGameTests {
         root.put("entities", entities);
         net.minecraft.nbt.NbtIo.writeCompressed(root,
                 com.dwinovo.numen.core.blueprint.BlueprintStore.dir(level.getServer())
-                        .resolve(name + ".nbt"));
+                        .resolve(name + ".nbt").toFile());
     }
 
     /**
@@ -1791,7 +1789,7 @@ public class CompanionGameTests {
         blocks.add(cellTag(1, 0, 0, 7));      // 越界
         blocks.add(cellTag(2, 0, 0, -1));     // 负下标
         root.put("blocks", blocks);
-        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_badindex.nbt"));
+        net.minecraft.nbt.NbtIo.writeCompressed(root, dir.resolve("fixture_badindex.nbt").toFile());
 
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
                 level, "fixture_badindex", anchor, 0);
@@ -1822,7 +1820,7 @@ public class CompanionGameTests {
         region.putLongArray("BlockStates", new long[]{0L});
         regions.put("bomb", region);
         lite.put("Regions", regions);
-        net.minecraft.nbt.NbtIo.writeCompressed(lite, dir.resolve("fixture_bomb.litematic"));
+        net.minecraft.nbt.NbtIo.writeCompressed(lite, dir.resolve("fixture_bomb.litematic").toFile());
 
         boolean refused = false;
         try {
@@ -2320,7 +2318,7 @@ public class CompanionGameTests {
         java.util.function.BiFunction<String, List<BlockPos>, List<BuildTaskRecord.Target>> vol =
                 (id, cells) -> {
                     var item = net.minecraft.core.registries.BuiltInRegistries.ITEM
-                            .get(net.minecraft.resources.ResourceLocation.parse(id));
+                            .get(new net.minecraft.resources.ResourceLocation(id));
                     var block = item instanceof net.minecraft.world.item.BlockItem bi
                             ? bi.getBlock() : Blocks.AIR;
                     List<BuildTaskRecord.Target> out = new ArrayList<>();
@@ -2420,10 +2418,10 @@ public class CompanionGameTests {
         var server = level.getServer();
         try {
             var template = server.getStructureManager()
-                    .get(net.minecraft.resources.ResourceLocation.parse("minecraft:igloo/top")).orElseThrow();
+                    .get(new net.minecraft.resources.ResourceLocation("minecraft:igloo/top")).orElseThrow();
             var tag = template.save(new net.minecraft.nbt.CompoundTag());
             java.nio.file.Path dir = com.dwinovo.numen.core.blueprint.BlueprintStore.dir(server);
-            net.minecraft.nbt.NbtIo.writeCompressed(tag, dir.resolve("igloo_top.nbt"));
+            net.minecraft.nbt.NbtIo.writeCompressed(tag, dir.resolve("igloo_top.nbt").toFile());
         } catch (java.io.IOException e) {
             throw new RuntimeException(e);
         }
@@ -2699,7 +2697,7 @@ public class CompanionGameTests {
         regions.put("main", region);
         var liteRoot = new net.minecraft.nbt.CompoundTag();
         liteRoot.put("Regions", regions);
-        net.minecraft.nbt.NbtIo.writeCompressed(liteRoot, dir.resolve("fixture_lite.litematic"));
+        net.minecraft.nbt.NbtIo.writeCompressed(liteRoot, dir.resolve("fixture_lite.litematic").toFile());
 
         BlockPos anchor = helper.absolutePos(new BlockPos(4, 4, 4));
         var lite = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_lite", anchor, 0);
@@ -2725,7 +2723,7 @@ public class CompanionGameTests {
         spal.putInt("minecraft:oak_stairs[facing=north]", 1);
         schemRoot.put("Palette", spal);
         schemRoot.putByteArray("BlockData", new byte[]{1, 1, 0, 1});
-        net.minecraft.nbt.NbtIo.writeCompressed(schemRoot, dir.resolve("fixture_schem.schem"));
+        net.minecraft.nbt.NbtIo.writeCompressed(schemRoot, dir.resolve("fixture_schem.schem").toFile());
 
         var schem = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_schem", anchor, 0);
         helper.assertTrue(schem.targets().size() == 3, "schem: expect 3 non-air cells, got "
