@@ -477,8 +477,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         long now = level.getGameTime();
         anticipatedDrops.values().removeIf(expiry -> expiry < now);
         // 搜集范围 = 服务端视距(身体周围的加载邻域),与目标扫描的事实边界同源。
+        // 视距下限取原版 server.properties 的 3:PlayerList 的视距是发给客户端的同步值,
+        // 只有专用/集成服启动时会配置——GameTestServer 这类开发服上它是 0,不设下限的话
+        // 收集箱塌成脚下一格,挖出的矿就躺在两格外"看不见"。
         int reach = level instanceof ServerLevel sl
-                ? sl.getServer().getPlayerList().getViewDistance() * 16 : 128;
+                ? Math.max(3, sl.getServer().getPlayerList().getViewDistance()) * 16 : 128;
         AABB box = new AABB(player.blockPosition()).inflate(reach);
         List<BlockPos> out = new ArrayList<>();
         for (ItemEntity ie : level.getEntitiesOfClass(ItemEntity.class, box)) {
