@@ -247,6 +247,30 @@ FlowerPotBlock.getContent() → getPotted()   // 仅 1.20.3/1.20.4 这一窗口�
 老 tag 之间 **零源码差异**,只有 `gradle.properties`:MC `1.20.2` / range `[1.20.2, 1.21)` /
 Fabric `0.91.0+1.20.2` / loader `0.15.0` / Forge `48.0.49`(+ core 三个 build.gradle 的 api 坐标 → 1.20.2)。
 
+### 1.20.2 落地实录(并仓迁移,1.20.4 树落底后走这一档新踩的)❗
+
+代码面比老 tag 时代大,"纯旋钮"不再成立,但也只多两刀(都是上面 ③ 的反用)+ 一处夹具:
+
+- **NbtIo 回 File 形态**:1.20.2 只有 `readCompressed(File)/(InputStream)` 与
+  `writeCompressed(tag, File)`,Path+NbtAccounter 重载是 1.20.3 的——各调用点 `.toFile()`,
+  `readCompressed(File)` 内部即无限额度,语义同 `unlimitedHeap()`(BlueprintStore 3 处、
+  CompanionGameTests 9 处)。
+- **`Blocks.GRASS` / `getContent()`**:③ 反用,各 1 处(gametest、BuildStates)。
+- **⚠ 夹具 SNBT 要降 DataVersion**:落底树的 `gameteststructures/*.snbt` 带
+  `DataVersion:3955`(1.21.1),高于本代 3578 时 DFU 只放行不降级,方块名按本代
+  字面解析——`minecraft:short_grass` 解析不出,整格静默成空气。改 `DataVersion:3578`
+  并把调色板/data 里的 `short_grass` → `grass`(其余方块名 1.17+ 都在,不用动)。
+
+**同构无需改**(逐一核过,负结果也是情报):Forge 48 的 gametest 钩子与 49 完全同套
+(`GameTestDontPrefix`/`GameTestPrefix`、模板名 `indexOf(':')` 跳前缀、批次照常前缀——
+`numen:` 冒号模板方案原样能用);`StructureTemplateManager` 三来源同构(generated 恒登记、
+测试目录仍被 `IS_RUNNING_IN_IDE` 门控,静态块喂料方案不动);`ChunkMap.applyChunkTrackingView`
+/`skipPlayer` 双靶子都在、签名同形;`CommonListenerCookie.createInitial(profile)` 单参、
+`ClientInformation.createDefault()`、`SavedData.Factory`、`DefaultPlayerSkin.get(UUID)`、
+`renderEntityInInventoryFollowsMouse`、sprite `blitSprite` 全部同构(1.20.2 就是这些形态的
+引入代);`Recipe.getId` 本代已移除,代码本就是 RecipeHolder 形态;api/forge 与 core/forge 的
+`runtimeClasspath exclude ai/ui` 在 Forge 48 下无害,保留。
+
 ## 1.20.2 → 1.20.1 ✓（最老支持版；Forge/Java17;双 loader 编译 + 出包通过）
 
 构建旋钮:MC `1.20.1` / range `[1.20.1, 1.21)` / Fabric `0.92.1+1.20.1` / loader `0.15.11` / Forge `47.2.30`。
