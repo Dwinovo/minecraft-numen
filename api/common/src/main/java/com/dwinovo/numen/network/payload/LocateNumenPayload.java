@@ -4,8 +4,8 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.CompanionRegistry;
 import com.dwinovo.numen.platform.Services;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -24,7 +24,7 @@ import java.util.UUID;
  * to a pet owned by the sender come back {@code found=false} (no oracle for
  * other players' pets).
  */
-public record LocateNumenPayload(List<UUID> entityUuids) implements NumenPayload {
+public record LocateNumenPayload(List<UUID> entityUuids) implements CustomPacketPayload {
 
     /** Roster panels are small; cap defends against garbage input. */
     public static final int MAX_UUIDS = 16;

@@ -6,7 +6,7 @@ import net.fabricmc.fabric.api.networking.v1.PacketByteBufs;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.network.FriendlyByteBuf;
-import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -18,8 +18,8 @@ import java.util.function.Function;
  * Fabric implementation of {@link INetworkChannel} for MC 1.20.4. Uses the
  * raw {@code ResourceLocation}+{@code FriendlyByteBuf} networking API
  * ({@code ServerPlayNetworking} / {@code ClientPlayNetworking}) — the
- * {@code NumenPayload}-typed {@code PayloadTypeRegistry} is a 1.20.5+
- * addition. The payload serialises itself through {@code NumenPayload.write}
+ * {@code CustomPacketPayload}-typed {@code PayloadTypeRegistry} is a 1.20.5+
+ * addition. The payload serialises itself through {@code CustomPacketPayload.write}
  * and is rebuilt by the per-registration {@code decoder}.
  *
  * <h2>Lazy client-class loading</h2>
@@ -34,7 +34,7 @@ import java.util.function.Function;
 public final class FabricNetworkChannel implements INetworkChannel {
 
     @Override
-    public <T extends NumenPayload> void registerClientToServer(
+    public <T extends CustomPacketPayload> void registerClientToServer(
             ResourceLocation id,
             Function<FriendlyByteBuf, T> decoder,
             BiConsumer<T, ServerPlayer> handler) {
@@ -45,7 +45,7 @@ public final class FabricNetworkChannel implements INetworkChannel {
     }
 
     @Override
-    public void sendToServer(NumenPayload payload) {
+    public void sendToServer(CustomPacketPayload payload) {
         FriendlyByteBuf buf = PacketByteBufs.create();
         payload.write(buf);
         // Lazy class-load: ClientPlayNetworking is client-only. Server JVM never reaches this.
@@ -53,7 +53,7 @@ public final class FabricNetworkChannel implements INetworkChannel {
     }
 
     @Override
-    public <T extends NumenPayload> void registerServerToClient(
+    public <T extends CustomPacketPayload> void registerServerToClient(
             ResourceLocation id,
             Function<FriendlyByteBuf, T> decoder,
             Consumer<T> handler) {
@@ -64,7 +64,7 @@ public final class FabricNetworkChannel implements INetworkChannel {
     }
 
     /** Isolated for lazy class-load — runs only on a client environment. */
-    private static <T extends NumenPayload> void registerClientReceiverImpl(
+    private static <T extends CustomPacketPayload> void registerClientReceiverImpl(
             ResourceLocation id, Function<FriendlyByteBuf, T> decoder, Consumer<T> handler) {
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking.registerGlobalReceiver(
                 id, (client, listener, buf, responseSender) -> {
@@ -74,7 +74,7 @@ public final class FabricNetworkChannel implements INetworkChannel {
     }
 
     @Override
-    public void sendToPlayer(ServerPlayer player, NumenPayload payload) {
+    public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
         FriendlyByteBuf buf = PacketByteBufs.create();
         payload.write(buf);
         ServerPlayNetworking.send(player, payload.id(), buf);

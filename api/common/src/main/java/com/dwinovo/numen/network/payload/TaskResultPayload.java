@@ -2,8 +2,8 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.tool.ServerToolTransport;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
@@ -27,7 +27,7 @@ import java.util.UUID;
  */
 public record TaskResultPayload(UUID entityUuid,
                                  String toolCallId,
-                                 String resultJson) implements NumenPayload {
+                                 String resultJson) implements CustomPacketPayload {
 
     public static final int MAX_TOOL_CALL_ID_LENGTH = 128;
     public static final int MAX_RESULT_JSON_LENGTH = 16 * 1024;

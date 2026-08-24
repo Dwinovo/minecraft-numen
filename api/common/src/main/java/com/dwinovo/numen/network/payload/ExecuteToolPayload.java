@@ -6,8 +6,8 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -54,7 +54,7 @@ import java.util.UUID;
 public record ExecuteToolPayload(UUID entityUuid,
                                   String toolCallId,
                                   String toolName,
-                                  String argumentsJson) implements NumenPayload {
+                                  String argumentsJson) implements CustomPacketPayload {
 
     public static final int MAX_TOOL_CALL_ID_LENGTH = 128;
     public static final int MAX_TOOL_NAME_LENGTH = 128;

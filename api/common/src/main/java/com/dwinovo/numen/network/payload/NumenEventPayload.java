@@ -1,8 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
@@ -25,7 +25,7 @@ import java.util.UUID;
  * 说了算。
  */
 public record NumenEventPayload(UUID entityUuid, String entryType, String text, long ts, boolean urgent)
-        implements NumenPayload {
+        implements CustomPacketPayload {
 
     public static final ResourceLocation ID =
             new ResourceLocation(Constants.MOD_ID, "numen_event");

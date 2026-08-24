@@ -1,8 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
@@ -15,7 +15,7 @@ import java.util.UUID;
  * {@code found=false} otherwise. The client drops them into
  * {@link ClientNumenLocations} for the roster panel / vitals strip to read.
  */
-public record NumenLocationsPayload(List<Snapshot> snapshots) implements NumenPayload {
+public record NumenLocationsPayload(List<Snapshot> snapshots) implements CustomPacketPayload {
 
     /**
      * Wire shape of one located (or not) companion. {@code loaded=false} with

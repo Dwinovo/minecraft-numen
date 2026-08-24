@@ -9,7 +9,7 @@ import com.dwinovo.numen.platform.Services;
 
 /**
  * Central registration hub for every {@link
- * com.dwinovo.numen.network.NumenPayload} the mod
+ * net.minecraft.network.protocol.common.custom.CustomPacketPayload} the mod
  * declares. Each loader's mod-init code calls {@link #register} exactly once
  * during startup; the {@link Services#NETWORK} platform implementation handles
  * the loader-specific timing.
@@ -17,8 +17,8 @@ import com.dwinovo.numen.platform.Services;
  * <h2>Adding a new payload</h2>
  * <ol>
  *   <li>Define a record under {@code com.dwinovo.numen.network.payload}
- *       implementing {@code NumenPayload} (1.20.1 shape: {@code write} +
- *       and {@code StreamCodec}.</li>
+ *       implementing {@code CustomPacketPayload} (1.20.4 shape: {@code write} +
+ *       {@code id}) with a public {@code ID} and a static {@code read}.</li>
  *   <li>Add one {@code registerClientToServer(...)} or
  *       {@code registerServerToClient(...)} call here.</li>
  * </ol>

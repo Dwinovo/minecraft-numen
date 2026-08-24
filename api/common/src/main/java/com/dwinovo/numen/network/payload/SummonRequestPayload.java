@@ -2,8 +2,8 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.Companions;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,7 +19,7 @@ import net.minecraft.server.level.ServerPlayer;
  * 同名正版玩家,查到穿其皮肤,查不到静默回落默认皮肤(日志可查,不打扰玩家)。
  */
 public record SummonRequestPayload(String name, String skinValue, String skinSig, boolean creative)
-        implements NumenPayload {
+        implements CustomPacketPayload {
 
     public static final int MAX_NAME = 16;
     /** Mojang 签名 textures 的尺寸上限:value 是带皮肤/披风 URL 的 base64 JSON,

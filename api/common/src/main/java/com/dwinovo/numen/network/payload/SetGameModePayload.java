@@ -3,9 +3,9 @@ package com.dwinovo.numen.network.payload;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.network.NumenPayload;
 
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -18,7 +18,7 @@ import java.util.UUID;
  * 权限门与召唤同一道({@link Companions#applyGameMode}):创造要主人有
  * gamemode 权限或本人在创造。改完立刻重推名册,编辑卡的模式格按新真相显示。
  */
-public record SetGameModePayload(UUID uuid, boolean creative) implements NumenPayload {
+public record SetGameModePayload(UUID uuid, boolean creative) implements CustomPacketPayload {
 
     public static final ResourceLocation ID =
             new ResourceLocation(Constants.MOD_ID, "set_game_mode");

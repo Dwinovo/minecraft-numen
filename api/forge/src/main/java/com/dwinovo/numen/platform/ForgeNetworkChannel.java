@@ -4,61 +4,57 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.platform.services.INetworkChannel;
 import io.netty.buffer.Unpooled;
 import net.minecraft.network.FriendlyByteBuf;
-import com.dwinovo.numen.network.NumenPayload;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraftforge.network.NetworkEvent;
-import net.minecraftforge.network.NetworkRegistry;
+import net.minecraftforge.network.ChannelBuilder;
 import net.minecraftforge.network.PacketDistributor;
-import net.minecraftforge.network.simple.SimpleChannel;
+import net.minecraftforge.network.SimpleChannel;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
- * Forge 1.20.1 implementation of {@link INetworkChannel}.
+ * Forge 1.20.4 implementation of {@link INetworkChannel}.
  *
  * <h2>Why an envelope instead of one Forge message per payload</h2>
- * Forge 1.20.1 routes on a classic {@link SimpleChannel} keyed by the message's
- * runtime {@code Class}. The cross-loader interface registers payloads by
+ * Forge 1.20.4 routes on a {@link SimpleChannel} keyed by the message's runtime
+ * {@code Class}. The cross-loader interface registers payloads by
  * {@code ResourceLocation}, so this channel registers a <em>single</em> Forge
  * message — an {@link Envelope} carrying {@code (payload id, serialised bytes)} —
  * and multiplexes every payload through it, looking the decoder/handler up by id
  * on both the send and receive sides.
  *
  * <p>Registration is eager (Forge's {@code SimpleChannel} accepts message
- * registration during construction). Forge 47.x predates the {@code ChannelBuilder}
- * API, so the channel is built with {@link NetworkRegistry#newSimpleChannel} and the
- * message registered via {@code registerMessage} with {@link Optional#empty()} so the
- * single envelope class travels both directions.
+ * registration during construction), so there is no deferred "flush on an event"
+ * step like NeoForge needs.
  *
  * <h2>Threading</h2>
- * The classic API dispatches the consumer on the network thread; we hop to the
- * receiving side's main thread with {@link NetworkEvent.Context#enqueueWork}
- * (server-main for C→S, client-main for S→C), matching the interface contract.
+ * {@code consumerMainThread} hands the envelope to the consumer on the receiving
+ * side's main thread (server-main for C→S, client-main for S→C), so common
+ * handlers don't need to reschedule — matching the interface contract.
  */
 public final class ForgeNetworkChannel implements INetworkChannel {
 
-    private static final String PROTOCOL_VERSION = "1";
+    private static final int PROTOCOL_VERSION = 1;
 
-    private static final SimpleChannel CHANNEL = NetworkRegistry.newSimpleChannel(
-            new ResourceLocation(Constants.MOD_ID, "main"),
-            () -> PROTOCOL_VERSION,
-            PROTOCOL_VERSION::equals,
-            PROTOCOL_VERSION::equals);
+    private static final SimpleChannel CHANNEL = ChannelBuilder
+            .named(new ResourceLocation(Constants.MOD_ID, "main"))
+            .networkProtocolVersion(PROTOCOL_VERSION)
+            .acceptedVersions((status, version) -> true)
+            .simpleChannel();
 
     /** A single opaque message multiplexing every payload: id + serialised bytes. */
     private record Envelope(ResourceLocation id, byte[] data) {}
 
-    private record C2S<T extends NumenPayload>(
+    private record C2S<T extends CustomPacketPayload>(
             Function<FriendlyByteBuf, T> decoder,
             BiConsumer<T, ServerPlayer> handler) {}
 
-    private record S2C<T extends NumenPayload>(
+    private record S2C<T extends CustomPacketPayload>(
             Function<FriendlyByteBuf, T> decoder,
             Consumer<T> handler) {}
 
@@ -67,28 +63,25 @@ public final class ForgeNetworkChannel implements INetworkChannel {
 
     /** Default constructor used by {@code ServiceLoader}; wires the single envelope message. */
     public ForgeNetworkChannel() {
-        CHANNEL.registerMessage(0, Envelope.class,
-                ForgeNetworkChannel::encodeEnvelope,
-                ForgeNetworkChannel::decodeEnvelope,
-                (env, ctxSupplier) -> {
-                    NetworkEvent.Context ctx = ctxSupplier.get();
-                    ctx.enqueueWork(() -> {   // hop to the receiving side's main thread
-                        ServerPlayer sender = ctx.getSender();
-                        if (sender != null) {
-                            receiveC2S(env, sender);   // a C→S packet arrived on the server
-                        } else {
-                            receiveS2C(env);           // an S→C packet arrived on the client
-                        }
-                    });
+        CHANNEL.messageBuilder(Envelope.class, 0)
+                .encoder(ForgeNetworkChannel::encodeEnvelope)
+                .decoder(ForgeNetworkChannel::decodeEnvelope)
+                .consumerMainThread((env, ctx) -> {
+                    ServerPlayer sender = ctx.getSender();
+                    if (sender != null) {
+                        receiveC2S(env, sender);   // a C→S packet arrived on the server
+                    } else {
+                        receiveS2C(env);           // an S→C packet arrived on the client
+                    }
                     ctx.setPacketHandled(true);
-                },
-                Optional.empty());   // bidirectional: the one envelope class travels both ways
+                })
+                .add();
     }
 
     // ---- registration ----
 
     @Override
-    public <T extends NumenPayload> void registerClientToServer(
+    public <T extends CustomPacketPayload> void registerClientToServer(
             ResourceLocation id,
             Function<FriendlyByteBuf, T> decoder,
             BiConsumer<T, ServerPlayer> handler) {
@@ -96,7 +89,7 @@ public final class ForgeNetworkChannel implements INetworkChannel {
     }
 
     @Override
-    public <T extends NumenPayload> void registerServerToClient(
+    public <T extends CustomPacketPayload> void registerServerToClient(
             ResourceLocation id,
             Function<FriendlyByteBuf, T> decoder,
             Consumer<T> handler) {
@@ -106,14 +99,13 @@ public final class ForgeNetworkChannel implements INetworkChannel {
     // ---- sending ----
 
     @Override
-    public void sendToServer(NumenPayload payload) {
-        CHANNEL.sendToServer(new Envelope(payload.id(), serialise(payload)));
+    public void sendToServer(CustomPacketPayload payload) {
+        CHANNEL.send(new Envelope(payload.id(), serialise(payload)), PacketDistributor.SERVER.noArg());
     }
 
     @Override
-    public void sendToPlayer(ServerPlayer player, NumenPayload payload) {
-        // Classic API: target first, message second; PLAYER.with takes a Supplier<ServerPlayer>.
-        CHANNEL.send(PacketDistributor.PLAYER.with(() -> player), new Envelope(payload.id(), serialise(payload)));
+    public void sendToPlayer(ServerPlayer player, CustomPacketPayload payload) {
+        CHANNEL.send(new Envelope(payload.id(), serialise(payload)), PacketDistributor.PLAYER.with(player));
     }
 
     // ---- receiving (already on the main thread) ----
@@ -137,17 +129,17 @@ public final class ForgeNetworkChannel implements INetworkChannel {
     }
 
     // Wildcard-capture helpers: decoder.apply(buf) yields exactly the captured payload type the handler wants.
-    private static <T extends NumenPayload> void dispatchC2S(C2S<T> reg, byte[] data, ServerPlayer sender) {
+    private static <T extends CustomPacketPayload> void dispatchC2S(C2S<T> reg, byte[] data, ServerPlayer sender) {
         reg.handler().accept(reg.decoder().apply(reader(data)), sender);
     }
 
-    private static <T extends NumenPayload> void dispatchS2C(S2C<T> reg, byte[] data) {
+    private static <T extends CustomPacketPayload> void dispatchS2C(S2C<T> reg, byte[] data) {
         reg.handler().accept(reg.decoder().apply(reader(data)));
     }
 
     // ---- (de)serialisation ----
 
-    private static byte[] serialise(NumenPayload payload) {
+    private static byte[] serialise(CustomPacketPayload payload) {
         FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
         payload.write(buf);
         byte[] data = new byte[buf.readableBytes()];

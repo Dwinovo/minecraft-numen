@@ -4,9 +4,9 @@ import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.CompanionRegistry;
 import com.dwinovo.numen.entity.Companions;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.network.NumenPayload;
 
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -24,7 +24,7 @@ import java.util.UUID;
  * 都不用自己写。休眠/死亡的身体只改注册表,下次重建自然生效。
  */
 public record ChangeSkinPayload(UUID uuid, String skinValue, String skinSig)
-        implements NumenPayload {
+        implements CustomPacketPayload {
 
     public static final ResourceLocation ID =
             new ResourceLocation(Constants.MOD_ID, "change_skin");

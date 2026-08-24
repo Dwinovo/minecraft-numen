@@ -1,8 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.ArrayList;
@@ -22,7 +22,7 @@ import java.util.UUID;
  *
  * <p>推送时机:主人登录、召唤、遣散、死亡、复活——任何"存在或存活状态"的变化。
  */
-public record CompanionListPayload(String worldId, List<Entry> companions) implements NumenPayload {
+public record CompanionListPayload(String worldId, List<Entry> companions) implements CustomPacketPayload {
 
     /** Cap defends against absurd input; nobody owns hundreds of companions. */
     public static final int MAX = 64;

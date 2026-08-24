@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 /**
@@ -25,7 +25,7 @@ public record PathDebugPayload(UUID companionId,
                                List<Long> currentPath, List<Long> nextPath, List<Long> bestPath,
                                List<Long> toBreak, List<Long> toPlace, List<Long> toWalkInto,
                                List<Long> goalBoxes, List<Long> goalColumns)
-        implements NumenPayload {
+        implements CustomPacketPayload {
 
     public static final ResourceLocation ID =
             new ResourceLocation(Constants.MOD_ID, "path_debug");

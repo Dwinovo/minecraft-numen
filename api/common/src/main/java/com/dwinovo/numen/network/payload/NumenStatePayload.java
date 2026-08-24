@@ -1,9 +1,9 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.item.ItemStack;
@@ -36,7 +36,7 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
                                 int selectedSlot, ItemStack offhand,
                                 List<MobEffectInstance> effects,
                                 String vehicleType, int vehicleId)
-        implements NumenPayload {
+        implements CustomPacketPayload {
 
     public static final ResourceLocation ID =
             new ResourceLocation(Constants.MOD_ID, "numen_state");

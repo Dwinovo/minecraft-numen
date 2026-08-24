@@ -1,8 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
@@ -27,7 +27,7 @@ import java.util.UUID;
  */
 public record CurrentTaskPayload(UUID entityUuid, String taskId, String tool,
                                  String describe, boolean standing, long elapsedMs)
-        implements NumenPayload {
+        implements CustomPacketPayload {
 
     /** 她闲着。 */
     public static CurrentTaskPayload idle(UUID entityUuid) {

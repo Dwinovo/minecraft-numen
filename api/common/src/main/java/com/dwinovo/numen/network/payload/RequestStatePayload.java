@@ -3,8 +3,8 @@ package com.dwinovo.numen.network.payload;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.platform.Services;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
@@ -22,7 +22,7 @@ import java.util.UUID;
  * <p>Only the owner of a LOADED companion gets the contents; otherwise the reply
  * is {@code loaded=false} (asleep / not yours — no inventory oracle).
  */
-public record RequestStatePayload(UUID uuid) implements NumenPayload {
+public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
 
     /** The 36 main backpack slots (hotbar + storage); equipment is already client-synced. */
     public static final int MAIN_SLOTS = 36;

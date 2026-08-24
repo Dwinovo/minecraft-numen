@@ -1,8 +1,8 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 
 import java.util.UUID;
@@ -26,7 +26,7 @@ import java.util.UUID;
  * {@code cause} is the vanilla death message ("X was slain by a zombie") for that tool result.
  */
 public record NumenDeathPayload(UUID entityUuid, String cause)
-        implements NumenPayload {
+        implements CustomPacketPayload {
 
     public static final ResourceLocation ID =
             new ResourceLocation(Constants.MOD_ID, "numen_death");

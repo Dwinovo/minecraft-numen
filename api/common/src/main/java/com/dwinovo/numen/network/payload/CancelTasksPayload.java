@@ -2,8 +2,8 @@ package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.network.NumenPayload;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -25,7 +25,7 @@ import java.util.UUID;
  * synthesized "interrupted by owner" results for those tool-call ids and drops
  * the real ones as late arrivals. This payload's job is purely the body stop.
  */
-public record CancelTasksPayload(UUID entityUuid) implements NumenPayload {
+public record CancelTasksPayload(UUID entityUuid) implements CustomPacketPayload {
 
     public static final ResourceLocation ID =
             new ResourceLocation(Constants.MOD_ID, "cancel_tasks");
