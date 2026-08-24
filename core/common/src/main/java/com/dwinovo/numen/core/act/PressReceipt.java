@@ -73,7 +73,7 @@ public final class PressReceipt {
     }
 
     private static String stackChange(String hand, ItemStack before, ItemStack now) {
-        if (ItemStack.isSameItemSameComponents(before, now) && before.getCount() == now.getCount()) {
+        if (ItemStack.isSameItemSameTags(before, now) && before.getCount() == now.getCount()) {
             return null;
         }
         return hand + ": " + describe(before) + " -> " + describe(now);

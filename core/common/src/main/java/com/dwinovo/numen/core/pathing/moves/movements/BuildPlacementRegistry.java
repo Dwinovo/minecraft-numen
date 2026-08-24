@@ -111,7 +111,8 @@ public final class BuildPlacementRegistry {
             for (int i = 0; i < 9; i++) {
                 ItemStack stack = inv.getItem(i);
                 if (stack.isEmpty()
-                        || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
+                        || stack.getItem() instanceof net.minecraft.world.item.TieredItem
+                        || stack.getItem() instanceof net.minecraft.world.item.ShearsItem) {
                     if (select) {
                         inv.selected = i;
                     }
@@ -187,7 +188,8 @@ public final class BuildPlacementRegistry {
                 for (int i = 0; i < 9; i++) {
                     ItemStack stack = inventory.getItem(i);
                     if (stack.isEmpty()
-                            || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
+                            || stack.getItem() instanceof net.minecraft.world.item.TieredItem
+                        || stack.getItem() instanceof net.minecraft.world.item.ShearsItem) {
                         if (select) {
                             inventory.selected = i;
                         }

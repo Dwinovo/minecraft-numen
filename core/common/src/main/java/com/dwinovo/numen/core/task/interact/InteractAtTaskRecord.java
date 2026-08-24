@@ -3,7 +3,6 @@ import com.dwinovo.numen.core.task.MouseButton;
 
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
@@ -52,7 +51,7 @@ public final class InteractAtTaskRecord extends TaskRecord {
         if (item == null) {
             return null;
         }
-        if (item.components().has(DataComponents.FOOD)) {
+        if (item.getFoodProperties() != null) {   // 1.20.1:食物属性在 Item 上,不是组件
             return BuiltInRegistries.ITEM.getKey(item).getPath()
                     + " is a consumable — use eat (using it through the world body wouldn't heal you).";
         }

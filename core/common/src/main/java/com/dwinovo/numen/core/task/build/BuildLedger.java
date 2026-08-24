@@ -94,7 +94,7 @@ final class BuildLedger {
         }
         for (BuildTaskRecord.EntitySpawn spawn : r.entities) {
             if (!fixtures.alreadyThere(spawn)) {
-                for (ItemStack carried : spawn.payload(player.level().registryAccess())) {
+                for (ItemStack carried : spawn.payload()) {
                     out.add(new BuildTaskRecord.CellNeed(carried, true));
                 }
             }

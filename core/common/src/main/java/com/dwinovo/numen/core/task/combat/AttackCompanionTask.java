@@ -97,6 +97,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      */
     private static final double BOW_MIN_DISTANCE = 8.0;
 
+    /** 1.20.1:生存模式实体交互距离是固定 3.0(ENTITY_INTERACTION_RANGE 属性是 1.20.5+ 的)。 */
+    private static final double ENTITY_REACH = 3.0;
+
     /**
      * 弓战斗的环外沿。<b>不是射程上限</b> —— 三十二格的话她能站在天边,而箭有下坠、目标
      * 会走,那么远基本射不中。十二格是"稳稳能中、又够得开"的量级:太远就往回走。
@@ -480,7 +483,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             }
             Entity e = liveEntity(f.id());
             if (e != null && f.distance() <= Swing.reachTo(
-                    player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE), e.getBbWidth())) {
+                    ENTITY_REACH, e.getBbWidth())) {
                 victim = e;
                 best = f.distance();
             }
@@ -592,7 +595,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     }
 
     private double reachToTarget() {
-        double native0 = player.getAttributeValue(Attributes.ENTITY_INTERACTION_RANGE);
+        double native0 = ENTITY_REACH;
         return target == null || target.isRemoved()
                 ? Swing.reachOf(native0)
                 : Swing.reachTo(native0, target.getBbWidth());

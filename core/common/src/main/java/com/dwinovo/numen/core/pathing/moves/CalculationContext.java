@@ -9,17 +9,13 @@ import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
+import net.minecraft.world.item.enchantment.EnchantmentHelper;
 import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.item.enchantment.ItemEnchantments;
-import net.minecraft.world.item.enchantment.effects.EnchantmentAttributeEffect;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -199,8 +195,8 @@ public class CalculationContext {
             // (空手或带 TOOL 组件的挖掘工具),否则右键走主手放不出副手方块
             for (int i = 0; i < 9; i++) {
                 ItemStack stack = inv.getItem(i);
-                if (stack.isEmpty() || stack.getItem().components()
-                        .has(net.minecraft.core.component.DataComponents.TOOL)) {
+                if (stack.isEmpty() || stack.getItem() instanceof net.minecraft.world.item.TieredItem
+                        || stack.getItem() instanceof net.minecraft.world.item.ShearsItem) {
                     return true;
                 }
             }
@@ -226,11 +222,11 @@ public class CalculationContext {
     private static int equipmentEnchantLevel(ServerPlayer player) {
         int level = 0;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemEnchantments itemEnchantments = player.getItemBySlot(slot).getEnchantments();
-            for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
-                if (enchant.is(Enchantments.FROST_WALKER)) {
-                    level = itemEnchantments.getLevel(enchant);
-                }
+            // 1.20.1:直接查附魔等级,无 Holder/组件。
+            int lvl = EnchantmentHelper.getItemEnchantmentLevel(
+                    Enchantments.FROST_WALKER, player.getItemBySlot(slot));
+            if (lvl > 0) {
+                level = lvl;
             }
         }
         return level;
@@ -238,21 +234,11 @@ public class CalculationContext {
 
     /** 按装备的水下移动效率附魔,把水中步速在水速与平走速之间插值。 */
     private static double computeWaterWalkSpeed(ServerPlayer player) {
-        float waterSpeedMultiplier = 1.0f;
-        OUTER:
-        for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemEnchantments itemEnchantments = player.getItemBySlot(slot).getEnchantments();
-            for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
-                List<EnchantmentAttributeEffect> effects =
-                        enchant.value().getEffects(EnchantmentEffectComponents.ATTRIBUTES);
-                for (EnchantmentAttributeEffect effect : effects) {
-                    if (effect.attribute().is(Attributes.WATER_MOVEMENT_EFFICIENCY.unwrapKey().orElseThrow())) {
-                        waterSpeedMultiplier = effect.amount().calculate(itemEnchantments.getLevel(enchant));
-                        break OUTER;
-                    }
-                }
-            }
-        }
+        // 1.20.1:水下移动效率即深海探索者附魔,乘数 = level/3(1.21 的
+        // WATER_MOVEMENT_EFFICIENCY 属性效果同曲线),无附魔保持 1.0 与原逻辑一致。
+        int depthStrider = EnchantmentHelper.getDepthStrider(player);
+        float waterSpeedMultiplier = depthStrider > 0
+                ? Math.min(1.0f, depthStrider / 3.0f) : 1.0f;
         return ActionCosts.WALK_ONE_IN_WATER_COST * (1 - waterSpeedMultiplier)
                 + ActionCosts.WALK_ONE_BLOCK_COST * waterSpeedMultiplier;
     }

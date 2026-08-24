@@ -187,7 +187,7 @@ public final class BlockDigger {
         // 主手物品与开挖时不同(物品/组件级比较)→ 重开:ABORT 旧进度、
         // 按新手持重新 START(与原版换持重置破坏进度同语义)
         if (started && destroyingItem != null
-                && !net.minecraft.world.item.ItemStack.isSameItemSameComponents(
+                && !net.minecraft.world.item.ItemStack.isSameItemSameTags(
                         destroyingItem, player.getMainHandItem())) {
             BlockPos samePos = pos;
             start(samePos, false);

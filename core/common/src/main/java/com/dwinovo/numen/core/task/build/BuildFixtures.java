@@ -63,7 +63,7 @@ final class BuildFixtures {
                 }
                 // 身上带的东西另算,而且按组件全等收:框里那把锋利五的剑,得他真有一把
                 // 才装得上。收什么放什么——付不起就整个拿掉,框空着挂上去,如实记一笔。
-                var carried = spawn.payload(level.registryAccess());
+                var carried = spawn.payload();
                 boolean paidCarried = true;
                 if (r.consumeMaterials) {
                     for (ItemStack want : carried) {

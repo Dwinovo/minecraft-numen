@@ -12,15 +12,12 @@ import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.Enchantments;
-import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
@@ -263,7 +260,7 @@ final class MovementPlacement {
         // 免耗材画像的"伸手进创造物品栏":背包连一块耗材都没有时自动补一组
         // 泥土——原版创造玩家放置也得先手持方块,真人是从创造栏抓,假玩家
         // 没有那个 GUI,这里就是那只手。生存画像不进此分支。
-        if (player.hasInfiniteMaterials() && !hasAnyThrowaway(player, acceptable)) {
+        if (player.getAbilities().instabuild && !hasAnyThrowaway(player, acceptable)) {   // 1.20.1 无 hasInfiniteMaterials()
             ItemStack restock = new ItemStack(net.minecraft.world.item.Items.DIRT, 64);
             if (!inventory.add(restock)) {
                 return false;   // 背包满还没耗材:罕见,按无料处理
@@ -290,7 +287,8 @@ final class MovementPlacement {
                 for (int i = 0; i < 9; i++) {
                     ItemStack stack = inventory.getItem(i);
                     if (stack.isEmpty()
-                            || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
+                            || stack.getItem() instanceof net.minecraft.world.item.TieredItem
+                            || stack.getItem() instanceof net.minecraft.world.item.ShearsItem) {
                         if (select) {
                             inventory.selected = i;
                         }
@@ -356,12 +354,9 @@ final class MovementPlacement {
     static int frostWalkerLevel(ServerPlayer player) {
         int level = 0;
         for (EquipmentSlot slot : EquipmentSlot.values()) {
-            ItemEnchantments itemEnchantments = player.getItemBySlot(slot).getEnchantments();
-            for (Holder<Enchantment> enchant : itemEnchantments.keySet()) {
-                if (enchant.is(Enchantments.FROST_WALKER)) {
-                    level = Math.max(level, itemEnchantments.getLevel(enchant));
-                }
-            }
+            // 1.20.1:直接查附魔等级,无 Holder/组件。
+            level = Math.max(level, net.minecraft.world.item.enchantment.EnchantmentHelper
+                    .getItemEnchantmentLevel(Enchantments.FROST_WALKER, player.getItemBySlot(slot)));
         }
         return level;
     }

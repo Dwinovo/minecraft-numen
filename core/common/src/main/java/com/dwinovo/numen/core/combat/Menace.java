@@ -177,8 +177,8 @@ public final class Menace {
      *
      * <p>光看血量会把"满血裸奔"和"满血下界合金"判成一样危险,而后者能多扛四五倍。
      * 减伤不自己算:交给原版的 {@link CombatRules#getDamageAfterAbsorb},护甲、韧性、
-     * 以及模组改过的公式一并跟着走。传的伤害源不带武器,所以不会触发附魔那条分支,
-     * 也就没有副作用({@code LivingEntity.getDamageAfterArmorAbsorb} 会磨损护甲,不能用)。
+     * 一并跟着走。这一代(1.20.1)的公式只收数值,没有伤害源参数,天然无副作用
+     * ({@code LivingEntity.getDamageAfterArmorAbsorb} 会磨损护甲,不能用)。
      *
      * @return 折算后的有效血量;没有护甲时就等于血量本身
      */
@@ -187,8 +187,7 @@ public final class Menace {
         if (!(self.level() instanceof ServerLevel level)) {
             return health;
         }
-        float afterArmor = CombatRules.getDamageAfterAbsorb(self, NOMINAL_HIT,
-                level.damageSources().generic(),
+        float afterArmor = CombatRules.getDamageAfterAbsorb(NOMINAL_HIT,
                 self.getArmorValue(), (float) self.getAttributeValue(Attributes.ARMOR_TOUGHNESS));
         if (afterArmor <= 0.0f) {
             return Double.MAX_VALUE;   // 伤害被吃干净了:这一档她无敌

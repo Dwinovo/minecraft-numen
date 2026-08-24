@@ -57,7 +57,7 @@ final class BuildInventory {
 
     /** 从背包扣掉一件满足这一笔要求的东西。 */
     void consumeMatching(BuildTaskRecord.CellNeed need) {
-        if (player.hasInfiniteMaterials()) {
+        if (player.getAbilities().instabuild) {
             return;
         }
         Inventory inventory = player.getInventory();
@@ -73,7 +73,7 @@ final class BuildInventory {
 
     /** 从背包扣掉一个该物品。 */
     void consumeOne(Item item) {
-        if (player.hasInfiniteMaterials()) {
+        if (player.getAbilities().instabuild) {
             return;   // 任务中途被切成免耗材画像:记账即刻停手,别扣真方块
         }
         Inventory inventory = player.getInventory();
@@ -99,7 +99,7 @@ final class BuildInventory {
         int n = 0;
         for (int i = 0; i < limit; i++) {
             ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, want)) {
+            if (!stack.isEmpty() && ItemStack.isSameItemSameTags(stack, want)) {
                 n += stack.getCount();
             }
         }
@@ -108,14 +108,14 @@ final class BuildInventory {
 
     /** 从背包扣掉一件和这一叠完全一样的东西。 */
     boolean consumeStrict(ItemStack want) {
-        if (player.hasInfiniteMaterials()) {
+        if (player.getAbilities().instabuild) {
             return true;
         }
         Inventory inventory = player.getInventory();
         int limit = buildableLimit(inventory);
         for (int i = 0; i < limit; i++) {
             ItemStack stack = inventory.getItem(i);
-            if (!stack.isEmpty() && ItemStack.isSameItemSameComponents(stack, want)) {
+            if (!stack.isEmpty() && ItemStack.isSameItemSameTags(stack, want)) {
                 stack.shrink(1);
                 return true;
             }

@@ -68,7 +68,7 @@ public final class BlueprintStore {
 
     /** 主目录:社区通用的 {@code schematics/}(不存在则建,新图纸也写这里)。 */
     public static Path dir(MinecraftServer server) {
-        Path dir = server.getServerDirectory().resolve("schematics");
+        Path dir = server.getServerDirectory().toPath().resolve("schematics");
         try {
             Files.createDirectories(dir);
         } catch (IOException e) {
@@ -81,7 +81,7 @@ public final class BlueprintStore {
     private static List<Path> searchRoots(MinecraftServer server) {
         List<Path> roots = new ArrayList<>(2);
         roots.add(dir(server));
-        Path legacy = server.getServerDirectory().resolve("config").resolve("numen").resolve("blueprints");
+        Path legacy = server.getServerDirectory().toPath().resolve("config").resolve("numen").resolve("blueprints");
         if (Files.isDirectory(legacy)) {
             roots.add(legacy);
         }
@@ -241,7 +241,7 @@ public final class BlueprintStore {
             // 这一格要几叠料:带花的花盆是盆加花两件,带花纹的旗帜是一叠但要组件一致。
             // 一格一件是特例而不是通则,这张料单整个盖过默认的"一件本方块的物品"。
             var cellNeeds = com.dwinovo.numen.core.build.BuildStates
-                    .cellNeeds(placed, safe, level, world, level.registryAccess());
+                    .cellNeeds(placed, safe, level, world);
             if (!cellNeeds.isEmpty()) {
                 needs.put(world.asLong(), cellNeeds);
             }
@@ -251,7 +251,7 @@ public final class BlueprintStore {
         for (Tag t : tag.getList("entities", Tag.TAG_COMPOUND)) {
             CompoundTag e = (CompoundTag) t;
             CompoundTag safe = com.dwinovo.numen.core.build.BlueprintSafety
-                    .safeEntityData(e.getCompound("nbt"), level.registryAccess());
+                    .safeEntityData(e.getCompound("nbt"));
             if (safe == null) {
                 continue;
             }
@@ -286,7 +286,7 @@ public final class BlueprintStore {
             Path schem = base.resolve(name + ".schem");
             try {
                 if (Files.exists(nbt)) {
-                    return NbtIo.readCompressed(nbt, NbtAccounter.unlimitedHeap());
+                    return NbtIo.readCompressed(nbt.toFile());
                 }
                 if (Files.exists(snbt)) {
                     return NbtUtils.snbtToStructure(Files.readString(snbt));
@@ -294,11 +294,11 @@ public final class BlueprintStore {
                 // 社区格式:读出 gzip NBT 后转成原版结构形态,下游管线无感
                 if (Files.exists(litematic)) {
                     return BlueprintFormats.fromLitematic(
-                            NbtIo.readCompressed(litematic, NbtAccounter.unlimitedHeap()));
+                            NbtIo.readCompressed(litematic.toFile()));
                 }
                 if (Files.exists(schem)) {
                     return BlueprintFormats.fromSchem(
-                            NbtIo.readCompressed(schem, NbtAccounter.unlimitedHeap()));
+                            NbtIo.readCompressed(schem.toFile()));
                 }
             } catch (Exception e) {
                 throw new IllegalArgumentException("blueprint " + name + " cannot be read: " + e.getMessage(), e);

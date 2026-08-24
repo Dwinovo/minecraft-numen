@@ -207,8 +207,7 @@ public final class BuildStates {
      */
     public static List<BuildTaskRecord.CellNeed> cellNeeds(
             BlockState state, net.minecraft.nbt.CompoundTag safeData,
-            net.minecraft.world.level.LevelReader level, net.minecraft.core.BlockPos probe,
-            net.minecraft.core.HolderLookup.Provider registries) {
+            net.minecraft.world.level.LevelReader level, net.minecraft.core.BlockPos probe) {
         if (state == null) {
             return List.of();
         }
@@ -216,10 +215,10 @@ public final class BuildStates {
         // 那株植物。不写死一张"哪个盆装哪种花"的对照表(那张表在别处是二十多行的
         // switch),模组的花盆也照样认。
         if (state.getBlock() instanceof net.minecraft.world.level.block.FlowerPotBlock pot
-                && pot.getPotted() != Blocks.AIR) {
+                && pot.getContent() != Blocks.AIR) {
             net.minecraft.world.item.Item plant = materialItem(state, level, probe);
             if (plant == net.minecraft.world.item.Items.AIR) {
-                plant = pot.getPotted().asItem();
+                plant = pot.getContent().asItem();
             }
             if (plant == net.minecraft.world.item.Items.AIR
                     || plant == net.minecraft.world.item.Items.FLOWER_POT) {
@@ -230,7 +229,7 @@ public final class BuildStates {
                             net.minecraft.world.item.Items.FLOWER_POT), false),
                     new BuildTaskRecord.CellNeed(new net.minecraft.world.item.ItemStack(plant), false));
         }
-        net.minecraft.world.item.ItemStack exact = strictItem(state, safeData, registries);
+        net.minecraft.world.item.ItemStack exact = strictItem(state, safeData);
         return exact == null ? List.of() : List.of(new BuildTaskRecord.CellNeed(exact, true));
     }
 
@@ -240,33 +239,27 @@ public final class BuildStates {
      * <p>旗帜的花纹我们照搬(它是设计的一部分),而花纹是玩家在织布机上一层层染出来的
      * 活。按一面白旗收料就是把那份活白送。所以收的是<b>带着这些花纹的那面旗帜本身</b>。
      *
-     * <p>做法是把物品拼成一段 NBT 交给原版自己的编解码器去读,而不是手搭组件:方块实体
-     * 里那份 {@code patterns} 和物品上那个花纹组件本来就是同一套编码,借道过去必然一致,
-     * 手搭迟早会在某个版本上错位。
+     * <p>做法是把方块实体那份数据借道 {@code BlockEntityTag} 挂到物品上,而不是手搭:
+     * 这一代(1.20.1)方块实体里那份 {@code Patterns} 和旗帜物品 {@code BlockEntityTag}
+     * 里那份本来就是同一套编码,借道过去必然一致,手搭迟早会在某个版本上错位。
      *
      * @return 要精确收的那一叠;这一格不需要精确返回 null
      */
     public static net.minecraft.world.item.ItemStack strictItem(
-            BlockState state, net.minecraft.nbt.CompoundTag safeData,
-            net.minecraft.core.HolderLookup.Provider registries) {
+            BlockState state, net.minecraft.nbt.CompoundTag safeData) {
         if (state == null || safeData == null || !state.is(net.minecraft.tags.BlockTags.BANNERS)
-                || !safeData.contains("patterns")) {
+                || !safeData.contains("Patterns")) {
             return null;
         }
         net.minecraft.world.item.Item item = state.getBlock().asItem();
         if (item == net.minecraft.world.item.Items.AIR) {
             return null;
         }
-        net.minecraft.nbt.CompoundTag itemTag = new net.minecraft.nbt.CompoundTag();
-        itemTag.putString("id", net.minecraft.core.registries.BuiltInRegistries.ITEM
-                .getKey(item).toString());
-        itemTag.putInt("count", 1);
-        net.minecraft.nbt.CompoundTag components = new net.minecraft.nbt.CompoundTag();
-        components.put("minecraft:banner_patterns", safeData.get("patterns").copy());
-        itemTag.put("components", components);
-        return net.minecraft.world.item.ItemStack.parse(registries, itemTag)
-                .filter(s -> !s.isEmpty())
-                .orElse(null);
+        net.minecraft.world.item.ItemStack stack = new net.minecraft.world.item.ItemStack(item);
+        net.minecraft.nbt.CompoundTag beTag = new net.minecraft.nbt.CompoundTag();
+        beTag.put("Patterns", safeData.get("Patterns").copy());
+        stack.addTagElement("BlockEntityTag", beTag);
+        return stack;
     }
 
     /**

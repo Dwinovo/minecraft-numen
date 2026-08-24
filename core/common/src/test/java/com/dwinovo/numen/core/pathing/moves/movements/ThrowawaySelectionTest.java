@@ -72,34 +72,13 @@ class ThrowawaySelectionTest {
         abilities.set(p, new net.minecraft.world.entity.player.Abilities());   // 默认生存画像
         Field entityData = net.minecraft.world.entity.Entity.class.getDeclaredField("entityData");
         entityData.setAccessible(true);
-        // 1.21.x 的 SynchedEntityData 改由 Builder 组装，build() 会校验「每个 id 都已定义」
-        // ——只塞血量一项会当场抛。所以照 Entity 构造器的原样把定义表补全：基类那八项
-        // 写死在构造器里（不在 defineSynchedData 内），其余交给各层的 defineSynchedData
-        // （那几个实现都是纯粹的 builder.define，不碰实例状态）。拿到的就是真实定义表。
-        net.minecraft.network.syncher.SynchedEntityData.Builder builder =
-                new net.minecraft.network.syncher.SynchedEntityData.Builder(p);
-        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_SHARED_FLAGS_ID"),
-                (byte) 0);
-        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_AIR_SUPPLY_ID"),
-                net.minecraft.world.entity.Entity.TOTAL_AIR_SUPPLY);
-        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_CUSTOM_NAME_VISIBLE"),
-                false);
-        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_CUSTOM_NAME"),
-                java.util.Optional.<net.minecraft.network.chat.Component>empty());
-        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_SILENT"), false);
-        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_NO_GRAVITY"), false);
-        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_POSE"),
-                net.minecraft.world.entity.Pose.STANDING);
-        builder.define(dataKey(net.minecraft.world.entity.Entity.class, "DATA_TICKS_FROZEN"), 0);
-        java.lang.reflect.Method defineSynched = net.minecraft.world.entity.Entity.class
-                .getDeclaredMethod("defineSynchedData",
-                        net.minecraft.network.syncher.SynchedEntityData.Builder.class);
-        defineSynched.setAccessible(true);
-        defineSynched.invoke(p, builder);
-        net.minecraft.network.syncher.SynchedEntityData synched = builder.build();
-        entityData.set(p, synched);
-        synched.set(dataKey(net.minecraft.world.entity.LivingEntity.class, "DATA_HEALTH_ID"),
+        // 1.20.1 的 SynchedEntityData 直接 new + define,没有 Builder,也不校验
+        // 「每个 id 都已定义」——只定义要断言的血量一项即可。
+        net.minecraft.network.syncher.SynchedEntityData synched =
+                new net.minecraft.network.syncher.SynchedEntityData(p);
+        synched.define(dataKey(net.minecraft.world.entity.LivingEntity.class, "DATA_HEALTH_ID"),
                 20.0f);   // 满血
+        entityData.set(p, synched);
         return p;
     }
 

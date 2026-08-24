@@ -1,6 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
-import net.minecraft.core.HolderLookup;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
@@ -20,7 +20,7 @@ public final class RecipeProbe {
     private RecipeProbe() {}
 
     /** 展示产出——枚举配方表用它,不用空输入 assemble(那是出合同的问法)。 */
-    public static ItemStack resultOf(Recipe<?> recipe, HolderLookup.Provider registries) {
+    public static ItemStack resultOf(Recipe<?> recipe, RegistryAccess registries) {   // 1.20.1:展示产出收 RegistryAccess
         return probe(() -> recipe.getResultItem(registries));
     }
 

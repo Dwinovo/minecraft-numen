@@ -174,7 +174,7 @@ public final class BuildTaskRecord extends TaskRecord {
     public record CellNeed(net.minecraft.world.item.ItemStack stack, boolean exact) {
         public boolean matches(net.minecraft.world.item.ItemStack other) {
             return exact
-                    ? net.minecraft.world.item.ItemStack.isSameItemSameComponents(stack, other)
+                    ? net.minecraft.world.item.ItemStack.isSameItemSameTags(stack, other)
                     : other.is(stack.getItem());
         }
     }
@@ -265,14 +265,13 @@ public final class BuildTaskRecord extends TaskRecord {
         }
 
         /**
-         * 这只摆设身上带的东西要收哪几叠——每一叠按<b>组件全等</b>收。
+         * 这只摆设身上带的东西要收哪几叠——每一叠按<b>物品数据全等</b>收。
          *
          * <p>躯壳一件料,身上的东西另算:框白送而框里的剑也白送,那就是凭空造物品;
          * 框收料而框里的剑不给,玩家又会觉得图纸没还原。收什么放什么,账才是平的。
          */
-        public java.util.List<net.minecraft.world.item.ItemStack> payload(
-                net.minecraft.core.HolderLookup.Provider registries) {
-            return com.dwinovo.numen.core.build.BlueprintSafety.payloadStacks(nbt, registries);
+        public java.util.List<net.minecraft.world.item.ItemStack> payload() {
+            return com.dwinovo.numen.core.build.BlueprintSafety.payloadStacks(nbt);
         }
     }
 

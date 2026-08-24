@@ -111,7 +111,7 @@ public final class BlueprintReadTool implements NumenTool {
             }
         }
         for (var spawn : loaded.entities()) {
-            for (var stack : spawn.payload(level.registryAccess())) {
+            for (var stack : spawn.payload()) {
                 exact.merge(stack.getHoverName().getString(), 1, Integer::sum);
             }
         }

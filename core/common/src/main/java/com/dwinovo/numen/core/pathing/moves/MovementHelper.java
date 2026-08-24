@@ -140,7 +140,7 @@ public final class MovementHelper {
         if (block instanceof CauldronBlock) {
             return Ternary.NO;
         }
-        return state.isPathfindable(PathComputationType.LAND) ? Ternary.YES : Ternary.NO;
+        return state.isPathfindable(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO, PathComputationType.LAND) ? Ternary.YES : Ternary.NO;
     }
 
     /** MAYBE 的位置精判:地毯 / 雪层 / 满格流体。 */
@@ -180,7 +180,7 @@ public final class MovementHelper {
             return fluidState.getType() instanceof WaterFluid; // 只有水柱可游走
         }
 
-        return state.isPathfindable(PathComputationType.LAND);
+        return state.isPathfindable(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO, PathComputationType.LAND);
     }
 
     // ==================== 完全无阻碍(可跳跃穿过) ====================
@@ -211,7 +211,7 @@ public final class MovementHelper {
                 || block instanceof ShulkerBoxBlock) {
             return Ternary.NO;
         }
-        return state.isPathfindable(PathComputationType.LAND) ? Ternary.YES : Ternary.NO;
+        return state.isPathfindable(net.minecraft.world.level.EmptyBlockGetter.INSTANCE, net.minecraft.core.BlockPos.ZERO, PathComputationType.LAND) ? Ternary.YES : Ternary.NO;
     }
 
     public static boolean fullyPassable(CalculationContext context, int x, int y, int z) {

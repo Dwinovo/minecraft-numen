@@ -19,11 +19,9 @@ import net.minecraft.world.item.crafting.AbstractCookingRecipe;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.Recipe;
-import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.crafting.SmithingRecipe;
-import net.minecraft.world.item.crafting.SmithingRecipeInput;
 import net.minecraft.world.item.crafting.StonecutterRecipe;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -137,17 +135,17 @@ String item_id,
         String name = BuiltInRegistries.ITEM.getKey(target).getPath();
 
         List<String> recipes = new ArrayList<>();
-        for (RecipeHolder<?> holder : level.getRecipeManager().getRecipes()) {
+        // 1.20.1:配方表直接给 Recipe,还没有 RecipeHolder 包装。
+        for (Recipe<?> r : level.getRecipeManager().getRecipes()) {
             if (recipes.size() >= MAX_RECIPES) {
                 break;
             }
             // 每条配方自成一格:整合包里一条坏配方(产出为 null、输入表为 null)
             // 只丢它自己,绝不让它杀掉整个查询。见 RecipeProbe。
             try {
-                Recipe<?> r = holder.value();
                 if (r instanceof CraftingRecipe cr) {
                     // 产出依赖输入的配方(烟花、镶零件的装备)静态描述答不了;
-                    // 1.21.1 没有 PlacementInfo,空输入表的老启发式一并保留。
+                    // 这一代没有 PlacementInfo,空输入表的老启发式一并保留。
                     if (cr.isSpecial() || cr.getIngredients().isEmpty()
                             || cr.getIngredients().stream().allMatch(Ingredient::isEmpty)) {
                         continue;
@@ -173,8 +171,9 @@ String item_id,
                 } else if (r instanceof SmithingRecipe sm) {
                     // 锻造不走展示产出,保留空输入 assemble 的既有语义:变换配方
                     // (下界合金升级)照样给出产物,纹饰配方产出(空的)基底、自然排除。
-                    ItemStack result = RecipeProbe.probe(() -> sm.assemble(new SmithingRecipeInput(
-                            ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY), level.registryAccess()));
+                    // 1.20.1:assemble 收 Container(还没有 SmithingRecipeInput)。
+                    ItemStack result = RecipeProbe.probe(() -> sm.assemble(
+                            new net.minecraft.world.SimpleContainer(3), level.registryAccess()));
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }
@@ -182,7 +181,7 @@ String item_id,
                 }
             } catch (RuntimeException broken) {
                 com.dwinovo.numen.core.Constants.LOG.debug(
-                        "[numen-recipe] 配方 {} 坏了,跳过: {}", holder.id(), broken.toString());
+                        "[numen-recipe] 配方 {} 坏了,跳过: {}", r.getId(), broken.toString());
             }
         }
 

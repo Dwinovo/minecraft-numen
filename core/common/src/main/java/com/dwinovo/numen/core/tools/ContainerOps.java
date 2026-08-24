@@ -148,7 +148,7 @@ List<Move> moves,
     }
 
     private static boolean sameItem(ItemStack a, ItemStack b) {
-        return ItemStack.isSameItemSameComponents(a, b);
+        return ItemStack.isSameItemSameTags(a, b);
     }
 
     private static String name(ItemStack stack) {

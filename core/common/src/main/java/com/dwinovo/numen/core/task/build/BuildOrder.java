@@ -56,7 +56,7 @@ public final class BuildOrder {
         }
         var b = state.getBlock();
         return b instanceof net.minecraft.world.level.block.LadderBlock
-                || b instanceof net.minecraft.world.level.block.BaseTorchBlock
+                || b instanceof net.minecraft.world.level.block.TorchBlock
                 || b instanceof net.minecraft.world.level.block.SignBlock
                 || b instanceof net.minecraft.world.level.block.BasePressurePlateBlock
                 || b instanceof net.minecraft.world.level.block.BaseRailBlock
