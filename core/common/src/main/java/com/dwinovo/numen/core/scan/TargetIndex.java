@@ -226,7 +226,7 @@ public final class TargetIndex {
         List<BlockPos> out = new ArrayList<>();
         int centerCx = SectionPos.blockToSectionCoord(center.getX());
         int centerCz = SectionPos.blockToSectionCoord(center.getZ());
-        int minSection = level.getMinSection();
+        int minSection = level.getMinSectionY();   // 1.21.2+ 更名,语义不变
         int sectionCount = level.getSectionsCount();
         int[] sectionOrder = SearchGeometry.sectionOrder(minSection, minSection + sectionCount - 1,
                 SectionPos.blockToSectionCoord(center.getY()));

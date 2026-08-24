@@ -1,16 +1,18 @@
 package com.dwinovo.numen.core.tools;
 
 import net.minecraft.core.HolderLookup;
-import net.minecraft.core.NonNullList;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.CraftingBookCategory;
 import net.minecraft.world.item.crafting.CraftingInput;
+import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
-import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.PlacementInfo;
 import net.minecraft.world.item.crafting.RecipeSerializer;
-import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
+
+import java.util.List;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -57,22 +59,22 @@ class RecipeProbeTest {
         assumeTrue(booted, "Minecraft 引导不可用,跳过配方探测钉桩");
         assertFalse(RecipeProbe.usableIngredients(recipe(null, null)), "输入表为 null");
         assertTrue(RecipeProbe.usableIngredients(
-                recipe(NonNullList.of(Ingredient.EMPTY, Ingredient.of(Items.STICK)),
-                        new ItemStack(Items.STICK))));
+                recipe(List.of(Ingredient.of(Items.STICK)), new ItemStack(Items.STICK))));
     }
 
     /** 最小假配方:产出与输入表按参数给,null 就还 null——坏配方就长这样。 */
-    private static Recipe<CraftingInput> recipe(NonNullList<Ingredient> ings, ItemStack result) {
-        return new Recipe<>() {
+    private static CraftingRecipe recipe(List<Ingredient> ings, ItemStack result) {
+        return new CraftingRecipe() {
             @Override public boolean matches(CraftingInput input, Level level) { return false; }
             @Override public ItemStack assemble(CraftingInput input, HolderLookup.Provider registries) {
                 return result;
             }
-            @Override public boolean canCraftInDimensions(int width, int height) { return true; }
-            @Override public ItemStack getResultItem(HolderLookup.Provider registries) { return result; }
-            @Override public NonNullList<Ingredient> getIngredients() { return ings; }
-            @Override public RecipeSerializer<?> getSerializer() { return null; }
-            @Override public RecipeType<?> getType() { return null; }
+            @Override public PlacementInfo placementInfo() {
+                // 1.21.2+ 输入表经 PlacementInfo 暴露;坏配方的 null 就在这一层还 null
+                return ings == null ? null : PlacementInfo.create(ings);
+            }
+            @Override public RecipeSerializer<? extends CraftingRecipe> getSerializer() { return null; }
+            @Override public CraftingBookCategory category() { return CraftingBookCategory.MISC; }
         };
     }
 }

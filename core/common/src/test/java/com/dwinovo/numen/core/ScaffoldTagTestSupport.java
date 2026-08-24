@@ -32,8 +32,8 @@ public final class ScaffoldTagTestSupport {
     /** 幂等:每个测试类的 {@code @BeforeAll} 都可以调。 */
     @SuppressWarnings("unchecked")
     public static void bind() {
-        ((MappedRegistry<Item>) BuiltInRegistries.ITEM).bindTags(java.util.Map.of(
+        ((MappedRegistry<Item>) BuiltInRegistries.ITEM).bindTag(   // 1.21.2+ 按标签逐条绑
                 InitTag.SCAFFOLDS,
-                MATERIALS.stream().map(BuiltInRegistries.ITEM::wrapAsHolder).toList()));
+                MATERIALS.stream().map(BuiltInRegistries.ITEM::wrapAsHolder).toList());
     }
 }

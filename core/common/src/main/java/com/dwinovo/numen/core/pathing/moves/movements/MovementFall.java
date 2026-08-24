@@ -136,7 +136,7 @@ public class MovementFall extends Movement {
         }
         // 梯子回避:下方有梯子时把瞄点往梯子朝向偏,免得挂上去
         Direction avoidDir = avoid();
-        Vec3i avoid = avoidDir == null ? null : avoidDir.getNormal();
+        Vec3i avoid = avoidDir == null ? null : avoidDir.getUnitVec3i();
         if (avoid == null) {
             avoid = src.subtract(dest);
         } else {

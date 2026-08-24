@@ -115,7 +115,7 @@ public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRec
         if (!previous.isEmpty()) {
             inv.add(previous);                              // mutates `previous` down by what fit
             if (!previous.isEmpty() && player.level() instanceof ServerLevel sl) {
-                player.spawnAtLocation(previous);       // overflow → drop
+                player.spawnAtLocation(sl, previous);       // overflow → drop(1.21.2+ 首参收 ServerLevel)
             }
         }
         inv.setChanged();

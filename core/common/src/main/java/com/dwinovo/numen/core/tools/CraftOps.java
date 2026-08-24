@@ -313,11 +313,12 @@ public final class CraftOps {
 
     private static List<Cand> candidatesFor(ServerLevel level, Item target) {
         List<Cand> out = new ArrayList<>();
-        // 只取合成类型的表:模组自定义类型(机器配方)根本不进循环——执行层本来就
-        // 只会往标准合成格里摆料,几万条配方的整合包也省下全量遍历。
-        for (RecipeHolder<CraftingRecipe> holder
-                : level.getRecipeManager().getAllRecipesFor(RecipeType.CRAFTING)) {
-            CraftingRecipe cr = holder.value();
+        // 1.21.2+ 服务端没有按类型取表的公开口(recipeMap 不公开),全量遍历、只认
+        // 合成配方——执行层本来就只会往标准合成格里摆料,机器配方在这里被跳过。
+        for (RecipeHolder<?> holder : level.recipeAccess().getRecipes()) {
+            if (!(holder.value() instanceof CraftingRecipe cr)) {
+                continue;
+            }
             try {
                 // 产出依赖输入的配方(烟花、镶零件的装备)静态匹配答不了——模组
                 // 自己标的 isSpecial 就是这句话,原版合成书同样不列它们。
@@ -344,7 +345,8 @@ public final class CraftOps {
 
     /** The recipe's non-empty ingredients — the per-craft shopping list. */
     private static List<Ingredient> ingredientsOf(CraftingRecipe recipe) {
-        return recipe.getIngredients().stream().filter(i -> !i.isEmpty()).toList();
+        // 1.21.2+ 静态清单在 PlacementInfo(网格空位不进清单);过滤仅防坏配方
+        return recipe.placementInfo().ingredients().stream().filter(i -> !i.isEmpty()).toList();
     }
 
     private static boolean fits(CraftingRecipe recipe, int w, int h) {
@@ -359,18 +361,18 @@ public final class CraftOps {
         List<Placement> out = new ArrayList<>();
         if (recipe instanceof ShapedRecipe s) {
             int w = s.getWidth(), h = s.getHeight();
-            var cells = s.getIngredients();
+            var cells = s.getIngredients();   // 1.21.2+: List<Optional<Ingredient>>,空格 = empty
             for (int r = 0; r < h; r++) {
                 for (int c = 0; c < w; c++) {
-                    Ingredient ing = cells.get(r * w + c);
-                    if (!ing.isEmpty()) {
+                    Ingredient ing = cells.get(r * w + c).orElse(null);
+                    if (ing != null && !ing.isEmpty()) {
                         out.add(new Placement(r * gridW + c, ing));
                     }
                 }
             }
         } else {
             int pos = 0;
-            for (Ingredient ing : recipe.getIngredients()) {
+            for (Ingredient ing : recipe.placementInfo().ingredients()) {
                 if (!ing.isEmpty()) {
                     out.add(new Placement(pos++, ing));
                 }
@@ -383,10 +385,11 @@ public final class CraftOps {
     private static Item pickItem(Ingredient ing, Map<Item, Integer> pool) {
         Item best = null;
         int bestN = 0;
-        for (ItemStack s : ing.getItems()) {
-            int n = pool.getOrDefault(s.getItem(), 0);
+        for (var h : ing.items().toList()) {   // 1.21.2+: Stream<Holder<Item>>
+            Item item = h.value();
+            int n = pool.getOrDefault(item, 0);
             if (n > bestN) {
-                best = s.getItem();
+                best = item;
                 bestN = n;
             }
         }
@@ -435,8 +438,8 @@ public final class CraftOps {
         for (Map.Entry<String, int[]> e : tally.entrySet()) {
             int need = e.getValue()[0];
             int have = 0;
-            for (ItemStack s : rep.get(e.getKey()).getItems()) {
-                have += pool.getOrDefault(s.getItem(), 0);
+            for (var h : rep.get(e.getKey()).items().toList()) {   // 1.21.2+: Stream<Holder<Item>>
+                have += pool.getOrDefault(h.value(), 0);
             }
             if (have < need) {
                 out.add(need + "x " + e.getKey() + " (have " + have + ")");

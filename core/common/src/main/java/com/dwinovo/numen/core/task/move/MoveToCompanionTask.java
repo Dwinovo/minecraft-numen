@@ -95,7 +95,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         // 靠岸后接步行(见 tickBoatLeg)。其余情况(矿车没有舵、马的寻路仍按步行
         // 物理算、FIND 要先扫描)直接走步行段;下座驾是步行导航自己的事(PlayerNav)。
         if (player.isPassenger()
-                && player.getVehicle() instanceof net.minecraft.world.entity.vehicle.Boat
+                && player.getVehicle() instanceof net.minecraft.world.entity.vehicle.AbstractBoat
                 && (r.kind == MoveToTaskRecord.Kind.BLOCK || r.kind == MoveToTaskRecord.Kind.COLUMN)
                 && !reached()) {
             boatLeg = new com.dwinovo.numen.core.pathing.execute.BoatNav(player, blockTarget);

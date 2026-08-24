@@ -170,7 +170,8 @@ public final class BuildStates {
         // {@link #strictItem},读的是图纸自己那份数据)。
         if (level != null && !state.hasBlockEntity()) {
             try {
-                var picked = state.getBlock().getCloneItemStack(level, pos, state);
+                // 1.21.2+ 公开入口在 BlockStateBase 上,末参 includeData=false(这里只问无方块实体的方块)
+                var picked = state.getCloneItemStack(level, pos, false);
                 if (!picked.isEmpty()) {
                     return picked.getItem();
                 }

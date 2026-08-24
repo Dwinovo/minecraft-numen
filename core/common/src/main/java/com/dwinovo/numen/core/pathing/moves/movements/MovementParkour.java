@@ -38,7 +38,7 @@ public class MovementParkour extends Movement {
         super(player, src, dest, EMPTY, dest.below());
         int dx = dest.getX() - src.getX();
         int dz = dest.getZ() - src.getZ();
-        this.direction = Direction.getNearest(dx, 0, dz);
+        this.direction = Direction.getNearest(dx, 0, dz, Direction.NORTH);
         this.dist = Math.abs(dx) + Math.abs(dz);
         this.ascend = dest.getY() > src.getY();
     }

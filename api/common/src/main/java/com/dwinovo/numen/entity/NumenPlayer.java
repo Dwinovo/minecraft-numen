@@ -258,7 +258,7 @@ public final class NumenPlayer extends ServerPlayer {
         if (!super.startRiding(vehicle, force)) {
             return false;
         }
-        if (vehicle instanceof net.minecraft.world.entity.vehicle.Boat) {
+        if (vehicle instanceof net.minecraft.world.entity.vehicle.AbstractBoat) {
             yRotO = vehicle.getYRot();
             setYRot(vehicle.getYRot());
             setYHeadRot(vehicle.getYRot());

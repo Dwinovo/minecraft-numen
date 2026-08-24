@@ -110,7 +110,7 @@ public class CompanionGameTests {
     public static void attack_hunts_a_named_passive_target(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
-        var pig = EntityType.PIG.create(level);
+        var pig = EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         helper.assertTrue(pig != null, "pig did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
         pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -316,7 +316,7 @@ public class CompanionGameTests {
 
     private static Zombie spawnZombie(GameTestHelper helper, BlockPos rel, NumenPlayer target) {
         ServerLevel level = helper.getLevel();
-        Zombie zombie = EntityType.ZOMBIE.create(level);
+        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         helper.assertTrue(zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(rel);
         zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -2382,7 +2382,7 @@ public class CompanionGameTests {
         java.util.function.BiFunction<String, List<BlockPos>, List<BuildTaskRecord.Target>> vol =
                 (id, cells) -> {
                     var item = net.minecraft.core.registries.BuiltInRegistries.ITEM
-                            .get(net.minecraft.resources.ResourceLocation.parse(id));
+                            .getValue(net.minecraft.resources.ResourceLocation.parse(id));
                     var block = item instanceof net.minecraft.world.item.BlockItem bi
                             ? bi.getBlock() : Blocks.AIR;
                     List<BuildTaskRecord.Target> out = new ArrayList<>();
@@ -3017,7 +3017,7 @@ public class CompanionGameTests {
         });
 
         helper.succeedWhen(() -> {
-            var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.Boat.class,
+            var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.AbstractBoat.class,
                     new net.minecraft.world.phys.AABB(
                             helper.absolutePos(new BlockPos(6, 1, 6)).getCenter(),
                             helper.absolutePos(new BlockPos(10, 4, 10)).getCenter()));
@@ -3044,8 +3044,9 @@ public class CompanionGameTests {
         }
         // 船放在水面高度(rel y1 的水,面在 +0.9),别沉进水里被浮力弹上天
         BlockPos boatAt = helper.absolutePos(new BlockPos(6, 2, 8));
-        var boat = new net.minecraft.world.entity.vehicle.Boat(
-                level, boatAt.getX() + 0.5, boatAt.getY() - 1 + 0.9, boatAt.getZ() + 0.5);
+        // 1.21.2+ 船按木种各自成 EntityType,位置便捷构造器没了:create + setInitialPos
+        var boat = EntityType.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        boat.setInitialPos(boatAt.getX() + 0.5, boatAt.getY() - 1 + 0.9, boatAt.getZ() + 0.5);
         level.addFreshEntity(boat);
 
         NumenPlayer companion = spawnAt(helper, "gametest_pilot", new BlockPos(3, 2, 8), false);
@@ -3087,8 +3088,8 @@ public class CompanionGameTests {
             }
         }
         BlockPos boatAt = helper.absolutePos(new BlockPos(7, 2, 7));
-        var boat = new net.minecraft.world.entity.vehicle.Boat(
-                level, boatAt.getX() + 0.5, boatAt.getY() - 1, boatAt.getZ() + 0.5);
+        var boat = EntityType.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        boat.setInitialPos(boatAt.getX() + 0.5, boatAt.getY() - 1, boatAt.getZ() + 0.5);
         level.addFreshEntity(boat);
         BlockPos stone = helper.absolutePos(new BlockPos(7, 2, 5));
         level.setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
@@ -3124,8 +3125,8 @@ public class CompanionGameTests {
     public static void walking_task_steps_off_vehicle(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos cartAt = helper.absolutePos(new BlockPos(3, 2, 8));
-        var cart = new net.minecraft.world.entity.vehicle.Minecart(
-                level, cartAt.getX() + 0.5, cartAt.getY(), cartAt.getZ() + 0.5);
+        var cart = EntityType.MINECART.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        cart.setInitialPos(cartAt.getX() + 0.5, cartAt.getY(), cartAt.getZ() + 0.5);
         level.addFreshEntity(cart);
         BlockPos standAt = helper.absolutePos(new BlockPos(11, 2, 8));
         var stand = new net.minecraft.world.entity.decoration.ArmorStand(

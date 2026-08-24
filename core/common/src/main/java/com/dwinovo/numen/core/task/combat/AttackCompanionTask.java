@@ -414,7 +414,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         }
         ItemStack shield = player.getOffhandItem().is(Items.SHIELD)
                 ? player.getOffhandItem() : equipShield();
-        if (shield.isEmpty() || player.getCooldowns().isOnCooldown(shield.getItem())) {
+        if (shield.isEmpty() || player.getCooldowns().isOnCooldown(shield)) {   // 1.21.2+ 冷却按 ItemStack(组件分组)查
             return;   // 没盾,或者被斧子破了还在冷却 —— 正常跑
         }
         player.startUsingItem(InteractionHand.OFF_HAND);

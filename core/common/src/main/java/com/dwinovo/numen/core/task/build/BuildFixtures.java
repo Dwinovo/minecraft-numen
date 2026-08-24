@@ -109,7 +109,9 @@ final class BuildFixtures {
                     Direction facing = Direction.from3DDataValue(nbt.getByte("Facing"));
                     nbt.putByte("Facing", (byte) spawn.rotation().rotate(facing).get3DDataValue());
                 }
-                var created = net.minecraft.world.entity.EntityType.create(nbt, level);
+                // 1.21.2+ 要生成原因;蓝图放置与原版结构放实体同路,取 STRUCTURE
+                var created = net.minecraft.world.entity.EntityType.create(nbt, level,
+                        net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
                 if (created.isEmpty()) {
                     continue;
                 }

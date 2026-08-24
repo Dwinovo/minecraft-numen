@@ -136,7 +136,7 @@ String item_id,
         String name = BuiltInRegistries.ITEM.getKey(target).getPath();
 
         List<String> recipes = new ArrayList<>();
-        for (RecipeHolder<?> holder : level.getRecipeManager().getRecipes()) {
+        for (RecipeHolder<?> holder : level.recipeAccess().getRecipes()) {
             if (recipes.size() >= MAX_RECIPES) {
                 break;
             }
@@ -146,9 +146,9 @@ String item_id,
                 Recipe<?> r = holder.value();
                 if (r instanceof CraftingRecipe cr) {
                     // 产出依赖输入的配方(烟花、镶零件的装备)静态描述答不了;
-                    // 1.21.1 没有 PlacementInfo,空输入表的老启发式一并保留。
-                    if (cr.isSpecial() || cr.getIngredients().isEmpty()
-                            || cr.getIngredients().stream().allMatch(Ingredient::isEmpty)) {
+                    // 1.21.2+ 静态清单在 PlacementInfo,不可摆放即特殊配方。
+                    if (cr.isSpecial() || cr.placementInfo().isImpossibleToPlace()
+                            || cr.placementInfo().ingredients().isEmpty()) {
                         continue;
                     }
                     ItemStack result = RecipeProbe.resultOf(cr, level.registryAccess());
@@ -167,7 +167,7 @@ String item_id,
                     if (result.isEmpty() || result.getItem() != target) {
                         continue;
                     }
-                    recipes.add("[stonecutter] " + describeIngredient(sc.getIngredients().get(0))
+                    recipes.add("[stonecutter] " + describeIngredient(sc.input())
                             + " -> makes " + result.getCount());
                 } else if (r instanceof SmithingRecipe sm) {
                     // 锻造不走展示产出,保留空输入 assemble 的既有语义:变换配方
@@ -207,13 +207,13 @@ String item_id,
         if (recipe instanceof ShapedRecipe shaped) {
             int w = shaped.getWidth();
             int h = shaped.getHeight();
-            var cells = shaped.getIngredients();   // 1.21.1: NonNullList<Ingredient>, gaps = Ingredient.EMPTY
+            var cells = shaped.getIngredients();   // 1.21.2+: List<Optional<Ingredient>>,空格 = empty
             StringBuilder sb = new StringBuilder("shaped " + w + "x" + h + ", makes " + count + ":");
             for (int r = 0; r < h; r++) {
                 sb.append("\n  ");
                 for (int c = 0; c < w; c++) {
-                    Ingredient ing = cells.get(r * w + c);
-                    sb.append(ing.isEmpty() ? "." : describeIngredient(ing));
+                    Ingredient ing = cells.get(r * w + c).orElse(null);
+                    sb.append(ing == null || ing.isEmpty() ? "." : describeIngredient(ing));
                     if (c < w - 1) {
                         sb.append(" | ");
                     }
@@ -223,7 +223,7 @@ String item_id,
         }
         // Shapeless: order doesn't matter, place anywhere.
         Map<String, Integer> counts = new LinkedHashMap<>();
-        for (Ingredient ing : recipe.getIngredients()) {
+        for (Ingredient ing : recipe.placementInfo().ingredients()) {
             if (ing.isEmpty()) continue;
             counts.merge(describeIngredient(ing), 1, Integer::sum);
         }
@@ -240,12 +240,12 @@ String item_id,
                 : type == RecipeType.SMOKING ? "smoking (smoker)"
                 : type == RecipeType.CAMPFIRE_COOKING ? "campfire"
                 : "smelting (furnace)";
-        return "[" + station + "] " + describeIngredient(recipe.getIngredients().get(0)) + " -> makes "
-                + result.getCount() + " (" + recipe.getCookingTime() + " ticks)";
+        return "[" + station + "] " + describeIngredient(recipe.input()) + " -> makes "
+                + result.getCount() + " (" + recipe.cookingTime() + " ticks)";
     }
 
-    /** A smithing recipe (smithing table). 1.21.1's SmithingRecipe exposes only is*Ingredient(stack)
-     *  tests — no ingredient getters — so we can't enumerate the inputs; describe the station + result. */
+    /** A smithing recipe (smithing table). Station + result only — the trailing "To make it" section
+     *  already walks the three input slots, so per-recipe input enumeration adds nothing. */
     private static String formatSmithing(SmithingRecipe recipe, ItemStack result) {
         return "[smithing] (smithing table: template + base + addition) -> makes " + result.getCount();
     }
@@ -254,8 +254,8 @@ String item_id,
      *  members — so a category ingredient doesn't mislead the model into one specific item.
      *  Package-visible: the craft tool names its material shortfalls with the same vocabulary. */
     static String describeIngredient(Ingredient ing) {
-        List<String> paths = java.util.Arrays.stream(ing.getItems())   // 1.21.1: getItems() -> ItemStack[]
-                .map(s -> BuiltInRegistries.ITEM.getKey(s.getItem()).getPath())
+        List<String> paths = ing.items()   // 1.21.2+: Stream<Holder<Item>>
+                .map(h -> BuiltInRegistries.ITEM.getKey(h.value()).getPath())
                 .distinct()
                 .toList();
         if (paths.isEmpty()) {

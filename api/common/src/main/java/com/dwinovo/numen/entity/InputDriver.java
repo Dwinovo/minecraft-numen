@@ -6,7 +6,7 @@ import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.entity.vehicle.AbstractBoat;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -79,7 +79,7 @@ public final class InputDriver {
      */
     public static void steerVehicle(ServerPlayer p, Vec3 target) {
         Entity vehicle = p.getVehicle();
-        if (vehicle instanceof Boat boat) {
+        if (vehicle instanceof AbstractBoat boat) {
             double dx = target.x - boat.getX();
             double dz = target.z - boat.getZ();
             float want = (float) (Math.toDegrees(Math.atan2(dz, dx)) - 90.0);
@@ -96,7 +96,7 @@ public final class InputDriver {
 
     /** 松舵:船停桨,骑手输入清零。离开驾驶状态的每刻收尾。 */
     public static void haltVehicle(ServerPlayer p) {
-        if (p.getVehicle() instanceof Boat boat) {
+        if (p.getVehicle() instanceof AbstractBoat boat) {
             boat.setInput(false, false, false, false);
         }
         halt(p);

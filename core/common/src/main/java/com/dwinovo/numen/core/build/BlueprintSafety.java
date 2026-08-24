@@ -97,8 +97,9 @@ public final class BlueprintSafety {
             return false;
         }
         try {
+            // 1.21.2+ 把 op 门挪到了 BlockEntityType 上,经实例的 getType() 问
             var be = holder.newBlockEntity(net.minecraft.core.BlockPos.ZERO, state);
-            return be != null && be.onlyOpCanSetNbt();
+            return be != null && be.getType().onlyOpCanSetNbt();
         } catch (RuntimeException e) {
             return true;   // 造不出来就当它不安全
         }

@@ -6,7 +6,7 @@ import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.entity.vehicle.AbstractBoat;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
@@ -80,7 +80,7 @@ public final class BoatNav {
 
     public Status tick() {
         Entity vehicle = player.getVehicle();
-        if (!(vehicle instanceof Boat boat)) {
+        if (!(vehicle instanceof AbstractBoat boat)) {
             failReason = "no longer in a boat";
             return Status.FAILED;
         }
@@ -147,7 +147,7 @@ public final class BoatNav {
     // ------------------------------------------------------------------
 
     /** @return null = 有航线可走;否则直接给出终态。 */
-    private Status plan(Boat boat, int surface) {
+    private Status plan(AbstractBoat boat, int surface) {
         BlockPos feet = boat.blockPosition();
         surfaceY = surface;
         int sx = feet.getX();
