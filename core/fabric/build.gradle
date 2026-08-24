@@ -1,0 +1,69 @@
+plugins {
+    id 'multiloader-loader'
+    id 'net.fabricmc.fabric-loom-remap'
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${minecraft_version}"
+    // Obfuscated MC (1.21.4) → loom remaps to Mojang names to match the common source set.
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
+    // The numen-api engine, now a sibling loom project in this build. namedElements
+    // exposes the dev-mappings jar directly — no remap round-trip through a maven repo.
+    implementation project(path: ':api:fabric', configuration: 'namedElements')
+    // Bundle it into core's jar (Jar-in-Jar) so players install one file and get
+    // both mods — exactly like including a library mod such as GeckoLib.
+    include project(':api:fabric')
+}
+
+loom {
+    def aw = project(':core:common').file("src/main/resources/${mod_id}.accesswidener")
+    if (aw.exists()) {
+        accessWidenerPath.set(aw)
+    }
+    runs {
+        client {
+            client()
+            setConfigName('Fabric Client')
+            ideConfigGenerated(true)
+            runDir('runs/client')
+        }
+        server {
+            server()
+            setConfigName('Fabric Server')
+            ideConfigGenerated(true)
+            runDir('runs/server')
+        }
+        datagen {
+            inherit client
+            setConfigName('Fabric Data Generation')
+            ideConfigGenerated(true)
+            runDir('runs/datagen')
+            vmArg("-Dfabric-api.datagen")
+            vmArg("-Dfabric-api.datagen.output-dir=${file('src/generated/resources')}")
+            vmArg("-Dfabric-api.datagen.modid=${mod_id}")
+        }
+    }
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+// Implement mcgradleconventions loader attribute
+def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
+['apiElements', 'runtimeElements', 'sourcesElements', 'javadocElements', 'includeInternal', 'modCompileClasspath'].each { variant ->
+    configurations.named("$variant") {
+        attributes {
+            attribute(loaderAttribute, 'fabric')
+        }
+    }
+}
+sourceSets.configureEach {
+    [it.compileClasspathConfigurationName, it.runtimeClasspathConfigurationName].each { variant->
+        configurations.named("$variant") {
+            attributes {
+                attribute(loaderAttribute, 'fabric')
+            }
+        }
+    }
+}

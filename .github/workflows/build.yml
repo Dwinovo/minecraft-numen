@@ -1,0 +1,66 @@
+name: Build
+
+# 只回答一个问题:git 里的东西能不能编译。
+#
+# 判据在 checkout 这一步就成立了——runner 上只有被跟踪的文件,本机多出来的东西一个也没有。
+# 2026-08-01 有两个源码文件被 .gitignore 的裸 build 规则吞掉,本机照常编译,干净 clone 必然
+# 失败;因为当时只有推 tag 才跑 CI,这事十天没人发现,最后是两个外部用户报上来的。
+#
+# 本分支已并仓(api/core/ui/ai 单一构建),挂本分支;仍是两仓结构的分支各自保持关闭。
+on:
+  push:
+    branches: ["1.21.4"]
+  pull_request:
+    branches: ["1.21.4"]
+  workflow_dispatch:
+
+# 连着推几次时只留最后一次,前面的直接取消。
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 目标 JDK 逐分支不同(1.20.x -> 17,1.21.x -> 21,26.1.2 -> 25),从 gradle.properties
+      # 读,以后放开别的分支时这一步不用改。
+      - name: Read target JDK from gradle.properties
+        id: props
+        shell: bash
+        run: |
+          echo "java_version=$(grep -E '^java_version=' gradle.properties | head -n1 | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java ${{ steps.props.outputs.java_version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ steps.props.outputs.java_version }}
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Compile both loaders
+        run: >-
+          ./gradlew
+          :core:neoforge:compileJava
+          :core:fabric:compileJava
+          --no-daemon -x javadoc
+
+      # 纯 JVM 测试,不起游戏,几十秒。GameTest 要拉整个客户端,留给发版流水线。
+      - name: Run JVM tests
+        run: ./gradlew :api:common:test --no-daemon -x javadoc
+
+      - name: Upload test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: api/common/build/reports/tests/test/
+          retention-days: 7

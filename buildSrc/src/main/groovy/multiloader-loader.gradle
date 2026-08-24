@@ -12,14 +12,14 @@ configurations {
 }
 
 dependencies {
-    compileOnly(project(':common')) {
+    compileOnly(project(':core:common')) {
         def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)
         attributes {
             attribute(loaderAttribute, 'common')
         }
     }
-    commonJava project(path: ':common', configuration: 'commonJava')
-    commonResources project(path: ':common', configuration: 'commonResources')
+    commonJava project(path: ':core:common', configuration: 'commonJava')
+    commonResources project(path: ':core:common', configuration: 'commonResources')
 }
 
 tasks.named('compileJava', JavaCompile) {

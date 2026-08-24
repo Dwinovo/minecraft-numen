@@ -1,2 +1,0 @@
-timestamp,provider,model,samples,cases,selection_pct,passk_pct,args_valid_pct,args_match_pct
-2026-06-26 23:37:13,deepseek,deepseek-v4-flash,5,20,94.0,90.0,100.0,100.0

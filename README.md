@@ -2,126 +2,155 @@
 
 # Numen · 言出法随
 
-### An AI harness that lets large models truly live inside Minecraft
+### 一个住在你世界里的 AI 同伴
 
-*言出法随 (yán chū fǎ suí) — speak it, and it comes true.*
+*言出法随（yán chū fǎ suí）——你说出口，它便成真。*
 
-[**English**](README.md) · [简体中文](README_CN.md)
+[English](README_EN.md) · [**简体中文**](README.md)
 
-![Minecraft](https://img.shields.io/badge/Minecraft-1.21.11-62B47A?style=flat-square)
-![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20NeoForge-DE7C36?style=flat-square)
-![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
-![License](https://img.shields.io/badge/code-LGPL--3.0-4B6BFB?style=flat-square)
-![Status](https://img.shields.io/badge/status-early%20%2F%20vision-A8731E?style=flat-square)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.1.2-62B47A?style=flat-square)
+![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
+![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
+![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
 
-[**Vision**](#vision) · [**How it works**](#how-it-works) · [**Reach**](#reach) · [**Quick start**](#quick-start) · [**What it can do**](#what-it-can-do) · [**Roadmap**](#roadmap)
+[**快速开始**](#快速开始) · [**能做什么**](#能做什么) · [**扩展它**](#扩展它) · [**外接大脑**](#外接大脑) · [**设计**](#设计) · [**常见问题**](#常见问题) · [**给开发者**](#给开发者) · [**路线图**](#路线图)
 
 </div>
 
-<!-- Tip: drop a gameplay GIF/screenshot here once you have one — it sells the project faster than any paragraph. -->
+<p align="center">
+  <img src="docs/numen-demo.gif" alt="Numen 实机演示：砍树 · 挖矿 · 合成 · 战斗 · 联动 Mekanism" width="640">
+</p>
 
 ---
 
-We already have AI that can chat, write code, and reason. But it all lives in a text box — no body, no world; it finishes a task and forgets it ever happened.
+Numen 在你的世界里放一个 AI 同伴。你用自然语言把要做的事告诉它——打字或者按住 `V` 直接说，你的模型会的任何语言都行——它自己拆解成几十步动作、规划路线、选对工具、随机应变，一口气干完。
 
-**Numen wants to let large models out of the chat box, and into a world they actually live in.** And Minecraft is about as close to "a whole world" as you can get.
-
-Give it a body that mines, fights, and wires redstone; give it eyes that trace an ore vein and see straight through a machine's shell; and give it one promise — **言出法随**.
-
-Say *"go grab me a stack of iron,"* and it really heads underground, paths through the dark, swings the pickaxe, and comes back loaded — then asks if you want it smelted. Say *"build a hut where I'm standing,"* and the foundation rises block by block. **Every word you say turns into something that actually happens in the world.** In any language your model speaks.
+它不是个会聊天的 NPC。它是服务端的一个真玩家，挖矿、走路、挥剑、开箱子，每个动作都走原生玩家代码路径，和红石、怪物 AI、别人的 mod 站在同一套规则里。
 
 ```
-You:    go grab me a stack of iron
-Numen:  On it. Heading underground to find iron.
-        ▸ 4 steps · locate_biome · move_to · auto_mine · collect_items   ✔
-Numen:  Got 64 raw iron — want me to smelt it?
+你：    挖一组铁矿回来
+Numen： 这就去。下矿找铁。
+        ▸ 4 步 · locate_biome · move_to · auto_mine · collect_items   ✔
+Numen： 拿到 64 个粗铁——要我熔了吗？
 ```
 
-## Vision
+## 快速开始
 
-Getting AI to beat vanilla is only the start.
+1. **安装** mod（Fabric 端另需 [Fabric API](https://modrinth.com/mod/fabric-api)），启动一次。
+2. **填入 API key。** 按 **`G`** → **设置** → **模型**，选一家，粘贴你自己的 key。
+3. **召唤一个同伴。** 点面板左栏的 **`+`**，给它起个名字，回车。
+4. **点它的头像开聊**，把要做的事告诉它。
 
-Minecraft's real universe is in the mods: Create's gear trains, Applied Energistics' storage networks, Mekanism's factory lines — players pour countless hours into these systems. **Numen's ultimate goal is to let AI reach through this entire universe** — not just understand it, but actually play it: say *"build me an automated iron factory,"* and it can stand one up for real, across Create and AE2.
+> **模型**：内置十家预设——OpenAI、Anthropic、DeepSeek、Kimi、智谱 GLM、豆包、Qwen、MiniMax、硅基流动、OpenRouter；填任意 OpenAI 兼容后端也行。Anthropic 走的是它自己的原生协议，不是兼容层套壳。
 
-It's a long road, and we've only just set out. But the direction couldn't be clearer.
+> **面板**：按 `G` 有三页——**Chat**（聊天 + 实时计划面板）、**Items**（一张仿原版背包的只读角色卡）、**Settings**。左栏是同伴名册，点头像切换、点 **`+`** 召唤、点 **`✕`** 注销，基本不用敲指令。左边缘还有个小头像 HUD，它说话时会滑出来。设置页分十项：模型、语音输入、语音输出、人格、档案、皮肤、主题、技能库、外接大脑、MCP。
 
-> **言出法随 / Reach** — your intent reaches the world; the AI's ability reaches every mod.
+> **不开面板也能聊**：按住 **`R`** 出同伴轮盘选人，或者直接把准星对准它；**`Y`** 弹一个极简输入框打字；按住 **`V`** 对讲机式说话，松开就把转写发过去。键位在 选项 → 控制 → Numen 里随便改。
 
-## How it works
+> **说话和听见**：语音输入内置七个预设，其中阿里云百炼和豆包是流式的，边说边转写。同伴也能出声，语音输出支持阿里云百炼、Fish Audio、GPT-SoVITS、MiniMax 和任意 OpenAI 兼容 TTS，配好音色后它会边生成边念，不用等整段说完。
 
-That companion you talk to is just a body this system puts on. What makes *"言出法随"* real is the engineering underneath — we call it the **Harness**.
+> **macOS 语音输入**：麦克风权限声明在启动器 `.app` 的 `Info.plist` 里，而 mod 跑在 Java 子进程中，补不了这层声明，所以要用声明了麦克风权限的启动器，推荐 [Prism Launcher](https://prismlauncher.org/)。首次使用时允许麦克风访问，之后可在「系统设置 → 隐私与安全性 → 麦克风」里检查。启动器只负责这个授权入口，录音和语音识别仍由 Numen 和你配置的服务完成。
 
-In AI engineering, a harness is the scaffolding around a model: it wires the model into a world it can perceive, act in, and learn from. **Numen is that scaffolding, built for Minecraft.** Four parts:
+## 能做什么
 
-- 🧍 **A body — a real player.** The companion is a server-side *fake player* (`ServerPlayer`); every action runs through native player code paths. Which means it plays by the same rules as redstone, mob AI, containers, and other people's mods — by birth.
-- 👁️ **Eyes — a perception API.** Its own and the world's status, ranged block and entity scans, recipe lookups, single-block inspection — down to an **x-ray** that reads what a machine **holds** (items, fluid, energy) **without opening its GUI**.
-- ✋ **Hands — an action API.** Move, mine, place, fight (native melee + bow), drive any container/machine GUI, manage inventory, locate structures and biomes.
-- 🔁 **A teaching feedback loop.** Every tool result — success or failure — is written as a line that **teaches the model how Minecraft works**. *"Can't mine iron ore bare-handed — equip at least a stone pickaxe"* is this loop doing its job. This is the essence of an agent: use tools to pull **ground truth** from the environment, then decide the next move. That's how the model learns to play.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/showcase/plan.png" width="100%"><br><b>🧠 详细规划</b> · 逐步拆解任务</td>
+    <td width="50%"><img src="docs/showcase/pathfinding.png" width="100%"><br><b>🔭 感知与寻路</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/showcase/combat.png" width="100%"><br><b>⚔️ 原生战斗</b></td>
+    <td><img src="docs/showcase/interact.png" width="100%"><br><b>🧩 模组兼容</b> · 图中为 Mekanism</td>
+  </tr>
+</table>
 
-Above all this, **the brain runs on your own machine**: the agent loop calls the LLM from the owner's client, with the owner's API key — each player pays their own way, the server owner doesn't foot everyone's bill, and you never hand over your key. And it ships with **zero third-party runtime dependencies** — LLM transport is just the JDK's `HttpClient` + Gson (Java's AI ecosystem being what it is — you know how it goes — I had to hand-roll it).
+近三十个工具，拼成它此刻的双手与双眼：
 
-## Reach
+- ⛏️ **干活**——挖矿、伐木、采集、建造、精确放置与破坏、照配方合成、用熔炉熔炼、把战利品分门别类塞进箱子。
+- 🧭 **走位**——服务端寻路引擎：会跳、游、爬、开门、跑酷、驾船，也会搭桥、垫脚、搭柱、挖隧道、下挖楼梯。走路默认**不改世界**——墙、地板、别人的房子、地貌原样不动；唯一的路要挖要垫时，它会把会动的方块一块块列给模型，模型点头（`may_alter_terrain`）才开路，每次回执都如实写明路上挖了什么、放了什么。
+- ⚔️ **战斗**——原生玩家近战与弓箭，真冷却、真暴击；受伤会自己吃东西，快淹死会自己游上岸。
+- 🔭 **感知**——扫方块、扫实体、查状态、查配方、定位结构与群系，不开 GUI 就读出一台机器里装了什么。
+- 🗣️ **说话**——语音进语音出，也能给它设人格、换皮肤、挑音色。
+- 🧠 **记性**——对话跨存档持久化、太长会自动压缩；它记得用过的工作台、熔炉、箱子，下次直接走回去，而不是重造一个。死了原版死亡照常掉落，缓一会儿在你身边重生。
 
-Beating vanilla is just the appetizer. What we really want to chew through is the mods — that's the deep end of Minecraft.
+## 扩展它
 
-Lucky for us, Numen's body is a real player, so *physically* it gets along with mods out of the box: a mod's machines, chests, and contraptions — it can mine them, place them, right-click them, pull items from their slots, **no per-mod adapter required**. It can even see through the shell and read how many items, how much fluid, and how much energy most machines, tanks, and batteries are holding.
+同伴能玩到多深，取决于三件事，而这三件事的难度完全不同。
 
-But "able to reach out" isn't "able to understand." Does the AI know what a Mechanical Press is for? How an AE2 network should be wired? Delivering that understanding to the model takes two instruments — the very same two Claude itself uses to reach the real world:
+**能不能碰——已经是通用的。** 同伴是真玩家，所以模组的方块它能挖能放能右键，模组的容器它能开能拿能塞，暴露了标准 capability 的机器它能隔着外壳读出里面的物品、流体和能量。这一层不需要为任何模组单独写适配，装上就有。
 
-- 🔌 **MCP — connect.** A compatibility module that wires a mod's inner world, structured, into the AI's senses and hands. In Anthropic's own words: this is **handing it a hammer**.
-- 📖 **Skill — coach.** A plain-text [workflow](#what-it-can-do) — zero code, anyone can write one — that teaches the AI how to put a capability to good use. This is **showing it how to swing that hammer to drive a nail**.
+**知不知道是什么——大半是现成的。** 配方、标签、物品名都是会同步到客户端的数据，模组也在这套体系里。"这台机器吃什么、吐什么"，对相当一部分模组来说本来就是可读的。
 
-One grants the capability, the other the craft — and better yet, **they stack**:
+**知不知道怎么玩——这层只能靠人。** AE2 的通道要算、Create 的应力超了整条线会停、有些东西得先升级到某一阶才有意义——这类知识不在任何数据结构里，读不出来，只能写下来教给它。这就是 **Skill**：`config/numen/skills/` 下的 Markdown 工作流，相关时才加载、让提示词保持精简。零代码，人人能写。内置了一套示例（下界、烈焰棒、末影珍珠、要塞、龙战），改一篇或者自己写一篇，就能把你基地的规矩、或者一个新模组的玩法教给它。
 
-> Some mods need only a Skill: the vanilla hands already reach far enough; all it's missing is the manual.
-> For the self-contained universes — Create, AE2, Mekanism — wire it in with an MCP first, then teach it to play with a Skill. **Connect + coach: together, that's 通达 (reach).**
+光靠文字说不清的，可以直接给它加工具：mod 作者用 `NumenGateway` 注册一个工具，或者在设置的 **MCP** 一页挂上任意 Model Context Protocol 服务器（stdio 或 HTTP，带 OAuth），两种方式接进来的工具都跟内置工具一视同仁。工具是给它一把锤子，Skill 是教它怎么抡这把锤子。
 
-Every mod you can name, the AI can play. It's a big promise — but every brick is going up.
+前两层是一次性工程，第三层会一直长——这需要社区一起写。我们不打算假装有一天能把它写完。
 
-## Quick start
+## 外接大脑
 
-1. **Install** the mod (plus [Fabric API](https://modrinth.com/mod/fabric-api) if you're on Fabric) and launch once.
-2. **Add your API key.** Press **`G`** → **Settings**, pick a provider, and paste your own key (OpenAI, DeepSeek, Kimi, Qwen, Doubao… any OpenAI-compatible backend works).
-3. **Summon a companion.** Click the **`+`** in the panel's left rail, give it a name, hit Enter.
-4. **Click its avatar to chat**, and tell it what to do. The rest is on it.
+反过来也行：Numen 能在你本机起一个 MCP **服务器**，让外部 AI 客户端（Claude Desktop、Cursor，或任何支持 MCP 的东西）直接驱动你世界里的同伴——挖矿、建造、战斗、跟你说话，全部经由那个 AI。
 
-> The panel (press `G`) has three tabs: **Chat** (conversation + a live plan board), **Items** (a read-only character sheet styled like the vanilla inventory), and **Settings** (key and model). The left rail *is* your companion roster — click an avatar to switch, **`+`** to summon, **`✕`** to dismiss; you barely need commands at all. A small avatar HUD hugs the left screen edge, too — when a companion speaks, its avatar and a speech bubble slide out together.
+开启期间内置大脑完全停手，同一具身体不能有两个大脑。设置里按开关即开，端点和访问令牌就在那一页，令牌默认随机生成。详见 [外接大脑文档](docs/mcp-server.md)。
 
-## What it can do
+## 设计
 
-Give it an intent and it breaks it into dozens of actions and runs them end to end — planning the route, picking the right tool, judging distance, improvising as it goes — all without you watching over its shoulder.
+你聊天的那个同伴，只是这套系统穿上的一具身体。底下是四部分：
 
-- ⛏️ **Real work** — mine, chop, gather, build, place and break with precision, hand-craft by recipe, smelt in furnaces, sort loot into chests.
-- 🧭 **Real movement** — a pathfinder that takes its cues from Baritone, rewritten for the companion: it bridges gaps, pillars up, tunnels through, staircases down, and swims. *"Go to that coordinate"* is meant literally — even if that means digging all the way to diamond level.
-- ⚔️ **Real combat** — native player melee and bow: real cooldowns, real crits; it eats when hurt and swims to shore before it drowns.
-- 🔭 **Real perception** — scan blocks, scan entities, check status, look up recipes, locate any structure or biome, even x-ray what's inside a machine without opening its GUI.
-- 🧠 **Real memory** — conversations persist across saves and auto-compact when they grow long; it remembers the crafting tables, furnaces, and chests it has used, and walks back to them instead of building new ones. Death is recoverable: vanilla death drops as usual, then it respawns by your side after a moment.
+- 🧍 **身体——一具真玩家。** 同伴是服务端的假玩家（`ServerPlayer`），每个动作都走原生玩家代码路径。这意味着它天生就和红石、怪物 AI、容器、以及别人的 mod 站在同一套规则里。
+- 👁️ **眼睛——感知 API。** 自身与世界的状态、范围方块与实体扫描、配方查询、单块检视，以及不开 GUI 就读出一台机器装着什么（物品、流体、能量）。
+- ✋ **双手——行动 API。** 移动、挖矿、放置、战斗、驱动任意容器/机器 GUI、管理背包、定位结构与群系。
+- 🔁 **反馈回路。** 每一次工具返回——无论成功还是失败——都被写成教模型"Minecraft 怎么玩"的一句话。"徒手挖不动铁矿——至少装备一把石镐"，就是这套回路在干活。模型靠在环境里拿到的真实反馈决定下一步。
 
-Nearly thirty tools like these make up its hands and eyes *right now*. And its abilities keep growing — through the very two instruments of [Reach](#reach):
+**大脑跑在你自己的机器上**：agent loop 在 owner 的客户端、用 owner 的 API key 调 LLM，每个玩家各付各的用量，服主不必替所有人买单，你也不必上交 key。LLM 传输零第三方运行时依赖，只用 JDK 的 `HttpClient` + Gson。
 
-- 📖 **Write a Skill to coach it.** Markdown workflows under `config/numen/skills/`, loaded only when relevant to keep the prompt lean. It ships with a full set of guides for the whole vanilla end-game (the Nether, blaze rods, ender pearls, the stronghold, the dragon fight…). Edit one, or write your own, to teach it your base's rules — or a whole new mod's playbook.
-- 🔌 **Plug in an MCP to extend it.** A compatibility module wires a mod's inner world, structured, into its senses and hands — so the boundary of what it *can do* grows together with the entire modded ecosystem.
+## 常见问题
 
-Stack the two, and it goes from mastering vanilla all the way to mastering the entire modded universe.
+**要花钱吗？用哪个模型好？** Numen 本身开源免费，调用大模型用的是你自己的 key。想省钱用 DeepSeek、Qwen、Kimi、GLM，一次典型任务通常几分钱；想要最聪明用 Claude、GPT。模型越快越聪明，同伴表现越好。语音那两项同理，各用各的 key。
 
-## Roadmap
+**我的 API key 安全吗？** 大脑跑在你自己的客户端，key 只存在本地、只用于直连你选的后端，不经过任何第三方服务器，也不会上传给作者。
 
-Numen is young. Vanilla play already runs smoothly; the bigger story — letting AI **reach through the entire modded universe** — is being written one line at a time. Where we're headed:
+**联机服能用吗？** 能。同伴是服务端的真玩家，动作由服务端逐一校验，你只能驱动自己的同伴。服务端只需装 Numen，客户端各自填各自的 key。
 
-- **Connect the big mods (MCP).** For the self-contained tech universes — Create, AE2, Mekanism — dedicated MCP compatibility modules will wire their inner structure into the AI's senses and hands. The capability-based `inspect_block_storage` x-ray is the first brick.
-- **Grow a library of Skills.** Make "teach the AI a new mod" as simple as writing one Markdown file, built and shared by the community — and stacked with MCP, it carries the AI from *connected* all the way to *fluent*.
-- **Play more like a veteran.** Deeper memory of the world, and longer-horizon planning.
+**它会拆我家、乱来吗？** 它只做生存里一个真玩家能做的事，且每个动作都归属校验到它的主人——不会凭空造物，也不碰不属于你的东西。
 
-Contributions, skill submissions, and compat experiments are all welcome. This is an open blueprint — **and an invitation being cashed in, one commit at a time.**
+**响应有点慢？** 每走一步都要过一次大模型推理，模型越快体验越顺；这块仍在持续优化。
+
+## 给开发者
+
+Numen 出厂的每一个工具、每一篇技能，全部只用公共 API 写成，没有任何私有通道。任何 mod 作者都拿得到同一份能力：
+
+- 🔧 **通过 `NumenGateway` 注册一个工具**，你 mod 的能力就长在了 AI 的手上。工具契约里刻意不含任何 Minecraft 概念——怎么完成调用（同步、异步、自己发包、调外部网络服务）完全由工具自己做主。正因如此，同一套 API 伸向一个聊天平台，和伸向一条矿脉一样顺手。
+- 📖 **随 jar 附带技能**——一句调用就把你 jar 里的 `/skills` 目录变成内置技能，玩家装上你的 mod，AI 自动学会怎么玩它。
+- 🏗️ **或者造一个完全不同的 AI**——同一块地基上，AI NPC、剧情角色、服务器管家，随你想象。
+
+引擎（`api/`）在 1.21.1 与 1.21.4 上已经并入本仓库，其余版本分支陆续跟进；对第三方它仍然作为独立坐标发布，依赖方式不变：
+
+```gradle
+repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
+dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.4:<version>" }
+```
+
+面向集成的公共对接 API 采用 **MIT** 授权——写工具、写技能、写兼容，不必被 LGPL 牵着走。
+
+自己构建：克隆仓库，`./gradlew :core:fabric:build`（或 `:core:neoforge:build`）。Bug、点子、兼容实验都欢迎——[开个 issue](https://github.com/Dwinovo/minecraft-numen/issues)，或者写一篇技能提 PR。
+
+## 路线图
+
+- **为大模组做适配。** Create、AE2、Mekanism 这些自成宇宙的科技 mod，得一个个真去适配——注册工具、写技能、接 MCP，哪种合适用哪种。模组生态太大，指望单一机制打通不现实。`inspect_block_storage` 那一眼透视是第一块砖。
+- **长成一座技能库。** 让"教 AI 玩一个新模组"简单到只需写一篇 Markdown，社区共建共享。
+- **越玩越像个老玩家。** 更深的世界记忆与长程规划。
 
 ---
 
 <div align="center">
 
-<sub>Want to build it yourself, see the full tool list, or read the architecture? It's all in the source — start under <code>common/src/main/java/com/dwinovo/numen/</code>.</sub>
+<sub>想自己构建、看完整工具清单或架构设计？都在源码里——从 <code>core/common/src/main/java/com/dwinovo/numen/</code> 看起。</sub>
 
-<sub><b>Licensing</b> (modeled on AE2): the source code is <a href="LICENSE">LGPL-3.0</a> — forks you distribute must stay open under the same license. The forthcoming public integration API (what compatibility modules / MCP bridges code against) is <a href="LICENSE-API">MIT</a>, so anyone can build mod-compat freely. The art &amp; assets are <a href="LICENSE-ASSETS">All Rights Reserved</a>, and the names "Numen" / "言出法随" are reserved. Built on the <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a>.</sub>
+<sub><b>授权</b>：源代码采用 <a href="LICENSE">LGPL-3.0</a>——你分发的修改版必须以同协议继续开源。面向兼容模块 / MCP 桥接的<b>公共对接 API</b>采用 <a href="LICENSE-API">MIT</a>，让任何人都能自由地写 mod 兼容。美术与资源为 <a href="LICENSE-ASSETS">保留所有权利</a>，"Numen" / "言出法随" 名称亦予保留。基于 <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a> 构建。</sub>
 
-<sub>The pathfinder draws on <a href="https://github.com/cabaletta/baritone">Baritone</a> for design ideas only, and is a fully independent rewrite for a <b>server-side (fake-player)</b> setting — <b>no source was copied, ported, or adapted from it</b>. Numen's code is licensed LGPL-3.0 of its own accord; that choice is not a consequence of Baritone (which is also LGPL-3.0).</sub>
+<sub>寻路的<b>规划层</b>基于启发式搜索文献实现：加权 A* 与预算化的部分路径提交（搜索超时时按多档启发系数提交当前最优部分路径），附独立于游戏的单元测试。<b>路径跟随层</b>沿计划路径逐移动原语推进：窗口化的回退/前跳重定位、无缝段拼接与超长裁剪、执行期成本复核与脱轨看门狗，外加一组疾跑决策启发。<b>执行层</b>与 <a href="https://github.com/cabaletta/baritone">Baritone</a> 的根本区别在于运行位置：Baritone 是纯客户端模组、操控本机玩家；Numen 驱动的是<b>服务端假玩家</b>，移动/挖掘/放置全部经服务端 API 实现——设计思路上借鉴了其公开机制，<b>未复制、移植或改写其任何源码</b>。本项目代码采用 LGPL-3.0 属自主选择，与 Baritone（同为 LGPL-3.0）无衍生关系。</sub>
+
+<sub>喂给大模型的<b>空间感知表征</b>采用「自我中心的语义字符网格」而非裸坐标列表：把玩家周围的体素离散化、语义 pooling 成以自身为中心的字符矩阵。该表征形式的有效性依据 Gao 等，<i>Exploring Spatial Representation to Enhance LLM Reasoning in Aerial Vision-Language Navigation</i>（arXiv:2410.08500, 2024）——其消融实验表明，同为文本输入时，语义-拓扑-度量的网格矩阵显著优于拓扑图与方向距离描述，亦远优于直接输入图像。Numen 取其「egocentric + 离散化 + 语义 pooling」的格式原则，并针对方块世界的竖直性做三维适配（分层切片 / 高度信息）。</sub>
 
 </div>
