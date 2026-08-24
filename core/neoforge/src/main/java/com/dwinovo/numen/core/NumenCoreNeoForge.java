@@ -9,9 +9,8 @@ import com.dwinovo.numen.core.scan.BlockSearch;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
-import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 
@@ -43,7 +42,7 @@ public class NumenCoreNeoForge {
         // Client-only: declare core's built-in skills, read in place from the
         // skills/ dir bundled in this jar. Skills feed the client-side LLM, so
         // this never runs on a dedicated server.
-        if (FMLEnvironment.dist == Dist.CLIENT) {
+        if (FMLLoader.getCurrent().getDist() == Dist.CLIENT) {
             declareBundledSkills();
         }
 
@@ -51,12 +50,19 @@ public class NumenCoreNeoForge {
     }
 
     private static void declareBundledSkills() {
-        Path root = ModList.get().getModFileById(Constants.MOD_ID).getFile().findResource("skills");
-        if (root != null) {
-            SkillRegistry.instance().declareBundled(root);
-        } else {
-            Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
+        // Resolve the jar-internal skills/ dir via the classloader (loader-agnostic and stable
+        // across MC versions, unlike NeoForge's shifting IModFile API): the resource URL maps to a
+        // Path on the mod's (union) filesystem, which the engine reads in place.
+        try {
+            java.net.URL url = NumenCoreNeoForge.class.getResource("/skills");
+            if (url != null) {
+                SkillRegistry.instance().declareBundled(Path.of(url.toURI()));
+                return;
+            }
+        } catch (Exception ex) {
+            Constants.LOG.warn("[numen-core] failed to resolve bundled skills/: {}", ex.toString());
         }
+        Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
     }
 
     private static void onServerTickPost(ServerTickEvent.Post event) {

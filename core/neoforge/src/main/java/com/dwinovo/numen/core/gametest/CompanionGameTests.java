@@ -207,7 +207,7 @@ public class CompanionGameTests {
         helper.succeedWhen(() -> {
             NumenPlayer live = NumenPlayer.findByUuid(server, uuid);
             assertTrue(helper, live != null, "the body did not come back");
-            assertTrue(helper, live.getGameProfile().getProperties().containsKey("textures"),
+            assertTrue(helper, live.getGameProfile().properties().containsKey("textures"),
                     "the new skin is not on the rebuilt profile");
             assertTrue(helper, live.getInventory().hasAnyMatching(s -> s.is(Items.DIAMOND)),
                     "her inventory did not survive the recycle");
@@ -3013,7 +3013,7 @@ public class CompanionGameTests {
         BlockPos target = helper.absolutePos(new BlockPos(14, 2, 8));
         double boatStartDist = boat.position().distanceTo(Vec3.atCenterOf(target));
         helper.runAfterDelay(2, () -> {
-            companion.startRiding(boat, true);
+            companion.startRiding(boat, true, true);
             TaskRecord record = (TaskRecord) new MovementOps().moveTo(
                     (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, false,
                     TaskDispatch.ctx("gametest-pilot", companion));
@@ -3056,7 +3056,7 @@ public class CompanionGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_seated", new BlockPos(7, 2, 4), true);
         helper.runAfterDelay(2, () -> {
-            companion.startRiding(boat, true);
+            companion.startRiding(boat, true, true);
             TaskRecord press = new BlockActionOps().interactEntity("right", boat.getId(), null,
                     null, TaskDispatch.ctx("gametest-selfclick", companion));
             TaskDispatch.runSync(companion, press, reply -> {});
@@ -3095,7 +3095,7 @@ public class CompanionGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_rider", new BlockPos(3, 2, 6), true);
         helper.runAfterDelay(2, () -> {
-            companion.startRiding(cart, true);
+            companion.startRiding(cart, true, true);
             TaskRecord hit = new BlockActionOps().interactEntity("left", stand.getId(), null,
                     null, TaskDispatch.ctx("gametest-rider", companion));
             TaskDispatch.runSync(companion, hit, reply -> {});

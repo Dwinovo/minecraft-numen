@@ -84,11 +84,11 @@ public final class BlueprintTool implements NumenTool {
         Args a = GSON.fromJson(args, Args.class);
         if ("list".equals(a.action())) {
             List<Map<String, Object>> out = new ArrayList<>();
-            for (String name : BlueprintStore.list(companion.getServer())) {
+            for (String name : BlueprintStore.list(companion.level().getServer())) {
                 Map<String, Object> entry = new LinkedHashMap<>();
                 entry.put("name", name);
                 try {
-                    Vec3i size = BlueprintStore.peekSize(companion.getServer(), name);
+                    Vec3i size = BlueprintStore.peekSize(companion.level().getServer(), name);
                     entry.put("size", size.getX() + "x" + size.getY() + "x" + size.getZ());
                 } catch (Exception e) {
                     entry.put("size", "unreadable: " + e.getMessage());
