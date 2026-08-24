@@ -21,6 +21,7 @@ public interface ChatComponentAccessor {
     @Accessor("allMessages")
     List<GuiMessage> numen$allMessages();
 
-    @Invoker("refreshTrimmedMessages")
+    /** 这一代的重排版方法名是单数形态。 */
+    @Invoker("refreshTrimmedMessage")
     void numen$refreshTrimmedMessages();
 }

@@ -1,6 +1,7 @@
 package com.dwinovo.numen;
 
 import com.dwinovo.numen.agent.skill.SkillRegistry;
+import com.dwinovo.numen.mcp.client.McpClientManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
@@ -14,7 +15,7 @@ import net.minecraftforge.eventbus.api.IEventBus;
 import java.nio.file.Path;
 
 /**
- * Client entry point for Forge 1.20.4. Forge keeps separate mod and game event
+ * Client entry point for Forge 1.20.1. Forge keeps separate mod and game event
  * buses (mirroring the NeoForge reference this was ported from): registration
  * events (key mappings / GUI overlays / reload listeners) go on the mod bus,
  * while the per-tick / world-render / disconnect hooks go on the game bus
@@ -29,10 +30,30 @@ public final class NumenForgeClient {
 
     /** Wire every client listener. {@code modBus} is the mod event bus from the constructor. */
     public static void init(IEventBus modBus) {
-        // 读回上次选择的 GUI 主题(config/numen/ui.json)。路径走 FMLPaths——
-        // datagen 环境没有 Minecraft 实例,Minecraft.getInstance() 会 NPE 炸掉 CI。
+        // 下行 payload 的处理体住在客户端源码集,先挂进主源码集的挂点
+        com.dwinovo.numen.client.ClientPayloadHandlers.install();
+        // MCP client: connect to external MCP servers in config/numen/mcp_clients.json
+        // and register their tools for the built-in brain. Config dir from FML (no
+        // Minecraft instance needed this early).
+        McpClientManager.initClient(
+                net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get().resolve(Constants.MOD_ID));
+
+        // MCP server: the other direction — a loopback MCP server letting an external
+        // agent drive companions directly, bypassing the built-in brain. Off unless
+        // enabled in config/numen/mcp_server.json.
+        com.dwinovo.numen.mcp.server.NumenMcp.initClient(
+                net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get());
+
+        // 同伴数据的根,以及旧布局的一次性迁移。根从 FML 拿,不问 Minecraft
+        // (datagen 里模组照样构造,那时没有 Minecraft 实例)。
+        com.dwinovo.numen.client.agent.CompanionHome.init(
+                net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get().resolve("numen"));
+        com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
+
+        // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(
                 net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get().resolve("numen"));
+
         // Mod bus — registration events.
         modBus.addListener(NumenForgeClient::registerKeyMappings);
         modBus.addListener(NumenForgeClient::registerGuiOverlays);
@@ -89,38 +110,31 @@ public final class NumenForgeClient {
     static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
         // 先掐大脑:作废在飞回合与工具链,别让上一个存档的回合漂进下一个存档
         com.dwinovo.numen.client.agent.AgentLoopRegistry.quiesceAll();
-        com.dwinovo.numen.client.data.ClientNumenInventory.clear();
+        com.dwinovo.numen.client.data.ClientNumenState.clear();
         com.dwinovo.numen.client.agent.KnownSkins.clear();
         com.dwinovo.numen.client.hud.SpeechBubbles.clear();
         com.dwinovo.numen.client.chat.SelectedCompanion.clear();
         com.dwinovo.numen.client.chat.QuickVoice.clear();
         com.dwinovo.numen.client.chat.ChatLines.clearLive();
-        com.dwinovo.numen.client.agent.ClientDeaths.clearAll();
+        com.dwinovo.numen.client.agent.NumenRoster.instance().clear();
+        com.dwinovo.numen.client.agent.CompanionHome.onDisconnect();
         com.dwinovo.numen.client.debug.PathDebugState.clear();
     }
 
     static void registerGuiOverlays(RegisterGuiOverlaysEvent event) {
-        // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」。
+        // HUD: 快捷对话提醒——准星指着同伴时浮「按 [键] 对话」;
+        // toast 横幅同层(错误分类话术等,玩家不开面板也看得见)。
         event.registerAboveAll("talk_hint",
                 (gui, g, partialTick, screenWidth, screenHeight) ->
                         com.dwinovo.numen.client.hud.TalkHint.render(g));
+        event.registerAboveAll("numen_toasts",
+                (gui, g, partialTick, screenWidth, screenHeight) ->
+                        com.dwinovo.numen.client.hud.NumenHudToasts.render(g));
     }
 
     static void registerReloadListeners(RegisterClientReloadListenersEvent event) {
-        Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config").resolve(Constants.MOD_ID);
-        Path skillsDir = numenConfigRoot.resolve("skills");
-
-        // MCP client: connect to any external MCP servers listed in
-        // config/numen/mcp_clients.json and register their tools so the built-in
-        // brain can call them.
-        com.dwinovo.numen.mcp.client.McpClientManager.initClient(numenConfigRoot);
-
-        // MCP server: the other direction — a loopback MCP server letting an external
-        // agent drive companions directly, bypassing the built-in brain.
-        // Off unless enabled in config/numen/mcp_server.json.
-        com.dwinovo.numen.mcp.server.NumenMcp.initClient(
-                Minecraft.getInstance().gameDirectory.toPath().resolve("config"));
+        Path skillsDir = Minecraft.getInstance().gameDirectory.toPath()
+                .resolve("config").resolve(Constants.MOD_ID).resolve("skills");
 
         event.registerReloadListener((ResourceManagerReloadListener) rm -> {
             SkillRegistry.instance().scan(skillsDir);

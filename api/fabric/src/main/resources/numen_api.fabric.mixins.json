@@ -4,10 +4,7 @@
   "package": "com.dwinovo.numen.mixin",
   "compatibilityLevel": "JAVA_17",
   "mixins": [],
-  "client": [
-    "MixinSoundEngine",
-    "MixinVoicePcmFabricSound"
-  ],
+  "client": [],
   "server": [],
   "injectors": {
     "defaultRequire": 1
