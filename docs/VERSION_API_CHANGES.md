@@ -148,6 +148,8 @@ registryAccess().registryOrThrow(Registries.STRUCTURE)  → registryAccess().loo
   `template/base/additionIngredient()` 的 Optional getter（本分支不需要,仅记录）。
 
 ### 1.21.4 落地实录（并仓迁移）
+
+> ⚠ 哑气泡 mixin：气泡挂载点必须是 LivingEntityRenderer.render(渲染状态四参)——PlayerRenderer 在 1.21.2+ 不再自己实现 render，注旧签名无头测试照不出、真机 require=1 必炸（官方 mappings 逐字核过签名）。
 2026-08 从 1.21.1 @ b550494c 整树落底后的增量,只记上面没有的新坑：
 
 - **GameTest 相对坐标基准变了**❗：1.21.1 的 `helper.absolutePos(rel)` 以**结构方块位**
