@@ -198,6 +198,50 @@ core 内嵌 api 用 **ForgeGradle jarJar**:`jarJar.enable()` + `jarJar(group,nam
 **FG6 的 jarJar 产物带 `-all` classifier** → 可分发的 Forge 单文件是 `numen-forge-1.20.4-0.0.3-all.jar`(内嵌 api),
 plain `numen-forge-1.20.4-0.0.3.jar` 是不含 api 的 reobf jar。**发布/CI 要发 `-all.jar`。**
 
+### 1.20.4 落地实录(并仓迁移,1.20.1 树向上走两档时新踩的)❗
+
+只记本次新碰到的;上面各节已有的(config-phase、CustomPacketPayload、GuiCompat、
+RecipeHolder、ChannelBuilder)反着用即可,不重复。
+
+**① Forge 49 的 dev 运行会为模块层做 JPMS 校验**——并仓布局特有的死局:runs 的
+mods 块把 ai/ui 源码集聚进 numen_api 模组模块,而 api 的 `api project(':ai')`
+又把 numen-ai.jar 拖上运行 classpath 当自动模块,同包双模块直接拒启
+(`ResolutionException: Modules numen_api and numen.ai.SNAPSHOT export package …`)。
+Forge 47(1.20.1)没有这道校验,同一份配置好好的。修法在 api/forge 与 core/forge:
+```groovy
+configurations.named('runtimeClasspath') {
+    exclude module: 'ai'   // 兄弟工程 group 与本模块不同——带 group 的规则匹配不上,按 module 名来
+    exclude module: 'ui'
+}
+```
+类经 MOD_CLASSES(源码集输出)进运行一个不少;编译与打包不受影响。
+排查提示:FG6 的 MinecraftRunTask 在**任务动作里**才组装 classpath,配置期改
+`JavaExec.classpath` 是无效的;真实 java 命令行用 `--info` 抓。
+
+**② gametest 注解与模板管线整套换**(Forge 49 ≠ 47):
+- `PrefixGameTestTemplate` 没了,拆成 `GameTestDontPrefix`/`GameTestPrefix`;且本代把
+  批次名与模板名交给同一套前缀逻辑(`GameTestHolder` 的值同时前缀到两者)。解法不用
+  新注解:**模板名写 `numen:floor16`(带冒号直接按完整路径用、跳过前缀)**,批次照常
+  前缀以满足 `forge.enabledGameTestNamespaces` 筛选。
+- 模板一律问 `StructureTemplateManager` 要;"测试模板目录"这个来源只在
+  `SharedConstants.IS_RUNNING_IN_IDE` 为真时登记,无头跑批里是假的(1.20.1 的
+  `StructureUtils.spawnStructure` 自己读盘,没这一出;NeoForge 1.20.6 也没有)。
+  解法:CompanionGameTests 静态块把仓库 SNBT `NbtUtils.snbtToStructure` 转成结构
+  NBT 喂进存档 `generated/numen/structures/`(开闸口令 `numen.gametest.generated`
+  只在 GameTestServer 运行配置上设)——仓库仍只存文本,不提交二进制。
+
+**③ 1.20.2/1.20.3 的三处小刀**(向下手册没记,因为老树在那些点位不用这些 API):
+```java
+Recipe.getId()                     // 1.20.2 移除,id 归 RecipeHolder.id()(单测匿名配方覆写它会编译失败)
+NbtIo.readCompressed(File)         // 1.20.3 移除:走 Path + NbtAccounter.unlimitedHeap()(原版读结构模板同款额度);writeCompressed 同步只收 Path
+Blocks.GRASS → Blocks.SHORT_GRASS  // 1.20.3 改名(TALL_GRASS/GRASS_BLOCK 不变)
+FlowerPotBlock.getContent() → getPotted()   // 仅 1.20.3/1.20.4 这一窗口叫 getPotted,1.20.2- 与 1.20.5+ 都叫 getContent
+```
+
+**④ ChunkMap 的同伴静默 mixin 换注入点**(1.20.2 合并了逐 chunk 跟踪):
+`updateChunkTracking` → `applyChunkTrackingView`,取消前先
+`player.setChunkTrackingView(ChunkTrackingView.EMPTY)`,恢复跟踪时才不会整圈重放。
+
 ## 1.20.4 → 1.20.2 ✓（纯旋钮档）
 
 老 tag 之间 **零源码差异**,只有 `gradle.properties`:MC `1.20.2` / range `[1.20.2, 1.21)` /
