@@ -30,13 +30,15 @@ public record CompanionListPayload(String worldId, List<Entry> companions) imple
     public static final int MAX = 64;
 
     /** 一行。{@code respawnInMs} = {@link com.dwinovo.numen.entity.CompanionRoster#ALIVE} 是活着,
-     *  ≥0 是死了、还有这么久复活。 */
-    public record Entry(UUID uuid, String name, long respawnInMs) {
+     *  ≥0 是死了、还有这么久复活。{@code creative} 是此刻的游戏模式(不在场按生存),
+     *  编辑卡的模式格用它显示当前值。 */
+    public record Entry(UUID uuid, String name, long respawnInMs, boolean creative) {
         static final StreamCodec<RegistryFriendlyByteBuf, Entry> CODEC =
                 StreamCodec.composite(
                         UUIDUtil.STREAM_CODEC, Entry::uuid,
                         ByteBufCodecs.stringUtf8(256), Entry::name,
                         ByteBufCodecs.VAR_LONG, Entry::respawnInMs,
+                        ByteBufCodecs.BOOL, Entry::creative,
                         Entry::new);
     }
 

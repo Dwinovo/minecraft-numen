@@ -71,7 +71,7 @@ public final class ClientPayloadHandlers {
         java.util.List<NumenRoster.Entry> snapshot = new java.util.ArrayList<>();
         java.util.Set<UUID> onRoster = new java.util.LinkedHashSet<>();
         for (CompanionListPayload.Entry e : p.companions()) {
-            snapshot.add(NumenRoster.toEntry(e.uuid(), e.name(), e.respawnInMs()));
+            snapshot.add(NumenRoster.toEntry(e.uuid(), e.name(), e.respawnInMs(), e.creative()));
             onRoster.add(e.uuid());
         }
         NumenRoster.instance().replaceAll(p.worldId(), snapshot);
