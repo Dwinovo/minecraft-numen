@@ -85,7 +85,7 @@ public final class EquipCompanionTask extends AbstractCompanionTask<EquipTaskRec
             return;
         }
         if (target != null) {
-            directSet(target, inv.selected, one);
+            directSet(target, inv.getSelectedSlot(), one);
             return;
         }
         fail(r.label + " can't be equipped" + (r.slot != null ? " in " + r.slot.getName() : ""),

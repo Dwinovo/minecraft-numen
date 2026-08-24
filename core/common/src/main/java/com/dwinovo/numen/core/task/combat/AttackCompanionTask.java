@@ -887,7 +887,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
     private void snapshotInventory(Map<Item, Integer> out) {
         out.clear();
         Inventory inventory = player.getInventory();
-        for (ItemStack stack : inventory.items) {
+        for (ItemStack stack : inventory.getNonEquipmentItems()) {
             if (!stack.isEmpty()) out.merge(stack.getItem(), stack.getCount(), Integer::sum);
         }
     }

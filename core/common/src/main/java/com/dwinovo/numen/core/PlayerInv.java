@@ -44,8 +44,8 @@ public final class PlayerInv {
      */
     public static int carriedCount(Inventory inv, Item item) {
         int n = 0;
-        for (int i = 0; i < Math.min(BUILDABLE_SLOTS, inv.items.size()); i++) {
-            ItemStack s = inv.items.get(i);
+        for (int i = 0; i < Math.min(BUILDABLE_SLOTS, inv.getNonEquipmentItems().size()); i++) {
+            ItemStack s = inv.getNonEquipmentItems().get(i);
             if (!s.isEmpty() && s.is(item)) n += s.getCount();
         }
         return n;
@@ -53,7 +53,7 @@ public final class PlayerInv {
 
     /** 建造口径的存量:只数 {@link #BUILDABLE_SLOTS} 格。报价与实扣共用这一个。 */
     public static int buildableCount(Inventory inv, Item item) {
-        int limit = Math.min(BUILDABLE_SLOTS, inv.items.size());
+        int limit = Math.min(BUILDABLE_SLOTS, inv.getNonEquipmentItems().size());
         int n = 0;
         for (int i = 0; i < limit; i++) {
             ItemStack s = inv.getItem(i);

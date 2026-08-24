@@ -255,7 +255,7 @@ public final class BuildTaskRecord extends TaskRecord {
          * @return 对应物品;不在白名单里返回空气(不该出现)
          */
         public Item item() {
-            return switch (nbt.getString("id")) {
+            return switch (nbt.getStringOr("id", "")) {
                 case "minecraft:item_frame" -> net.minecraft.world.item.Items.ITEM_FRAME;
                 case "minecraft:glow_item_frame" -> net.minecraft.world.item.Items.GLOW_ITEM_FRAME;
                 case "minecraft:armor_stand" -> net.minecraft.world.item.Items.ARMOR_STAND;

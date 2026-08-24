@@ -93,7 +93,7 @@ public class MovementFall extends Movement {
             if (player.getY() - dest.getY() < NavSettings.get().blockReachDistance
                     && !player.onGround()) {
                 // 够得着落点了:切水桶、竖直向下瞄,命中落点即放水
-                player.getInventory().selected = bucketSlot;
+                player.getInventory().setSelectedSlot(bucketSlot);
                 state.setTarget(new MovementState.MovementTarget(toDestYaw, 90.0f, true));
                 forcedRotation = true;
                 if (MovementPlacement.isLookingAt(player, dest)
@@ -111,7 +111,7 @@ public class MovementFall extends Movement {
                 // 落进自己放的水:收水再走
                 int emptySlot = hotbarSlotWith(Items.BUCKET);
                 if (emptySlot != -1) {
-                    player.getInventory().selected = emptySlot;
+                    player.getInventory().setSelectedSlot(emptySlot);
                     if (player.getDeltaMovement().y >= 0) {
                         return state.setInput(Input.CLICK_RIGHT, true);
                     }

@@ -28,7 +28,7 @@ import java.util.Map;
  * {@code SectionPos → { Block → 段内位置集 }} 的倒排索引,只有含目标的 section 才有条目。
  * 三条供给让它保持新鲜:
  * <ol>
- *   <li><b>方块变更钩子</b>——{@code ServerLevel.onBlockStateChange}(即原版 POI 系统自己的
+ *   <li><b>方块变更钩子</b>——{@code ServerLevel.updatePOIOnBlockStateChange}(即原版 POI 系统自己的
  *       写入口)每次服务端方块变化调用 {@link #onBlockChange};无关方块两次哈希查询即返回,
  *       没有任何任务注册目标时第一行即返回。挖掉的目标实时出索引,长出的树苗实时进索引。</li>
  *   <li><b>懒构建</b>——查询碰到未建/过期的 section 时就地构建:palette 预筛(不含目标的
@@ -43,7 +43,7 @@ import java.util.Map;
  * 成簇目标(原木)全量索引。
  *
  * <h2>线程契约</h2>
- * 全部状态仅服务端主线程读写。worldgen 线程途经 onBlockStateChange 的写入被直接丢弃——
+ * 全部状态仅服务端主线程读写。worldgen 线程途经 updatePOIOnBlockStateChange 的写入被直接丢弃——
  * 新生成区块首次被查询/加载时懒构建自然收录(与原版 POI 的自愈口径一致)。
  */
 public final class TargetIndex {
@@ -171,7 +171,7 @@ public final class TargetIndex {
 
     // ==================== 供给:方块变更钩子 ====================
 
-    /** 由 ServerLevel.onBlockStateChange 的 mixin 调用——服务端每次方块变化都会路过这里。 */
+    /** 由 ServerLevel.updatePOIOnBlockStateChange 的 mixin 调用——服务端每次方块变化都会路过这里。 */
     public static void onBlockChange(ServerLevel level, BlockPos pos, BlockState oldState, BlockState newState) {
         if (!anyActive) {
             return;

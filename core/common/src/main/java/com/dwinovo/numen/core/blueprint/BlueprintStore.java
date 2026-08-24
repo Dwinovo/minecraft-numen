@@ -115,8 +115,8 @@ public final class BlueprintStore {
     /** 只读尺寸(列表工具的概要用)。 */
     public static Vec3i peekSize(MinecraftServer server, String name) {
         CompoundTag tag = readTag(server, name);
-        ListTag size = tag.getList("size", Tag.TAG_INT);
-        return new Vec3i(size.getInt(0), size.getInt(1), size.getInt(2));
+        ListTag size = tag.getListOrEmpty("size");
+        return new Vec3i(size.getIntOr(0, 0), size.getIntOr(1, 0), size.getIntOr(2, 0));
     }
 
     /**
@@ -127,17 +127,17 @@ public final class BlueprintStore {
      */
     public static Loaded load(ServerLevel level, String name, BlockPos anchor, int rotationQuarters) {
         CompoundTag tag = readTag(level.getServer(), name);
-        ListTag sizeTag = tag.getList("size", Tag.TAG_INT);
-        int sx = sizeTag.getInt(0);
-        int sy = sizeTag.getInt(1);
-        int sz = sizeTag.getInt(2);
+        ListTag sizeTag = tag.getListOrEmpty("size");
+        int sx = sizeTag.getIntOr(0, 0);
+        int sy = sizeTag.getIntOr(1, 0);
+        int sz = sizeTag.getIntOr(2, 0);
 
         // 多调色板结构(沉船等)取第一板;常规结构用单板。
         ListTag paletteTag;
-        if (tag.contains("palettes", Tag.TAG_LIST)) {
-            paletteTag = tag.getList("palettes", Tag.TAG_LIST).getList(0);
+        if (tag.getList("palettes").isPresent()) {
+            paletteTag = tag.getListOrEmpty("palettes").getListOrEmpty(0);
         } else {
-            paletteTag = tag.getList("palette", Tag.TAG_COMPOUND);
+            paletteTag = tag.getListOrEmpty("palette");
         }
         List<BlockState> palette = new ArrayList<>(paletteTag.size());
         Rotation rotation = switch (Math.floorMod(rotationQuarters, 4)) {
@@ -148,10 +148,10 @@ public final class BlueprintStore {
         };
         for (int i = 0; i < paletteTag.size(); i++) {
             palette.add(NbtUtils.readBlockState(
-                    level.holderLookup(Registries.BLOCK), paletteTag.getCompound(i)).rotate(rotation));
+                    level.holderLookup(Registries.BLOCK), paletteTag.getCompoundOrEmpty(i)).rotate(rotation));
         }
 
-        ListTag blocks = tag.getList("blocks", Tag.TAG_COMPOUND);
+        ListTag blocks = tag.getListOrEmpty("blocks");
         if (blocks.size() > MAX_CELLS) {
             throw new IllegalArgumentException("blueprint " + name + " has " + blocks.size()
                     + " cells, exceeding the " + MAX_CELLS + " cap");
@@ -166,14 +166,14 @@ public final class BlueprintStore {
         java.util.Map<Long, List<BuildTaskRecord.CellNeed>> needs = new java.util.HashMap<>();
         int dropped = 0;
         for (int i = 0; i < blocks.size(); i++) {
-            CompoundTag cell = blocks.getCompound(i);
-            ListTag pos = cell.getList("pos", Tag.TAG_INT);
-            int x = pos.getInt(0);
-            int y = pos.getInt(1);
-            int z = pos.getInt(2);
+            CompoundTag cell = blocks.getCompoundOrEmpty(i);
+            ListTag pos = cell.getListOrEmpty("pos");
+            int x = pos.getIntOr(0, 0);
+            int y = pos.getIntOr(1, 0);
+            int z = pos.getIntOr(2, 0);
             // 调色板下标来自文件,越界就是文件坏了——跳过这一格并记一笔,而不是让一个
             // 数组越界从工具调用里抛出去。整张图纸都坏的话下面 targets 为空,报错自然。
-            int paletteIndex = cell.getInt("state");
+            int paletteIndex = cell.getIntOr("state", -1);
             if (paletteIndex < 0 || paletteIndex >= palette.size()) {
                 dropped++;
                 continue;
@@ -231,9 +231,9 @@ public final class BlueprintStore {
             // 方块实体数据只搬装饰性的那部分(告示牌的字、旗帜的花纹);容器内容一律
             // 不搬——图纸是文件,照搬等于凭空造物品
             CompoundTag safe = null;
-            if (cell.contains("nbt", Tag.TAG_COMPOUND)) {
+            if (cell.getCompound("nbt").isPresent()) {
                 safe = com.dwinovo.numen.core.build.BlueprintSafety
-                        .safeBlockEntityData(state, cell.getCompound("nbt"));
+                        .safeBlockEntityData(state, cell.getCompoundOrEmpty("nbt"));
                 if (safe != null) {
                     beData.put(world.asLong(), safe);
                 }
@@ -248,20 +248,23 @@ public final class BlueprintStore {
         }
         // 摆设实体(展示框、盔甲架、画):随图纸一起旋转,躯壳照生,身上的东西剥掉
         List<BuildTaskRecord.EntitySpawn> spawns = new ArrayList<>();
-        for (Tag t : tag.getList("entities", Tag.TAG_COMPOUND)) {
-            CompoundTag e = (CompoundTag) t;
+        for (Tag t : tag.getListOrEmpty("entities")) {
+            // 1.21.5 的 getListOrEmpty 不按元素类型筛,强转前先挡一手,坏文件不 CCE
+            if (!(t instanceof CompoundTag e)) {
+                continue;
+            }
             CompoundTag safe = com.dwinovo.numen.core.build.BlueprintSafety
-                    .safeEntityData(e.getCompound("nbt"), level.registryAccess());
+                    .safeEntityData(e.getCompoundOrEmpty("nbt"), level.registryAccess());
             if (safe == null) {
                 continue;
             }
-            ListTag at = e.getList("pos", Tag.TAG_DOUBLE);
+            ListTag at = e.getListOrEmpty("pos");
             if (at.size() != 3) {
                 continue;
             }
-            double ex = at.getDouble(0);
-            double ey = at.getDouble(1);
-            double ez = at.getDouble(2);
+            double ex = at.getDoubleOr(0, 0);
+            double ey = at.getDoubleOr(1, 0);
+            double ez = at.getDoubleOr(2, 0);
             double rx;
             double rz;
             switch (quarters) {

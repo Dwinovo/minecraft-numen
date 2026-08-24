@@ -90,13 +90,13 @@ public final class UnequipCompanionTask extends AbstractCompanionTask<UnequipTas
      * 腾主手。@return 手上原本有没有东西(空手不算"脱了什么")。
      */
     private boolean freeMainHand(Inventory inv) {
-        ItemStack held = inv.getItem(inv.selected);
+        ItemStack held = inv.getItem(inv.getSelectedSlot());
         if (held.isEmpty()) {
             return false;
         }
         for (int i = 0; i < Inventory.getSelectionSize(); i++) {
             if (inv.getItem(i).isEmpty()) {
-                inv.selected = i;
+                inv.setSelectedSlot(i);
                 removed.add("main hand freed (switched to an empty hotbar slot, still carrying "
                         + itemName(held) + ")");
                 return true;
@@ -108,7 +108,7 @@ public final class UnequipCompanionTask extends AbstractCompanionTask<UnequipTas
             return true;
         }
         inv.setItem(free, held.copy());
-        inv.setItem(inv.selected, ItemStack.EMPTY);
+        inv.setItem(inv.getSelectedSlot(), ItemStack.EMPTY);
         removed.add("main hand freed (stowed " + itemName(held) + ")");
         return true;
     }

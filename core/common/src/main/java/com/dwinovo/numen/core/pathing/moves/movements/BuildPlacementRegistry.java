@@ -100,7 +100,7 @@ public final class BuildPlacementRegistry {
             ItemStack stack = inv.getItem(i);
             if (!stack.isEmpty() && desired.test(stack)) {
                 if (select) {
-                    inv.selected = i;
+                    inv.setSelectedSlot(i);
                 }
                 return true;
             }
@@ -113,14 +113,14 @@ public final class BuildPlacementRegistry {
                 if (stack.isEmpty()
                         || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
                     if (select) {
-                        inv.selected = i;
+                        inv.setSelectedSlot(i);
                     }
                     return true;
                 }
             }
         }
         if (NavSettings.get().allowInventory) {
-            for (int i = 9; i < inv.items.size(); i++) {
+            for (int i = 9; i < inv.getNonEquipmentItems().size(); i++) {
                 ItemStack stack = inv.getItem(i);
                 if (!stack.isEmpty() && desired.test(stack)) {
                     if (select) {
@@ -130,7 +130,7 @@ public final class BuildPlacementRegistry {
                             ItemStack tmp = inv.getItem(7);
                             inv.setItem(7, stack);
                             inv.setItem(i, tmp);
-                            inv.selected = 7;
+                            inv.setSelectedSlot(7);
                         }
                     }
                     return true;
@@ -176,7 +176,7 @@ public final class BuildPlacementRegistry {
                 if (!stack.isEmpty() && stack.getItem() == item
                         && wouldPlaceAny(player, stack, hit, yaw, pitch, InteractionHand.MAIN_HAND)) {
                     if (select) {
-                        inventory.selected = i;
+                        inventory.setSelectedSlot(i);
                     }
                     return true;
                 }
@@ -189,7 +189,7 @@ public final class BuildPlacementRegistry {
                     if (stack.isEmpty()
                             || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
                         if (select) {
-                            inventory.selected = i;
+                            inventory.setSelectedSlot(i);
                         }
                         return true;
                     }
@@ -204,7 +204,7 @@ public final class BuildPlacementRegistry {
                             ItemStack tmp = inventory.getItem(7);
                             inventory.setItem(7, stack);
                             inventory.setItem(i, tmp);
-                            inventory.selected = 7;
+                            inventory.setSelectedSlot(7);
                         }
                         return true;
                     }

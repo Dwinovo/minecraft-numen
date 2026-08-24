@@ -12,12 +12,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.item.AxeItem;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.MaceItem;
-import net.minecraft.world.item.SwordItem;
-import net.minecraft.world.item.TridentItem;
 import net.minecraft.world.item.enchantment.Enchantment;
 import net.minecraft.world.item.enchantment.EnchantmentEffectComponents;
 import net.minecraft.world.item.enchantment.Enchantments;
@@ -64,7 +61,7 @@ public class ToolSet {
     }
 
     public ToolSet(ServerPlayer player, boolean ignoreBreakingProtection) {
-        this(snapshotHotbar(player), player.getInventory().selected, ignoreBreakingProtection,
+        this(snapshotHotbar(player), player.getInventory().getSelectedSlot(), ignoreBreakingProtection,
                 NavSettings.get().considerPotionEffects ? potionAmplifier(player) : 1.0);
     }
 
@@ -140,11 +137,10 @@ public class ToolSet {
         return -1;
     }
 
-    /** 是否属于武器类物品(剑/斧/三叉戟/重锤)。 */
+    /** 是否属于武器类物品(剑/斧/三叉戟/重锤)。1.21.5 物品类扁平化(SwordItem 等
+     *  工具子类删除),武器身份改由 {@code minecraft:weapon} 数据组件承载。 */
     private static boolean isWeapon(ItemStack itemStack) {
-        Item item = itemStack.getItem();
-        return item instanceof SwordItem || item instanceof AxeItem
-                || item instanceof TridentItem || item instanceof MaceItem;
+        return itemStack.has(DataComponents.WEAPON);
     }
 
     /** 该物品是否带精准采集附魔。 */
@@ -271,11 +267,11 @@ public class ToolSet {
     /** 急迫 / 挖掘疲劳药水对挖掘速度的修正倍率(构造时在主线程取样)。 */
     private static double potionAmplifier(ServerPlayer player) {
         double speed = 1;
-        if (player.hasEffect(MobEffects.DIG_SPEED)) {
-            speed *= 1 + (player.getEffect(MobEffects.DIG_SPEED).getAmplifier() + 1) * 0.2;
+        if (player.hasEffect(MobEffects.HASTE)) {
+            speed *= 1 + (player.getEffect(MobEffects.HASTE).getAmplifier() + 1) * 0.2;
         }
-        if (player.hasEffect(MobEffects.DIG_SLOWDOWN)) {
-            switch (player.getEffect(MobEffects.DIG_SLOWDOWN).getAmplifier()) {
+        if (player.hasEffect(MobEffects.MINING_FATIGUE)) {
+            switch (player.getEffect(MobEffects.MINING_FATIGUE).getAmplifier()) {
                 case 0:
                     speed *= 0.3;
                     break;

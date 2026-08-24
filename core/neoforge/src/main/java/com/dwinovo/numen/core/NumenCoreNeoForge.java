@@ -35,6 +35,11 @@ public class NumenCoreNeoForge {
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
                 DebugCommands.register(e.getDispatcher()));
 
+        // 游戏内用例的登记。1.21.5 起 gametest 不再有注解入口,用例要主动注册成
+        // test_instance 条目;注册本身只在开了 gametest 的开发环境里生效(引擎侧
+        // RegisterGameTestsEvent 自己把关),正式环境不会有任何动作。
+        com.dwinovo.numen.core.gametest.NumenGameTests.register(eventBus);
+
         // Client-only: declare core's built-in skills, read in place from the
         // skills/ dir bundled in this jar. Skills feed the client-side LLM, so
         // this never runs on a dedicated server.

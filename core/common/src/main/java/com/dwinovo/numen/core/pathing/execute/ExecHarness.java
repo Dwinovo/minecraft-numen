@@ -440,7 +440,7 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         if (!NavSettings.get().allowInventory) {
             return false;
         }
-        for (int i = 9; i < inv.items.size(); i++) {
+        for (int i = 9; i < inv.getNonEquipmentItems().size(); i++) {
             if (what.test(inv.getItem(i))) {
                 player.holdInHand(i);
                 return true;

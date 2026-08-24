@@ -276,7 +276,7 @@ final class MovementPlacement {
                 ItemStack stack = inventory.getItem(i);
                 if (!stack.isEmpty() && stack.getItem() == item) {
                     if (select) {
-                        inventory.selected = i;
+                        inventory.setSelectedSlot(i);
                     }
                     return true;
                 }
@@ -292,7 +292,7 @@ final class MovementPlacement {
                     if (stack.isEmpty()
                             || stack.getItem().components().has(net.minecraft.core.component.DataComponents.TOOL)) {
                         if (select) {
-                            inventory.selected = i;
+                            inventory.setSelectedSlot(i);
                         }
                         return true;
                     }
@@ -307,7 +307,7 @@ final class MovementPlacement {
                             ItemStack tmp = inventory.getItem(7);
                             inventory.setItem(7, stack);
                             inventory.setItem(i, tmp);
-                            inventory.selected = 7;
+                            inventory.setSelectedSlot(7);
                         }
                         return true;
                     }

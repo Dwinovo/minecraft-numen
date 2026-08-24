@@ -651,7 +651,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         Inventory inv = player.getInventory();
         int sum = 0;
         // 只数主背包 36 格:盔甲/副手不算采集所得。
-        for (ItemStack s : inv.items) {
+        for (ItemStack s : inv.getNonEquipmentItems()) {
             if (!s.isEmpty() && dropItems.contains(s.getItem())) sum += s.getCount();
         }
         return sum;
@@ -688,7 +688,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  simulated drops match the real ones (e.g. respects a Silk Touch / Fortune pick if carried). */
     private ItemStack bestToolFor(BlockState state) {
         Inventory inv = player.getInventory();
-        ItemStack best = inv.getItem(inv.selected);
+        ItemStack best = inv.getItem(inv.getSelectedSlot());
         float bestSpeed = best.getDestroySpeed(state);
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);

@@ -72,13 +72,11 @@ public final class BlueprintSafety {
                 return null;
             }
             for (String side : new String[]{"front_text", "back_text"}) {
-                net.minecraft.nbt.CompoundTag text = out.getCompound(side);
-                if (!text.contains("messages", net.minecraft.nbt.Tag.TAG_LIST)) {
-                    continue;
-                }
+                net.minecraft.nbt.CompoundTag text = out.getCompoundOrEmpty(side);
+                // 1.21.5:getList 不再按元素类型筛,取 Optional;字符串行经 asString() 读
                 for (net.minecraft.nbt.Tag line
-                        : text.getList("messages", net.minecraft.nbt.Tag.TAG_STRING)) {
-                    if (hasClickEvent(line.getAsString())) {
+                        : text.getListOrEmpty("messages")) {
+                    if (hasClickEvent(line.asString().orElse(""))) {
                         return null;
                     }
                 }
@@ -151,7 +149,7 @@ public final class BlueprintSafety {
         if (data == null || !data.contains("id")) {
             return null;
         }
-        String id = data.getString("id");
+        String id = data.getStringOr("id", "");
         if (!id.equals("minecraft:item_frame") && !id.equals("minecraft:glow_item_frame")
                 && !id.equals("minecraft:armor_stand") && !id.equals("minecraft:painting")) {
             return null;

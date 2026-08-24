@@ -102,11 +102,11 @@ final class BuildFixtures {
                 // 展示框存大写 Facing、按六向编码(它能挂在天花板和地板上)。混用的
                 // 后果是一半的墙面展示框转向错误,随后立不住掉落。
                 if (nbt.contains("facing")) {
-                    Direction facing = Direction.from2DDataValue(nbt.getByte("facing"));
+                    Direction facing = Direction.from2DDataValue(nbt.getByteOr("facing", (byte) 0));
                     nbt.putByte("facing", (byte) spawn.rotation().rotate(facing).get2DDataValue());
                 }
                 if (nbt.contains("Facing")) {
-                    Direction facing = Direction.from3DDataValue(nbt.getByte("Facing"));
+                    Direction facing = Direction.from3DDataValue(nbt.getByteOr("Facing", (byte) 0));
                     nbt.putByte("Facing", (byte) spawn.rotation().rotate(facing).get3DDataValue());
                 }
                 // 1.21.2+ 要生成原因;蓝图放置与原版结构放实体同路,取 STRUCTURE
@@ -119,7 +119,7 @@ final class BuildFixtures {
                 // 挂件的朝向已经在 NBT 里转好了;盔甲架不是挂件,它的朝向只有偏航角,
                 // 走基类那个纯函数版的 rotate(只返回旋转后的偏航角,不改任何字段)。
                 float yaw = hangs ? entity.getYRot() : entity.rotate(spawn.rotation());
-                entity.moveTo(spawn.x(), spawn.y(), spawn.z(), yaw, entity.getXRot());
+                entity.snapTo(spawn.x(), spawn.y(), spawn.z(), yaw, entity.getXRot());   // 1.21.5: moveTo → snapTo
                 entity.setUUID(java.util.UUID.randomUUID());   // 同一张图纸建两遍不能撞 UUID
                 level.addFreshEntity(entity);
                 if (pays) {

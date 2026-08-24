@@ -87,7 +87,14 @@ class ProtectionPinsTest {
         ServerPlayer p = (ServerPlayer) unsafe.allocateInstance(ServerPlayer.class);
         Field inventory = Player.class.getDeclaredField("inventory");
         inventory.setAccessible(true);
-        inventory.set(p, new Inventory(p));
+        // 1.21.5: 盔甲/副手迁入 EntityEquipment,Inventory 与实体共享同一实例——
+        // 否则 getOffhandItem()(读实体 equipment)与背包写入(写 Inventory 的
+        // equipment)不同源,副手用例必挂
+        var equipment = new net.minecraft.world.entity.EntityEquipment();
+        Field equipmentField = net.minecraft.world.entity.LivingEntity.class.getDeclaredField("equipment");
+        equipmentField.setAccessible(true);
+        equipmentField.set(p, equipment);
+        inventory.set(p, new Inventory(p, equipment));
         Field foodData = Player.class.getDeclaredField("foodData");
         foodData.setAccessible(true);
         foodData.set(p, new FoodData());
@@ -127,7 +134,7 @@ class ProtectionPinsTest {
         entityData.set(p, synched);
         synched.set(dataKey(net.minecraft.world.entity.LivingEntity.class, "DATA_HEALTH_ID"),
                 20.0f);   // 满血
-        p.getInventory().items.set(0, new ItemStack(Items.DIRT));
+        p.getInventory().getNonEquipmentItems().set(0, new ItemStack(Items.DIRT));
         return p;
     }
 

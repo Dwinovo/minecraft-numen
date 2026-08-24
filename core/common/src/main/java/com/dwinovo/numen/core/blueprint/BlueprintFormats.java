@@ -50,7 +50,7 @@ final class BlueprintFormats {
     // ------------------------------------------------------------------
 
     static CompoundTag fromLitematic(CompoundTag root) {
-        CompoundTag regions = root.getCompound("Regions");
+        CompoundTag regions = root.getCompoundOrEmpty("Regions");
         if (regions.isEmpty()) {
             throw new IllegalArgumentException("litematic has no regions");
         }
@@ -63,8 +63,8 @@ final class BlueprintFormats {
         int maxZ = Integer.MIN_VALUE;
         ListTag entities = new ListTag();
         List<CompoundTag> regionTags = new ArrayList<>();
-        for (String key : regions.getAllKeys()) {
-            CompoundTag region = regions.getCompound(key);
+        for (String key : regions.keySet()) {
+            CompoundTag region = regions.getCompoundOrEmpty(key);
             regionTags.add(region);
             int[] min = regionMin(region);
             int[] abs = regionAbsSize(region);
@@ -80,38 +80,44 @@ final class BlueprintFormats {
         ListTag blocks = new ListTag();
         for (CompoundTag region : regionTags) {
             int paletteBase = palette.size();
-            ListTag regionPalette = region.getList("BlockStatePalette", Tag.TAG_COMPOUND);
+            ListTag regionPalette = region.getListOrEmpty("BlockStatePalette");
             boolean[] isAir = new boolean[regionPalette.size()];
             for (int i = 0; i < regionPalette.size(); i++) {
-                CompoundTag entry = regionPalette.getCompound(i);
-                isAir[i] = entry.getString("Name").endsWith("air");
+                CompoundTag entry = regionPalette.getCompoundOrEmpty(i);
+                isAir[i] = entry.getStringOr("Name", "").endsWith("air");
                 palette.add(entry.copy());
             }
             int[] min = regionMin(region);
             int[] abs = regionAbsSize(region);
-            long[] packed = region.getLongArray("BlockStates");
+            long[] packed = region.getLongArray("BlockStates").orElseGet(() -> new long[0]);
             int bits = Math.max(2, 32 - Integer.numberOfLeadingZeros(
                     Math.max(1, regionPalette.size() - 1)));
             // 方块实体数据(箱子里的东西、告示牌的字、旗帜花纹)按区域内坐标索引,
             // 出格时挂到对应的格上——不带它,社区图纸里的箱子告示牌全是空的
             Map<Long, CompoundTag> regionData = new HashMap<>();
-            for (Tag t : region.getList("TileEntities", Tag.TAG_COMPOUND)) {
-                CompoundTag be = ((CompoundTag) t).copy();
-                long key = key3(be.getInt("x"), be.getInt("y"), be.getInt("z"));
+            for (Tag t : region.getListOrEmpty("TileEntities")) {
+                if (!(t instanceof CompoundTag src)) {
+                    continue;   // 1.21.5 的 getList 不再按元素类型筛,自己挡一手
+                }
+                CompoundTag be = src.copy();
+                long key = key3(be.getIntOr("x", 0), be.getIntOr("y", 0), be.getIntOr("z", 0));
                 be.remove("x");
                 be.remove("y");
                 be.remove("z");
                 regionData.put(key, be);
             }
-            for (Tag t : region.getList("Entities", Tag.TAG_COMPOUND)) {
-                CompoundTag e = ((CompoundTag) t).copy();
-                ListTag at = e.getList("Pos", Tag.TAG_DOUBLE);
+            for (Tag t : region.getListOrEmpty("Entities")) {
+                if (!(t instanceof CompoundTag src)) {
+                    continue;
+                }
+                CompoundTag e = src.copy();
+                ListTag at = e.getListOrEmpty("Pos");
                 if (at.size() != 3) {
                     continue;
                 }
                 e.remove("Pos");
-                entities.add(entityCell(at.getDouble(0) - minX, at.getDouble(1) - minY,
-                        at.getDouble(2) - minZ, e));
+                entities.add(entityCell(at.getDoubleOr(0, 0) - minX, at.getDoubleOr(1, 0) - minY,
+                        at.getDoubleOr(2, 0) - minZ, e));
             }
             long volume = (long) abs[0] * abs[1] * abs[2];
             if (volume > MAX_REGION_VOLUME) {
@@ -136,18 +142,18 @@ final class BlueprintFormats {
 
     /** 区域最小角:负尺寸表示向负方向延伸(min = pos + size + 1)。 */
     private static int[] regionMin(CompoundTag region) {
-        CompoundTag pos = region.getCompound("Position");
-        CompoundTag size = region.getCompound("Size");
+        CompoundTag pos = region.getCompoundOrEmpty("Position");
+        CompoundTag size = region.getCompoundOrEmpty("Size");
         return new int[]{
-                pos.getInt("x") + Math.min(0, size.getInt("x") + 1),
-                pos.getInt("y") + Math.min(0, size.getInt("y") + 1),
-                pos.getInt("z") + Math.min(0, size.getInt("z") + 1)};
+                pos.getIntOr("x", 0) + Math.min(0, size.getIntOr("x", 0) + 1),
+                pos.getIntOr("y", 0) + Math.min(0, size.getIntOr("y", 0) + 1),
+                pos.getIntOr("z", 0) + Math.min(0, size.getIntOr("z", 0) + 1)};
     }
 
     private static int[] regionAbsSize(CompoundTag region) {
-        CompoundTag size = region.getCompound("Size");
-        return new int[]{Math.abs(size.getInt("x")), Math.abs(size.getInt("y")),
-                Math.abs(size.getInt("z"))};
+        CompoundTag size = region.getCompoundOrEmpty("Size");
+        return new int[]{Math.abs(size.getIntOr("x", 0)), Math.abs(size.getIntOr("y", 0)),
+                Math.abs(size.getIntOr("z", 0))};
     }
 
     /** {@code .litematic} 的跨 long 连续位流取值。 */
@@ -172,16 +178,16 @@ final class BlueprintFormats {
     // .schem(v2 根级 / v3 嵌套 Schematic.Blocks)
     // ------------------------------------------------------------------
 
-    static CompoundTag fromSchem(CompoundTag root) {
-        if (root.contains("Schematic", Tag.TAG_COMPOUND)) {
-            root = root.getCompound("Schematic");   // v3 外壳
-        }
-        CompoundTag blocksHolder = root.contains("Blocks", Tag.TAG_COMPOUND)
-                ? root.getCompound("Blocks")        // v3:Palette/Data 收在 Blocks 里
-                : root;                             // v2:平铺在根
-        int width = root.getShort("Width") & 0xFFFF;
-        int height = root.getShort("Height") & 0xFFFF;
-        int length = root.getShort("Length") & 0xFFFF;
+    static CompoundTag fromSchem(CompoundTag rootIn) {
+        // 1.21.5:contains(key, TAG_X) 没了,带类型的存在性判断改用「Optional 取到了没」
+        // ——新的 getX(key) 在键缺失或类型不符时同样返回 empty,判据与旧代逐位等价。
+        // 拆出 root 而不是就地改参数:下面 lambda 里要引用它,得是 effectively final。
+        final CompoundTag root = rootIn.getCompound("Schematic").orElse(rootIn);   // v3 外壳
+        CompoundTag blocksHolder = root.getCompound("Blocks")   // v3:Palette/Data 收在 Blocks 里
+                .orElse(root);                                  // v2:平铺在根
+        int width = root.getShortOr("Width", (short) 0) & 0xFFFF;
+        int height = root.getShortOr("Height", (short) 0) & 0xFFFF;
+        int length = root.getShortOr("Length", (short) 0) & 0xFFFF;
         if (width == 0 || height == 0 || length == 0) {
             throw new IllegalArgumentException("schem has zero dimension");
         }
@@ -192,53 +198,54 @@ final class BlueprintFormats {
         }
         // 方块实体数据:v3 在 Blocks.BlockEntities,v2 平铺在根
         Map<Long, CompoundTag> beData = new HashMap<>();
-        ListTag beList = blocksHolder.contains("BlockEntities", Tag.TAG_LIST)
-                ? blocksHolder.getList("BlockEntities", Tag.TAG_COMPOUND)
-                : root.getList("BlockEntities", Tag.TAG_COMPOUND);
+        ListTag beList = blocksHolder.getList("BlockEntities")
+                .orElseGet(() -> root.getListOrEmpty("BlockEntities"));
         for (Tag t : beList) {
-            CompoundTag be = (CompoundTag) t;
-            int[] at = be.getIntArray("Pos");
+            if (!(t instanceof CompoundTag be)) {
+                continue;
+            }
+            int[] at = be.getIntArray("Pos").orElseGet(() -> new int[0]);
             if (at.length != 3) {
                 continue;
             }
-            CompoundTag data = be.contains("Data", Tag.TAG_COMPOUND)
-                    ? be.getCompound("Data").copy()   // v3
-                    : be.copy();                      // v2:数据就在这一层
+            CompoundTag data = be.getCompound("Data").map(CompoundTag::copy)   // v3
+                    .orElseGet(be::copy);                                      // v2:数据就在这一层
             data.remove("Pos");
             data.remove("Id");
-            if (be.contains("Id", Tag.TAG_STRING)) {
-                data.putString("id", be.getString("Id"));
-            }
+            be.getString("Id").ifPresent(id -> data.putString("id", id));
             beData.put(key3(at[0], at[1], at[2]), data);
         }
         ListTag entities = new ListTag();
-        for (Tag t : root.getList("Entities", Tag.TAG_COMPOUND)) {
-            CompoundTag e = (CompoundTag) t;
-            ListTag at = e.getList("Pos", Tag.TAG_DOUBLE);
+        for (Tag t : root.getListOrEmpty("Entities")) {
+            if (!(t instanceof CompoundTag e)) {
+                continue;
+            }
+            ListTag at = e.getListOrEmpty("Pos");
             if (at.size() != 3) {
                 continue;
             }
-            CompoundTag data = e.contains("Data", Tag.TAG_COMPOUND)
-                    ? e.getCompound("Data").copy()
-                    : e.copy();
+            CompoundTag data = e.getCompound("Data").map(CompoundTag::copy)
+                    .orElseGet(e::copy);
             data.remove("Pos");
             data.remove("Id");
-            if (e.contains("Id", Tag.TAG_STRING)) {
-                data.putString("id", e.getString("Id"));
-            }
-            entities.add(entityCell(at.getDouble(0), at.getDouble(1), at.getDouble(2), data));
+            e.getString("Id").ifPresent(id -> data.putString("id", id));
+            entities.add(entityCell(at.getDoubleOr(0, 0), at.getDoubleOr(1, 0),
+                    at.getDoubleOr(2, 0), data));
         }
-        CompoundTag paletteMap = blocksHolder.getCompound("Palette");
+        CompoundTag paletteMap = blocksHolder.getCompoundOrEmpty("Palette");
         int maxId = -1;
-        for (String key : paletteMap.getAllKeys()) {
-            maxId = Math.max(maxId, paletteMap.getInt(key));
+        for (String key : paletteMap.keySet()) {
+            maxId = Math.max(maxId, paletteMap.getIntOr(key, -1));
         }
         CompoundTag[] byId = new CompoundTag[maxId + 1];
         boolean[] isAir = new boolean[maxId + 1];
-        for (String key : paletteMap.getAllKeys()) {
-            int id = paletteMap.getInt(key);
+        for (String key : paletteMap.keySet()) {
+            int id = paletteMap.getIntOr(key, -1);
+            if (id < 0) {
+                continue;
+            }
             byId[id] = parseStateString(key);
-            isAir[id] = byId[id].getString("Name").endsWith("air");
+            isAir[id] = byId[id].getStringOr("Name", "").endsWith("air");
         }
         ListTag palette = new ListTag();
         int[] remap = new int[maxId + 1];
@@ -249,9 +256,9 @@ final class BlueprintFormats {
             }
         }
 
-        byte[] data = blocksHolder.contains("Data", Tag.TAG_BYTE_ARRAY)
-                ? blocksHolder.getByteArray("Data")
-                : blocksHolder.getByteArray("BlockData");   // v2 字段名
+        byte[] data = blocksHolder.getByteArray("Data")
+                .orElseGet(() -> blocksHolder.getByteArray("BlockData")   // v2 字段名
+                        .orElseGet(() -> new byte[0]));
         ListTag blocks = new ListTag();
         int cursor = 0;
         long volume = (long) width * height * length;

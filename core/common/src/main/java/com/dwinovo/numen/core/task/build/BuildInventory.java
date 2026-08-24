@@ -38,7 +38,7 @@ final class BuildInventory {
     }
 
     private int buildableLimit(Inventory inventory) {
-        return Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.items.size());
+        return Math.min(PlayerInv.BUILDABLE_SLOTS, inventory.getNonEquipmentItems().size());
     }
 
     /** 背包里有几件满足这一笔要求的东西——口径由这笔要求自己说。 */
