@@ -441,8 +441,8 @@ public final class NumenScreen extends Screen {
                 return;
             }
             // 按名字:本机查同名正版(与召唤同一条路);查不到发空值 = 回原版默认皮肤。
+            // 保存即关卡,查询过程不占 UI;失败的原因进聊天框留痕。
             String n = name;
-            editPanel().note(I18n.get("numen.summon.fetching_skin"));
             com.dwinovo.numen.client.skin.MojangSkinLookup.fetch(n)
                     .thenAccept(r -> Minecraft.getInstance().execute(() -> {
                         if (r.problem() != null) {
@@ -817,6 +817,7 @@ public final class NumenScreen extends Screen {
                     NumenRoster.Entry e = entries.get(rail);
                     if (e.uuid().equals(uuid)) {
                         editing = !editing;   // 再点激活头像:开/收她的编辑卡
+                        if (editing) editPanel().reset();   // 开卡:草稿从当下真相取基线
                         rebuild();
                     } else {
                         editing = false;
