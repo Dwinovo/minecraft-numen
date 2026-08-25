@@ -37,26 +37,22 @@ public final class ChatLines {
     private static final int OWN = 0xAAB0B8;
     /** 同伴正文:近白——正文必须一眼可读,"退后"交给名字配色与工具行。 */
     private static final int TEXT = 0xE8EBEF;
-    /** 工具调用状态行:最暗一档——是动作记录,不是话。 */
-    private static final int TOOL = 0x8A9099;
-
     /** 每个同伴的在飞流式行(摘行用的句柄)。 */
     private static final Map<UUID, GuiMessage> LIVE = new HashMap<>();
 
     private ChatLines() {}
 
     /**
-     * 主人发出的一句(文字或语音),回显为暗灰字幕行;{@code queued} 时
-     * 缀上排队标记——她正忙,这条在队列里等她收口。
+     * 主人发出的一句(文字或语音),回显为暗灰字幕行。
+     *
+     * <p>只记"你说了这句话",不载她此刻的处境:聊天行是不可变的日志,印上去的状态
+     * 她一开口就成了假话,还永远挂在那儿。状态归活的界面——头顶气泡第二行写她正在
+     * 干什么,面板把还没被消费的那条画成 ⌛ 泡。
      */
-    public static void owner(String companionName, String text, boolean voice, boolean queued) {
-        MutableComponent line = Component.literal(
+    public static void owner(String companionName, String text, boolean voice) {
+        add(Component.literal(
                 "你 → " + companionName + ":" + (voice ? "(语音) " : "") + text)
-                .withStyle(s -> s.withColor(OWN));
-        if (queued) {
-            line.append(Component.literal("  (排队中,她忙完就看)").withStyle(s -> s.withColor(TOOL)));
-        }
-        add(line);
+                .withStyle(s -> s.withColor(OWN)));
     }
 
     /** 同伴的回复定格行:加粗着色名字 + 近白正文,全文显示不折叠。 */
