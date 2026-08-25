@@ -115,7 +115,6 @@ public final class ModLanguageData {
         // Edit card: click the active avatar to open; every pick applies immediately.
         public static final String EDIT_TITLE            = "numen.edit.title";
         public static final String EDIT_DISMISS          = "numen.edit.dismiss";
-        public static final String EDIT_SKIN_KEEP        = "numen.edit.skin_keep";
         public static final String EDIT_PROVIDER_UNBOUND = "numen.edit.provider_unbound";
         public static final String EDIT_MODE_LOCKED      = "numen.edit.mode_locked";
 
@@ -422,7 +421,6 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_MODE_INHERIT_TIP, "No gamemode permission — she inherits your current mode");
         adder.add(Keys.EDIT_TITLE,            "Edit");
         adder.add(Keys.EDIT_DISMISS,          "Dismiss");
-        adder.add(Keys.EDIT_SKIN_KEEP,        "Keep current");
         adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(unbound)");
         adder.add(Keys.EDIT_MODE_LOCKED,      "No cheat/OP permission — her mode can't be changed");
         adder.add(Keys.SKIN_TITLE,           "Skins");
@@ -742,7 +740,6 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_MODE_INHERIT_TIP, "没有 gamemode 权限——同伴将继承你当前的模式");
         adder.add(Keys.EDIT_TITLE,            "编辑");
         adder.add(Keys.EDIT_DISMISS,          "遣散");
-        adder.add(Keys.EDIT_SKIN_KEEP,        "保持现状");
         adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(未绑定)");
         adder.add(Keys.EDIT_MODE_LOCKED,      "没有作弊/OP 权限,改不了同伴的模式");
         adder.add(Keys.SKIN_TITLE,           "皮肤库");

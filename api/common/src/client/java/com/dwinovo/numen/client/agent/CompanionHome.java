@@ -44,25 +44,31 @@ import java.util.stream.Stream;
  */
 public final class CompanionHome {
 
-    /** 一只同伴的三种配置绑定;字段为 null = 未绑定(回落全局/默认)。 */
-    public record Binding(String providerId, String personaId, String voiceId) {
+    /** 一只同伴的配置绑定;字段为 null = 未绑定(回落全局/默认)。
+     *  {@code skinId} 记的是选择意图(皮肤库条目 id,null = 按名字默认)——皮肤数据
+     *  本体住在服务端注册表,这里只为编辑卡能标出当前选择。 */
+    public record Binding(String providerId, String personaId, String voiceId, String skinId) {
 
-        public static final Binding EMPTY = new Binding(null, null, null);
+        public static final Binding EMPTY = new Binding(null, null, null, null);
 
         public Binding withProvider(String id) {
-            return new Binding(blankToNull(id), personaId, voiceId);
+            return new Binding(blankToNull(id), personaId, voiceId, skinId);
         }
 
         public Binding withPersona(String id) {
-            return new Binding(providerId, blankToNull(id), voiceId);
+            return new Binding(providerId, blankToNull(id), voiceId, skinId);
         }
 
         public Binding withVoice(String id) {
-            return new Binding(providerId, personaId, blankToNull(id));
+            return new Binding(providerId, personaId, blankToNull(id), skinId);
+        }
+
+        public Binding withSkin(String id) {
+            return new Binding(providerId, personaId, voiceId, blankToNull(id));
         }
 
         public boolean isEmpty() {
-            return providerId == null && personaId == null && voiceId == null;
+            return providerId == null && personaId == null && voiceId == null && skinId == null;
         }
 
         private static String blankToNull(String s) {
@@ -188,7 +194,8 @@ public final class CompanionHome {
         try {
             JsonObject o = JsonParser.parseString(
                     Files.readString(p, StandardCharsets.UTF_8)).getAsJsonObject();
-            return new Binding(str(o, "provider"), str(o, "persona"), str(o, "voice"));
+            return new Binding(str(o, "provider"), str(o, "persona"), str(o, "voice"),
+                    str(o, "skin"));
         } catch (IOException | RuntimeException e) {
             Constants.LOG.warn("[numen-home] 绑定读取失败 {}: {}", p, e.toString());
             return Binding.EMPTY;
@@ -209,6 +216,7 @@ public final class CompanionHome {
             if (b.providerId() != null) o.addProperty("provider", b.providerId());
             if (b.personaId() != null) o.addProperty("persona", b.personaId());
             if (b.voiceId() != null) o.addProperty("voice", b.voiceId());
+            if (b.skinId() != null) o.addProperty("skin", b.skinId());
             Files.writeString(p, o.toString(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             Constants.LOG.warn("[numen-home] 绑定写入失败 {}: {}", p, e.toString());
