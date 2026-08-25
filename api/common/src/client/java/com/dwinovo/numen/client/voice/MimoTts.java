@@ -26,9 +26,8 @@ import java.util.concurrent.CompletableFuture;
  * {@code /chat/completions} 直接用；带 {@code /v1} 补 {@code /chat/completions}；
  * 否则补 {@code /v1/chat/completions}。
  *
- * <p>鉴权：支持两种请求头——{@code api-key: <key>}（Mimo 文档首选）或
- * {@code Authorization: Bearer <key>}（OpenAI 惯例）。本实现优先使用
- * {@code api-key}，同时保留 Bearer 兼容。
+ * <p>鉴权：{@code api-key: <key>} 请求头（官方文档两种鉴权二选一,取其首选;
+ * 双头齐发有被服务端拒的风险,不做兼容兜底）。
  */
 public final class MimoTts implements TtsBackend {
 
@@ -161,8 +160,7 @@ public final class MimoTts implements TtsBackend {
                     .uri(VoiceHttp.uriOf(url))
                     .timeout(VoiceHttp.REQUEST_TIMEOUT)
                     .header("Content-Type", "application/json")
-                    .header("api-key", apiKey)                     // Mimo 文档首选鉴权头
-                    .header("Authorization", "Bearer " + apiKey)   // 兼容 OpenAI 惯例
+                    .header("api-key", apiKey)   // 官方两种鉴权二选一,取文档首选
                     .POST(HttpRequest.BodyPublishers.ofString(
                             buildBody(model, voice, text).toString(), StandardCharsets.UTF_8))
                     .build();
