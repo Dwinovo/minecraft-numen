@@ -127,7 +127,8 @@ final class TurnPresenter {
      * 重新 resolve——声线库/绑定的编辑下一轮生效;开新轮会打断上一轮还在
      * 播的残句(新内容优先,与打断语义一致)。
      */
-    VoiceTurn beginVoiceTurn() {
+    /** {@code ownerBargeIn} = 本轮由主人夺话触发(硬停上一轮);否则句界衔接。 */
+    VoiceTurn beginVoiceTurn(boolean ownerBargeIn) {
         VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
         if (cfg == null) {
             if (voice != null) voice.interrupt();   // 总开关关闭/解绑:静音存量队列
@@ -137,7 +138,7 @@ final class TurnPresenter {
             voice = new VoicePipeline(entityUuid);
         }
         final var vp = voice;
-        final int vgen = vp.beginTurn(cfg);
+        final int vgen = vp.beginTurn(cfg, ownerBargeIn);
         return new VoiceTurn(vp.chunkSink(vgen), () -> vp.endTurn(vgen));
     }
 
