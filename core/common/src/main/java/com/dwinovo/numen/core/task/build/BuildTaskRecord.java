@@ -138,12 +138,40 @@ public final class BuildTaskRecord extends TaskRecord {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.replaceBlockEntities = replaceBlockEntities;
         this.entities = List.copyOf(entities);
-        this.targets = List.copyOf(targets);
+        this.targets = promotePlainCells(targets, blockEntityData);
         this.replaceMode = replaceMode;
         this.replaceExisting = replaceExisting;
         this.consumeMaterials = consumeMaterials;
         this.allowPartial = allowPartial;
         this.blockEntityData = Map.copyOf(blockEntityData);
+    }
+
+    /**
+     * 素面格升格走原生放置:方块没有任何 blockstate 属性、这一格也不带方块实体数据时,
+     * "照图直写"与"玩家动作"的产物语义完全等价,唯一区别是后者跑物品放置钩子——
+     * 领地可拦、Visual Workbench 一类原地换方块的模组照常接管。升格改的是 Target 的
+     * itemPlace 字段:车道选择、宽容对账(按自述名)、按手扣料三处读的都是它,单一真源。
+     * 有属性的方块不升格(哪怕目标恰是默认态,如朝北的熔炉):原生放置按视线推导
+     * 状态,给不出图纸点名的精确值。
+     */
+    private static List<Target> promotePlainCells(List<Target> targets,
+                                                  Map<Long, CompoundTag> blockEntityData) {
+        List<Target> out = new java.util.ArrayList<>(targets.size());
+        for (Target t : targets) {
+            boolean plain = !t.itemPlace()
+                    && !t.desiredState().isAir()
+                    && t.desiredState().getProperties().isEmpty()
+                    && !blockEntityData.containsKey(t.pos().asLong())
+                    // 物品放出来的必须就是图纸要的方块:盆栽(potted_*)无属性但 item 是花盆,
+                    // 原生放置只给空盆,盆+花两件的料单格必须留在直写道。
+                    && t.item() instanceof net.minecraft.world.item.BlockItem bi
+                    && bi.getBlock() == t.desiredState().getBlock();
+            out.add(plain
+                    ? new Target(t.desiredState(), t.item(), t.pos(), t.label(),
+                            t.facing(), t.axis(), t.topHalf(), true)
+                    : t);
+        }
+        return List.copyOf(out);
     }
 
     /**
