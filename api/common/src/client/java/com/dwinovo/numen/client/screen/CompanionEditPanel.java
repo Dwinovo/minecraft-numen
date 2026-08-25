@@ -23,10 +23,10 @@ import java.util.Objects;
 
 /**
  * 编辑卡——点当前激活头像打开,改一只<b>已创建</b>同伴:人设/模式/模型配置/声线/
- * 皮肤五个选择 + 遣散。草稿制:下拉只改草稿,点保存才统一落地,且只发真正变过的
+ * 皮肤五个选择。草稿制:下拉只改草稿,点保存才统一落地,且只发真正变过的
  * 项(换肤要原地重建身体,误触代价高);取消丢弃草稿。草稿基线在开卡时从各自的
- * 真源取一次({@link #reset()})。皮肤是唯一读不到当前值的(真源在服务端注册表),
- * 首项"保持现状"如实表达这一点,保存时只有选了别项才发包。
+ * 真源取一次({@link #reset()});皮肤的当前选择记在绑定里(与档案/声线同模)。
+ * 遣散收成右上角垃圾桶图标(悬停危险色),底部只留取消/保存一对主动作。
  */
 public final class CompanionEditPanel {
 
@@ -57,7 +57,6 @@ public final class CompanionEditPanel {
     private static final String VOICE_NONE = "__none__";
     /** 与召唤卡的"默认(按名字)"同义:本机查同名正版,查不到落回原版默认皮肤。 */
     public static final String SKIN_BY_NAME = "__default__";
-    private static final String SKIN_KEEP = "__keep__";
 
     /** 编辑草稿;开卡时从真源取基线,保存时与基线比对只落差异。 */
     private static final class Draft {
@@ -65,15 +64,16 @@ public final class CompanionEditPanel {
         String providerId;    // null = 未绑定(只出现在老档,不许改回)
         String voiceId;       // null = 无声
         boolean creative;
-        String skinId = SKIN_KEEP;
+        String skinId = SKIN_BY_NAME;
     }
 
     private final UiRoot ui = new UiRoot();
     private final Host host;
 
     private Draft draft = new Draft();
-    private String origPersona, origProvider, origVoice;
+    private String origPersona, origProvider, origVoice, origSkin;
     private boolean origCreative;
+    private int trashX, trashY;
 
     private List<String> personaIds = List.of();
     private List<String> providerIds = List.of();
@@ -98,11 +98,15 @@ public final class CompanionEditPanel {
         origProvider = binding.providerId();
         origVoice = binding.voiceId();
         origCreative = host.currentCreative();
+        // 皮肤当前选择从绑定读;没记账或条目已删 = 按名字默认。
+        String sk = binding.skinId();
+        origSkin = sk != null && SkinLibrary.instance().get(sk) != null ? sk : SKIN_BY_NAME;
         draft = new Draft();
         draft.personaId = origPersona;
         draft.providerId = origProvider;
         draft.voiceId = origVoice;
         draft.creative = origCreative;
+        draft.skinId = origSkin;
     }
 
     public void build(int x, int y, int w, int h, int dropBottom) {
@@ -116,6 +120,8 @@ public final class CompanionEditPanel {
         Label title = ui.add(new Label(
                 t(ModLanguageData.Keys.EDIT_TITLE) + " · " + host.name(), Label.Role.PRIMARY));
         title.setBounds(x + 24, ry + 5, w - 24, 9);
+        trashX = x + w - 12;
+        trashY = ry + 3;
         ry += 24;
 
         // 人设 | 模式
@@ -200,13 +206,11 @@ public final class CompanionEditPanel {
         }
         ry = rowY2 + NumenStyle.ROW_PITCH;
 
-        // 皮肤:整行宽。首项"保持现状"是真话——当前穿的哪张住在服务端注册表里,
-        // 客户端不留副本;保存时只有选了别项才发包(换肤要原地重建身体)。
+        // 皮肤:整行宽,默认选中当前穿的(绑定里记的选择意图);
+        // 保存时只有真换了才发包(换肤要原地重建身体)。
         ry = label(x, ry, ModLanguageData.Keys.SUMMON_SKIN);
         List<String> skinNames = new ArrayList<>();
         List<String> sIds = new ArrayList<>();
-        sIds.add(SKIN_KEEP);
-        skinNames.add(t(ModLanguageData.Keys.EDIT_SKIN_KEEP));
         sIds.add(SKIN_BY_NAME);
         skinNames.add(t(ModLanguageData.Keys.SUMMON_SKIN_DEFAULT));
         for (var e : SkinLibrary.instance().list()) {
@@ -223,16 +227,13 @@ public final class CompanionEditPanel {
         ry += NumenStyle.ROW_PITCH + 4;
 
         int bw = 64, gap = 8;
-        int bx = x + (w - (bw * 3 + gap * 2)) / 2;
-        Button dismiss = ui.add(new Button(t(ModLanguageData.Keys.EDIT_DISMISS),
-                Button.Style.DANGER, host::onDismiss));
-        dismiss.setBounds(bx, ry, bw, 16);
+        int bx = x + (w - (bw * 2 + gap)) / 2;
         Button cancel = ui.add(new Button(t("numen.gui.settings.cancel"),
                 Button.Style.NORMAL, host::onClose));
-        cancel.setBounds(bx + bw + gap, ry, bw, 16);
+        cancel.setBounds(bx, ry, bw, 16);
         Button save = ui.add(new Button(t(ModLanguageData.Keys.GUI_SETTINGS_SAVE),
                 Button.Style.ACCENT, this::save));
-        save.setBounds(bx + (bw + gap) * 2, ry, bw, 16);
+        save.setBounds(bx + bw + gap, ry, bw, 16);
     }
 
     /** 保存:与开卡基线比对,只落真正变过的项,然后关卡。 */
@@ -250,8 +251,10 @@ public final class CompanionEditPanel {
         if (!modeLocked && draft.creative != origCreative) {
             host.setCreative(draft.creative);
         }
-        if (!SKIN_KEEP.equals(draft.skinId)) {
+        if (!draft.skinId.equals(origSkin)) {
             host.applySkin(draft.skinId);
+            CompanionHome.bind(uuid, CompanionHome.binding(uuid)
+                    .withSkin(SKIN_BY_NAME.equals(draft.skinId) ? null : draft.skinId));
         }
         host.onClose();
     }
@@ -259,6 +262,11 @@ public final class CompanionEditPanel {
     // ---- 宿主转发面 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
+        // 右上角垃圾桶(遣散):平时低调,悬停亮危险色;点击仍过确认卡,误触有闸。
+        int tc = overTrash(mouseX, mouseY) ? c.danger() : c.textMuted();
+        s.fillRect(trashX + 3, trashY, 5, 1, tc);        // 提手
+        s.fillRect(trashX, trashY + 1, 11, 2, tc);       // 盖
+        s.fillRect(trashX + 1, trashY + 4, 9, 8, tc);    // 桶身
         if (modeLocked) {   // 置灰的当前档(不是控件:点不了才是本意)
             NumenStyle.fieldCard(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
                     c.sectionBg(), c.inputBorder());
@@ -270,15 +278,26 @@ public final class CompanionEditPanel {
         ui.render(s, c, mouseX, mouseY, nowMs);
     }
 
-    /** 悬停置灰模式格时的解释文案(宿主画 tooltip)。 */
-    public String modeTooltipAt(double mx, double my) {
+    /** 悬停提示(宿主画 tooltip):垃圾桶报遣散,置灰模式格报锁因。 */
+    public String tooltipAt(double mx, double my) {
+        if (overTrash(mx, my)) {
+            return t(ModLanguageData.Keys.EDIT_DISMISS);
+        }
         if (!modeLocked) return null;
         boolean over = mx >= modeBoxX && mx < modeBoxX + modeBoxW
                 && my >= modeBoxY && my < modeBoxY + NumenStyle.CONTROL_H;
         return over ? t(ModLanguageData.Keys.EDIT_MODE_LOCKED) : null;
     }
 
+    private boolean overTrash(double mx, double my) {
+        return mx >= trashX - 1 && mx < trashX + 12 && my >= trashY - 1 && my < trashY + 13;
+    }
+
     public boolean mouseClicked(double mx, double my, int button) {
+        if (overTrash(mx, my)) {
+            host.onDismiss();
+            return true;
+        }
         return ui.mouseClicked(mx, my, button);
     }
 
