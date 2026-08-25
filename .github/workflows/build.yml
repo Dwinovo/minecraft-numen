@@ -9,9 +9,9 @@ name: Build
 # 本分支已并仓(api/core/ui/ai 单一构建),挂本分支;仍是两仓结构的分支各自保持关闭。
 on:
   push:
-    branches: ["26.1.2"]
+    branches: ["26.2"]
   pull_request:
-    branches: ["26.1.2"]
+    branches: ["26.2"]
   workflow_dispatch:
 
 # 连着推几次时只留最后一次,前面的直接取消。
