@@ -113,6 +113,7 @@ public final class ModLanguageData {
         public static final String SUMMON_MODE_INHERIT_TIP = "numen.summon.mode_inherit_tip";
 
         // Edit card: click the active avatar to open; every pick applies immediately.
+        public static final String EDIT_HINT             = "numen.edit.hint";
         public static final String EDIT_TITLE            = "numen.edit.title";
         public static final String EDIT_CLOSE            = "numen.edit.close";
         public static final String EDIT_DISMISS          = "numen.edit.dismiss";
@@ -421,6 +422,7 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_MODE_CREATIVE,    "Creative");
         adder.add(Keys.SUMMON_MODE_INHERITED,   "%s (inherited)");
         adder.add(Keys.SUMMON_MODE_INHERIT_TIP, "No gamemode permission — she inherits your current mode");
+        adder.add(Keys.EDIT_HINT,             "Click to edit %s");
         adder.add(Keys.EDIT_TITLE,            "Edit");
         adder.add(Keys.EDIT_CLOSE,            "Close");
         adder.add(Keys.EDIT_DISMISS,          "Dismiss");
@@ -742,6 +744,7 @@ public final class ModLanguageData {
         adder.add(Keys.SUMMON_MODE_CREATIVE,    "创造");
         adder.add(Keys.SUMMON_MODE_INHERITED,   "%s(继承)");
         adder.add(Keys.SUMMON_MODE_INHERIT_TIP, "没有 gamemode 权限——同伴将继承你当前的模式");
+        adder.add(Keys.EDIT_HINT,             "点击编辑 %s");
         adder.add(Keys.EDIT_TITLE,            "编辑");
         adder.add(Keys.EDIT_CLOSE,            "关闭");
         adder.add(Keys.EDIT_DISMISS,          "遣散");
