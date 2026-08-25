@@ -109,6 +109,37 @@ public final class NumenScreen extends Screen {
     private static net.minecraft.resources.ResourceLocation railSpr(String n) {
         return new net.minecraft.resources.ResourceLocation(com.dwinovo.numen.Constants.MOD_ID, n);
     }
+    /** 悬停编辑铅笔的位图(16×16,[x][y]):照 Lucide pencil 的形。45° 杆用轴向/横向
+     *  坐标解析光栅化——u=y-x 沿杆推进(右上端 -10 → 左下笔尖 +10),v=x+y 横跨杆宽,
+     *  |v-16|≤宽 即笔体;尾端收圆一像素,u≥8 收成笔尖。描边由渲染时对掩码外扩一像素得到。 */
+    private static final boolean[][] PENCIL_MASK = buildPencilMask();
+
+    private static boolean[][] buildPencilMask() {
+        boolean[][] m = new boolean[16][16];
+        for (int x = 0; x < 16; x++) {
+            for (int y = 0; y < 16; y++) {
+                int u = y - x, v = x + y;
+                if (u < -10 || u > 10) continue;
+                int w = u == -10 ? 1 : u <= 7 ? 2 : u <= 9 ? 1 : 0;
+                m[x][y] = Math.abs(v - 16) <= w;
+            }
+        }
+        return m;
+    }
+
+    /** (gx,gy) 不在笔体上但与笔体八邻接——描边像素。 */
+    private static boolean nearPencil(int gx, int gy) {
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                int nx = gx + dx, ny = gy + dy;
+                if (nx >= 0 && nx < 16 && ny >= 0 && ny < 16 && PENCIL_MASK[nx][ny]) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static final net.minecraft.resources.ResourceLocation CHEVRON_UP = railSpr("chevron_up");
     private static final net.minecraft.resources.ResourceLocation CHEVRON_DOWN = railSpr("chevron_down");
 
@@ -1029,22 +1060,22 @@ public final class NumenScreen extends Screen {
                     FIELD, active ? ACCENT : BORDER);
             PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
             // 悬停激活头像:变暗 + 居中铅笔——"这里可编辑"的通用视觉语言。
-            // 铅笔按经典编辑图标的形:擦头带、箍环、三像素宽斜杆、两阶收尖到铅芯,
-            // 逐段主题色,沿右上→左下 45° 铺像素。
+            // 铅笔照 Lucide pencil 的形(45° 三宽杆收尖 + 近尾端笔帽分割线):
+            // 白色笔体整体单色,深色一像素外描边保证任何皮肤底上都读得出。
             boolean hovered = mouseX >= ax && mouseX < ax + RAIL_AV
                     && mouseY >= ay && mouseY < ay + RAIL_AV;
             if (active && hovered && !dismissOpen() && !modalOpen()) {
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0x80101010);
-                int px0 = ax + 16, py0 = ay + 8;
-                for (int k = 0; k <= 9; k++) {
-                    int w = k <= 7 ? 3 : (k == 8 ? 2 : 1);       // 笔尖两阶收窄
-                    int c = k <= 1 ? CTA                          // 擦头
-                            : k == 2 ? BORDER                     // 箍环
-                            : k <= 7 ? ON_BAND                    // 笔身
-                            : k == 8 ? TXT_MUTED : TXT;           // 木尖、铅芯
-                    int j0 = (3 - w) / 2;
-                    for (int j = j0; j < j0 + w; j++) {
-                        g.fill(px0 - k + j, py0 + k + j, px0 - k + j + 1, py0 + k + j + 1, c);
+                int ox = ax + 5, oy = ay + 5;
+                for (int gx = 0; gx < 16; gx++) {
+                    for (int gy = 0; gy < 16; gy++) {
+                        if (PENCIL_MASK[gx][gy]) {
+                            boolean capLine = gy - gx == -6;   // 笔帽分割线(横跨杆宽的一道)
+                            g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1,
+                                    capLine ? 0xFF1F1F1F : 0xFFFFFFFF);
+                        } else if (nearPencil(gx, gy)) {
+                            g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1, 0xFF1F1F1F);
+                        }
                     }
                 }
             }
