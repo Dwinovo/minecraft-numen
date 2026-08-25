@@ -106,6 +106,21 @@ public final class VoicePipeline {
         };
     }
 
+    /**
+     * 整段开说(外接大脑的 say):整段就地分句、排到播放队尾——不动代际、不清存量、
+     * 不碰流式那只 divider,连续调用自然连播。声线按传入配置现取(与 {@link #beginTurn}
+     * 同一来源);{@link #interrupt}(主人打断/死亡)照样一刀切停它。主线程调用。
+     */
+    public void sayAppend(VoiceLibrary.Entry cfg, String text) {
+        if (text == null || text.isBlank()) return;
+        this.backend = cfg.createBackend();
+        this.volume = cfg.volume();
+        SentenceDivider whole = new SentenceDivider();
+        List<String> segments = new java.util.ArrayList<>(whole.feed(text));
+        segments.addAll(whole.flush());
+        enqueue(segments);
+    }
+
     /** 流结束（正常或出错都调）：flush 分句器余量。任意线程可调。 */
     public void endTurn(int gen) {
         Minecraft.getInstance().execute(() -> {

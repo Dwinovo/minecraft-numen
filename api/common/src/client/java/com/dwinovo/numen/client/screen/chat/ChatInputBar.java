@@ -55,10 +55,7 @@ public final class ChatInputBar {
 
         boolean canAbort();
 
-        /** 外接大脑模式:发言入口整排锁死(叫停不锁)。 */
-        boolean inputLocked();
-
-        /** 输入框占位文案(随锁定态/麦克风状态变)。 */
+        /** 输入框占位文案(随麦克风状态变)。 */
         String hint();
 
         /** 这条输入行对着的那位的大脑;null = 没选同伴(不补全、不跑命令)。 */
@@ -156,18 +153,17 @@ public final class ChatInputBar {
         refreshEnablement();
     }
 
-    /** 每帧同步可按性与占位文案:叫停的可用性、锁定态都是活的。 */
+    /** 每帧同步可按性与占位文案:叫停的可用性是活的。 */
     public void refreshEnablement() {
         if (field == null) return;
-        boolean locked = host.inputLocked();
         boolean paged = panel != null;
         // 面板在场时输入框让位(它就摆在输入框那格),旁边几颗键跟着停手——
         // 叫停除外:那是主人的急刹车,任何时候都得能按。
         field.setVisible(!paged);
-        field.setEnabled(!locked && !paged);
+        field.setEnabled(!paged);
         field.placeholder(host.hint());
-        if (micBtn != null) micBtn.setEnabled(!locked && !paged);
-        if (sendBtn != null) sendBtn.setEnabled(!locked && !paged);
+        if (micBtn != null) micBtn.setEnabled(!paged);
+        if (sendBtn != null) sendBtn.setEnabled(!paged);
         if (stopBtn != null) stopBtn.setEnabled(host.canAbort());
     }
 
@@ -278,7 +274,7 @@ public final class ChatInputBar {
     /** 弹层此刻该不该在。 */
     private boolean popupOpen() {
         return !dismissed && !candidates.isEmpty()
-                && field != null && field.isFocused() && !host.inputLocked();
+                && field != null && field.isFocused();
     }
 
     /** 文字变了就重算候选,并把 Esc 的收起复位。 */
@@ -335,7 +331,7 @@ public final class ChatInputBar {
     // ---- 内部 ----
 
     private void send() {
-        if (field == null || panel != null || host.inputLocked()) return;
+        if (field == null || panel != null) return;
         String text = field.value() == null ? "" : field.value().trim();
         if (text.isEmpty()) return;
         // 斜杠命令是主人对客户端说的话:在本地跑完就结束,不往下走。所以它不过宿主的

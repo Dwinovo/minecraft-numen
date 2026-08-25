@@ -14,6 +14,7 @@ import com.dwinovo.numen.client.ui.Anim;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.RoundRect;
 import com.dwinovo.numen.mcp.server.McpMode;
+import com.dwinovo.numen.mcp.server.McpTranscript;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -150,13 +151,17 @@ public final class ChatView {
     // ---- render ----
 
     public void render(GuiGraphicsExtractor g, int x, int y, int w, int h) {
-        gx = x; gy = y; gw = w; gh = h;
         loadPalette();
         long now = System.currentTimeMillis();
         float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
         lastFrameMs = now;
         updateLive(dt, now);
-        List<Block> blocks = build(bubbleMaxW(w));
+        renderBlocks(g, x, y, w, h, build(bubbleMaxW(w)), dt);
+    }
+
+    /** 滚动 + 裁剪 + 逐块绘制——对话视图与外脑现场视图共用的那台机器。 */
+    private void renderBlocks(GuiGraphicsExtractor g, int x, int y, int w, int h, List<Block> blocks, float dt) {
+        gx = x; gy = y; gw = w; gh = h;
         int content = totalHeight(blocks);
         lastMaxScroll = Math.max(0, content - h);
         if (pinBottom) scrollTarget = lastMaxScroll;
@@ -180,23 +185,25 @@ public final class ChatView {
         }
     }
 
-    // ---- 外接大脑控制台:模式开启时顶掉整条对话流 ----
+    // ---- 外脑驱动中:聊天区画现场缓冲 ----
+
+    /** 外脑现场的头部知情区高度(标题行 + 状态行 + 分隔线)。 */
+    private static final int EXT_HEADER_H = 30;
 
     /**
-     * 「外接大脑」模式下的聊天区形态:这不是对话,是一台控制台——顶部写清谁接进来了,
-     * 下面滚外部 AI 的工具调用。故意长得和聊天完全不一样(无气泡、无头像、等宽两行一条),
-     * 让主人一眼知道"这屏不是我在跟同伴说话,是别的 AI 在开她"。
-     *
-     * <p>数据来自 {@link McpMode.ActivityFeed} 的只读快照(HTTP 线程写、这里读),
-     * 纯内存不持久化;还没人接入时这里改显示接入向导。
+     * 外脑驱动时的聊天区:顶上一条"谁接进来了"的知情行(主人得一眼知道这屏对面
+     * 是外接大脑),下面用<b>同一套气泡语法</b>画 {@link McpTranscript} 的现场——
+     * 主人的话右侧气泡、外脑的 say 左侧气泡、动作淡色一行。还没动静时显示接入向导。
      */
-    public void renderConsole(GuiGraphicsExtractor g, int x, int y, int w, int h) {
+    public void renderExternal(GuiGraphicsExtractor g, int x, int y, int w, int h) {
         loadPalette();
+        long now = System.currentTimeMillis();
+        float dt = lastFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastFrameMs) / 1000f);
+        lastFrameMs = now;
         McpMode mcp = McpMode.instance();
         int cx = x + EDGE;
         int cw = w - EDGE - SB_W - 3;
 
-        g.enableScissor(x, y, x + w, y + h);
         line(g, I18n.get("numen.brain.console_title"), cx, y + 2, TXT);
         String who = mcp.clientName();
         line(g, who == null
@@ -205,25 +212,40 @@ public final class ChatView {
                 cx, y + 14, who == null ? FAINT : OK);
         g.fill(cx, y + 26, cx + cw, y + 27, CHIP_FILL);
 
-        List<McpMode.Activity> feed = mcp.feed().snapshot();
-        int listTop = y + 32;
-        if (feed.isEmpty()) {
-            renderConsoleGuide(g, mcp, cx, listTop, cw, who != null);
-            g.disableScissor();
+        UUID id = uuid.get();
+        if (McpTranscript.isEmpty(id)) {
+            renderConsoleGuide(g, mcp, cx, y + EXT_HEADER_H + 2, cw, who != null);
             return;
         }
-        // 自底向上画:最新一条钉在底部,超出上沿的自然被裁掉(不做滚动——这是活动流,
-        // 要看历史去日志;面板只答"现在在干嘛")。
-        int rowH = LINE_H * 2 + 2;
-        int cy = y + h - BOT_PAD - rowH;
-        for (int i = feed.size() - 1; i >= 0 && cy >= listTop; i--, cy -= rowH) {
-            McpMode.Activity a = feed.get(i);
-            String head = (a.error() ? "✗ " : "✔ ") + a.tool()
-                    + (a.args().isBlank() ? "" : "  " + a.args());
-            line(g, fitOneLine(head, cw), cx, cy, a.error() ? FAIL : TXT);
-            line(g, fitOneLine("→ " + a.summary(), cw - 6), cx + 6, cy + LINE_H, FAINT);
+        renderBlocks(g, x, y + EXT_HEADER_H, w, h - EXT_HEADER_H, buildExternal(id, bubbleMaxW(w)), dt);
+    }
+
+    /** 现场缓冲 → 可画的块。与 {@link #build} 同一套 Block 词汇,只是来源不同。 */
+    private List<Block> buildExternal(UUID id, int bubbleMaxW) {
+        List<Block> out = new ArrayList<>();
+        int innerW = bubbleMaxW - PAD_H * 2;
+        int chipTextW = bubbleMaxW - PAD_H * 2 - ICON_W;
+        Boolean lastSide = null;
+        for (McpTranscript.Line ln : McpTranscript.view(id)) {
+            switch (ln.kind()) {
+                case OWNER -> {
+                    boolean first = lastSide == null || !lastSide;
+                    out.add(bubble(true, null, ln.text(), TXT, OWN_FILL, OWN_BORDER, innerW, first));
+                    lastSide = true;
+                }
+                case SAY -> {
+                    boolean first = lastSide == null || lastSide;
+                    out.add(bubble(false, first ? name.get() : null, ln.text(),
+                            TXT, AI_FILL, AI_BORDER, innerW, first));
+                    lastSide = false;
+                }
+                case TOOL -> out.add(new Chip(List.of(new ChipRow(
+                        ln.error() ? "✗" : "✔", ln.error() ? FAIL : OK,
+                        Nb.colored(fitOneLine(ln.text(), chipTextW), ln.error() ? FAIL : TOOL)
+                                .getVisualOrderText())), null));
+            }
         }
-        g.disableScissor();
+        return out;
     }
 
     /** 还没有调用记录时的引导:连上了就等它动手,没连过就讲怎么接。 */
@@ -263,6 +285,7 @@ public final class ChatView {
 
     /** Toggle the fold of a completed tool chip under the mouse. */
     public boolean mouseClicked(double mx, double my) {
+        if (McpMode.instance().driving()) return false;   // 现场视图没有可折叠的块
         if (gw == 0 || mx < gx || mx >= gx + gw || my < gy || my >= gy + gh) return false;
         loadPalette();
         int cy = gy + TOP_PAD - Math.round(scrollPos);
