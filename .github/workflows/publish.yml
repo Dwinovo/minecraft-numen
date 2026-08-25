@@ -54,21 +54,25 @@ jobs:
         run: |
           set -euo pipefail
           if [ -d core/neoforge ]; then
-            echo "name=neoforge"             >> "$GITHUB_OUTPUT"
-            echo "datagen=:core:neoforge:runData" >> "$GITHUB_OUTPUT"
-            echo "build=:core:neoforge:build"     >> "$GITHUB_OUTPUT"
+            echo "name=neoforge"                     >> "$GITHUB_OUTPUT"
+            echo "datagen=:core:neoforge:runData"    >> "$GITHUB_OUTPUT"
+            echo "api_datagen=:api:neoforge:runData" >> "$GITHUB_OUTPUT"
+            echo "build=:core:neoforge:build"        >> "$GITHUB_OUTPUT"
           elif [ -d core/forge ]; then
-            echo "name=forge"          >> "$GITHUB_OUTPUT"
-            echo "datagen=:core:forge:Data" >> "$GITHUB_OUTPUT"
-            echo "build=:core:forge:build"  >> "$GITHUB_OUTPUT"
+            echo "name=forge"                  >> "$GITHUB_OUTPUT"
+            echo "datagen=:core:forge:Data"    >> "$GITHUB_OUTPUT"
+            echo "api_datagen=:api:forge:Data" >> "$GITHUB_OUTPUT"
+            echo "build=:core:forge:build"     >> "$GITHUB_OUTPUT"
           else
             echo "No forge/ or neoforge/ subproject found on this branch" >&2
             exit 1
           fi
 
       # api 的语言文件也是生成出来的(ModLanguageData),不跑就打出一个没有任何翻译的包。
+      # api 的第二 loader 与 core 同款,所以两条 datagen 都取自上面那一次探测——写死一个
+      # 就会在 Forge 分支上找不到 :api:neoforge 而整步炸掉。
       - name: Run data generation
-        run: ./gradlew :api:fabric:runDatagen :api:neoforge:runData :core:fabric:runDatagen ${{ steps.loader.outputs.datagen }} --no-daemon
+        run: ./gradlew :api:fabric:runDatagen ${{ steps.loader.outputs.api_datagen }} :core:fabric:runDatagen ${{ steps.loader.outputs.datagen }} --no-daemon
 
       - name: Build with Gradle
         run: ./gradlew :core:fabric:build ${{ steps.loader.outputs.build }} --no-daemon
