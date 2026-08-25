@@ -130,6 +130,29 @@ public final class NumenScreen extends Screen {
         return m;
     }
 
+    /** 头部编辑铅笔的横座标;-1 = 本帧没画(无同伴/模态中),点不中。 */
+    private int editPencilX = -1;
+
+    private boolean overEditPencil(double mx, double my) {
+        return editPencilX >= 0 && mx >= editPencilX - 1 && mx < editPencilX + 16
+                && my >= top + 3 && my < top + 19;
+    }
+
+    /** 画一支 Lucide 形铅笔(16 格位图):笔体单色可指定,深色一像素外描边。 */
+    private void drawPencil(GuiGraphicsExtractor g, int ox, int oy, int bodyColor) {
+        for (int gx = 0; gx < 16; gx++) {
+            for (int gy = 0; gy < 16; gy++) {
+                if (PENCIL_MASK[gx][gy]) {
+                    boolean capLine = gy - gx == -6;   // 笔帽分割线(横跨杆宽的一道)
+                    g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1,
+                            capLine ? 0xFF1F1F1F : bodyColor);
+                } else if (nearPencil(gx, gy)) {
+                    g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1, 0xFF1F1F1F);
+                }
+            }
+        }
+    }
+
     /** (gx,gy) 不在笔体上但与笔体八邻接——描边像素。 */
     private static boolean nearPencil(int gx, int gy) {
         for (int dx = -1; dx <= 1; dx++) {
@@ -828,12 +851,14 @@ public final class NumenScreen extends Screen {
             if (rail >= 0) {
                 List<NumenRoster.Entry> entries = NumenRoster.instance().entries();
                 if (rail < entries.size()) {
+                    boolean wasSummoning = summoning;
                     summoning = false;
                     NumenRoster.Entry e = entries.get(rail);
                     if (e.uuid().equals(uuid)) {
-                        editing = !editing;   // 再点激活头像:开/收她的编辑卡
-                        if (editing) editPanel().reset();   // 开卡:草稿从当下真相取基线
-                        rebuild();
+                        // 侧栏是纯切换器(Discord 语法):点当前头像不再有动作,
+                        // 编辑入口在头部名字旁的铅笔;模态开着时当逃生口收卡。
+                        if (editing) { editing = false; rebuild(); }
+                        else if (wasSummoning) rebuild();
                     } else {
                         editing = false;
                         switchTo(e.uuid(), e.name());
@@ -847,6 +872,12 @@ public final class NumenScreen extends Screen {
                 return super.mouseClicked(event, doubleClick);
             }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
+            if (uuid != null && !dismissOpen() && overEditPencil(mouseX, mouseY)) {
+                editing = true;
+                editPanel().reset();   // 开卡:草稿从当下真相取基线
+                rebuild();
+                return true;
+            }
             int my = (int) mouseY;
             if (my >= top && my < top + HEADER_H) {
                 for (int i = 0; i < 3; i++) {
@@ -943,6 +974,14 @@ public final class NumenScreen extends Screen {
         String nm = clip(name == null ? "Numen" : name, Math.max(24, headerLimit - (left + PAD)));
         txt(g, Component.literal(nm), left + PAD, top + 7, ON_BAND);
         int afterName = left + PAD + font.width(nm) + 6;
+        // 名字旁的铅笔 = 编辑入口("名字在哪,编辑就在哪"的资料页定式);悬停亮 CTA。
+        editPencilX = -1;
+        if (uuid != null && !modalOpen() && !dismissOpen() && afterName + 18 <= headerLimit) {
+            editPencilX = afterName;
+            boolean hot = overEditPencil(mouseX, mouseY);
+            drawPencil(g, editPencilX, top + 3, hot ? CTA : 0xFFFFFFFF);
+            afterName += 18;
+        }
         if (uuid != null && NumenRoster.instance().isDead(uuid)) {   // active companion dead — respawn countdown
             // 倒计时归零还没回来 = 周围没有能站的地方,复活在重试。继续显示"0"就是
             // 一个数字卡死不动,教科书级的"看起来坏了"——说清楚在等什么。
@@ -1090,31 +1129,11 @@ public final class NumenScreen extends Screen {
                 int py2 = ay + (RAIL_AV - pillH) / 2;
                 g.fill(railX + 1, py2, railX + 3, py2 + pillH, ACCENT);
             }
-            if (hovered && railQuiet) {
-                // 悬停必给名字;当前这只的悬停语义是"点击进编辑",tooltip 跟着说。
-                pendingTip = java.util.List.of(Component.literal(active
-                        ? I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.EDIT_TITLE) + " · " + e.name()
-                        : e.name()));
+            if (hovered && !active && railQuiet) {
+                // 未选中悬停给名字(即时渲染,无网页式延迟);当前那只的名字在头部常驻。
+                pendingTip = java.util.List.of(Component.literal(e.name()));
                 pendingTipX = mouseX;
                 pendingTipY = mouseY;
-            }
-            // 悬停当前头像:变暗 + 居中铅笔——"这里可编辑"的通用视觉语言。
-            // 铅笔照 Lucide pencil 的形(45° 三宽杆收尖 + 近尾端笔帽分割线):
-            // 白色笔体整体单色,深色一像素外描边保证任何皮肤底上都读得出。
-            if (active && hovered && railQuiet) {
-                g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0x80101010);
-                int ox = ax + 5, oy = ay + 5;
-                for (int gx = 0; gx < 16; gx++) {
-                    for (int gy = 0; gy < 16; gy++) {
-                        if (PENCIL_MASK[gx][gy]) {
-                            boolean capLine = gy - gx == -6;   // 笔帽分割线(横跨杆宽的一道)
-                            g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1,
-                                    capLine ? 0xFF1F1F1F : 0xFFFFFFFF);
-                        } else if (nearPencil(gx, gy)) {
-                            g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1, 0xFF1F1F1F);
-                        }
-                    }
-                }
             }
             if (e.dead()) {                                           // dead — dim veil + respawn countdown
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
