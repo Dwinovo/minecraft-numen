@@ -150,9 +150,9 @@ public final class EntityAgentLoop {
      * 协议安全点一次倒空。三态路由(什么输入什么状态下配开轮)在
      * {@link #pushEvent};条目、落盘、年龄标注、排空规则全在 {@link EventQueue}。
      *
-     * <p>什么时候该倒是<b>队列自己的规则</b>(急件 / 攒够条数 / 攒够时长 / 锁着就等),
-     * 它不认识"死亡""外接大脑"这些概念——那些只是拿了 {@link QueueLock} 里某把锁的
-     * 上层。这里只负责在状态变化时上锁松手。
+     * <p>什么时候<b>熟</b>是队列自己的规则(急件 / 攒够条数 / 攒够时长),它不认识
+     * "死亡""外接大脑"这些概念——内脑此刻能不能来取件是 {@link #paused()} 的事,
+     * 队列只答熟度、只管台账。
      */
     private EventQueue queue;
     /** 后台异步任务记账(派发回执置位,对上 id 的 task_finished 清零);null = 身体空闲。
@@ -329,13 +329,12 @@ public final class EntityAgentLoop {
         tokens.load();
         log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
         personaId = CompanionHome.binding(entityUuid).personaId();
-        // 锁不落盘,恢复时按状态重新上:她死着的时候主人退出游戏,重进后 loop 是全新的,
-        // 而队列里可能躺着急件——不补这一下她会在还没复活的时候就开口。
+        // 重进后 loop 是全新的,死亡停牌按状态恢复:她死着的时候主人退出游戏,
+        // 队列里可能躺着急件——不补这一下她会在还没复活的时候就开口。
         // 真源是名册说她死没死(状态),不是"我收到过死亡消息"(事件)。
         if (NumenRoster.instance().isDead(entityUuid)) {
             dead = true;
-            queue.lock(QueueLock.DEATH);
-            Constants.LOG.info("[numen-entity#{}] 恢复时她还死着 — 队列上锁", entityUuid);
+            Constants.LOG.info("[numen-entity#{}] 恢复时她还死着 — 停牌等复活", entityUuid);
         }
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
@@ -390,7 +389,7 @@ public final class EntityAgentLoop {
     /**
      * 主人在聊天框里说话。
      *
-     * <p>死着也照收——{@link #tryStartTurn} 第一道守卫就是 {@code dead},开不起来轮,
+     * <p>死着也照收——{@link #tryStartTurn} 第一道守卫 {@link #paused()} 就含死亡,开不起来轮,
      * 话安安静静躺在收件箱里,聊天里显示成 ⌛ 待发气泡,复活时随死亡叙事一起送出。
      * (外接大脑模式早就是这个做法:"收件箱照收不误,事件不丢"。)直接丢掉的话,
      * 死前一秒说的留着、死后一秒说的蒸发——而主人根本看不见那一 tick 的分界,
@@ -478,13 +477,6 @@ public final class EntityAgentLoop {
     public void clientTick() {
         dispatcher.tick();
         presenter.tick();
-        // 外接大脑那把锁按状态同步,不靠"模式切换时通知":漏掉一次通知会把队列永久锁死。
-        // 口径是 driving() 不是 enabled():失联回退开着且外脑安静超时,锁开、内脑接管。
-        if (McpMode.instance().driving()) {
-            queue.lock(QueueLock.MCP_MODE);
-        } else {
-            queue.unlock(QueueLock.MCP_MODE);
-        }
         // 攒够时长也要开口:光靠"输入到达"触发的话,最后一条之后就再没人问了
         if (!awaitingLlmResponse && !dispatcher.busy()) {
             maybeDrain();
@@ -590,7 +582,7 @@ public final class EntityAgentLoop {
     public void setGoal(com.dwinovo.numen.agent.goal.GoalState next, String echo) {
         this.goal = next;
         CompanionHome.setGoal(entityUuid, next);
-        if (next == null || dead || queue.locked()) {
+        if (next == null || paused()) {
             return;
         }
         next.countTurn();
@@ -624,7 +616,7 @@ public final class EntityAgentLoop {
      * <p>队列里还有别的排着就先不判——那些本来就会开起一轮,那一轮收尾时再说。
      */
     private void steerToGoal() {
-        if (goal == null || dead || queue.locked() || !queue.isEmpty() || goalJudging) {
+        if (goal == null || paused() || !queue.isEmpty() || goalJudging) {
             return;
         }
         // 身体还在干活就别催。
@@ -896,14 +888,12 @@ public final class EntityAgentLoop {
     // ---- external control (an MCP client / Claude drives the body directly) ----
 
     /**
-     * 外接大脑(MCP)此刻是不是接管着她 —— 读的是队列上那把锁的持有者,
-     * <b>不另记一份</b>。锁本身每刻按 {@code McpMode} 的状态同步(见 clientTick)。
-     *
-     * <p>不另开一个 {@code externallyDriven} 字段配一对 acquire/release:那样"她此刻
-     * 是不是被接管着"就有了两个答案,而两个答案迟早会不一致。锁是唯一真源。
+     * 外接大脑此刻是不是驾驶席上的那个脑——现算自 {@code McpMode.driving()},
+     * <b>不存副本、不做同步</b>:存一份就有两个答案,而两个答案迟早不一致。
+     * 失联回退的接管与交还也在同一口径里(driving 翻转即生效,零滞后)。
      */
     public boolean isExternallyDriven() {
-        return queue.lockHolders().contains(QueueLock.MCP_MODE);
+        return McpMode.instance().driving();
     }
 
     /**
@@ -922,6 +912,15 @@ public final class EntityAgentLoop {
         if (taken.isEmpty()) return null;
         List<String> parts = EventQueue.render(taken, now);
         return parts.isEmpty() ? null : String.join("\n\n", parts);
+    }
+
+    /** 急件叫醒挂点直通(get_events 长轮询停靠用)。主线程调用。 */
+    public void addUrgentListener(Runnable listener) {
+        queue.addUrgentListener(listener);
+    }
+
+    public void removeUrgentListener(Runnable listener) {
+        queue.removeUrgentListener(listener);
     }
 
     /**
@@ -963,10 +962,8 @@ public final class EntityAgentLoop {
         presenter.clearPartial();
         // 箱子一样不清:每条都盖着时间戳,模型自己看得出哪些是死之前的。
         // 我们替它判断"哪些信息过期了",反而会删掉有用的叙事("我死前刚吃了东西")。
-        dead = true;
-        // 上锁而不是在排空路径上加一个 if:队列只知道"有人锁着",不知道那个人是死亡。
-        queue.lock(QueueLock.DEATH);
-        Constants.LOG.info("[numen-entity#{}] body died ({}) — 队列上锁 ({} call(s) in flight)",
+        dead = true;   // 停牌:开轮/排空/目标推进全过 paused(),死着一轮不开
+        Constants.LOG.info("[numen-entity#{}] body died ({}) — 停牌 ({} call(s) in flight)",
                 entityUuid, cause, deathInterruptedCalls.size());
     }
 
@@ -1007,9 +1004,8 @@ public final class EntityAgentLoop {
                 "你刚才死了(" + cause + "),背包里的东西全掉在死亡地点了;"
                         + "现已在主人身边复活。先看看状况再决定下一步。"),
                 System.currentTimeMillis(), true);
-        // 松手就完了:队列自己会判断该排空,连同死亡期间攒下的一切(工具失败结果之外
-        // 的事件、主人说的话)一起走。
-        queue.unlock(QueueLock.DEATH);
+        // dead 在开头已复位,停牌自动解除:下个 tick 一问熟度就发现急件,连同死亡
+        // 期间攒下的一切(事件、主人说的话)一起走。
     }
 
     /**
@@ -1060,6 +1056,9 @@ public final class EntityAgentLoop {
      * 可以反复问,所以<b>不存在"错过的排空"</b>,也就不需要记住"我刚才想排空"。
      */
     private void maybeDrain() {
+        if (paused()) {
+            return;   // 停牌不开口——也别把"主动开轮"的日志刷成噪音
+        }
         int level = com.dwinovo.numen.client.data.ClientPrefs.initiativeLevel();
         long now = System.currentTimeMillis();
         if (!queue.shouldDrain(now, level)) {
@@ -1228,13 +1227,21 @@ public final class EntityAgentLoop {
         return EventTypes.COMPACT.equals(type) || EventTypes.CLEAR.equals(type);
     }
 
+    /**
+     * 内脑此刻停牌:她死了,或驾驶席在外接大脑手里。<b>暂停判定的单一出口</b>——
+     * 开轮({@link #tryStartTurn})、主动排空({@link #maybeDrain})、目标推进
+     * ({@link #setGoal}/{@code steerToGoal})全走这一处;加一种新的暂停理由 =
+     * 这里加一个条件,不是在哪条路径上再长一个 if(从前散着的三个特例就是那么
+     * 长出来的)。队列不认识这些:停牌是消费者自己的事,队列只答熟度。
+     */
+    private boolean paused() {
+        return dead || isExternallyDriven();
+    }
+
     private void tryStartTurn() {
-        // 队列锁着 = 现在不该对外说话。谁锁的、为什么锁,这里不关心也不需要知道:
-        // 死亡、外接大脑、以后任何暂停理由,都只是 QueueLock 里多一个持有者,
-        // 而不是这里多一个 if——这一轮清掉的三个特例都是那么长出来的。
-        if (queue.locked()) {
-            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: 队列锁着 {}",
-                    entityUuid, queue.lockHolders());
+        if (paused()) {
+            Constants.LOG.debug("[numen-entity#{}] tryStartTurn skipped: 停牌 (dead={}, external={})",
+                    entityUuid, dead, isExternallyDriven());
             return;
         }
         if (turnPause.isPaused()) {
