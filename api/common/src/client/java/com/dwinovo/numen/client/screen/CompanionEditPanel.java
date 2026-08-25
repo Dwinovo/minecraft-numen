@@ -9,7 +9,6 @@ import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.Dropdown;
-import com.dwinovo.numen.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
 import com.dwinovo.numen.client.voice.VoiceLibrary;
@@ -20,12 +19,14 @@ import net.minecraft.client.resources.language.I18n;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 编辑卡——点当前激活头像打开,改一只<b>已创建</b>同伴:人设/模式/模型配置/声线/
- * 皮肤五个选择 + 遣散。没有"保存":每个选择当场落地(人设/模型/声线是客户端绑定,
- * 模式/皮肤发包给服务端),卡上显示的当前值在 build 时从各自的真源读出。
- * 皮肤是唯一读不到当前值的(真源在服务端注册表),首项"保持现状"如实表达这一点。
+ * 皮肤五个选择 + 遣散。草稿制:下拉只改草稿,点保存才统一落地,且只发真正变过的
+ * 项(换肤要原地重建身体,误触代价高);取消丢弃草稿。草稿基线在开卡时从各自的
+ * 真源取一次({@link #reset()})。皮肤是唯一读不到当前值的(真源在服务端注册表),
+ * 首项"保持现状"如实表达这一点,保存时只有选了别项才发包。
  */
 public final class CompanionEditPanel {
 
@@ -58,17 +59,28 @@ public final class CompanionEditPanel {
     public static final String SKIN_BY_NAME = "__default__";
     private static final String SKIN_KEEP = "__keep__";
 
+    /** 编辑草稿;开卡时从真源取基线,保存时与基线比对只落差异。 */
+    private static final class Draft {
+        String personaId;     // null = 默认人设
+        String providerId;    // null = 未绑定(只出现在老档,不许改回)
+        String voiceId;       // null = 无声
+        boolean creative;
+        String skinId = SKIN_KEEP;
+    }
+
     private final UiRoot ui = new UiRoot();
     private final Host host;
 
-    private InlineAlert alert;
+    private Draft draft = new Draft();
+    private String origPersona, origProvider, origVoice;
+    private boolean origCreative;
+
     private List<String> personaIds = List.of();
     private List<String> providerIds = List.of();
     private List<String> voiceIds = List.of();
     private List<String> skinIds = List.of();
     private int modeBoxX, modeBoxY, modeBoxW;
     private boolean modeLocked;
-    private boolean modeCreative;
 
     public CompanionEditPanel(Host host) {
         this.host = host;
@@ -77,13 +89,26 @@ public final class CompanionEditPanel {
                 s -> mc.keyboardHandler.setClipboard(s));
     }
 
+    /** 每次开卡:草稿从当下真相取一次基线。 */
+    public void reset() {
+        var uuid = host.uuid();
+        var loop = AgentLoopRegistry.getOrCreate(uuid);
+        var binding = CompanionHome.binding(uuid);
+        origPersona = loop.personaId();
+        origProvider = binding.providerId();
+        origVoice = binding.voiceId();
+        origCreative = host.currentCreative();
+        draft = new Draft();
+        draft.personaId = origPersona;
+        draft.providerId = origProvider;
+        draft.voiceId = origVoice;
+        draft.creative = origCreative;
+    }
+
     public void build(int x, int y, int w, int h, int dropBottom) {
         PersonaLibrary.instance().reload();   // 人设目录可能刚被增删,和召唤卡一样重扫
         ui.clear();
         ui.setViewportHeight(dropBottom);
-        var uuid = host.uuid();
-        var loop = AgentLoopRegistry.getOrCreate(uuid);
-        var binding = CompanionHome.binding(uuid);
 
         int half = (w - 6) / 2;
         int ry = y;
@@ -105,18 +130,16 @@ public final class CompanionEditPanel {
             personaNames.add(p.name());
         }
         personaIds = pIds;
-        String curPersona = loop.personaId() == null ? PERSONA_NONE : loop.personaId();
+        String curPersona = draft.personaId == null ? PERSONA_NONE : draft.personaId;
         Dropdown personaPick = ui.add(new Dropdown(personaNames,
                 Math.max(0, personaIds.indexOf(curPersona)),
                 i -> {
                     String id = personaIds.get(i);
-                    AgentLoopRegistry.getOrCreate(host.uuid())
-                            .setPersona(PERSONA_NONE.equals(id) ? null : id);
+                    draft.personaId = PERSONA_NONE.equals(id) ? null : id;
                 }));
         personaPick.setBounds(x, rowY, half, NumenStyle.CONTROL_H);
 
         modeLocked = !host.canChooseMode();
-        modeCreative = host.currentCreative();
         if (modeLocked) {
             // 改不了(权限门在服务端也是同一道):画成置灰格,悬停给解释。
             modeBoxX = x + half + 6;
@@ -126,7 +149,7 @@ public final class CompanionEditPanel {
             Dropdown modePick = ui.add(new Dropdown(
                     List.of(t(ModLanguageData.Keys.SUMMON_MODE_SURVIVAL),
                             t(ModLanguageData.Keys.SUMMON_MODE_CREATIVE)),
-                    modeCreative ? 1 : 0, i -> host.setCreative(i == 1)));
+                    draft.creative ? 1 : 0, i -> draft.creative = i == 1));
             modePick.setBounds(x + half + 6, rowY, half, NumenStyle.CONTROL_H);
         }
         ry = rowY + NumenStyle.ROW_PITCH;
@@ -136,9 +159,8 @@ public final class CompanionEditPanel {
         label(x + half + 6, ry, ModLanguageData.Keys.VOICE_SUMMON_LABEL);
         List<String> provNames = new ArrayList<>();
         List<String> ids = new ArrayList<>();
-        String curProv = binding.providerId();
-        if (curProv == null) {
-            // 老档没绑过:占位首项如实显示,选中任一真档案即绑定(不许绑回"未绑定")。
+        if (draft.providerId == null) {
+            // 老档没绑过:占位首项如实显示,选中任一真档案即入草稿(不许改回"未绑定")。
             ids.add("");
             provNames.add(t(ModLanguageData.Keys.EDIT_PROVIDER_UNBOUND));
         }
@@ -149,12 +171,10 @@ public final class CompanionEditPanel {
         providerIds = ids;
         if (!ids.isEmpty()) {
             Dropdown provPick = ui.add(new Dropdown(provNames,
-                    Math.max(0, providerIds.indexOf(curProv == null ? "" : curProv)),
+                    Math.max(0, providerIds.indexOf(draft.providerId == null ? "" : draft.providerId)),
                     i -> {
                         String id = providerIds.get(i);
-                        if (!id.isEmpty()) {
-                            AgentLoopRegistry.getOrCreate(host.uuid()).setProviderEntry(id);
-                        }
+                        if (!id.isEmpty()) draft.providerId = id;
                     }));
             provPick.setBounds(x, rowY2, half, NumenStyle.CONTROL_H);
         }
@@ -169,20 +189,19 @@ public final class CompanionEditPanel {
                 voiceNames.add(e.name());
             }
             voiceIds = vIds;
-            String curVoice = binding.voiceId() == null ? VOICE_NONE : binding.voiceId();
+            String curVoice = draft.voiceId == null ? VOICE_NONE : draft.voiceId;
             Dropdown voicePick = ui.add(new Dropdown(voiceNames,
                     Math.max(0, voiceIds.indexOf(curVoice)),
                     i -> {
                         String id = voiceIds.get(i);
-                        CompanionHome.bind(host.uuid(), CompanionHome.binding(host.uuid())
-                                .withVoice(VOICE_NONE.equals(id) ? null : id));
+                        draft.voiceId = VOICE_NONE.equals(id) ? null : id;
                     }));
             voicePick.setBounds(x + half + 6, rowY2, half, NumenStyle.CONTROL_H);
         }
         ry = rowY2 + NumenStyle.ROW_PITCH;
 
         // 皮肤:整行宽。首项"保持现状"是真话——当前穿的哪张住在服务端注册表里,
-        // 客户端不留副本;其余项选中即换(签名库条目直发,按名字走异步查询)。
+        // 客户端不留副本;保存时只有选了别项才发包(换肤要原地重建身体)。
         ry = label(x, ry, ModLanguageData.Keys.SUMMON_SKIN);
         List<String> skinNames = new ArrayList<>();
         List<String> sIds = new ArrayList<>();
@@ -197,25 +216,44 @@ public final class CompanionEditPanel {
             }
         }
         skinIds = sIds;
-        Dropdown skinPick = ui.add(new Dropdown(skinNames, 0,
-                i -> {
-                    String id = skinIds.get(i);
-                    if (!SKIN_KEEP.equals(id)) host.applySkin(id);
-                }));
+        Dropdown skinPick = ui.add(new Dropdown(skinNames,
+                Math.max(0, skinIds.indexOf(draft.skinId)),
+                i -> draft.skinId = skinIds.get(i)));
         skinPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH + 4;
 
-        alert = ui.add(new InlineAlert());
-        alert.setBounds(x, y + 14, w, 24);
-
         int bw = 64, gap = 8;
-        int bx = x + (w - (bw * 2 + gap)) / 2;
+        int bx = x + (w - (bw * 3 + gap * 2)) / 2;
         Button dismiss = ui.add(new Button(t(ModLanguageData.Keys.EDIT_DISMISS),
                 Button.Style.DANGER, host::onDismiss));
         dismiss.setBounds(bx, ry, bw, 16);
-        Button close = ui.add(new Button(t(ModLanguageData.Keys.EDIT_CLOSE),
+        Button cancel = ui.add(new Button(t("numen.gui.settings.cancel"),
                 Button.Style.NORMAL, host::onClose));
-        close.setBounds(bx + bw + gap, ry, bw, 16);
+        cancel.setBounds(bx + bw + gap, ry, bw, 16);
+        Button save = ui.add(new Button(t(ModLanguageData.Keys.GUI_SETTINGS_SAVE),
+                Button.Style.ACCENT, this::save));
+        save.setBounds(bx + (bw + gap) * 2, ry, bw, 16);
+    }
+
+    /** 保存:与开卡基线比对,只落真正变过的项,然后关卡。 */
+    private void save() {
+        var uuid = host.uuid();
+        if (!Objects.equals(draft.personaId, origPersona)) {
+            AgentLoopRegistry.getOrCreate(uuid).setPersona(draft.personaId);
+        }
+        if (draft.providerId != null && !draft.providerId.equals(origProvider)) {
+            AgentLoopRegistry.getOrCreate(uuid).setProviderEntry(draft.providerId);
+        }
+        if (!Objects.equals(draft.voiceId, origVoice)) {
+            CompanionHome.bind(uuid, CompanionHome.binding(uuid).withVoice(draft.voiceId));
+        }
+        if (!modeLocked && draft.creative != origCreative) {
+            host.setCreative(draft.creative);
+        }
+        if (!SKIN_KEEP.equals(draft.skinId)) {
+            host.applySkin(draft.skinId);
+        }
+        host.onClose();
     }
 
     // ---- 宿主转发面 ----
@@ -224,7 +262,7 @@ public final class CompanionEditPanel {
         if (modeLocked) {   // 置灰的当前档(不是控件:点不了才是本意)
             NumenStyle.fieldCard(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
                     c.sectionBg(), c.inputBorder());
-            s.drawText(t(modeCreative ? ModLanguageData.Keys.SUMMON_MODE_CREATIVE
+            s.drawText(t(draft.creative ? ModLanguageData.Keys.SUMMON_MODE_CREATIVE
                             : ModLanguageData.Keys.SUMMON_MODE_SURVIVAL),
                     modeBoxX + 5, modeBoxY + (NumenStyle.CONTROL_H - s.lineHeight()) / 2 + 1,
                     c.textMuted(), false);
@@ -238,11 +276,6 @@ public final class CompanionEditPanel {
         boolean over = mx >= modeBoxX && mx < modeBoxX + modeBoxW
                 && my >= modeBoxY && my < modeBoxY + NumenStyle.CONTROL_H;
         return over ? t(ModLanguageData.Keys.EDIT_MODE_LOCKED) : null;
-    }
-
-    /** 异步动作的等待说明(如按名字查皮肤),胶囊显示。 */
-    public void note(String message) {
-        if (alert != null) alert.show(InlineAlert.Severity.INFO, message);
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
