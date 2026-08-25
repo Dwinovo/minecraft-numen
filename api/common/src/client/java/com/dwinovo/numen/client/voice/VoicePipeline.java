@@ -24,8 +24,9 @@ import java.util.function.Consumer;
  * 与 {@code EntityAgentLoop.turnGeneration} 同一思路：每次
  * {@link #beginTurn} / {@link #interrupt} 递增 {@link #generation}；
  * 分发时捕获的 gen 随着 chunk 回调、合成完成回调一路携带,落地时对不上号
- * 即整体丢弃。新 turn 开始、主人打断（Stop）、同伴死亡都会打断当前播放并
- * 清空队列;同伴不在世（客户端解析不到实体）时只清不播。
+ * 即整体丢弃。主人夺话的新 turn、主人打断（Stop）、同伴死亡立即停播清队;
+ * 事件触发的新 turn 只清未播段,正在播的句子说完再接(句界衔接)。
+ * 同伴不在世（客户端解析不到实体）时只清不播。
  *
  * <h2>线程模型</h2>
  * 所有可变状态只在客户端主线程上碰：
@@ -69,12 +70,20 @@ public final class VoicePipeline {
     }
 
     /**
-     * 一次 LLM 分发开始：打断上一轮残余（停播 + 清队列 + 重置分句器）,
-     * 按当前绑定的声线重建后端,返回本轮的代际号。主线程调用。
+     * 一次 LLM 分发开始,按触发者分两档(语音 agent 的通行做法):主人夺话
+     * ({@code bargeIn})立即硬停上一轮——人开口了还把句子说完,体感是"没理我";
+     * 她自己接自己的话(事件/任务触发)则句界衔接——正在播的这句说完,旧轮未播段
+     * 丢弃,不拦腰、不叠播、不积压陈话。按当前绑定的声线重建后端,返回本轮代际号。
+     * 主线程调用。
      */
-    public int beginTurn(VoiceLibrary.Entry cfg) {
+    public int beginTurn(VoiceLibrary.Entry cfg, boolean bargeIn) {
         generation++;
-        stopAndClear();
+        if (bargeIn) {
+            stopAndClear();
+        } else {
+            queue.clear();
+            divider.reset();
+        }
         this.backend = cfg.createBackend();
         this.volume = cfg.volume();
         return generation;
