@@ -99,7 +99,6 @@ public final class ChatView {
     private static ResourceLocation spr(String n) {
         return new ResourceLocation(Constants.MOD_ID, n);
     }
-    private static final ResourceLocation AVATAR_FRAME = spr("avatar_frame");
     private static final ResourceLocation SCROLL_TRACK = spr("scroll_track");
     private static final ResourceLocation SCROLL_THUMB = spr("scroll_thumb");
 
@@ -555,7 +554,9 @@ public final class ChatView {
             draw(g, Nb.colored(b.label(), MUTED).getVisualOrderText(), bx + 2, y);
         }
         if (b.showAvatar()) {
-            g.blitSprite(AVATAR_FRAME, avX - 2, bubTop - 2, AV + 4, AV + 4);
+            // 头像框纯代码绘制,继承所在气泡的配色——AI/主人两侧色调天然分明,且跟主题走。
+            RoundRect.card(g, avX - 2, bubTop - 2, avX + AV + 2, bubTop + AV + 2, 3,
+                    b.fill(), b.border());
             PlayerFaceRenderer.draw(g, skin(b.own()), avX, bubTop, AV);
         }
         RoundRect.card(g, bx, bubTop, bx + bw, bubTop + bh, RADIUS, b.fill(), b.border());
