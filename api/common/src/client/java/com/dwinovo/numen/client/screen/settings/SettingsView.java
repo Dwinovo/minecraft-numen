@@ -564,13 +564,15 @@ public final class SettingsView {
         host.rebuild();
     }
 
-    /** 存储里的 backend 串归一到下拉的四个已知 id(未知/留空按 openai)。 */
+    /** 存储里的 backend 串归一到下拉的已知 id(未知/留空按 openai)。 */
     private static String normalizeVoiceBackend(String backend) {
         String b = backend == null ? "" : backend.toLowerCase(java.util.Locale.ROOT).strip();
         return switch (b) {
             case com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_SOVITS,
                  com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX,
-                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH -> b;
+                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH,
+                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_DASHSCOPE,
+                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MIMO -> b;
             default -> com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
         };
     }

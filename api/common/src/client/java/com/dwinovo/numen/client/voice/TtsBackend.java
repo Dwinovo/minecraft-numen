@@ -10,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
  * <ul>
  *   <li>{@link OpenAiCompatibleTts} — OpenAI {@code /v1/audio/speech} 协议,
  *       覆盖 OpenAI / 硅基流动等一票兼容服务；</li>
+ *   <li>{@link MimoTts} — 小米 Mimo TTS，OpenAI 兼容协议，自有模型与音色体系；</li>
  *   <li>{@link GptSovitsTts} — GPT-SoVITS api_v2 风格的本地推理服务。</li>
  * </ul>
  */
