@@ -103,14 +103,8 @@ public class CompanionChatScreen extends Screen {
 
         @Override public boolean canAbort() { return loop().canInterrupt(); }
 
-        @Override public boolean inputLocked() {
-            return com.dwinovo.numen.mcp.server.McpMode.instance().enabled();
-        }
-
         @Override public String hint() {
-            return inputLocked()
-                    ? net.minecraft.client.resources.language.I18n.get("numen.brain.chat_locked")
-                    : "想说什么…(回车说出去,Esc 算了)";
+            return "想说什么…(回车说出去,Esc 算了)";
         }
 
         @Override public EntityAgentLoop loop() { return CompanionChatScreen.this.loop(); }

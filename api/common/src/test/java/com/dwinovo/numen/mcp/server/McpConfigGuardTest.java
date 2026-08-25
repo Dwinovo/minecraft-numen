@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class McpConfigGuardTest {
 
     private static McpConfig with(String host, String token) {
-        return new McpConfig(true, host, 8765, token, 300, List.of());
+        return new McpConfig(true, host, 8765, token, 300, List.of(), false);
     }
 
     // ---- 够不够得着 ----
@@ -94,7 +94,7 @@ class McpConfigGuardTest {
 
     @Test
     void eachWitherLeavesTheRestAlone() {
-        McpConfig base = new McpConfig(true, "127.0.0.1", 8765, "tok", 300, List.of("todowrite"));
+        McpConfig base = new McpConfig(true, "127.0.0.1", 8765, "tok", 300, List.of("todowrite"), false);
 
         McpConfig moved = base.withEndpoint("0.0.0.0", 9000, 60);
         assertEquals("tok", moved.token());
