@@ -1137,8 +1137,15 @@ public final class EntityAgentLoop {
      * joined with newlines into one message to avoid back-to-back {@code user}
      * messages that some backends reject.
      */
+    /** 本轮是否由主人夺话触发——drainInbox 取件时按队列的 QUERY 标记判定,
+     *  空排空的接续轮为 false;beginVoiceTurn 据此选硬停或句界衔接。 */
+    private boolean ownerSpokeThisTurn;
+
     private boolean drainInbox() {
-        if (queue.isEmpty()) return false;
+        if (queue.isEmpty()) {
+            ownerSpokeThisTurn = false;   // 接续轮:她接自己的话,不硬停
+            return false;
+        }
         long now = System.currentTimeMillis();
         // 先到先得。遇到一条不该当文本处理的(整理/清空)就停下:前面排着的先走完,它留在
         // 队首等下一个安全点。不插队——插队一旦开了口子,以后每加一种条目都要重新回答
@@ -1160,6 +1167,7 @@ public final class EntityAgentLoop {
             startCompaction(false);
             return true;
         }
+        ownerSpokeThisTurn = text.stream().anyMatch(e -> EventTypes.QUERY.equals(e.type()));
         List<String> parts = new ArrayList<>();
         // current_task is live runtime state. It is attached request-locally by
         // modelContextSnapshot(), never written into conversation history or JSONL.
@@ -1266,7 +1274,7 @@ public final class EntityAgentLoop {
         // Capture the current generation; if the owner interrupts before this
         // call resolves, handleResponse sees the mismatch and discards it.
         final int gen = turnGeneration;
-        final TurnPresenter.VoiceTurn vt = presenter.beginVoiceTurn();
+        final TurnPresenter.VoiceTurn vt = presenter.beginVoiceTurn(ownerSpokeThisTurn);
         presenter.clearPartial();
         // 头顶挂思考气泡:从发出请求到回应落地的整个空窗都有反馈
         NumenLlmClient llm = client();
@@ -1781,7 +1789,7 @@ public final class EntityAgentLoop {
                 Constants.LOG.info("[numen-entity#{}] re-running failed turn once", entityUuid);
                 awaitingLlmResponse = true;
                 final int gen2 = turnGeneration;
-                final TurnPresenter.VoiceTurn vt2 = presenter.beginVoiceTurn();   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
+                final TurnPresenter.VoiceTurn vt2 = presenter.beginVoiceTurn(ownerSpokeThisTurn);   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
                 presenter.clearPartial();                 // 失败那次的半截文字同理作废
                 NumenLlmClient llm2 = client();
                 llm2.chatStreaming(modelContextSnapshot(), ToolRegistry.all(),
