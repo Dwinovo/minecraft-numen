@@ -16,7 +16,7 @@ import java.util.concurrent.CompletableFuture;
  * 同伴语音的取数重定向——<b>Fabric 专属</b>。Fabric 运行 vanilla 字节码,
  * {@code SoundEngine.play} 对流式声音固定调用
  * {@code SoundBufferLibrary.getStream(sound.getPath(), loop)} 去开 ogg
- * (vanilla 26.1.2 的 {@link SoundInstance} 仍没有可覆写的
+ * (vanilla 26.2 的 {@link SoundInstance} 仍没有可覆写的
  * {@code getStream} default 钩子),所以在这里把带内存 PCM 的实例
  * ({@link VoicePcmSource}:同伴 3D 语音与设置界面 2D 试听)的取数换成
  * 它自带的流,其余声音原样放行。

@@ -27,7 +27,7 @@ public final class NumenHudToasts {
     public static void render(GuiGraphicsExtractor g) {
         if (TOASTS.isIdle()) return;
         Minecraft mc = Minecraft.getInstance();
-        if (mc.options.hideGui) return;
+        if (mc.gui.hud.isHidden()) return;
         TOASTS.render(new McDrawSurface(g, mc.font),
                 mc.getWindow().getGuiScaledWidth(),
                 NumenTheme.DARK.colors(), Util.getMillis());

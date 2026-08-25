@@ -103,18 +103,14 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.debug.PathDebugState.clear();
                 });
 
-        // 寻路调试覆盖层:世界空间画线。26.1 fabric-api 迁 rendering.v1.level 的
-        // LevelRenderEvents:挂 BEFORE_GIZMOS(原版调试图元 gizmo 的绘制点,语义一致),
-        // 相机走 gameRenderer.getMainCamera()。
+        // 寻路调试覆盖层:世界空间的线与方框走原版 gizmo 通道。BEFORE_GIZMOS 在
+        // LevelRenderer.finalizeGizmoCollection() 前触发,渲染帧的 gizmo 收集器
+        // 在位,回调里直接 Gizmos.* 提交、当帧出画。
+        // (fabric 的 DebugRendererRegistry 绑死服务端 DebugSubscription 订阅制,
+        // 与我们自有 payload 驱动的开关不合,不走它。)
         // 头顶气泡不在这里——它走玩家实体渲染尾部(MixinLivingEntityRenderer),
         // 与名牌同管线,光影下才正常。
         net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents.BEFORE_GIZMOS
-                .register(context -> {
-                    if (context.poseStack() != null) {
-                        com.dwinovo.numen.client.debug.PathDebugRenderer.render(
-                                context.poseStack(),
-                                net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera());
-                    }
-                });
+                .register(context -> com.dwinovo.numen.client.debug.PathDebugRenderer.emit());
     }
 }

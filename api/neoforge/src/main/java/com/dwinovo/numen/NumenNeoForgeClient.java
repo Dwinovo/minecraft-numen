@@ -52,22 +52,22 @@ public class NumenNeoForgeClient {
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
         modBus.addListener(NumenNeoForgeClient::registerGuiLayers);
         modBus.addListener(NumenNeoForgeClient::registerReloadListeners);
+        modBus.addListener(NumenNeoForgeClient::registerDebugRenderers);
         // GUI 圆角 SDF shader 无需任何注册:1.21.5 改代码定义的 RenderPipeline,
         // 首次使用时懒编译(RegisterShadersEvent 已随 JSON shader 体系一并删除)。
-        // Game bus — per-tick / world-render / disconnect.
+        // Game bus — per-tick / disconnect.
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onClientTick);
         NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onLoggingOut);
-        NeoForge.EVENT_BUS.addListener(NumenNeoForgeClient::onRenderLevel);
     }
 
-    static void onRenderLevel(net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterTranslucentBlocks event) {
-        // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后,按 stage 子事件分发)。
-        // stage 子事件不带相机,相机走 gameRenderer 主相机。
+    static void registerDebugRenderers(net.neoforged.neoforge.client.event.RegisterDebugRenderersEvent event) {
+        // 寻路调试覆盖层:世界空间的线与方框走原版 gizmo 通道。注册进
+        // DebugRenderer 的渲染器列表(NeoForge 注册的不受 F3 调试项门控,常驻),
+        // 每帧提取期在 gizmo 收集器作用域内被调用,PathDebugState 无快照时零开销。
         // 头顶气泡不在这里——它走玩家实体渲染尾部(MixinLivingEntityRenderer),
         // 与名牌同管线,光影下才正常。
-        com.dwinovo.numen.client.debug.PathDebugRenderer.render(
-                event.getPoseStack(),
-                net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera());
+        event.register((camX, camY, camZ, debugValues, frustum, partialTick) ->
+                com.dwinovo.numen.client.debug.PathDebugRenderer.emit());
     }
 
     static void registerKeyMappings(net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent event) {

@@ -22,6 +22,7 @@ import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
 import net.minecraft.world.entity.player.PlayerSkin;
 import net.minecraft.client.resources.language.I18n;
+import net.minecraft.locale.Language;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -624,7 +625,7 @@ public final class ChatView {
     /** 工具名 → 人话:约定键 {@code numen.tool.<name>};没有译文的(MCP 外部工具)原样显示。 */
     private static String toolLabel(String name) {
         String key = "numen.tool." + name;
-        return I18n.exists(key) ? I18n.get(key) : name;
+        return Language.getInstance().has(key) ? I18n.get(key) : name;
     }
 
     /** 参数 JSON → 人读摘要:抓最能说明这一步的名词(物品/方块/目标)、坐标、数量,

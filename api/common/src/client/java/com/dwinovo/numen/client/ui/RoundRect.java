@@ -1,19 +1,17 @@
 package com.dwinovo.numen.client.ui;
 
 import com.dwinovo.numen.Constants;
+import com.mojang.blaze3d.PrimitiveTopology;
 import com.mojang.blaze3d.pipeline.BlendFunction;
 import com.mojang.blaze3d.pipeline.ColorTargetState;
-import com.mojang.blaze3d.pipeline.DepthStencilState;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.platform.CompareOp;
-import com.mojang.blaze3d.shaders.UniformType;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.gui.render.TextureSetup;
+import net.minecraft.client.renderer.BindGroupLayouts;
 import net.minecraft.client.renderer.state.gui.GuiElementRenderState;
 import net.minecraft.resources.Identifier;
 import org.joml.Matrix3x2f;
@@ -35,16 +33,21 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class RoundRect {
 
-    /** 管线定义:着色器位置指 {@code assets/numen_api/shaders/core/rendertype_round_rect.*}。 */
+    /**
+     * 管线定义:着色器位置指 {@code assets/numen_api/shaders/core/rendertype_round_rect.*}。
+     * bind group 布局照抄 vanilla GUI 管线(GLOBALS + MATRICES_PROJECTION,后者即
+     * DynamicTransforms/Projection 两个 UBO;GLSL 只需声明自己用到的块)。GUI 家族
+     * 一律无深度(GuiRenderer 按提交序出画),故不带 DepthStencilState。
+     */
     public static final RenderPipeline PIPELINE = RenderPipeline.builder()
             .withLocation(Identifier.fromNamespaceAndPath(Constants.MOD_ID, "pipeline/round_rect"))
             .withVertexShader(Identifier.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"))
             .withFragmentShader(Identifier.fromNamespaceAndPath(Constants.MOD_ID, "core/rendertype_round_rect"))
-            .withUniform("DynamicTransforms", UniformType.UNIFORM_BUFFER)
-            .withUniform("Projection", UniformType.UNIFORM_BUFFER)
-            .withVertexFormat(DefaultVertexFormat.ENTITY, VertexFormat.Mode.QUADS)
+            .withBindGroupLayout(BindGroupLayouts.GLOBALS)
+            .withBindGroupLayout(BindGroupLayouts.MATRICES_PROJECTION)
             .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
-            .withDepthStencilState(new DepthStencilState(CompareOp.LESS_THAN_OR_EQUAL, true))
+            .withVertexBinding(0, DefaultVertexFormat.ENTITY)
+            .withPrimitiveTopology(PrimitiveTopology.QUADS)
             .withCull(false)
             .build();
 

@@ -34,7 +34,7 @@ public abstract class MixinKeyboardInput extends ClientInput {
         Minecraft mc = Minecraft.getInstance();
         // 只喂本地玩家的真输入:Freecam 之类会给玩家换假输入对象,别喂错人
         if (mc.player != null && mc.player.input == (Object) this
-                && mc.screen instanceof CompanionWheelScreen) {
+                && mc.gui.screen() instanceof CompanionWheelScreen) {
             this.moveVector = CompanionWheelScreen.feedMovement(this);
         }
     }

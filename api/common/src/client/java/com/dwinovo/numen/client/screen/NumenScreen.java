@@ -209,7 +209,7 @@ public final class NumenScreen extends Screen {
 
     /** Open the panel focused on a specific companion. */
     public static void open(UUID uuid, String name) {
-        Minecraft.getInstance().setScreen(new NumenScreen(uuid, name));
+        Minecraft.getInstance().gui.setScreen(new NumenScreen(uuid, name));
     }
 
     /** {@code /numen settings} 入口:直接落在设置页(全局配置与同伴无关,空面板也能用)。 */
@@ -219,15 +219,15 @@ public final class NumenScreen extends Screen {
         NumenScreen screen = first == null
                 ? new NumenScreen(null, null) : new NumenScreen(first.uuid(), first.name());
         screen.tab = Tab.SETTINGS;
-        Minecraft.getInstance().setScreen(screen);
+        Minecraft.getInstance().gui.setScreen(screen);
     }
 
     /** Hotkey entry: open the workspace on the first companion (or an empty panel to summon from). */
     public static void openWorkspace() {
         var entries = NumenRoster.instance().entries();
-        if (entries.isEmpty()) { Minecraft.getInstance().setScreen(new NumenScreen(null, null)); return; }
+        if (entries.isEmpty()) { Minecraft.getInstance().gui.setScreen(new NumenScreen(null, null)); return; }
         NumenRoster.Entry first = entries.get(0);
-        Minecraft.getInstance().setScreen(new NumenScreen(first.uuid(), first.name()));
+        Minecraft.getInstance().gui.setScreen(new NumenScreen(first.uuid(), first.name()));
     }
 
     /** Switch the panel to another companion in place (left-rail click) — no reopen. */

@@ -1,13 +1,12 @@
-#version 150
+#version 330
 
-// 1.21.6+ UBO convention (mirrors vanilla dynamictransforms/projection includes;
-// copied inline like vanilla core/gui does).
+// UBO convention mirrors vanilla dynamictransforms/projection includes
+// (copied inline like vanilla core/gui does; std140 layout must match verbatim).
 layout(std140) uniform DynamicTransforms {
     mat4 ModelViewMat;
     vec4 ColorModulator;
     vec3 ModelOffset;
     mat4 TextureMat;
-    float LineWidth;
 };
 layout(std140) uniform Projection {
     mat4 ProjMat;

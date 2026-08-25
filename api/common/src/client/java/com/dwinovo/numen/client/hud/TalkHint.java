@@ -34,7 +34,7 @@ public final class TalkHint {
 
     private static void renderInner(GuiGraphicsExtractor g) {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.screen != null || mc.options.hideGui) {
+        if (mc.gui.screen() != null || mc.gui.hud.isHidden()) {
             return;
         }
         // 快捷语音的实时状态(录音中/没听清等提示)优先于按键提示

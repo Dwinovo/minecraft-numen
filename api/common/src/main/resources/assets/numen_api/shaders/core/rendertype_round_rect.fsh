@@ -1,14 +1,14 @@
-#version 150
+#version 330
 
 // Signed-distance-field rounded rectangle (standard sdRoundedBox by Inigo Quilez).
 // SDF params arrive as flat varyings (no custom uniforms on 1.21.6+ pipelines).
+// UBO block layout must match vanilla dynamictransforms verbatim (std140).
 
 layout(std140) uniform DynamicTransforms {
     mat4 ModelViewMat;
     vec4 ColorModulator;
     vec3 ModelOffset;
     mat4 TextureMat;
-    float LineWidth;
 };
 
 in vec4 vertexColor;

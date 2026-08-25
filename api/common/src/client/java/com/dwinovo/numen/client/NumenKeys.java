@@ -64,22 +64,22 @@ public final class NumenKeys {
     public static void tick() {
         Minecraft mc = Minecraft.getInstance();
         while (OPEN_ROSTER.consumeClick()) {
-            if (mc.player != null && mc.screen == null) {
+            if (mc.player != null && mc.gui.screen() == null) {
                 NumenScreen.openWorkspace();
             }
         }
         while (COMPANION_WHEEL.consumeClick()) {
-            if (mc.player == null || mc.screen != null) {
+            if (mc.player == null || mc.gui.screen() != null) {
                 continue;
             }
             if (NumenRoster.instance().entries().isEmpty()) {
                 com.dwinovo.numen.client.hud.TalkHint.flash("还没有同伴——先在 G 面板召唤一位", 3000);
                 continue;
             }
-            mc.setScreen(new CompanionWheelScreen());
+            mc.gui.setScreen(new CompanionWheelScreen());
         }
         while (TALK_COMPANION.consumeClick()) {
-            if (mc.player == null || mc.screen != null) {
+            if (mc.player == null || mc.gui.screen() != null) {
                 continue;
             }
             NumenRoster.Entry target = SelectedCompanion.resolveTarget();
@@ -89,10 +89,10 @@ public final class NumenKeys {
                                 + "] 选一位同伴,或把准星对准它", 3000);
                 continue;
             }
-            mc.setScreen(new CompanionChatScreen(target.uuid(), target.name()));
+            mc.gui.setScreen(new CompanionChatScreen(target.uuid(), target.name()));
         }
         // 快捷语音:按下沿开录,抬起沿(或任何界面弹开)收音发送
-        boolean voiceDown = QUICK_VOICE.isDown() && mc.player != null && mc.screen == null;
+        boolean voiceDown = QUICK_VOICE.isDown() && mc.player != null && mc.gui.screen() == null;
         if (voiceDown && !voiceWasDown) {
             QuickVoice.press();
         } else if (!voiceDown && voiceWasDown) {

@@ -82,7 +82,7 @@ public final class ChatLines {
     public static void streaming(UUID companion, String companionName, String partial) {
         // 崩溃护栏:摘行手术碰的是原版聊天内部结构,出错宁可这帧不更新
         com.dwinovo.numen.client.ui.SafeUi.run("chat-streaming", () -> {
-            ChatComponent chat = Minecraft.getInstance().gui.getChat();
+            ChatComponent chat = Minecraft.getInstance().gui.hud.getChat();
             ChatComponentAccessor acc = (ChatComponentAccessor) chat;
             removeLive(acc, companion);
             MutableComponent line = name(companionName)
@@ -99,7 +99,7 @@ public final class ChatLines {
     /** 流式收尾:摘掉在飞行(定格行由调用方随后补上)。 */
     public static void streamingDone(UUID companion) {
         com.dwinovo.numen.client.ui.SafeUi.run("chat-streaming", () -> {
-            ChatComponent chat = Minecraft.getInstance().gui.getChat();
+            ChatComponent chat = Minecraft.getInstance().gui.hud.getChat();
             removeLive((ChatComponentAccessor) chat, companion);
         });
     }
@@ -124,6 +124,6 @@ public final class ChatLines {
     }
 
     private static void add(Component line) {
-        Minecraft.getInstance().gui.getChat().addClientSystemMessage(line);
+        Minecraft.getInstance().gui.hud.getChat().addClientSystemMessage(line);
     }
 }
