@@ -70,8 +70,7 @@ public final class QuickVoice {
         }
         NumenGateway.Delivery sent = NumenGateway.enqueue(t.uuid(), said);
         if (sent != NumenGateway.Delivery.REJECTED) {
-            ChatLines.owner(t.name(), said, true,
-                    sent == NumenGateway.Delivery.QUEUED);
+            ChatLines.owner(t.name(), said, true);
         } else {
             flash(t.name() + " 没能收到——它可能不在线");
         }
