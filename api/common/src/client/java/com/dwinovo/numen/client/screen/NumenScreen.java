@@ -1107,6 +1107,11 @@ public final class NumenScreen extends Screen {
             boolean hovered = mouseX >= ax && mouseX < ax + RAIL_AV
                     && mouseY >= ay && mouseY < ay + RAIL_AV;
             boolean railQuiet = !dismissOpen() && !modalOpen();
+            // 亮度说话(浏览器标签页语法):未选中淡一档,悬停点亮,选中最亮。
+            // 死亡另有重暗幕+倒计时,档位拉得开,不会混。
+            if (!active && !e.dead() && !(hovered && railQuiet)) {
+                g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0x59101010);
+            }
             int pillH = active ? RAIL_AV - 6 : (hovered && railQuiet ? 8 : 0);
             if (pillH > 0) {
                 int py2 = ay + (RAIL_AV - pillH) / 2;
