@@ -33,7 +33,8 @@ import java.util.UUID;
  *
  * <ul>
  *   <li>{@code backend} — {@code "openai"}(OpenAI /v1/audio/speech 协议,含硅基流动等)、
- *       {@code "mimo"}(小米 Mimo TTS,OpenAI 兼容,支持 speed 参数)、
+ *       {@code "mimo"}(小米 Mimo TTS,Chat Completions 风格私有协议,字段:
+ *       url/api_key/model/voice)、
  *       {@code "gpt_sovits"}(api_v2 的 /tts)、{@code "minimax"}(t2a_v2,字段:
  *       url/api_key/group_id 可选/model/voice=voice_id)或 {@code "fish_audio"}
  *       (v1/tts,字段:url/api_key/voice=reference_id/model=可选模型头);</li>
