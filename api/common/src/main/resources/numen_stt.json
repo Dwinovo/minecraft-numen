@@ -6,21 +6,32 @@
       "name": "SiliconFlow (硅基流动)",
       "backend": "whisper-http",
       "baseUrl": "https://api.siliconflow.cn",
-      "models": ["FunAudioLLM/SenseVoiceSmall", "TeleAI/TeleSpeechASR"]
+      "models": [
+        "FunAudioLLM/SenseVoiceSmall",
+        "TeleAI/TeleSpeechASR"
+      ]
     },
     {
       "id": "openai",
       "name": "OpenAI",
       "backend": "whisper-http",
       "baseUrl": "https://api.openai.com",
-      "models": ["gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe", "whisper-1"]
+      "models": [
+        "gpt-transcribe",
+        "gpt-4o-transcribe",
+        "gpt-4o-mini-transcribe",
+        "whisper-1"
+      ]
     },
     {
       "id": "groq",
       "name": "Groq",
       "backend": "whisper-http",
       "baseUrl": "https://api.groq.com/openai",
-      "models": ["whisper-large-v3-turbo", "whisper-large-v3"]
+      "models": [
+        "whisper-large-v3-turbo",
+        "whisper-large-v3"
+      ]
     },
     {
       "id": "openrouter",
@@ -63,7 +74,10 @@
       "backend": "doubao",
       "baseUrl": "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel",
       "modelLabel": "资源档 (计费方式)",
-      "models": ["volc.seedasr.sauc.duration", "volc.seedasr.sauc.concurrent"]
+      "models": [
+        "volc.seedasr.sauc.duration",
+        "volc.seedasr.sauc.concurrent"
+      ]
     },
     {
       "id": "custom",
@@ -71,6 +85,15 @@
       "backend": "whisper-http",
       "baseUrl": "",
       "models": []
+    },
+    {
+      "id": "stepfun",
+      "name": "阶跃星辰 StepFun",
+      "backend": "stepfun-asr",
+      "baseUrl": "https://api.stepfun.com",
+      "models": [
+        "stepaudio-2.5-asr"
+      ]
     }
   ]
 }
