@@ -318,7 +318,10 @@ public class CompanionGameTests {
 
     private static Zombie spawnZombie(GameTestHelper helper, BlockPos rel, NumenPlayer target) {
         ServerLevel level = helper.getLevel();
-        Zombie zombie = EntityTypes.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        // 26.2:create 的双参重载带生成检查(和平难度下怪物直接回 null),而
+        // gametest 服务器难度挡怪;夹具要的是"必须出怪",按刷怪笼同款 ignoreChecks=true。
+        Zombie zombie = EntityTypes.ZOMBIE.create(level, new net.minecraft.world.entity.EntitySpawnRequest(
+                net.minecraft.world.entity.EntitySpawnReason.STRUCTURE, true));
         assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(rel);
         zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
