@@ -51,6 +51,11 @@ public final class McpServer {
     private static final String SERVER_VERSION = "0.1.0";
     /** Roster / create / delete are fast; only tool actions use the config timeout. */
     private static final int CONTROL_TIMEOUT_SECONDS = 10;
+    /** get_events 长轮询：上限卡在 50 秒给桥接层（mcp-remote 等）留自己的
+     *  请求超时余量；250ms 的查询间隔对聊天延迟无感。 */
+    private static final int DEFAULT_WAIT_SECONDS = 30;
+    private static final int MAX_WAIT_SECONDS = 50;
+    private static final long POLL_INTERVAL_MS = 250;
     /** 活动流里一条参数/结果摘要的截断长度——面板一行放得下即可。 */
     private static final int SUMMARY_LIMIT = 90;
 
@@ -62,9 +67,9 @@ public final class McpServer {
     private static final String INSTRUCTIONS = """
             Numen companions are AI-controlled, player-like characters inside a live Minecraft game. \
             Through this server you take control of a companion's body and play the game as it — perceive, \
-            move, mine, build, craft, fight. You are the brain; the companion is your hands and eyes. Its \
-            built-in AI stays idle unless its owner speaks to it, so you drive the body directly — there is \
-            no 'take control' handshake.
+            move, mine, build, craft, fight. You ARE its brain while this server runs: the built-in AI \
+            stands aside entirely, and even the owner's in-game chat reaches you (via get_events) instead \
+            of it. Drive the body directly — there is no 'take control' handshake.
 
             Loop: (1) list_companions to see who is live — create_companion by name to summon a new one, \
             delete_companion to dismiss one for good; (2) perceive with get_self_status / scan_blocks / \
@@ -76,7 +81,14 @@ public final class McpServer {
             Rules: survival mode — the tools do only what a real player can (mine to get stone; there is no \
             give or setblock). You are blind between calls, so perceive before and after acting. Action \
             tools return only when the task finishes or times out. You can drive several companions in \
-            parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.""";
+            parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.
+
+            You also carry the companion's conversation: poll get_events(companion, wait_seconds) in a \
+            loop — it long-polls and returns the moment something urgent happens. The owner speaking to \
+            the companion (in-game chat or voice) arrives as a <query>; world happenings arrive as \
+            <event>s. Reply with say(companion, text): the words appear in-game as the companion's chat \
+            line, speech bubble, and voice. Keep your own conversation history — the game stores none \
+            for you; between get_events calls nothing is lost (events queue up).""";
 
     private final McpConfig config;
     private final Gson gson = new Gson();
@@ -89,7 +101,9 @@ public final class McpServer {
     public void start() throws IOException {
         http = HttpServer.create(new InetSocketAddress(config.host(), config.port()), 0);
         http.createContext("/mcp", this::handle);
-        http.setExecutor(Executors.newFixedThreadPool(8, r -> {
+        // get_events 长轮询会让整条线程停靠最长 50 秒，动作类工具也会阻到任务结束——
+        // 池得容下几个同伴各自的轮询加并行动作。
+        http.setExecutor(Executors.newFixedThreadPool(16, r -> {
             Thread t = new Thread(r, "numen-mcp-http");
             t.setDaemon(true);
             return t;
@@ -244,6 +258,17 @@ public final class McpServer {
                 "Permanently dismiss a companion — it drops its inventory and is gone for good. Takes its name or id.",
                 requiredStringSchema("companion",
                         "Which companion to dismiss — its name or id (see list_companions).")));
+        tools.add(toolDef("get_events",
+                "Long-poll the companion's inbox: returns the moment something urgent arrives (the owner "
+                        + "speaking to it shows up as a <query>; world happenings as <event>s), or whatever "
+                        + "accumulated once wait_seconds runs out. Events are consumed on read and nothing is "
+                        + "lost between calls — keep polling this in a loop while you drive the companion.",
+                getEventsSchema()));
+        tools.add(toolDef("say",
+                "Speak as the companion: the text appears in-game as its chat line, speech bubble, and voice "
+                        + "(if one is bound). Use it to answer the owner's <query> events and to narrate what "
+                        + "you are doing. Consecutive calls queue up and play in order.",
+                saySchema()));
 
         for (NumenTool tool : ToolRegistry.all()) {
             if (config.isHidden(tool.name())) continue;
@@ -320,6 +345,26 @@ public final class McpServer {
         return p;
     }
 
+    private JsonObject getEventsSchema() {
+        JsonObject schema = objectSchema("companion", true);
+        JsonObject wait = new JsonObject();
+        wait.addProperty("type", "integer");
+        wait.addProperty("description", "How long to wait for something urgent before returning, in seconds "
+                + "(0–" + MAX_WAIT_SECONDS + ", default " + DEFAULT_WAIT_SECONDS + "). 0 = return at once.");
+        schema.getAsJsonObject("properties").add("wait_seconds", wait);
+        return schema;
+    }
+
+    private JsonObject saySchema() {
+        JsonObject schema = objectSchema("companion", true);
+        JsonObject text = new JsonObject();
+        text.addProperty("type", "string");
+        text.addProperty("description", "What the companion says, in its own voice/persona.");
+        schema.getAsJsonObject("properties").add("text", text);
+        schema.getAsJsonArray("required").add("text");
+        return schema;
+    }
+
     // ---- tools/call ----
 
     /** 派发一次工具调用,并把它记进活动流——面板上那条流就是这里喂的。 */
@@ -331,8 +376,26 @@ public final class McpServer {
                 ? params.getAsJsonObject("arguments") : new JsonObject();
 
         JsonObject out = dispatchToolCall(name, args);
-        McpMode.instance().record(name, argsSummary(args), textOf(out), isError(out));
+        recordActivity(name, args, out);
         return out;
+    }
+
+    /**
+     * 动作行进现场缓冲（面板聊天区里的淡色工具行）。对话面的两个工具不记：
+     * say 自己就是一条 SAY 气泡，get_events 是轮询心跳，记了全是噪音。
+     * 带 companion 的进它自己的道，不带的（list/create）进全局道。
+     */
+    private void recordActivity(String name, JsonObject args, JsonObject out) {
+        if ("get_events".equals(name) || "say".equals(name)) return;
+        UUID who = null;
+        try {
+            who = resolveCompanion(args);
+        } catch (Exception ignored) {
+            // 解析不出就进全局道——记录不因归档失败而丢
+        }
+        String argsLine = argsSummary(args);
+        String head = name + (argsLine.isBlank() ? "" : "  " + argsLine);
+        McpTranscript.tool(who, head + " → " + textOf(out), isError(out));
     }
 
     private JsonObject dispatchToolCall(String name, JsonObject args) {
@@ -341,6 +404,8 @@ public final class McpServer {
                 case "list_companions" -> content(listCompanions(), false);
                 case "create_companion" -> handleCreate(args);
                 case "delete_companion" -> handleDelete(args);
+                case "get_events" -> handleGetEvents(args);
+                case "say" -> handleSay(args);
                 default -> handleToolInvoke(name, args);
             };
         } catch (TimeoutException te) {
@@ -414,6 +479,44 @@ public final class McpServer {
         boolean ok = NumenActuator.delete(target).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         return content(ok ? "dismissed " + target + " — it dropped its inventory and is gone for good"
                 : "could not dismiss " + target, !ok);
+    }
+
+    /** 长轮询取件：急件一到立即整批返回；到点有什么给什么，没有就如实说没有。 */
+    private JsonObject handleGetEvents(JsonObject args) throws Exception {
+        UUID target = resolveCompanion(args);
+        if (target == null) {
+            return content("get_events needs a 'companion' argument (a name or id from list_companions)", true);
+        }
+        int wait = DEFAULT_WAIT_SECONDS;
+        if (args.has("wait_seconds") && !args.get("wait_seconds").isJsonNull()) {
+            wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, args.get("wait_seconds").getAsInt()));
+        }
+        long deadline = System.currentTimeMillis() + wait * 1000L;
+        while (true) {
+            String batch = NumenActuator.takeEvents(target, true)
+                    .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            if (batch != null) return content(batch, false);
+            if (System.currentTimeMillis() + POLL_INTERVAL_MS >= deadline) break;
+            Thread.sleep(POLL_INTERVAL_MS);
+        }
+        String rest = NumenActuator.takeEvents(target, false)
+                .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        return content(rest != null ? rest
+                : "(no new events — keep polling; the owner's words and world happenings land here)", false);
+    }
+
+    private JsonObject handleSay(JsonObject args) throws Exception {
+        UUID target = resolveCompanion(args);
+        if (target == null) {
+            return content("say needs a 'companion' argument (a name or id from list_companions)", true);
+        }
+        String text = args.has("text") && !args.get("text").isJsonNull()
+                ? args.get("text").getAsString().trim() : "";
+        if (text.isEmpty()) {
+            return content("say needs a non-empty 'text'", true);
+        }
+        boolean ok = NumenActuator.say(target, text).get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        return content(ok ? "said" : "could not say — is the companion live?", !ok);
     }
 
     private JsonObject handleToolInvoke(String toolName, JsonObject args) throws Exception {

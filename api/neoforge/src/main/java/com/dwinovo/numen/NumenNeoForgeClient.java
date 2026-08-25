@@ -94,6 +94,7 @@ public class NumenNeoForgeClient {
     static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
         com.dwinovo.numen.client.NumenKeys.tick();
         com.dwinovo.numen.client.agent.AgentLoopRegistry.tickAll();
+        com.dwinovo.numen.mcp.server.McpMode.instance().clientTick();
     }
 
     static void onLoggingOut(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
