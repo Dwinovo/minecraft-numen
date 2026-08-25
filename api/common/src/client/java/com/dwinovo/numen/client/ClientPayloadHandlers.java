@@ -141,6 +141,13 @@ public final class ClientPayloadHandlers {
                             net.minecraft.client.resources.language.I18n.get("numen.summon.voice_missing"));
                 }
             }
+            // 召唤时选的皮肤库条目记进绑定(编辑卡据此标当前皮肤)。条目途中被删
+            // 不用出声——皮肤按签名值已生效,只是记不上账,编辑卡会按默认显示。
+            String skinEntry = com.dwinovo.numen.client.skin.SkinLibrary.takePendingSummon(e.name());
+            if (skinEntry != null && com.dwinovo.numen.client.skin.SkinLibrary.instance().get(skinEntry) != null) {
+                com.dwinovo.numen.client.agent.CompanionHome.bind(e.uuid(),
+                        com.dwinovo.numen.client.agent.CompanionHome.binding(e.uuid()).withSkin(skinEntry));
+            }
         }
     }
 
