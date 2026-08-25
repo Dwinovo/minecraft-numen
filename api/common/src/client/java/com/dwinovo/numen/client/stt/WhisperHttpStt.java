@@ -26,6 +26,8 @@ public final class WhisperHttpStt implements SttBackend {
     public static final String DEFAULT_BASE = "https://api.siliconflow.cn";
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
+            // 明文 http 下 JDK 默认发 h2c 升级头,自建服务端(Uvicorn 等)刷警告;钉死 1.1。
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(10))
             .followRedirects(HttpClient.Redirect.NORMAL)
             .build();
@@ -111,13 +113,15 @@ public final class WhisperHttpStt implements SttBackend {
             byte[] body = Multipart.build(boundary, model, "audio.wav", wav);
             HttpRequest request;
             try {
-                request = HttpRequest.newBuilder()
+                HttpRequest.Builder rb = HttpRequest.newBuilder()
                         .uri(URI.create(url))
                         .timeout(REQUEST_TIMEOUT)
                         .header("Content-Type", "multipart/form-data; boundary=" + boundary)
-                        .header("Authorization", "Bearer " + apiKey)
-                        .POST(HttpRequest.BodyPublishers.ofByteArray(body))
-                        .build();
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(body));
+                if (!apiKey.isBlank()) {   // 自建端点常无鉴权:空钥不带 Authorization
+                    rb.header("Authorization", "Bearer " + apiKey);
+                }
+                request = rb.build();
             } catch (RuntimeException e) {
                 listener.onError(e);
                 return;
