@@ -590,15 +590,7 @@ public final class NumenScreen extends Screen {
 
         @Override public boolean canAbort() { return loop().canInterrupt(); }
 
-        @Override public boolean inputLocked() {
-            // 「外接大脑」模式:发言入口整排锁死。真正的互斥在 EntityAgentLoop 的开轮
-            // 闸门上——这里只是把"按了没反应"提前成"按不下去"。叫停键不锁:那是主人
-            // 的急刹车,外部 AI 抽风时更需要它。
-            return com.dwinovo.numen.mcp.server.McpMode.instance().enabled();
-        }
-
         @Override public String hint() {
-            if (inputLocked()) return I18n.get("numen.brain.chat_locked");
             if (micNotice != null && micNoticeUntil > System.currentTimeMillis()) return micNotice;
             return I18n.get("numen.chat.hint", name == null ? "" : name);
         }
@@ -727,21 +719,22 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    /** 发言闸门:模式开着时一并挡掉(回车绕过了被禁用的发送键,否则消息会进
-     *  内置大脑的收件箱、在模式关闭后突然诈尸开轮)。斜杠命令到不了这儿——输入行
-     *  在本地跑完了。 */
+    /** 说出去。外脑驱动时话进同一个收件箱、由外脑经 get_events 取走并 say 回话
+     *  ——所以那条路不查 provider(外脑不需要):endpoint 检查只拦内脑要开轮的情形。
+     *  斜杠命令到不了这儿——输入行在本地跑完了。 */
     private void submitChat(String text) {
-        if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) return;
         if (text == null || text.isBlank()) return;
-        // Endpoint check for THIS companion (its provider entry, not the legacy global
-        // key): unbound / keyless surfaces as a visible hint, never a crash or a
-        // silent no-op — the no-provider safety net.
-        String problem = loop().endpointProblem();
-        if (problem != null) {
-            com.dwinovo.numen.Constants.LOG.warn("[numen-chat] {}", problem);
-            warnText = problem;
-            warnUntil = System.currentTimeMillis() + 4000;
-            return;
+        if (!com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
+            // Endpoint check for THIS companion (its provider entry, not the legacy global
+            // key): unbound / keyless surfaces as a visible hint, never a crash or a
+            // silent no-op — the no-provider safety net.
+            String problem = loop().endpointProblem();
+            if (problem != null) {
+                com.dwinovo.numen.Constants.LOG.warn("[numen-chat] {}", problem);
+                warnText = problem;
+                warnUntil = System.currentTimeMillis() + 4000;
+                return;
+            }
         }
         loop().submitPrompt(text);
         if (inputBar != null) inputBar.setText("");
@@ -1298,9 +1291,10 @@ public final class NumenScreen extends Screen {
         int planX = transX + transW + 8;
         com.dwinovo.numen.client.screen.chat.PlanCard.render(
                 g, font, loop(), planX - 4, bodyY, PLAN_W + 4, bodyBottom);
-        // 「外接大脑」模式:对话流换成控制台——身体归外部 AI,这屏就该显示它在干嘛。
-        if (com.dwinovo.numen.mcp.server.McpMode.instance().enabled()) {
-            chatView.renderConsole(g, transX, bodyY, transW, bodyBottom - bodyY);
+        // 外脑驱动中:对话流换成现场——同一套气泡语法,画的是现场缓冲(主人的话、
+        // 外脑的 say 与动作行),顶上一条"谁接进来了"的知情行。
+        if (com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
+            chatView.renderExternal(g, transX, bodyY, transW, bodyBottom - bodyY);
         } else {
             chatView.render(g, transX, bodyY, transW, bodyBottom - bodyY);
         }

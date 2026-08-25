@@ -147,6 +147,17 @@ final class TurnPresenter {
         if (voice != null) voice.interrupt();
     }
 
+    /**
+     * 外接大脑的整段发声(say):按当前绑定现取声线,整段排到播放队尾——
+     * 不开新轮、不清存量,连续的 say 自然连播。未绑声线 = 静默(气泡与聊天行照旧)。
+     */
+    void sayExternal(String text) {
+        VoiceLibrary.Entry cfg = VoiceLibrary.instance().resolve(entityUuid);
+        if (cfg == null) return;
+        if (voice == null) voice = new VoicePipeline(entityUuid);
+        voice.sayAppend(cfg, text);
+    }
+
     /** 聊天框的打字机:在飞回复逐 tick 长出来——不开面板也能实时看她说话。 */
     private void streamToChat() {
         if (!streamingActive.getAsBoolean() || livePartial.length() == 0) {
