@@ -55,13 +55,15 @@ public final class OpenAiCompatibleTts implements TtsBackend {
 
         HttpRequest request;
         try {
-            request = HttpRequest.newBuilder()
+            HttpRequest.Builder rb = HttpRequest.newBuilder()
                     .uri(VoiceHttp.uriOf(url))
                     .timeout(VoiceHttp.REQUEST_TIMEOUT)
                     .header("Content-Type", "application/json")
-                    .header("Authorization", "Bearer " + apiKey)
-                    .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8))
-                    .build();
+                    .POST(HttpRequest.BodyPublishers.ofString(body.toString(), StandardCharsets.UTF_8));
+            if (apiKey != null && !apiKey.isBlank()) {   // 自建端点常无鉴权:空钥不带 Authorization
+                rb.header("Authorization", "Bearer " + apiKey);
+            }
+            request = rb.build();
         } catch (RuntimeException e) {
             return CompletableFuture.failedFuture(e);   // 坏配置走异步失败通道,绝不同步炸
         }

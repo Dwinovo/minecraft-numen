@@ -80,8 +80,10 @@ public final class SttProviders {
      */
     public static SttBackend fromConfig(INumenConfig cfg) {
         Option opt = byId(cfg.getSttProvider());
-        String key = cfg.getSttApiKey();
-        if (key == null || key.isBlank()) {
+        String key = cfg.getSttApiKey() == null ? "" : cfg.getSttApiKey();
+        // 密钥必填与否由后端定:云端流式(doubao/dashscope)缺钥握手必败;
+        // whisper-http 兼容端点常见自建无鉴权,空钥放行(请求侧空钥不带 Authorization)。
+        if (key.isBlank() && !BACKEND_WHISPER_HTTP.equals(opt.backend())) {
             Constants.LOG.warn("[numen-stt] provider '{}' 没填 API Key,语音输入没开", opt.id());
             return null;
         }

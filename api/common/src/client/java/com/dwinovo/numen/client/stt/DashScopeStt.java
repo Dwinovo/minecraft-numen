@@ -43,6 +43,8 @@ public final class DashScopeStt implements SttBackend {
     private static final int FINAL_WAIT_SEC = 10;
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
+            // 明文 http 下 JDK 默认发 h2c 升级头,自建服务端(Uvicorn 等)刷警告;钉死 1.1。
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
