@@ -248,6 +248,7 @@ minecraft.runs.configureEach {
 }
 ```
 ```groovy
+// ①c mixin AP 与增量编译不相容：增量轮次不重跑 AP，refmap 丢失且 jar 静默不带；开发期全程 disableRefMap 照不出，生产 SRG 直接拒启。修法：api/forge、core/forge 两处 compileJava options.incremental=false + jar doLast 绞索（有 mixins.json 必有 refmap，缺了判死）。
 // ①b FG6 双输出共目录的任务竞态：api/forge 把 classes+resources 重定向进同一个
 //    build/sourcesSets/main，跨项目 classpath 的 builtBy 只挂 compileJava →
 //    :core:forge:compileJava 与 :api:forge:processResources 写/读同目录无依赖边，

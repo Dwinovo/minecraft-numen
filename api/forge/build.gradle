@@ -107,3 +107,20 @@ sourceSets.each {
 // 共目录之后,跨项目 classpath 的 builtBy 只挂着 compileJava:把资源拷贝排在编译前,
 // 消费方(如 :core:forge:compileJava)拿到目录时两类内容都已就位,不再竞态。
 tasks.named('compileJava') { dependsOn tasks.named('processResources') }
+
+// mixin AP 与增量编译不相容：增量轮次 AP 不重跑，refmap 丢失且 jar 静默不带，
+// 生产环境 SRG 运行时 mixin 按官方名找不到目标直接拒启（开发期 disableRefMap 照不出）。
+tasks.named('compileJava', JavaCompile) { options.incremental = false }
+// 绞索：包里有 mixins.json 就必须有 refmap，缺了当场把构建判死，不给静默坏包出门。
+tasks.named('jar', Jar) {
+    doLast {
+        def zf = new java.util.zip.ZipFile(archiveFile.get().asFile)
+        try {
+            boolean hasMixins = zf.entries().any { it.name.endsWith('.mixins.json') }
+            boolean hasRefmap = zf.entries().any { it.name.endsWith('.refmap.json') }
+            if (hasMixins && !hasRefmap) {
+                throw new GradleException("mixin refmap missing from ${archiveFile.get().asFile.name}")
+            }
+        } finally { zf.close() }
+    }
+}
