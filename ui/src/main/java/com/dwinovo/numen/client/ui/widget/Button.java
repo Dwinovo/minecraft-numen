@@ -67,7 +67,8 @@ public final class Button extends Widget {
             }
             int ghostColor = !enabled ? c.textMuted()
                     : NumenStyle.mixColor(c.textSecondary(), c.textPrimary(), t);
-            s.drawText(label, x + (w - s.textWidth(label)) / 2,
+            String ghostShown = com.dwinovo.numen.client.ui.TextClip.fit(s, label, w - 6);
+            s.drawText(ghostShown, x + (w - s.textWidth(ghostShown)) / 2,
                     y + (h - s.lineHeight()) / 2 + 1, ghostColor, false);
             return;
         }
@@ -89,9 +90,11 @@ public final class Button extends Widget {
             icon.draw(s, x + (w - iconSize) / 2, y + (h - iconSize) / 2, iconSize, textColor);
             return;
         }
-        int tx = x + (w - s.textWidth(label)) / 2;
+        // 左右各留 3px 内边距再收口:文字贴边比截断更难看
+        String shown = com.dwinovo.numen.client.ui.TextClip.fit(s, label, w - 6);
+        int tx = x + (w - s.textWidth(shown)) / 2;
         int ty = y + (h - s.lineHeight()) / 2 + 1;
-        s.drawText(label, tx, ty, textColor, false);
+        s.drawText(shown, tx, ty, textColor, false);
     }
 
     @Override
