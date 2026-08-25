@@ -445,6 +445,11 @@ public final class EntityAgentLoop {
         // anything else numen injects into the same user turn (events, and future world-state/reminders).
         // 主人的话恒为急件:人说话了就该有回应。队列不区分类型,只看这个标记。
         queue.push(EventTypes.QUERY, wire, System.currentTimeMillis(), true);
+        // 外脑驱动期间面板画的是现场缓冲——主人的话得当场可见,不能等谁取走才出现。
+        // 这里是所有主人话的单一咽喉(面板/快捷对话/语音/桥接),挂点只此一处。
+        if (McpMode.instance().driving()) {
+            com.dwinovo.numen.mcp.server.McpTranscript.owner(entityUuid, logged);
+        }
         Constants.LOG.info("[numen-entity#{}] user prompt ({} chars){}{}: {}",
                 entityUuid, wire.length(),
                 wasAborted ? " — reset previous abort" : "",
@@ -474,7 +479,8 @@ public final class EntityAgentLoop {
         dispatcher.tick();
         presenter.tick();
         // 外接大脑那把锁按状态同步,不靠"模式切换时通知":漏掉一次通知会把队列永久锁死。
-        if (McpMode.instance().enabled()) {
+        // 口径是 driving() 不是 enabled():失联回退开着且外脑安静超时,锁开、内脑接管。
+        if (McpMode.instance().driving()) {
             queue.lock(QueueLock.MCP_MODE);
         } else {
             queue.unlock(QueueLock.MCP_MODE);
@@ -898,6 +904,38 @@ public final class EntityAgentLoop {
      */
     public boolean isExternallyDriven() {
         return queue.lockHolders().contains(QueueLock.MCP_MODE);
+    }
+
+    /**
+     * 外接大脑收件(get_events 的取货口):{@code urgentOnly} 时只在队里有急件才取,
+     * 长轮询靠它省着等;到点了不管急不急有什么给什么。渲染与内脑
+     * {@code drainInbox} 同一份 {@link EventQueue#render}——外脑看到的事件文本
+     * 和内脑一字不差。控制条目(整理/清空)是对内脑说的,留在队里等模式关闭,
+     * 与 drainInbox 同一条 takeWhile 规则。
+     *
+     * @return 取走的事件拼段;这次没取到返回 null(继续等或如实说没有)
+     */
+    public String takeEventsForExternal(boolean urgentOnly) {
+        if (urgentOnly && !queue.hasUrgent()) return null;
+        long now = System.currentTimeMillis();
+        List<EventQueue.Entry> taken = queue.takeWhile(e -> !isControlEntry(e.type()), now);
+        if (taken.isEmpty()) return null;
+        List<String> parts = EventQueue.render(taken, now);
+        return parts.isEmpty() ? null : String.join("\n\n", parts);
+    }
+
+    /**
+     * 外接大脑替她说话(say 工具):头顶气泡 + 聊天栏定格行 + 现场缓冲 + 语音,
+     * 走的全是内脑说话的同一套表现层。语音整段排队尾——连续的 say 连着播,
+     * 不互相掐;主人的打断键照样一刀切停。
+     */
+    public void externalSay(String text) {
+        String shown = com.dwinovo.numen.client.chat.ChatDisplayModes.current().assistantText(text);
+        if (shown.isBlank()) shown = text;   // 全是动作记号也别无声吞掉——原样示人
+        com.dwinovo.numen.mcp.server.McpTranscript.say(entityUuid, shown);
+        com.dwinovo.numen.client.chat.ChatLines.companion(presenter.speakerName(), shown);
+        com.dwinovo.numen.client.hud.SpeechBubbles.say(entityUuid, shown);
+        presenter.sayExternal(text);
     }
 
 

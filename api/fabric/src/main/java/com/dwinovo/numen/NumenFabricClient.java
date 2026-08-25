@@ -84,6 +84,7 @@ public class NumenFabricClient implements ClientModInitializer {
                 .register(client -> {
                     com.dwinovo.numen.client.NumenKeys.tick();
                     com.dwinovo.numen.client.agent.AgentLoopRegistry.tickAll();
+                    com.dwinovo.numen.mcp.server.McpMode.instance().clientTick();
                 });
 
         net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents.DISCONNECT

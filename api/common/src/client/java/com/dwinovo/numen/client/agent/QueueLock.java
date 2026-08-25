@@ -17,11 +17,12 @@ public final class QueueLock {
     public static final String DEATH = "death";
 
     /**
-     * 外接大脑模式开着:身体归外部 MCP 驱动者,内置大脑一轮都不开。
+     * 外接大脑驱动中:身体归外部 MCP 驱动者,内置大脑一轮都不开。
      *
-     * <p>这只是个权宜之计——外面那个大脑其实<b>也需要</b>这些世界事件,不然它是瞎的。
-     * 正确的形状是给队列换一个流出方向(sink)而不是锁住它。锁和 sink 是正交的两件事,
-     * 所以现在这么做不挡住那条路。
+     * <p>锁只拦内脑的"出"——事件照进不误,流出方向换成了外脑:它经 get_events
+     * 整批取走({@code EntityAgentLoop.takeEventsForExternal}),主人在游戏里说的话
+     * 也走这条线。这把锁因此就是"同一时刻一个脑答话"的仲裁本身,不是权宜之计。
+     * 按 {@code McpMode.driving()} 每刻同步(失联回退开着时,外脑安静超时锁自动开)。
      */
     public static final String MCP_MODE = "mcp_mode";
 
