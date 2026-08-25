@@ -1098,20 +1098,15 @@ public final class NumenScreen extends Screen {
             if (ay + RAIL_AV > railBottomEdge()) break;
             NumenRoster.Entry e = entries.get(i);
             boolean active = e.uuid().equals(uuid);
-            // 选中关系用左缘指示条说话(Discord 服务器栏同语法):长条 = 当前,
-            // 悬停未选中出短条 = 可切换;头像框一律中性色,不再拿边框当选中态。
-            com.dwinovo.numen.client.ui.RoundRect.card(g, ax - 2, ay - 2,
-                    ax + RAIL_AV + 2, ay + RAIL_AV + 2, 3,
-                    FIELD, BORDER);
-            PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
             boolean hovered = mouseX >= ax && mouseX < ax + RAIL_AV
                     && mouseY >= ay && mouseY < ay + RAIL_AV;
             boolean railQuiet = !dismissOpen() && !modalOpen();
-            // 亮度说话(浏览器标签页语法):未选中淡一档,悬停点亮,选中最亮。
-            // 死亡另有重暗幕+倒计时,档位拉得开,不会混。
-            if (!active && !e.dead() && !(hovered && railQuiet)) {
-                g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0x59101010);
-            }
+            // 选中关系用左缘指示条说话(Discord 服务器栏同语法):长条 = 当前,
+            // 悬停未选中出短条 = 可切换。悬停的容器反应与"+"号同语法:边框亮 CTA。
+            com.dwinovo.numen.client.ui.RoundRect.card(g, ax - 2, ay - 2,
+                    ax + RAIL_AV + 2, ay + RAIL_AV + 2, 3,
+                    FIELD, !active && hovered && railQuiet ? CTA : BORDER);
+            PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
             int pillH = active ? RAIL_AV - 6 : (hovered && railQuiet ? 8 : 0);
             if (pillH > 0) {
                 int py2 = ay + (RAIL_AV - pillH) / 2;
