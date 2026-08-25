@@ -83,71 +83,48 @@ class EventQueueTest {
         assertEquals(EventQueue.MAX_LEVEL, EventQueue.thresholdOf(50), "越界也不能变成无限沉默");
     }
 
-    // ---- 锁 ----
+    // ---- 急件叫醒 ----
 
     @Test
-    void lockedQueueHoldsEvenUrgent() {
+    void urgentPushWakesListeners() {
         EventQueue q = fresh();
-        q.lock("死亡");
-        q.push(EventTypes.EVENT, "<event>很急的事</event>", T0, true);
+        java.util.concurrent.atomic.AtomicInteger woken = new java.util.concurrent.atomic.AtomicInteger();
+        q.addUrgentListener(woken::incrementAndGet);
 
-        assertFalse(q.shouldDrain(T0, 1), "锁着就是不出,再急也一样");
-        assertEquals(1, q.size(), "但照收不误");
+        q.push(EventTypes.EVENT, "<event>下雨了</event>", T0, false);
+        assertEquals(0, woken.get(), "普通件不叫");
+
+        q.push(EventTypes.QUERY, "<query>救命</query>", T0, true);
+        assertEquals(1, woken.get(), "急件即叫");
+        assertTrue(q.hasUrgent(), "叫醒不递件,货还在台账上");
     }
 
     @Test
-    void unlockingReleasesEverythingAtOnce() {
+    void listenerMayRemoveItselfInCallback() {
+        // get_events 的停靠者被叫醒即摘钩——回调里摘自己不能炸并发修改
         EventQueue q = fresh();
-        q.lock("死亡");
-        q.push(EventTypes.EVENT, "<event>任务断了</event>", T0, true);
-        q.push(EventTypes.QUERY, "<query>你还好吗</query>", T0, true);
+        java.util.concurrent.atomic.AtomicInteger woken = new java.util.concurrent.atomic.AtomicInteger();
+        Runnable[] once = new Runnable[1];
+        once[0] = () -> {
+            woken.incrementAndGet();
+            q.removeUrgentListener(once[0]);
+        };
+        q.addUrgentListener(once[0]);
 
-        q.unlock("死亡");
-
-        assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL));
-        // 世界的事包成一块、主人的话跟在后面，所以是两段
-        assertEquals(2, EventQueue.render(q.takeEntries(T0), T0).size(), "锁期间攒的一起走");
+        q.push(EventTypes.QUERY, "<query>a</query>", T0, true);
+        q.push(EventTypes.QUERY, "<query>b</query>", T0, true);
+        assertEquals(1, woken.get(), "摘了自己,第二声不再叫");
     }
 
     @Test
-    void everyHolderMustLetGo() {
-        // 她死着的时候主人开了外接大脑:复活松一把锁,不能把另一把也松了
+    void wakeIsSugarStateIsTruth() {
+        // 脉冲可以丢,电平不会骗:没人停靠时急件落地,状态随时问得出来
         EventQueue q = fresh();
-        q.lock("死亡");
-        q.lock("外接大脑");
-        q.push(EventTypes.EVENT, "<event>x</event>", T0, true);
+        q.push(EventTypes.QUERY, "<query>没人听见</query>", T0, true);
 
-        q.unlock("死亡");
-        assertTrue(q.locked(), "还有人锁着");
-        assertFalse(q.shouldDrain(T0, 1));
-
-        q.unlock("外接大脑");
-        assertFalse(q.locked());
-        assertTrue(q.shouldDrain(T0, 1));
-    }
-
-    @Test
-    void lockingIsIdempotentAndUnknownUnlockIsHarmless() {
-        EventQueue q = fresh();
-        q.lock("死亡");
-        q.lock("死亡");
-        q.unlock("死亡");
-        assertFalse(q.locked(), "重复上锁只算一把");
-
-        q.unlock("没上过的锁");   // 静默
-        assertFalse(q.locked());
-    }
-
-    @Test
-    void lockDoesNotBlockPushingOrClearing() {
-        // 锁只管"出":主人按停止撤回指令,跟她能不能说话无关
-        EventQueue q = fresh();
-        q.lock("死亡");
-        q.push(EventTypes.QUERY, "<query>去挖矿</query>", T0, true);
-        q.push(EventTypes.EVENT, "<event>你被打了</event>", T0, false);
-
-        assertEquals(1, q.clearInterrupted());
-        assertEquals(1, q.size(), "清的是指令,事实留着");
+        assertTrue(q.hasUrgent());
+        assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), "有急件即熟,无关有没有人被叫醒");
+        assertEquals(1, EventQueue.render(q.takeEntries(T0), T0).size());
     }
 
     // ---- 类型表(队列不认识类型) ----
