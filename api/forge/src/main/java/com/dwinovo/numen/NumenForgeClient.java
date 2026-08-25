@@ -105,6 +105,7 @@ public final class NumenForgeClient {
         }
         com.dwinovo.numen.client.NumenKeys.tick();
         com.dwinovo.numen.client.agent.AgentLoopRegistry.tickAll();
+        com.dwinovo.numen.mcp.server.McpMode.instance().clientTick();
     }
 
     static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
