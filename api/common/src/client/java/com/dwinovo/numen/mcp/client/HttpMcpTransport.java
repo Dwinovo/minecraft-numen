@@ -45,6 +45,8 @@ public final class HttpMcpTransport implements McpTransport {
         this.url = URI.create(url);
         this.headers = headers == null ? Map.of() : headers;
         this.http = HttpClient.newBuilder()
+            // 明文 http 下 JDK 默认发 h2c 升级头,自建服务端(Uvicorn 等)刷警告;钉死 1.1。
+            .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(Math.max(1, connectTimeoutSeconds)))
                 .build();
     }
