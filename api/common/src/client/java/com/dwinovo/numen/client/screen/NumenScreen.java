@@ -1076,17 +1076,32 @@ public final class NumenScreen extends Screen {
             if (ay + RAIL_AV > railBottomEdge()) break;
             NumenRoster.Entry e = entries.get(i);
             boolean active = e.uuid().equals(uuid);
-            // 头像框纯代码绘制,跟主题走色:激活亮 ACCENT,平时 BORDER——烘焙贴图换主题就变色盲。
+            // 选中关系用左缘指示条说话(Discord 服务器栏同语法):长条 = 当前,
+            // 悬停未选中出短条 = 可切换;头像框一律中性色,不再拿边框当选中态。
             com.dwinovo.numen.client.ui.RoundRect.card(g, ax - 2, ay - 2,
                     ax + RAIL_AV + 2, ay + RAIL_AV + 2, 3,
-                    FIELD, active ? ACCENT : BORDER);
+                    FIELD, BORDER);
             PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
-            // 悬停激活头像:变暗 + 居中铅笔——"这里可编辑"的通用视觉语言。
-            // 铅笔照 Lucide pencil 的形(45° 三宽杆收尖 + 近尾端笔帽分割线):
-            // 白色笔体整体单色,深色一像素外描边保证任何皮肤底上都读得出。
             boolean hovered = mouseX >= ax && mouseX < ax + RAIL_AV
                     && mouseY >= ay && mouseY < ay + RAIL_AV;
-            if (active && hovered && !dismissOpen() && !modalOpen()) {
+            boolean railQuiet = !dismissOpen() && !modalOpen();
+            int pillH = active ? RAIL_AV - 6 : (hovered && railQuiet ? 8 : 0);
+            if (pillH > 0) {
+                int py2 = ay + (RAIL_AV - pillH) / 2;
+                g.fill(railX + 1, py2, railX + 3, py2 + pillH, ACCENT);
+            }
+            if (hovered && railQuiet) {
+                // 悬停必给名字;当前这只的悬停语义是"点击进编辑",tooltip 跟着说。
+                pendingTip = java.util.List.of(Component.literal(active
+                        ? I18n.get(com.dwinovo.numen.data.ModLanguageData.Keys.EDIT_TITLE) + " · " + e.name()
+                        : e.name()));
+                pendingTipX = mouseX;
+                pendingTipY = mouseY;
+            }
+            // 悬停当前头像:变暗 + 居中铅笔——"这里可编辑"的通用视觉语言。
+            // 铅笔照 Lucide pencil 的形(45° 三宽杆收尖 + 近尾端笔帽分割线):
+            // 白色笔体整体单色,深色一像素外描边保证任何皮肤底上都读得出。
+            if (active && hovered && railQuiet) {
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0x80101010);
                 int ox = ax + 5, oy = ay + 5;
                 for (int gx = 0; gx < 16; gx++) {
