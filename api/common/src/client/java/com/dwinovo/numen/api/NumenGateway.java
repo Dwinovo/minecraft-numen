@@ -1,6 +1,7 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import net.minecraft.client.Minecraft;
 
 import java.util.UUID;
@@ -47,6 +48,9 @@ public final class NumenGateway {
         SEEN,
         /** 先排着:她手上有事没法马上看(在飞的回合、未决工具、死着、被停止)。 */
         QUEUED,
+        /** 外接大脑在开车:话进了事件线,由它取走回话。内脑整体停牌,"排着等她腾手"
+         *  这句话在这里没有意义——它压根不参与。 */
+        TO_EXTERNAL_BRAIN,
         /** 不在客户端主线程,只能交给它稍后处理 —— 结果这边观察不到。 */
         HANDED_OFF
     }
@@ -63,8 +67,9 @@ public final class NumenGateway {
      * made every quick-key/bridge message before the first panel visit vanish
      * with "not online".)
      *
-     * <p>返回的是<b>实际发生了什么</b>,不是对"她忙不忙"的推断。界面要显示"排队中"
-     * 就照这个显示;自己另判一遍必然会跟真正的闸门跑偏。
+     * <p>返回的是<b>实际发生了什么</b>,不是对"她忙不忙"的推断——桥接方判"送没送到"
+     * 就照这个判,自己另算一遍必然会跟真正的闸门跑偏。游戏内的聊天回显只记事不记状态,
+     * 所以这几个值今天没有任何界面在读;它们是给外部集成的汇报,该说实话。
      *
      * @param companion the companion entity's UUID
      * @param message   delivered exactly as given — formatting is the caller's business
@@ -79,7 +84,11 @@ public final class NumenGateway {
             mc.execute(() -> AgentLoopRegistry.getOrCreate(companion).submitPrompt(message));
             return Delivery.HANDED_OFF;
         }
-        return AgentLoopRegistry.getOrCreate(companion).submitPrompt(message)
-                ? Delivery.QUEUED : Delivery.SEEN;
+        EntityAgentLoop loop = AgentLoopRegistry.getOrCreate(companion);
+        boolean pressed = loop.submitPrompt(message);
+        // 外脑驾驶期间内脑恒为停牌,那个 boolean 恒真却什么也不说明——报驾驶席,
+        // 判据取自 isExternallyDriven() 这一处真源,不另猜。
+        if (loop.isExternallyDriven()) return Delivery.TO_EXTERNAL_BRAIN;
+        return pressed ? Delivery.QUEUED : Delivery.SEEN;
     }
 }
