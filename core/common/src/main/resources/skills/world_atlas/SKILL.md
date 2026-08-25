@@ -1,14 +1,14 @@
 ---
 name: world_atlas
-description: Every searchable structure and biome in MC 26.1 — exact registry ids with a one-line picture of each (what's there, dangers, loot), the classic id traps, family tags, and the structure-vs-biome routing rule. Load before locate_structure / locate_biome.
+description: Every searchable structure and biome in MC 26.2 — exact registry ids with a one-line picture of each (what's there, dangers, loot), the classic id traps, family tags, and the structure-vs-biome routing rule. Load before locate_structure / locate_biome.
 ---
 
 # Skill: world_atlas
 
 `locate_structure` / `locate_biome` take EXACT registry ids (or `#tags`),
 current dimension only. A guessed id costs a failed round — this is the
-COMPLETE catalog (all 34 structures + all 65 biomes, extracted from the
-26.1 registry): if an id isn't here, it doesn't exist in vanilla.
+COMPLETE catalog (all 34 structures + all 66 biomes, extracted from the
+26.2 registry): if an id isn't here, it doesn't exist in vanilla.
 
 ## Id traps — memorize these four
 
@@ -75,6 +75,7 @@ COMPLETE catalog (all 34 structures + all 65 biomes, extracted from the
 | `cold_ocean` / `deep_cold_ocean` / `frozen_ocean` / `deep_frozen_ocean` | 冷/冻海:冰山、北极熊;水下废墟石质版 |
 | `mushroom_fields` | 蘑菇岛:**唯一不刷敌对怪的群系**,哞菇;绝对安全的扎营地 |
 | `dripstone_caves` / `lush_caves` | 洞穴群系:钟乳石(滴水收集岩浆!)+额外铜矿;繁茂洞穴=发光浆果(食物+光源)、美西螈、黏土 |
+| `sulfur_caves` | 硫磺洞穴(26.2 新增):硫磺块/硫磺尖刺/硫磺泉池;刷硫磺方块怪(sulfur_cube,可桶装)+常规洞穴怪 |
 | `deep_dark` | 深暗之域(Y 极深):sculk、远古城市;**监守者——这不是战斗区域,是潜行区域** |
 
 ## Biomes — Nether / End

@@ -15,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.combat.Swing;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.entity.monster.zombie.Zombie;
@@ -111,7 +112,7 @@ public class CompanionGameTests {
     public static void attack_hunts_a_named_passive_target(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = armedCompanion(helper, new BlockPos(2, 2, 2));
-        var pig = EntityType.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var pig = EntityTypes.PIG.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         assertTrue(helper, pig != null, "pig did not spawn");
         BlockPos at = helper.absolutePos(new BlockPos(13, 2, 13));
         pig.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -317,7 +318,7 @@ public class CompanionGameTests {
 
     private static Zombie spawnZombie(GameTestHelper helper, BlockPos rel, NumenPlayer target) {
         ServerLevel level = helper.getLevel();
-        Zombie zombie = EntityType.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        Zombie zombie = EntityTypes.ZOMBIE.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         assertTrue(helper, zombie != null, "zombie did not spawn");
         BlockPos at = helper.absolutePos(rel);
         zombie.snapTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
@@ -664,7 +665,7 @@ public class CompanionGameTests {
         List<BuildTaskRecord.Target> mixed = new ArrayList<>(List.of(
                 new BuildTaskRecord.Target(Blocks.TORCH.defaultBlockState(), Items.TORCH,
                         new BlockPos(1, 1, 0), "torch", null, null, null),
-                new BuildTaskRecord.Target(Blocks.RED_CARPET.defaultBlockState(), Items.RED_CARPET,
+                new BuildTaskRecord.Target(Blocks.CARPET.red().defaultBlockState(), Items.CARPET.red(),
                         new BlockPos(2, 1, 0), "carpet", null, null, null),
                 new BuildTaskRecord.Target(Blocks.STONE, Items.STONE,
                         new BlockPos(0, 9, 0), "stone", null, null, null)));
@@ -757,7 +758,7 @@ public class CompanionGameTests {
         bannerData.putString("id", "minecraft:banner");
         bannerData.put("patterns", patterns);
 
-        var targets = List.of(new BuildTaskRecord.Target(Blocks.WHITE_BANNER, Items.WHITE_BANNER,
+        var targets = List.of(new BuildTaskRecord.Target(Blocks.BANNER.white(), Items.BANNER.white(),
                 at, "banner", null, null, null));
         var ctx = TaskDispatch.ctx("gametest-be", companion);
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
@@ -766,7 +767,7 @@ public class CompanionGameTests {
                 java.util.Map.of(at.asLong(), bannerData)), null, reply -> {});
 
         helper.succeedWhen(() -> {
-            assertTrue(helper, level.getBlockState(at).is(Blocks.WHITE_BANNER),
+            assertTrue(helper, level.getBlockState(at).is(Blocks.BANNER.white()),
                     "the banner itself is not placed yet");
             var be = level.getBlockEntity(at);
             assertTrue(helper, be instanceof net.minecraft.world.level.block.entity.BannerBlockEntity,
@@ -917,7 +918,7 @@ public class CompanionGameTests {
     public static void blueprint_secondary_halves_are_not_targets(GameTestHelper helper)
             throws Exception {
         ServerLevel level = helper.getLevel();
-        BlockState foot = Blocks.RED_BED.defaultBlockState()
+        BlockState foot = Blocks.BED.red().defaultBlockState()
                 .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
                         net.minecraft.world.level.block.state.properties.BedPart.FOOT)
                 .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties
@@ -969,7 +970,7 @@ public class CompanionGameTests {
         int beds = 0;
         int doors = 0;
         for (var t : loaded.targets()) {
-            if (t.item() == Items.RED_BED) beds += t.materialCount();
+            if (t.item() == Items.BED.red()) beds += t.materialCount();
             if (t.item() == Items.OAK_DOOR) doors += t.materialCount();
         }
         assertTrue(helper, beds == 1 && doors == 1,
@@ -1067,7 +1068,7 @@ public class CompanionGameTests {
                 want.x - 2, want.y - 2, want.z - 2, want.x + 2, want.y + 2, want.z + 2);
         helper.succeedWhen(() -> {
             var frames = level.getEntities(
-                    net.minecraft.world.entity.EntityType.ITEM_FRAME, near, e -> true);
+                    net.minecraft.world.entity.EntityTypes.ITEM_FRAME, near, e -> true);
             assertTrue(helper, !frames.isEmpty(),
                     "the item frame never made it onto the wall — its anchor was rejected"
                             + " and it vanished without a trace");
@@ -1078,7 +1079,7 @@ public class CompanionGameTests {
             assertTrue(helper, hung.position().distanceTo(want) < 1.5,
                     "the frame hung at " + hung.position() + " but belongs at " + want);
             var stands = level.getEntities(
-                    net.minecraft.world.entity.EntityType.ARMOR_STAND, near, e -> true);
+                    net.minecraft.world.entity.EntityTypes.ARMOR_STAND, near, e -> true);
             assertTrue(helper, !stands.isEmpty(), "the armour stand never got placed");
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -1112,7 +1113,7 @@ public class CompanionGameTests {
         bannerData.putString("id", "minecraft:banner");
         bannerData.put("patterns", patterns);
 
-        BlockState banner = Blocks.WHITE_BANNER.defaultBlockState();
+        BlockState banner = Blocks.BANNER.white().defaultBlockState();
         var safeBanner = com.dwinovo.numen.core.build.BlueprintSafety
                 .safeBlockEntityData(banner, bannerData);
         assertTrue(helper, safeBanner != null && safeBanner.contains("patterns"),
@@ -1121,13 +1122,13 @@ public class CompanionGameTests {
         // 而料要收的是"带着这些花纹的那面旗帜",不是一面白旗
         var exact = com.dwinovo.numen.core.build.BuildStates
                 .strictItem(banner, safeBanner, registries);
-        assertTrue(helper, exact != null && exact.is(Items.WHITE_BANNER),
+        assertTrue(helper, exact != null && exact.is(Items.BANNER.white()),
                 "the requirement should be a white banner stack, got " + exact);
         assertTrue(helper, !net.minecraft.world.item.ItemStack.isSameItemSameComponents(
-                        exact, new net.minecraft.world.item.ItemStack(Items.WHITE_BANNER)),
+                        exact, new net.minecraft.world.item.ItemStack(Items.BANNER.white())),
                 "a plain white banner must NOT satisfy it — that hands out the loom work for free");
         assertTrue(helper, net.minecraft.world.item.ItemStack.isSameItem(
-                        exact, new net.minecraft.world.item.ItemStack(Items.WHITE_BANNER)),
+                        exact, new net.minecraft.world.item.ItemStack(Items.BANNER.white())),
                 "it is still a white banner by type; only the components differ");
 
         // 陶罐的纹样不搬:碎片是稀有掉落,还原它就是凭空产出
@@ -1277,8 +1278,8 @@ public class CompanionGameTests {
                         && Blocks.OAK_HANGING_SIGN.defaultBlockState().is(tag),
                 "naming #minecraft:all_signs must cover wall and hanging signs too — that is"
                         + " the point of referencing the vanilla tag instead of listing members");
-        assertTrue(helper, Blocks.WHITE_BANNER.defaultBlockState().is(tag)
-                        && Blocks.WHITE_WALL_BANNER.defaultBlockState().is(tag),
+        assertTrue(helper, Blocks.BANNER.white().defaultBlockState().is(tag)
+                        && Blocks.WALL_BANNER.white().defaultBlockState().is(tag),
                 "banners carry their patterns, and the tag must cover wall banners as well");
 
         // 标签之外一律不搬,而且判据只有这一处
@@ -1433,7 +1434,7 @@ public class CompanionGameTests {
         record Give(net.minecraft.world.item.Item item, int forOnePass) {}
         List<Give> supplies = List.of(
                 new Give(Items.STONE, 3),
-                new Give(Items.RED_BED, 1),
+                new Give(Items.BED.red(), 1),
                 new Give(Items.ITEM_FRAME, 1),
                 new Give(Items.ARMOR_STAND, 1),
                 new Give(Items.DIAMOND, 1));
@@ -1462,17 +1463,17 @@ public class CompanionGameTests {
                                         + " (want " + t.desiredState() + ")");
                     }
                     assertTrue(helper, level.getEntities(
-                                    net.minecraft.world.entity.EntityType.ITEM_FRAME,
+                                    net.minecraft.world.entity.EntityTypes.ITEM_FRAME,
                                     site, e -> true).size() == 1,
                             "first run should hang exactly one item frame");
                     assertTrue(helper, level.getEntities(
-                                    net.minecraft.world.entity.EntityType.ARMOR_STAND,
+                                    net.minecraft.world.entity.EntityTypes.ARMOR_STAND,
                                     site, e -> true).size() == 1,
                             "first run should place exactly one armour stand");
                 })
                 // 床头是床脚的落位回调造出来的,不是我们放的——它也得真的在
                 .thenExecute(() -> assertTrue(helper, 
-                        level.getBlockState(anchor.offset(2, 0, 0)).is(Blocks.RED_BED),
+                        level.getBlockState(anchor.offset(2, 0, 0)).is(Blocks.BED.red()),
                         "the bed head must exist even though it was never a target cell"))
                 // 第一遍是真的在生存模式下逐格砌出来的,不是本来就在那儿
                 .thenExecute(() -> assertTrue(helper, 
@@ -1506,11 +1507,11 @@ public class CompanionGameTests {
                             "the second run broke " + second[0].broken() + " block(s)");
                     // 摆设没多出来——这一条没有幂等检查的话必然翻倍
                     assertTrue(helper, level.getEntities(
-                                    net.minecraft.world.entity.EntityType.ITEM_FRAME,
+                                    net.minecraft.world.entity.EntityTypes.ITEM_FRAME,
                                     site, e -> true).size() == 1,
                             "a second run must not hang a second item frame on the same wall");
                     assertTrue(helper, level.getEntities(
-                                    net.minecraft.world.entity.EntityType.ARMOR_STAND,
+                                    net.minecraft.world.entity.EntityTypes.ARMOR_STAND,
                                     site, e -> true).size() == 1,
                             "a second run must not place a second armour stand");
                     // 多留的那一件料还在:第二遍一分钱没花
@@ -1591,18 +1592,18 @@ public class CompanionGameTests {
                                     + " cells should be standing, got " + done);
                     // 收工那一步没跑,所以摆设一只都还没有
                     assertTrue(helper, level.getEntities(
-                                    net.minecraft.world.entity.EntityType.ITEM_FRAME,
+                                    net.minecraft.world.entity.EntityTypes.ITEM_FRAME,
                                     site, e -> true).isEmpty(),
                             "a run that ran out of materials must not have spawned fixtures yet");
                     assertTrue(helper, level.getEntities(
-                                    net.minecraft.world.entity.EntityType.ARMOR_STAND,
+                                    net.minecraft.world.entity.EntityTypes.ARMOR_STAND,
                                     site, e -> true).isEmpty(),
                             "nor the armour stand");
                 })
                 // 补料:剩下的报价 + 每种各一件备用。重发一模一样的调用。
                 .thenExecute(() -> {
                     companion.getInventory().add(new ItemStack(Items.STONE, 1 + 1));
-                    companion.getInventory().add(new ItemStack(Items.RED_BED, 1 + 1));
+                    companion.getInventory().add(new ItemStack(Items.BED.red(), 1 + 1));
                     companion.getInventory().add(new ItemStack(Items.ITEM_FRAME, 1 + 1));
                     companion.getInventory().add(new ItemStack(Items.ARMOR_STAND, 1 + 1));
                     companion.getInventory().add(new ItemStack(Items.DIAMOND, 1 + 1));
@@ -1620,11 +1621,11 @@ public class CompanionGameTests {
                                 "restocked run has not finished " + t.pos().toShortString());
                     }
                     assertTrue(helper, level.getEntities(
-                                    net.minecraft.world.entity.EntityType.ITEM_FRAME,
+                                    net.minecraft.world.entity.EntityTypes.ITEM_FRAME,
                                     site, e -> true).size() == 1,
                             "the restocked run should hang the item frame");
                     assertTrue(helper, level.getEntities(
-                                    net.minecraft.world.entity.EntityType.ARMOR_STAND,
+                                    net.minecraft.world.entity.EntityTypes.ARMOR_STAND,
                                     site, e -> true).size() == 1,
                             "the restocked run should place the armour stand");
                 })
@@ -1637,11 +1638,11 @@ public class CompanionGameTests {
                     assertTrue(helper, second[0].broken() == 0,
                             "and it should not have broken anything, got " + second[0].broken());
                     // 床头由床脚代建,从来不是目标格
-                    assertTrue(helper, level.getBlockState(anchor.offset(2, 0, 0)).is(Blocks.RED_BED),
+                    assertTrue(helper, level.getBlockState(anchor.offset(2, 0, 0)).is(Blocks.BED.red()),
                             "the bed head must be there, built by its foot");
                     // 总账:每种料的备用那一件必须一件不少
                     for (net.minecraft.world.item.Item item : List.of(
-                            Items.STONE, Items.RED_BED, Items.ITEM_FRAME,
+                            Items.STONE, Items.BED.red(), Items.ITEM_FRAME,
                             Items.ARMOR_STAND, Items.DIAMOND)) {
                         int left = 0;
                         for (int i = 0; i < 36; i++) {
@@ -1762,7 +1763,7 @@ public class CompanionGameTests {
      * 以及要计料的躯壳。报价是 3 石 + 1 床 + 1 展示框 + 1 盔甲架 + 1 钻石。
      */
     private static void writeSmallHouse(ServerLevel level, String name) throws Exception {
-        BlockState bedFoot = Blocks.RED_BED.defaultBlockState()
+        BlockState bedFoot = Blocks.BED.red().defaultBlockState()
                 .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.BED_PART,
                         net.minecraft.world.level.block.state.properties.BedPart.FOOT)
                 .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties
@@ -2226,7 +2227,7 @@ public class CompanionGameTests {
         int multi = 0;
         int beds = 0;
         for (BuildTaskRecord.Target t : loaded.targets()) {
-            if (t.desiredState().is(Blocks.RED_BED)) {
+            if (t.desiredState().is(Blocks.BED.red())) {
                 beds++;
             }
             int n = t.materialCount();
@@ -2246,9 +2247,9 @@ public class CompanionGameTests {
         // 此前是"两半都在集里、次半记 0 件"凑出来的,那条路上床头会先落位,而床的
         // 落位回调会往目标集之外再写一块床头——一件料换三块床方块。
         assertTrue(helper, beds > 0, "this cottage has beds; the fixture must still contain them");
-        assertTrue(helper, quoted.get(Items.RED_BED) != null && quoted.get(Items.RED_BED) == beds,
+        assertTrue(helper, quoted.get(Items.BED.red()) != null && quoted.get(Items.BED.red()) == beds,
                 "one bed item per bed: " + beds + " bed cell(s) but "
-                        + quoted.get(Items.RED_BED) + " item(s) quoted");
+                        + quoted.get(Items.BED.red()) + " item(s) quoted");
         assertTrue(helper, loaded.targets().stream().noneMatch(t -> com.dwinovo.numen.core.build
                         .BuildStates.isSecondaryHalf(t.desiredState())),
                 "no secondary half belongs in the target set");
@@ -2983,8 +2984,8 @@ public class CompanionGameTests {
         helper.succeedWhen(() -> {
             var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.boat.AbstractBoat.class,
                     new net.minecraft.world.phys.AABB(
-                            helper.absolutePos(new BlockPos(6, 1, 6)).getCenter(),
-                            helper.absolutePos(new BlockPos(10, 4, 10)).getCenter()));
+                            Vec3.atCenterOf(helper.absolutePos(new BlockPos(6, 1, 6))),
+                            Vec3.atCenterOf(helper.absolutePos(new BlockPos(10, 4, 10)))));
             assertTrue(helper, !boats.isEmpty(),
                     "no boat appeared on the aimed water — tool reply: " + receipt[0]);
             CompanionFactory.despawn(level.getServer(), companion);
@@ -3009,7 +3010,7 @@ public class CompanionGameTests {
         // 船放在水面高度(rel y1 的水,面在 +0.9),别沉进水里被浮力弹上天
         BlockPos boatAt = helper.absolutePos(new BlockPos(6, 2, 8));
         // 1.21.2+ 船按木种各自成 EntityType,位置便捷构造器没了:create + setInitialPos
-        var boat = EntityType.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var boat = EntityTypes.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         boat.setInitialPos(boatAt.getX() + 0.5, boatAt.getY() - 1 + 0.9, boatAt.getZ() + 0.5);
         level.addFreshEntity(boat);
 
@@ -3052,7 +3053,7 @@ public class CompanionGameTests {
             }
         }
         BlockPos boatAt = helper.absolutePos(new BlockPos(7, 2, 7));
-        var boat = EntityType.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var boat = EntityTypes.OAK_BOAT.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         boat.setInitialPos(boatAt.getX() + 0.5, boatAt.getY() - 1, boatAt.getZ() + 0.5);
         level.addFreshEntity(boat);
         BlockPos stone = helper.absolutePos(new BlockPos(7, 2, 5));
@@ -3089,7 +3090,7 @@ public class CompanionGameTests {
     public static void walking_task_steps_off_vehicle(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos cartAt = helper.absolutePos(new BlockPos(3, 2, 8));
-        var cart = EntityType.MINECART.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
+        var cart = EntityTypes.MINECART.create(level, net.minecraft.world.entity.EntitySpawnReason.STRUCTURE);
         cart.setInitialPos(cartAt.getX() + 0.5, cartAt.getY(), cartAt.getZ() + 0.5);
         level.addFreshEntity(cart);
         BlockPos standAt = helper.absolutePos(new BlockPos(11, 2, 8));
