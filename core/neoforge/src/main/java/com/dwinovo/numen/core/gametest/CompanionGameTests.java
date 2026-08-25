@@ -551,6 +551,32 @@ public class CompanionGameTests {
      * 对的格自动跳过。计划不需要存——<b>世界本身就是进度</b>。这条一旦坏掉,续建
      * 会变成在旧墙上叠新墙,所以必须有回归锁。
      */
+    /**
+     * 素面格落进高草下半格:原生右键道的邻居链会把上半截草打碎——
+     * 直写时代留孤儿草悬在工作台头顶(#63)。
+     */
+    @NumenTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void plain_cell_into_tall_grass_breaks_the_top(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos lower = helper.absolutePos(new BlockPos(6, 2, 6));
+        level.setBlock(lower, Blocks.TALL_GRASS.defaultBlockState(), 3);
+        level.setBlock(lower.above(), Blocks.TALL_GRASS.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.DOUBLE_BLOCK_HALF,
+                        net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER), 3);
+        NumenPlayer companion = spawnAt(helper, "gametest_mower", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new ItemStack(Items.CRAFTING_TABLE, 1));
+        var ctx = TaskDispatch.ctx("gametest-tallgrass", companion);
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(4000L),
+                List.of(new BuildTaskRecord.Target(Blocks.CRAFTING_TABLE, Items.CRAFTING_TABLE,
+                        lower, "crafting_table", null, null, null)), true, true, true), null, reply -> {});
+        helper.succeedWhen(() -> {
+            assertTrue(helper, level.getBlockState(lower).is(Blocks.CRAFTING_TABLE), "工作台没放上");
+            assertTrue(helper, !level.getBlockState(lower.above()).is(Blocks.TALL_GRASS),
+                    "孤儿草还悬在工作台头顶: " + level.getBlockState(lower.above()));
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 方向 → 栅栏臂属性(CrossCollisionBlock 的映射表是 protected,用公开常量自建)。 */
     private static net.minecraft.world.level.block.state.properties.BooleanProperty fenceArm(
             net.minecraft.core.Direction d) {
