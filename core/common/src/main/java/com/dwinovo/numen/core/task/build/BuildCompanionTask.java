@@ -75,7 +75,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /**
      * 写入标志:{@code UPDATE_CLIENTS}(同步给客户端)+ {@code UPDATE_KNOWN_SHAPE}
-     * (跳过形状重算),<b>不含</b> {@code UPDATE_NEIGHBORS}。
+     * (跳过形状重算),<b>不含</b> {@code UPDATE_NEIGHBORS}。连接形状的账不欠着:
+     * 收尾 {@link #fixConnections()} 统一按真实邻居补算。
      *
      * <p>这是整个施工能不能照图落地的分水岭。默认的 {@code 3} 会通知邻块并触发
      * 形状重算,于是原版立刻拿它自己的规则复核我们刚写下的每一格:靠在非泥土
@@ -868,6 +869,39 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /** 收工:撤掉自己垫的脚手架、生成摆设、外围补水,放一把庆祝的粒子。 */
+    /**
+     * 连接形状收尾:直写落位刻意不惊动邻居(保图纸原样),代价是体积生成的栅栏/玻璃板
+     * 各自孤立、蓝图边界不贴世界里既有的旧墙。建筑完整后统一按真实邻居重算连接形状:
+     * updateShape 只算"要不要伸手去贴",不触发重力/流体那条物理链;目标格与其六邻
+     * 都算(旧墙那一侧也要伸回来),已连接的算了不变,幂等。对失依附件 updateShape
+     * 会给出空气——建筑完整时不该出现,真出现宁可保留原样也不无声抹掉方块。
+     */
+    private void fixConnections() {
+        var level = player.level();
+        java.util.Set<BlockPos> touched = new java.util.LinkedHashSet<>();
+        for (BuildTaskRecord.Target t : r.targets) {
+            if (BuildCellRules.isAirTarget(t)) continue;
+            touched.add(t.pos());
+            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
+                touched.add(t.pos().relative(d));
+            }
+        }
+        for (BlockPos pos : touched) {
+            BlockState current = level.getBlockState(pos);
+            // 只重算十字连接系(栅栏/玻璃板/铁栏杆)与墙——孤立病只长在它们身上。
+            // 楼梯转角/箱子合体这类形状语义不碰:蓝图边缘格的形状依赖源世界
+            // 截取范围外的邻居,重算会把分毫不差的图纸算成另一个样子。
+            boolean connective = current.getBlock() instanceof net.minecraft.world.level.block.CrossCollisionBlock
+                    || current.getBlock() instanceof net.minecraft.world.level.block.WallBlock;
+            if (current.isAir() || !connective) continue;
+            BlockState updated = net.minecraft.world.level.block.Block
+                    .updateFromNeighbourShapes(current, level, pos);
+            if (updated != current && !updated.isAir()) {
+                level.setBlock(pos, updated, PLACE_FLAGS);
+            }
+        }
+    }
+
     private TaskState finish() {
         for (BlockPos pos : scaffold) {
             if (targetByPos.containsKey(pos.asLong())) continue;
@@ -877,6 +911,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         scaffold.clear();
+        fixConnections();
         fixtures.spawnAll();
         fixtures.nudgeSurroundingWater(siteMin, siteMax);
         show.celebrate(siteMin, siteMax);
