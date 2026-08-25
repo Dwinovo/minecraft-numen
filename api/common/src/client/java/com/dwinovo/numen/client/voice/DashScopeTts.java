@@ -47,6 +47,8 @@ public final class DashScopeTts implements TtsBackend {
     static final int SAMPLE_RATE = 24_000;
 
     private static final HttpClient CLIENT = HttpClient.newBuilder()
+            // 明文 http 下 JDK 默认发 h2c 升级头,自建服务端(Uvicorn 等)刷警告;钉死 1.1。
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 

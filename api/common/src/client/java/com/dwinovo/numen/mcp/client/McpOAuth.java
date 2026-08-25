@@ -54,6 +54,8 @@ final class McpOAuth {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final HttpClient HTTP = HttpClient.newBuilder()
+            // 明文 http 下 JDK 默认发 h2c 升级头,自建服务端(Uvicorn 等)刷警告;钉死 1.1。
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(20)).build();
     private static final long AUTH_TIMEOUT_MS = 5 * 60 * 1000;   // wait up to 5 min for the user
     private static final String STORE_FILE = "mcp_oauth.json";
