@@ -13,6 +13,13 @@ finished build looks wrong.
 1. PLAN first: purpose, footprint, height, one main material + one accent material.
 2. Inspect the site (goto / look around): flat enough? big enough? Note the GROUND
    level — every vertical decision below is anchored to it.
+   **Uneven ground is YOUR problem to solve, not the builder's**: the builder puts
+   blocks exactly where told, so on a slope one side of the footprint will hang in
+   the air (or bury into the hill). Scan the footprint first; if the surface varies,
+   either move the site, or lay a foundation yourself BEFORE the blueprint — a
+   `fill` volume of the wall material from the lowest corner up to your chosen
+   ground level (costs materials in survival like any build). Stilt houses are a
+   valid choice too — just make it a choice, not an accident.
 3. Build big-to-small in ONE build call where possible: a single ordered `ops`
    stream — volumes first, stateful details (`set`, `set_door`) last; later ops
    overwrite earlier cells.
