@@ -28,7 +28,11 @@ import java.util.List;
  *   <li>{@code call_timeout_seconds} — how long one {@code tools/call} waits for a
  *       body action to finish before reporting a timeout;</li>
  *   <li>{@code hidden_tools} — engine tools NOT exposed to the external agent
- *       (agent-internal bookkeeping the external brain has no business calling).</li>
+ *       (agent-internal bookkeeping the external brain has no business calling);</li>
+ *   <li>{@code quiet_fallback} — when the external brain goes quiet (no request for
+ *       {@link McpMode#QUIET_AFTER_MS} ms) the built-in brain takes over until it
+ *       returns. Default false: the companion stands by silently — the owner turned
+ *       this mode on deliberately.</li>
  * </ul>
  */
 public record McpConfig(
@@ -37,7 +41,8 @@ public record McpConfig(
         int port,
         String token,
         int callTimeoutSeconds,
-        List<String> hiddenTools) {
+        List<String> hiddenTools,
+        boolean quietFallback) {
 
     /** Tools the built-in brain manages for itself — never handed to an external driver. */
     private static final List<String> DEFAULT_HIDDEN = List.of("todowrite", "load_skill");
@@ -51,7 +56,7 @@ public record McpConfig(
      */
     public static McpConfig load(Path file) {
         if (!Files.isRegularFile(file)) {
-            McpConfig def = new McpConfig(false, LOOPBACK, 8765, mintToken(), 300, DEFAULT_HIDDEN);
+            McpConfig def = new McpConfig(false, LOOPBACK, 8765, mintToken(), 300, DEFAULT_HIDDEN, false);
             writeDefault(file, def);
             return def;
         }
@@ -64,10 +69,11 @@ public record McpConfig(
                     o.has("port") ? o.get("port").getAsInt() : 8765,
                     strOr(o, "token", ""),
                     o.has("call_timeout_seconds") ? o.get("call_timeout_seconds").getAsInt() : 300,
-                    o.has("hidden_tools") ? strings(o, "hidden_tools") : DEFAULT_HIDDEN);
+                    o.has("hidden_tools") ? strings(o, "hidden_tools") : DEFAULT_HIDDEN,
+                    o.has("quiet_fallback") && o.get("quiet_fallback").getAsBoolean());
         } catch (IOException | RuntimeException ex) {
             Constants.LOG.warn("[numen-mcp] unreadable config {} — server disabled: {}", file, ex.toString());
-            return new McpConfig(false, "127.0.0.1", 8765, "", 300, DEFAULT_HIDDEN);
+            return new McpConfig(false, "127.0.0.1", 8765, "", 300, DEFAULT_HIDDEN, false);
         }
     }
 
@@ -82,25 +88,30 @@ public record McpConfig(
 
     /** 配置文件还没读到时的占位(模式关闭),避免 {@link McpMode} 持 null 配置。 */
     static McpConfig disabledDefault() {
-        return new McpConfig(false, LOOPBACK, 8765, "", 300, DEFAULT_HIDDEN);
+        return new McpConfig(false, LOOPBACK, 8765, "", 300, DEFAULT_HIDDEN, false);
     }
 
     /** 只改开关的副本——设置面板拨动开关时用,其余字段保持用户手改的值。 */
     McpConfig withEnabled(boolean on) {
-        return new McpConfig(on, host, port, token, callTimeoutSeconds, hiddenTools);
+        return new McpConfig(on, host, port, token, callTimeoutSeconds, hiddenTools, quietFallback);
     }
 
     /** 改端点与超时的副本(设置页保存时用)。 */
     McpConfig withEndpoint(String host, int port, int callTimeoutSeconds) {
-        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools);
+        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools, quietFallback);
     }
 
     McpConfig withToken(String token) {
-        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools);
+        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools, quietFallback);
     }
 
     McpConfig withHiddenTools(List<String> hiddenTools) {
-        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, List.copyOf(hiddenTools));
+        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, List.copyOf(hiddenTools), quietFallback);
+    }
+
+    /** 拨"失联后内脑接管"的副本。 */
+    McpConfig withQuietFallback(boolean on) {
+        return new McpConfig(enabled, host, port, token, callTimeoutSeconds, hiddenTools, on);
     }
 
     /** 绑的是所有网卡吗——局域网里别人够得着。 */
@@ -149,6 +160,7 @@ public record McpConfig(
         JsonArray hidden = new JsonArray();
         cfg.hiddenTools().forEach(hidden::add);
         o.add("hidden_tools", hidden);
+        o.addProperty("quiet_fallback", cfg.quietFallback());
         try {
             Files.createDirectories(file.getParent());
             Files.writeString(file, o.toString(), StandardCharsets.UTF_8);
