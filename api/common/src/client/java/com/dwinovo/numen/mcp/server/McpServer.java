@@ -51,11 +51,10 @@ public final class McpServer {
     private static final String SERVER_VERSION = "0.1.0";
     /** Roster / create / delete are fast; only tool actions use the config timeout. */
     private static final int CONTROL_TIMEOUT_SECONDS = 10;
-    /** get_events 长轮询：上限卡在 50 秒给桥接层（mcp-remote 等）留自己的
-     *  请求超时余量；250ms 的查询间隔对聊天延迟无感。 */
+    /** get_events 长轮询：上限卡在 50 秒，给桥接层（mcp-remote 等）留自己的
+     *  请求超时余量。等待停靠在队列的急件叫醒挂点上，不轮询。 */
     private static final int DEFAULT_WAIT_SECONDS = 30;
     private static final int MAX_WAIT_SECONDS = 50;
-    private static final long POLL_INTERVAL_MS = 250;
     /** 活动流里一条参数/结果摘要的截断长度——面板一行放得下即可。 */
     private static final int SUMMARY_LIMIT = 90;
 
@@ -481,7 +480,8 @@ public final class McpServer {
                 : "could not dismiss " + target, !ok);
     }
 
-    /** 长轮询取件：急件一到立即整批返回；到点有什么给什么，没有就如实说没有。 */
+    /** 长轮询取件：停靠在队列的急件叫醒挂点上，急件一到立即整批返回；到点清扫，
+     *  有什么给什么，没有就如实说没有。叫醒只是提前，正确性由到点清扫兜底。 */
     private JsonObject handleGetEvents(JsonObject args) throws Exception {
         UUID target = resolveCompanion(args);
         if (target == null) {
@@ -491,15 +491,18 @@ public final class McpServer {
         if (args.has("wait_seconds") && !args.get("wait_seconds").isJsonNull()) {
             wait = Math.max(0, Math.min(MAX_WAIT_SECONDS, args.get("wait_seconds").getAsInt()));
         }
-        long deadline = System.currentTimeMillis() + wait * 1000L;
-        while (true) {
-            String batch = NumenActuator.takeEvents(target, true)
-                    .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            if (batch != null) return content(batch, false);
-            if (System.currentTimeMillis() + POLL_INTERVAL_MS >= deadline) break;
-            Thread.sleep(POLL_INTERVAL_MS);
+        if (wait > 0) {
+            NumenActuator.EventWait parked = NumenActuator.awaitUrgent(target);
+            try {
+                String batch = parked.batch().get(wait, TimeUnit.SECONDS);
+                if (batch != null) return content(batch, false);
+            } catch (TimeoutException deadline) {
+                // 到点，转清扫——叫醒只是提前，正确性由清扫兜底
+            } finally {
+                parked.cancel().run();
+            }
         }
-        String rest = NumenActuator.takeEvents(target, false)
+        String rest = NumenActuator.takeEvents(target)
                 .get(CONTROL_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         return content(rest != null ? rest
                 : "(no new events — keep polling; the owner's words and world happenings land here)", false);

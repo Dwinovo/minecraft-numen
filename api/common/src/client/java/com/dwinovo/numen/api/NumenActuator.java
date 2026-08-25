@@ -157,22 +157,73 @@ public final class NumenActuator {
      * @param argsJson  the tool's arguments as a JSON object string; null/blank means {@code {}}
      */
     /**
-     * Take the companion's pending events (the owner speaking arrives here as a
-     * {@code <query>}, world happenings as {@code <event>}s — same wire text its
-     * built-in brain would see). {@code urgentOnly} takes only when something
-     * urgent is queued — the MCP server's long-poll spins on that cheaply.
+     * Take whatever events are pending right now (the owner speaking arrives as a
+     * {@code <query>}, world happenings as {@code <event>}s — same wire text the
+     * built-in brain would see). This is the deadline sweep of a long poll; for
+     * the parked wait use {@link #awaitUrgent}.
      *
-     * @return the rendered event batch, or null when nothing was taken this time
+     * @return the rendered event batch, or null when there was nothing
      */
-    public static CompletableFuture<String> takeEvents(UUID companion, boolean urgentOnly) {
+    public static CompletableFuture<String> takeEvents(UUID companion) {
         CompletableFuture<String> f = new CompletableFuture<>();
         if (companion == null) {
             f.complete(null);
             return f;
         }
         Minecraft.getInstance().execute(() ->
-                f.complete(AgentLoopRegistry.getOrCreate(companion).takeEventsForExternal(urgentOnly)));
+                f.complete(AgentLoopRegistry.getOrCreate(companion).takeEventsForExternal(false)));
         return f;
+    }
+
+    /**
+     * A parked long-poll: {@code batch} completes with the whole event batch the
+     * moment something urgent lands (immediately when one already has); {@code cancel}
+     * withdraws the waiter — idempotent, safe after completion. Correctness never
+     * rests on the wake: whatever a lost poke would have delivered, the caller's
+     * deadline sweep ({@link #takeEvents}) picks up.
+     */
+    public record EventWait(CompletableFuture<String> batch, Runnable cancel) {}
+
+    /**
+     * Park until {@code companion} has something urgent. Check-then-register runs in
+     * ONE client-thread hop, so no urgent can slip between "queue was empty" and
+     * "waiter parked".
+     */
+    public static EventWait awaitUrgent(UUID companion) {
+        CompletableFuture<String> f = new CompletableFuture<>();
+        if (companion == null) {
+            f.complete(null);
+            return new EventWait(f, () -> { });
+        }
+        java.util.concurrent.atomic.AtomicReference<Runnable> hook =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        Runnable cancel = () -> Minecraft.getInstance().execute(() -> {
+            Runnable h = hook.getAndSet(null);
+            if (h != null) {
+                AgentLoopRegistry.get(companion).ifPresent(lp -> lp.removeUrgentListener(h));
+            }
+        });
+        Minecraft.getInstance().execute(() -> {
+            var loop = AgentLoopRegistry.getOrCreate(companion);
+            String now = loop.takeEventsForExternal(true);
+            if (now != null) {
+                f.complete(now);
+                return;
+            }
+            Runnable h = () -> {
+                String batch = loop.takeEventsForExternal(true);
+                if (batch != null) {   // 别的取件人抢先了就继续挂着,等下一声
+                    Runnable self = hook.getAndSet(null);
+                    if (self != null) {
+                        loop.removeUrgentListener(self);
+                    }
+                    f.complete(batch);
+                }
+            };
+            hook.set(h);
+            loop.addUrgentListener(h);
+        });
+        return new EventWait(f, cancel);
     }
 
     /**
