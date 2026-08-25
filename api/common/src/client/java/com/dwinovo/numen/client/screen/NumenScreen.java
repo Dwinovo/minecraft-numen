@@ -336,8 +336,12 @@ public final class NumenScreen extends Screen {
             if (d.personaId != null) com.dwinovo.numen.persona.PersonaLibrary.pendSummon(d.name, d.personaId);
             com.dwinovo.numen.agent.llm.ProviderLibrary.pendSummon(d.name, d.providerId);
             if (d.voiceId != null) com.dwinovo.numen.client.voice.VoiceLibrary.pendSummon(d.name, d.voiceId);
-            // 自定义皮肤:库里存好的签名数据现成,直接发。
+            // 自定义皮肤:库里存好的签名数据现成,直接发。选了库条目的同时记账
+            // (UUID 到货时落进绑定),编辑卡才能标出她当前穿的是哪张。
             var skinEntry = com.dwinovo.numen.client.skin.SkinLibrary.instance().get(d.skinId);
+            if (skinEntry != null && skinEntry.signed()) {
+                com.dwinovo.numen.client.skin.SkinLibrary.pendSummon(d.name, d.skinId);
+            }
             if (skinEntry != null && skinEntry.signed()) {
                 com.dwinovo.numen.Constants.LOG.info("[numen-skin] 召唤 {}: 用皮肤库条目「{}」",
                         d.name, skinEntry.name());
@@ -989,7 +993,7 @@ public final class NumenScreen extends Screen {
             editPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
                     mouseX, mouseY, net.minecraft.Util.getMillis());
-            String modeTip = editPanel().modeTooltipAt(mouseX, mouseY);
+            String modeTip = editPanel().tooltipAt(mouseX, mouseY);
             if (modeTip != null) {
                 pendingTip = java.util.List.of(Component.literal(modeTip));
                 pendingTipX = mouseX;
