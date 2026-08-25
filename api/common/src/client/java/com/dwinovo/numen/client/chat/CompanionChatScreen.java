@@ -95,7 +95,7 @@ public class CompanionChatScreen extends Screen {
         @Override public void onSend(String text) {
             NumenGateway.Delivery sent = NumenGateway.enqueue(companionUuid, text);
             if (sent != NumenGateway.Delivery.REJECTED) {
-                ChatLines.owner(companionName, text, false, sent == NumenGateway.Delivery.QUEUED);
+                ChatLines.owner(companionName, text, false);
             } else {
                 com.dwinovo.numen.client.hud.TalkHint.flash(companionName + " 没能收到——它可能不在线", 3000);
             }
