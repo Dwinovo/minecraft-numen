@@ -396,11 +396,14 @@ public final class EntityAgentLoop {
      * 只会觉得这模组有时候吞消息。
      */
     /**
-     * @return 这句话有没有被压着(true = 她没能当场看,得等)。这是<b>观察</b>不是预测:
-     *         {@code tryStartTurn} 之后有没有真的发出请求,看的就是它自己的状态。
-     *         调用方拿 {@code isBusy()} 之类的东西自己猜是猜不准的——那里面的
-     *         {@code currentTask != null} 并不在开轮的闸门里,她在跟随时你说的话明明
-     *         当场就发出去了,界面却会写"排队中"。闸门以后再加几道,这里也不会跑偏。
+     * @return 这句话有没有被压着(true = 内脑没能当场把请求发出去)。这是<b>观察</b>不是预测:
+     *         {@code tryStartTurn} 之后有没有真的发出请求,看的就是它自己的状态。调用方拿
+     *         {@code isBusy()} 之类的东西自己猜是猜不准的——那里面的 {@code currentTask != null}
+     *         并不在开轮的闸门里,她在跟随时你说的话当场就发得出去。闸门以后再加几道,这里也不会跑偏。
+     *
+     *         <p>它只喂 {@link com.dwinovo.numen.api.NumenGateway.Delivery} 那份给桥接看的汇报,
+     *         不驱动任何界面。外脑驾驶时内脑整体停牌,它恒为 true——那不是"她忙",是她不在这条线上,
+     *         所以 {@code Delivery} 在那种情况下单报 {@code TO_EXTERNAL_BRAIN}。
      */
     public boolean submitPrompt(String text) {
         return enqueueOwnerWords("<query>" + text + "</query>", text);
