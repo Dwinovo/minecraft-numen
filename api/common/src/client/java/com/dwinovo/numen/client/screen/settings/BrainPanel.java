@@ -117,6 +117,14 @@ public final class BrainPanel {
 
         ui.add(new ValueRow(t("numen.brain.status"), () -> statusLine(McpMode.instance())))
                 .setBounds(x, ry, w, ValueRow.HEIGHT);
+        ry += VALUE_PITCH;
+
+        // 失联回退:外脑安静超时后内脑是否接管。即时写配置,与主开关同一个"拨了就算"风格。
+        Label fallbackLabel = ui.add(new Label(t("numen.brain.fallback_toggle"), Label.Role.MUTED));
+        fallbackLabel.setBounds(x, ry + 2, w - 28, 9);
+        Toggle fallback = ui.add(new Toggle(mcp.config().quietFallback(),
+                McpMode.instance()::setQuietFallback));
+        fallback.setBounds(x + w - 24, ry, 22, 11);
 
         String promptLabel = t("numen.brain.copy_prompt");
         int pw = Minecraft.getInstance().font.width(promptLabel) + 14;

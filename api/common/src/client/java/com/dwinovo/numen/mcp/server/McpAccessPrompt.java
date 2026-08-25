@@ -72,10 +72,17 @@ final class McpAccessPrompt {
 
                 - Every tool takes a `companion` argument (name or id), so each call targets one body. \
                 There is no take-control handshake — just call tools.
+                - You are the companion's brain, so keep a `get_events(companion, wait_seconds)` loop \
+                running: it long-polls and returns the moment something urgent happens. The player \
+                speaking to the companion in-game arrives as a `<query>`; world happenings and task \
+                completions arrive as `<event>`s. Events are consumed on read and nothing is lost \
+                between calls.
+                - Reply and narrate with `say(companion, text)` — the words appear in-game as the \
+                companion's chat line, speech bubble, and voice. Keep your own conversation history; \
+                the game stores none for you.
                 - Action tools (`goto`, `mine`, `build`, `fish`, …) are BACKGROUND tasks: they \
-                return a task id immediately. Poll `task_status` until the body goes idle — as an \
-                external driver you do NOT receive `task_finished` events, so polling is the only way \
-                to know it's done. `task_stop` cancels.
+                return a task id immediately. Their completions land in `get_events`; `task_status` \
+                answers "what is it doing right now", `task_stop` cancels.
                 - One body runs one task at a time. If you get a "body is busy" refusal, either wait for \
                 that task or `task_stop` it.
                 - You're blind between calls: perceive with `get_self_status` / `scan_blocks` / \

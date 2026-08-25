@@ -4,6 +4,7 @@ import com.dwinovo.numen.agent.tool.ClientToolContext;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
+import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.network.payload.DismissRequestPayload;
@@ -39,8 +40,9 @@ import java.util.concurrent.atomic.AtomicLong;
  * <h2>没有"取得控制权"这一步</h2>
  * 直接 {@link #invoke} 即可,不需要先申请、用完再归还。两个大脑不打架靠两道现成的闸:
  * <ul>
- *   <li><b>大脑层</b>——「外接大脑」模式开启期间({@code McpMode.enabled()})内置大脑
- *       一轮都不开,主人聊天、弹幕桥接送进来的消息都只进收件箱不开轮;</li>
+ *   <li><b>大脑层</b>——外接大脑驱动期间({@code McpMode.driving()})内置大脑
+ *       一轮都不开,主人聊天、弹幕桥接送进来的消息都只进收件箱,由外脑经
+ *       {@link #takeEvents} 取走、用 {@link #say} 回话;</li>
  *   <li><b>身体层</b>——{@code TaskDispatch} 的"一具身体一件活"闸门:身体上有活时新派
  *       的活当场被拒(附带话术),物理上不可能两件活撕扯一具身体。</li>
  * </ul>
@@ -154,6 +156,43 @@ public final class NumenActuator {
      * @param toolName  a registered tool name (case-tolerant, see {@link ToolRegistry#resolve})
      * @param argsJson  the tool's arguments as a JSON object string; null/blank means {@code {}}
      */
+    /**
+     * Take the companion's pending events (the owner speaking arrives here as a
+     * {@code <query>}, world happenings as {@code <event>}s — same wire text its
+     * built-in brain would see). {@code urgentOnly} takes only when something
+     * urgent is queued — the MCP server's long-poll spins on that cheaply.
+     *
+     * @return the rendered event batch, or null when nothing was taken this time
+     */
+    public static CompletableFuture<String> takeEvents(UUID companion, boolean urgentOnly) {
+        CompletableFuture<String> f = new CompletableFuture<>();
+        if (companion == null) {
+            f.complete(null);
+            return f;
+        }
+        Minecraft.getInstance().execute(() ->
+                f.complete(AgentLoopRegistry.getOrCreate(companion).takeEventsForExternal(urgentOnly)));
+        return f;
+    }
+
+    /**
+     * Speak as the companion: speech bubble + chat line + its bound voice, the same
+     * presentation the built-in brain's replies get. Conversation state stays with
+     * the caller — the game records nothing for it.
+     */
+    public static CompletableFuture<Boolean> say(UUID companion, String text) {
+        CompletableFuture<Boolean> f = new CompletableFuture<>();
+        if (companion == null || text == null || text.isBlank()) {
+            f.complete(false);
+            return f;
+        }
+        Minecraft.getInstance().execute(() -> {
+            AgentLoopRegistry.getOrCreate(companion).externalSay(text);
+            f.complete(true);
+        });
+        return f;
+    }
+
     public static CompletableFuture<String> invoke(UUID companion, String toolName, String argsJson) {
         CompletableFuture<String> f = new CompletableFuture<>();
         if (companion == null || toolName == null || toolName.isBlank()) {
