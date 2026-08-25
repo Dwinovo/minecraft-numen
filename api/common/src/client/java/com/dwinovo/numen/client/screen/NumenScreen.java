@@ -1028,6 +1028,16 @@ public final class NumenScreen extends Screen {
             // textured socket behind the head (gold-bordered when active), then the avatar, then a status LED
             g.blitSprite(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
             PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
+            // 悬停激活头像:边框亮 CTA + tooltip——"再点开编辑卡"这个入口的唯一可见提示。
+            boolean hovered = mouseX >= ax && mouseX < ax + RAIL_AV
+                    && mouseY >= ay && mouseY < ay + RAIL_AV;
+            if (active && hovered && !dismissOpen() && !modalOpen()) {
+                Nb.border(g, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4, 1, CTA);
+                pendingTip = java.util.List.of(Component.translatable(
+                        com.dwinovo.numen.data.ModLanguageData.Keys.EDIT_HINT, e.name()));
+                pendingTipX = mouseX;
+                pendingTipY = mouseY;
+            }
             if (e.dead()) {                                           // dead — dim veil + respawn countdown
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
                 long rem = e.remainingMs();
