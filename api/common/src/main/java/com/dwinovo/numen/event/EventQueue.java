@@ -1,32 +1,30 @@
 package com.dwinovo.numen.event;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * 同伴的输入队列——主人的话与世界事件<b>共用</b>的这一个。
  *
- * <h2>它只遵守自己的规则</h2>
+ * <h2>它只是台账,不是调度员</h2>
  * 不认识 Minecraft,不认识 agent 死没死,不认识"回合"是什么,也不认识条目的类型
- * (那是 {@link EventTypes} 的表)。它只回答一个问题:<b>现在该不该排空</b>。
+ * (那是 {@link EventTypes} 的表)。它只回答一个问题:<b>现在熟没熟</b>。
  *
  * <pre>
- * 有急件 + 没锁  → 排空
- * 有急件 + 锁着  → 等锁开
- * 没急件         → 看条数、看时长
+ * 有急件  → 熟了
+ * 没急件  → 看条数、看时长
  * </pre>
  *
- * <p>没有第四条。谁发的、什么类型、她当时在干嘛——一律不看。
+ * <p>没有第三条。谁发的、什么类型、她当时在干嘛、消费者此刻方不方便——一律不看。
+ * 消费者能不能来取(她死了?驾驶席在外接大脑手里?)是<b>消费者自己的停牌</b>,
+ * 不在这里:队列没有锁,取件口({@link #takeWhile}/{@link #takeEntries})永远敞着,
+ * 谁来取、什么时候取,由持有队列的人决定。
  *
- * <h2>锁</h2>
- * 多持有者:{@link #lock}/{@link #unlock} 收一个不透明字符串,全部松手才算开。
- * 队列不知道那些字符串是什么意思(她死了?外接大脑接管了?),只知道有人锁着。
- * 锁管的只是 {@link #shouldDrain}——"该不该<b>主动</b>排空"这一个决策;不管进、
- * 不管清,也不管取件口({@link #takeWhile}/{@link #takeEntries}):取件口谁能用、
- * 什么时候用,由持有队列的人决定——外接大脑的 get_events 正是绕开锁直接取的
- * (锁拦的是内置大脑,不是队列)。
+ * <h2>急件叫醒:脉冲可以丢,电平不会骗</h2>
+ * 急件落地时同步通知{@link #addUrgentListener 登记过的等待者}——叫的内容只是
+ * "来问吧",不递事件。正确性从不依赖叫醒:{@link #hasUrgent}/{@link #shouldDrain}
+ * 是随时可问、答案一致的状态;丢一次叫醒,消费者按自己的节律(内脑的 tick 心跳、
+ * 外脑的下一次长轮询)一问就发现。
  *
  * <h2>"排空"是"到点就走",不是"立刻发出"</h2>
  * {@link #shouldDrain} 只读状态,可以反复问、答案一致。上层因为协议原因(不能往
@@ -34,9 +32,9 @@ import java.util.Set;
  * <b>不存在"错过的排空"</b>,也就不需要记住"我刚才想排空"这种会出错的状态。
  *
  * <h2>上限</h2>
- * {@value #DEFAULT_CAP} 条,满了丢最老的并记账,排空时如实补一句。锁可能开很久
- * (外接大脑能开一整天),不设上限就会涨到把上下文撑爆;但丢弃不能无声无息——
- * 主人得知道自己看到的是全部还是残片。
+ * {@value #DEFAULT_CAP} 条,满了丢最老的并记账,排空时如实补一句。消费者可能很久
+ * 不来取(外接大脑失联、她死着躺一晚上),不设上限就会涨到把上下文撑爆;但丢弃
+ * 不能无声无息——主人得知道自己看到的是全部还是残片。
  *
  * <p>纯 JVM。落盘由 {@link Journal} 注入,线程约束由持有者负责。
  */
@@ -66,7 +64,8 @@ public final class EventQueue {
     }
 
     private final List<Entry> entries = new ArrayList<>();
-    private final Set<String> locks = new LinkedHashSet<>();
+    /** 急件叫醒名单。回调在 push 的调用线程上同步执行,只该做"完成一个等待"这类轻动作。 */
+    private final List<Runnable> urgentListeners = new ArrayList<>();
     private final Journal journal;
     private final int cap;
     private int dropped;
@@ -94,31 +93,27 @@ public final class EventQueue {
             dropped++;
         }
         journal.save(entries);
-    }
-
-    // ---- 锁 ----
-
-    /** 上锁。同一个持有者重复上锁是幂等的。 */
-    public void lock(String holder) {
-        if (holder != null && locks.add(holder)) {
-            journal.save(entries);
+        if (urgent) {
+            // 叫醒在入队落盘之后:等待者被叫起来一问,货一定已经在。
+            // 拷贝一份再遍历,回调里摘自己是安全的。
+            for (Runnable listener : List.copyOf(urgentListeners)) {
+                listener.run();
+            }
         }
     }
 
-    /** 松手。没上过的锁静默忽略;全部松手才算开。 */
-    public void unlock(String holder) {
-        if (holder != null && locks.remove(holder)) {
-            journal.save(entries);
+    // ---- 急件叫醒 ----
+
+    /** 登记急件叫醒(叫"来问吧",不递事件)。 */
+    public void addUrgentListener(Runnable listener) {
+        if (listener != null) {
+            urgentListeners.add(listener);
         }
     }
 
-    public boolean locked() {
-        return !locks.isEmpty();
-    }
-
-    /** 谁锁着(给日志看)。 */
-    public Set<String> lockHolders() {
-        return Set.copyOf(locks);
+    /** 摘掉叫醒。没登记过的静默忽略。 */
+    public void removeUrgentListener(Runnable listener) {
+        urgentListeners.remove(listener);
     }
 
     // ---- 出 ----
@@ -131,7 +126,7 @@ public final class EventQueue {
      * @param level 主动性档位 1~10,见 {@link #thresholdOf} / {@link #maxWaitMsOf}
      */
     public boolean shouldDrain(long now, int level) {
-        if (locked() || entries.isEmpty()) {
+        if (entries.isEmpty()) {
             return false;
         }
         for (Entry e : entries) {
