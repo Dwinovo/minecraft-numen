@@ -31,6 +31,8 @@ public final class SttProviders {
     public static final String BACKEND_DOUBAO = "doubao";
     /** 阿里云百炼(DashScope)实时识别:流式 WebSocket,run-task 指令协议。 */
     public static final String BACKEND_DASHSCOPE = "dashscope";
+    /** 阶跃星辰(StepFun)识别:私有 JSON+SSE,批量上传、结果流式先到。 */
+    public static final String BACKEND_STEPFUN = "stepfun-asr";
 
     /**
      * @param modelLabel 那一栏在设置里叫什么。多数服务商就是"模型",但也有名不副实的——豆包那一栏
@@ -106,6 +108,7 @@ public final class SttProviders {
             case BACKEND_WHISPER_HTTP -> new WhisperHttpStt(base, key, model);
             case BACKEND_DOUBAO -> new DoubaoStt(base, key, model);
             case BACKEND_DASHSCOPE -> new DashScopeStt(base, key, model);
+            case BACKEND_STEPFUN -> new StepFunStt(base, key, model);
             default -> {
                 Constants.LOG.warn("[numen-stt] provider '{}' 的 backend='{}' 不认识,按 {} 处理",
                         opt.id(), opt.backend(), BACKEND_WHISPER_HTTP);
