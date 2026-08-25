@@ -93,6 +93,8 @@ public final class HttpLlmTransport {
         this.extraHeaders = extraHeaders == null ? java.util.Map.of() : extraHeaders;
         this.authHeaders = authHeaders;
         HttpClient.Builder b = HttpClient.newBuilder()
+            // 明文 http 下 JDK 默认发 h2c 升级头,自建服务端(Uvicorn 等)刷警告;钉死 1.1。
+            .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(CONNECT_TIMEOUT)
                 .followRedirects(HttpClient.Redirect.NORMAL);
         java.net.ProxySelector ps = proxySelector(proxy);
