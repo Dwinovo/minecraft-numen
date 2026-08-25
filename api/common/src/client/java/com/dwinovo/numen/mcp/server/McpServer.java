@@ -51,9 +51,10 @@ public final class McpServer {
     private static final String SERVER_VERSION = "0.1.0";
     /** Roster / create / delete are fast; only tool actions use the config timeout. */
     private static final int CONTROL_TIMEOUT_SECONDS = 10;
-    /** get_events 长轮询：上限卡在 50 秒，给桥接层（mcp-remote 等）留自己的
-     *  请求超时余量。等待停靠在队列的急件叫醒挂点上，不轮询。 */
-    private static final int DEFAULT_WAIT_SECONDS = 30;
+    /** get_events 长轮询：默认只停 2 秒——停靠期间外脑困在这一次调用里，别的什么都做不了，
+     *  它得频繁拿回方向盘才能主动行动，而不是只会应答。急件走叫醒挂点即刻送达，与这个值无关；
+     *  上限 50 秒留给"就想挂着等主人"的用法，也给桥接层（mcp-remote 等）的请求超时留余量。 */
+    private static final int DEFAULT_WAIT_SECONDS = 2;
     private static final int MAX_WAIT_SECONDS = 50;
     /** 活动流里一条参数/结果摘要的截断长度——面板一行放得下即可。 */
     private static final int SUMMARY_LIMIT = 90;
@@ -82,12 +83,15 @@ public final class McpServer {
             tools return only when the task finishes or times out. You can drive several companions in \
             parallel. Modded blocks, items, and GUIs (Create, AE2, Mekanism) work natively.
 
-            You also carry the companion's conversation: poll get_events(companion, wait_seconds) in a \
-            loop — it long-polls and returns the moment something urgent happens. The owner speaking to \
-            the companion (in-game chat or voice) arrives as a <query>; world happenings arrive as \
-            <event>s. Reply with say(companion, text): the words appear in-game as the companion's chat \
-            line, speech bubble, and voice. Keep your own conversation history — the game stores none \
-            for you; between get_events calls nothing is lost (events queue up).""";
+            You also carry the companion's conversation: call get_events(companion) about every 2 \
+            seconds while you drive it. It waits 2 seconds by default and returns instantly the moment \
+            something urgent lands, so you get the wheel back every couple of seconds and can act on \
+            your own initiative instead of only reacting. The owner speaking to the companion (in-game \
+            chat or voice) arrives as a <query>; world happenings arrive as <event>s. Reply with \
+            say(companion, text): the words appear in-game as the companion's chat line, speech bubble, \
+            and voice. Keep your own conversation history — the game stores none for you; between \
+            get_events calls nothing is lost (events queue up). Raise wait_seconds (up to 50) only when \
+            you deliberately want to park and wait for the owner to speak.""";
 
     private final McpConfig config;
     private final Gson gson = new Gson();
@@ -261,7 +265,7 @@ public final class McpServer {
                 "Long-poll the companion's inbox: returns the moment something urgent arrives (the owner "
                         + "speaking to it shows up as a <query>; world happenings as <event>s), or whatever "
                         + "accumulated once wait_seconds runs out. Events are consumed on read and nothing is "
-                        + "lost between calls — keep polling this in a loop while you drive the companion.",
+                        + "lost between calls — call this about every 2 seconds while you drive the companion.",
                 getEventsSchema()));
         tools.add(toolDef("say",
                 "Speak as the companion: the text appears in-game as its chat line, speech bubble, and voice "
@@ -349,7 +353,8 @@ public final class McpServer {
         JsonObject wait = new JsonObject();
         wait.addProperty("type", "integer");
         wait.addProperty("description", "How long to wait for something urgent before returning, in seconds "
-                + "(0–" + MAX_WAIT_SECONDS + ", default " + DEFAULT_WAIT_SECONDS + "). 0 = return at once.");
+                + "(0–" + MAX_WAIT_SECONDS + ", default " + DEFAULT_WAIT_SECONDS + "). 0 = return at once. "
+                + "Leave it unset for the normal drive loop; raise it only to park and wait for the owner.");
         schema.getAsJsonObject("properties").add("wait_seconds", wait);
         return schema;
     }
