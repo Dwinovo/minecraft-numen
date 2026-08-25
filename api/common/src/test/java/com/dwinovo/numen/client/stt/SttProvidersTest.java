@@ -43,7 +43,8 @@ class SttProvidersTest {
     void everyBackendNameIsOneTheFactoryActuallyHandles() throws IOException {
         // 认不出来的 backend 会静默退回 whisper-http —— 对 WebSocket 那几家等于完全发错
         Set<String> known = Set.of(SttProviders.BACKEND_WHISPER_HTTP,
-                SttProviders.BACKEND_DOUBAO, SttProviders.BACKEND_DASHSCOPE);
+                SttProviders.BACKEND_DOUBAO, SttProviders.BACKEND_DASHSCOPE,
+                SttProviders.BACKEND_STEPFUN);
         for (var e : providers()) {
             String backend = str(e.getAsJsonObject(), "backend");
             assertTrue(known.contains(backend),
@@ -83,7 +84,10 @@ class SttProvidersTest {
             if (base.isBlank()) {
                 continue;
             }
-            boolean realtime = !SttProviders.BACKEND_WHISPER_HTTP.equals(str(p, "backend"));
+            // 批量型走 http(s),实时流式型走 wss——stepfun 是 HTTP+SSE 批量型。
+            String backend = str(p, "backend");
+            boolean realtime = !SttProviders.BACKEND_WHISPER_HTTP.equals(backend)
+                    && !SttProviders.BACKEND_STEPFUN.equals(backend);
             assertEquals(realtime, base.startsWith("wss://"),
                     str(p, "id") + " 的协议和地址对不上: " + base);
         }
