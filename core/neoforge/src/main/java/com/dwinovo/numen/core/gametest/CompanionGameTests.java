@@ -551,6 +551,114 @@ public class CompanionGameTests {
      * 对的格自动跳过。计划不需要存——<b>世界本身就是进度</b>。这条一旦坏掉,续建
      * 会变成在旧墙上叠新墙,所以必须有回归锁。
      */
+    /** 方向 → 栅栏臂属性(CrossCollisionBlock 的映射表是 protected,用公开常量自建)。 */
+    private static net.minecraft.world.level.block.state.properties.BooleanProperty fenceArm(
+            net.minecraft.core.Direction d) {
+        return switch (d) {
+            case NORTH -> net.minecraft.world.level.block.state.properties.BlockStateProperties.NORTH;
+            case SOUTH -> net.minecraft.world.level.block.state.properties.BlockStateProperties.SOUTH;
+            case EAST -> net.minecraft.world.level.block.state.properties.BlockStateProperties.EAST;
+            case WEST -> net.minecraft.world.level.block.state.properties.BlockStateProperties.WEST;
+            default -> throw new IllegalArgumentException(String.valueOf(d));
+        };
+    }
+
+    /**
+     * 收尾连接重算:直写落位不惊动邻居,体积生成的栅栏本是一排孤柱;建筑完整后
+     * 按真实邻居补算连接形状——三根一排,中间那根必须向两侧邻居伸臂。
+     * 方向按坐标差现算,不咬绝对东西(结构旋转免疫)。
+     */
+    @NumenTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void volume_fences_connect_after_build(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_fencer", new BlockPos(2, 2, 2), false);
+        List<BuildTaskRecord.Target> targets = new ArrayList<>();
+        for (int x = 6; x <= 8; x++) {
+            targets.add(new BuildTaskRecord.Target(Blocks.OAK_FENCE, Items.OAK_FENCE,
+                    helper.absolutePos(new BlockPos(x, 2, 8)), "oak_fence", null, null, null));
+        }
+        companion.getInventory().add(new ItemStack(Items.OAK_FENCE, 3));
+        var ctx = TaskDispatch.ctx("gametest-fence-row", companion);
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(4000L),
+                targets, true, true, true), null, reply -> {});
+        BlockPos mid = helper.absolutePos(new BlockPos(7, 2, 8));
+        BlockPos west = helper.absolutePos(new BlockPos(6, 2, 8));
+        BlockPos east = helper.absolutePos(new BlockPos(8, 2, 8));
+        helper.succeedWhen(() -> {
+            BlockState m = level.getBlockState(mid);
+            assertTrue(helper, m.is(Blocks.OAK_FENCE), "中间那格不是栅栏");
+            for (BlockPos nb : new BlockPos[]{west, east}) {
+                var d = net.minecraft.core.Direction.getNearest(
+                        nb.getX() - mid.getX(), 0, nb.getZ() - mid.getZ(), net.minecraft.core.Direction.NORTH);
+                var prop = fenceArm(d);
+                assertTrue(helper, m.getValue(prop), "中间栅栏没向 " + d + " 伸臂: " + m);
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 边界贴旧墙:世界里已有的栅栏,新栅栏要伸手去贴,旧的也要伸回来。 */
+    @NumenTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void built_fence_grabs_existing_neighbour(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        helper.setBlock(new BlockPos(6, 2, 6), Blocks.OAK_FENCE);
+        NumenPlayer companion = spawnAt(helper, "gametest_edger", new BlockPos(2, 2, 2), false);
+        BlockPos oldPos = helper.absolutePos(new BlockPos(6, 2, 6));
+        BlockPos newPos = helper.absolutePos(new BlockPos(7, 2, 6));
+        List<BuildTaskRecord.Target> targets = List.of(
+                new BuildTaskRecord.Target(Blocks.OAK_FENCE, Items.OAK_FENCE,
+                        newPos, "oak_fence", null, null, null));
+        companion.getInventory().add(new ItemStack(Items.OAK_FENCE, 1));
+        var ctx = TaskDispatch.ctx("gametest-fence-edge", companion);
+        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(4000L),
+                targets, true, true, true), null, reply -> {});
+        helper.succeedWhen(() -> {
+            BlockState built = level.getBlockState(newPos);
+            BlockState old = level.getBlockState(oldPos);
+            assertTrue(helper, built.is(Blocks.OAK_FENCE), "新栅栏没立起来");
+            var toOld = net.minecraft.core.Direction.getNearest(
+                    oldPos.getX() - newPos.getX(), 0, oldPos.getZ() - newPos.getZ(), net.minecraft.core.Direction.NORTH);
+            assertTrue(helper, built.getValue(
+                    fenceArm(toOld)),
+                    "新栅栏没伸手贴旧邻居: " + built);
+            assertTrue(helper, old.getValue(
+                    fenceArm(toOld.getOpposite())),
+                    "旧栅栏没伸回来: " + old);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 素面格升格原生放置:无属性无数据的格子(工作台)按玩家动作落位——升格发生在
+     * record 构造时,车道/对账/扣料同读 itemPlace 一个字段;带属性的格子(栅栏)不升格。
+     */
+    @NumenTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void plain_cell_promoted_to_item_place(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_joiner", new BlockPos(2, 2, 2), false);
+        BlockPos tablePos = helper.absolutePos(new BlockPos(6, 2, 6));
+        List<BuildTaskRecord.Target> targets = List.of(
+                new BuildTaskRecord.Target(Blocks.CRAFTING_TABLE, Items.CRAFTING_TABLE,
+                        tablePos, "crafting_table", null, null, null),
+                new BuildTaskRecord.Target(Blocks.OAK_FENCE, Items.OAK_FENCE,
+                        helper.absolutePos(new BlockPos(8, 2, 6)), "oak_fence", null, null, null));
+        companion.getInventory().add(new ItemStack(Items.CRAFTING_TABLE, 1));
+        companion.getInventory().add(new ItemStack(Items.OAK_FENCE, 1));
+        var ctx = TaskDispatch.ctx("gametest-plain-cell", companion);
+        BuildTaskRecord record = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(4000L),
+                targets, true, true, true);
+        assertTrue(helper, record.targets.get(0).itemPlace(), "素面格(工作台)没升格成原生放置");
+        assertTrue(helper, !record.targets.get(1).itemPlace(), "带属性格(栅栏)不该升格");
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+        helper.succeedWhen(() -> {
+            assertTrue(helper, level.getBlockState(tablePos).is(Blocks.CRAFTING_TABLE),
+                    "工作台没放出来");
+            assertTrue(helper, companion.getInventory().countItem(Items.CRAFTING_TABLE) == 0,
+                    "原生车道没按手扣料");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     @NumenTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
     public static void survival_build_resumes_after_restock(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
