@@ -85,6 +85,22 @@ public final class SkinLibrary extends JsonLibrary<SkinLibrary.Entry> {
         return freshId("skin");
     }
 
+    // ---- pending summon assignment (same mechanism as PersonaLibrary.pendSummon:
+    // the new companion's UUID is unknown until the roster snapshot arrives) ----
+
+    private static final java.util.Map<String, String> PENDING_SUMMON = new java.util.LinkedHashMap<>();
+
+    /** Remember the skin entry chosen for a companion being summoned (by name). */
+    public static void pendSummon(String name, String entryId) {
+        if (name == null || entryId == null) return;
+        PENDING_SUMMON.put(name, entryId);
+    }
+
+    /** Take (and clear) the entry id pending for a just-arrived companion name, or null. */
+    public static String takePendingSummon(String name) {
+        return PENDING_SUMMON.remove(name);
+    }
+
     // ---- persistence hooks ----
 
     @Override
