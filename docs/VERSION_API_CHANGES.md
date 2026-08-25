@@ -15,7 +15,7 @@ Fabric + NeoForge 同源。向上移植（把低版本分支的代码搬到高�
 
 ## 版本阶梯
 
-`1.20.1 → 1.20.2 → 1.20.4 → 1.20.6 → 1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 → 1.21.11 → 26.1.2`
+`1.20.1 → 1.20.2 → 1.20.4 → 1.20.6 → 1.21.1 → 1.21.4 → 1.21.5 → 1.21.8 → 1.21.10 → 1.21.11 → 26.1.2 → 26.2`
 
 新架构（numen-api 拆分 + 调度器 + raw `NumenTool` + skill 体系）当前基线在 **`1.21.1`**，正逐档向上移植。
 
@@ -1017,3 +1017,141 @@ fix(未加载区块身体休眠 + 四条用例补 despawn)。双 loader 出包 +
 暂存箱,0.1.1 后新增)、Recipe.group()/showNotification() 抽象化咬到单测假配方、
 RecipeProbe 断参,以及上面整节的同步加载票据雪崩——前几样五分钟的事,最后一个吃掉
 了本档大半排障时间,也推翻了上一档的一条旧结论。
+
+---
+
+## 26.1.2 → 26.2 ✓（已验证：双 loader 编译 + 出包 + datagen 四路零漂移 + 867 单测零跳过 + 65 条游戏内用例 ×3;渲染第五震:Vulkan 化管线 + 屏幕/HUD 拆家 + 立即模式终结）
+
+构建旋钮:MC `26.2` / range `[26.2, 26.3)` / NeoForm `26.2-2` / Fabric `0.158.0+26.2` /
+Fabric loader `0.19.3` / NeoForge **`26.2.0.67`(正式版,出了 beta 期)**。26.2 无补丁版
+(NeoForm 只有 26.2-1/-2,MC id 就是裸 `26.2`)。运行时库 **gson `2.13.2 → 2.14.0`**
+(MC 26.2 manifest 升版,ai/build.gradle 跟着提)、slf4j-api `2.0.17` 不变。
+插件线零动:loom `1.14.10` / moddev `2.0.141` 原版本直吃 26.2。Java 25 不变,CI 只改门。
+26.1+ 客户端 jar 原生 Mojang 名不再发 mappings txt——**勘探直接 javap 两版 client jar**,
+比对 mappings 文本更快也更真(NeoForge 补丁不污染)。
+
+### 渲染第五震:屏幕/HUD 拆家(api/client,全量机械替换)
+```java
+Minecraft.screen 字段与 setScreen 删除 → mc.gui.screen() / mc.gui.setScreen(…)
+  (Gui 是 Minecraft 的 public final 字段;setScreenAndShow 两版都在,不混淆)
+新类 net.minecraft.client.gui.Hud(Gui.hud,public final):HUD 从 Gui 整体拆出
+Gui.getChat() → mc.gui.hud.getChat()(ChatComponent.addClientSystemMessage 原位,
+  加行链路与"取 0 位句柄"前提继续成立)
+Options.hideGui 字段删除 → mc.gui.hud.isHidden()(F1 翻转走 Hud.toggle(),
+  vanilla 的名牌/toast/debug 判定全换成了这个)
+I18n.exists(String) 删除(类只剩 get) → Language.getInstance().has(key)
+```
+
+### 渲染第五震:管线 API Vulkan 化(RoundRect + 自定义 shader)
+26.2 引入 Vulkan 后端(`com.mojang.blaze3d.vulkan`),RenderPipeline 声明面改成
+WebGPU 风格的 bind group:
+```java
+Builder.withUniform(String, UniformType) 删除 → withBindGroupLayout(BindGroupLayout)
+  // vanilla GUI 家族 = GLOBALS + MATRICES_PROJECTION 两层;MATRICES_PROJECTION 即原
+  // DynamicTransforms + Projection 两个 UBO 打包(BindGroupLayouts 静态表)。GLSL 只
+  // 声明自己用到的块即可(vanilla core/gui 同样不声明 Globals,照抄不慌)
+Builder.withVertexFormat(format, VertexFormat.Mode) → withVertexBinding(0, format)
+  + withPrimitiveTopology(PrimitiveTopology.QUADS)
+  // VertexFormat.Mode 枚举删除,拓扑迁 com.mojang.blaze3d.PrimitiveTopology
+GUI 家族一律无深度:builder 默认 Optional.empty(),GUI_SNIPPET 不设,
+  GUI_TEXT_SNIPPET 还显式清掉——RoundRect 跟着删 DepthStencilState(出画序即提交序)
+```
+shader 文本两处:`#version 150 → 330`;DynamicTransforms UBO 块**删 LineWidth 字段**
+(std140 布局须与 vanilla dynamictransforms 逐字对齐,多一个字段绑定即错位)。
+GuiElementRenderState 方法面 / TextureSetup.noTexture / VertexConsumer 顶点属性面 /
+DefaultVertexFormat.ENTITY / precompilePipeline / GuiGraphicsExtractor 的
+guiRenderState/scissorStack 字段全部原位——**AT/AW 零改动**。
+
+### 渲染第五震:立即模式终结,世界空间调试线迁 Gizmos
+`MultiBufferSource` / `ShapeRenderer` / `OutlineBufferSource` 整类删除,
+`Minecraft.renderBuffers()` 没了(RenderBuffers 只剩 StagedVertexBuffer)——
+"拿 BufferSource 逐帧画线"的通道从此不存在。官方替代是 `net.minecraft.gizmos.Gizmos`
+静态收集器(26.1 的 fabric 事件名 BEFORE_GIZMOS 预告的就是它):
+```java
+Gizmos.line(Vec3, Vec3, argb[, width])       // 默认宽 3,ARGB 带 alpha
+Gizmos.cuboid(BlockPos, padding, GizmoStyle.stroke(argb))  // padding=-0.02 即旧内缩框
+// 另有 arrow/point/circle/rect/billboardText;GizmoProperties 可 setAlwaysOnTop()/
+// persistForMillis()/fadeOut();默认深度测试(线被地形遮挡),与旧 lines 管线一致
+```
+机制:ThreadLocal 收集器,**无收集器时 addGizmo 直接抛 IllegalStateException**。
+Minecraft 把整个渲染帧包在 renderThreadGizmos 作用域里(提取期另有 mainThreadGizmos,
+逻辑期有 perTickGizmos),LevelRenderer.finalizeGizmoCollection() 每帧收账。挂点:
+- fabric:`LevelRenderEvents.BEFORE_GIZMOS` 注入在 finalizeGizmoCollection() 前,
+  收集器在位,回调里直接 Gizmos.* 当帧出画(fabric 的 DebugRendererRegistry 绑死
+  服务端 DebugSubscription 订阅制,不适合自有 payload 驱动的开关,不走它);
+- neoforge:新事件 `RegisterDebugRenderersEvent`(mod bus)注册
+  `DebugRenderer.SimpleDebugRenderer`(emitGizmos 六参签名两版同形),NeoForge 注册的
+  **不受 F3 调试项门控**,每帧提取期在收集器作用域内被调——原 RenderLevelStageEvent
+  挂法废弃(那些 stage 在 finalize 之后,提交会迟一帧)。
+PathDebugRenderer 因此不再收 PoseStack/Camera(相机换算由 gizmo 渲染器做),
+buffers/endBatch 整段消失,函数面缩成 `emit()`。
+
+### 实体侧:生成请求化 + id 发放推迟 + 常量迁居
+```java
+EntityType.create(Level, EntitySpawnReason) 仍在,但改为委托
+  create(Level, new EntitySpawnRequest(reason, /*ignoreChecks*/ false))——
+  ⚠ 从此带生成检查:canSpawn = featureflag 启用 && (allowedInPeaceful || 非和平)。
+  和平难度下怪物 create 直接回 null!必出怪的夹具按刷怪笼同款 (reason, true);
+  蓝图放实体与 StructureTemplate 同款 (STRUCTURE, false),和平跳怪是 vanilla 一致行为
+Entity 的 id 改由 Level.getNextEntityId() 在构造器里发放(原全局静态计数器),
+  getId() 对未发放(0)抛 IllegalStateException,而 hashCode() 走 getId()——
+  Unsafe 裸分配的测试空壳玩家要手补非零 id,否则按实体做键(WeakHashMap)当场炸
+EntityType 上的实体类型常量全部迁新宿主 EntityTypes(与 BlockEntityTypes 同法):
+  EntityType.PIG → EntityTypes.PIG(ZOMBIE/ITEM_FRAME/ARMOR_STAND/OAK_BOAT/MINECART 同)
+染色方块/物品常量收进 ColorCollection(16 色 record,per-color 访问器):
+  Blocks.RED_BED → Blocks.BED.red();WHITE_BANNER → BANNER.white();
+  WHITE_WALL_BANNER → WALL_BANNER.white();RED_CARPET → CARPET.red();Items 同名集合
+BlockPos.getCenter() 删除 → Vec3.atCenterOf(pos)
+```
+
+### datagen:标签 appender 全面键基化
+vanilla `IntrinsicHolderTagsProvider`(值基 add(T) 的唯一来源)整类删除,
+`TagsProvider.tag(key)` 返回 ResourceKey 基 `TagAppender<T>`:
+```java
+neoforge:BlockTagsProvider/ItemTagsProvider 降级纯 TagsProvider —— b.add(v) 不复存在
+fabric:valueLookupBuilder(key) 删除 → builder(key)(返回 BlockItemTagAppender;
+  fabric 的 forceAddTag/setReplace 接口注入仍在,归属校验的绕行不变)
+适配:值→键在 loader 包装层查注册表(BuiltInRegistries.X.getResourceKey(v).orElseThrow()),
+  common 的值基 Appender 契约与全部标签清单一字不动;四路 datagen 生成物零漂移
+```
+
+### 内容侧:26.2 新增 sulfur_caves
+两版 client jar 的 data/ diff:结构 34 条零变化、矿物 placed_feature 零变化
+(tier_progression 的 1.21+/26.x 口径仍真),生物群系 65 → 66:新增
+`minecraft:sulfur_caves`(硫磺洞穴,硫磺块/尖刺/泉池,新怪 sulfur_cube 可桶装)。
+world_atlas 补条目并把总数与版本口径改到 26.2——它自claim穷尽,少一条就是假的。
+⚠ 做这个 diff 用 client jar:26.x 的 server jar 是 bundler 壳(165 个表项全是
+META-INF),grep 出"零差异"是空对空。
+
+### 未发生的预警项
+- **12 只 mixin 靶点全部原位**(气泡 submit 四参描述符、载具 isLocalInstanceAuthoritative、
+  skipPlayer/applyChunkTrackingView、send 单参+connection、SoundBufferLibrary.getStream、
+  ChatComponent.allMessages/refreshTrimmedMessages、KeyboardInput.tick、dataSlots、
+  nibble、updatePOIOnBlockStateChange 逐字健在),AT/AW 零改动;
+- SavedDataType / payload 面 / StreamCodec.composite 上限(仍 12 字段)/ 世界时钟读写侧 /
+  gametest 泛型化与资源包布局 / 结构模板 DataVersion 4189 / 单测组件绑定夹具——
+  26.1.2 整套适配原样成立,一处未动;
+- 26.1 的同步加载票据雪崩未复发(身体休眠门 + despawn 配对在位,三轮全绿);
+- ContainerInput/ChunkPos/Recipe.assemble/authlib 面零触点。
+
+### 版本口径与不迁项
+- MixinSoundEngine / IVoiceSoundFactory 的"vanilla 仍无 SoundInstance.getStream 钩子"
+  对 26.2 重验仍真,只改口径数字;McDrawSurface 实现口径、composite 上限口径同;
+- "26.1 起/26.1 拆成"一类历史陈述仍真,保留;
+- README/MCMOD 的"11 个版本"是对已发布支持面的陈述,26.2 发版时统一改。
+
+### 只在真机客户端才能目视验证的部分
+沿用上一档清单,本档另加三项因为换了通道才需要重看:寻路调试覆盖层换 Gizmos 后的
+观感与深度关系(双翼挂点都换了);GUI 圆角 SDF 在 BindGroup 化管线 + 330 shader 下的
+渲染结果;Hud.isHidden 替换 hideGui 后 F1 对快捷对话提醒/toast 的隐藏行为。
+
+### 26.2 落地实录(开荒)
+首个无路书档:官方元数据勘旋钮(NeoForm/NeoForge maven-metadata + fabric meta +
+modrinth)→ 配置期一次通过 → 编译错误驱动。提交序列:build(旋钮/CI 门/gson)→
+api(屏幕 HUD/Gizmos/管线/shader)→ core(EntitySpawnRequest/键基标签/常量迁居/
+atlas)→ test(夹具补 id)→ test(gametest 出怪 ignoreChecks)→ docs。全程三次红:
+api client 23 编译错收敛七类符号、单测 2 红(id=0 的 hashCode)、gametest 1 红
+(和平难度拒刷僵尸——26.1.2 同一调用无检查,行为差异藏在委托参数里,编译不报)。
+勘探主武器从 mappings diff 换成 **javap 两版 client jar + comm 类表 diff**(26.1+
+原生 Mojang 名,jar 即真相);一次工具假阴性(jar tf 管道偶发空输出,gizmo 包被误判
+不存在)靠先落盘 tf 全表再 grep 排掉——类表 diff 一律以落盘文件为准。
