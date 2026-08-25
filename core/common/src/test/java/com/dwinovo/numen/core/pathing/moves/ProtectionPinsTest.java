@@ -86,6 +86,12 @@ class ProtectionPinsTest {
         theUnsafe.setAccessible(true);
         sun.misc.Unsafe unsafe = (sun.misc.Unsafe) theUnsafe.get(null);
         ServerPlayer p = (ServerPlayer) unsafe.allocateInstance(ServerPlayer.class);
+        // 26.2:实体 id 改由 Level.getNextEntityId() 在构造器里发放,getId() 对
+        // 未发放(0)直接抛状态异常,而 hashCode() 走 getId()——空壳没有 Level,
+        // 按同语义补个非零 id,按实体做键(WeakHashMap 等)的路径才走得通。
+        Field idField = net.minecraft.world.entity.Entity.class.getDeclaredField("id");
+        idField.setAccessible(true);
+        idField.setInt(p, 1);
         Field inventory = Player.class.getDeclaredField("inventory");
         inventory.setAccessible(true);
         // 1.21.5: 盔甲/副手迁入 EntityEquipment,Inventory 与实体共享同一实例——
