@@ -630,8 +630,9 @@ public class CompanionGameTests {
             BlockState m = level.getBlockState(mid);
             helper.assertTrue(m.is(Blocks.OAK_FENCE), "中间那格不是栅栏");
             for (BlockPos nb : new BlockPos[]{west, east}) {
-                var d = net.minecraft.core.Direction.fromDelta(
-                        nb.getX() - mid.getX(), 0, nb.getZ() - mid.getZ());
+                var d = net.minecraft.core.Direction.getNearest(
+                        nb.getX() - mid.getX(), 0, nb.getZ() - mid.getZ(),
+                        net.minecraft.core.Direction.NORTH);
                 var prop = fenceArm(d);
                 helper.assertTrue(m.getValue(prop), "中间栅栏没向 " + d + " 伸臂: " + m);
             }
@@ -658,8 +659,9 @@ public class CompanionGameTests {
             BlockState built = level.getBlockState(newPos);
             BlockState old = level.getBlockState(oldPos);
             helper.assertTrue(built.is(Blocks.OAK_FENCE), "新栅栏没立起来");
-            var toOld = net.minecraft.core.Direction.fromDelta(
-                    oldPos.getX() - newPos.getX(), 0, oldPos.getZ() - newPos.getZ());
+            var toOld = net.minecraft.core.Direction.getNearest(
+                    oldPos.getX() - newPos.getX(), 0, oldPos.getZ() - newPos.getZ(),
+                    net.minecraft.core.Direction.NORTH);
             helper.assertTrue(built.getValue(
                     fenceArm(toOld)),
                     "新栅栏没伸手贴旧邻居: " + built);
