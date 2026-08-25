@@ -109,8 +109,6 @@ public final class NumenScreen extends Screen {
     private static net.minecraft.resources.ResourceLocation railSpr(String n) {
         return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, n);
     }
-    private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME = railSpr("avatar_frame");
-    private static final net.minecraft.resources.ResourceLocation AVATAR_FRAME_ACTIVE = railSpr("avatar_frame_active");
     private static final net.minecraft.resources.ResourceLocation CHEVRON_UP = railSpr("chevron_up");
     private static final net.minecraft.resources.ResourceLocation CHEVRON_DOWN = railSpr("chevron_down");
 
@@ -1025,21 +1023,30 @@ public final class NumenScreen extends Screen {
             if (ay + RAIL_AV > railBottomEdge()) break;
             NumenRoster.Entry e = entries.get(i);
             boolean active = e.uuid().equals(uuid);
-            // textured socket behind the head (gold-bordered when active), then the avatar, then a status LED
-            g.blitSprite(active ? AVATAR_FRAME_ACTIVE : AVATAR_FRAME, ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4);
+            // 头像框纯代码绘制,跟主题走色:激活亮 ACCENT,平时 BORDER——烘焙贴图换主题就变色盲。
+            com.dwinovo.numen.client.ui.RoundRect.card(g, ax - 2, ay - 2,
+                    ax + RAIL_AV + 2, ay + RAIL_AV + 2, 3,
+                    FIELD, active ? ACCENT : BORDER);
             PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
             // 悬停激活头像:变暗 + 居中铅笔——"这里可编辑"的通用视觉语言。
-            // 铅笔是纯几何(双像素阶梯对角线 + 单像素笔尖),跟主题 CTA 色。
+            // 铅笔按经典编辑图标的形:擦头带、箍环、三像素宽斜杆、两阶收尖到铅芯,
+            // 逐段主题色,沿右上→左下 45° 铺像素。
             boolean hovered = mouseX >= ax && mouseX < ax + RAIL_AV
                     && mouseY >= ay && mouseY < ay + RAIL_AV;
             if (active && hovered && !dismissOpen() && !modalOpen()) {
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0x80101010);
-                int pcx2 = ax + RAIL_AV / 2, pcy2 = ay + RAIL_AV / 2;
-                for (int k = 0; k < 5; k++) {
-                    g.fill(pcx2 + 3 - 2 * k, pcy2 - 5 + 2 * k,
-                            pcx2 + 5 - 2 * k, pcy2 - 3 + 2 * k, CTA);
+                int px0 = ax + 16, py0 = ay + 8;
+                for (int k = 0; k <= 9; k++) {
+                    int w = k <= 7 ? 3 : (k == 8 ? 2 : 1);       // 笔尖两阶收窄
+                    int c = k <= 1 ? CTA                          // 擦头
+                            : k == 2 ? BORDER                     // 箍环
+                            : k <= 7 ? ON_BAND                    // 笔身
+                            : k == 8 ? TXT_MUTED : TXT;           // 木尖、铅芯
+                    int j0 = (3 - w) / 2;
+                    for (int j = j0; j < j0 + w; j++) {
+                        g.fill(px0 - k + j, py0 + k + j, px0 - k + j + 1, py0 + k + j + 1, c);
+                    }
                 }
-                g.fill(pcx2 - 6, pcy2 + 4, pcx2 - 5, pcy2 + 5, CTA);   // 笔尖
             }
             if (e.dead()) {                                           // dead — dim veil + respawn countdown
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0xB0101010);
