@@ -166,7 +166,7 @@ class MimoTtsTest {
     }
 
     @Test
-    void constructorTrimsAndUsesProvidedValues() {
+    void constructorUsesProvidedValues() {
         MimoTts tts = new MimoTts("https://custom.api.com", "sk-test", "my-model", "my-voice");
         String desc = tts.describe();
         assertTrue(desc.contains("my-model"));
