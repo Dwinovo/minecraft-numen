@@ -10,9 +10,9 @@ name: Build
 # 依赖,挂上去只会得到一排红叉。等它们并仓了再放开。
 on:
   push:
-    branches: ["1.21.1"]
+    branches: ["1.21"]
   pull_request:
-    branches: ["1.21.1"]
+    branches: ["1.21"]
   workflow_dispatch:
 
 # 连着推几次时只留最后一次,前面的直接取消。
