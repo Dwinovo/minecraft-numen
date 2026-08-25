@@ -2,6 +2,7 @@ package com.dwinovo.numen.client.ui.widget;
 
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenTheme;
+import com.dwinovo.numen.client.ui.TextClip;
 
 import java.util.function.Supplier;
 
@@ -45,10 +46,11 @@ public final class ValueRow extends Widget {
         if (!visible) {
             return;
         }
-        s.drawText(label, x, y, c.textMuted(), false);
+        s.drawText(TextClip.fit(s, label, LABEL_W - 2), x, y, c.textMuted(), false);
         String text = value == null ? "" : value.get();
         boolean grey = dimmed != null && Boolean.TRUE.equals(dimmed.get());
-        s.drawText(text == null ? "" : text, x + LABEL_W, y,
+        // 值列按剩余宽收口:端点地址、令牌这类长串曾直接画穿行尾压到邻居身上
+        s.drawText(TextClip.fit(s, text == null ? "" : text, w - LABEL_W), x + LABEL_W, y,
                 grey ? c.textMuted() : c.textPrimary(), false);
     }
 
