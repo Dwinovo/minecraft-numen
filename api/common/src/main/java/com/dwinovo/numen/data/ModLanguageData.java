@@ -343,9 +343,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.steps", "%s steps");
         adder.add("numen.chat.plan", "PLAN");
         adder.add("numen.chat.no_plan", "no plan yet");
-        adder.add("numen.chat.usage_tip.context", "context: how full the model's memory window is — near the top it compacts itself, nothing to do");
-        adder.add("numen.chat.usage_tip.tokens", "tokens: cumulative fresh work = cache-missed input + output");
-        adder.add("numen.chat.usage_tip.cache", "cached input is free-ish and not counted, so most messages add only a little");
         // Tool-chip labels (convention: numen.tool.<tool name>; unknown/MCP tools fall back to the raw name).
         adder.add("numen.tool.build", "Build");
         adder.add("numen.tool.close_gui", "Close GUI");
@@ -673,9 +670,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.steps", "%s 步");
         adder.add("numen.chat.plan", "计划");
         adder.add("numen.chat.no_plan", "暂无计划");
-        adder.add("numen.chat.usage_tip.context", "context：对话占模型记忆窗口的比例，快满时会自动压缩，无需操作");
-        adder.add("numen.chat.usage_tip.tokens", "tokens：累计新处理量 = 未命中缓存的输入 + 输出");
-        adder.add("numen.chat.usage_tip.cache", "命中缓存的输入不计入，所以平时每条消息只涨一点");
         // 工具 chip 标签(约定键 numen.tool.<工具名>;未知/MCP 工具回落原名)。
         adder.add("numen.tool.build", "建造");
         adder.add("numen.tool.close_gui", "关闭界面");
