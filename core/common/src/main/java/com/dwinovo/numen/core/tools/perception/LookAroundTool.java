@@ -60,6 +60,12 @@ public final class LookAroundTool implements NumenTool {
         return "look_around";
     }
 
+    /** 常驻:空间视图是她的眼睛。 */
+    @Override
+    public Residency residency() {
+        return Residency.RESIDENT;
+    }
+
     @Override
     public String description() {
         return "Your spatial view: a top-down character map of the blocks around you, centred on "
