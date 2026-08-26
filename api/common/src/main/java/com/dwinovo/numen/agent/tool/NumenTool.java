@@ -21,6 +21,26 @@ import java.util.function.Consumer;
 public interface NumenTool extends IToolSpec {
 
     /**
+     * 工具在请求里的<b>驻留方式</b>。判据是"每轮都用不用",不是"重不重要":
+     * 动作动词({@code mine}/{@code build}/{@code craft})是一次性派发,派完靠
+     * {@code task_status} 轮询,调用频次其实很低;真正每轮都要的是感知与轮询。
+     *
+     * <p>缺省 {@link Residency#DEFERRED} —— 新工具默认不占每轮的位置,要常驻得自己
+     * 表态。反过来(默认常驻)的话,忘了表态的工具会悄悄挤进每一轮请求。
+     */
+    default Residency residency() {
+        return Residency.DEFERRED;
+    }
+
+    /** 见 {@link #residency()}。 */
+    enum Residency {
+        /** 完整定义每轮随请求发出。 */
+        RESIDENT,
+        /** 只在目录里留一行摘要,模型调 {@code find_tools} 才取回完整定义。 */
+        DEFERRED
+    }
+
+    /**
      * Run this tool for one call — the engine's ONLY entry point. 默认实现是
      * 身体工具的运输:把调用发往服务端并停靠,等 {@link #onServerCall} 的
      * 结果回家。不走身体的工具覆写它,想怎么干怎么干(当场完成、去异步、
