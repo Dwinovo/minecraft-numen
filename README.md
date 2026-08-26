@@ -124,11 +124,11 @@ Numen 出厂的每一个工具、每一篇技能，全部只用公共 API 写成
 - 📖 **随 jar 附带技能**——一句调用就把你 jar 里的 `/skills` 目录变成内置技能，玩家装上你的 mod，AI 自动学会怎么玩它。
 - 🏗️ **或者造一个完全不同的 AI**——同一块地基上，AI NPC、剧情角色、服务器管家，随你想象。
 
-引擎（`api/`）在 1.21.1、1.21.4 与 1.21.5 上已经并入本仓库，其余版本分支陆续跟进；对第三方它仍然作为独立坐标发布，依赖方式不变：
+引擎（`api/`）住在本仓库的 `api/` 目录里，对第三方仍作为独立坐标发布：
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.5:<version>" }
+dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-26.2:0.0.9" }
 ```
 
 面向集成的公共对接 API 采用 **MIT** 授权——写工具、写技能、写兼容，不必被 LGPL 牵着走。
