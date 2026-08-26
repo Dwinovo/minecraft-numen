@@ -23,6 +23,12 @@ public final class InspectBlockTool implements NumenTool {
         return "inspect_block";
     }
 
+    /** 常驻:单点确认,动手前后都要用。 */
+    @Override
+    public Residency residency() {
+        return Residency.RESIDENT;
+    }
+
     @Override
     public String description() {
         return "Inspect a single block at the given integer coordinates. Returns block id, its "
