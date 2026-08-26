@@ -28,6 +28,12 @@ public final class ScanBlocksTool implements NumenTool {
         return "scan_blocks";
     }
 
+    /** 常驻:找方块是最常走的一步。 */
+    @Override
+    public Residency residency() {
+        return Residency.RESIDENT;
+    }
+
     @Override
     public String description() {
         return "Find blocks of given type(s) near you and report where they are, nearest first, up to 32. "
