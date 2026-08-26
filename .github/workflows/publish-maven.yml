@@ -1,0 +1,87 @@
+name: Publish Maven Artifacts
+
+# 把 numen-api 与 numen-core 的制品发到 Dwinovo/numen-maven（一个静态 Maven 仓，
+# 插件作者经 raw.githubusercontent.com 直接引用）。
+#
+# 触发只有两种：发版打 tag，以及手动挑分支跑。**每次推送不发**——制品坐标一旦发出
+# 就不该再变，随手推一次就换一批字节的话，插件作者钉住的版本会在他脚下漂移。
+#
+# 挑哪个 loader 归构建自己管（根 build.gradle 的 publishAll），这里不做探测：
+# 同一个判断写在两处，迟早只改对一处。
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Read build properties
+        id: props
+        shell: bash
+        run: |
+          echo "java_version=$(grep -E '^java_version=' gradle.properties | head -n1 | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+          echo "minecraft_version=$(grep -E '^minecraft_version=' gradle.properties | head -n1 | cut -d= -f2-)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Java ${{ steps.props.outputs.java_version }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ steps.props.outputs.java_version }}
+          distribution: "temurin"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      # 跨仓写入要 PAT：GITHUB_TOKEN 只对当前仓有写权限。
+      - name: Checkout numen-maven
+        uses: actions/checkout@v4
+        with:
+          repository: Dwinovo/numen-maven
+          token: ${{ secrets.MAVEN_REPO_TOKEN }}
+          path: maven-repo
+
+      # 语言文件等生成资源要先出来，否则发出去的 api 制品里一个翻译都没有。
+      - name: Run data generation
+        run: ./gradlew datagenAll --no-daemon
+
+      - name: Publish api + core
+        run: ./gradlew publishAll -Plocal_maven_url=file://$PWD/maven-repo --no-daemon
+
+      # 多条分支可能同时跑，都往同一个仓推 —— 撞车是常态，不是异常。
+      # 失败就 rebase 重试；rebase 在这里永远安全：各分支写的是互不重叠的目录
+      # （制品坐标带 MC 版本），不存在同一文件的并发修改。
+      - name: Commit and push
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd maven-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "没有新制品，跳过提交"
+            exit 0
+          fi
+          git commit -m "publish: MC ${{ steps.props.outputs.minecraft_version }} 的 numen-api 与 numen-core 制品"
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              echo "推送成功（第 $attempt 次尝试）"
+              exit 0
+            fi
+            echo "推送被拒，拉取后重试…"
+            git pull --rebase
+            sleep $((RANDOM % 5 + 2))
+          done
+          echo "::error::重试 5 次仍未推送成功" >&2
+          exit 1

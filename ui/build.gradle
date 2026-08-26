@@ -16,7 +16,15 @@ plugins {
 
 // api 家族的版本线(发布坐标契约);group 无同名冲突,直接用对外 group。
 group = 'com.dwinovo.numen'
-version = '0.0.8-SNAPSHOT'
+version = '0.0.9'
+
+// 可复现构建:十一条分支共用同一个坐标(numen-ai / numen-ui 不带 MC 后缀),
+// 各分支发出来的字节必须一致——否则同一个版本号在不同分支下内容不同,
+// 正是"钉住的坐标会漂移"那个毛病。去掉时间戳、固定条目顺序即可。
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
 
 base {
     archivesName = 'numen-ui'
