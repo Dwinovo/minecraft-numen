@@ -571,7 +571,8 @@ public final class SettingsView {
                  com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MINIMAX,
                  com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_FISH,
                  com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_DASHSCOPE,
-                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MIMO -> b;
+                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_MIMO,
+                 com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_DOUBAO -> b;
             default -> com.dwinovo.numen.client.voice.VoiceLibrary.BACKEND_OPENAI;
         };
     }

@@ -66,6 +66,7 @@ public final class VoiceFormPanel {
             case VoiceLibrary.BACKEND_FISH -> com.dwinovo.numen.client.voice.FishAudioTts.DEFAULT_BASE;
             case VoiceLibrary.BACKEND_DASHSCOPE -> com.dwinovo.numen.client.voice.DashScopeTts.DEFAULT_BASE;
             case VoiceLibrary.BACKEND_MIMO -> com.dwinovo.numen.client.voice.MimoTts.DEFAULT_BASE;
+            case VoiceLibrary.BACKEND_DOUBAO -> com.dwinovo.numen.client.voice.DoubaoTts.DEFAULT_BASE;
             default -> com.dwinovo.numen.client.voice.OpenAiCompatibleTts.DEFAULT_BASE;
         };
     }
@@ -73,7 +74,8 @@ public final class VoiceFormPanel {
     private static final List<String> BACKENDS = List.of(
             VoiceLibrary.BACKEND_OPENAI, VoiceLibrary.BACKEND_SOVITS,
             VoiceLibrary.BACKEND_MINIMAX, VoiceLibrary.BACKEND_FISH,
-            VoiceLibrary.BACKEND_DASHSCOPE, VoiceLibrary.BACKEND_MIMO);
+            VoiceLibrary.BACKEND_DASHSCOPE, VoiceLibrary.BACKEND_MIMO,
+            VoiceLibrary.BACKEND_DOUBAO);
     private static final String TEST_SENTENCE = "你好,我是你的同伴,这是我的声音。";
 
     /** 滚动根:表单行(进裁剪区,可上下滚);固定根:✕/结果胶囊/按钮行(不动)。 */
@@ -140,7 +142,8 @@ public final class VoiceFormPanel {
                 t(ModLanguageData.Keys.VOICE_BACKEND_MINIMAX),
                 t(ModLanguageData.Keys.VOICE_BACKEND_FISH),
                 t(ModLanguageData.Keys.VOICE_BACKEND_DASHSCOPE),
-                t(ModLanguageData.Keys.VOICE_BACKEND_MIMO)),
+                t(ModLanguageData.Keys.VOICE_BACKEND_MIMO),
+                t(ModLanguageData.Keys.VOICE_BACKEND_DOUBAO)),
                 Math.max(0, BACKENDS.indexOf(draft.backend)), this::onBackendPicked));
         backendPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
@@ -198,6 +201,15 @@ public final class VoiceFormPanel {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_MIMO_VOICE,
                         com.dwinovo.numen.client.voice.MimoTts.DEFAULT_VOICE,
                         false, draft.voice, v -> draft.voice = v);
+            }
+            case VoiceLibrary.BACKEND_DOUBAO -> {
+                ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_DOUBAO,
+                        "", true, draft.apiKey, v -> draft.apiKey = v);
+                ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_DOUBAO_RESOURCE,
+                        com.dwinovo.numen.client.voice.DoubaoTts.DEFAULT_RESOURCE_ID,
+                        false, draft.model, v -> draft.model = v);
+                ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_DOUBAO_SPEAKER,
+                        "zh_female_…_bigtts", false, draft.voice, v -> draft.voice = v);
             }
             default -> {
                 ry = textRow(x, ry, w, ModLanguageData.Keys.VOICE_FORM_KEY_OPENAI,
