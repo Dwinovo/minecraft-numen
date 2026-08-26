@@ -112,11 +112,21 @@ processResources {
 // tool packs build against — with the @Internal stragglers that live inside them
 // excluded. Addon devs compileOnly this small, stable jar; the full jar runs at
 // runtime. Mirrors Flywheel's flywheel-…-api, Create's :slim, and JEI's …-api.
+//
+// 它是从**成品 jar** 里裁出来的,不是从编译产物。Fabric 的运行期命名是
+// intermediary,成品由 Loom 的 remapJar 换过去;若这里改从 sourceSets 取,瘦 jar
+// 就停在 mojmap,同一个 publication 里两套命名——用 yarn 的插件作者会在
+// ServerPlayer 这种名字上直接编译失败。裁成品则两者永远同源,不可能分叉。
 tasks.register('apiJar', Jar) {
     archiveClassifier = 'api'
-    from sourceSets.main.output
-    // common 的公共 API 有两个住在客户端源码集的门(NumenGateway/NumenActuator);
-    // 加载器模块没有 client 源码集,懒取空集
+    // 谁是成品:Fabric 是 remapJar,其余加载器就是 jar 本身。loader 插件在子项目的
+    // plugins 块里晚于本脚本应用,所以推迟到执行期再问。
+    def shippedJar = { tasks.findByName('remapJar') ?: tasks.getByName('jar') }
+    dependsOn shippedJar
+    from({ zipTree(shippedJar().archiveFile) })
+    // common 自己的成品 jar 不含 client 源码集,而公共 API 有两个门住在那里
+    // (NumenGateway/NumenActuator)。加载器模块把 common 的两个源码集都并进了
+    // 成品,这里取到空集,不会引入第二套映射。
     from({ def c = sourceSets.findByName('client'); c != null ? c.output : [] })
     // public API surface (see the package-info of each). This list is the
     // contract of record — kept in lockstep with what numen-core actually
@@ -132,6 +142,13 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/agent/skill/SkillInfo*.class'
     include 'com/dwinovo/numen/platform/Services*.class'          // cross-loader SPI locator
     include 'com/dwinovo/numen/platform/services/**'              // (block caps for storage inspection)
+    // Loom 只给"认得出是 mod"的 jar 做重映射,判据就是 fabric.mod.json。瘦 jar 不带
+    // 它,消费者的 modCompileOnly 会原样透传:jar 里是 intermediary、消费者环境里是
+    // yarn,撞在 class_3222 找不到上。无条件写——其余加载器的成品 jar 里没有这个
+    // 文件(它们用 META-INF/neoforge.mods.toml),匹配不到就是空操作。这样不必认识
+    // 任何 loom 插件 id:各分支上它叫 fabric-loom / fabric-loom-remap /
+    // net.fabricmc.fabric-loom 三种名字,盯 id 必然漏。
+    include 'fabric.mod.json'
     // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们连同
     // ServerToolTransport 本该迁去 core 自己的网络层,迁移前先如实纳入契约
     include 'com/dwinovo/numen/network/payload/PathDebugPayload*.class'
