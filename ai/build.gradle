@@ -1,6 +1,6 @@
 // numen-ai:大脑与 LLM 服务商之间的连接层,纯 JVM 库——零 Minecraft 依赖、
-// 零 numen-api 回引。这意味着它与 Minecraft 版本无关:十一个版本分支共用
-// 同一份 numen-ai,provider 层的修复改一处全家族生效。
+// 零 numen-api 回引。代码本身与 Minecraft 版本无关,但各版本分支上的这份源码
+// 目前并不相同(功能先落 1.21.1),所以发布坐标带分支后缀,见下方 artifactId。
 //
 // 现住户:agent.http(传输:SSE 流式/重试退避/空闲看门狗)、agent.prompt(提示词)、
 // agent.provider(线格式适配 + IToolSpec 工具描述面 + 站点注册表 ProviderRegistry,
@@ -14,9 +14,8 @@ plugins {
 group = 'com.dwinovo.numen'
 version = '0.0.9'
 
-// 可复现构建:十一条分支共用同一个坐标(numen-ai / numen-ui 不带 MC 后缀),
-// 各分支发出来的字节必须一致——否则同一个版本号在不同分支下内容不同,
-// 正是"钉住的坐标会漂移"那个毛病。去掉时间戳、固定条目顺序即可。
+// 可复现构建:同一份源码重复构建应得到同样的字节,这样重新发布是空提交,
+// 不会在制品仓里堆出一串"只有时间戳不同"的版本。去掉时间戳、固定条目顺序即可。
 tasks.withType(AbstractArchiveTask).configureEach {
     preserveFileTimestamps = false
     reproducibleFileOrder = true
@@ -63,8 +62,11 @@ test {
 publishing {
     publications {
         register('mavenJava', MavenPublication) {
-            // 刻意不带 MC 版本后缀:本模块与 Minecraft 版本无关,全分支同坐标。
-            artifactId = 'numen-ai'
+            // 带 MC 版本后缀,理由不是"依赖 Minecraft"(本模块零 MC 依赖),而是各版本
+            // 分支上的这份源码并不相同:功能先落 1.21.1,其余分支等迁移。不带后缀
+            // 就是十三条分支抢同一个坐标、谁最后发谁赢——消费者拿到哪份全看运气。
+            // 等各分支的这个模块真同步齐了,再谈合并坐标。
+            artifactId = "numen-ai-${minecraft_version}"
             from components.java
         }
     }

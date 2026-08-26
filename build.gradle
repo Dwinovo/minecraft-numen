@@ -47,8 +47,8 @@ tasks.register('datagenAll') {
 tasks.register('publishAll') {
     group = 'publishing'
     description = '把 api 与 core 两家、本分支两个 loader 的制品发到 numen-maven'
-    // ai/ui 与 MC 版本无关,坐标不带后缀,十一条分支发的是同一个东西
-    // (jar 已做成可复现,各分支字节一致,重复发布在 git 眼里是空提交)。
+    // ai/ui 也带分支后缀:代码与 MC 版本无关,但各分支上的这份源码目前不同,
+    // 共用坐标会变成十三条分支互相覆盖(详见 ai/build.gradle 的 artifactId)。
     dependsOn ':ai:publish'
     dependsOn ':ui:publish'
     ['api', 'core'].each { family ->
