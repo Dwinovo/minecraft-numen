@@ -273,6 +273,8 @@ public final class McpServer {
                         + "you are doing. Consecutive calls queue up and play in order.",
                 saySchema()));
 
+        // 全量给外脑,不做渐进披露:那是我们自己请求里的省法,外脑的上下文预算归它自己管,
+        // 而且 MCP 客户端(Claude Code 之类)本来就会把借来的工具再延迟一次。
         for (NumenTool tool : ToolRegistry.all()) {
             if (config.isHidden(tool.name())) continue;
             tools.add(toolDef(tool.name(), tool.description(), withCompanion(tool.parameterSchema())));
