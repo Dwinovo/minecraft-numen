@@ -55,13 +55,9 @@ jobs:
           set -euo pipefail
           if [ -d core/neoforge ]; then
             echo "name=neoforge"                     >> "$GITHUB_OUTPUT"
-            echo "datagen=:core:neoforge:runData"    >> "$GITHUB_OUTPUT"
-            echo "api_datagen=:api:neoforge:runData" >> "$GITHUB_OUTPUT"
             echo "build=:core:neoforge:build"        >> "$GITHUB_OUTPUT"
           elif [ -d core/forge ]; then
             echo "name=forge"                  >> "$GITHUB_OUTPUT"
-            echo "datagen=:core:forge:Data"    >> "$GITHUB_OUTPUT"
-            echo "api_datagen=:api:forge:Data" >> "$GITHUB_OUTPUT"
             echo "build=:core:forge:build"     >> "$GITHUB_OUTPUT"
           else
             echo "No forge/ or neoforge/ subproject found on this branch" >&2
@@ -69,10 +65,9 @@ jobs:
           fi
 
       # api 的语言文件也是生成出来的(ModLanguageData),不跑就打出一个没有任何翻译的包。
-      # api 的第二 loader 与 core 同款,所以两条 datagen 都取自上面那一次探测——写死一个
-      # 就会在 Forge 分支上找不到 :api:neoforge 而整步炸掉。
+      # 挑哪个 loader 的生成任务归构建自己管(datagenAll),CI 不再各写一遍探测。
       - name: Run data generation
-        run: ./gradlew :api:fabric:runDatagen ${{ steps.loader.outputs.api_datagen }} :core:fabric:runDatagen ${{ steps.loader.outputs.datagen }} --no-daemon
+        run: ./gradlew datagenAll --no-daemon
 
       - name: Build with Gradle
         run: ./gradlew :core:fabric:build ${{ steps.loader.outputs.build }} --no-daemon
@@ -165,6 +160,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Publish Fabric to Modrinth and CurseForge
+        id: publish_fabric
         continue-on-error: true
         if: ${{ steps.meta.outputs.fabric_file != '' }}
         uses: Kira-NT/mc-publish@v3.3.1
@@ -194,6 +190,8 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish ${{ steps.meta.outputs.second_loader }} to Modrinth and CurseForge
+        id: publish_second
+        continue-on-error: true
         if: ${{ steps.meta.outputs.second_file != '' }}
         uses: Kira-NT/mc-publish@v3.3.1
         with:
@@ -219,3 +217,22 @@ jobs:
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
 
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # 两个发布步骤都 continue-on-error:一家平台抽风不该拖累另一个 loader。
+      # 但"继续跑"不等于"当没发生"——这一步把成败收口,任一没成整个 run 就红。
+      # (1.21.8 那次 CurseForge 502,Fabric 包哪儿都没到,而 run 报的是 success,
+      #  是靠人工数 release 资产才发现的。)
+      - name: Fail if any publish did not succeed
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          fabric='${{ steps.publish_fabric.outcome }}'
+          second='${{ steps.publish_second.outcome }}'
+          echo "fabric=$fabric  ${{ steps.meta.outputs.second_loader }}=$second"
+          bad=0
+          [ "$fabric" = "success" ] || [ "$fabric" = "skipped" ] || bad=1
+          [ "$second" = "success" ] || [ "$second" = "skipped" ] || bad=1
+          if [ "$bad" = "1" ]; then
+            echo "::error::有 loader 没发布成功,见上面各步骤的日志" >&2
+            exit 1
+          fi
