@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.screen;
 
+import com.dwinovo.numen.client.ui.TokenFormat;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 
 import com.dwinovo.numen.agent.llm.ConvoLog;
@@ -682,13 +683,6 @@ public final class NumenScreen extends Screen {
     }
 
     /** 显示过滤统一走 {@link com.dwinovo.numen.client.chat.ChatDisplayMode}(可整体切换)。 */
-    /** token 数的人读格式:1350 → "1.4k",132400 → "132.4k",1_200_000 → "1.2m"。 */
-    private static String fmtTokens(long n) {
-        if (n >= 1_000_000) return String.format("%.1fm", n / 1_000_000.0);
-        if (n >= 1_000) return String.format("%.1fk", n / 1_000.0);
-        return String.valueOf(n);
-    }
-
     /** Truncate {@code s} with an ellipsis so it fits in {@code maxW} px. */
     private String clip(String s, int maxW) {
         if (font.width(s) <= maxW) return s;
@@ -1246,15 +1240,38 @@ public final class NumenScreen extends Screen {
 
     /** 头部右侧(tab 左边)的上下文水位+累计消耗。恒定淡色——这是信息不是警报,
      *  临近水位线会自动压缩,不需要玩家做任何事。返回文字左边界,标题据此让位。 */
+    /**
+     * 用量条:{@code ↑输入 ↓输出 R缓存读 W缓存写 CH命中率 占用%/窗口}。每段有值才出现
+     * ——服务商不报缓存的话那三段自然消失,不显示一排零。
+     *
+     * <p>命中率只看<b>最近一轮</b>:累计命中率会被历史稀释,看不出"刚才那轮把缓存打穿了"。
+     * 它是即时诊断,不是成绩单。
+     */
     private int renderUsage(GuiGraphics g, int mouseX, int mouseY) {
-        int pct = loop().contextPercent();
-        long total = loop().totalTokensUsed();
-        if (pct <= 0 && total <= 0) return tabX[0];
-        String s = (pct > 0 ? "context " + pct + "%" : "")
-                + (pct > 0 && total > 0 ? " · " : "")
-                + (total > 0 ? fmtTokens(total) + " tokens" : "");
+        var loop = loop();
+        var sum = loop.usageTotals();
+        int pct = loop.contextPercent();
+        if (sum.total() <= 0 && pct <= 0) return tabX[0];
+
+        StringBuilder sb = new StringBuilder();
+        if (sum.input() > 0) sb.append('↑').append(TokenFormat.tokens(sum.input())).append(' ');
+        if (sum.output() > 0) sb.append('↓').append(TokenFormat.tokens(sum.output())).append(' ');
+        if (sum.cacheRead() > 0) sb.append('R').append(TokenFormat.tokens(sum.cacheRead())).append(' ');
+        if (sum.cacheWrite() > 0) sb.append('W').append(TokenFormat.tokens(sum.cacheWrite())).append(' ');
+        double hit = loop.lastUsage().cacheHitRate();
+        if (sum.reportsCache() && hit >= 0) {
+            sb.append("CH").append(TokenFormat.percent1(hit)).append("% ");
+        }
+        if (pct > 0) {
+            sb.append(pct).append("%/").append(TokenFormat.tokens(loop.modelWindow()));
+        }
+        String s = sb.toString().strip();
+        if (s.isEmpty()) return tabX[0];
+
+        // 上下文快满了要显眼:超过 90% 是红,70% 以上是黄,其余同其它淡色信息
+        int color = pct > 90 ? 0xFFE05A5A : pct > 70 ? 0xFFE0A53A : TXT_FAINT;
         int tx = tabX[0] - 10 - font.width(s);
-        txt(g, Component.literal(s), tx, top + 7, TXT_FAINT);
+        txt(g, Component.literal(s), tx, top + 7, color);
         if (mouseX >= tx && mouseX < tabX[0] - 10 && mouseY >= top + 5 && mouseY < top + 17) {
             g.setComponentTooltipForNextFrame(font, List.of(
                     Component.translatable("numen.chat.usage_tip.context"),
