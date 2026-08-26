@@ -1308,7 +1308,9 @@ public final class EntityAgentLoop {
         convo.incrementTurn();
         awaitingLlmResponse = true;
 
-        var tools = ToolRegistry.all();
+        // 只发常驻工具:其余的在系统提示的 <deferred_tools> 目录里留一行摘要,
+        // 模型调 find_tools 才取回完整定义(见 ToolDisclosure)。
+        var tools = ToolRegistry.resident();
         var snapshot = modelContextSnapshot();
         String systemPrompt = composeSystemPrompt();
 
@@ -1741,6 +1743,13 @@ public final class EntityAgentLoop {
         if (!reflexes.isEmpty()) {
             sb.append("\n\n<instincts>\n").append(reflexes).append("\n</instincts>");
         }
+        // 延迟工具目录。它随注册表变(接了 MCP server 会多出几行),但不随回合变,
+        // 所以仍然待得住这个稳定层——与技能表、本能名册同一档。
+        String catalogue = com.dwinovo.numen.agent.tool.ToolDisclosure
+                .catalog(ToolRegistry.deferred());
+        if (!catalogue.isEmpty()) {
+            sb.append("\n\n").append(catalogue);
+        }
         return sb.toString();
     }
 
@@ -1833,7 +1842,7 @@ public final class EntityAgentLoop {
                 final TurnPresenter.VoiceTurn vt2 = presenter.beginVoiceTurn(ownerSpokeThisTurn);   // 重跑也重新开口(失败那次的半截语音随 beginTurn 作废)
                 presenter.clearPartial();                 // 失败那次的半截文字同理作废
                 NumenLlmClient llm2 = client();
-                llm2.chatStreaming(modelContextSnapshot(), ToolRegistry.all(),
+                llm2.chatStreaming(modelContextSnapshot(), ToolRegistry.resident(),
                                 composeSystemPrompt(),
                                 presenter.tapForUi(gen2, vt2.sink(), llm2.provider()::extractReasoningDelta))
                         .whenComplete((r2, e2) -> {
@@ -1921,9 +1930,23 @@ public final class EntityAgentLoop {
         // Hand this turn's calls to the dispatcher — it runs them serially and
         // reports each result back through the sink (into the conversation), then
         // calls onAllSettled so the loop starts the next turn.
+        // 许可集合随批次一起交出去,不存成字段——它描述的是"这一批调用发出时模型
+        // 看见了什么",存起来就会在下一批变成陈账。
         dispatcher.dispatch(turn.toolCalls().stream()
                 .map(tc -> new ToolInvocation(tc.id(), tc.name(), tc.arguments()))
-                .toList());
+                .toList(), callableTools());
+    }
+
+    /**
+     * 这一刻哪些工具可以调:常驻的永远可以(定义就在请求里),延迟的要看对话里还有没有
+     * 它的展开块。<b>现算,不存</b>——压缩把展开块总结掉之后,模型手里也没有参数定义了,
+     * 这里自然就该重新拦住它。
+     */
+    private java.util.Set<String> callableTools() {
+        java.util.Set<String> ok = new java.util.LinkedHashSet<>();
+        for (com.dwinovo.numen.agent.tool.NumenTool t : ToolRegistry.resident()) ok.add(t.name());
+        ok.addAll(com.dwinovo.numen.agent.tool.ToolDisclosure.expandedIn(modelContextSnapshot()));
+        return ok;
     }
 
     private static String truncate(String s, int max) {
