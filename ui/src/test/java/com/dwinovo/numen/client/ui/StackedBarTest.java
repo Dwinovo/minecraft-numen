@@ -1,6 +1,5 @@
-package com.dwinovo.numen.client.ui.widget;
+package com.dwinovo.numen.client.ui;
 
-import com.dwinovo.numen.client.ui.IDrawSurface;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
