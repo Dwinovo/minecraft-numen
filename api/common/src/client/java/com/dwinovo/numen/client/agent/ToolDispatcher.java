@@ -60,6 +60,9 @@ public final class ToolDispatcher {
     /** The single in-flight call (id → invocation); ≤1 under the serial model. */
     private final Map<String, ToolInvocation> inFlight = new HashMap<>();
     /** Reentrancy guard so a synchronously-completing tool keeps the drain iterative. */
+    /** 本批允许调用的工具名(见 {@link #dispatch})。 */
+    private java.util.Set<String> callable = java.util.Set.of();
+
     private boolean advancing = false;
     private long deadlineMillis = 0;
 
@@ -83,7 +86,13 @@ public final class ToolDispatcher {
     }
 
     /** Run this turn's tool calls, serially. */
-    public void dispatch(List<ToolInvocation> calls) {
+    /**
+     * 收下这一批调用。{@code callable} 是<b>这一批发出时模型能看见定义的工具</b>——
+     * 常驻的加上对话里还留着展开块的那些(见 {@code ToolDisclosure})。随批次传进来
+     * 而不是存成字段:它描述的是一个瞬间,存起来下一批就是陈账。
+     */
+    public void dispatch(List<ToolInvocation> calls, java.util.Set<String> callable) {
+        this.callable = callable == null ? java.util.Set.of() : callable;
         queue.addAll(calls);
         drainNext();
     }
@@ -149,6 +158,15 @@ public final class ToolDispatcher {
                     return;
                 }
                 NumenTool tool = ToolRegistry.resolve(inv.name());
+                if (tool != null && !callable.contains(tool.name())) {
+                    // 定义没在她眼前,参数只能是猜的——挡下来并告诉她怎么补,
+                    // 比让一次瞎填的调用真的动身体便宜。
+                    Constants.LOG.info("[numen-dispatch#{}] tool '{}' not expanded yet (id={})",
+                            entityUuid, inv.name(), inv.id());
+                    sink.onResult(inv, TaskResult.fail(
+                            com.dwinovo.numen.agent.tool.ToolDisclosure.notExpanded(tool.name())).toJson());
+                    continue;
+                }
                 if (tool == null) {
                     Constants.LOG.warn("[numen-dispatch#{}] LLM called unknown tool '{}' (id={})",
                             entityUuid, inv.name(), inv.id());
