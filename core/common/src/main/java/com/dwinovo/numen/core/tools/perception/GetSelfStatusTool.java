@@ -30,6 +30,12 @@ public final class GetSelfStatusTool implements NumenTool {
         return "get_self_status";
     }
 
+    /** 常驻:每轮都可能要看自己的状态。 */
+    @Override
+    public Residency residency() {
+        return Residency.RESIDENT;
+    }
+
     @Override
     public String description() {
         // The reflex overview rides THIS description (constitution §6): numen-api
