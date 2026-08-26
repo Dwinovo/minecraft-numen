@@ -37,6 +37,9 @@ final class UsageCommand implements PageCommand {
         return new UsagePage(loop);
     }
 
+    /** 构成条的高度。够看出比例即可,再高就把明细挤出弹层。 */
+    private static final int BAR_H = 6;
+
     /** 每次 {@link SelectPanel.Page#rows} 都现取:账在她说话时随时在变。 */
     private record UsagePage(EntityAgentLoop loop) implements SelectPanel.Page {
 
@@ -86,6 +89,24 @@ final class UsageCommand implements PageCommand {
         @Override
         public boolean activate(int index) {
             return false;
+        }
+
+        /** 构成条:服务商不报缓存就没有构成可言,那时不占这份高度。 */
+        @Override
+        public int bannerHeight() {
+            return loop.usageTotals().reportsCache() ? BAR_H + 5 : 0;
+        }
+
+        @Override
+        public void drawBanner(com.dwinovo.numen.client.ui.IDrawSurface s,
+                               com.dwinovo.numen.client.ui.NumenTheme.Colors c,
+                               int x, int y, int w) {
+            Usage u = loop.usageTotals();
+            // 绿是命中(省下的),淡是新处理(付过的)——比例比数字快
+            com.dwinovo.numen.client.ui.StackedBar.draw(s, x, y, w, BAR_H, c.inputBg(), List.of(
+                    new com.dwinovo.numen.client.ui.StackedBar.Segment(u.cacheRead(), c.success()),
+                    new com.dwinovo.numen.client.ui.StackedBar.Segment(
+                            u.input() + u.cacheWrite(), c.textMuted())));
         }
 
         /** 千分位:账要看得出量级,不缩写。 */

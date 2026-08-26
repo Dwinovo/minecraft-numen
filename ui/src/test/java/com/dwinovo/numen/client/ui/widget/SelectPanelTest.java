@@ -125,4 +125,40 @@ class SelectPanelTest {
     void aTitledPanelIsTallerThanAnUntitledOne() {
         assertTrue(SelectPanel.heightFor(4, true) > SelectPanel.heightFor(4, false));
     }
+
+    // ---- 可选横幅 ----
+
+    /** 带横幅的页:记下横幅有没有被画、画在哪。 */
+    private static final class BannerPage implements SelectPanel.Page {
+        private final int height;
+        int drawnY = -1;
+
+        BannerPage(int height) { this.height = height; }
+
+        @Override public String title() { return "带条的页"; }
+        @Override public List<SelectPanel.Row> rows() {
+            return List.of(new SelectPanel.Row("a", "1", null));
+        }
+        @Override public boolean activate(int index) { return false; }
+        @Override public int bannerHeight() { return height; }
+        @Override public void drawBanner(com.dwinovo.numen.client.ui.IDrawSurface s,
+                                         com.dwinovo.numen.client.ui.NumenTheme.Colors c,
+                                         int x, int y, int w) {
+            drawnY = y;
+        }
+    }
+
+    @Test
+    void bannerHeightAddsToThePanelHeight() {
+        SelectPanel plain = new SelectPanel(new BannerPage(0));
+        SelectPanel withBanner = new SelectPanel(new BannerPage(12));
+        assertEquals(plain.preferredHeight() + 12, withBanner.preferredHeight());
+    }
+
+    @Test
+    void pagesWithoutABannerAreUntouched() {
+        // 缺省实现:现有的页一行都不用改
+        SelectPanel p = new SelectPanel(new FakePage(3));
+        assertEquals(SelectPanel.heightFor(3, true), p.preferredHeight());
+    }
 }
