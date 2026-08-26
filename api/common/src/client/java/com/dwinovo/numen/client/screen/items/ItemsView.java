@@ -161,11 +161,13 @@ public final class ItemsView {
             // 记忆行:水位条(绿→琥珀→红)+ 条数与累计消耗
             Nb.text(g, font, "记忆", c2, ly, th.textDim());
             int barX = c2 + 26, barW = 46, pct = Mth.clamp(loop.contextPercent(), 0, 100);
-            RoundRect.fill(g, barX, ly + 1, barX + barW, ly + 7, 2, th.field());
             int barColor = pct < 60 ? th.ok() : pct < 85 ? th.run() : th.fail();
-            if (pct > 0) {
-                RoundRect.fill(g, barX, ly + 1, barX + Math.max(3, barW * pct / 100), ly + 7, 2, barColor);
-            }
+            // 与账卡的构成条同一份画法(见 StackedBar):水位是"只有一段"的堆叠条
+            com.dwinovo.numen.client.ui.widget.StackedBar.draw(
+                    new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+                    barX, ly + 1, barW, 6, th.field(), 100,
+                    java.util.List.of(new com.dwinovo.numen.client.ui.widget.StackedBar.Segment(
+                            pct, barColor)));
             Nb.text(g, font, clip(font, loop.display().size() + "条·"
                     + com.dwinovo.numen.client.ui.TokenFormat.tokens(loop.totalTokensUsed()), lw - 26 - barW - 8),
                     barX + barW + 4, ly, th.textDim());
