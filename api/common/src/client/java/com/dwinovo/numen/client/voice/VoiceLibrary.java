@@ -35,6 +35,8 @@ import java.util.UUID;
  *   <li>{@code backend} — {@code "openai"}(OpenAI /v1/audio/speech 协议,含硅基流动等)、
  *       {@code "mimo"}(小米 Mimo TTS,Chat Completions 风格私有协议,字段:
  *       url/api_key/model/voice)、
+ *       {@code "doubao"}(豆包大模型语音合成,单向流式 NDJSON,字段:
+ *       url/api_key/model=资源 ID/voice=音色 ID)、
  *       {@code "gpt_sovits"}(api_v2 的 /tts)、{@code "minimax"}(t2a_v2,字段:
  *       url/api_key/group_id 可选/model/voice=voice_id)或 {@code "fish_audio"}
  *       (v1/tts,字段:url/api_key/voice=reference_id/model=可选模型头);</li>
@@ -52,6 +54,8 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
     public static final String BACKEND_DASHSCOPE = "dashscope";
     /** 小米 Mimo TTS:OpenAI 兼容协议,自有模型与音色体系。 */
     public static final String BACKEND_MIMO = "mimo";
+    /** 豆包(火山引擎)大模型语音合成:HTTP Chunked 单向流式,返回 NDJSON。 */
+    public static final String BACKEND_DOUBAO = "doubao";
 
     /**
      * 一条命名声线配置。允许不完整——只有名字是必填;参数错误在第一次合成时以日志报错。
@@ -83,6 +87,10 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
             return BACKEND_MIMO.equalsIgnoreCase(backend);
         }
 
+        public boolean isDoubao() {
+            return BACKEND_DOUBAO.equalsIgnoreCase(backend);
+        }
+
         /** 据 backend 字段实例化对应 TTS 实现。 */
         public TtsBackend createBackend() {
             if (isSovits()) {
@@ -99,6 +107,9 @@ public final class VoiceLibrary extends JsonLibrary<VoiceLibrary.Entry> {
             }
             if (isMimo()) {
                 return new MimoTts(url, apiKey, model, voice);
+            }
+            if (isDoubao()) {
+                return new DoubaoTts(url, apiKey, model, voice);
             }
             return new OpenAiCompatibleTts(url, apiKey, model, voice);
         }
