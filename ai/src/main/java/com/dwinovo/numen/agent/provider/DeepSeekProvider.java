@@ -38,13 +38,19 @@ public final class DeepSeekProvider extends OpenAIProvider {
 
     @Override public String defaultBaseUrl() { return DEFAULT_BASE_URL; }
 
-    /** {@code usage.prompt_cache_miss_tokens} 直接就是缓存未命中的输入,加输出即新处理量。 */
+    /**
+     * DeepSeek 的方言:{@code prompt_cache_hit_tokens} / {@code prompt_cache_miss_tokens}
+     * 直接就是命中与未命中的输入,不走 {@code prompt_tokens_details}。它不报缓存写。
+     */
     @Override
-    public long freshTokens(com.google.gson.JsonObject usage) {
+    public Usage usage(com.google.gson.JsonObject usage) {
         if (usage != null && usage.has("prompt_cache_miss_tokens")) {
-            return LlmProvider.usageInt(usage, "prompt_cache_miss_tokens")
-                    + LlmProvider.usageInt(usage, "completion_tokens");
+            return new Usage(
+                    LlmProvider.usageInt(usage, "prompt_cache_miss_tokens"),
+                    LlmProvider.usageInt(usage, "completion_tokens"),
+                    LlmProvider.usageInt(usage, "prompt_cache_hit_tokens"),
+                    0);
         }
-        return super.freshTokens(usage);
+        return super.usage(usage);
     }
 }
