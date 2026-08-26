@@ -124,11 +124,11 @@ Every tool and every skill Numen ships with is written against the public API �
 - 📖 **Ship skills inside your jar** — one call turns your jar's `/skills` directory into built-in skills, so players who install your mod get an AI that already knows how to play it.
 - 🏗️ **Or build a completely different AI** — same foundation, whether you want AI NPCs, story characters, or a server butler.
 
-The engine (`api/`) has been merged into this repository on 1.21.1, 1.21.4 and 1.21.5, with the other version branches following. It is still published under its own coordinates for third parties, and depending on it hasn't changed:
+The engine (`api/`) lives in this repository under `api/`, and is still published under its own coordinates for third parties:
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.5:<version>" }
+dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.11:0.0.9" }
 ```
 
 The public integration API is **MIT** licensed — write tools, skills, and compat without being dragged into LGPL.

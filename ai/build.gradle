@@ -71,7 +71,10 @@ publishing {
     repositories {
         maven {
             name = 'localNumen'
-            url = uri(findProperty('local_maven_url') ?: 'file:///D:/01_Projects/numen-maven')
+            // 发布目标的唯一出处是 gradle.properties 的 local_maven_url;
+            // CI 用 -Plocal_maven_url= 指到 checkout 出来的 numen-maven。
+            // 这里不写兜底默认值:属性缺了就当场报错,好过静默发到别处。
+            url = uri(providers.gradleProperty('local_maven_url').get())
         }
     }
 }
