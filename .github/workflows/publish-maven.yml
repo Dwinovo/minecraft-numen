@@ -59,8 +59,9 @@ jobs:
         run: ./gradlew publishAll -Plocal_maven_url=file://$PWD/maven-repo --no-daemon
 
       # 多条分支可能同时跑，都往同一个仓推 —— 撞车是常态，不是异常。
-      # 失败就 rebase 重试；rebase 在这里永远安全：各分支写的是互不重叠的目录
-      # （制品坐标带 MC 版本），不存在同一文件的并发修改。
+      # 失败就 rebase 重试。rebase 能自动收敛的前提是各分支写互不重叠的路径：
+      # 所有制品坐标都带 MC 版本后缀（ai/ui 也带，见 ai/build.gradle 的 artifactId）。
+      # 这个前提一旦被破坏，冲突落在 maven-metadata.xml 上，重试多少次都没用。
       - name: Commit and push
         shell: bash
         run: |
