@@ -13,7 +13,7 @@ plugins {
 allprojects { ext.mod_id = 'numen' }
 ['api:common', 'api:fabric', 'api:forge'].each { path ->
     project(path) {
-        version = '0.0.9'
+        version = '0.0.10'
         ext.mod_id = 'numen_api'
         // 内部模块身份必须与 core 家族区分:两家子项目同名(common/fabric/forge),
         // 若 group 也相同,Gradle 会把 project(':api:common') 依赖按"同一模块"做版本
