@@ -162,10 +162,14 @@ public final class ModLanguageData {
         public static final String VOICE_BACKEND_FISH    = "numen.voice.backend_fish";
         public static final String VOICE_BACKEND_DASHSCOPE = "numen.voice.backend_dashscope";
         public static final String VOICE_BACKEND_MIMO    = "numen.voice.backend_mimo";
+        public static final String VOICE_BACKEND_DOUBAO  = "numen.voice.backend_doubao";
         public static final String VOICE_FORM_URL       = "numen.voice.form_url";
         public static final String VOICE_FORM_KEY_MIMO  = "numen.voice.form_key_mimo";
         public static final String VOICE_FORM_MIMO_MODEL = "numen.voice.form_mimo_model";
         public static final String VOICE_FORM_MIMO_VOICE = "numen.voice.form_mimo_voice";
+        public static final String VOICE_FORM_KEY_DOUBAO = "numen.voice.form_key_doubao";
+        public static final String VOICE_FORM_DOUBAO_RESOURCE = "numen.voice.form_doubao_resource";
+        public static final String VOICE_FORM_DOUBAO_SPEAKER = "numen.voice.form_doubao_speaker";
         public static final String VOICE_FORM_KEY_OPENAI  = "numen.voice.form_key_openai";
         public static final String VOICE_FORM_KEY_MINIMAX = "numen.voice.form_key_minimax";
         public static final String VOICE_FORM_KEY_FISH    = "numen.voice.form_key_fish";
@@ -484,6 +488,7 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_BACKEND_FISH,    "Fish Audio");
         adder.add(Keys.VOICE_BACKEND_DASHSCOPE, "Alibaba Model Studio (realtime)");
         adder.add(Keys.VOICE_BACKEND_MIMO,    "Xiaomi Mimo (Chat Completions)");
+        adder.add(Keys.VOICE_BACKEND_DOUBAO,  "Doubao (Volcengine)");
         adder.add(Keys.VOICE_FORM_URL,       "Service URL");
         adder.add(Keys.VOICE_FORM_KEY_OPENAI,  "API Key");
         adder.add(Keys.VOICE_FORM_KEY_MINIMAX, "API Key");
@@ -492,6 +497,9 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_FORM_KEY_MIMO,  "API Key");
         adder.add(Keys.VOICE_FORM_MIMO_MODEL, "Model");
         adder.add(Keys.VOICE_FORM_MIMO_VOICE, "Voice");
+        adder.add(Keys.VOICE_FORM_KEY_DOUBAO, "API Key");
+        adder.add(Keys.VOICE_FORM_DOUBAO_RESOURCE, "Resource ID");
+        adder.add(Keys.VOICE_FORM_DOUBAO_SPEAKER, "Speaker ID");
         adder.add(Keys.VOICE_FORM_DASHSCOPE_MODEL, "Model");
         adder.add(Keys.VOICE_FORM_DASHSCOPE_VOICE, "Voice");
         adder.add(Keys.VOICE_FORM_MINIMAX_MODEL, "Model");
@@ -810,6 +818,7 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_BACKEND_FISH,    "Fish Audio");
         adder.add(Keys.VOICE_BACKEND_DASHSCOPE, "阿里云百炼(实时)");
         adder.add(Keys.VOICE_BACKEND_MIMO,    "小米 Mimo(Chat Completions)");
+        adder.add(Keys.VOICE_BACKEND_DOUBAO,  "豆包(火山引擎)");
         adder.add(Keys.VOICE_FORM_URL,       "服务地址");
         adder.add(Keys.VOICE_FORM_KEY_OPENAI,  "API Key");
         adder.add(Keys.VOICE_FORM_KEY_MINIMAX, "API Key");
@@ -818,6 +827,9 @@ public final class ModLanguageData {
         adder.add(Keys.VOICE_FORM_KEY_MIMO,  "API Key");
         adder.add(Keys.VOICE_FORM_MIMO_MODEL, "合成模型");
         adder.add(Keys.VOICE_FORM_MIMO_VOICE, "音色");
+        adder.add(Keys.VOICE_FORM_KEY_DOUBAO, "API Key");
+        adder.add(Keys.VOICE_FORM_DOUBAO_RESOURCE, "资源 ID");
+        adder.add(Keys.VOICE_FORM_DOUBAO_SPEAKER, "音色 ID");
         adder.add(Keys.VOICE_FORM_DASHSCOPE_MODEL, "合成模型");
         adder.add(Keys.VOICE_FORM_DASHSCOPE_VOICE, "音色");
         adder.add(Keys.VOICE_FORM_MINIMAX_MODEL, "模型");
