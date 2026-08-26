@@ -3,24 +3,26 @@ package com.dwinovo.numen.client.command;
 import com.dwinovo.numen.agent.provider.CacheWaste;
 import com.dwinovo.numen.agent.provider.Usage;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
+import com.dwinovo.numen.client.ui.NumenTheme;
+import com.dwinovo.numen.client.ui.StackedBar;
 import com.dwinovo.numen.client.ui.TokenFormat;
-import com.dwinovo.numen.client.ui.widget.SelectPanel;
+import com.dwinovo.numen.client.ui.widget.Popup;
+import com.dwinovo.numen.client.ui.widget.Readout;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * {@code /usage} —— 这个同伴的 token 账。
+ * {@code /usage} —— 这个同伴的 token 账,贴着输入框弹一张读数卡。
  *
- * <p>与 {@code /skills} 同款:贴着输入框弹出来,不接管整块面板——看完账多半还要接着
- * 说话,把人从输入框里赶出去是多余的一步。
+ * <p>不接管整块面板:看完账多半还要接着说话,把人从输入框里赶出去是多余的一步。
  *
  * <p>输入按<b>缓存命中 / 新处理</b>拆,这是唯一与服务商无关的拆法;缓存写归到新处理
  * 那一侧,它是实打实处理过的量,只是顺便存了起来。页脚那一行读的是同一份数据
  * ({@link EntityAgentLoop#usageTotals()} 等),不各算各的。
  */
-final class UsageCommand implements PageCommand {
+final class UsageCommand implements PopupCommand {
 
     @Override
     public String name() {
@@ -33,80 +35,61 @@ final class UsageCommand implements PageCommand {
     }
 
     @Override
-    public SelectPanel.Page page(EntityAgentLoop loop) {
-        return new UsagePage(loop);
+    public Popup popup(EntityAgentLoop loop) {
+        return new Readout(new UsageContent(loop));
     }
 
-    /** 构成条的高度。够看出比例即可,再高就把明细挤出弹层。 */
-    private static final int BAR_H = 6;
-
-    /** 每次 {@link SelectPanel.Page#rows} 都现取:账在她说话时随时在变。 */
-    private record UsagePage(EntityAgentLoop loop) implements SelectPanel.Page {
+    /** 每次取值都现问:账在她说话时随时在变。 */
+    private record UsageContent(EntityAgentLoop loop) implements Readout.Content {
 
         @Override
         public String title() {
             return "Token 账   Esc 返回";
         }
 
+        /** 绿是命中(省下的),淡是新处理(付过的)。服务商不报缓存就没有构成可言。 */
         @Override
-        public List<SelectPanel.Row> rows() {
+        public List<StackedBar.Segment> bar(NumenTheme.Colors c) {
             Usage u = loop.usageTotals();
-            List<SelectPanel.Row> rows = new ArrayList<>();
+            if (c == null || !u.reportsCache()) return List.of();
+            return List.of(
+                    new StackedBar.Segment(u.cacheRead(), c.success()),
+                    new StackedBar.Segment(u.input() + u.cacheWrite(), c.textMuted()));
+        }
+
+        @Override
+        public List<Readout.Line> lines() {
+            Usage u = loop.usageTotals();
+            List<Readout.Line> out = new ArrayList<>();
             if (u.total() <= 0) {
-                rows.add(new SelectPanel.Row("还没有用量记录", "她一轮都还没开口", null));
-                return rows;
+                out.add(Readout.Line.of("还没有用量记录", "她一轮都还没开口"));
+                return out;
             }
-            rows.add(new SelectPanel.Row("输入", group(u.promptTokens()), null));
+            out.add(Readout.Line.of("输入", group(u.promptTokens())));
             if (u.reportsCache()) {
-                // 圆点当健康灯:命中率高是绿的,低了变红——一眼看出缓存有没有在干活
-                rows.add(new SelectPanel.Row("  命中缓存",
-                        group(u.cacheRead()) + "  " + TokenFormat.percent1(u.cacheHitRate()) + "%",
-                        u.cacheHitRate() >= 0.7));
-                rows.add(new SelectPanel.Row("  新处理",
-                        group(u.input() + u.cacheWrite()), null));
+                out.add(Readout.Line.sub("命中缓存", group(u.cacheRead()),
+                        TokenFormat.percent1(u.cacheHitRate()) + "%", null));
+                out.add(Readout.Line.sub("新处理", group(u.input() + u.cacheWrite()), null, null));
                 if (u.cacheWrite() > 0) {
-                    rows.add(new SelectPanel.Row("  其中写入缓存", group(u.cacheWrite()), null));
+                    out.add(Readout.Line.sub("其中写入缓存", group(u.cacheWrite()), null, null));
                 }
             }
-            rows.add(new SelectPanel.Row("输出", group(u.output()), null));
-            rows.add(new SelectPanel.Row("合计", group(u.total()), null));
-
+            out.add(Readout.Line.of("输出", group(u.output())));
+            out.add(Readout.Line.of("合计", group(u.total())));
             double last = loop.lastUsage().cacheHitRate();
             if (u.reportsCache() && last >= 0) {
-                rows.add(new SelectPanel.Row("最近一轮命中率",
-                        TokenFormat.percent1(last) + "%", last >= 0.7));
+                out.add(Readout.Line.of("最近一轮命中率", TokenFormat.percent1(last) + "%"));
             }
+            return out;
+        }
+
+        /** 这条出现就是前缀被动过:提示词改了、工具清单变了、或缓存过期。 */
+        @Override
+        public String alert(NumenTheme.Colors c) {
             CacheWaste waste = loop.cacheWaste();
-            if (waste.missedTokens() > 0) {
-                // 这一行出现就是前缀被动过:提示词改了、工具清单变了、或缓存过期
-                rows.add(new SelectPanel.Row("缓存重付",
-                        group(waste.missedTokens()) + " · " + waste.missCount() + " 次", false));
-            }
-            return rows;
-        }
-
-        /** 账没有可按的东西——每一行都是读数。 */
-        @Override
-        public boolean activate(int index) {
-            return false;
-        }
-
-        /** 构成条:服务商不报缓存就没有构成可言,那时不占这份高度。 */
-        @Override
-        public int bannerHeight() {
-            return loop.usageTotals().reportsCache() ? BAR_H + 5 : 0;
-        }
-
-        @Override
-        public void drawBanner(com.dwinovo.numen.client.ui.IDrawSurface s,
-                               com.dwinovo.numen.client.ui.NumenTheme.Colors c,
-                               int x, int y, int w) {
-            Usage u = loop.usageTotals();
-            // 绿是命中(省下的),淡是新处理(付过的)——比例比数字快
-            com.dwinovo.numen.client.ui.StackedBar.draw(s, x, y, w, BAR_H, c.inputBg(), List.of(
-                    new com.dwinovo.numen.client.ui.StackedBar.Segment(u.cacheRead(), c.success()),
-                    new com.dwinovo.numen.client.ui.StackedBar.Segment(
-                            u.input() + u.cacheWrite(), c.textMuted())));
+            if (waste.missedTokens() <= 0) return null;
+            return "⚠ 缓存重付 " + group(waste.missedTokens())
+                    + " tokens · " + waste.missCount() + " 次";
         }
 
         /** 千分位:账要看得出量级,不缩写。 */

@@ -21,7 +21,7 @@ import java.util.List;
  *
  * <p>纯 JVM,不碰 Minecraft。
  */
-public final class SelectPanel extends Widget {
+public final class SelectPanel extends Popup {
 
     /** 一行。{@code on} 为 {@code null} = 这行没有开关态,不画圆点。 */
     public record Row(String label, String note, Boolean on) {
@@ -43,19 +43,6 @@ public final class SelectPanel extends Widget {
         /** 回车落在第 {@code index} 行。返回 {@code true} = 内容变了,下一帧重取行。 */
         boolean activate(int index);
 
-        /**
-         * 行上面那条横幅占多高;{@code 0}(缺省)= 不画。
-         *
-         * <p>有些页要先给一眼看得出的东西——构成条、水位条——再列明细。数字要一个个比,
-         * 一条条一眼就够。缺省不画,现有的页什么都不用改。
-         */
-        default int bannerHeight() {
-            return 0;
-        }
-
-        /** 画那条横幅。{@link #bannerHeight} 为 0 时不会被调到。 */
-        default void drawBanner(IDrawSurface s, NumenTheme.Colors c, int x, int y, int w) {
-        }
     }
 
     private static final int ROW_H = 12;
@@ -81,8 +68,9 @@ public final class SelectPanel extends Widget {
         return PAD * 2 + (titled ? TITLE_H : 0) + shown * ROW_H;
     }
 
+    @Override
     public int preferredHeight() {
-        return heightFor(rows.size(), page.title() != null) + page.bannerHeight();
+        return heightFor(rows.size(), page.title() != null);
     }
 
     public int selectedIndex() {
@@ -150,12 +138,6 @@ public final class SelectPanel extends Widget {
         if (title != null) {
             s.drawText(title, x + PAD, iy, c.textSecondary(), false);
             iy += TITLE_H;
-        }
-
-        int banner = page.bannerHeight();
-        if (banner > 0) {
-            page.drawBanner(s, c, x + PAD, iy, w - PAD * 2);
-            iy += banner;
         }
 
         int shown = visibleRows();

@@ -87,7 +87,8 @@ public final class ChatInputBar {
     /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
     private int fieldX, fieldY, fieldW, fieldH;
     /** 开着的选择面板;非 null 时它<b>取代</b>输入框,键盘整个归它。 */
-    private com.dwinovo.numen.client.ui.widget.SelectPanel panel;
+    /** 贴着输入框弹出来的那一层。装什么由命令决定(名单、读数卡…),见 Popup。 */
+    private com.dwinovo.numen.client.ui.widget.Popup panel;
     /** 当前补全候选。空 = 不弹层。 */
     private List<Completion> candidates = List.of();
     private int selected;
@@ -173,9 +174,9 @@ public final class ChatInputBar {
      * 打开一个面板。它摆在输入框那一格、底边对齐,<b>往上</b>长得更高——一次要看好几行,
      * 而下面没有地方。
      */
-    public void openPage(com.dwinovo.numen.client.ui.widget.SelectPanel.Page page) {
-        if (page == null || field == null) return;
-        panel = new com.dwinovo.numen.client.ui.widget.SelectPanel(page);
+    public void openPopup(com.dwinovo.numen.client.ui.widget.Popup popup) {
+        if (popup == null || field == null) return;
+        panel = popup;
         int ph = Math.max(fieldH, panel.preferredHeight());
         panel.setBounds(fieldX, fieldY + fieldH - ph, fieldW, ph);
         candidates = List.of();   // 补全弹层让位:一次只有一个东西吃键盘
@@ -339,9 +340,9 @@ public final class ChatInputBar {
         var loop = host.loop();
         if (loop != null && com.dwinovo.numen.client.command.ChatCommands.isCommand(text)) {
             // 面板类命令:多余的参数不理会——它要的不是参数,是一个能上下选的界面。
-            var page = com.dwinovo.numen.client.command.ChatCommands.pageFor(loop, text);
+            var page = com.dwinovo.numen.client.command.ChatCommands.popupFor(loop, text);
             if (page != null) {
-                openPage(page);
+                openPopup(page);
                 host.onCommandReply(null);
                 return;
             }
