@@ -119,7 +119,11 @@ publishing {
     }
     repositories {
         maven {
-            url System.getenv('local_maven_url')
+            name = 'localNumen'
+            // 与 api 家族同款:默认落本地文件仓,CI 用 -Plocal_maven_url= 指到它
+            // checkout 出来的 numen-maven。读环境变量的话本地跑就得先 export,
+            // 忘了就静默发到 null。
+            url = uri(findProperty('local_maven_url') ?: 'file:///D:/01_Projects/numen-maven')
         }
     }
 }
