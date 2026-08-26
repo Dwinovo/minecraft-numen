@@ -12,7 +12,7 @@
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.0.2--SNAPSHOT-A8731E?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.0.9-A8731E?style=flat-square)
 
 [**What it is**](#what-it-is) · [**Public API**](#public-api) · [**Depend on it**](#depend-on-it) · [**Build & publish**](#build--publish) · [**Ecosystem**](#ecosystem) · [**License**](#license)
 
@@ -141,11 +141,25 @@ repositories {
 
 dependencies {
     // slim, stable API jar for compiling against — the Numen mod supplies the full engine at runtime
-    compileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.2-SNAPSHOT:api"
+    compileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.9:api"
 }
 ```
 
 Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. This branch builds `1.21.1` on Java 21.
+
+`numen-ai` (model access and usage accounting) and `numen-ui` (widgets) come along transitively — `IToolSpec`, which `NumenTool` extends, lives in `numen-ai`, so without it your tool will not compile. Neither coordinate carries an MC-version suffix; every branch publishes the same bytes.
+
+**To change engine mechanics themselves**, depend on core:
+
+```gradle
+dependencies {
+    modImplementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
+}
+```
+
+core pulls the matching `numen-api-*` in with it — no second line needed.
+
+> Do not depend on `numen-api-common-*`. It holds only the cross-loader code: **no language files**, no loader entrypoint. It compiles, and then does nothing in game. **The loader-named coordinate is the complete one.**
 
 ---
 
@@ -154,11 +168,16 @@ Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match
 Standard MultiLoader-Template layout (`common` + per-loader subprojects).
 
 ```bash
-./gradlew build      # build every loader
-./gradlew publish    # publish the full jar + the slim :api jar to numen-maven
+./gradlew build         # build every loader
+./gradlew datagenAll    # run data generation for both families, both loaders
+./gradlew publishAll    # publish api + core + ai + ui
 ```
 
-`publish` writes to the repo at `local_maven_url` (see `gradle.properties`; override with `-Plocal_maven_url=...`). The publication carries two artifacts: the full jar (runtime, bundled by the Numen mod) and the slim `api`-classifier jar (what addons `compileOnly`).
+The target repo comes from `local_maven_url` in `gradle.properties`; override with `-Plocal_maven_url=...`. `datagenAll` / `publishAll` pick the branch's second loader (Forge or NeoForge) themselves — callers never need to know which.
+
+Artifacts fall into three kinds: the full jar (runtime, bundled by the Numen mod), the slim `api`-classifier jar (what addons `compileOnly`), and sources / javadoc.
+
+**Real publishing is done by CI** — push a `v*` tag or dispatch the `Publish Maven Artifacts` workflow; it checks out `numen-maven` and pushes the artifacts there. Versions are fixed releases, written once per coordinate: to ship something new, bump the version.
 
 ---
 
