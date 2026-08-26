@@ -173,13 +173,26 @@ public interface LlmProvider {
     // ---- usage accounting ----
 
     /**
-     * 本次请求真正新处理的 token:缓存命中的输入不计,只算未命中的输入加输出。
-     * 缓存正常工作时这个数很小,暴涨说明缓存前缀碎了。缓存字段是各家方言,
-     * 由实现自理;默认全量 total——没有缓存机制(或方言未知)的服务商,所有
-     * 输入都算新处理。
+     * usage 帧 → 四元用量。默认按 OpenAI 形读:{@code prompt_tokens} 是全量提示词,
+     * 缓存量在 {@code prompt_tokens_details} 里,余下即新处理的输入。各家方言由
+     * 实现自己归一到这个形状(Anthropic 在 mergeUsage 里归一,DeepSeek 覆写本方法)。
+     *
+     * <p>"这一轮真正新处理了多少"是 {@link Usage#fresh()},从四元推导,不需要每家
+     * 各写一遍减法。
      */
-    default long freshTokens(JsonObject usage) {
-        return usageInt(usage, "total_tokens");
+    default Usage usage(JsonObject usage) {
+        long prompt = usageInt(usage, "prompt_tokens");
+        long output = usageInt(usage, "completion_tokens");
+        long cacheRead = 0;
+        long cacheWrite = 0;
+        if (usage != null && usage.has("prompt_tokens_details")
+                && usage.get("prompt_tokens_details").isJsonObject()) {
+            JsonObject d = usage.getAsJsonObject("prompt_tokens_details");
+            cacheRead = usageInt(d, "cached_tokens");
+            cacheWrite = usageInt(d, "cache_creation_tokens");
+        }
+        long input = Math.max(0, prompt - cacheRead - cacheWrite);
+        return new Usage(input, output, cacheRead, cacheWrite);
     }
 
     /** usage 帧安全取整(帧缺失/字段缺失 → 0)。 */

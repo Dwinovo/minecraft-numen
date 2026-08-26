@@ -198,8 +198,12 @@ class AnthropicProviderTest {
         assertEquals(260, acc.usage.get("prompt_tokens").getAsInt());
         assertEquals(40, acc.usage.get("completion_tokens").getAsInt());
         assertEquals(300, acc.usage.get("total_tokens").getAsInt());
-        // 新处理量 = 全量 - 缓存命中 = 260 + 40 - 200。
-        assertEquals(100, P.freshTokens(acc.usage));
+        // 四元拆开:输入 50、命中 200、写入 10、输出 40;新处理量 = 50 + 10 + 40。
+        Usage u = P.usage(acc.usage);
+        assertEquals(50, u.input());
+        assertEquals(200, u.cacheRead());
+        assertEquals(10, u.cacheWrite());
+        assertEquals(100, u.fresh());
     }
 
     @Test
