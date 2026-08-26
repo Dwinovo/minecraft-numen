@@ -1,6 +1,7 @@
 package com.dwinovo.numen.client.agent;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.provider.CacheWaste;
 import com.dwinovo.numen.agent.provider.Usage;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -26,6 +27,7 @@ final class TokenLedger {
     private long total;
     private Usage sum = Usage.ZERO;
     private Usage latest = Usage.ZERO;
+    private final CacheWaste waste = new CacheWaste();
 
     TokenLedger(UUID entityUuid) {
         this.entityUuid = entityUuid;
@@ -43,6 +45,11 @@ final class TokenLedger {
     /** 最近一轮的用量——命中率取自它,不取累计。 */
     Usage latest() {
         return latest;
+    }
+
+    /** 缓存重计费:本该命中却重新处理的量。本次运行内累计,不落盘。 */
+    CacheWaste waste() {
+        return waste;
     }
 
     private Path file() {
@@ -71,6 +78,7 @@ final class TokenLedger {
     void add(Usage u) {
         if (u == null) return;
         latest = u;
+        waste.observe(u);
         sum = sum.plus(u);
         total += u.fresh();
         try {
