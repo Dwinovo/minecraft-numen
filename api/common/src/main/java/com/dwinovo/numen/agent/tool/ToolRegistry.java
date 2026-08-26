@@ -102,6 +102,29 @@ public final class ToolRegistry {
         return new ArrayList<>(TOOLS.values());
     }
 
+    /**
+     * 常驻工具——完整定义每轮随请求发出。见 {@link NumenTool#residency()}。
+     */
+    public static List<NumenTool> resident() {
+        return byResidency(NumenTool.Residency.RESIDENT);
+    }
+
+    /**
+     * 延迟工具——只在目录里留一行摘要。借来的 MCP 工具全在这一档:自家工具有界且
+     * 高频,借来的无界且描述长度不可控。
+     */
+    public static List<NumenTool> deferred() {
+        return byResidency(NumenTool.Residency.DEFERRED);
+    }
+
+    private static List<NumenTool> byResidency(NumenTool.Residency want) {
+        List<NumenTool> out = new ArrayList<>();
+        for (NumenTool t : TOOLS.values()) {
+            if (t.residency() == want) out.add(t);
+        }
+        return out;
+    }
+
     public static int size() {
         return TOOLS.size();
     }
