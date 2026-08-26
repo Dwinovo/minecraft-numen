@@ -214,7 +214,7 @@ public final class EntityAgentLoop {
     /** A summarization call is in flight; blocks normal turns until it lands. */
     private boolean compacting = false;
     /** Context size of the last request as the API counted it (0 = unknown yet). */
-    private int lastPromptTokens = 0;
+    private long lastPromptTokens = 0;
     /** Consecutive compaction failures — circuit breaker for the auto path. */
     private int compactFailures = 0;
 
@@ -308,7 +308,7 @@ public final class EntityAgentLoop {
      * ({@link com.dwinovo.numen.agent.llm.ProviderLibrary.Entry#contextWindow()}),
      * 请求走哪份档案窗口就按哪份算;没有档案(遗留同伴)才回落旧的全局配置。
      */
-    private int modelWindow() {
+    public int modelWindow() {
         var entry = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerEntryId);
         if (entry != null) {
             return entry.contextWindow();
@@ -372,6 +372,16 @@ public final class EntityAgentLoop {
     /** 本同伴累计消耗的 token(跨会话持久化)。 */
     public long totalTokensUsed() {
         return tokens.total();
+    }
+
+    /** 四元累计用量(跨会话)——页脚的 ↑↓RW 取自它。 */
+    public com.dwinovo.numen.agent.provider.Usage usageTotals() {
+        return tokens.sum();
+    }
+
+    /** 最近一轮的用量——命中率取自它:累计命中率会被历史稀释,看不出刚才那轮打穿了缓存。 */
+    public com.dwinovo.numen.agent.provider.Usage lastUsage() {
+        return tokens.latest();
     }
     public ConvoState convo() { return convo; }
 
@@ -1293,7 +1303,7 @@ public final class EntityAgentLoop {
         // never send a usage frame leave lastPromptTokens at 0 — fall back to
         // a local estimate so the gate still fires instead of never.
         int window = modelWindow();
-        int contextTokens = lastPromptTokens > 0
+        long contextTokens = lastPromptTokens > 0
                 ? lastPromptTokens
                 : estimateContextTokens(convo.snapshot());
         if (contextTokens >= window - AUTO_COMPACT_BUFFER_TOKENS
@@ -1412,7 +1422,7 @@ public final class EntityAgentLoop {
             return;
         }
 
-        tokens.add(res.freshTokens());   // 压缩调用同样烧 token,计入累计
+        tokens.add(res.usage());   // 压缩调用同样烧 token,计入累计
         String wrapped = SUMMARY_HEADER + summary.strip();
         // 近段原文跨过压缩边界(startCompaction 切好的那份):压缩只在空闲时跑,期间
         // compacting 闸挡住新回合,历史不会在等待摘要的路上变化。
@@ -1877,7 +1887,7 @@ public final class EntityAgentLoop {
         if (res.promptTokens() > 0) {
             lastPromptTokens = res.promptTokens();
         }
-        tokens.add(res.freshTokens());
+        tokens.add(res.usage());
         // 目标的账单:主人得看得见这个目标到现在烧了多少。
         if (goal != null) goal.addTokens(res.freshTokens());
 
