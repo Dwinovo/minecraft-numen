@@ -183,20 +183,20 @@ public final class ChatCommands {
     /**
      * 这串输入要打开的面板;不是面板命令(或命令不存在/此刻不可用)返回 {@code null}。
      *
-     * <p>打开面板<b>就是</b>这条命令的执行,所以这里记一笔"最近用过"。
+     * <p>打开弹层<b>就是</b>这条命令的执行,所以这里记一笔"最近用过"。
      */
-    public static com.dwinovo.numen.client.ui.widget.SelectPanel.Page pageFor(
+    public static com.dwinovo.numen.client.ui.widget.Popup popupFor(
             EntityAgentLoop loop, String text) {
         Parsed p = parse(text);
         if (p == null || p.name().isEmpty()) {
             return null;
         }
         ChatCommand command = find(loop, p.name());
-        if (!(command instanceof PageCommand page) || command.unavailable(loop) != null) {
+        if (!(command instanceof PopupCommand popup) || command.unavailable(loop) != null) {
             return null;
         }
         remember(command.name());
-        return page.page(loop);
+        return popup.popup(loop);
     }
 
     /**
