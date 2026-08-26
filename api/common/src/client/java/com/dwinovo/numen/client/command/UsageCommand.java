@@ -3,8 +3,6 @@ package com.dwinovo.numen.client.command;
 import com.dwinovo.numen.agent.provider.CacheWaste;
 import com.dwinovo.numen.agent.provider.Usage;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
-import com.dwinovo.numen.client.ui.NumenTheme;
-import com.dwinovo.numen.client.ui.StackedBar;
 import com.dwinovo.numen.client.ui.TokenFormat;
 import com.dwinovo.numen.client.ui.widget.Popup;
 import com.dwinovo.numen.client.ui.widget.Readout;
@@ -47,14 +45,14 @@ final class UsageCommand implements PopupCommand {
             return "Token 账   Esc 返回";
         }
 
-        /** 绿是命中(省下的),淡是新处理(付过的)。服务商不报缓存就没有构成可言。 */
+        /** 命中是"好"的那段,新处理是中性的。服务商不报缓存就没有构成可言。 */
         @Override
-        public List<StackedBar.Segment> bar(NumenTheme.Colors c) {
+        public List<Readout.Part> bar() {
             Usage u = loop.usageTotals();
-            if (c == null || !u.reportsCache()) return List.of();
+            if (!u.reportsCache()) return List.of();
             return List.of(
-                    new StackedBar.Segment(u.cacheRead(), c.success()),
-                    new StackedBar.Segment(u.input() + u.cacheWrite(), c.textMuted()));
+                    new Readout.Part(u.cacheRead(), Readout.Tone.GOOD),
+                    new Readout.Part(u.input() + u.cacheWrite(), Readout.Tone.PLAIN));
         }
 
         @Override
@@ -68,24 +66,26 @@ final class UsageCommand implements PopupCommand {
             out.add(Readout.Line.of("输入", group(u.promptTokens())));
             if (u.reportsCache()) {
                 out.add(Readout.Line.sub("命中缓存", group(u.cacheRead()),
-                        TokenFormat.percent1(u.cacheHitRate()) + "%", null));
-                out.add(Readout.Line.sub("新处理", group(u.input() + u.cacheWrite()), null, null));
+                        TokenFormat.percent1(u.cacheHitRate()) + "%"));
+                out.add(Readout.Line.sub("新处理", group(u.input() + u.cacheWrite()), null));
                 if (u.cacheWrite() > 0) {
-                    out.add(Readout.Line.sub("其中写入缓存", group(u.cacheWrite()), null, null));
+                    out.add(Readout.Line.sub("其中写入缓存", group(u.cacheWrite()), null));
                 }
             }
             out.add(Readout.Line.of("输出", group(u.output())));
             out.add(Readout.Line.of("合计", group(u.total())));
             double last = loop.lastUsage().cacheHitRate();
             if (u.reportsCache() && last >= 0) {
-                out.add(Readout.Line.of("最近一轮命中率", TokenFormat.percent1(last) + "%"));
+                // 低了说明前缀正在被打穿——数字自己带颜色
+                out.add(Readout.Line.toned("最近一轮命中率", TokenFormat.percent1(last) + "%",
+                        last >= 0.7 ? Readout.Tone.GOOD : Readout.Tone.WARN));
             }
             return out;
         }
 
         /** 这条出现就是前缀被动过:提示词改了、工具清单变了、或缓存过期。 */
         @Override
-        public String alert(NumenTheme.Colors c) {
+        public String alert() {
             CacheWaste waste = loop.cacheWaste();
             if (waste.missedTokens() <= 0) return null;
             return "⚠ 缓存重付 " + group(waste.missedTokens())
