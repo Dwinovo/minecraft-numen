@@ -12,7 +12,7 @@
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.0.2--SNAPSHOT-A8731E?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.0.9-A8731E?style=flat-square)
 
 [**这是什么**](#这是什么) · [**公共 API**](#公共-api) · [**如何依赖**](#如何依赖) · [**构建与发布**](#构建与发布) · [**生态**](#生态) · [**授权**](#授权)
 
@@ -141,11 +141,25 @@ repositories {
 
 dependencies {
     // 精简、稳定的 API jar，仅用于编译——运行时由 Numen mod 提供完整引擎
-    compileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.2-SNAPSHOT:api"
+    compileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.9:api"
 }
 ```
 
 按你的目标替换加载器（`fabric` / `forge` / `neoforge`）和 Minecraft 版本。本分支基于 Java 21 构建 `1.21.1`。
+
+`numen-ai`（模型接入与用量核算）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。这两个坐标不带 MC 版本后缀，各分支发的是同一份字节。
+
+**要改引擎本身的机制**，就依赖 core：
+
+```gradle
+dependencies {
+    modImplementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
+}
+```
+
+core 会把对应的 `numen-api-*` 一并带出来，不用另写一行。
+
+> 别依赖 `numen-api-common-*`。它只有跨加载器那部分代码，**没有语言文件**，也不包含加载器入口——能编译，装进游戏什么都不会发生。**带加载器名的那个坐标才是完整的。**
 
 ---
 
@@ -154,11 +168,16 @@ dependencies {
 标准的 MultiLoader-Template 布局（`common` + 各加载器子项目）。
 
 ```bash
-./gradlew build      # 构建每个加载器
-./gradlew publish    # 把完整 jar 和精简 :api jar 发布到 numen-maven
+./gradlew build         # 构建每个加载器
+./gradlew datagenAll    # 跑齐两家、两个 loader 的数据生成
+./gradlew publishAll    # 发 api + core + ai + ui 的全部制品
 ```
 
-`publish` 写入 `local_maven_url` 指向的仓库（见 `gradle.properties`，可用 `-Plocal_maven_url=...` 覆盖）。发布物包含两个 artifact：完整 jar（运行时用，由 Numen mod 打包携带）和 classifier 为 `api` 的精简 jar（插件 `compileOnly` 用）。
+发布目标由 `gradle.properties` 的 `local_maven_url` 决定，`-Plocal_maven_url=...` 可覆盖。`datagenAll` / `publishAll` 会自己按分支挑第二个 loader（Forge 还是 NeoForge），调用方不必知道。
+
+发布物按坐标分三类：完整 jar（运行时用，由 Numen mod 打包携带）、classifier 为 `api` 的精简 jar（插件 `compileOnly` 用），以及 sources / javadoc。
+
+**正式发布由 CI 做**——打 `v*` tag 或手动触发 `Publish Maven Artifacts` 工作流，它会 checkout `numen-maven` 并把制品推上去。制品版本是定死的正式版号，同一个坐标只写一次；要发新的就先把版本号往前推。
 
 ---
 
