@@ -23,6 +23,12 @@ public final class ScanNearbyEntitiesTool implements NumenTool {
         return "scan_nearby_entities";
     }
 
+    /** 常驻:找实体;与 scan_blocks 靠描述区分,摘要不足以选对。 */
+    @Override
+    public Residency residency() {
+        return Residency.RESIDENT;
+    }
+
     @Override
     public String description() {
         return "List entities within a radius around you, sorted by distance. Use type_filter to "
