@@ -142,10 +142,10 @@ repositories {
 dependencies {
     // Fabric: the slim jar carries intermediary names, same as the full jar. Use
     // modCompileOnly so Loom maps it into your own namespace — yarn or mojmap.
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.10:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-26.2:0.0.10:api"
 
     // NeoForge / Forge: runtime names are Mojang names, so plain compileOnly works.
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.0.10:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-26.2:0.0.10:api"
 }
 ```
 
@@ -157,7 +157,7 @@ Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match
 
 ```gradle
 dependencies {
-    modImplementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
+    modImplementation "com.dwinovo.numen:numen-neoforge-26.2:0.1.2"
 }
 ```
 
