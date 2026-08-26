@@ -14,7 +14,7 @@ import java.util.List;
  * <p>与设置页的技能管理<b>同源</b>:两边写的都是 {@link SkillRegistry} 这一个单例,
  * 落盘也是它自己的 {@code skills_state.json}。没有第二份状态,也就没有要对齐的东西。
  */
-final class SkillsCommand implements PageCommand {
+final class SkillsCommand implements PopupCommand {
 
     @Override
     public String name() {
@@ -27,8 +27,8 @@ final class SkillsCommand implements PageCommand {
     }
 
     @Override
-    public SelectPanel.Page page(EntityAgentLoop loop) {
-        return new SkillsPage();
+    public com.dwinovo.numen.client.ui.widget.Popup popup(EntityAgentLoop loop) {
+        return new SelectPanel(new SkillsPage());
     }
 
     /** 面板内容。每次 {@link #rows} 都现问库——设置页那边改了,这边下一帧就对。 */
