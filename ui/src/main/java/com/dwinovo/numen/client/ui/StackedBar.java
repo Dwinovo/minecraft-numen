@@ -1,11 +1,6 @@
-package com.dwinovo.numen.client.ui.widget;
-
-import com.dwinovo.numen.client.ui.IDrawSurface;
-import com.dwinovo.numen.client.ui.NumenStyle;
-import com.dwinovo.numen.client.ui.NumenTheme;
+package com.dwinovo.numen.client.ui;
 
 import java.util.List;
-import java.util.function.Supplier;
 
 /**
  * 堆叠条:一条底槽上按比例并排几段。用来一眼看出<b>构成</b>——命中缓存占多少、
@@ -13,10 +8,10 @@ import java.util.function.Supplier;
  *
  * <p>单段填充也走它(只给一段即可),那是水位条。
  *
- * <p>取数走 {@link Supplier}:这类数据(用量、水位)随时在变,build 时捕获会把过期的
- * 比例钉死在屏幕上。
  */
-public final class StackedBar extends Widget {
+public final class StackedBar {
+
+    private StackedBar() {}
 
     /** 一段:量与颜色。量为 0 的段不占位。 */
     public record Segment(long value, int argb) {}
@@ -28,21 +23,8 @@ public final class StackedBar extends Widget {
      */
     public static final int MIN_VISIBLE_PX = 1;
 
-    private final Supplier<List<Segment>> segments;
-
-    public StackedBar(Supplier<List<Segment>> segments) {
-        this.segments = segments;
-    }
-
-    @Override
-    public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        if (!visible) return;
-        draw(s, x, y, w, h, c.inputBg(), segments.get());
-    }
-
     /**
-     * 直接画一条,不经过控件——给那些手持画布、没有 {@code UiRoot} 的地方
-     * (物品页的记忆水位条)。控件的 {@link #render} 也走这里:<b>一份实现,两个入口</b>。
+     * 画一条。
      *
      * <p>宽度分配对着<b>累计量</b>算,不是各段各自四舍五入后再相加:后者的误差会累积,
      * 几段之后条尾就差出好几像素,或者整条溢出。
