@@ -52,8 +52,16 @@ jobs:
         run: ./gradlew assemble --no-daemon -x javadoc
 
       # 纯 JVM 测试,不起游戏,几十秒。GameTest 要拉整个客户端,留给发版流水线。
+      # 数据生成:语言文件、方块标签都是生成出来的,不跑就发现不了"provider 改了但
+      # 生成任务炸了"这类问题——发版流水线曾经因此在 Forge 分支上整步失败,而这里
+      # 一路绿灯。datagenAll 由构建自己按分支挑 loader,CI 不做探测。
+      - name: Run data generation
+        run: ./gradlew datagenAll --no-daemon -x javadoc
+
+      # 全模块测试。只跑 :api:common:test 的话,ai(provider/用量核算)、ui(控件)、
+      # core(寻路/战斗/任务)三家的用例一个都不会跑——那是一多半的测试。
       - name: Run JVM tests
-        run: ./gradlew :api:common:test --no-daemon -x javadoc
+        run: ./gradlew test --no-daemon -x javadoc
 
       - name: Upload test report on failure
         if: failure()
