@@ -1231,8 +1231,12 @@ public final class NumenScreen extends Screen {
      * 用量条:{@code ↑输入 ↓输出 R缓存读 W缓存写 CH命中率 占用%/窗口}。每段有值才出现
      * ——服务商不报缓存的话那三段自然消失,不显示一排零。
      *
+     * <h2>颜色只给有信息的段</h2>
+     * 输入输出是纯体量,知道多少并不改变什么,保持淡色;<b>命中率和上下文占用</b>才是
+     * 会让人想动手的两个数——前者低了说明前缀在被打穿,后者高了说明快要压缩。缓存读用
+     * 成功色,它代表省下来的那部分。全部上色等于全部没上色。
+     *
      * <p>命中率只看<b>最近一轮</b>:累计命中率会被历史稀释,看不出"刚才那轮把缓存打穿了"。
-     * 它是即时诊断,不是成绩单。
      */
     private int renderUsage(GuiGraphics g, int mouseX, int mouseY) {
         var loop = loop();
@@ -1240,30 +1244,45 @@ public final class NumenScreen extends Screen {
         int pct = loop.contextPercent();
         if (sum.total() <= 0 && pct <= 0) return tabX[0];
 
-        StringBuilder sb = new StringBuilder();
-        if (sum.input() > 0) sb.append('↑').append(TokenFormat.tokens(sum.input())).append(' ');
-        if (sum.output() > 0) sb.append('↓').append(TokenFormat.tokens(sum.output())).append(' ');
-        if (sum.cacheRead() > 0) sb.append('R').append(TokenFormat.tokens(sum.cacheRead())).append(' ');
-        if (sum.cacheWrite() > 0) sb.append('W').append(TokenFormat.tokens(sum.cacheWrite())).append(' ');
+        List<String> parts = new java.util.ArrayList<>();
+        List<Integer> colors = new java.util.ArrayList<>();
+        if (sum.input() > 0) {
+            parts.add("↑" + TokenFormat.tokens(sum.input()));
+            colors.add(TXT_FAINT);
+        }
+        if (sum.output() > 0) {
+            parts.add("↓" + TokenFormat.tokens(sum.output()));
+            colors.add(TXT_FAINT);
+        }
+        if (sum.cacheRead() > 0) {
+            parts.add("R" + TokenFormat.tokens(sum.cacheRead()));
+            colors.add(OK);
+        }
+        if (sum.cacheWrite() > 0) {
+            parts.add("W" + TokenFormat.tokens(sum.cacheWrite()));
+            colors.add(TXT_MUTED);
+        }
         double hit = loop.lastUsage().cacheHitRate();
         if (sum.reportsCache() && hit >= 0) {
-            sb.append("CH").append(TokenFormat.percent1(hit)).append("% ");
+            parts.add("CH" + TokenFormat.percent1(hit) + "%");
+            colors.add(hit >= 0.7 ? OK : hit >= 0.3 ? RUN : FAIL);
         }
         if (pct > 0) {
-            sb.append(pct).append("%/").append(TokenFormat.tokens(loop.modelWindow()));
+            parts.add(pct + "%/" + TokenFormat.tokens(loop.modelWindow()));
+            colors.add(pct > 90 ? FAIL : pct > 70 ? RUN : TXT_FAINT);
         }
-        String s = sb.toString().strip();
-        if (s.isEmpty()) return tabX[0];
+        if (parts.isEmpty()) return tabX[0];
 
-        // 上下文快满了要显眼:超过 90% 是红,70% 以上是黄,其余同其它淡色信息
-        int color = pct > 90 ? 0xFFE05A5A : pct > 70 ? 0xFFE0A53A : TXT_FAINT;
-        int tx = tabX[0] - 10 - font.width(s);
-        txt(g, Component.literal(s), tx, top + 7, color);
-        if (mouseX >= tx && mouseX < tabX[0] - 10 && mouseY >= top + 5 && mouseY < top + 17) {
-            g.renderComponentTooltip(font, List.of(
-                    Component.translatable("numen.chat.usage_tip.context"),
-                    Component.translatable("numen.chat.usage_tip.tokens"),
-                    Component.translatable("numen.chat.usage_tip.cache")), mouseX, mouseY);
+        int gap = font.width(" ");
+        int total = -gap;
+        for (String part : parts) {
+            total += font.width(part) + gap;
+        }
+        int tx = tabX[0] - 10 - total;
+        int x = tx;
+        for (int k = 0; k < parts.size(); k++) {
+            txt(g, Component.literal(parts.get(k)), x, top + 7, colors.get(k));
+            x += font.width(parts.get(k)) + gap;
         }
         return tx;
     }
