@@ -142,10 +142,10 @@ repositories {
 dependencies {
     // Fabric：瘦 jar 与主 jar 一样是 intermediary 命名，用 modCompileOnly
     // 让 Loom 映射到你自己的命名——yarn 和 mojmap 都能用
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.10:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.11:0.0.10:api"
 
     // NeoForge / Forge：运行期命名就是 Mojang 命名，直接 compileOnly
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.0.10:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.11:0.0.10:api"
 }
 ```
 
@@ -157,7 +157,7 @@ dependencies {
 
 ```gradle
 dependencies {
-    modImplementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
+    modImplementation "com.dwinovo.numen:numen-neoforge-1.21.11:0.1.2"
 }
 ```
 
