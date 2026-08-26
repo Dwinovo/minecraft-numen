@@ -25,6 +25,12 @@ public final class TaskStatusTool implements NumenTool {
         return "task_status";
     }
 
+    /** 常驻:动作类工具返回 task_id 后必须靠它轮询。 */
+    @Override
+    public Residency residency() {
+        return Residency.RESIDENT;
+    }
+
     @Override
     public String description() {
         return "Read what you have in flight: the background task (id, what it is, running/queued, "

@@ -25,6 +25,12 @@ public final class MoveToTool implements NumenTool {
         return "goto";
     }
 
+    /** 常驻:移动是几乎每个任务的第一步。 */
+    @Override
+    public Residency residency() {
+        return Residency.RESIDENT;
+    }
+
     @Override
     public String description() {
         return """
