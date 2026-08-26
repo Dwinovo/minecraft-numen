@@ -2,7 +2,6 @@ package com.dwinovo.numen.client.ui.widget;
 
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenTheme;
-import com.dwinovo.numen.client.ui.StackedBar;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
@@ -38,10 +37,10 @@ class ReadoutTest {
 
         @Override public String title() { return title; }
         @Override public List<Readout.Line> lines() { return lines; }
-        @Override public List<StackedBar.Segment> bar(NumenTheme.Colors c) {
-            return withBar ? List.of(new StackedBar.Segment(1, 0xFF00FF00)) : List.of();
+        @Override public List<Readout.Part> bar() {
+            return withBar ? List.of(new Readout.Part(1, Readout.Tone.GOOD)) : List.of();
         }
-        @Override public String alert(NumenTheme.Colors c) { return alert; }
+        @Override public String alert() { return alert; }
     }
 
     private static NumenTheme.Colors colors() {
@@ -95,7 +94,7 @@ class ReadoutTest {
         Fake f = new Fake();
         f.title = null;
         f.lines = List.of(Readout.Line.of("甲", "1"),
-                Readout.Line.sub("乙", "2", null, null));
+                Readout.Line.sub("乙", "2", null));
         Readout r = new Readout(f);
         r.setBounds(0, 0, 200, r.preferredHeight());
         Recorder rec = new Recorder();
@@ -107,12 +106,33 @@ class ReadoutTest {
     void noteRidesAlongWithTheNumber() {
         Fake f = new Fake();
         f.title = null;
-        f.lines = List.of(Readout.Line.sub("命中", "100", "89.1%", null));
+        f.lines = List.of(Readout.Line.sub("命中", "100", "89.1%"));
         Readout r = new Readout(f);
         r.setBounds(0, 0, 200, r.preferredHeight());
         Recorder rec = new Recorder();
         r.render(rec, colors(), 0, 0, 0);
         assertTrue(rec.texts.stream().anyMatch(d -> d.text().contains("89.1%")));
+    }
+
+    @Test
+    void measuredHeightFitsEverythingItDraws() {
+        // 踩过的雷:测高时说"没有条",画的时候又画了,最后一行被卡边切掉。
+        // 结构问题必须只用结构回答——这条盯着测高与实画不许分家。
+        Fake f = new Fake();
+        f.withBar = true;
+        f.alert = "⚠ 有事";
+        f.lines = List.of(Readout.Line.of("甲", "1"), Readout.Line.of("乙", "2"),
+                Readout.Line.of("丙", "3"));
+        Readout r = new Readout(f);
+        int hh = r.preferredHeight();
+        r.setBounds(0, 0, 200, hh);
+        Recorder rec = new Recorder();
+        r.render(rec, colors(), 0, 0, 0);
+        int lowest = 0;
+        for (Draw d : rec.texts) {
+            lowest = Math.max(lowest, d.y() + rec.lineHeight());
+        }
+        assertTrue(lowest <= hh, "画到了 " + lowest + ",可卡只有 " + hh + " 高");
     }
 
     /** 某段文字的右边缘。 */
