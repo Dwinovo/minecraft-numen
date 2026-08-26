@@ -13,12 +13,51 @@ plugins {
 allprojects { ext.mod_id = 'numen' }
 ['api:common', 'api:fabric', 'api:neoforge'].each { path ->
     project(path) {
-        version = '0.0.8-SNAPSHOT'
+        version = '0.0.9'
         ext.mod_id = 'numen_api'
         // 内部模块身份必须与 core 家族区分:两家子项目同名(common/fabric/neoforge),
         // 若 group 也相同,Gradle 会把 project(':api:common') 依赖按"同一模块"做版本
         // 冲突解析,直接指回 core 自己形成任务自环。发布坐标不受影响——api-common.gradle
         // 的 publication 显式写 groupId。
         group = 'com.dwinovo.numen.api'
+    }
+}
+
+/**
+ * 数据生成的统一入口。<b>CI 只认这一个任务名</b>——各分支的第二 loader 不同
+ * (Forge 用 ForgeGradle 的 {@code Data},NeoForge 用 moddev 的 {@code runData}),
+ * 但那是构建自己的事,不该让每个工作流各写一遍探测:写两遍就会有一天只改对一遍
+ * (发版流水线曾经因此在 Forge 分支上整步炸掉)。
+ */
+tasks.register('datagenAll') {
+    group = 'build'
+    description = '跑齐 api 与 core 两家、本分支两个 loader 的数据生成'
+    ['api', 'core'].each { family ->
+        // Fabric 两家都有;第二 loader 按分支而异,存在才挂
+        dependsOn ":${family}:fabric:runDatagen"
+        if (findProject(":${family}:neoforge") != null) {
+            dependsOn ":${family}:neoforge:runData"
+        } else if (findProject(":${family}:forge") != null) {
+            dependsOn ":${family}:forge:Data"
+        }
+    }
+}
+
+/** 发布制品的统一入口。同 {@link datagenAll}:挑哪个 loader 归构建自己管。 */
+tasks.register('publishAll') {
+    group = 'publishing'
+    description = '把 api 与 core 两家、本分支两个 loader 的制品发到 numen-maven'
+    // ai/ui 与 MC 版本无关,坐标不带后缀,十一条分支发的是同一个东西
+    // (jar 已做成可复现,各分支字节一致,重复发布在 git 眼里是空提交)。
+    dependsOn ':ai:publish'
+    dependsOn ':ui:publish'
+    ['api', 'core'].each { family ->
+        dependsOn ":${family}:common:publish"
+        dependsOn ":${family}:fabric:publish"
+        if (findProject(":${family}:neoforge") != null) {
+            dependsOn ":${family}:neoforge:publish"
+        } else if (findProject(":${family}:forge") != null) {
+            dependsOn ":${family}:forge:publish"
+        }
     }
 }
