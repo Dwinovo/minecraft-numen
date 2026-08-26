@@ -46,6 +46,7 @@ public final class ChatCommands {
         register(new ClearCommand());
         register(new GoalCommand());
         register(new SkillsCommand());
+        register(new UsageCommand());
     }
 
     private ChatCommands() {}
