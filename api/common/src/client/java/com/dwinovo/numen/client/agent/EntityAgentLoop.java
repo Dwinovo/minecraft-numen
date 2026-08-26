@@ -383,6 +383,11 @@ public final class EntityAgentLoop {
     public com.dwinovo.numen.agent.provider.Usage lastUsage() {
         return tokens.latest();
     }
+
+    /** 缓存重计费的诊断数。 */
+    public com.dwinovo.numen.agent.provider.CacheWaste cacheWaste() {
+        return tokens.waste();
+    }
     public ConvoState convo() { return convo; }
 
     /** Read-only physical transcript for the GUI (see {@link #display}). */
@@ -797,6 +802,7 @@ public final class EntityAgentLoop {
         convo.replaceAll(List.of());
         display.add(new ConvoState.Msg.User(ConvoLog.CLEAR_DIVIDER));
         lastPromptTokens = 0;
+        tokens.waste().reset();   // 同压缩:历史剪断之后上一轮不再可比
         compactFailures = 0;
         Constants.LOG.info("[numen-entity#{}] 上下文清空(记录留档)", entityUuid);
     }
@@ -1451,6 +1457,7 @@ public final class EntityAgentLoop {
         convo.replaceAll(next);
         display.add(new ConvoState.Msg.User(ConvoLog.COMPACT_DIVIDER));
         lastPromptTokens = 0;   // unknown until the next request reports usage
+        tokens.waste().reset();   // 前缀本来就换了,下一轮的未命中不算"白付"
         compactFailures = 0;
         Constants.LOG.info(
                 "[numen-entity#{}] compaction done ({}): {} tokens → summary ({} chars) + {} preserved msg(s) in {} ms",
