@@ -191,6 +191,8 @@ public final class NumenScreen extends Screen {
     private SummonPanel summonPanel;
     // 编辑流:再点激活头像打开,同款居中卡;每个选择当场落地,见 CompanionEditPanel。
     private boolean editing;
+    private boolean showingUsage;
+    private UsagePanel usagePanel;
     private CompanionEditPanel editPanel;
     /** 屏幕级浮层根:承载模态确认卡(遣散同伴);浮层在场时背景全屏蔽。 */
     private final com.dwinovo.numen.client.ui.widget.UiRoot overlayUi =
@@ -265,6 +267,20 @@ public final class NumenScreen extends Screen {
         Minecraft.getInstance().setScreen(new NumenScreen(uuid, name));
     }
 
+    /**
+     * {@code /usage} 入口:面板开着就直接翻卡,没开就带着这只同伴开面板再翻。
+     * 命令在两处都能敲(面板输入行、游戏内快捷对话),两条路都得到同一张卡。
+     */
+    public static void openUsage(UUID uuid, String name) {
+        if (Minecraft.getInstance().screen instanceof NumenScreen open) {
+            open.openUsage();
+            return;
+        }
+        NumenScreen screen = new NumenScreen(uuid, name);
+        screen.showingUsage = true;
+        Minecraft.getInstance().setScreen(screen);
+    }
+
     /** {@code /numen settings} 入口:直接落在设置页(全局配置与同伴无关,空面板也能用)。 */
     public static void openSettings() {
         var entries = NumenRoster.instance().entries();
@@ -337,6 +353,7 @@ public final class NumenScreen extends Screen {
         settings.clearWidgets();
         if (summoning) { buildSummonCard(); return; }
         if (editing) { buildEditCard(); return; }
+        if (showingUsage) { buildUsageCard(); return; }
         switch (tab) {
             case CHAT -> { if (uuid != null) buildChatWidgets(); }
             case SETTINGS -> settings.buildWidgets();
@@ -423,6 +440,46 @@ public final class NumenScreen extends Screen {
             editPanel = new CompanionEditPanel(new EditHost());
         }
         return editPanel;
+    }
+
+    private UsagePanel usagePanel() {
+        if (usagePanel == null) {
+            usagePanel = new UsagePanel(new UsageHost());
+        }
+        return usagePanel;
+    }
+
+    private void buildUsageCard() {
+        usagePanel().build(modalX(), modalY0() + 6, modalW(), modalCardBottom() - modalY0(),
+                top + panelH - 2);
+    }
+
+    /** 读数卡的宿主面:数据全从代理循环现取,卡自己不存。 */
+    private final class UsageHost implements UsagePanel.Host {
+        @Override public String name() { return name == null ? "?" : name; }
+
+        @Override public com.dwinovo.numen.agent.provider.Usage usage() {
+            return loop().usageTotals();
+        }
+
+        @Override public com.dwinovo.numen.agent.provider.Usage lastUsage() {
+            return loop().lastUsage();
+        }
+
+        @Override public com.dwinovo.numen.agent.provider.CacheWaste waste() {
+            return loop().cacheWaste();
+        }
+
+        @Override public void onClose() {
+            showingUsage = false;
+            rebuild();
+        }
+    }
+
+    /** 面板已经开着时翻到读数卡。 */
+    private void openUsage() {
+        showingUsage = true;
+        rebuild();
     }
 
     private void buildEditCard() {
@@ -537,7 +594,7 @@ public final class NumenScreen extends Screen {
 
     /** 召唤/编辑模态之一在场——背景(页签/聊天/设置)交互一律屏蔽,侧栏留作逃生口。 */
     private boolean modalOpen() {
-        return summoning || editing;
+        return summoning || editing || showingUsage;
     }
 
     /** First roster companion that isn't {@code exclude}, or null if none. */
@@ -766,6 +823,7 @@ public final class NumenScreen extends Screen {
             if (summonPanel().keyPressed(keyCode, modifiers)) return true;
             return super.keyPressed(event);
         }
+        if (showingUsage && k == 256) { showingUsage = false; rebuild(); return true; }
         if (editing) {
             if (k == 256) { editing = false; rebuild(); return true; } // Esc 收卡,不关面板
             if (editPanel().keyPressed(keyCode, modifiers)) return true;
@@ -824,6 +882,7 @@ public final class NumenScreen extends Screen {
             if (summoning && summonPanel().mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
+            if (showingUsage && usagePanel().mouseClicked(mouseX, mouseY, button)) return true;
             if (editing && editPanel().mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
@@ -1042,6 +1101,17 @@ public final class NumenScreen extends Screen {
                 pendingTipX = mouseX;
                 pendingTipY = mouseY;
             }
+        }
+        if (showingUsage) {
+            // 读数卡:与编辑卡同款暗幕与居中卡,只是里面没有可输入的东西
+            g.fill(railX, top, railX + RAIL_W + panelW, top + panelH,
+                    (UiTheme.current().border() & 0xFFFFFF) | 0x99000000);
+            com.dwinovo.numen.client.ui.RoundRect.card(g, modalCardX(), modalCardY(),
+                    modalCardX() + modalCardW(), modalCardBottom(), 6,
+                    UiTheme.current().aiFill(), UiTheme.current().aiBorder());
+            usagePanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+                    com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
+                    mouseX, mouseY, net.minecraft.Util.getMillis());
         }
 
 
