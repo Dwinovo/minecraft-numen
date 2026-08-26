@@ -2,6 +2,7 @@ package com.dwinovo.numen.agent.llm;
 
 import com.dwinovo.numen.ai.AiLog;
 import com.dwinovo.numen.agent.http.HttpLlmTransport;
+import com.dwinovo.numen.agent.provider.Usage;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.ProviderRegistry;
 
@@ -129,8 +130,23 @@ public final class NumenLlmClient {
      * agent loop's auto-compaction triggers on (no client-side token estimation
      * needed). Zero when the backend sent no usage frame.
      */
-    public record ChatResult(AssistantTurn turn, int promptTokens, int totalTokens,
-                             long freshTokens) {}
+    public record ChatResult(AssistantTurn turn, Usage usage) {
+
+        /** 提示词的完整体量——自动压缩的触发判据(API 数的,不用客户端估)。 */
+        public long promptTokens() {
+            return usage.promptTokens();
+        }
+
+        /** 提示词加输出。 */
+        public long totalTokens() {
+            return usage.total();
+        }
+
+        /** 这一轮真正新处理的量:缓存读不计。 */
+        public long freshTokens() {
+            return usage.fresh();
+        }
+    }
 
     /**
      * Streaming chat completion. Returns a future of the final
@@ -195,10 +211,7 @@ public final class NumenLlmClient {
         }).thenApply(v -> {
             AssistantTurn turn = provider.finalizeStream(acc);
             logCallSummary(t0, acc, turn);
-            return new ChatResult(turn,
-                    jsonInt(acc.usage, "prompt_tokens"),
-                    jsonInt(acc.usage, "total_tokens"),
-                    provider.freshTokens(acc.usage));   // 新处理量:缓存命中不计
+            return new ChatResult(turn, provider.usage(acc.usage));
         });
     }
 

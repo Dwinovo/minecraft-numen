@@ -301,6 +301,8 @@ public class AnthropicProvider implements LlmProvider {
             u.addProperty("prompt_tokens", input + cacheRead + cacheWrite);
             JsonObject details = new JsonObject();
             details.addProperty("cached_tokens", cacheRead);
+            // 缓存写也留下:它是实打实处理过的量,归一时丢了下游就再也拆不出来
+            details.addProperty("cache_creation_tokens", cacheWrite);
             u.add("prompt_tokens_details", details);
         }
         if (in.has("output_tokens")) {
@@ -321,17 +323,6 @@ public class AnthropicProvider implements LlmProvider {
         };
     }
 
-    /** usage 已归一成 OpenAI 形:命中量在 details 里,减法口径与 OpenAI 系一致。 */
-    @Override
-    public long freshTokens(JsonObject usage) {
-        long fresh = LlmProvider.usageInt(usage, "prompt_tokens")
-                + LlmProvider.usageInt(usage, "completion_tokens");
-        if (usage != null && usage.has("prompt_tokens_details")
-                && usage.get("prompt_tokens_details").isJsonObject()) {
-            fresh -= LlmProvider.usageInt(usage.getAsJsonObject("prompt_tokens_details"), "cached_tokens");
-        }
-        return Math.max(0, fresh);
-    }
 
     @Override
     public AssistantTurn finalizeStream(StreamAccumulator acc) {

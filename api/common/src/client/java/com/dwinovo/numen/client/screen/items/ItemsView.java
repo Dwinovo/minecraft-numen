@@ -167,7 +167,7 @@ public final class ItemsView {
                 RoundRect.fill(g, barX, ly + 1, barX + Math.max(3, barW * pct / 100), ly + 7, 2, barColor);
             }
             Nb.text(g, font, clip(font, loop.display().size() + "条·"
-                    + fmtTokens(loop.totalTokensUsed()), lw - 26 - barW - 8),
+                    + com.dwinovo.numen.client.ui.TokenFormat.tokens(loop.totalTokensUsed()), lw - 26 - barW - 8),
                     barX + barW + 4, ly, th.textDim());
             // 距离行:相对朝向的方位箭头——一眼知道她在哪边
             Minecraft mc = Minecraft.getInstance();
@@ -250,12 +250,6 @@ public final class ItemsView {
         if (font.width(s) <= maxW) return s;
         String out = font.plainSubstrByWidth(s, maxW - font.width("…"));
         return out + "…";
-    }
-
-    private static String fmtTokens(long n) {
-        if (n < 1000) return String.valueOf(n);
-        if (n < 1_000_000) return String.format("%.1fk", n / 1000.0);
-        return String.format("%.1fM", n / 1_000_000.0);
     }
 
     /** 同伴相对主人朝向的八方位箭头(↑ = 正前方)。 */
