@@ -9,7 +9,7 @@
 [English](README_EN.md) · [**简体中文**](README.md)
 
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.2-62B47A?style=flat-square)
-![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
+![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
 
@@ -139,7 +139,7 @@ dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2:
 
 ## 路线图
 
-- **为大模组做适配。** Create、AE2、Mekanism 这些自成宇宙的科技 mod，得一个个真去适配——注册工具、写技能、接 MCP，哪种合适用哪种。模组生态太大，指望单一机制打通不现实。`inspect_block_storage` 那一眼透视是第一块砖。
+- **为大模组做适配。** Create、AE2、Mekanism 这些自成宇宙的科技 mod，得一个个真去适配。路子是**插件 + 技能**：插件用公共 API 把那个模组的能力接过来（注册工具、读它的方块状态），技能用 Markdown 教同伴什么时候用、按什么顺序用——一套工作流。指望那些模组自己去写 MCP 服务器是不现实的，适配这件事得由我们这边发起。`inspect_block_storage` 那一眼透视是第一块砖。
 - **长成一座技能库。** 让"教 AI 玩一个新模组"简单到只需写一篇 Markdown，社区共建共享。
 - **越玩越像个老玩家。** 更深的世界记忆与长程规划。
 

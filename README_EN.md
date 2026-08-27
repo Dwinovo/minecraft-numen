@@ -9,7 +9,7 @@
 [**English**](README_EN.md) · [简体中文](README.md)
 
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.2-62B47A?style=flat-square)
-![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
+![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
 
@@ -139,7 +139,7 @@ Building it yourself: clone the repo and run `./gradlew :core:fabric:build` (or 
 
 ## Roadmap
 
-- **Adapting the big mods.** Create, AE2, Mekanism and other tech mods that are universes unto themselves have to be adapted one at a time — registering tools, writing skills, wiring up MCP, whichever fits. The mod ecosystem is far too large for any single mechanism to cover it. `inspect_block_storage` is the first brick.
+- **Adapting the big mods.** Create, AE2, Mekanism and other tech mods that are universes unto themselves have to be adapted one at a time. The route is **a plugin plus skills**: the plugin reaches into that mod through the public API (registering tools, reading its block state), and the skills teach the companion in Markdown when to use them and in what order — a workflow. Expecting those mods to ship MCP servers of their own is not realistic; adaptation has to start from our side. `inspect_block_storage` is the first brick.
 - **Growing a skill library.** Make "teach the AI a new mod" as simple as writing one Markdown file, built and shared by the community.
 - **Playing more like a veteran.** Deeper world memory and longer-horizon planning.
 
