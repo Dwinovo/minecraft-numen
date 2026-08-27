@@ -6,7 +6,10 @@ plugins {
 dependencies {
     // The numen-api engine, now a sibling moddev project in this build.
     // NeoForge is Mojang-mapped natively, so no remap step is needed.
-    implementation project(':api:neoforge')
+    //
+    // api 而非 implementation:理由同 core/fabric —— 引擎的类型出现在 core 的
+    // 公开签名里,记成 runtime 的话消费者编译不了。
+    api project(':api:neoforge')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':api:neoforge'))
 }

@@ -11,7 +11,12 @@ dependencies {
     modImplementation "net.fabricmc.fabric-api:fabric-api:${fabric_version}"
     // The numen-api engine, now a sibling loom project in this build. namedElements
     // exposes the dev-mappings jar directly — no remap round-trip through a maven repo.
-    implementation project(path: ':api:fabric', configuration: 'namedElements')
+    //
+    // api 而非 implementation:引擎的类型出现在 core 的公开签名里(例如
+    // AbstractCompanionTask<R extends TaskRecord>,TaskRecord 来自引擎)。写成
+    // implementation 时 POM 把它记成 runtime,想扩展 core 的开发者编译期看不见
+    // TaskRecord/Task/NumenPlayer,依赖 core 这条路直接走不通。
+    api project(path: ':api:fabric', configuration: 'namedElements')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get
     // both mods — exactly like including a library mod such as GeckoLib.
     include project(':api:fabric')
