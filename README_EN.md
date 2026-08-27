@@ -27,6 +27,8 @@ Numen puts an AI companion in your world. Tell it what you want in plain languag
 
 It isn't a chatbot NPC. It's a real player on the server: it mines, walks, swings, opens chests, and every action goes through the vanilla player code path — which means it plays by the same rules as redstone, mob AI, and everyone else's mods.
 
+And it grows: one Markdown file teaches it a new way to play, and one plugin puts a mod like Create or AE2 into its hands — [the community can write both](#extending-it).
+
 ```
 You:    Go get me a stack of iron
 Numen:  On it. Heading underground.
@@ -75,17 +77,18 @@ Close to thirty tools make up its hands and eyes right now:
 
 ## Extending it
 
-How deep a companion can go comes down to three things, and they are nowhere near equally hard.
+A companion is a **real body** in that world — it mines and places a mod's blocks, opens and empties a mod's containers, and reads what a machine holds through its casing wherever standard capabilities are exposed. That layer works out of the box; nothing has to be adapted for it.
 
-**Whether it can touch it — already universal.** The companion is a real player, so it can break, place, and right-click a mod's blocks, open and move items through a mod's containers, and read the items, fluids, and energy inside any machine that exposes the standard capabilities. This layer needs no per-mod adaptation at all; it works the moment you install the mod.
+What it lacks is **how to play**. AE2 channels have to be counted, Create's whole line stalls once stress goes over, some things only make sense past a certain tier — none of that lives in a data structure. It cannot be read. It has to be taught.
 
-**Whether it knows what a thing is — mostly free.** Recipes, tags, and item names are data that gets synced to the client, and mods live in that same system. "What does this machine consume and produce" is, for a good share of mods, already readable.
+There are two ways to teach it, and **the community can write both**:
 
-**Whether it knows how to play — this one is on us.** AE2 channels have to be budgeted, Create's stress will stall a whole line if you exceed it, some things only make sense after a tier upgrade. None of that lives in a data structure — it can't be read out, it has to be written down. That's what a **Skill** is: a Markdown workflow under `config/numen/skills/`, loaded only when relevant so the prompt stays lean. No code, anyone can write one. A set of examples ships with the mod (Nether, blaze rods, ender pearls, strongholds, the dragon fight); edit one or write your own to teach it your base's conventions or a new mod's gameplay.
+- **Skills** — one Markdown file, no code. Write down your base's house rules or how a mod is played, drop it in `config/numen/skills/`, done. A starter set ships with the mod (the Nether, blaze rods, ender pearls, strongholds, the dragon); edit one and you have your own.
+- **Plugins** — a mod that **wires another mod's abilities in**. Install the Create plugin and the companion knows how to play Create; install the AE2 one and it understands AE2. Tools and skills can ride along in the same jar, so players get both just by installing it.
 
-When words aren't enough, you can hand it tools directly: a mod author registers one through `NumenGateway`, or you attach any Model Context Protocol server from the **MCP** settings page (stdio or HTTP, OAuth supported). Tools arriving either way are treated exactly like built-in ones. A tool hands it a hammer; a Skill teaches it how to swing.
+Skills teach it how to think; plugins hand it new limbs. Stack the two and it becomes both better company and genuinely useful — far enough down that road, building an aircraft ought to be its job, not yours.
 
-The first two layers are one-time engineering. The third keeps growing, and that takes a community. We're not going to pretend it will ever be finished.
+> The **MCP** page in settings can hook up any Model Context Protocol server, and its tools are treated exactly like built-in ones. But that is for wiring yourself into services that already exist: adapting a mod cannot depend on that mod shipping an MCP server, so a plugin has to do it.
 
 ## External brain
 
@@ -118,7 +121,7 @@ On top of all that, **the brain runs on your own machine**: the agent loop lives
 
 ## For developers
 
-Every tool and every skill Numen ships with is written against the public API — there are no private back channels. Any mod author gets the same capabilities:
+Every tool and every skill Numen ships with is written against the public API — there are no private back channels. **Writing a [plugin](#extending-it) gets you the same capabilities**:
 
 - 🔧 **Register a tool through `NumenGateway`** and your mod's capabilities become part of the AI's hands. The tool contract deliberately contains no Minecraft concepts — how a call completes (synchronously, asynchronously, sending its own packets, calling an external web service) is entirely up to the tool. That's why the same API reaches a chat platform as comfortably as it reaches an ore vein.
 - 📖 **Ship skills inside your jar** — one call turns your jar's `/skills` directory into built-in skills, so players who install your mod get an AI that already knows how to play it.
@@ -139,7 +142,7 @@ Building it yourself: clone the repo and run `./gradlew :core:fabric:build` (or 
 
 ## Roadmap
 
-- **Adapting the big mods.** Create, AE2, Mekanism and other tech mods that are universes unto themselves have to be adapted one at a time. The route is **a plugin plus skills**: the plugin reaches into that mod through the public API (registering tools, reading its block state), and the skills teach the companion in Markdown when to use them and in what order — a workflow. Expecting those mods to ship MCP servers of their own is not realistic; adaptation has to start from our side. `inspect_block_storage` is the first brick.
+- **Adapting the big mods.** Create, AE2, Mekanism and other tech mods that are universes unto themselves have to be adapted one at a time — [a plugin plus skills](#extending-it), one workflow per mod. `inspect_block_storage` is the first brick.
 - **Growing a skill library.** Make "teach the AI a new mod" as simple as writing one Markdown file, built and shared by the community.
 - **Playing more like a veteran.** Deeper world memory and longer-horizon planning.
 
