@@ -27,6 +27,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # tag 与 gradle.properties 对不上就别发了 —— 发出去才发现的话,GitHub release
+      # 标题、CurseForge 文件名、maven 坐标会各说各话。判据只此一处:scripts/check-tag.sh
+      - name: Check tag matches gradle.properties
+        if: startsWith(github.ref, 'refs/tags/')
+        run: bash scripts/check-tag.sh "${{ github.ref_name }}"
+
       - name: Read build properties
         id: props
         shell: bash
