@@ -57,7 +57,7 @@ public final class PersonaLibrary {
     public static PersonaLibrary instance() {
         if (instance == null) {
             Path cfg = Minecraft.getInstance().gameDirectory.toPath()
-                    .resolve("config").resolve("numen");
+                    .resolve("config").resolve(com.dwinovo.numen.Constants.CONFIG_ROOT);
             instance = new PersonaLibrary(cfg.resolve("persona"), cfg.resolve("personas.json"));
             instance.load();
         }
