@@ -16,7 +16,7 @@ public class CommonClass {
                 Services.PLATFORM.getPlatformName(), Services.PLATFORM.getEnvironmentName());
 
         // 老版本落盘格式的搬运先行——必须在任何消费方读盘之前。
-        java.nio.file.Path numenDir = Services.PLATFORM.getConfigDir().resolve("numen");
+        java.nio.file.Path numenDir = Services.PLATFORM.getConfigDir().resolve(com.dwinovo.numen.Constants.CONFIG_ROOT);
         com.dwinovo.numen.config.ConfigMigrations.run(numenDir);
 
         registerTools();
@@ -30,11 +30,15 @@ public class CommonClass {
      * {@link com.dwinovo.numen.task.CompanionTaskFactory})。
      */
     private static void wireTaskMachine() {
-        com.dwinovo.numen.entity.CompanionLifecycle.onDeath(
+        // 引擎自己也走同一条总线,和插件用的是同一套事件——没有"内部另有一条捷径"。
+        com.dwinovo.numen.entity.CompanionEvents.subscribe(
+                com.dwinovo.numen.api.CompanionEvent.DEATH,
                 com.dwinovo.numen.task.CompanionTickDispatcher::clearActiveTask);
-        com.dwinovo.numen.entity.CompanionLifecycle.onRemove(
+        com.dwinovo.numen.entity.CompanionEvents.subscribe(
+                com.dwinovo.numen.api.CompanionEvent.REMOVE,
                 com.dwinovo.numen.task.CompanionTickDispatcher::onCompanionRemoved);
-        com.dwinovo.numen.entity.CompanionLifecycle.onAbort(
+        com.dwinovo.numen.entity.CompanionEvents.subscribe(
+                com.dwinovo.numen.api.CompanionEvent.ABORT,
                 com.dwinovo.numen.agent.tool.ServerToolTransport::abort);
         // 引擎自带姿态链的名册文书(主人开关 + 提示词总览一行)。
         com.dwinovo.numen.task.reflex.ReflexRegistry.register(

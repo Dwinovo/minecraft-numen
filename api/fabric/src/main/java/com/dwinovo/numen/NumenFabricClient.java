@@ -20,24 +20,34 @@ public class NumenFabricClient implements ClientModInitializer {
     public void onInitializeClient() {
         // 下行 payload 的处理体住在客户端源码集,先挂进主源码集的挂点
         com.dwinovo.numen.client.ClientPayloadHandlers.install();
+        // 早先用 MOD_ID 当配置根,技能与 mcp_clients 落在了 config/numen_api/。
+        // 先把它们接过来,再让下面各个 init 去读——否则老玩家的配置会凭空消失。
+        com.dwinovo.numen.client.ConfigRootMigration.run(FabricLoader.getInstance().getConfigDir());
         Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config").resolve(Constants.MOD_ID);
+                .resolve("config").resolve(Constants.CONFIG_ROOT);
         Path skillsDir = numenConfigRoot.resolve("skills");
 
         // 同伴数据的根,以及旧布局的一次性迁移。根从 loader 拿,不问 Minecraft
         // (datagen 里模组照样构造,那时没有 Minecraft 实例)。
         com.dwinovo.numen.client.agent.CompanionHome.init(
-                FabricLoader.getInstance().getConfigDir().resolve("numen"));
+                FabricLoader.getInstance().getConfigDir().resolve(Constants.CONFIG_ROOT));
         com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
+
+        // 把只在客户端存在的能力接给插件那扇门。接上了本身就是"这是客户端"的判据——
+        // 专用服务器上没人接,插件的 bundleSkills 与 onClient 自然成空操作,
+        // 不必让每个插件自己去问一遍加载器"我在哪一侧"。
+        com.dwinovo.numen.api.NumenPlugins.bindClient(
+                root -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().declareBundled(root),
+                com.dwinovo.numen.api.NumenGateway::enqueue);
 
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(
-                FabricLoader.getInstance().getConfigDir().resolve("numen"));
+                FabricLoader.getInstance().getConfigDir().resolve(Constants.CONFIG_ROOT));
 
         // MCP client: connect to any external MCP servers listed in
         // config/numen/mcp_clients.json and register their tools so the built-in
         // brain can call them. Config dir from the loader (avoids Minecraft timing).
-        McpClientManager.initClient(FabricLoader.getInstance().getConfigDir().resolve(Constants.MOD_ID));
+        McpClientManager.initClient(FabricLoader.getInstance().getConfigDir().resolve(Constants.CONFIG_ROOT));
 
         // MCP server: the other direction — stand up a loopback MCP server so an
         // external agent can drive companions directly, bypassing the built-in brain.
