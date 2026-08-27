@@ -27,7 +27,7 @@ Numen puts an AI companion in your world. Tell it what you want in plain languag
 
 It isn't a chatbot NPC. It's a real player on the server: it mines, walks, swings, opens chests, and every action goes through the vanilla player code path — which means it plays by the same rules as redstone, mob AI, and everyone else's mods.
 
-And it grows: one Markdown file teaches it a new way to play, and one plugin puts a mod like Create or AE2 into its hands — [the community can write both](#extending-it).
+It can also get better at things. Write a Markdown file to teach it a new way to play; write a plugin to wire in Create or AE2. [Both are things the community can write](#extending-it).
 
 ```
 You:    Go get me a stack of iron
@@ -77,18 +77,19 @@ Close to thirty tools make up its hands and eyes right now:
 
 ## Extending it
 
-A companion is a **real body** in that world — it mines and places a mod's blocks, opens and empties a mod's containers, and reads what a machine holds through its casing wherever standard capabilities are exposed. That layer works out of the box; nothing has to be adapted for it.
+A companion is a real player, so it mines and places a mod's blocks, opens and empties a mod's containers, and reads what a machine holds without opening its screen wherever standard capabilities are exposed. That much works on install; nothing has to be adapted.
 
-What it lacks is **how to play**. AE2 channels have to be counted, Create's whole line stalls once stress goes over, some things only make sense past a certain tier — none of that lives in a data structure. It cannot be read. It has to be taught.
+What it doesn't know is how to play. AE2 channels have to be counted, Create's whole line stalls once stress goes over, some things only pay off past a certain tier. None of that can be read out. It has to be taught.
 
-There are two ways to teach it, and **the community can write both**:
+There are two ways to teach it, and the community can write both.
 
-- **Skills** — one Markdown file, no code. Write down your base's house rules or how a mod is played, drop it in `config/numen/skills/`, done. A starter set ships with the mod (the Nether, blaze rods, ender pearls, strongholds, the dragon); edit one and you have your own.
-- **Plugins** — a mod that **wires another mod's abilities in**. Install the Create plugin and the companion knows how to play Create; install the AE2 one and it understands AE2. Tools and skills can ride along in the same jar, so players get both just by installing it.
+**A skill** is one Markdown file. Write down your base's house rules, or how a mod is played, drop it in `config/numen/skills/`, done. No code. Five examples ship with the mod: the Nether, blaze rods, ender pearls, strongholds, the dragon. Editing one is the fastest way in.
 
-Skills teach it how to think; plugins hand it new limbs. Stack the two and it becomes both better company and genuinely useful — far enough down that road, building an aircraft ought to be its job, not yours.
+**A plugin** is a mod that wires another mod in. Install the Create plugin and the companion knows how to use Create; install the AE2 one and it understands AE2. A plugin does two things: it registers tools through `NumenGateway` (say, "read what's inside this machine"), and it can ship skills inside its own jar, so installing your plugin gives players the tools and the know-how together. [numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge) is a working example; see [For developers](#for-developers) for how to write one.
 
-> The **MCP** page in settings can hook up any Model Context Protocol server, and its tools are treated exactly like built-in ones. But that is for wiring yourself into services that already exist: adapting a mod cannot depend on that mod shipping an MCP server, so a plugin has to do it.
+Where we want this to end up: one day it builds an aircraft on its own.
+
+> The **MCP** page in settings can hook up an external Model Context Protocol server, and its tools count the same as built-in ones. That is for wiring yourself into services that already exist. Adapting a mod can't wait on that mod shipping an MCP server; that takes a plugin.
 
 ## External brain
 
