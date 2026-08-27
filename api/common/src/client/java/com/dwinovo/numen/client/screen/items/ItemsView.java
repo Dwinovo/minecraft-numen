@@ -138,8 +138,8 @@ public final class ItemsView {
         int lw = COMP_W / 2 - 16;
         int ly = aY + 6;
         // 人设行:8px 小脸 + 名字
-        net.minecraft.client.gui.components.PlayerFaceRenderer.draw(
-                g, com.dwinovo.numen.client.agent.KnownSkins.of(uuid), c1, ly - 1, 8);
+        com.dwinovo.numen.client.skin.CompanionFace.draw(
+                g, uuid, com.dwinovo.numen.client.agent.KnownSkins.of(uuid), c1, ly - 1, 8);
         String persona = loop != null && loop.personaName() != null && !loop.personaName().isBlank()
                 ? loop.personaName() : "默认人设";
         Nb.text(g, font, clip(font, persona, lw - 11), c1 + 11, ly, th.text());
