@@ -6,7 +6,11 @@ plugins {
 dependencies {
     // The numen-api engine, now a sibling moddev project in this build.
     // NeoForge is Mojang-mapped natively, so no remap step is needed.
-    implementation project(':api:neoforge')
+    // api 而非 implementation/compileOnly:引擎的类型出现在 core 的公开签名里
+    // (例如 AbstractCompanionTask<R extends TaskRecord>,TaskRecord 来自引擎)。
+    // 记成 runtime 或干脆不进 POM,想扩展 core 的开发者编译期就看不见
+    // TaskRecord/Task/NumenPlayer,依赖 core 这条路直接走不通。
+    api project(':api:neoforge')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':api:neoforge'))
 }

@@ -163,7 +163,7 @@ dependencies {
 
 core pulls the matching `numen-api-*` in with it — no second line needed.
 
-> Do not depend on `numen-api-common-*`. It holds only the cross-loader code: **no language files**, no loader entrypoint. It compiles, and then does nothing in game. **The loader-named coordinate is the complete one.**
+> Do not depend on either family's `-common` coordinate (`numen-api-common-*` / `numen-common-*`). They hold only the cross-loader code: no loader entrypoint; `numen-api-common-*` also has no language files, and `numen-common-*` does not nest the engine. They compile, and then do nothing in game. **The loader-named coordinate is the complete one.**
 
 ---
 
