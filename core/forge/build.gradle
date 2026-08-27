@@ -146,7 +146,11 @@ dependencies {
     // The numen-api engine, now a sibling ForgeGradle project in this build (same official
     // mappings in dev). compileOnly: the api classes are provided at runtime by the bundled
     // numen-api mod (the runs above load it from the sibling source sets).
-    compileOnly project(':api:forge')
+    // api 而非 implementation/compileOnly:引擎的类型出现在 core 的公开签名里
+    // (例如 AbstractCompanionTask<R extends TaskRecord>,TaskRecord 来自引擎)。
+    // 记成 runtime 或干脆不进 POM,想扩展 core 的开发者编译期就看不见
+    // TaskRecord/Task/NumenPlayer,依赖 core 这条路直接走不通。
+    api project(':api:forge')
     // Bundle the Forge build of the api into META-INF/jarjar/ so one file ships both mods.
     // transitive=false: only the api jar is nested — its Forge/Minecraft deps are provided
     // by the loader at runtime and must NOT be embedded (that would bloat the jar to ~94MB).
