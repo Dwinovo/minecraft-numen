@@ -128,7 +128,7 @@ Numen 出厂的每一个工具、每一篇技能，全部只用公共 API 写成
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.5:0.0.10" }
+dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.5:0.1.2" }
 ```
 
 面向集成的公共对接 API 采用 **MIT** 授权——写工具、写技能、写兼容，不必被 LGPL 牵着走。
