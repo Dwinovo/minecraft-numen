@@ -14,9 +14,8 @@ plugins {
     id 'maven-publish'
 }
 
-// api 家族的版本线(发布坐标契约);group 无同名冲突,直接用对外 group。
+// 版本号不在这里出现:全树锁步,唯一出处是 gradle.properties 的 version。
 group = 'com.dwinovo.numen'
-version = '0.0.9'
 
 // 可复现构建:同一份源码重复构建应得到同样的字节,这样重新发布是空提交,
 // 不会在制品仓里堆出一串"只有时间戳不同"的版本。去掉时间戳、固定条目顺序即可。
