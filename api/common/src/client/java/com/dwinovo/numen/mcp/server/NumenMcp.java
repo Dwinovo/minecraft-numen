@@ -18,7 +18,7 @@ public final class NumenMcp {
     private NumenMcp() {}
 
     public static void initClient(Path configDir) {
-        Path file = configDir.resolve("numen").resolve("mcp_server.json");
+        Path file = configDir.resolve(com.dwinovo.numen.Constants.CONFIG_ROOT).resolve("mcp_server.json");
         McpMode.instance().bootstrap(file, McpConfig.load(file));
     }
 }

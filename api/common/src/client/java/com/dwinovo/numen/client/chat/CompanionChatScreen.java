@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.chat;
 
+import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
@@ -93,8 +94,8 @@ public class CompanionChatScreen extends Screen {
     /** 输入行的宿主:说话走 Gateway 然后关屏;命令的回话闪在准星提示层,屏也关。 */
     private final class BarHost implements ChatInputBar.Host {
         @Override public void onSend(String text) {
-            NumenGateway.Delivery sent = NumenGateway.enqueue(companionUuid, text);
-            if (sent != NumenGateway.Delivery.REJECTED) {
+            Delivery sent = NumenGateway.enqueue(companionUuid, text);
+            if (sent != Delivery.REJECTED) {
                 ChatLines.owner(companionName, text, false);
             } else {
                 com.dwinovo.numen.client.hud.TalkHint.flash(companionName + " 没能收到——它可能不在线", 3000);
