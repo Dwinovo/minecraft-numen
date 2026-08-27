@@ -37,13 +37,13 @@ Numen:  Got 64 raw iron — want me to smelt it?
 ## Quick start
 
 1. **Install** the mod (Fabric also needs [Fabric API](https://modrinth.com/mod/fabric-api)) and launch once.
-2. **Add an API key.** Press **`G`** → **Settings** → **Model**, pick a provider, paste your own key.
+2. **Add an API key.** Press **`N`** → **Settings** → **Model**, pick a provider, paste your own key.
 3. **Summon a companion.** Click **`+`** in the panel's left rail, name it, hit enter.
 4. **Click its portrait and start talking.**
 
 > **Models**: ten presets built in — OpenAI, Anthropic, DeepSeek, Kimi, Zhipu GLM, Doubao, Qwen, MiniMax, SiliconFlow, OpenRouter — plus any OpenAI-compatible backend you point it at. Anthropic runs on its own native protocol, not a compatibility shim.
 
-> **The panel**: `G` opens three tabs — **Chat** (conversation plus a live plan view), **Items** (a read-only character sheet styled after the vanilla inventory), and **Settings**. The left rail is your companion roster: click a portrait to switch, **`+`** to summon, **`✕`** to dismiss. You rarely need to type a command. There's also a small portrait HUD on the left edge that slides out when a companion speaks. Settings has ten pages: model, speech-to-text, text-to-speech, persona, profile, skin, theme, skill library, external brain, and MCP.
+> **The panel**: `N` opens three tabs — **Chat** (conversation plus a live plan view), **Items** (a read-only character sheet styled after the vanilla inventory), and **Settings**. The left rail is your companion roster: click a portrait to switch, **`+`** to summon, **`✕`** to dismiss. You rarely need to type a command. There's also a small portrait HUD on the left edge that slides out when a companion speaks. Settings has ten pages: model, speech-to-text, text-to-speech, persona, profile, skin, theme, skill library, external brain, and MCP.
 
 > **Talking without the panel**: hold **`R`** for the companion wheel to pick who you're talking to (or just put your crosshair on them), **`Y`** for a minimal text box, and hold **`V`** to talk walkie-talkie style — release and the transcript is sent. Rebind anything under Options → Controls → Numen.
 
