@@ -17,6 +17,7 @@ import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import com.dwinovo.numen.client.skin.CompanionFace;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -215,7 +216,7 @@ public class CompanionWheelScreen extends Screen {
             if (!atTop) {
                 RoundRect.fill(g, -half - 2, -half - 2, half + 2, half + 2, 4, th.border());
             }
-            PlayerFaceRenderer.draw(g, KnownSkins.of(entries.get(i).uuid()),
+            CompanionFace.draw(g, entries.get(i).uuid(), KnownSkins.of(entries.get(i).uuid()),
                     -half, -half, AVATAR);
             g.pose().popMatrix();
         }

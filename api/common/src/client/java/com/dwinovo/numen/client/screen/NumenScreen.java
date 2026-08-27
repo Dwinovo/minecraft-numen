@@ -27,6 +27,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import com.dwinovo.numen.client.skin.CompanionFace;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
@@ -1028,7 +1029,7 @@ public final class NumenScreen extends Screen {
                     modalCardX() + modalCardW(), modalCardBottom(), 6,
                     UiTheme.current().aiFill(), UiTheme.current().aiBorder());
             if (uuid != null) {
-                PlayerFaceRenderer.draw(g, skinFor(uuid), modalX(), modalY0() + 6, 18);
+                CompanionFace.draw(g, uuid, skinFor(uuid), modalX(), modalY0() + 6, 18);
             }
             editPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
@@ -1107,7 +1108,7 @@ public final class NumenScreen extends Screen {
             com.dwinovo.numen.client.ui.RoundRect.card(g, ax - 2, ay - 2,
                     ax + RAIL_AV + 2, ay + RAIL_AV + 2, 3,
                     FIELD, !active && hovered && railQuiet ? CTA : BORDER);
-            PlayerFaceRenderer.draw(g, skinFor(e.uuid()), ax, ay, RAIL_AV);
+            CompanionFace.draw(g, e.uuid(), skinFor(e.uuid()), ax, ay, RAIL_AV);
             int pillH = active ? RAIL_AV - 6 : (hovered && railQuiet ? 8 : 0);
             if (pillH > 0) {
                 int py2 = ay + (RAIL_AV - pillH) / 2;
