@@ -42,7 +42,7 @@ Addons touch the engine through three doors. Two feed a companion; one teaches i
 
 ### Door 1 — `NumenGateway`: feed the built-in brain
 
-Hand a companion's **built-in brain** a message, verbatim. The engine splices it into the conversation at the next protocol-valid point, exactly as if the owner had typed it; the built-in LLM then decides what to do. This is how inbound bridges work — the QQ bridge turns a QQ message into an `enqueue`.
+Hand a companion's **built-in brain** a message, verbatim. The engine splices it into the conversation at the next protocol-valid point, exactly as if the owner had typed it; the built-in LLM then decides what to do. This is how a plugin that carries an outside channel works — the QQ plugin turns a QQ message into an `enqueue`.
 
 ```java
 import com.dwinovo.numen.api.NumenGateway;
@@ -151,17 +151,21 @@ dependencies {
 
 Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. This branch builds `1.21.1` on Java 21.
 
-`numen-ai` (model access and usage accounting) and `numen-ui` (widgets) come along transitively — `IToolSpec`, which `NumenTool` extends, lives in `numen-ai`, so without it your tool will not compile. Neither coordinate carries an MC-version suffix; every branch publishes the same bytes.
+`numen-ai` (model access and usage accounting) and `numen-ui` (widgets) come along transitively — `IToolSpec`, which `NumenTool` extends, lives in `numen-ai`, so without it your tool will not compile. Their coordinates carry the MC-version suffix too: the code itself has nothing to do with Minecraft, but the copy on each version branch is not currently the same.
 
 **To change engine mechanics themselves**, depend on core:
 
 ```gradle
 dependencies {
-    modImplementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
+    // Fabric
+    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:0.1.2"
+
+    // NeoForge / Forge (there is no modImplementation there — that's a Loom keyword)
+    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
 }
 ```
 
-core pulls the matching `numen-api-*` in with it — no second line needed.
+core pulls the matching `numen-api-*` in with it — no second line needed. The engine's types appear in core's own public signatures (`AbstractCompanionTask<R extends TaskRecord>` and friends), so it is an `api` dependency, not a runtime one.
 
 > Do not depend on either family's `-common` coordinate (`numen-api-common-*` / `numen-common-*`). They hold only the cross-loader code: no loader entrypoint; `numen-api-common-*` also has no language files, and `numen-common-*` does not nest the engine. They compile, and then do nothing in game. **The loader-named coordinate is the complete one.**
 
@@ -196,21 +200,25 @@ It bumps and pushes each branch first, and only tags **once CI is green on all 1
 
 ## Ecosystem
 
-**Numen** ([minecraft-numen](https://github.com/Dwinovo/minecraft-numen)) is the mod — the AI companion. It runs on the **[numen-api](https://github.com/Dwinovo/numen-api)** engine (published through **[numen-maven](https://github.com/Dwinovo/numen-maven)**), which exposes a small public API. Two things build on it: *(this repo)*
+**Numen** ([minecraft-numen](https://github.com/Dwinovo/minecraft-numen)) is the mod — the AI companion. The engine (`api/`), the MCP server and the mod itself all live in this one repository; the engine is also published through **[numen-maven](https://github.com/Dwinovo/numen-maven)** and exposes a small public API.
 
-**Extend a companion** — its own brain stays in charge:
-- **Bridges** carry an outside channel into a companion: a message arrives, and the companion decides what to do. Built on `NumenGateway`. → **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)** (QQ), with more to come.
-- **Skills** teach a companion how to behave — markdown loaded into its context. Bundled with Numen, or community-written.
+Two things build on it:
 
-**Expose Numen** — hand the controls to an outside brain:
-- **[numen-mcp](https://github.com/Dwinovo/numen-mcp)** is a Model Context Protocol server: any external agent (like Claude) drives companions directly. Built on `NumenActuator`.
+**Plugins** — a third-party mod that gives a companion new abilities through the public API. Its own brain stays in charge: the plugin supplies the capability, the companion decides whether and when to use it. Register tools through `NumenGateway`, ship skills inside your jar.
+
+- **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)** — carries QQ in: a message arrives, and the companion decides how to answer.
+- **numen-ysm** (on the way) — wires up [YSM](https://ysm.cfpa.team/) models and animations: the companion inherits its owner's model, and can change it or play emotes.
+
+**Skills** — teach a companion how to behave, markdown loaded into its context. Bundled with Numen, community-written, or shipped inside a plugin's jar.
+
+As for **handing the controls to an outside brain** (any external agent driving companions directly), that is the built-in MCP server — nothing extra to install. See [External brain](#external-brain).
 
 ---
 
 ## License
 
 - **Source code — [LGPL-3.0](LICENSE).** Forks you distribute must stay open under the same license.
-- **Public integration API — [MIT](LICENSE-API).** The surface addons and MCP bridges code against (classes under `com.dwinovo.numen.api`) is MIT, so mod-compat can be built freely, including in proprietary projects.
+- **Public integration API — [MIT](LICENSE-API).** The surface plugins and outside brains code against (classes under `com.dwinovo.numen.api`) is MIT, so mod-compat can be built freely, including in proprietary projects.
 - **Art & assets — [All Rights Reserved](LICENSE-ASSETS).** The names "Numen" / "言出法随" are reserved.
 
 Built on the [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template).

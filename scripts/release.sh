@@ -63,6 +63,9 @@ for b in "${BRANCHES[@]}"; do
   for doc in README.md README_EN.md api/README.md api/README_EN.md; do
     [ -f "$WT/$doc" ] || continue
     sed -i -E "s@(numen-(api-)?(common|fabric|forge|neoforge)-[0-9.]+):[0-9]+\.[0-9]+\.[0-9]+@\1:$VERSION@g; s@badge/version-[0-9.]+-@badge/version-$VERSION-@g" "$WT/$doc"
+    # 支持的 MC 范围也是派生物:真相是上面那份分支清单,徽章只是它的一个副本。
+    # 手写的话,新开一条分支就会有一天没人记得改 —— 今天就撞见过(徽章停在 26.1.2)。
+    sed -i -E "s@badge/Minecraft-[0-9.]+%20~%20[0-9.]+-@badge/Minecraft-${BRANCHES[0]}%20~%20${BRANCHES[${#BRANCHES[@]}-1]}-@g" "$WT/$doc"
   done
   if git -C "$WT" diff --quiet; then echo "  $b 已经是 $VERSION,跳过"; continue; fi
   git -C "$WT" add -A

@@ -42,7 +42,7 @@
 
 ### 门一 —— `NumenGateway`：喂给内置大脑
 
-把一条消息原样交给同伴的**内置大脑**。引擎会在对话协议允许的下一个位置把它拼进去，效果和主人亲手打字一样；随后由内置 LLM 决定要做什么。入站桥接就是这样工作的——QQ 桥把一条 QQ 消息变成一次 `enqueue`。
+把一条消息原样交给同伴的**内置大脑**。引擎会在对话协议允许的下一个位置把它拼进去，效果和主人亲手打字一样；随后由内置 LLM 决定要做什么。接入外部渠道的插件就是这样工作的——QQ 插件把一条 QQ 消息变成一次 `enqueue`。
 
 ```java
 import com.dwinovo.numen.api.NumenGateway;
@@ -151,17 +151,21 @@ dependencies {
 
 按你的目标替换加载器（`fabric` / `forge` / `neoforge`）和 Minecraft 版本。本分支基于 Java 21 构建 `1.21.1`。
 
-`numen-ai`（模型接入与用量核算）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。这两个坐标不带 MC 版本后缀，各分支发的是同一份字节。
+`numen-ai`（模型接入与用量核算）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。它们的坐标同样带 MC 版本后缀：代码本身与 Minecraft 无关，但各版本分支上的这份源码目前并不相同。
 
 **要改引擎本身的机制**，就依赖 core：
 
 ```gradle
 dependencies {
-    modImplementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
+    // Fabric
+    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:0.1.2"
+
+    // NeoForge / Forge（没有 modImplementation 这个关键字，那是 Loom 的）
+    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
 }
 ```
 
-core 会把对应的 `numen-api-*` 一并带出来，不用另写一行。
+core 会把对应的 `numen-api-*` 一并带出来，不用另写一行——引擎的类型出现在 core 的公开签名里（`AbstractCompanionTask<R extends TaskRecord>` 之类），所以它是 `api` scope 而非 `runtime`。
 
 > 两家的 `-common` 坐标（`numen-api-common-*` / `numen-common-*`）都别依赖。它们只有跨加载器那部分代码：没有加载器入口，`numen-api-common-*` 还没有语言文件，`numen-common-*` 也不内嵌引擎。能编译，装进游戏什么都不会发生。**带加载器名的那个坐标才是完整的。**
 
@@ -196,21 +200,25 @@ scripts/release.sh 0.1.3 --dry-run  # 只看要做什么
 
 ## 生态
 
-**Numen**（[minecraft-numen](https://github.com/Dwinovo/minecraft-numen)）是那个 mod——AI 同伴本体,跑在 **[numen-api](https://github.com/Dwinovo/numen-api)** 引擎上(经 **[numen-maven](https://github.com/Dwinovo/numen-maven)** 发布),引擎对外开放一套小巧的公共 API。两类东西建在它之上： *(本仓库)*
+**Numen**（[minecraft-numen](https://github.com/Dwinovo/minecraft-numen)）是那个 mod——AI 同伴本体。引擎(`api/`)、MCP 服务器与模组本体同住这一个仓,引擎另经 **[numen-maven](https://github.com/Dwinovo/numen-maven)** 发布,对外开放一套小巧的公共 API。
 
-**扩展一个同伴**——同伴自己的大脑仍然做主:
-- **桥(Bridge)** 把一个外部渠道接进同伴:消息进来,同伴自己决定怎么做。基于 `NumenGateway`。→ **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)**(QQ),后续还有更多。
-- **技能(Skill)** 教同伴怎么做事——markdown 注入它的上下文。随 Numen 内置,或社区编写。
+两类东西建在它之上：
 
-**把 Numen 暴露出去**——把操控权交给外部大脑:
-- **[numen-mcp](https://github.com/Dwinovo/numen-mcp)** 是一个 Model Context Protocol 服务器:任意外部智能体(比如 Claude)直接驱动同伴。基于 `NumenActuator`。
+**插件(Plugin)**——一个第三方 mod,基于公共 API 给同伴添本事。同伴自己的大脑仍然做主:插件负责提供能力,要不要用、什么时候用由它自己决定。基于 `NumenGateway` 注册工具、随 jar 附带技能。
+
+- **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)**——把 QQ 接进来:消息进来,同伴自己决定怎么回。
+- **numen-ysm**(在路上)——接 [YSM](https://ysm.cfpa.team/) 的模型与动作:同伴继承主人的模型,能换装、能做动作。
+
+**技能(Skill)**——教同伴怎么做事,markdown 注入它的上下文。随 Numen 内置,或社区编写,也可以由插件随 jar 附带。
+
+至于**把操控权交给外部大脑**(任意外部智能体直接驱动同伴),那是内置的 MCP 服务器,不必另装东西——见[外部大脑](#外部大脑)。
 
 ---
 
 ## 授权
 
 - **源代码 —— [LGPL-3.0](LICENSE)。** 你分发的修改版必须以同协议继续开源。
-- **公共对接 API 面 —— [MIT](LICENSE-API)。** 插件与 MCP 桥接对接的那层表面（`com.dwinovo.numen.api` 包下的类）是 MIT，写兼容不必被 LGPL 牵着走，商业闭源项目也可自由使用。
+- **公共对接 API 面 —— [MIT](LICENSE-API)。** 插件与外部大脑对接的那层表面（`com.dwinovo.numen.api` 包下的类）是 MIT，写兼容不必被 LGPL 牵着走，商业闭源项目也可自由使用。
 - **美术与资源 —— [保留所有权利](LICENSE-ASSETS)。** "Numen" / "言出法随" 名称亦予保留。
 
 基于 [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template) 构建。

@@ -8,7 +8,7 @@
 
 [**English**](README_EN.md) · [简体中文](README.md)
 
-![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.1.2-62B47A?style=flat-square)
+![Minecraft](https://img.shields.io/badge/Minecraft-1.20.1%20~%2026.2-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-17%20%7C%2021%20%7C%2025-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0-A8731E?style=flat-square)
@@ -128,8 +128,10 @@ The engine (`api/`) lives in this repository under `api/`, and is still publishe
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2" }
+dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2:api" }
 ```
+
+The line differs per loader, and changing engine mechanics means depending on core instead — see [api/README_EN](api/README_EN.md#depend-on-it).
 
 The public integration API is **MIT** licensed — write tools, skills, and compat without being dragged into LGPL.
 
@@ -147,7 +149,7 @@ Building it yourself: clone the repo and run `./gradlew :core:fabric:build` (or 
 
 <sub>Want to build it yourself, see the full tool list, or read the architecture? It's all in the source — start under <code>core/common/src/main/java/com/dwinovo/numen/</code>.</sub>
 
-<sub><b>Licensing</b>: the source code is <a href="LICENSE">LGPL-3.0</a> — forks you distribute must stay open under the same license. The public integration API (what compatibility modules / MCP bridges code against) is <a href="LICENSE-API">MIT</a>, so anyone can build mod-compat freely. The art &amp; assets are <a href="LICENSE-ASSETS">All Rights Reserved</a>, and the names "Numen" / "言出法随" are reserved. Built on the <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a>.</sub>
+<sub><b>Licensing</b>: the source code is <a href="LICENSE">LGPL-3.0</a> — forks you distribute must stay open under the same license. The public integration API (what plugins and outside brains code against) is <a href="LICENSE-API">MIT</a>, so anyone can build mod-compat freely. The art &amp; assets are <a href="LICENSE-ASSETS">All Rights Reserved</a>, and the names "Numen" / "言出法随" are reserved. Built on the <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a>.</sub>
 
 <sub>The <b>planning layer</b> implements techniques from the heuristic-search literature: weighted A* with budgeted partial-path commitment (on search timeout the best partial path across several heuristic-coefficient tiers is committed), with game-independent unit tests. The <b>path-following layer</b> advances movement primitive by movement primitive along the computed path: windowed backward/forward relocation, seamless segment splicing and over-length cutoff, in-flight cost re-verification with an off-path watchdog, plus a set of sprint-decision heuristics. The <b>execution layer</b> differs from <a href="https://github.com/cabaletta/baritone">Baritone</a> fundamentally in where it runs: Baritone is a client-side mod driving the local player, while Numen drives a <b>server-side fake player</b> — movement, digging and placement all go through server APIs. It draws on Baritone's publicly documented mechanics for design ideas only; <b>no source was copied, ported, or adapted from it</b>. Numen's code is licensed LGPL-3.0 of its own accord; that choice is not a consequence of Baritone (which is also LGPL-3.0).</sub>
 
