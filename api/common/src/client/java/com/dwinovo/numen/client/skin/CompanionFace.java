@@ -3,7 +3,7 @@ package com.dwinovo.numen.client.skin;
 import com.dwinovo.numen.api.CompanionPortrait;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
-import net.minecraft.client.resources.PlayerSkin;
+import net.minecraft.world.entity.player.PlayerSkin;
 
 import java.util.List;
 import java.util.UUID;
