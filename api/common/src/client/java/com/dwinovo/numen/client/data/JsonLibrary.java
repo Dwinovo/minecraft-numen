@@ -44,7 +44,7 @@ public abstract class JsonLibrary<E> {
     /** 客户端配置目录 {@code config/numen}。 */
     protected static Path configDir() {
         return Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config").resolve("numen");
+                .resolve("config").resolve(com.dwinovo.numen.Constants.CONFIG_ROOT);
     }
 
     // ---- 子类钩子 ----

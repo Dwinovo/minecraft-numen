@@ -6,7 +6,8 @@ import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
 import com.dwinovo.numen.agent.tool.ToolInvocation;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
-import com.dwinovo.numen.entity.CompanionLifecycle;
+import com.dwinovo.numen.api.CompanionEvent;
+import com.dwinovo.numen.entity.CompanionEvents;
 import com.dwinovo.numen.task.TaskResult;
 import net.minecraft.client.player.AbstractClientPlayer;
 
@@ -131,7 +132,7 @@ public final class ToolDispatcher {
         deadlineMillis = 0;
         advancing = false;
         if (stopBody) {
-            CompanionLifecycle.fireAbort(entityUuid);   // 内容包据此停掉自己那边的活
+            CompanionEvents.fire(CompanionEvent.ABORT, entityUuid);   // 内容包据此停掉自己那边的活
         } else {
             // 不叫停身体，但停在传输层的调用还是得忘掉：它们属于一个已经结束
             // 的会话，结果再也回不来。
