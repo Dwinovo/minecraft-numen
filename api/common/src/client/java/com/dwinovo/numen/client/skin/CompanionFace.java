@@ -4,7 +4,6 @@ import com.dwinovo.numen.api.CompanionPortrait;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.PlayerFaceRenderer;
 import net.minecraft.client.resources.PlayerSkin;
-import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 import java.util.UUID;
@@ -39,25 +38,19 @@ public final class CompanionFace {
      */
     public static void draw(GuiGraphics g, UUID companion, PlayerSkin skin,
                             int x, int y, int size) {
-        ResourceLocation custom = portraitOf(companion, size);
-        if (custom != null) {
-            // 插件给的是成品头像,整张画出来;不像皮肤那样要剪 8×8 的脸
-            g.blit(custom, x, y, 0, 0, size, size, size, size);
-        } else {
-            PlayerFaceRenderer.draw(g, skin, x, y, size);
-        }
+        if (drawnByPlugin(g, companion, x, y, size)) return;
+        PlayerFaceRenderer.draw(g, skin, x, y, size);
     }
 
-    /** 按注册顺序问,第一个给出非 null 的胜出;都没有就是 null。 */
-    private static ResourceLocation portraitOf(UUID companion, int size) {
+    /** 按注册顺序问,第一个认领的胜出。 */
+    private static boolean drawnByPlugin(GuiGraphics g, UUID companion, int x, int y, int size) {
         for (CompanionPortrait p : PROVIDERS) {
             try {
-                ResourceLocation r = p.portraitOf(companion, size);
-                if (r != null) return r;
+                if (p.draw(g, companion, x, y, size)) return true;
             } catch (RuntimeException ignored) {
                 // 插件画头像出错不该把整个界面拖下水,当它没认领
             }
         }
-        return null;
+        return false;
     }
 }
