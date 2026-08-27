@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.agent;
 
+import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
@@ -257,7 +258,7 @@ public final class EntityAgentLoop {
     EntityAgentLoop(UUID entityUuid) {
         this.entityUuid = entityUuid;
         Path numenRoot = Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config").resolve("numen");
+                .resolve("config").resolve(com.dwinovo.numen.Constants.CONFIG_ROOT);
         this.log = ConvoLog.atFile(CompanionHome.chat(entityUuid));
         this.convo = new ConvoState(msg -> {
             log.append(msg);
@@ -416,7 +417,7 @@ public final class EntityAgentLoop {
      *         {@code isBusy()} 之类的东西自己猜是猜不准的——那里面的 {@code currentTask != null}
      *         并不在开轮的闸门里,她在跟随时你说的话当场就发得出去。闸门以后再加几道,这里也不会跑偏。
      *
-     *         <p>它只喂 {@link com.dwinovo.numen.api.NumenGateway.Delivery} 那份给桥接看的汇报,
+     *         <p>它只喂 {@link com.dwinovo.numen.api.Delivery} 那份给桥接看的汇报,
      *         不驱动任何界面。外脑驾驶时内脑整体停牌,它恒为 true——那不是"她忙",是她不在这条线上,
      *         所以 {@code Delivery} 在那种情况下单报 {@code TO_EXTERNAL_BRAIN}。
      */
@@ -877,7 +878,7 @@ public final class EntityAgentLoop {
             // still-queued) so the assistant(tool_calls) message keeps matching tool
             // results — otherwise the next request is protocol-invalid (HTTP 400). Real
             // results arriving later are dropped as "late" by the dispatcher.
-            // stopBody=true(主人按停止):cancelAndDrain 顺手触发 CompanionLifecycle.onAbort,
+            // stopBody=true(主人按停止):cancelAndDrain 顺手触发 ABORT 事件,
             // 内容包据此停掉身体那边的活。断线登出不走这条 —— 见 quiesce。
             List<String> cancelled = dispatcher.cancelAndDrain(stopBody);
             String why = stopBody ? "interrupted by owner" : "owner disconnected";
