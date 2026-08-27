@@ -12,7 +12,7 @@
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.0.10-A8731E?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.1.2-A8731E?style=flat-square)
 
 [**这是什么**](#这是什么) · [**公共 API**](#公共-api) · [**如何依赖**](#如何依赖) · [**构建与发布**](#构建与发布) · [**生态**](#生态) · [**授权**](#授权)
 
@@ -142,10 +142,10 @@ repositories {
 dependencies {
     // Fabric：瘦 jar 与主 jar 一样是 intermediary 命名，用 modCompileOnly
     // 让 Loom 映射到你自己的命名——yarn 和 mojmap 都能用
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.20.6:0.0.10:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.20.6:0.1.2:api"
 
     // NeoForge / Forge：运行期命名就是 Mojang 命名，直接 compileOnly
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.20.6:0.0.10:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.20.6:0.1.2:api"
 }
 ```
 
