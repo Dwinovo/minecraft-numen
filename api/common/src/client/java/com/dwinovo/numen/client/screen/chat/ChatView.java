@@ -18,6 +18,7 @@ import com.dwinovo.numen.mcp.server.McpTranscript;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
+import com.dwinovo.numen.client.skin.CompanionFace;
 import net.minecraft.client.gui.components.PlayerFaceExtractor;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.DefaultPlayerSkin;
@@ -581,7 +582,12 @@ public final class ChatView {
             // 头像框纯代码绘制,继承所在气泡的配色——AI/主人两侧色调天然分明,且跟主题走。
             RoundRect.card(g, avX - 2, bubTop - 2, avX + AV + 2, bubTop + AV + 2, 3,
                     b.fill(), b.border());
-            PlayerFaceExtractor.extractRenderState(g, skin(b.own()), avX, bubTop, AV);
+            // 主人自己那侧画的是玩家本人,不是同伴——改外观的插件不该接管它
+            if (b.own()) {
+                PlayerFaceExtractor.extractRenderState(g, skin(true), avX, bubTop, AV);
+            } else {
+                CompanionFace.draw(g, uuid.get(), skin(false), avX, bubTop, AV);
+            }
         }
         RoundRect.card(g, bx, bubTop, bx + bw, bubTop + bh, RADIUS, b.fill(), b.border());
         int ty = bubTop + PAD_V + 1;
