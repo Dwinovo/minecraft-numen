@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.chat;
 
+import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.stt.VoiceInputController;
@@ -68,8 +69,8 @@ public final class QuickVoice {
             if (said.isEmpty()) flash("没听清,再试一次");
             return;
         }
-        NumenGateway.Delivery sent = NumenGateway.enqueue(t.uuid(), said);
-        if (sent != NumenGateway.Delivery.REJECTED) {
+        Delivery sent = NumenGateway.enqueue(t.uuid(), said);
+        if (sent != Delivery.REJECTED) {
             ChatLines.owner(t.name(), said, true);
         } else {
             flash(t.name() + " 没能收到——它可能不在线");
