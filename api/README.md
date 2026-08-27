@@ -204,12 +204,9 @@ scripts/release.sh 0.1.3 --dry-run  # 只看要做什么
 
 两类东西建在它之上：
 
-**插件(Plugin)**——一个第三方 mod,基于公共 API 给同伴添本事。同伴自己的大脑仍然做主:插件负责提供能力,要不要用、什么时候用由它自己决定。基于 `NumenGateway` 注册工具、随 jar 附带技能。
+**插件(Plugin)** 是一个第三方 mod,用公共 API 给同伴添本事。它做两件事:用 `NumenGateway` 注册工具,以及把 `/skills` 目录随自己的 jar 一起发。同伴自己的大脑仍然做主——插件提供能力,要不要用、什么时候用由它决定。
 
-- **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)**——把 QQ 接进来:消息进来,同伴自己决定怎么回。
-- **numen-ysm**(在路上)——接 [YSM](https://ysm.cfpa.team/) 的模型与动作:同伴继承主人的模型,能换装、能做动作。
-
-**技能(Skill)**——教同伴怎么做事,markdown 注入它的上下文。随 Numen 内置,或社区编写,也可以由插件随 jar 附带。
+**技能(Skill)** 是 markdown,教同伴怎么做事,相关时才注入上下文。随 Numen 内置,社区编写,或者由插件随 jar 附带。
 
 至于**把操控权交给外部大脑**(任意外部智能体直接驱动同伴),那是内置的 MCP 服务器,不必另装东西——见[外部大脑](#外部大脑)。
 

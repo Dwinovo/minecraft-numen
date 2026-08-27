@@ -85,9 +85,7 @@ There are two ways to teach it, and the community can write both.
 
 **A skill** is one Markdown file. Write down your base's house rules, or how a mod is played, drop it in `config/numen/skills/`, done. No code. Five examples ship with the mod: the Nether, blaze rods, ender pearls, strongholds, the dragon. Editing one is the fastest way in.
 
-**A plugin** is a mod that wires another mod in. Install the Create plugin and the companion knows how to use Create; install the AE2 one and it understands AE2. A plugin does two things: it registers tools through `NumenGateway` (say, "read what's inside this machine"), and it can ship skills inside its own jar, so installing your plugin gives players the tools and the know-how together. [numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge) is a working example; see [For developers](#for-developers) for how to write one.
-
-Where we want this to end up: one day it builds an aircraft on its own.
+**A plugin** is a mod that wires another mod in. Install the Create plugin and the companion knows how to use Create; install the AE2 one and it understands AE2. A plugin does two things: it registers tools through `NumenGateway` (say, "read what's inside this machine"), and it can ship skills inside its own jar. Installing your plugin gives players the tools and the know-how together. See [For developers](#for-developers) for how to write one.
 
 > The **MCP** page in settings can hook up an external Model Context Protocol server, and its tools count the same as built-in ones. That is for wiring yourself into services that already exist. Adapting a mod can't wait on that mod shipping an MCP server; that takes a plugin.
 

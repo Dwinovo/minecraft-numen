@@ -204,12 +204,9 @@ It bumps and pushes each branch first, and only tags **once CI is green on all 1
 
 Two things build on it:
 
-**Plugins** — a third-party mod that gives a companion new abilities through the public API. Its own brain stays in charge: the plugin supplies the capability, the companion decides whether and when to use it. Register tools through `NumenGateway`, ship skills inside your jar.
+**A plugin** is a third-party mod that gives a companion new abilities through the public API. It does two things: registers tools through `NumenGateway`, and ships a `/skills` directory inside its own jar. The companion's own brain stays in charge — the plugin supplies the capability, the companion decides whether and when to use it.
 
-- **[numen-qq-bridge](https://github.com/Dwinovo/numen-qq-bridge)** — carries QQ in: a message arrives, and the companion decides how to answer.
-- **numen-ysm** (on the way) — wires up [YSM](https://ysm.cfpa.team/) models and animations: the companion inherits its owner's model, and can change it or play emotes.
-
-**Skills** — teach a companion how to behave, markdown loaded into its context. Bundled with Numen, community-written, or shipped inside a plugin's jar.
+**A skill** is markdown that teaches a companion how to behave, loaded into its context only when relevant. Bundled with Numen, community-written, or shipped inside a plugin's jar.
 
 As for **handing the controls to an outside brain** (any external agent driving companions directly), that is the built-in MCP server — nothing extra to install. See [External brain](#external-brain).
 
