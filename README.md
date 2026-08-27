@@ -153,8 +153,8 @@ dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2:
 
 <sub><b>授权</b>：源代码采用 <a href="LICENSE">LGPL-3.0</a>——你分发的修改版必须以同协议继续开源。面向插件 / 外部大脑的<b>公共对接 API</b>采用 <a href="LICENSE-API">MIT</a>，让任何人都能自由地写 mod 兼容。美术与资源为 <a href="LICENSE-ASSETS">保留所有权利</a>，"Numen" / "言出法随" 名称亦予保留。基于 <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a> 构建。</sub>
 
-<sub>寻路的<b>规划层</b>基于启发式搜索文献实现：加权 A* 与预算化的部分路径提交（搜索超时时按多档启发系数提交当前最优部分路径），附独立于游戏的单元测试。<b>路径跟随层</b>沿计划路径逐移动原语推进：窗口化的回退/前跳重定位、无缝段拼接与超长裁剪、执行期成本复核与脱轨看门狗，外加一组疾跑决策启发。<b>执行层</b>与 <a href="https://github.com/cabaletta/baritone">Baritone</a> 的根本区别在于运行位置：Baritone 是纯客户端模组、操控本机玩家；Numen 驱动的是<b>服务端假玩家</b>，移动/挖掘/放置全部经服务端 API 实现——设计思路上借鉴了其公开机制，<b>未复制、移植或改写其任何源码</b>。本项目代码采用 LGPL-3.0 属自主选择，与 Baritone（同为 LGPL-3.0）无衍生关系。</sub>
+<sub>寻路借鉴了 <a href="https://github.com/cabaletta/baritone">Baritone</a> 的公开机制（加权 A*、部分路径提交、执行期成本复核），但 Baritone 是客户端模组、操控本机玩家，Numen 驱动的是服务端假玩家，移动/挖掘/放置全走服务端 API。<b>未复制、移植或改写其任何源码</b>；LGPL-3.0 是自主选择，与其无衍生关系。</sub>
 
-<sub>喂给大模型的<b>空间感知表征</b>采用「自我中心的语义字符网格」而非裸坐标列表：把玩家周围的体素离散化、语义 pooling 成以自身为中心的字符矩阵。该表征形式的有效性依据 Gao 等，<i>Exploring Spatial Representation to Enhance LLM Reasoning in Aerial Vision-Language Navigation</i>（arXiv:2410.08500, 2024）——其消融实验表明，同为文本输入时，语义-拓扑-度量的网格矩阵显著优于拓扑图与方向距离描述，亦远优于直接输入图像。Numen 取其「egocentric + 离散化 + 语义 pooling」的格式原则，并针对方块世界的竖直性做三维适配（分层切片 / 高度信息）。</sub>
+<sub>喂给大模型的空间感知用「自我中心的语义字符网格」而不是坐标列表，格式原则取自 Gao 等，<i>Exploring Spatial Representation to Enhance LLM Reasoning in Aerial Vision-Language Navigation</i>（arXiv:2410.08500, 2024），并针对方块世界做了三维适配。</sub>
 
 </div>
