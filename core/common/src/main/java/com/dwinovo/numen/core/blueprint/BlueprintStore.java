@@ -81,6 +81,8 @@ public final class BlueprintStore {
     private static List<Path> searchRoots(MinecraftServer server) {
         List<Path> roots = new ArrayList<>(2);
         roots.add(dir(server));
+        // 字面量,不用 Constants.CONFIG_ROOT:这是"蓝图曾经放在哪"的历史事实,
+        // 配置根将来若改名,这条兜底路径不该跟着改——那样就找不到老蓝图了。
         Path legacy = server.getServerDirectory().toPath().resolve("config").resolve("numen").resolve("blueprints");
         if (Files.isDirectory(legacy)) {
             roots.add(legacy);
