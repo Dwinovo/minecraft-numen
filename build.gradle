@@ -8,12 +8,14 @@ plugins {
 }
 
 // mod_id 因家族而异(core=numen,api=numen_api),不能放全树共享的 gradle.properties,
-// 在此按家族显式指定。api 家族同时沿用自己的版本线——发布坐标 numen-api-*-<mc> 的
-// 版本号是第三方依赖的契约,与模组本体版本(0.1.x)各走各的。
+// 在此按家族显式指定。
+//
+// 版本号<b>不在这里出现</b>:全树锁步,唯一出处是 gradle.properties 的 version,
+// 各模块继承它。api 曾经走自己的版本线,代价是没人答得上"哪个 api 配哪个模组"——
+// 得有张兼容表,而那张表不存在。锁步之后这个问题不成立:模组 0.1.3 就配 api 0.1.3。
 allprojects { ext.mod_id = 'numen' }
 ['api:common', 'api:fabric', 'api:forge'].each { path ->
     project(path) {
-        version = '0.0.10'
         ext.mod_id = 'numen_api'
         // 内部模块身份必须与 core 家族区分:两家子项目同名(common/fabric/forge),
         // 若 group 也相同,Gradle 会把 project(':api:common') 依赖按"同一模块"做版本
