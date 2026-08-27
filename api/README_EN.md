@@ -12,7 +12,7 @@
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.0.10-A8731E?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.1.2-A8731E?style=flat-square)
 
 [**What it is**](#what-it-is) · [**Public API**](#public-api) · [**Depend on it**](#depend-on-it) · [**Build & publish**](#build--publish) · [**Ecosystem**](#ecosystem) · [**License**](#license)
 
@@ -142,10 +142,10 @@ repositories {
 dependencies {
     // Fabric: the slim jar carries intermediary names, same as the full jar. Use
     // modCompileOnly so Loom maps it into your own namespace — yarn or mojmap.
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.10:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2:api"
 
     // NeoForge / Forge: runtime names are Mojang names, so plain compileOnly works.
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.0.10:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.1.2:api"
 }
 ```
 
@@ -181,7 +181,16 @@ The target repo comes from `local_maven_url` in `gradle.properties`; override wi
 
 Artifacts fall into three kinds: the full jar (runtime, bundled by the Numen mod), the slim `api`-classifier jar (what addons `compileOnly`), and sources / javadoc.
 
-**Real publishing is done by CI** — push a `v*` tag or dispatch the `Publish Maven Artifacts` workflow; it checks out `numen-maven` and pushes the artifacts there. Versions are fixed releases, written once per coordinate: to ship something new, bump the version.
+**Versions are locked in step across the tree**, with a single source: `version` in `gradle.properties`. api, core, ai and ui all share it, so "which api goes with which mod" never comes up — mod 0.1.3 takes api 0.1.3. Coordinates in the docs are rewritten mechanically by the release script; they are not a second source.
+
+**Releasing is one command:**
+
+```bash
+scripts/release.sh 0.1.3            # every version branch, beta
+scripts/release.sh 0.1.3 --dry-run  # show what it would do
+```
+
+It bumps and pushes each branch first, and only tags **once CI is green on all 13** — the tag is what triggers publishing. That order is deliberate: the irreversible step (a jar landing on CurseForge, which takes manual deletion to undo) comes after the evidence. `scripts/check-tag.sh` fails the publish if a tag disagrees with `gradle.properties`.
 
 ---
 

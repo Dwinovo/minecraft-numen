@@ -12,7 +12,7 @@
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.0.10-A8731E?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.1.2-A8731E?style=flat-square)
 
 [**这是什么**](#这是什么) · [**公共 API**](#公共-api) · [**如何依赖**](#如何依赖) · [**构建与发布**](#构建与发布) · [**生态**](#生态) · [**授权**](#授权)
 
@@ -142,10 +142,10 @@ repositories {
 dependencies {
     // Fabric：瘦 jar 与主 jar 一样是 intermediary 命名，用 modCompileOnly
     // 让 Loom 映射到你自己的命名——yarn 和 mojmap 都能用
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.0.10:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2:api"
 
     // NeoForge / Forge：运行期命名就是 Mojang 命名，直接 compileOnly
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.0.10:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.1.2:api"
 }
 ```
 
@@ -181,7 +181,16 @@ core 会把对应的 `numen-api-*` 一并带出来，不用另写一行。
 
 发布物按坐标分三类：完整 jar（运行时用，由 Numen mod 打包携带）、classifier 为 `api` 的精简 jar（插件 `compileOnly` 用），以及 sources / javadoc。
 
-**正式发布由 CI 做**——打 `v*` tag 或手动触发 `Publish Maven Artifacts` 工作流，它会 checkout `numen-maven` 并把制品推上去。制品版本是定死的正式版号，同一个坐标只写一次；要发新的就先把版本号往前推。
+**版本号全树锁步**，唯一出处是 `gradle.properties` 的 `version`——api、core、ai、ui 共用一个号。所以"哪个 api 配哪个模组"不成问题：模组 0.1.3 就配 api 0.1.3。文档里的坐标由发版脚本机械刷新，不是第二个出处。
+
+**发版走一条命令**：
+
+```bash
+scripts/release.sh 0.1.3            # 全部版本分支，beta
+scripts/release.sh 0.1.3 --dry-run  # 只看要做什么
+```
+
+它先在每条分支上改版本号并推送，**等 13 条 CI 全绿之后**才打 tag——tag 触发发布流水线。顺序是有意的：把不可逆的那步（jar 上架 CurseForge，撤回要人工去后台删）排在判据之后。tag 与 `gradle.properties` 对不上时 `scripts/check-tag.sh` 会让发布失败。
 
 ---
 
