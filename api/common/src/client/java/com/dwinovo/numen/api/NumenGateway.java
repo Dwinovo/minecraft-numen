@@ -91,4 +91,16 @@ public final class NumenGateway {
         if (loop.isExternallyDriven()) return Delivery.TO_EXTERNAL_BRAIN;
         return pressed ? Delivery.QUEUED : Delivery.SEEN;
     }
+
+    /**
+     * 接管同伴头像的画法——装了会改外观的插件之后,原版皮肤那张脸就不是她真实的样子了。
+     *
+     * <p>契约与注意事项见 {@link CompanionPortrait}(尤其是"每帧都会调用,所以必须便宜"
+     * 那条)。注册后引擎在所有画头像的地方都会问你,你只在能答时答,其余返回 null 让它回退。
+     *
+     * <p>客户端调用,通常在你的模组构造期。
+     */
+    public static void registerPortrait(CompanionPortrait provider) {
+        com.dwinovo.numen.client.skin.CompanionFace.register(provider);
+    }
 }
