@@ -128,7 +128,7 @@ The engine (`api/`) lives in this repository under `api/`, and is still publishe
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.8:0.0.10" }
+dependencies  { modImplementation "com.dwinovo.numen:numen-api-fabric-1.21.8:0.1.2" }
 ```
 
 The public integration API is **MIT** licensed — write tools, skills, and compat without being dragged into LGPL.
