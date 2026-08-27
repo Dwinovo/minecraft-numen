@@ -1,5 +1,6 @@
 package com.dwinovo.numen.entity;
 
+import com.dwinovo.numen.api.CompanionEvent;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ClientInformation;
@@ -82,6 +83,8 @@ public final class CompanionFactory {
             mode = GameType.CREATIVE;
         }
         player.setGameMode(mode);
+        // 身体齐了、进了玩家列表,插件此刻可以对它下命令(改外观、发指令都需要它在列表里)
+        CompanionEvents.fire(CompanionEvent.SPAWN, player);
         return player;
     }
 
@@ -106,7 +109,7 @@ public final class CompanionFactory {
         // Tell tool packs the body is leaving so they can finalize their own
         // per-companion work (e.g. clear a mining crack overlay) instead of leaving
         // it orphaned once the body drops out of the tick loop's player list.
-        CompanionLifecycle.fireRemove(player);
+        CompanionEvents.fire(CompanionEvent.REMOVE, player);
         server.getPlayerList().remove(player);
     }
 }

@@ -29,8 +29,12 @@ public class NumenNeoForgeClient {
         // MCP client: connect to external MCP servers in config/numen/mcp_clients.json
         // and register their tools for the built-in brain. Config dir from FML (no
         // Minecraft instance needed this early).
+        // 早先用 MOD_ID 当配置根,技能与 mcp_clients 落在了 config/numen_api/。
+        // 先把它们接过来,再让下面各个 init 去读——否则老玩家的配置会凭空消失。
+        com.dwinovo.numen.client.ConfigRootMigration.run(net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get());
+
         McpClientManager.initClient(
-                net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve(Constants.MOD_ID));
+                net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve(Constants.CONFIG_ROOT));
 
         // MCP server: the other direction — a loopback MCP server letting an external
         // agent drive companions directly, bypassing the built-in brain. Off unless
@@ -41,12 +45,19 @@ public class NumenNeoForgeClient {
         // 同伴数据的根,以及旧布局的一次性迁移。根从 FML 拿,不问 Minecraft
         // (datagen 里模组照样构造,那时没有 Minecraft 实例)。
         com.dwinovo.numen.client.agent.CompanionHome.init(
-                net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("numen"));
+                net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve(Constants.CONFIG_ROOT));
         com.dwinovo.numen.client.agent.CompanionHome.migrateLegacy();
+
+        // 把只在客户端存在的能力接给插件那扇门。接上了本身就是"这是客户端"的判据——
+        // 专用服务器上没人接,插件的 bundleSkills 与 onClient 自然成空操作,
+        // 不必让每个插件自己去问一遍加载器"我在哪一侧"。
+        com.dwinovo.numen.api.NumenPlugins.bindClient(
+                root -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().declareBundled(root),
+                com.dwinovo.numen.api.NumenGateway::enqueue);
 
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(
-                net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve("numen"));
+                net.neoforged.fml.loading.FMLPaths.CONFIGDIR.get().resolve(Constants.CONFIG_ROOT));
 
         // Mod bus — registration events.
         modBus.addListener(NumenNeoForgeClient::registerKeyMappings);
@@ -116,7 +127,7 @@ public class NumenNeoForgeClient {
         // the keyed API (1.21.1 was RegisterClientReloadListenersEvent.registerReloadListener,
         // no key).
         Path numenConfigRoot = Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config").resolve(Constants.MOD_ID);
+                .resolve("config").resolve(Constants.CONFIG_ROOT);
         Path skillsDir = numenConfigRoot.resolve("skills");
 
         event.addListener(

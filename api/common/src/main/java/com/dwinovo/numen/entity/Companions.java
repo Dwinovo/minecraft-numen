@@ -1,5 +1,6 @@
 package com.dwinovo.numen.entity;
 
+import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.network.payload.NumenDeathPayload;
 import com.dwinovo.numen.network.payload.NumenRespawnPayload;
 import com.dwinovo.numen.network.payload.CompanionListPayload;
@@ -243,7 +244,7 @@ public final class Companions {
         if (owner != null) {   // immediate, same-session
             Services.NETWORK.sendToPlayer(owner, new NumenDeathPayload(uuid, cause));
         }
-        CompanionLifecycle.fireDeath(body);   // 不发工具结果:那条 tool_call 已由死因结算
+        CompanionEvents.fire(CompanionEvent.DEATH, body);   // 不发工具结果:那条 tool_call 已由死因结算
         // Persist the death (cause + game-time) in the world-saved registry so it survives a logout during
         // the respawn window — without this, a relog lost the pending state and the body silently respawned
         // "alive" with an empty inventory and no idea it had died.
