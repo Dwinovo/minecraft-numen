@@ -160,14 +160,26 @@ public final class TextField extends Widget {
         return y + (h - s.lineHeight()) / 2 + 1;
     }
 
-    /** 滚动视窗使光标可见:光标出左缘则左移视窗,出右缘则右移。 */
+    /**
+     * 滚动视窗使光标可见:光标出左缘则左移视窗,出右缘则右移。
+     *
+     * <p><b>从光标往左退,不是从视窗起点往右挪。</b>两者结果一样,代价差一个量级:
+     * 往右挪的话,每挪一格都要量 {@code viewStart..cursor} 整段,而那一段一开始就是
+     * 整个值——粘进一条 600 字符的密钥(MiniMax 的是 JWT),每帧要量三十多万个字符,
+     * 界面当场卡死,表现就是"太长了填不进去"。往左退只扫看得见的那几十个字符,
+     * 与值多长无关。
+     */
     private void ensureCursorVisible(IDrawSurface s, String display, int innerW) {
         viewStart = Math.min(viewStart, Math.max(0, display.length()));
-        if (cursor < viewStart) viewStart = cursor;
-        while (viewStart < cursor
-                && s.textWidth(display.substring(viewStart, cursor)) > innerW) {
-            viewStart++;
+        if (cursor < viewStart) {
+            viewStart = cursor;
+            return;
         }
+        int start = cursor;
+        while (start > 0 && s.textWidth(display.substring(start - 1, cursor)) <= innerW) {
+            start--;
+        }
+        if (viewStart < start) viewStart = start;
     }
 
     private static String clipToWidth(IDrawSurface s, String text, int maxW) {
