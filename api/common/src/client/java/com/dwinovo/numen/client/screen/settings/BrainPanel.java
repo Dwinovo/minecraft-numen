@@ -56,6 +56,9 @@ public final class BrainPanel {
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
+        // 文本编辑交给真 EditBox(只收事件、不自绘),画面仍归 NumenUI。
+        // 这是输入法辅助模组能认出这些框的前提——见 McTextInput。
+        ui.setInputFactory(com.dwinovo.numen.client.ui.mc.McTextInput.factory());
     }
 
     /** 切分区时回到概览页,并丢弃未保存的草稿。 */
