@@ -32,11 +32,10 @@ public final class Builtin {
 
     private Builtin() {}
 
-    public static void registerAll(IEventBus modBus) {
+    public static void registerAll(IEventBus modBus) {   // modBus 留着:下一个联动多半要用
         gate("yes_steve_model", "ysm",
                 skills -> () -> com.dwinovo.numen.plugins.ysm.NumenYsm.install(skills));
-        gate("touhou_little_maid", "tlm",
-                skills -> () -> com.dwinovo.numen.plugins.tlm.NumenTlm.install(modBus, skills));
+        // 车万女仆不支持这个 MC 版本(它封顶 1.21.1),所以这条分支上没有那个联动模块。
     }
 
     /**

@@ -17,7 +17,6 @@ dependencies {
     // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里
     // (它们不发布——没人需要依赖我们的联动代码)。
     compileOnly project(':plugins:ysm')
-    compileOnly project(':plugins:tlm')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':api:neoforge'))
 }
@@ -90,5 +89,4 @@ sourceSets.configureEach {
 // 目标模组不在时它们一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
 tasks.named('jar', Jar) {
     from({ project(':plugins:ysm').sourceSets.main.output })
-    from({ project(':plugins:tlm').sourceSets.main.output })
 }
