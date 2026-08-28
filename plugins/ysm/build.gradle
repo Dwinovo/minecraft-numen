@@ -1,0 +1,4 @@
+plugins { id 'numen-plugin' }
+
+// YSM 是闭源且混淆的,本联动<b>不引用它任何一个类</b>——只用命令(ysm model set / play / auth)
+// 和 NBT 键名(model_id / select_texture),那两样混淆器改不动。所以这里一个依赖都没有。

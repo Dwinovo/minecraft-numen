@@ -30,6 +30,9 @@ public class NumenCoreNeoForge {
     public NumenCoreNeoForge(IEventBus eventBus, ModContainer container) {
         NumenCore.init();
 
+        // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
+        com.dwinovo.numen.plugins.Builtin.registerAll(eventBus);
+
         NeoForge.EVENT_BUS.addListener(NumenCoreNeoForge::onServerTickPost);
         // Debug verbs merged into the /numen root registered by the engine mod.
         NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.RegisterCommandsEvent e) ->
