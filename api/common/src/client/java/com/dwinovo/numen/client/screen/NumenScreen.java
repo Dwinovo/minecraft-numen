@@ -206,7 +206,7 @@ public final class NumenScreen extends Screen {
                         @Override public <T extends AbstractWidget> T add(T w) { return NumenScreen.this.add(w); }
                         @Override public void rebuild() { NumenScreen.this.rebuild(); }
                         @Override public void focus(AbstractWidget w) { setInitialFocus(w); }
-                        @Override public Font font() { return NumenScreen.this.font; }
+                                        @Override public Font font() { return NumenScreen.this.font; }
                         @Override public int left() { return left; }
                         @Override public int top() { return top; }
                         @Override public int panelW() { return panelW; }
@@ -300,6 +300,9 @@ public final class NumenScreen extends Screen {
 
     @Override
     protected void init() {
+        // 输入框的真控件挂到本屏上:只注册事件、不进 renderables,画面归 NumenUI。
+        // 屏幕作用域——关屏时在 removed() 卸掉。
+        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(this::addWidget);
         // 窗口留 12px 边距后能给多大给多大,夹在上下限之间;窗口比下限还小时
         // railX/top 至少钳到 0,保证头部(标题/tab/关闭途径)永远可见可点。
         panelW = Math.clamp(this.width - RAIL_W - 24, PANEL_MIN_W, PANEL_MAX_W);
@@ -605,9 +608,7 @@ public final class NumenScreen extends Screen {
         }
 
         /** 只注册事件,不进 renderables——画面归 NumenUI。见 {@code McTextInput}。 */
-        @Override public void mountInput(AbstractWidget w) { NumenScreen.this.addWidget(w); }
 
-        @Override public void focusInput(AbstractWidget w) { NumenScreen.this.setFocused(w); }
 
         @Override public void onCommandReply(String reply) {
             showCommandReply(reply);
@@ -1400,4 +1401,10 @@ public final class NumenScreen extends Screen {
         return false;
     }
 
+
+    @Override
+    public void removed() {
+        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(null);
+        super.removed();
+    }
 }
