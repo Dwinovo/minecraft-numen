@@ -28,6 +28,7 @@ public final class UiRoot {
     private Widget focused;
     private Overlay overlay;
 
+    private java.util.function.BiFunction<String, Consumer<String>, TextInput> inputFactory;
     private Supplier<String> clipboardGet = () -> "";
     private Consumer<String> clipboardSet = s -> {};
     /** GUI 缩放后的视口高(屏幕层 init/resize 时设置);浮层用它避免越出屏幕底缘。 */
@@ -51,6 +52,9 @@ public final class UiRoot {
     }
 
     public <T extends Widget> T add(T widget) {
+        // 输入框在加进来这一刻换上宿主的真编辑器。放这里而不是构造器里:
+        // 构造时还不知道会被加进哪个根,拿不到工厂。
+        if (widget instanceof TextField tf) tf.attachHost(this);
         widget.root = this;
         widgets.add(widget);
         return widget;
@@ -63,6 +67,22 @@ public final class UiRoot {
     }
 
     /** 宿主注入剪贴板能力(MC 屏幕接 keyboardHandler);测试注入假实现。 */
+    /**
+     * 宿主提供的文本编辑器工厂。每个 {@link TextField} 加进来时用它换一个真编辑器。
+     *
+     * <p>为什么开在这里而不是每个调用点自己传:全树二十多个输入框,逐个改一遍既啰嗦
+     * 又必然漏。挂在根上之后,调用点一个字不用动——和剪贴板是同一个路子。
+     * 没接工厂时输入框退回纯内存模式,打字照常,只是输入法辅助模组认不出来
+     * (理由见 {@link TextInput})。
+     */
+    public void setInputFactory(java.util.function.BiFunction<String, Consumer<String>, TextInput> f) {
+        this.inputFactory = f;
+    }
+
+    java.util.function.BiFunction<String, Consumer<String>, TextInput> inputFactory() {
+        return inputFactory;
+    }
+
     public void setClipboard(Supplier<String> get, Consumer<String> set) {
         this.clipboardGet = get;
         this.clipboardSet = set;
