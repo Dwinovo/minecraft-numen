@@ -33,21 +33,21 @@ public final class Builtin {
     private Builtin() {}
 
     public static void registerAll(IEventBus modBus) {
-        gate("yes_steve_model", "ysm_look",
+        gate("yes_steve_model", "ysm",
                 skills -> () -> com.dwinovo.numen.plugins.ysm.NumenYsm.install(skills));
-        gate("touhou_little_maid", "maid_look",
+        gate("touhou_little_maid", "tlm",
                 skills -> () -> com.dwinovo.numen.plugins.tlm.NumenTlm.install(modBus, skills));
     }
 
     /**
-     * @param modId  目标模组;不在就整块跳过
-     * @param skill  这个联动自带的技能目录名(在 jar 的 {@code plugin_skills/} 下)
-     * @param body   延迟到判据为真之后才求值——理由见类注释
+     * @param modId   目标模组;不在就整块跳过
+     * @param plugin  联动的模块名({@code plugins/} 下的目录名),用来定位它自带的技能
+     * @param body    延迟到判据为真之后才求值——理由见类注释
      */
-    private static void gate(String modId, String skill, java.util.function.Function<Path, Runnable> body) {
+    private static void gate(String modId, String plugin, java.util.function.Function<Path, Runnable> body) {
         if (!ModList.get().isLoaded(modId)) return;
         try {
-            body.apply(skillsRoot(skill)).run();
+            body.apply(skillsRoot(plugin)).run();
             Constants.LOG.info("[numen] 联动已接上:{}", modId);
         } catch (Throwable t) {
             // 一个联动接不上不能带倒整个模组,也不能带倒别的联动
@@ -56,14 +56,21 @@ public final class Builtin {
     }
 
     /**
-     * 联动的技能放在 {@code plugin_skills/<名字>/} 而不是 {@code skills/}。
-     * 后者是引擎无条件加载的那一份——技能混进去的话,没装 YSM 的玩家也会在提示词里
-     * 看到"怎么换 YSM 模型",那是纯粹的噪音,而且他们照做也没用。
+     * 一个联动自带的技能根:{@code plugins/<模块名>/skills/}。
+     *
+     * <p>目录就叫 {@code skills},但必须挂在 {@code plugins/<模块名>/} 底下——jar 是平的,
+     * 源码树里 {@code plugins/ysm/} 那层前缀打包时就没了。直接放 {@code skills/} 的话会和
+     * core 自己那份合并,而 core 声明的是<b>整个根</b>、无条件:没装 YSM 的玩家提示词里也会
+     * 出现"怎么换 YSM 模型",纯噪音,而且照做也没用。加一层命名空间是每个模组都在做的事
+     * ({@code assets/<modid>/…} 同理)。
+     *
+     * <p>给的是整个 {@code skills/} 根而不是某一篇,所以一个联动想带几篇就带几篇,
+     * 不用回来改这里。
      */
-    private static Path skillsRoot(String name) {
+    private static Path skillsRoot(String plugin) {
         try {
             return ModList.get().getModFileById(Constants.MOD_ID)
-                    .getFile().findResource("plugin_skills", name);
+                    .getFile().findResource("plugins", plugin, "skills");
         } catch (Throwable ignored) {
             return null;   // 找不到就不带技能,工具照常能用
         }
