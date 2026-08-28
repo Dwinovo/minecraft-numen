@@ -8,9 +8,11 @@ import com.dwinovo.numen.entity.CompanionEvents;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 插件的登记处:{@code NumenPlugins.register(numen -> …)}。
@@ -70,6 +72,31 @@ public final class NumenPlugins {
      * 就成了排序的函数:同一份代码换个加载器、加个别的模组就可能整块静默失效,
      * 而且没有任何报错。专用服务器上没人来接,这两个表原样留着不跑,正是要的行为。
      */
+    /**
+     * 插件挂在 {@code <runtime_state>} 上的现算片段。见 {@link NumenApi#contributeState}。
+     * 用 CopyOnWriteArrayList:登记发生在加载期,读发生在每次请求,读远多于写。
+     */
+    private static final List<Function<UUID, String>> STATE = new CopyOnWriteArrayList<>();
+
+    /**
+     * 汇总所有插件对这只同伴的现算片段。<b>引擎内部调用</b>。
+     *
+     * <p>某个插件算炸了不能连累整条请求——它自己那段丢掉,别人的照常挂上。
+     */
+    public static String stateFragments(UUID companion) {
+        if (STATE.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        for (Function<UUID, String> f : STATE) {
+            try {
+                String x = f.apply(companion);
+                if (x != null && !x.isBlank()) sb.append(x);
+            } catch (RuntimeException e) {
+                Constants.LOG.error("[numen] 插件的运行期状态算不出来,这一段跳过", e);
+            }
+        }
+        return sb.toString();
+    }
+
     private static final List<Runnable> PENDING = new ArrayList<>();
     private static final List<Path> PENDING_SKILLS = new ArrayList<>();
 
@@ -104,6 +131,11 @@ public final class NumenPlugins {
         public void onClient(Runnable clientOnly) {
             if (clientOnly == null) return;
             if (clientReady) runClientBlock(clientOnly); else PENDING.add(clientOnly);
+        }
+
+        @Override
+        public void contributeState(Function<UUID, String> fragment) {
+            if (fragment != null) STATE.add(fragment);
         }
 
         @Override
