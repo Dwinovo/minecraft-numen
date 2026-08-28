@@ -50,14 +50,14 @@ public final class SwitchModelTool implements NumenTool {
             reply.accept(TaskResult.fail("要传 model_id").toJson());
             return;
         }
-        var server = companion.getServer();
+        var server = companion.level().getServer();
         if (server == null) {
             reply.accept(TaskResult.fail("身体不在服务端上").toJson());
             return;
         }
         String texture = args.has("texture_id") ? args.get("texture_id").getAsString() : null;
 
-        Ysm.setModel(server, companion.getGameProfile().getName(),
+        Ysm.setModel(server, companion.getName().getString(),
                 new Ysm.Look(model, texture));
 
         // 回读:以身体的实际状态为准,不信命令跑过就是成功了

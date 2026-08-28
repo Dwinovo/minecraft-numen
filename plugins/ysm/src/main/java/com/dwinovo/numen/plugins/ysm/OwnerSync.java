@@ -37,7 +37,7 @@ public final class OwnerSync {
      * 否则她带着上一次的授权露面几秒钟。
      */
     public static void onSpawn(NumenPlayer companion) {
-        MinecraftServer server = companion.getServer();
+        MinecraftServer server = companion.level().getServer();
         if (server != null) reconcile(server, companion);
     }
 
@@ -60,7 +60,7 @@ public final class OwnerSync {
         Set<String> have = Ysm.readAuthorized(companion);
         if (want.equals(have)) return;
 
-        String me = companion.getGameProfile().getName();
+        String me = companion.getName().getString();
         Ysm.authClear(server, me);
         for (String model : want) Ysm.authAdd(server, me, model);
     }

@@ -49,12 +49,12 @@ public final class PlayEmoteTool implements NumenTool {
             reply.accept(TaskResult.fail("要传 animation").toJson());
             return;
         }
-        var server = companion.getServer();
+        var server = companion.level().getServer();
         if (server == null) {
             reply.accept(TaskResult.fail("身体不在服务端上").toJson());
             return;
         }
-        String me = companion.getGameProfile().getName();
+        String me = companion.getName().getString();
         if (STOP.equalsIgnoreCase(animation)) {
             Ysm.stopAnimation(server, me);
             reply.accept(TaskResult.ok("停下了").toJson());
