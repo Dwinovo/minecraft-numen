@@ -16,7 +16,7 @@ public class CommonClass {
                 Services.PLATFORM.getPlatformName(), Services.PLATFORM.getEnvironmentName());
 
         // 老版本落盘格式的搬运先行——必须在任何消费方读盘之前。
-        java.nio.file.Path numenDir = Services.PLATFORM.getConfigDir().resolve(com.dwinovo.numen.Constants.CONFIG_ROOT);
+        java.nio.file.Path numenDir = NumenPaths.config();
         com.dwinovo.numen.config.ConfigMigrations.run(numenDir);
 
         registerTools();
