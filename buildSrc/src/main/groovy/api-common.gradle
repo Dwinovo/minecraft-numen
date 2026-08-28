@@ -133,6 +133,7 @@ tasks.register('apiJar', Jar) {
     // contract of record — kept in lockstep with what numen-core actually
     // compiles against, so building core against the :api jar always works.
     include 'com/dwinovo/numen/api/**'             // @Internal marker + api meta
+    include 'com/dwinovo/numen/NumenPaths*.class'  // config/numen/ 的唯一答案(NumenApi.configDir 背后那个)
     include 'com/dwinovo/numen/agent/tool/api/**'  // per-call tool context
     include 'com/dwinovo/numen/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
     include 'com/dwinovo/numen/task/**'            // task contract + the registration points a pack drives
