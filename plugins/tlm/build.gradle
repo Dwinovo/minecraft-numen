@@ -1,0 +1,14 @@
+plugins { id 'numen-plugin' }
+
+repositories {
+    // 车万女仆发在 Modrinth;代码部分 MIT,不混淆,所以可以直接编译依赖拿真模型对象。
+    exclusiveContent {
+        forRepository { maven { name = 'Modrinth'; url = 'https://api.modrinth.com/maven' } }
+        filter { includeGroup 'maven.modrinth' }
+    }
+}
+
+dependencies {
+    // 运行时由玩家自己装的那份提供;本模块不携带它一个字节,也不带任何模型/贴图/音频。
+    compileOnly "maven.modrinth:touhou-little-maid:${tlm_version}"
+}

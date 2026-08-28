@@ -13,6 +13,12 @@ dependencies {
     // 本模块的 datagen 需要引擎在运行时类路径上,所以是 api 而不是 compileOnlyApi
     // ——Forge 那边相反,见 core/forge/build.gradle。
     api project(':api:neoforge')
+
+    // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
+    // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里
+    // (它们不发布——没人需要依赖我们的联动代码)。
+    compileOnly project(':plugins:ysm')
+    compileOnly project(':plugins:tlm')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':api:neoforge'))
 }
@@ -79,4 +85,11 @@ sourceSets.configureEach {
             }
         }
     }
+}
+
+// 联动模组的类与资源平铺进发行 jar——它们本质是独立模组,只是跟车一起发。
+// 目标模组不在时它们一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
+tasks.named('jar', Jar) {
+    from({ project(':plugins:ysm').sourceSets.main.output })
+    from({ project(':plugins:tlm').sourceSets.main.output })
 }
