@@ -36,6 +36,31 @@ public final class McTextInput implements TextInput {
      */
     private static final int MAX_LEN = 32768;
 
+    /**
+     * 当前屏幕把真控件挂上去的那个口。由 {@code Screen} 开屏装上、关屏卸掉——
+     * 所以它是<b>屏幕作用域</b>的,不是全局状态(Minecraft 同时只有一个 Screen)。
+     *
+     * <p>为什么不让每个面板自己传:面板拿不到宿主——它们的 host 既不是字段也不在
+     * build 的参数里。硬要传就得改十个面板的签名,而那和"换个输入引擎"没有关系。
+     */
+    private static java.util.function.Consumer<net.minecraft.client.gui.components.AbstractWidget> mounter;
+
+    /** 开屏装上;传 null 卸掉。没装的时候输入框退回纯内存模式,打字照常。 */
+    public static void mountVia(java.util.function.Consumer<net.minecraft.client.gui.components.AbstractWidget> m) {
+        mounter = m;
+    }
+
+    /** 交给 {@code UiRoot.setInputFactory} 的那个工厂。 */
+    public static java.util.function.BiFunction<String, Consumer<String>, TextInput> factory() {
+        return (initial, onChange) -> {
+            var m = mounter;
+            if (m == null) return null;   // 不在受支持的屏幕里,保持纯内存
+            var in = new McTextInput(net.minecraft.client.Minecraft.getInstance().font, initial, onChange);
+            m.accept(in.widget());
+            return in;
+        };
+    }
+
     private final EditBox box;
 
     public McTextInput(Font font, String initial, Consumer<String> onChange) {
@@ -79,6 +104,11 @@ public final class McTextInput implements TextInput {
     @Override
     public void setFocused(boolean f) {
         box.setFocused(f);
+    }
+
+    @Override
+    public void setNumericOnly(boolean on) {
+        box.setFilter(on ? t -> t.chars().allMatch(Character::isDigit) : t -> true);
     }
 
     @Override
