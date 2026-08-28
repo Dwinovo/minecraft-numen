@@ -31,6 +31,12 @@ public final class TextField extends Widget {
     private char tokenMarker;
     private int tokenColor;
 
+    /**
+     * 宿主提供的真编辑器;为空表示这个框自己管编辑(纯内存,无输入法)。
+     * 绑上之后本控件<b>只画不编</b>——理由见 {@link TextInput}。
+     */
+    private TextInput host;
+
     public TextField(String initial, Consumer<String> onChange) {
         if (initial != null) value.append(initial);
         this.cursor = value.length();
@@ -65,19 +71,37 @@ public final class TextField extends Widget {
         return this;
     }
 
-    public String value() { return value.toString(); }
+    /**
+     * 把编辑权交给宿主的真控件。绑上之后 {@link #charTyped}/{@link #keyPressed}
+     * 一律不接,让事件落到宿主控件上——那是输入法认得出的那一个。
+     */
+    public TextField boundTo(TextInput input) {
+        this.host = input;
+        if (input != null) input.setText(value.toString());
+        return this;
+    }
+
+    public String value() { return host != null ? host.text() : value.toString(); }
 
     public void setValue(String v) {
+        if (host != null) {
+            host.setText(v == null ? "" : v);
+            return;
+        }
         value.setLength(0);
         if (v != null) value.append(v);
         cursor = Math.min(cursor, value.length());
         viewStart = Math.min(viewStart, cursor);
     }
 
-    public int cursor() { return cursor; }
+    public int cursor() { return host != null ? host.cursor() : cursor; }
 
     /** 光标移到末尾。补全之后要接着往下打,光标留在原处会插在半截。 */
     public void cursorToEnd() {
+        if (host != null) {
+            host.setText(host.text());   // 宿主控件的 setText 自带"光标去末尾"
+            return;
+        }
         cursor = value.length();
         viewStart = Math.min(viewStart, cursor);
     }
@@ -109,19 +133,30 @@ public final class TextField extends Widget {
 
         int pad = NumenStyle.FIELD_PAD;
         int innerW = w - pad * 2;
-        String display = masked ? "•".repeat(value.length()) : value.toString();
+
+        if (host != null) {
+            // 焦点是单向的:NumenUI 这边说了算(它先吃到点击),宿主控件跟着走。
+            // 反过来双向同步的话,两份焦点状态迟早对不上。
+            host.setFocused(isFocused());
+            // 文字画在哪,真控件就摆在哪——输入法候选框跟着它的插入符定位。
+            host.moveTo(x + pad, textY(s), innerW, s.lineHeight());
+        }
+
+        String raw = value();
+        int caret = Math.min(cursor(), raw.length());
+        String display = masked ? "•".repeat(raw.length()) : raw;
 
         if (display.isEmpty() && !isFocused()) {
             s.drawText(placeholder, x + pad, textY(s), c.textMuted(), false);
             return;
         }
 
-        ensureCursorVisible(s, display, innerW);
+        ensureCursorVisible(s, display, innerW, caret);
         String visible = clipToWidth(s, display.substring(viewStart), innerW);
         drawVisible(s, visible, x + pad, textY(s), c.textPrimary());
 
         if (isFocused() && (nowMs / 500) % 2 == 0) {   // 光标 1Hz 闪烁
-            int cx = x + pad + s.textWidth(display.substring(viewStart, cursor));
+            int cx = x + pad + s.textWidth(display.substring(viewStart, caret));
             s.fillRect(cx, y + 3, 1, h - 6, c.textPrimary());
         }
     }
@@ -144,6 +179,9 @@ public final class TextField extends Widget {
 
     /** 首词在整串里的结束下标(不含);没开高亮或不是首词开头则 0。 */
     private int tokenEnd() {
+        // 读 value() 而不是内部的 value:绑了宿主之后文本住在那边,读内部的会得到空串,
+        // 斜杠命令的高亮会整个失效。
+        String value = value();
         if (tokenMarker == 0 || masked || value.length() == 0
                 || value.charAt(0) != tokenMarker) {
             return 0;
@@ -169,14 +207,14 @@ public final class TextField extends Widget {
      * 界面当场卡死,表现就是"太长了填不进去"。往左退只扫看得见的那几十个字符,
      * 与值多长无关。
      */
-    private void ensureCursorVisible(IDrawSurface s, String display, int innerW) {
+    private void ensureCursorVisible(IDrawSurface s, String display, int innerW, int caret) {
         viewStart = Math.min(viewStart, Math.max(0, display.length()));
-        if (cursor < viewStart) {
-            viewStart = cursor;
+        if (caret < viewStart) {
+            viewStart = caret;
             return;
         }
-        int start = cursor;
-        while (start > 0 && s.textWidth(display.substring(start - 1, cursor)) <= innerW) {
+        int start = caret;
+        while (start > 0 && s.textWidth(display.substring(start - 1, caret)) <= innerW) {
             start--;
         }
         if (viewStart < start) viewStart = start;
@@ -210,6 +248,10 @@ public final class TextField extends Widget {
 
     @Override
     public boolean charTyped(char ch) {
+        // 绑了宿主就一个字符都不接:NumenScreen 是"NumenUI 先跑,处理了就 return true",
+        // 这里一旦返回 true,super.charTyped 就轮不到,字符落不到那个真控件上,
+        // 输入法辅助模组的 mixin 也就永远不触发。放行才是接上输入法的前提。
+        if (host != null) return false;
         if (ch < ' ') return false;
         if (numericOnly && (ch < '0' || ch > '9')) return false;
         value.insert(cursor, ch);
@@ -220,6 +262,7 @@ public final class TextField extends Widget {
 
     @Override
     public boolean keyPressed(int keyCode, int modifiers) {
+        if (host != null) return false;   // 同 charTyped:让键落到宿主控件上
         if (KeyCodes.ctrl(modifiers)) {
             if (keyCode == KeyCodes.KEY_V) {
                 String paste = root == null ? "" : root.clipboard();
