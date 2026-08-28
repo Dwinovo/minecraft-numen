@@ -28,7 +28,6 @@ public final class NumenTlm {
             numen.onClient(() -> {
                 numen.registerTool(new ListMaidModelsTool());
                 numen.registerTool(new WearMaidModelTool());
-                numen.registerTool(new MakeSoundTool());
 
                 Wardrobe.bind(numen.configDir());
                 Wardrobe.load();
