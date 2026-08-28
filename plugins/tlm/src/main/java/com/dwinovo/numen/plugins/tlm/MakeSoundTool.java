@@ -37,23 +37,45 @@ public final class MakeSoundTool implements NumenTool {
                 .build();
     }
 
+    /** 类别名 ↔ 声音 id。这是两者对应关系的唯一一处。 */
+    private static final Map<String, String> KINDS = Map.of(
+            "idle", MaidVoice.IDLE,
+            "hurt", MaidVoice.HURT,
+            "attack", MaidVoice.ATTACK);
+
+    /** 这只同伴当前模型<b>真正带得动</b>的类别。喂给 runtime_state,让她每轮都知道。 */
+    static java.util.List<String> kindsOf(java.util.UUID companion) {
+        var have = MaidVoice.available(companion);
+        return KINDS.entrySet().stream()
+                .filter(e -> have.contains(e.getValue()))
+                .map(Map.Entry::getKey).sorted().toList();
+    }
+
     @Override
     public void invoke(ToolCall call) {
         if (!Tlm.present()) {
             call.complete(TaskResult.fail("这里没装车万女仆").toJson());
             return;
         }
+        java.util.UUID me = call.ctx().entityUuid();
         JsonObject args = call.args();
         String kind = args.has("kind") && !args.get("kind").isJsonNull()
                 ? args.get("kind").getAsString() : "idle";
-        String sound = switch (kind) {
-            case "hurt" -> MaidVoice.HURT;
-            case "attack" -> MaidVoice.ATTACK;
-            default -> MaidVoice.IDLE;
-        };
-        MaidVoice.play(call.ctx().entityUuid(), sound);
-        // 不回报"播成功了":没穿模型、包里没这条、人不在视距内都会静默跳过,
-        // 而这三种情况都不是错误。硬说成功反而让她以为主人听见了。
+        String sound = KINDS.get(kind);
+        if (sound == null) {
+            call.complete(TaskResult.fail("没有 " + kind + " 这一类").toJson());
+            return;
+        }
+
+        // 播不出去就如实说。上一版无论如何都回"哼了一声"——没穿模型、包里没这条、
+        // 人不在视距内全被说成成功,她会以为主人听见了,然后接着往下讲。
+        if (!MaidVoice.play(me, sound)) {
+            var can = kindsOf(me);
+            call.complete(TaskResult.fail(can.isEmpty()
+                    ? "这套模型没带语音,出不了声"
+                    : "这套模型没有 " + kind + " 这一类;能用的是 " + String.join("、", can)).toJson());
+            return;
+        }
         call.complete(TaskResult.ok("哼了一声", Map.of("kind", kind)).toJson());
     }
 }
