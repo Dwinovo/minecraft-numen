@@ -1,9 +1,11 @@
 package com.dwinovo.numen.client.ui.mc;
 
 import com.dwinovo.numen.client.ui.widget.TextInput;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 
 import java.util.function.Consumer;
@@ -101,9 +103,23 @@ public final class McTextInput implements TextInput {
         return box.isFocused();
     }
 
+    /**
+     * 焦点要<b>同时</b>给控件自己和屏幕。
+     *
+     * <p>只调 {@code box.setFocused(true)} 是不够的:那只设控件自己的标志位,而香草
+     * 分发字符走的是 {@code Screen.getFocused()}——屏幕不认这个控件,
+     * {@code super.charTyped} 就找不到接收者,字打不进去。
+     */
     @Override
     public void setFocused(boolean f) {
         box.setFocused(f);
+        Screen screen = Minecraft.getInstance().screen;
+        if (screen == null) return;
+        if (f) {
+            if (screen.getFocused() != box) screen.setFocused(box);
+        } else if (screen.getFocused() == box) {
+            screen.setFocused(null);
+        }
     }
 
     @Override
