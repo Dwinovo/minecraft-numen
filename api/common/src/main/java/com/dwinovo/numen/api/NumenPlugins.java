@@ -85,6 +85,11 @@ public final class NumenPlugins {
         }
 
         @Override
+        public Path configDir() {
+            return com.dwinovo.numen.NumenPaths.config();
+        }
+
+        @Override
         public Delivery enqueue(UUID companion, String message) {
             BiFunction<UUID, String, Delivery> fn = enqueue;
             return fn == null ? Delivery.REJECTED : fn.apply(companion, message);
