@@ -6,6 +6,8 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.entity.CompanionEvents;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -54,6 +56,29 @@ public final class NumenPlugins {
         skills = skillSink;
         enqueue = enqueueFn;
         clientReady = true;
+        for (Runnable r : PENDING) runClientBlock(r);
+        for (Path root : PENDING_SKILLS) skillSink.accept(root);
+        PENDING.clear();
+        PENDING_SKILLS.clear();
+    }
+
+    /**
+     * 客户端还没接上时先攒着,接上再跑。
+     *
+     * <p>插件在自己的 {@code @Mod} 构造器里登记,而引擎的客户端入口也是一个
+     * {@code @Mod} 构造器——谁先谁后由加载器的模组排序决定。不攒的话,插件生不生效
+     * 就成了排序的函数:同一份代码换个加载器、加个别的模组就可能整块静默失效,
+     * 而且没有任何报错。专用服务器上没人来接,这两个表原样留着不跑,正是要的行为。
+     */
+    private static final List<Runnable> PENDING = new ArrayList<>();
+    private static final List<Path> PENDING_SKILLS = new ArrayList<>();
+
+    private static void runClientBlock(Runnable r) {
+        try {
+            r.run();
+        } catch (RuntimeException e) {
+            Constants.LOG.error("[numen] 插件的客户端初始化出错", e);
+        }
     }
 
     private static final class Impl implements NumenApi {
@@ -70,18 +95,15 @@ public final class NumenPlugins {
 
         @Override
         public void bundleSkills(Path skillsRoot) {
+            if (skillsRoot == null) return;
             Consumer<Path> sink = skills;
-            if (sink != null && skillsRoot != null) sink.accept(skillsRoot);
+            if (sink != null) sink.accept(skillsRoot); else PENDING_SKILLS.add(skillsRoot);
         }
 
         @Override
         public void onClient(Runnable clientOnly) {
-            if (!clientReady || clientOnly == null) return;
-            try {
-                clientOnly.run();
-            } catch (RuntimeException e) {
-                Constants.LOG.error("[numen] 插件的客户端初始化出错", e);
-            }
+            if (clientOnly == null) return;
+            if (clientReady) runClientBlock(clientOnly); else PENDING.add(clientOnly);
         }
 
         @Override
