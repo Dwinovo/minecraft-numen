@@ -82,6 +82,9 @@ public class CompanionChatScreen extends Screen {
 
     @Override
     protected void init() {
+        // 输入框的真控件挂到本屏上:只注册事件、不进 renderables,画面归 NumenUI。
+        // 屏幕作用域——关屏时在 removed() 卸掉。
+        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(this::addWidget);
         String kept = inputBar != null ? inputBar.text() : "";
         int x = (this.width - INPUT_W) / 2;
         int y = this.height - 44;
@@ -114,14 +117,6 @@ public class CompanionChatScreen extends Screen {
         @Override public EntityAgentLoop loop() { return CompanionChatScreen.this.loop(); }
 
         /** 只注册事件,不进 renderables——画面归 NumenUI。见 {@code McTextInput}。 */
-        @Override public void mountInput(net.minecraft.client.gui.components.AbstractWidget w) {
-            CompanionChatScreen.this.addWidget(w);
-        }
-
-        @Override public void focusInput(net.minecraft.client.gui.components.AbstractWidget w) {
-            CompanionChatScreen.this.setFocused(w);
-        }
-
         @Override public void onCommandReply(String reply) {
             if (reply == null || reply.isBlank()) {
                 return;   // 不吭声的命令,或面板已在输入行原位打开——屏留着
@@ -192,5 +187,11 @@ public class CompanionChatScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void removed() {
+        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(null);
+        super.removed();
     }
 }
