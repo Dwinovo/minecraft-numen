@@ -86,7 +86,15 @@ public final class MaidBody {
         puppet.mirror(player, modelId);
 
         event.setCanceled(true);
-        renderer.render(puppet, player.getYRot(), event.getPartialTick(),
+        // 经原版类型调用,不要直接 renderer.render(...)。
+        //
+        // EntityMaidRenderer.render 是车万女仆<b>覆写原版 MobRenderer.render</b> 的方法,
+        // 在它的发行 jar 里叫 SRG 名(m_7392_)。而 Forge 的重映射按「拥有者类 + 方法名」
+        // 查表:拥有者写成 EntityMaidRenderer 的话它不在原版映射表里,工具看不出这是个
+        // 继承来的原版方法,调用点就原样留着官方名——运行期 NoSuchMethodError。
+        // 声明成原版类型之后拥有者是 EntityRenderer,查得到,虚分派照样落到车万女仆的实现上。
+        net.minecraft.client.renderer.entity.EntityRenderer<net.minecraft.world.entity.Mob> r = renderer;
+        r.render(puppet, player.getYRot(), event.getPartialTick(),
                 event.getPoseStack(), event.getMultiBufferSource(), event.getPackedLight());
     }
 }
