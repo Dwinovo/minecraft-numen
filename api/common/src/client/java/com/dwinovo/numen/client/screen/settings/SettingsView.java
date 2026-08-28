@@ -46,6 +46,7 @@ public final class SettingsView {
         <T extends AbstractWidget> T add(T w);
         void rebuild();
         void focus(AbstractWidget w);
+
         Font font();
         int left();
         int top();

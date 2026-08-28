@@ -64,18 +64,6 @@ public final class ChatInputBar {
         /** 斜杠命令跑完回给主人的话;null = 这条命令不吭声(或已在原位开了面板)。画在哪、留多久是宿主的事。 */
         void onCommandReply(String reply);
 
-        /**
-         * 把文本输入的真控件挂到宿主屏幕上。<b>必须用 {@code addWidget}</b>
-         * (只收事件、不进 renderables),别用 {@code addRenderableWidget}——画面归
-         * NumenUI,它多画一遍就是两个输入框叠着。理由见 {@code McTextInput}。
-         *
-         * <p>宿主不是 Screen(或者还没接)时留空实现:那样输入退回纯内存模式,
-         * 打字照常,只是输入法辅助模组认不出来。
-         */
-        default void mountInput(net.minecraft.client.gui.components.AbstractWidget w) {}
-
-        /** 让宿主屏幕把键盘焦点交给这个控件——{@code Screen.setFocused}。 */
-        default void focusInput(net.minecraft.client.gui.components.AbstractWidget w) {}
     }
 
     private static final int BTN_W = 22;
@@ -90,7 +78,6 @@ public final class ChatInputBar {
     private final Set<Key> wanted;
 
     private TextField field;
-    private com.dwinovo.numen.client.ui.mc.McTextInput fieldInput;
     /** 缺席的键为 null(不在 {@link #wanted} 里)。 */
     private Button micBtn, sendBtn, stopBtn;
     /** 右侧那一串键,顺序即布局。 */
@@ -115,6 +102,9 @@ public final class ChatInputBar {
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
+        // 文本编辑交给真 EditBox(只收事件、不自绘),画面仍归 NumenUI。
+        // 这是输入法辅助模组能认出这个框的前提——见 McTextInput。
+        ui.setInputFactory(com.dwinovo.numen.client.ui.mc.McTextInput.factory());
     }
 
     /** 输入框内容(切换同伴时宿主取走暂存,回来再 setText 放回)。 */
@@ -151,17 +141,10 @@ public final class ChatInputBar {
         int inW = w - (BTN_W + GAP) * keys.length;
         // 编辑交给一个真 EditBox(只收事件、不自绘),画面仍归 NumenUI。
         // 这是输入法辅助模组能认出这个框的前提——见 McTextInput。
-        java.util.function.Consumer<String> onEdit = v -> {
+        field = ui.add(new TextField(draft, v -> {
             draft = v;
             refreshCandidates();
-        };
-        fieldInput = new com.dwinovo.numen.client.ui.mc.McTextInput(
-                net.minecraft.client.Minecraft.getInstance().font, draft, onEdit);
-        host.mountInput(fieldInput.widget());
-        // TextField 绑了宿主之后自己不再改文本,它那份 onChange 永远不会触发;
-        // 传同一个是为了将来解绑(纯内存模式)时行为一致,不是两条路各走各的。
-        field = ui.add(new TextField(draft, onEdit).boundTo(fieldInput)
-                .placeholder(host.hint())
+        }).placeholder(host.hint())
                 .leadingToken(com.dwinovo.numen.client.command.ChatCommands.PREFIX, CMD_COLOR));
         field.setBounds(x, y, inW, h);
         fieldX = x;
@@ -173,7 +156,6 @@ public final class ChatInputBar {
         }
 
         ui.requestFocus(field);   // 开屏即可打字
-        if (fieldInput != null) host.focusInput(fieldInput.widget());
         refreshCandidates();
         refreshEnablement();
     }
