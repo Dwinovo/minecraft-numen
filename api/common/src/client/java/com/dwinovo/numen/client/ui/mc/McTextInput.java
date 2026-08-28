@@ -3,7 +3,6 @@ package com.dwinovo.numen.client.ui.mc;
 import com.dwinovo.numen.client.ui.widget.TextInput;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
@@ -66,12 +65,11 @@ public final class McTextInput implements TextInput {
     private final EditBox box;
 
     public McTextInput(Font font, String initial, Consumer<String> onChange) {
-        this.box = new EditBox(font, 0, 0, 1, 1, CommonComponents.EMPTY) {
-            @Override
-            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                // 双保险:即便哪天被误挂进 renderables 也不会画出第二个输入框
-            }
-        };
+        // 不覆写 renderWidget:控件走 addWidget 注册,压根不进 renderables,永远不会被
+        // 绘制。覆写只是"双保险",代价却是把 GuiGraphics 钉进类型签名——那个类在 26.2
+        // 上已经不存在了(换成 GuiGraphicsExtractor),为一道用不上的保险换来跨版本分叉,
+        // 不划算。
+        this.box = new EditBox(font, 0, 0, 1, 1, CommonComponents.EMPTY);
         box.setMaxLength(MAX_LEN);
         box.setBordered(false);
         box.setValue(initial == null ? "" : initial);
