@@ -220,7 +220,11 @@ tasks.named('jar', Jar) {
 
 // 联动模组的类与资源平铺进发行 jar——它们本质是独立模组,只是跟车一起发。
 // 目标模组不在时它们一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
-tasks.named('jar', Jar) {
-    from({ project(':plugins:ysm').sourceSets.main.output })
-    from({ project(':plugins:tlm').sourceSets.main.output })
+//
+// jar 和 jarJar 都要:Forge 这边真正发出去的是 jarJar 产的 -all(它把引擎嵌进
+// META-INF/jarjar/),而它<b>不继承 jar 的内容配置</b>。只加在 jar 上的话,-all 里
+// 一个联动 class 都没有——装上去就是"工具凭空少了几个",还不报错。
+tasks.matching { it.name == 'jar' || it.name == 'jarJar' }.configureEach {
+    it.from({ project(':plugins:ysm').sourceSets.main.output })
+    it.from({ project(':plugins:tlm').sourceSets.main.output })
 }
