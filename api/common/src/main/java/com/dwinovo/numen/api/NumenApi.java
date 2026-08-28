@@ -5,6 +5,7 @@ import com.dwinovo.numen.agent.tool.NumenTool;
 import java.nio.file.Path;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
 
 /**
  * 插件手里的那个对象——<b>扩展 Numen 的唯一一扇门</b>。
@@ -77,6 +78,24 @@ public interface NumenApi {
      * 自己 {@code createDirectories}。
      */
     Path configDir();
+
+    /**
+     * 每次发请求时现算一段,挂进这只同伴的 {@code <runtime_state>}。
+     *
+     * <p>解决的是这么个事:你的工具把同伴改了(换了外观、接了什么设备),她只在
+     * <b>调用工具那一轮</b>知道,下一轮、下一次进游戏就忘了。挂在这儿的东西每轮都在,
+     * 她随时知道自己现在是什么状态。
+     *
+     * <pre>{@code
+     * numen.contributeState(companion -> wearing(companion) == null ? ""
+     *         : "<maid_look>你现在穿着「" + name + "」</maid_look>");
+     * }</pre>
+     *
+     * <p>自己带一个标签;这轮没什么好说的就返回空串。一个字都不入会话历史,
+     * 所以随便变——它挂在请求末端,不在字节级稳定的系统提示里,打不碎 prompt 缓存。
+     * 抛异常不会打断别的贡献者,但会记进日志。
+     */
+    void contributeState(Function<UUID, String> fragment);
 
     /**
      * 把一句话交给同伴的内置大脑,效果和主人亲手打字一样。
