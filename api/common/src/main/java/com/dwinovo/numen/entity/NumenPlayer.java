@@ -307,13 +307,18 @@ public final class NumenPlayer extends ServerPlayer {
     /**
      * 挨打。原样交给父类结算,只在真的掉了血之后广播一条 {@code HURT}。
      *
+     * <p>1.21.2 起原版把带返回值的那个口挪到了 {@code hurtServer}——{@code hurt} 变成
+     * 返回 void,判断不了这一下有没有真的落上。挂在这里反而更贴切:同伴的身体本来
+     * 就活在服务端。
+     *
      * <p>发在这里而不是 tick 里扫 {@code hurtTime}:扫的话拿不到来源和伤害量
      * (下一次伤害会盖掉 {@code getLastDamageSource}),而监听者要靠这两样分情况。
      * 返回 false 表示这次伤害被挡下/免疫了,那不是"受伤",不发。
      */
     @Override
-    public boolean hurt(net.minecraft.world.damagesource.DamageSource source, float amount) {
-        boolean took = super.hurt(source, amount);
+    public boolean hurtServer(net.minecraft.server.level.ServerLevel level,
+                              net.minecraft.world.damagesource.DamageSource source, float amount) {
+        boolean took = super.hurtServer(level, source, amount);
         if (took) {
             CompanionEvents.fire(CompanionEvent.HURT,
                     new CompanionEvent.Hurt(this, source, amount));
