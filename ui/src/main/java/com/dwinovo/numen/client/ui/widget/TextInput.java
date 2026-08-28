@@ -38,4 +38,10 @@ public interface TextInput {
      * 屏幕角落。
      */
     void moveTo(int x, int y, int w, int h);
+
+    /**
+     * 只收数字。<b>必须转交给宿主</b>:绑定之后 {@code charTyped} 那条路不走了,
+     * 过滤留在本控件里等于没有——端口号那种框会开始收字母。
+     */
+    default void setNumericOnly(boolean on) {}
 }

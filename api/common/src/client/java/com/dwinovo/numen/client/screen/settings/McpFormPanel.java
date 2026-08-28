@@ -45,6 +45,9 @@ public final class McpFormPanel {
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
+        // 文本编辑交给真 EditBox(只收事件、不自绘),画面仍归 NumenUI。
+        // 这是输入法辅助模组能认出这些框的前提——见 McTextInput。
+        ui.setInputFactory(com.dwinovo.numen.client.ui.mc.McTextInput.factory());
     }
 
     /** 载入待编辑的草稿(新建=空草稿;编辑=从 spec 拷来)。宿主随后 build。 */
