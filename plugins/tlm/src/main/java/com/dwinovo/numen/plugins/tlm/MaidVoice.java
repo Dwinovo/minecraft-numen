@@ -40,23 +40,36 @@ public final class MaidVoice {
      *
      * <p>只在客户端有意义:音效包是主人自己装的,只有这一侧读得到。
      */
-    public static void play(UUID companion, String sound) {
-        String modelId = Wardrobe.worn(companion);
-        if (modelId == null) return;
-
-        // 音效包的 id 就是模型 id 的命名空间——同一个包同时提供模型和声音
-        int colon = modelId.indexOf(':');
-        if (colon <= 0) return;
-        String pack = modelId.substring(0, colon);
-        if (Tlm.voice(pack, sound).isEmpty()) return;   // 这个包没带这条,别播个空的
+    public static boolean play(UUID companion, String sound) {
+        String pack = pack(companion);
+        if (pack == null) return false;
+        if (Tlm.voice(pack, sound).isEmpty()) return false;   // 这个包没带这条,别播个空的
 
         AbstractClientPlayer body = body(companion);
-        if (body == null) return;   // 不在视距内,没必要出声
+        if (body == null) return false;   // 不在视距内,没必要出声
 
         Minecraft.getInstance().getSoundManager().play(new MaidSoundInstanceAtPos(
                 SoundEvents.EMPTY, pack + ":" + sound,
                 body.getX(), body.getY() + body.getEyeHeight(), body.getZ(),
                 1.0F, 1.0F));
+        return true;
+    }
+
+    /**
+     * 这只同伴此刻的音效包 id。<b>就是模型 id 的命名空间</b>——同一个包同时提供
+     * 模型和声音,所以不需要另存一份"她用哪个音效包"。没穿模型返回 null。
+     */
+    static String pack(UUID companion) {
+        String modelId = Wardrobe.worn(companion);
+        if (modelId == null) return null;
+        int colon = modelId.indexOf(':');
+        return colon > 0 ? modelId.substring(0, colon) : null;
+    }
+
+    /** 这只同伴现在能出哪些声。没穿模型、或包里不带语音,就是空的。 */
+    static java.util.Set<String> available(UUID companion) {
+        String pack = pack(companion);
+        return pack == null ? java.util.Set.of() : Tlm.voices(pack);
     }
 
     /** 在世界里找到这只同伴的身体;不在视距内返回 null。 */

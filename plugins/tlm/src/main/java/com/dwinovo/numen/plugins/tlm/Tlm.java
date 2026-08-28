@@ -87,6 +87,24 @@ public final class Tlm {
         }
     }
 
+    /**
+     * 这个音效包里到底有哪几条语音。包与包差别很大——有的一条都不带。
+     *
+     * <p>拿得到清单,才谈得上让她知道自己能出什么声;否则她只能瞎猜,
+     * 猜错了还以为主人听见了。
+     */
+    public static java.util.Set<String> voices(String pack) {
+        try {
+            var cache = CustomSoundLoader.getSoundCache(pack);
+            if (cache == null) return java.util.Set.of();
+            java.util.Set<String> out = new java.util.LinkedHashSet<>();
+            cache.buffers().keySet().forEach(rl -> out.add(rl.getPath()));
+            return out;
+        } catch (Throwable ignored) {
+            return java.util.Set.of();
+        }
+    }
+
     /** 车万女仆装了没有。没装的话本插件全程安静,不报错。 */
     public static boolean present() {
         try {
