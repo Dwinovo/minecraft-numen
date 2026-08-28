@@ -29,6 +29,20 @@ public final class CompanionEvent<T> {
     /** 主人打断了这个同伴的思考——手上没做完的活该放弃了。给的是 UUID,因为身体未必还在。 */
     public static final CompanionEvent<UUID> ABORT = new CompanionEvent<>("companion_abort");
 
+    /** 她挨了一下。伤害已经结算,{@code amount} 是<b>结算前</b>报上来的量。 */
+    public static final CompanionEvent<Hurt> HURT = new CompanionEvent<>("companion_hurt");
+
+    /**
+     * {@link #HURT} 的内容。
+     *
+     * <p>带上来源和伤害量,而不是只给身体:监听者要据此<b>分情况</b>——护盾看是谁打的,
+     * 音效看轻重,提醒主人看急不急。只给身体的话每个监听者都得自己去
+     * {@code getLastDamageSource()} 捞一遍,而那时它可能已经被下一次伤害盖掉了。
+     */
+    public record Hurt(NumenPlayer companion,
+                       net.minecraft.world.damagesource.DamageSource source,
+                       float amount) {}
+
     private final String name;
 
     private CompanionEvent(String name) {
