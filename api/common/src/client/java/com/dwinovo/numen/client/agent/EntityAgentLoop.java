@@ -1545,7 +1545,10 @@ public final class EntityAgentLoop {
      * {@code <runtime_state>} 里,模型只需认一个信封。
      */
     private String runtimeStateXml() {
-        String body = currentTaskXml() + inventoryXml() + effectsXml() + ridingXml();
+        // 插件的现算片段也挂这一层:它们和背包、状态效果一样是"此刻的她",
+        // 会变,所以不能进字节级稳定的系统提示。
+        String body = currentTaskXml() + inventoryXml() + effectsXml() + ridingXml()
+                + com.dwinovo.numen.api.NumenPlugins.stateFragments(entityUuid);
         String xml = body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
         // 原样打出来。"她看到的世界"平时完全不可见,于是"她怎么会这么说"只能靠猜——
         // 而她说的数跟事件对不上时,分不清是她编的还是我们喂错了。开一次 debug 就有答案。
