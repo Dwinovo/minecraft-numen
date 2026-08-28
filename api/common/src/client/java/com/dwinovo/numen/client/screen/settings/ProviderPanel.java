@@ -55,6 +55,9 @@ public final class ProviderPanel {
         Minecraft mc = Minecraft.getInstance();
         ui.setClipboard(() -> mc.keyboardHandler.getClipboard(),
                 s -> mc.keyboardHandler.setClipboard(s));
+        // 文本编辑交给真 EditBox(只收事件、不自绘),画面仍归 NumenUI。
+        // 这是输入法辅助模组能认出这些框的前提——见 McTextInput。
+        ui.setInputFactory(com.dwinovo.numen.client.ui.mc.McTextInput.factory());
     }
 
     /** (重)布局进给定矩形。viewportBottom = 下拉弹层不得越过的纵坐标(通常是宿主面板底缘)。 */
