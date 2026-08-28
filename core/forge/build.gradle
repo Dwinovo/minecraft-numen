@@ -136,6 +136,11 @@ sourceSets.main.resources.exclude '.cache/**'
 jarJar.enable()
 
 dependencies {
+    // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它们的 install 入口,
+    // 类与资源由下面的 jar 块平铺进发行 jar。
+    compileOnly project(':plugins:ysm')
+    compileOnly project(':plugins:tlm')
+
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     // refmap 由 mixin 注解处理器在编译期生成——AP 必须显式挂上,否则 mixin 照样编译
     // 通过、jar 照样打出来,只是里面没有 refmap,运行期才炸(与 api 的 forge 模块同款声明)。
@@ -211,4 +216,11 @@ tasks.named('jar', Jar) {
             }
         } finally { zf.close() }
     }
+}
+
+// 联动模组的类与资源平铺进发行 jar——它们本质是独立模组,只是跟车一起发。
+// 目标模组不在时它们一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
+tasks.named('jar', Jar) {
+    from({ project(':plugins:ysm').sourceSets.main.output })
+    from({ project(':plugins:tlm').sourceSets.main.output })
 }

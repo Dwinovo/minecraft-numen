@@ -29,6 +29,9 @@ import java.nio.file.Path;
 public class NumenCoreForge {
 
     public NumenCoreForge() {
+        // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
+        com.dwinovo.numen.plugins.Builtin.registerAll(
+                net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext.get().getModEventBus());
         NumenCore.init();
 
         // 游戏内用例的注册走<b>模组总线</b>,不是游戏总线:Forge 1.20.1 不像高版本

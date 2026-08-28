@@ -1,0 +1,15 @@
+plugins {
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'numen-plugin'
+}
+
+minecraft {
+    mappings channel: 'official', version: minecraft_version
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+}
+
+// YSM 是闭源且混淆的,本联动不引用它任何一个类——只用命令和 NBT 键名,
+// 那两样混淆器改不动。所以这里一个第三方依赖都没有。
