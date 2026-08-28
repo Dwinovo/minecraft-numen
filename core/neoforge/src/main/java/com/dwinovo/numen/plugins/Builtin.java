@@ -67,10 +67,13 @@ public final class Builtin {
      * 不用回来改这里。
      */
     private static Path skillsRoot(String plugin) {
+        // 经类加载器取,不用 NeoForge 的 IModFile —— 后者的口跨 MC 版本一直在变
+        // (26.x 上 getModFileById(...).getFile() 就没了),而资源 URL 在哪个版本都成立。
+        // core 自己声明 skills/ 用的也是这条路,两处同一个写法。
         try {
-            return ModList.get().getModFileById(Constants.MOD_ID)
-                    .getFile().findResource("plugins", plugin, "skills");
-        } catch (Throwable ignored) {
+            java.net.URL url = Builtin.class.getResource("/plugins/" + plugin + "/skills");
+            return url == null ? null : Path.of(url.toURI());
+        } catch (Exception ignored) {
             return null;   // 找不到就不带技能,工具照常能用
         }
     }
