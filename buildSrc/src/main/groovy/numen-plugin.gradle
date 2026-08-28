@@ -1,0 +1,41 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev'
+}
+
+/**
+ * 一个<b>联动模组</b>的构建约定。{@code plugins/} 下每个子目录是一个独立联动,
+ * 被内嵌进成品 jar 一起发,但本质上就是一个独立模组。
+ *
+ * <h2>为什么各自一个模块,而不是一个大模块装几个包</h2>
+ * 每个联动都要拉自己那个目标模组的 compileOnly 依赖和 maven 仓库。挤在一起的话,
+ * 接 AE2 会让 YSM 联动的类路径上多出 AE2,接 Jade 又多一个——最后没人说得清哪个
+ * 联动到底依赖了什么。一个联动一格:加一个是加一个目录,删一个是删一个目录。
+ *
+ * <h2>为什么编译期只给瘦 api jar</h2>
+ * 联动和第三方插件走同一扇门({@code NumenPlugins.register}),那就该<b>看得见的东西
+ * 也一样</b>。放进 core 的话同一个 jar 里什么都看得见,今天走前门、明天赶时间抄近路,
+ * 而我们发现 API 缺陷全靠有人走前门(onClient 静默空操作那个坑就是这么找到的)。
+ * 这条规矩交给编译器执行,不靠自觉。
+ *
+ * <h2>不发布</h2>
+ * 没有 maven-publish。没人需要依赖我们的联动代码,发出去只是多一个要维护的坐标。
+ */
+group = 'com.dwinovo.numen'
+base { archivesName = "numen-plugin-${project.name}-${minecraft_version}" }
+java { toolchain.languageVersion = JavaLanguageVersion.of(java_version) }
+
+neoForge {
+    version = neoforge_version
+    mods { "${mod_id}" { sourceSet sourceSets.main } }
+}
+
+dependencies {
+    // 复现第三方插件的类路径,一点不多一点不少:
+    //   · 瘦 api jar —— 就是他们 compileOnly 的那个 :api 分类器制品
+    //   · ai / ui —— 他们经 POM 传递依赖拿到的两个模块(NumenTool 继承的 IToolSpec 在 ai 里)
+    // 别图省事换成 project(':api:neoforge'):那样整个引擎的内部类都进类路径,这个模块就白设了。
+    compileOnly files(project(':api:neoforge').tasks.named('apiJar'))
+    compileOnly project(':ai')
+    compileOnly project(':ui')
+}

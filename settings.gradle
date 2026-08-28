@@ -33,3 +33,7 @@ include('api:neoforge')
 // numen-ai:LLM 连接层,纯 JVM、与 MC 版本无关(详见 ai/build.gradle 头注)。
 include('ai')
 include('ui')
+
+// 联动模块:一个联动一个,各自独立,内嵌发布不单独发坐标。见 buildSrc 的 numen-plugin.gradle
+include('plugins:ysm')
+include('plugins:tlm')
