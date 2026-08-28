@@ -1,6 +1,7 @@
 package com.dwinovo.numen.plugins.tlm;
 
 import com.github.tartaricacid.touhoulittlemaid.client.resource.CustomPackLoader;
+import com.github.tartaricacid.touhoulittlemaid.client.sound.CustomSoundLoader;
 import com.github.tartaricacid.touhoulittlemaid.client.resource.pojo.CustomModelPack;
 import com.github.tartaricacid.touhoulittlemaid.client.resource.pojo.MaidModelInfo;
 
@@ -66,6 +67,23 @@ public final class Tlm {
             return CustomPackLoader.MAID_MODELS.getInfo(modelId);
         } catch (Throwable ignored) {
             return Optional.empty();
+        }
+    }
+
+    /**
+     * 取一条语音的音频缓冲。同名多变体(hurt1..hurt4)由它自己随机挑一条。
+     *
+     * @param pack  音效包 id,就是模型 id 的命名空间(如 {@code gugu_gaga})
+     * @param sound 声音 id,如 {@code maid/ai/hurt}
+     */
+    public static Optional<com.mojang.blaze3d.audio.SoundBuffer> voice(String pack, String sound) {
+        try {
+            var cache = CustomSoundLoader.getSoundCache(pack);
+            if (cache == null) return Optional.empty();
+            return Optional.ofNullable(
+                    cache.getBuffer(net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(pack, sound)));
+        } catch (Throwable ignored) {
+            return Optional.empty();   // 这个包没带音效,或者车万女仆还没加载完
         }
     }
 

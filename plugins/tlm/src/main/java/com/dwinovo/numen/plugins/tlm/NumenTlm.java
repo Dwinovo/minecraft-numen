@@ -28,12 +28,20 @@ public final class NumenTlm {
             numen.onClient(() -> {
                 numen.registerTool(new ListMaidModelsTool());
                 numen.registerTool(new WearMaidModelTool());
+                numen.registerTool(new MakeSoundTool());
 
                 Wardrobe.bind(numen.configDir());
                 Wardrobe.load();
 
                 // 每轮都告诉她现在穿的是谁,而不是只在换装那一轮
                 numen.contributeState(MaidLook::describe);
+
+                // 受伤和死亡自动出声:情绪最强、频率天然低,不会变成噪音。
+                // 其余时刻由她自己用 make_sound 决定——理由见 MaidVoice。
+                numen.on(com.dwinovo.numen.api.CompanionEvent.HURT,
+                        h -> MaidVoice.play(h.companion().getUUID(), MaidVoice.HURT));
+                numen.on(com.dwinovo.numen.api.CompanionEvent.DEATH,
+                        body -> MaidVoice.play(body.getUUID(), MaidVoice.DEATH));
 
                 modBus.addListener(MaidBody::onAddLayers);
                 NeoForge.EVENT_BUS.addListener(MaidBody::render);
