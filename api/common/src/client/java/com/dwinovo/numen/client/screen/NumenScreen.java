@@ -302,7 +302,7 @@ public final class NumenScreen extends Screen {
     protected void init() {
         // 输入框的真控件挂到本屏上:只注册事件、不进 renderables,画面归 NumenUI。
         // 屏幕作用域——关屏时在 removed() 卸掉。
-        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(this::addWidget);
+        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(this::addWidget, this::setFocused);
         // 窗口留 12px 边距后能给多大给多大,夹在上下限之间;窗口比下限还小时
         // railX/top 至少钳到 0,保证头部(标题/tab/关闭途径)永远可见可点。
         panelW = Math.clamp(this.width - RAIL_W - 24, PANEL_MIN_W, PANEL_MAX_W);
@@ -1404,7 +1404,7 @@ public final class NumenScreen extends Screen {
 
     @Override
     public void removed() {
-        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(null);
+        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(null, null);
         super.removed();
     }
 }
