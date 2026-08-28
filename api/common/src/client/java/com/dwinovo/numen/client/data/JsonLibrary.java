@@ -7,7 +7,6 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.client.Minecraft;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -41,10 +40,9 @@ public abstract class JsonLibrary<E> {
         this.file = file;
     }
 
-    /** 客户端配置目录 {@code config/numen}。 */
+    /** 配置目录 {@code config/numen};见 {@link com.dwinovo.numen.NumenPaths}。 */
     protected static Path configDir() {
-        return Minecraft.getInstance().gameDirectory.toPath()
-                .resolve("config").resolve(com.dwinovo.numen.Constants.CONFIG_ROOT);
+        return com.dwinovo.numen.NumenPaths.config();
     }
 
     // ---- 子类钩子 ----

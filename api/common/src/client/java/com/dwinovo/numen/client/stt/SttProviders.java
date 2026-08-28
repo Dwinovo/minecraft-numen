@@ -140,7 +140,7 @@ public final class SttProviders {
     /** 读 {@code config/numen/stt.json};没有就先拿内置的播一份下去供编辑。 */
     private static String readOrSeedUserFile(String bundled) {
         try {
-            Path file = Services.PLATFORM.getConfigDir().resolve(com.dwinovo.numen.Constants.CONFIG_ROOT).resolve("stt.json");
+            Path file = com.dwinovo.numen.NumenPaths.config().resolve("stt.json");
             if (Files.exists(file)) {
                 return Files.readString(file, StandardCharsets.UTF_8);
             }
