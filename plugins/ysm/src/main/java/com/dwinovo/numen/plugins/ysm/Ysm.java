@@ -53,24 +53,45 @@ public final class Ysm {
 
     // ---- 读:玩家现在穿什么 ----
 
-    /** 一个玩家当前的模型与贴图;YSM 没给这个玩家建过 attachment 时返回 null。 */
+    /**
+     * 一个玩家当前的模型与贴图;YSM 没给这个玩家建过 attachment 时返回 null。
+     *
+     * <p>26.x 起实体存档换成了 {@code ValueOutput},而且 {@code CompoundTag} 的取值
+     * 一律返回 {@code Optional}——所以这段和低版本分支长得不一样,不是抄漏了。
+     */
     public static Look readLook(ServerPlayer player) {
-        CompoundTag all = new CompoundTag();
-        player.saveWithoutId(all);
-        CompoundTag info = all.getCompound(ATTACHMENTS).getCompound(MODEL_INFO);
+        CompoundTag all = snapshot(player);
+        if (all == null) return null;
+        var info = all.getCompound(ATTACHMENTS).flatMap(a -> a.getCompound(MODEL_INFO));
         if (info.isEmpty()) return null;
-        String model = info.getString(KEY_MODEL);
-        return model.isEmpty() ? null : new Look(model, info.getString(KEY_TEXTURE));
+        String model = info.get().getString(KEY_MODEL).orElse("");
+        return model.isEmpty() ? null
+                : new Look(model, info.get().getString(KEY_TEXTURE).orElse(NO_TEXTURE));
     }
 
     /** 一个玩家被授权的模型集合。读不到就是空集——空集意味着"什么都不镜像",不是"放行一切"。 */
     public static Set<String> readAuthorized(ServerPlayer player) {
-        CompoundTag all = new CompoundTag();
-        player.saveWithoutId(all);
-        ListTag list = all.getCompound(ATTACHMENTS).getList(AUTH_MODELS, Tag.TAG_STRING);
         Set<String> out = new LinkedHashSet<>();
-        for (int i = 0; i < list.size(); i++) out.add(list.getString(i));
+        CompoundTag all = snapshot(player);
+        if (all == null) return out;
+        all.getCompound(ATTACHMENTS)
+           .flatMap(a -> a.getList(AUTH_MODELS))
+           .ifPresent(list -> {
+               for (int i = 0; i < list.size(); i++) list.getString(i).ifPresent(out::add);
+           });
         return out;
+    }
+
+    /** 把玩家存成一份 CompoundTag 来读它的 attachment。26.x 起要经 ValueOutput 中转。 */
+    private static CompoundTag snapshot(ServerPlayer player) {
+        try {
+            var out = net.minecraft.world.level.storage.TagValueOutput.createWithContext(
+                    net.minecraft.util.ProblemReporter.DISCARDING, player.registryAccess());
+            player.saveWithoutId(out);
+            return out.buildResult();
+        } catch (Throwable ignored) {
+            return null;   // YSM 没装/存档形状变了:当作没穿,不报错
+        }
     }
 
     // ---- 写:走命令 ----
@@ -106,7 +127,9 @@ public final class Ysm {
      */
     private static void run(MinecraftServer server, String command) {
         server.getCommands().performPrefixedCommand(
-                server.createCommandSourceStack().withPermission(4), command);
+                server.createCommandSourceStack().withPermission(
+                        // 26.x 起权限从整数等级换成了 PermissionSet;OWNER 对应原来的 4
+                        net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER), command);
     }
 
     /** 模型 id 带斜杠(misc/1_alex),名字可能带空格——交给 Brigadier 自己决定要不要加引号。 */
