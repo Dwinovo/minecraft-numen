@@ -39,9 +39,9 @@ public final class NumenTlm {
                 // 受伤和死亡自动出声:情绪最强、频率天然低,不会变成噪音。
                 // 其余时刻由她自己用 make_sound 决定——理由见 MaidVoice。
                 numen.on(com.dwinovo.numen.api.CompanionEvent.HURT,
-                        h -> MaidVoice.play(h.companion().getUUID(), MaidVoice.HURT));
+                        h -> MaidVoice.onHurt(h.companion().getUUID(), h.source()));
                 numen.on(com.dwinovo.numen.api.CompanionEvent.DEATH,
-                        body -> MaidVoice.play(body.getUUID(), MaidVoice.DEATH));
+                        body -> MaidVoice.onDeath(body.getUUID()));
 
                 modBus.addListener(MaidBody::onAddLayers);
                 NeoForge.EVENT_BUS.addListener(MaidBody::render);
