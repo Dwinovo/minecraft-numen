@@ -1,5 +1,7 @@
 package com.dwinovo.numen.entity;
 
+import com.dwinovo.numen.api.CompanionEvent;
+
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
@@ -279,6 +281,23 @@ public final class NumenPlayer extends ServerPlayer {
      * connection position and let chunk loading follow the body so it never
      * walks out of its loaded area.
      */
+    /**
+     * 挨打。原样交给父类结算,只在真的掉了血之后广播一条 {@code HURT}。
+     *
+     * <p>发在这里而不是 tick 里扫 {@code hurtTime}:扫的话拿不到来源和伤害量
+     * (下一次伤害会盖掉 {@code getLastDamageSource}),而监听者要靠这两样分情况。
+     * 返回 false 表示这次伤害被挡下/免疫了,那不是"受伤",不发。
+     */
+    @Override
+    public boolean hurt(net.minecraft.world.damagesource.DamageSource source, float amount) {
+        boolean took = super.hurt(source, amount);
+        if (took) {
+            CompanionEvents.fire(CompanionEvent.HURT,
+                    new CompanionEvent.Hurt(this, source, amount));
+        }
+        return took;
+    }
+
     /**
      * 死因在这里抄下来——原版广播死亡消息也是在这一刻(清空战斗记录之前)。
      * 抄的是同一句话,所以她知道的和聊天里广播的一字不差。
