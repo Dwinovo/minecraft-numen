@@ -29,8 +29,16 @@ import java.util.Set;
  */
 public final class Ysm {
 
-    /** 玩家 NBT 里 YSM 那块 attachment 的位置。真机 dump 确认过。 */
-    private static final String ATTACHMENTS = "neoforge:attachments";
+    /**
+     * 玩家 NBT 里 YSM 那块数据的位置。
+     *
+     * <p><b>1.20.1 是 Forge,这里必须是 {@code ForgeCaps}</b>:YSM 在这个版本上用的是
+     * Forge 的 Capability({@code addCapability}/{@code getCapability}),序列化后落在
+     * {@code ForgeCaps} 下。NeoForge 的 {@code neoforge:attachments} 是高版本才有的机制,
+     * 这个版本上根本不存在——照搬过来的话读到的是空,授权表跟着空,同伴就一个模型都换不了,
+     * 而报错会说"主人没有授权",把病因指到别处去。
+     */
+    private static final String ATTACHMENTS = "ForgeCaps";
     private static final String MODEL_INFO = "yes_steve_model:model_id";
 
     /**
