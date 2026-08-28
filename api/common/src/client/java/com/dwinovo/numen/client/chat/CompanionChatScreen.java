@@ -84,7 +84,7 @@ public class CompanionChatScreen extends Screen {
     protected void init() {
         // 输入框的真控件挂到本屏上:只注册事件、不进 renderables,画面归 NumenUI。
         // 屏幕作用域——关屏时在 removed() 卸掉。
-        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(this::addWidget);
+        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(this::addWidget, this::setFocused);
         String kept = inputBar != null ? inputBar.text() : "";
         int x = (this.width - INPUT_W) / 2;
         int y = this.height - 44;
@@ -191,7 +191,7 @@ public class CompanionChatScreen extends Screen {
 
     @Override
     public void removed() {
-        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(null);
+        com.dwinovo.numen.client.ui.mc.McTextInput.mountVia(null, null);
         super.removed();
     }
 }
