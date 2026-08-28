@@ -72,13 +72,23 @@ public final class TextField extends Widget {
     }
 
     /**
-     * 把编辑权交给宿主的真控件。绑上之后 {@link #charTyped}/{@link #keyPressed}
-     * 一律不接,让事件落到宿主控件上——那是输入法认得出的那一个。
+     * 加进 {@link UiRoot} 时自动换上宿主的真编辑器。根上没接工厂就保持纯内存模式。
+     *
+     * <p>绑上之后本控件<b>只画不编</b>:{@link #charTyped}/{@link #keyPressed} 一律不接,
+     * 让事件落到宿主控件上——那是输入法认得出的那一个。
      */
-    public TextField boundTo(TextInput input) {
-        this.host = input;
-        if (input != null) input.setText(value.toString());
-        return this;
+    void attachHost(UiRoot r) {
+        var factory = r.inputFactory();
+        if (factory == null || host != null) return;
+        TextInput in = factory.apply(value.toString(), this::fireChangeWith);
+        if (in == null) return;   // 工厂可以拒绝(不在受支持的屏幕里),那就保持纯内存
+        host = in;
+        if (numericOnly) host.setNumericOnly(true);   // 先 numeric() 后 add 的调用点
+    }
+
+    /** 宿主控件改了文本:原样转给本控件的 onChange。 */
+    private void fireChangeWith(String v) {
+        if (onChange != null) onChange.accept(v);
     }
 
     public String value() { return host != null ? host.text() : value.toString(); }
@@ -234,6 +244,7 @@ public final class TextField extends Widget {
      */
     public TextField numeric() {
         this.numericOnly = true;
+        if (host != null) host.setNumericOnly(true);   // 绑定后过滤归宿主,见 TextInput
         return this;
     }
 
