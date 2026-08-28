@@ -601,6 +601,11 @@ public final class NumenScreen extends Screen {
             return uuid == null ? null : NumenScreen.this.loop();
         }
 
+        /** 只注册事件,不进 renderables——画面归 NumenUI。见 {@code McTextInput}。 */
+        @Override public void mountInput(AbstractWidget w) { NumenScreen.this.addWidget(w); }
+
+        @Override public void focusInput(AbstractWidget w) { NumenScreen.this.setFocused(w); }
+
         @Override public void onCommandReply(String reply) {
             showCommandReply(reply);
             chatView.pinToBottom();
