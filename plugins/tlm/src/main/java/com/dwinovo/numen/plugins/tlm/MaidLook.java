@@ -34,15 +34,16 @@ public final class MaidLook {
         sb.append("这套模型盖住了你的整个身体,别的外观(比如 YSM 的模型)在它底下看不见;"
                 + "要露出别的外观,得先用 wear_maid_model 把它脱下来(model 留空)。");
 
-        // 有没有语音必须每轮告诉她:包与包差别很大,有的一条都不带。
-        // 不说的话她只能瞎猜,猜错了还以为主人听见了。
-        var kinds = MakeSoundTool.kindsOf(companion);
-        if (kinds.isEmpty()) {
-            sb.append("这套模型没带语音,make_sound 出不了声,别用。");
-        } else {
-            sb.append("这套模型带语音,你可以用 make_sound 哼一声,能用的 kind 有:")
-              .append(String.join("、", kinds)).append("。");
+        sb.append("</maid_look>");
+
+        // 能发哪些声单开一个标签,不揉进上面那段散文——它是一份可枚举的清单,
+        // 她要照着原样填进 make_sound 的参数里,结构化了才不容易抄错。
+        // 包与包差别很大(有的一条都不带),所以这份清单必须每轮现算,不能写死进工具描述。
+        var voices = MaidVoice.voluntary(companion);
+        if (!voices.isEmpty()) {
+            sb.append("<maid_voice>").append(String.join(" ", voices))
+              .append("</maid_voice>");
         }
-        return sb.append("</maid_look>").toString();
+        return sb.toString();
     }
 }
