@@ -7,7 +7,6 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.fml.ModList;
-import net.minecraftforge.fml.loading.FMLPaths;
 
 import java.nio.file.Path;
 import java.util.function.Consumer;
@@ -37,15 +36,10 @@ public final class Builtin {
         // 注:这个 MC 版本上车万女仆没有按坐标播语音的口,所以那个联动只做模型不做语音。
     }
 
-    /** YSM 联动只写原版;它要的加载器专属的三件事,Forge 的答案在这里。 */
+    /** YSM 联动只写原版;它要的加载器专属的两件事,Forge 的答案在这里。 */
     private static final class YsmOnForge implements YsmHost {
         static void install(Path skills) {
             com.dwinovo.numen.plugins.ysm.NumenYsm.install(new YsmOnForge(), skills);
-        }
-
-        @Override
-        public Path configDir() {
-            return FMLPaths.CONFIGDIR.get();
         }
 
         @Override

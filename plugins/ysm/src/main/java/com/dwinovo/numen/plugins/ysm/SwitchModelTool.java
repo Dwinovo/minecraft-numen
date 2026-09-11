@@ -24,11 +24,9 @@ import java.util.function.Consumer;
 public final class SwitchModelTool implements NumenTool {
 
     private final Ysm ysm;
-    private final YsmCatalog catalog;
 
-    public SwitchModelTool(Ysm ysm, YsmCatalog catalog) {
+    public SwitchModelTool(Ysm ysm) {
         this.ysm = ysm;
-        this.catalog = catalog;
     }
 
     @Override
@@ -45,8 +43,8 @@ public final class SwitchModelTool implements NumenTool {
     @Override
     public Map<String, Object> parameterSchema() {
         return Schema.object()
-                .string("model_id", "模型 id,形如 misc/1_alex 或 default")
-                .optionalString("texture_id", "贴图 id(list_ysm_options 里 textures 那栏);不传就用模型自带的默认贴图")
+                .string("model_id", "模型 id,照 list_ysm_options 清单里的原样传")
+                .optionalString("texture_id", "贴图 id(list_ysm_options 里 textures 那栏);不传就用这个模型贴图清单里的第一张")
                 .build();
     }
 
@@ -63,25 +61,25 @@ public final class SwitchModelTool implements NumenTool {
             reply.accept(TaskResult.fail("身体不在服务端上").toJson());
             return;
         }
-        // 贴图不传就用模型自带的默认——从它的 ysm.json 读,不靠 YSM 的占位符(2.4.1 不认)。
+        String me = companion.getName().getString();
+        // 贴图不传就用 YSM 给这个模型列的第一张——问的是它自己的补全,不猜文件格式
         String texture = args.has("texture_id") ? args.get("texture_id").getAsString() : "";
         if (texture.isBlank()) {
-            if (!catalog.hasModel(model)) {
+            if (!ysm.models(server, me).contains(model)) {
                 reply.accept(TaskResult.fail(
-                        "本机的模型目录里没有 '" + model + "'。用 list_ysm_options 看清单里的 id").toJson());
+                        "YSM 不认 '" + model + "' 这个模型。用 list_ysm_options 看清单里的 id").toJson());
                 return;
             }
-            var textures = catalog.textures(model);
+            var textures = ysm.textures(server, me, model);
             if (textures.isEmpty()) {
                 reply.accept(TaskResult.fail(
-                        "'" + model + "' 的 ysm.json 里没列贴图,定不了默认贴图;传 texture_id 指定一个").toJson());
+                        "YSM 没给 '" + model + "' 列出贴图,定不了默认贴图;传 texture_id 指定一个").toJson());
                 return;
             }
             texture = textures.get(0);
         }
 
-        ysm.setModel(server, companion.getName().getString(),
-                new Ysm.Look(model, texture));
+        ysm.setModel(server, me, new Ysm.Look(model, texture));
 
         // 回读:以身体的实际状态为准,不信命令跑过就是成功了
         var now = ysm.readLook(companion);
