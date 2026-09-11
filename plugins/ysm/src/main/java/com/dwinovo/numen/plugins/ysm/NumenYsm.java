@@ -15,6 +15,8 @@ import java.nio.file.Path;
  * <p>登记方式和第三方插件一字不差:全部经 {@code NumenPlugins.register} 那扇门。
  * 编译期也一样——本模块的类路径上只有瘦 api jar 与原版 MC,引擎内部类与加载器的类
  * 都够不着;加载器各不相同的那几件事由 {@link YsmHost} 带进来。
+ *
+ * <p>对接方式(只走 YSM 的命令,不引用它的类)出自 #37:Dani-732 的兼容补丁先走通了这条路。
  */
 public final class NumenYsm {
 
