@@ -72,4 +72,8 @@ tasks.register('releaseJars', Sync) {
     ['fabric', secondLoader].each { loader ->
         from({ shipped[loader](project(":core:${loader}")) }) { into loader }
     }
+    // Forge 的成品还要过一道 reobf(official 名换成 SRG 名),它原地改写 jarJar 的产物,
+    // 由 build 挂上、不是 jarJar 自己的一步。这里明确等它:只依赖 jarJar 的话,拷走的是
+    // 改写前的开发 jar,线上一调 MC 的方法就 NoSuchMethodError。
+    if (secondLoader == 'forge') dependsOn ':core:forge:reobfJarJar'
 }
