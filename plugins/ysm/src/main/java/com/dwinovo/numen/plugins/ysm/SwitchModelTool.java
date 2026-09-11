@@ -66,10 +66,15 @@ public final class SwitchModelTool implements NumenTool {
         // 贴图不传就用模型自带的默认——从它的 ysm.json 读,不靠 YSM 的占位符(2.4.1 不认)。
         String texture = args.has("texture_id") ? args.get("texture_id").getAsString() : "";
         if (texture.isBlank()) {
+            if (!catalog.hasModel(model)) {
+                reply.accept(TaskResult.fail(
+                        "本机的模型目录里没有 '" + model + "'。用 list_ysm_options 看清单里的 id").toJson());
+                return;
+            }
             var textures = catalog.textures(model);
             if (textures.isEmpty()) {
                 reply.accept(TaskResult.fail(
-                        "本机的模型目录里没有 '" + model + "',定不了它的贴图。用 list_ysm_options 看清单里的 id").toJson());
+                        "'" + model + "' 的 ysm.json 里没列贴图,定不了默认贴图;传 texture_id 指定一个").toJson());
                 return;
             }
             texture = textures.get(0);
