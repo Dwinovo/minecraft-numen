@@ -20,6 +20,11 @@ dependencies {
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get
     // both mods — exactly like including a library mod such as GeckoLib.
     include project(':api:fabric')
+
+    // 内嵌的联动模组。compileOnly:只有 Builtin 那道闸要看见它的 install 入口,
+    // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里。
+    // 只有 YSM:车万女仆没有 Fabric 版。
+    compileOnly project(':plugins:ysm')
 }
 
 loom {
@@ -58,6 +63,14 @@ loom {
 }
 
 sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+// 联动模组的类与资源平铺进发行 jar——它本质是独立模组,只是跟车一起发。
+// 平铺在 jar 这一步,随后 remapJar 把它连同本模块的类一起换成 intermediary 名:
+// 联动对着原版的 Mojang 名编译,与本模块的 named 命名空间是同一套,所以能一起重映射。
+// 目标模组不在时它一个类都不会被加载,见 com.dwinovo.numen.plugins.Builtin。
+tasks.named('jar', Jar) {
+    from({ project(':plugins:ysm').sourceSets.main.output })
+}
 
 // Implement mcgradleconventions loader attribute
 def loaderAttribute = Attribute.of('io.github.mcgradleconventions.loader', String)

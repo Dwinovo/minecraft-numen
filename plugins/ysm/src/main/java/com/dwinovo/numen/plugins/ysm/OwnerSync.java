@@ -28,21 +28,24 @@ public final class OwnerSync {
     /** 对账间隔。权限变化是人手动操作的,几秒的延迟没人感觉得到。 */
     private static final int EVERY_TICKS = 20 * 5;
 
-    private static int counter;
+    private final Ysm ysm;
+    private int counter;
 
-    private OwnerSync() {}
+    public OwnerSync(Ysm ysm) {
+        this.ysm = ysm;
+    }
 
     /**
      * 同伴刚进世界。对账每隔几秒本来也会跑到,但出场那一下要立刻对齐——
      * 否则她带着上一次的授权露面几秒钟。
      */
-    public static void onSpawn(NumenPlayer companion) {
+    public void onSpawn(NumenPlayer companion) {
         MinecraftServer server = companion.level().getServer();
         if (server != null) reconcile(server, companion);
     }
 
     /** 每 tick 调用,内部自己限频。 */
-    public static void tick(MinecraftServer server) {
+    public void tick(MinecraftServer server) {
         if (++counter < EVERY_TICKS) return;
         counter = 0;
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
@@ -50,18 +53,18 @@ public final class OwnerSync {
         }
     }
 
-    private static void reconcile(MinecraftServer server, NumenPlayer companion) {
+    private void reconcile(MinecraftServer server, NumenPlayer companion) {
         UUID ownerUuid = companion.getOwnerUuid();
         if (ownerUuid == null) return;
         ServerPlayer owner = server.getPlayerList().getPlayer(ownerUuid);
         if (owner == null) return;                 // 主人不在线,没有可跟随的状态
 
-        Set<String> want = Ysm.readAuthorized(owner);
-        Set<String> have = Ysm.readAuthorized(companion);
+        Set<String> want = ysm.readAuthorized(owner);
+        Set<String> have = ysm.readAuthorized(companion);
         if (want.equals(have)) return;
 
         String me = companion.getName().getString();
-        Ysm.authClear(server, me);
-        for (String model : want) Ysm.authAdd(server, me, model);
+        ysm.authClear(server, me);
+        for (String model : want) ysm.authAdd(server, me, model);
     }
 }

@@ -3,12 +3,10 @@ plugins {
     id 'numen-plugin'
 }
 
+// 车万女仆在这个 MC 版本上只有 Forge 版,本联动直接用 Forge 的事件(玩家渲染、客户端 tick),
+// 编译对着 Forge。Fabric 上装不上车万女仆,那边没有这个联动,也不需要有。
 minecraft {
     mappings channel: 'official', version: minecraft_version
-}
-
-dependencies {
-    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
 }
 
 repositories {
@@ -19,5 +17,9 @@ repositories {
 }
 
 dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // 瘦 api jar 取 Forge 那份:本联动本来就只跑在 Forge 上
+    compileOnly files(project(':api:forge').tasks.named('apiJar'))
+    // 运行时由玩家自己装的那份提供;本模块不携带它一个字节,也不带任何模型/贴图/音频。
     compileOnly "maven.modrinth:touhou-little-maid:${tlm_version}"
 }
