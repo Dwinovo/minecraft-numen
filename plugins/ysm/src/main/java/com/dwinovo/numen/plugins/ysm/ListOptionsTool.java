@@ -7,6 +7,7 @@ import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -20,11 +21,9 @@ import java.util.function.Consumer;
 public final class ListOptionsTool implements NumenTool {
 
     private final Ysm ysm;
-    private final YsmCatalog catalog;
 
-    public ListOptionsTool(Ysm ysm, YsmCatalog catalog) {
+    public ListOptionsTool(Ysm ysm) {
         this.ysm = ysm;
-        this.catalog = catalog;
     }
 
     @Override
@@ -34,7 +33,7 @@ public final class ListOptionsTool implements NumenTool {
 
     @Override
     public String description() {
-        return "看自己现在穿的模型与贴图、能换的模型清单、当前模型自带的贴图与能做的动作。";
+        return "看自己现在穿的模型与贴图、能换的模型清单、当前模型的贴图与能做的动作。";
     }
 
     @Override
@@ -45,16 +44,22 @@ public final class ListOptionsTool implements NumenTool {
     @Override
     public void onServerCall(String toolCallId, JsonObject args,
                              NumenPlayer companion, Consumer<String> reply) {
+        var server = companion.level().getServer();
+        if (server == null) {
+            reply.accept(TaskResult.fail("身体不在服务端上").toJson());
+            return;
+        }
+        String me = companion.getName().getString();
         var look = ysm.readLook(companion);
-        var models = catalog.models();
-        var textures = look == null ? java.util.List.<String>of() : catalog.textures(look.model());
-        var emotes = catalog.emotesFor(look);
+        var models = ysm.models(server, me);
+        var textures = look == null ? List.<String>of() : ysm.textures(server, me, look.model());
+        var emotes = ysm.emotes(server, me);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("current_model", look == null ? "(读不到,YSM 可能没装)" : look.model());
         data.put("current_texture", look == null ? "" : look.texture());
         data.put("available_models", models);
-        data.put("textures", textures);   // 当前模型自带的贴图 id,switch_model 的 texture_id 从这里挑
+        data.put("textures", textures);   // 当前模型的贴图 id,switch_model 的 texture_id 从这里挑
         data.put("emotes", emotes);
 
         String summary = look == null

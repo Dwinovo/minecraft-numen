@@ -1,11 +1,16 @@
 package com.dwinovo.numen.plugins.ysm;
 
+import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.ParseResults;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.suggestion.Suggestion;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -16,12 +21,16 @@ import java.util.Set;
  * {@code com.elfmcys.yesstevemodel.O0o0Oo0Oo0Ooo0oO000o0OOO},下一个版本就换名字。
  * 引用它等于把本插件绑死在某一个 YSM 版本上。
  *
- * <p>这里只用两样混淆改不动的东西:
+ * <p>这里只用三样混淆改不动的东西:
  * <ul>
  *   <li><b>命令</b>——{@code ysm model set} / {@code ysm play} / {@code ysm auth} 是 YSM
  *       对外的公开面,三个加载器上一字不差,而且目标参数用的是原版的
  *       {@code EntityArgument.players()},所以同伴(服务端假玩家)在玩家列表里就打得中。
  *       已在 1.21.1 + YSM 2.6.5 真机验过。</li>
+ *   <li><b>命令补全</b>——有哪些模型、某个模型有哪些贴图、当前模型有哪些动作,都问命令树的
+ *       补全({@code ysm model set <玩家> <Tab>})。这是 YSM 自己维护的清单:目录里的、
+ *       {@code .ysm} 打包的、zip 里的模型全在,格式和目录规则一概不用我们认,
+ *       2.4.1 与 2.6.5 都挂了补全提供者。</li>
  *   <li><b>NBT 键名</b>——它们是源码里的字符串字面量,混淆器不改字符串。存在哪一层
  *       随加载器而异,见 {@link Storage}。</li>
  * </ul>
@@ -73,7 +82,7 @@ public final class Ysm {
         this.storage = storage;
     }
 
-    // ---- 读:玩家现在穿什么 ----
+    // ---- 读:玩家现在穿什么(NBT) ----
 
     /**
      * 一个玩家当前的模型与贴图;YSM 没给这个玩家写过时返回 null。
@@ -116,15 +125,50 @@ public final class Ysm {
         }
     }
 
+    // ---- 读:YSM 认哪些 id(命令补全) ----
+
+    /** YSM 认的全部模型 id。 */
+    public List<String> models(MinecraftServer server, String playerName) {
+        return suggestions(server, "ysm model set " + arg(playerName) + " ");
+    }
+
+    /**
+     * 某个模型的贴图 id。补全按字母排,第一张未必是作者在模型里定的默认;
+     * YSM 认 {@code -}(用默认贴图)的版本会把它也列出来,它排在最前。
+     */
+    public List<String> textures(MinecraftServer server, String playerName, String model) {
+        return suggestions(server, "ysm model set " + arg(playerName) + " " + arg(model) + " ");
+    }
+
+    /** 一个玩家现在这身模型能做的动作名。 */
+    public List<String> emotes(MinecraftServer server, String playerName) {
+        return suggestions(server, "ysm play " + arg(playerName) + " ");
+    }
+
+    /** 命令行敲到这里、按 Tab 会列出什么。补全提供者是同步的,在服务端线程上直接取。 */
+    private static List<String> suggestions(MinecraftServer server, String input) {
+        CommandDispatcher<CommandSourceStack> dispatcher = server.getCommands().getDispatcher();
+        ParseResults<CommandSourceStack> parse = dispatcher.parse(input, source(server));
+        return dispatcher.getCompletionSuggestions(parse).join().getList().stream()
+                .map(Suggestion::getText).map(Ysm::unquote).toList();
+    }
+
+    /** 补全给的是命令行里的写法,带空格的 id 会带引号;还原成 id 本身。 */
+    private static String unquote(String token) {
+        if (token.length() >= 2 && token.startsWith("\"") && token.endsWith("\"")) {
+            return token.substring(1, token.length() - 1).replace("\\\"", "\"").replace("\\\\", "\\");
+        }
+        return token;
+    }
+
     // ---- 写:走命令 ----
 
     /**
      * 给一个玩家换模型。<b>刻意不传 ignore_auth</b>——省略时 YSM 默认按授权检查,
      * 同伴要不到主人没有的模型是 YSM 在拦,不是本插件写 if 拦。
      *
-     * <p>贴图必须是真实的贴图 id({@link YsmCatalog#textures}),这里不替调用方补占位符:
-     * YSM 2.6.5 起认 {@code -} 为"用默认贴图",2.4.1 却把它当贴图名原样存下,模型渲染成
-     * 紫黑格——1.21 只有 2.4.1 可用,真机撞见过。
+     * <p>贴图由调用方从 {@link #textures} 里挑好再传,这里不补占位符:{@code -} 只有 2.6 起
+     * 才认,2.4.1 会把它当贴图名原样存下、模型渲染成紫黑格——1.21 只有 2.4.1 可用,真机撞见过。
      */
     public void setModel(MinecraftServer server, String playerName, Look look) {
         run(server, "ysm model set " + arg(playerName) + " " + arg(look.model()) + " " + arg(look.texture()));
@@ -146,15 +190,18 @@ public final class Ysm {
         run(server, "ysm auth " + arg(playerName) + " add " + arg(modelId));
     }
 
-    /**
-     * YSM 的命令要权限等级 2。这里用最高权限的服务器源执行:调用方是插件而不是玩家,
-     * 越权与否已经在上层按"主人的授权集合"判过了。
-     */
     private static void run(MinecraftServer server, String command) {
-        server.getCommands().performPrefixedCommand(
-                server.createCommandSourceStack().withPermission(
-                        // 26.x 起权限从整数等级换成了 PermissionSet;OWNER 对应原来的 4
-                        net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER), command);
+        server.getCommands().performPrefixedCommand(source(server), command);
+    }
+
+    /**
+     * YSM 的命令要权限等级 2。这里用最高权限的服务器源:调用方是插件而不是玩家,
+     * 越权与否已经在上层按"主人的授权集合"判过了。补全也用它,否则权限不够的节点不会被列出。
+     */
+    private static CommandSourceStack source(MinecraftServer server) {
+        // 26.x 起权限从整数等级换成了 PermissionSet;OWNER 对应原来的 4
+        return server.createCommandSourceStack().withPermission(
+                net.minecraft.server.permissions.LevelBasedPermissionSet.OWNER);
     }
 
     /** 模型 id 带斜杠(misc/1_alex),名字可能带空格——交给 Brigadier 自己决定要不要加引号。 */

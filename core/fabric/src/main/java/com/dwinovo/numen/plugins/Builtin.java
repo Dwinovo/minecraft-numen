@@ -33,15 +33,10 @@ public final class Builtin {
         gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnFabric.install(skills));
     }
 
-    /** YSM 联动只写原版;它要的加载器专属的三件事,Fabric 的答案在这里。 */
+    /** YSM 联动只写原版;它要的加载器专属的两件事,Fabric 的答案在这里。 */
     private static final class YsmOnFabric implements YsmHost {
         static void install(Path skills) {
             com.dwinovo.numen.plugins.ysm.NumenYsm.install(new YsmOnFabric(), skills);
-        }
-
-        @Override
-        public Path configDir() {
-            return FabricLoader.getInstance().getConfigDir();
         }
 
         @Override

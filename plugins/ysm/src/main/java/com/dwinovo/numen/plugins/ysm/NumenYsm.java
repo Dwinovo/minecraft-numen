@@ -25,13 +25,12 @@ public final class NumenYsm {
     /** 由宿主加载器的 {@code Builtin} 在确认 YSM 在场后调用。 */
     public static void install(YsmHost host, Path skillsRoot) {
         Ysm ysm = new Ysm(host.storage());
-        YsmCatalog catalog = new YsmCatalog(host.configDir());
         OwnerSync sync = new OwnerSync(ysm);
 
         NumenPlugins.register(numen -> {
-            numen.registerTool(new ListOptionsTool(ysm, catalog));
-            numen.registerTool(new SwitchModelTool(ysm, catalog));
-            numen.registerTool(new PlayEmoteTool(ysm, catalog));
+            numen.registerTool(new ListOptionsTool(ysm));
+            numen.registerTool(new SwitchModelTool(ysm));
+            numen.registerTool(new PlayEmoteTool(ysm));
 
             if (skillsRoot != null) numen.bundleSkills(skillsRoot);
 
