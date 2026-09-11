@@ -67,9 +67,6 @@ public final class Ysm {
     private static final String KEY_MODEL = "model_id";
     private static final String KEY_TEXTURE = "select_texture";
 
-    /** 没有贴图时 YSM 认这个占位符。 */
-    public static final String NO_TEXTURE = "-";
-
     private final Storage storage;
 
     public Ysm(Storage storage) {
@@ -91,7 +88,7 @@ public final class Ysm {
         if (info.isEmpty()) return null;
         String model = info.get().getString(KEY_MODEL).orElse("");
         return model.isEmpty() ? null
-                : new Look(model, info.get().getString(KEY_TEXTURE).orElse(NO_TEXTURE));
+                : new Look(model, info.get().getString(KEY_TEXTURE).orElse(""));
     }
 
     /** 一个玩家被授权的模型集合。读不到就是空集——空集意味着"什么都不镜像",不是"放行一切"。 */
@@ -124,10 +121,13 @@ public final class Ysm {
     /**
      * 给一个玩家换模型。<b>刻意不传 ignore_auth</b>——省略时 YSM 默认按授权检查,
      * 同伴要不到主人没有的模型是 YSM 在拦,不是本插件写 if 拦。
+     *
+     * <p>贴图必须是真实的贴图 id({@link YsmCatalog#textures}),这里不替调用方补占位符:
+     * YSM 2.6.5 起认 {@code -} 为"用默认贴图",2.4.1 却把它当贴图名原样存下,模型渲染成
+     * 紫黑格——1.21 只有 2.4.1 可用,真机撞见过。
      */
     public void setModel(MinecraftServer server, String playerName, Look look) {
-        String texture = (look.texture() == null || look.texture().isBlank()) ? NO_TEXTURE : look.texture();
-        run(server, "ysm model set " + arg(playerName) + " " + arg(look.model()) + " " + arg(texture));
+        run(server, "ysm model set " + arg(playerName) + " " + arg(look.model()) + " " + arg(look.texture()));
     }
 
     public void playAnimation(MinecraftServer server, String playerName, String animation) {

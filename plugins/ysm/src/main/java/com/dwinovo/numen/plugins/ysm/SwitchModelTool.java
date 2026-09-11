@@ -24,9 +24,11 @@ import java.util.function.Consumer;
 public final class SwitchModelTool implements NumenTool {
 
     private final Ysm ysm;
+    private final YsmCatalog catalog;
 
-    public SwitchModelTool(Ysm ysm) {
+    public SwitchModelTool(Ysm ysm, YsmCatalog catalog) {
         this.ysm = ysm;
+        this.catalog = catalog;
     }
 
     @Override
@@ -44,7 +46,7 @@ public final class SwitchModelTool implements NumenTool {
     public Map<String, Object> parameterSchema() {
         return Schema.object()
                 .string("model_id", "模型 id,形如 misc/1_alex 或 default")
-                .optionalString("texture_id", "贴图 id;不传就用模型自带的默认贴图")
+                .optionalString("texture_id", "贴图 id(list_ysm_options 里 textures 那栏);不传就用模型自带的默认贴图")
                 .build();
     }
 
@@ -61,7 +63,17 @@ public final class SwitchModelTool implements NumenTool {
             reply.accept(TaskResult.fail("身体不在服务端上").toJson());
             return;
         }
-        String texture = args.has("texture_id") ? args.get("texture_id").getAsString() : null;
+        // 贴图不传就用模型自带的默认——从它的 ysm.json 读,不靠 YSM 的占位符(2.4.1 不认)。
+        String texture = args.has("texture_id") ? args.get("texture_id").getAsString() : "";
+        if (texture.isBlank()) {
+            var textures = catalog.textures(model);
+            if (textures.isEmpty()) {
+                reply.accept(TaskResult.fail(
+                        "本机的模型目录里没有 '" + model + "',定不了它的贴图。用 list_ysm_options 看清单里的 id").toJson());
+                return;
+            }
+            texture = textures.get(0);
+        }
 
         ysm.setModel(server, companion.getName().getString(),
                 new Ysm.Look(model, texture));
