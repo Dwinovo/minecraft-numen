@@ -12,8 +12,7 @@ import java.util.function.Consumer;
 /**
  * 让同伴做一个动作。
  *
- * <p>动作名不写死在这里:每个模型自带一套,清单由 {@link YsmCatalog} 从 YSM 的模型
- * 目录读出来,跟着玩家装了什么模型走。
+ * <p>动作名不写死在这里:每个模型自带一套,清单问 YSM 自己的命令补全,跟着同伴现在穿的模型走。
  *
  * <p><b>音效不用我们管。</b> 模型作者可以把音效接在动画上(动画 JSON 里的
  * {@code sound_effects}),YSM 播动画时一并放。真机验过:同伴是服务端假玩家,
@@ -24,11 +23,9 @@ public final class PlayEmoteTool implements NumenTool {
     private static final String STOP = "stop";
 
     private final Ysm ysm;
-    private final YsmCatalog catalog;
 
-    public PlayEmoteTool(Ysm ysm, YsmCatalog catalog) {
+    public PlayEmoteTool(Ysm ysm) {
         this.ysm = ysm;
-        this.catalog = catalog;
     }
 
     @Override
@@ -70,7 +67,7 @@ public final class PlayEmoteTool implements NumenTool {
         }
         // YSM 的 play 命令是静默的:动作名不存在时它既不报错也不回执,所以先自己核一遍,
         // 否则模型会以为做了、其实什么都没发生。
-        var known = catalog.emotesFor(ysm.readLook(companion));
+        var known = ysm.emotes(server, me);
         if (!known.isEmpty() && !known.contains(animation)) {
             reply.accept(TaskResult.fail(
                     "当前模型没有 '" + animation + "' 这个动作,用 list_ysm_options 看有哪些").toJson());
