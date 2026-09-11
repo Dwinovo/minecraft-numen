@@ -12,7 +12,7 @@
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.1.2-A8731E?style=flat-square)
+![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.21.1%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
 
 [**这是什么**](#这是什么) · [**公共 API**](#公共-api) · [**如何依赖**](#如何依赖) · [**构建与发布**](#构建与发布) · [**生态**](#生态) · [**授权**](#授权)
 
@@ -142,14 +142,14 @@ repositories {
 dependencies {
     // Fabric：瘦 jar 与主 jar 一样是 intermediary 命名，用 modCompileOnly
     // 让 Loom 映射到你自己的命名——yarn 和 mojmap 都能用
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>:api"
 
     // NeoForge / Forge：运行期命名就是 Mojang 命名，直接 compileOnly
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.1.2:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:<version>:api"
 }
 ```
 
-按你的目标替换加载器（`fabric` / `forge` / `neoforge`）和 Minecraft 版本。本分支基于 Java 21 构建 `1.21.1`。
+按你的目标替换加载器（`fabric` / `forge` / `neoforge`）和 Minecraft 版本。`<version>` 填顶上徽章显示的最新版本。本分支基于 Java 21 构建 `1.21.1`。
 
 `numen-ai`（模型接入与用量核算）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。它们的坐标同样带 MC 版本后缀：代码本身与 Minecraft 无关，但各版本分支上的这份源码目前并不相同。
 
@@ -158,10 +158,10 @@ dependencies {
 ```gradle
 dependencies {
     // Fabric
-    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:0.1.2"
+    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:<version>"
 
     // NeoForge / Forge（没有 modImplementation 这个关键字，那是 Loom 的）
-    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
+    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:<version>"
 }
 ```
 
@@ -179,22 +179,22 @@ core 会把对应的 `numen-api-*` 一并带出来，不用另写一行——引
 ./gradlew build         # 构建每个加载器
 ./gradlew datagenAll    # 跑齐两家、两个 loader 的数据生成
 ./gradlew publishAll    # 发 api + core + ai + ui 的全部制品
+./gradlew releaseJars   # 把每个 loader 发给玩家的 jar 收进 build/release/<loader>/
 ```
 
-发布目标由 `gradle.properties` 的 `local_maven_url` 决定，`-Plocal_maven_url=...` 可覆盖。`datagenAll` / `publishAll` 会自己按分支挑第二个 loader（Forge 还是 NeoForge），调用方不必知道。
+发布目标由 `gradle.properties` 的 `local_maven_url` 决定，默认是仓内的 `build/local-maven`——平时调试就发到这里；`-Plocal_maven_url=...` 可覆盖。`datagenAll` / `publishAll` / `releaseJars` 会自己按分支挑第二个 loader（Forge 还是 NeoForge），调用方不必知道。
 
 发布物按坐标分三类：完整 jar（运行时用，由 Numen mod 打包携带）、classifier 为 `api` 的精简 jar（插件 `compileOnly` 用），以及 sources / javadoc。
 
-**版本号全树锁步**，唯一出处是 `gradle.properties` 的 `version`——api、core、ai、ui 共用一个号。所以"哪个 api 配哪个模组"不成问题：模组 0.1.3 就配 api 0.1.3。文档里的坐标由发版脚本机械刷新，不是第二个出处。
+**版本号全树锁步**，唯一出处是 `gradle.properties` 的 `version`——api、core、ai、ui 共用一个号，游戏里显示的也是它。所以"哪个 api 配哪个模组"不成问题：模组 0.1.3 就配 api 0.1.3。文档里不写具体版本号：坐标写成 `<version>`，顶上的徽章直接读 numen-maven。
 
-**发版走一条命令**：
+**发版在 GitHub 上点一下**：Actions → Publish → Run workflow，选分支（就是 MC 版本）和渠道（beta / release）。命令行等价于：
 
 ```bash
-scripts/release.sh 0.1.3            # 全部版本分支，beta
-scripts/release.sh 0.1.3 --dry-run  # 只看要做什么
+gh workflow run publish.yml --ref 1.21.1 -f channel=beta
 ```
 
-它先在每条分支上改版本号并推送，**等 13 条 CI 全绿之后**才打 tag——tag 触发发布流水线。顺序是有意的：把不可逆的那步（jar 上架 CurseForge，撤回要人工去后台删）排在判据之后。tag 与 `gradle.properties` 对不上时 `scripts/check-tag.sh` 会让发布失败。
+一次运行把两头发完：构建一次；制品推到 numen-maven 给开发者，打上 `v<版本>-<MC>[-beta]` 的 tag 把这个版本钉在这个提交上；jar 传到 Modrinth 和 CurseForge 给玩家；最后建 GitHub Release。更新日志取上一个版本以来的 `feat` / `fix` 提交。这个版本在这个 MC 上发过、或者这个提交的 Build 不是绿的，都会在动手之前停下。中途失败就在那次运行上点 Re-run failed jobs，只重跑失败的那几路。
 
 ---
 

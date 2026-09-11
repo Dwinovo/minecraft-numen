@@ -130,7 +130,7 @@ The engine (`api/`) lives in this repository under `api/`, and is still publishe
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2:api" }
+dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>:api" }
 ```
 
 The line differs per loader, and changing engine mechanics means depending on core instead — see [api/README_EN](api/README_EN.md#depend-on-it).

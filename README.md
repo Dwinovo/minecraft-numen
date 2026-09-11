@@ -130,7 +130,7 @@ Numen 出厂的每一个工具、每一篇技能，全部只用公共 API 写成
 
 ```gradle
 repositories { maven { url = 'https://raw.githubusercontent.com/Dwinovo/numen-maven/main' } }
-dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2:api" }
+dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>:api" }
 ```
 
 加载器不同写法不同，要改引擎机制则改依赖 core——详见 [api/README](api/README.md#如何依赖)。

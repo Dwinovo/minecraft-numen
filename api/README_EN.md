@@ -12,7 +12,7 @@
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.1.2-A8731E?style=flat-square)
+![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.21.1%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
 
 [**What it is**](#what-it-is) · [**Public API**](#public-api) · [**Depend on it**](#depend-on-it) · [**Build & publish**](#build--publish) · [**Ecosystem**](#ecosystem) · [**License**](#license)
 
@@ -142,14 +142,14 @@ repositories {
 dependencies {
     // Fabric: the slim jar carries intermediary names, same as the full jar. Use
     // modCompileOnly so Loom maps it into your own namespace — yarn or mojmap.
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:0.1.2:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<version>:api"
 
     // NeoForge / Forge: runtime names are Mojang names, so plain compileOnly works.
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:0.1.2:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.1:<version>:api"
 }
 ```
 
-Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. This branch builds `1.21.1` on Java 21.
+Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. Use the latest version from the badge at the top for `<version>`. This branch builds `1.21.1` on Java 21.
 
 `numen-ai` (model access and usage accounting) and `numen-ui` (widgets) come along transitively — `IToolSpec`, which `NumenTool` extends, lives in `numen-ai`, so without it your tool will not compile. Their coordinates carry the MC-version suffix too: the code itself has nothing to do with Minecraft, but the copy on each version branch is not currently the same.
 
@@ -158,10 +158,10 @@ Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match
 ```gradle
 dependencies {
     // Fabric
-    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:0.1.2"
+    modImplementation "com.dwinovo.numen:numen-fabric-1.21.1:<version>"
 
     // NeoForge / Forge (there is no modImplementation there — that's a Loom keyword)
-    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:0.1.2"
+    // implementation "com.dwinovo.numen:numen-neoforge-1.21.1:<version>"
 }
 ```
 
@@ -179,22 +179,22 @@ Standard MultiLoader-Template layout (`common` + per-loader subprojects).
 ./gradlew build         # build every loader
 ./gradlew datagenAll    # run data generation for both families, both loaders
 ./gradlew publishAll    # publish api + core + ai + ui
+./gradlew releaseJars   # collect the jar each loader ships to players into build/release/<loader>/
 ```
 
-The target repo comes from `local_maven_url` in `gradle.properties`; override with `-Plocal_maven_url=...`. `datagenAll` / `publishAll` pick the branch's second loader (Forge or NeoForge) themselves — callers never need to know which.
+The target repo comes from `local_maven_url` in `gradle.properties`, which defaults to the in-repo `build/local-maven` — that is where day-to-day debugging publishes; override with `-Plocal_maven_url=...`. `datagenAll` / `publishAll` / `releaseJars` pick the branch's second loader (Forge or NeoForge) themselves — callers never need to know which.
 
 Artifacts fall into three kinds: the full jar (runtime, bundled by the Numen mod), the slim `api`-classifier jar (what addons `compileOnly`), and sources / javadoc.
 
-**Versions are locked in step across the tree**, with a single source: `version` in `gradle.properties`. api, core, ai and ui all share it, so "which api goes with which mod" never comes up — mod 0.1.3 takes api 0.1.3. Coordinates in the docs are rewritten mechanically by the release script; they are not a second source.
+**Versions are locked in step across the tree**, with a single source: `version` in `gradle.properties`. api, core, ai and ui all share it, so "which api goes with which mod" never comes up — mod 0.1.3 takes api 0.1.3, and it is also the version shown in game. The docs carry no concrete version: coordinates say `<version>`, and the badge at the top reads numen-maven directly.
 
-**Releasing is one command:**
+**Releasing is one click on GitHub:** Actions → Publish → Run workflow, pick the branch (that is, the MC version) and the channel (beta / release). From the command line:
 
 ```bash
-scripts/release.sh 0.1.3            # every version branch, beta
-scripts/release.sh 0.1.3 --dry-run  # show what it would do
+gh workflow run publish.yml --ref 1.21.1 -f channel=beta
 ```
 
-It bumps and pushes each branch first, and only tags **once CI is green on all 13** — the tag is what triggers publishing. That order is deliberate: the irreversible step (a jar landing on CurseForge, which takes manual deletion to undo) comes after the evidence. `scripts/check-tag.sh` fails the publish if a tag disagrees with `gradle.properties`.
+One run covers both audiences: it builds once; pushes the artifacts to numen-maven for developers and tags `v<version>-<mc>[-beta]` to pin that version to this commit; uploads the jars to Modrinth and CurseForge for players; and finally creates the GitHub Release. The changelog is the `feat` / `fix` commits since the previous version. If this version was already released on this MC, or this commit's Build is not green, it stops before touching anything. If something fails halfway, use Re-run failed jobs on that run — only the failed parts run again.
 
 ---
 
