@@ -1,5 +1,9 @@
 plugins { id 'numen-plugin' }
 
+// 车万女仆只有 Forge / NeoForge 版,本联动直接用 NeoForge 的事件(玩家渲染、客户端 tick),
+// 编译对着 NeoForge。Fabric 上装不上车万女仆,那边没有这个联动,也不需要有。
+neoForge { version = neoforge_version }
+
 repositories {
     // 车万女仆发在 Modrinth;代码部分 MIT,不混淆,所以可以直接编译依赖拿真模型对象。
     exclusiveContent {
@@ -9,6 +13,8 @@ repositories {
 }
 
 dependencies {
+    // 瘦 api jar 取 NeoForge 那份:本联动本来就只跑在 NeoForge 上
+    compileOnly files(project(':api:neoforge').tasks.named('apiJar'))
     // 运行时由玩家自己装的那份提供;本模块不携带它一个字节,也不带任何模型/贴图/音频。
     compileOnly "maven.modrinth:touhou-little-maid:${tlm_version}"
 }
