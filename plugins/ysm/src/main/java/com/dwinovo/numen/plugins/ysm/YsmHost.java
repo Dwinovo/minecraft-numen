@@ -2,7 +2,6 @@ package com.dwinovo.numen.plugins.ysm;
 
 import net.minecraft.server.MinecraftServer;
 
-import java.nio.file.Path;
 import java.util.function.Consumer;
 
 /**
@@ -14,9 +13,6 @@ import java.util.function.Consumer;
  * Fabric / Forge / NeoForge 上跑,不必按加载器各写一份。
  */
 public interface YsmHost {
-
-    /** 加载器的 {@code config/} 根;YSM 的模型目录 {@code config/yes_steve_model/} 在它底下。 */
-    Path configDir();
 
     /** 每个服务端 tick 结束时回调。 */
     void onServerTick(Consumer<MinecraftServer> listener);
