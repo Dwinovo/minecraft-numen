@@ -25,41 +25,51 @@ allprojects { ext.mod_id = 'numen' }
     }
 }
 
-/**
- * 数据生成的统一入口。<b>CI 只认这一个任务名</b>——各分支的第二 loader 不同
- * (Forge 用 ForgeGradle 的 {@code Data},NeoForge 用 moddev 的 {@code runData}),
- * 但那是构建自己的事,不该让每个工作流各写一遍探测:写两遍就会有一天只改对一遍
- * (发版流水线曾经因此在 Forge 分支上整步炸掉)。
- */
+// 本分支的第二个 loader。Fabric 每条分支都有,另一个是 NeoForge 还是 Forge 由分支决定,
+// 下面三个入口都按它挑。<b>CI 只认这几个任务名</b>,不做探测:同一个判断写两遍,
+// 迟早只改对一遍。
+def secondLoader = findProject(':core:neoforge') != null ? 'neoforge' : 'forge'
+
+/** 数据生成的统一入口。 */
 tasks.register('datagenAll') {
     group = 'build'
     description = '跑齐 api 与 core 两家、本分支两个 loader 的数据生成'
     ['api', 'core'].each { family ->
-        // Fabric 两家都有;第二 loader 按分支而异,存在才挂
         dependsOn ":${family}:fabric:runDatagen"
-        if (findProject(":${family}:neoforge") != null) {
-            dependsOn ":${family}:neoforge:runData"
-        } else if (findProject(":${family}:forge") != null) {
-            dependsOn ":${family}:forge:Data"
-        }
+        // NeoForge 是 moddev 的 runData,Forge 是 ForgeGradle 的 Data
+        dependsOn ":${family}:${secondLoader}:${secondLoader == 'neoforge' ? 'runData' : 'Data'}"
     }
 }
 
-/** 发布制品的统一入口。同 {@link datagenAll}:挑哪个 loader 归构建自己管。 */
+/** 发布制品的统一入口:api 与 core 两家、本分支两个 loader,外加 ai/ui。 */
 tasks.register('publishAll') {
     group = 'publishing'
-    description = '把 api 与 core 两家、本分支两个 loader 的制品发到 numen-maven'
+    description = '把 api 与 core 两家、本分支两个 loader 的制品发到 local_maven_url'
     // ai/ui 也带分支后缀:代码与 MC 版本无关,但各分支上的这份源码目前不同,
     // 共用坐标会变成十三条分支互相覆盖(详见 ai/build.gradle 的 artifactId)。
     dependsOn ':ai:publish'
     dependsOn ':ui:publish'
     ['api', 'core'].each { family ->
-        dependsOn ":${family}:common:publish"
-        dependsOn ":${family}:fabric:publish"
-        if (findProject(":${family}:neoforge") != null) {
-            dependsOn ":${family}:neoforge:publish"
-        } else if (findProject(":${family}:forge") != null) {
-            dependsOn ":${family}:forge:publish"
-        }
+        ['common', 'fabric', secondLoader].each { dependsOn ":${family}:${it}:publish" }
+    }
+}
+
+/**
+ * 发给玩家的 jar,一个 loader 一个,收进 build/release/<loader>/。发布流水线只从这里拿:
+ * build/libs 里还躺着 sources、javadoc,Forge 另有一个没内嵌引擎的瘦 jar,哪个是成品只有构建知道。
+ */
+tasks.register('releaseJars', Sync) {
+    group = 'build'
+    description = '把本分支每个 loader 发给玩家的那个 jar 收进 build/release/<loader>/'
+    into layout.buildDirectory.dir('release')
+    // 成品出自哪个任务:Loom 要重映射时是 remapJar(26.1+ 原生 Mojang 名,没有这一步,就是 jar);
+    // moddev 把内嵌的引擎直接打进 jar;ForgeGradle 的 jarJar 另出一个 -all,内嵌引擎的是它。
+    def shipped = [
+        fabric  : { p -> p.tasks.findByName('remapJar') ?: p.tasks.getByName('jar') },
+        neoforge: { p -> p.tasks.getByName('jar') },
+        forge   : { p -> p.tasks.getByName('jarJar') },
+    ]
+    ['fabric', secondLoader].each { loader ->
+        from({ shipped[loader](project(":core:${loader}")) }) { into loader }
     }
 }
