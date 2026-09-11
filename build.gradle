@@ -57,11 +57,29 @@ tasks.register('publishAll') {
 /**
  * 发给玩家的 jar,一个 loader 一个,收进 build/release/<loader>/。发布流水线只从这里拿:
  * build/libs 里还躺着 sources、javadoc,Forge 另有一个没内嵌引擎的瘦 jar,哪个是成品只有构建知道。
+ *
+ * <p><b>先 {@code ./gradlew datagenAll},再 {@code ./gradlew releaseJars},分两次调用。</b>
+ * 生成资源(api 的语言文件、core 的方块标签)要起一遍游戏才有,而起游戏本身就要先有
+ * processResources 的产物——同一次调用里没法让 processResources 在生成之后再跑一遍,
+ * 所以两步只能分开。下面那道检查把"忘了跑"从静默坏包(进游戏全是翻译键、保护标签为空)
+ * 变成当场失败;它只认"有没有生成过",不认"生成得新不新",发版流水线每次都重新生成。
  */
 tasks.register('releaseJars', Sync) {
     group = 'build'
     description = '把本分支每个 loader 发给玩家的那个 jar 收进 build/release/<loader>/'
     into layout.buildDirectory.dir('release')
+    doFirst {
+        ['api', 'core'].each { family ->
+            ['fabric', secondLoader].each { loader ->
+                def dir = project(":${family}:${loader}").file('src/generated/resources')
+                def generated = dir.isDirectory() ? fileTree(dir) { exclude '.cache/**' }.files : []
+                if (generated.isEmpty()) {
+                    throw new GradleException("${family}/${loader} 没有生成资源(${dir}):" +
+                            "成品会缺语言文件/方块标签。先跑 ./gradlew datagenAll,再跑 releaseJars")
+                }
+            }
+        }
+    }
     // 成品出自哪个任务:Loom 要重映射时是 remapJar(26.1+ 原生 Mojang 名,没有这一步,就是 jar);
     // moddev 把内嵌的引擎直接打进 jar;ForgeGradle 的 jarJar 另出一个 -all,内嵌引擎的是它。
     def shipped = [
