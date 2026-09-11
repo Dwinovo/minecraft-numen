@@ -23,6 +23,14 @@ public final class PlayEmoteTool implements NumenTool {
 
     private static final String STOP = "stop";
 
+    private final Ysm ysm;
+    private final YsmCatalog catalog;
+
+    public PlayEmoteTool(Ysm ysm, YsmCatalog catalog) {
+        this.ysm = ysm;
+        this.catalog = catalog;
+    }
+
     @Override
     public String name() {
         return "play_emote";
@@ -56,19 +64,19 @@ public final class PlayEmoteTool implements NumenTool {
         }
         String me = companion.getName().getString();
         if (STOP.equalsIgnoreCase(animation)) {
-            Ysm.stopAnimation(server, me);
+            ysm.stopAnimation(server, me);
             reply.accept(TaskResult.ok("停下了").toJson());
             return;
         }
         // YSM 的 play 命令是静默的:动作名不存在时它既不报错也不回执,所以先自己核一遍,
         // 否则模型会以为做了、其实什么都没发生。
-        var known = YsmCatalog.emotesFor(Ysm.readLook(companion));
+        var known = catalog.emotesFor(ysm.readLook(companion));
         if (!known.isEmpty() && !known.contains(animation)) {
             reply.accept(TaskResult.fail(
                     "当前模型没有 '" + animation + "' 这个动作,用 list_ysm_options 看有哪些").toJson());
             return;
         }
-        Ysm.playAnimation(server, me, animation);
+        ysm.playAnimation(server, me, animation);
         reply.accept(TaskResult.ok("做了 " + animation).toJson());
     }
 }

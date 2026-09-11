@@ -12,6 +12,13 @@ plugins {
  * 接 AE2 会让 YSM 联动的类路径上多出 AE2,接 Jade 又多一个——最后没人说得清哪个
  * 联动到底依赖了什么。一个联动一格:加一个是加一个目录,删一个是删一个目录。
  *
+ * <h2>跑在什么平台上,联动自己声明</h2>
+ * 只写原版 MC 与 numen api 的联动对着原版编译({@code neoForge { neoFormVersion = … }}),
+ * 三个加载器都能跑,加载器各不相同的事经一个接口由宿主提供;目标模组本身只有某个
+ * 加载器版的,就对着那个加载器编译({@code neoForge { version = … }})。瘦 api jar 也
+ * 跟着选({@code :api:common} 或 {@code :api:<loader>} 的 apiJar)。两样都写在各自的
+ * build.gradle 里,这里不替它们定。
+ *
  * <h2>为什么编译期只给瘦 api jar</h2>
  * 联动和第三方插件走同一扇门({@code NumenPlugins.register}),那就该<b>看得见的东西
  * 也一样</b>。放进 core 的话同一个 jar 里什么都看得见,今天走前门、明天赶时间抄近路,
@@ -25,17 +32,10 @@ group = 'com.dwinovo.numen'
 base { archivesName = "numen-plugin-${project.name}-${minecraft_version}" }
 java { toolchain.languageVersion = JavaLanguageVersion.of(java_version) }
 
-neoForge {
-    version = neoforge_version
-    mods { "${mod_id}" { sourceSet sourceSets.main } }
-}
-
 dependencies {
-    // 复现第三方插件的类路径,一点不多一点不少:
-    //   · 瘦 api jar —— 就是他们 compileOnly 的那个 :api 分类器制品
-    //   · ai / ui —— 他们经 POM 传递依赖拿到的两个模块(NumenTool 继承的 IToolSpec 在 ai 里)
-    // 别图省事换成 project(':api:neoforge'):那样整个引擎的内部类都进类路径,这个模块就白设了。
-    compileOnly files(project(':api:neoforge').tasks.named('apiJar'))
+    // 复现第三方插件的类路径:ai / ui 是他们经 POM 传递依赖拿到的两个模块
+    // (NumenTool 继承的 IToolSpec 在 ai 里)。瘦 api jar 由联动按平台自己挑,见上。
+    // 别图省事换成 project(':api:<loader>'):那样整个引擎的内部类都进类路径,这个模块就白设了。
     compileOnly project(':ai')
     compileOnly project(':ui')
 }

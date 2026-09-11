@@ -19,6 +19,14 @@ import java.util.function.Consumer;
  */
 public final class ListOptionsTool implements NumenTool {
 
+    private final Ysm ysm;
+    private final YsmCatalog catalog;
+
+    public ListOptionsTool(Ysm ysm, YsmCatalog catalog) {
+        this.ysm = ysm;
+        this.catalog = catalog;
+    }
+
     @Override
     public String name() {
         return "list_ysm_options";
@@ -37,9 +45,9 @@ public final class ListOptionsTool implements NumenTool {
     @Override
     public void onServerCall(String toolCallId, JsonObject args,
                              NumenPlayer companion, Consumer<String> reply) {
-        var look = Ysm.readLook(companion);
-        var models = YsmCatalog.models();
-        var emotes = YsmCatalog.emotesFor(look);
+        var look = ysm.readLook(companion);
+        var models = catalog.models();
+        var emotes = catalog.emotesFor(look);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("current_model", look == null ? "(读不到,YSM 可能没装)" : look.model());

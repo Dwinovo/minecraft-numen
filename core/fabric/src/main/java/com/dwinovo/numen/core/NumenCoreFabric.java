@@ -21,6 +21,9 @@ public class NumenCoreFabric implements ModInitializer {
     public void onInitialize() {
         NumenCore.init();
 
+        // 内嵌的联动模组:装了目标模组才接上,没装当不存在。见 plugins.Builtin。
+        com.dwinovo.numen.plugins.Builtin.registerAll();
+
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         // Advance budget-sliced long-range block scans each tick.
         ServerTickEvents.END_SERVER_TICK.register(BlockSearch::tick);

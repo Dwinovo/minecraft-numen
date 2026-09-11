@@ -1,4 +1,13 @@
 plugins { id 'numen-plugin' }
 
+// 只写原版 MC 与 numen api,三个加载器都能跑:编译对着原版(NeoForm),加载器的类物理上
+// 不在类路径上,想用也编译不过。加载器之间不一样的那几件事经 YsmHost 由宿主提供。
+neoForge { neoFormVersion = neo_form_version }
+
+dependencies {
+    // 瘦 api jar 取跨加载器那份:与本模块一样只有原版 MC 的类型
+    compileOnly files(project(':api:common').tasks.named('apiJar'))
+}
+
 // YSM 是闭源且混淆的,本联动<b>不引用它任何一个类</b>——只用命令(ysm model set / play / auth)
-// 和 NBT 键名(model_id / select_texture),那两样混淆器改不动。所以这里一个依赖都没有。
+// 和 NBT 键名(model_id / select_texture),那两样混淆器改不动。所以这里没有它的依赖。
