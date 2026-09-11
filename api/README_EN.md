@@ -12,7 +12,7 @@
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.1.2-A8731E?style=flat-square)
+![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.21.8%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
 
 [**What it is**](#what-it-is) · [**Public API**](#public-api) · [**Depend on it**](#depend-on-it) · [**Build & publish**](#build--publish) · [**Ecosystem**](#ecosystem) · [**License**](#license)
 
@@ -142,14 +142,14 @@ repositories {
 dependencies {
     // Fabric: the slim jar carries intermediary names, same as the full jar. Use
     // modCompileOnly so Loom maps it into your own namespace — yarn or mojmap.
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.8:0.1.2:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.8:<version>:api"
 
     // NeoForge / Forge: runtime names are Mojang names, so plain compileOnly works.
-    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.8:0.1.2:api"
+    // compileOnly "com.dwinovo.numen:numen-api-neoforge-1.21.8:<version>:api"
 }
 ```
 
-Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. This branch builds `1.21.1` on Java 21.
+Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match your target. Use the latest version from the badge at the top for `<version>`. This branch builds `1.21.1` on Java 21.
 
 `numen-ai` (model access and usage accounting) and `numen-ui` (widgets) come along transitively — `IToolSpec`, which `NumenTool` extends, lives in `numen-ai`, so without it your tool will not compile. Neither coordinate carries an MC-version suffix; every branch publishes the same bytes.
 
@@ -157,7 +157,7 @@ Swap the loader (`fabric` / `forge` / `neoforge`) and Minecraft version to match
 
 ```gradle
 dependencies {
-    modImplementation "com.dwinovo.numen:numen-neoforge-1.21.8:0.1.2"
+    modImplementation "com.dwinovo.numen:numen-neoforge-1.21.8:<version>"
 }
 ```
 
