@@ -28,7 +28,7 @@ public final class NumenYsm {
 
         NumenPlugins.register(numen -> {
             numen.registerTool(new ListOptionsTool(ysm, catalog));
-            numen.registerTool(new SwitchModelTool(ysm));
+            numen.registerTool(new SwitchModelTool(ysm, catalog));
             numen.registerTool(new PlayEmoteTool(ysm, catalog));
 
             if (skillsRoot != null) numen.bundleSkills(skillsRoot);

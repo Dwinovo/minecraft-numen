@@ -34,7 +34,7 @@ public final class ListOptionsTool implements NumenTool {
 
     @Override
     public String description() {
-        return "看自己现在穿的模型、能换的模型清单、以及当前模型能做的动作。";
+        return "看自己现在穿的模型与贴图、能换的模型清单、当前模型自带的贴图与能做的动作。";
     }
 
     @Override
@@ -47,11 +47,14 @@ public final class ListOptionsTool implements NumenTool {
                              NumenPlayer companion, Consumer<String> reply) {
         var look = ysm.readLook(companion);
         var models = catalog.models();
+        var textures = look == null ? java.util.List.<String>of() : catalog.textures(look.model());
         var emotes = catalog.emotesFor(look);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("current_model", look == null ? "(读不到,YSM 可能没装)" : look.model());
+        data.put("current_texture", look == null ? "" : look.texture());
         data.put("available_models", models);
+        data.put("textures", textures);   // 当前模型自带的贴图 id,switch_model 的 texture_id 从这里挑
         data.put("emotes", emotes);
 
         String summary = look == null
