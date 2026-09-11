@@ -2,7 +2,6 @@ package com.dwinovo.numen.plugins.ysm;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.neoforged.fml.loading.FMLPaths;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -36,17 +35,18 @@ public final class YsmCatalog {
     private static final String MODEL_MARKER = "ysm.json";
     private static final String[] ROOTS = {"builtin", "custom"};
 
-    private YsmCatalog() {}
+    private final Path base;
 
-    private static Path base() {
-        return FMLPaths.CONFIGDIR.get().resolve("yes_steve_model");
+    /** @param configDir 加载器的 {@code config/} 根,由宿主给({@link YsmHost#configDir()}) */
+    public YsmCatalog(Path configDir) {
+        this.base = configDir.resolve("yes_steve_model");
     }
 
     /** 这台机器上装了的全部模型 id。YSM 没装或目录不在时返回空表。 */
-    public static List<String> models() {
+    public List<String> models() {
         List<String> out = new ArrayList<>();
         for (String root : ROOTS) {
-            Path dir = base().resolve(root);
+            Path dir = base.resolve(root);
             if (!Files.isDirectory(dir)) continue;
             try (Stream<Path> walk = Files.walk(dir)) {
                 walk.filter(p -> p.getFileName().toString().equals(MODEL_MARKER))
@@ -61,10 +61,10 @@ public final class YsmCatalog {
     }
 
     /** 某个模型自带的动作名。传 null 或找不到该模型时返回空集。 */
-    public static Set<String> emotesFor(Ysm.Look look) {
+    public Set<String> emotesFor(Ysm.Look look) {
         if (look == null || look.model() == null || look.model().isBlank()) return Set.of();
         for (String root : ROOTS) {
-            Path anim = base().resolve(root).resolve(look.model()).resolve("animations");
+            Path anim = base.resolve(root).resolve(look.model()).resolve("animations");
             if (!Files.isDirectory(anim)) continue;
             Set<String> out = new LinkedHashSet<>();
             try (Stream<Path> files = Files.list(anim)) {

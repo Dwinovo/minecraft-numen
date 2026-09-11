@@ -23,6 +23,12 @@ import java.util.function.Consumer;
  */
 public final class SwitchModelTool implements NumenTool {
 
+    private final Ysm ysm;
+
+    public SwitchModelTool(Ysm ysm) {
+        this.ysm = ysm;
+    }
+
     @Override
     public String name() {
         return "switch_model";
@@ -57,11 +63,11 @@ public final class SwitchModelTool implements NumenTool {
         }
         String texture = args.has("texture_id") ? args.get("texture_id").getAsString() : null;
 
-        Ysm.setModel(server, companion.getName().getString(),
+        ysm.setModel(server, companion.getName().getString(),
                 new Ysm.Look(model, texture));
 
         // 回读:以身体的实际状态为准,不信命令跑过就是成功了
-        var now = Ysm.readLook(companion);
+        var now = ysm.readLook(companion);
         if (now != null && model.equals(now.model())) {
             reply.accept(TaskResult.ok("换好了:" + model).toJson());
         } else {
