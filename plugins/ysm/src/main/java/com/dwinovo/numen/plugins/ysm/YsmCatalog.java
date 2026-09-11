@@ -31,7 +31,9 @@ import java.util.stream.Stream;
  *
  * <p>贴图 id 是 {@code ysm.json} 里 {@code files.player.texture} 列出的文件名去掉扩展名
  * ({@code textures/skin.png} → {@code skin}),第一个是模型的默认贴图。玩家存档里
- * {@code select_texture} 存的就是这个形式,2.4.1 与 2.6.5 都一样。
+ * {@code select_texture} 存的就是这个形式,2.4.1 与 2.6.5 都一样。列表里的条目有两种写法:
+ * 直接一个路径字符串,或者一个对象、底色贴图在 {@code uv} 键下(同一个内置包里
+ * {@code wine_fox/14_momo} 就是后者),两种都要认。
  *
  * <p>动作名是各 {@code animations/*.animation.json} 里 {@code animations} 对象的键。
  * 不同模型自带的不一样——{@code default} 有 50 个,{@code misc/1_alex} 有 45 个。
@@ -66,9 +68,14 @@ public final class YsmCatalog {
         return out;
     }
 
+    /** 本机目录里有没有这个模型。 */
+    public boolean hasModel(String modelId) {
+        return modelDir(modelId) != null;
+    }
+
     /**
      * 某个模型自带的贴图 id,按 ysm.json 里的顺序,第一个是默认贴图。
-     * 模型不在本机目录里、或 ysm.json 里没列贴图时返回空表。
+     * 模型不在本机目录里、或 ysm.json 里没列贴图时返回空表——两种情况调用方用 {@link #hasModel} 分。
      */
     public List<String> textures(String modelId) {
         Path dir = modelDir(modelId);
@@ -79,12 +86,24 @@ public final class YsmCatalog {
             JsonElement player = spec.has("files") ? spec.getAsJsonObject("files").get("player") : null;
             JsonElement textures = player != null && player.isJsonObject() ? player.getAsJsonObject().get("texture") : null;
             if (textures != null && textures.isJsonArray()) {
-                for (JsonElement t : textures.getAsJsonArray()) out.add(textureId(t.getAsString()));
+                for (JsonElement t : textures.getAsJsonArray()) {
+                    String path = texturePath(t);
+                    if (path != null) out.add(textureId(path));
+                }
             }
         } catch (Exception ignored) {
             // ysm.json 坏了或形状不对:当作没列贴图,调用方会说清楚
         }
         return out;
+    }
+
+    /** 列表条目 → 底色贴图路径:字符串原样,对象取 {@code uv};别的形状不认。 */
+    private static String texturePath(JsonElement entry) {
+        if (entry.isJsonPrimitive()) return entry.getAsString();
+        if (entry.isJsonObject() && entry.getAsJsonObject().has("uv")) {
+            return entry.getAsJsonObject().get("uv").getAsString();
+        }
+        return null;
     }
 
     /** 某个模型自带的动作名。传 null 或找不到该模型时返回空集。 */
