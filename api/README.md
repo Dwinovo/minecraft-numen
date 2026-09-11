@@ -12,7 +12,7 @@
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20Forge%20%7C%20NeoForge-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
 ![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
-![Version](https://img.shields.io/badge/version-0.1.2-A8731E?style=flat-square)
+![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.20.2%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
 
 [**这是什么**](#这是什么) · [**公共 API**](#公共-api) · [**如何依赖**](#如何依赖) · [**构建与发布**](#构建与发布) · [**生态**](#生态) · [**授权**](#授权)
 
@@ -142,14 +142,14 @@ repositories {
 dependencies {
     // Fabric：瘦 jar 与主 jar 一样是 intermediary 命名，用 modCompileOnly
     // 让 Loom 映射到你自己的命名——yarn 和 mojmap 都能用
-    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.20.2:0.1.2:api"
+    modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.20.2:<version>:api"
 
     // NeoForge / Forge：运行期命名就是 Mojang 命名，直接 compileOnly
-    // compileOnly "com.dwinovo.numen:numen-api-forge-1.20.2:0.1.2:api"
+    // compileOnly "com.dwinovo.numen:numen-api-forge-1.20.2:<version>:api"
 }
 ```
 
-按你的目标替换加载器（`fabric` / `forge` / `neoforge`）和 Minecraft 版本。本分支基于 Java 21 构建 `1.21.1`。
+按你的目标替换加载器（`fabric` / `forge` / `neoforge`）和 Minecraft 版本。`<version>` 填顶上徽章显示的最新版本。本分支基于 Java 21 构建 `1.21.1`。
 
 `numen-ai`（模型接入与用量核算）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。这两个坐标不带 MC 版本后缀，各分支发的是同一份字节。
 
@@ -157,7 +157,7 @@ dependencies {
 
 ```gradle
 dependencies {
-    modImplementation "com.dwinovo.numen:numen-forge-1.20.2:0.1.2"
+    modImplementation "com.dwinovo.numen:numen-forge-1.20.2:<version>"
 }
 ```
 
