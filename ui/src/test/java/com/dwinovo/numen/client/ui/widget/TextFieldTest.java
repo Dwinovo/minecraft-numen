@@ -4,8 +4,11 @@ import com.dwinovo.numen.client.ui.KeyCodes;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 文本框编辑语义:插删/光标/Home End/粘贴清洗/掩码渲染/onChange。 */
@@ -94,5 +97,64 @@ class TextFieldTest {
         f.keyPressed(KeyCodes.HOME, 0);
         f.keyPressed(KeyCodes.LEFT, 0);
         assertEquals(0, f.cursor());
+    }
+
+    /** 假宿主:绑上之后文本住在这里,改动经回调告诉 TextField——和真 EditBox 一个形状。 */
+    private static final class FakeInput implements TextInput {
+        private String text;
+        private final Consumer<String> onChange;
+        private boolean focused;
+
+        FakeInput(String initial, Consumer<String> onChange) {
+            this.text = initial;
+            this.onChange = onChange;
+        }
+
+        /** 模拟用户在宿主控件里打字。 */
+        void type(String s) {
+            text = s;
+            onChange.accept(s);
+        }
+
+        @Override public String text() { return text; }
+        @Override public void setText(String s) { text = s; }
+        @Override public int cursor() { return text.length(); }
+        @Override public boolean focused() { return focused; }
+        @Override public void setFocused(boolean f) { focused = f; }
+        @Override public void moveTo(int x, int y, int w, int h) {}
+    }
+
+    private static TextField hostedField(String initial, AtomicReference<FakeInput> host, UiRoot root) {
+        root.setInputFactory((initial0, onChange) -> {
+            FakeInput in = new FakeInput(initial0, onChange);
+            host.set(in);
+            return in;
+        });
+        TextField f = root.add(new TextField(initial, s -> {}).numeric());
+        assertNotNull(host.get(), "add 之后应当已经绑上宿主");
+        return f;
+    }
+
+    @Test
+    void hostedIntValueReadsHostText() {
+        UiRoot root = new UiRoot();
+        AtomicReference<FakeInput> host = new AtomicReference<>();
+        TextField f = hostedField("8080", host, root);
+        assertEquals(8080, f.intValue(-1));
+        host.get().type(" 9090 ");
+        assertEquals(9090, f.intValue(-1));   // 绑了宿主之后的值住在宿主里
+        host.get().type("");
+        assertEquals(-1, f.intValue(-1));
+    }
+
+    @Test
+    void hostedEditClearsInlineError() {
+        UiRoot root = new UiRoot();
+        AtomicReference<FakeInput> host = new AtomicReference<>();
+        TextField f = hostedField("1", host, root);
+        f.setError("端口不对");
+        assertTrue(f.hasError());
+        host.get().type("12");
+        assertFalse(f.hasError());   // 用户一开始修改错误标记就撤下,宿主模式也一样
     }
 }

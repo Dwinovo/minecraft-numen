@@ -88,6 +88,7 @@ public final class TextField extends Widget {
 
     /** 宿主控件改了文本:原样转给本控件的 onChange。 */
     private void fireChangeWith(String v) {
+        error = null;   // 和 fireChange 一样:用户开始修改即撤下错误标记,宿主模式也不例外
         if (onChange != null) onChange.accept(v);
     }
 
@@ -250,8 +251,9 @@ public final class TextField extends Widget {
 
     /** 当前值按整数读;空或读不动时返回 {@code fallback}。 */
     public int intValue(int fallback) {
+        // 读 value() 而不是内部的 value:绑了宿主之后文本住在那边(同 tokenEnd)。
         try {
-            return Integer.parseInt(value.toString().strip());
+            return Integer.parseInt(value().strip());
         } catch (NumberFormatException notANumber) {
             return fallback;
         }
