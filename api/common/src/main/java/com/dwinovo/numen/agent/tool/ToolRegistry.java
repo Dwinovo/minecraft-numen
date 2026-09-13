@@ -3,6 +3,7 @@ package com.dwinovo.numen.agent.tool;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -89,7 +90,7 @@ public final class ToolRegistry {
         if (name == null) return null;
         NumenTool exact = TOOLS.get(name);
         if (exact != null) return exact;
-        String lower = name.toLowerCase();
+        String lower = name.toLowerCase(Locale.ROOT);   // 工具名是 ASCII 标识符,不能随系统区域变(土耳其语 I)
         if (lower.equals(name)) return null;  // already lowercase, no further fallback
         return TOOLS.get(lower);
     }

@@ -176,7 +176,9 @@ public final class ToolDispatcher {
                 }
                 inFlight.put(inv.id(), inv);
                 deadlineMillis = System.currentTimeMillis() + TOOL_BACKSTOP_MILLIS;
-                ToolCall call = new ToolCall(inv.id(), inv.name(), inv.argsJson(),
+                // 带规范名(tool.name())而不是 LLM 写的那个:大小写宽松只在 resolve 这一步,
+                // 服务端工具经 ServerToolTransport 原样带名字过去,那边按注册名严格查。
+                ToolCall call = new ToolCall(inv.id(), tool.name(), inv.argsJson(),
                         new ClientToolContext(sink.entity(), entityUuid),
                         json -> complete(inv, json));
                 Constants.LOG.info("[numen-dispatch#{}] dispatch tool={} id={} args={}",
