@@ -1,5 +1,6 @@
 package com.dwinovo.numen.plugins;
 
+import com.dwinovo.numen.core.ModJar;
 import com.dwinovo.numen.plugins.ysm.Ysm;
 import com.dwinovo.numen.plugins.ysm.YsmHost;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
@@ -29,7 +30,7 @@ public final class Builtin {
     private Builtin() {}
 
     public static void registerAll() {
-        Gate gate = new Gate(FabricLoader.getInstance()::isModLoaded);
+        Gate gate = new Gate(FabricLoader.getInstance()::isModLoaded, ModJar::find);
         gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnFabric.install(skills));
     }
 

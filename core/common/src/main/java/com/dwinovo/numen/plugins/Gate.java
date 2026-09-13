@@ -16,8 +16,9 @@ import java.util.function.Predicate;
  * 只有瘦 api jar,引擎内部类够不着(见 buildSrc 的 numen-plugin.gradle)。
  *
  * <h2>分工</h2>
- * 目标模组在不在,只有加载器答得上;本类是三个加载器共用的那部分——判、装、定位技能。
- * 清单在各加载器模块的 {@code Builtin} 里,它同时替联动做那几件加载器各不相同的事。
+ * 目标模组在不在、jar 里的一条路径对应哪个 {@link Path},只有加载器答得上,两样都由
+ * 构造时注入;本类是三个加载器共用的那部分——判、装、定位技能。清单在各加载器模块的
+ * {@code Builtin} 里,它同时替联动做那几件加载器各不相同的事。
  *
  * <h2>为什么要多套一层</h2>
  * 直接传 {@code Runnable} 的话,{@code NumenTlm::install} 这个方法引用在<b>创建
@@ -30,10 +31,16 @@ import java.util.function.Predicate;
 public final class Gate {
 
     private final Predicate<String> modLoaded;
+    private final Function<String, Path> inJar;
 
-    /** @param modLoaded 问加载器:这个 mod id 装了没 */
-    public Gate(Predicate<String> modLoaded) {
+    /**
+     * @param modLoaded 问加载器:这个 mod id 装了没
+     * @param inJar     问加载器:本模组 jar 里的这条路径对应哪个 {@link Path},没有这条路径给 null。
+     *                  各加载器模块的 {@code ModJar.find}——core 自己的 skills 根也从那里取
+     */
+    public Gate(Predicate<String> modLoaded, Function<String, Path> inJar) {
         this.modLoaded = modLoaded;
+        this.inJar = inJar;
     }
 
     /**
@@ -53,7 +60,8 @@ public final class Gate {
     }
 
     /**
-     * 一个联动自带的技能根:{@code plugins/<模块名>/skills/}。
+     * 一个联动自带的技能根:{@code plugins/<模块名>/skills/};jar 里没有就 null,联动照装、
+     * 只是不带技能——留一条 warn,不能悄悄少了。
      *
      * <p>目录就叫 {@code skills},但必须挂在 {@code plugins/<模块名>/} 底下——jar 是平的,
      * 源码树里 {@code plugins/ysm/} 那层前缀打包时就没了。直接放 {@code skills/} 的话会和
@@ -64,15 +72,12 @@ public final class Gate {
      * <p>给的是整个 {@code skills/} 根而不是某一篇,所以一个联动想带几篇就带几篇,
      * 不用回来改这里。
      */
-    private static Path skillsRoot(String plugin) {
-        // 经类加载器取,不用加载器的 mod-file 口——那些口跨 MC 版本一直在变
-        // (NeoForge 26.x 上 getModFileById(...).getFile() 就没了),而资源 URL 在哪个版本、
-        // 哪个加载器都成立。core 自己声明 skills/ 用的也是这条路。
-        try {
-            java.net.URL url = Gate.class.getResource("/plugins/" + plugin + "/skills");
-            return url == null ? null : Path.of(url.toURI());
-        } catch (Exception ignored) {
-            return null;   // 找不到就不带技能,工具照常能用
+    private Path skillsRoot(String plugin) {
+        String path = "plugins/" + plugin + "/skills";
+        Path root = inJar.apply(path);
+        if (root == null) {
+            Constants.LOG.warn("[numen] 联动 {} 的技能目录 {} 不在 jar 里,工具照常、技能不带", plugin, path);
         }
+        return root;
     }
 }

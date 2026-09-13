@@ -9,7 +9,6 @@ import com.dwinovo.numen.core.scan.BlockSearch;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
-import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLEnvironment;
 import net.neoforged.neoforge.common.NeoForge;
@@ -49,7 +48,7 @@ public class NumenCoreNeoForge {
     }
 
     private static void declareBundledSkills() {
-        Path root = ModList.get().getModFileById(Constants.MOD_ID).getFile().findResource("skills");
+        Path root = ModJar.find("skills");
         if (root != null) {
             SkillRegistry.instance().declareBundled(root);
         } else {

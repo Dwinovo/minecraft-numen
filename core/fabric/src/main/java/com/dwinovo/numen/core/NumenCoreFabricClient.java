@@ -2,7 +2,8 @@ package com.dwinovo.numen.core;
 
 import com.dwinovo.numen.agent.skill.SkillRegistry;
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.loader.api.FabricLoader;
+
+import java.nio.file.Path;
 
 /**
  * Fabric <em>client</em> entry point for numen-core. The engine (numen-api) ships
@@ -19,10 +20,11 @@ public class NumenCoreFabricClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
-        FabricLoader.getInstance().getModContainer(Constants.MOD_ID)
-                .flatMap(c -> c.findPath("skills"))
-                .ifPresentOrElse(
-                        root -> SkillRegistry.instance().declareBundled(root),
-                        () -> Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar"));
+        Path root = ModJar.find("skills");
+        if (root != null) {
+            SkillRegistry.instance().declareBundled(root);
+        } else {
+            Constants.LOG.warn("[numen-core] no bundled skills/ dir found in jar");
+        }
     }
 }
