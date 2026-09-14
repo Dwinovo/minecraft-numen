@@ -107,7 +107,7 @@ mine、build 天然 `natural`,`any` 表示连需要主人同意的格子也算�
 `spec` 的形状按规格四组:`alter`(none/natural)、`avoid`(排除的格子类型)、
 `penalties{place,break,jump,wade}`、`avoid_break/avoid_place/avoid_step`(方块 id、`#标签`、
 坐标 `x,y,z` 或坐标盒 `x1,y1,z1..x2,y2,z2`)、`parkour`、`climb_vines`、`max_fall`、
-`max_alterations`;JSON 到规格的翻译只在 `RouteSpecJson` 一处。按方块种类的禁令
+`alter_budget`;JSON 到规格的翻译只在 `RouteSpecJson` 一处。按方块种类的禁令
 (`RouteSpec.BlockBans`)与按位置的表互补:位置表回答"这一格",种类表回答"这一种"。
 
 `follow` 没有 `may_alter_terrain`,跟随不改地形;跟不上时回执同样列候选,模型先 goto 一条

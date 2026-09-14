@@ -194,6 +194,12 @@ public final class TerrainBill {
                 listing(byId));
     }
 
+    /** 预算内无路的说法:两处失败回执共用,数字口径一致。 */
+    public static String overBudget(int budget, int cheapestChange) {
+        return String.format("no route within an alter_budget of %d (the cheapest found would change %d blocks)",
+                budget, cheapestChange);
+    }
+
     /** 规划查询的回执:找到几条、从哪儿到哪儿,接着是候选清单,末尾告诉模型怎么用。 */
     public static String planned(BlockPos from, BlockPos toward, Map<String, TerrainBill> byId) {
         return String.format(

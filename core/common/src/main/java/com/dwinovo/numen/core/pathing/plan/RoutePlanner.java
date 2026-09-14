@@ -94,10 +94,15 @@ public final class RoutePlanner {
 
         private final List<Candidate> found = new ArrayList<>();
         /** 已有候选经过的全部格子:重叠率的分母一侧,也是下一次搜索要加价的格。 */
+        /** 每次搜索交出的路,含超预算作废的:惩罚按它们算,备选才会去别处找。 */
+        private final List<NavPath> searched = new ArrayList<>();
         private final Set<BlockPos> covered = new HashSet<>();
         private int searches;
         private SearchHandle inFlight;
         private List<Candidate> result;
+        /** 账单超出规格改动预算而作废的候选数,以及其中改动最少的那条改了几格。 */
+        private int overBudget;
+        private int cheapestChange = Integer.MAX_VALUE;
 
         private Query(BlockPos realStart, BlockPos start, GoalCompiler.Compiled goal, RouteSpec spec,
                       int wanted) {
@@ -132,8 +137,18 @@ public final class RoutePlanner {
             inFlight = null;
             NavPath path = calc.getPath().orElse(null);
             if (path != null && !overlapsTooMuch(path)) {
-                found.add(new Candidate(spec, path, TerrainBill.planned(path, level),
-                        calc.getType() == PathCalcResult.Type.SUCCESS_TO_GOAL));
+                TerrainBill bill = TerrainBill.planned(path, level);
+                int changed = bill.breakCount() + bill.placeCount();
+                if (changed > spec.alterBudget()) {
+                    // 预算是规划时的约束:超了的路不算候选,但它的格子照样计入惩罚,
+                    // 下一次搜索才会去别处找改动更少的路
+                    overBudget++;
+                    cheapestChange = Math.min(cheapestChange, changed);
+                } else {
+                    found.add(new Candidate(spec, path, bill,
+                            calc.getType() == PathCalcResult.Type.SUCCESS_TO_GOAL));
+                }
+                searched.add(path);
                 covered.addAll(path.positions());
             }
             if (path == null || searches >= wanted) {
@@ -146,6 +161,16 @@ public final class RoutePlanner {
 
         public boolean isDone() {
             return result != null;
+        }
+
+        /** 一条候选都没留下,而且至少有一条是因为超出改动预算才作废的。 */
+        public boolean exceededBudget() {
+            return found.isEmpty() && overBudget > 0;
+        }
+
+        /** 作废的候选里改动最少的那条改了几格;没有作废的候选时无意义。 */
+        public int cheapestChange() {
+            return cheapestChange;
         }
 
         public void cancel() {
@@ -179,8 +204,8 @@ public final class RoutePlanner {
             double extra = (NavSettings.get().routeAlternativePenaltyFactor - 1.0)
                     * ActionCosts.WALK_ONE_BLOCK_COST;
             PositionCosts.Builder b = PositionCosts.builder();
-            for (Candidate c : found) {
-                for (BlockPos p : c.path().positions()) {
+            for (NavPath path : searched) {
+                for (BlockPos p : path.positions()) {
                     b.stand(p.asLong(), extra);
                 }
             }

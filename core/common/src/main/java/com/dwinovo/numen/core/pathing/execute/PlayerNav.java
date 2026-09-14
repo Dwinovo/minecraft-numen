@@ -145,6 +145,13 @@ public final class PlayerNav {
     private RoutePlanner.Query probe;
     /** 查询所针对的目标契约(候选记入路线簿时带上)。 */
     private GoalCompiler.Compiled probeGoal;
+    /**
+     * 有限改动预算下的整路规划;非空时原地等它出结论。预算是规划时的约束——直接派搜索
+     * 会绕过它,所以设了预算的导航先按规格规划整条路,预算内才采纳。
+     */
+    private RoutePlanner.Query budgetPlan;
+    /** 预算已核过(采纳了预算内的整路,或走的是规划好的路线)。 */
+    private boolean budgetPlanned;
 
     /** 单格目标:按意图编译(可走格=站上去,占用格=贴脸即到,不吞噬目标)。 */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
@@ -263,6 +270,7 @@ public final class PlayerNav {
             return;
         }
         core.seed(route.goal().engineGoal(), route.path());
+        budgetPlanned = true;
     }
 
     /** 把裸目标包成无 sacred 的编译契约(engineGoal 经词表映射同步派生)。 */
@@ -424,6 +432,13 @@ public final class PlayerNav {
             searchSatisfied = false;
         }
 
+        if (spec.budgeted() && spec.alter().mayAlter() && !budgetPlanned) {
+            Status planning = planWithinBudget(compiled);
+            if (planning != null) {
+                return planning;
+            }
+        }
+
         PathExecutor before = core.getCurrent();
         long tExec = NavProfiler.begin();
         // 状态机空闲(初次、或结果被判孤儿丢弃)时(重新)下发目标;
@@ -551,6 +566,8 @@ public final class PlayerNav {
             InputDriver.halt(player);
             return Status.RUNNING;
         }
+        boolean overBudget = probe.exceededBudget();
+        int cheapestChange = probe.cheapestChange();
         probe = null;
         GoalCompiler.Compiled goal = probeGoal;
         probeGoal = null;
@@ -558,7 +575,9 @@ public final class PlayerNav {
             return Status.ARRIVED;
         }
         if (candidates.isEmpty()) {
-            return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(), ", not even by digging or bridging"));
+            return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(), overBudget
+                    ? ", " + TerrainBill.overBudget(spec.alterBudget(), cheapestChange)
+                    : ", not even by digging or bridging"));
         }
         if (candidates.stream().allMatch(c -> c.bill().isEmpty())) {
             // 可改地形的搜索出的路根本不动地形——那是清洁搜索自己的预算问题:如实说没路,
@@ -578,6 +597,42 @@ public final class PlayerNav {
         Constants.LOG.info("[numen-path] TERRAIN-BLOCKED start={} goal={} | {}",
                 feet.toShortString(), center.toShortString(), reason);
         return fail(FailureType.TERRAIN_BLOCKED, reason);
+    }
+
+    /**
+     * 设了改动预算的导航先规划整条路:在飞就等,出结论后预算内的采纳为首段、超预算按无路终局。
+     * 返回 null 表示不需要等(已采纳,或起点算不出、交给正常搜索——那时预算按不限处理并记日志)。
+     */
+    private Status planWithinBudget(GoalCompiler.Compiled compiled) {
+        if (budgetPlan == null) {
+            BlockPos start = core.pathStart();
+            if (start == null) {
+                budgetPlanned = true;
+                Constants.LOG.info("[numen-path] 起点算不出来,改动预算 {} 这次不核", spec.alterBudget());
+                return null;
+            }
+            budgetPlan = planner.plan(PathExecutor.playerFeet(player), start, compiled, spec, 1);
+        }
+        java.util.List<RoutePlanner.Candidate> planned = budgetPlan.poll();
+        if (planned == null) {
+            InputDriver.halt(player);
+            return Status.RUNNING;
+        }
+        boolean overBudget = budgetPlan.exceededBudget();
+        int cheapestChange = budgetPlan.cheapestChange();
+        budgetPlan = null;
+        budgetPlanned = true;
+        if (reached.getAsBoolean()) {
+            return Status.ARRIVED;
+        }
+        if (planned.isEmpty()) {
+            return fail(FailureType.NO_PATH, noPathAutopsy(compiled.goal(), overBudget
+                    ? ", " + TerrainBill.overBudget(spec.alterBudget(), cheapestChange) : ""));
+        }
+        if (!planned.get(0).path().movements().isEmpty()) {
+            core.seed(compiled.engineGoal(), planned.get(0).path());
+        }
+        return null;
     }
 
     /**

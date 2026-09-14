@@ -27,7 +27,7 @@ import net.minecraft.world.level.block.Block;
  * 只此一处。旋钮名用模型看得懂的普通词,按规格的四组组织:
  * <ul>
  *   <li>能力:{@code alter}(none/natural)、{@code parkour}、{@code climb_vines}、
- *       {@code max_fall}、{@code max_alterations};</li>
+ *       {@code max_fall}、{@code alter_budget};</li>
  *   <li>每类代价:{@code avoid}——要排除的格子类型({@link CellClass} 名);</li>
  *   <li>按位置 / 按种类:{@code avoid_break}、{@code avoid_place}、{@code avoid_step}——
  *       方块 id、{@code #标签},或坐标 {@code x,y,z} / 坐标盒 {@code x1,y1,z1..x2,y2,z2};</li>
@@ -68,8 +68,11 @@ public final class RouteSpecJson {
                 .optionalBool("climb_vines", "Allow climbing vines. Default false.")
                 .optionalInteger("max_fall", "Highest drop she may take without water below, in blocks. "
                         + "Default 3; she may still fall further when her health can take it.", 0, 64)
-                .optionalInteger("max_alterations", "At most this many blocks changed on the whole route "
-                        + "(only meaningful with alter:natural).", 0, 10_000);
+                .optionalInteger("alter_budget", "Budget of blocks the whole route may change (broken + "
+                        + "placed). Routes that would exceed it are dropped; if none fits, the reply says so. "
+                        + "Only meaningful with alter:'natural'. Checked when the route is planned; if she has "
+                        + "to re-plan after being blocked, the result still itemises every block actually "
+                        + "changed.", 0, 10_000);
     }
 
     /** {@code null} 或空对象即出厂规格。 */
@@ -119,8 +122,8 @@ public final class RouteSpecJson {
         if (json.has("max_fall")) {
             spec = spec.withMaxFallHeightNoWater(nonNegativeInt(json, "max_fall"));
         }
-        if (json.has("max_alterations")) {
-            spec = spec.withMaxAlterations(nonNegativeInt(json, "max_alterations"));
+        if (json.has("alter_budget")) {
+            spec = spec.withAlterBudget(nonNegativeInt(json, "alter_budget"));
         }
         return spec;
     }
@@ -137,17 +140,27 @@ public final class RouteSpecJson {
     }
 
     private static CellClass cellClass(String raw) {
+        CellClass cls;
         try {
-            return CellClass.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+            cls = CellClass.valueOf(raw.trim().toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException(
                     "spec.avoid: unknown cell type '" + raw + "'; valid names: " + cellNames());
         }
+        if (!cls.avoidable()) {
+            throw new IllegalArgumentException(
+                    "spec.avoid: '" + raw + "' is not something a walk can keep out of; valid names: " + cellNames());
+        }
+        return cls;
     }
 
+    /** 可排除的类型名,由 {@link CellClass#avoidable()} 定,不另抄一份。 */
     private static String cellNames() {
         StringBuilder sb = new StringBuilder();
         for (CellClass c : CellClass.values()) {
+            if (!c.avoidable()) {
+                continue;
+            }
             if (sb.length() > 0) {
                 sb.append(", ");
             }

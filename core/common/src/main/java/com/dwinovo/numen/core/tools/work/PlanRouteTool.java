@@ -80,15 +80,21 @@ public final class PlanRouteTool implements NumenTool {
         BlockPos feet = PathExecutor.playerFeet(companion);
         BlockPos start = Movement.pathStart(companion, spec);
         RoutePlanner.Query query = planner.plan(feet, start, goal, spec, alternatives);
-        RoutePlanner.deliver(query, candidates -> reply.accept(result(companion, goal, spec, feet, candidates)));
+        RoutePlanner.deliver(query, candidates -> reply.accept(result(companion, goal, spec, feet, candidates,
+                query.exceededBudget() ? query.cheapestChange() : -1)));
     }
 
     /** 回执:候选记进路线簿,清单文案由账单出;没路时说清在哪个规格下没路、下一步能试什么。 */
+    /** @param cheapestOverBudget 一条候选都没留下且是预算所致时,作废候选里最少的改动格数;否则 -1 */
     private static String result(NumenPlayer companion, GoalCompiler.Compiled goal, RouteSpec spec,
-                                 BlockPos feet, List<RoutePlanner.Candidate> candidates) {
+                                 BlockPos feet, List<RoutePlanner.Candidate> candidates,
+                                 int cheapestOverBudget) {
         BlockPos center = goal.goal().center();
         if (candidates.isEmpty()) {
-            String hint = spec.alter().mayAlter()
+            String hint = cheapestOverBudget >= 0
+                    ? " — " + TerrainBill.overBudget(spec.alterBudget(), cheapestOverBudget)
+                            + "; raise alter_budget or pick another destination."
+                    : spec.alter().mayAlter()
                     ? " — not even by digging or bridging; pick another destination or a nearer waypoint."
                     : " without altering terrain; plan again with spec {alter:'natural'} to see what digging"
                             + " or bridging would take, or pick another destination.";

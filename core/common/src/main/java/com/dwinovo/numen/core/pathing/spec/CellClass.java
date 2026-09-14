@@ -68,13 +68,24 @@ public enum CellClass {
     /** 静水柱(源或竖直下落,含被水淹的可穿行方块):只能在水面游过、浮在有水的柱子里。 */
     WATER,
     /** 流动的水(非满格):不可穿,会被冲离路径;上方有水时仍可浮着。 */
-    FLOWING,
+    FLOWING_WATER,
     /** 岩浆(源或流动):不可穿;可站与否看代价表,出厂排除。 */
     LAVA,
     /** 绝不走进:火、蛛网、末地传送门、甜浆果丛、仙人掌、岩浆块、气泡柱。 */
     HAZARD,
     /** 其余不可穿不可站的东西(铁门、栅栏、活板门、潜影盒、坩埚等),挖得动才过。 */
     OBSTACLE;
+
+    /**
+     * 规格能不能把这一类整个排除。默认能走、却可以选择不走的才算(水、门、梯子……);
+     * 空气与地面排除了就没路,障碍本来就不走——这些不给模型选,免得规格里出现无意义的项。
+     */
+    public boolean avoidable() {
+        return switch (this) {
+            case WATER, FLOWING_WATER, LAVA, HAZARD, DOOR, LADDER, VINE, SNOW_LAYER -> true;
+            default -> false;
+        };
+    }
 
     /** 唯一的分类函数。 */
     public static CellClass of(BlockState state) {
@@ -140,7 +151,7 @@ public enum CellClass {
         if (!(fluid.getType() instanceof WaterFluid)) {
             return OBSTACLE;
         }
-        return fluid.getAmount() == 8 ? WATER : FLOWING;
+        return fluid.getAmount() == 8 ? WATER : FLOWING_WATER;
     }
 
     private static boolean isHazard(Block b) {
@@ -241,7 +252,7 @@ public enum CellClass {
                 return true;
             case VINE:
                 return spec.climbVines();
-            case WATER, FLOWING: {
+            case WATER, FLOWING_WATER: {
                 BlockState up = view.getBlockState(new BlockPos(x, y + 1, z));
                 return up.getBlock() == Blocks.LILY_PAD || up.getBlock() instanceof CarpetBlock
                         || isWater(up);
