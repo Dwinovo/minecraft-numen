@@ -13,8 +13,8 @@ import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.Movement;
-import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 import net.minecraft.core.BlockPos;
@@ -34,6 +34,7 @@ import net.minecraft.core.BlockPos;
 public final class PathingCore {
 
     private final NumenPlayer player;
+    private final RouteSpec spec;
     private final ExecHarness harness;
     private final SearchDispatcher dispatcher;
     /**
@@ -70,25 +71,20 @@ public final class PathingCore {
     private boolean cancelRequested;
     private boolean calcFailedLastTick;
 
+    /**
+     * @param spec 这次导航的路线规格;段起点"脚下能不能站"按它判(两份上下文工厂建出的
+     *             上下文带的是同一份规格加上按目标变化的位置代价)
+     */
     public PathingCore(NumenPlayer player, SearchDispatcher dispatcher,
                        Supplier<CalculationContext> searchContextFactory,
                        Supplier<CalculationContext> executionContextFactory,
-                       TerrainPermit permit) {
+                       RouteSpec spec) {
         this.player = player;
-        this.harness = new ExecHarness(player, permit);
+        this.spec = spec;
+        this.harness = new ExecHarness(player);
         this.dispatcher = dispatcher;
         this.searchContextFactory = searchContextFactory;
         this.executionContextFactory = executionContextFactory;
-    }
-
-    /**
-     * 搜索与执行同一份快照的简便构造:执行期复核直接读本次搜索的上下文。
-     * <b>注意</b>:执行期成本复核因此读不到世界变化(快照冻结),生产
-     * 路径必须走双工厂构造(执行侧供活世界上下文),此构造仅限测试。
-     */
-    public PathingCore(NumenPlayer player, SearchDispatcher dispatcher,
-                       Supplier<CalculationContext> contextFactory, TerrainPermit permit) {
-        this(player, dispatcher, contextFactory, null, permit);
     }
 
     // ==================== 对外 API ====================
@@ -323,8 +319,8 @@ public final class PathingCore {
         if (goal == null) {
             return;
         }
-        // 每次派发都重新取样冻结快照:背包/工具/饥饿与语义开关
-        // (sacred/deniedPlace)以派发一刻为准
+        // 每次派发都重新取样冻结快照:背包/工具/饥饿与规格的位置代价
+        // (当前目标的 sacred 格)以派发一刻为准
         context = searchContextFactory.get();
         long primaryTimeout;
         long failureTimeout;
@@ -483,7 +479,7 @@ public final class PathingCore {
      * 同一,提取到基类静态助手后此处直接转发,逻辑不再重复。
      */
     public BlockPos pathStart() {
-        return Movement.pathStart(player);
+        return Movement.pathStart(player, spec);
     }
 
 

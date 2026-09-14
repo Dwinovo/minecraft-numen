@@ -3,7 +3,8 @@ package com.dwinovo.numen.core.pathing.goal;
 import com.dwinovo.numen.core.pathing.bridge.GoalAdapter;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.goals.Goal;
-import com.dwinovo.numen.core.pathing.util.BlockHelper;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
@@ -97,13 +98,13 @@ public final class GoalCompiler {
         return new Compiled(NavGoal.nearGround(c, radius), LongSets.emptySet());
     }
 
-    /** The {@code resolveBlockGoal} replacement: a walkable cell is a place to
-     *  stand, an occupied one is a block to get to (and not consume). */
-    public static Compiled block(Level level, BlockPos cell) {
-        return block(BlockHelper.canWalkThrough(level, cell), cell);
+    /** The {@code resolveBlockGoal} replacement: a walkable cell (under the route's
+     *  spec) is a place to stand, an occupied one is a block to get to (and not consume). */
+    public static Compiled block(Level level, BlockPos cell, RouteSpec spec) {
+        return block(CellClass.canWalkThrough(level, cell, spec), cell);
     }
 
-    /** Pure core of {@link #block(Level, BlockPos)} (headless-testable). */
+    /** Pure core of {@link #block(Level, BlockPos, RouteSpec)} (headless-testable). */
     public static Compiled block(boolean cellWalkable, BlockPos cell) {
         return cellWalkable ? standOn(cell) : interact(cell);
     }

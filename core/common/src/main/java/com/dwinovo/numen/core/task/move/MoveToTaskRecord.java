@@ -22,9 +22,10 @@ import com.dwinovo.numen.task.TaskRecord;
  * timeout is handled by the base class.
  *
  * <p>{@code mayAlterTerrain} is the model's explicit consent to dig through, bridge
- * or pillar on the way. Without it the walk never changes a block (see
- * {@code TerrainPermit}); when the only route would, the failure lists exactly which
- * blocks and the model decides whether to re-send with consent.
+ * or pillar on the way; the task maps it onto the route spec's {@code alter}
+ * ({@code RouteSpec.Alter}). Without it the walk never changes a block; when the only
+ * route would, the failure lists exactly which blocks and the model decides whether to
+ * re-send with consent.
  */
 public final class MoveToTaskRecord extends TaskRecord {
 

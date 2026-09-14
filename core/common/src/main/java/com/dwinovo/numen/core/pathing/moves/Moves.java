@@ -23,7 +23,7 @@ public enum Moves {
     DOWNWARD(0, -1, 0) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementDownward(context.player, src, src.below());
+            return new MovementDownward(context.player, context.spec, src, src.below());
         }
 
         @Override
@@ -35,7 +35,7 @@ public enum Moves {
     PILLAR(0, +1, 0) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementPillar(context.player, src, src.above());
+            return new MovementPillar(context.player, context.spec, src, src.above());
         }
 
         @Override
@@ -47,7 +47,7 @@ public enum Moves {
     TRAVERSE_NORTH(0, 0, -1) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementTraverse(context.player, src, src.north());
+            return new MovementTraverse(context.player, context.spec, src, src.north());
         }
 
         @Override
@@ -59,7 +59,7 @@ public enum Moves {
     TRAVERSE_SOUTH(0, 0, +1) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementTraverse(context.player, src, src.south());
+            return new MovementTraverse(context.player, context.spec, src, src.south());
         }
 
         @Override
@@ -71,7 +71,7 @@ public enum Moves {
     TRAVERSE_EAST(+1, 0, 0) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementTraverse(context.player, src, src.east());
+            return new MovementTraverse(context.player, context.spec, src, src.east());
         }
 
         @Override
@@ -83,7 +83,7 @@ public enum Moves {
     TRAVERSE_WEST(-1, 0, 0) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementTraverse(context.player, src, src.west());
+            return new MovementTraverse(context.player, context.spec, src, src.west());
         }
 
         @Override
@@ -95,7 +95,7 @@ public enum Moves {
     ASCEND_NORTH(0, +1, -1) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementAscend(context.player, src, src.offset(0, 1, -1));
+            return new MovementAscend(context.player, context.spec, src, src.offset(0, 1, -1));
         }
 
         @Override
@@ -107,7 +107,7 @@ public enum Moves {
     ASCEND_SOUTH(0, +1, +1) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementAscend(context.player, src, src.offset(0, 1, 1));
+            return new MovementAscend(context.player, context.spec, src, src.offset(0, 1, 1));
         }
 
         @Override
@@ -119,7 +119,7 @@ public enum Moves {
     ASCEND_EAST(+1, +1, 0) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementAscend(context.player, src, src.offset(1, 1, 0));
+            return new MovementAscend(context.player, context.spec, src, src.offset(1, 1, 0));
         }
 
         @Override
@@ -131,7 +131,7 @@ public enum Moves {
     ASCEND_WEST(-1, +1, 0) {
         @Override
         public Movement apply0(CalculationContext context, BlockPos src) {
-            return new MovementAscend(context.player, src, src.offset(-1, 1, 0));
+            return new MovementAscend(context.player, context.spec, src, src.offset(-1, 1, 0));
         }
 
         @Override
@@ -338,9 +338,9 @@ public enum Moves {
         }
         BlockPos dest = new BlockPos(res.x, res.y, res.z);
         if (res.y == src.getY() - 1) {
-            return new MovementDescend(context.player, src, dest);
+            return new MovementDescend(context.player, context.spec, src, dest);
         }
-        return new MovementFall(context.player, src, dest);
+        return new MovementFall(context.player, context.spec, src, dest);
     }
 
     private static Movement diagonal(CalculationContext context, BlockPos src, Moves move) {
@@ -349,7 +349,7 @@ public enum Moves {
         if (res.cost >= ActionCosts.COST_INF) {
             return null;
         }
-        return new MovementDiagonal(context.player, src, new BlockPos(res.x, res.y, res.z));
+        return new MovementDiagonal(context.player, context.spec, src, new BlockPos(res.x, res.y, res.z));
     }
 
     private static Movement parkour(CalculationContext context, BlockPos src, Direction direction) {
@@ -358,6 +358,6 @@ public enum Moves {
         if (res.cost >= ActionCosts.COST_INF) {
             return null;
         }
-        return new MovementParkour(context.player, src, new BlockPos(res.x, res.y, res.z));
+        return new MovementParkour(context.player, context.spec, src, new BlockPos(res.x, res.y, res.z));
     }
 }

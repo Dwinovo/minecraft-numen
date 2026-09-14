@@ -10,6 +10,8 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
@@ -39,8 +41,8 @@ public class MovementTraverse extends Movement {
     /** 桥块是否一直都在(false 表示本次执行需要现搭)。 */
     private boolean wasTheBridgeBlockAlwaysThere = true;
 
-    public MovementTraverse(ServerPlayer player, BlockPos src, BlockPos dest) {
-        super(player, src, dest, new BlockPos[]{dest.above(), dest}, dest.below());
+    public MovementTraverse(ServerPlayer player, RouteSpec spec, BlockPos src, BlockPos dest) {
+        super(player, spec, src, dest, new BlockPos[]{dest.above(), dest}, dest.below());
     }
 
     @Override
@@ -63,13 +65,12 @@ public class MovementTraverse extends Movement {
         BlockState srcDown = context.get(x, y - 1, z);
         Block srcDownBlock = srcDown.getBlock();
         boolean standingOnABlock = MovementHelper.mustBeSolidToWalkOn(context, x, y - 1, z, srcDown);
-        boolean frostWalker = standingOnABlock && !context.assumeWalkOnWater
-                && MovementHelper.canUseFrostWalker(context, destOn);
-        if (frostWalker || MovementHelper.canWalkOn(context, destX, y - 1, destZ, destOn)) {
+        boolean frostWalker = standingOnABlock && MovementHelper.canUseFrostWalker(context, destOn);
+        if (frostWalker || context.canWalkOn(destX, y - 1, destZ, destOn)) {
             // 走路分支:桥本来就在
             double WC = WALK_ONE_BLOCK_COST;
             boolean water = false;
-            if (MovementHelper.isWater(pb0) || MovementHelper.isWater(pb1)) {
+            if (CellClass.isWater(pb0) || CellClass.isWater(pb1)) {
                 WC = context.waterWalkSpeed;
                 water = true;
             } else {
@@ -78,7 +79,7 @@ public class MovementTraverse extends Movement {
                 } else if (frostWalker) {
                     // 霜行者冻出的冰面走起来没有水面罚金
                 } else if (destOn.getBlock() == Blocks.WATER) {
-                    WC += context.walkOnWaterOnePenalty;
+                    WC += context.spec.wadePenalty();
                 }
                 if (srcDownBlock == Blocks.SOUL_SAND) {
                     WC += (WALK_ONE_OVER_SOUL_SAND_COST - WALK_ONE_BLOCK_COST) / 2;
@@ -111,8 +112,8 @@ public class MovementTraverse extends Movement {
             if (!MovementHelper.isReplaceable(destX, y - 1, destZ, destOn, context.loadedTest)) {
                 return COST_INF;
             }
-            boolean throughWater = MovementHelper.isWater(pb0) || MovementHelper.isWater(pb1);
-            if (MovementHelper.isWater(destOn) && throughWater) {
+            boolean throughWater = CellClass.isWater(pb0) || CellClass.isWater(pb1);
+            if (CellClass.isWater(destOn) && throughWater) {
                 // 在水里且要往水里垫:这套水上行走语义不允许
                 return COST_INF;
             }
@@ -181,7 +182,7 @@ public class MovementTraverse extends Movement {
             if (state.getStatus() != MovementStatus.PREPPING) {
                 return state;
             }
-            if (MovementHelper.avoidWalkingInto(pb0) || MovementHelper.avoidWalkingInto(pb1)) {
+            if (CellClass.avoidWalkingInto(pb0) || CellClass.avoidWalkingInto(pb1)) {
                 return state;
             }
             double dist = Math.max(Math.abs(player.getX() - (dest.getX() + 0.5)),
@@ -196,9 +197,9 @@ public class MovementTraverse extends Movement {
             // yaw 对准终点中心,pitch 沿用挖掘目标;两格都是整方块/空气时用固定俯角
             float yawToDest = AimGeometry.yawTo(player.getEyePosition(), AimGeometry.blockCenter(dest));
             float pitchToBreak = state.getTarget().getPitch();
-            if (MovementHelper.isBlockNormalCube(pb0)
+            if (CellClass.isFullCube(pb0)
                     || (pb0.getBlock() instanceof AirBlock
-                            && (MovementHelper.isBlockNormalCube(pb1) || pb1.getBlock() instanceof AirBlock))) {
+                            && (CellClass.isFullCube(pb1) || pb1.getBlock() instanceof AirBlock))) {
                 pitchToBreak = 26;
             }
             return state.setTarget(new MovementState.MovementTarget(yawToDest, pitchToBreak, true))
@@ -215,9 +216,9 @@ public class MovementTraverse extends Movement {
         // 木门:挡路且能开 → 看门中心右键
         if (pb0.getBlock() instanceof DoorBlock || pb1.getBlock() instanceof DoorBlock) {
             boolean notPassable = (pb0.getBlock() instanceof DoorBlock
-                            && !MovementHelper.isDoorPassable(level, src, dest))
+                            && !CellClass.isDoorPassable(level, src, dest))
                     || (pb1.getBlock() instanceof DoorBlock
-                            && !MovementHelper.isDoorPassable(level, dest, src));
+                            && !CellClass.isDoorPassable(level, dest, src));
             boolean canOpen = !(pb0.getBlock() == Blocks.IRON_DOOR || pb1.getBlock() == Blocks.IRON_DOOR);
             if (notPassable && canOpen) {
                 Vec3 center = AimGeometry.blockCenter(positionsToBreak[0]);
@@ -231,9 +232,9 @@ public class MovementTraverse extends Movement {
         // 栅栏门:找出挡路的那扇,射线可视时才看向它右键;完全不可视
         // 则不点击,落到后续行走逻辑继续推进
         if (pb0.getBlock() instanceof FenceGateBlock || pb1.getBlock() instanceof FenceGateBlock) {
-            BlockPos blocked = !MovementHelper.isGatePassable(level, positionsToBreak[0], src.above())
+            BlockPos blocked = !CellClass.isGatePassable(level, positionsToBreak[0], src.above())
                     ? positionsToBreak[0]
-                    : !MovementHelper.isGatePassable(level, positionsToBreak[1], src)
+                    : !CellClass.isGatePassable(level, positionsToBreak[1], src)
                             ? positionsToBreak[1]
                             : null;
             if (blocked != null) {
@@ -247,7 +248,7 @@ public class MovementTraverse extends Movement {
             }
         }
 
-        boolean isTheBridgeBlockThere = MovementHelper.canWalkOn(level, positionToPlace)
+        boolean isTheBridgeBlockThere = CellClass.canWalkOn(level, positionToPlace, spec)
                 || ladder
                 || MovementPlacement.canUseFrostWalker(player, level.getBlockState(positionToPlace));
         BlockPos feet = feet(player);
@@ -281,9 +282,9 @@ public class MovementTraverse extends Movement {
             BlockState intoBelow = level.getBlockState(into);
             BlockState intoAbove = level.getBlockState(into.above());
             if (wasTheBridgeBlockAlwaysThere
-                    && (!MovementHelper.isLiquid(level.getBlockState(feet)) || NavSettings.get().sprintInWater)
-                    && (!MovementHelper.avoidWalkingInto(intoBelow) || MovementHelper.isWater(intoBelow))
-                    && !MovementHelper.avoidWalkingInto(intoAbove)) {
+                    && (!CellClass.isLiquid(level.getBlockState(feet)) || NavSettings.get().sprintInWater)
+                    && (!CellClass.avoidWalkingInto(intoBelow) || CellClass.isWater(intoBelow))
+                    && !CellClass.avoidWalkingInto(intoAbove)) {
                 state.setInput(Input.SPRINT, true);
             }
 
@@ -386,7 +387,7 @@ public class MovementTraverse extends Movement {
     @Override
     protected boolean safeToCancel(MovementState state) {
         return state.getStatus() != MovementStatus.RUNNING
-                || MovementHelper.canWalkOn(player.level(), dest.below());
+                || CellClass.canWalkOn(player.level(), dest.below(), spec);
     }
 
     /** 站在梯/藤上挖掘时按住潜行防滑落。 */

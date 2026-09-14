@@ -6,10 +6,10 @@ import java.util.Map;
 
 import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
-import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -57,7 +57,6 @@ class MovementCostsTest {
     private boolean savedAllowWaterBucketFall;
     private boolean savedAllowSprint;
     private boolean savedAllowPlace;
-    private boolean savedAllowParkour;
 
     @BeforeAll
     static void boot() {
@@ -142,13 +141,11 @@ class MovementCostsTest {
         savedAllowWaterBucketFall = s.allowWaterBucketFall;
         savedAllowSprint = s.allowSprint;
         savedAllowPlace = s.allowPlace;
-        savedAllowParkour = s.allowParkour;
         // 空壳玩家没有药水效果表与所在维度,绕开会触碰它们的取样路径
         s.considerPotionEffects = false;
         s.allowWaterBucketFall = false;
         s.allowSprint = true;
         s.allowPlace = true;
-        s.allowParkour = false;
     }
 
     @AfterEach
@@ -158,7 +155,6 @@ class MovementCostsTest {
         s.allowWaterBucketFall = savedAllowWaterBucketFall;
         s.allowSprint = savedAllowSprint;
         s.allowPlace = savedAllowPlace;
-        s.allowParkour = savedAllowParkour;
     }
 
     // ==================== 假世界 ====================
@@ -193,8 +189,15 @@ class MovementCostsTest {
         return v;
     }
 
+    /** 可改地形的出厂规格;跑酷出厂即关,单测按需派生。 */
+    private static final RouteSpec NATURAL = RouteSpec.defaults().withAlter(RouteSpec.Alter.NATURAL);
+
     private static CalculationContext context(FakeView view) {
-        return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, true, TerrainPermit.TERRAFORM);
+        return context(view, NATURAL);
+    }
+
+    private static CalculationContext context(FakeView view, RouteSpec spec) {
+        return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, true, spec);
     }
 
     // ==================== 平移 ====================
@@ -209,11 +212,18 @@ class MovementCostsTest {
 
     @Test
     void traverseFlatWalkCosts4_6329() {
-        NavSettings.get().allowSprint = false;
-        CalculationContext ctx = context(floored());
+        CalculationContext ctx = context(floored(), NATURAL.withSprint(false));
         double cost = MovementTraverse.cost(ctx, 0, 64, 0, 1, 0);
         assertEquals(4.6329, cost, EPS);
         assertEquals(ActionCosts.WALK_ONE_BLOCK_COST, cost, 1e-9);
+    }
+
+    @Test
+    void serverSprintSwitchCapsTheSpec() {
+        // 规格说可以疾跑,服主总开关关着:总开关是天花板
+        NavSettings.get().allowSprint = false;
+        CalculationContext ctx = context(floored());
+        assertEquals(ActionCosts.WALK_ONE_BLOCK_COST, MovementTraverse.cost(ctx, 0, 64, 0, 1, 0), 1e-9);
     }
 
     // ==================== 上一格 ====================
@@ -270,8 +280,8 @@ class MovementCostsTest {
         CalculationContext ctx = context(v);
         double cost = MovementPillar.cost(ctx, 0, 64, 0);
         // 徒手(泥土物品)挖泥土:硬度 0.5 → 1/(2/30)=15 tick,再加挖掘附加罚金。
-        // 罚金引用设置真源:这条钉的是成本组成,罚金定多大是 NavSettings 的决定。
-        assertEquals(25.1634 + 15 + NavSettings.get().blockBreakAdditionalPenalty, cost, EPS);
+        // 罚金引用规格真源:这条钉的是成本组成,罚金定多大是 RouteSpec 的决定。
+        assertEquals(25.1634 + 15 + NATURAL.breakPenalty(), cost, EPS);
     }
 
     // ==================== 原地下挖 ====================
@@ -283,7 +293,7 @@ class MovementCostsTest {
         v.set(0, 62, 0, Blocks.STONE.defaultBlockState()); // 再下一格可站
         CalculationContext ctx = context(v);
         double cost = MovementDownward.cost(ctx, 0, 64, 0);
-        assertEquals(5.6147 + 15 + NavSettings.get().blockBreakAdditionalPenalty, cost, EPS);
+        assertEquals(5.6147 + 15 + NATURAL.breakPenalty(), cost, EPS);
     }
 
     // ==================== 跑酷 ====================
@@ -301,11 +311,10 @@ class MovementCostsTest {
 
     @Test
     void parkourEnabledPricesOneGapJump() {
-        NavSettings.get().allowParkour = true;
         FakeView v = new FakeView();
         v.set(0, 63, 0, Blocks.STONE.defaultBlockState());
         v.set(2, 63, 0, Blocks.STONE.defaultBlockState());
-        CalculationContext ctx = context(v);
+        CalculationContext ctx = context(v, NATURAL.withParkour(true));
         MutableMoveResult res = new MutableMoveResult();
         MovementParkour.cost(ctx, 0, 64, 0, Direction.EAST, res);
         assertEquals(2, res.x);

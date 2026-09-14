@@ -2,10 +2,9 @@ package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
-import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
-import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
@@ -41,6 +40,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 @Tag("mc")
 class BuildTaskRecordTest {
+
+    /** 施工上下文的规格:可改地形;工地格的禁令由任务并进位置代价,这里不需要。 */
+    private static final RouteSpec NATURAL = RouteSpec.defaults().withAlter(RouteSpec.Alter.NATURAL);
 
     private static boolean booted;
     private static ServerPlayer player;
@@ -315,7 +317,7 @@ class BuildTaskRecordTest {
         FakeView view = new FakeView();
         view.set(pos, Blocks.AIR.defaultBlockState());
         BuildCalculationContext ctx = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
-                true, LongSets.emptySet(), LongSets.emptySet(), TerrainPermit.TERRAFORM,
+                true, NATURAL,
                 Map.of(pos.asLong(), target),
                 Set.of(Blocks.OBSIDIAN.defaultBlockState()), true);
 
@@ -341,11 +343,11 @@ class BuildTaskRecordTest {
         FakeView view = new FakeView();
         view.set(pos, Blocks.AIR.defaultBlockState());
         BuildCalculationContext ctx = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
-                true, LongSets.emptySet(), LongSets.emptySet(), TerrainPermit.TERRAFORM,
+                true, NATURAL,
                 Map.of(pos.asLong(), target),
                 Set.of(Blocks.DIRT.defaultBlockState()), true);
 
-        assertEquals(NavSettings.get().blockPlacementPenalty
+        assertEquals(NATURAL.placeCost()
                         * NavSettings.get().placeIncorrectBlockPenaltyMultiplier,
                 ctx.costOfPlacingAt(pos.getX(), pos.getY(), pos.getZ(), Blocks.AIR.defaultBlockState()));
     }
@@ -361,7 +363,7 @@ class BuildTaskRecordTest {
         FakeView view = new FakeView();
         view.set(pos, Blocks.DIRT.defaultBlockState());
         BuildCalculationContext ctx = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
-                true, LongSets.emptySet(), LongSets.emptySet(), TerrainPermit.TERRAFORM,
+                true, NATURAL,
                 Map.of(pos.asLong(), target),
                 Set.of(Blocks.OBSIDIAN.defaultBlockState()), true);
 

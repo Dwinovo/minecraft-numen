@@ -10,6 +10,8 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
@@ -31,8 +33,8 @@ public class MovementAscend extends Movement {
     /** 需要放置时,连续多少 tick 还没把块放上(用于退开自救与取消保护)。 */
     private int ticksWithoutPlacement = 0;
 
-    public MovementAscend(ServerPlayer player, BlockPos src, BlockPos dest) {
-        super(player, src, dest,
+    public MovementAscend(ServerPlayer player, RouteSpec spec, BlockPos src, BlockPos dest) {
+        super(player, spec, src, dest,
                 new BlockPos[]{dest, src.above(2), dest.above()}, dest.below());
     }
 
@@ -51,7 +53,7 @@ public class MovementAscend extends Movement {
     public static double cost(CalculationContext context, int x, int y, int z, int destX, int destZ) {
         BlockState toPlace = context.get(destX, y, destZ);
         double additionalPlacementCost = 0;
-        if (!MovementHelper.canWalkOn(context, destX, y, destZ, toPlace)) {
+        if (!context.canWalkOn(destX, y, destZ, toPlace)) {
             additionalPlacementCost = context.costOfPlacingAt(destX, y, destZ, toPlace);
             if (additionalPlacementCost >= COST_INF) {
                 return COST_INF;
@@ -79,7 +81,7 @@ public class MovementAscend extends Movement {
         }
         BlockState srcUp2 = context.get(x, y + 2, z);
         if (context.get(x, y + 3, z).getBlock() instanceof FallingBlock
-                && (MovementHelper.canWalkThrough(context, x, y + 1, z)
+                && (context.canWalkThrough(x, y + 1, z)
                         || !(srcUp2.getBlock() instanceof FallingBlock))) {
             // 跳上去的瞬间头顶沙柱塌下来会闷住;只有"src.above 不可穿且
             // src.above(2) 也是落沙"的情形说明整根沙柱已在准备期清掉,才放行
@@ -90,8 +92,8 @@ public class MovementAscend extends Movement {
             return COST_INF;
         }
         // 灵魂沙上能起跳,下半砖上跳不满一格
-        boolean jumpingFromBottomSlab = MovementHelper.isBottomSlab(srcDown);
-        boolean jumpingToBottomSlab = MovementHelper.isBottomSlab(toPlace);
+        boolean jumpingFromBottomSlab = CellClass.isBottomSlab(srcDown);
+        boolean jumpingToBottomSlab = CellClass.isBottomSlab(toPlace);
         if (jumpingFromBottomSlab && !jumpingToBottomSlab) {
             return COST_INF; // 从下半砖只能上到另一块下半砖
         }
@@ -99,7 +101,7 @@ public class MovementAscend extends Movement {
         if (jumpingToBottomSlab) {
             if (jumpingFromBottomSlab) {
                 walk = Math.max(JUMP_ONE_BLOCK_COST, WALK_ONE_BLOCK_COST);
-                walk += context.jumpPenalty;
+                walk += context.spec.jumpPenalty();
             } else {
                 walk = WALK_ONE_BLOCK_COST; // 整块上半砖:直接走进去,不跳
             }
@@ -109,7 +111,7 @@ public class MovementAscend extends Movement {
             } else {
                 walk = Math.max(JUMP_ONE_BLOCK_COST, WALK_ONE_BLOCK_COST);
             }
-            walk += context.jumpPenalty;
+            walk += context.spec.jumpPenalty();
         }
 
         double totalCost = walk + additionalPlacementCost;
@@ -161,7 +163,7 @@ public class MovementAscend extends Movement {
         }
 
         BlockState jumpingOnto = level.getBlockState(positionToPlace);
-        if (!MovementHelper.canWalkOn(level, positionToPlace)) {
+        if (!CellClass.canWalkOn(level, positionToPlace, spec)) {
             // 落点块还不在:潜行放置
             ticksWithoutPlacement++;
             if (MovementPlacement.attemptToPlaceABlock(state, player, dest.below(), false, true)
@@ -178,8 +180,8 @@ public class MovementAscend extends Movement {
             return state;
         }
         AimGeometry.moveTowards(player, state, dest);
-        if (MovementHelper.isBottomSlab(jumpingOnto)
-                && !MovementHelper.isBottomSlab(level.getBlockState(src.below()))) {
+        if (CellClass.isBottomSlab(jumpingOnto)
+                && !CellClass.isBottomSlab(level.getBlockState(src.below()))) {
             return state; // 从整块走进下半砖不用跳
         }
 
@@ -225,7 +227,7 @@ public class MovementAscend extends Movement {
         BlockPos startUp = src.above(2);
         for (int i = 0; i < 4; i++) {
             BlockPos check = startUp.relative(Direction.from2DDataValue(i));
-            if (!MovementHelper.canWalkThrough(player.level(), check)) {
+            if (!CellClass.canWalkThrough(player.level(), check, spec)) {
                 return false;
             }
         }

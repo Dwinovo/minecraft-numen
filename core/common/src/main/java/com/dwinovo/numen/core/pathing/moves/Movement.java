@@ -6,6 +6,8 @@ import java.util.Objects;
 import java.util.Set;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -30,6 +32,8 @@ import net.minecraft.world.phys.HitResult;
 public abstract class Movement {
 
     protected final ServerPlayer player;
+    /** 给本动作计价的那份路线规格;执行期的格子判定与顺手放置都按它。 */
+    protected final RouteSpec spec;
 
     protected final BlockPos src;
     protected final BlockPos dest;
@@ -57,17 +61,23 @@ public abstract class Movement {
     /** 成本是否是在 dest 所在 chunk 已加载时算出的(执行期涨价豁免用)。 */
     private Boolean calculatedWhileLoaded;
 
-    protected Movement(ServerPlayer player, BlockPos src, BlockPos dest,
+    protected Movement(ServerPlayer player, RouteSpec spec, BlockPos src, BlockPos dest,
                        BlockPos[] toBreak, BlockPos toPlace) {
         this.player = player;
+        this.spec = spec;
         this.src = src;
         this.dest = dest;
         this.positionsToBreak = toBreak;
         this.positionToPlace = toPlace;
     }
 
-    protected Movement(ServerPlayer player, BlockPos src, BlockPos dest, BlockPos[] toBreak) {
-        this(player, src, dest, toBreak, null);
+    protected Movement(ServerPlayer player, RouteSpec spec, BlockPos src, BlockPos dest,
+                       BlockPos[] toBreak) {
+        this(player, spec, src, dest, toBreak, null);
+    }
+
+    public RouteSpec spec() {
+        return spec;
     }
 
     // ==================== 成本 ====================
@@ -117,7 +127,7 @@ public abstract class Movement {
 
     /**
      * 当前身位是否属于本动作的合法过程位集合。脚下不在集合里时,
-     * 再按 {@link #pathStart(ServerPlayer)} 算一个假起点(脚下不可站时
+     * 再按 {@link #pathStart(ServerPlayer, RouteSpec)} 算一个假起点(脚下不可站时
      * 取 3×3 邻格/下一格的支撑点)——重算/回退后,整体路径起点不一定
      * 属于本移动自身的 {src,dest} 集合,假起点兜住这种情形。
      */
@@ -146,7 +156,7 @@ public abstract class Movement {
         if (getValidPositions().contains(feet)) {
             return true;
         }
-        BlockPos fakeStart = pathStart(player);
+        BlockPos fakeStart = pathStart(player, spec);
         return getValidPositions().contains(fakeStart);
     }
 
@@ -156,10 +166,10 @@ public abstract class Movement {
      * 其余情况用脚位。与 PathingCore.pathStart 同一语义,提取为基类静态
      * 助手供 Movement 子类(如 Downward 的 UNREACHABLE 判定)复用。
      */
-    public static BlockPos pathStart(ServerPlayer player) {
+    public static BlockPos pathStart(ServerPlayer player, RouteSpec spec) {
         BlockPos feet = feet(player);
         var level = player.level();
-        if (MovementHelper.canWalkOn(level, feet.below())) {
+        if (CellClass.canWalkOn(level, feet.below(), spec)) {
             return feet;
         }
         if (player.onGround()) {
@@ -181,14 +191,14 @@ public abstract class Movement {
                 if (xDist > 0.8 && zDist > 0.8) {
                     continue;
                 }
-                if (MovementHelper.canWalkOn(level, possibleSupport.below())
-                        && MovementHelper.canWalkThrough(level, possibleSupport)
-                        && MovementHelper.canWalkThrough(level, possibleSupport.above())) {
+                if (CellClass.canWalkOn(level, possibleSupport.below(), spec)
+                        && CellClass.canWalkThrough(level, possibleSupport, spec)
+                        && CellClass.canWalkThrough(level, possibleSupport.above(), spec)) {
                     return possibleSupport;
                 }
             }
         } else {
-            if (MovementHelper.canWalkOn(level, feet.below().below())) {
+            if (CellClass.canWalkOn(level, feet.below().below(), spec)) {
                 return feet.below();
             }
         }
@@ -209,7 +219,7 @@ public abstract class Movement {
         player.getAbilities().flying = false;
         currentState = updateState(currentState);
         BlockPos feet = feet(player);
-        if (MovementHelper.isLiquid(player.level().getBlockState(feet))
+        if (CellClass.isLiquid(player.level().getBlockState(feet))
                 && player.getY() < dest.getY() + 0.6) {
             currentState.setInput(Input.JUMP, true);
         }
@@ -261,7 +271,7 @@ public abstract class Movement {
                             new AABB(0, 0, 0, 1, 1.1, 1).move(pos)).isEmpty()) {
                 return false;
             }
-            if (!MovementHelper.canWalkThrough(player.level(), pos)) {
+            if (!CellClass.canWalkThrough(player.level(), pos, spec)) {
                 beginBreaking(state, pos);
                 return false;
             }
@@ -318,9 +328,6 @@ public abstract class Movement {
 
         /** 应用单个按键。 */
         void applyInput(Input input, boolean held);
-
-        /** 这次导航对地形的许可:执行期"顺手"的放置(跑酷落点补块)只在可改地形时做。 */
-        TerrainPermit permit();
     }
 
     private ExecutionDelegate executionDelegate;
@@ -358,9 +365,9 @@ public abstract class Movement {
         }
     }
 
-    /** 执行期能不能改地形;未注入代理(纯规划)按不能算——规划已由上下文成本裁决。 */
+    /** 执行期"顺手"的放置(跑酷落点补块)只在规格允许改地形时做。 */
     protected boolean mayAlterTerrain() {
-        return executionDelegate != null && executionDelegate.permit().mayAlter();
+        return spec.alter().mayAlter();
     }
 
     // ==================== 元数据 ====================
@@ -395,7 +402,7 @@ public abstract class Movement {
         }
         List<BlockPos> result = new ArrayList<>();
         for (BlockPos pos : positionsToBreak) {
-            if (!MovementHelper.canWalkThrough(level, pos)) {
+            if (!CellClass.canWalkThrough(level, pos, spec)) {
                 result.add(pos);
             }
         }
@@ -409,7 +416,7 @@ public abstract class Movement {
             return toPlaceCached;
         }
         List<BlockPos> result = new ArrayList<>();
-        if (positionToPlace != null && !MovementHelper.canWalkOn(level, positionToPlace)) {
+        if (positionToPlace != null && !CellClass.canWalkOn(level, positionToPlace, spec)) {
             result.add(positionToPlace);
         }
         toPlaceCached = result;

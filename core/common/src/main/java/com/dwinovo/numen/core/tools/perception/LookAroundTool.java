@@ -4,7 +4,8 @@ import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.core.pathing.execute.PathExecutor;
-import com.dwinovo.numen.core.pathing.moves.MovementHelper;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonObject;
 
@@ -144,7 +145,7 @@ public final class LookAroundTool implements NumenTool {
         BlockState feetState = view.getBlockState(new BlockPos(x, feetY, z));
         BlockState headState = view.getBlockState(new BlockPos(x, feetY + 1, z));
 
-        if (MovementHelper.isLava(feetState) || MovementHelper.isLava(headState)) {
+        if (CellClass.isLava(feetState) || CellClass.isLava(headState)) {
             return HAZARD;
         }
         if (feetState.getBlock() instanceof LiquidBlock || headState.getBlock() instanceof LiquidBlock) {
@@ -160,8 +161,8 @@ public final class LookAroundTool implements NumenTool {
             }
         }
         if (standY == null) {
-            boolean bodyClear = MovementHelper.fullyPassable(view, new BlockPos(x, feetY, z))
-                    && MovementHelper.fullyPassable(view, new BlockPos(x, feetY + 1, z));
+            boolean bodyClear = CellClass.fullyPassable(view, new BlockPos(x, feetY, z))
+                    && CellClass.fullyPassable(view, new BlockPos(x, feetY + 1, z));
             if (!bodyClear) {
                 return (isTree(feetState) || isTree(headState)) ? TREE : WALL;
             }
@@ -184,9 +185,9 @@ public final class LookAroundTool implements NumenTool {
     }
 
     private static boolean canStandAt(BlockGetter view, int x, int y, int z) {
-        return MovementHelper.canWalkOn(view, new BlockPos(x, y - 1, z))
-                && MovementHelper.fullyPassable(view, new BlockPos(x, y, z))
-                && MovementHelper.fullyPassable(view, new BlockPos(x, y + 1, z));
+        return CellClass.canWalkOn(view, new BlockPos(x, y - 1, z), RouteSpec.defaults())
+                && CellClass.fullyPassable(view, new BlockPos(x, y, z))
+                && CellClass.fullyPassable(view, new BlockPos(x, y + 1, z));
     }
 
     /** Layered-costmap style: ring a caution buffer around lava/fire so the model keeps clear of edges. */

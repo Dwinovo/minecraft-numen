@@ -135,9 +135,9 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
         startWalkingNav();
     }
 
-    /** 这次 goto 的地形许可:模型点头了才开路,否则只走不改。四处建导航都从这儿取。 */
+    /** 这次 goto 的路线规格:模型点头了才开路,否则只走不改。四处建导航都从这儿取。 */
     private PlayerNav.ContextProvider terrain() {
-        return r.mayAlterTerrain ? PlayerNav.ContextProvider.TERRAFORM : PlayerNav.ContextProvider.DEFAULT;
+        return r.mayAlterTerrain ? PlayerNav.ContextProvider.NATURAL : PlayerNav.ContextProvider.DEFAULT;
     }
 
     /**
@@ -222,7 +222,7 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
      */
     private boolean reached() {
         return inGoalCell(feet())
-                && inGoalCell(com.dwinovo.numen.core.pathing.moves.Movement.pathStart(player));
+                && inGoalCell(com.dwinovo.numen.core.pathing.moves.Movement.pathStart(player, terrain().spec()));
     }
 
     /** ONE membership definition per kind, shared with the search:

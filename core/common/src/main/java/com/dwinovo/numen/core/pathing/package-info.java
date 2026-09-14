@@ -6,9 +6,12 @@
  * <ul>
  *   <li>{@code goals/} —— 内核目标族:单格/双格/邻域/列/层/复合/外逃等
  *       到达语义与各自的启发式。</li>
+ *   <li>{@code spec/} —— 路线规格:按次传值的 {@code RouteSpec}(能力、每类代价、
+ *       按位置代价、动作代价)、格子分类 {@code CellClass}(全仓唯一的可穿/可站
+ *       判定出处)、位置代价表 {@code PositionCosts}。</li>
  *   <li>{@code moves/} —— 成本模型与移动原语:动作成本表、成本上下文
- *       ({@code CalculationContext},吸收 sacred/deniedPlace
- *       三个语义开关)、谓词库({@code MovementHelper})、工具评估
+ *       ({@code CalculationContext},把规格与总开关、背包、附魔折成结论)、
+ *       挖掘/放置判定库({@code MovementHelper})、工具评估
  *       ({@code ToolSet})与八类移动原语的计价+逐 tick 状态机。</li>
  *   <li>{@code astar/} —— 搜索器:二叉堆开集、系数分档的部分路径候选、
  *       favoring 折扣、路径装配(截尾/拼接/裁剪)。</li>
@@ -24,9 +27,10 @@
  *       (任务层目标接口)与 {@code PathPlannerPool}。</li>
  *   <li>{@code goal/} —— 意图契约层:{@code GoalCompiler} 把任务意图
  *       编译成 goal + sacred 的完整导航契约。</li>
- *   <li>{@code settings/} —— 全部旋钮({@code NavSettings})。</li>
- *   <li>{@code util/} —— 方块谓词库({@code BlockHelper})与离线可答的
- *       方块实体视图接口({@code BlockEntityAware})。</li>
+ *   <li>{@code settings/} —— 引擎与服主参数({@code NavSettings}:总开关、搜索预算、
+ *       执行参数);模型该碰的旋钮在 {@code spec/}。</li>
+ *   <li>{@code util/} —— 任务层与挖掘器共用的方块工具({@code BlockHelper}:脚位、
+ *       可收获、硬禁挖)与离线可答的方块实体视图接口({@code BlockEntityAware})。</li>
  * </ul>
  *
  * <p>对外契约(目标态):任务层只经 {@code execute.PlayerNav} +

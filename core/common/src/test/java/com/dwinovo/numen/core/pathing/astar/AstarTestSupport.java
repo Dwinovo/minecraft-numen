@@ -9,6 +9,7 @@ import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.Movement;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 
@@ -47,7 +48,7 @@ final class AstarTestSupport {
     static final class TestMovement extends Movement {
 
         TestMovement(BlockPos src, BlockPos dest, double cost) {
-            super(null, src, dest, new BlockPos[0]);
+            super(null, RouteSpec.defaults(), src, dest, new BlockPos[0]);
             override(cost);
         }
 

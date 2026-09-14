@@ -7,6 +7,8 @@ import java.util.Map;
 import java.util.Set;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
+import com.dwinovo.numen.core.pathing.spec.PositionCosts;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.util.BlockEntityAware;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -47,10 +49,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
  *       这里钉<b>机制</b>(手动绑一个测试自声明的方块进标签);
  *       默认成员(床/门/活板门/栅栏门)的真源在 ModBlockTagData,
  *       由 ModBlockTagDataTest 另钉;</li>
- *   <li>sacred(导航自身目标格)必 INF;</li>
+ *   <li>sacred(导航自身目标格,经规格的按位置代价)必 INF;</li>
  *   <li>同地形普通方块(泥土)有限价——证明是保护在起作用,不是别的
  *       东西把边价推上去的;</li>
- *   <li>deniedPlace 命中格放置计 INF;石头可作放置贴面
+ *   <li>规格按位置禁放的格放置计 INF;石头可作放置贴面
  *       (plan/execute 一把尺的共享谓词)。</li>
  * </ul>
  * 需要 MC 注册表,无头引导失败时跳过而不失败。
@@ -198,9 +200,12 @@ class ProtectionPinsTest {
         return v;
     }
 
+    /** 可改地形的规格,sacred 格作为按位置的禁挖禁放并进去。 */
+    private static final RouteSpec NATURAL = RouteSpec.defaults().withAlter(RouteSpec.Alter.NATURAL);
+
     private static CalculationContext context(FakeView view, LongSet sacred) {
         return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, false,
-                sacred, LongSets.emptySet(), TerrainPermit.TERRAFORM);
+                NATURAL.withPositions(PositionCosts.protect(sacred)));
     }
 
     private static LongSet sacredOf(BlockPos pos) {
@@ -279,16 +284,16 @@ class ProtectionPinsTest {
                 dirt.getX(), dirt.getY(), dirt.getZ(), false) >= COST_INF);
     }
 
-    // ==================== 地形许可:PRESERVE 下挖与放处处 INF ====================
+    // ==================== 路线规格:不改地形时挖与放处处 INF ====================
 
     @Test
-    void preservePermitMakesEveryBreakAndPlaceInfinite() {
+    void preservingSpecMakesEveryBreakAndPlaceInfinite() {
         BlockPos dirt = SRC.north();
         FakeView v = floored();
         v.set(dirt, Blocks.DIRT.defaultBlockState());
         CalculationContext preserve = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
-                false, LongSets.emptySet(), LongSets.emptySet(), TerrainPermit.PRESERVE);
-        // 同一块泥土,TERRAFORM 有限价(见上),PRESERVE 无限价——翻成 INF 的只是许可
+                false, RouteSpec.defaults());
+        // 同一块泥土,NATURAL 有限价(见上),NONE 无限价——翻成 INF 的只是规格的 alter
         assertTrue(MovementHelper.getMiningDurationTicks(preserve,
                 dirt.getX(), dirt.getY(), dirt.getZ(), false) >= COST_INF);
         BlockPos cell = SRC.north().above();
@@ -308,11 +313,10 @@ class ProtectionPinsTest {
         CalculationContext sacredCtx = context(v, sacredOf(cell));
         assertEquals(COST_INF, sacredCtx.costOfPlacingAt(
                 cell.getX(), cell.getY(), cell.getZ(), v.getBlockState(cell)));
-        // deniedPlace 格(执行层证明无支撑)不可再规划放置
-        LongSet denied = new LongOpenHashSet();
-        denied.add(cell.asLong());
+        // 规格按位置只禁放的格不可再规划放置
         CalculationContext deniedCtx = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
-                false, LongSets.emptySet(), denied, TerrainPermit.TERRAFORM);
+                false, NATURAL.withPositions(PositionCosts.builder()
+                        .place(cell.asLong(), COST_INF).build()));
         assertEquals(COST_INF, deniedCtx.costOfPlacingAt(
                 cell.getX(), cell.getY(), cell.getZ(), v.getBlockState(cell)));
     }

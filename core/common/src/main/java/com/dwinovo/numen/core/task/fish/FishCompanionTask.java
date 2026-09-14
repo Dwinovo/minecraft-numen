@@ -5,6 +5,8 @@ import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.mixin.FishingHookAccessor;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
@@ -527,9 +529,9 @@ public final class FishCompanionTask extends AbstractCompanionTask<FishTaskRecor
     private boolean isDryStance(BlockPos pos) {
         return player.level().getFluidState(pos).isEmpty()
                 && player.level().getFluidState(pos.above()).isEmpty()
-                && BlockHelper.canWalkThrough(player.level(), pos)
-                && BlockHelper.canWalkThrough(player.level(), pos.above())
-                && BlockHelper.canWalkOn(player.level(), pos.below());
+                && CellClass.canWalkThrough(player.level(), pos, RouteSpec.defaults())
+                && CellClass.canWalkThrough(player.level(), pos.above(), RouteSpec.defaults())
+                && CellClass.canWalkOn(player.level(), pos.below(), RouteSpec.defaults());
     }
 
     private boolean atStance() {

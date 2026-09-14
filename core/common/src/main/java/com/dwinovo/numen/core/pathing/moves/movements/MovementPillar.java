@@ -10,6 +10,8 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -34,8 +36,8 @@ import static com.dwinovo.numen.core.pathing.moves.ActionCosts.LADDER_UP_ONE_COS
 /** 垫柱上一格:原地起跳在脚下放方块(或沿梯子/藤蔓/水柱直接上一格)。 */
 public class MovementPillar extends Movement {
 
-    public MovementPillar(ServerPlayer player, BlockPos src, BlockPos dest) {
-        super(player, src, dest, new BlockPos[]{src.above(2)}, src);
+    public MovementPillar(ServerPlayer player, RouteSpec spec, BlockPos src, BlockPos dest) {
+        super(player, spec, src, dest, new BlockPos[]{src.above(2)}, src);
     }
 
     /**
@@ -68,9 +70,9 @@ public class MovementPillar extends Movement {
             return COST_INF; // 栅栏门顶头,跳不过去也挖不干净
         }
         BlockState srcUp = null;
-        if (MovementHelper.isWater(toBreak) && MovementHelper.isWater(fromState)) {
+        if (CellClass.isWater(toBreak) && CellClass.isWater(fromState)) {
             srcUp = context.get(x, y + 1, z);
-            if (MovementHelper.isWater(srcUp)) {
+            if (CellClass.isWater(srcUp)) {
                 return LADDER_UP_ONE_COST; // 已在水柱中,允许继续上游
             }
         }
@@ -85,10 +87,9 @@ public class MovementPillar extends Movement {
                 placeCost += 0.1; // 悬空垫柱轻罚(1/200 秒)
             }
         }
-        if ((MovementHelper.isLiquid(fromState)
-                        && !MovementHelper.canPlaceAgainst(context, x, y - 1, z, fromDown))
-                || (MovementHelper.isLiquid(fromDown) && context.assumeWalkOnWater)) {
-            // 泡在水里贴不到下面、或按水面行走语义站在水上,都垫不了
+        if (CellClass.isLiquid(fromState)
+                && !MovementHelper.canPlaceAgainst(context, x, y - 1, z, fromDown)) {
+            // 泡在水里贴不到下面,垫不了
             return COST_INF;
         }
         if ((from == Blocks.LILY_PAD || from instanceof CarpetBlock)
@@ -120,30 +121,30 @@ public class MovementPillar extends Movement {
         if (ladder) {
             return LADDER_UP_ONE_COST + hardness * 5; // 挂梯上挖极慢
         } else {
-            return JUMP_ONE_BLOCK_COST + placeCost + context.jumpPenalty + hardness;
+            return JUMP_ONE_BLOCK_COST + placeCost + context.spec.jumpPenalty() + hardness;
         }
     }
 
     /** 四个水平邻格有无实心方块(藤蔓攀爬依据)。 */
     public static boolean hasAgainst(CalculationContext context, int x, int y, int z) {
-        return MovementHelper.isBlockNormalCube(context.get(x + 1, y, z))
-                || MovementHelper.isBlockNormalCube(context.get(x - 1, y, z))
-                || MovementHelper.isBlockNormalCube(context.get(x, y, z + 1))
-                || MovementHelper.isBlockNormalCube(context.get(x, y, z - 1));
+        return CellClass.isFullCube(context.get(x + 1, y, z))
+                || CellClass.isFullCube(context.get(x - 1, y, z))
+                || CellClass.isFullCube(context.get(x, y, z + 1))
+                || CellClass.isFullCube(context.get(x, y, z - 1));
     }
 
     /** 藤蔓格四邻里第一个实心方块(攀爬贴面),没有则 null。 */
     public static BlockPos getAgainst(BlockGetter level, BlockPos vine) {
-        if (MovementHelper.isBlockNormalCube(level.getBlockState(vine.north()))) {
+        if (CellClass.isFullCube(level.getBlockState(vine.north()))) {
             return vine.north();
         }
-        if (MovementHelper.isBlockNormalCube(level.getBlockState(vine.south()))) {
+        if (CellClass.isFullCube(level.getBlockState(vine.south()))) {
             return vine.south();
         }
-        if (MovementHelper.isBlockNormalCube(level.getBlockState(vine.east()))) {
+        if (CellClass.isFullCube(level.getBlockState(vine.east()))) {
             return vine.east();
         }
-        if (MovementHelper.isBlockNormalCube(level.getBlockState(vine.west()))) {
+        if (CellClass.isFullCube(level.getBlockState(vine.west()))) {
             return vine.west();
         }
         return null;
@@ -173,8 +174,8 @@ public class MovementPillar extends Movement {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
         BlockState fromDown = level.getBlockState(src);
-        if (MovementHelper.isWater(fromDown)
-                && MovementHelper.isWater(level.getBlockState(dest))) {
+        if (CellClass.isWater(fromDown)
+                && CellClass.isWater(level.getBlockState(dest))) {
             // 水柱:看向上方目标中心保持居中上浮(上浮强跳由基类通用规则按)
             Vec3 destCenter = AimGeometry.blockCenter(dest);
             state.setTarget(new MovementState.MovementTarget(
@@ -198,7 +199,7 @@ public class MovementPillar extends Movement {
             state.setTarget(new MovementState.MovementTarget(player.getYRot(), placePitch, true));
         }
 
-        boolean blockIsThere = MovementHelper.canWalkOn(level, src) || ladder;
+        boolean blockIsThere = CellClass.canWalkOn(level, src, spec) || ladder;
         if (ladder) {
             BlockPos against = vine
                     ? getAgainst(level, src)
@@ -210,7 +211,7 @@ public class MovementPillar extends Movement {
                     || feet(player).equals(dest)) {
                 return state.setStatus(MovementStatus.SUCCESS);
             }
-            if (MovementHelper.isBottomSlab(level.getBlockState(src.below()))) {
+            if (CellClass.isBottomSlab(level.getBlockState(src.below()))) {
                 state.setInput(Input.JUMP, true); // 从下半砖上够梯子得先跳
             }
             AimGeometry.moveTowards(player, state, against);
@@ -325,7 +326,7 @@ public class MovementPillar extends Movement {
                 state.setInput(Input.SNEAK, true);
             }
         }
-        if (MovementHelper.isWater(player.level().getBlockState(dest.above()))) {
+        if (CellClass.isWater(player.level().getBlockState(dest.above()))) {
             return true;
         }
         return super.prepared(state);

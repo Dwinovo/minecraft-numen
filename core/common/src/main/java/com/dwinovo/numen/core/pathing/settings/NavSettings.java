@@ -11,8 +11,13 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
 /**
- * 地面寻路全部旋钮的集中定义:成本模型、能力开关、搜索预算、分段与执行参数。
- * 所有字段 public 可变,运行期直接改写即生效;全局单例 {@link #get()}。
+ * 地面寻路的引擎与服主参数:总开关(天花板)、搜索预算、分段与执行参数、
+ * 建造校验参数。所有字段 public 可变,运行期直接改写即生效;全局单例 {@link #get()}。
+ *
+ * <p>模型该碰的那部分——这一次导航能不能改地形、能不能跑酷、各项罚金、
+ * 每类格子的代价——不在这里,在按次传值的
+ * {@link com.dwinovo.numen.core.pathing.spec.RouteSpec};规格只能在这里的总开关
+ * 之下收紧。判据:模型会想改的是规格,服主定的上限与引擎自身的参数是设置。
  *
  * <p>方块/物品清单字段经由懒加载 getter 暴露(首次访问才触碰注册表),
  * 保证纯逻辑单测在不引导 MC 注册表的情况下也能使用其余数值字段。
@@ -27,16 +32,16 @@ public final class NavSettings {
 
     private NavSettings() {}
 
-    // ==================== 成本 / 能力开关 ====================
+    // ==================== 总开关 / 引擎假设 ====================
 
     /** 调试:打开寻路性能探针,{@link com.dwinovo.numen.core.pathing.util.NavProfiler} 按窗口打 [nav-profile] 日志。默认关。 */
     public boolean profile = false;
 
-    /** 允许挖掘方块开路。 */
+    /** 允许挖掘方块开路(总开关;规格的 alter 在其下生效)。 */
     public boolean allowBreak = true;
-    /** 允许疾跑。 */
+    /** 允许疾跑(总开关;规格的 sprint 在其下生效)。 */
     public boolean allowSprint = true;
-    /** 允许放置方块搭路。 */
+    /** 允许放置方块搭路(总开关)。 */
     public boolean allowPlace = true;
     /** 允许动用背包深处(9-35 格)的物品:规划期全背包计入耗材,执行期
      *  自动把耗材/水桶搬进快捷栏。关闭时只认快捷栏与副手。 */
@@ -45,57 +50,18 @@ public final class NavSettings {
     public boolean allowPlaceInFluidsSource = true;
     /** 允许把方块放进流动流体所在格。 */
     public boolean allowPlaceInFluidsFlow = true;
-    /** 放置一个方块的成本罚金(省方块,不鼓励乱放)。 */
-    public double blockPlacementPenalty = 20.0;
-    /**
-     * 每次挖掘的附加成本(除纯挖掘耗时外的定值)。
-     *
-     * <p>30 ≈ 多走 6.5 格。她是住在别人世界里的客人:破坏该是绕不开时的下策,不是抄
-     * 近道的手段。穿一堵墙要拆脚和头两格 ≈ 走 17 格,十几格内有门就走门;地下无路可
-     * 绕时该挖照挖。参照系:挖掘型机器人拿这个值当平手判定(≈2,工具越好拆墙越接近
-     * 免费),定居型 NPC 根本没有破坏这个选项(∞)——同伴两头的活都要干,取中段。
-     */
-    public double blockBreakAdditionalPenalty = 30.0;
-    /** 每次起跳的附加罚金。 */
-    public double jumpPenalty = 2.0;
-    /** 水面行走每格附加罚金。 */
-    public double walkOnWaterOnePenalty = 3.0;
     /** 允许高空坠落时用水桶接底。 */
     public boolean allowWaterBucketFall = true;
-    /** 视水面为可行走地面(默认关,按游泳位语义处理水)。 */
-    public boolean assumeWalkOnWater = false;
-    /** 视岩浆面为可行走地面(默认关)。 */
-    public boolean assumeWalkOnLava = false;
     /** 假定有自动上台阶能力(上一格无需跳跃)。 */
     public boolean assumeStep = false;
     /** 假定行走安全(搭桥时不潜行)。 */
     public boolean assumeSafeWalk = false;
     /** 允许在建筑高度上限起跳。 */
     public boolean allowJumpAtBuildLimit = false;
-    /** 允许跑酷跳上高一格的落点。 */
-    public boolean allowParkourAscend = true;
-    /** 允许对角下降。 */
-    public boolean allowDiagonalDescend = false;
-    /** 允许对角上升。 */
-    public boolean allowDiagonalAscend = false;
-    /** 允许原地向下挖。 */
-    public boolean allowDownward = true;
-    /** 视藤蔓为可攀爬(默认关)。 */
-    public boolean allowVines = false;
-    /** 允许站上下半台阶。 */
-    public boolean allowWalkOnBottomSlab = true;
-    /** 允许跑酷跳跃(2-4 格平跳,默认关)。 */
-    public boolean allowParkour = false;
-    /** 允许跑酷跳跃中途在落点下方放方块(默认关)。 */
-    public boolean allowParkourPlace = false;
     /** 破坏成本计入急迫/挖掘疲劳药水效果。 */
     public boolean considerPotionEffects = true;
-    /** 液体邻格判定从严:任何相邻液体都禁挖(默认关,只禁源与横流)。 */
-    public boolean strictLiquidCheck = false;
     /** 不挖会引发悬空下坠的方块(沙/砾邻格)。 */
     public boolean avoidUpdatingFallingBlocks = true;
-    /** 无水情况下可接受的最大坠落高度。 */
-    public int maxFallHeightNoWater = 3;
     /** 每点摔落伤害折算的代价(tick 当量)。走一格约 4.6,默认 20 即"每掉半颗心
      *  宁可多绕四格多路"——疼不再免费,但摔不死的高度依然是路。 */
     public double fallDamageCostPerPoint = 20.0;
@@ -218,21 +184,12 @@ public final class NavSettings {
 
     // ==================== 方块 / 物品清单(懒加载,首次访问才触碰注册表) ====================
 
-    private List<Block> blocksToAvoid;
     private List<Block> blocksToAvoidBreaking;
     private List<Block> allowBreakAnyway;
     private List<Block> buildIgnoreBlocks;
     private List<Block> okIfAir;
     private List<String> buildIgnoreProperties;
     private Map<Block, List<Block>> buildValidSubstitutes;
-
-    /** 永不穿行的方块(额外拉黑清单)。 */
-    public List<Block> blocksToAvoid() {
-        if (blocksToAvoid == null) {
-            blocksToAvoid = new ArrayList<>();
-        }
-        return blocksToAvoid;
-    }
 
     /** 尽量不挖的功能方块:挖掘成本乘 1/{@link #avoidBreakingMultiplier}。 */
     public List<Block> blocksToAvoidBreaking() {

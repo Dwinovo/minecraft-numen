@@ -9,6 +9,7 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -26,8 +27,8 @@ public class MovementDownward extends Movement {
     /** 自由落体阶段计 tick(前 10 tick 不按键)。 */
     private int numTicks = 0;
 
-    public MovementDownward(ServerPlayer player, BlockPos src, BlockPos dest) {
-        super(player, src, dest, new BlockPos[]{dest});
+    public MovementDownward(ServerPlayer player, RouteSpec spec, BlockPos src, BlockPos dest) {
+        super(player, spec, src, dest, new BlockPos[]{dest});
     }
 
     @Override
@@ -41,10 +42,10 @@ public class MovementDownward extends Movement {
      * 否则落一格 + 挖脚下(脚下若是落沙,轮到执行时早已变空,不计沙链)。
      */
     public static double cost(CalculationContext context, int x, int y, int z) {
-        if (!context.allowDownward) {
+        if (!context.spec.downward()) {
             return COST_INF;
         }
-        if (!MovementHelper.canWalkOn(context, x, y - 2, z)) {
+        if (!context.canWalkOn(x, y - 2, z)) {
             return COST_INF;
         }
         BlockState down = context.get(x, y - 1, z);

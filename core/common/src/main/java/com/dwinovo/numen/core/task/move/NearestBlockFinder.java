@@ -92,7 +92,7 @@ final class NearestBlockFinder {
         // 夹死的格不作候选——省得选中一个走近了也没法处置的目标。问的是这块
         // "能不能被处置",与她怎么走过去无关,按可改地形算。
         var ctx = ContextFactory.forExecution(player,
-                com.dwinovo.numen.core.pathing.moves.TerrainPermit.TERRAFORM);
+                com.dwinovo.numen.core.pathing.execute.PlayerNav.ContextProvider.NATURAL.spec());
         found.stream()
                 .sorted(Comparator.comparingDouble(BlockScanner.Hit::distance))
                 .map(h -> h.pos().immutable())

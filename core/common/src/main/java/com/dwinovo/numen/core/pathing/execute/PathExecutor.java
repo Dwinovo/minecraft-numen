@@ -17,7 +17,7 @@ import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.Input;
 import com.dwinovo.numen.core.pathing.moves.Movement;
-import com.dwinovo.numen.core.pathing.moves.MovementHelper;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
@@ -203,7 +203,7 @@ public final class PathExecutor {
             // 裁决必须和动作自己的合法性判定同源:脚下那格没支撑时(站在柱顶
             // 边沿之类),搜索用的是旁边那格作"假起点",动作也认这个假起点。
             // 只按 feet 判就比动作自己更严,会把本来健康的路径一条条掐掉。
-            if (movement.getValidPositions().contains(Movement.pathStart(player))) {
+            if (movement.getValidPositions().contains(Movement.pathStart(player, movement.spec()))) {
                 ticksNotInValid = 0;
             } else if (++ticksNotInValid > MAX_TICKS_NOT_IN_VALID) {
                 Constants.LOG.info(
@@ -540,14 +540,15 @@ public final class PathExecutor {
         }
         BlockPos feet = playerFeet(player);
         var level = com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level());
-        if (!MovementHelper.canWalkOn(level, feet.below())) {
+        Movement current = path.movements().get(pathPosition);
+        if (!CellClass.canWalkOn(level, feet.below(), current.spec())) {
             return false; // 站位本身可疑(可能跑酷中),别停
         }
-        if (!MovementHelper.canWalkThrough(level, feet)
-                || !MovementHelper.canWalkThrough(level, feet.above())) {
+        if (!CellClass.canWalkThrough(level, feet, current.spec())
+                || !CellClass.canWalkThrough(level, feet.above(), current.spec())) {
             return false; // 身位被埋,别停
         }
-        if (!path.movements().get(pathPosition).safeToCancel()) {
+        if (!current.safeToCancel()) {
             return false;
         }
         List<BlockPos> positions = currentBest.get().positions();
@@ -582,8 +583,8 @@ public final class PathExecutor {
             harness.ensureThrowawayInHotbar();
         }
         if (movement instanceof MovementFall
-                && movement.getSrc().getY() - movement.getDest().getY() > NavSettings.get().maxFallHeightNoWater
-                && !MovementHelper.isWater(player.level().getBlockState(movement.getDest()))) {
+                && movement.getSrc().getY() - movement.getDest().getY() > movement.spec().maxFallHeightNoWater()
+                && !CellClass.isWater(player.level().getBlockState(movement.getDest()))) {
             harness.ensureWaterBucketInHotbar();
         }
     }

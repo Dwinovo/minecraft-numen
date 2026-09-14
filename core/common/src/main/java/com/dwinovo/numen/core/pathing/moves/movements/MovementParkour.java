@@ -11,6 +11,8 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -34,8 +36,8 @@ public class MovementParkour extends Movement {
     private final int dist;
     private final boolean ascend;
 
-    public MovementParkour(ServerPlayer player, BlockPos src, BlockPos dest) {
-        super(player, src, dest, EMPTY, dest.below());
+    public MovementParkour(ServerPlayer player, RouteSpec spec, BlockPos src, BlockPos dest) {
+        super(player, spec, src, dest, EMPTY, dest.below());
         int dx = dest.getX() - src.getX();
         int dz = dest.getZ() - src.getZ();
         this.direction = Direction.getNearest(dx, 0, dz);
@@ -54,7 +56,7 @@ public class MovementParkour extends Movement {
      */
     public static void cost(CalculationContext context, int x, int y, int z,
                             Direction dir, MutableMoveResult res) {
-        if (!context.allowParkour) {
+        if (!context.spec.parkour()) {
             return;
         }
         if (!context.allowJumpAtBuildLimit && y >= context.worldHeight - 1) {
@@ -62,35 +64,31 @@ public class MovementParkour extends Movement {
         }
         int xDiff = dir.getStepX();
         int zDiff = dir.getStepZ();
-        if (!MovementHelper.fullyPassable(context, x + xDiff, y, z + zDiff)) {
+        if (!CellClass.fullyPassable(context.get(x + xDiff, y, z + zDiff))) {
             // 最常见剪枝:紧邻格不是空的
             return;
         }
         BlockState adj = context.get(x + xDiff, y - 1, z + zDiff);
-        if (MovementHelper.canWalkOn(context, x + xDiff, y - 1, z + zDiff, adj)) {
+        if (context.canWalkOn(x + xDiff, y - 1, z + zDiff, adj)) {
             // 能直接走过去就不跑酷
             return;
         }
-        if (MovementHelper.avoidWalkingInto(adj) && !(adj.getFluidState().getType() instanceof WaterFluid)) {
+        if (CellClass.avoidWalkingInto(adj) && !(adj.getFluidState().getType() instanceof WaterFluid)) {
             return; // 紧邻下方是岩浆之类,过冲危险
         }
-        if (!MovementHelper.fullyPassable(context, x + xDiff, y + 1, z + zDiff)) {
+        if (!CellClass.fullyPassable(context.get(x + xDiff, y + 1, z + zDiff))) {
             return;
         }
-        if (!MovementHelper.fullyPassable(context, x + xDiff, y + 2, z + zDiff)) {
+        if (!CellClass.fullyPassable(context.get(x + xDiff, y + 2, z + zDiff))) {
             return;
         }
-        if (!MovementHelper.fullyPassable(context, x, y + 2, z)) {
+        if (!CellClass.fullyPassable(context.get(x, y + 2, z))) {
             return;
         }
         BlockState standingOn = context.get(x, y - 1, z);
         if (standingOn.getBlock() == Blocks.VINE || standingOn.getBlock() == Blocks.LADDER
                 || standingOn.getBlock() instanceof StairBlock
-                || MovementHelper.isBottomSlab(standingOn)) {
-            return;
-        }
-        // 水面行走语义下不能确定脚下的水已冻住,不敢起跳
-        if (context.assumeWalkOnWater && !standingOn.getFluidState().isEmpty()) {
+                || CellClass.isBottomSlab(standingOn)) {
             return;
         }
         if (!context.get(x, y, z).getFluidState().isEmpty()) {
@@ -110,23 +108,23 @@ public class MovementParkour extends Movement {
             int destZ = z + zDiff * i;
 
             // 身位与头顶
-            if (!MovementHelper.fullyPassable(context, destX, y + 1, destZ)) {
+            if (!CellClass.fullyPassable(context.get(destX, y + 1, destZ))) {
                 break;
             }
-            if (!MovementHelper.fullyPassable(context, destX, y + 2, destZ)) {
+            if (!CellClass.fullyPassable(context.get(destX, y + 2, destZ))) {
                 break;
             }
 
             // 落点格实心:跑酷上升判定
             BlockState destInto = context.get(destX, y, destZ);
-            if (!MovementHelper.fullyPassable(context, destX, y, destZ, destInto)) {
-                if (i <= 3 && context.allowParkourAscend && context.canSprint
-                        && MovementHelper.canWalkOn(context, destX, y, destZ, destInto)
+            if (!CellClass.fullyPassable(destInto)) {
+                if (i <= 3 && context.spec.parkourAscend() && context.canSprint
+                        && context.canWalkOn(destX, y, destZ, destInto)
                         && checkOvershootSafety(context, destX + xDiff, y + 1, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y + 1;
                     res.z = destZ;
-                    res.cost = i * SPRINT_ONE_BLOCK_COST + context.jumpPenalty;
+                    res.cost = i * SPRINT_ONE_BLOCK_COST + context.spec.jumpPenalty();
                     return;
                 }
                 break; // 撞墙:转入跳跃放置扫描
@@ -135,21 +133,21 @@ public class MovementParkour extends Movement {
             // 平跳落点:禁落耕地(踩塌);霜行者可冻住水面时也算落点
             BlockState landingOn = context.get(destX, y - 1, destZ);
             if ((landingOn.getBlock() != Blocks.FARMLAND
-                    && MovementHelper.canWalkOn(context, destX, y - 1, destZ, landingOn))
+                    && context.canWalkOn(destX, y - 1, destZ, landingOn))
                     || (Math.min(16, context.frostWalker + 2) >= i
                             && MovementHelper.canUseFrostWalker(context, landingOn))) {
                 if (checkOvershootSafety(context, destX + xDiff, y, destZ + zDiff)) {
                     res.x = destX;
                     res.y = y;
                     res.z = destZ;
-                    res.cost = costFromJumpDistance(i) + context.jumpPenalty;
+                    res.cost = costFromJumpDistance(i) + context.spec.jumpPenalty();
                     return;
                 }
                 break; // 落点过冲不安全:转入跳跃放置扫描
             }
 
             // 没有落点:再高一层也得通透才能继续往更远飞
-            if (!MovementHelper.fullyPassable(context, destX, y + 3, destZ)) {
+            if (!CellClass.fullyPassable(context.get(destX, y + 3, destZ))) {
                 break;
             }
 
@@ -157,7 +155,7 @@ public class MovementParkour extends Movement {
         }
 
         // 跳跃放置:空中在落点下方放一块
-        if (!context.allowParkourPlace) {
+        if (!context.spec.parkourPlace()) {
             return;
         }
         // 从最远的已验证距离往回找可放位置
@@ -186,7 +184,7 @@ public class MovementParkour extends Movement {
                     res.x = destX;
                     res.y = y;
                     res.z = destZ;
-                    res.cost = costFromJumpDistance(i) + placeCost + context.jumpPenalty;
+                    res.cost = costFromJumpDistance(i) + placeCost + context.spec.jumpPenalty();
                     return;
                 }
             }
@@ -195,8 +193,8 @@ public class MovementParkour extends Movement {
 
     /** 落地后还会往前冲两格身位,那两格不能是危险格。 */
     private static boolean checkOvershootSafety(CalculationContext context, int x, int y, int z) {
-        return !MovementHelper.avoidWalkingInto(context.get(x, y, z))
-                && !MovementHelper.avoidWalkingInto(context.get(x, y + 1, z));
+        return !CellClass.avoidWalkingInto(context.get(x, y, z))
+                && !CellClass.avoidWalkingInto(context.get(x, y + 1, z));
     }
 
     /** 跳距 → 成本:2/3 格按平走计,4 格必须疾跑。 */
@@ -269,7 +267,7 @@ public class MovementParkour extends Movement {
                 // 已跳出第一格或已离地
                 if (mayAlterTerrain()
                         && MovementPlacement.selectForLocation(player, dest.below(), false)
-                        && !MovementHelper.canWalkOn(player.level(), dest.below())
+                        && !CellClass.canWalkOn(player.level(), dest.below(), spec)
                         && !player.onGround()
                         && MovementPlacement.attemptToPlaceABlock(state, player, dest.below(), true, false)
                                 == MovementPlacement.PlaceResult.READY_TO_PLACE) {

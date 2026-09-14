@@ -6,9 +6,12 @@ import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
+import com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.movements.BuildPlacementRegistry;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.pathing.spec.PositionCosts;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -20,6 +23,7 @@ import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.state.BlockState;
@@ -1124,15 +1128,15 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     private LongOpenHashSet siteCells;
 
-    /** 把工地格并进寻路收到的禁令集——两条禁令对本任务起的每一次寻路都生效。 */
-    private LongSet union(LongSet other) {
-        if (other == null || other.isEmpty()) {
-            return protectedCells();
+    /** 把工地格的两条禁令并进这次寻路的规格——对本任务起的每一次寻路都生效。 */
+    private RouteSpec withSite(RouteSpec spec) {
+        if (sitePins == null) {
+            sitePins = PositionCosts.protect(protectedCells());
         }
-        LongOpenHashSet merged = new LongOpenHashSet(protectedCells());
-        merged.addAll(other);
-        return merged;
+        return spec.withPositions(spec.positions().plus(sitePins));
     }
+
+    private PositionCosts sitePins;
 
     /** 把层窗口对准 order 里最低的那一层。 */
     private void resetLayerWindow() {
@@ -1282,7 +1286,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     private boolean isReplaceable(BlockPos pos, BlockState state) {
         return MovementHelper.isReplaceable(pos.getX(), pos.getY(), pos.getZ(), state,
-                com.dwinovo.numen.core.pathing.moves.ChunkLoadedTest.ALWAYS);
+                ChunkLoadedTest.ALWAYS);
     }
 
     /**
@@ -1361,26 +1365,33 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         return target != null && target.acceptsPlacedState(state);
     }
 
+    /**
+     * 施工就是改地形:挖错块、搭脚手架、被自己封顶时拆一块出去,都是这个任务的本分。
+     * 起跳比平时贵得多:工地上下层之间蹦跶容易把刚砌的东西踩坏,能绕楼梯就绕。
+     */
+    private static final RouteSpec SPEC = RouteSpec.defaults()
+            .withAlter(RouteSpec.Alter.NATURAL)
+            .withJumpPenalty(RouteSpec.defaults().jumpPenalty() + 10.0);
+
     @Override
-    public CalculationContext forSearch(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
-        return ContextFactory.forSearch(player, union(sacred), union(deniedPlace), permit(),
-                (p, view, loaded, safe, s, denied, permit) -> new BuildCalculationContext(
-                        p, view, loaded, safe, s, denied, permit, targetByPos,
-                        inv.availableStates(true), r.replaceExisting));
+    public RouteSpec spec() {
+        return SPEC;
     }
 
     @Override
-    public CalculationContext forExecution(NumenPlayer player, LongSet sacred, LongSet deniedPlace) {
-        return ContextFactory.forExecution(player, union(sacred), union(deniedPlace), permit(),
-                (p, view, loaded, safe, s, denied, permit) -> new BuildCalculationContext(
-                        p, view, loaded, safe, s, denied, permit, targetByPos,
-                        inv.availableStates(true), r.replaceExisting));
+    public CalculationContext forSearch(NumenPlayer player, RouteSpec spec) {
+        return ContextFactory.forSearch(player, withSite(spec), this::buildContext);
     }
 
-    /** 施工就是改地形:挖错块、搭脚手架、被自己封顶时拆一块出去,都是这个任务的本分。 */
     @Override
-    public com.dwinovo.numen.core.pathing.moves.TerrainPermit permit() {
-        return com.dwinovo.numen.core.pathing.moves.TerrainPermit.TERRAFORM;
+    public CalculationContext forExecution(NumenPlayer player, RouteSpec spec) {
+        return ContextFactory.forExecution(player, withSite(spec), this::buildContext);
+    }
+
+    private CalculationContext buildContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loaded,
+                                            boolean safeForThreadedUse, RouteSpec spec) {
+        return new BuildCalculationContext(player, view, loaded, safeForThreadedUse, spec,
+                targetByPos, inv.availableStates(true), r.replaceExisting);
     }
 
     @Override

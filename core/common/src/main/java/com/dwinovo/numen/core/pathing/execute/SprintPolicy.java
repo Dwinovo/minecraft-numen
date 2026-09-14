@@ -7,6 +7,7 @@ import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.Movement;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
 import com.dwinovo.numen.core.pathing.moves.movements.MovementAscend;
 import com.dwinovo.numen.core.pathing.moves.movements.MovementDescend;
 import com.dwinovo.numen.core.pathing.moves.movements.MovementDiagonal;
@@ -66,13 +67,13 @@ final class SprintPolicy {
      * SPRINT 键(没收动作在执行器,这里只收结论)。
      */
     Decision decide(int pathPosition, boolean requested) {
-        // 与成本模型同判据:允许疾跑且饥饿值足够
-        if (!(NavSettings.get().allowSprint
+        Movement current = path.movements().get(pathPosition);
+        // 与成本模型同判据:规格允许疾跑、总开关允许、饥饿值足够
+        if (!(current.spec().sprint() && NavSettings.get().allowSprint
                 && (!WorkProfile.of(player).hasHunger()
                         || player.getFoodData().getFoodLevel() > 6))) {
             return Decision.NO;
         }
-        Movement current = path.movements().get(pathPosition);
 
         // 平走→上台直跳:跳过平走那步,原地起跳直接冲上去
         if (current instanceof MovementTraverse traverse && pathPosition < path.length() - 3) {
@@ -217,11 +218,11 @@ final class SprintPolicy {
             }
             for (int y = next.getDest().getY(); y <= movement.getSrc().getY() + 1; y++) {
                 BlockPos chk = new BlockPos(next.getDest().getX(), y, next.getDest().getZ());
-                if (!MovementHelper.fullyPassable(level, chk)) {
+                if (!CellClass.fullyPassable(level, chk)) {
                     break outer;
                 }
             }
-            if (!MovementHelper.canWalkOn(level, next.getDest().below())) {
+            if (!CellClass.canWalkOn(level, next.getDest().below(), movement.spec())) {
                 break;
             }
         }
@@ -239,7 +240,7 @@ final class SprintPolicy {
             return false;
         }
         BlockPos headBonk = current.getSrc().subtract(current.getDirection()).above(2);
-        if (MovementHelper.fullyPassable(player.level(), headBonk)) {
+        if (CellClass.fullyPassable(player.level(), headBonk)) {
             return true;
         }
         // 身后头顶不通:再走出 0.8 才敢跳(免得起跳磕头)
@@ -266,10 +267,10 @@ final class SprintPolicy {
             return false;
         }
         var level = LoadedOnlyView.of(player.level());
-        if (!MovementHelper.canWalkOn(level, current.getDest().below())) {
+        if (!CellClass.canWalkOn(level, current.getDest().below(), current.spec())) {
             return false;
         }
-        if (!MovementHelper.canWalkOn(level, next.getDest().below())) {
+        if (!CellClass.canWalkOn(level, next.getDest().below(), next.spec())) {
             return false;
         }
         if (!next.toBreak(level).isEmpty()) {
@@ -281,15 +282,15 @@ final class SprintPolicy {
                 if (x == 1) {
                     chk = chk.offset(current.getDirection());
                 }
-                if (!MovementHelper.fullyPassable(level, chk)) {
+                if (!CellClass.fullyPassable(level, chk)) {
                     return false;
                 }
             }
         }
-        if (MovementHelper.avoidWalkingInto(level.getBlockState(current.getSrc().above(3)))) {
+        if (CellClass.avoidWalkingInto(level.getBlockState(current.getSrc().above(3)))) {
             return false;
         }
-        return !MovementHelper.avoidWalkingInto(level.getBlockState(next.getDest().above(2)));
+        return !CellClass.avoidWalkingInto(level.getBlockState(next.getDest().above(2)));
     }
 
     /** 下降可否疾跑冲进下一步:同向下降恒可;落点前方可站时同向平走/对角亦可。 */
@@ -297,8 +298,8 @@ final class SprintPolicy {
         if (next instanceof MovementDescend && next.getDirection().equals(current.getDirection())) {
             return true;
         }
-        if (!MovementHelper.canWalkOn(player.level(),
-                current.getDest().offset(current.getDirection()))) {
+        if (!CellClass.canWalkOn(player.level(),
+                current.getDest().offset(current.getDirection()), current.spec())) {
             return false;
         }
         if (next instanceof MovementTraverse && next.getDirection().equals(current.getDirection())) {

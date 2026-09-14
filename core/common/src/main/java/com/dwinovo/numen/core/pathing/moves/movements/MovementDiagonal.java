@@ -10,6 +10,8 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
@@ -32,8 +34,8 @@ public class MovementDiagonal extends Movement {
 
     private static final double SQRT_2 = Math.sqrt(2);
 
-    public MovementDiagonal(ServerPlayer player, BlockPos src, BlockPos dest) {
-        super(player, src, dest, buildPositionsToBreak(src, dest));
+    public MovementDiagonal(ServerPlayer player, RouteSpec spec, BlockPos src, BlockPos dest) {
+        super(player, spec, src, dest, buildPositionsToBreak(src, dest));
     }
 
     /** 两个切角柱(各两层)+ 终点柱(两层);对角从不真挖,只用作通透检查。 */
@@ -52,7 +54,7 @@ public class MovementDiagonal extends Movement {
      */
     public static void cost(CalculationContext context, int x, int y, int z,
                             int destX, int destZ, MutableMoveResult res) {
-        if (!MovementHelper.canWalkThrough(context, destX, y + 1, destZ)) {
+        if (!context.canWalkThrough(destX, y + 1, destZ)) {
             return;
         }
         BlockState destInto = context.get(destX, y, destZ);
@@ -61,13 +63,13 @@ public class MovementDiagonal extends Movement {
         BlockState destWalkOn;
         boolean descend = false;
         boolean frostWalker = false;
-        if (!MovementHelper.canWalkThrough(context, destX, y, destZ, destInto)) {
+        if (!context.canWalkThrough(destX, y, destZ, destInto)) {
             // 终点身位不通:只可能是对角上升
             ascend = true;
-            if (!context.allowDiagonalAscend
-                    || !MovementHelper.canWalkThrough(context, x, y + 2, z)
-                    || !MovementHelper.canWalkOn(context, destX, y, destZ, destInto)
-                    || !MovementHelper.canWalkThrough(context, destX, y + 2, destZ)) {
+            if (!context.spec.diagonalAscend()
+                    || !context.canWalkThrough(x, y + 2, z)
+                    || !context.canWalkOn(destX, y, destZ, destInto)
+                    || !context.canWalkThrough(destX, y + 2, destZ)) {
                 return;
             }
             destWalkOn = destInto;
@@ -77,17 +79,15 @@ public class MovementDiagonal extends Movement {
             fromDown = context.get(x, y - 1, z);
             boolean standingOnABlock = MovementHelper.mustBeSolidToWalkOn(context, x, y - 1, z, fromDown);
             frostWalker = standingOnABlock && MovementHelper.canUseFrostWalker(context, destWalkOn);
-            if (!frostWalker && !MovementHelper.canWalkOn(context, destX, y - 1, destZ, destWalkOn)) {
+            if (!frostWalker && !context.canWalkOn(destX, y - 1, destZ, destWalkOn)) {
                 // 落脚不可站:只可能是对角下降
                 descend = true;
-                if (!context.allowDiagonalDescend
-                        || !MovementHelper.canWalkOn(context, destX, y - 2, destZ)
-                        || !MovementHelper.canWalkThrough(context, destX, y - 1, destZ, destWalkOn)) {
+                if (!context.spec.diagonalDescend()
+                        || !context.canWalkOn(destX, y - 2, destZ)
+                        || !context.canWalkThrough(destX, y - 1, destZ, destWalkOn)) {
                     return;
                 }
             }
-            // 水面行走语义下不能指望水冻住(先判完下降档再收紧)
-            frostWalker &= !context.assumeWalkOnWater;
         }
         double multiplier = WALK_ONE_BLOCK_COST;
         // 两端灵魂沙各影响一半行程
@@ -96,7 +96,7 @@ public class MovementDiagonal extends Movement {
         } else if (frostWalker) {
             // 霜行者冻出的冰面无罚
         } else if (destWalkOn.getBlock() == Blocks.WATER) {
-            multiplier += context.walkOnWaterOnePenalty * SQRT_2;
+            multiplier += context.spec.wadePenalty() * SQRT_2;
         }
         Block fromDownBlock = fromDown.getBlock();
         if (fromDownBlock == Blocks.LADDER || fromDownBlock == Blocks.VINE) {
@@ -107,17 +107,17 @@ public class MovementDiagonal extends Movement {
         }
         // 切过的两个角落下方不能是岩浆(块/液),会燎到
         BlockState cuttingOver1 = context.get(x, y - 1, destZ);
-        if (cuttingOver1.getBlock() == Blocks.MAGMA_BLOCK || MovementHelper.isLava(cuttingOver1)) {
+        if (cuttingOver1.getBlock() == Blocks.MAGMA_BLOCK || CellClass.isLava(cuttingOver1)) {
             return;
         }
         BlockState cuttingOver2 = context.get(destX, y - 1, z);
-        if (cuttingOver2.getBlock() == Blocks.MAGMA_BLOCK || MovementHelper.isLava(cuttingOver2)) {
+        if (cuttingOver2.getBlock() == Blocks.MAGMA_BLOCK || CellClass.isLava(cuttingOver2)) {
             return;
         }
         boolean water = false;
         BlockState startState = context.get(x, y, z);
         Block startIn = startState.getBlock();
-        if (MovementHelper.isWater(startState) || MovementHelper.isWater(destInto)) {
+        if (CellClass.isWater(startState) || CellClass.isWater(destInto)) {
             if (ascend) {
                 return;
             }
@@ -128,17 +128,17 @@ public class MovementDiagonal extends Movement {
         BlockState pb0 = context.get(x, y, destZ);
         BlockState pb2 = context.get(destX, y, z);
         if (ascend) {
-            boolean aTop = MovementHelper.canWalkThrough(context, x, y + 2, destZ);
-            boolean aMid = MovementHelper.canWalkThrough(context, x, y + 1, destZ);
-            boolean aLow = MovementHelper.canWalkThrough(context, x, y, destZ, pb0);
-            boolean bTop = MovementHelper.canWalkThrough(context, destX, y + 2, z);
-            boolean bMid = MovementHelper.canWalkThrough(context, destX, y + 1, z);
-            boolean bLow = MovementHelper.canWalkThrough(context, destX, y, z, pb2);
+            boolean aTop = context.canWalkThrough(x, y + 2, destZ);
+            boolean aMid = context.canWalkThrough(x, y + 1, destZ);
+            boolean aLow = context.canWalkThrough(x, y, destZ, pb0);
+            boolean bTop = context.canWalkThrough(destX, y + 2, z);
+            boolean bMid = context.canWalkThrough(destX, y + 1, z);
+            boolean bLow = context.canWalkThrough(destX, y, z, pb2);
             if ((!(aTop && aMid && aLow) && !(bTop && bMid && bLow)) // 两条绕行柱都不通
-                    || MovementHelper.avoidWalkingInto(pb0)
-                    || MovementHelper.avoidWalkingInto(pb2)
-                    || (aTop && aMid && MovementHelper.canWalkOn(context, x, y, destZ, pb0)) // 其实可以直接普通上一格
-                    || (bTop && bMid && MovementHelper.canWalkOn(context, destX, y, z, pb2))
+                    || CellClass.avoidWalkingInto(pb0)
+                    || CellClass.avoidWalkingInto(pb2)
+                    || (aTop && aMid && context.canWalkOn(x, y, destZ, pb0)) // 其实可以直接普通上一格
+                    || (bTop && bMid && context.canWalkOn(destX, y, z, pb2))
                     || (!aTop && aMid && aLow) // 头碰 A
                     || (!bTop && bMid && bLow)) { // 头碰 B
                 return;
@@ -161,8 +161,8 @@ public class MovementDiagonal extends Movement {
             return;
         }
         BlockState pb3 = context.get(destX, y + 1, z);
-        if (optionA == 0 && ((MovementHelper.avoidWalkingInto(pb2) && pb2.getBlock() != Blocks.WATER)
-                || MovementHelper.avoidWalkingInto(pb3))) {
+        if (optionA == 0 && ((CellClass.avoidWalkingInto(pb2) && pb2.getBlock() != Blocks.WATER)
+                || CellClass.avoidWalkingInto(pb3))) {
             // A 侧通畅时要从 B 侧绕:B 侧不能是危险格(水除外)
             return;
         }
@@ -170,8 +170,8 @@ public class MovementDiagonal extends Movement {
         if (optionA != 0 && optionB != 0) {
             return;
         }
-        if (optionB == 0 && ((MovementHelper.avoidWalkingInto(pb0) && pb0.getBlock() != Blocks.WATER)
-                || MovementHelper.avoidWalkingInto(pb1))) {
+        if (optionB == 0 && ((CellClass.avoidWalkingInto(pb0) && pb0.getBlock() != Blocks.WATER)
+                || CellClass.avoidWalkingInto(pb1))) {
             return;
         }
         if (optionA != 0 || optionB != 0) {
@@ -232,7 +232,7 @@ public class MovementDiagonal extends Movement {
         if (feet.equals(dest)) {
             return state.setStatus(MovementStatus.SUCCESS);
         } else if (!playerInValidPosition()
-                && !(MovementHelper.isLiquid(player.level().getBlockState(src))
+                && !(CellClass.isLiquid(player.level().getBlockState(src))
                         && getValidPositions().contains(feet.above()))) {
             return state.setStatus(MovementStatus.UNREACHABLE);
         }
@@ -249,12 +249,12 @@ public class MovementDiagonal extends Movement {
     /** 四个角柱全通透(且不在禁疾跑的水里)才可疾跑斜穿。 */
     private boolean sprint() {
         Level level = player.level();
-        if (MovementHelper.isLiquid(level.getBlockState(feet(player)))
+        if (CellClass.isLiquid(level.getBlockState(feet(player)))
                 && !NavSettings.get().sprintInWater) {
             return false;
         }
         for (int i = 0; i < 4; i++) {
-            if (!MovementHelper.canWalkThrough(level, positionsToBreak[i])) {
+            if (!CellClass.canWalkThrough(level, positionsToBreak[i], spec)) {
                 return false;
             }
         }
@@ -275,7 +275,7 @@ public class MovementDiagonal extends Movement {
         }
         java.util.List<BlockPos> result = new java.util.ArrayList<>();
         for (int i = 4; i < 6; i++) {
-            if (!MovementHelper.canWalkThrough(level, positionsToBreak[i])) {
+            if (!CellClass.canWalkThrough(level, positionsToBreak[i], spec)) {
                 result.add(positionsToBreak[i]);
             }
         }
@@ -291,7 +291,7 @@ public class MovementDiagonal extends Movement {
         }
         java.util.List<BlockPos> result = new java.util.ArrayList<>();
         for (int i = 0; i < 4; i++) {
-            if (!MovementHelper.canWalkThrough(level, positionsToBreak[i])) {
+            if (!CellClass.canWalkThrough(level, positionsToBreak[i], spec)) {
                 result.add(positionsToBreak[i]);
             }
         }
@@ -316,15 +316,15 @@ public class MovementDiagonal extends Movement {
         }
         BlockPos cornerA = new BlockPos(src.getX(), src.getY() - 1, dest.getZ());
         BlockPos cornerB = new BlockPos(dest.getX(), src.getY() - 1, src.getZ());
-        if (MovementHelper.canWalkOn(level, cornerA) && MovementHelper.canWalkOn(level, cornerB)) {
+        if (CellClass.canWalkOn(level, cornerA, spec) && CellClass.canWalkOn(level, cornerB, spec)) {
             return true;
         }
         if (feet.equals(new BlockPos(src.getX(), src.getY(), dest.getZ()))
                 || feet.equals(new BlockPos(dest.getX(), src.getY(), src.getZ()))) {
-            return MovementHelper.canWalkOn(level, BlockPos.containing(x + offset, y, z + offset))
-                    || MovementHelper.canWalkOn(level, BlockPos.containing(x + offset, y, z - offset))
-                    || MovementHelper.canWalkOn(level, BlockPos.containing(x - offset, y, z + offset))
-                    || MovementHelper.canWalkOn(level, BlockPos.containing(x - offset, y, z - offset));
+            return CellClass.canWalkOn(level, BlockPos.containing(x + offset, y, z + offset), spec)
+                    || CellClass.canWalkOn(level, BlockPos.containing(x + offset, y, z - offset), spec)
+                    || CellClass.canWalkOn(level, BlockPos.containing(x - offset, y, z + offset), spec)
+                    || CellClass.canWalkOn(level, BlockPos.containing(x - offset, y, z - offset), spec);
         }
         return true;
     }

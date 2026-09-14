@@ -10,6 +10,8 @@ import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
 import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -36,8 +38,8 @@ public class MovementDescend extends Movement {
     /** 执行层根据下一动作注入的强制稳走标志。 */
     private boolean forceSafeMode = false;
 
-    public MovementDescend(ServerPlayer player, BlockPos src, BlockPos dest) {
-        super(player, src, dest,
+    public MovementDescend(ServerPlayer player, RouteSpec spec, BlockPos src, BlockPos dest) {
+        super(player, spec, src, dest,
                 new BlockPos[]{dest.above(2), dest.above(), dest}, dest.below());
     }
 
@@ -82,7 +84,7 @@ public class MovementDescend extends Movement {
         }
 
         BlockState below = context.get(destX, y - 2, destZ);
-        if (!MovementHelper.canWalkOn(context, destX, y - 2, destZ, below)) {
+        if (!context.canWalkOn(destX, y - 2, destZ, below)) {
             // 下面还空:转坠落分档
             dynamicFallCost(context, x, y, z, destX, destZ, totalCost, below, res);
             return;
@@ -120,7 +122,7 @@ public class MovementDescend extends Movement {
             // 前壁要挖就会惊动这根沙柱塌进坑里(还可能填掉要落的水),放弃
             return false;
         }
-        if (!MovementHelper.canWalkThrough(context, destX, y - 2, destZ, below)) {
+        if (!context.canWalkThrough(destX, y - 2, destZ, below)) {
             return false;
         }
         double costSoFar = 0;
@@ -137,17 +139,14 @@ public class MovementDescend extends Movement {
             int unprotectedFallHeight = fallHeight - (y - effectiveStartHeight);
             double tentativeCost = WALK_OFF_BLOCK_COST
                     + FALL_N_BLOCKS_COST[unprotectedFallHeight] + frontBreak + costSoFar;
-            if (reachedMinimum && MovementHelper.isWater(ontoBlock)) {
-                if (!MovementHelper.canWalkThrough(context, destX, newY, destZ, ontoBlock)) {
+            if (reachedMinimum && CellClass.isWater(ontoBlock)) {
+                if (!context.canWalkThrough(destX, newY, destZ, ontoBlock)) {
                     return false;
                 }
-                if (context.assumeWalkOnWater) {
+                if (CellClass.isFlowing(context.view, destX, newY, destZ, ontoBlock)) {
                     return false;
                 }
-                if (MovementHelper.isFlowing(context.view, destX, newY, destZ, ontoBlock)) {
-                    return false;
-                }
-                if (!MovementHelper.canWalkOn(context, destX, newY - 1, destZ)) {
+                if (!context.canWalkOn(destX, newY - 1, destZ)) {
                     // 水太浅会直接穿透砸到下面的东西
                     return false;
                 }
@@ -166,13 +165,13 @@ public class MovementDescend extends Movement {
                 effectiveStartHeight = newY;
                 continue;
             }
-            if (MovementHelper.canWalkThrough(context, destX, newY, destZ, ontoBlock)) {
+            if (context.canWalkThrough(destX, newY, destZ, ontoBlock)) {
                 continue;
             }
-            if (!MovementHelper.canWalkOn(context, destX, newY, destZ, ontoBlock)) {
+            if (!context.canWalkOn(destX, newY, destZ, ontoBlock)) {
                 return false; // 岩浆之类:不可穿也不可站
             }
-            if (MovementHelper.isBottomSlab(ontoBlock)) {
+            if (CellClass.isBottomSlab(ontoBlock)) {
                 return false; // 落半砖判定飘忽且额外摔伤
             }
             if (reachedMinimum && unprotectedFallHeight <= context.maxFallHeightNoWater + 1) {
@@ -224,7 +223,7 @@ public class MovementDescend extends Movement {
         BlockPos fakeDest = new BlockPos(dest.getX() * 2 - src.getX(), dest.getY(),
                 dest.getZ() * 2 - src.getZ());
         if ((feet.equals(dest) || feet.equals(fakeDest))
-                && (MovementHelper.isLiquid(player.level().getBlockState(dest))
+                && (CellClass.isLiquid(player.level().getBlockState(dest))
                         || player.getY() - dest.getY() < 0.5)) {
             // 等真正落地再报成功,否则下一动作接飞
             return state.setStatus(MovementStatus.SUCCESS);
@@ -269,7 +268,7 @@ public class MovementDescend extends Movement {
             return true;
         }
         for (int i = 0; i <= 2; i++) {
-            if (MovementHelper.avoidWalkingInto(player.level().getBlockState(into.above(i)))) {
+            if (CellClass.avoidWalkingInto(player.level().getBlockState(into.above(i)))) {
                 return true;
             }
         }
@@ -280,9 +279,9 @@ public class MovementDescend extends Movement {
     public boolean skipToAscend() {
         BlockPos into = destOvershoot();
         Level level = player.level();
-        return !MovementHelper.canWalkThrough(level, into)
-                && MovementHelper.canWalkThrough(level, into.above())
-                && MovementHelper.canWalkThrough(level, into.above(2));
+        return !CellClass.canWalkThrough(level, into, spec)
+                && CellClass.canWalkThrough(level, into.above(), spec)
+                && CellClass.canWalkThrough(level, into.above(2), spec);
     }
 
     /** dest 再沿同方向一格(疾跑冲过时会撞到的柱)。 */

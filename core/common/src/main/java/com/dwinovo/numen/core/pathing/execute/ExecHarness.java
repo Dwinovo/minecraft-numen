@@ -7,9 +7,7 @@ import java.util.EnumMap;
 import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.pathing.moves.Input;
 import com.dwinovo.numen.core.pathing.moves.Movement;
-import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.pathing.moves.MovementState;
-import com.dwinovo.numen.core.pathing.moves.TerrainPermit;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -59,8 +57,6 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     private final NumenPlayer player;
     private final AimProcessor aim;
     private final BlockDigger digger;
-    /** 这次导航对地形的许可(与搜索/执行上下文同一来源:PlayerNav 的 ContextProvider)。 */
-    private final TerrainPermit permit;
     /**
      * 这次导航真挖了什么、真放了什么。执行器是唯一动手的地方,账也只记在这儿:
      * 任务回执末尾如实相告(en route: broke …; placed …),模型事后至少知道自己干过什么。
@@ -79,16 +75,10 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     /** 本 tick 是否有任何记录待落地。 */
     private boolean dirty;
 
-    public ExecHarness(NumenPlayer player, TerrainPermit permit) {
+    public ExecHarness(NumenPlayer player) {
         this.player = player;
-        this.permit = permit;
         this.aim = new AimProcessor();
         this.digger = new BlockDigger(player);
-    }
-
-    @Override
-    public TerrainPermit permit() {
-        return permit;
     }
 
     /** 这次导航至今真动过的地形(只读视图;空账 = 一块没动)。 */

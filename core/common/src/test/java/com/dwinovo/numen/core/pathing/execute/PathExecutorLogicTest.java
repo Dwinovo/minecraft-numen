@@ -10,6 +10,7 @@ import com.dwinovo.numen.core.pathing.astar.NavPath;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.Movement;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.moves.movements.MovementFall;
 
 import net.minecraft.core.BlockPos;
@@ -38,7 +39,7 @@ class PathExecutorLogicTest {
         }
 
         FakeMovement(BlockPos src, BlockPos dest, double cost) {
-            super(null, src, dest, new BlockPos[0], null);
+            super(null, RouteSpec.defaults(), src, dest, new BlockPos[0], null);
             this.cost = cost;
         }
 
@@ -211,7 +212,7 @@ class PathExecutorLogicTest {
     void fallUsesFlatDistanceOnly() {
         // 造一条含 Fall 的路径:src(0,66,0)->dest(0,64,0) 的坠落
         List<Movement> movements = new ArrayList<>();
-        movements.add(new MovementFall(null, new BlockPos(0, 66, 0), new BlockPos(0, 64, 0)));
+        movements.add(new MovementFall(null, RouteSpec.defaults(), new BlockPos(0, 66, 0), new BlockPos(0, 64, 0)));
         List<BlockPos> pos = List.of(new BlockPos(0, 66, 0), new BlockPos(0, 64, 0));
         NavPath path = new NavPath() {
             @Override public List<Movement> movements() { return movements; }
