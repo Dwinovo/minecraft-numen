@@ -197,7 +197,8 @@ class MovementCostsTest {
     }
 
     private static CalculationContext context(FakeView view, RouteSpec spec) {
-        return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, true, spec);
+        return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, true, spec,
+                com.dwinovo.numen.core.GateTestSupport.open());
     }
 
     // ==================== 平移 ====================

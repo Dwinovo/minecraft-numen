@@ -115,7 +115,7 @@ class RoutePlannerTest {
         return new RoutePlanner(dispatcher, spec -> {
             dispatcher.specsSeen.add(spec);
             return null;
-        }, level);
+        }, level, com.dwinovo.numen.core.GateTestSupport::open);
     }
 
     @Test

@@ -317,7 +317,7 @@ class BuildTaskRecordTest {
         FakeView view = new FakeView();
         view.set(pos, Blocks.AIR.defaultBlockState());
         BuildCalculationContext ctx = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
-                true, NATURAL,
+                true, NATURAL, com.dwinovo.numen.core.GateTestSupport.open(),
                 Map.of(pos.asLong(), target),
                 Set.of(Blocks.OBSIDIAN.defaultBlockState()), true);
 
@@ -343,7 +343,7 @@ class BuildTaskRecordTest {
         FakeView view = new FakeView();
         view.set(pos, Blocks.AIR.defaultBlockState());
         BuildCalculationContext ctx = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
-                true, NATURAL,
+                true, NATURAL, com.dwinovo.numen.core.GateTestSupport.open(),
                 Map.of(pos.asLong(), target),
                 Set.of(Blocks.DIRT.defaultBlockState()), true);
 
@@ -363,7 +363,7 @@ class BuildTaskRecordTest {
         FakeView view = new FakeView();
         view.set(pos, Blocks.DIRT.defaultBlockState());
         BuildCalculationContext ctx = new BuildCalculationContext(player, view, ChunkLoadedTest.ALWAYS,
-                true, NATURAL,
+                true, NATURAL, com.dwinovo.numen.core.GateTestSupport.open(),
                 Map.of(pos.asLong(), target),
                 Set.of(Blocks.OBSIDIAN.defaultBlockState()), true);
 

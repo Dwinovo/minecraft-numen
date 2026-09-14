@@ -56,10 +56,10 @@ class FrozenToolSetThreadingTest {
     void workerThreadReadsMatchMainThread() throws Exception {
         assumeTrue(booted, "MC 未能引导,跳过");
         ItemStack[] hotbar = hotbarWithShears();
-        ToolSet frozen = new ToolSet(hotbar, 0, false, 1.0);
+        ToolSet frozen = new ToolSet(hotbar, 0, 1.0);
 
         // 主线程基准(独立实例,避免与 worker 共享逐块缓存)
-        ToolSet reference = new ToolSet(hotbarWithShears(), 0, false, 1.0);
+        ToolSet reference = new ToolSet(hotbarWithShears(), 0, 1.0);
         double mainStr = reference.getStrVsBlock(Blocks.COBWEB.defaultBlockState());
         int mainSlot = reference.getBestSlot(Blocks.COBWEB, false);
 
@@ -81,7 +81,7 @@ class FrozenToolSetThreadingTest {
     void mutatingSourceArrayAfterConstructionHasNoEffect() {
         assumeTrue(booted, "MC 未能引导,跳过");
         ItemStack[] hotbar = hotbarWithShears();
-        ToolSet frozen = new ToolSet(hotbar, 0, false, 1.0);
+        ToolSet frozen = new ToolSet(hotbar, 0, 1.0);
         int before = frozen.getBestSlot(Blocks.COBWEB, false);
         assertEquals(3, before, "构造时剪刀在 3 号槽");
 
@@ -92,7 +92,7 @@ class FrozenToolSetThreadingTest {
         assertEquals(before, after, "构造后的外部改写不影响快照");
 
         // 探针本身可区分:用改写后的数组新建实例,选出的是新槽位
-        ToolSet rebuilt = new ToolSet(hotbar, 0, false, 1.0);
+        ToolSet rebuilt = new ToolSet(hotbar, 0, 1.0);
         assertEquals(7, rebuilt.getBestSlot(Blocks.COBWEB, false), "新实例看到挪动后的剪刀");
     }
 }

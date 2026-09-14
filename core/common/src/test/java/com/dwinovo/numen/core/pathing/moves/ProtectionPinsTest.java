@@ -2,14 +2,16 @@ package com.dwinovo.numen.core.pathing.moves;
 
 import java.lang.reflect.Field;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.core.pathing.spec.PositionCosts;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
-import com.dwinovo.numen.core.pathing.util.BlockEntityAware;
+import com.dwinovo.numen.permission.Gate;
+import com.dwinovo.numen.permission.Mode;
+import com.dwinovo.numen.permission.PlacedBlocks;
+import com.dwinovo.numen.permission.RuleSet;
+import com.dwinovo.numen.permission.TerritoryClaims;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -42,13 +44,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /**
  * 挖掘/放置保护口径的回归钉,打在真实成本函数上:
  * <ul>
- *   <li>功能方块软惩罚:箱子(在 NavSettings.blocksToAvoidBreaking 默认清单内)
- *       计 ×10 软成本(有限价,无路可走仍会破坏)
- *       (回到泥土一样的有限价);</li>
- *   <li>do_not_break 标签成员在任何开关下都计 INF——硬禁挖的唯一真源。
- *       这里钉<b>机制</b>(手动绑一个测试自声明的方块进标签);
- *       默认成员(床/门/活板门/栅栏门)的真源在 ModBlockTagData,
- *       由 ModBlockTagDataTest 另钉;</li>
+ *   <li>权限层的 ask(带方块实体的箱子、玩家放的格、出厂表按标签点名的门)在 NATURAL 下
+ *       计 INF——有别的路就不走这条;在 ANY 下有限但贵于自然方块,并且账单说得出为什么
+ *       需要同意;</li>
  *   <li>sacred(导航自身目标格,经规格的按位置代价)必 INF;</li>
  *   <li>同地形普通方块(泥土)有限价——证明是保护在起作用,不是别的
  *       东西把边价推上去的;</li>
@@ -162,22 +160,15 @@ class ProtectionPinsTest {
 
     // ==================== 假世界 ====================
 
-    /** Map 后备世界视图,自答方块实体存在性(保护检查离线可答)。 */
-    private static final class FakeView implements BlockGetter, BlockEntityAware {
+    /** Map 后备世界视图。 */
+    private static final class FakeView implements BlockGetter {
         final Map<BlockPos, BlockState> blocks = new HashMap<>();
-        final Set<BlockPos> blockEntities = new HashSet<>();
 
         void set(BlockPos p, BlockState s) {
             blocks.put(p.immutable(), s);
         }
 
-        void setChest(BlockPos p) {
-            set(p, Blocks.CHEST.defaultBlockState());
-            blockEntities.add(p.immutable());
-        }
-
         @Override public BlockEntity getBlockEntity(BlockPos pos) { return null; }
-        @Override public boolean hasBlockEntity(BlockPos pos) { return blockEntities.contains(pos); }
         @Override public BlockState getBlockState(BlockPos pos) {
             return blocks.getOrDefault(pos, Blocks.AIR.defaultBlockState());
         }
@@ -202,10 +193,17 @@ class ProtectionPinsTest {
 
     /** 可改地形的规格,sacred 格作为按位置的禁挖禁放并进去。 */
     private static final RouteSpec NATURAL = RouteSpec.defaults().withAlter(RouteSpec.Alter.NATURAL);
+    /** 连需要主人同意的格也算进路线的规格。 */
+    private static final RouteSpec ANY = RouteSpec.defaults().withAlter(RouteSpec.Alter.ANY);
 
     private static CalculationContext context(FakeView view, LongSet sacred) {
+        return context(view, sacred, NATURAL, new PlacedBlocks());
+    }
+
+    private static CalculationContext context(FakeView view, LongSet sacred, RouteSpec spec, PlacedBlocks placed) {
         return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, false,
-                NATURAL.withPositions(PositionCosts.protect(sacred)));
+                spec.withPositions(PositionCosts.protect(sacred)),
+                new Gate(null, Mode.ASK, RuleSet.factory(), placed, TerritoryClaims.NONE));
     }
 
     private static LongSet sacredOf(BlockPos pos) {
@@ -214,47 +212,75 @@ class ProtectionPinsTest {
         return set;
     }
 
-    // ==================== 挖掘保护 ====================
+    // ==================== 挖掘保护:权限层的裁决折成代价 ====================
 
     @Test
-    void chestBreakIsSoftPenaltyButFinite() {
+    void chestNeedsConsentSoNaturalRoutesAroundAndAnyPaysDearly() {
         BlockPos chest = SRC.north();
         FakeView v = floored();
-        v.setChest(chest);
-        // 箱子在 NavSettings.blocksToAvoidBreaking 默认清单内 → ×10 软成本(有限价)
-        double soft = MovementHelper.getMiningDurationTicks(
+        v.set(chest, Blocks.CHEST.defaultBlockState());
+        // 出厂 ask 表 break(block_entity):NATURAL 下 INF——有别的路就不走这条
+        assertTrue(MovementHelper.getMiningDurationTicks(
                 context(v, LongSets.emptySet()),
+                chest.getX(), chest.getY(), chest.getZ(), false) >= COST_INF,
+                "带方块实体的箱子在 NATURAL 下应计 INF");
+        assertTrue(Moves.TRAVERSE_NORTH.cost(context(v, LongSets.emptySet()),
+                SRC.getX(), SRC.getY(), SRC.getZ()) >= COST_INF, "穿箱平移在 NATURAL 下应计 INF");
+        // ANY 下有限但贵:同一块箱子对比泥土
+        CalculationContext any = context(v, LongSets.emptySet(), ANY, new PlacedBlocks());
+        double consent = MovementHelper.getMiningDurationTicks(any,
                 chest.getX(), chest.getY(), chest.getZ(), false);
-        assertTrue(soft > 0 && soft < COST_INF, "软惩罚箱子应有有限价,实为 " + soft);
-        // 对照:普通泥土无软惩罚,应显著更便宜(软惩罚真实生效)
+        assertTrue(consent > 0 && consent < COST_INF, "ANY 下箱子应有限价,实为 " + consent);
         BlockPos dirt = SRC.south();
         v.set(dirt, Blocks.DIRT.defaultBlockState());
-        double plain = MovementHelper.getMiningDurationTicks(
-                context(v, LongSets.emptySet()),
+        double plain = MovementHelper.getMiningDurationTicks(any,
                 dirt.getX(), dirt.getY(), dirt.getZ(), false);
-        assertTrue(plain < soft, "软惩罚应贵于普通方块,soft=" + soft + " plain=" + plain);
-        // 端到端:北向平移(要挖穿箱子)产出有限边(不是 INF)
-        double cost = Moves.TRAVERSE_NORTH.cost(context(v, LongSets.emptySet()),
-                SRC.getX(), SRC.getY(), SRC.getZ());
-        assertTrue(cost > 0 && cost < COST_INF, "穿箱平移应有限价,实为 " + cost);
+        assertTrue(plain < consent, "需要同意的格应贵于自然方块,consent=" + consent + " plain=" + plain);
+        // 账单填得出为什么需要同意
+        assertTrue(com.dwinovo.numen.core.pathing.execute.TerrainBill
+                .consent(any.gate, v, chest, v.getBlockState(chest)).contains("has a block entity"));
+        assertEquals("", com.dwinovo.numen.core.pathing.execute.TerrainBill
+                .consent(any.gate, v, dirt, v.getBlockState(dirt)));
     }
 
     @Test
-    void doNotBreakTagHoldsInfinite() {
-        // do_not_break 硬禁挖。标签内容运行时来自数据包,无头引导不加载数据包,
-        // 所以手动绑一个测试自声明的方块(石头,与箱子软清单区分开)——同
-        // ScaffoldTagTestSupport 的路子,钉的是机制;默认成员另见 ModBlockTagDataTest。
+    void playerPlacedCellIsInfiniteUnlessAny() {
+        BlockPos wall = SRC.north();
+        FakeView v = floored();
+        v.set(wall, Blocks.DIRT.defaultBlockState());
+        PlacedBlocks placed = new PlacedBlocks();
+        placed.record(wall);
+        // 同一块泥土:没记号有限价,记了"玩家放的"就 INF——翻成 INF 的只是记号
+        assertTrue(MovementHelper.getMiningDurationTicks(
+                context(v, LongSets.emptySet(), NATURAL, new PlacedBlocks()),
+                wall.getX(), wall.getY(), wall.getZ(), false) < COST_INF);
+        assertTrue(MovementHelper.getMiningDurationTicks(
+                context(v, LongSets.emptySet(), NATURAL, placed),
+                wall.getX(), wall.getY(), wall.getZ(), false) >= COST_INF,
+                "玩家放的格在 NATURAL 下应计 INF");
+        CalculationContext any = context(v, LongSets.emptySet(), ANY, placed);
+        double consent = MovementHelper.getMiningDurationTicks(any,
+                wall.getX(), wall.getY(), wall.getZ(), false);
+        assertTrue(consent > 0 && consent < COST_INF, "ANY 下玩家放的格应有限价,实为 " + consent);
+        assertTrue(com.dwinovo.numen.core.pathing.execute.TerrainBill
+                .consent(any.gate, v, wall, v.getBlockState(wall)).contains("placed by a player"));
+    }
+
+    @Test
+    void factoryDoorRuleHoldsInfinite() {
+        // 出厂表 break(#minecraft:doors)。标签内容运行时来自数据包,无头引导不加载数据包,
+        // 所以手动把石头绑进门标签——同 ScaffoldTagTestSupport 的路子,钉的是"标签行生效"。
         BlockPos stone = SRC.north();
         FakeView v = floored();
         v.set(stone, Blocks.STONE.defaultBlockState());
-        bindBlockTags(java.util.Map.of(com.dwinovo.numen.core.init.InitTag.DO_NOT_BREAK,
+        bindBlockTags(java.util.Map.of(net.minecraft.tags.BlockTags.DOORS,
                 java.util.List.of(net.minecraft.core.registries.BuiltInRegistries.BLOCK
                         .wrapAsHolder(Blocks.STONE))));
         try {
             assertTrue(MovementHelper.getMiningDurationTicks(
                     context(v, LongSets.emptySet()),
                     stone.getX(), stone.getY(), stone.getZ(), false) >= COST_INF,
-                    "标签成员应计 INF");
+                    "出厂表点名的标签成员应计 INF");
         } finally {
             bindBlockTags(java.util.Map.of());   // 回到无头引导的原态:方块标签全空
         }
@@ -292,7 +318,7 @@ class ProtectionPinsTest {
         FakeView v = floored();
         v.set(dirt, Blocks.DIRT.defaultBlockState());
         CalculationContext preserve = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
-                false, RouteSpec.defaults());
+                false, RouteSpec.defaults(), new Gate(null, Mode.ASK, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE));
         // 同一块泥土,NATURAL 有限价(见上),NONE 无限价——翻成 INF 的只是规格的 alter
         assertTrue(MovementHelper.getMiningDurationTicks(preserve,
                 dirt.getX(), dirt.getY(), dirt.getZ(), false) >= COST_INF);
@@ -316,7 +342,8 @@ class ProtectionPinsTest {
         // 规格按位置只禁放的格不可再规划放置
         CalculationContext deniedCtx = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
                 false, NATURAL.withPositions(PositionCosts.builder()
-                        .place(cell.asLong(), COST_INF).build()));
+                        .place(cell.asLong(), COST_INF).build()),
+                new Gate(null, Mode.ASK, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE));
         assertEquals(COST_INF, deniedCtx.costOfPlacingAt(
                 cell.getX(), cell.getY(), cell.getZ(), v.getBlockState(cell)));
     }

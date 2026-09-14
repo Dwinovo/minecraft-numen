@@ -64,6 +64,7 @@ class RouteSpecJsonTest {
                  "penalties":{"place":5,"break":7.5,"jump":9,"wade":0},
                  "parkour":true,"climb_vines":true,"max_fall":6,"alter_budget":4}"""));
         assertEquals(RouteSpec.Alter.NATURAL, s.alter());
+        assertEquals(RouteSpec.Alter.ANY, RouteSpecJson.parse(json("{\"alter\":\"any\"}")).alter());
         assertEquals(RouteSpec.FORBID, s.cellCost(CellClass.WATER));
         assertEquals(RouteSpec.FORBID, s.cellCost(CellClass.DOOR));
         assertEquals(0.0, s.cellCost(CellClass.GROUND));
@@ -100,7 +101,7 @@ class RouteSpecJsonTest {
 
     @Test
     void mistakesAreTaught() {
-        assertTrue(error("{\"alter\":\"maybe\"}").contains("'none' or 'natural'"));
+        assertTrue(error("{\"alter\":\"maybe\"}").contains("'none', 'natural' or 'any'"));
         assertTrue(error("{\"avoid\":[\"swamp\"]}").contains("unknown cell type 'swamp'"));
         assertTrue(error("{\"avoid\":\"water\"}").contains("array of strings"));
         assertTrue(error("{\"penalties\":{\"jump\":-1}}").contains("between 0 and"));
