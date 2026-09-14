@@ -59,6 +59,8 @@ public class NumenCoreNeoForge {
     private static void onServerTickPost(ServerTickEvent.Post event) {
         // 排程机器的心跳随机器归了 numen-api;core 只 tick 自己的工具配套。
         BlockSearch.tick(event.getServer());
+        // Read-only route queries (plan_route): poll finished searches and reply.
+        com.dwinovo.numen.core.pathing.plan.RoutePlanner.serverTick(event.getServer());
         PathCaches.serverTick(event.getServer());
         // Periodic eviction sweep for the target-block index (entries of unloaded chunks).
         com.dwinovo.numen.core.scan.TargetIndex.serverTick(event.getServer());

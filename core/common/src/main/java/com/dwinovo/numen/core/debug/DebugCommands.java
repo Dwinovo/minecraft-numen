@@ -199,8 +199,10 @@ public final class DebugCommands {
                                       Double x, Double y, Double z, String block) {
         TaskRecord record;
         try {
-            // 调试台是主人自己的手:开路许可给满,和模型那一侧的默认值无关
-            record = (TaskRecord) MOVEMENT_TOOLS.moveTo(x, y, z, block, true,
+            // 调试台是主人自己的手:规格给成可自然改动,和模型那一侧的默认值无关
+            com.google.gson.JsonObject spec = new com.google.gson.JsonObject();
+            spec.addProperty("alter", "natural");
+            record = (TaskRecord) MOVEMENT_TOOLS.moveTo(x, y, z, block, spec, null,
                     TaskDispatch.ctx("debug-goto", companion));
         } catch (IllegalArgumentException e) {
             ctx.getSource().sendFailure(Component.literal(e.getMessage()));

@@ -1,6 +1,12 @@
 package com.dwinovo.numen.core.task.move;
 
+import com.dwinovo.numen.core.pathing.calc.NavGoal;
+import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
+
+import it.unimi.dsi.fastutil.longs.LongSets;
+import net.minecraft.core.BlockPos;
 
 /**
  * Typed task descriptor for the {@code goto} tool. The goal type is chosen
@@ -17,21 +23,22 @@ import com.dwinovo.numen.task.TaskRecord;
  *   <li>{@code block} only (no coordinates) → {@link Kind#FIND}:
  *       scan for the nearest block of that kind and walk up beside it,
  *       never touching it.</li>
+ *   <li>{@code route} only → {@link Kind#ROUTE}: walk a route the planner
+ *       already priced (a {@code goto} refusal or a {@code plan_route} reply
+ *       listed it by id); destination and spec are the route's own.</li>
  * </ul>
  * Coordinates are nullable ({@code null} = "not supplied"); the deadline-based
  * timeout is handled by the base class.
  *
- * <p>{@code mayAlterTerrain} is the model's explicit consent to dig through, bridge
- * or pillar on the way; the task maps it onto the route spec's {@code alter}
- * ({@code RouteSpec.Alter}). Without it the walk never changes a block; when the only
- * route would, the failure lists exactly which blocks and the model decides whether to
- * re-send with consent.
+ * <p>{@link #spec} is the parsed route spec the walk searches and executes under
+ * ({@link RouteSpec#defaults()} = never changes a block). It is {@code null} only for
+ * the ROUTE form, whose spec travels with the route.
  */
 public final class MoveToTaskRecord extends TaskRecord {
 
     public static final String TOOL_NAME = "goto";
 
-    public enum Kind { BLOCK, COLUMN, YLEVEL, FIND }
+    public enum Kind { BLOCK, COLUMN, YLEVEL, FIND, ROUTE }
 
     /** Nullable: {@code null} means the LLM did not supply this axis. */
     public final Double x;
@@ -39,19 +46,22 @@ public final class MoveToTaskRecord extends TaskRecord {
     public final Double z;
     /** Namespaced block id to walk to the nearest of; null when coordinates drive. */
     public final String block;
+    /** Route-book id to walk; null unless this is the ROUTE form. */
+    public final String route;
     public final Kind kind;
-    /** Consent to dig / bridge / pillar en route. False = the walk leaves every block as it was. */
-    public final boolean mayAlterTerrain;
+    /** The parsed route spec for a coordinate/FIND walk; null for the ROUTE form. */
+    public final RouteSpec spec;
 
     public MoveToTaskRecord(String toolCallId, long deadlineGameTime,
-                            Double x, Double y, Double z, String block, boolean mayAlterTerrain) {
+                            Double x, Double y, Double z, String block, RouteSpec spec, String route) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.x = x;
         this.y = y;
         this.z = z;
         this.block = block == null || block.isBlank() ? null : block.trim();
-        this.kind = resolveKind(x, y, z, this.block);
-        this.mayAlterTerrain = mayAlterTerrain;
+        this.route = route == null || route.isBlank() ? null : route.trim();
+        this.kind = resolveKind(x, y, z, this.block, this.route);
+        this.spec = spec;
     }
 
     /**
@@ -59,8 +69,16 @@ public final class MoveToTaskRecord extends TaskRecord {
      * named nullable fields). Throws a teaching error for ambiguous
      * combos so the LLM learns the valid shapes.
      */
-    private static Kind resolveKind(Double x, Double y, Double z, String block) {
+    public static Kind resolveKind(Double x, Double y, Double z, String block, String route) {
         boolean hasX = x != null, hasY = y != null, hasZ = z != null;
+        if (route != null) {
+            if (hasX || hasY || hasZ || block != null) {
+                throw new IllegalArgumentException(
+                        "route means 'walk the planned route " + route + "' — its destination and"
+                        + " spec are already fixed, so give it ALONE (no coordinates, block or spec).");
+            }
+            return Kind.ROUTE;
+        }
         if (block != null) {
             if (hasX || hasY || hasZ) {
                 throw new IllegalArgumentException(
@@ -79,8 +97,24 @@ public final class MoveToTaskRecord extends TaskRecord {
         throw new IllegalArgumentException(
                 "goto needs either x+z (a location; omit y to auto-resolve the "
                 + "surface), x+y+z (one exact cell), y alone (a target height), "
-                + "or block alone (walk to the nearest block of that kind). "
+                + "block alone (walk to the nearest block of that kind), or route alone "
+                + "(walk a planned route by id). "
                 + "Got " + (hasX ? "x" : "") + (hasY ? "y" : "") + (hasZ ? "z" : ""));
+    }
+
+    /**
+     * The navigation contract of a coordinate kind — the ONE place a goto target becomes a
+     * goal, shared by the walk and by the read-only planner:
+     * BLOCK = occupy exactly that cell (digging out whatever is there is the route's business,
+     * so the cell is not sacred), COLUMN = that (x,z) at any height, YLEVEL = that height.
+     */
+    public static GoalCompiler.Compiled compile(Kind kind, int bx, int by, int bz) {
+        return switch (kind) {
+            case BLOCK -> GoalCompiler.standOn(new BlockPos(bx, by, bz));
+            case COLUMN -> new GoalCompiler.Compiled(NavGoal.column(bx, bz), LongSets.emptySet());
+            case YLEVEL -> new GoalCompiler.Compiled(NavGoal.yLevel(by), LongSets.emptySet());
+            case FIND, ROUTE -> throw new IllegalArgumentException(kind + " has no coordinate goal");
+        };
     }
 
     @Override
@@ -94,7 +128,8 @@ public final class MoveToTaskRecord extends TaskRecord {
             case COLUMN -> "走向 x=" + (int) (double) x + " z=" + (int) (double) z;
             case YLEVEL -> "下到 y=" + (int) (double) y;
             case FIND -> "去找 " + block;
+            case ROUTE -> "走路线 " + route;
         };
-        return mayAlterTerrain ? where + "(可开路)" : where;
+        return spec != null && spec.alter().mayAlter() ? where + "(可开路)" : where;
     }
 }

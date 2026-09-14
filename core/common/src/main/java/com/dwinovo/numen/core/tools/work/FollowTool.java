@@ -30,7 +30,7 @@ public final class FollowTool implements NumenTool {
     private static final double MIN_DISTANCE = 2.0;
     private static final double MAX_DISTANCE = 16.0;
 
-    private record Args(Integer distance, Integer entity_id, String entity_uuid, Boolean may_alter_terrain) {}
+    private record Args(Integer distance, Integer entity_id, String entity_uuid) {}
 
     @Override
     public String name() {
@@ -45,12 +45,12 @@ public final class FollowTool implements NumenTool {
                 + "Use it when the owner asks you to come along or stick close, or to shadow a "
                 + "particular mob or player. You go quiet while you are already beside them. "
                 + "Following a named entity ends by itself if that entity dies or leaves the "
-                + "loaded area; following your owner just waits when they log off. TERRAIN: by "
-                + "default she never breaks or places a block to keep up. When the only way to "
-                + "them would need digging, bridging or pillaring, following ENDS with a failure "
-                + "that lists exactly which blocks; if altering them is acceptable, re-send follow "
-                + "with may_alter_terrain=true (ask the owner when it is not obviously natural "
-                + "terrain).";
+                + "loaded area; following your owner just waits when they log off. TERRAIN: "
+                + "following never breaks or places a block. When the only way to them would need "
+                + "digging, bridging or pillaring, following ENDS with a failure that lists candidate "
+                + "routes and exactly which blocks each would alter; if that is acceptable, goto "
+                + "route:<id> to get there, then follow again (ask the owner when it is not "
+                + "obviously natural terrain).";
     }
 
     @Override
@@ -63,10 +63,6 @@ public final class FollowTool implements NumenTool {
                         "Who to follow, by runtime entity id from scan_nearby_entities. "
                                 + "Leave it out to follow your owner.",
                         1, Integer.MAX_VALUE)
-                .optionalBool("may_alter_terrain", "Consent to dig through, bridge or pillar to "
-                        + "keep up. Omit/false = leave every block untouched (default). Set true "
-                        + "after a failed follow listed the blocks in the way and you judge that "
-                        + "acceptable, or when the owner said so.")
                 .build();
     }
 
@@ -94,8 +90,7 @@ public final class FollowTool implements NumenTool {
         } else if (parsed != null && parsed.entity_uuid() != null) {
             targetUuid = java.util.UUID.fromString(parsed.entity_uuid());
         }
-        boolean mayAlterTerrain = parsed != null && Boolean.TRUE.equals(parsed.may_alter_terrain());
-        setTask(companion, new FollowTaskRecord(toolCallId, distance, entityId, targetUuid, mayAlterTerrain),
+        setTask(companion, new FollowTaskRecord(toolCallId, distance, entityId, targetUuid),
                 args, reply);
     }
 }
