@@ -3,6 +3,14 @@ plugins {
     id 'net.fabricmc.fabric-loom-remap'
 }
 
+repositories {
+    // Common Protection API 发在 Nucleoid 的 maven。
+    exclusiveContent {
+        forRepository { maven { name = 'Nucleoid'; url = 'https://maven.nucleoid.xyz/' } }
+        filter { includeGroup 'eu.pb4' }
+    }
+}
+
 dependencies {
     minecraft "com.mojang:minecraft:${minecraft_version}"
     // Obfuscated MC (1.21.1) → loom remaps to Mojang names to match the common source set.
@@ -26,6 +34,11 @@ dependencies {
     // 类与资源由下面的 jar 块平铺进发行 jar,不作为独立依赖出现在 POM 里。
     // 只有 YSM:车万女仆没有 Fabric 版。
     compileOnly project(':plugins:ysm')
+
+    // 领地裁决口接 Common Protection API:领地 mod(Flan、GOML、Open Parties and Claims……)把它内嵌进
+    // 自己的 jar,本模组不带它一个字节。modCompileOnly 让 loom 把它的 intermediary 名换成本模块的 Mojang 名;
+    // 不在运行时类路径上,没有领地 mod 时一个类都不会加载,见 com.dwinovo.numen.plugins.Builtin。
+    modCompileOnly "eu.pb4:common-protection-api:${cpa_version}"
 }
 
 loom {

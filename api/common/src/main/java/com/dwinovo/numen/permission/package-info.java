@@ -12,7 +12,7 @@
  * ({@link com.dwinovo.numen.permission.PlacedBlocks}), the per-companion mode and the owner's own rule
  * layer — checked before the factory layer — live with the owner
  * ({@link com.dwinovo.numen.permission.PermissionStore}). Territory mods answer through
- * {@link com.dwinovo.numen.permission.TerritoryClaims}. When a verdict asks, the task that proposed the
+ * {@link com.dwinovo.numen.permission.TerritoryClaims}, installed by a loader module. When a verdict asks, the task that proposed the
  * action consults the owner through the companion's
  * {@link com.dwinovo.numen.permission.ConsentDesk}; what the owner allows becomes a task-scoped grant that
  * feeds back into the next {@link com.dwinovo.numen.permission.Gate}, and "allow and remember" also writes

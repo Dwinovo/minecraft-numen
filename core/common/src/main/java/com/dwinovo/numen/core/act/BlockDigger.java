@@ -5,6 +5,7 @@ import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.core.act.ToolSelect;
+import com.dwinovo.numen.core.mixin.ServerPlayerGameModeAccessor;
 import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.Verdict;
@@ -44,8 +45,16 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * {@link Interaction} (break_block / interact). It is the only place a block is broken, so it is
  * where the permission layer is enforced: every new target is judged before the first swing
  * ({@link #permit}); a refused block is reported as {@link DigResult#REFUSED} and never touched.
+ *
+ * <p>服务端也可能把这一下退回来:领地 mod 取消了左键或破坏事件、出生点保护、冒险模式限制——它们都在原生
+ * 通道里生效,不经权限层。挖掘器在 START 与收尾那一下之后读服务端的挖掘状态({@link ServerPlayerGameModeAccessor})
+ * 对账,退回来的同样按 {@link DigResult#REFUSED} 收场,理由是 {@link #SERVER_REFUSED}——不空挥到超时,也不把
+ * 没挖掉的方块报成挖掉了。
  */
 public final class BlockDigger {
+
+    /** 服务端把挖掘退回来时回执里的理由。 */
+    public static final String SERVER_REFUSED = "被领地或服务器保护拦下";
 
     /** The crack is broadcast under breaker id -1 (not the player's entity id),
      *  so the server's own per-player crack clearing on STOP can't wipe it early. */
@@ -65,7 +74,7 @@ public final class BlockDigger {
     private int blockHitDelay;    // post-break cooldown (survives reset())
     /** 开挖时的主手物品快照;中途换持(物品/组件级)即重开进度。 */
     private net.minecraft.world.item.ItemStack destroyingItem;
-    /** 最近一次 {@link DigResult#REFUSED} 的裁决;没被拒过是 null。 */
+    /** 最近一次 {@link DigResult#REFUSED} 的理由(权限层的裁决,或服务端退回的 {@link #SERVER_REFUSED});没被拒过是 null。 */
     private Verdict refusal;
 
     public BlockDigger(NumenPlayer player) {
@@ -122,7 +131,10 @@ public final class BlockDigger {
         BROKE_OCCLUDER,
         /** No face of the target is reachable and nothing safe occludes it — stuck (maps to OCCLUDED). */
         NO_SHOT,
-        /** The permission layer refused this block; {@link #refusal()} says why. Nothing was swung. */
+        /**
+         * The permission layer refused this block before the first swing, or the server bounced the break
+         * back (a land claim, spawn protection); {@link #refusal()} says why. The block is untouched.
+         */
         REFUSED;
 
         /** 本 tick 有方块真的没了(目标或遮挡物)。 */
@@ -253,6 +265,9 @@ public final class BlockDigger {
             player.swing(InteractionHand.MAIN_HAND);
             if (player.getAbilities().instabuild) {
                 // creative: START 即破,连挖不设间隔(每 tick 一格)
+                if (!landed(state)) {
+                    return refusedByServer();
+                }
                 reset();
                 return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
             }
@@ -261,9 +276,18 @@ public final class BlockDigger {
                 // 不再补一次(重复 attack 会翻倍副作用,红石矿甚至会在
                 // insta-mine 后被旧 state 的 attack 原地点亮放回)
                 if (state.getDestroyProgress(player, level, pos) >= 1.0f) {
+                    if (!landed(state)) {
+                        return refusedByServer();
+                    }
                     reset();                         // instamine: START broke it (no STOP is sent)
                     return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
                 }
+            }
+            ServerPlayerGameModeAccessor server = (ServerPlayerGameModeAccessor) player.gameMode;
+            if (!server.numen$isDestroyingBlock() || !pos.equals(server.numen$destroyPos())) {
+                // 服务端没收下这一下 START:往下攒进度也永远等不到它挖。它没开始挖,不必发 ABORT
+                started = false;
+                return refusedByServer();
             }
             return DigResult.PROGRESSING;            // begin accumulating next tick
         }
@@ -278,11 +302,35 @@ public final class BlockDigger {
             // removes it (no intact-for-a-frame flicker).
             player.gameMode.handleBlockBreakAction(pos,
                     ServerboundPlayerActionPacket.Action.STOP_DESTROY_BLOCK, side, level.getMaxBuildHeight(), -1);
+            if (!landed(state)) {
+                return refusedByServer();
+            }
             blockHitDelay = postBreakDelay();
             reset();
             return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
         }
         return DigResult.PROGRESSING;
+    }
+
+    /**
+     * 收尾那一下(creative/秒破的 START、生存的 STOP)之后,这一格的破坏落地了没有:方块变了算落地;服务端
+     * 按自己的钟觉得进度还差一点、挂成延迟破坏的,过几刻它自己挖掉,也算。都不是就是服务端退回来了。
+     *
+     * @param before 按下之前那一格的方块状态
+     */
+    private boolean landed(BlockState before) {
+        if (player.level().getBlockState(pos) != before) {
+            return true;
+        }
+        ServerPlayerGameModeAccessor server = (ServerPlayerGameModeAccessor) player.gameMode;
+        return server.numen$hasDelayedDestroy() && pos.equals(server.numen$delayedDestroyPos());
+    }
+
+    /** 服务端退回了这一下:记下理由,放开这一格(清裂纹),按 REFUSED 收场。 */
+    private DigResult refusedByServer() {
+        refusal = Verdict.deny(SERVER_REFUSED);
+        cancel();
+        return DigResult.REFUSED;
     }
 
     private void start(BlockPos target, boolean selectTool) {

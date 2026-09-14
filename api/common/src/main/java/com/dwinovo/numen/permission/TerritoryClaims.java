@@ -1,9 +1,10 @@
 package com.dwinovo.numen.permission;
 
 /**
- * 领地 mod 的裁决口:{@code claimed} 信号问它。各 loader 模块装自己的实现
- * (Fabric 接 Common Protection API;NeoForge 由挖掘走原生通道触发 BreakEvent 被拦),
- * 经 {@link Gate} 的构造参数进来。没装时是 {@link #NONE}:没有领地 mod,就没有领地。
+ * 领地 mod 的裁决口:{@code claimed} 信号问它。加载器模块在模组初始化时经
+ * {@link Permission#useTerritoryClaims} 装上自己的实现(Fabric 在 Common Protection API 在场时接它),
+ * {@link Permission#gateFor} 把它放进裁决快照。没装时是 {@link #NONE}:没有领地 mod,就没有领地——
+ * 挖掘与放置照样走原生通道,领地 mod 在那里取消事件时由落点如实报成被拦(NeoForge 就是这样)。
  */
 @FunctionalInterface
 public interface TerritoryClaims {

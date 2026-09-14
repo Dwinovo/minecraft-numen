@@ -5,6 +5,7 @@ import com.dwinovo.numen.core.Constants;
 import java.nio.file.Path;
 import java.util.function.Function;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 /**
  * 内嵌联动的闸门:<b>目标模组在场才装,不在就当不存在</b>。
@@ -50,8 +51,21 @@ public final class Gate {
      */
     public void open(String modId, String plugin, Function<Path, Runnable> body) {
         if (!modLoaded.test(modId)) return;
+        install(modId, () -> body.apply(skillsRoot(plugin)));
+    }
+
+    /**
+     * 不带技能的联动——只往引擎里接一个口子(如领地裁决口),没有 {@code plugins/<模块名>/skills/} 可找。
+     * 同一道闸、同样延迟求值。
+     */
+    public void open(String modId, Supplier<Runnable> body) {
+        if (!modLoaded.test(modId)) return;
+        install(modId, body);
+    }
+
+    private static void install(String modId, Supplier<Runnable> body) {
         try {
-            body.apply(skillsRoot(plugin)).run();
+            body.get().run();
             Constants.LOG.info("[numen] 联动已接上:{}", modId);
         } catch (Throwable t) {
             // 一个联动接不上不能带倒整个模组,也不能带倒别的联动
