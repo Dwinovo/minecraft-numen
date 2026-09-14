@@ -203,7 +203,7 @@ class ProtectionPinsTest {
     private static CalculationContext context(FakeView view, LongSet sacred, RouteSpec spec, PlacedBlocks placed) {
         return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, false,
                 spec.withPositions(PositionCosts.protect(sacred)),
-                new Gate(null, Mode.ASK, RuleSet.factory(), placed, TerritoryClaims.NONE));
+                new Gate(null, Mode.ASK, RuleSet.factory(), placed, TerritoryClaims.NONE, java.util.List.of()));
     }
 
     private static LongSet sacredOf(BlockPos pos) {
@@ -236,11 +236,38 @@ class ProtectionPinsTest {
         double plain = MovementHelper.getMiningDurationTicks(any,
                 dirt.getX(), dirt.getY(), dirt.getZ(), false);
         assertTrue(plain < consent, "需要同意的格应贵于自然方块,consent=" + consent + " plain=" + plain);
-        // 账单填得出为什么需要同意
-        assertTrue(com.dwinovo.numen.core.pathing.execute.TerrainBill
-                .consent(any.gate, v, chest, v.getBlockState(chest)).contains("has a block entity"));
-        assertEquals("", com.dwinovo.numen.core.pathing.execute.TerrainBill
-                .consent(any.gate, v, dirt, v.getBlockState(dirt)));
+        // 账单的挖掘条目由同一个裁决填上那一条征询:箱子要问,泥土不用
+        var chestBill = com.dwinovo.numen.core.pathing.execute.TerrainBill.planned(throughCell(chest), v, any.gate);
+        assertEquals(1, chestBill.consentItems().size());
+        assertTrue(chestBill.consentItems().get(0).cause().contains("has a block entity"));
+        assertTrue(chestBill.summary().contains("needing consent"), chestBill.summary());
+        assertTrue(com.dwinovo.numen.core.pathing.execute.TerrainBill.planned(throughCell(dirt), v, any.gate)
+                .consentItems().isEmpty());
+    }
+
+    /** 一步挖穿 {@code cell} 的假路径:只为出账,不执行。 */
+    private static com.dwinovo.numen.core.pathing.astar.NavPath throughCell(BlockPos cell) {
+        Movement step = new Movement(null, ANY, SRC, cell, new BlockPos[]{cell}) {
+            {
+                override(1);
+            }
+
+            @Override
+            public double calculateCost(CalculationContext context, MutableMoveResult result) {
+                return 1;
+            }
+
+            @Override
+            protected java.util.Set<BlockPos> calculateValidPositions() {
+                return java.util.Set.of(SRC, cell);
+            }
+        };
+        return new com.dwinovo.numen.core.pathing.astar.PathBase() {
+            @Override public java.util.List<Movement> movements() { return java.util.List.of(step); }
+            @Override public java.util.List<BlockPos> positions() { return java.util.List.of(SRC, cell); }
+            @Override public com.dwinovo.numen.core.pathing.goals.Goal getGoal() { return null; }
+            @Override public int getNumNodesConsidered() { return 0; }
+        };
     }
 
     @Test
@@ -262,8 +289,11 @@ class ProtectionPinsTest {
         double consent = MovementHelper.getMiningDurationTicks(any,
                 wall.getX(), wall.getY(), wall.getZ(), false);
         assertTrue(consent > 0 && consent < COST_INF, "ANY 下玩家放的格应有限价,实为 " + consent);
-        assertTrue(com.dwinovo.numen.core.pathing.execute.TerrainBill
-                .consent(any.gate, v, wall, v.getBlockState(wall)).contains("placed by a player"));
+        assertTrue(com.dwinovo.numen.core.pathing.execute.TerrainBill.planned(throughCell(wall), v, any.gate)
+                .consentItems().get(0).cause().contains("placed by a player"));
+        // 挑挖什么的剪枝不问权限:同一块玩家放的泥土挖得动
+        assertTrue(MovementHelper.getUnpricedMiningDurationTicks(context(v, LongSets.emptySet(), NATURAL, placed),
+                wall.getX(), wall.getY(), wall.getZ(), v.getBlockState(wall), false) < COST_INF);
     }
 
     @Test
@@ -318,7 +348,7 @@ class ProtectionPinsTest {
         FakeView v = floored();
         v.set(dirt, Blocks.DIRT.defaultBlockState());
         CalculationContext preserve = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
-                false, RouteSpec.defaults(), new Gate(null, Mode.ASK, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE));
+                false, RouteSpec.defaults(), new Gate(null, Mode.ASK, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE, java.util.List.of()));
         // 同一块泥土,NATURAL 有限价(见上),NONE 无限价——翻成 INF 的只是规格的 alter
         assertTrue(MovementHelper.getMiningDurationTicks(preserve,
                 dirt.getX(), dirt.getY(), dirt.getZ(), false) >= COST_INF);
@@ -343,7 +373,7 @@ class ProtectionPinsTest {
         CalculationContext deniedCtx = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
                 false, NATURAL.withPositions(PositionCosts.builder()
                         .place(cell.asLong(), COST_INF).build()),
-                new Gate(null, Mode.ASK, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE));
+                new Gate(null, Mode.ASK, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE, java.util.List.of()));
         assertEquals(COST_INF, deniedCtx.costOfPlacingAt(
                 cell.getX(), cell.getY(), cell.getZ(), v.getBlockState(cell)));
     }

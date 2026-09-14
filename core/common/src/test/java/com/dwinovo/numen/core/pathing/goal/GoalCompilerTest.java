@@ -59,7 +59,7 @@ class GoalCompilerTest {
     void mineFieldKeepsNothingSacredSoEveryStanceStaysReachable() {
         BlockPos ore2 = T.east(4);
         BlockPos drop = T.north(2);
-        GoalCompiler.Compiled c = GoalCompiler.mineField(List.of(T, ore2), List.of(drop));
+        GoalCompiler.Compiled c = GoalCompiler.mineField(List.of(T, ore2), p -> 0, List.of(drop));
         assertTrue(c.sacred().isEmpty(),
                 "no target cell may be sacred — a stance inside the target's own column"
                         + " would become unsatisfiable");
@@ -69,8 +69,24 @@ class GoalCompilerTest {
     }
 
     @Test
+    void mineFieldPricesEachStanceWithItsDigCost() {
+        BlockPos owners = T.east(3);
+        GoalCompiler.Compiled c = GoalCompiler.mineField(List.of(T, owners), p -> p.equals(owners) ? 150 : 10,
+                List.of());
+        // 到达价是停下那一格满足的成员里最便宜的那个;估价把价钱算进去(仍是下界)
+        assertEquals(10, c.goal().arrivalCost(T.north()));
+        assertEquals(150, c.goal().arrivalCost(owners.north()));
+        assertTrue(c.goal().heuristic(owners.north()) <= 150,
+                "站在贵的那块旁边时估价不高于它自己的到达价");
+        // 内核目标看到的是同一份到达价
+        assertEquals(150, c.engineGoal().arrivalCost(owners.north().getX(), owners.north().getY(),
+                owners.north().getZ()));
+        assertEquals(10, c.engineGoal().arrivalCost(T.north().getX(), T.north().getY(), T.north().getZ()));
+    }
+
+    @Test
     void mineFieldOnlyAdmitsCellsWhoseBodyTouchesTheOre() {
-        GoalCompiler.Compiled c = GoalCompiler.mineField(List.of(T), List.of());
+        GoalCompiler.Compiled c = GoalCompiler.mineField(List.of(T), p -> 0, List.of());
         assertTrue(c.goal().isAt(T.below(2)), "脚在下两格:矿贴着头顶");
         assertFalse(c.goal().isAt(T.below(3)), "再低一格就够不着了");
         assertFalse(c.goal().isAt(T.north(2)), "隔一格就不算贴着");

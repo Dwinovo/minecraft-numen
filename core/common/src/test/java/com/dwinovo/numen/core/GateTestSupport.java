@@ -15,6 +15,6 @@ public final class GateTestSupport {
     private GateTestSupport() {}
 
     public static Gate open() {
-        return new Gate(null, Mode.ASK, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE);
+        return new Gate(null, Mode.ASK, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE, java.util.List.of());
     }
 }
