@@ -15,22 +15,37 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 一张"动地形"的清单:哪些格要挖(按方块种类分组、保留坐标)、哪些格要放。
- * 两处用同一种说法——规划出来的路<b>会</b>动什么(无路验尸,喂给模型决定要不要授权),
- * 和执行器<b>真</b>动了什么(任务回执,事后如实相告)。语言面向工具回执(英文),
- * 坐标点名,方块按种类归堆,模型一眼能分出"两块木板一块玻璃"和"十一块石头"。
+ * 一张路线的账单:多长(格数、估计刻数)、哪些格要挖(坐标、方块、以及为什么需要同意)、
+ * 哪些格要放。两处用同一种说法——规划出来的路<b>会</b>动什么(预算账,喂给模型决定要不要
+ * 授权),和执行器<b>真</b>动了什么(实际账,任务回执事后如实相告)。语言面向工具回执
+ * (英文),坐标点名,方块按种类归堆,模型一眼能分出"两块木板一块玻璃"和"十一块石头"。
  */
 public final class TerrainBill {
 
     /** 每种方块最多点名多少个坐标,其余计数——清单是给人判断的,不是给人数的。 */
     private static final int COORDS_PER_KIND = 6;
 
-    private final Map<Block, List<BlockPos>> breaks = new LinkedHashMap<>();
-    private final Map<Block, List<BlockPos>> places = new LinkedHashMap<>();
+    /**
+     * 一条挖掘条目。
+     *
+     * @param consent 为什么需要主人同意(玩家放置 / 带方块实体);不需要同意为空串。
+     *                由权限层填写,规划器自己不判
+     */
+    public record Break(BlockPos pos, Block block, String consent) {}
 
-    /** 规划路径的预算:沿途每个移动原语此刻仍需挖/放的格。 */
+    /** @param block 放上去的方块;规划阶段还不知道会选哪种耗材,为 null */
+    public record Place(BlockPos pos, Block block) {}
+
+    private final List<Break> breaks = new ArrayList<>();
+    private final List<Place> places = new ArrayList<>();
+    private int blocks;
+    private double ticks;
+
+    /** 规划路径的预算:长度,加上沿途每个移动原语此刻仍需挖/放的格。 */
     public static TerrainBill planned(NavPath path, BlockGetter level) {
         TerrainBill bill = new TerrainBill();
+        bill.blocks = path.length();
+        bill.ticks = path.ticksRemainingFrom(0);
         for (Movement m : path.movements()) {
             for (BlockPos p : m.toBreak(level)) {
                 bill.addBreak(p, level.getBlockState(p));
@@ -43,30 +58,50 @@ public final class TerrainBill {
     }
 
     public void addBreak(BlockPos pos, BlockState was) {
-        breaks.computeIfAbsent(was.getBlock(), k -> new ArrayList<>()).add(pos.immutable());
+        breaks.add(new Break(pos.immutable(), was.getBlock(), ""));
     }
 
     /** @param placed 放上去的方块;规划阶段还不知道会选哪种耗材,传 null */
     public void addPlace(BlockPos pos, Block placed) {
-        places.computeIfAbsent(placed, k -> new ArrayList<>()).add(pos.immutable());
+        places.add(new Place(pos.immutable(), placed));
     }
 
-    /** 并入另一张清单(任务把历次导航的账汇总成一次旅程的账)。 */
+    /** 并入另一张账单(任务把历次导航的账汇总成一次旅程的账)。 */
     public void addAll(TerrainBill other) {
-        other.breaks.forEach((k, v) -> breaks.computeIfAbsent(k, x -> new ArrayList<>()).addAll(v));
-        other.places.forEach((k, v) -> places.computeIfAbsent(k, x -> new ArrayList<>()).addAll(v));
+        breaks.addAll(other.breaks);
+        places.addAll(other.places);
+        blocks += other.blocks;
+        ticks += other.ticks;
     }
 
     public boolean isEmpty() {
         return breaks.isEmpty() && places.isEmpty();
     }
 
+    public List<Break> breaks() {
+        return List.copyOf(breaks);
+    }
+
+    public List<Place> places() {
+        return List.copyOf(places);
+    }
+
     public int breakCount() {
-        return breaks.values().stream().mapToInt(List::size).sum();
+        return breaks.size();
     }
 
     public int placeCount() {
-        return places.values().stream().mapToInt(List::size).sum();
+        return places.size();
+    }
+
+    /** 路线长度(格数);执行账尚未记长度时为 0。 */
+    public int blocks() {
+        return blocks;
+    }
+
+    /** 路线的估计刻数;执行账尚未记长度时为 0。 */
+    public double ticks() {
+        return ticks;
     }
 
     /**
@@ -77,17 +112,25 @@ public final class TerrainBill {
     public String describe() {
         StringBuilder sb = new StringBuilder();
         if (!breaks.isEmpty()) {
-            sb.append("break ").append(kinds(breaks));
+            Map<Block, List<BlockPos>> byKind = new LinkedHashMap<>();
+            for (Break b : breaks) {
+                byKind.computeIfAbsent(b.block(), k -> new ArrayList<>()).add(b.pos());
+            }
+            sb.append("break ").append(kinds(byKind));
         }
         if (!places.isEmpty()) {
             if (sb.length() > 0) {
                 sb.append(", and ");
             }
             sb.append("place ");
-            if (places.size() == 1 && places.containsKey(null)) {
+            Map<Block, List<BlockPos>> byKind = new LinkedHashMap<>();
+            for (Place p : places) {
+                byKind.computeIfAbsent(p.block(), k -> new ArrayList<>()).add(p.pos());
+            }
+            if (byKind.size() == 1 && byKind.containsKey(null)) {
                 sb.append(placeCount()).append(placeCount() == 1 ? " block" : " blocks");
             } else {
-                sb.append(kinds(places));
+                sb.append(kinds(byKind));
             }
         }
         return sb.toString();
