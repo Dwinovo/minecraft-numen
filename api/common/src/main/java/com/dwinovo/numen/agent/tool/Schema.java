@@ -176,6 +176,33 @@ public final class Schema {
             return this;
         }
 
+        /**
+         * An optional nested object built by {@code fields} — the same shape {@link #objectArray}
+         * gives one array item, sitting directly under this key. Dropped from {@code required},
+         * so a missing value binds as null.
+         */
+        public Builder optionalObject(String name, String desc, java.util.function.Consumer<Builder> fields) {
+            Builder ib = new Builder();
+            fields.accept(ib);
+            Map<String, Object> obj = new LinkedHashMap<>();
+            obj.put("type", "object");
+            obj.put("description", desc);
+            obj.put("properties", ib.props);
+            obj.put("required", List.copyOf(ib.required));
+            obj.put("additionalProperties", false);
+            props.put(name, obj);
+            return this;
+        }
+
+        /** Optional bounded number — dropped from {@code required}. */
+        public Builder optionalNumber(String name, String desc, double min, double max) {
+            Map<String, Object> p = base("number", desc);
+            p.put("minimum", min);
+            p.put("maximum", max);
+            props.put(name, p);
+            return this;
+        }
+
         public Map<String, Object> build() {
             Map<String, Object> root = new LinkedHashMap<>();
             root.put("type", "object");

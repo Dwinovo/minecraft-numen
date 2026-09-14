@@ -194,6 +194,20 @@ public final class NumenPlayer extends ServerPlayer {
         pausedReflexes = java.util.Set.of();
     }
 
+    /**
+     * 内容包挂在这具身体上的同伴级状态,按类型各一份(路线簿之类)。
+     *
+     * <p>与 {@link #pausedReflexes} 同一原则——<b>跟着身体走,不进静态表</b>:身体没了状态
+     * 就没了,休眠回来是新身体、新状态,不用给每一种状态各配一套离场清理;引擎不认识
+     * 内容包的类型,所以按类型取、首次取时由调用方建。
+     */
+    private final java.util.Map<Class<?>, Object> bodyState = new java.util.HashMap<>();
+
+    /** 取(首次取时建)这具身体上的一份同伴级状态。 */
+    public <T> T state(Class<T> type, java.util.function.Supplier<T> init) {
+        return type.cast(bodyState.computeIfAbsent(type, k -> init.get()));
+    }
+
     /** The loaded companion body with this UUID, or {@code null} if not spawned. */
     public static NumenPlayer findByUuid(MinecraftServer server, UUID uuid) {
         return server.getPlayerList().getPlayer(uuid) instanceof NumenPlayer ap ? ap : null;
