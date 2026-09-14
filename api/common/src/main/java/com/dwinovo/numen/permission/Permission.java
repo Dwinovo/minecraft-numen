@@ -19,13 +19,13 @@ public final class Permission {
     private Permission() {}
 
     /**
-     * 主线程:取这只同伴此刻的裁决快照(模式、规则、所在维度的放置记录)。
+     * 主线程:取这只同伴此刻的裁决快照(模式、规则、所在维度的放置记录、主人答应下来的任务期授权)。
      * 领地口现在是 {@link TerritoryClaims#NONE};loader 模块的实现接进来是下一步。
      */
     public static Gate gateFor(NumenPlayer companion) {
         ServerLevel level = (ServerLevel) companion.level();
         return new Gate(companion, modeOf(companion), RuleSet.factory(), PlacedBlocks.of(level),
-                TerritoryClaims.NONE);
+                TerritoryClaims.NONE, ConsentDesk.of(companion).granted());
     }
 
     /** 主线程:对活世界裁决一个动作。 */

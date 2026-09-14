@@ -134,8 +134,8 @@ final class CompanionBrain {
 
         // 每刻结算:主人按停止会在带外把记录标成终态,而客户端串行的派发器会一直
         // 卡到那一个结果送出——不能等这个槽下次赢了才结算。
-        sync.settleIfTerminal();
-        current.settleIfTerminal();
+        sync.settleIfTerminal(companion);
+        current.settleIfTerminal(companion);
         // 手上的活干完了就把记录抹掉,免得重启后凭空捡回一件早就完成的活。
         if (current.isEmpty() && !wasIdle) {
             TaskPersistence.forget(companion);
@@ -218,8 +218,8 @@ final class CompanionBrain {
 
     /** 身体离开世界:两个槽就地结算(它们不会再被 tick),结果照送。 */
     void finalizeActive(NumenPlayer companion) {
-        sync.finalizeInline();
-        current.finalizeInline();
+        sync.finalizeInline(companion);
+        current.finalizeInline(companion);
         holder = null;
         // 同 tick():状态先归位再宣布结果 —— 结果一到就同步开轮,那一刻会读 <current_task>。
         syncCurrentTask(companion);

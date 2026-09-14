@@ -116,6 +116,8 @@ public final class CompanionTickDispatcher {
                     com.dwinovo.numen.event.NumenEvents.ownerHurt(ap, hurt.attacker(),
                             hurt.hp(), hurt.maxHp(), ap.distanceTo(ownerPlayer), hurt.urgent());
                 }
+                // 等主人点头的那条征询:主人下线或到点就按拒绝收尾,发起的任务下一刻读到结论。
+                com.dwinovo.numen.permission.ConsentDesk.of(ap).tick();
                 CompanionBrain brain = brainFor(ap.getUUID());
                 if (!brain.boundTo(ap) && !brain.boundBodyGone()) {
                     // 同一个 UUID 同时有两具身体:上一具还在世界里,来的这具是重影。

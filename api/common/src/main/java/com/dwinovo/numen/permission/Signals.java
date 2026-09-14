@@ -17,13 +17,16 @@ import java.util.Set;
  * <p>不按方块或生物种类枚举:玩家放置、带方块实体、有主人、有名字、是村民、领地裁决,这几个
  * 信号覆盖原版和任何模组——高级工作台有方块实体,模组宠物继承原版驯服,都不用适配。
  *
+ * <p>信号只陈述事实,不裁决。{@link #CLAIMED} 与 {@link #SPAWN_PROTECTED} 是外部强制,由
+ * {@link Gate} 直接当拒绝用;其余只在规则行里起作用。
+ *
  * <p>线程:每个信号只读 {@link Facts#view} 与 {@link Facts#placed}(任何线程可读);要活读世界
- * 的({@link #CONTENTS}、{@link #CLAIMED})只在 {@link Facts#live} 非空时读,否则按各自说明的
- * 保守值回答。
+ * 的({@link #CONTENTS}、{@link #CLAIMED}、{@link #SPAWN_PROTECTED})只在 {@link Facts#live} 非空时读,
+ * 否则按各自说明的保守值回答。
  */
 public enum Signals {
 
-    PLACED("placed", "placed by a player") {
+    PLACED("placed", "placed by a player", false) {
         @Override
         boolean test(Action a, Facts f) {
             return a.pos() != null && f.placed() != null
@@ -31,7 +34,7 @@ public enum Signals {
         }
     },
 
-    BLOCK_ENTITY("block_entity", "has a block entity") {
+    BLOCK_ENTITY("block_entity", "has a block entity", false) {
         @Override
         boolean test(Action a, Facts f) {
             return a.state() != null && a.state().hasBlockEntity();
@@ -40,9 +43,9 @@ public enum Signals {
 
     /**
      * 容器里有没有东西。只有主线程读得到方块实体;搜索线程按"有"回答——规划比执行保守,
-     * 一条要等主人点头的路不会被规划成免费的。
+     * 一条要等主人点头的路不会被规划成免费的。拆了东西洒一地会消失,撤不回。
      */
-    CONTENTS("contents", "has contents") {
+    CONTENTS("contents", "has contents", true) {
         @Override
         boolean test(Action a, Facts f) {
             return a.pos() != null && a.state() != null && a.state().hasBlockEntity()
@@ -50,42 +53,43 @@ public enum Signals {
         }
     },
 
-    OWNED("owned", "has an owner") {
+    /** 有主人的实体:打死了就是主人的宠物没了,撤不回。 */
+    OWNED("owned", "has an owner", true) {
         @Override
         boolean test(Action a, Facts f) {
             return a.entity() instanceof OwnableEntity o && o.getOwnerUUID() != null;
         }
     },
 
-    NAMED("named", "has a name") {
+    NAMED("named", "has a name", false) {
         @Override
         boolean test(Action a, Facts f) {
             return a.entity() != null && a.entity().hasCustomName();
         }
     },
 
-    VILLAGER("villager", "is a villager") {
+    VILLAGER("villager", "is a villager", false) {
         @Override
         boolean test(Action a, Facts f) {
             return a.entity() instanceof AbstractVillager;
         }
     },
 
-    HOSTILE("hostile", "is hostile") {
+    HOSTILE("hostile", "is hostile", false) {
         @Override
         boolean test(Action a, Facts f) {
             return a.entity() instanceof Enemy;
         }
     },
 
-    HAZARD_ITEM("hazard_item", "is a hazard") {
+    HAZARD_ITEM("hazard_item", "is a hazard", false) {
         @Override
         boolean test(Action a, Facts f) {
             return a.item() != null && HAZARD_ITEMS.contains(a.item());
         }
     },
 
-    NEAR_PLACED("near_placed", "next to player-placed blocks") {
+    NEAR_PLACED("near_placed", "next to player-placed blocks", false) {
         @Override
         boolean test(Action a, Facts f) {
             return a.pos() != null && f.placed() != null
@@ -93,11 +97,26 @@ public enum Signals {
         }
     },
 
-    /** 领地 mod 说不。命中即 deny,不进规则表;主线程才问得到,搜索线程按"不知道"放行。 */
-    CLAIMED("claimed", "inside someone's claim") {
+    /**
+     * 领地 mod 说不。外部强制:命中即 deny,不进规则表、不问主人;主线程才问得到,搜索线程按
+     * "不知道"放行。
+     */
+    CLAIMED("claimed", "a land claim forbids it", false) {
         @Override
         boolean test(Action a, Facts f) {
             return f.live() != null && f.claims().forbids(a, f);
+        }
+    },
+
+    /**
+     * 服务器的出生点保护说不(服主设的半径,非管理员不许动)。外部强制,与 {@link #CLAIMED} 同一档;
+     * 主线程才问得到,测试里没有同伴身体时不成立。
+     */
+    SPAWN_PROTECTED("spawn_protected", "spawn protection forbids it", false) {
+        @Override
+        boolean test(Action a, Facts f) {
+            return f.live() != null && f.actor() != null && a.pos() != null
+                    && f.live().getServer().isUnderSpawnProtection(f.live(), a.pos(), f.actor());
         }
     };
 
@@ -110,10 +129,12 @@ public enum Signals {
 
     private final String ruleName;
     private final String description;
+    private final boolean irreversible;
 
-    Signals(String ruleName, String description) {
+    Signals(String ruleName, String description, boolean irreversible) {
         this.ruleName = ruleName;
         this.description = description;
+        this.irreversible = irreversible;
     }
 
     /** 规则文本里写的名字。 */
@@ -124,6 +145,14 @@ public enum Signals {
     /** 命中时给回执用的自述("placed by a player")。 */
     public String description() {
         return description;
+    }
+
+    /**
+     * 这个事实成立时动作撤不回(打死宠物、拆掉装着东西的容器)。它不改裁决——放行与拒绝只看规则行;
+     * 它只让征询清单把这一条标出来,主人点头之前看得见。
+     */
+    public boolean irreversible() {
+        return irreversible;
     }
 
     abstract boolean test(Action action, Facts facts);

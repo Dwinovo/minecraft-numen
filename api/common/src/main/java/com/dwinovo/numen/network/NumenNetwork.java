@@ -47,6 +47,18 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.CurrentTaskPayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.CurrentTaskPayload::handle);
 
+        // S→C: 同伴在等主人点头的那条征询(或撤回)——卡片与轮廓只照它画(见 ConsentDesk)。
+        Services.NETWORK.registerServerToClient(
+                com.dwinovo.numen.network.payload.ConsentRequestPayload.TYPE,
+                com.dwinovo.numen.network.payload.ConsentRequestPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.ConsentRequestPayload::handle);
+
+        // C→S: 主人在征询卡片上的答复(只认主人)。
+        Services.NETWORK.registerClientToServer(
+                com.dwinovo.numen.network.payload.ConsentReplyPayload.TYPE,
+                com.dwinovo.numen.network.payload.ConsentReplyPayload.STREAM_CODEC,
+                com.dwinovo.numen.network.payload.ConsentReplyPayload::handle);
+
         // C→S: owner pressed Stop — cancel the companion's queued + running tasks.
         Services.NETWORK.registerClientToServer(
                 com.dwinovo.numen.network.payload.CancelTasksPayload.TYPE,

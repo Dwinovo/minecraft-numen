@@ -11,6 +11,9 @@
  * ({@link com.dwinovo.numen.permission.Signals}), the placement record is world-saved
  * ({@link com.dwinovo.numen.permission.PlacedBlocks}), the per-companion mode lives with its
  * owner ({@link com.dwinovo.numen.permission.PermissionStore}). Territory mods answer through
- * {@link com.dwinovo.numen.permission.TerritoryClaims}. Design: {@code docs/permission-layer.md}.
+ * {@link com.dwinovo.numen.permission.TerritoryClaims}. When a verdict asks, the task that proposed the
+ * action consults the owner through the companion's
+ * {@link com.dwinovo.numen.permission.ConsentDesk}; what the owner allows becomes a task-scoped grant that
+ * feeds back into the next {@link com.dwinovo.numen.permission.Gate}. Design: {@code docs/permission-layer.md}.
  */
 package com.dwinovo.numen.permission;

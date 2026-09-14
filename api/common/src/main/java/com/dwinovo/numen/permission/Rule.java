@@ -73,6 +73,16 @@ public final class Rule {
         return true;
     }
 
+    /** 命中这条规则的动作撤不回:它的正项里有撤不回的信号({@link Signals#irreversible})。 */
+    public boolean irreversible() {
+        for (Term t : terms) {
+            if (!t.negated && t.type == Term.Type.SIGNAL && t.signal.irreversible()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** 命中时给回执的短语:各正项的自述,如 {@code placed by a player}、{@code is #minecraft:doors}。 */
     public String describe() {
         List<String> parts = new ArrayList<>();

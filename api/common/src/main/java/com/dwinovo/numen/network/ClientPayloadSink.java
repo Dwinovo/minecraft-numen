@@ -25,6 +25,7 @@ public final class ClientPayloadSink {
 
     public static volatile Consumer<CompanionListPayload> companionList = p -> {};
     public static volatile Consumer<CurrentTaskPayload> currentTask = p -> {};
+    public static volatile Consumer<com.dwinovo.numen.network.payload.ConsentRequestPayload> consent = p -> {};
     public static volatile Consumer<NumenDeathPayload> death = p -> {};
     public static volatile Consumer<NumenEventPayload> event = p -> {};
     public static volatile Consumer<NumenStatePayload> state = p -> {};
