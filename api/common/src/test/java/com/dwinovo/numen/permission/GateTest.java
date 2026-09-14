@@ -18,8 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * 裁决的顺序与出厂表:模式 → 外部强制 → deny → allow → ask → 都不中也问;出厂 allow 行放行自然方块,
- * 出厂 ask 行问玩家放的与带方块实体的;三种模式;任务期授权按"同一行规则 + 同一种东西"放行。
+ * 裁决的顺序与出厂表:模式 → 外部强制 → 主人层(deny → allow → ask)→ 出厂层(deny → allow → ask)→ 都不中
+ * 也问;出厂 allow 行放行自然方块,出厂 ask 行问玩家放的与带方块实体的;三种模式;任务期授权按"同一行规则
+ * + 同一种东西"放行;记住的规则怎么推。
  */
 @Tag("mc")
 class GateTest {
@@ -37,8 +38,13 @@ class GateTest {
         assumeTrue(booted, "Minecraft 引导不可用,跳过裁决钉桩");
     }
 
-    private static Gate gate(Mode mode, RuleSet rules, PlacedBlocks placed) {
-        return new Gate(null, mode, rules, placed, TerritoryClaims.NONE, List.of());
+    /** 只有出厂层(主人还没写过规则)。 */
+    private static Gate gate(Mode mode, RuleSet factory, PlacedBlocks placed) {
+        return layered(mode, RuleSet.EMPTY, factory, placed);
+    }
+
+    private static Gate layered(Mode mode, RuleSet owner, RuleSet factory, PlacedBlocks placed) {
+        return new Gate(null, mode, owner, factory, placed, TerritoryClaims.NONE, List.of());
     }
 
     private static RuleSet rules(List<String> deny, List<String> ask, List<String> allow) {
@@ -151,6 +157,113 @@ class GateTest {
         assertEquals(Verdict.UNCOVERED, v.cause());
     }
 
+    // ==================== 分层 ====================
+
+    @Test
+    void anOwnersAskRowBeatsTheFactoryAllowRow() {
+        FakeWorld world = new FakeWorld();
+        world.set(POS, Blocks.STONE.defaultBlockState());
+        Gate gate = layered(Mode.ASK, rules(List.of(), List.of("break(!placed & !block_entity)"), List.of()),
+                RuleSet.factory(), new PlacedBlocks());
+        Verdict v = gate.judge(Action.breakBlock(POS, world.getBlockState(POS)), world);
+        assertTrue(v.asks(), "主人写了挖自然方块也要问,出厂的 allow 行压不过它");
+        assertEquals("break(!placed & !block_entity)", v.rule().toString());
+    }
+
+    @Test
+    void aRememberedAllowBeatsTheFactoryAskItWasCarvedFrom() {
+        FakeWorld world = new FakeWorld();
+        PlacedBlocks placed = new PlacedBlocks();
+        BlockPos cobble = POS;
+        BlockPos log = POS.offset(3, 0, 0);
+        world.set(cobble, Blocks.COBBLESTONE.defaultBlockState());
+        world.set(log, Blocks.OAK_LOG.defaultBlockState());
+        placed.record(cobble);
+        placed.record(log);
+        Gate gate = layered(Mode.ASK, rules(List.of(), List.of(), List.of("break(placed & minecraft:cobblestone)")),
+                RuleSet.factory(), placed);
+
+        assertTrue(gate.judge(Action.breakBlock(cobble, world.getBlockState(cobble)), world).allowed(),
+                "记住的圆石:玩家放的也不再问");
+        Verdict logVerdict = gate.judge(Action.breakBlock(log, world.getBlockState(log)), world);
+        assertTrue(logVerdict.asks(), "玩家放的橡木没被记住,照旧问");
+        assertEquals("break(placed)", logVerdict.rule().toString());
+    }
+
+    @Test
+    void theOwnersLayerDecidesBeforeTheFactoryLayerInBothDirections() {
+        FakeWorld world = new FakeWorld();
+        world.set(POS, Blocks.DIRT.defaultBlockState());
+        PlacedBlocks placed = new PlacedBlocks();
+        Action dig = Action.breakBlock(POS, world.getBlockState(POS));
+        Gate denied = layered(Mode.ASK, rules(List.of("break(minecraft:dirt)"), List.of(), List.of()),
+                RuleSet.factory(), placed);
+        assertEquals(Verdict.Kind.DENY, denied.judge(dig, world).kind(), "主人的 deny 行压过出厂 allow 行");
+
+        placed.record(POS);
+        Gate allowed = layered(Mode.ASK, rules(List.of(), List.of(), List.of("break(placed)")),
+                RuleSet.factory(), placed);
+        assertTrue(allowed.judge(dig, world).allowed(), "主人的 allow 行压过出厂 ask 行");
+    }
+
+    // ==================== 记住的规则 ====================
+
+    @Test
+    void rememberingKeepsTheAskedConditionsAndPinsTheKind() {
+        FakeWorld world = new FakeWorld();
+        PlacedBlocks placed = new PlacedBlocks();
+        world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
+        placed.record(POS);
+        Gate gate = gate(Mode.ASK, RuleSet.factory(), placed);
+        Action dig = Action.breakBlock(POS, world.getBlockState(POS));
+        ConsentItem item = gate.consentItem(dig, gate.judge(dig, world), world);
+        assertEquals("break(placed & minecraft:cobblestone)", item.remember().toString());
+        assertTrue(item.remember().matches(dig, new Facts(world, placed, null, TerritoryClaims.NONE, null)),
+                "记下的规则盖得住这次问的动作");
+
+        // 主人自己写的 ask 行带取反项:原样留着
+        world.set(POS.north(), Blocks.STONE.defaultBlockState());
+        Gate strict = layered(Mode.ASK, rules(List.of(), List.of("break(!placed & !block_entity)"), List.of()),
+                RuleSet.factory(), placed);
+        Action digStone = Action.breakBlock(POS.north(), world.getBlockState(POS.north()));
+        assertEquals("break(!placed & !block_entity & minecraft:stone)",
+                strict.consentItem(digStone, strict.judge(digStone, world), world).remember().toString());
+
+        // 没有任何一行覆盖:只钉对象
+        Gate bare = gate(Mode.ASK, RuleSet.EMPTY, placed);
+        Action drop = Action.drop(Items.DIAMOND);
+        assertEquals("drop(minecraft:diamond)",
+                bare.consentItem(drop, bare.judge(drop, world), world).remember().toString());
+
+        // 搜索线程读不到容器内容按有:问的是装着东西那一行,记下的也带着它
+        BlockPos chest = POS.east();
+        world.set(chest, Blocks.CHEST.defaultBlockState());
+        Action digChest = Action.breakBlock(chest, world.getBlockState(chest));
+        assertEquals("break(block_entity & contents & minecraft:chest)",
+                gate.consentItem(digChest, gate.judge(digChest, world), world).remember().toString());
+    }
+
+    @Test
+    void aRememberedRowLetsTheSameKindThroughNextTime() {
+        FakeWorld world = new FakeWorld();
+        PlacedBlocks placed = new PlacedBlocks();
+        BlockPos first = POS;
+        BlockPos second = POS.offset(5, 0, 0);
+        for (BlockPos p : List.of(first, second)) {
+            world.set(p, Blocks.COBBLESTONE.defaultBlockState());
+            placed.record(p);
+        }
+        Gate before = gate(Mode.ASK, RuleSet.factory(), placed);
+        Action digFirst = Action.breakBlock(first, world.getBlockState(first));
+        ConsentItem asked = before.consentItem(digFirst, before.judge(digFirst, world), world);
+
+        List<Rule> remembered = ConsentItem.remembered(List.of(asked, asked));
+        assertEquals(1, remembered.size(), "同一行只记一次");
+        Gate after = layered(Mode.ASK, new RuleSet(List.of(), List.of(), remembered), RuleSet.factory(), placed);
+        assertTrue(after.judge(Action.breakBlock(second, world.getBlockState(second)), world).allowed(),
+                "记住之后同一种东西不再问,也不靠任务期授权");
+    }
+
     // ==================== 外部强制 ====================
 
     @Test
@@ -158,7 +271,8 @@ class GateTest {
         FakeWorld world = new FakeWorld();
         world.set(POS, Blocks.OAK_LOG.defaultBlockState());
         TerritoryClaims everywhere = (action, facts) -> true;
-        Gate gate = new Gate(null, Mode.ASK, RuleSet.factory(), new PlacedBlocks(), everywhere, List.of());
+        Gate gate = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(), everywhere,
+                List.of());
         // 主线程上的拒绝(带着"a land claim forbids it")由 GameTest 在活世界里钉
         assertTrue(gate.judge(Action.breakBlock(POS, world.getBlockState(POS)), world).allowed(),
                 "搜索线程问不到领地:按不知道放行,执行时再拦");
@@ -202,15 +316,16 @@ class GateTest {
 
         Gate ungranted = gate(Mode.ASK, RuleSet.factory(), placed);
         Action digFirst = Action.breakBlock(first, world.getBlockState(first));
-        ConsentItem grant = ConsentItem.of(digFirst, ungranted.judge(digFirst, world));
+        ConsentItem grant = ungranted.consentItem(digFirst, ungranted.judge(digFirst, world), world);
 
-        Gate granted = new Gate(null, Mode.ASK, RuleSet.factory(), placed, TerritoryClaims.NONE, List.of(grant));
+        Gate granted = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), placed, TerritoryClaims.NONE,
+                List.of(grant));
         assertTrue(granted.judge(digFirst, world).allowed());
         assertTrue(granted.judge(Action.breakBlock(second, world.getBlockState(second)), world).allowed(),
                 "同一行规则问出来的同一种方块:挖一堆只问一次");
         assertTrue(granted.judge(Action.breakBlock(stone, world.getBlockState(stone)), world).asks(),
                 "换一种方块另问");
-        assertEquals(Verdict.Kind.DENY, new Gate(null, Mode.OBSERVE, RuleSet.factory(), placed, TerritoryClaims.NONE,
-                List.of(grant)).judge(digFirst, world).kind(), "授权只把问变成放行,解不开拒绝");
+        assertEquals(Verdict.Kind.DENY, new Gate(null, Mode.OBSERVE, RuleSet.EMPTY, RuleSet.factory(), placed,
+                TerritoryClaims.NONE, List.of(grant)).judge(digFirst, world).kind(), "授权只把问变成放行,解不开拒绝");
     }
 }

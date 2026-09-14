@@ -18,8 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 征询登记处:发起即推卡、答复记授权、超时与主人不在按拒绝、新的顶掉旧的、任务收尾清授权撤请求。
- * 时钟、主人在不在、推卡撤卡都经假接线,不起服务器。
+ * 征询登记处:发起即推卡、答复记授权、允许并记住写规则、超时与主人不在按拒绝、新的顶掉旧的、任务收尾清授权
+ * 撤请求。时钟、主人在不在、推卡撤卡、主人的规则表都经假接线,不起服务器。
  */
 class ConsentDeskTest {
 
@@ -28,12 +28,14 @@ class ConsentDeskTest {
         long now = 1000;
         boolean ownerOnline = true;
         final List<ConsentRequest> shown = new ArrayList<>();
+        final List<Rule> remembered = new ArrayList<>();
         int cleared;
 
         @Override public long gameTime() { return now; }
         @Override public boolean ownerPresent() { return ownerOnline; }
         @Override public void show(ConsentRequest request) { shown.add(request); }
         @Override public void clear() { cleared++; }
+        @Override public void remember(List<Rule> allow) { remembered.addAll(allow); }
     }
 
     private static final class Task extends TaskRecord {
@@ -42,9 +44,12 @@ class ConsentDeskTest {
         }
     }
 
+    /** 记住的那一行只用种类项:解析信号名要引导 MC,这里不起。 */
+    private static final Rule REMEMBER_LOGS = Rule.parse("break(minecraft:oak_log)");
+
     private static ConsentItem log(int x) {
         return new ConsentItem(Action.Kind.BREAK, new BlockPos(x, 64, 0), ConsentItem.NO_ENTITY, "oak_log",
-                "break(placed)", "placed by a player", false);
+                "break(placed)", "placed by a player", false, REMEMBER_LOGS);
     }
 
     private FakeLine line;
@@ -78,13 +83,26 @@ class ConsentDeskTest {
     }
 
     @Test
-    void rememberIsATaskGrantUntilRulesExist() {
+    void rememberWritesTheRulesOnceAndStillGrantsTheTask() {
         Task task = new Task();
-        ConsentDesk.Ticket ticket = desk.ask(task, List.of(log(1)), "r");
+        ConsentDesk.Ticket ticket = desk.ask(task, List.of(log(1), log(2)), "r");
         desk.answer(ticket.request().id(), ConsentAnswer.Decision.ALLOW_REMEMBER, "");
         assertTrue(ticket.poll().allowed());
-        assertEquals(List.of(log(1)), desk.granted());
-        assertTrue(ticket.poll().allowance(List.of(log(1))).contains("记住规则在下一步"));
+        assertEquals(List.of(log(1), log(2)), desk.granted(), "本任务里照样放行");
+        assertEquals(List.of(REMEMBER_LOGS), line.remembered, "两条同一行规则,只写一次");
+        String allowance = ticket.poll().allowance(List.of(log(1), log(2)));
+        assertTrue(allowance.contains("allow break(minecraft:oak_log)"), "回执说记下了哪一行: " + allowance);
+    }
+
+    @Test
+    void allowOnceAndDenyRememberNothing() {
+        Task task = new Task();
+        ConsentDesk.Ticket once = desk.ask(task, List.of(log(1)), "r");
+        desk.answer(once.request().id(), ConsentAnswer.Decision.ALLOW_ONCE, "");
+        ConsentDesk.Ticket no = desk.ask(task, List.of(log(2)), "r");
+        desk.answer(no.request().id(), ConsentAnswer.Decision.DENY, "");
+        assertTrue(line.remembered.isEmpty());
+        assertFalse(once.poll().allowance(List.of(log(1))).contains("remembered"));
     }
 
     @Test
@@ -180,7 +198,7 @@ class ConsentDeskTest {
             items.add(log(x));
         }
         items.add(new ConsentItem(Action.Kind.ATTACK, new BlockPos(5, 64, 5), 42, "wolf", "attack(owned)",
-                "has an owner", true));
+                "has an owner", true, Rule.parse("attack(entity:00000000-0000-0000-0000-00000000002a)")));
         List<ConsentItem.Line> lines = ConsentItem.listing(items);
         assertEquals(2, lines.size());
         assertEquals("break 8 oak_log (0,64,0; 1,64,0; 2,64,0; 3,64,0; 4,64,0; 5,64,0; +2 more): placed by a player",
