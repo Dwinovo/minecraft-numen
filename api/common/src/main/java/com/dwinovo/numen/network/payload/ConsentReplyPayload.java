@@ -20,7 +20,7 @@ import java.util.UUID;
  *
  * <h2>信任模型</h2>
  * 与 {@link ExecuteToolPayload} 同一条:目标必须是同伴(跨维度查找),发送者必须是它的主人。
- * 请求号对不上挂着的那一条(已超时、已被顶替)就忽略——登记处自己判,这里只转交。
+ * 认主人、对请求号都在 {@link ConsentDesk#reply}(与 {@code /numen consent} 命令同一个入口),这里只转交。
  *
  * @param companion 哪只同伴
  * @param id        答的是哪一条请求
@@ -56,13 +56,12 @@ public record ConsentReplyPayload(UUID companion, long id, ConsentAnswer.Decisio
             Constants.LOG.debug("[numen-net] consent_reply for unknown companion {}", p.companion());
             return;
         }
-        if (!companion.isOwnedByPlayer(player.getUUID())) {
-            Constants.LOG.warn("[numen-net] ✗ consent_reply rejected from {}: not the owner",
+        switch (ConsentDesk.reply(player, companion, p.id(), p.decision(), p.note())) {
+            case NOT_OWNER -> Constants.LOG.warn("[numen-net] ✗ consent_reply rejected from {}: not the owner",
                     player.getName().getString());
-            return;
-        }
-        if (!ConsentDesk.of(companion).answer(p.id(), p.decision(), p.note())) {
-            Constants.LOG.info("[numen-net] consent_reply #{} for {} no longer pending", p.id(), p.companion());
+            case NOT_PENDING -> Constants.LOG.info("[numen-net] consent_reply #{} for {} no longer pending",
+                    p.id(), p.companion());
+            case ANSWERED -> { }
         }
     }
 }

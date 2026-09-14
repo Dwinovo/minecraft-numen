@@ -6,6 +6,7 @@ import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.task.TaskRecord;
 
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
@@ -50,6 +51,16 @@ public final class ConsentDesk {
     public static final String TASK_ENDED = "发起征询的任务已经结束";
     /** 发起者撤回了(要做的事已经不用问)。 */
     public static final String WITHDRAWN = "发起者撤回了这条征询";
+
+    /** {@link #reply} 的结局。 */
+    public enum Reply {
+        /** 答的是挂着的那一条,已经收下。 */
+        ANSWERED,
+        /** 答复的人不是这只同伴的主人。 */
+        NOT_OWNER,
+        /** 这个号没有挂着(已答复、已超时、被顶替,或者本来就没有)。 */
+        NOT_PENDING
+    }
 
     /** 登记处与外界的接线:时钟、主人在不在、把请求推给主人或撤回、把记住的规则写进主人的表。 */
     interface Line {
@@ -115,8 +126,33 @@ public final class ConsentDesk {
     }
 
     /**
-     * 主人的答复。允许就把清单记进发起任务的授权,允许并记住再把记住的规则写进主人的 allow 表;拒绝没有
-     * 附言时理由是 {@link #OWNER_SAID_NO}。
+     * 答复从外面进来的唯一入口:卡片的网络载荷与 {@code /numen consent} 命令都落这里。只认主人;认下的交给
+     * 这只同伴的登记处 {@link #answer}。
+     */
+    public static Reply reply(ServerPlayer from, NumenPlayer companion, long requestId,
+                             ConsentAnswer.Decision decision, String note) {
+        if (!companion.isOwnedByPlayer(from.getUUID())) {
+            return Reply.NOT_OWNER;
+        }
+        return of(companion).answer(requestId, decision, note) ? Reply.ANSWERED : Reply.NOT_PENDING;
+    }
+
+    /** 挂着这个请求号的在场同伴;没有是 null。请求号全服唯一,命令只带号不带同伴。 */
+    public static NumenPlayer pendingAt(MinecraftServer server, long requestId) {
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            if (player instanceof NumenPlayer companion) {
+                ConsentRequest pending = of(companion).pending();
+                if (pending != null && pending.id() == requestId) {
+                    return companion;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 这只同伴的主人的答复(经 {@link #reply} 进来;测试直接调)。允许就把清单记进发起任务的授权,允许并
+     * 记住再把记住的规则写进主人的 allow 表;拒绝没有附言时理由是 {@link #OWNER_SAID_NO}。
      *
      * @return 答的是不是挂着的那一条(过期、被顶替的号一律忽略)
      */
