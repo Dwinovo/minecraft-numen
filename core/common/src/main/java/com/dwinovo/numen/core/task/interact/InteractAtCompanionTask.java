@@ -108,12 +108,14 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                 // 挡着的方块要不要主人同意,权限层说;回执只转述,不出主意去拆
                 var verdict = com.dwinovo.numen.permission.Permission.judge(player,
                         com.dwinovo.numen.permission.Action.breakBlock(blocker, blockerState));
-                String blockerNote = verdict.allowed()
-                        ? "that blocker may be broken without asking"
-                        : "breaking that blocker " + verdict.reason();
+                String blockerNote = switch (verdict.kind()) {
+                    case ALLOW -> "Breaking that blocker needs no consent.";
+                    case ASK -> "Breaking that blocker needs the owner's consent (" + verdict.cause() + ").";
+                    case DENY -> "Breaking that blocker is refused (" + verdict.cause() + ").";
+                };
                 fail("aim " + aimLabel() + " is blocked from here — the crosshair lands on "
                         + blockerId + " at " + blocker.getX() + "," + blocker.getY() + ","
-                        + blocker.getZ() + " instead; " + blockerNote + ". goto the target's"
+                        + blocker.getZ() + " instead. " + blockerNote + " goto the target's"
                         + " open side, then retry.", FailureType.OCCLUDED);
                 return TaskState.FAILED;
             }
@@ -126,19 +128,18 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     return TaskState.FAILED;
                 }
             }
-            // 左键动手之前:打到的方块(挖)或实体(打)交给权限层。要问就站着等主人,不许就带着理由收场
-            if (button() == Interaction.Button.ATTACK) {
-                com.dwinovo.numen.permission.Action proposed = leftClickAction(hit);
-                if (proposed != null) {
-                    Permit permit = permit(proposed, r.describe());
-                    if (permit.state() == PermitState.WAITING) {
-                        InputDriver.halt(player);
-                        return TaskState.RUNNING;
-                    }
-                    if (permit.state() == PermitState.REFUSED) {
-                        fail("cannot " + proposed.describe() + ": " + permit.refusal(), FailureType.REFUSED);
-                        return TaskState.FAILED;
-                    }
+            // 按下去之前:准星落到的方块或实体交给权限层——左键是挖、打,右键是右键方块、右键实体。
+            // 要问就站着等主人,不许就带着理由收场
+            com.dwinovo.numen.permission.Action proposed = proposedAction(hit);
+            if (proposed != null) {
+                Permit permit = permit(proposed, r.describe());
+                if (permit.state() == PermitState.WAITING) {
+                    InputDriver.halt(player);
+                    return TaskState.RUNNING;
+                }
+                if (permit.state() == PermitState.REFUSED) {
+                    fail("cannot " + proposed.describe() + ": " + permit.refusal(), FailureType.REFUSED);
+                    return TaskState.FAILED;
                 }
             }
             // A right-click landing on a block activates it (opens a station's GUI,
@@ -185,14 +186,20 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
         };
     }
 
-    /** 左键落在哪儿就是要做什么:方块是挖,实体是打;打空气什么都不做。 */
-    private com.dwinovo.numen.permission.Action leftClickAction(HitResult hit) {
-        if (hit instanceof net.minecraft.world.phys.BlockHitResult bh) {
-            return com.dwinovo.numen.permission.Action.breakBlock(bh.getBlockPos(),
-                    player.level().getBlockState(bh.getBlockPos()));
+    /**
+     * 这一下按在哪儿就是要做什么:左键方块是挖、左键实体是打;右键方块是 {@code use_block}、右键实体是
+     * {@code use_entity}。落在空气里的不对着世界里的谁,不是权限层的动作。
+     */
+    private com.dwinovo.numen.permission.Action proposedAction(HitResult hit) {
+        boolean left = button() == Interaction.Button.ATTACK;
+        if (hit instanceof net.minecraft.world.phys.BlockHitResult bh && hit.getType() == HitResult.Type.BLOCK) {
+            var state = player.level().getBlockState(bh.getBlockPos());
+            return left ? com.dwinovo.numen.permission.Action.breakBlock(bh.getBlockPos(), state)
+                    : com.dwinovo.numen.permission.Action.useBlock(bh.getBlockPos(), state);
         }
         if (hit instanceof net.minecraft.world.phys.EntityHitResult eh) {
-            return com.dwinovo.numen.permission.Action.attack(eh.getEntity());
+            return left ? com.dwinovo.numen.permission.Action.attack(eh.getEntity())
+                    : com.dwinovo.numen.permission.Action.useEntity(eh.getEntity());
         }
         return null;
     }

@@ -141,15 +141,19 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
             return TaskState.RUNNING;   // settling / something briefly in the line — re-aim next tick
         }
 
-        if (interaction == null && r.button == MouseButton.LEFT) {
-            // 左键打它之前交给权限层:宠物、有名字的、村民要问就站着等主人,不许就带着理由收场
-            Permit permit = permit(com.dwinovo.numen.permission.Action.attack(entity), r.describe());
+        if (interaction == null) {
+            // 按下去之前交给权限层:左键是打它(宠物、有名字的、村民),右键是右键它(有主人的)。
+            // 要问就站着等主人,不许就带着理由收场
+            boolean left = r.button == MouseButton.LEFT;
+            Permit permit = permit(left ? com.dwinovo.numen.permission.Action.attack(entity)
+                    : com.dwinovo.numen.permission.Action.useEntity(entity), r.describe());
             if (permit.state() == PermitState.WAITING) {
                 InputDriver.halt(player);
                 return TaskState.RUNNING;
             }
             if (permit.state() == PermitState.REFUSED) {
-                fail("cannot attack " + targetName() + ": " + permit.refusal(), FailureType.REFUSED);
+                fail("cannot " + (left ? "attack " : "use ") + targetName() + ": " + permit.refusal(),
+                        FailureType.REFUSED);
                 return TaskState.FAILED;
             }
         }

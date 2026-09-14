@@ -1,6 +1,8 @@
 package com.dwinovo.numen.core.tools.inventory;
 import com.dwinovo.numen.core.tools.ContainerOps;
 
+import static com.dwinovo.numen.task.TaskDispatch.*;
+
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.entity.NumenPlayer;
@@ -11,7 +13,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
-/** Query tool (raw NumenTool): transfer items between slots in the open GUI; replies in place. */
+/**
+ * World-action tool (raw NumenTool): transfer items between slots in the open GUI. Runs as a short sync
+ * task — taking something out of a container goes through the permission layer and may wait for the owner.
+ */
 public final class TransferTool implements NumenTool {
 
     private static final Gson GSON = new Gson();
@@ -47,6 +52,6 @@ public final class TransferTool implements NumenTool {
     @Override
     public void onServerCall(String toolCallId, JsonObject args, NumenPlayer self, Consumer<String> reply) {
         Args a = GSON.fromJson(args, Args.class);
-        reply.accept(impl.transfer(a.moves(), self));
+        runSync(self, impl.transfer(a.moves(), ctx(toolCallId, self)), reply);
     }
 }

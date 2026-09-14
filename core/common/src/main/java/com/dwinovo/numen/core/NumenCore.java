@@ -150,6 +150,8 @@ public final class NumenCore {
         TaskFactory.register(com.dwinovo.numen.core.task.inventory.UnequipTaskRecord.class,
                 (p, r) -> new com.dwinovo.numen.core.task.inventory.UnequipCompanionTask(p, r));
         TaskFactory.register(DropItemsTaskRecord.class, (p, r) -> new DropCompanionTask(p, r));
+        TaskFactory.register(com.dwinovo.numen.core.task.inventory.TransferTaskRecord.class,
+                (p, r) -> new com.dwinovo.numen.core.task.inventory.TransferCompanionTask(p, r));
         TaskFactory.register(EatItemTaskRecord.class, (p, r) -> new EatCompanionTask(p, r));
         TaskFactory.register(AttackTaskRecord.class, (p, r) -> new AttackCompanionTask(p, r));
         TaskFactory.register(CollectItemsTaskRecord.class, (p, r) -> new CollectItemsCompanionTask(p, r));

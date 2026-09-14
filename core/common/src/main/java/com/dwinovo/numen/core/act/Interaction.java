@@ -346,6 +346,7 @@ public final class Interaction {
 
     private boolean fireUseBlock() {
         InputDriver.halt(player);
+        net.minecraft.world.inventory.AbstractContainerMenu menuBefore = player.containerMenu;
         BlockHitResult hit;
         if (presetHit != null) {
             hit = presetHit;                                  // caller already resolved the support face
@@ -368,6 +369,7 @@ public final class Interaction {
             if (res.consumesAction()) {
                 player.swing(h);
                 lastUseOutcome = "consumed (" + handName + "=" + res + ")";
+                MenuOrigin.pressed(player, menuBefore, hit.getBlockPos());
                 return true;
             }
             if (outcome.length() > 0) outcome.append(", ");
@@ -425,11 +427,14 @@ public final class Interaction {
         }
         InputDriver.halt(player);
         InputDriver.lookAt(player, entity.getEyePosition());
+        net.minecraft.world.inventory.AbstractContainerMenu menuBefore = player.containerMenu;
         for (InteractionHand h : HANDS) {
             if (entity.interact(player, h).consumesAction()) {       // animals / villagers
+                MenuOrigin.pressed(player, menuBefore, null);
                 return true;
             }
             if (player.interactOn(entity, h).consumesAction()) {     // item frames / leads
+                MenuOrigin.pressed(player, menuBefore, null);
                 return true;
             }
         }
