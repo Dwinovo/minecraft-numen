@@ -135,7 +135,7 @@ dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<versi
 
 The line differs per loader, and changing engine mechanics means depending on core instead — see [api/README_EN](api/README_EN.md#depend-on-it).
 
-The public integration API is **MIT** licensed — write tools, skills, and compat without being dragged into LGPL.
+Plugins and compatibility mods may use any license, including proprietary: work distributed separately that uses Numen through its API is not bound by the LGPL.
 
 Building it yourself: clone the repo and run `./gradlew :core:fabric:build` (or `:core:neoforge:build`). Bugs, ideas, and compat experiments are all welcome — [open an issue](https://github.com/Dwinovo/minecraft-numen/issues), or write a skill and send a PR.
 
@@ -151,7 +151,7 @@ Building it yourself: clone the repo and run `./gradlew :core:fabric:build` (or 
 
 <sub>Want to build it yourself, see the full tool list, or read the architecture? It's all in the source — start under <code>core/common/src/main/java/com/dwinovo/numen/</code>.</sub>
 
-<sub><b>Licensing</b>: the source code is <a href="LICENSE">LGPL-3.0</a> — forks you distribute must stay open under the same license. The public integration API (what plugins and outside brains code against) is <a href="LICENSE-API">MIT</a>, so anyone can build mod-compat freely. The art &amp; assets are <a href="LICENSE-ASSETS">All Rights Reserved</a>, and the names "Numen" / "言出法随" are reserved. Built on the <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a>.</sub>
+<sub><b>Licensing</b>: the source code is <a href="LICENSE">LGPL-3.0</a> — forks you distribute must stay open under the same license; plugins and compatibility mods distributed separately that use Numen through its API may use any license, including proprietary. The art &amp; assets are <a href="LICENSE-ASSETS">All Rights Reserved</a>, and the names "Numen" / "言出法随" are reserved. Built on the <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a>.</sub>
 
 <sub>Pathfinding draws on <a href="https://github.com/cabaletta/baritone">Baritone</a>'s publicly documented mechanics (weighted A*, partial-path commitment, in-flight cost re-verification), but Baritone is a client-side mod driving the local player while Numen drives a server-side fake player, with movement, digging and placement all going through server APIs. <b>No source was copied, ported, or adapted from it</b>; the LGPL-3.0 licence is Numen's own choice, not a consequence of Baritone's.</sub>
 

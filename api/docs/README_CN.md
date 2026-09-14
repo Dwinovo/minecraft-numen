@@ -110,6 +110,6 @@ Numen 还很年轻。原版玩法已经跑得很顺；而"让 AI 通达整个模
 
 想自己构建、看完整工具清单或架构设计？都在源码里——从 `common/src/main/java/com/dwinovo/numen/` 看起。
 
-**授权**（参照 AE2 拆分）：源代码采用 [LGPL-3.0](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE)——你分发的修改版必须以同协议继续开源。面向兼容模块 / MCP 桥接的**公共对接 API**（即将提供）采用 [MIT](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE-API)，让任何人都能自由地写 mod 兼容。美术与资源为 [保留所有权利](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE-ASSETS)，"Numen" / "言出法随" 名称亦予保留。基于 [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template) 构建。
+**授权**：源代码采用 [LGPL-3.0](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE)——你分发的修改版必须以同协议继续开源；单独发布、通过 API 使用 Numen 的插件与兼容模组可以采用任何协议，包括闭源。美术与资源为 [保留所有权利](https://github.com/Dwinovo/minecraft-numen/blob/HEAD/LICENSE-ASSETS)，"Numen" / "言出法随" 名称亦予保留。基于 [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template) 构建。
 
 寻路器在设计思路上借鉴了 [Baritone](https://github.com/cabaletta/baritone)，并针对**服务端（假玩家）**场景完全独立重写——**未复制、移植或改写其任何源码**。本项目代码采用 LGPL-3.0 属自主选择，与 Baritone（同为 LGPL-3.0）无衍生关系。

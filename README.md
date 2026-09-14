@@ -135,7 +135,7 @@ dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<versi
 
 加载器不同写法不同，要改引擎机制则改依赖 core——详见 [api/README](api/README.md#如何依赖)。
 
-面向集成的公共对接 API 采用 **MIT** 授权——写工具、写技能、写兼容，不必被 LGPL 牵着走。
+插件和兼容模组可以采用任何协议，包括闭源：单独发布、通过 API 使用 Numen 的作品不受 LGPL 约束。
 
 自己构建：克隆仓库，`./gradlew :core:fabric:build`（或 `:core:neoforge:build`）。Bug、点子、兼容实验都欢迎——[开个 issue](https://github.com/Dwinovo/minecraft-numen/issues)，或者写一篇技能提 PR。
 
@@ -151,7 +151,7 @@ dependencies  { modCompileOnly "com.dwinovo.numen:numen-api-fabric-1.21.1:<versi
 
 <sub>想自己构建、看完整工具清单或架构设计？都在源码里——从 <code>core/common/src/main/java/com/dwinovo/numen/</code> 看起。</sub>
 
-<sub><b>授权</b>：源代码采用 <a href="LICENSE">LGPL-3.0</a>——你分发的修改版必须以同协议继续开源。面向插件 / 外部大脑的<b>公共对接 API</b>采用 <a href="LICENSE-API">MIT</a>，让任何人都能自由地写 mod 兼容。美术与资源为 <a href="LICENSE-ASSETS">保留所有权利</a>，"Numen" / "言出法随" 名称亦予保留。基于 <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a> 构建。</sub>
+<sub><b>授权</b>：源代码采用 <a href="LICENSE">LGPL-3.0</a>——你分发的修改版必须以同协议继续开源；单独发布、通过 API 使用 Numen 的插件与兼容模组可以采用任何协议，包括闭源。美术与资源为 <a href="LICENSE-ASSETS">保留所有权利</a>，"Numen" / "言出法随" 名称亦予保留。基于 <a href="https://github.com/jaredlll08/MultiLoader-Template">MultiLoader Template</a> 构建。</sub>
 
 <sub>寻路借鉴了 <a href="https://github.com/cabaletta/baritone">Baritone</a> 的公开机制（加权 A*、部分路径提交、执行期成本复核），但 Baritone 是客户端模组、操控本机玩家，Numen 驱动的是服务端假玩家，移动/挖掘/放置全走服务端 API。<b>未复制、移植或改写其任何源码</b>；LGPL-3.0 是自主选择，与其无衍生关系。</sub>
 

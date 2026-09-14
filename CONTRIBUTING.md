@@ -21,3 +21,8 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 ./gradlew :api:common:test :core:common:test
 ./gradlew :core:neoforge:runGameTestServer
 ```
+
+## 授权 / License
+
+代码贡献按 LGPL-3.0 授权。插件和兼容模组只要单独发布、通过 API 使用 Numen，可以采用任何协议，包括闭源。
+Code contributions are licensed under LGPL-3.0. Plugins and compatibility mods distributed separately that use Numen through its API may use any license, including proprietary.

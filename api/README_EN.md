@@ -11,7 +11,7 @@
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
-![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
+![License](https://img.shields.io/badge/code-LGPL--3.0-4B6BFB?style=flat-square)
 ![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.21.1%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
 
 [**What it is**](#what-it-is) · [**Public API**](#public-api) · [**Depend on it**](#depend-on-it) · [**Build & publish**](#build--publish) · [**Ecosystem**](#ecosystem) · [**License**](#license)
@@ -214,8 +214,8 @@ As for **handing the controls to an outside brain** (any external agent driving 
 
 ## License
 
-- **Source code — [LGPL-3.0](LICENSE).** Forks you distribute must stay open under the same license.
-- **Public integration API — [MIT](LICENSE-API).** The surface plugins and outside brains code against (classes under `com.dwinovo.numen.api`) is MIT, so mod-compat can be built freely, including in proprietary projects.
-- **Art & assets — [All Rights Reserved](LICENSE-ASSETS).** The names "Numen" / "言出法随" are reserved.
+- **Source code — [LGPL-3.0](../LICENSE).** Forks you distribute must stay open under the same license.
+- **Plugins and compatibility mods may use any license.** Work distributed separately that uses Numen through its API is not bound by the LGPL, including proprietary projects.
+- **Art & assets — [All Rights Reserved](../LICENSE-ASSETS).** The names "Numen" / "言出法随" are reserved.
 
 Built on the [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template).

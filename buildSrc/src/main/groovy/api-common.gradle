@@ -51,13 +51,13 @@ repositories {
 }
 
 sourcesJar {
-    from(rootProject.file('LICENSE')) {
+    from(rootProject.files('LICENSE', 'COPYING', 'LICENSE-ASSETS')) {
         rename { "${it}_${mod_name}" }
     }
 }
 
 jar {
-    from(rootProject.file('LICENSE')) {
+    from(rootProject.files('LICENSE', 'COPYING', 'LICENSE-ASSETS')) {
         rename { "${it}_${mod_name}" }
     }
 
@@ -150,6 +150,9 @@ tasks.register('apiJar', Jar) {
     // 任何 loom 插件 id:各分支上它叫 fabric-loom / fabric-loom-remap /
     // net.fabricmc.fabric-loom 三种名字,盯 id 必然漏。
     include 'fabric.mod.json'
+    // 协议文本随成品 jar 进来(见上面 jar 块),瘦 jar 发给第三方开发者,一样要带
+    include 'LICENSE*'
+    include 'COPYING*'
     // 已知债:调试通道的两个 payload 被 numen-core 的 debug 侧直用;它们连同
     // ServerToolTransport 本该迁去 core 自己的网络层,迁移前先如实纳入契约
     include 'com/dwinovo/numen/network/payload/PathDebugPayload*.class'

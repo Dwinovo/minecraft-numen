@@ -11,7 +11,7 @@
 ![Minecraft](https://img.shields.io/badge/Minecraft-1.21.1-62B47A?style=flat-square)
 ![Loaders](https://img.shields.io/badge/Loaders-common%20%7C%20Fabric%20%7C%20NeoForge%20%7C%20Forge%20%E2%89%A41.20.4-DE7C36?style=flat-square)
 ![Java](https://img.shields.io/badge/Java-21-007396?style=flat-square&logo=openjdk&logoColor=white)
-![License](https://img.shields.io/badge/code-LGPL--3.0%20·%20API%20MIT-4B6BFB?style=flat-square)
+![License](https://img.shields.io/badge/code-LGPL--3.0-4B6BFB?style=flat-square)
 ![Version](https://img.shields.io/maven-metadata/v?metadataUrl=https%3A%2F%2Fraw.githubusercontent.com%2FDwinovo%2Fnumen-maven%2Fmain%2Fcom%2Fdwinovo%2Fnumen%2Fnumen-api-fabric-1.21.1%2Fmaven-metadata.xml&label=version&color=A8731E&style=flat-square)
 
 [**这是什么**](#这是什么) · [**公共 API**](#公共-api) · [**如何依赖**](#如何依赖) · [**构建与发布**](#构建与发布) · [**生态**](#生态) · [**授权**](#授权)
@@ -214,8 +214,8 @@ gh workflow run publish.yml --ref 1.21.1 -f channel=beta
 
 ## 授权
 
-- **源代码 —— [LGPL-3.0](LICENSE)。** 你分发的修改版必须以同协议继续开源。
-- **公共对接 API 面 —— [MIT](LICENSE-API)。** 插件与外部大脑对接的那层表面（`com.dwinovo.numen.api` 包下的类）是 MIT，写兼容不必被 LGPL 牵着走，商业闭源项目也可自由使用。
-- **美术与资源 —— [保留所有权利](LICENSE-ASSETS)。** "Numen" / "言出法随" 名称亦予保留。
+- **源代码 —— [LGPL-3.0](../LICENSE)。** 你分发的修改版必须以同协议继续开源。
+- **插件与兼容模组可以采用任何协议。** 单独发布、通过 API 使用 Numen 的作品不受 LGPL 约束，商业闭源项目也可以。
+- **美术与资源 —— [保留所有权利](../LICENSE-ASSETS)。** "Numen" / "言出法随" 名称亦予保留。
 
 基于 [MultiLoader Template](https://github.com/jaredlll08/MultiLoader-Template) 构建。
