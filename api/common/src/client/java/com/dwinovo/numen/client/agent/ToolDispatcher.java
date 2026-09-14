@@ -98,9 +98,19 @@ public final class ToolDispatcher {
         drainNext();
     }
 
-    /** Per-tick backstop: fail a never-replying in-flight call so the loop can't wedge. */
+    /**
+     * Per-tick backstop: fail a never-replying in-flight call so the loop can't wedge.
+     *
+     * <p>这具身体挂着一条等主人点头的征询时不算:服务端活着、正在等人,在飞的那件同步动作
+     * (interact_at 左键、drop_items)就是悬着等这个答复,由服务端按游戏刻超时收尾。兜底时钟
+     * 从答复之后重新起算。
+     */
     public void tick() {
         if (deadlineMillis == 0 || inFlight.isEmpty()) return;
+        if (com.dwinovo.numen.client.consent.ConsentCards.pending(entityUuid) != null) {
+            deadlineMillis = System.currentTimeMillis() + TOOL_BACKSTOP_MILLIS;
+            return;
+        }
         if (System.currentTimeMillis() < deadlineMillis) return;
         ToolInvocation inv = inFlight.values().iterator().next();
         Constants.LOG.warn("[numen-dispatch#{}] tool {} id={} hit backstop timeout — failing it",

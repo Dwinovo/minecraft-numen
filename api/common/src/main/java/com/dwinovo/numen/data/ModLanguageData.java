@@ -70,6 +70,17 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_THINKING_ON        = "numen.gui.providers.thinking.on";
         public static final String RESPAWN_BLOCKED                  = "numen.respawn.blocked";
 
+        // 征询卡片(ConsentCard):同伴等主人点头时聊天面板顶部与 HUD 上那张卡。
+        public static final String CONSENT_TITLE          = "numen.consent.title";
+        public static final String CONSENT_MORE           = "numen.consent.more";
+        public static final String CONSENT_EXPIRES        = "numen.consent.expires";
+        public static final String CONSENT_NOTE           = "numen.consent.note";
+        public static final String CONSENT_ALLOW          = "numen.consent.allow";
+        public static final String CONSENT_ALLOW_REMEMBER = "numen.consent.allow_remember";
+        public static final String CONSENT_DENY           = "numen.consent.deny";
+        public static final String CONSENT_IRREVERSIBLE   = "numen.consent.irreversible";
+        public static final String CONSENT_HUD_HINT       = "numen.consent.hud_hint";
+
         /** Hotkey: open the companion roster panel (shown in Controls settings). */
         public static final String KEY_OPEN_ROSTER = "key.numen.open_roster";
 
@@ -548,6 +559,15 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_THINKING_OFF,      "Off");
         adder.add(Keys.GUI_PROVIDERS_THINKING_ON,       "On");
         adder.add(Keys.RESPAWN_BLOCKED,                 "· waiting for room to land");
+        adder.add(Keys.CONSENT_TITLE,          "%s asks for your consent");
+        adder.add(Keys.CONSENT_MORE,           "+%s more");
+        adder.add(Keys.CONSENT_EXPIRES,        "counts as denied in %ss if unanswered");
+        adder.add(Keys.CONSENT_NOTE,           "Note (optional; passed on word for word)");
+        adder.add(Keys.CONSENT_ALLOW,          "Allow");
+        adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Allow & remember");
+        adder.add(Keys.CONSENT_DENY,           "Deny");
+        adder.add(Keys.CONSENT_IRREVERSIBLE,   "can't undo");
+        adder.add(Keys.CONSENT_HUD_HINT,       "Press [%s] to answer in the panel");
     }
 
     private static void addZh(Adder adder) {
@@ -876,5 +896,14 @@ public final class ModLanguageData {
         adder.add(Keys.GUI_PROVIDERS_THINKING_OFF,      "关闭");
         adder.add(Keys.GUI_PROVIDERS_THINKING_ON,       "开启");
         adder.add(Keys.RESPAWN_BLOCKED,                 "· 周围太挤,等一个落脚点");
+        adder.add(Keys.CONSENT_TITLE,          "%s 想征得你的同意");
+        adder.add(Keys.CONSENT_MORE,           "还有 %s 项");
+        adder.add(Keys.CONSENT_EXPIRES,        "%s 秒内不答复按拒绝处理");
+        adder.add(Keys.CONSENT_NOTE,           "附言(可选,原话转给她)");
+        adder.add(Keys.CONSENT_ALLOW,          "允许");
+        adder.add(Keys.CONSENT_ALLOW_REMEMBER, "允许并记住");
+        adder.add(Keys.CONSENT_DENY,           "拒绝");
+        adder.add(Keys.CONSENT_IRREVERSIBLE,   "撤不回");
+        adder.add(Keys.CONSENT_HUD_HINT,       "按 [%s] 打开面板答复");
     }
 }

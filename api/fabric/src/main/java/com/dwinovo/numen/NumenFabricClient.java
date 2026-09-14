@@ -99,6 +99,7 @@ public class NumenFabricClient implements ClientModInitializer {
                 (g, delta) -> {
                     com.dwinovo.numen.client.hud.TalkHint.render(g);
                     com.dwinovo.numen.client.hud.NumenHudToasts.render(g);
+                    com.dwinovo.numen.client.consent.ConsentHud.render(g);
                 });
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {
@@ -120,6 +121,7 @@ public class NumenFabricClient implements ClientModInitializer {
                     com.dwinovo.numen.client.agent.NumenRoster.instance().clear();
                     com.dwinovo.numen.client.agent.CompanionHome.onDisconnect();
                     com.dwinovo.numen.client.debug.PathDebugState.clear();
+                    com.dwinovo.numen.client.consent.ConsentCards.clear();
                 });
 
         // 寻路调试覆盖层:世界空间画线(半透明方块阶段之后)。
@@ -129,6 +131,8 @@ public class NumenFabricClient implements ClientModInitializer {
                 .register(context -> {
                     if (context.matrixStack() != null) {
                         com.dwinovo.numen.client.debug.PathDebugRenderer.render(
+                                context.matrixStack(), context.camera());
+                        com.dwinovo.numen.client.consent.ConsentOutlines.render(
                                 context.matrixStack(), context.camera());
                     }
                 });

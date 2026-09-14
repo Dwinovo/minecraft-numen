@@ -46,6 +46,7 @@ public final class ClientPayloadHandlers {
         ClientPayloadSink.currentTask = p ->
                 com.dwinovo.numen.client.agent.AgentLoopRegistry.getOrCreate(p.entityUuid())
                         .onCurrentTask(p);
+        ClientPayloadSink.consent = com.dwinovo.numen.client.consent.ConsentCards::accept;
         ClientPayloadSink.death = ClientPayloadHandlers::handleDeath;
         // getOrCreate:主人登录时补发的离线事件可能先于任何交互到达,
         // 那时 loop 还没造出来——用 get 会把补发的事件整批丢掉。

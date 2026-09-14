@@ -78,6 +78,8 @@ public class NumenNeoForgeClient {
                 .AFTER_TRANSLUCENT_BLOCKS) {
             com.dwinovo.numen.client.debug.PathDebugRenderer.render(
                     event.getPoseStack(), event.getCamera());
+            com.dwinovo.numen.client.consent.ConsentOutlines.render(
+                    event.getPoseStack(), event.getCamera());
         }
     }
 
@@ -99,6 +101,9 @@ public class NumenNeoForgeClient {
         event.registerAboveAll(
                 ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_toasts"),
                 (g, delta) -> com.dwinovo.numen.client.hud.NumenHudToasts.render(g));
+        event.registerAboveAll(
+                ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "consent_card"),
+                (g, delta) -> com.dwinovo.numen.client.consent.ConsentHud.render(g));
     }
 
     static void onClientTick(net.neoforged.neoforge.client.event.ClientTickEvent.Post event) {
@@ -119,6 +124,7 @@ public class NumenNeoForgeClient {
         com.dwinovo.numen.client.agent.NumenRoster.instance().clear();
         com.dwinovo.numen.client.agent.CompanionHome.onDisconnect();
         com.dwinovo.numen.client.debug.PathDebugState.clear();
+        com.dwinovo.numen.client.consent.ConsentCards.clear();
     }
 
     static void registerShaders(net.neoforged.neoforge.client.event.RegisterShadersEvent event) {

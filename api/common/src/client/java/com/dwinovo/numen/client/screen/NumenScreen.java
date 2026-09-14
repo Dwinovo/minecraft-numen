@@ -242,6 +242,16 @@ public final class NumenScreen extends Screen {
     private final int[] tabX = new int[3];   // left x of each tab label, for click hit-testing
     private final int[] tabW = new int[3];
 
+    /** 聊天区顶部的征询卡:这位同伴在等主人点头时出现,可点。 */
+    private final com.dwinovo.numen.client.consent.ConsentCard consentCard =
+            new com.dwinovo.numen.client.consent.ConsentCard(true);
+
+    /** 征询卡此刻是否画着、画的是不是这位同伴还挂着的那一条(撤回之后旧卡位置不再吃点击)。 */
+    private boolean consentLive() {
+        var pending = com.dwinovo.numen.client.consent.ConsentCards.pending(uuid);
+        return tab == Tab.CHAT && !modalOpen() && pending != null && pending == consentCard.shown();
+    }
+
     /** Chat transcript view (bubbles + tool chips + eased scroll); reset on companion/tab switch. */
     private final com.dwinovo.numen.client.screen.chat.ChatView chatView =
             new com.dwinovo.numen.client.screen.chat.ChatView(
@@ -273,8 +283,17 @@ public final class NumenScreen extends Screen {
         Minecraft.getInstance().setScreen(screen);
     }
 
-    /** Hotkey entry: open the workspace on the first companion (or an empty panel to summon from). */
+    /**
+     * Hotkey entry: open the workspace on the companion that is waiting for the owner's consent (the HUD
+     * card points here), else the first companion (or an empty panel to summon from).
+     */
     public static void openWorkspace() {
+        var asking = com.dwinovo.numen.client.consent.ConsentCards.first();
+        if (asking != null) {
+            Minecraft.getInstance().setScreen(new NumenScreen(asking.companion(),
+                    NumenRoster.instance().name(asking.companion())));
+            return;
+        }
         var entries = NumenRoster.instance().entries();
         if (entries.isEmpty()) { Minecraft.getInstance().setScreen(new NumenScreen(null, null)); return; }
         NumenRoster.Entry first = entries.get(0);
@@ -332,6 +351,7 @@ public final class NumenScreen extends Screen {
     /** Rebuild the widgets for the active tab. */
     private void rebuild() {
         if (inputBar != null) savedInput = inputBar.text();
+        consentCard.invalidate();
         clearWidgets();
         overlay.clear();
         inputBar = null;
@@ -770,6 +790,9 @@ public final class NumenScreen extends Screen {
             if (editPanel().keyPressed(keyCode, modifiers)) return true;
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
+        if (consentLive() && consentCard.keyPressed(keyCode, modifiers)) {
+            return true;
+        }
         if (tab == Tab.CHAT && inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {
             return true;
         }
@@ -779,6 +802,9 @@ public final class NumenScreen extends Screen {
     @Override
     public boolean charTyped(char ch, int modifiers) {
         if (tab == Tab.SETTINGS && !modalOpen() && settings.charTyped(ch)) {
+            return true;
+        }
+        if (consentLive() && consentCard.charTyped(ch)) {
             return true;
         }
         if (tab == Tab.CHAT && !modalOpen() && inputBar != null && inputBar.charTyped(ch)) {
@@ -868,6 +894,9 @@ public final class NumenScreen extends Screen {
                         return true;
                     }
                 }
+            }
+            if (consentLive() && consentCard.mouseClicked(mouseX, mouseY, button)) {
+                return true;
             }
             if (tab == Tab.CHAT && inputBar != null
                     && inputBar.mouseClicked(mouseX, mouseY, button)) {
@@ -1329,6 +1358,15 @@ public final class NumenScreen extends Screen {
         // 长期目标一行:她一轮接一轮在做的那件事。常驻在正文上方——目标是"现在的驱动力",
         // 不是聊天记录里的一条,埋进对话流就翻不到了。
         bodyY = renderGoalLine(g, bodyY, panelW - PAD * 2);
+
+        // 她在等主人点头:卡片压在正文最上面,对话流让出它的高度
+        var consent = com.dwinovo.numen.client.consent.ConsentCards.pending(uuid);
+        if (consent != null && !modalOpen()) {
+            int cardH = consentCard.layout(consent, left + PAD, bodyY, panelW - PAD * 2);
+            consentCard.render(g, mouseX, mouseY,
+                    com.dwinovo.numen.client.screen.settings.HostThemeColors.current());
+            bodyY += cardH + 4;
+        }
 
         // right-side PLAN card + the bubble transcript
         int planX = transX + transW + 8;
