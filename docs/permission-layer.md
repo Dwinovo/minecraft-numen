@@ -77,17 +77,33 @@
 | hostile | 是不是敌对 | 实体分类 |
 | hazard_item | 放的是不是岩浆、火、TNT、水 | 物品 |
 | near_placed | 放置点附近有没有玩家放的方块 | placed 的邻域查询 |
-| claimed | 领地 mod 说不说不 | loader 模块各一个实现:Fabric 接 Common Protection API;NeoForge 由挖掘走 `ServerPlayerGameMode` 触发 BreakEvent 被领地 mod 拦,回执如实报 |
+| claimed | 领地 mod 说不说不 | 加载器模块在模组初始化时经 `Permission.useTerritoryClaims` 装实现,没装是 `TerritoryClaims.NONE`:Fabric 在 Common Protection API(`common-protection-api` 1.0.0,领地 mod 内嵌)在场时接它,同伴以自己的身份问;NeoForge 不接具体领地 mod |
 | spawn_protected | 服务器出生点保护说不说不 | `MinecraftServer.isUnderSpawnProtection` |
 
 `claimed` 与 `spawn_protected` 是外部强制:命中即拒,不进规则表、不问主人,回执写明是谁拦的
 ("a land claim forbids it")。它们只在主线程问得到,搜索线程按不知道放行,执行时再拦。
 插件可登记新信号,出厂这几个已够。
 
-**规则(Rule)。** deny、allow、ask 三张表。查的顺序 deny → allow → ask → 都不中也问,第一个
-命中即定;allow 排在 ask 前面,因为"允许并记住"(§七)存的是从某条 ask 行里抠出来的一条更细的
-allow 行,ask 若先查,记住的规则永远轮不到。于是出厂 allow 行必须写得比 ask 行窄。一条规则
-一行字符串 `动作(信号 & 信号 & !信号)`,与 Claude Code 的 `Tool(specifier)` 同形:
+领地口之外还有原生通道:挖掘照真客户端发 START/STOP,领地 mod(NeoForge 上的,和不接 CPA 的)在那里取消
+左键或破坏事件。`BlockDigger` 在 START 与收尾那一下之后读服务端的挖掘状态对账,被退回来的按 `REFUSED`
+收场,理由"被领地或服务器保护拦下",不空挥到超时,也不把没挖掉的报成挖掉了。
+
+**规则(Rule)。** 两层,每层 deny、allow、ask 三张表:主人层是主人自己写的(命令、"允许并记住",
+存档见 §七),出厂层是下面这张默认表。查的顺序第一个命中即定:
+
+模式 → 外部强制(领地、出生点保护)→ 主人层(deny → allow → ask)→ 出厂层(allow → ask;出厂 deny 表
+是空的)→ 都不中也问。
+
+- 主人层整体先于出厂层:主人手写的 `ask break(!placed & !block_entity)` 压过出厂的自然方块 allow 行,
+  挖自然方块也问;主人写的 allow 行也压过出厂的 ask 行。
+- 层内 allow 先于 ask:"允许并记住"(§七)存的是从某条 ask 行里抠出来的一条更细的 allow 行,ask 若先查,
+  记住的规则永远轮不到。记住 `allow break(placed & minecraft:cobblestone)` 之后挖玩家放的圆石不问,挖玩家
+  放的橡木仍问。于是出厂 allow 行也必须写得比出厂 ask 行窄。
+- 任务期授权(§六)只覆盖问出来的动作,解不开拒绝。
+
+裁决快照(`Gate`)由 `Permission.gateFor` 在主线程取:模式、主人层与出厂层、放置记录、领地口、任务期
+授权,不可变,任何线程可读。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,与 Claude Code 的
+`Tool(specifier)` 同形,全仓只在 `Rule.parse` 解析,写错了回教学式的错误(列出认得的动词与信号):
 
 ```
 break(placed)          攻击/挖掘/放置四个动词 × 信号
@@ -117,8 +133,8 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 **裁决(Verdict)。** 唯一入口,收一个或一批动作,回答三种之一:放行;拒绝并附理由;需要主人
 同意并附理由(问的是哪一行规则,清单按它归堆)。
 
-**模式(Mode)。** 每个同伴一个,主人在面板设:`ask`(默认,走规则表)、`bypass`(全放行,
-单机不想被打扰的人用)、`observe`(只看不动,拒绝一切改世界的动作,等于 plan mode)。
+**模式(Mode)。** 每个同伴一个,主人设(`/numen permission mode`,面板页待交互重做):`ask`(默认,走规则表)、
+`bypass`(全放行,单机不想被打扰的人用)、`observe`(只看不动,拒绝一切改世界的动作,等于 plan mode)。
 
 **征询(Consent)。** 裁决说需要同意时发起,见 §六。
 
@@ -155,7 +171,8 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 | goto、follow | 规划出路以后、开走以前(导航采纳每一段路之前,含路线簿里的路与预算内整路),`alter=any` 的路把账单里要问的格打包送一次;重规划再查,授权覆盖的不重复问。无路时探针放宽一档(只走不改的先查自然改动,自然改动的查 `any`),候选行标 needing consent |
 | build | 施工前把要清的格与要放的格整批裁决,要问的一张卡;允许就建,拒绝的格按"主人不让动"跳过并写进回执 |
 | attack | 开打前送目标,要问的合成一张卡,等答复期间不打它;自卫换目标时新冒出来的再送 |
-| interact_at | 左键打到的方块(挖)或实体(打)动手前送;右键 `use_block`、拿东西 `take` 走落点 |
+| interact_at、interact_entity | 按下去之前送准星落到的动作:左键是挖、打,右键是 `use_block`、`use_entity` |
+| transfer | 逐步执行,把东西从容器里拿进背包的那一步动手前送 `take`(容器是右键打开界面的那一格);她自己背包的合成格与没有方块实体的工作台类界面不算 |
 | drop_items | 每次送 `drop`,出厂是问 |
 
 **允许的作用范围。** 对所有工具通用:本任务内,同一行规则问出来的同一种方块(或同一只实体)
@@ -171,9 +188,10 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
    (坐标最多点名 6 个,与路线账单同一种说法),另带要描轮廓的格子与实体。聊天面板顶部与 HUD
    出卡:同伴名、原因、清单(撤不回的标出来)、倒计时、三个按钮、一个可选附言框;HUD 那张不带
    输入,提示按面板键答复。世界里给涉及的方块和实体描轮廓,请求结束就撤。卡是非模态的。
-3. 三个按钮:**允许**只在发起它的任务里有效;**允许并记住**按动作的信号追加一条 allow
-   规则(见 §七,落地前与允许同效,回执里说明);**拒绝**可附一句话。
-4. `ConsentReplyPayload` 带同 id 回服务端,只认主人。允许:清单记成任务期授权,动作继续。
+3. 三个按钮:**允许**只在发起它的任务里有效;**允许并记住**本任务内同样放行,并把每一条推出的 allow
+   行写进主人层(见 §七),回执里交代记下了哪几行;**拒绝**可附一句话。
+4. `ConsentReplyPayload` 带同 id 回服务端,只认主人;`/numen consent <allow|remember|deny> <id> [附言]` 与它落到
+   同一个入口 `ConsentDesk.reply`(以后聊天里的可点击按钮就点这条命令)。允许:清单记成任务期授权,动作继续。
    拒绝:动作失败,`REFUSED` 的理由是主人那句原话或"主人拒绝";回执走既有的工具结果与
    task_finished,不新增事件种类。
 5. 超时由服务端按游戏刻算(两分钟),主人离线或到点按拒绝,理由写"主人不在场,无法征得同意"。
@@ -185,17 +203,41 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 
 ## 七、记住的规则与存储
 
-"允许并记住"存的作用域从命中的信号推:
+"允许并记住"存的作用域只在一处推(`Rule.remembering`,建征询清单时按裁决用的同一份事实推好,放在
+`ConsentItem.remember`),卡片与命令答复走同一个入口写进主人层:
+
+- 同一个动词;
+- 对象:实体认那一只(`entity:<uuid>`);方块与物品认种类 id,并留着问出它的那一行的条件;
+- 撤不回的信号这一次不成立、不读活世界时却按成立算的,取反钉上:卡上这一条没标撤不回,记下的规则就
+  盖不到撤不回的情形。记下的这一行一定盖得住这次问的动作。
 
 | 命中 | 存成 |
 |---|---|
 | `break(placed)` 挖了圆石 | `allow break(placed & minecraft:cobblestone)`:我放的圆石随便挖 |
 | `attack(named)` 某只狼 | `allow attack(entity:<uuid>)`:这一只可以 |
 | `break(block_entity)` 空箱子 | `allow break(block_entity & minecraft:chest & !contents)` |
+| 主人写的 `ask break(!placed & !block_entity)` 挖了石头 | `allow break(!placed & !block_entity & minecraft:stone)` |
 
-撤不回的也记得住——记不记由主人决定,卡片只负责把"撤不回"标出来。规则按主人存在服务端存档
-(每主人一份 SavedData),面板一页看和改,和 Claude Code 的 `/permissions` 对话框一样列出每条
-规则和它从哪来。任务期授权(§六:同一行规则问出来的同一种东西)不落盘,随任务结束消失。
+撤不回的也记得住——记不记由主人决定,卡片只负责把"撤不回"标出来。
+
+**存储。** `PermissionStore`,每主人一份 SavedData,与他手下每只同伴的模式放在一起:deny、ask、allow
+三张表,每行是规则原文,读档经 `Rule.parse`,写错的行记一条错误日志、不进表。规则层是不可变快照,改一次
+换一份。任务期授权(§六:同一行规则问出来的同一种东西)不落盘,随任务结束消失。
+
+**命令入口。** 主人专用,是卡片、面板与以后可点击按钮的底层接口;命令只调 `Permission`、`PermissionStore`、
+`ConsentDesk` 的公开接口,不复制判断:
+
+```
+/numen permission mode <同伴名> [ask|bypass|observe]    不带模式参数时显示当前模式
+/numen permission rules list                          主人层(带序号)与出厂层
+/numen permission rules add <deny|ask|allow> <规则>    例: add ask take(*)
+/numen permission rules remove <deny|ask|allow> <序号>
+/numen permission rules reset                         清空主人层
+/numen consent <allow|remember|deny> <请求 id> [附言]
+```
+
+面板里看和改规则的那一页,和 Claude Code 的 `/permissions` 对话框一样列出每条规则和它从哪来,随交互统一
+按主流 HITL 设计重做。
 
 ## 八、与路由的接口
 
@@ -228,9 +270,13 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 3. goto、build、interact、attack、drop、mine 接入执行开始时的裁决;goto 的候选探针无路时放宽
    一档,候选带同意标注;mine 按统一定价挑目标。(已落地)
 4. 征询协议:登记处、网络载荷、卡片、HUD、轮廓、超时;派发器豁免。(已落地)
-5. 记住的规则与面板页。
+5. 记住的规则与面板页。后端已落地:主人层三张表与分层查询、"允许并记住"推规则写进主人层、
+   `/numen permission`、`/numen consent` 命令入口;右键方块、右键实体、从容器拿东西在动手前过裁决。
+   面板页与卡片、HUD 待交互统一重做。
 6. 领地 mod 信号(Fabric CPA);GameTest:不砍玩家放的原木、不拆有东西的箱子、允许后能拆、
-   拒绝附言回到模型、observe 模式拒绝一切改动。
+   拒绝附言回到模型、observe 模式拒绝一切改动。后端已落地:Fabric 在 CPA 在场时装领地口;挖掘落点被原生
+   通道退回按 REFUSED"被领地或服务器保护拦下"收场;GameTest 覆盖记住、分层、命令答复、observe 拦开箱与
+   拿东西、主人写 `ask take(*)`、破坏事件被取消。
 
 ## 十一、宪法修订
 
