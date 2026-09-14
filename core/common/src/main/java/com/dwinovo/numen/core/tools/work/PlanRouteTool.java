@@ -76,7 +76,8 @@ public final class PlanRouteTool implements NumenTool {
         int alternatives = a.alternatives() == null ? 1 : a.alternatives();
 
         RoutePlanner planner = new RoutePlanner(PoolSearchDispatcher.INSTANCE,
-                s -> ContextFactory.forSearch(companion, s), companion.level());
+                s -> ContextFactory.forSearch(companion, s), companion.level(),
+                () -> com.dwinovo.numen.permission.Permission.gateFor(companion));
         BlockPos feet = PathExecutor.playerFeet(companion);
         BlockPos start = Movement.pathStart(companion, spec);
         RoutePlanner.Query query = planner.plan(feet, start, goal, spec, alternatives);

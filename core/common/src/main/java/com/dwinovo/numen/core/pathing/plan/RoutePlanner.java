@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 import com.dwinovo.numen.core.pathing.astar.Favoring;
 import com.dwinovo.numen.core.pathing.astar.NavPath;
@@ -20,6 +21,7 @@ import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.core.pathing.spec.PositionCosts;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
+import com.dwinovo.numen.permission.Gate;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
@@ -61,12 +63,15 @@ public final class RoutePlanner {
     private final Function<RouteSpec, CalculationContext> contexts;
     /** 预算账读的世界(主线程)。 */
     private final BlockGetter level;
+    /** 预算账问"为什么需要同意"用的裁决快照,出账时现取(主线程)。 */
+    private final Supplier<Gate> gates;
 
     public RoutePlanner(SearchDispatcher dispatcher, Function<RouteSpec, CalculationContext> contexts,
-                        BlockGetter level) {
+                        BlockGetter level, Supplier<Gate> gates) {
         this.dispatcher = dispatcher;
         this.contexts = contexts;
         this.level = level;
+        this.gates = gates;
     }
 
     /**
@@ -137,7 +142,7 @@ public final class RoutePlanner {
             inFlight = null;
             NavPath path = calc.getPath().orElse(null);
             if (path != null && !overlapsTooMuch(path)) {
-                TerrainBill bill = TerrainBill.planned(path, level);
+                TerrainBill bill = TerrainBill.planned(path, level, gates.get());
                 int changed = bill.breakCount() + bill.placeCount();
                 if (changed > spec.alterBudget()) {
                     // 预算是规划时的约束:超了的路不算候选,但它的格子照样计入惩罚,

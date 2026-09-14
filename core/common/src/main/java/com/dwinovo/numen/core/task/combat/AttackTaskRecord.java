@@ -31,6 +31,8 @@ public final class AttackTaskRecord extends TaskRecord {
     private final Set<Integer> defeated = new LinkedHashSet<>();
     private final Set<Integer> lost = new LinkedHashSet<>();
     private final Set<Integer> unreachable = new LinkedHashSet<>();
+    /** 权限层不让打的:id → 理由。宠物、有名字的、村民,主人没点头就不动手。 */
+    private final Map<Integer, String> refused = new LinkedHashMap<>();
     private final Map<Integer, Integer> strikesByEntity = new LinkedHashMap<>();
     private int strikes;
 
@@ -44,11 +46,13 @@ public final class AttackTaskRecord extends TaskRecord {
     public Set<Integer> defeated() { return Set.copyOf(defeated); }
     public Set<Integer> lost() { return Set.copyOf(lost); }
     public Set<Integer> unreachable() { return Set.copyOf(unreachable); }
+    public Map<Integer, String> refused() { return Map.copyOf(refused); }
     public int strikes() { return strikes; }
 
     public void defeated(int id) { defeated.add(id); }
     public void lost(int id) { lost.add(id); }
     public void unreachable(int id) { unreachable.add(id); }
+    public void refused(int id, String why) { refused.put(id, why); }
 
     /** 出手一次(挥击或射出一箭)。 */
     public void strike(int id) {
@@ -62,11 +66,13 @@ public final class AttackTaskRecord extends TaskRecord {
         if (defeated.contains(id)) return "defeated";
         if (lost.contains(id)) return "lost";
         if (unreachable.contains(id)) return "unreachable";
+        if (refused.containsKey(id)) return "refused: " + refused.get(id);
         return "pending";
     }
 
     public boolean terminal(int id) {
-        return defeated.contains(id) || lost.contains(id) || unreachable.contains(id);
+        return defeated.contains(id) || lost.contains(id) || unreachable.contains(id)
+                || refused.containsKey(id);
     }
 
     /**

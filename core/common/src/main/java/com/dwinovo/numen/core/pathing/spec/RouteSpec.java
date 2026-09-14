@@ -33,7 +33,8 @@ public final class RouteSpec {
     /**
      * 走路能不能改世界。{@link #NONE} 是接近类动作的默认——它们的意图是"到那儿去",
      * 不是"改那儿";挖矿、施工天然 {@link #NATURAL};{@link #ANY} 把需要主人同意的格也
-     * 算进路线、账单里单列(这一步与 NATURAL 同义,留给权限层)。
+     * 算进路线(有限但很贵的代价,见 {@code CalculationContext.CONSENT_COST_MULTIPLIER}),
+     * 账单里每条挖掘条目带着为什么需要同意。
      */
     public enum Alter {
         NONE, NATURAL, ANY;

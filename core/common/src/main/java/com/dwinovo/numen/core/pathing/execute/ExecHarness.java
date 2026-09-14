@@ -329,9 +329,18 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         rightClickCooldown = NavSettings.get().rightClickSpeed - 1;
         // 放置落点 = 命中面前方那格(贴面放置);开门/交互不会让它从可替换变成实心
         BlockPos placeAt = hit.getBlockPos().relative(hit.getDirection());
-        boolean emptyBefore = level.getBlockState(placeAt).canBeReplaced();
+        BlockState before = level.getBlockState(placeAt);
+        boolean emptyBefore = before.canBeReplaced();
         for (InteractionHand hand : HANDS) {
             ItemStack stack = player.getItemInHand(hand);
+            // 手里是方块就是要放:放置落点先过权限层。被拒的手不按下去——不是换一只手绕开,
+            // 是这一格不许放;另一只手若也拿方块同样被拒。
+            if (emptyBefore && stack.getItem() instanceof net.minecraft.world.item.BlockItem
+                    && !com.dwinovo.numen.permission.Permission.judge(player,
+                            com.dwinovo.numen.permission.Action.place(placeAt, before, stack.getItem()))
+                            .allowed()) {
+                continue;
+            }
             if (player.gameMode.useItemOn(player, level, stack, hand, hit).consumesAction()) {
                 player.swing(hand);
                 BlockState now = level.getBlockState(placeAt);

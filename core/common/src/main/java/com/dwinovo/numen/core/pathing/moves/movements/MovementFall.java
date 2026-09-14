@@ -63,7 +63,8 @@ public class MovementFall extends Movement {
     private boolean willPlaceBucket() {
         // 只问要不要放水桶(hasWaterBucket),与地形许可无关;MLG 放水再收回,不改世界
         CalculationContext context = new CalculationContext(player, player.level(),
-                ChunkLoadedTest.ALWAYS, false, spec);
+                ChunkLoadedTest.ALWAYS, false, spec,
+                com.dwinovo.numen.permission.Permission.gateFor((com.dwinovo.numen.entity.NumenPlayer) player));
         MutableMoveResult result = new MutableMoveResult();
         return MovementDescend.dynamicFallCost(context, src.getX(), src.getY(), src.getZ(),
                 dest.getX(), dest.getZ(), 0,

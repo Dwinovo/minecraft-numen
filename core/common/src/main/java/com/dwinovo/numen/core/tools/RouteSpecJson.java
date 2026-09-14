@@ -134,8 +134,9 @@ public final class RouteSpecJson {
         return switch (raw.toLowerCase(Locale.ROOT)) {
             case "none" -> RouteSpec.Alter.NONE;
             case "natural" -> RouteSpec.Alter.NATURAL;
+            case "any" -> RouteSpec.Alter.ANY;
             default -> throw new IllegalArgumentException(
-                    "spec.alter must be 'none' or 'natural', got '" + raw + "'");
+                    "spec.alter must be 'none', 'natural' or 'any', got '" + raw + "'");
         };
     }
 

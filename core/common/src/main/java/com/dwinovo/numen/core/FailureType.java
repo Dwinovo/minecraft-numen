@@ -67,6 +67,9 @@ public enum FailureType {
     TARGET_LOST,
     /** No more matching targets within the bounded scan radius. Kick to LLM (widen? stop?). */
     MINED_OUT,
+    /** The permission layer refused the action (owner's rule, observe mode, or a consent that was
+     *  not given). Kick to LLM: the model must not route around it — the owner decides. */
+    REFUSED,
     /** A fluid/lava/void hazard blocks the safe execution. In-ladder: route around, else give up. */
     HAZARD,
     /** Pre-empted or cancelled (owner stop, death). Not a real failure — terminal housekeeping. */

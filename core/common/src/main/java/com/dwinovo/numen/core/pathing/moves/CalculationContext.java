@@ -6,7 +6,9 @@ import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.core.pathing.settings.ScaffoldMaterials;
 import com.dwinovo.numen.core.pathing.spec.CellClass;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
-import com.dwinovo.numen.core.pathing.util.BlockHelper;
+import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Gate;
+import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -36,6 +38,8 @@ import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
  * <p>世界读取走注入的 {@link BlockGetter} 视图 + {@link ChunkLoadedTest}
  * 谓词;这次导航能做什么、每样多贵由 {@link RouteSpec} 说了算(能不能改地形、
  * 哪些格禁挖禁放、各项罚金),本类只把它与服主总开关、背包、附魔折成结论。
+ * 这一格能不能挖、能不能放,只问权限层的 {@link Gate}——它是主线程取的快照,
+ * 工作线程只读。
  */
 public class CalculationContext {
 
@@ -79,6 +83,15 @@ public class CalculationContext {
     /** 这次导航的路线规格;{@link #allowBreak}/{@link #hasThrowaway}/{@link #canSprint} 已把它与总开关折在一起。 */
     public final RouteSpec spec;
 
+    /** 权限层的裁决快照:挖某格、放某格先问它。 */
+    public final Gate gate;
+
+    /**
+     * 需要主人同意的格子在 {@link RouteSpec.Alter#ANY} 下的代价乘数。要有限,ANY 才搜得到
+     * 穿过它的路;要贵到任何长度相当的自然路线都胜出——十倍于自然挖掘,约等于绕行几十格。
+     */
+    public static final double CONSENT_COST_MULTIPLIER = 10.0;
+
     /** 世界可建高度下界(含)与上界(不含)。 */
     public final int worldBottom;
     public final int worldHeight;
@@ -90,13 +103,14 @@ public class CalculationContext {
     public final WorldBorder worldBorder;
 
     public CalculationContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loadedTest,
-                              boolean safeForThreadedUse, RouteSpec spec) {
+                              boolean safeForThreadedUse, RouteSpec spec, Gate gate) {
         NavSettings settings = NavSettings.get();
         this.safeForThreadedUse = safeForThreadedUse;
         this.player = player;
         this.view = view;
         this.loadedTest = loadedTest;
         this.spec = spec;
+        this.gate = gate;
         this.toolSet = new ToolSet(player);
         // 免耗材画像(创造)恒有耗材:执行层选料时会自动补一组(伸手进创造
         // 物品栏的代码版),规划器因此敢想所有需要垫方块的路线——不然空手
@@ -261,8 +275,9 @@ public class CalculationContext {
     // ==================== 成本函数 ====================
 
     /**
-     * 在 (x,y,z) 放一个方块的成本。无耗材、规格按位置或按种类禁放、贴着世界边界(边界格
-     * 无法右键贴放)、流体规则不许 → INF;否则放置罚金加该格的位置代价。
+     * 在 (x,y,z) 放一个方块的成本。无耗材、规格按位置或按种类禁放、权限层不许、贴着世界边界
+     * (边界格无法右键贴放)、流体规则不许 → INF;否则放置罚金加该格的位置代价,需要主人同意
+     * 的格(只有 {@link RouteSpec.Alter#ANY} 走得到)再乘 {@link #CONSENT_COST_MULTIPLIER}。
      */
     public double costOfPlacingAt(int x, int y, int z, BlockState current) {
         if (!hasThrowaway) { // 构造时已含规格与 allowPlace 判定
@@ -275,6 +290,10 @@ public class CalculationContext {
         if (spec.bans().placingInto().contains(current.getBlock())) {
             return COST_INF;
         }
+        double permitted = permissionMultiplier(Action.place(new BlockPos(x, y, z), current, null));
+        if (permitted >= COST_INF) {
+            return COST_INF;
+        }
         if (!MovementHelper.placeableWithinBorder(worldBorder, x, z)) {
             return COST_INF;
         }
@@ -285,24 +304,18 @@ public class CalculationContext {
                 && !current.getFluidState().isSource()) {
             return COST_INF;
         }
-        return spec.placeCost() + positional;
+        return spec.placeCost() * permitted + positional;
     }
 
-    /** 挖掘保护判定的专用游标(与 {@link #cursor} 分开,免得互相踩)。 */
-    private final BlockPos.MutableBlockPos protectionCursor = new BlockPos.MutableBlockPos();
-
     /**
-     * 挖 (x,y,z) 的成本乘数。四层禁令,从严到宽:
+     * 挖 (x,y,z) 的成本乘数。三层禁令,从严到宽:
      * <ol>
      *   <li>规格按位置禁挖(导航自身目标格、工地格)与按种类禁挖(模型点名的方块)
      *       永远 INF,任何开关都不可穿透;</li>
-     *   <li>do_not_break 标签成员(默认设施类:床/门/活板门/栅栏门,
-     *       数据包可追加)直接 INF,任何开关都不可解除;</li>
+     *   <li>权限层的裁决(见 {@link #permissionMultiplier}):拒绝 → INF;需要主人同意 →
+     *       {@link RouteSpec.Alter#ANY} 下有限价、否则 INF;</li>
      *   <li>规格不改地形、或总开关 {@code allowBreak} 关闭,且不在例外清单 → INF。</li>
      * </ol>
-     * 功能方块(工作台/熔炉/箱子等)的 ×10 软惩罚由 {@link ToolSet}
-     * 的 {@code avoidanceMultiplier}(NavSettings.blocksToAvoidBreaking)
-     * 在 {@code getStrVsBlock} 里实现,此处不参与。
      */
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
         if (spec.positions().dig(BlockPos.asLong(x, y, z)) >= COST_INF) {
@@ -311,13 +324,30 @@ public class CalculationContext {
         if (spec.bans().breaking().contains(current.getBlock())) {
             return COST_INF;
         }
-        if (BlockHelper.shouldAvoidBreaking(view, protectionCursor.set(x, y, z))) {
+        double permitted = permissionMultiplier(Action.breakBlock(new BlockPos(x, y, z), current));
+        if (permitted >= COST_INF) {
             return COST_INF;
         }
         if (!allowBreak && !allowBreakAnyway.contains(current.getBlock())) {
             return COST_INF;
         }
-        return 1;
+        return permitted;
+    }
+
+    /**
+     * 权限层对一个动作的裁决折成代价乘数:放行 1;拒绝 INF;需要主人同意——规格是
+     * {@link RouteSpec.Alter#ANY} 就 {@link #CONSENT_COST_MULTIPLIER}(算进路线,账单里单列),
+     * 否则 INF(有别的路就不走这条)。成本模型只读裁决,不自判。
+     */
+    protected double permissionMultiplier(Action action) {
+        Verdict verdict = gate.judge(action, view);
+        if (verdict.allowed()) {
+            return 1;
+        }
+        if (verdict.asks() && spec.alter() == RouteSpec.Alter.ANY) {
+            return CONSENT_COST_MULTIPLIER;
+        }
+        return COST_INF;
     }
 
     /** 坠落中放水桶的成本(与放置罚金同价)。 */

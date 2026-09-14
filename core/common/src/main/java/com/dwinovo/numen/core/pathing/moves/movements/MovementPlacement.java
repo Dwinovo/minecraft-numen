@@ -103,8 +103,18 @@ final class MovementPlacement {
     static PlaceResult attemptToPlaceABlock(MovementState state, ServerPlayer player,
                                             BlockPos placeAt, boolean preferDown, boolean wouldSneak,
                                             float currentYaw, float currentPitch) {
-        BuildPlacementRegistry.recordScaffold(player, placeAt);
         Level level = player.level();
+        // 放置落点先过权限层(耗材还没选,按"放什么都一样"问):不许放就没有可行贴面,
+        // 状态机按够不着收场、重新规划——成本模型同一份裁决早已把这格定成 INF,走到这里
+        // 只可能是规划之后世界变了。
+        if (!com.dwinovo.numen.permission.Permission.judge(
+                (com.dwinovo.numen.entity.NumenPlayer) player,
+                com.dwinovo.numen.permission.Action.place(placeAt, level.getBlockState(placeAt), null))
+                .allowed()) {
+            state.setStatus(MovementStatus.UNREACHABLE);
+            return PlaceResult.NO_OPTION;
+        }
+        BuildPlacementRegistry.recordScaffold(player, placeAt);
         double reach = NavSettings.get().blockReachDistance;
         Vec3 eye = eyePosition(player, wouldSneak);
         boolean found = false;

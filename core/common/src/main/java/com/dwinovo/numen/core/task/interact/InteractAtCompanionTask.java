@@ -103,12 +103,18 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     && hit instanceof net.minecraft.world.phys.BlockHitResult blockedHit
                     && !blockedHit.getBlockPos().equals(r.aim)) {
                 var blocker = blockedHit.getBlockPos();
-                String blockerId = BuiltInRegistries.BLOCK
-                        .getKey(player.level().getBlockState(blocker).getBlock()).getPath();
+                var blockerState = player.level().getBlockState(blocker);
+                String blockerId = BuiltInRegistries.BLOCK.getKey(blockerState.getBlock()).getPath();
+                // 挡着的方块要不要主人同意,权限层说;回执只转述,不出主意去拆
+                var verdict = com.dwinovo.numen.permission.Permission.judge(player,
+                        com.dwinovo.numen.permission.Action.breakBlock(blocker, blockerState));
+                String blockerNote = verdict.allowed()
+                        ? "that blocker may be broken without asking"
+                        : "breaking that blocker " + verdict.reason();
                 fail("aim " + aimLabel() + " is blocked from here — the crosshair lands on "
                         + blockerId + " at " + blocker.getX() + "," + blocker.getY() + ","
-                        + blocker.getZ() + " instead. break_block that blocker, or goto the"
-                        + " target's open side, then retry.", FailureType.OCCLUDED);
+                        + blocker.getZ() + " instead; " + blockerNote + ". goto the target's"
+                        + " open side, then retry.", FailureType.OCCLUDED);
                 return TaskState.FAILED;
             }
             // A consumable / ender pearl used in the AIR is body-bound (would feed or teleport the

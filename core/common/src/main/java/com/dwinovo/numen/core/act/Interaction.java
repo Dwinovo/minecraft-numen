@@ -272,7 +272,15 @@ public final class Interaction {
 
     private Status breakBlock() {
         if (player.level().getBlockState(block).isAir()) return Status.DONE;
-        return digger.dig(block) ? Status.DONE : Status.RUNNING;
+        BlockDigger.DigResult result = digger.digStep(block);
+        if (result == BlockDigger.DigResult.REFUSED) {
+            // 权限层在挖掘落点把门;这里只转述,不换法子
+            failReason = "cannot break that block: " + digger.refusal().reason();
+            failType = FailureType.REFUSED;
+            hardFail = true;
+            return Status.FAILED;
+        }
+        return result == BlockDigger.DigResult.BROKE_TARGET ? Status.DONE : Status.RUNNING;
     }
 
     // ---- USE + air: tap or hold (food / bow) ----
@@ -312,6 +320,15 @@ public final class Interaction {
 
     private boolean fireAttackEntity() {
         if (entity == null || !entity.isAlive()) return false;
+        // 攻击落点:宠物、有名字的、村民,主人没点头就不出手
+        com.dwinovo.numen.permission.Verdict verdict = com.dwinovo.numen.permission.Permission.judge(
+                player, com.dwinovo.numen.permission.Action.attack(entity));
+        if (!verdict.allowed()) {
+            failReason = "cannot attack " + entity.getName().getString() + ": " + verdict.reason();
+            failType = FailureType.REFUSED;
+            hardFail = true;
+            return false;
+        }
         InputDriver.halt(player);
         InputDriver.lookAt(player, entity.getEyePosition());
         boolean recovering = entity instanceof net.minecraft.world.entity.LivingEntity living

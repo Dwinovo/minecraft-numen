@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.FailureType;
+import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
@@ -16,6 +17,8 @@ import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.entity.InputDriver;
+import com.dwinovo.numen.permission.Gate;
+import com.dwinovo.numen.permission.PlacedBlocks;
 import com.dwinovo.numen.task.TaskState;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
@@ -105,6 +108,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private final BuildFixtures fixtures;
     private final BuildLedger ledger;
     private final BuildShowmanship show;
+    /** 清障与撤脚手架的唯一落点:方块只在 {@link BlockDigger} 里被破坏,权限层在那儿把门。 */
+    private final BlockDigger digger;
 
     private final Map<Long, BuildTaskRecord.Target> targetByPos = new LinkedHashMap<>();
     /** 施工期寻路垫出来的非目标方块,收工时一并撤掉。 */
@@ -188,6 +193,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         this.fixtures = new BuildFixtures(player, record, inv);
         this.ledger = new BuildLedger(player, record, rules, inv, fixtures);
         this.show = new BuildShowmanship(player, inv);
+        this.digger = new BlockDigger(player);
         for (BuildTaskRecord.Target target : record.targets) {
             targetByPos.put(target.pos().asLong(), target);
         }
@@ -526,7 +532,9 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         }
 
         if (occupied) {
-            clear(pos);
+            if (!clear(pos)) {
+                return null;   // 没清掉(权限层拒了、或砸不动):这遍放下,不往上放
+            }
             if (BuildCellRules.isAirTarget(target)) {
                 markObserved(target, true);
                 return desired;
@@ -698,35 +706,21 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 清掉挡路的方块:生存掉落物品(她清出来的木头该归玩家),免耗材不掉。
+     * 清掉挡路的方块:走挖掘器的原生破坏——生存按主手结算掉落(她清出来的木头该归玩家),
+     * 创造不掉,破坏事件照常触发,权限层在那儿把门。
      *
      * <p>掉落按主手物品结算,而主手此刻拿的是<b>正在砌的那个方块</b>(演出需要),
      * 不是镐。所以石头与矿石这一类清了不掉东西——"归玩家"只在不需要工具的方块上
      * 成立。要让它全成立就得在清障前临时换成镐,那会和演出打架,故此处照实记下。
-     * 破坏特效走原版 levelEvent,音效与碎屑与玩家自己挖一模一样。
+     *
+     * @return 这一格真的清空了
      */
-    private void clear(BlockPos pos) {
-        var level = player.level();
-        BlockState state = level.getBlockState(pos);
-        if (state.isAir()) {
-            return;
+    private boolean clear(BlockPos pos) {
+        if (!digger.destroyNow(pos)) {
+            return false;
         }
-        if (r.consumeMaterials) {
-            try {
-                net.minecraft.world.level.block.Block.dropResources(
-                        state, level, pos, level.getBlockEntity(pos), player,
-                        player.getMainHandItem());
-            } catch (RuntimeException e) {
-                // 掉落要跑战利品表,而战利品表是数据包能改的东西——模组或整合包的一张
-                // 坏表不该让整栋楼停在这一格。清障本身照做:少掉一件东西是遗憾,清不掉
-                // 就永远建不下去。
-                com.dwinovo.numen.core.Constants.LOG.warn(
-                        "[numen-build] {} 的掉落结算失败,方块照清", state, e);
-            }
-        }
-        level.levelEvent(2001, pos, net.minecraft.world.level.block.Block.getId(state));
-        level.setBlock(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), PLACE_FLAGS);
         r.brokeOne();
+        return true;
     }
 
     /**
@@ -911,7 +905,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (targetByPos.containsKey(pos.asLong())) continue;
             BlockState state = player.level().getBlockState(pos);
             if (!state.isAir() && !(state.getBlock() instanceof LiquidBlock)) {
-                player.level().destroyBlock(pos, r.consumeMaterials);
+                digger.destroyNow(pos);
             }
         }
         scaffold.clear();
@@ -926,8 +920,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             List<String> notes = new ArrayList<>();
             if (skippedCells > 0) {
                 // 不说"全对上了"——有格子我们主动没动,得说清有几格、为什么
-                notes.add("left " + skippedCells + " cell(s) alone: something with contents was "
-                        + "already there, or the spot cannot be built on");
+                notes.add("left " + skippedCells + " cell(s) alone: what is there needs the owner's "
+                        + "consent to move, or the spot cannot be built on");
             }
             if (r.droppedAtLoad() > 0) {
                 notes.add(r.droppedAtLoad() + " cell(s) of the blueprint were dropped on load"
@@ -1389,8 +1383,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     private CalculationContext buildContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loaded,
-                                            boolean safeForThreadedUse, RouteSpec spec) {
-        return new BuildCalculationContext(player, view, loaded, safeForThreadedUse, spec,
+                                            boolean safeForThreadedUse, RouteSpec spec, Gate gate) {
+        return new BuildCalculationContext(player, view, loaded, safeForThreadedUse, spec, gate,
                 targetByPos, inv.availableStates(true), r.replaceExisting);
     }
 
@@ -1407,8 +1401,35 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     protected void cleanup() {
         super.cleanup();
         unregisterProvider();
+        registerBuiltCells();
         InputDriver.halt(player);
         player.setShiftKeyDown(false);
+    }
+
+    /**
+     * 成果格登记进放置记录:她盖的墙从此是主人的东西,下一次寻路、挖矿要动它得先问。
+     * 收工时登记,任务怎么结束都登记——半栋房子也是主人的半栋房子。双格方块的另一半
+     * (门上半、床头)由主半带出来,一并登记。她自己放置时经过的 {@code BlockItem.place}
+     * 把这些格当成"同伴自己的"抹掉了记号,这里是把成果交回主人的那一步。
+     */
+    private void registerBuiltCells() {
+        if (!(player.level() instanceof net.minecraft.server.level.ServerLevel level)) {
+            return;
+        }
+        PlacedBlocks placed = PlacedBlocks.of(level);
+        for (BuildTaskRecord.Target target : r.targets) {
+            if (BuildCellRules.isAirTarget(target) || !level.isLoaded(target.pos())) {
+                continue;
+            }
+            if (!target.matches(level.getBlockState(target.pos()))) {
+                continue;
+            }
+            placed.record(target.pos());
+            BlockPos other = BuildCellRules.otherHalfOf(target.pos(), target.desiredState());
+            if (other != null && !level.getBlockState(other).isAir()) {
+                placed.record(other);
+            }
+        }
     }
 
     /**

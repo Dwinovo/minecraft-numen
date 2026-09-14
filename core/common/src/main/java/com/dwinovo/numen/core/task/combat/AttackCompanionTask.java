@@ -16,6 +16,9 @@ import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.chain.MobDefenseChain;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
@@ -233,6 +236,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      *
      * <p>点名模式下"被授权"是模型给的那份清单;无差别模式下是"这一刻在追我的"——会分裂的怪
      * 裂出来的新 id 因此自动进场,而点名的清单一裂开就作废了。
+     *
+     * <p>进场之前先过权限层:宠物、有名字的、村民,主人没点头就不在局面里——攻击层"够得着就打"
+     * 只看局面,所以门必须开在这里,一处。被拒的记进账本,回执说清是谁、为什么。
      */
     private Battlefield surveyField() {
         hostiles = Menace.hostilesAround(player, FIELD_RADIUS);
@@ -240,9 +246,15 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         for (var mob : hostiles) {
             boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
             boolean authorized = r.indiscriminate ? engaging : r.entityIds.contains(mob.getId());
+            if (authorized && !r.terminal(mob.getId())) {
+                Verdict verdict = Permission.judge(player, Action.attack(mob));
+                if (!verdict.allowed()) {
+                    r.refused(mob.getId(), verdict.reason());
+                }
+            }
             if (r.terminal(mob.getId())) {
-                // 打完了、丢了、或者走不到又射不到的:<b>整只移出局面</b>。留着当"还有东西在
-                // 追我"的话,判据会永远喊走位 —— 一只在悬崖对面射她的骷髅就能把任务钉死。
+                // 打完了、丢了、走不到又射不到、或者不许打的:<b>整只移出局面</b>。留着当"还有
+                // 东西在追我"的话,判据会永远喊走位 —— 一只在悬崖对面射她的骷髅就能把任务钉死。
                 // 躲它归寻路的势场管,那一层看的是场上的怪,不是这份名单。
                 continue;
             }
@@ -263,6 +275,11 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 }
                 Entity e = liveEntity(id);
                 if (e != null) {
+                    Verdict verdict = Permission.judge(player, Action.attack(e));
+                    if (!verdict.allowed()) {
+                        r.refused(id, verdict.reason());
+                        continue;
+                    }
                     foes.add(new Battlefield.Foe(id, player.distanceTo(e),
                             Menace.explodes(e), Menace.armed(e),
                             false, reachable(id), true));
@@ -350,8 +367,21 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
             succeed();
             return TaskState.SUCCESS;
         }
+        if (!r.refused().isEmpty() && r.refused().size() + r.lost().size() + r.unreachable().size()
+                >= r.entityIds.size()) {
+            // 一只都没打:不是找不到,是不许打。让模型去问主人,别换个法子再试。
+            fail("could not attack: " + refusedSummary(), FailureType.REFUSED);
+            return TaskState.FAILED;
+        }
         fail("none of the requested entity ids could be attacked", FailureType.TARGET_LOST);
         return TaskState.FAILED;
+    }
+
+    /** {@code entity 12 needs the owner's consent (has an owner); entity 15 ...}。 */
+    private String refusedSummary() {
+        List<String> parts = new ArrayList<>();
+        r.refused().forEach((id, why) -> parts.add("entity " + id + " " + why));
+        return String.join("; ", parts);
     }
 
     private void logMove(AttackPlan.Move move, Battlefield field) {
@@ -919,6 +949,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         touched.addAll(r.defeated());
         touched.addAll(r.lost());
         touched.addAll(r.unreachable());
+        touched.addAll(r.refused().keySet());
         Map<String, Object> byEntity = new LinkedHashMap<>();
         for (int id : touched) {
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -932,6 +963,9 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         data.put("defeated_entity_ids", r.defeated());
         data.put("lost_entity_ids", r.lost());
         data.put("unreachable_entity_ids", r.unreachable());
+        if (!r.refused().isEmpty()) {
+            data.put("refused_entity_ids", r.refused());
+        }
         data.put("strikes", r.strikes());
         data.put("combat_by_entity", byEntity);
         data.put("loot_gained", lootGained());
@@ -948,12 +982,14 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
 
     @Override
     protected String successMessage() {
+        String refusedNote = r.refused().isEmpty() ? "" : "; left alone: " + refusedSummary();
         if (r.indiscriminate) {
-            return "fought off " + tally() + "; nothing is coming after you any more";
+            return "fought off " + tally() + "; nothing is coming after you any more" + refusedNote;
         }
         int incomplete = r.lost().size() + r.unreachable().size();
         return "defeated " + tally()
-                + (incomplete == 0 ? "" : " (" + incomplete + " targets could not be completed)");
+                + (incomplete == 0 ? "" : " (" + incomplete + " targets could not be completed)")
+                + refusedNote;
     }
 
     @Override

@@ -307,7 +307,8 @@ public final class PlayerNav {
         this.core = new PathingCore(player, PoolSearchDispatcher.INSTANCE,
                 this::searchContext, this::executionContext, spec);
         this.planner = new RoutePlanner(PoolSearchDispatcher.INSTANCE,
-                s -> this.contextProvider.forSearch(player, s), player.level());
+                s -> this.contextProvider.forSearch(player, s), player.level(),
+                () -> com.dwinovo.numen.permission.Permission.gateFor(player));
     }
 
     /** 这次搜索/复核用的规格:导航规格加上当前目标的 sacred 格(禁挖禁放)。 */

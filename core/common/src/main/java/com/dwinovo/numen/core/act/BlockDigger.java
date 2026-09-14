@@ -4,8 +4,10 @@ import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.act.ToolSelect;
+import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.permission.Verdict;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
@@ -38,7 +40,10 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  *   <li>interrupted: {@code ABORT_DESTROY_BLOCK} + clear the crack.</li>
  * </ul>
  * Shared by path-obstruction clearing ({@code ExecHarness}), auto-mine
- * ({@code MineCompanionTask}), and {@link Interaction} (break_block / interact).
+ * ({@code MineCompanionTask}), construction clearing ({@code BuildCompanionTask}) and
+ * {@link Interaction} (break_block / interact). It is the only place a block is broken, so it is
+ * where the permission layer is enforced: every new target is judged before the first swing
+ * ({@link #permit}); a refused block is reported as {@link DigResult#REFUSED} and never touched.
  */
 public final class BlockDigger {
 
@@ -60,6 +65,8 @@ public final class BlockDigger {
     private int blockHitDelay;    // post-break cooldown (survives reset())
     /** 开挖时的主手物品快照;中途换持(物品/组件级)即重开进度。 */
     private net.minecraft.world.item.ItemStack destroyingItem;
+    /** 最近一次 {@link DigResult#REFUSED} 的裁决;没被拒过是 null。 */
+    private Verdict refusal;
 
     public BlockDigger(NumenPlayer player) {
         this.player = player;
@@ -68,6 +75,40 @@ public final class BlockDigger {
     /** The block currently being dug, or {@code null} when idle. */
     public BlockPos current() {
         return pos;
+    }
+
+    /** Why the last {@link DigResult#REFUSED} happened; {@code null} if nothing was refused yet. */
+    public Verdict refusal() {
+        return refusal;
+    }
+
+    /**
+     * 问权限层这一格能不能挖。每次换新目标问一次,在第一次挥手之前;被拒的格连 START 都不发。
+     * 唯一挖掘落点上的唯一门,所有调用方(寻路、挖矿、施工、break_block)都过它。
+     */
+    private Verdict permit(BlockPos target) {
+        Verdict verdict = Permission.judge(player, Action.breakBlock(target, player.level().getBlockState(target)));
+        if (!verdict.allowed()) {
+            refusal = verdict;
+        }
+        return verdict;
+    }
+
+    /**
+     * 施工清障:一次到位的原生破坏({@code ServerPlayerGameMode.destroyBlock}——掉落按手持结算、
+     * 创造不掉、领地 mod 的破坏事件照常触发),不走逐刻进度,也不要求视线。同样先过权限层。
+     *
+     * @return 方块真的没了
+     */
+    public boolean destroyNow(BlockPos target) {
+        BlockState state = player.level().getBlockState(target);
+        if (state.isAir()) {
+            return false;
+        }
+        if (!permit(target).allowed()) {
+            return false;
+        }
+        return player.gameMode.destroyBlock(target);
     }
 
     /** Outcome of one {@link #digStep} tick — lets callers distinguish "still working"
@@ -80,19 +121,14 @@ public final class BlockDigger {
         /** An OCCLUDER in the way broke this tick (not the target) — a step toward it. */
         BROKE_OCCLUDER,
         /** No face of the target is reachable and nothing safe occludes it — stuck (maps to OCCLUDED). */
-        NO_SHOT;
+        NO_SHOT,
+        /** The permission layer refused this block; {@link #refusal()} says why. Nothing was swung. */
+        REFUSED;
 
         /** 本 tick 有方块真的没了(目标或遮挡物)。 */
         public boolean broke() {
             return this == BROKE_TARGET || this == BROKE_OCCLUDER;
         }
-    }
-
-    /** Legacy boolean shim: {@code true} only on the tick the TARGET breaks. Kept so
-     *  pre-migration callers ({@link Interaction}) compile unchanged; delete once every
-     *  caller consumes {@link #digStep}. */
-    public boolean dig(BlockPos target) {
-        return digStep(target) == DigResult.BROKE_TARGET;
     }
 
     /**
@@ -115,6 +151,10 @@ public final class BlockDigger {
         InputDriver.halt(player);
         BlockPos effective = crosshairHit.getBlockPos();
         if (pos == null || !pos.equals(effective)) {
+            if (!permit(effective).allowed()) {
+                cancel();
+                return DigResult.REFUSED;
+            }
             // 工具由外层(移动原语按意图格)选择,这里不按命中格改选
             start(effective, false);
         }
@@ -140,13 +180,15 @@ public final class BlockDigger {
         // sight (leaves in front, a tight column overhead) — fall back to breaking the
         // occluder: aim at the target's centre and break whatever the
         // crosshair actually hits, opening the way, instead of holding forever for a clear angle.
-        // One guard: never grind a do_not_break / container block as the occluder.
+        // The occluder goes through the same permission gate as any target: a player's chest in
+        // the way is never ground down just to reach something behind it.
         BlockHitResult hit = reachableHit(target);
         BlockPos effective = target;
         if (hit == null) {
             BlockHitResult center = centerRaycast(target);
             if (center != null && !center.getBlockPos().equals(target)
-                    && !BlockHelper.shouldAvoidBreaking(level, center.getBlockPos())) {
+                    && Permission.judge(player, Action.breakBlock(center.getBlockPos(),
+                            level.getBlockState(center.getBlockPos()))).allowed()) {
                 hit = center;
                 effective = center.getBlockPos();
             }
@@ -156,6 +198,10 @@ public final class BlockDigger {
             return DigResult.NO_SHOT;                // no clear shot, nothing safe in the way — stuck
         }
         if (pos == null || !pos.equals(effective)) {
+            if (!permit(effective).allowed()) {
+                cancel();
+                return DigResult.REFUSED;
+            }
             start(effective, true);
         }
         // dig() may be clearing an OCCLUDER this tick, not the target; report the break (true) ONLY
@@ -177,6 +223,10 @@ public final class BlockDigger {
             return DigResult.NO_SHOT;
         }
         if (pos == null || !pos.equals(target)) {
+            if (!permit(target).allowed()) {
+                cancel();
+                return DigResult.REFUSED;
+            }
             start(target, true);
         }
         return advance(hit, true);

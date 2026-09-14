@@ -2,6 +2,9 @@ package com.dwinovo.numen.core.pathing.execute;
 
 import com.dwinovo.numen.core.pathing.astar.NavPath;
 import com.dwinovo.numen.core.pathing.moves.Movement;
+import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Gate;
+import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -33,9 +36,13 @@ public final class TerrainBill {
      * 一条挖掘条目。
      *
      * @param consent 为什么需要主人同意(玩家放置 / 带方块实体);不需要同意为空串。
-     *                由权限层填写,规划器自己不判
+     *                规划账问权限层({@link #consent}),规划器自己不判
      */
-    public record Break(BlockPos pos, Block block, String consent) {}
+    public record Break(BlockPos pos, Block block, String consent) {
+        public boolean needsConsent() {
+            return !consent.isEmpty();
+        }
+    }
 
     /** @param block 放上去的方块;规划阶段还不知道会选哪种耗材,为 null */
     public record Place(BlockPos pos, Block block) {}
@@ -45,14 +52,18 @@ public final class TerrainBill {
     private int blocks;
     private double ticks;
 
-    /** 规划路径的预算:长度,加上沿途每个移动原语此刻仍需挖/放的格。 */
-    public static TerrainBill planned(NavPath path, BlockGetter level) {
+    /**
+     * 规划路径的预算:长度,加上沿途每个移动原语此刻仍需挖/放的格;每条挖掘条目带上权限层
+     * 说的"为什么需要同意"。
+     */
+    public static TerrainBill planned(NavPath path, BlockGetter level, Gate gate) {
         TerrainBill bill = new TerrainBill();
         bill.blocks = path.length();
         bill.ticks = path.ticksRemainingFrom(0);
         for (Movement m : path.movements()) {
             for (BlockPos p : m.toBreak(level)) {
-                bill.addBreak(p, level.getBlockState(p));
+                BlockState was = level.getBlockState(p);
+                bill.addBreak(p, was, consent(gate, level, p, was));
             }
             for (BlockPos p : m.toPlace(level)) {
                 bill.addPlace(p, null);
@@ -61,8 +72,30 @@ public final class TerrainBill {
         return bill;
     }
 
+    /** 挖这一格为什么需要主人同意;不需要(放行或干脆不许)为空串。只读裁决,不自判。 */
+    public static String consent(Gate gate, BlockGetter level, BlockPos pos, BlockState state) {
+        Verdict verdict = gate.judge(Action.breakBlock(pos, state), level);
+        return verdict.asks() ? verdict.reason() : "";
+    }
+
+    /** 实际账:执行器真挖了的格,同意与否已经过了。 */
     public void addBreak(BlockPos pos, BlockState was) {
-        breaks.add(new Break(pos.immutable(), was.getBlock(), ""));
+        addBreak(pos, was, "");
+    }
+
+    public void addBreak(BlockPos pos, BlockState was, String consent) {
+        breaks.add(new Break(pos.immutable(), was.getBlock(), consent == null ? "" : consent));
+    }
+
+    /** 要挖的格里需要主人同意的有几格。 */
+    public int consentCount() {
+        int n = 0;
+        for (Break b : breaks) {
+            if (b.needsConsent()) {
+                n++;
+            }
+        }
+        return n;
     }
 
     /** @param placed 放上去的方块;规划阶段还不知道会选哪种耗材,传 null */

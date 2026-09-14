@@ -18,6 +18,9 @@ import com.dwinovo.numen.core.pathing.util.NavProfiler;
 import com.dwinovo.numen.core.scan.TargetIndex;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
+import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Gate;
+import com.dwinovo.numen.permission.Verdict;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.ChunkPos;
@@ -138,6 +141,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** Targets pruned because no carried tool harvests them (force=false only) — kept so the
      *  terminal failure can name the tool problem instead of reporting an empty field. */
     private final Set<BlockPos> unharvestable = new HashSet<>();
+    /**
+     * 权限层不让挖的候选:选目标前就剔掉,不问、不选。资源采集的语义是"去找",问"能砍你家
+     * 柱子吗"本身就荒唐。记位置免得重复计数;回执按"方块 + 理由"归堆报"跳过了 N 块你放的 X"。
+     */
+    private final Set<BlockPos> refusedPos = new HashSet<>();
+    private final Map<String, Integer> refused = new java.util.LinkedHashMap<>();
     /** Items the target blocks drop (simulated via the server loot tables). The
      *  count is over THESE in the inventory, not blocks broken — redstone_ore yields ~4 redstone. */
     private Set<Item> dropItems = Set.of();
@@ -620,6 +629,14 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 }
                 clearNoShot();
             }
+            case REFUSED -> {
+                // 选目标时放行、动手时被拒:只可能是选中之后世界变了(有人刚把它放下)。
+                // 与剔除同一口径记账,继续找别的。
+                noteRefused(pos, digger.refusal());
+                knownOres.remove(pos);
+                digger.cancel();
+                clearNoShot();
+            }
             case NO_SHOT -> {
                 if (pos.equals(noShotPos)) {
                     if (++noShotTicks >= MAX_NO_SHOT_TICKS) {
@@ -760,10 +777,20 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // 问的是"挖不挖得成",按可改地形算——这是挖矿任务,规格本来就是 NATURAL
         CalculationContext ctx = ContextFactory.forExecution(player,
                 PlayerNav.ContextProvider.NATURAL.spec());
+        Gate gate = ctx.gate;
         knownOres.removeIf(p -> {
             var state = level.getBlockState(p);
-            if (state.isAir() || !r.targets.contains(state.getBlock()) || unworkable.contains(p)
-                    || !plausibleToBreak(ctx, p, state)) {
+            if (state.isAir() || !r.targets.contains(state.getBlock()) || unworkable.contains(p)) {
+                return true;
+            }
+            // 权限层先过:不让挖的候选剔掉并记账(ask 也是剔,不问)。成本模型对它同样是 INF,
+            // 但只有在这里问才说得出"为什么跳过"。
+            Verdict verdict = gate.judgeLive(Action.breakBlock(p, state), player.serverLevel());
+            if (!verdict.allowed()) {
+                noteRefused(p, verdict);
+                return true;
+            }
+            if (!plausibleToBreak(ctx, p, state)) {
                 return true;
             }
             // Harvestability gate. Tool-skipped cells are remembered so the terminal failure
@@ -781,6 +808,27 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         if (knownOres.size() > MAX_ORES) {
             knownOres.subList(MAX_ORES, knownOres.size()).clear();
         }
+    }
+
+    /** 记一格被权限层剔掉的候选:按"方块 + 理由"归堆,同一格只记一次。 */
+    private void noteRefused(BlockPos pos, Verdict verdict) {
+        if (verdict == null || !refusedPos.add(pos.immutable())) {
+            return;
+        }
+        String block = net.minecraft.core.registries.BuiltInRegistries.BLOCK
+                .getKey(player.level().getBlockState(pos).getBlock()).getPath();
+        String label = verdict.asks() ? verdict.cause() + ", needs the owner's consent" : verdict.cause();
+        refused.merge(block + " (" + label + ")", 1, Integer::sum);
+    }
+
+    /** 回执尾巴:{@code ; skipped 3 oak_log (placed by a player, needs the owner's consent)};没跳过任何格为空串。 */
+    private String skippedNote() {
+        if (refused.isEmpty()) {
+            return "";
+        }
+        List<String> parts = new ArrayList<>();
+        refused.forEach((what, n) -> parts.add(n + " " + what));
+        return "; skipped " + String.join(", ", parts);
     }
 
     /** Nearest known ore to the feet, or null — for the "near ore exists but heading far" diagnostics. */
@@ -870,8 +918,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         }
         if (!unworkable.isEmpty()) {
             fail("found " + unworkable.size() + " " + r.label + " nearby but no clear shot at any"
-                    + " of them from any stance I could take; gathered 0",
+                    + " of them from any stance I could take; gathered 0" + skippedNote(),
                     FailureType.NO_PATH);
+        } else if (!refused.isEmpty()) {
+            // 找到了,但一块都不许动:不是没矿,是不许挖。让模型去问主人,别去别处找。
+            fail("every " + r.label + " nearby was refused; gathered 0" + skippedNote(),
+                    FailureType.REFUSED);
         } else {
             fail("no reachable " + r.label + " found in the loaded area around me",
                     FailureType.MINED_OUT);
@@ -904,21 +956,25 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         data.put("target", r.label);
         data.put("requested", r.count);
         data.put("gathered", r.getMined());
+        if (!refused.isEmpty()) {
+            data.put("skipped_for_consent", Map.copyOf(refused));
+        }
         return data;
     }
 
     @Override
     protected String successMessage() {
-        return "gathered " + r.getMined() + "/" + r.count + " " + r.label + " (" + progressNote + ")";
+        return "gathered " + r.getMined() + "/" + r.count + " " + r.label + " (" + progressNote + ")"
+                + skippedNote();
     }
 
     @Override
     protected String timeoutMessage() {
-        return "timed out after gathering " + r.getMined() + "/" + r.count + " " + r.label;
+        return "timed out after gathering " + r.getMined() + "/" + r.count + " " + r.label + skippedNote();
     }
 
     @Override
     protected String cancelledMessage() {
-        return "interrupted after gathering " + r.getMined() + "/" + r.count + " " + r.label;
+        return "interrupted after gathering " + r.getMined() + "/" + r.count + " " + r.label + skippedNote();
     }
 }

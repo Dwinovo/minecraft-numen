@@ -2,6 +2,8 @@ package com.dwinovo.numen.core.task.build;
 
 import com.dwinovo.numen.core.pathing.cache.LoadedOnlyView;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.Permission;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
@@ -54,6 +56,10 @@ final class BuildCellRules {
      * <p>不让动的格子<b>不进待建集、也算作了结</b>。若只是"放的时候跳过",它每一遍
      * 都会重新排进顺序、每一遍都放不下去,整栋楼陪着它重试到超时,而那一格从第一遍
      * 起就已经注定动不了。
+     *
+     * <p>让路的档位管"石头挡路要不要顶掉";这一格上的东西许不许清、这一格许不许放,
+     * 问权限层——玩家的箱子、玩家放的墙、观察模式,都是它的裁决,这里不另设判据。
+     * 双格方块连另一半一起问:任一半不许清就都不动。
      */
     boolean blockedByMode(BuildTaskRecord.Target target) {
         BlockPos pos = target.pos();
@@ -61,17 +67,23 @@ final class BuildCellRules {
         if (!r.replaceMode.allows(current, target.desiredState())) {
             return true;
         }
-        // 玩家的箱子不能被一堵墙盖掉。让路的档位管"石头挡路要不要顶掉",这一条
-        // 管"带方块实体的方块要不要动"——少砌一格墙是遗憾,清掉一箱子东西是事故。
-        if (r.replaceBlockEntities || current.isAir()) {
+        if (target.matches(current)) {
             return false;
         }
-        if (current.hasBlockEntity() && !target.matches(current)) {
+        if (!current.isAir() && !Permission.judge(player, Action.breakBlock(pos, current)).allowed()) {
             return true;
         }
-        // 双格方块连另一半一起看:任一半压着方块实体就都不动
+        if (!isAirTarget(target)
+                && !Permission.judge(player, Action.place(pos, current, target.item())).allowed()) {
+            return true;
+        }
         BlockPos other = otherHalfOf(pos, target.desiredState());
-        return other != null && peek(other).hasBlockEntity();
+        if (other == null) {
+            return false;
+        }
+        BlockState otherState = peek(other);
+        return !otherState.isAir()
+                && !Permission.judge(player, Action.breakBlock(other, otherState)).allowed();
     }
 
     /**
