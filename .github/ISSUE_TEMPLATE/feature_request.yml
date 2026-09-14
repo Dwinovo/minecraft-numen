@@ -1,0 +1,39 @@
+name: 功能建议 / Feature request
+description: 先说遇到了什么问题，再说想法 / Describe the problem first, then the idea
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        一张 issue 只提一件事。
+        One request per issue.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你遇到了什么问题 / What problem did you run into
+      description: 在什么场景下、现在的同伴做不到或做得不好的是什么 / The situation, and what the companion can't do or does badly today
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你希望怎样 / What would you like
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 你现在是怎么绕过去的 / How do you work around it today
+
+  - type: dropdown
+    id: implement
+    attributes:
+      label: 你愿意自己实现吗 / Would you implement it yourself
+      options:
+        - 不，只是建议 / No, just suggesting
+        - 愿意，先在这里对齐方案 / Yes, after we agree on the approach here
+    validations:
+      required: true

@@ -1,0 +1,101 @@
+name: Bug 报告 / Bug report
+description: 同伴行为不对、报错、崩溃 / Wrong behavior, errors or crashes
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        一个问题一张 issue。先搜一下有没有人报过。
+        One problem per issue. Please search existing issues first.
+
+  - type: input
+    id: numen-version
+    attributes:
+      label: Numen 版本 / Numen version
+      placeholder: "0.1.3"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mc-version
+    attributes:
+      label: Minecraft 版本 / Minecraft version
+      options:
+        - "1.20.1"
+        - "1.20.2"
+        - "1.20.4"
+        - "1.20.6"
+        - "1.21"
+        - "1.21.1"
+        - "1.21.4"
+        - "1.21.5"
+        - "1.21.8"
+        - "1.21.10"
+        - "1.21.11"
+        - "26.1.2"
+        - "26.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: loader
+    attributes:
+      label: 加载器 / Mod loader
+      options:
+        - Fabric
+        - NeoForge
+        - Forge
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: 模型服务商与模型 / LLM provider and model
+      description: 和 AI 行为有关的问题必填 / Required for anything about the companion's decisions
+      placeholder: "DeepSeek / deepseek-chat"
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 发生了什么，本来应该怎样 / What happened, and what should have happened
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      description: 你对同伴说了什么、在什么地形、做了哪几步 / What you told the companion, where, and what you did
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志 / Logs
+      description: |
+        把 `logs/latest.log` 拖进这里；崩溃请附 `crash-reports/` 里的文件。
+        Drag `logs/latest.log` here; for crashes also attach the file from `crash-reports/`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: other-mods
+    attributes:
+      label: 同时装的其他模组 / Other mods installed
+      description: 只装 Numen 能复现就写"无" / Write "none" if it reproduces with Numen alone
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 确认 / Checks
+      options:
+        - label: 我搜过已有的 issue / I searched existing issues
+          required: true
+        - label: 我用的是这个 Minecraft 版本对应的最新 Numen / I am on the latest Numen for this Minecraft version
+          required: true
