@@ -4,6 +4,7 @@ import com.dwinovo.numen.core.pathing.bridge.GoalAdapter;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.spec.CellClass;
+import com.dwinovo.numen.core.pathing.spec.PositionCosts;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -54,6 +55,14 @@ public final class GoalCompiler {
         /** engineGoal 从 goal 经映射表派生(既有调用方签名不变)。 */
         public Compiled(NavGoal goal, LongSet sacred) {
             this(goal, GoalAdapter.toEngineGoal(goal), sacred);
+        }
+
+        /**
+         * 把本目标的 sacred 格并进规格(禁挖禁放):朝这个目标的每次搜索与每次执行期复核
+         * 都用它得到的规格。这是规划器的正确性约束——别挖自己要站、要够的那格——不是权限。
+         */
+        public RouteSpec protecting(RouteSpec spec) {
+            return spec.withPositions(spec.positions().plus(PositionCosts.protect(sacred)));
         }
     }
 

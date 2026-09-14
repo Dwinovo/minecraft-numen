@@ -4,30 +4,30 @@ import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.pathing.astar.Favoring;
-import com.dwinovo.numen.core.pathing.astar.NavPath;
-import com.dwinovo.numen.core.pathing.astar.PathCalcResult;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.bridge.PoolSearchDispatcher;
-import com.dwinovo.numen.core.pathing.bridge.SearchHandle;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
-import com.dwinovo.numen.core.pathing.execute.PathExecutor;
-import com.dwinovo.numen.core.pathing.execute.PathingCore;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
-import com.dwinovo.numen.core.pathing.settings.NavSettings;
-import com.dwinovo.numen.core.pathing.spec.PositionCosts;
+import com.dwinovo.numen.core.pathing.moves.Movement;
+import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
+import com.dwinovo.numen.core.pathing.plan.RouteBook;
+import com.dwinovo.numen.core.pathing.plan.RoutePlanner;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.util.NavProfiler;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 
-import it.unimi.dsi.fastutil.longs.LongSet;
 import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
+
+import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
 
 /**
  * 任务层的导航正门:把一份编译好的导航契约({@link GoalCompiler.Compiled})
@@ -52,10 +52,10 @@ import net.minecraft.core.BlockPos;
  * 执行期复核用活世界——带的都是同一份规格,同一把尺。
  *
  * <p><b>不动地形的路找不到时</b>(规格不改地形的首段 NO_PATH),不立刻终局:
- * 用可改地形的规格只搜不走地探一次,把那条路<b>会</b>挖什么、放什么列成清单
- * ({@link TerrainBill})交给任务层——裁决是 {@link FailureType#TERRAIN_BLOCKED},
- * 模型读清单决定要不要授权(re-send with may_alter_terrain)。引擎不替它猜
- * "这是不是玩家的房子":木板玻璃在地表是房子,石头泥土在地下不是,这个判断归模型。
+ * 用可自然改动的规格向 {@link RoutePlanner} 只搜不走地查一次候选路线,每条带预算账
+ * ({@link TerrainBill}),记进这具身体的 {@link RouteBook},清单交给任务层——裁决是
+ * {@link FailureType#TERRAIN_BLOCKED},模型读清单挑一条({@code goto route:<id>})或换目的地。
+ * 引擎不替它猜"这是不是玩家的房子":木板玻璃在地表是房子,石头泥土在地下不是,这个判断归模型。
  */
 public final class PlayerNav {
 
@@ -101,12 +101,14 @@ public final class PlayerNav {
 
     /** 段规划状态机:搜索派发、段执行、无缝接段、失败自动重搜全在其内。 */
     private final PathingCore core;
+    /** 只搜不走的查询口(无路探针走它),与状态机同一派发器、同一上下文来源。 */
+    private final RoutePlanner planner;
 
     /**
-     * 最近一次拉取的目标的 sacred 格({@code BlockPos.asLong()} 键)。
-     * 每次拉目标同步刷新——goal 与 sacred 是同一份契约,不允许分开读。
+     * 最近一次拉取的目标契约(goal 与 sacred 一体)。每次拉目标同步刷新——规格里的
+     * 位置保护从它派生,不允许 goal 与 sacred 分开读。
      */
-    private LongSet sacred = LongSets.emptySet();
+    private GoalCompiler.Compiled contract;
 
     /**
      * 搜索目标在脚下即满足、而 caller 的 reached 仍不满足:钉稳 ARRIVED
@@ -134,15 +136,15 @@ public final class PlayerNav {
     private CalculationContext lastSearchContext;
 
     /**
-     * 无路时要不要探"若许改地形则此路"。默认不探:探针要站着等两秒,追怪/跟随这类
+     * 无路时要不要查"若许改地形有哪几条路"。默认不查:查询要站着等几秒,追怪/跟随这类
      * 活目标的导航等不起,也没人会为了够一只僵尸去拆墙。goto 与接近类交互任务开它——
-     * 那里的失败回执是模型下一步决策的依据,清单值这两秒。
+     * 那里的失败回执是模型下一步决策的依据,候选清单值这几秒。
      */
     private boolean terrainProbe;
-    /** 在飞的"若许改地形则此路"探针搜索;非空时本导航原地等它出结论,不再驱动状态机。 */
-    private SearchHandle terraformProbe;
-    /** 探针所针对的目标(验尸文案用)。 */
-    private NavGoal terraformProbeGoal;
+    /** 在飞的候选路线查询;非空时本导航原地等它出结论,不再驱动状态机。 */
+    private RoutePlanner.Query probe;
+    /** 查询所针对的目标契约(候选记入路线簿时带上)。 */
+    private GoalCompiler.Compiled probeGoal;
 
     /** 单格目标:按意图编译(可走格=站上去,占用格=贴脸即到,不吞噬目标)。 */
     public PlayerNav(NumenPlayer player, BlockPos goal, double speed, BooleanSupplier reached) {
@@ -220,12 +222,47 @@ public final class PlayerNav {
     }
 
     /**
-     * 开启无路探针:只走不改找不到路时,探一条可改地形的路并把要动的方块列给任务层
+     * 开启无路探针:只走不改找不到路时,查可改地形的候选路线并把清单列给任务层
      * (见类文档)。建好导航、首次 tick 前调用。
      */
     public PlayerNav withTerrainProbe() {
         this.terrainProbe = true;
         return this;
+    }
+
+    /** 身体离路线起点最多这么远(格,平方)还算"还在起点上"。 */
+    private static final double ROUTE_START_SQR = 4.0;
+
+    /**
+     * 沿路线簿里的一条路走:目标与规格都是那条路的;缓存的路径还有效——身体没离开起点、
+     * 首段此刻仍可走——就直接走它,否则在同一规格下重算。中途被堵也在同一规格下重算,
+     * 不会偷偷换成另一种走法。
+     */
+    public static PlayerNav alongRoute(NumenPlayer player, RouteBook.Route route, BooleanSupplier reached) {
+        PlayerNav nav = new PlayerNav(player, 1.0, reached, route::goal, false,
+                ContextProvider.of(route.spec()));
+        nav.contract = route.goal();
+        nav.plannedCenter = route.goal().goal().center();
+        nav.seed(route);
+        return nav.withTerrainProbe();
+    }
+
+    /** 缓存路径的有效性只在这里判:起点两格内、首段用活世界复核仍可行。 */
+    private void seed(RouteBook.Route route) {
+        if (route.path().movements().isEmpty()) {
+            return;   // 起点即目标:状态机自己会判脚下满足
+        }
+        if (PathExecutor.playerFeet(player).distSqr(route.start()) > ROUTE_START_SQR) {
+            Constants.LOG.info("[numen-path] 路线 {} 的起点 {} 离身体太远,同一规格下重算",
+                    route.id(), route.start().toShortString());
+            return;
+        }
+        Movement first = route.path().movements().get(0);
+        if (first.calculateCost(executionContext(), new MutableMoveResult()) >= COST_INF) {
+            Constants.LOG.info("[numen-path] 路线 {} 的首段此刻走不了,同一规格下重算", route.id());
+            return;
+        }
+        core.seed(route.goal().engineGoal(), route.path());
     }
 
     /** 把裸目标包成无 sacred 的编译契约(engineGoal 经词表映射同步派生)。 */
@@ -261,11 +298,13 @@ public final class PlayerNav {
         this.spec = speed >= 1.0 ? provided : provided.withSprint(false);
         this.core = new PathingCore(player, PoolSearchDispatcher.INSTANCE,
                 this::searchContext, this::executionContext, spec);
+        this.planner = new RoutePlanner(PoolSearchDispatcher.INSTANCE,
+                s -> this.contextProvider.forSearch(player, s), player.level());
     }
 
     /** 这次搜索/复核用的规格:导航规格加上当前目标的 sacred 格(禁挖禁放)。 */
     private RouteSpec routeSpec() {
-        return spec.withPositions(spec.positions().plus(PositionCosts.protect(sacred)));
+        return contract == null ? spec : contract.protecting(spec);
     }
 
     /** 搜索用冻结上下文:快照世界 + 快照背包 + 本次规格。 */
@@ -287,7 +326,7 @@ public final class PlayerNav {
     public interface ContextProvider {
         /** 缺省:只走不改。接近类动作全部用它,忘了指定也只会更保守。 */
         ContextProvider DEFAULT = of(RouteSpec.defaults());
-        /** 可改地形:挖矿,以及模型显式授权的 goto/follow。 */
+        /** 可自然改动:挖矿这类天然要动地形的意图。 */
         ContextProvider NATURAL = of(RouteSpec.defaults().withAlter(RouteSpec.Alter.NATURAL));
 
         static ContextProvider of(RouteSpec spec) {
@@ -333,8 +372,8 @@ public final class PlayerNav {
             failType = FailureType.TARGET_LOST;
             return Status.FAILED;
         }
-        if (terraformProbe != null) {
-            return pollTerraformProbe();
+        if (probe != null) {
+            return pollProbe();
         }
         // 步行导航驱动的是脚下的身体:坐着任何载具都先下来——乘客的行走输入对载具
         // 无效,不在这儿下就坐着"走"到失速。全仓步行任务共用这一处,别在任务层各判各的。
@@ -350,7 +389,7 @@ public final class PlayerNav {
         if (compiled == null) {
             return fail(FailureType.TARGET_LOST, "target lost");
         }
-        sacred = compiled.sacred();
+        contract = compiled;
         NavGoal navGoal = compiled.goal();
 
         // 目标中心移动 >2 格:重根(进度量尺随之复位,状态机自会软取消旧段)
@@ -402,10 +441,10 @@ public final class PlayerNav {
             if (reached.getAsBoolean()) {
                 return Status.ARRIVED;
             }
-            // 只走不改找不到路:先探一条可改地形的路,把它会动什么列出来再裁决——
-            // 模型要的是"授权什么"的具体清单,不是一句 no path
+            // 只走不改找不到路:先查可改地形的候选路线,把每条会动什么列出来再裁决——
+            // 模型要的是带价签的选项,不是一句 no path
             boolean preserving = !spec.alter().mayAlter();
-            if (terrainProbe && preserving && submitTerraformProbe(compiled.engineGoal(), navGoal)) {
+            if (terrainProbe && preserving && submitProbe(compiled)) {
                 InputDriver.halt(player);
                 return Status.RUNNING;
             }
@@ -484,64 +523,58 @@ public final class PlayerNav {
     }
 
     /**
-     * 派一次"若许改地形则此路"的探针:与状态机同一派发器、同一目标、同一起点,只把规格
-     * 换成可自然改动;只搜不走——结论到手只产出清单,绝不执行。
+     * 查一次"若许自然改动有哪几条路":与状态机同一派发器、同一目标、同一起点,只把规格换成
+     * 可自然改动,要 {@link RoutePlanner#MAX_ALTERNATIVES} 条;只搜不走。
      *
      * @return 是否真的派出去了(派不出去时直接按 NO_PATH 裁决)
      */
-    private boolean submitTerraformProbe(Goal engineGoal, NavGoal navGoal) {
+    private boolean submitProbe(GoalCompiler.Compiled compiled) {
         BlockPos start = core.pathStart();
         if (start == null) {
             return false;
         }
-        CalculationContext probeContext = ContextFactory.forSearch(player,
-                routeSpec().withAlter(RouteSpec.Alter.NATURAL));
-        NavSettings settings = NavSettings.get();
-        terraformProbe = PoolSearchDispatcher.INSTANCE.submit(PathExecutor.playerFeet(player), start,
-                engineGoal, probeContext, Favoring.empty(),
-                settings.primaryTimeoutMS, settings.failureTimeoutMS);
-        terraformProbeGoal = navGoal;
-        Constants.LOG.info("[numen-path] 只走不改无路,探一条可改地形的路 start={} goal={}",
-                start.toShortString(), navGoal.center().toShortString());
+        probe = planner.plan(PathExecutor.playerFeet(player), start, compiled,
+                spec.withAlter(RouteSpec.Alter.NATURAL), RoutePlanner.MAX_ALTERNATIVES);
+        probeGoal = compiled;
+        Constants.LOG.info("[numen-path] 只走不改无路,查可改地形的候选路线 start={} goal={}",
+                start.toShortString(), compiled.goal().center().toShortString());
         return true;
     }
 
     /**
-     * 探针出结论:有路 → 列清单,TERRAIN_BLOCKED;无路 → 连挖都到不了,NO_PATH。
-     * 等结论期间身体原地站住。裁决前仍让 caller 的 reached 谓词先说话。
+     * 查询出结论:有候选 → 记进路线簿、列清单,TERRAIN_BLOCKED;无候选 → 连挖都到不了,
+     * NO_PATH。等结论期间身体原地站住。裁决前仍让 caller 的 reached 谓词先说话。
      */
-    private Status pollTerraformProbe() {
-        PathCalcResult result = terraformProbe.poll();
-        if (result == null) {
+    private Status pollProbe() {
+        java.util.List<RoutePlanner.Candidate> candidates = probe.poll();
+        if (candidates == null) {
             InputDriver.halt(player);
             return Status.RUNNING;
         }
-        terraformProbe = null;
-        NavGoal goal = terraformProbeGoal;
-        terraformProbeGoal = null;
+        probe = null;
+        GoalCompiler.Compiled goal = probeGoal;
+        probeGoal = null;
         if (reached.getAsBoolean()) {
             return Status.ARRIVED;
         }
-        // 搜索器交出的路径已经装配过(postProcess 在 calculate 模板里),直接读移动原语
-        NavPath path = result.getPath().orElse(null);
-        TerrainBill bill = path == null ? null : TerrainBill.planned(path, player.level());
-        if (bill == null || bill.isEmpty()) {
-            // 连可改地形都搜不出路(或搜出的路根本不动地形——那就是清洁搜索自己的预算问题):
-            // 如实说没路,别把"挖"当万能解
-            return fail(FailureType.NO_PATH, noPathAutopsy(goal,
-                    path == null ? ", not even by digging or bridging" : ""));
+        if (candidates.isEmpty()) {
+            return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(), ", not even by digging or bridging"));
+        }
+        if (candidates.stream().allMatch(c -> c.bill().isEmpty())) {
+            // 可改地形的搜索出的路根本不动地形——那是清洁搜索自己的预算问题:如实说没路,
+            // 别把"挖"当万能解
+            return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(), ""));
+        }
+        RouteBook book = RouteBook.of(player);
+        long now = player.level().getGameTime();
+        Map<String, TerrainBill> byId = new LinkedHashMap<>();
+        for (RoutePlanner.Candidate c : candidates) {
+            RouteBook.Route route = book.add(goal, c.spec(), c.path(), c.bill(), now);
+            byId.put(route.id(), route.bill());
         }
         BlockPos feet = PathExecutor.playerFeet(player);
-        BlockPos center = goal.center();
-        // 措辞对任何任务都成立:goto 自己重发带标记,别的任务先 goto 开路再做事
-        String reason = String.format(
-                "no route without altering terrain (from %s toward %s, about %.0f blocks away). %s would %s."
-                        + " Altering terrain needs consent: if that is acceptable, goto there with"
-                        + " may_alter_terrain=true; otherwise pick another spot or ask.",
-                feet.toShortString(), center.toShortString(), Math.sqrt(feet.distSqr(center)),
-                result.getType() == PathCalcResult.Type.SUCCESS_TO_GOAL
-                        ? "The cheapest route through" : "Even the first leg of a route through",
-                bill.describe());
+        BlockPos center = goal.goal().center();
+        String reason = TerrainBill.noCleanRoute(feet, center, byId);
         Constants.LOG.info("[numen-path] TERRAIN-BLOCKED start={} goal={} | {}",
                 feet.toShortString(), center.toShortString(), reason);
         return fail(FailureType.TERRAIN_BLOCKED, reason);
@@ -627,9 +660,9 @@ public final class PlayerNav {
     public void stop() {
         stopped = true;
         searchSatisfied = false;
-        if (terraformProbe != null) {
-            terraformProbe.cancel();
-            terraformProbe = null;
+        if (probe != null) {
+            probe.cancel();
+            probe = null;
         }
         core.forceCancel();
         InputDriver.halt(player);

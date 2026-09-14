@@ -117,6 +117,20 @@ public final class PathingCore {
         return true;
     }
 
+    /**
+     * 采纳一条已规划好的路径作为首段:目标与路径一并下发,身体从它的起点接着走。
+     * 中途失败照常在本内核的规格下重搜——路径不是可交接的东西,目标加规格才是。
+     * 只在空闲(无段、无在飞搜索)时可调。
+     */
+    public void seed(Goal goal, NavPath path) {
+        if (current != null || inProgress != null) {
+            throw new IllegalStateException("已有路段或在飞搜索,不能再采纳路径");
+        }
+        this.goal = goal;
+        context = searchContextFactory.get();
+        current = newExecutor(path);
+    }
+
     /** 目标失效裁决:当前段终点原本在旧目标内、而不在新目标内。 */
     private boolean goalInvalidatedBy(Goal newGoal) {
         if (current == null || goal == null || newGoal == null) {

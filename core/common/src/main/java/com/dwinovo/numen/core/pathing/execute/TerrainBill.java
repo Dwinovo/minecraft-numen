@@ -19,6 +19,10 @@ import java.util.Map;
  * 哪些格要放。两处用同一种说法——规划出来的路<b>会</b>动什么(预算账,喂给模型决定要不要
  * 授权),和执行器<b>真</b>动了什么(实际账,任务回执事后如实相告)。语言面向工具回执
  * (英文),坐标点名,方块按种类归堆,模型一眼能分出"两块木板一块玻璃"和"十一块石头"。
+ *
+ * <p>路线回执的文案全在这里:一条候选一行({@link #line}),候选清单
+ * ({@link #listing}),以及"没有干净的路"的回执({@link #noCleanRoute})——goto、follow
+ * 与规划查询工具都用这一份措辞,模型在哪儿看到的路线都长一个样。
  */
 public final class TerrainBill {
 
@@ -136,7 +140,80 @@ public final class TerrainBill {
         return sb.toString();
     }
 
+    /**
+     * 紧凑正文(候选行用),例如 {@code break 2 oak_planks (120,64,-33; 120,65,-33), 1 glass (122,65,-33)  place 2 blocks};
+     * 空清单是 {@code no terrain change}。与 {@link #describe} 同一份归堆,只是不成句。
+     */
+    public String summary() {
+        if (isEmpty()) {
+            return "no terrain change";
+        }
+        StringBuilder sb = new StringBuilder();
+        if (!breaks.isEmpty()) {
+            Map<Block, List<BlockPos>> byKind = new LinkedHashMap<>();
+            for (Break b : breaks) {
+                byKind.computeIfAbsent(b.block(), k -> new ArrayList<>()).add(b.pos());
+            }
+            sb.append("break ").append(String.join(", ", parts(byKind)));
+        }
+        if (!places.isEmpty()) {
+            if (sb.length() > 0) {
+                sb.append("  ");
+            }
+            sb.append("place ").append(placeCount()).append(placeCount() == 1 ? " block" : " blocks");
+        }
+        return sb.toString();
+    }
+
+    /** 候选清单里的一行:id、长度、账。 */
+    public String line(String id) {
+        return "  " + id + "  " + blocks + (blocks == 1 ? " block  " : " blocks  ") + summary();
+    }
+
+    /** 候选清单正文:每条一行,按给定顺序(先出的先列)。 */
+    public static String listing(Map<String, TerrainBill> byId) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, TerrainBill> e : byId.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append('\n');
+            }
+            sb.append(e.getValue().line(e.getKey()));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * "只走不改没有路"的回执:哪儿到哪儿、多远,接着是候选清单,末尾告诉模型怎么选。
+     * goto 与 follow 的 TERRAIN_BLOCKED 文案只此一处。
+     */
+    public static String noCleanRoute(BlockPos from, BlockPos toward, Map<String, TerrainBill> byId) {
+        return String.format(
+                "no route without altering terrain (from %s toward %s, about %.0f blocks away). candidates:\n%s\n"
+                        + "choose one with goto route:<id>, or pick another destination.",
+                from.toShortString(), toward.toShortString(), Math.sqrt(from.distSqr(toward)),
+                listing(byId));
+    }
+
+    /** 规划查询的回执:找到几条、从哪儿到哪儿,接着是候选清单,末尾告诉模型怎么用。 */
+    public static String planned(BlockPos from, BlockPos toward, Map<String, TerrainBill> byId) {
+        return String.format(
+                "%d route%s from %s toward %s (about %.0f blocks away):\n%s\n"
+                        + "walk one with goto route:<id>; ids stay valid while I stay near here.",
+                byId.size(), byId.size() == 1 ? "" : "s",
+                from.toShortString(), toward.toShortString(), Math.sqrt(from.distSqr(toward)),
+                listing(byId));
+    }
+
     private static String kinds(Map<Block, List<BlockPos>> byKind) {
+        List<String> parts = parts(byKind);
+        if (parts.size() <= 1) {
+            return parts.isEmpty() ? "" : parts.get(0);
+        }
+        return String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
+    }
+
+    /** 每种方块一段:{@code 2 oak_planks (120,64,-33; 120,65,-33)}。 */
+    private static List<String> parts(Map<Block, List<BlockPos>> byKind) {
         List<String> parts = new ArrayList<>();
         for (Map.Entry<Block, List<BlockPos>> e : byKind.entrySet()) {
             List<BlockPos> cells = e.getValue();
@@ -157,9 +234,6 @@ public final class TerrainBill {
             part.append(')');
             parts.add(part.toString());
         }
-        if (parts.size() <= 1) {
-            return parts.isEmpty() ? "" : parts.get(0);
-        }
-        return String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
+        return parts;
     }
 }
