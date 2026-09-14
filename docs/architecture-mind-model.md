@@ -147,5 +147,64 @@ interface Reflex {
 2. 是模型发起的吗?→ 是:一个 `NumenTool`,回执按 §六 的口径写。
 3. 是身体自己发生的吗?→ 是:走 `NumenEvents`,离线与开轮时机由它和队列答。
 4. 模型需要预先知道这机制吗?→ 是:实现 `Reflex`,自述自动进提示词。
+5. 这个动作会不会改世界或伤到实体?→ 会:必须经过权限层(§八)的裁决,没有第二个入口。
 
-四问答完仍无处安放的功能,先修宪再动工。
+五问答完仍无处安放的功能,先修宪再动工。
+
+## 八、权限层:身体的任何动作在动手前怎么过门
+
+设计稿 `docs/permission-layer.md`。放在 api,它是机器;core 的任务与工具是往里送动作的
+内容。五个零件:
+
+**动作(Action)。** 身体要对世界做的一件具体的事及其目标:`break(pos)`、`place(pos, block)`、
+`attack(entity)`、`use_block(pos)`、`use_entity(entity)`、`take(container, item)`、`drop(item)`。
+不带工具名、不带 JSON。
+
+**信号(Signal)。** 给动作贴事实的函数,每个只回答一个通用问题,不按种类枚举:
+
+| 信号 | 问题 | 来源 |
+|---|---|---|
+| placed | 这格是不是玩家放的 | `BlockItem.place` 返回处的 mixin,放的人不是同伴就按区块记进每维度一份 SavedData;查询时格子已是空气视为无记号;同伴自己垫路的不记,build 完工把成果格登记 |
+| block_entity | 这格有没有方块实体 | 方块状态 |
+| contents | 容器里有没有东西 | 世界(只在主线程读;搜索线程按"有") |
+| owned | 这只实体有没有主人 | `OwnableEntity` |
+| named | 有没有自定义名字 | 实体 |
+| villager | 是不是村民 | 实体类型 |
+| hostile | 是不是敌对 | 实体分类 |
+| hazard_item | 放的是不是岩浆、火、TNT、水 | 物品 |
+| near_placed | 放置点附近有没有玩家放的方块 | placed 的邻域查询 |
+| claimed | 领地 mod 说不说不 | `TerritoryClaims` 接口,loader 模块各装一个实现 |
+
+**规则(Rule)。** deny、ask、allow 三张表。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,
+项也可以是方块或实体种类 id、`#标签`、`entity:<uuid>`。查的顺序 deny → 熔断 → allow → ask →
+都不中即放行(allow 在 ask 之前,因为"允许并记住"存的是从 ask 行里抠出来的更细的 allow 行)。
+出厂:deny 空;ask 为 `break(placed)`、`break(block_entity)`、`break(#minecraft:beds)`、
+`break(#minecraft:doors)`、`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、
+`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)`;
+allow 空——其余(自然方块、野生动物、敌对生物、自己的背包、开关门、开容器、从容器拿东西)放行。
+
+**熔断。** `attack(owned)`、`break(block_entity & contents)` 永远问,"允许并记住"也盖不住。
+
+**裁决(Verdict)。** 唯一入口 `Permission`:主线程 `judge(companion, action)` 对活世界问一个动作;
+`gateFor(companion)` 取一份快照(模式、规则、放置记录)交给搜索线程逐格问。答复三种:放行;
+拒绝并附理由;需要主人同意并附理由。
+
+**模式(Mode)。** 每个同伴一个,存在主人的 SavedData 里:`ask`(默认,走规则表)、`bypass`
+(全放行)、`observe`(只看不动,拒绝一切改世界的动作)。
+
+**三个时机,各管一事。**
+
+| 时机 | 做什么 |
+|---|---|
+| 规划 | 成本模型只读裁决:ask 或 deny 的格按 `RouteSpec.FORBID`;规格 `alter=any` 时 ask 的格按有限代价算进路线,`TerrainBill.Break.consent` 写明为什么需要同意 |
+| 执行开始 | 整条路线或整个动作的账单过一次规则表,需要同意就发起一次征询;不是走到墙边才问 |
+| 每次动作 | `BlockDigger`(唯一挖掘落点)、攻击落点、放置落点强制,不发起征询;到这里还没授权就当动作失败,任务按既有机制重算或收尾 |
+
+**各内容的接入点。** mine 选目标前送每个候选,ask 或 deny 的直接剔除、不问,回执写"跳过了
+N 块你放置的 X";goto、follow 规划出路以后、开走以前整条路打包送一次;build 清场格走 `BlockDigger`、
+放置格送 `place`;attack 开打前送目标,自卫本能换目标时再送;interact_at 左键走挖掘落点、右键
+`use_block`、拿东西 `take`;drop_items 每次送 `drop`。
+
+**征询**是一个请求响应子协议(服务端记请求 → 主人客户端出卡 → 允许 / 允许并记住 / 拒绝附言 →
+答复回服务端;超时按拒绝)。模型看到的只有普通的工具结果和回执;征询的答复走任务回执,不新增
+事件种类(§四"核心代码永远不直接调 emitEvent"不变)。

@@ -64,6 +64,13 @@ public final class NumenPrompts {
             - Reuse the world. <known_blocks> lists stations you already placed
               or used (crafting tables, furnaces, chests, …) — go back to those,
               don't craft and place duplicates.
+            - Some actions need the owner's nod: breaking what a player placed,
+              breaking anything with a block entity (chests, furnaces, beds,
+              doors), hitting pets, named mobs or villagers. A result that says
+              "refused" or "needs the owner's consent" is the owner's call, not
+              an obstacle — do NOT route around it (no other tool, no other
+              angle, no "clear it first"). Tell the owner what was refused and
+              let them decide.
             - Plan only what's big. Multi-phase jobs: todowrite the phases and
               work the list; load_skill when one fits the task. One-step
               requests: just do them.

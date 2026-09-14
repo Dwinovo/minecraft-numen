@@ -76,8 +76,10 @@
 
 插件可登记新信号,出厂这几个已够。
 
-**规则(Rule)。** deny、ask、allow 三张表,按此顺序第一个命中即定。一条规则一行字符串
-`动作(信号)`,与 Claude Code 的 `Tool(specifier)` 同形:
+**规则(Rule)。** deny、ask、allow 三张表。查的顺序 deny → 熔断 → allow → ask → 都不中即
+放行,第一个命中即定;allow 排在 ask 前面,因为"允许并记住"(§七)存的是从某条 ask 行里抠出来
+的一条更细的 allow 行,ask 若先查,记住的规则永远轮不到。一条规则一行字符串
+`动作(信号 & 信号 & !信号)`,与 Claude Code 的 `Tool(specifier)` 同形:
 
 ```
 break(placed)          攻击/挖掘/放置四个动词 × 信号
@@ -91,7 +93,7 @@ break(#minecraft:beds) 也接受方块标签与 id,给主人写细规则用
 | 表 | 规则 |
 |---|---|
 | deny | 空(领地裁决不是规则,是命中即 deny 的信号) |
-| ask | `break(placed)`、`break(block_entity)`、`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)` |
+| ask | `break(placed)`、`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)` |
 | allow | 其余:自然方块、野生动物、敌对生物、自己的背包、开关门、开容器、从容器拿东西 |
 
 从主人的容器拿东西默认放行:她的设计就是用主人的工作台熔炉箱子,相当于 Claude Code 读项目
