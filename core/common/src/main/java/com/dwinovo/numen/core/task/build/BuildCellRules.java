@@ -13,6 +13,9 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 单格判据的唯一出处:这一格能不能动、该不该动、是不是注定动不了。
  * 施工循环、轮扫对账与材料报价三处共用——判据分叉的直接后果就是
@@ -59,31 +62,47 @@ final class BuildCellRules {
      *
      * <p>让路的档位管"石头挡路要不要顶掉";这一格上的东西许不许清、这一格许不许放,
      * 问权限层——玩家的箱子、玩家放的墙、观察模式,都是它的裁决,这里不另设判据。
+     * 要问主人的在开工前整批问过({@link #actionsFor});主人答应的这时已是放行,拒绝的仍不许。
      * 双格方块连另一半一起问:任一半不许清就都不动。
      */
     boolean blockedByMode(BuildTaskRecord.Target target) {
-        BlockPos pos = target.pos();
-        BlockState current = peek(pos);
+        BlockState current = peek(target.pos());
         if (!r.replaceMode.allows(current, target.desiredState())) {
             return true;
         }
         if (target.matches(current)) {
             return false;
         }
-        if (!current.isAir() && !Permission.judge(player, Action.breakBlock(pos, current)).allowed()) {
-            return true;
+        for (Action action : actionsFor(target)) {
+            if (!Permission.judge(player, action).allowed()) {
+                return true;
+            }
         }
-        if (!isAirTarget(target)
-                && !Permission.judge(player, Action.place(pos, current, target.item())).allowed()) {
-            return true;
+        return false;
+    }
+
+    /**
+     * 把这一格建成目标要对世界做的事:清掉上面现有的、放上目标、清掉双格方块另一半压着的。
+     * 权限层问的就是这几件——施工中逐格判与开工前整批问主人用同一份。
+     */
+    List<Action> actionsFor(BuildTaskRecord.Target target) {
+        BlockPos pos = target.pos();
+        BlockState current = peek(pos);
+        List<Action> actions = new ArrayList<>(3);
+        if (!current.isAir()) {
+            actions.add(Action.breakBlock(pos, current));
+        }
+        if (!isAirTarget(target)) {
+            actions.add(Action.place(pos, current, target.item()));
         }
         BlockPos other = otherHalfOf(pos, target.desiredState());
-        if (other == null) {
-            return false;
+        if (other != null) {
+            BlockState otherState = peek(other);
+            if (!otherState.isAir()) {
+                actions.add(Action.breakBlock(other, otherState));
+            }
         }
-        BlockState otherState = peek(other);
-        return !otherState.isAir()
-                && !Permission.judge(player, Action.breakBlock(other, otherState)).allowed();
+        return actions;
     }
 
     /**

@@ -131,11 +131,15 @@ public final class GoalCompiler {
      * break loses nothing: the cell leaves knownOres on the next prune, its drop
      * is collected by the drop members, and progress counts inventory, not dig
      * events.
+     *
+     * <p>每个目标的站位带着挖它的价钱({@code digCost},成本模型的定价:需要主人同意的格贵十倍),
+     * 搜索按"走过去 + 挖它"的总价挑先去哪一块,不是谁近挑谁。
      */
-    public static Compiled mineField(List<BlockPos> ores, List<BlockPos> drops) {
+    public static Compiled mineField(List<BlockPos> ores, java.util.function.ToDoubleFunction<BlockPos> digCost,
+                                     List<BlockPos> drops) {
         List<NavGoal> members = new ArrayList<>(ores.size() + drops.size());
         for (BlockPos ore : ores) {
-            members.add(NavGoal.mineStance(ore));
+            members.add(NavGoal.priced(NavGoal.mineStance(ore), digCost.applyAsDouble(ore)));
         }
         for (BlockPos drop : drops) {
             members.add(NavGoal.exact(drop));     // items, not blocks

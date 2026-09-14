@@ -20,9 +20,12 @@ import com.dwinovo.numen.core.pathing.plan.RouteBook;
 import com.dwinovo.numen.core.pathing.plan.RoutePlanner;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.pathing.util.NavProfiler;
+import com.dwinovo.numen.core.pathing.astar.NavPath;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.permission.ConsentItem;
+import com.dwinovo.numen.permission.Permission;
 
 import it.unimi.dsi.fastutil.longs.LongSets;
 import net.minecraft.core.BlockPos;
@@ -52,10 +55,16 @@ import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
  * 执行期复核用活世界——带的都是同一份规格,同一把尺。
  *
  * <p><b>不动地形的路找不到时</b>(规格不改地形的首段 NO_PATH),不立刻终局:
- * 用可自然改动的规格向 {@link RoutePlanner} 只搜不走地查一次候选路线,每条带预算账
+ * 用可自然改动的规格向 {@link RoutePlanner} 只搜不走地查一次候选路线,自然改动也没路再用
+ * {@link RouteSpec.Alter#ANY} 查一次(候选的账单标出哪些格要主人同意);每条带预算账
  * ({@link TerrainBill}),记进这具身体的 {@link RouteBook},清单交给任务层——裁决是
  * {@link FailureType#TERRAIN_BLOCKED},模型读清单挑一条({@code goto route:<id>})或换目的地。
  * 引擎不替它猜"这是不是玩家的房子":木板玻璃在地表是房子,石头泥土在地下不是,这个判断归模型。
+ *
+ * <p><b>开走之前问主人</b>:规格是 {@link RouteSpec.Alter#ANY} 时,每一段路被采纳之前出一张预算账,
+ * 里面有要问主人的格就扣住不走({@link #consentNeeded}),由任务发起征询;主人答应之后
+ * ({@link #consentGranted})按新的授权重看,都覆盖了才开走。别的规格下这些格的代价是 INF,
+ * 规划不出穿过它们的路,不需要这道口。
  */
 public final class PlayerNav {
 
@@ -143,6 +152,10 @@ public final class PlayerNav {
     private boolean terrainProbe;
     /** 在飞的候选路线查询;非空时本导航原地等它出结论,不再驱动状态机。 */
     private RoutePlanner.Query probe;
+    /** 在飞查询用的改动档:先 NATURAL,没路再 ANY。 */
+    private RouteSpec.Alter probeAlter;
+    /** 扣着的那段路要问主人的清单(采纳时出账算好)。 */
+    private List<ConsentItem> heldConsent = List.of();
     /** 查询所针对的目标契约(候选记入路线簿时带上)。 */
     private GoalCompiler.Compiled probeGoal;
     /**
@@ -305,10 +318,37 @@ public final class PlayerNav {
         RouteSpec provided = this.contextProvider.spec();
         this.spec = speed >= 1.0 ? provided : provided.withSprint(false);
         this.core = new PathingCore(player, PoolSearchDispatcher.INSTANCE,
-                this::searchContext, this::executionContext, spec);
+                this::searchContext, this::executionContext, spec, this::admits);
         this.planner = new RoutePlanner(PoolSearchDispatcher.INSTANCE,
                 s -> this.contextProvider.forSearch(player, s), player.level(),
-                () -> com.dwinovo.numen.permission.Permission.gateFor(player));
+                () -> Permission.gateFor(player));
+    }
+
+    /**
+     * 一段路能不能开走:{@link RouteSpec.Alter#ANY} 下出一张预算账,没有要问主人的格才放行;
+     * 要问的清单记下来({@link #consentNeeded})。判据就是账单里权限层填的那一条,这里不另判。
+     */
+    private boolean admits(NavPath path) {
+        if (spec.alter() != RouteSpec.Alter.ANY) {
+            return true;
+        }
+        heldConsent = TerrainBill.planned(path,
+                com.dwinovo.numen.core.pathing.cache.LoadedOnlyView.of(player.level()),
+                Permission.gateFor(player)).consentItems();
+        return heldConsent.isEmpty();
+    }
+
+    /** 扣着等主人点头的那段路要问的清单;没有扣着的路是空表。 */
+    public List<ConsentItem> consentNeeded() {
+        return core.heldPath() == null ? List.of() : heldConsent;
+    }
+
+    /** 主人答应了:按新的授权重看扣着的那段路,都覆盖了就开走;还有没覆盖的就继续扣着。 */
+    public void consentGranted() {
+        NavPath held = core.heldPath();
+        if (held != null && admits(held)) {
+            core.releaseHeld();
+        }
     }
 
     /** 这次搜索/复核用的规格:导航规格加上当前目标的 sacred 格(禁挖禁放)。 */
@@ -457,10 +497,11 @@ public final class PlayerNav {
             if (reached.getAsBoolean()) {
                 return Status.ARRIVED;
             }
-            // 只走不改找不到路:先查可改地形的候选路线,把每条会动什么列出来再裁决——
-            // 模型要的是带价签的选项,不是一句 no path
+            // 找不到路:先查放宽一档的候选路线,把每条会动什么列出来再裁决——模型要的是带价签的
+            // 选项,不是一句 no path。只走不改的先查自然改动;自然改动的直接查连要主人同意的格也算的
             boolean preserving = !spec.alter().mayAlter();
-            if (terrainProbe && preserving && submitProbe(compiled)) {
+            if (terrainProbe && spec.alter() != RouteSpec.Alter.ANY
+                    && submitProbe(compiled, preserving ? RouteSpec.Alter.NATURAL : RouteSpec.Alter.ANY)) {
                 InputDriver.halt(player);
                 return Status.RUNNING;
             }
@@ -539,27 +580,29 @@ public final class PlayerNav {
     }
 
     /**
-     * 查一次"若许自然改动有哪几条路":与状态机同一派发器、同一目标、同一起点,只把规格换成
-     * 可自然改动,要 {@link RoutePlanner#MAX_ALTERNATIVES} 条;只搜不走。
+     * 查一次"若许这一档改动有哪几条路":与状态机同一派发器、同一目标、同一起点,只把规格的改动档
+     * 换成 {@code alter},要 {@link RoutePlanner#MAX_ALTERNATIVES} 条;只搜不走。
      *
      * @return 是否真的派出去了(派不出去时直接按 NO_PATH 裁决)
      */
-    private boolean submitProbe(GoalCompiler.Compiled compiled) {
+    private boolean submitProbe(GoalCompiler.Compiled compiled, RouteSpec.Alter alter) {
         BlockPos start = core.pathStart();
         if (start == null) {
             return false;
         }
         probe = planner.plan(PathExecutor.playerFeet(player), start, compiled,
-                spec.withAlter(RouteSpec.Alter.NATURAL), RoutePlanner.MAX_ALTERNATIVES);
+                spec.withAlter(alter), RoutePlanner.MAX_ALTERNATIVES);
         probeGoal = compiled;
-        Constants.LOG.info("[numen-path] 只走不改无路,查可改地形的候选路线 start={} goal={}",
-                start.toShortString(), compiled.goal().center().toShortString());
+        probeAlter = alter;
+        Constants.LOG.info("[numen-path] 无路,查 alter={} 的候选路线 start={} goal={}",
+                alter, start.toShortString(), compiled.goal().center().toShortString());
         return true;
     }
 
     /**
-     * 查询出结论:有候选 → 记进路线簿、列清单,TERRAIN_BLOCKED;无候选 → 连挖都到不了,
-     * NO_PATH。等结论期间身体原地站住。裁决前仍让 caller 的 reached 谓词先说话。
+     * 查询出结论:有候选 → 记进路线簿、列清单,TERRAIN_BLOCKED;自然改动无候选 → 再查一次连要主人
+     * 同意的格也算进去的路;那也无候选 → 连挖都到不了,NO_PATH。等结论期间身体原地站住。
+     * 裁决前仍让 caller 的 reached 谓词先说话。
      */
     private Status pollProbe() {
         java.util.List<RoutePlanner.Candidate> candidates = probe.poll();
@@ -575,14 +618,22 @@ public final class PlayerNav {
         if (reached.getAsBoolean()) {
             return Status.ARRIVED;
         }
+        if (candidates.isEmpty() && probeAlter == RouteSpec.Alter.NATURAL
+                && submitProbe(goal, RouteSpec.Alter.ANY)) {
+            InputDriver.halt(player);
+            return Status.RUNNING;
+        }
         if (candidates.isEmpty()) {
             return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(), overBudget
                     ? ", " + TerrainBill.overBudget(spec.alterBudget(), cheapestChange)
                     : ", not even by digging or bridging"));
         }
-        if (candidates.stream().allMatch(c -> c.bill().isEmpty())) {
-            // 可改地形的搜索出的路根本不动地形——那是清洁搜索自己的预算问题:如实说没路,
-            // 别把"挖"当万能解
+        boolean relaxed = probeAlter == RouteSpec.Alter.ANY
+                ? candidates.stream().anyMatch(c -> !c.bill().consentItems().isEmpty())
+                : candidates.stream().anyMatch(c -> !c.bill().isEmpty());
+        if (!relaxed) {
+            // 放宽一档搜出的路根本用不着放宽的那一档(不动地形、不碰要同意的格)——那是原规格
+            // 那次搜索自己的问题(预算、执行器不认账):如实说没路,别把放宽当万能解
             return fail(FailureType.NO_PATH, noPathAutopsy(goal.goal(), ""));
         }
         RouteBook book = RouteBook.of(player);
@@ -594,7 +645,7 @@ public final class PlayerNav {
         }
         BlockPos feet = PathExecutor.playerFeet(player);
         BlockPos center = goal.goal().center();
-        String reason = TerrainBill.noCleanRoute(feet, center, byId);
+        String reason = TerrainBill.noCleanRoute(feet, center, spec.alter().mayAlter(), byId);
         Constants.LOG.info("[numen-path] TERRAIN-BLOCKED start={} goal={} | {}",
                 feet.toShortString(), center.toShortString(), reason);
         return fail(FailureType.TERRAIN_BLOCKED, reason);

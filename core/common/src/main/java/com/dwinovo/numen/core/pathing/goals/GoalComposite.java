@@ -30,6 +30,18 @@ public class GoalComposite implements Goal {
         return min;
     }
 
+    /** 停在这一格满足的那些成员里最便宜的到达价。 */
+    @Override
+    public double arrivalCost(int x, int y, int z) {
+        double min = Double.MAX_VALUE;
+        for (Goal goal : goals) {
+            if (goal.isInGoal(x, y, z)) {
+                min = Math.min(min, goal.arrivalCost(x, y, z));
+            }
+        }
+        return min == Double.MAX_VALUE ? 0 : min;
+    }
+
     public Goal[] goals() {
         return goals;
     }

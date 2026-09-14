@@ -141,6 +141,18 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
             return TaskState.RUNNING;   // settling / something briefly in the line — re-aim next tick
         }
 
+        if (interaction == null && r.button == MouseButton.LEFT) {
+            // 左键打它之前交给权限层:宠物、有名字的、村民要问就站着等主人,不许就带着理由收场
+            Permit permit = permit(com.dwinovo.numen.permission.Action.attack(entity), r.describe());
+            if (permit.state() == PermitState.WAITING) {
+                InputDriver.halt(player);
+                return TaskState.RUNNING;
+            }
+            if (permit.state() == PermitState.REFUSED) {
+                fail("cannot attack " + targetName() + ": " + permit.refusal(), FailureType.REFUSED);
+                return TaskState.FAILED;
+            }
+        }
         if (interaction == null) {
             if (r.item != null) {
                 player.holdInHand(PlayerInv.findSlot(player.getInventory(), r.item));
@@ -164,7 +176,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
                 yield TaskState.SUCCESS;
             }
             case FAILED -> {
-                fail(interaction.failReason(), FailureType.UNKNOWN);
+                fail(interaction.failReason(), interaction.failType());
                 yield TaskState.FAILED;
             }
             case RUNNING -> TaskState.RUNNING;

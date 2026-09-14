@@ -126,6 +126,12 @@ public final class PathExecutor {
         tickRecursionDepth = 0;
         recentStepsHead = 0;
         java.util.Arrays.fill(recentSteps, null);
+        // 上一刻挖掘落点被权限层拒了:这一段按那句话收场,重规划去——不等卡死检测慢慢量出来
+        String refused = harness.takeRefusal();
+        if (refused != null) {
+            cancel(refused);
+            return true;
+        }
         return onTick0();
     }
 

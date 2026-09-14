@@ -3,7 +3,9 @@ package com.dwinovo.numen.core.pathing.execute;
 import com.dwinovo.numen.core.pathing.astar.NavPath;
 import com.dwinovo.numen.core.pathing.moves.Movement;
 import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.Gate;
+import com.dwinovo.numen.permission.Listing;
 import com.dwinovo.numen.permission.Verdict;
 
 import net.minecraft.core.BlockPos;
@@ -21,7 +23,9 @@ import java.util.Map;
  * 一张路线的账单:多长(格数、估计刻数)、哪些格要挖(坐标、方块、以及为什么需要同意)、
  * 哪些格要放。两处用同一种说法——规划出来的路<b>会</b>动什么(预算账,喂给模型决定要不要
  * 授权),和执行器<b>真</b>动了什么(实际账,任务回执事后如实相告)。语言面向工具回执
- * (英文),坐标点名,方块按种类归堆,模型一眼能分出"两块木板一块玻璃"和"十一块石头"。
+ * (英文),坐标点名({@link Listing},与征询清单同一种说法),方块按种类归堆,模型一眼能分出
+ * "两块木板一块玻璃"和"十一块石头"。要问主人的挖掘条目带着那一条征询,开走前整批送去
+ * ({@link #consentItems})。
  *
  * <p>路线回执的文案全在这里:一条候选一行({@link #line}),候选清单
  * ({@link #listing}),以及"没有干净的路"的回执({@link #noCleanRoute})——goto、follow
@@ -29,18 +33,14 @@ import java.util.Map;
  */
 public final class TerrainBill {
 
-    /** 每种方块最多点名多少个坐标,其余计数——清单是给人判断的,不是给人数的。 */
-    private static final int COORDS_PER_KIND = 6;
-
     /**
      * 一条挖掘条目。
      *
-     * @param consent 为什么需要主人同意(玩家放置 / 带方块实体);不需要同意为空串。
-     *                规划账问权限层({@link #consent}),规划器自己不判
+     * @param consent 挖这一格要问主人时的那一条征询;不用问为 null。规划账问权限层填,规划器自己不判
      */
-    public record Break(BlockPos pos, Block block, String consent) {
+    public record Break(BlockPos pos, Block block, ConsentItem consent) {
         public boolean needsConsent() {
-            return !consent.isEmpty();
+            return consent != null;
         }
     }
 
@@ -54,7 +54,7 @@ public final class TerrainBill {
 
     /**
      * 规划路径的预算:长度,加上沿途每个移动原语此刻仍需挖/放的格;每条挖掘条目带上权限层
-     * 说的"为什么需要同意"。
+     * 问出来的那一条征询(裁决是 ask 才有)。
      */
     public static TerrainBill planned(NavPath path, BlockGetter level, Gate gate) {
         TerrainBill bill = new TerrainBill();
@@ -63,7 +63,9 @@ public final class TerrainBill {
         for (Movement m : path.movements()) {
             for (BlockPos p : m.toBreak(level)) {
                 BlockState was = level.getBlockState(p);
-                bill.addBreak(p, was, consent(gate, level, p, was));
+                Action dig = Action.breakBlock(p, was);
+                Verdict verdict = gate.judge(dig, level);
+                bill.addBreak(p, was, verdict.asks() ? ConsentItem.of(dig, verdict) : null);
             }
             for (BlockPos p : m.toPlace(level)) {
                 bill.addPlace(p, null);
@@ -72,30 +74,25 @@ public final class TerrainBill {
         return bill;
     }
 
-    /** 挖这一格为什么需要主人同意;不需要(放行或干脆不许)为空串。只读裁决,不自判。 */
-    public static String consent(Gate gate, BlockGetter level, BlockPos pos, BlockState state) {
-        Verdict verdict = gate.judge(Action.breakBlock(pos, state), level);
-        return verdict.asks() ? verdict.reason() : "";
-    }
-
     /** 实际账:执行器真挖了的格,同意与否已经过了。 */
     public void addBreak(BlockPos pos, BlockState was) {
-        addBreak(pos, was, "");
+        addBreak(pos, was, null);
     }
 
-    public void addBreak(BlockPos pos, BlockState was, String consent) {
-        breaks.add(new Break(pos.immutable(), was.getBlock(), consent == null ? "" : consent));
+    /** @param consent 要问主人时的那一条;不用问为 null */
+    public void addBreak(BlockPos pos, BlockState was, ConsentItem consent) {
+        breaks.add(new Break(pos.immutable(), was.getBlock(), consent));
     }
 
-    /** 要挖的格里需要主人同意的有几格。 */
-    public int consentCount() {
-        int n = 0;
+    /** 要挖的格里需要主人同意的那几条——开走前整批送去征询的清单。 */
+    public List<ConsentItem> consentItems() {
+        List<ConsentItem> items = new ArrayList<>();
         for (Break b : breaks) {
             if (b.needsConsent()) {
-                n++;
+                items.add(b.consent());
             }
         }
-        return n;
+        return items;
     }
 
     /** @param placed 放上去的方块;规划阶段还不知道会选哪种耗材,传 null */
@@ -149,11 +146,7 @@ public final class TerrainBill {
     public String describe() {
         StringBuilder sb = new StringBuilder();
         if (!breaks.isEmpty()) {
-            Map<Block, List<BlockPos>> byKind = new LinkedHashMap<>();
-            for (Break b : breaks) {
-                byKind.computeIfAbsent(b.block(), k -> new ArrayList<>()).add(b.pos());
-            }
-            sb.append("break ").append(kinds(byKind));
+            sb.append("break ").append(andJoined(breakParts()));
         }
         if (!places.isEmpty()) {
             if (sb.length() > 0) {
@@ -167,14 +160,17 @@ public final class TerrainBill {
             if (byKind.size() == 1 && byKind.containsKey(null)) {
                 sb.append(placeCount()).append(placeCount() == 1 ? " block" : " blocks");
             } else {
-                sb.append(kinds(byKind));
+                List<String> parts = new ArrayList<>();
+                byKind.forEach((block, cells) -> parts.add(Listing.part(name(block), cells.size(), cells)));
+                sb.append(andJoined(parts));
             }
         }
         return sb.toString();
     }
 
     /**
-     * 紧凑正文(候选行用),例如 {@code break 2 oak_planks (120,64,-33; 120,65,-33), 1 glass (122,65,-33)  place 2 blocks};
+     * 紧凑正文(候选行用),例如
+     * {@code break 2 oak_planks (120,64,-33; 120,65,-33) needing consent (placed by a player), 1 glass (122,65,-33)  place 2 blocks};
      * 空清单是 {@code no terrain change}。与 {@link #describe} 同一份归堆,只是不成句。
      */
     public String summary() {
@@ -183,11 +179,7 @@ public final class TerrainBill {
         }
         StringBuilder sb = new StringBuilder();
         if (!breaks.isEmpty()) {
-            Map<Block, List<BlockPos>> byKind = new LinkedHashMap<>();
-            for (Break b : breaks) {
-                byKind.computeIfAbsent(b.block(), k -> new ArrayList<>()).add(b.pos());
-            }
-            sb.append("break ").append(String.join(", ", parts(byKind)));
+            sb.append("break ").append(String.join(", ", breakParts()));
         }
         if (!places.isEmpty()) {
             if (sb.length() > 0) {
@@ -216,13 +208,18 @@ public final class TerrainBill {
     }
 
     /**
-     * "只走不改没有路"的回执:哪儿到哪儿、多远,接着是候选清单,末尾告诉模型怎么选。
+     * "按这次的规格没有路"的回执:哪儿到哪儿、多远,接着是候选清单,末尾告诉模型怎么选。
      * goto 与 follow 的 TERRAIN_BLOCKED 文案只此一处。
+     *
+     * @param alteringAllowed 这次的规格本来就许改地形(候选是连要主人同意的格也算进去查出来的)
      */
-    public static String noCleanRoute(BlockPos from, BlockPos toward, Map<String, TerrainBill> byId) {
+    public static String noCleanRoute(BlockPos from, BlockPos toward, boolean alteringAllowed,
+                                      Map<String, TerrainBill> byId) {
         return String.format(
-                "no route without altering terrain (from %s toward %s, about %.0f blocks away). candidates:\n%s\n"
-                        + "choose one with goto route:<id>, or pick another destination.",
+                "no route without %s (from %s toward %s, about %.0f blocks away). candidates:\n%s\n"
+                        + "choose one with goto route:<id>, or pick another destination. A route with cells"
+                        + " needing consent asks the owner before I set off.",
+                alteringAllowed ? "touching what needs the owner's consent" : "altering terrain",
                 from.toShortString(), toward.toShortString(), Math.sqrt(from.distSqr(toward)),
                 listing(byId));
     }
@@ -243,36 +240,37 @@ public final class TerrainBill {
                 listing(byId));
     }
 
-    private static String kinds(Map<Block, List<BlockPos>> byKind) {
-        List<String> parts = parts(byKind);
+    private static String andJoined(List<String> parts) {
         if (parts.size() <= 1) {
             return parts.isEmpty() ? "" : parts.get(0);
         }
         return String.join(", ", parts.subList(0, parts.size() - 1)) + " and " + parts.get(parts.size() - 1);
     }
 
-    /** 每种方块一段:{@code 2 oak_planks (120,64,-33; 120,65,-33)}。 */
-    private static List<String> parts(Map<Block, List<BlockPos>> byKind) {
+    /**
+     * 挖掘条目按"方块 + 要不要问、为什么问"归堆,每堆一段:{@code 2 oak_planks (120,64,-33; 120,65,-33)},
+     * 要问的缀 {@code needing consent (placed by a player)}。
+     */
+    private List<String> breakParts() {
+        Map<String, List<Break>> groups = new LinkedHashMap<>();
+        for (Break b : breaks) {
+            String key = name(b.block()) + '|' + (b.needsConsent() ? b.consent().cause() : "");
+            groups.computeIfAbsent(key, k -> new ArrayList<>()).add(b);
+        }
         List<String> parts = new ArrayList<>();
-        for (Map.Entry<Block, List<BlockPos>> e : byKind.entrySet()) {
-            List<BlockPos> cells = e.getValue();
-            StringBuilder part = new StringBuilder();
-            part.append(cells.size()).append(' ')
-                    .append(e.getKey() == null ? "block" : BuiltInRegistries.BLOCK.getKey(e.getKey()).getPath())
-                    .append(" (");
-            for (int i = 0; i < Math.min(COORDS_PER_KIND, cells.size()); i++) {
-                if (i > 0) {
-                    part.append("; ");
-                }
-                BlockPos p = cells.get(i);
-                part.append(p.getX()).append(',').append(p.getY()).append(',').append(p.getZ());
+        for (List<Break> group : groups.values()) {
+            Break head = group.get(0);
+            List<BlockPos> cells = new ArrayList<>();
+            for (Break b : group) {
+                cells.add(b.pos());
             }
-            if (cells.size() > COORDS_PER_KIND) {
-                part.append("; +").append(cells.size() - COORDS_PER_KIND).append(" more");
-            }
-            part.append(')');
-            parts.add(part.toString());
+            String part = Listing.part(name(head.block()), cells.size(), cells);
+            parts.add(head.needsConsent() ? part + " needing consent (" + head.consent().cause() + ")" : part);
         }
         return parts;
+    }
+
+    private static String name(Block block) {
+        return block == null ? "block" : BuiltInRegistries.BLOCK.getKey(block).getPath();
     }
 }

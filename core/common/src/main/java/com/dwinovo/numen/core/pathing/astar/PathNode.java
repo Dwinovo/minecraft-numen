@@ -19,7 +19,7 @@ public final class PathNode {
     /** 起点到此的实际成本,初始 INF,由搜索循环松弛改写。 */
     public double cost;
 
-    /** 恒等于 cost + estimatedCostToGoal,堆按它排序。 */
+    /** cost + estimatedCostToGoal,堆按它排序;目标格出堆时补上到达价({@code Goal#arrivalCost})再放回。 */
     public double combinedCost;
 
     /** 松弛出本节点成本的前驱。 */

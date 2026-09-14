@@ -126,6 +126,21 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     return TaskState.FAILED;
                 }
             }
+            // 左键动手之前:打到的方块(挖)或实体(打)交给权限层。要问就站着等主人,不许就带着理由收场
+            if (button() == Interaction.Button.ATTACK) {
+                com.dwinovo.numen.permission.Action proposed = leftClickAction(hit);
+                if (proposed != null) {
+                    Permit permit = permit(proposed, r.describe());
+                    if (permit.state() == PermitState.WAITING) {
+                        InputDriver.halt(player);
+                        return TaskState.RUNNING;
+                    }
+                    if (permit.state() == PermitState.REFUSED) {
+                        fail("cannot " + proposed.describe() + ": " + permit.refusal(), FailureType.REFUSED);
+                        return TaskState.FAILED;
+                    }
+                }
+            }
             // A right-click landing on a block activates it (opens a station's GUI,
             // flips a switch, …). Remember the block we touched so <known_blocks> can
             // walk us back to stations we've used, not just ones we placed. The harvest
@@ -163,11 +178,23 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                 yield TaskState.SUCCESS;
             }
             case FAILED -> {
-                fail(interaction.failReason(), FailureType.UNKNOWN);
+                fail(interaction.failReason(), interaction.failType());
                 yield TaskState.FAILED;
             }
             case RUNNING -> TaskState.RUNNING;
         };
+    }
+
+    /** 左键落在哪儿就是要做什么:方块是挖,实体是打;打空气什么都不做。 */
+    private com.dwinovo.numen.permission.Action leftClickAction(HitResult hit) {
+        if (hit instanceof net.minecraft.world.phys.BlockHitResult bh) {
+            return com.dwinovo.numen.permission.Action.breakBlock(bh.getBlockPos(),
+                    player.level().getBlockState(bh.getBlockPos()));
+        }
+        if (hit instanceof net.minecraft.world.phys.EntityHitResult eh) {
+            return com.dwinovo.numen.permission.Action.attack(eh.getEntity());
+        }
+        return null;
     }
 
 

@@ -174,20 +174,31 @@ interface Reflex {
 | hazard_item | 放的是不是岩浆、火、TNT、水 | 物品 |
 | near_placed | 放置点附近有没有玩家放的方块 | placed 的邻域查询 |
 | claimed | 领地 mod 说不说不 | `TerritoryClaims` 接口,loader 模块各装一个实现 |
+| spawn_protected | 出生点保护说不说不 | 服务器 |
 
-**规则(Rule)。** deny、ask、allow 三张表。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,
-项也可以是方块或实体种类 id、`#标签`、`entity:<uuid>`。查的顺序 deny → 熔断 → allow → ask →
-都不中即放行(allow 在 ask 之前,因为"允许并记住"存的是从 ask 行里抠出来的更细的 allow 行)。
-出厂:deny 空;ask 为 `break(placed)`、`break(block_entity)`、`break(#minecraft:beds)`、
-`break(#minecraft:doors)`、`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、
-`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)`;
-allow 空——其余(自然方块、野生动物、敌对生物、自己的背包、开关门、开容器、从容器拿东西)放行。
+`claimed`、`spawn_protected` 是外部强制:命中即拒,不问主人,回执写明是谁拦的。
 
-**熔断。** `attack(owned)`、`break(block_entity & contents)` 永远问,"允许并记住"也盖不住。
+**代码里不写死能,也不写死不能。** 放行只来自 allow 行与主人选的 bypass;拒绝只来自主人写的
+deny 行、主人选的 observe 与外部强制;其余一律问。身体的物理与安全判断(岩浆、摔落上限、
+挖不动)不属权限,不经裁决。
+
+**规则(Rule)。** deny、allow、ask 三张表。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,
+项也可以是方块或实体种类 id、`#标签`、`entity:<uuid>`。查的顺序 deny → allow → ask → 都不中
+也问(allow 在 ask 之前,因为"允许并记住"存的是从 ask 行里抠出来的更细的 allow 行)。出厂:
+deny 空;allow 为 `break(!placed & !block_entity & !#minecraft:beds & !#minecraft:doors &
+!#minecraft:trapdoors & !#minecraft:fence_gates)`、`place(!hazard_item)`、
+`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、
+`use_entity(!owned)`、`take(*)`;ask 为 `break(block_entity & contents)`、`break(placed)`、
+`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、
+`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、
+`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)`。
+
+**不可逆提示。** `attack(owned)`、`break(block_entity & contents)` 是普通 ask 行,允许与记住都
+盖得住;征询卡片把命中它们的清单项标出"撤不回"。
 
 **裁决(Verdict)。** 唯一入口 `Permission`:主线程 `judge(companion, action)` 对活世界问一个动作;
-`gateFor(companion)` 取一份快照(模式、规则、放置记录)交给搜索线程逐格问。答复三种:放行;
-拒绝并附理由;需要主人同意并附理由。
+`gateFor(companion)` 取一份快照(模式、规则、放置记录、任务期授权)交给搜索线程逐格问。答复
+三种:放行;拒绝并附理由;需要主人同意并附理由。
 
 **模式(Mode)。** 每个同伴一个,存在主人的 SavedData 里:`ask`(默认,走规则表)、`bypass`
 (全放行)、`observe`(只看不动,拒绝一切改世界的动作)。
@@ -196,15 +207,18 @@ allow 空——其余(自然方块、野生动物、敌对生物、自己的背�
 
 | 时机 | 做什么 |
 |---|---|
-| 规划 | 成本模型只读裁决:ask 或 deny 的格按 `RouteSpec.FORBID`;规格 `alter=any` 时 ask 的格按有限代价算进路线,`TerrainBill.Break.consent` 写明为什么需要同意 |
-| 执行开始 | 整条路线或整个动作的账单过一次规则表,需要同意就发起一次征询;不是走到墙边才问 |
+| 规划 | 成本模型只读裁决:拒绝无穷大;要问的格在 `alter=any` 下按有限代价算进路线、其余规格下无穷大;`TerrainBill.Break.consent` 带着那一条征询 |
+| 执行开始 | 整条路线或整个动作过一次裁决,需要同意就发起一次征询;不是走到墙边才问 |
 | 每次动作 | `BlockDigger`(唯一挖掘落点)、攻击落点、放置落点强制,不发起征询;到这里还没授权就当动作失败,任务按既有机制重算或收尾 |
 
-**各内容的接入点。** mine 选目标前送每个候选,ask 或 deny 的直接剔除、不问,回执写"跳过了
-N 块你放置的 X";goto、follow 规划出路以后、开走以前整条路打包送一次;build 清场格走 `BlockDigger`、
-放置格送 `place`;attack 开打前送目标,自卫本能换目标时再送;interact_at 左键走挖掘落点、右键
-`use_block`、拿东西 `take`;drop_items 每次送 `drop`。
+**各内容的接入点。** 内容只提出动作(`AbstractCompanionTask.permit`),判与问归权限层。mine 选目标
+不看权限,规格 `alter=any`,按"走过去 + 挖它"的同一套定价挑,动手前把挖掘交给权限层;goto、follow
+的导航采纳每段路之前,`alter=any` 的路把要问的格打包送一次;build 施工前整批裁决,要问的一张卡,
+拒绝的格跳过并交代;attack 开打前送目标,自卫换目标时再送;interact_at 左键动手前送;drop_items
+每次送。允许的作用范围:本任务内,同一行规则问出来的同一种方块(或同一只实体)。
 
-**征询**是一个请求响应子协议(服务端记请求 → 主人客户端出卡 → 允许 / 允许并记住 / 拒绝附言 →
-答复回服务端;超时按拒绝)。模型看到的只有普通的工具结果和回执;征询的答复走任务回执,不新增
-事件种类(§四"核心代码永远不直接调 emitEvent"不变)。
+**征询**是一个请求响应子协议:登记处 `ConsentDesk` 挂在身体上,同一同伴同时一条、新的顶掉旧的;
+`ConsentRequestPayload` 推主人客户端出卡(聊天面板顶部可点、HUD 提示)→ 允许 / 允许并记住 /
+拒绝附言 → `ConsentReplyPayload` 回服务端(只认主人);主人离线或两分钟没答复按拒绝。等待期间
+同步调用悬着、后台任务站住,期限都不走表。模型看到的只有普通的工具结果和回执;征询的答复走
+任务回执,不新增事件种类(§四"核心代码永远不直接调 emitEvent"不变)。

@@ -8,8 +8,15 @@ import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.task.TaskRecord;
 import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.permission.Action;
+import com.dwinovo.numen.permission.ConsentAnswer;
+import com.dwinovo.numen.permission.ConsentDesk;
+import com.dwinovo.numen.permission.ConsentItem;
+import com.dwinovo.numen.permission.Permission;
+import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.task.TaskResult;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +91,11 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      */
     private TaskState pendingTerminal;
 
+    /** 在等主人答复的那张号;没在问是 null。 */
+    private ConsentDesk.Ticket consent;
+    /** 主人点头的那几次,回执末尾交代。 */
+    private final List<String> allowances = new ArrayList<>();
+
     // ---- sub-task composition state (see runChild) ----
     /** The child sub-goal currently being delegated to, or {@code null}. */
     private Task child;
@@ -135,15 +147,152 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
         // 链抢占时的 freezeTick 同一原则)。正常 tick 速率下一次搜索只有几刻,
         // 这里几乎不动;tick 远快于真实时间时(如不限速的测试服),没有这道
         // 冻结,任务会在第一次搜索返回前就被判 TIMEOUT。
-        if (nav != null && nav.planningInFlight()) {
+        // 等主人点头的刻同理:期限度量身体干活,主人想多久不是任务的错。
+        if ((nav != null && nav.planningInFlight()) || consent != null) {
             r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
         }
         try {
-            return onTick();
+            TaskState routeConsent = awaitRouteConsent();
+            return routeConsent != null ? routeConsent : onTick();
         } catch (RuntimeException e) {
             crashed("tick", e);
             return TaskState.FAILED;
         }
+    }
+
+    /**
+     * 导航扣着一段要问主人的路时,这一刻归征询:身体站住、问主人;答应了放行那段路接着跑
+     * {@link #onTick},拒绝了按 {@link FailureType#REFUSED} 收场。任何带导航的任务都一样,
+     * 不各写各的。
+     *
+     * @return 这一刻的终态或 RUNNING;不用等(没有扣着的路,或刚放行)时为 null
+     */
+    private TaskState awaitRouteConsent() {
+        if (nav == null) {
+            return null;
+        }
+        List<ConsentItem> needed = nav.consentNeeded();
+        if (needed.isEmpty()) {
+            return null;
+        }
+        InputDriver.halt(player);
+        ConsentAnswer answer = consult(needed, r.describe());
+        if (answer == null) {
+            return TaskState.RUNNING;
+        }
+        if (!answer.allowed()) {
+            fail(answer.refusal(needed), FailureType.REFUSED);
+            return TaskState.FAILED;
+        }
+        nav.consentGranted();
+        return null;
+    }
+
+    // ---------------------------------------------------------------------
+    // Permission — the task proposes actions; the permission layer decides
+    // ---------------------------------------------------------------------
+
+    /** 执行开始时一个动作过权限层的结论。 */
+    protected enum PermitState { ALLOWED, WAITING, REFUSED }
+
+    /**
+     * @param state   放行 / 在等主人 / 不许
+     * @param refusal 不许时回执的理由(规则、模式、外部强制的自述,或主人的原话);其余为空串
+     */
+    protected record Permit(PermitState state, String refusal) {
+        static final Permit ALLOWED = new Permit(PermitState.ALLOWED, "");
+        static final Permit WAITING = new Permit(PermitState.WAITING, "");
+
+        static Permit refused(String why) {
+            return new Permit(PermitState.REFUSED, why);
+        }
+    }
+
+    /**
+     * 执行开始:把要做的一个动作交给权限层。放行就做;拒绝就带着理由收场;要问就发起征询,
+     * 等待期间返回 WAITING(调用方让身体站住,每刻再调),主人答应后返回 ALLOWED——同一行规则
+     * 问出来的同一种东西从此在本任务内放行,不再问。任务自己不判能不能,只提出动作。
+     *
+     * @param reason 给主人看的原因
+     */
+    protected final Permit permit(Action action, String reason) {
+        return permitAll(List.of(action), reason).get(0);
+    }
+
+    /**
+     * 同 {@link #permit},一批动作一起:各自裁决,要问的合成一张征询卡,主人的答复对这一批里要问的
+     * 全部生效。结果与 {@code actions} 一一对应。
+     */
+    protected final List<Permit> permitAll(List<Action> actions, String reason) {
+        var gate = Permission.gateFor(player);
+        List<Permit> out = new ArrayList<>(actions.size());
+        List<ConsentItem> asks = new ArrayList<>();
+        List<Integer> askedAt = new ArrayList<>();
+        for (Action action : actions) {
+            Verdict verdict = gate.judgeLive(action, player.serverLevel());
+            switch (verdict.kind()) {
+                case ALLOW -> out.add(Permit.ALLOWED);
+                case DENY -> out.add(Permit.refused(verdict.reason()));
+                case ASK -> {
+                    askedAt.add(out.size());
+                    asks.add(ConsentItem.of(action, verdict));
+                    out.add(Permit.WAITING);
+                }
+            }
+        }
+        if (asks.isEmpty()) {
+            settleConsult();
+            return out;
+        }
+        ConsentAnswer answer = consult(asks, reason);
+        if (answer != null) {
+            Permit settled = answer.allowed() ? Permit.ALLOWED : Permit.refused(answer.refusal(asks));
+            for (int i : askedAt) {
+                out.set(i, settled);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 问主人一批事:第一次调用发起征询,之后每刻读结论;清单变了就重发(新的顶掉旧的)。
+     * 主人答应的清单由登记处记成本任务的授权,回执末尾交代。
+     *
+     * @return 结论;还在等是 null
+     */
+    protected final ConsentAnswer consult(List<ConsentItem> items, String reason) {
+        if (consent != null && !consent.request().items().equals(items)) {
+            consent = null;
+        }
+        if (consent == null) {
+            consent = ConsentDesk.of(player).ask(r, items, reason);
+        }
+        ConsentAnswer answer = consent.poll();
+        if (answer == null) {
+            return null;
+        }
+        consent = null;
+        if (answer.allowed()) {
+            allowances.add(answer.allowance(items));
+        }
+        return answer;
+    }
+
+    /**
+     * 要做的事此刻不用问了:主人刚答应(授权已经让裁决变成放行)就把这次允许记进回执;
+     * 还没答复就撤回挂着的征询。
+     */
+    private void settleConsult() {
+        if (consent == null) {
+            return;
+        }
+        ConsentAnswer answer = consent.poll();
+        if (answer == null) {
+            ConsentDesk.of(player).withdraw(consent);
+        } else if (answer.allowed()) {
+            allowances.add(answer.allowance(consent.request().items()));
+        }
+        consent = null;
     }
 
     /**
@@ -172,8 +321,9 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     @Override
     public final TaskResult result(TaskState finalState) {
         cleanup();
-        // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,拆了什么就说什么
-        String enRoute = journey.isEmpty() ? "" : " En route I had to " + journey.describe() + ".";
+        // 路上真动过的地形跟着每一种收场走:成功也好失败也罢,拆了什么就说什么;主人点过头的也说
+        String enRoute = (journey.isEmpty() ? "" : " En route I had to " + journey.describe() + ".")
+                + (allowances.isEmpty() ? "" : " " + String.join("; ", allowances) + ".");
         return switch (finalState) {
             case SUCCESS   -> TaskResult.ok(successMessage() + enRoute, resultData());
             case TIMEOUT   -> new TaskResult(false, timeoutMessage() + enRoute, true, false, resultData());

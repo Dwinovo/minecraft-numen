@@ -15,7 +15,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-/** {@code drop_items} on the player body — toss items forward, natively. One-tick. */
+/**
+ * {@code drop_items} on the player body — toss items forward, natively. One tick when the permission
+ * layer allows it; otherwise the call waits for the owner's answer.
+ */
 public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTaskRecord> {
 
     private int dropped;
@@ -37,6 +40,22 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
 
     @Override
     protected void onStart() {
+        tryDrop();
+    }
+
+    /**
+     * 丢之前交给权限层(出厂规则每次都问):放行就丢、当刻收场;要问就等主人点头,这次调用悬着;
+     * 不许就带着理由收场。
+     */
+    private TaskState tryDrop() {
+        Permit permit = permit(com.dwinovo.numen.permission.Action.drop(r.item), r.describe());
+        if (permit.state() == PermitState.WAITING) {
+            return TaskState.RUNNING;
+        }
+        if (permit.state() == PermitState.REFUSED) {
+            fail("did not drop " + r.label + ": " + permit.refusal(), FailureType.REFUSED);
+            return TaskState.FAILED;
+        }
         Inventory inv = player.getInventory();
         int have = PlayerInv.count(inv, r.item);
         dropped = Math.min(r.count, have);
@@ -59,11 +78,12 @@ public final class DropCompanionTask extends AbstractCompanionTask<DropItemsTask
         doneMessage = "dropped " + dropped + "x " + r.label
                 + (dropped < r.count ? " (only had " + dropped + ")" : "");
         succeed();   // work is done — finalize this same tick, before a Stop can mislabel it
+        return TaskState.SUCCESS;
     }
 
     @Override
     protected TaskState onTick() {
-        return TaskState.SUCCESS;
+        return tryDrop();
     }
 
     /** No nav / overlay to release. */

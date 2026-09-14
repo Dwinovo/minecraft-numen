@@ -39,6 +39,7 @@ import net.minecraft.core.BlockPos;
  *   <li>getToBlock → {@link GoalGetToBlock}(成员判定逐格一致;启发式
  *       形状不同——旧词表减"一步+一跳"松量,内核按修正 y 差估价)</li>
  *   <li>composite → {@link GoalComposite}(成员递归映射)</li>
+ *   <li>priced → {@link #wrap} 通用包装(估价、到达价逐点透传)</li>
  *   <li>mineColumn → GoalTwoBlocks 族:maxBelow=0 → {@link GoalBlock},
  *       =1 → {@link GoalTwoBlocks},≥2 → {@link GoalComposite}(双格 +
  *       逐格补 {@link GoalBlock}),成员集与站位带逐格一致</li>
@@ -154,6 +155,11 @@ public final class GoalAdapter {
         @Override
         public double heuristic(int x, int y, int z) {
             return delegate.heuristic(new BlockPos(x, y, z));
+        }
+
+        @Override
+        public double arrivalCost(int x, int y, int z) {
+            return delegate.arrivalCost(new BlockPos(x, y, z));
         }
 
         @Override

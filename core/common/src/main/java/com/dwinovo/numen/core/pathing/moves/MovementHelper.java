@@ -143,16 +143,32 @@ public final class MovementHelper {
 
     /**
      * 挖穿该格的成本(tick)。本就可穿行 → 0;流体 → INF;
-     * 禁挖 → INF;否则 1/速度 + 附加罚金,再乘上下文乘数。
+     * 禁挖 → INF;否则 1/速度 + 附加罚金,再乘上下文乘数(规格与权限层的定价)。
      * {@code includeFalling} 时向上递归叠加整根落沙柱的成本。
      */
     public static double getMiningDurationTicks(CalculationContext context, int x, int y, int z,
                                                 BlockState state, boolean includeFalling) {
+        return miningDuration(context, x, y, z, state, includeFalling, true);
+    }
+
+    /**
+     * 挖穿该格要多久,不问权限层:同 {@link #getMiningDurationTicks},乘数只取规格与总开关。
+     * 回答"这一格挖不挖得动",选挖什么的剪枝用它——许不许挖是执行开始时权限层的事。
+     */
+    public static double getUnpricedMiningDurationTicks(CalculationContext context, int x, int y, int z,
+                                                        BlockState state, boolean includeFalling) {
+        return miningDuration(context, x, y, z, state, includeFalling, false);
+    }
+
+    private static double miningDuration(CalculationContext context, int x, int y, int z,
+                                         BlockState state, boolean includeFalling, boolean priced) {
         if (!context.canWalkThrough(x, y, z, state)) {
             if (!state.getFluidState().isEmpty()) {
                 return COST_INF;
             }
-            double mult = context.breakCostMultiplierAt(x, y, z, state);
+            double mult = priced
+                    ? context.breakCostMultiplierAt(x, y, z, state)
+                    : context.terrainBreakMultiplierAt(x, y, z, state);
             if (mult >= COST_INF) {
                 return COST_INF;
             }
@@ -169,7 +185,7 @@ public final class MovementHelper {
             if (includeFalling) {
                 BlockState above = context.get(x, y + 1, z);
                 if (above.getBlock() instanceof FallingBlock) {
-                    result += getMiningDurationTicks(context, x, y + 1, z, above, true);
+                    result += miningDuration(context, x, y + 1, z, above, true, priced);
                 }
             }
             return result;

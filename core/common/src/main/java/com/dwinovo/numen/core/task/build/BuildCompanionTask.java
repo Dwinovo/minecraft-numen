@@ -101,7 +101,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             net.minecraft.world.level.block.Block.UPDATE_CLIENTS
                     | net.minecraft.world.level.block.Block.UPDATE_KNOWN_SHAPE;
 
-    private enum Phase { TRAVEL, WORK }
+    /** CONSENT:开工前整批问主人;TRAVEL:赴工地;WORK:施工。 */
+    private enum Phase { CONSENT, TRAVEL, WORK }
 
     private final BuildCellRules rules;
     private final BuildInventory inv;
@@ -186,6 +187,14 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     private String note = "done";
 
+    /** 开工前要问主人的清单(清的格与放的格里裁决为要问的)。 */
+    private List<com.dwinovo.numen.permission.ConsentItem> consentItems = List.of();
+    /** 清单涉及的目标格——主人拒绝时,这些格按"主人不让动"交代。 */
+    private final LongOpenHashSet consentCells = new LongOpenHashSet();
+    /** 主人拒绝了的目标格,与他的原话。 */
+    private final LongOpenHashSet ownerRefused = new LongOpenHashSet();
+    private String ownerWords = "";
+
     public BuildCompanionTask(NumenPlayer player, BuildTaskRecord record) {
         super(player, record);
         this.rules = new BuildCellRules(player, record);
@@ -267,11 +276,60 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
         rebuildOrder();
         computePace();
         passStartCompleted = r.completed();
+        collectConsent();
+        phase = consentItems.isEmpty() ? Phase.TRAVEL : Phase.CONSENT;
+    }
+
+    /**
+     * 施工前把要清的格与要放的格整批过一遍权限层,裁决为要问的合成一张卡。放行的照建;
+     * 不许的(规则、模式、外部强制)由 {@link BuildCellRules#blockedByMode} 照常跳过。
+     */
+    private void collectConsent() {
+        var gate = com.dwinovo.numen.permission.Permission.gateFor(player);
+        List<com.dwinovo.numen.permission.ConsentItem> items = new ArrayList<>();
+        for (BuildTaskRecord.Target target : r.targets) {
+            if (target.matches(rules.peek(target.pos()))
+                    || !r.replaceMode.allows(rules.peek(target.pos()), target.desiredState())
+                    || rules.hopeless(target)) {
+                continue;
+            }
+            for (com.dwinovo.numen.permission.Action action : rules.actionsFor(target)) {
+                var verdict = gate.judgeLive(action, player.serverLevel());
+                if (verdict.asks()) {
+                    items.add(com.dwinovo.numen.permission.ConsentItem.of(action, verdict));
+                    consentCells.add(target.pos().asLong());
+                }
+            }
+        }
+        consentItems = List.copyOf(items);
+    }
+
+    /**
+     * 等主人答复:身体站住。答应了——那些格从此是放行,重扫重排后开工;拒绝了——那些格仍不许,
+     * 施工照常跳过,收工时按"主人不让动"连同他的原话交代。
+     */
+    private TaskState tickConsent() {
+        InputDriver.halt(player);
+        var answer = consult(consentItems, r.describe());
+        if (answer == null) {
+            return TaskState.RUNNING;
+        }
+        if (!answer.allowed()) {
+            ownerRefused.addAll(consentCells);
+            ownerWords = answer.words();
+        }
+        consentItems = List.of();
+        rescanAll();
+        rebuildOrder();
         phase = Phase.TRAVEL;
+        return TaskState.RUNNING;
     }
 
     @Override
     protected TaskState onTick() {
+        if (phase == Phase.CONSENT) {
+            return tickConsent();
+        }
         // 蹲姿由施工分支决定并保持:落位只在批次刻发生,若每 tick 复位成站立,
         // 中间那些刻就会把她弹起来,看起来是在抖而不是在蹲着贴边放。
         player.setShiftKeyDown(phase == Phase.WORK && show.crouching());
@@ -289,6 +347,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         return switch (phase) {
+            case CONSENT -> tickConsent();
             case TRAVEL -> tickTravel();
             case WORK -> tickWork();
         };
@@ -918,10 +977,19 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             // 三种交代要并列,不能互相吃掉:此前 skippedFixtures 一非零就只报摆设,
             // 那句"有几格没动"被整段吞掉——两件事同时发生时回执只说一半。
             List<String> notes = new ArrayList<>();
-            if (skippedCells > 0) {
-                // 不说"全对上了"——有格子我们主动没动,得说清有几格、为什么
-                notes.add("left " + skippedCells + " cell(s) alone: what is there needs the owner's "
-                        + "consent to move, or the spot cannot be built on");
+            // 不说"全对上了"——有格子我们主动没动,得说清有几格、为什么;主人不让动的单说
+            int refusedByOwner = 0;
+            for (long cell : ownerRefused) {
+                if (skippedPos.contains(cell)) {
+                    refusedByOwner++;
+                }
+            }
+            if (refusedByOwner > 0) {
+                notes.add("left " + refusedByOwner + " cell(s) alone because the owner said no: " + ownerWords);
+            }
+            if (skippedCells > refusedByOwner) {
+                notes.add("left " + (skippedCells - refusedByOwner) + " cell(s) alone: what is there may not"
+                        + " be moved, or the spot cannot be built on");
             }
             if (r.droppedAtLoad() > 0) {
                 notes.add(r.droppedAtLoad() + " cell(s) of the blueprint were dropped on load"

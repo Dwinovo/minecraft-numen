@@ -119,6 +119,22 @@ public interface NavGoal {
     }
 
     /**
+     * 路停在 {@code feet} 之后还要付的价钱(tick),默认 0——见内核 {@code Goal#arrivalCost}。
+     * 只对 {@link #isAt} 成立的格有意义。
+     */
+    default double arrivalCost(BlockPos feet) {
+        return 0;
+    }
+
+    /**
+     * 到了 {@code inner} 之后还要付 {@code cost}:估价加上它(仍是乐观下界),到达价就是它。复合目标的
+     * 成员各带各的价,搜索按"走过去 + 到了再付"挑——挖矿按挖掘的定价挑先挖哪一块。
+     */
+    static NavGoal priced(NavGoal inner, double cost) {
+        return new Priced(inner, cost);
+    }
+
+    /**
      * 环形站位:离 {@code pos} 在 {@code [inner, outer]} 之间。
      *
      * <p>它给的不只是到达条件,更是<b>估价</b>:到<b>带</b>的距离,两侧都朝带递减。
@@ -557,8 +573,55 @@ public interface NavGoal {
             return min;
         }
 
+        /** 停在这一格满足的那些成员里最便宜的到达价。 */
+        @Override public double arrivalCost(BlockPos feet) {
+            double min = Double.MAX_VALUE;
+            for (NavGoal g : members) {
+                if (g.isAt(feet)) {
+                    min = Math.min(min, g.arrivalCost(feet));
+                }
+            }
+            return min == Double.MAX_VALUE ? 0 : min;
+        }
+
         @Override public BlockPos center() {
             return centroid;
+        }
+    }
+
+    /** {@link #priced} 的产物。 */
+    final class Priced implements NavGoal {
+        public final NavGoal inner;
+        public final double cost;
+
+        Priced(NavGoal inner, double cost) {
+            this.inner = inner;
+            this.cost = cost;
+        }
+
+        @Override public boolean isAt(BlockPos feet) {
+            return inner.isAt(feet);
+        }
+
+        @Override public double heuristic(BlockPos from) {
+            return inner.heuristic(from) + cost;
+        }
+
+        /** 进度只问离得近了没有,不掺价钱。 */
+        @Override public double progressHeuristic(BlockPos from) {
+            return inner.progressHeuristic(from);
+        }
+
+        @Override public double arrivalCost(BlockPos feet) {
+            return cost;
+        }
+
+        @Override public BlockPos center() {
+            return inner.center();
+        }
+
+        @Override public String toString() {
+            return "Priced{" + inner + " +" + cost + "}";
         }
     }
 

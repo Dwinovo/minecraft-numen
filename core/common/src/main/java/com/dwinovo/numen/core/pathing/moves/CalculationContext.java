@@ -308,30 +308,33 @@ public class CalculationContext {
     }
 
     /**
-     * 挖 (x,y,z) 的成本乘数。三层禁令,从严到宽:
-     * <ol>
-     *   <li>规格按位置禁挖(导航自身目标格、工地格)与按种类禁挖(模型点名的方块)
-     *       永远 INF,任何开关都不可穿透;</li>
-     *   <li>权限层的裁决(见 {@link #permissionMultiplier}):拒绝 → INF;需要主人同意 →
-     *       {@link RouteSpec.Alter#ANY} 下有限价、否则 INF;</li>
-     *   <li>规格不改地形、或总开关 {@code allowBreak} 关闭,且不在例外清单 → INF。</li>
-     * </ol>
+     * 挖 (x,y,z) 的成本乘数:这次导航的规格允不允许({@link #terrainBreakMultiplierAt}),再乘权限层的
+     * 定价({@link #permissionMultiplier}:放行 1;需要主人同意在 {@link RouteSpec.Alter#ANY} 下有限价、
+     * 否则 INF;拒绝 INF)。
      */
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
+        if (terrainBreakMultiplierAt(x, y, z, current) >= COST_INF) {
+            return COST_INF;
+        }
+        return permissionMultiplier(Action.breakBlock(new BlockPos(x, y, z), current));
+    }
+
+    /**
+     * 挖 (x,y,z) 在这次导航的规格与服主总开关之下做不做得到,不问权限层:规格按位置禁挖(导航自身
+     * 目标格、工地格)、按种类禁挖(模型点名的方块)、规格不改地形或总开关 {@code allowBreak} 关闭
+     * 且不在例外清单 → INF;否则 1。
+     */
+    public double terrainBreakMultiplierAt(int x, int y, int z, BlockState current) {
         if (spec.positions().dig(BlockPos.asLong(x, y, z)) >= COST_INF) {
             return COST_INF;
         }
         if (spec.bans().breaking().contains(current.getBlock())) {
             return COST_INF;
         }
-        double permitted = permissionMultiplier(Action.breakBlock(new BlockPos(x, y, z), current));
-        if (permitted >= COST_INF) {
-            return COST_INF;
-        }
         if (!allowBreak && !allowBreakAnyway.contains(current.getBlock())) {
             return COST_INF;
         }
-        return permitted;
+        return 1;
     }
 
     /**

@@ -17,8 +17,6 @@ import com.dwinovo.numen.core.task.chain.MobDefenseChain;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.permission.Action;
-import com.dwinovo.numen.permission.Permission;
-import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.task.TaskState;
 
 import net.minecraft.core.BlockPos;
@@ -196,6 +194,10 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         AttackPlan.Move move = AttackPlan.decide(field, lastMove);
         lastMove = move;
         logMove(move, field);
+        if (move.action() == AttackPlan.Action.DONE && awaitingOwner) {
+            InputDriver.halt(player);   // 没别的可打,等主人点头
+            return TaskState.RUNNING;
+        }
 
         Entity chosen = move.foeId() == AttackPlan.NO_FOE ? null : liveEntity(move.foeId());
         if (chosen != target) {
@@ -237,20 +239,35 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
      * <p>点名模式下"被授权"是模型给的那份清单;无差别模式下是"这一刻在追我的"——会分裂的怪
      * 裂出来的新 id 因此自动进场,而点名的清单一裂开就作废了。
      *
-     * <p>进场之前先过权限层:宠物、有名字的、村民,主人没点头就不在局面里——攻击层"够得着就打"
-     * 只看局面,所以门必须开在这里,一处。被拒的记进账本,回执说清是谁、为什么。
+     * <p>进场之前先过权限层({@link #cleared}):攻击层"够得着就打"只看局面,所以门必须开在这里,
+     * 一处。要问的这一刻不进局面,一张卡问主人,主人点头下一刻进场;不许的记进账本,回执说清是谁、
+     * 为什么。自卫换目标时新冒出来的要问的,同样再问。
      */
     private Battlefield surveyField() {
         hostiles = Menace.hostilesAround(player, FIELD_RADIUS);
-        List<Battlefield.Foe> foes = new ArrayList<>();
+        List<Entity> candidates = new ArrayList<>();
         for (var mob : hostiles) {
             boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
             boolean authorized = r.indiscriminate ? engaging : r.entityIds.contains(mob.getId());
             if (authorized && !r.terminal(mob.getId())) {
-                Verdict verdict = Permission.judge(player, Action.attack(mob));
-                if (!verdict.allowed()) {
-                    r.refused(mob.getId(), verdict.reason());
+                candidates.add(mob);
+            }
+        }
+        if (!r.indiscriminate) {
+            for (int id : r.entityIds) {
+                Entity e = r.terminal(id) ? null : liveEntity(id);
+                if (e != null && !candidates.contains(e)) {
+                    candidates.add(e);
                 }
+            }
+        }
+        java.util.Set<Integer> cleared = cleared(candidates);
+        List<Battlefield.Foe> foes = new ArrayList<>();
+        for (var mob : hostiles) {
+            boolean engaging = mob.getTarget() == player || mob == player.getLastHurtByMob();
+            boolean authorized = r.indiscriminate ? engaging : r.entityIds.contains(mob.getId());
+            if (authorized && !r.terminal(mob.getId()) && !cleared.contains(mob.getId())) {
+                authorized = false;   // 在等主人点头:在场,但这一刻不是目标
             }
             if (r.terminal(mob.getId())) {
                 // 打完了、丢了、走不到又射不到、或者不许打的:<b>整只移出局面</b>。留着当"还有
@@ -274,12 +291,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                     continue;
                 }
                 Entity e = liveEntity(id);
-                if (e != null) {
-                    Verdict verdict = Permission.judge(player, Action.attack(e));
-                    if (!verdict.allowed()) {
-                        r.refused(id, verdict.reason());
-                        continue;
-                    }
+                if (e != null && cleared.contains(id)) {
                     foes.add(new Battlefield.Foe(id, player.distanceTo(e),
                             Menace.explodes(e), Menace.armed(e),
                             false, reachable(id), true));
@@ -293,6 +305,34 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
                 loadout.hasMelee(), loadout.hasRanged(),
                 retreatFailures >= MAX_RETREAT_FAILURES, foes);
     }
+
+    /**
+     * 这一批要打的交给权限层:放行的进场;要问的合成一张卡、等主人答复期间不进场;不许的(主人拒绝、
+     * 规则、模式、外部强制)记进账本,从此不在局面里。
+     *
+     * @return 这一刻放行的实体 id
+     */
+    private java.util.Set<Integer> cleared(List<Entity> candidates) {
+        List<Action> attacks = new ArrayList<>(candidates.size());
+        for (Entity e : candidates) {
+            attacks.add(Action.attack(e));
+        }
+        List<Permit> permits = permitAll(attacks, r.describe());
+        java.util.Set<Integer> cleared = new java.util.HashSet<>();
+        awaitingOwner = false;
+        for (int i = 0; i < candidates.size(); i++) {
+            int id = candidates.get(i).getId();
+            switch (permits.get(i).state()) {
+                case ALLOWED -> cleared.add(id);
+                case REFUSED -> r.refused(id, permits.get(i).refusal());
+                case WAITING -> awaitingOwner = true;
+            }
+        }
+        return cleared;
+    }
+
+    /** 这一刻有要打的在等主人点头:局面里没别的可打也不收场。 */
+    private boolean awaitingOwner;
 
     private static boolean containsId(List<Battlefield.Foe> foes, int id) {
         for (var f : foes) {
