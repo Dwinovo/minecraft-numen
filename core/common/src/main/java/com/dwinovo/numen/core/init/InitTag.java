@@ -12,8 +12,9 @@ import net.minecraft.world.level.block.Block;
  * pathfinder and the loader-side data generators both reference the constants
  * here so the key's identifier exists in one place only — rename or repath in
  * this file and every consumer follows. These are core's tags (namespace
- * {@code numen}), not the engine's: pathfinding scaffolding and protected blocks
- * are tool-pack concerns.
+ * {@code numen}), not the engine's: pathfinding scaffolding and blueprint safety
+ * are tool-pack concerns. Which blocks the body may break is not a tag — that is
+ * the permission layer's rule table ({@code com.dwinovo.numen.permission}).
  *
  * <h2>Why not derive at runtime</h2>
  * Tags are referenced from pathfinder hot paths where a fresh
@@ -38,18 +39,6 @@ public final class InitTag {
      * {@code data/numen/tags/item/scaffolds.json}.
      */
     public static final TagKey<Item> SCAFFOLDS = item("scaffolds");
-
-    /**
-     * Blocks the pathfinder must never break while travelling — the player's
-     * functional/valuable furniture. Any block in this tag gets {@code COST_INF},
-     * so it's routed around (and a {@code goto} onto one relaxes to "stand
-     * adjacent" rather than digging it). This tag carries the no-BlockEntity work
-     * stations (crafting table, stonecutter, smithing table, …) that the
-     * BlockEntity proxy can't catch; container blocks are still covered by that
-     * proxy on top. Datapack-driven so packs extend it freely — see
-     * {@code data/numen/tags/block/do_not_break.json}.
-     */
-    public static final TagKey<Block> DO_NOT_BREAK = block("do_not_break");
 
     /**
      * Blocks whose block-entity data a blueprint may carry into the world — sign

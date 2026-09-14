@@ -30,7 +30,7 @@
  *   <li>{@code settings/} —— 引擎与服主参数({@code NavSettings}:总开关、搜索预算、
  *       执行参数);模型该碰的旋钮在 {@code spec/}。</li>
  *   <li>{@code util/} —— 任务层与挖掘器共用的方块工具({@code BlockHelper}:脚位、
- *       可收获、硬禁挖)与离线可答的方块实体视图接口({@code BlockEntityAware})。</li>
+ *       可收获)。这一格许不许动不在本包判,问权限层({@code com.dwinovo.numen.permission})。</li>
  * </ul>
  *
  * <p>对外契约(目标态):任务层只经 {@code execute.PlayerNav} +

@@ -32,20 +32,6 @@ public final class BuildTaskRecord extends TaskRecord {
      * 中间两档已经实现并受测,等图纸层把档位开放给玩家时直接可用。
      */
     public final ReplaceMode replaceMode;
-    /**
-     * 允许盖掉<b>带方块实体</b>的方块吗——默认不允许。
-     *
-     * <p>箱子、木桶、熔炉、告示牌、酿造台都带方块实体,而它们往里装着玩家的东西。
-     * 让路的档位管的是"石头挡路要不要顶掉",这一条管的是"玩家的箱子要不要动",
-     * 两件事的答案不该绑在一起:少砌一格墙是遗憾,清掉一箱子东西是事故。
-     *
-     * <p>双格方块要连另一半一起看:床的另一半、门的上半,任一半带方块实体就都不动。
-     *
-     * <p>与让路的中间两档一样,当前两条工具入口都发 {@code false}(保护),开放给
-     * 玩家是后面版本的事。留成构造参数而不是硬编码的常量,是为了别把一个恒假的
-     * 分支伪装成可配开关——读代码的人会以为它有别的取值。
-     */
-    public final boolean replaceBlockEntities;
     public final boolean replaceExisting;
     /** 是否消耗背包材料:随能力画像而定(创造免耗材,生存逐格真扣)。 */
     public final boolean consumeMaterials;
@@ -126,17 +112,7 @@ public final class BuildTaskRecord extends TaskRecord {
                            ReplaceMode replaceMode, boolean replaceExisting,
                            boolean consumeMaterials, boolean allowPartial,
                            Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities) {
-        this(toolCallId, deadlineGameTime, targets, replaceMode, replaceExisting,
-                consumeMaterials, allowPartial, blockEntityData, entities, false);
-    }
-
-    public BuildTaskRecord(String toolCallId, long deadlineGameTime, List<Target> targets,
-                           ReplaceMode replaceMode, boolean replaceExisting,
-                           boolean consumeMaterials, boolean allowPartial,
-                           Map<Long, CompoundTag> blockEntityData, List<EntitySpawn> entities,
-                           boolean replaceBlockEntities) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
-        this.replaceBlockEntities = replaceBlockEntities;
         this.entities = List.copyOf(entities);
         this.targets = promotePlainCells(targets, blockEntityData);
         this.replaceMode = replaceMode;

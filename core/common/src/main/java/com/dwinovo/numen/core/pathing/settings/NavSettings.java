@@ -8,7 +8,6 @@ import java.util.Map;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 
 /**
  * 地面寻路的引擎与服主参数:总开关(天花板)、搜索预算、分段与执行参数、
@@ -89,8 +88,6 @@ public final class NavSettings {
     public boolean goalBreakFromAbove = false;
     /** 分层建造中当前层没有可执行动作时是否跳到下一层。 */
     public boolean skipFailedLayers = false;
-    /** 受保护方块的挖掘速度乘数(0.1 即成本 ×10)。 */
-    public double avoidBreakingMultiplier = 0.1;
     /** 启用生物/刷怪笼规避(默认关,关闭时 Favoring 不叠规避球)。 */
     public boolean avoidance = false;
     /** 刷怪笼规避系数(>1 规避,<1 主动靠近)。 */
@@ -197,21 +194,11 @@ public final class NavSettings {
 
     // ==================== 方块 / 物品清单(懒加载,首次访问才触碰注册表) ====================
 
-    private List<Block> blocksToAvoidBreaking;
     private List<Block> allowBreakAnyway;
     private List<Block> buildIgnoreBlocks;
     private List<Block> okIfAir;
     private List<String> buildIgnoreProperties;
     private Map<Block, List<Block>> buildValidSubstitutes;
-
-    /** 尽量不挖的功能方块:挖掘成本乘 1/{@link #avoidBreakingMultiplier}。 */
-    public List<Block> blocksToAvoidBreaking() {
-        if (blocksToAvoidBreaking == null) {
-            blocksToAvoidBreaking = new ArrayList<>(List.of(
-                    Blocks.CRAFTING_TABLE, Blocks.FURNACE, Blocks.CHEST, Blocks.TRAPPED_CHEST));
-        }
-        return blocksToAvoidBreaking;
-    }
 
     /** {@link #allowBreak} 关闭时仍允许挖掘的例外方块。 */
     public List<Block> allowBreakAnyway() {

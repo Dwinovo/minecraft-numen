@@ -1,6 +1,5 @@
 package com.dwinovo.numen.core.pathing.cache;
 
-import com.dwinovo.numen.core.pathing.util.BlockEntityAware;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.BlockGetter;
@@ -28,7 +27,7 @@ import net.minecraft.world.level.material.FluidState;
  * <p>Single-threaded per instance: one search runs on one worker, so the mutable
  * {@link #prev} needs no synchronisation.
  */
-public final class CachedNavView implements BlockGetter, BlockEntityAware {
+public final class CachedNavView implements BlockGetter {
 
     private static final BlockState AIR = Blocks.AIR.defaultBlockState();
 
@@ -93,14 +92,10 @@ public final class CachedNavView implements BlockGetter, BlockEntityAware {
     }
 
     @Override
-    public boolean hasBlockEntity(BlockPos pos) {
-        return loaded.hasBlockEntity(pos);   // from the main-thread snapshot — safe off-thread
-    }
-
-    @Override
     public BlockEntity getBlockEntity(BlockPos pos) {
-        // Can't reconstruct a live block entity off-thread. The only search-path caller, the don't-grief
-        // check, now goes through hasBlockEntity instead, so returning null here is safe.
+        // Can't read a live block entity off-thread. Whether a cell HAS one is a property of its
+        // BlockState (the permission layer's block_entity signal reads that); contents are only
+        // read on the main thread.
         return null;
     }
 

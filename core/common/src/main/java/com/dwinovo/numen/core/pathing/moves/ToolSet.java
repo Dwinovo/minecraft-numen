@@ -48,23 +48,14 @@ public class ToolSet {
     /** 构造时的手持槽位(autoTool 关闭的成本口径用)。 */
     private final int selectedSlot;
 
-    /** true 时功能方块保护乘数失效(强制破坏语义)。 */
-    private final boolean ignoreBreakingProtection;
-
     // 构造时取样的设置(计算中途改设置不影响本次搜索)
     private final boolean autoTool;
     private final boolean useSwordToMine;
     private final boolean itemSaver;
     private final int itemSaverThreshold;
-    private final List<Block> blocksToAvoidBreaking;
-    private final double avoidBreakingMultiplier;
 
     public ToolSet(ServerPlayer player) {
-        this(player, false);
-    }
-
-    public ToolSet(ServerPlayer player, boolean ignoreBreakingProtection) {
-        this(snapshotHotbar(player), player.getInventory().selected, ignoreBreakingProtection,
+        this(snapshotHotbar(player), player.getInventory().selected,
                 NavSettings.get().considerPotionEffects ? potionAmplifier(player) : 1.0);
     }
 
@@ -72,20 +63,16 @@ public class ToolSet {
      * 快照直构(线程安全冒烟测试与自备快照的调用方用):调用方给出
      * 快捷栏九格(应为不再被改写的副本)、选中槽位与药水修正倍率。
      */
-    public ToolSet(ItemStack[] hotbarSnapshot, int selectedSlot,
-                   boolean ignoreBreakingProtection, double potionAmplifier) {
+    public ToolSet(ItemStack[] hotbarSnapshot, int selectedSlot, double potionAmplifier) {
         this.breakStrengthCache = new HashMap<>();
         this.hotbar = hotbarSnapshot.clone();
         this.selectedSlot = selectedSlot;
-        this.ignoreBreakingProtection = ignoreBreakingProtection;
 
         NavSettings settings = NavSettings.get();
         this.autoTool = settings.autoTool;
         this.useSwordToMine = settings.useSwordToMine;
         this.itemSaver = settings.itemSaver;
         this.itemSaverThreshold = settings.itemSaverThreshold;
-        this.blocksToAvoidBreaking = List.copyOf(settings.blocksToAvoidBreaking());
-        this.avoidBreakingMultiplier = settings.avoidBreakingMultiplier;
 
         if (potionAmplifier != 1.0) {
             Function<Double, Double> amplify = x -> potionAmplifier * x;
@@ -209,21 +196,10 @@ public class ToolSet {
         return best;
     }
 
-    /** 用最优槽位工具挖该方块的速度(已乘保护方块修正)。 */
+    /** 用最优槽位工具挖该方块的速度。能不能挖不在这里判,那是权限层的事。 */
     private double getBestDestructionTime(Block b) {
         ItemStack stack = hotbar[getBestSlot(b, false, true)];
-        return calculateSpeedVsBlock(stack, b.defaultBlockState()) * avoidanceMultiplier(b);
-    }
-
-    /**
-     * 受保护功能方块(工作台/熔炉/箱子等)速度乘 0.1,
-     * 即挖掘成本 ×10;强制破坏语义下失效。
-     */
-    private double avoidanceMultiplier(Block b) {
-        if (ignoreBreakingProtection) {
-            return 1;
-        }
-        return blocksToAvoidBreaking.contains(b) ? avoidBreakingMultiplier : 1;
+        return calculateSpeedVsBlock(stack, b.defaultBlockState());
     }
 
     /**

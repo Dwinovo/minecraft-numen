@@ -2,7 +2,6 @@ package com.dwinovo.numen.core.pathing.cache;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceKey;
@@ -115,7 +114,6 @@ public final class PathCaches {
      *  level (non-blocking — unloaded chunks are simply absent → the reader sees AIR). */
     private static LoadedChunks snapshot(ServerLevel level, List<BlockPos> feet) {
         Long2ObjectOpenHashMap<LevelChunk> map = new Long2ObjectOpenHashMap<>();
-        LongOpenHashSet blockEntities = new LongOpenHashSet();
         for (BlockPos f : feet) {
             int ccx = SectionPos.blockToSectionCoord(f.getX());
             int ccz = SectionPos.blockToSectionCoord(f.getZ());
@@ -128,14 +126,11 @@ public final class PathCaches {
                         LevelChunk chunk = level.getChunkSource().getChunkNow(cx, cz);
                         if (chunk != null) {
                             map.put(key, chunk);
-                            for (BlockPos bePos : chunk.getBlockEntities().keySet()) {
-                                blockEntities.add(bePos.asLong());
-                            }
                         }
                     }
                 }
             }
         }
-        return new LoadedChunks(map, blockEntities);
+        return new LoadedChunks(map);
     }
 }
