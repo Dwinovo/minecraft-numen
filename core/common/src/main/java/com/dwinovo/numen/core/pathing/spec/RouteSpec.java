@@ -1,6 +1,9 @@
 package com.dwinovo.numen.core.pathing.spec;
 
 import java.util.Arrays;
+import java.util.Set;
+
+import net.minecraft.world.level.block.Block;
 
 import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
 
@@ -11,7 +14,8 @@ import static com.dwinovo.numen.core.pathing.moves.ActionCosts.COST_INF;
  *   <li><b>能力开关与上限</b>——这一格能不能做这种动作:改地形({@link Alter})、疾跑、
  *       跑酷、斜向上下、向下挖、攀藤;最大落差、一条路最多改几格;</li>
  *   <li><b>每类代价</b>——{@link CellClass} 到代价的表,{@link #FORBID} 即排除;</li>
- *   <li><b>按位置</b>——{@link PositionCosts};</li>
+ *   <li><b>按位置与按种类</b>——{@link PositionCosts}(不看方块看坐标),以及
+ *       {@link BlockBans}(不看坐标看方块:这些种类不挖、不往里放、不踩);</li>
  *   <li><b>动作代价</b>——放置、挖掘附加、跳跃、涉水四项惩罚,外加默认关的每格噪声。</li>
  * </ol>
  *
@@ -56,13 +60,33 @@ public final class RouteSpec {
     private final double jumpPenalty;
     private final double wadePenalty;
     private final double noise;
+    private final BlockBans bans;
+
+    /**
+     * 按方块种类的禁令,与 {@link PositionCosts} 互补:位置表回答"这一格",这张表回答
+     * "这一种"。三栏各自独立——不挖这些(箱子、原木)、不往这些格里放(水源、高草)、
+     * 不踩这些(耕地、作物)。标签展开成成员后存,搜索热路径只做集合查询。
+     */
+    public record BlockBans(Set<Block> breaking, Set<Block> placingInto, Set<Block> standingOn) {
+        public static final BlockBans EMPTY = new BlockBans(Set.of(), Set.of(), Set.of());
+
+        public BlockBans {
+            breaking = Set.copyOf(breaking);
+            placingInto = Set.copyOf(placingInto);
+            standingOn = Set.copyOf(standingOn);
+        }
+
+        public boolean isEmpty() {
+            return breaking.isEmpty() && placingInto.isEmpty() && standingOn.isEmpty();
+        }
+    }
 
     private RouteSpec(Alter alter, boolean sprint, boolean parkour, boolean parkourPlace,
                       boolean parkourAscend, boolean diagonalAscend, boolean diagonalDescend,
                       boolean downward, boolean climbVines, boolean strictLiquidCheck,
                       int maxFallHeightNoWater, int maxAlterations, double[] cellCosts,
                       PositionCosts positions, double placeCost, double breakPenalty,
-                      double jumpPenalty, double wadePenalty, double noise) {
+                      double jumpPenalty, double wadePenalty, double noise, BlockBans bans) {
         this.alter = alter;
         this.sprint = sprint;
         this.parkour = parkour;
@@ -82,12 +106,13 @@ public final class RouteSpec {
         this.jumpPenalty = jumpPenalty;
         this.wadePenalty = wadePenalty;
         this.noise = noise;
+        this.bans = bans;
     }
 
     private static final RouteSpec DEFAULTS = new RouteSpec(
             Alter.NONE, true, false, false, true, false, false, true, false, false,
             3, Integer.MAX_VALUE, defaultCellCosts(), PositionCosts.EMPTY,
-            20.0, 30.0, 2.0, 3.0, 0.0);
+            20.0, 30.0, 2.0, 3.0, 0.0, BlockBans.EMPTY);
 
     /**
      * 出厂规格:只走不改,可疾跑、可跑酷跳上高一格、可原地向下挖;不跑酷平跳、不斜向上下、
@@ -177,6 +202,12 @@ public final class RouteSpec {
         return positions;
     }
 
+    // ==================== 按种类 ====================
+
+    public BlockBans bans() {
+        return bans;
+    }
+
     // ==================== 动作代价 ====================
 
     /** 放置一个方块的罚金(省方块,不鼓励乱放)。 */
@@ -210,84 +241,84 @@ public final class RouteSpec {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withSprint(boolean sprint) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withParkour(boolean parkour) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withParkourPlace(boolean parkourPlace) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withParkourAscend(boolean parkourAscend) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withDiagonalAscend(boolean diagonalAscend) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withDiagonalDescend(boolean diagonalDescend) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withDownward(boolean downward) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withClimbVines(boolean climbVines) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withStrictLiquidCheck(boolean strictLiquidCheck) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withMaxFallHeightNoWater(int maxFallHeightNoWater) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withMaxAlterations(int maxAlterations) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withCellCost(CellClass cls, double cost) {
@@ -296,48 +327,55 @@ public final class RouteSpec {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, costs, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withPositions(PositionCosts positions) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withPlaceCost(double placeCost) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withBreakPenalty(double breakPenalty) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withJumpPenalty(double jumpPenalty) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withWadePenalty(double wadePenalty) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
     }
 
     public RouteSpec withNoise(double noise) {
         return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
                 diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
                 maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
-                wadePenalty, noise);
+                wadePenalty, noise, bans);
+    }
+
+    public RouteSpec withBans(BlockBans bans) {
+        return new RouteSpec(alter, sprint, parkour, parkourPlace, parkourAscend, diagonalAscend,
+                diagonalDescend, downward, climbVines, strictLiquidCheck, maxFallHeightNoWater,
+                maxAlterations, cellCosts, positions, placeCost, breakPenalty, jumpPenalty,
+                wadePenalty, noise, bans);
     }
 }

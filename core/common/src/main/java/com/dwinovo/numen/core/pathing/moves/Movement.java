@@ -366,7 +366,7 @@ public abstract class Movement {
     }
 
     /** 执行期"顺手"的放置(跑酷落点补块)只在规格允许改地形时做。 */
-    protected boolean mayAlterTerrain() {
+    protected boolean alterAllowed() {
         return spec.alter().mayAlter();
     }
 

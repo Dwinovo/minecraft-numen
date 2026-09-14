@@ -69,6 +69,10 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
         int numNodes = 0;
         int numEmptyChunk = 0;
         boolean isFavoring = !favoring.isEmpty();
+        // 按位置的代价表:踩(stand)与穿(pass)两栏在这里叠加到落点——规划查询给上一条路的
+        // 格子加价出备选就靠它;FORBID 的格早在移动原语的可站/可穿判定里排除了
+        com.dwinovo.numen.core.pathing.spec.PositionCosts positions = calcContext.spec.positions();
+        boolean hasPositional = !positions.isEmpty();
         int timeCheckInterval = 1 << 6;
         // 循环前取样全部设置:计算中途改设置不改变本次搜索的行为
         int pathingMaxChunkBorderFetch = NavSettings.get().pathingMaxChunkBorderFetch;
@@ -138,6 +142,10 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                 if (isFavoring) {
                     // 折扣乘在动作成本上,按目的格哈希
                     actionCost *= favoring.calculate(hashCode);
+                }
+                if (hasPositional) {
+                    long cell = BlockPos.asLong(res.x, res.y, res.z);
+                    actionCost += positions.stand(cell) + positions.pass(cell);
                 }
                 PathNode neighbor = getNodeAtPosition(res.x, res.y, res.z, hashCode);
                 double tentativeCost = currentNode.cost + actionCost;

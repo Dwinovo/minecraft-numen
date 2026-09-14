@@ -265,7 +265,7 @@ public class MovementParkour extends Movement {
         } else if (!feet.equals(src)) {
             if (feet.equals(src.relative(direction)) || player.getY() - src.getY() > 0.0001) {
                 // 已跳出第一格或已离地
-                if (mayAlterTerrain()
+                if (alterAllowed()
                         && MovementPlacement.selectForLocation(player, dest.below(), false)
                         && !CellClass.canWalkOn(player.level(), dest.below(), spec)
                         && !player.onGround()

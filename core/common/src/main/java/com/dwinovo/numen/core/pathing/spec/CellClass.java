@@ -233,6 +233,9 @@ public enum CellClass {
         if (!positions.isEmpty() && positions.stand(BlockPos.asLong(x, y, z)) >= RouteSpec.FORBID) {
             return false;
         }
+        if (spec.bans().standingOn().contains(state.getBlock())) {
+            return false;
+        }
         switch (cls) {
             case GROUND, STAIRS, LADDER, BOTTOM_SLAB:
                 return true;

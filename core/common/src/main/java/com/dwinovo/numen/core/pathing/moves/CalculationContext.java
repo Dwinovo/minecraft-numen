@@ -261,8 +261,8 @@ public class CalculationContext {
     // ==================== 成本函数 ====================
 
     /**
-     * 在 (x,y,z) 放一个方块的成本。无耗材、规格按位置禁放、贴着世界边界(边界格无法
-     * 右键贴放)、流体规则不许 → INF;否则放置罚金加该格的位置代价。
+     * 在 (x,y,z) 放一个方块的成本。无耗材、规格按位置或按种类禁放、贴着世界边界(边界格
+     * 无法右键贴放)、流体规则不许 → INF;否则放置罚金加该格的位置代价。
      */
     public double costOfPlacingAt(int x, int y, int z, BlockState current) {
         if (!hasThrowaway) { // 构造时已含规格与 allowPlace 判定
@@ -270,6 +270,9 @@ public class CalculationContext {
         }
         double positional = spec.positions().place(BlockPos.asLong(x, y, z));
         if (positional >= COST_INF) {
+            return COST_INF;
+        }
+        if (spec.bans().placingInto().contains(current.getBlock())) {
             return COST_INF;
         }
         if (!MovementHelper.placeableWithinBorder(worldBorder, x, z)) {
@@ -289,9 +292,10 @@ public class CalculationContext {
     private final BlockPos.MutableBlockPos protectionCursor = new BlockPos.MutableBlockPos();
 
     /**
-     * 挖 (x,y,z) 的成本乘数。三层禁令,从严到宽:
+     * 挖 (x,y,z) 的成本乘数。四层禁令,从严到宽:
      * <ol>
-     *   <li>规格按位置禁挖(导航自身目标格、工地格)永远 INF,任何开关都不可穿透;</li>
+     *   <li>规格按位置禁挖(导航自身目标格、工地格)与按种类禁挖(模型点名的方块)
+     *       永远 INF,任何开关都不可穿透;</li>
      *   <li>do_not_break 标签成员(默认设施类:床/门/活板门/栅栏门,
      *       数据包可追加)直接 INF,任何开关都不可解除;</li>
      *   <li>规格不改地形、或总开关 {@code allowBreak} 关闭,且不在例外清单 → INF。</li>
@@ -302,6 +306,9 @@ public class CalculationContext {
      */
     public double breakCostMultiplierAt(int x, int y, int z, BlockState current) {
         if (spec.positions().dig(BlockPos.asLong(x, y, z)) >= COST_INF) {
+            return COST_INF;
+        }
+        if (spec.bans().breaking().contains(current.getBlock())) {
             return COST_INF;
         }
         if (BlockHelper.shouldAvoidBreaking(view, protectionCursor.set(x, y, z))) {

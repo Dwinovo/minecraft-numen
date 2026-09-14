@@ -136,6 +136,19 @@ public final class NavSettings {
      */
     public int maxNodesPerSearch = 2_000_000;
 
+    // ==================== 规划查询 ====================
+
+    /**
+     * 出备选路线的惩罚倍率:上一条路踩过的每一格,踩价按它计(附加 (倍率-1)×单格步行成本,
+     * 见 {@code RoutePlanner})。惩罚法而不是随机扰动——路线多样性的研究结论是惩罚法得到的
+     * 备选重叠少得多,且可复现。
+     */
+    public double routeAlternativePenaltyFactor = 3.0;
+    /** 备选与已有候选的格位重叠率高于此值即丢弃(0-1)。 */
+    public double routeAlternativeMaxOverlap = 0.7;
+    /** 每个同伴的路线簿最多存几条候选,超出淘汰最早的。 */
+    public int routeBookCapacity = 6;
+
     // ==================== 路径 / 分段 ====================
 
     /** 在已加载 chunk 边界截断路径(默认关)。 */
