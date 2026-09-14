@@ -65,7 +65,7 @@ public final class TerrainBill {
                 BlockState was = level.getBlockState(p);
                 Action dig = Action.breakBlock(p, was);
                 Verdict verdict = gate.judge(dig, level);
-                bill.addBreak(p, was, verdict.asks() ? ConsentItem.of(dig, verdict) : null);
+                bill.addBreak(p, was, verdict.asks() ? gate.consentItem(dig, verdict, level) : null);
             }
             for (BlockPos p : m.toPlace(level)) {
                 bill.addPlace(p, null);

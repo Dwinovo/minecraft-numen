@@ -12,7 +12,8 @@ import java.util.Map;
 
 /**
  * 征询清单里的一条:一个等主人点头的动作。主人允许之后它就是一条任务期授权
- * ({@link #covers}),裁决把被它覆盖的 ask 放行。
+ * ({@link #covers}),裁决把被它覆盖的 ask 放行;主人选"允许并记住"时,{@link #remember} 那一行写进
+ * 主人的 allow 表。
  *
  * @param kind         动词
  * @param pos          方块动作的格子;实体动作是实体此刻站的格(卡片描轮廓用);丢弃为 null
@@ -21,9 +22,10 @@ import java.util.Map;
  * @param rule         问的是哪一行规则的原文;没有任何一行覆盖时为空串
  * @param cause        为什么要问:那一行规则的自述({@code placed by a player})
  * @param irreversible 这件事撤不回(那一行规则的正项里有撤不回的信号)
+ * @param remember     主人说"允许并记住"时存下的那一行 allow(推法见 {@link Rule#remembering})
  */
 public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String subject, String rule, String cause,
-                          boolean irreversible) {
+                          boolean irreversible, Rule remember) {
 
     public static final int NO_ENTITY = -1;
 
@@ -34,19 +36,35 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
     /** 清单正文的一行;{@code irreversible} 让卡片在这一行前面标出"撤不回"。 */
     public record Line(String text, boolean irreversible) {}
 
-    /** 从一个被裁成 ask 的动作建一条。 */
-    public static ConsentItem of(Action action, Verdict verdict) {
+    /**
+     * 从一个被裁成 ask 的动作建一条({@link Gate#consentItem} / {@link Gate#consentItemLive})。
+     *
+     * @param facts 裁决这个动作用的那一份事实——记住的规则按它推
+     */
+    static ConsentItem of(Action action, Verdict verdict, Facts facts) {
         String rule = verdict.rule() == null ? "" : verdict.rule().toString();
         boolean irreversible = verdict.rule() != null && verdict.rule().irreversible();
+        Rule remember = Rule.remembering(action, verdict.rule(), facts);
         return switch (action.kind()) {
             case ATTACK, USE_ENTITY -> new ConsentItem(action.kind(), action.entity().blockPosition(),
                     action.entity().getId(), EntityType.getKey(action.entity().getType()).getPath(),
-                    rule, verdict.cause(), irreversible);
+                    rule, verdict.cause(), irreversible, remember);
             case DROP -> new ConsentItem(action.kind(), null, NO_ENTITY, subjectOf(action), rule, verdict.cause(),
-                    irreversible);
+                    irreversible, remember);
             default -> new ConsentItem(action.kind(), action.pos(), NO_ENTITY, subjectOf(action), rule,
-                    verdict.cause(), irreversible);
+                    verdict.cause(), irreversible, remember);
         };
+    }
+
+    /** 一批清单要记住的规则,去重、保持先后。 */
+    public static List<Rule> remembered(List<ConsentItem> items) {
+        List<Rule> rules = new ArrayList<>();
+        for (ConsentItem item : items) {
+            if (!rules.contains(item.remember)) {
+                rules.add(item.remember);
+            }
+        }
+        return rules;
     }
 
     /**

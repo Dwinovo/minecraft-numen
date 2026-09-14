@@ -30,6 +30,10 @@ import java.util.concurrent.atomic.AtomicLong;
  * 主人允许的清单记在发起它的任务记录名下,{@link #granted} 是全部在册授权的快照,作为
  * {@link Gate} 的输入:被覆盖的 ask 放行。任务收尾(槽放开这条记录)时 {@link #release} 清掉它名下的
  * 授权与没答复的请求——各任务不各存一份。
+ *
+ * <h2>记住</h2>
+ * 主人选"允许并记住"时,除了记成本任务的授权,清单每一条的 {@link ConsentItem#remember} 写进主人的
+ * allow 表({@link PermissionStore#remember}),往后同类的事由主人层直接放行,不再问。
  */
 public final class ConsentDesk {
 
@@ -47,7 +51,7 @@ public final class ConsentDesk {
     /** 发起者撤回了(要做的事已经不用问)。 */
     public static final String WITHDRAWN = "发起者撤回了这条征询";
 
-    /** 登记处与外界的接线:时钟、主人在不在、把请求推给主人或撤回。 */
+    /** 登记处与外界的接线:时钟、主人在不在、把请求推给主人或撤回、把记住的规则写进主人的表。 */
     interface Line {
         long gameTime();
 
@@ -56,6 +60,8 @@ public final class ConsentDesk {
         void show(ConsentRequest request);
 
         void clear();
+
+        void remember(List<Rule> allow);
     }
 
     private static final AtomicLong IDS = new AtomicLong();
@@ -109,8 +115,8 @@ public final class ConsentDesk {
     }
 
     /**
-     * 主人的答复(网络载荷与测试的落点)。允许就把清单记进发起任务的授权;拒绝没有附言时理由是
-     * {@link #OWNER_SAID_NO}。
+     * 主人的答复。允许就把清单记进发起任务的授权,允许并记住再把记住的规则写进主人的 allow 表;拒绝没有
+     * 附言时理由是 {@link #OWNER_SAID_NO}。
      *
      * @return 答的是不是挂着的那一条(过期、被顶替的号一律忽略)
      */
@@ -126,6 +132,9 @@ public final class ConsentDesk {
         if (decision != ConsentAnswer.Decision.DENY) {
             grants.computeIfAbsent(ticket.scope, k -> new ArrayList<>()).addAll(ticket.request.items());
             rebuildGranted();
+        }
+        if (decision == ConsentAnswer.Decision.ALLOW_REMEMBER) {
+            line.remember(ConsentItem.remembered(ticket.request.items()));
         }
         settle(ticket, new ConsentAnswer(decision, words));
         line.clear();
@@ -209,7 +218,7 @@ public final class ConsentDesk {
         }
     }
 
-    /** 真身体的接线:游戏刻、主人在线与否、载荷推给主人。 */
+    /** 真身体的接线:游戏刻、主人在线与否、载荷推给主人、记住的规则进主人的存档。 */
     private record BodyLine(NumenPlayer body) implements Line {
         @Override
         public long gameTime() {
@@ -235,6 +244,11 @@ public final class ConsentDesk {
             if (owner != null) {
                 Services.NETWORK.sendToPlayer(owner, ConsentRequestPayload.none(body.getUUID()));
             }
+        }
+
+        @Override
+        public void remember(List<Rule> allow) {
+            PermissionStore.of(body.getServer(), body.getOwnerUuid()).remember(allow);
         }
     }
 }

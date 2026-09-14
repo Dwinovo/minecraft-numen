@@ -19,13 +19,13 @@ public final class Permission {
     private Permission() {}
 
     /**
-     * 主线程:取这只同伴此刻的裁决快照(模式、规则、所在维度的放置记录、主人答应下来的任务期授权)。
-     * 领地口现在是 {@link TerritoryClaims#NONE};loader 模块的实现接进来是下一步。
+     * 主线程:取这只同伴此刻的裁决快照——模式、主人层与出厂层规则、所在维度的放置记录、主人答应下来的
+     * 任务期授权。快照不可变,任何线程可读。
      */
     public static Gate gateFor(NumenPlayer companion) {
         ServerLevel level = (ServerLevel) companion.level();
-        return new Gate(companion, modeOf(companion), RuleSet.factory(), PlacedBlocks.of(level),
-                TerritoryClaims.NONE, ConsentDesk.of(companion).granted());
+        return new Gate(companion, modeOf(companion), ownerRules(companion), RuleSet.factory(),
+                PlacedBlocks.of(level), TerritoryClaims.NONE, ConsentDesk.of(companion).granted());
     }
 
     /** 主线程:对活世界裁决一个动作。 */
@@ -49,5 +49,11 @@ public final class Permission {
             return;
         }
         PermissionStore.of(companion.getServer(), owner).setMode(companion.getUUID(), mode);
+    }
+
+    /** 这只同伴的主人写的那一层规则;还没有主人时是空层。 */
+    private static RuleSet ownerRules(NumenPlayer companion) {
+        UUID owner = companion.getOwnerUuid();
+        return owner == null ? RuleSet.EMPTY : PermissionStore.of(companion.getServer(), owner).rules();
     }
 }

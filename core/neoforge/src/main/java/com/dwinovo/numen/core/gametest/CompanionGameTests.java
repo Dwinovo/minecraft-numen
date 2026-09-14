@@ -4014,7 +4014,7 @@ public class CompanionGameTests {
         playerPlaces(helper, logRel, Items.DARK_OAK_LOG);
         NumenPlayer companion = spawnAt(helper, "gametest_claimed", new BlockPos(3, 2, 6), false);
         var gate = new com.dwinovo.numen.permission.Gate(companion, com.dwinovo.numen.permission.Mode.ASK,
-                com.dwinovo.numen.permission.RuleSet.factory(),
+                com.dwinovo.numen.permission.RuleSet.EMPTY, com.dwinovo.numen.permission.RuleSet.factory(),
                 com.dwinovo.numen.permission.PlacedBlocks.of(level), (action, facts) -> true,
                 java.util.List.of());
         BlockPos log = helper.absolutePos(logRel);

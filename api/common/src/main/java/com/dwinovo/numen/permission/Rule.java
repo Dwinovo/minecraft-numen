@@ -1,5 +1,7 @@
 package com.dwinovo.numen.permission;
 
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
@@ -9,8 +11,12 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.level.block.Block;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * 一条规则:一行字符串 {@code 动作(项 & 项 & !项)},与 Claude Code 的 {@code Tool(specifier)}
@@ -19,6 +25,9 @@ import java.util.UUID;
  * 或 {@code *};{@code !} 取反。全仓只在这一个类里解析。
  */
 public final class Rule {
+
+    /** 存档里的一行规则;写错的行解码失败,消息与 {@link #parse} 同一份。 */
+    public static final Codec<Rule> CODEC = Codec.STRING.comapFlatMap(Rule::decode, Rule::toString);
 
     private final String text;
     private final Action.Kind kind;   // null = 任何动作
@@ -35,14 +44,17 @@ public final class Rule {
         String text = raw == null ? "" : raw.trim();
         int open = text.indexOf('(');
         if (open <= 0 || !text.endsWith(")")) {
-            throw new IllegalArgumentException("rule must look like verb(term & term): '" + raw + "'");
+            throw new IllegalArgumentException(
+                    "rule must look like verb(term & term), e.g. break(placed & !block_entity): '" + raw + "'");
         }
         String verb = text.substring(0, open).trim();
         Action.Kind kind = null;
         if (!verb.equals("*")) {
             kind = Action.Kind.byVerb(verb);
             if (kind == null) {
-                throw new IllegalArgumentException("unknown verb '" + verb + "' in rule '" + raw + "'");
+                throw new IllegalArgumentException("unknown verb '" + verb + "' in rule '" + raw + "'; verbs are "
+                        + Arrays.stream(Action.Kind.values()).map(Action.Kind::verb).collect(Collectors.joining(", "))
+                        + ", or * for any");
             }
         }
         String inner = text.substring(open + 1, text.length() - 1).trim();
@@ -54,6 +66,14 @@ public final class Rule {
             terms.add(Term.parse(piece.trim(), raw));
         }
         return new Rule(text, kind, terms);
+    }
+
+    private static DataResult<Rule> decode(String text) {
+        try {
+            return DataResult.success(parse(text));
+        } catch (IllegalArgumentException e) {
+            return DataResult.error(e::getMessage);
+        }
     }
 
     public Action.Kind kind() {
@@ -94,6 +114,52 @@ public final class Rule {
         return parts.isEmpty() ? text : String.join(", ", parts);
     }
 
+    /**
+     * 主人对一个问出来的动作说"允许并记住"时存下的那一行 allow。三样拼成:
+     * <ol>
+     *   <li>同一个动词;</li>
+     *   <li>对象:实体认那一只({@code attack(named)} 某只狼 → {@code attack(entity:<uuid>)});方块与物品认种类
+     *       id,并留着问出它的那一行的条件({@code break(placed)} 挖圆石 →
+     *       {@code break(placed & minecraft:cobblestone)});</li>
+     *   <li>撤不回的信号({@link Signals#irreversible})这一次不成立、不读活世界时却按成立算的,取反钉上
+     *       ({@code break(block_entity)} 空箱子 → {@code break(block_entity & minecraft:chest & !contents)}):
+     *       卡上这一条没标撤不回,记下的规则就盖不到撤不回的情形。</li>
+     * </ol>
+     * 那一行已经说到的信号不再添;记下的这一行一定盖得住这次问的动作。
+     *
+     * @param hit   这个动作命中的 ask 行;没有任何一行覆盖时为 null
+     * @param facts 裁决这个动作用的那一份事实
+     */
+    static Rule remembering(Action action, Rule hit, Facts facts) {
+        List<String> terms = new ArrayList<>();
+        Set<Signals> mentioned = EnumSet.noneOf(Signals.class);
+        boolean entity = action.entity() != null;
+        if (entity) {
+            terms.add("entity:" + action.entity().getUUID());
+        }
+        if (hit != null) {
+            for (Term t : hit.terms) {
+                if (t.type == Term.Type.SIGNAL) {
+                    mentioned.add(t.signal);
+                }
+                if (!entity && t.type != Term.Type.ANY) {
+                    terms.add(t.text);
+                }
+            }
+        }
+        ResourceLocation id = entity ? null : Term.subjectId(action);
+        if (id != null && !terms.contains(id.toString())) {
+            terms.add(id.toString());
+        }
+        Facts blind = new Facts(facts.view(), facts.placed(), null, facts.claims(), facts.actor());
+        for (Signals s : Signals.values()) {
+            if (s.irreversible() && !mentioned.contains(s) && !s.test(action, facts) && s.test(action, blind)) {
+                terms.add("!" + s.ruleName());
+            }
+        }
+        return parse(action.kind().verb() + "(" + (terms.isEmpty() ? "*" : String.join(" & ", terms)) + ")");
+    }
+
     @Override
     public String toString() {
         return text;
@@ -119,13 +185,16 @@ public final class Rule {
         final Signals signal;
         final ResourceLocation id;
         final UUID uuid;
+        /** 这一项的原文({@code !placed}、{@code minecraft:chest})。 */
+        final String text;
 
-        private Term(Type type, boolean negated, Signals signal, ResourceLocation id, UUID uuid) {
+        private Term(Type type, boolean negated, Signals signal, ResourceLocation id, UUID uuid, String body) {
             this.type = type;
             this.negated = negated;
             this.signal = signal;
             this.id = id;
             this.uuid = uuid;
+            this.text = (negated ? "!" : "") + body;
         }
 
         static Term parse(String raw, String rule) {
@@ -135,18 +204,18 @@ public final class Rule {
                 throw new IllegalArgumentException("empty term in rule '" + rule + "'");
             }
             if (body.equals("*")) {
-                return new Term(Type.ANY, negated, null, null, null);
+                return new Term(Type.ANY, negated, null, null, null, body);
             }
             if (body.startsWith("#")) {
                 ResourceLocation id = ResourceLocation.tryParse(body.substring(1));
                 if (id == null) {
                     throw new IllegalArgumentException("bad tag '" + body + "' in rule '" + rule + "'");
                 }
-                return new Term(Type.TAG, negated, null, id, null);
+                return new Term(Type.TAG, negated, null, id, null, body);
             }
             if (body.startsWith("entity:")) {
                 try {
-                    return new Term(Type.ENTITY, negated, null, null, UUID.fromString(body.substring(7)));
+                    return new Term(Type.ENTITY, negated, null, null, UUID.fromString(body.substring(7)), body);
                 } catch (IllegalArgumentException e) {
                     throw new IllegalArgumentException("bad entity uuid '" + body + "' in rule '" + rule + "'");
                 }
@@ -156,13 +225,15 @@ public final class Rule {
                 if (id == null) {
                     throw new IllegalArgumentException("bad id '" + body + "' in rule '" + rule + "'");
                 }
-                return new Term(Type.ID, negated, null, id, null);
+                return new Term(Type.ID, negated, null, id, null, body);
             }
             Signals signal = Signals.byName(body);
             if (signal == null) {
-                throw new IllegalArgumentException("unknown signal '" + body + "' in rule '" + rule + "'");
+                throw new IllegalArgumentException("unknown signal '" + body + "' in rule '" + rule + "'; signals are "
+                        + Arrays.stream(Signals.values()).map(Signals::ruleName).collect(Collectors.joining(", "))
+                        + ", or write a namespaced id (minecraft:chest), a tag (#minecraft:beds), entity:<uuid> or *");
             }
-            return new Term(Type.SIGNAL, negated, signal, null, null);
+            return new Term(Type.SIGNAL, negated, signal, null, null, body);
         }
 
         boolean matches(Action action, Facts facts) {
@@ -199,14 +270,19 @@ public final class Rule {
         }
 
         private boolean idHit(Action a) {
+            return id.equals(subjectId(a));
+        }
+
+        /** 种类项认的那个 id:挖/右键/拿看格子上的方块,放看要放的方块,实体动作看实体种类,其余看物品。 */
+        static ResourceLocation subjectId(Action a) {
             Block block = subjectBlock(a);
             if (block != null) {
-                return id.equals(BuiltInRegistries.BLOCK.getKey(block));
+                return BuiltInRegistries.BLOCK.getKey(block);
             }
             if (a.entity() != null) {
-                return id.equals(EntityType.getKey(a.entity().getType()));
+                return EntityType.getKey(a.entity().getType());
             }
-            return a.item() != null && id.equals(BuiltInRegistries.ITEM.getKey(a.item()));
+            return a.item() == null ? null : BuiltInRegistries.ITEM.getKey(a.item());
         }
 
         private static Block subjectBlock(Action a) {

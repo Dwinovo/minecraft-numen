@@ -1,5 +1,6 @@
 package com.dwinovo.numen.permission;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -11,11 +12,11 @@ import java.util.List;
  */
 public record ConsentAnswer(Decision decision, String words) {
 
-    /** 卡片上的三个键。 */
+    /** 主人的三种答复。 */
     public enum Decision {
         /** 允许:只在发起这次征询的任务里有效。 */
         ALLOW_ONCE,
-        /** 允许并记住:按命中的信号记一条 allow 规则;规则表落地之前与 {@link #ALLOW_ONCE} 同效。 */
+        /** 允许并记住:本任务里放行,并把每一条的 {@link ConsentItem#remember} 写进主人的 allow 表。 */
         ALLOW_REMEMBER,
         DENY
     }
@@ -34,8 +35,8 @@ public record ConsentAnswer(Decision decision, String words) {
     }
 
     /**
-     * 允许之后回执里交代的那一句:主人点了头、说了什么;选的是"允许并记住"时说明记住规则还没有落地,
-     * 这次只在本任务内有效。
+     * 允许之后回执里交代的那一句:主人点了头、说了什么;选的是"允许并记住"时再交代记下了哪几行规则,
+     * 往后同类的事不再问。
      */
     public String allowance(List<ConsentItem> asked) {
         StringBuilder sb = new StringBuilder("the owner allowed: ").append(ConsentItem.listingText(asked));
@@ -43,7 +44,11 @@ public record ConsentAnswer(Decision decision, String words) {
             sb.append(" (owner's note: ").append(words).append(')');
         }
         if (decision == Decision.ALLOW_REMEMBER) {
-            sb.append("; asked to remember it, but 记住规则在下一步 — for now it held for this task only");
+            List<String> rules = new ArrayList<>();
+            for (Rule rule : ConsentItem.remembered(asked)) {
+                rules.add("allow " + rule);
+            }
+            sb.append("; and remembered it, so these will not be asked again: ").append(String.join("; ", rules));
         }
         return sb.toString();
     }

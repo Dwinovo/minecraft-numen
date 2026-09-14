@@ -235,7 +235,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
                 case DENY -> out.add(Permit.refused(verdict.reason()));
                 case ASK -> {
                     askedAt.add(out.size());
-                    asks.add(ConsentItem.of(action, verdict));
+                    asks.add(gate.consentItemLive(action, verdict, player.serverLevel()));
                     out.add(Permit.WAITING);
                 }
             }
