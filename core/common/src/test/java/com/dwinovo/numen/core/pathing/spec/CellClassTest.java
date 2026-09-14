@@ -111,7 +111,7 @@ class CellClassTest {
         assertEquals(CellClass.VINE, CellClass.of(Blocks.VINE.defaultBlockState()));
         assertEquals(CellClass.WATER, CellClass.of(Blocks.WATER.defaultBlockState()));
         assertEquals(CellClass.WATER, CellClass.of(Blocks.SEAGRASS.defaultBlockState()));
-        assertEquals(CellClass.FLOWING, CellClass.of(flowingWater()));
+        assertEquals(CellClass.FLOWING_WATER, CellClass.of(flowingWater()));
         assertEquals(CellClass.LAVA, CellClass.of(Blocks.LAVA.defaultBlockState()));
         assertEquals(CellClass.HAZARD, CellClass.of(Blocks.MAGMA_BLOCK.defaultBlockState()));
         assertEquals(CellClass.HAZARD, CellClass.of(Blocks.CACTUS.defaultBlockState()));

@@ -53,7 +53,11 @@ final class PlanTestSupport {
     static final class TestMovement extends Movement {
 
         TestMovement(BlockPos src, BlockPos dest, double cost) {
-            super(null, RouteSpec.defaults(), src, dest, new BlockPos[0]);
+            this(src, dest, cost, new BlockPos[0]);
+        }
+
+        TestMovement(BlockPos src, BlockPos dest, double cost, BlockPos[] toBreak) {
+            super(null, RouteSpec.defaults(), src, dest, toBreak);
             override(cost);
         }
 
@@ -75,10 +79,16 @@ final class PlanTestSupport {
         private final List<Movement> movements;
 
         FakePath(List<BlockPos> positions) {
+            this(positions, new BlockPos[0]);
+        }
+
+        /** @param firstBreaks 第一段要挖的格(账单从这里来) */
+        FakePath(List<BlockPos> positions, BlockPos[] firstBreaks) {
             this.positions = List.copyOf(positions);
             List<Movement> moves = new ArrayList<>();
             for (int i = 0; i < positions.size() - 1; i++) {
-                moves.add(new TestMovement(positions.get(i), positions.get(i + 1), 1));
+                moves.add(new TestMovement(positions.get(i), positions.get(i + 1), 1,
+                        i == 0 ? firstBreaks : new BlockPos[0]));
             }
             this.movements = Collections.unmodifiableList(moves);
         }
@@ -106,10 +116,19 @@ final class PlanTestSupport {
 
     /** 沿 +x 的直线:从 startX 起共 length 格,y=64,给定 z。 */
     static FakePath line(int startX, int length, int z) {
+        return new FakePath(linePositions(startX, length, z));
+    }
+
+    /** 同上,但第一段要挖掉给定的格。 */
+    static FakePath lineBreaking(int startX, int length, int z, BlockPos... toBreak) {
+        return new FakePath(linePositions(startX, length, z), toBreak);
+    }
+
+    private static List<BlockPos> linePositions(int startX, int length, int z) {
         List<BlockPos> positions = new ArrayList<>();
         for (int i = 0; i < length; i++) {
             positions.add(new BlockPos(startX + i, 64, z));
         }
-        return new FakePath(positions);
+        return positions;
     }
 }

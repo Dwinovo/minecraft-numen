@@ -18,12 +18,21 @@ import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.FluidState;
 
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static com.dwinovo.numen.core.pathing.plan.PlanTestSupport.line;
+import static com.dwinovo.numen.core.pathing.plan.PlanTestSupport.lineBreaking;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static com.dwinovo.numen.core.pathing.plan.PlanTestSupport.neverGoal;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -37,6 +46,29 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RoutePlannerTest {
 
     private static final BlockPos START = new BlockPos(0, 64, 0);
+
+    /** 账单要读方块种类,所以预算用例要引导 Minecraft;引导不了就跳过那一条。 */
+    private static boolean booted;
+
+    @BeforeAll
+    static void boot() {
+        try {
+            net.minecraft.SharedConstants.tryDetectVersion();
+            net.minecraft.server.Bootstrap.bootStrap();
+            booted = true;
+        } catch (Throwable t) {
+            booted = false;
+        }
+    }
+
+    /** 处处石头的世界:任何"要挖的格"都真的要挖。 */
+    private static final class StoneWorld implements BlockGetter {
+        @Override public BlockEntity getBlockEntity(BlockPos pos) { return null; }
+        @Override public BlockState getBlockState(BlockPos pos) { return Blocks.STONE.defaultBlockState(); }
+        @Override public FluidState getFluidState(BlockPos pos) { return getBlockState(pos).getFluidState(); }
+        @Override public int getHeight() { return 384; }
+        @Override public int getMinBuildHeight() { return -64; }
+    }
 
     /** 按队列交路径的假派发器;记下每次提交时的规格。 */
     private static final class ScriptedDispatcher implements SearchDispatcher {
@@ -75,11 +107,50 @@ class RoutePlannerTest {
     }
 
     private static RoutePlanner planner(ScriptedDispatcher dispatcher) {
+        return planner(dispatcher, null);
+    }
+
+    private static RoutePlanner planner(ScriptedDispatcher dispatcher, BlockGetter level) {
         // 上下文函数只记规格:假派发器不读上下文
         return new RoutePlanner(dispatcher, spec -> {
             dispatcher.specsSeen.add(spec);
             return null;
-        }, null);
+        }, level);
+    }
+
+    @Test
+    void routesOverTheAlterBudgetAreDroppedAndTheCheapestIsReported() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过账单钉桩");
+        ScriptedDispatcher d = new ScriptedDispatcher();
+        // 第一条要挖三格,第二条要挖一格;预算两格:第一条作废、第二条留下
+        d.script.add(lineBreaking(0, 10, 0, new BlockPos(1, 65, 0), new BlockPos(2, 65, 0), new BlockPos(3, 65, 0)));
+        d.script.add(lineBreaking(0, 10, 5, new BlockPos(1, 65, 5)));
+        RouteSpec spec = RouteSpec.defaults().withAlter(RouteSpec.Alter.NATURAL).withAlterBudget(2);
+        RoutePlanner.Query q = planner(d, new StoneWorld()).plan(START, START, neverGoal(), spec, 2);
+        assertNull(q.poll());
+        List<RoutePlanner.Candidate> out = q.poll();
+        assertNotNull(out);
+        assertEquals(1, out.size());
+        assertEquals(1, out.get(0).bill().breakCount());
+        assertFalse(q.exceededBudget());
+        // 作废的那条格子照样进惩罚表,第二次搜索才会去别处找
+        assertTrue(d.specsSeen.get(1).positions().stand(new BlockPos(3, 64, 0).asLong()) > 0);
+    }
+
+    @Test
+    void allRoutesOverBudgetLeaveNothingAndSayWhatTheCheapestWouldCost() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过账单钉桩");
+        ScriptedDispatcher d = new ScriptedDispatcher();
+        d.script.add(lineBreaking(0, 10, 0, new BlockPos(1, 65, 0), new BlockPos(2, 65, 0), new BlockPos(3, 65, 0)));
+        d.script.add(lineBreaking(0, 10, 5, new BlockPos(1, 65, 5), new BlockPos(2, 65, 5)));
+        RouteSpec spec = RouteSpec.defaults().withAlter(RouteSpec.Alter.NATURAL).withAlterBudget(1);
+        RoutePlanner.Query q = planner(d, new StoneWorld()).plan(START, START, neverGoal(), spec, 2);
+        assertNull(q.poll());
+        List<RoutePlanner.Candidate> out = q.poll();
+        assertNotNull(out);
+        assertTrue(out.isEmpty());
+        assertTrue(q.exceededBudget());
+        assertEquals(2, q.cheapestChange());
     }
 
     @Test

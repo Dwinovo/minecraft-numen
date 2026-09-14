@@ -34,7 +34,7 @@ class RouteSpecTest {
         assertFalse(d.climbVines());
         assertFalse(d.strictLiquidCheck());
         assertEquals(3, d.maxFallHeightNoWater());
-        assertEquals(Integer.MAX_VALUE, d.maxAlterations());
+        assertEquals(Integer.MAX_VALUE, d.alterBudget());
         assertEquals(20.0, d.placeCost());
         assertEquals(30.0, d.breakPenalty());
         assertEquals(2.0, d.jumpPenalty());

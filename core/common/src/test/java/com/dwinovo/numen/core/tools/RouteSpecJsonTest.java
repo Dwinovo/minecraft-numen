@@ -62,7 +62,7 @@ class RouteSpecJsonTest {
         RouteSpec s = RouteSpecJson.parse(json("""
                 {"alter":"natural","avoid":["water","DOOR"],
                  "penalties":{"place":5,"break":7.5,"jump":9,"wade":0},
-                 "parkour":true,"climb_vines":true,"max_fall":6,"max_alterations":4}"""));
+                 "parkour":true,"climb_vines":true,"max_fall":6,"alter_budget":4}"""));
         assertEquals(RouteSpec.Alter.NATURAL, s.alter());
         assertEquals(RouteSpec.FORBID, s.cellCost(CellClass.WATER));
         assertEquals(RouteSpec.FORBID, s.cellCost(CellClass.DOOR));
@@ -74,7 +74,7 @@ class RouteSpecJsonTest {
         assertTrue(s.parkour());
         assertTrue(s.climbVines());
         assertEquals(6, s.maxFallHeightNoWater());
-        assertEquals(4, s.maxAlterations());
+        assertEquals(4, s.alterBudget());
     }
 
     @Test
@@ -110,6 +110,17 @@ class RouteSpecJsonTest {
         assertTrue(error("{\"avoid_step\":[\"1,two,3\"]}").contains("integers"));
         assertTrue(error("{\"max_fall\":-2}").contains("0 or more"));
         assertTrue(error("{\"parkour\":\"yes\"}").contains("true or false"));
+    }
+
+    @Test
+    void avoidAcceptsOnlyTypesAWalkCanKeepOutOf() {
+        RouteSpec s = RouteSpecJson.parse(json("{\"avoid\":[\"water\",\"flowing_water\"]}"));
+        assertEquals(RouteSpec.FORBID, s.cellCost(com.dwinovo.numen.core.pathing.spec.CellClass.WATER));
+        assertEquals(RouteSpec.FORBID, s.cellCost(com.dwinovo.numen.core.pathing.spec.CellClass.FLOWING_WATER));
+        // 地面、空气、障碍不是"可以选择不走"的东西,给了就是规格写错了
+        assertTrue(error("{\"avoid\":[\"ground\"]}").contains("not something a walk can keep out of"));
+        assertTrue(error("{\"avoid\":[\"obstacle\"]}").contains("valid names"));
+        assertTrue(error("{\"avoid\":[\"lake\"]}").contains("unknown cell type"));
     }
 
     /** 标签要等数据包绑定,无头引导下全空——标签展开只在真机验,这里只钉方块 id。 */
