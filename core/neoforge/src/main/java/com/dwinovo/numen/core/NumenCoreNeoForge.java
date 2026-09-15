@@ -62,8 +62,6 @@ public class NumenCoreNeoForge {
         // Read-only route queries (plan_route): poll finished searches and reply.
         com.dwinovo.numen.core.pathing.plan.RoutePlanner.serverTick(event.getServer());
         PathCaches.serverTick(event.getServer());
-        // Periodic eviction sweep for the target-block index (entries of unloaded chunks).
-        com.dwinovo.numen.core.scan.TargetIndex.serverTick(event.getServer());
         // Debug particles for pathing state, sent only to players with debug on.
         PathDebugRenderer.serverTick(event.getServer());
     }

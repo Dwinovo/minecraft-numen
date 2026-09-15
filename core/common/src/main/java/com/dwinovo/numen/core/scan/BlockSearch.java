@@ -1,7 +1,6 @@
 package com.dwinovo.numen.core.scan;
 
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.scan.BlockScanner;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -12,6 +11,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,39 +20,54 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
-import java.util.function.Predicate;
 
 /**
- * 找方块,全仓就这一条路:{@code scan_blocks} 问"附近有哪些",{@code goto} 的 FIND 模式问
- * "最近的那个在哪",两者只差 {@code want} 和半径。
+ * 找方块,全仓就这一个出口:{@code scan_blocks} 问"附近有哪些",{@code goto} 的 FIND 模式问"最近的那个在哪",
+ * {@code mine} 反复问"最近的一批在哪",三者只差 {@code want} 和半径。
  *
- * <p>从中心所在 chunk 起按 {@link RingSpiral} 逐环外扩走 chunk 列,每列内 section 的顺序和
- * 何时可以收工都问 {@link SearchGeometry}:攒够的 {@code want} 个一旦比下一环最近的可能还近,
- * 立刻停——这是精确界,停下来的结果和走满全程逐字一致。一个
- * {@link SearchBudget#trySectionScan} 配额换一节,跨 tick 续。
+ * <p>从中心所在 chunk 起按 {@link RingSpiral} 逐环外扩走 chunk 列,每列内 section 的顺序和何时可以收工都问
+ * {@link SearchGeometry}:攒够的 {@code want} 个一旦比下一环最近的可能还近,立刻停——这是精确界,停下来的
+ * 结果和走满全程逐字一致。跨 tick 续。
+ *
+ * <h2>读地形经共享索引</h2>
+ * 每一节的内容由 {@link TargetIndex} 答:它按 section 记着每种登记方块的位置,由方块变更钩子保持新鲜。
+ * 搜索在跑的那几刻登记自己的目标;要反复找同几种方块的任务用 {@link #hold} 持有登记,期间的每次搜索读的
+ * 都是热缓存,不必重读地形。
+ *
+ * <h2>每刻的预算</h2>
+ * 真读一节(构建条目,或现场读一节铺天盖地的目标)花一个 {@link SearchBudget#trySectionRead} 配额;
+ * 索引已有新鲜条目、palette 就能排除、整节在球外的,不花配额,只受同一份 4ms 墙钟约束
+ * ({@link SearchBudget#withinTime})。
  *
  * <h2>已加载地形就是边界</h2>
- * 没加载的列跳过并计数,绝不去加载它:读它会把服务端线程按在区块 IO 或地形生成上,而一次感知
- * 查询没有理由为了回答自己而把世界变大。跳过的列数随 {@link ScanResult} 回去,让回执说得清
- * 覆盖到哪——那边的方块是"不知道",不是"没有"。
+ * 没加载的列跳过并计数,绝不去加载它:读它会把服务端线程按在区块 IO 或地形生成上,而一次查询没有理由
+ * 为了回答自己而把世界变大。跳过的列数随 {@link ScanResult} 回去,让回执说得清覆盖到哪——那边的方块是
+ * "不知道",不是"没有"。
  *
  * <h2>为什么在主线程</h2>
- * {@code LevelChunkSection} 的调色板是可变的,主线程随时可能就地扩容,后台读到一半会炸。
- * 所以读地形只能排队,靠配额与 4ms 墙钟顶住 tick。代价是找一个八成不存在的方块要花几秒;
- * 换来的是不会漏节、不会读到半个调色板。
+ * {@code LevelChunkSection} 的调色板是可变的,主线程随时可能就地扩容,后台读到一半会炸。所以读地形只能
+ * 排队,靠配额与墙钟顶住 tick。
  *
- * <p>它<b>不占身体、不进任务队列</b>:她该走走该挖挖,搜索在后头自己推进。服务端主线程,
- * 由两个 loader 的 tick 末钩子驱动。
+ * <p>它<b>不占身体、不进任务队列</b>:她该走走该挖挖,搜索在后头自己推进。服务端主线程,由两个 loader 的
+ * tick 末钩子驱动。
  */
 public final class BlockSearch {
 
+    static {
+        // 搜索与索引描述的都是一个具体的世界,世界没了就得跟着没;清理跟状态同居。见 ServerLifecycle。
+        com.dwinovo.numen.platform.ServerLifecycle.onStopped(BlockSearch::dropAll);
+    }
+
     /** Hard stop: convert a crawling scan into a partial answer (30s). */
     private static final int DEADLINE_TICKS = 600;
-    /** Same collect cap as the synchronous scanner — bounds memory and sort. */
+    /** Collect cap — bounds memory and sort; ring order means what is kept is the nearest area. */
     private static final int MAX_COLLECT = 8_192;
+    /** 索引驱逐清扫周期(tick)。 */
+    private static final int EVICT_SWEEP_TICKS = 200;
 
     private static final List<BlockSearch> JOBS = new ArrayList<>();
     private static int nextId = 1;
+    private static int sweepTimer;
 
     private final int id = nextId++;
     /** What was asked for, short enough for one log line: {@code iron_ore} / {@code iron_ore+1}. */
@@ -63,7 +78,7 @@ public final class BlockSearch {
     private final BlockPos center;
     private final int radius;
     private final double radiusSq;
-    private final Predicate<BlockState> filter;
+    private final Set<Block> targets;
     private final Consumer<ScanResult> onDone;
 
     private final int centerChunkX, centerChunkZ, maxRing;
@@ -71,7 +86,7 @@ public final class BlockSearch {
     private final int[] sectionOrder;
     private int ring, perimIdx;
     private long deadline = -1;
-    private int columnsScanned, columnsUnloaded;
+    private int columnsScanned, columnsUnloaded, sectionsRead;
     private final int columnsTotal;
     private boolean stoppedEarly;
 
@@ -104,13 +119,13 @@ public final class BlockSearch {
     }
 
     private BlockSearch(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
-                          Set<Block> targets, Consumer<ScanResult> onDone) {
+                        Set<Block> targets, Consumer<ScanResult> onDone) {
         this.entityUuid = entityUuid;
         this.dimension = level.dimension();
         this.center = center;
         this.radius = radius;
         this.radiusSq = (double) radius * radius;
-        this.filter = state -> targets.contains(state.getBlock());
+        this.targets = Set.copyOf(targets);
         this.onDone = onDone;
         this.label = describe(targets);
         this.centerChunkX = SectionPos.blockToSectionCoord(center.getX());
@@ -139,27 +154,64 @@ public final class BlockSearch {
     public static int start(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
                             Set<Block> targets, Consumer<ScanResult> onDone) {
         BlockSearch job = new BlockSearch(entityUuid, level, center, radius, want, targets, onDone);
+        TargetIndex.register(job.dimension, job.targets);
         JOBS.add(job);
         return job.id;
     }
 
     /** Abandon one search: no callback will fire. Unknown / already-finished ids are a no-op. */
     public static void cancel(int id) {
-        JOBS.removeIf(job -> job.id == id);
-    }
-
-    /** Advance all pending scans under the shared budget. */
-    public static void tick(MinecraftServer server) {
-        if (JOBS.isEmpty()) return;
-        SearchBudget.refresh(server);
         Iterator<BlockSearch> it = JOBS.iterator();
         while (it.hasNext()) {
             BlockSearch job = it.next();
-            if (job.tickOne(server)) it.remove();
+            if (job.id == id) {
+                it.remove();
+                TargetIndex.unregister(job.dimension, job.targets);
+                return;
+            }
         }
     }
 
-    /** @return true when finished (reply sent). */
+    /**
+     * 要反复找这几种方块:持有期间索引由方块变更钩子保持它们的缓存新鲜,每次 {@link #start} 读热缓存。
+     * 与 {@link #release} 成对调用(计数式,可重入)。
+     */
+    public static void hold(ServerLevel level, Set<Block> blocks) {
+        TargetIndex.register(level.dimension(), blocks);
+    }
+
+    /** 放下 {@link #hold} 的登记。 */
+    public static void release(ServerLevel level, Set<Block> blocks) {
+        TargetIndex.unregister(level.dimension(), blocks);
+    }
+
+    /** 由 ServerLevel.onBlockStateChange 的 mixin 调用——服务端每次方块变化都会路过这里。 */
+    public static void onBlockChange(ServerLevel level, BlockPos pos, BlockState oldState, BlockState newState) {
+        TargetIndex.onBlockChange(level, pos, oldState, newState);
+    }
+
+    /** Advance all pending scans under the shared budget; periodically evict index entries of unloaded chunks. */
+    public static void tick(MinecraftServer server) {
+        if (!TargetIndex.isEmpty() && ++sweepTimer >= EVICT_SWEEP_TICKS) {
+            sweepTimer = 0;
+            TargetIndex.sweep(server);
+        }
+        if (JOBS.isEmpty()) return;
+        SearchBudget.refresh(server);
+        // A callback may start the next search; it joins the list for the next tick.
+        for (BlockSearch job : List.copyOf(JOBS)) {
+            if (JOBS.contains(job) && job.tickOne(server)) {
+                JOBS.remove(job);
+                job.onDone.accept(job.result);
+                TargetIndex.unregister(job.dimension, job.targets);
+            }
+        }
+    }
+
+    /** The answer, set by {@link #finish}. */
+    private ScanResult result;
+
+    /** @return true when finished ({@link #result} is set). */
     private boolean tickOne(MinecraftServer server) {
         ServerLevel level = server.getLevel(dimension);
         if (level == null) {
@@ -179,12 +231,11 @@ public final class BlockSearch {
                 finish(server, false);   // spiral exhausted
                 return true;
             }
-            // Scan the in-progress column one budgeted section at a time, nearest layer first.
+            // Read the in-progress column one section at a time, nearest layer first.
             while (sectionCursor < sectionOrder.length) {
-                if (!SearchBudget.trySectionScan()) return false;
-                BlockScanner.scanChunkSection(level, currentChunk,
-                        currentChunkX, sectionOrder[sectionCursor], currentChunkZ,
-                        center, radius, radiusSq, filter, matches);
+                if (!SearchBudget.withinTime() || !readSection(level, sectionOrder[sectionCursor])) {
+                    return false;
+                }
                 sectionCursor++;
                 feedBound();
                 if (matches.size() >= MAX_COLLECT) {
@@ -196,6 +247,45 @@ public final class BlockSearch {
             currentChunk = null;
             columnsScanned++;
         }
+    }
+
+    /**
+     * 读当前列里的一节,命中追加进 {@link #matches}。要真读地形而本刻配额用完时返回 false,
+     * 什么也没做,下一刻从这一节接着来。
+     */
+    private boolean readSection(ServerLevel level, int sectionY) {
+        int index = level.getSectionIndexFromSectionY(sectionY);
+        if (index < 0 || index >= currentChunk.getSectionsCount() || !touchesSphere(sectionY)) {
+            return true;
+        }
+        LevelChunkSection section = currentChunk.getSection(index);
+        long key = SectionPos.asLong(currentChunkX, sectionY, currentChunkZ);
+        TargetIndex.SectionEntry entry = TargetIndex.cached(dimension, section, key, targets);
+        if (entry == null || entry.saturatedAny(targets)) {
+            if (!SearchBudget.trySectionRead()) {
+                return false;
+            }
+            sectionsRead++;
+            if (entry == null) {
+                entry = TargetIndex.build(dimension, section, key);
+            }
+        }
+        TargetIndex.collect(entry, section, currentChunkX, sectionY, currentChunkZ, targets,
+                center, radius, radiusSq, matches);
+        return true;
+    }
+
+    /** 这一节的立方体离中心最近的那一点在球内吗——整节在球外的不读。 */
+    private boolean touchesSphere(int sectionY) {
+        double dx = axisGap(center.getX(), SectionPos.sectionToBlockCoord(currentChunkX));
+        double dy = axisGap(center.getY(), SectionPos.sectionToBlockCoord(sectionY));
+        double dz = axisGap(center.getZ(), SectionPos.sectionToBlockCoord(currentChunkZ));
+        return dx * dx + dy * dy + dz * dz <= radiusSq;
+    }
+
+    /** 一个坐标到 [base, base+15] 的距离;在区间内为 0。 */
+    private static double axisGap(int c, int base) {
+        return c < base ? base - c : Math.max(0, c - (base + 15));
     }
 
     /**
@@ -247,13 +337,13 @@ public final class BlockSearch {
         // asked, what came back, WHY it stopped, and what it cost. "She can't find X" is
         // answered by the stop reason plus the unloaded count, without a debug build.
         Constants.LOG.info("[numen-scan] {} r={} → {} hit(s){} | {} | {}/{} columns read,"
-                        + " {} not loaded | {} tick(s)",
+                        + " {} not loaded, {} section read(s) | {} tick(s)",
                 label, radius, matches.size(),
                 matches.isEmpty() ? "" : String.format(", nearest %.1f", matches.get(0).distance()),
-                stopReason(deadlineHit), columnsScanned, columnsTotal, columnsUnloaded,
+                stopReason(deadlineHit), columnsScanned, columnsTotal, columnsUnloaded, sectionsRead,
                 startTick < 0 ? 0 : server.getTickCount() - startTick);
-        onDone.accept(new ScanResult(matches, columnsScanned, columnsUnloaded, columnsTotal,
-                deadlineHit, stoppedEarly));
+        result = new ScanResult(matches, columnsScanned, columnsUnloaded, columnsTotal,
+                deadlineHit, stoppedEarly);
     }
 
     private String stopReason(boolean deadlineHit) {
@@ -269,5 +359,12 @@ public final class BlockSearch {
         if (!it.hasNext()) return "nothing";
         String first = BuiltInRegistries.BLOCK.getKey(it.next()).getPath();
         return targets.size() > 1 ? first + "+" + (targets.size() - 1) : first;
+    }
+
+    /** 服务器停止时清空在飞的搜索与索引(别钉住旧世界,也别让旧搜索的登记漏进新世界的计数)。 */
+    private static void dropAll() {
+        JOBS.clear();
+        TargetIndex.dropAll();
+        sweepTimer = 0;
     }
 }

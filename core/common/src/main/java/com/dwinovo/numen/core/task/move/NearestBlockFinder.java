@@ -23,8 +23,8 @@ import java.util.Set;
  * 剪枝入册、编译 anyOf 导航契约、打不通时逐个除名轮换。它与 goto 的坐标三态
  * (BLOCK/COLUMN/YLEVEL)不共享任何逻辑,任务只管驱动。
  *
- * <p>搜索和 {@code scan_blocks} 走同一条路,只是 {@code want} 不同——所以
- * "最近的铁矿在哪"两个工具给的是同一个答案。
+ * <p>搜索和 {@code scan_blocks}、{@code mine} 走同一个出口({@link BlockSearch}),只是 {@code want}
+ * 不同——所以"最近的铁矿在哪"几个工具给的是同一个答案。
  */
 final class NearestBlockFinder {
 

@@ -41,11 +41,15 @@ public final class SearchBudget {
      */
     private static final int MAX_BIOME_SAMPLES_PER_TICK = 256;
     /**
-     * Block-scan section visits (one permit = one 16³ chunk section). The
-     * palette pre-check makes a miss sub-microsecond and a hit ~50µs of
-     * iteration, so a generous pool still sits safely under the 4ms lid.
+     * Block-search section reads (one permit = one 16³ chunk section actually read:
+     * building its index entry — a count pass plus a collect pass — or walking a
+     * section where a target is too abundant to index). Sections the palette rules
+     * out and sections with a fresh index entry cost no permit, only wall clock.
+     *
+     * <p>实测一次构建约 50µs:单刻 64 次时峰值 ~3.1ms,48 次压进 ~2.5ms——取 48,冷区域在几刻内
+     * 渐进变热,读地形本身不把一刻吃到 4ms 的墙钟上限。
      */
-    private static final int MAX_SECTION_SCANS_PER_TICK = 256;
+    private static final int MAX_SECTION_READS_PER_TICK = 48;
     /**
      * Wall-clock hard stop. The count caps bound the common case; this makes
      * the "never stalls the server" promise unconditional even when every
@@ -56,7 +60,7 @@ public final class SearchBudget {
     private static int stampTick = Integer.MIN_VALUE;
     private static int checksLeft;
     private static int biomeSamplesLeft;
-    private static int sectionScansLeft;
+    private static int sectionReadsLeft;
     private static long deadlineNanos;
 
     private SearchBudget() {}
@@ -74,15 +78,23 @@ public final class SearchBudget {
         stampTick = tick;
         checksLeft = MAX_CHECKS_PER_TICK;
         biomeSamplesLeft = MAX_BIOME_SAMPLES_PER_TICK;
-        sectionScansLeft = MAX_SECTION_SCANS_PER_TICK;
+        sectionReadsLeft = MAX_SECTION_READS_PER_TICK;
         deadlineNanos = System.nanoTime() + MAX_NANOS_PER_TICK;
     }
 
-    /** Take one section-scan permit (one 16³ section); false = resume next tick. */
-    public static boolean trySectionScan() {
-        if (sectionScansLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
-        sectionScansLeft--;
+    /** Take one section-read permit (one 16³ section read); false = resume next tick. */
+    public static boolean trySectionRead() {
+        if (sectionReadsLeft <= 0 || System.nanoTime() >= deadlineNanos) return false;
+        sectionReadsLeft--;
         return true;
+    }
+
+    /**
+     * Wall clock left in this tick's pool — the lid over work that needs no permit
+     * (visiting sections the index or palette already answers); false = resume next tick.
+     */
+    public static boolean withinTime() {
+        return System.nanoTime() < deadlineNanos;
     }
 
     /** Take one biome-sample permit; false = pool drained, resume next tick. */

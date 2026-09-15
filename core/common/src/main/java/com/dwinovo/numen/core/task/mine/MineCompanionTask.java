@@ -15,7 +15,8 @@ import com.dwinovo.numen.core.act.BlockDigger;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.NavProfiler;
-import com.dwinovo.numen.core.scan.TargetIndex;
+import com.dwinovo.numen.core.scan.BlockScanner;
+import com.dwinovo.numen.core.scan.BlockSearch;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
@@ -55,10 +56,11 @@ import java.util.Set;
  *
  * <h2>The loop</h2>
  * <ol>
- *   <li><b>knownOreLocations</b> — fed on demand from the shared {@link TargetIndex}
- *       (block-change-fed, lazily built), and {@link #prune} every tick (drop ones
- *       mined / no longer matching / unworkable / hazardous), sorted by
- *       distance, capped at {@link #MAX_ORES}.</li>
+ *   <li><b>knownOreLocations</b> — fed on demand by {@link BlockSearch} (the one way to
+ *       find blocks; the task holds its targets there, so the shared index stays fresh
+ *       through the block-change hook and repeated searches read a warm cache), and
+ *       {@link #prune} every tick (drop ones mined / no longer matching / unworkable /
+ *       hazardous), sorted by distance, capped at {@link #MAX_ORES}.</li>
  *   <li><b>in place</b> — any target the eyes can actually hit from where the body
  *       stands (centre or an exposed face, within block reach, unobstructed) is
  *       broken on the spot, nearest first, auto-switching to the best tool — no
@@ -97,9 +99,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private static final int QUERY_MIN_GAP_TICKS = 20;
     /** 无条件刷新的慢心跳(tick):兜底外部世界变化(别人放/挖了方块)。 */
     private static final int QUERY_HEARTBEAT_TICKS = 100;
-    /** 单次查询允许就地构建的 section 数上限——冷区域在几次查询内渐进变热,不压 tick
-     *  (实测 64 时首窗峰 ~3.1ms,48 把单次查询的最坏构建成本压进 ~2.5ms)。 */
-    private static final int QUERY_BUILD_BUDGET = 48;
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double MINE_SPEED = 1.0;
     /** 同一格连续这么多刻拉不出射线,就记进 {@link #unworkable} —— 够到测试说它能挖,
@@ -178,9 +177,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     /** 地图不完整时连续无路的次数（见 {@link NoPathVerdict}）。 */
     private int coldMapFails;
-    /** 上一次索引查询是否覆盖完整(构建预算未耗尽)。false = 冷区域仍在渐进构建,
+    /** 上一次搜索是否走完了(没被期限截断)。还没有搜索回来、或被截断时为 false——
      *  终局判定("附近没有目标")必须等它为 true 才能下。 */
     private boolean lastQueryComplete;
+    /** 在飞的搜索句柄;0 表示没有。 */
+    private int searchId;
+    /** 回来了还没并进名单的搜索结果。 */
+    private BlockSearch.ScanResult arrived;
 
     // Progressive dig (blocks break tick-by-tick at legitimate player speed, not
     // instabreak) — shared with the path executor so all breaking reads the same.
@@ -221,19 +224,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // blocks drop, and snapshot how many we already hold so the tally is the delta above it.
         dropItems = computeDropItems();
         baseline = inventoryMatch();
-        // 登记目标进共享索引并立即首查;冷区域的索引构建由每次查询的预算分摊,
-        // 覆盖完整前 onTick 的终局判定会等着(lastQueryComplete)。
+        // 持有目标的登记,让共享索引在任务期间保持新鲜,并立即起首次搜索;冷区域的读地形由
+        // 每刻的读节配额分摊,首批结果回来前 onTick 的终局判定会等着(lastQueryComplete)。
         if (player.level() instanceof ServerLevel sl) {
-            TargetIndex.register(sl, r.targets);
+            BlockSearch.hold(sl, r.targets);
         }
         runQuery();
         lastProgressTick = player.level().getGameTime();
         lastProgressPos = player.blockPosition();
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
         com.dwinovo.numen.core.Constants.LOG.info(
-                "[numen-task] mine start targets={} count={} feet={} firstQuery={} hit(s) mapComplete={}",
-                r.label, r.count, player.blockPosition().toShortString(),
-                knownOres.size(), lastQueryComplete);
+                "[numen-task] mine start targets={} count={} feet={}",
+                r.label, r.count, player.blockPosition().toShortString());
     }
 
     @Override
@@ -253,10 +255,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
         // Maintain the ore list every tick — INCLUDING while a dig below is latched:
         // prune (cheap — knownOres is capped at 64) revalidates against the live world;
-        // the shared TargetIndex is queried on demand (list low / new chunk / slow
-        // heartbeat / cold area still building) instead of on a fixed rescan cadence —
-        // the block-change hook keeps the index itself current in between.
+        // a search is started on demand (list low / new chunk / slow heartbeat / last one
+        // cut short) instead of on a fixed rescan cadence — the block-change hook keeps
+        // the shared index current in between.
         long tUpkeep = NavProfiler.begin();
+        absorbSearch();
         prune();
         maybeQuery();
         NavProfiler.end("mine.upkeep", tUpkeep);
@@ -386,13 +389,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             }
         }
 
-        // 3) No ore known and nothing dropped nearby. An incomplete index (cold area
-        //    still building under the per-query budget) means "don't know yet", not
-        //    "nothing there" — wait for full coverage before any verdict. 等扫描的刻
-        //    不烧任务预算:索引按真实时间分摊构建,而期限数游戏刻——tick 远快于真实
-        //    时间时(/tick rate、不限速的测试服),期限会在首查返回前烧光,任务无声
-        //    TIMEOUT。与 nav 规划在飞的冻结(AbstractCompanionTask)同一条保护。
-        if (!lastQueryComplete) {
+        // 3) No ore known and nothing dropped nearby. A search still in flight, or the last
+        //    one cut short, means "don't know yet", not "nothing there" — wait for it before
+        //    any verdict. 等搜索的刻不烧任务预算:读地形按真实时间分摊,而期限数游戏刻——
+        //    tick 远快于真实时间时(/tick rate、不限速的测试服),期限会在首查返回前烧光,
+        //    任务无声 TIMEOUT。与 nav 规划在飞的冻结(AbstractCompanionTask)同一条保护。
+        if (!lastQueryComplete || searchId != 0) {
             r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
             return TaskState.RUNNING;
         }
@@ -741,11 +743,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     // ---- ore list maintenance ----
 
-    /** 按需查询:名单快吃完 / 进入新 chunk / 慢心跳到点 / 上次覆盖不完整,才碰索引。 */
+    /** 按需查询:名单快吃完 / 进入新 chunk / 慢心跳到点 / 上次没走完,才起一次搜索。 */
     private void maybeQuery() {
         --queryCooldown;
         --heartbeatTimer;
-        if (queryCooldown > 0) {
+        if (queryCooldown > 0 || searchId != 0) {
             return;
         }
         if (knownOres.size() < QUERY_LOW_WATER
@@ -756,7 +758,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         }
     }
 
-    /** 查一次共享索引,把最近的目标并进名单。 */
+    /** 起一次搜索,结果回来后由 {@link #absorbSearch} 并进名单。 */
     private void runQuery() {
         if (!(player.level() instanceof ServerLevel sl)) {
             return;
@@ -764,58 +766,88 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         lastQueryChunk = ChunkPos.asLong(player.blockPosition());
         heartbeatTimer = QUERY_HEARTBEAT_TICKS;
         queryCooldown = QUERY_MIN_GAP_TICKS;
-        TargetIndex.Result res = TargetIndex.query(sl, player.blockPosition(), r.targets,
-                MAX_ORES, QUERY_MAX_CHUNK_RADIUS, QUERY_BUILD_BUDGET);
-        lastQueryComplete = res.complete();
+        searchId = BlockSearch.start(player.getUUID(), sl, player.blockPosition(), QUERY_MAX_CHUNK_RADIUS * 16,
+                MAX_ORES, r.targets, res -> {
+                    searchId = 0;
+                    arrived = res;
+                });
+    }
+
+    /** 搜索回来了就把最近的目标并进名单。 */
+    private void absorbSearch() {
+        BlockSearch.ScanResult res = arrived;
+        if (res == null) {
+            return;
+        }
+        arrived = null;
+        // 间隔从结果到手时起算:冷区域一次搜索可能跨过整个间隔,从起跑时算的话名单一空就接着起下一次,
+        // 终局判定永远等不到"没有在飞的搜索"
+        queryCooldown = QUERY_MIN_GAP_TICKS;
+        heartbeatTimer = QUERY_HEARTBEAT_TICKS;
+        lastQueryComplete = !res.deadlineHit();
         if (lastQueryComplete) {
             coldMapFails = 0;   // 图齐了，之前那几次无路不再算数
         }
         com.dwinovo.numen.core.Constants.LOG.debug(
                 "[numen-task] mine query feet={} raw={} complete={} known(before merge)={}",
-                player.blockPosition().toShortString(), res.hits().size(), res.complete(),
+                player.blockPosition().toShortString(), res.matches().size(), lastQueryComplete,
                 knownOres.size());
-        mergeHits(res.hits());
+        mergeHits(res.matches());
     }
 
-    /** Add fresh, still-workable hits to knownOres, then prune (which re-validates
-     *  every entry against the live world and keeps the nearest {@link #MAX_ORES}). */
-    private void mergeHits(List<BlockPos> hits) {
+    /**
+     * 按由近及远把还做得成的命中收进名单,收满 {@link #MAX_ORES} 个就停:铺天盖地的目标(石头)一次能回来
+     * 上千格,逐格验完再截断是白花主线程——远处的下次查询还在。
+     */
+    private void mergeHits(List<BlockScanner.Hit> hits) {
         // One-off Set view for dedup: knownOres stays a distance-ordered list (prune sorts it),
         // but membership checks against it must not be linear scans — a big batch times a
         // linear contains is O(N^2) on the server thread.
         Set<BlockPos> seen = new HashSet<>(knownOres);
-        for (BlockPos hit : hits) {
-            BlockPos p = hit.immutable();
-            if (unworkable.contains(p) || !seen.add(p)) continue;
+        Level level = player.level();
+        CalculationContext ctx = ContextFactory.forExecution(player, MINE_TERRAIN.spec());
+        for (BlockScanner.Hit hit : hits) {
+            if (knownOres.size() >= MAX_ORES) {
+                break;
+            }
+            BlockPos p = hit.pos().immutable();
+            if (!seen.add(p) || !stillCandidate(level, ctx, p)) {
+                continue;
+            }
             knownOres.add(p);
         }
         prune();
     }
 
+    /**
+     * 这一格还算不算候选:还是目标方块、没被记成挖不动、挖得成、手里的工具收得到掉落。
+     * 问的是"挖不挖得成",按这件活自己的规格算;许不许挖不在这里剪。
+     */
+    private boolean stillCandidate(Level level, CalculationContext ctx, BlockPos p) {
+        var state = level.getBlockState(p);
+        if (state.isAir() || !r.targets.contains(state.getBlock()) || unworkable.contains(p)) {
+            return false;
+        }
+        if (!plausibleToBreak(ctx, p, state)) {
+            return false;
+        }
+        // Harvestability gate. Tool-skipped cells are remembered so the terminal failure
+        // can say "you need a better tool" instead of the misleading "nothing found" (the
+        // tool situation can also CHANGE mid-task: the only good pick breaking makes this
+        // fire on re-prune).
+        if (!WorkProfile.of(player).instaBreak()
+                && !BlockHelper.canHarvest(player.getInventory(), state)) {
+            unharvestable.add(p.immutable());
+            return false;
+        }
+        return true;
+    }
+
     private void prune() {
         Level level = player.level();
         BlockPos feet = player.blockPosition();
-        // 问的是"挖不挖得成",按这件活自己的规格算;许不许挖不在这里剪
         CalculationContext ctx = ContextFactory.forExecution(player, MINE_TERRAIN.spec());
-        knownOres.removeIf(p -> {
-            var state = level.getBlockState(p);
-            if (state.isAir() || !r.targets.contains(state.getBlock()) || unworkable.contains(p)) {
-                return true;
-            }
-            if (!plausibleToBreak(ctx, p, state)) {
-                return true;
-            }
-            // Harvestability gate. Tool-skipped cells are remembered so the terminal failure
-            // can say "you need a better tool" instead of the misleading "nothing found" (the
-            // tool situation can also CHANGE mid-task: the only good pick breaking makes this
-            // fire on re-prune).
-            if (!WorkProfile.of(player).instaBreak()
-                    && !BlockHelper.canHarvest(player.getInventory(), state)) {
-                unharvestable.add(p.immutable());
-                return true;
-            }
-            return false;
-        });
+        knownOres.removeIf(p -> !stillCandidate(level, ctx, p));
         knownOres.sort(Comparator.comparingDouble(feet::distSqr));
         if (knownOres.size() > MAX_ORES) {
             knownOres.subList(MAX_ORES, knownOres.size()).clear();
@@ -931,8 +963,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // clears its lingering goal boxes. Then release the dig + the index registration.
         super.cleanup();
         digger.cancel();
+        if (searchId != 0) {
+            BlockSearch.cancel(searchId);
+            searchId = 0;
+        }
         if (player.level() instanceof ServerLevel sl) {
-            TargetIndex.unregister(sl, r.targets);
+            BlockSearch.release(sl, r.targets);
         }
     }
 
