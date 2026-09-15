@@ -237,7 +237,7 @@ public final class DebugCommands {
         }
         TaskRecord record;
         try {
-            record = BLOCK_TOOLS.autoMine(blockIds, count,
+            record = BLOCK_TOOLS.autoMine(blockIds, null, count, null,
                     TaskDispatch.ctx("debug-mine", companion));
         } catch (IllegalArgumentException e) {
             ctx.getSource().sendFailure(Component.literal(e.getMessage()));

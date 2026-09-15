@@ -22,7 +22,7 @@ import net.minecraft.tags.TagKey;
 import net.minecraft.world.level.block.Block;
 
 /**
- * 工具面的路线规格:{@code goto} 与 {@code plan_route} 的 {@code spec} 参数长什么样
+ * 工具面的路线规格:{@code goto}、{@code plan_route} 与 {@code mine} 的 {@code spec} 参数长什么样
  * ({@link #schema})、怎么变成 {@link RouteSpec}({@link #parse})——JSON 到规格的翻译全仓
  * 只此一处。旋钮名用模型看得懂的普通词,按规格的四组组织:
  * <ul>
@@ -33,7 +33,8 @@ import net.minecraft.world.level.block.Block;
  *       方块 id、{@code #标签},或坐标 {@code x,y,z} / 坐标盒 {@code x1,y1,z1..x2,y2,z2};</li>
  *   <li>动作代价:{@code penalties} 里的 {@code place}/{@code break}/{@code jump}/{@code wade}。</li>
  * </ul>
- * 全部可选,不给就是出厂值(只走不改)。每一条错都报教学式错误——名字打错、坐标格式不对、
+ * 全部可选,不给的字段保持调用方的默认规格:goto 与 plan_route 是出厂值(只走不改),mine 是它自己的
+ * 默认(可以改地形,要主人同意的格也算进去)。每一条错都报教学式错误——名字打错、坐标格式不对、
  * 方块 id 不存在——模型下一次就写对。
  */
 public final class RouteSpecJson {
@@ -46,9 +47,9 @@ public final class RouteSpecJson {
 
     /** {@code spec} 对象的字段(挂在调用方的 {@code optionalObject} 里)。 */
     public static void schema(Schema.Builder b) {
-        b.optionalEnum("alter", "Whether the walk may change the world: 'none' (default) never "
-                        + "breaks or places a block; 'natural' may dig, bridge and pillar through "
-                        + "natural terrain and every change is itemised in the result.",
+        b.optionalEnum("alter", "Whether the walk may change the world: 'none' never breaks or "
+                        + "places a block; 'natural' may dig, bridge and pillar through natural terrain "
+                        + "and every change is itemised in the result.",
                         "none", "natural")
                 .optionalStringArray("avoid", "Cell types to keep out of entirely. Names: "
                         + cellNames() + ". E.g. ['water'] to stay dry, ['door'] to never pass doors.")
@@ -70,14 +71,22 @@ public final class RouteSpecJson {
                         + "Default 3; she may still fall further when her health can take it.", 0, 64)
                 .optionalInteger("alter_budget", "Budget of blocks the whole route may change (broken + "
                         + "placed). Routes that would exceed it are dropped; if none fits, the reply says so. "
-                        + "Only meaningful with alter:'natural'. Checked when the route is planned; if she has "
+                        + "Only meaningful when the walk may alter terrain. Checked when the route is planned; if she has "
                         + "to re-plan after being blocked, the result still itemises every block actually "
                         + "changed.", 0, 10_000);
     }
 
-    /** {@code null} 或空对象即出厂规格。 */
+    /** 叠在出厂规格上({@link #parse(JsonObject, RouteSpec)});{@code null} 或空对象即出厂规格。 */
     public static RouteSpec parse(JsonObject json) {
-        RouteSpec spec = RouteSpec.defaults();
+        return parse(json, RouteSpec.defaults());
+    }
+
+    /**
+     * 把模型给的字段叠在调用方自己的默认规格 {@code base} 上:没给的字段保持 base 的值,按位置与按种类的
+     * 禁令并进 base 已有的那些。{@code null} 或空对象即 base。
+     */
+    public static RouteSpec parse(JsonObject json, RouteSpec base) {
+        RouteSpec spec = base;
         if (json == null) {
             return spec;
         }
@@ -111,8 +120,10 @@ public final class RouteSpecJson {
         breaking.cells.forEach((long c) -> cells.dig(c, RouteSpec.FORBID));
         placing.cells.forEach((long c) -> cells.place(c, RouteSpec.FORBID));
         standing.cells.forEach((long c) -> cells.stand(c, RouteSpec.FORBID));
+        RouteSpec.BlockBans held = spec.bans();
         spec = spec.withPositions(spec.positions().plus(cells.build()))
-                .withBans(new RouteSpec.BlockBans(breaking.blocks, placing.blocks, standing.blocks));
+                .withBans(new RouteSpec.BlockBans(union(held.breaking(), breaking.blocks),
+                        union(held.placingInto(), placing.blocks), union(held.standingOn(), standing.blocks)));
         if (json.has("parkour")) {
             spec = spec.withParkour(bool(json, "parkour"));
         }
@@ -177,6 +188,12 @@ public final class RouteSpecJson {
                     "spec.penalties." + name + " must be between 0 and " + (int) MAX_PENALTY + ", got " + v);
         }
         return v;
+    }
+
+    private static Set<Block> union(Set<Block> held, Set<Block> added) {
+        Set<Block> out = new LinkedHashSet<>(held);
+        out.addAll(added);
+        return out;
     }
 
     /** 一栏禁令:按种类的方块集合 + 按位置的格子集合。 */

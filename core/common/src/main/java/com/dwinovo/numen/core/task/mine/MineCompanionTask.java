@@ -17,6 +17,7 @@ import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.NavProfiler;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.scan.BlockSearch;
+import com.dwinovo.numen.core.scan.GroupBook;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
@@ -54,6 +55,12 @@ import java.util.Set;
  * companion player body (a server-side fake player, so every break goes
  * through real server-side interaction rules, not client input).
  *
+ * <h2>两种用法,一个循环</h2>
+ * {@code block_ids} 用法的候选来自搜索({@link BlockSearch});{@code groups} 用法的候选只是点名的团里的格子
+ * ({@link GroupBook},开工时按编号取),每格还得是扫描时记下的那种方块,不往外扩。除了候选从哪来,走、挖、
+ * 捡、问权限、收场都是同一条路。点名的格子途中被别人挖掉或变了,照常挖剩下的,回执如实交代;全都没了就
+ * 如实收场。
+ *
  * <h2>The loop</h2>
  * <ol>
  *   <li><b>knownOreLocations</b> — fed on demand by {@link BlockSearch} (the one way to
@@ -76,7 +83,8 @@ import java.util.Set;
  * </ol>
  *
  * <h2>主人的东西</h2>
- * 选目标不看权限:主人放的原木和野树一样是候选。路线规格是 {@link RouteSpec.Alter#ANY},
+ * 选目标不看权限:主人放的原木和野树一样是候选。路线规格默认是 {@link RouteSpec.Alter#ANY}(模型给的
+ * {@code spec} 叠在上面,{@code avoid_break} 这类限制经 {@link #plausibleToBreak} 直接作用到候选上),
  * 需要主人同意的格在成本模型里乘 {@code CONSENT_COST_MULTIPLIER}——挑目标按"走过去 + 挖它"的
  * 同一套定价({@link #targetCost}),附近有野树时自然先挖野树。轮到一格,动手之前把这次挖掘交给
  * 权限层({@link #permit}):要问就等主人点头,同一行规则问出来的同一种方块从此本任务内不再问;
@@ -161,6 +169,19 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  这种画像下恒为 0,数拾取物会让任务铲平半径 32 chunk 后报败。 */
     private int brokenTargets;
 
+    /** groups 用法点名的格子和扫描时记下的方块;block_ids 用法为 null。 */
+    private Map<BlockPos, Block> named;
+    /** groups 用法里出现的方块种类。 */
+    private Set<Block> namedKinds = Set.of();
+    /** groups 用法里还没收进名单的点名格。挖不动的格也回到这里,地形一变还能再收。 */
+    private final Set<BlockPos> remaining = new HashSet<>();
+    /** groups 用法里轮到时已经不是扫描时那种方块的格(被挖掉、被换掉)。 */
+    private final Set<BlockPos> gone = new HashSet<>();
+    /** 挖不成的候选:挖不动的方块、规格禁挖的、贴着流体或悬空落沙的——{@link #plausibleToBreak} 说不的。 */
+    private final Set<BlockPos> ruledOut = new HashSet<>();
+    /** 这件活的路线规格:mine 的默认叠上模型给的。 */
+    private final PlayerNav.ContextProvider terrain;
+
     /** 距下一次允许查询的冷却(tick)。 */
     private int queryCooldown;
     /** 距慢心跳强制刷新的剩余 tick。 */
@@ -184,6 +205,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private int searchId;
     /** 回来了还没并进名单的搜索结果。 */
     private BlockSearch.ScanResult arrived;
+    /** 开工时在 {@link BlockSearch} 持有了目标登记;收尾只放下自己持有的。 */
+    private boolean holding;
 
     // Progressive dig (blocks break tick-by-tick at legitimate player speed, not
     // instabreak) — shared with the path executor so all breaking reads the same.
@@ -192,6 +215,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     public MineCompanionTask(NumenPlayer player, MineBlockTaskRecord record) {
         super(player, record);
         this.digger = new BlockDigger(player);
+        this.terrain = PlayerNav.ContextProvider.of(record.spec);
     }
 
     @Override
@@ -200,11 +224,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // would destroy the block for no drop. Same gate as the cost model
         // (BlockHelper.canHarvest, whole-inventory). prune() then drops any individual unharvestable
         // cell, so a mixed request (e.g. coal we can mine + diamond we can't) still works.
-        return List.of(() -> {
+        return List.of(this::resolveGroups, () -> {
             if (WorkProfile.of(player).instaBreak()) {
                 return null;   // 瞬破画像无视工具等级,工具门不适用
             }
-            boolean anyHarvestable = r.targets.stream().anyMatch(
+            boolean anyHarvestable = kinds().stream().anyMatch(
                     b -> BlockHelper.canHarvest(player.getInventory(), b.defaultBlockState()));
             if (!anyHarvestable) {
                 return new Precondition.Failure(
@@ -218,35 +242,70 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         });
     }
 
+    /**
+     * groups 用法:按编号取身体上团簿里最新一次扫描的团。有编号不在里面(更早的扫描、重启前的扫描、
+     * 从没扫过)就明说过期,让模型重新扫描——旧编号不会被悄悄当成别的团。
+     */
+    private Precondition.Failure resolveGroups() {
+        if (r.groups.isEmpty()) {
+            return null;
+        }
+        GroupBook book = GroupBook.of(player);
+        String stale = book.staleMessage(r.groups);
+        if (stale != null) {
+            return new Precondition.Failure(stale, FailureType.TARGET_LOST);
+        }
+        named = book.cells(r.groups);
+        namedKinds = Set.copyOf(named.values());
+        return null;
+    }
+
+    /** 这件活要的方块种类:block_ids 用法点名的,或 groups 用法团里扫描时记下的。 */
+    private Set<Block> kinds() {
+        return named == null ? r.targets : namedKinds;
+    }
+
     @Override
     protected void onStart() {
         // Count toward `count` by ITEMS gathered, not blocks broken: resolve what these
         // blocks drop, and snapshot how many we already hold so the tally is the delta above it.
         dropItems = computeDropItems();
         baseline = inventoryMatch();
-        // 持有目标的登记,让共享索引在任务期间保持新鲜,并立即起首次搜索;冷区域的读地形由
-        // 每刻的读节配额分摊,首批结果回来前 onTick 的终局判定会等着(lastQueryComplete)。
-        if (player.level() instanceof ServerLevel sl) {
-            BlockSearch.hold(sl, r.targets);
+        if (named != null) {
+            // 候选就是点名的格子,不用搜;没给 count 的话期限按格数给
+            remaining.addAll(named.keySet());
+            r.setCells(named.size());
+            lastQueryComplete = true;
+            if (r.count == MineBlockTaskRecord.UNTIL_GONE) {
+                r.extendDeadlineTo(player.level().getGameTime() + MineBlockTaskRecord.timeoutTicks(named.size()));
+            }
+        } else {
+            // 持有目标的登记,让共享索引在任务期间保持新鲜,并立即起首次搜索;冷区域的读地形由
+            // 每刻的读节配额分摊,首批结果回来前 onTick 的终局判定会等着(lastQueryComplete)。
+            if (player.level() instanceof ServerLevel sl) {
+                BlockSearch.hold(sl, r.targets);
+                holding = true;
+            }
+            runQuery();
         }
-        runQuery();
         lastProgressTick = player.level().getGameTime();
         lastProgressPos = player.blockPosition();
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
         com.dwinovo.numen.core.Constants.LOG.info(
-                "[numen-task] mine start targets={} count={} feet={}",
-                r.label, r.count, player.blockPosition().toShortString());
+                "[numen-task] mine start targets={} count={} cells={} feet={}",
+                r.label, r.count, named == null ? "-" : named.size(), player.blockPosition().toShortString());
     }
 
     @Override
     protected TaskState onTick() {
         // 进度口径随画像:有掉落 = 数拾取到的物品(一块矿可能出多个);
-        // 无掉落(创造) = 数破坏的目标方块——否则永远数不满。
-        int gathered = WorkProfile.of(player).dropsLoot()
+        // 无掉落(创造) = 数破坏的目标方块——否则永远数不满。挖完点名的团为止的,数挖掉的格。
+        boolean untilGone = r.count == MineBlockTaskRecord.UNTIL_GONE;
+        int gathered = WorkProfile.of(player).dropsLoot() && !untilGone
                 ? Math.max(0, inventoryMatch() - baseline)
                 : brokenTargets;
         r.setMined(gathered);
-        if (gathered >= r.count) {
+        if (!untilGone && gathered >= r.count) {
             progressNote = "gathered all requested";
             return TaskState.SUCCESS;
         }
@@ -301,8 +360,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 return TaskState.RUNNING;
             }
             if (permit.state() == PermitState.REFUSED) {
-                fail("could not mine " + r.label + ": " + permit.refusal() + "; gathered " + r.getMined(),
-                        FailureType.REFUSED);
+                fail("could not mine " + r.label + ": " + permit.refusal() + "; " + soFar(), FailureType.REFUSED);
                 return TaskState.FAILED;
             }
             return mineProgress(reachable);
@@ -328,7 +386,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 // and standing in a stance whose ore just got mined out resumes navigation
                 // instead of reporting a stale arrival.
                 nav = PlayerNav.toRevalidating(player, this::oreFieldCompiled, MINE_SPEED,
-                        () -> reachableTarget() != null, MINE_TERRAIN);
+                        () -> reachableTarget() != null, terrain);
             }
             switch (nav.tick()) {
                 case RUNNING -> { return TaskState.RUNNING; }
@@ -402,7 +460,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         //    range still succeeds") — the body does not wander off across the world looking
         //    for more; widening the search is the model's call.
         if (r.getMined() > 0) {
-            progressNote = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
+            progressNote = (named == null ? "no more " + r.label + " in range" : "nothing left to dig in " + r.label)
+                    + leftovers();
             return TaskState.SUCCESS;
         }
         return noOreFailure();
@@ -421,10 +480,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return GoalCompiler.mineField(
                 new ArrayList<>(knownOres), this::digCost, new ArrayList<>(drops));
     }
-
-    /** 挖这一格的这次导航的规格:可以改地形,需要主人同意的格也算进去、按价排在后面。 */
-    private static final PlayerNav.ContextProvider MINE_TERRAIN =
-            PlayerNav.ContextProvider.of(RouteSpec.defaults().withAlter(RouteSpec.Alter.ANY));
 
     /** 到了之后挖它的价钱;这一刻没算过的按不许挖的价。 */
     private double digCost(BlockPos ore) {
@@ -655,8 +710,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 // 挖掘落点的裁决不许(动手前放行之后世界变了,或挡在前面的遮挡物不许挖):
                 // 权限层的拒绝就是这件活的结果,带着理由收场
                 digger.cancel();
-                fail("could not mine " + r.label + ": " + digger.refusal().reason() + "; gathered "
-                        + r.getMined(), FailureType.REFUSED);
+                fail("could not mine " + r.label + ": " + digger.refusal().reason() + "; " + soFar(),
+                        FailureType.REFUSED);
                 return TaskState.FAILED;
             }
             case NO_SHOT -> {
@@ -664,6 +719,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     if (++noShotTicks >= MAX_NO_SHOT_TICKS) {
                         unworkable.add(pos.immutable());
                         knownOres.remove(pos);
+                        if (named != null) {
+                            remaining.add(pos.immutable());   // 地形一变(挖掉任何一格)还能再收
+                        }
                         digger.cancel();   // release the in-progress-dig latch on this ore
                         clearNoShot();
                     }
@@ -703,11 +761,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private Set<Item> computeDropItems() {
         Set<Item> items = new HashSet<>();
         if (!(player.level() instanceof ServerLevel level)) {
-            for (Block b : r.targets) items.add(b.asItem());
+            for (Block b : kinds()) items.add(b.asItem());
             return items;
         }
         BlockPos origin = player.blockPosition();
-        for (Block b : r.targets) {
+        for (Block b : kinds()) {
             BlockState state = b.defaultBlockState();
             List<ItemStack> drops;
             try {
@@ -743,10 +801,20 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     // ---- ore list maintenance ----
 
-    /** 按需查询:名单快吃完 / 进入新 chunk / 慢心跳到点 / 上次没走完,才起一次搜索。 */
+    /**
+     * 按需补货。block_ids 用法:名单快吃完 / 进入新 chunk / 慢心跳到点 / 上次没走完,才起一次搜索。
+     * groups 用法:名单空了,或快吃完且过了间隔,就从点名格里收。
+     */
     private void maybeQuery() {
         --queryCooldown;
         --heartbeatTimer;
+        if (named != null) {
+            if (knownOres.isEmpty() || (knownOres.size() < QUERY_LOW_WATER && queryCooldown <= 0)) {
+                queryCooldown = QUERY_MIN_GAP_TICKS;
+                admitNamed();
+            }
+            return;
+        }
         if (queryCooldown > 0 || searchId != 0) {
             return;
         }
@@ -805,7 +873,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // linear contains is O(N^2) on the server thread.
         Set<BlockPos> seen = new HashSet<>(knownOres);
         Level level = player.level();
-        CalculationContext ctx = ContextFactory.forExecution(player, MINE_TERRAIN.spec());
+        CalculationContext ctx = ContextFactory.forExecution(player, terrain.spec());
         for (BlockScanner.Hit hit : hits) {
             if (knownOres.size() >= MAX_ORES) {
                 break;
@@ -820,15 +888,51 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     }
 
     /**
-     * 这一格还算不算候选:还是目标方块、没被记成挖不动、挖得成、手里的工具收得到掉落。
-     * 问的是"挖不挖得成",按这件活自己的规格算;许不许挖不在这里剪。
+     * groups 用法的补货:从还没收进名单的点名格里由近及远收,收满 {@link #MAX_ORES} 个为止。挖不动的格留在
+     * 那儿等地形变;其余收不进的({@link #stillCandidate} 记了账)就此划掉。
+     */
+    private void admitNamed() {
+        if (remaining.isEmpty() || knownOres.size() >= MAX_ORES) {
+            return;
+        }
+        BlockPos feet = player.blockPosition();
+        List<BlockPos> nearestFirst = new ArrayList<>(remaining);
+        nearestFirst.sort(Comparator.comparingDouble(feet::distSqr));
+        Level level = player.level();
+        CalculationContext ctx = ContextFactory.forExecution(player, terrain.spec());
+        for (BlockPos p : nearestFirst) {
+            if (knownOres.size() >= MAX_ORES) {
+                break;
+            }
+            if (unworkable.contains(p)) {
+                continue;
+            }
+            remaining.remove(p);
+            if (stillCandidate(level, ctx, p)) {
+                knownOres.add(p);
+            }
+        }
+        prune();
+    }
+
+    /**
+     * 这一格还算不算候选:还是要的方块(groups 用法:还是扫描时记下的那种)、没被记成挖不动、挖得成、手里的
+     * 工具收得到掉落。问的是"挖不挖得成",按这件活自己的规格算;许不许挖不在这里剪。收不进的记账,回执交代。
      */
     private boolean stillCandidate(Level level, CalculationContext ctx, BlockPos p) {
         var state = level.getBlockState(p);
-        if (state.isAir() || !r.targets.contains(state.getBlock()) || unworkable.contains(p)) {
+        boolean wanted = named != null ? named.get(p) == state.getBlock() : r.targets.contains(state.getBlock());
+        if (state.isAir() || !wanted) {
+            if (named != null) {
+                gone.add(p.immutable());
+            }
+            return false;
+        }
+        if (unworkable.contains(p)) {
             return false;
         }
         if (!plausibleToBreak(ctx, p, state)) {
+            ruledOut.add(p.immutable());
             return false;
         }
         // Harvestability gate. Tool-skipped cells are remembered so the terminal failure
@@ -846,11 +950,15 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private void prune() {
         Level level = player.level();
         BlockPos feet = player.blockPosition();
-        CalculationContext ctx = ContextFactory.forExecution(player, MINE_TERRAIN.spec());
+        CalculationContext ctx = ContextFactory.forExecution(player, terrain.spec());
         knownOres.removeIf(p -> !stillCandidate(level, ctx, p));
         knownOres.sort(Comparator.comparingDouble(feet::distSqr));
         if (knownOres.size() > MAX_ORES) {
-            knownOres.subList(MAX_ORES, knownOres.size()).clear();
+            List<BlockPos> farther = knownOres.subList(MAX_ORES, knownOres.size());
+            if (named != null) {
+                remaining.addAll(farther);   // 点名的格只是暂时排不上,不是没了
+            }
+            farther.clear();
         }
         // 挖每一块的价钱:同一个成本模型,需要主人同意的乘倍率,不许的是 INF——挑目标按价,不按剪
         digCosts.clear();
@@ -918,15 +1026,48 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 now - lastProgressTick, player.blockPosition().toShortString(), knownOres.size());
         String where = player.blockPosition().toShortString();
         if (r.getMined() > 0) {
-            progressNote = "gathered " + r.getMined() + "/" + r.count + ", then got stuck at "
-                    + where + " — could not reach the remaining " + knownOres.size() + " "
-                    + r.label;
+            progressNote = "then got stuck at " + where + " — could not reach the remaining "
+                    + knownOres.size() + " " + noun() + leftovers();
             return TaskState.SUCCESS;
         }
-        fail("found " + knownOres.size() + " " + r.label + " but could not reach any of them from "
+        fail("found " + knownOres.size() + " " + noun() + " but could not reach any of them from "
                 + where + " — no path out, and nothing minable in place; gathered 0."
                 + " Move me somewhere else, or clear a way first.", FailureType.NO_PATH);
         return TaskState.FAILED;
+    }
+
+    /** 挖不成的候选在回执里的说法。 */
+    private static final String RULED_OUT = "can't be broken here (unbreakable, excluded by the spec, or fluid or"
+            + " loose falling blocks beside them)";
+
+    /** 回执里怎么称呼要挖的东西:方块名,或"g3 的格子"。 */
+    private String noun() {
+        return named == null ? r.label : "cells of " + r.label;
+    }
+
+    /** 到目前为止的收获,一句话。 */
+    private String soFar() {
+        return r.count == MineBlockTaskRecord.UNTIL_GONE
+                ? "dug " + r.getMined() + " of " + r.cells() + " cells"
+                : "gathered " + r.getMined();
+    }
+
+    /** 找到了或点名了、却没挖成的各因为什么;都没有是空串。 */
+    private String leftovers() {
+        List<String> parts = new ArrayList<>(4);
+        if (!gone.isEmpty()) {
+            parts.add(gone.size() + " were gone or had changed before I got to them");
+        }
+        if (!unharvestable.isEmpty()) {
+            parts.add(unharvestable.size() + " can't be harvested with the current tools");
+        }
+        if (!unworkable.isEmpty()) {
+            parts.add(unworkable.size() + " gave no clear shot from any stance");
+        }
+        if (!ruledOut.isEmpty()) {
+            parts.add(ruledOut.size() + " " + RULED_OUT);
+        }
+        return parts.isEmpty() ? "" : "; not mined: " + String.join(", ", parts);
     }
 
     /** Terminal "nothing gathered, no ore left to go for" failure, distinguishing a
@@ -938,17 +1079,21 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         if (!unharvestable.isEmpty()) {
             // Targets exist but the carried tools can't make them drop — the actionable
             // problem is the tool, not the deposit. Names the escape hatches explicitly.
-            fail("found " + unharvestable.size() + " " + r.label + " but none can be harvested with"
+            fail("found " + unharvestable.size() + " " + noun() + " but none can be harvested with"
                     + " the current tools (mining would destroy them without any drop); gathered "
                     + r.getMined() + ". Equip a better tool (equip_item) and retry; to just destroy"
-                    + " blocks regardless of drops, goto beside them and use interact_at with button left.",
-                    FailureType.WRONG_TOOL);
-            return TaskState.FAILED;
-        }
-        if (!unworkable.isEmpty()) {
-            fail("found " + unworkable.size() + " " + r.label + " nearby but no clear shot at any"
-                    + " of them from any stance I could take; gathered 0",
+                    + " blocks regardless of drops, goto beside them and use interact_at with button left."
+                    + leftovers(), FailureType.WRONG_TOOL);
+        } else if (!unworkable.isEmpty()) {
+            fail("found " + unworkable.size() + " " + noun() + " nearby but no clear shot at any"
+                    + " of them from any stance I could take; gathered 0" + leftovers(),
                     FailureType.NO_PATH);
+        } else if (!ruledOut.isEmpty()) {
+            fail("found " + ruledOut.size() + " " + noun() + " but none " + RULED_OUT + "; gathered 0"
+                    + leftovers(), FailureType.MINED_OUT);
+        } else if (named != null) {
+            fail("all " + named.size() + " cells of " + r.label + " were gone or had changed since the scan;"
+                    + " gathered 0. scan_blocks again to see what is there now.", FailureType.TARGET_LOST);
         } else {
             fail("no reachable " + r.label + " found in the loaded area around me",
                     FailureType.MINED_OUT);
@@ -967,7 +1112,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             BlockSearch.cancel(searchId);
             searchId = 0;
         }
-        if (player.level() instanceof ServerLevel sl) {
+        if (holding && player.level() instanceof ServerLevel sl) {
             BlockSearch.release(sl, r.targets);
         }
     }
@@ -976,23 +1121,35 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     protected Map<String, Object> resultData() {
         Map<String, Object> data = new HashMap<>();
         data.put("target", r.label);
-        data.put("requested", r.count);
-        data.put("gathered", r.getMined());
+        if (r.count == MineBlockTaskRecord.UNTIL_GONE) {
+            data.put("cells", r.cells());
+            data.put("dug", r.getMined());
+        } else {
+            data.put("requested", r.count);
+            data.put("gathered", r.getMined());
+        }
         return data;
+    }
+
+    /** {@code gathered 3/8 oak_log} 或 {@code dug 3/12 cells of g3,g4}。 */
+    private String tally() {
+        return r.count == MineBlockTaskRecord.UNTIL_GONE
+                ? "dug " + r.getMined() + "/" + r.cells() + " cells of " + r.label
+                : "gathered " + r.getMined() + "/" + r.count + " " + r.label;
     }
 
     @Override
     protected String successMessage() {
-        return "gathered " + r.getMined() + "/" + r.count + " " + r.label + " (" + progressNote + ")";
+        return tally() + " (" + progressNote + ")";
     }
 
     @Override
     protected String timeoutMessage() {
-        return "timed out after gathering " + r.getMined() + "/" + r.count + " " + r.label;
+        return "timed out after I " + tally();
     }
 
     @Override
     protected String cancelledMessage() {
-        return "interrupted after gathering " + r.getMined() + "/" + r.count + " " + r.label;
+        return "interrupted after I " + tally();
     }
 }

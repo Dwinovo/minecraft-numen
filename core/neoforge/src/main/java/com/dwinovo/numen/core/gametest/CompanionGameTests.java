@@ -430,7 +430,7 @@ public class CompanionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_tunneler", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
         TaskRecord record = new BlockActionOps().autoMine(
-                List.of("minecraft:gold_ore"), 2, TaskDispatch.ctx("gametest-doormine", companion));
+                List.of("minecraft:gold_ore"), null, 2, null, TaskDispatch.ctx("gametest-doormine", companion));
         TaskDispatch.setTask(companion, record, null, reply -> {});
 
         BlockPos wallProbe = helper.absolutePos(new BlockPos(1, 3, 3));
@@ -469,7 +469,7 @@ public class CompanionGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
 
         TaskRecord record = new BlockActionOps().autoMine(
-                List.of("minecraft:spruce_log"), 8, TaskDispatch.ctx("gametest-mine", companion));
+                List.of("minecraft:spruce_log"), null, 8, null, TaskDispatch.ctx("gametest-mine", companion));
         TaskDispatch.setTask(companion, record, null, reply -> {});
 
         helper.succeedWhen(() -> {
@@ -2702,7 +2702,7 @@ public class CompanionGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
 
         TaskRecord record = new BlockActionOps().autoMine(
-                List.of("minecraft:deepslate_diamond_ore"), 2, TaskDispatch.ctx("gametest-mine", companion));
+                List.of("minecraft:deepslate_diamond_ore"), null, 2, null, TaskDispatch.ctx("gametest-mine", companion));
         TaskDispatch.setTask(companion, record, null, reply -> {});
 
         helper.succeedWhen(() -> {
@@ -2769,7 +2769,7 @@ public class CompanionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_cminer", new BlockPos(2, 2, 2), true);
 
         TaskRecord record = new BlockActionOps().autoMine(
-                List.of("minecraft:gold_ore"), 4, TaskDispatch.ctx("gametest-cmine", companion));
+                List.of("minecraft:gold_ore"), null, 4, null, TaskDispatch.ctx("gametest-cmine", companion));
         TaskDispatch.setTask(companion, record, null, reply -> {});
 
         helper.succeedWhen(() -> {
@@ -3752,7 +3752,7 @@ public class CompanionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_forester");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         TaskRecord record = new BlockActionOps().autoMine(
-                List.of("minecraft:oak_log"), 2, TaskDispatch.ctx("gametest-lumber", companion));
+                List.of("minecraft:oak_log"), null, 2, null, TaskDispatch.ctx("gametest-lumber", companion));
         TaskDispatch.setTask(companion, record, null, reply -> {});
         java.util.Set<Long> requests = new java.util.HashSet<>();
         helper.onEachTick(() -> {
@@ -3786,7 +3786,7 @@ public class CompanionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_keeper");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         TaskRecord record = new BlockActionOps().autoMine(
-                List.of("minecraft:jungle_log"), 2, TaskDispatch.ctx("gametest-hewer", companion));
+                List.of("minecraft:jungle_log"), null, 2, null, TaskDispatch.ctx("gametest-hewer", companion));
         TaskDispatch.setTask(companion, record, null, reply -> {});
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
@@ -3828,7 +3828,7 @@ public class CompanionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_warden");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         TaskRecord record = new BlockActionOps().autoMine(
-                List.of("minecraft:acacia_log"), 2, TaskDispatch.ctx("gametest-ranger", companion));
+                List.of("minecraft:acacia_log"), null, 2, null, TaskDispatch.ctx("gametest-ranger", companion));
         TaskDispatch.setTask(companion, record, null, reply -> {});
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
@@ -3952,7 +3952,7 @@ public class CompanionGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.OBSERVE);
         TaskRecord record = new BlockActionOps().autoMine(
-                List.of("minecraft:birch_log"), 2, TaskDispatch.ctx("gametest-watch", companion));
+                List.of("minecraft:birch_log"), null, 2, null, TaskDispatch.ctx("gametest-watch", companion));
         TaskDispatch.setTask(companion, record, null, reply -> {});
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
@@ -3985,7 +3985,7 @@ public class CompanionGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
         TaskRecord record = new BlockActionOps().autoMine(
-                List.of("minecraft:spruce_log"), 2, TaskDispatch.ctx("gametest-trusted", companion));
+                List.of("minecraft:spruce_log"), null, 2, null, TaskDispatch.ctx("gametest-trusted", companion));
         TaskDispatch.setTask(companion, record, null, reply -> {});
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);

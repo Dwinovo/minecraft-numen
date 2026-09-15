@@ -1,53 +1,92 @@
 package com.dwinovo.numen.core.task.mine;
 
+import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.world.level.block.Block;
 
+import java.util.List;
 import java.util.Set;
 
 /**
- * Typed task descriptor for the intent-level {@code mine} tool: "gather
- * {@code count} of these block types, search/pathfind/dig it yourself". The
- * task owns the whole loop — scan the loaded area around the body for
- * targets, walk to them with the terrain-modifying pathfinder (bridging /
- * digging as needed), mine into the entity inventory, repeat until the count
- * is met or nothing reachable remains.
- *
- * <p>The LLM never sees coordinates: it only declares <em>what</em> and
- * <em>how many</em>. Drops/tool-tier follow from whatever the entity holds,
- * as in vanilla.
+ * Typed task descriptor for the intent-level {@code mine} tool, in one of two forms:
+ * <ul>
+ *   <li><b>block_ids</b> — "gather {@code count} of these block types, find them yourself": the task
+ *       searches the loaded area around the body, walks to the nearest with the terrain-modifying
+ *       pathfinder, mines into the inventory, repeats until the count is met or nothing reachable
+ *       remains;</li>
+ *   <li><b>groups</b> — "dig exactly these groups from the latest {@code scan_blocks}": the targets are
+ *       only those cells, each still holding the block the scan recorded; nothing beyond them. The ids
+ *       are resolved against the body's group book when the task starts.</li>
+ * </ul>
+ * Drops/tool-tier follow from whatever the entity holds, as in vanilla.
  */
 public final class MineBlockTaskRecord extends TaskRecord {
 
     public static final String TOOL_NAME = "mine";
 
-    /** Block types to gather (include variants, e.g. iron_ore + deepslate_iron_ore). */
+    /**
+     * mine 的默认规格:可以改地形,需要主人同意的格也算进去、按价排在后面(挖不挖由动手前的权限裁决定)。
+     * 模型给的 {@code spec} 叠在它上面,没给的字段保持这里的值。
+     */
+    public static final RouteSpec DEFAULT_SPEC = RouteSpec.defaults().withAlter(RouteSpec.Alter.ANY);
+
+    /** {@link #count} 取这个值:groups 用法没给 count,挖完这些团为止。 */
+    public static final int UNTIL_GONE = 0;
+
+    /** Per-block budget is generous; total scales with the work so big jobs don't time out. */
+    private static final long TICKS_PER_BLOCK = 30 * 20;   // 30s each
+    private static final long MIN_TIMEOUT_TICKS = 60 * 20; // 1 min floor
+
+    /** Block types to gather (block_ids form; include variants, e.g. iron_ore + deepslate_iron_ore); empty for groups. */
     public final Set<Block> targets;
-    /** How many to gather before reporting success. */
+    /** Group ids from the latest scan (groups form); empty for block_ids. */
+    public final List<String> groups;
+    /** How many ITEMS to gather before reporting success, or {@link #UNTIL_GONE}. */
     public final int count;
-    /** Human-readable target label for messages / debug overlay (e.g. "iron_ore"). */
+    /** Human-readable target label for messages / debug overlay (e.g. "iron_ore", "g3,g4"). */
     public final String label;
+    /** How the body may move and dig: {@link #DEFAULT_SPEC} with the model's fields laid over it. */
+    public final RouteSpec spec;
 
     /** Live progress = matching ITEMS gathered since the task started (counted in the inventory,
-     *  not blocks broken — multi-drop ores like redstone yield several items per block). Set each tick
-     *  by the task; drives the stop condition + the debug overlay text. */
+     *  not blocks broken — multi-drop ores like redstone yield several items per block), or cells
+     *  dug for {@link #UNTIL_GONE}. Set each tick by the task; drives the stop condition + the debug
+     *  overlay text. */
     private int mined = 0;
+    /** groups 用法开工时点名的格数;describe 与回执用。 */
+    private int cells;
 
-    public MineBlockTaskRecord(String toolCallId, long deadlineGameTime,
-                               Set<Block> targets, int count, String label) {
+    public MineBlockTaskRecord(String toolCallId, long deadlineGameTime, Set<Block> targets, List<String> groups,
+                               int count, String label, RouteSpec spec) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.targets = Set.copyOf(targets);
+        this.groups = List.copyOf(groups);
         this.count = count;
         this.label = label;
+        this.spec = spec;
+    }
+
+    /** 挖 {@code blocks} 格(或收 {@code blocks} 个物品)的期限预算。 */
+    public static long timeoutTicks(int blocks) {
+        return Math.max(MIN_TIMEOUT_TICKS, (long) blocks * TICKS_PER_BLOCK);
     }
 
     public int getMined() {
         return mined;
     }
 
-    /** Set the running item-gathered tally (the task recomputes it from the inventory each tick). */
+    /** Set the running tally (the task recomputes it each tick). */
     public void setMined(int gathered) {
         this.mined = gathered;
+    }
+
+    public int cells() {
+        return cells;
+    }
+
+    /** groups 用法开工时记下点名的格数。 */
+    public void setCells(int cells) {
+        this.cells = cells;
     }
 
     @Override
@@ -56,6 +95,8 @@ public final class MineBlockTaskRecord extends TaskRecord {
      * 工具 id 不写进来,需要它的地方(运行时状态的 tool 属性、派发回执)本来就有。
      */
     public String describe() {
-        return "挖 " + label + " " + mined + "/" + count;
+        return count == UNTIL_GONE
+                ? "挖 " + label + " " + mined + "/" + cells + " 格"
+                : "挖 " + label + " " + mined + "/" + count;
     }
 }
