@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -75,6 +76,18 @@ class TextFieldTest {
         for (String t : s.texts) {
             assertTrue(!t.contains("sk-12345") && !t.contains("12345"), "泄漏明文: " + t);
         }
+    }
+
+    @Test
+    void anUnderlinedFieldDrawsOnlyItsBottomLine() {
+        UiRoot root = new UiRoot();
+        TextField f = root.add(new TextField("", s -> {}).placeholder("告诉她该怎么做").underlined(true));
+        f.setBounds(10, 20, 100, 14);
+        WidgetTestSupport.FakeSurface s = new WidgetTestSupport.FakeSurface();
+        f.render(s, WidgetTestSupport.C, 0, 0, 0);
+        assertEquals(1, s.rects.size(), "不画卡壳,只有一道线");
+        assertArrayEquals(new int[]{10, 33, 100, 1}, s.rects.get(0), "线贴着底边、横跨整宽");
+        assertTrue(s.texts.contains("告诉她该怎么做"), "占位照常");
     }
 
     @Test
