@@ -3848,6 +3848,261 @@ public class CompanionGameTests {
         });
     }
 
+    // ==================== 分团:scan_blocks 的团与 mine groups ====================
+
+    /** scan_blocks 在半径 {@code radius} 内找 {@code blockId},回执落进返回数组的第一格。 */
+    private static String[] scan(NumenPlayer companion, int radius, String blockId) {
+        com.google.gson.JsonObject args = new com.google.gson.JsonObject();
+        args.addProperty("radius", radius);
+        com.google.gson.JsonArray ids = new com.google.gson.JsonArray();
+        ids.add(blockId);
+        args.add("block_ids", ids);
+        String[] reply = new String[1];
+        new com.dwinovo.numen.core.tools.perception.ScanBlocksTool().onServerCall("gametest-scan", args, companion,
+                r -> reply[0] = r);
+        return reply;
+    }
+
+    private static com.google.gson.JsonArray groupsIn(String reply) {
+        return com.google.gson.JsonParser.parseString(reply).getAsJsonObject().getAsJsonArray("groups");
+    }
+
+    /** 列出了 {@code cell} 这一格的那一团;没有为 null。 */
+    private static com.google.gson.JsonObject groupHolding(com.google.gson.JsonArray groups, BlockPos cell) {
+        String wanted = cell.getX() + "," + cell.getY() + "," + cell.getZ();
+        for (var element : groups) {
+            var group = element.getAsJsonObject();
+            if (!group.has("positions")) {
+                continue;
+            }
+            for (var position : group.getAsJsonArray("positions")) {
+                if (position.getAsString().equals(wanted)) {
+                    return group;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** mine 点名这些团(不给 count,挖完为止),后台派出。 */
+    private static TaskRecord mineGroups(NumenPlayer companion, String callId, List<String> groups) {
+        TaskRecord record = new BlockActionOps().autoMine(null, groups, null, null,
+                TaskDispatch.ctx(callId, companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+        return record;
+    }
+
+    /**
+     * 玩家放的原木柱贴着一棵野树:scan_blocks 给出两团。柱子那团要问主人(玩家放的)、野树那团放行,
+     * 各自逐格列出,两团不串格。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_permission")
+    public static void scan_blocks_splits_a_player_pillar_from_a_wild_tree(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> pillar = List.of(new BlockPos(7, 2, 7), new BlockPos(7, 3, 7), new BlockPos(7, 4, 7));
+        for (BlockPos rel : pillar) {
+            playerPlaces(helper, rel, Items.CHERRY_LOG);
+        }
+        List<BlockPos> tree = List.of(new BlockPos(8, 2, 7), new BlockPos(8, 3, 7), new BlockPos(8, 4, 7),
+                new BlockPos(8, 5, 7));
+        for (BlockPos rel : tree) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.CHERRY_LOG.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_surveyor", new BlockPos(4, 2, 7), false);
+        String[] reply = scan(companion, 6, "minecraft:cherry_log");
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(reply[0] != null, "scan_blocks has not replied");
+            var root = com.google.gson.JsonParser.parseString(reply[0]).getAsJsonObject();
+            var groups = root.getAsJsonArray("groups");
+            helper.assertTrue(groups.size() == 2 && root.has("groups_total") && root.get("groups_total").getAsInt() == 2,
+                    "expected exactly two groups: " + reply[0]);
+            var owners = groupHolding(groups, helper.absolutePos(pillar.get(0)));
+            var wild = groupHolding(groups, helper.absolutePos(tree.get(0)));
+            helper.assertTrue(owners != null && wild != null && owners != wild,
+                    "the pillar and the tree are not two groups: " + reply[0]);
+            for (BlockPos rel : pillar) {
+                helper.assertTrue(groupHolding(groups, helper.absolutePos(rel)) == owners,
+                        "a pillar log is not in the pillar's group: " + rel.toShortString());
+            }
+            for (BlockPos rel : tree) {
+                helper.assertTrue(groupHolding(groups, helper.absolutePos(rel)) == wild,
+                        "a tree log is not in the tree's group: " + rel.toShortString());
+            }
+            helper.assertTrue(owners.get("cells").getAsInt() == 3 && "ask".equals(owners.get("permission").getAsString())
+                            && owners.get("reason").getAsString().contains("placed by a player"),
+                    "the pillar's group does not say breaking it needs the owner: " + owners);
+            helper.assertTrue(wild.get("cells").getAsInt() == 4 && "allow".equals(wild.get("permission").getAsString()),
+                    "the tree's group is not allowed: " + wild);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * mine groups 只挖点名的团:两棵分开的野树扫成两团,点名近的那团。她挖完那团三格就收场,
+     * 另一团一格不少。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void mine_groups_digs_only_the_named_group(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> named = List.of(new BlockPos(4, 2, 4), new BlockPos(4, 3, 4), new BlockPos(4, 4, 4));
+        List<BlockPos> other = List.of(new BlockPos(11, 2, 10), new BlockPos(11, 3, 10), new BlockPos(11, 4, 10));
+        for (BlockPos rel : named) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.DARK_OAK_LOG.defaultBlockState());
+        }
+        for (BlockPos rel : other) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.DARK_OAK_LOG.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_feller", new BlockPos(7, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        String[] reply = scan(companion, 6, "minecraft:dark_oak_log");
+        TaskRecord[] mine = new TaskRecord[1];
+
+        helper.succeedWhen(() -> {
+            if (mine[0] == null) {
+                helper.assertTrue(reply[0] != null, "scan_blocks has not replied");
+                var groups = groupsIn(reply[0]);
+                var target = groupHolding(groups, helper.absolutePos(named.get(0)));
+                var spared = groupHolding(groups, helper.absolutePos(other.get(0)));
+                helper.assertTrue(target != null && spared != null && target != spared,
+                        "the two trees are not two groups: " + reply[0]);
+                mine[0] = mineGroups(companion, "gametest-feller", List.of(target.get("id").getAsString()));
+            }
+            String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
+            helper.assertTrue(result != null, "mine has not finished");
+            helper.assertTrue(mine[0].getResult().success() && result.contains("dug 3/3 cells"),
+                    "mine did not dig the named group out: " + result);
+            for (BlockPos rel : named) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
+                        "a log of the named group is still standing at " + rel.toShortString());
+            }
+            for (BlockPos rel : other) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.DARK_OAK_LOG),
+                        "a log outside the named group was cut at " + rel.toShortString());
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 旧编号明确报错:扫两次,第二次的编号接着往上数;拿第一次的编号去 mine,任务以失败收场,回执点名
+     * 那个编号、说出最新一次列了哪些、让她重新扫描;原木一根不少。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_permission")
+    public static void mine_groups_with_an_old_id_is_told_to_scan_again(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos logRel = new BlockPos(6, 2, 6);
+        level.setBlockAndUpdate(helper.absolutePos(logRel), Blocks.MANGROVE_LOG.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_archivist", new BlockPos(3, 2, 6), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        String[][] replies = {scan(companion, 5, "minecraft:mangrove_log"), null};
+        String[] ids = new String[2];
+        TaskRecord[] mine = new TaskRecord[1];
+
+        helper.succeedWhen(() -> {
+            for (int i = 0; i < 2; i++) {
+                if (ids[i] != null) {
+                    continue;
+                }
+                helper.assertTrue(replies[i] != null && replies[i][0] != null, "scan " + (i + 1) + " has not replied");
+                var group = groupHolding(groupsIn(replies[i][0]), helper.absolutePos(logRel));
+                helper.assertTrue(group != null, "scan " + (i + 1) + " did not list the log: " + replies[i][0]);
+                ids[i] = group.get("id").getAsString();
+                if (i == 0) {
+                    replies[1] = scan(companion, 5, "minecraft:mangrove_log");
+                } else {
+                    helper.assertTrue(Integer.parseInt(ids[1].substring(1)) > Integer.parseInt(ids[0].substring(1)),
+                            "a new scan reused an old id: " + ids[0] + " then " + ids[1]);
+                    mine[0] = mineGroups(companion, "gametest-archivist", List.of(ids[0]));
+                }
+            }
+            String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
+            helper.assertTrue(result != null, "mine has not finished");
+            helper.assertTrue(!mine[0].getResult().success() && result.contains(ids[0]) && result.contains(ids[1])
+                    && result.contains("scan_blocks again"), "the old id was not reported as stale: " + result);
+            helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.MANGROVE_LOG),
+                    "the log was cut under a stale id");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * mine 带 spec 的 avoid_break 作用到挑目标上:两根野生诡异菌柄,avoid_break 点名其中一格、要两个。
+     * 她挖了另一根就收场,点名的那格原样立着,回执交代那一格挖不成。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void mine_spec_avoid_break_leaves_that_cell_standing(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos freeRel = new BlockPos(5, 2, 5);
+        BlockPos keptRel = new BlockPos(9, 2, 5);
+        level.setBlockAndUpdate(helper.absolutePos(freeRel), Blocks.WARPED_STEM.defaultBlockState());
+        level.setBlockAndUpdate(helper.absolutePos(keptRel), Blocks.WARPED_STEM.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_forager", new BlockPos(7, 2, 5), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        BlockPos kept = helper.absolutePos(keptRel);
+        com.google.gson.JsonObject spec = new com.google.gson.JsonObject();
+        com.google.gson.JsonArray avoid = new com.google.gson.JsonArray();
+        avoid.add(kept.getX() + "," + kept.getY() + "," + kept.getZ());
+        spec.add("avoid_break", avoid);
+        TaskRecord record = new BlockActionOps().autoMine(List.of("minecraft:warped_stem"), null, 2, spec,
+                TaskDispatch.ctx("gametest-forager", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            String reply = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(reply != null, "mine has not finished");
+            helper.assertTrue(level.getBlockState(helper.absolutePos(freeRel)).isAir(), "the free stem was not mined");
+            helper.assertTrue(level.getBlockState(kept).is(Blocks.WARPED_STEM), "the avoid_break cell was mined");
+            helper.assertTrue(record.getResult().success() && reply.contains("can't be broken here"),
+                    "the reply does not account for the cell the spec kept: " + reply);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 点名的团被拒就停:主人写了 deny 行不许挖绯红菌柄,scan_blocks 把那团标成 deny 并给出理由;mine groups
+     * 点名它,任务按拒绝收场、理由是那一行规则,菌柄一根不少,也不弹卡。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void mine_groups_refused_stops_with_the_reason(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> stems = List.of(new BlockPos(6, 2, 6), new BlockPos(6, 3, 6));
+        for (BlockPos rel : stems) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.CRIMSON_STEM.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_objector", new BlockPos(3, 2, 6), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_botanist");
+        storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
+                com.dwinovo.numen.permission.Rule.parse("break(minecraft:crimson_stem)"));
+        String[] reply = scan(companion, 5, "minecraft:crimson_stem");
+        TaskRecord[] mine = new TaskRecord[1];
+        boolean[] asked = new boolean[1];
+        helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
+
+        helper.succeedWhen(() -> {
+            if (mine[0] == null) {
+                helper.assertTrue(reply[0] != null, "scan_blocks has not replied");
+                var group = groupHolding(groupsIn(reply[0]), helper.absolutePos(stems.get(0)));
+                helper.assertTrue(group != null && "deny".equals(group.get("permission").getAsString())
+                                && group.get("reason").getAsString().contains("denied by rule"),
+                        "the scan does not mark the denied group: " + reply[0]);
+                mine[0] = mineGroups(companion, "gametest-objector", List.of(group.get("id").getAsString()));
+            }
+            String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
+            helper.assertTrue(result != null, "mine has not finished");
+            helper.assertTrue(!mine[0].getResult().success() && result.contains("denied by rule"),
+                    "the refusal does not carry the rule: " + result);
+            for (BlockPos rel : stems) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).is(Blocks.CRIMSON_STEM),
+                        "a denied stem was cut at " + rel.toShortString());
+            }
+            helper.assertTrue(!asked[0], "a denied group raised a consent card");
+            CompanionFactory.despawn(level.getServer(), companion);
+            CompanionFactory.despawn(level.getServer(), owner);
+        });
+    }
+
     /**
      * interact_at 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
      */
