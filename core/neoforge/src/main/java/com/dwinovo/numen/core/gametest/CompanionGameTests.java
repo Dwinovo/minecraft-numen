@@ -279,6 +279,36 @@ public class CompanionGameTests {
                 .thenSucceed();
     }
 
+    /**
+     * 本能替身体做了事,她要听到的是一条 {@code reflex} 事件,带着是哪个本能:摔落时铺水接住自己,
+     * 主人不在线,这件事以 {@code reflex} 类型进出箱,文本里写着本能名册里的登记名 {@code mlg}。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_survival")
+    public static void a_reflex_tells_her_which_instinct_acted(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = plainCompanion(helper, new BlockPos(11, 2, 11));
+        companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
+        var outbox = com.dwinovo.numen.entity.EventOutbox.get(level.getServer());
+        helper.startSequence()
+                .thenExecuteAfter(SPAWN_INVULNERABLE_TICKS,
+                        () -> drop(helper, companion, new BlockPos(11, DROP_HEIGHT, 11)))
+                .thenWaitUntil(() -> {
+                    var reflexes = outbox.peek(companion.getUUID()).entries().stream()
+                            .filter(e -> e.type().equals(com.dwinovo.numen.agent.inbox.EventTypes.REFLEX))
+                            .toList();
+                    helper.assertTrue(!reflexes.isEmpty(), "no reflex event was kept for the offline owner: "
+                            + outbox.peek(companion.getUUID()).entries());
+                    helper.assertTrue(reflexes.get(0).text().startsWith("<event kind=\"reflex\"")
+                                    && reflexes.get(0).text().contains("reflex=\"mlg\""),
+                            "the reflex event does not name its instinct: " + reflexes.get(0).text());
+                })
+                .thenExecute(() -> {
+                    outbox.forget(companion.getUUID());
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
     /** 把她提到 rel 那一格上空放手。 */
     private static void drop(GameTestHelper helper, NumenPlayer companion, BlockPos rel) {
         BlockPos at = helper.absolutePos(rel);
