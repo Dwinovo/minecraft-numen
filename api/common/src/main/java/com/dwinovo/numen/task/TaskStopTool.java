@@ -77,7 +77,7 @@ public final class TaskStopTool implements NumenTool {
             return;
         }
 
-        CompanionTickDispatcher.stopActive(companion, "stopped by task_stop");
+        CompanionTickDispatcher.stopActive(companion, TaskRecord.StopCause.TASK_STOP);
         reply.accept(TaskResult.ok("已叫停 " + active.publicId() + "(" + active.describe()
                 + ")。收尾结果会以 task_finished(status=stopped) 事件送达。",
                 Map.of("task_id", active.publicId())).toJson());

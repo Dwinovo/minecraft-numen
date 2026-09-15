@@ -68,9 +68,7 @@ final class TaskSlot {
     void put(NumenPlayer companion, TaskRecord rec) {
         if (record != null) {
             task.stop(companion, Task.StopReason.REPLACED);
-            if (!record.getState().isTerminal()) {
-                record.setState(TaskState.CANCELLED);
-            }
+            record.stop(TaskRecord.StopCause.REPLACED);
             settle(companion);
         }
         rec.setState(TaskState.RUNNING);
@@ -125,10 +123,10 @@ final class TaskSlot {
         }
     }
 
-    /** 主人按停止:标成取消,下一次结算会送出结果。 */
-    void cancel() {
+    /** 从外面叫停(主人按停止、task_stop、命令):标成取消并记下是谁,下一次结算会送出结果。 */
+    void cancel(TaskRecord.StopCause cause) {
         if (record != null && record.getState() == TaskState.RUNNING) {
-            record.setState(TaskState.CANCELLED);
+            record.stop(cause);
         }
     }
 
@@ -137,9 +135,7 @@ final class TaskSlot {
         if (record == null) {
             return;
         }
-        if (!record.getState().isTerminal()) {
-            record.setState(TaskState.CANCELLED);
-        }
+        record.stop(TaskRecord.StopCause.BODY_LEFT);
         settle(companion);
     }
 
@@ -166,7 +162,8 @@ final class TaskSlot {
      * 征询一并清掉——授权的作用域就是任务,由放开任务的这一处收口。
      */
     private void settle(NumenPlayer companion) {
-        record.setResult(task.result(record.getState()));
+        TaskResult result = task.result(record.getState());
+        record.setResult(record.getStopCause() == null ? result : result.stoppedBy(record.getStopCause()));
         com.dwinovo.numen.permission.ConsentDesk.of(companion).release(record);
         outbox.accept(record);
         task = null;

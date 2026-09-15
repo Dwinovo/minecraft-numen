@@ -62,6 +62,8 @@ public abstract class TaskRecord {
 
     private TaskState state = TaskState.PENDING;
     private TaskResult result;
+    /** 从外面叫停的是谁;任务自己走到 CANCELLED(比如她死了)或没被叫停时为 null。 */
+    private StopCause stopCause;
     /** 异步派发的记录:受理时已经回执过 tool_call,收尾改走 task_finished 事件。 */
     private boolean async;
     /** 首次进入 RUNNING 的游戏刻;task_status 用它报已耗时。-1 = 还没开跑。 */
@@ -128,6 +130,39 @@ public abstract class TaskRecord {
     /** Called by {@code CompanionTickDispatcher} as the record transitions through lifecycle. */
     public final void setState(TaskState state) { this.state = state; }
     public final void setResult(TaskResult result) { this.result = result; }
+
+    /**
+     * 从外面叫停这件活。叫停的人写进结算结果({@code TaskSlot} 结算时统一加在消息前面):模型分得清是主人按了
+     * 停止、它自己调了 task_stop、还是被新派的活顶掉——任务本身不知道谁叫停的它,这一句只能记在记录上。
+     * 已经走到终态的不改。
+     */
+    public final void stop(StopCause cause) {
+        if (!state.isTerminal()) {
+            state = TaskState.CANCELLED;
+            stopCause = cause;
+        }
+    }
+
+    public final StopCause getStopCause() { return stopCause; }
+
+    /** 谁叫停的这件活,和模型读到的那句话。 */
+    public enum StopCause {
+        OWNER("the owner pressed Stop"),
+        TASK_STOP("you stopped it with task_stop"),
+        COMMAND("stopped by a /numen command"),
+        REPLACED("a newer body action replaced it"),
+        BODY_LEFT("the body left the world");
+
+        private final String words;
+
+        StopCause(String words) {
+            this.words = words;
+        }
+
+        public String words() {
+            return words;
+        }
+    }
 
     /**
      * Short human-readable description for the {@code /numen debug} head

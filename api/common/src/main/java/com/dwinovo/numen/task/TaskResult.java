@@ -60,6 +60,11 @@ public record TaskResult(boolean success,
         return new TaskResult(false, message, false, true, Map.of());
     }
 
+    /** 同一份结果,消息前面写上是谁叫停的({@link TaskRecord.StopCause})。 */
+    public TaskResult stoppedBy(TaskRecord.StopCause cause) {
+        return new TaskResult(success, cause.words() + " — " + message, timedOut, interrupted, data);
+    }
+
     /**
      * Render this result as the JSON string consumed by the LLM. The shape
      * mirrors the field names exactly so a model trained on common

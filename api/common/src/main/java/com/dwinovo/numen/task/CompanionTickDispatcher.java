@@ -181,12 +181,12 @@ public final class CompanionTickDispatcher {
      * 意图钉释放),原因词不同。返回被叫停的记录,null = 本来就没有异步任务在跑。
      * 收尾结果由 drainResults 以 task_finished(status=stopped) 事件送达。
      */
-    public static TaskRecord stopActive(NumenPlayer player, String reason) {
+    public static TaskRecord stopActive(NumenPlayer player, TaskRecord.StopCause cause) {
         CompanionBrain brain = BRAINS.get(player.getUUID());
         if (brain == null) return null;
         TaskRecord target = brain.current.record();
         if (target == null) return null;
-        brain.current.cancel();
+        brain.current.cancel(cause);
         TaskSessionHooks.fireSessionEnd(player);
         return target;
     }
@@ -197,8 +197,8 @@ public final class CompanionTickDispatcher {
     public static void cancelFor(NumenPlayer player) {
         CompanionBrain brain = BRAINS.get(player.getUUID());   // never create: a late cancel
         if (brain == null) return;                             // packet must not leak a brain
-        brain.sync.cancel();
-        brain.current.cancel();
+        brain.sync.cancel(TaskRecord.StopCause.OWNER);
+        brain.current.cancel(TaskRecord.StopCause.OWNER);
         TaskSessionHooks.fireSessionEnd(player);
     }
 
