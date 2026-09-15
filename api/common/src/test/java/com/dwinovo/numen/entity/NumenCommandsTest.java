@@ -89,12 +89,15 @@ class NumenCommandsTest {
     }
 
     @Test
-    void consentTakesAnIdAndAnOptionalNote() {
+    void consentTakesAnIdAndADenyTakesAnOptionalNote() {
         Map<String, ParsedArgument<CommandSourceStack, ?>> bare = runs("numen consent allow 42");
         assertEquals(42L, bare.get("id").getResult());
         Map<String, ParsedArgument<CommandSourceStack, ?>> noted = runs("numen consent deny 7 那是我的柱子 别动");
         assertEquals("那是我的柱子 别动", noted.get("note").getResult());
         runs("numen consent remember 9");
+        runs("numen consent deny 9");
+        assertTrue(fails("numen consent allow 42 小心点"), "a note only goes with a deny");
+        assertTrue(fails("numen consent remember 9 小心点"), "a note only goes with a deny");
         assertTrue(fails("numen consent allow"), "a request id is required");
         assertTrue(fails("numen consent maybe 3"));
     }

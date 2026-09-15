@@ -4475,13 +4475,12 @@ public class CompanionGameTests {
                 helper.assertTrue(record.getResult() == null, "drop_items finished without an answer");
                 helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 3, "dropped before the answer");
                 answered[0] = desk(companion).answer(pending.id(),
-                        com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "给我吧");
+                        com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
             }
             String reply = record.getResult() == null ? null : record.getResult().message();
             helper.assertTrue(reply != null && record.getResult().success(), "drop_items did not finish: " + reply);
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0, "nothing was dropped");
-            helper.assertTrue(reply.contains("the owner allowed") && !reply.contains("给我吧"),
-                    "the reply does not say the owner allowed, or the note waited for it: " + reply);
+            helper.assertTrue(reply.contains("the owner allowed"), "the reply does not say the owner allowed: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
             CompanionFactory.despawn(level.getServer(), owner);
         });
@@ -4782,7 +4781,7 @@ public class CompanionGameTests {
     /**
      * {@code /numen consent} 与卡片是同一个入口:第一次丢钻石由卡片的网络载荷答复,第二次丢绿宝石由主人敲命令
      * "允许并记住"答复——两次都丢了、回执都交代主人允许了(记住的那次还交代记下了哪一行);记住之后第三次丢绿宝石
-     * 不再问。别人敲命令答不了;
+     * 不再问。带附言的允许不收(附言只随拒绝);别人敲命令答不了;
      * 答一个没挂着的号说清楚没有。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -4810,7 +4809,13 @@ public class CompanionGameTests {
                         com.dwinovo.numen.network.payload.ConsentReplyPayload.handle(
                                 new com.dwinovo.numen.network.payload.ConsentReplyPayload(companion.getUUID(),
                                         pending.id(), com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE,
-                                        "卡片答的"), owner);
+                                        "小心点"), owner);
+                        helper.assertTrue(desk(companion).pending() == pending,
+                                "an allow carrying a note was taken; a note only goes with a deny");
+                        com.dwinovo.numen.network.payload.ConsentReplyPayload.handle(
+                                new com.dwinovo.numen.network.payload.ConsentReplyPayload(companion.getUUID(),
+                                        pending.id(), com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE,
+                                        ""), owner);
                         step[0] = 1;
                     }
                 }
@@ -4827,7 +4832,7 @@ public class CompanionGameTests {
                 }
                 case 2 -> {
                     if (pending != null) {
-                        List<String> said = runAs(owner, "numen consent remember " + pending.id() + " 命令答的");
+                        List<String> said = runAs(owner, "numen consent remember " + pending.id());
                         helper.assertTrue(said.stream().anyMatch(m -> m.contains("Answered consent request")),
                                 "the owner's command was not taken: " + said);
                         step[0] = 3;
@@ -5044,7 +5049,7 @@ public class CompanionGameTests {
                         helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
                                 "took before the owner answered");
                         desk(companion).answer(pending.id(),
-                                com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "拿吧");
+                                com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
                         step[0] = 3;
                     }
                 }
