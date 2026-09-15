@@ -11,7 +11,7 @@ import net.minecraft.client.Minecraft;
 /**
  * 快捷语音:对讲机式按住说话,松开把最终转写直接发给当前交互对象
  * ({@link SelectedCompanion#resolveTarget()}),走与文字完全相同的
- * {@link NumenGateway#enqueue} 管线。录音期间准星提示层显示实时增量,
+ * {@link NumenGateway#emit} 管线。录音期间准星提示层显示实时增量,
  * 目标在按下那一刻锁定——说到一半转头不换收件人。
  */
 public final class QuickVoice {
@@ -69,7 +69,7 @@ public final class QuickVoice {
             if (said.isEmpty()) flash("没听清,再试一次");
             return;
         }
-        Delivery sent = NumenGateway.enqueue(t.uuid(), said);
+        Delivery sent = NumenGateway.emit(t.uuid(), com.dwinovo.numen.agent.inbox.EventTypes.QUERY, said);
         if (sent != Delivery.REJECTED) {
             ChatLines.owner(t.name(), said, true);
         } else {

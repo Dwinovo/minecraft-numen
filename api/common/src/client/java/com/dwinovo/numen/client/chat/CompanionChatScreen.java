@@ -32,7 +32,7 @@ import java.util.UUID;
  * {@code /skills} 这类面板、回车先补后发,两处一模一样,不另写一套。不带麦克风键
  * ——快捷语音有自己的按住说话键。命令跑完的回话走准星提示层闪一下,屏照关。
  *
- * <p>与 {@code @名字} 路由是同一条管线({@link NumenGateway#enqueue}),
+ * <p>与 {@code @名字} 路由是同一条管线({@link NumenGateway#emit}),
  * 对应两种社交距离:@ 是远程喊话,这里是走到跟前说话。
  */
 public class CompanionChatScreen extends Screen {
@@ -94,7 +94,7 @@ public class CompanionChatScreen extends Screen {
     /** 输入行的宿主:说话走 Gateway 然后关屏;命令的回话闪在准星提示层,屏也关。 */
     private final class BarHost implements ChatInputBar.Host {
         @Override public void onSend(String text) {
-            Delivery sent = NumenGateway.enqueue(companionUuid, text);
+            Delivery sent = NumenGateway.emit(companionUuid, com.dwinovo.numen.agent.inbox.EventTypes.QUERY, text);
             if (sent != Delivery.REJECTED) {
                 ChatLines.owner(companionName, text, false);
             } else {

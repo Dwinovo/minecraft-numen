@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * <h2>Actuator vs {@link NumenGateway}</h2>
  * Two deliberately separate doors:
  * <ul>
- *   <li>{@link NumenGateway#enqueue} feeds a message to the companion's
+ *   <li>{@link NumenGateway#emit} feeds a message to the companion's
  *       <em>built-in brain</em>, which then decides what to do. The brain stays
  *       in charge (chat, QQ, stream relays use this).</li>
  *   <li>{@code NumenActuator} lets an <em>external</em> brain skip the built-in

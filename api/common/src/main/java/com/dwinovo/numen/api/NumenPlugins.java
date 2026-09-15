@@ -1,16 +1,19 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.entity.CompanionEvents;
+import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.event.NumenEvents;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.UUID;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -32,7 +35,7 @@ public final class NumenPlugins {
 
     /** 客户端接上来的那几样;专用服务器上一直是 null,于是相关调用自然成空操作。 */
     private static volatile Consumer<Path> skills;
-    private static volatile BiFunction<UUID, String, Delivery> enqueue;
+    private static volatile ClientInput clientInput;
     /** 客户端接上来了没有。它同时就是"我现在是不是客户端"的答案。 */
     private static volatile boolean clientReady;
 
@@ -50,13 +53,18 @@ public final class NumenPlugins {
         }
     }
 
+    /** 主人客户端那一侧的输入口,形状与 {@link NumenApi#emit(UUID, String, String)} 相同。 */
+    @FunctionalInterface
+    public interface ClientInput {
+        Delivery emit(UUID companion, String type, String text);
+    }
+
     /**
      * 客户端起来时把只在客户端存在的能力接上来。<b>引擎内部调用</b>,插件不该碰。
      */
-    public static void bindClient(Consumer<Path> skillSink,
-                                  BiFunction<UUID, String, Delivery> enqueueFn) {
+    public static void bindClient(Consumer<Path> skillSink, ClientInput input) {
         skills = skillSink;
-        enqueue = enqueueFn;
+        clientInput = input;
         clientReady = true;
         for (Runnable r : PENDING) runClientBlock(r);
         for (Path root : PENDING_SKILLS) skillSink.accept(root);
@@ -144,9 +152,20 @@ public final class NumenPlugins {
         }
 
         @Override
-        public Delivery enqueue(UUID companion, String message) {
-            BiFunction<UUID, String, Delivery> fn = enqueue;
-            return fn == null ? Delivery.REJECTED : fn.apply(companion, message);
+        public void registerEventType(String type, boolean alwaysUrgent) {
+            EventTypes.register(EventTypes.event(type, alwaysUrgent));
+        }
+
+        @Override
+        public void emit(NumenPlayer companion, String type, Map<String, String> attrs, String text,
+                         boolean urgent) {
+            NumenEvents.emit(companion, type, attrs, text, urgent);
+        }
+
+        @Override
+        public Delivery emit(UUID companion, String type, String text) {
+            ClientInput input = clientInput;
+            return input == null ? Delivery.REJECTED : input.emit(companion, type, text);
         }
     }
 }

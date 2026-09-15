@@ -1,8 +1,10 @@
 package com.dwinovo.numen.api;
 
 import com.dwinovo.numen.agent.tool.NumenTool;
+import com.dwinovo.numen.entity.NumenPlayer;
 
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 import java.util.function.Function;
@@ -98,11 +100,45 @@ public interface NumenApi {
     void contributeState(Function<UUID, String> fragment);
 
     /**
-     * 把一句话交给同伴的内置大脑,效果和主人亲手打字一样。
+     * 登记一种事件——同伴身上会发生、她该知道的一种事(比如饰品插件的 {@code accessory_changed})。
+     *
+     * <p>登记的是类型表里的一行,和引擎自带的 {@code task_finished}、{@code reflex} 同一种形状:
+     * 插话投递、原文交给模型、主人按停止也不清(那是事实)、不进聊天流。你只决定一件事——
+     * 这种事是不是<b>恒为急件</b>({@code true} = 她不知道就会做错事,每一条都立刻开一轮;
+     * {@code false} = 每次发的时候由你定)。
+     *
+     * <p>服务端发出口靠它挡住没登记的种类,主人客户端的队列靠它决定怎么投递,所以<b>两侧都要登记</b>:
+     * 在 {@code NumenPlugins.register} 的块里直接调,别放进 {@link #onClient}。
+     */
+    void registerEventType(String type, boolean alwaysUrgent);
+
+    /**
+     * 服务端:她身上发生了一件事,告诉她。
+     *
+     * <p>和引擎自带的事件走同一个发出口:按类型查表,盖上游戏内时间戳,拼成
+     * {@code <event kind="type" …>text</event>};主人在线直接送到他的客户端,离线进出箱,
+     * 等他登录时补发。
+     *
+     * @param type   {@link #registerEventType} 登记过的种类
+     * @param attrs  拼进 {@code <event>} 的属性,按迭代顺序;没有就给 null
+     * @param text   这件事本身,转义由引擎做
+     * @param urgent 她不知道就会做错事 → 立刻开一轮;否则攒着搭车。登记成恒为急件的种类不看它
+     * @throws IllegalArgumentException 种类没登记,或者不是世界上发生的事(比如 {@code query})
+     */
+    void emit(NumenPlayer companion, String type, Map<String, String> attrs, String text, boolean urgent);
+
+    /**
+     * 主人的客户端:把一条输入交给同伴的内置大脑,返回实际发生了什么。
+     *
+     * <p>这一侧收的是主人的话:{@code type} 给 {@code query},效果和主人亲手打字一样。
+     * 身体上发生的事住在服务端,从上面那个带身体的 {@code emit} 发。专用服务器上没有
+     * 主人的客户端,返回 {@link Delivery#REJECTED}。
      *
      * <p>这是<b>进</b>的方向。出的方向不在这里:同伴要说什么、要做什么,是它自己
      * 调用工具的结果——注册一个工具,它有话说的时候会调你。
+     *
+     * @throws IllegalArgumentException {@code type} 不是 {@code query}
      */
-    Delivery enqueue(UUID companion, String message);
+    Delivery emit(UUID companion, String type, String text);
 
 }

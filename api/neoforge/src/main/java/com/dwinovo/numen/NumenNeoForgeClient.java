@@ -53,7 +53,7 @@ public class NumenNeoForgeClient {
         // 不必让每个插件自己去问一遍加载器"我在哪一侧"。
         com.dwinovo.numen.api.NumenPlugins.bindClient(
                 root -> com.dwinovo.numen.agent.skill.SkillRegistry.instance().declareBundled(root),
-                com.dwinovo.numen.api.NumenGateway::enqueue);
+                com.dwinovo.numen.api.NumenGateway::emit);
 
         // 读回上次选择的 GUI 主题(config/numen/ui.json)。
         com.dwinovo.numen.client.screen.UiTheme.init(

@@ -1,5 +1,6 @@
 package com.dwinovo.numen.api;
 
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import net.minecraft.client.Minecraft;
@@ -13,8 +14,9 @@ import java.util.UUID;
  *
  * <h2>Deliberately unspecialized</h2>
  * This is the abstract "start()" on the base class: numen-api defines one
- * verb — <em>enqueue a string for a companion</em> — and every integration
- * decides for itself what that string is. Provenance tags, rate limiting,
+ * verb — <em>emit an input of a type for a companion</em>, the same verb as
+ * {@link NumenApi#emit(UUID, String, String)} — and every integration decides
+ * for itself what the string is. Provenance tags, rate limiting,
  * translation, permission checks: all caller-side. The message lands in the
  * same owner-prompt queue the chat GUI uses and is spliced into the
  * conversation at the next protocol-valid point, exactly as if the owner had
@@ -32,7 +34,7 @@ import java.util.UUID;
  * <h2>Client-side API</h2>
  * Companions are driven by their owner's game client (the owner's API key
  * pays for the tokens), so this must be called in the owner's client process.
- * Safe from any thread — the enqueue itself is marshalled onto the client
+ * Safe from any thread — the emit itself is marshalled onto the client
  * main thread. Companion UUIDs come from the entity
  * ({@code entity.getUUID()}).
  */
@@ -42,8 +44,11 @@ public final class NumenGateway {
 
 
     /**
-     * Queue {@code message} for {@code companion}, verbatim. If the companion
-     * is idle this starts a turn immediately; if it is mid-task the message is
+     * Queue {@code text} for {@code companion}, verbatim, as an input of {@code type}. On the owner's
+     * client that input is the owner's words: {@code type} is {@link EventTypes#QUERY}. Things that
+     * happen to the body live on the server and go out through the body's
+     * {@link NumenApi#emit(com.dwinovo.numen.entity.NumenPlayer, String, java.util.Map, String, boolean)}.
+     * If the companion is idle this starts a turn immediately; if it is mid-task the message is
      * seen by the model at the next tool-batch boundary (queued messages merge
      * into one user message).
      *
@@ -58,20 +63,26 @@ public final class NumenGateway {
      * 所以这几个值今天没有任何界面在读;它们是给外部集成的汇报,该说实话。
      *
      * @param companion the companion entity's UUID
-     * @param message   delivered exactly as given — formatting is the caller's business
+     * @param type      {@link EventTypes#QUERY}
+     * @param text      delivered exactly as given — formatting is the caller's business
+     * @throws IllegalArgumentException {@code type} is not {@link EventTypes#QUERY}
      */
-    public static Delivery enqueue(UUID companion, String message) {
-        if (companion == null || message == null || message.isBlank()) return Delivery.REJECTED;
+    public static Delivery emit(UUID companion, String type, String text) {
+        if (!EventTypes.QUERY.equals(type)) {
+            throw new IllegalArgumentException("主人的客户端上只收主人的话(query),收到的是 " + type
+                    + ";身体上发生的事从服务端带着身体发");
+        }
+        if (companion == null || text == null || text.isBlank()) return Delivery.REJECTED;
         boolean known = AgentLoopRegistry.get(companion).isPresent()
                 || com.dwinovo.numen.client.agent.NumenRoster.instance().name(companion) != null;
         if (!known) return Delivery.REJECTED;
         Minecraft mc = Minecraft.getInstance();
         if (!mc.isSameThread()) {
-            mc.execute(() -> AgentLoopRegistry.getOrCreate(companion).submitPrompt(message));
+            mc.execute(() -> AgentLoopRegistry.getOrCreate(companion).submitPrompt(text));
             return Delivery.HANDED_OFF;
         }
         EntityAgentLoop loop = AgentLoopRegistry.getOrCreate(companion);
-        boolean pressed = loop.submitPrompt(message);
+        boolean pressed = loop.submitPrompt(text);
         // 外脑驾驶期间内脑恒为停牌,那个 boolean 恒真却什么也不说明——报驾驶席,
         // 判据取自 isExternallyDriven() 这一处真源,不另猜。
         if (loop.isExternallyDriven()) return Delivery.TO_EXTERNAL_BRAIN;
