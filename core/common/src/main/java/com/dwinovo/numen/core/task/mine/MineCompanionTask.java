@@ -73,7 +73,7 @@ import java.util.Set;
  *       broken on the spot, nearest first, auto-switching to the best tool — no
  *       pathing, and never the block the body stands on.</li>
  *   <li><b>composite goal</b> — otherwise head for the whole ore field at once:
- *       one A* search over {@link NavGoal#composite} of {@link NavGoal#mine}
+ *       one A* search over {@link NavGoal#composite} of {@link NavGoal#mineStance}
  *       stances, so it walks to the CLOSEST reachable ore (not greedy-nearest,
  *       which is often the walled-in one).</li>
  *   <li><b>够不着是一批的属性,不是某一格的罪</b> — 复合目标搜不出路,意思是
@@ -500,18 +500,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  即目标底面在脚上 6 格内仍可命中——波段最多下探到此,再深就算站得住也打不到了。 */
     private static final int MAX_STANCE_DEPTH = 6;
 
-
-    /**
-     * Is {@code pos} also part of what we're mining — a known target, a filter
-     * match, or already-broken air continuing the shaft? Used by {@link #coalesce}
-     * to read the vertical run a block sits in.
-     */
-    private boolean internalMiningGoal(CalculationContext ctx, BlockPos pos) {
-        if (knownOres.contains(pos)) return true;
-        net.minecraft.world.level.block.state.BlockState state = player.level().getBlockState(pos);
-        if (state.isAir()) return true;                         // broken-out air still continues the run
-        return r.targets.contains(state.getBlock()) && plausibleToBreak(ctx, pos, state);
-    }
 
     /** 该目标格是否真挖得成:挖穿成本无穷(挖不动/规格禁挖)、禁挖判定命中
      *  (冰/虫蚀/贴液体/悬空落沙邻格/世界边界)、或上下都被基岩封死的都不算。

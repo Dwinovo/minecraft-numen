@@ -221,12 +221,7 @@ public interface NavGoal {
      *   <li>{@code maxBelow == 1} → feet at the ore or one below;</li>
      *   <li>{@code maxBelow == 2} → feet at the ore, one, or two below.</li>
      * </ul>
-     * Which one a given ore gets is decided by {@code MineCompanionTask.coalesce}:
-     * the bottom
-     * of a vertical run gets the exact ({@code maxBelow == 0}) stance so the body
-     * mines it in place rather
-     * than tunnelling under it. The vertical term in the heuristic folds the whole
-     * accepted band to zero cost.
+     * The vertical term in the heuristic folds the whole accepted band to zero cost.
      */
     static NavGoal mineColumn(BlockPos ore, int maxBelow) {
         return new MineColumn(ore, maxBelow);
@@ -238,11 +233,9 @@ public interface NavGoal {
     }
 
     /**
-     * Get as FAR as possible from {@code from} while holding a y-level —
-     * used for branch mining: when no ore is
-     * known, head out along the level to dig fresh tunnel and expose more. Never
+     * Get as FAR as possible from {@code from} while holding a y-level. Never
      * "arrived" (isAt always false) so the search returns a best-effort partial that
-     * walks outward; the next replan continues exploring.
+     * walks outward; the next replan continues.
      */
     static NavGoal runAway(BlockPos from, int maintainY) {
         return new RunAway(from, maintainY);

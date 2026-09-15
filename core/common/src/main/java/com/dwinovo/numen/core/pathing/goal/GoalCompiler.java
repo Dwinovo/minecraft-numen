@@ -67,13 +67,6 @@ public final class GoalCompiler {
     }
 
     /**
-     * One mining stance: the ore (what becomes sacred), the stance BASE the feet
-     * band hangs from (usually the ore itself, but a run's top block anchors one
-     * lower — see {@code MineCompanionTask.coalesce}), and how far below that
-     * base the feet may end ({@link NavGoal#mineColumn}).
-     */
-
-    /**
      * Use/open/work at a block (crafting table, chest, furnace, door): end
      * TOUCHING it ({@link NavGoal#getToBlock} — y-anchored, no elevated cell
      * satisfies), the target itself sacred, arrival = grounded within reach.
