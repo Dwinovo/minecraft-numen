@@ -25,6 +25,14 @@ class NumenStyleTest {
     }
 
     @Test
+    void sectionRowsShareOneHeightSoTheirEdgesLineUp() {
+        assertEquals(NumenStyle.CONTROL_H, NumenStyle.HEADER_H, "抬头行与控件同高,行尾按钮贴满这一行");
+        assertEquals(24, NumenStyle.centerIn(20, 18, 9), "9 像素高的字在 18 像素的行里居中");
+        assertEquals(20 + NumenStyle.HEADER_H + NumenStyle.HEADER_GAP, NumenStyle.bodyTop(20), "正文从抬头行下面开始");
+        assertEquals(20 + 100 - NumenStyle.CONTROL_H, NumenStyle.footerTop(20, 100), "收尾行贴底边");
+    }
+
+    @Test
     void aBoxIsASquareRingUnderItsFill() {
         Recorder s = new Recorder();
         NumenStyle.box(s, 10, 20, 100, 18, 0xFF111111, 0xFFEEEEEE);
