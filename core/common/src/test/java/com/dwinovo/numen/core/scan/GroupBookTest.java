@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.LongSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -42,13 +44,18 @@ class GroupBookTest {
         assumeTrue(booted, "Minecraft 引导不可用,跳过团簿钉桩");
     }
 
+    /** 身体上那条编号的替身:从 1 起往上数。 */
+    private static LongSupplier numbers() {
+        return new AtomicLong()::incrementAndGet;
+    }
+
     private static Map<BlockPos, Block> cells(int x) {
         return Map.of(new BlockPos(x, 64, 0), Blocks.OAK_LOG, new BlockPos(x, 65, 0), Blocks.OAK_LOG);
     }
 
     @Test
     void idsKeepCountingUpAcrossScans() {
-        GroupBook book = new GroupBook();
+        GroupBook book = new GroupBook(numbers());
         assertEquals(List.of("g1", "g2"), book.replace(List.of(cells(0), cells(5))));
         assertEquals(List.of("g3"), book.replace(List.of(cells(9))));
         assertEquals(List.of(), book.replace(List.of()));
@@ -57,7 +64,7 @@ class GroupBookTest {
 
     @Test
     void anIdFromAnEarlierScanIsStaleAndTheLatestIdsAreNamed() {
-        GroupBook book = new GroupBook();
+        GroupBook book = new GroupBook(numbers());
         book.replace(List.of(cells(0), cells(5)));
         book.replace(List.of(cells(9), cells(12), cells(15)));
 
@@ -69,17 +76,33 @@ class GroupBookTest {
         assertTrue(mixed != null && mixed.contains("g2") && !mixed.contains("group g4"), mixed);
     }
 
+    /**
+     * 身体重建(休眠回来、重启)时簿子是新的、没有扫描结果,编号来源是同一条落盘的数:旧编号说清楚没有扫描
+     * 结果,新扫描接着往上数,不会让旧编号指到新团上。
+     */
+    @Test
+    void aRebuiltBookKeepsCountingAndHoldsNoOldGroups() {
+        LongSupplier body = numbers();
+        GroupBook before = new GroupBook(body);
+        assertEquals(List.of("g1", "g2"), before.replace(List.of(cells(0), cells(5))));
+        GroupBook after = new GroupBook(body);
+        String stale = after.staleMessage(List.of("g2"));
+        assertTrue(stale != null && stale.contains("no scan_blocks result") && stale.contains("never reused"), stale);
+        assertEquals(List.of("g3"), after.replace(List.of(cells(9))));
+        assertTrue(after.staleMessage(List.of("g2")).contains("g3"));
+    }
+
     /** 新身体(重启后重放的活也是)还没扫描过:照实说没有扫描结果,不说"最近一次什么都没找到"。 */
     @Test
     void aBodyThatNeverScannedSaysThereIsNoScan() {
-        String stale = new GroupBook().staleMessage(List.of("g3"));
+        String stale = new GroupBook(numbers()).staleMessage(List.of("g3"));
         assertTrue(stale != null && stale.contains("no scan_blocks result") && stale.contains("g3")
                 && !stale.contains("found no groups"), stale);
     }
 
     @Test
     void aScanThatFoundNothingMakesEveryOldIdStale() {
-        GroupBook book = new GroupBook();
+        GroupBook book = new GroupBook(numbers());
         book.replace(List.of(cells(0)));
         book.replace(List.of());
         String stale = book.staleMessage(List.of("g1"));
@@ -88,7 +111,7 @@ class GroupBookTest {
 
     @Test
     void takingGroupsMergesTheirCellsWithTheRecordedBlocks() {
-        GroupBook book = new GroupBook();
+        GroupBook book = new GroupBook(numbers());
         book.replace(List.of(cells(0), cells(5), cells(9)));
         Map<BlockPos, Block> taken = book.cells(List.of("g1", "g3"));
         assertEquals(4, taken.size());
