@@ -5,6 +5,7 @@ import com.dwinovo.numen.network.payload.CancelTasksPayload;
 import com.dwinovo.numen.network.payload.ExecuteToolPayload;
 import com.dwinovo.numen.platform.Services;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,19 +39,22 @@ public final class ServerToolTransport {
         if (call != null) call.complete(resultJson);
     }
 
-    /** 主人按停止:忘掉停在这里的调用,并告诉身体住手。 */
+    /**
+     * 主人按停止:告诉身体住手。停在这里的调用不在这里清——服务端会把被取消的活作为结果照常送回,
+     * 外接模型经 {@code NumenActuator} 挂着的调用就靠这条结果收尾;内脑放弃的调用由它自己按 id
+     * {@link #forget} 掉。
+     */
     public static void abort(UUID companionUuid) {
-        forget(companionUuid);
         Services.NETWORK.sendToServer(new CancelTasksPayload(companionUuid));
     }
 
     /**
-     * 只忘掉停在这里的调用，<b>不动身体</b> —— 断线登出走这条。
-     *
-     * <p>那些调用属于一个已经结束的会话，结果再也回不来了；不忘就是一直长的账本。
-     * 但身体不能叫停：她还在服务器里 tick，任务照样该跑完，收尾进离线出箱等主人回来。
+     * 忘掉这几个调用,<b>不动身体</b>。调用方放弃了它们(打断、死亡、登出),结果回来也没人要了;
+     * 只按 id 清,同一只同伴身上别人挂着的调用(外接模型的)不受影响。
      */
-    public static void forget(UUID companionUuid) {
-        IN_FLIGHT.values().removeIf(c -> companionUuid.equals(c.ctx().entityUuid()));
+    public static void forget(Collection<String> callIds) {
+        for (String id : callIds) {
+            IN_FLIGHT.remove(id);
+        }
     }
 }

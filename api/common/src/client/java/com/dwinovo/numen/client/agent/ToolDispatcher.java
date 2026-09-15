@@ -150,12 +150,11 @@ public final class ToolDispatcher {
         queue.clear();
         deadlineMillis = 0;
         advancing = false;
+        // 停在传输层的这几个调用按 id 忘掉:结果回来也没人要了。只清自己派的,
+        // 外接模型挂在同一只同伴身上的调用不动。
+        com.dwinovo.numen.agent.tool.ServerToolTransport.forget(ids);
         if (stopBody) {
             CompanionEvents.fire(CompanionEvent.ABORT, entityUuid);   // 内容包据此停掉自己那边的活
-        } else {
-            // 不叫停身体，但停在传输层的调用还是得忘掉：它们属于一个已经结束
-            // 的会话，结果再也回不来。
-            com.dwinovo.numen.agent.tool.ServerToolTransport.forget(entityUuid);
         }
         return ids;
     }
