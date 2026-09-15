@@ -15,8 +15,8 @@ import java.util.UUID;
  * 说话和干活是同时发生的两件事,凭什么互相遮挡:
  * <ul>
  *   <li><b>正文行</b>:她说的最后一句,有自己的生命周期(按字数),到点消失。</li>
- *   <li><b>状态行</b>:此刻在干什么——有工具在跑就是「正在 xxx」,只是在等
- *       模型回复就是「正在思考中」,都没有就没有这一行。</li>
+ *   <li><b>状态行</b>:此刻在干什么——在等主人点头就是「等你点头」(手上的活正停着等这一句),
+ *       有工具在跑就是「正在 xxx」,只是在等模型回复就是「正在思考中」,都没有就没有这一行。</li>
  * </ul>
  * 两条线独立:话还在时来了工具,气泡就是"话 + 正在挖矿";话过期了工具还没完,
  * 只剩状态行;工具先完而话还没过期,状态行消失、话继续待着。两条都空 = 不显示。
@@ -39,17 +39,18 @@ public final class SpeechBubbles {
      * 渲染方要画的东西——两条线可同时在场。
      *
      * @param text     未过期的正文;null = 这会儿没话
+     * @param asking   她挂着一条征询在等主人点头——画「等你点头」,压过下面两种
      * @param activity 正在执行的工具名;null = 没有工具在跑
      * @param waiting  在等模型回复(且没有工具在跑)——画「正在思考中」
      */
-    public record View(String text, String activity, boolean waiting) {
+    public record View(String text, boolean asking, String activity, boolean waiting) {
         public boolean hasText() {
             return text != null && !text.isEmpty();
         }
 
-        /** 有状态行要画吗(正在 xxx / 正在思考中)。 */
+        /** 有状态行要画吗(等你点头 / 正在 xxx / 正在思考中)。 */
         public boolean hasStatus() {
-            return activity != null || waiting;
+            return asking || activity != null || waiting;
         }
     }
 
@@ -107,7 +108,9 @@ public final class SpeechBubbles {
             }
         }
 
-        // 第二条线:此刻在干什么(工具优先于"在等回复"——具体的事比笼统的忙有信息量)
+        // 第二条线:此刻在干什么。等主人点头压过一切——活正停着等他;工具优先于"在等回复"——
+        // 具体的事比笼统的忙有信息量
+        boolean asking = com.dwinovo.numen.client.consent.ConsentCards.pending(entityUuid) != null;
         String activity = null;
         boolean waiting = false;
         var loop = AgentLoopRegistry.get(entityUuid).orElse(null);
@@ -116,9 +119,9 @@ public final class SpeechBubbles {
             waiting = activity == null && loop.isBusy();
         }
 
-        if (text == null && activity == null && !waiting) {
+        if (text == null && !asking && activity == null && !waiting) {
             return null;   // 话说完了、活干完了:头顶就该干净
         }
-        return new View(text, activity, waiting);
+        return new View(text, asking, activity, waiting);
     }
 }

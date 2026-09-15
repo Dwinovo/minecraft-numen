@@ -463,6 +463,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_OK,         "\"%s\" signed");
         adder.add("numen.summon.mode",       "Mode");
         adder.add("numen.bubble.thinking",   "✦ Thinking");
+        adder.add("numen.bubble.asking",     "⌛ Waiting for your OK");
         adder.add("numen.chat.reasoning",    "Reasoning");
         adder.add("numen.summon.fetching_skin", "Fetching skin…");
         adder.add("numen.summon.persona_missing", "Chosen persona is gone (file deleted?), using the default");
@@ -815,6 +816,7 @@ public final class ModLanguageData {
         adder.add(Keys.SKIN_SIGN_OK,         "「%s」签名成功");
         adder.add("numen.summon.mode",       "模式");
         adder.add("numen.bubble.thinking",   "✦ 正在思考");
+        adder.add("numen.bubble.asking",     "⌛ 等你点头");
         adder.add("numen.chat.reasoning",    "思考过程");
         adder.add("numen.summon.fetching_skin", "正在获取皮肤…");
         adder.add("numen.summon.persona_missing", "选的人设没找到(文件被删?),先用默认人格");

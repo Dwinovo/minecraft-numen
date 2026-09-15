@@ -30,7 +30,7 @@ import java.util.List;
  * 当前 {@link UiTheme}(奶油底深字),底部一枚小方尾指向说话者。
  *
  * <p>一只气泡里可以同时有两条线(见 {@link SpeechBubbles}):正文在上、
- * 状态行(正在 xxx / 正在思考中)在下且暗一档——它是旁白,不是她说的话。
+ * 状态行(等你点头 / 正在 xxx / 正在思考中)在下且暗一档——它是旁白,不是她说的话;等你点头那一行用强调色。
  * 只剩状态行时底色退成纸面,一眼能分出"她在说话"还是"她在忙"。
  */
 public final class SpeechBubbleRenderer {
@@ -97,7 +97,9 @@ public final class SpeechBubbleRenderer {
         // 从这行起是状态行:画暗一档 + 前缀记号。只差一档灰的话,主人读起来跟正文
         // 没区别——"她在说话"和"她在干活"是两种东西,得看得出来。
         int statusFrom = lines.size();
-        if (bubble.hasStatus()) {
+        if (bubble.asking()) {
+            lines.add(I18n.get("numen.bubble.asking"));
+        } else if (bubble.hasStatus()) {
             lines.add(bubble.activity() != null
                     ? I18n.get("numen.bubble.doing", bubble.activity())
                     : I18n.get("numen.bubble.thinking") + thinkingDots());
@@ -136,8 +138,8 @@ public final class SpeechBubbleRenderer {
         float ty = y0 + PAD_Y + 1;
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i);
-            // 状态行暗一档:它是旁白,正文才是她说的话
-            int color = i >= statusFrom ? th.textDim() : th.text();
+            // 状态行暗一档:它是旁白,正文才是她说的话;等主人点头那一行用强调色——它要主人做点什么
+            int color = i < statusFrom ? th.text() : bubble.asking() ? th.cta() : th.textDim();
             float tx = -font.width(line) / 2.0f;
             font.drawInBatch(line, tx, ty, color, false, poseStack.last().pose(), buffers,
                     Font.DisplayMode.NORMAL, 0, FULL_BRIGHT);
