@@ -4183,6 +4183,37 @@ public class CompanionGameTests {
     }
 
     /**
+     * 重启后接不回来的活不许让调度 tick 抛出去:存下的参数重放时已经不成立(mine 同时给了 block_ids 与 groups,
+     * 工具当场拒收),新身体照样起来,她收到一条 task_finished 说清这件活没接回来,记录清掉。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_terrain")
+    public static void a_restored_task_whose_args_no_longer_hold_is_reported(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        BlockPos spawn = helper.absolutePos(new BlockPos(3, 2, 6));
+        NumenPlayer first = com.dwinovo.numen.entity.Companions.summon(server, UUID.randomUUID(),
+                "gametest_restorer", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        UUID uuid = first.getUUID();
+        com.dwinovo.numen.entity.Companions.dormant(server, first);
+        var registry = com.dwinovo.numen.entity.CompanionRegistry.get(server);
+        registry.put(uuid, registry.find(uuid).doing("mine",
+                "{\"block_ids\":[\"minecraft:stone\"],\"groups\":[\"g1\"],\"count\":1}"));
+        NumenPlayer second = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
+        helper.assertTrue(second != null, "the body was not rebuilt");
+        StringBuilder told = new StringBuilder();
+        helper.succeedWhen(() -> {
+            helper.assertTrue(registry.find(uuid).taskTool().isBlank(), "the task that cannot be replayed is still on record");
+            for (var entry : com.dwinovo.numen.entity.EventOutbox.get(server).peek(uuid)
+                    .takeEntries(System.currentTimeMillis())) {
+                told.append(entry.text());
+            }
+            helper.assertTrue(told.toString().contains("task_finished") && told.toString().contains("没能接回来"),
+                    "she was not told the task could not be restored: " + told);
+            com.dwinovo.numen.entity.Companions.dismiss(server, second);
+        });
+    }
+
+    /**
      * 她顺路挖掉的点名格算她挖的:四根原木叠成一柱,四面黑曜石围成竖井,她站在柱顶。点名这一团,她只能一路往下
      * 挖着走——每一根都是导航顺路挖掉的,不是站定了挖的。回执说四格都是她挖的,没有一格记成"别人动过"。
      */
