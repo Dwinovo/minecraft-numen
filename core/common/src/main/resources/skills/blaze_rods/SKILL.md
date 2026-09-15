@@ -15,7 +15,7 @@ Phase 3 of the dragon route. Eyes of ender need blaze powder; `locate_structure`
 ## Finding a fortress
 
 1. **`locate_structure("minecraft:fortress")`** — exact coordinates, direction and distance in one call (must be called while IN the Nether). Don't wander looking for it.
-2. `goto` the returned x/z (the returned y is approximate — travel around y≈70), then `scan_blocks(nether_bricks, radius=128)` to find the actual corridors; the structure spans many y-levels.
+2. `goto` the returned x/z (the returned y is approximate — travel around y≈70), then `scan_blocks(nether_bricks, radius=128)` to find the actual corridors — the nearest groups and their boxes show where the brickwork runs; the structure spans many y-levels.
 3. Beware the lookalike: blackstone with gold = **bastion** (`minecraft:bastion_remnant`) — different structure, avoid; its piglin brutes attack on sight.
 4. Track your portal's coordinates so you can navigate home.
 

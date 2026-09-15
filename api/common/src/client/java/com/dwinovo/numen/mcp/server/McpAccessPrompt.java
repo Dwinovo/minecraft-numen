@@ -87,6 +87,9 @@ final class McpAccessPrompt {
                 that task or `task_stop` it.
                 - You're blind between calls: perceive with `get_self_status` / `scan_blocks` / \
                 `scan_nearby_entities` before and after acting.
+                - `scan_blocks` answers in groups of touching blocks, each with an id (g1, g2, …) and \
+                whether breaking it is allowed, needs the owner's consent, or is refused. `mine` with \
+                `groups` digs exactly those cells; an id is only good until the next `scan_blocks`.
                 - It's survival mode — the tools do only what a real player can. No give, no setblock.
 
                 One more thing: talk to me in the language I'm writing to you in, even though these \

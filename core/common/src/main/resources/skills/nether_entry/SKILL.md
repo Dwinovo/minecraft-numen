@@ -22,7 +22,7 @@ Mine it from a **ruined portal** — a structure that's just standing obsidian, 
 
 Notes:
 - A portal's frame mixes plain **obsidian** with **crying obsidian** (purple particles). Crying obsidian is a *different block and useless for a portal frame* — `mine(obsidian)` already ignores it, so a single portal may yield fewer than 10. If you come up short, `locate_structure("#minecraft:ruined_portal")` again for the next nearest and top up.
-- If `mine` reports it skipped blocks "against water or lava", that portal sits in a wet/lava pocket — relocate to a cleaner one rather than fighting the fluid.
+- If `mine` reports obsidian that "can't be broken here" with fluid beside it, that portal sits in a wet/lava pocket — relocate to a cleaner one rather than fighting the fluid.
 
 ## Portal build
 

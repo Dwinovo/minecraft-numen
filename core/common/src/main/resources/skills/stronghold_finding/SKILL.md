@@ -37,7 +37,7 @@ The room has a lava pool under the frame and a **silverfish spawner** on the sta
 
 ## Step 4 — fill the frames
 
-1. The 12 `end_portal_frame` blocks ring a 3×3 opening. `scan_blocks(end_portal_frame)` lists all 12 positions.
+1. The 12 `end_portal_frame` blocks ring a 3×3 opening. `scan_blocks(end_portal_frame)` returns them as one group that lists all 12 positions.
 2. `inspect_block` each frame — the `has_eye` property tells you which are pre-filled.
 3. `interact_at(button=right, x, y, z, item_id=minecraft:ender_eye)` on each empty frame. **Eyes cannot be taken back out.**
 4. The 12th eye activates the portal; the opening fills with the starfield surface.
