@@ -71,9 +71,6 @@ import java.util.Set;
  *       <b>这一刻这一批都到不了</b>,不是"最近那颗有问题"。所以这里不记账到任何一格:
  *       重新规划就是了。既没挖掉一格、也没挪窝超过 {@link #STALL_TICKS} 刻,才收工,
  *       并如实报告"剩下的走不到"。</li>
- *   <li><b>branch mine</b> — when no ore is known, head outward holding the
- *       y-level ({@link NavGoal#runAway}) to dig fresh tunnel and expose more,
- *       bounded by {@link #MAX_BRANCH_TICKS}.</li>
  * </ol>
  *
  * <h2>主人的东西</h2>
@@ -105,15 +102,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private static final int QUERY_BUILD_BUDGET = 48;
     private static final double REACH_SQR = 4.5 * 4.5;
     private static final double MINE_SPEED = 1.0;
-    /** Give up branch-mining after this many ticks with no ore found (~30 s). */
-    private static final int MAX_BRANCH_TICKS = 600;
-    /**
-     * Whether to keep hunting when no target is known. OFF (the default): "no ore
-     * known" ends the task with whatever was gathered — the body does NOT wander
-     * off across the world looking for more, which is the safer contract for a
-     * companion the player expects to stay nearby. Flip this to enable the opt-in
-     * explore mode (the bounded branch-mine below). */
-    private static final boolean EXPLORE_FOR_BLOCKS = false;
     /** 同一格连续这么多刻拉不出射线,就记进 {@link #unworkable} —— 够到测试说它能挖,
      *  可射线始终成不了(瞄准量化、站位上方有个檐口)。没有这条,挖掘会永远等一个
      *  不会来的射线。 */
@@ -174,16 +162,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  这种画像下恒为 0,数拾取物会让任务铲平半径 32 chunk 后报败。 */
     private int brokenTargets;
 
-    private boolean navIsBranch;
-    private BlockPos branchPoint;
-    private int branchY;
     /** 距下一次允许查询的冷却(tick)。 */
     private int queryCooldown;
     /** 距慢心跳强制刷新的剩余 tick。 */
     private int heartbeatTimer;
     /** 上一次查询时同伴所在 chunk(打包 long)——跨 chunk 视为看到新地形,触发补查。 */
     private long lastQueryChunk = Long.MIN_VALUE;
-    private int branchTicks;
     private String progressNote = "done";
     /** The ore currently returning {@code NO_SHOT}, and for how many consecutive ticks. */
     private BlockPos noShotPos;
@@ -323,12 +307,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // 2) Head for the ore field + nearby drops (GoalComposite), arriving when a
         //    shaft opens up; drops are collected by walking over them (native pickup).
         if (!knownOres.isEmpty() || !drops.isEmpty()) {
-            branchTicks = 0;
             TaskState stalled = stalledOut();
             if (stalled != null) {
                 return stalled;
             }
-            if (nav == null || navIsBranch) {
+            if (nav == null) {
                 stopNav();
                 // Compiled front door: one composite over every known ore's stance plus nearby
                 // drops. The route MAY chop a target on the way past — an en-route break is
@@ -342,7 +325,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 // instead of reporting a stale arrival.
                 nav = PlayerNav.toRevalidating(player, this::oreFieldCompiled, MINE_SPEED,
                         () -> reachableTarget() != null, MINE_TERRAIN);
-                navIsBranch = false;
             }
             switch (nav.tick()) {
                 case RUNNING -> { return TaskState.RUNNING; }
@@ -413,41 +395,14 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             r.extendDeadlineTo(r.getDeadlineGameTime() + 1);
             return TaskState.RUNNING;
         }
-        //    Default: stop here — only the
-        //    opt-in explore mode branch-mines outward for more. So
-        //    finish with whatever we gathered (the tool's contract: "fewer than count
-        //    in range still succeeds"), rather than running off across the world.
-        if (!EXPLORE_FOR_BLOCKS) {
-            if (r.getMined() > 0) {
-                progressNote = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
-                return TaskState.SUCCESS;
-            }
-            return noOreFailure();
+        //    Finish with whatever we gathered (the tool's contract: "fewer than count in
+        //    range still succeeds") — the body does not wander off across the world looking
+        //    for more; widening the search is the model's call.
+        if (r.getMined() > 0) {
+            progressNote = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
+            return TaskState.SUCCESS;
         }
-
-        // 3b) Opt-in explore — branch-mine outward (bounded) to dig fresh tunnel and expose more.
-        if (branchPoint == null) {
-            branchPoint = player.blockPosition();
-            branchY = branchPoint.getY();
-        }
-        if (++branchTicks > MAX_BRANCH_TICKS) {
-            if (r.getMined() > 0) {
-                progressNote = "gathered " + r.getMined() + "/" + r.count + ", no more " + r.label + " in range";
-                return TaskState.SUCCESS;
-            }
-            return noOreFailure();
-        }
-        if (nav == null || !navIsBranch) {
-            stopNav();
-            nav = PlayerNav.toGoal(player, () -> NavGoal.runAway(branchPoint, branchY),
-                    MINE_SPEED, () -> false, MINE_TERRAIN);
-            navIsBranch = true;
-        }
-        switch (nav.tick()) {
-            case RUNNING, ARRIVED -> { return TaskState.RUNNING; }
-            case FAILED -> { stopNav(); return TaskState.RUNNING; } // boxed in — rescan/retry
-        }
-        return TaskState.RUNNING;
+        return noOreFailure();
     }
 
     // ---- goals ----
@@ -966,13 +921,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     FailureType.MINED_OUT);
         }
         return TaskState.FAILED;
-    }
-
-    /** Stop the nav AND clear the branch-mode flag (extends the base's nav release). */
-    @Override
-    protected void stopNav() {
-        super.stopNav();
-        navIsBranch = false;
     }
 
     @Override
