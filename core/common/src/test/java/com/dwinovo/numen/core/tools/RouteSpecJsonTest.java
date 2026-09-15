@@ -48,6 +48,21 @@ class RouteSpecJsonTest {
         return assertThrows(IllegalArgumentException.class, () -> RouteSpecJson.parse(json(text))).getMessage();
     }
 
+    /** mine 的 spec 叠在它自己的默认上:没给的字段保持默认,给了的覆盖,禁令并进默认已有的。 */
+    @Test
+    void fieldsLayOverTheCallersDefault() {
+        assumeTrue(booted, "Minecraft 引导不可用,跳过方块 id 解析");
+        RouteSpec base = RouteSpec.defaults().withAlter(RouteSpec.Alter.ANY)
+                .withBans(new RouteSpec.BlockBans(java.util.Set.of(Blocks.CHEST), java.util.Set.of(), java.util.Set.of()));
+        assertSame(base, RouteSpecJson.parse(null, base));
+        RouteSpec kept = RouteSpecJson.parse(json("{\"avoid_break\":[\"1,2,3\",\"minecraft:oak_log\"]}"), base);
+        assertEquals(RouteSpec.Alter.ANY, kept.alter());
+        assertEquals(COST_INF, kept.positions().dig(new BlockPos(1, 2, 3).asLong()));
+        assertTrue(kept.bans().breaking().contains(Blocks.CHEST));
+        assertTrue(kept.bans().breaking().contains(Blocks.OAK_LOG));
+        assertEquals(RouteSpec.Alter.NATURAL, RouteSpecJson.parse(json("{\"alter\":\"natural\"}"), base).alter());
+    }
+
     @Test
     void nullOrEmptyIsTheFactorySpec() {
         assertSame(RouteSpec.defaults(), RouteSpecJson.parse(null));
