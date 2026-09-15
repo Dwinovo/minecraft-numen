@@ -33,6 +33,16 @@ public enum Signals {
             return a.pos() != null && f.placed() != null
                     && f.placed().isPlaced(a.pos(), f.view().getBlockState(a.pos()));
         }
+
+        /** 主人看到的是谁放的:"dwinovo 放的";不知道是谁放的(旧存档)照说"玩家放的"。 */
+        @Override
+        Component shown(Action a, Facts f) {
+            PlacedBlocks.Placer placer = a.pos() == null || f.placed() == null ? null
+                    : f.placed().placerAt(a.pos(), f.view().getBlockState(a.pos()));
+            return placer != null && placer.known()
+                    ? Component.translatable(ModLanguageData.Keys.PERMISSION_PLACED_BY, placer.name())
+                    : super.shown(a, f);
+        }
     },
 
     BLOCK_ENTITY("block_entity", "has a block entity", false) {
@@ -125,8 +135,11 @@ public enum Signals {
         return description;
     }
 
-    /** 同一句自述给主人看的那一版,主人的客户端按自己的语言显示("玩家放的")。 */
-    public Component shown() {
+    /**
+     * 同一句自述给主人看的那一版,主人的客户端按自己的语言显示("玩家放的")。按这个动作与事实说,
+     * 说得出具体的就说具体的(谁放的)。
+     */
+    Component shown(Action a, Facts f) {
         return Component.translatable(ModLanguageData.Keys.PERMISSION_SIGNAL_PREFIX + ruleName);
     }
 

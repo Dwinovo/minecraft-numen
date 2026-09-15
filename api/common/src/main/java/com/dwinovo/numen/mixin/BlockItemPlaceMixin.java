@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * 玩家放置记录的唯一写入口:{@code BlockItem.place} 成功返回时,放的人是真玩家就把这一格记进
- * {@link PlacedBlocks},是同伴就把这一格的旧记号抹掉——她垫的路、她盖的墙是她自己的动作,
+ * {@link PlacedBlocks}(连同是谁),是同伴就把这一格的旧记号抹掉——她垫的路、她盖的墙是她自己的动作,
  * 不该被当成别人留下的东西;建造任务收工另把成果格登记回来。
  *
  * <p>挂在 {@code place} 而不是 {@code useOn}:所有经物品落位的方块(含模组的)都过这一处,
@@ -37,8 +37,9 @@ public abstract class BlockItemPlaceMixin {
         Player who = context.getPlayer();
         if (who instanceof NumenPlayer) {
             PlacedBlocks.of(level).forget(context.getClickedPos());
-        } else if (who instanceof ServerPlayer) {
-            PlacedBlocks.of(level).record(context.getClickedPos());
+        } else if (who instanceof ServerPlayer player) {
+            PlacedBlocks.of(level).record(context.getClickedPos(),
+                    new PlacedBlocks.Placer(player.getUUID(), player.getGameProfile().getName()));
         }
     }
 }

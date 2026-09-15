@@ -117,15 +117,19 @@ public final class Rule {
         return parts.isEmpty() ? text : String.join(", ", parts);
     }
 
-    /** {@link #describe} 给主人看的那一版:信号按主人的语言显示,种类、标签与实体照原文。 */
-    public Component shown() {
+    /**
+     * {@link #describe} 给主人看的那一版,就这个动作说:信号按主人的语言显示(说得出谁放的就说谁),
+     * 种类、标签与实体照原文。
+     */
+    public Component shown(Action action, Facts facts) {
         MutableComponent out = null;
         for (Term t : terms) {
             if (t.negated || t.type == Term.Type.ANY) {
                 continue;
             }
-            out = out == null ? Component.empty().append(t.shown())
-                    : out.append(Component.translatable(ModLanguageData.Keys.PERMISSION_SEPARATOR)).append(t.shown());
+            Component term = t.shown(action, facts);
+            out = out == null ? Component.empty().append(term)
+                    : out.append(Component.translatable(ModLanguageData.Keys.PERMISSION_SEPARATOR)).append(term);
         }
         return out == null ? Component.literal(text) : out;
     }
@@ -274,8 +278,8 @@ public final class Rule {
         }
 
         /** 给主人看的这一项;只对正项、非 {@code *} 调。 */
-        Component shown() {
-            return type == Type.SIGNAL ? signal.shown() : Component.literal(text);
+        Component shown(Action action, Facts facts) {
+            return type == Type.SIGNAL ? signal.shown(action, facts) : Component.literal(text);
         }
 
         /** 挖/右键看格子上的方块,放看要放的方块,实体动作看实体种类,拿/丢看物品。 */

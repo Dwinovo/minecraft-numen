@@ -33,7 +33,7 @@ import java.util.Map;
  * @param name         给主人看的名字(没有图标时显示):方块、物品的名字,实体的名字(起了名的就是那个名字)
  * @param rule         问的是哪一行规则的原文;没有任何一行覆盖时为空串
  * @param cause        为什么要问:那一行规则的自述({@code placed by a player})
- * @param shownCause   给主人看的为什么要问({@link Verdict#shownCause})
+ * @param shownCause   给主人看的为什么要问:命中那行规则就这个动作说的那一版({@link Rule#shown}),哪一行都没说到就说没有规则
  * @param irreversible 这件事撤不回(那一行规则的正项里有撤不回的信号)
  * @param remember     主人说"允许并记住"时存下的那一行 allow(推法见 {@link Rule#remembering})
  */
@@ -75,19 +75,21 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         String rule = verdict.rule() == null ? "" : verdict.rule().toString();
         boolean irreversible = verdict.rule() != null && verdict.rule().irreversible();
         Rule remember = Rule.remembering(action, verdict.rule(), facts);
+        Component why = verdict.rule() != null ? verdict.rule().shown(action, facts)
+                : Component.translatable(ModLanguageData.Keys.PERMISSION_UNCOVERED);
         return switch (action.kind()) {
             case ATTACK, USE_ENTITY -> new ConsentItem(action.kind(), null, action.entity().getId(),
                     EntityType.getKey(action.entity().getType()).getPath(), null, action.entity().getName(), rule,
-                    verdict.cause(), verdict.shownCause(), irreversible, remember);
+                    verdict.cause(), why, irreversible, remember);
             case DROP -> {
                 Subject subject = Subject.of(action);
                 yield new ConsentItem(action.kind(), null, NO_ENTITY, subject.id, subject.icon, subject.name, rule,
-                        verdict.cause(), verdict.shownCause(), irreversible, remember);
+                        verdict.cause(), why, irreversible, remember);
             }
             default -> {
                 Subject subject = Subject.of(action);
                 yield new ConsentItem(action.kind(), action.pos(), NO_ENTITY, subject.id, subject.icon, subject.name,
-                        rule, verdict.cause(), verdict.shownCause(), irreversible, remember);
+                        rule, verdict.cause(), why, irreversible, remember);
             }
         };
     }
@@ -133,14 +135,14 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
     }
 
     /**
-     * 清单,一堆一条:按"动词 + 对象 + 理由"归堆(实体再按名字分开),保持先出现的先列。
+     * 清单,一堆一条:按"动词 + 对象 + 理由"归堆(实体按名字、玩家放的按谁放的再分开),保持先出现的先列。
      * 答复框与回执都用这一份。
      */
     public static List<Group> listing(List<ConsentItem> items) {
         Map<String, List<ConsentItem>> groups = new LinkedHashMap<>();
         for (ConsentItem item : items) {
             String key = item.kind.verb() + ' ' + item.subject + ' ' + item.name.getString() + ' ' + item.rule
-                    + ' ' + item.cause;
+                    + ' ' + item.shownCause.getString();
             groups.computeIfAbsent(key, k -> new ArrayList<>()).add(item);
         }
         List<Group> out = new ArrayList<>();

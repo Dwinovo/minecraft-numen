@@ -1,9 +1,5 @@
 package com.dwinovo.numen.permission;
 
-import com.dwinovo.numen.data.ModLanguageData;
-
-import net.minecraft.network.chat.Component;
-
 /**
  * 裁决的三种答复:放行;拒绝并附理由;需要主人同意并附理由。
  *
@@ -50,11 +46,6 @@ public record Verdict(Kind kind, String cause, Rule rule) {
 
     public boolean asks() {
         return kind == Kind.ASK;
-    }
-
-    /** 要问的理由给主人看的那一版({@link #cause} 的对应):命中的那行规则,或者哪一行都没说到。 */
-    public Component shownCause() {
-        return rule != null ? rule.shown() : Component.translatable(ModLanguageData.Keys.PERMISSION_UNCOVERED);
     }
 
     /** 给回执的整句理由;放行为空串。 */

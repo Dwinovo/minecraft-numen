@@ -2,10 +2,11 @@ package com.dwinovo.numen.permission;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
-import it.unimi.dsi.fastutil.longs.LongSet;
+import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.UUIDUtil;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.server.level.ServerLevel;
@@ -16,39 +17,74 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.saveddata.SavedData;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 每维度一份:玩家放过方块的格子。{@code placed} 信号的来源,也是"这东西是谁的"这个概念在
+ * 每维度一份:玩家放过方块的格子,和是谁放的。{@code placed} 信号的来源,也是"这东西是谁的"这个概念在
  * 全仓唯一的落点。
  *
- * <p>记:{@code BlockItem.place} 返回处的 mixin,放的人是真玩家就记,是同伴就把这一格的旧记号
- * 抹掉(她垫的路、她盖的墙是她的,不是别人留下的);建造任务收工另把成果格登记回来。
+ * <p>记:{@code BlockItem.place} 返回处的 mixin,放的人是真玩家就记下这一格和他,是同伴就把这一格的旧记号
+ * 抹掉(她垫的路、她盖的墙是她的,不是别人留下的)。
  * 查:格子已是空气视为无记号并顺手清掉——不另挂方块变化钩子,谁挖的都一样。
  *
- * <p>线程:按区块存位集合,每个集合发布后不再改,改就整个换一份(写时复制,经
+ * <p>线程:按区块存"格子 → 放的人",每份发布后不再改,改就整个换一份(写时复制,经
  * {@link ConcurrentHashMap#compute}),寻路工作线程无锁读。
  */
 public final class PlacedBlocks extends SavedData {
 
+    /**
+     * 放下这一格的玩家:{@code id} 认人,{@code name} 是放的那一刻的名字(主人看的"xxx 放的";查不到名字为空串)。
+     * 记下放的人之前的存档里的格子不知道是谁放的,是 {@link #UNKNOWN}。
+     */
+    public record Placer(UUID id, String name) {
+
+        public static final Placer UNKNOWN = new Placer(new UUID(0L, 0L), "");
+
+        /** 说得出是谁:有名字。 */
+        public boolean known() {
+            return !name.isEmpty();
+        }
+    }
+
+    /** 同一个人放的格子存成一组。 */
+    private record PlacerCells(UUID id, String name, List<Long> cells) {
+        static final Codec<PlacerCells> CODEC = RecordCodecBuilder.create(i -> i.group(
+                UUIDUtil.CODEC.fieldOf("id").forGetter(PlacerCells::id),
+                Codec.STRING.fieldOf("name").forGetter(PlacerCells::name),
+                Codec.LONG.listOf().fieldOf("cells").forGetter(PlacerCells::cells)
+        ).apply(i, PlacerCells::new));
+    }
+
+    /**
+     * {@code cells}:不知道是谁放的格子(记下放的人之前的存档);{@code placers}:按放的人分组的格子。
+     */
     private static final Codec<PlacedBlocks> CODEC = RecordCodecBuilder.create(i -> i.group(
-            Codec.LONG.listOf().fieldOf("cells").forGetter(PlacedBlocks::cells)
+            Codec.LONG.listOf().optionalFieldOf("cells", List.of()).forGetter(PlacedBlocks::unknownCells),
+            PlacerCells.CODEC.listOf().optionalFieldOf("placers", List.of()).forGetter(PlacedBlocks::placerCells)
     ).apply(i, PlacedBlocks::new));
 
     private static final SavedData.Factory<PlacedBlocks> FACTORY = new SavedData.Factory<>(
             PlacedBlocks::new, PlacedBlocks::load, DataFixTypes.SAVED_DATA_RANDOM_SEQUENCES);
 
-    /** {@link ChunkPos#asLong} → 该区块内玩家放过的格子({@link BlockPos#asLong});值发布后不改。 */
-    private final ConcurrentHashMap<Long, LongSet> byChunk = new ConcurrentHashMap<>();
+    /** {@link ChunkPos#asLong} → 该区块内玩家放过的格子({@link BlockPos#asLong})与放的人;值发布后不改。 */
+    private final ConcurrentHashMap<Long, Long2ObjectMap<Placer>> byChunk = new ConcurrentHashMap<>();
 
     public PlacedBlocks() {
     }
 
-    private PlacedBlocks(List<Long> cells) {
-        for (long cell : cells) {
-            add(cell);
+    private PlacedBlocks(List<Long> unknown, List<PlacerCells> groups) {
+        for (long cell : unknown) {
+            put(cell, Placer.UNKNOWN);
+        }
+        for (PlacerCells group : groups) {
+            Placer placer = new Placer(group.id(), group.name());
+            for (long cell : group.cells()) {
+                put(cell, placer);
+            }
         }
     }
 
@@ -67,9 +103,9 @@ public final class PlacedBlocks extends SavedData {
         return tag;
     }
 
-    /** 记一格(主线程)。 */
-    public void record(BlockPos pos) {
-        add(pos.asLong());
+    /** 记一格和放它的人(主线程)。 */
+    public void record(BlockPos pos, Placer placer) {
+        put(pos.asLong(), placer);
         setDirty();
     }
 
@@ -77,13 +113,13 @@ public final class PlacedBlocks extends SavedData {
     public void forget(BlockPos pos) {
         long cell = pos.asLong();
         byChunk.computeIfPresent(chunkKey(pos), (k, old) -> {
-            if (!old.contains(cell)) {
+            if (!old.containsKey(cell)) {
                 return old;
             }
             if (old.size() == 1) {
                 return null;
             }
-            LongOpenHashSet next = new LongOpenHashSet(old);
+            Long2ObjectOpenHashMap<Placer> next = new Long2ObjectOpenHashMap<>(old);
             next.remove(cell);
             return next;
         });
@@ -95,15 +131,24 @@ public final class PlacedBlocks extends SavedData {
      * 并顺手把记号清掉。任何线程可调。
      */
     public boolean isPlaced(BlockPos pos, BlockState now) {
-        LongSet cells = byChunk.get(chunkKey(pos));
-        if (cells == null || !cells.contains(pos.asLong())) {
-            return false;
+        return placerAt(pos, now) != null;
+    }
+
+    /**
+     * 放这一格的人;不是玩家放的是 null(已是空气同 {@link #isPlaced},顺手清掉)。不知道是谁放的是
+     * {@link Placer#UNKNOWN}。任何线程可调。
+     */
+    public Placer placerAt(BlockPos pos, BlockState now) {
+        Long2ObjectMap<Placer> cells = byChunk.get(chunkKey(pos));
+        Placer placer = cells == null ? null : cells.get(pos.asLong());
+        if (placer == null) {
+            return null;
         }
         if (now.isAir()) {
             forget(pos);
-            return false;
+            return null;
         }
-        return true;
+        return placer;
     }
 
     /** {@code center} 周围 {@code radius} 格(切比雪夫)内有没有玩家放的方块(含自身)。 */
@@ -113,8 +158,8 @@ public final class PlacedBlocks extends SavedData {
             for (int dy = -radius; dy <= radius; dy++) {
                 for (int dz = -radius; dz <= radius; dz++) {
                     cursor.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
-                    LongSet cells = byChunk.get(ChunkPos.asLong(cursor));
-                    if (cells != null && cells.contains(cursor.asLong())
+                    Long2ObjectMap<Placer> cells = byChunk.get(ChunkPos.asLong(cursor));
+                    if (cells != null && cells.containsKey(cursor.asLong())
                             && isPlaced(cursor.immutable(), view.getBlockState(cursor))) {
                         return true;
                     }
@@ -127,25 +172,44 @@ public final class PlacedBlocks extends SavedData {
     /** 记着的格子总数(测试与调试用)。 */
     public int size() {
         int n = 0;
-        for (LongSet s : byChunk.values()) {
+        for (Long2ObjectMap<Placer> s : byChunk.values()) {
             n += s.size();
         }
         return n;
     }
 
-    private void add(long cell) {
+    private void put(long cell, Placer placer) {
         byChunk.compute(ChunkPos.asLong(BlockPos.of(cell)), (k, old) -> {
-            LongOpenHashSet next = old == null ? new LongOpenHashSet() : new LongOpenHashSet(old);
-            next.add(cell);
+            Long2ObjectOpenHashMap<Placer> next = old == null ? new Long2ObjectOpenHashMap<>()
+                    : new Long2ObjectOpenHashMap<>(old);
+            next.put(cell, placer);
             return next;
         });
     }
 
-    private List<Long> cells() {
+    private List<Long> unknownCells() {
         List<Long> out = new ArrayList<>();
-        for (Map.Entry<Long, LongSet> e : byChunk.entrySet()) {
-            e.getValue().forEach((long c) -> out.add(c));
+        for (Long2ObjectMap<Placer> cells : byChunk.values()) {
+            for (Long2ObjectMap.Entry<Placer> e : cells.long2ObjectEntrySet()) {
+                if (e.getValue().equals(Placer.UNKNOWN)) {
+                    out.add(e.getLongKey());
+                }
+            }
         }
+        return out;
+    }
+
+    private List<PlacerCells> placerCells() {
+        Map<Placer, List<Long>> groups = new LinkedHashMap<>();
+        for (Long2ObjectMap<Placer> cells : byChunk.values()) {
+            for (Long2ObjectMap.Entry<Placer> e : cells.long2ObjectEntrySet()) {
+                if (!e.getValue().equals(Placer.UNKNOWN)) {
+                    groups.computeIfAbsent(e.getValue(), k -> new ArrayList<>()).add(e.getLongKey());
+                }
+            }
+        }
+        List<PlacerCells> out = new ArrayList<>();
+        groups.forEach((placer, cells) -> out.add(new PlacerCells(placer.id(), placer.name(), cells)));
         return out;
     }
 

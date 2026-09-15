@@ -1475,7 +1475,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /**
-     * 成果格登记进放置记录:她盖的墙从此是主人的东西,下一次寻路、挖矿要动它得先问。
+     * 成果格登记进放置记录,记在主人名下:她盖的墙从此是主人的东西,下一次寻路、挖矿要动它得先问。
      * 收工时登记,任务怎么结束都登记——半栋房子也是主人的半栋房子。双格方块的另一半
      * (门上半、床头)由主半带出来,一并登记。她自己放置时经过的 {@code BlockItem.place}
      * 把这些格当成"同伴自己的"抹掉了记号,这里是把成果交回主人的那一步。
@@ -1485,6 +1485,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             return;
         }
         PlacedBlocks placed = PlacedBlocks.of(level);
+        PlacedBlocks.Placer owner = ownerAsPlacer(level);
         for (BuildTaskRecord.Target target : r.targets) {
             if (BuildCellRules.isAirTarget(target) || !level.isLoaded(target.pos())) {
                 continue;
@@ -1492,12 +1493,27 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (!target.matches(level.getBlockState(target.pos()))) {
                 continue;
             }
-            placed.record(target.pos());
+            placed.record(target.pos(), owner);
             BlockPos other = BuildCellRules.otherHalfOf(target.pos(), target.desiredState());
             if (other != null && !level.getBlockState(other).isAir()) {
-                placed.record(other);
+                placed.record(other, owner);
             }
         }
+    }
+
+    /** 主人作为放的人:名字取在线的主人,不在线取服务器记着的档案;都查不到名字为空串(说成"玩家放的")。 */
+    private PlacedBlocks.Placer ownerAsPlacer(net.minecraft.server.level.ServerLevel level) {
+        java.util.UUID id = player.getOwnerUuid();
+        if (id == null) {
+            return PlacedBlocks.Placer.UNKNOWN;
+        }
+        net.minecraft.server.level.ServerPlayer online = player.resolveOwnerPlayer();
+        String name = online != null ? online.getGameProfile().getName()
+                : java.util.Optional.ofNullable(level.getServer().getProfileCache())
+                        .flatMap(cache -> cache.get(id))
+                        .map(com.mojang.authlib.GameProfile::getName)
+                        .orElse("");
+        return new PlacedBlocks.Placer(id, name);
     }
 
     /**

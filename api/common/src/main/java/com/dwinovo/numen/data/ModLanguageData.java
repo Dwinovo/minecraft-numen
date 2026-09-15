@@ -81,7 +81,9 @@ public final class ModLanguageData {
         public static final String CONSENT_VERB_PREFIX    = "numen.consent.verb.";
         /** 信号给主人看的自述,后接规则里的信号名({@code placed}……)。 */
         public static final String PERMISSION_SIGNAL_PREFIX = "numen.permission.signal.";
+        public static final String PERMISSION_PLACED_BY   = "numen.permission.placed_by";
         public static final String PERMISSION_UNCOVERED   = "numen.permission.uncovered";
+        public static final String CONSENT_SECONDS        = "numen.consent.seconds";
         public static final String PERMISSION_SEPARATOR   = "numen.permission.separator";
         public static final String PERMISSION_A_BLOCK     = "numen.permission.a_block";
 
@@ -586,7 +588,9 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "villager",     "villager");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "hostile");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hazard_item",  "dangerous");
+        adder.add(Keys.PERMISSION_PLACED_BY,   "placed by %s");
         adder.add(Keys.PERMISSION_UNCOVERED,   "no rule");
+        adder.add(Keys.CONSENT_SECONDS,        "%ss");
         adder.add(Keys.PERMISSION_SEPARATOR,   ", ");
         adder.add(Keys.PERMISSION_A_BLOCK,     "a block");
     }
@@ -940,7 +944,9 @@ public final class ModLanguageData {
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "villager",     "村民");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "敌对");
         adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hazard_item",  "危险");
+        adder.add(Keys.PERMISSION_PLACED_BY,   "%s 放的");
         adder.add(Keys.PERMISSION_UNCOVERED,   "没有规则");
+        adder.add(Keys.CONSENT_SECONDS,        "%s 秒");
         adder.add(Keys.PERMISSION_SEPARATOR,   "、");
         adder.add(Keys.PERMISSION_A_BLOCK,     "方块");
     }

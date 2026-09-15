@@ -27,8 +27,8 @@ import java.util.function.Supplier;
  *
  * <pre>
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  ← 撤不回时是红的
- * [脸] 小蓝 +1                    ▰▰▰▰▱▱  ← 别的同伴还有几条在等;剩下的时间
- * 挖 [原木]×6 · 玩家放的                   ← 清单:动词、图标(没有图标写名字)、数量、理由
+ * [脸] 小蓝 +1              ▰▰▰▰▱▱ 87 秒  ← 别的同伴还有几条在等;剩下的时间
+ * 挖 [原木]×6 · dwinovo 放的              ← 清单:动词、图标(没有图标写名字)、数量、理由
  * → 1 允许
  *   2 以后都允许      allow break(…)       ← 记下的规则只在选中这项时出现
  *   3 拒绝
@@ -218,7 +218,7 @@ public final class ConsentPrompt extends Widget {
                     ix, ty + (HEAD_H - FACE) / 2, FACE);
         }
         int nx = ix + FACE + 4;
-        String shownName = TextClip.fit(s, name, iw - FACE - 4 - BAR_W - 24);
+        String shownName = TextClip.fit(s, name, iw - FACE - 4 - BAR_W - 60);
         s.drawText(shownName, nx, ty + textDy, c.textPrimary(), false);
         int others = ConsentCards.all().size() - 1;
         if (others > 0) {
@@ -226,7 +226,10 @@ public final class ConsentPrompt extends Widget {
         }
         var level = Minecraft.getInstance().level;
         long left = level == null ? 0 : Math.max(0, request.expiresAtGameTime() - level.getGameTime());
-        int barX = ix + iw - BAR_W;
+        String seconds = I18n.get(ModLanguageData.Keys.CONSENT_SECONDS, (left + 19) / 20);
+        int secondsW = s.textWidth(seconds);
+        s.drawText(seconds, ix + iw - secondsW, ty + textDy, c.textMuted(), false);
+        int barX = ix + iw - secondsW - 4 - BAR_W;
         int barY = ty + HEAD_H / 2 - 1;
         s.fillRect(barX, barY, BAR_W, 2, c.inputBorder());
         s.fillRect(barX, barY, (int) Math.round(BAR_W * Math.min(1.0, (double) left / ConsentDesk.TIMEOUT_TICKS)), 2,
