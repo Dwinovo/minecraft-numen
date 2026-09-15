@@ -125,6 +125,29 @@ class NumenToastsTest {
     }
 
     @Test
+    void theDisplayTimeScaleStretchesTheStay() {
+        NumenToasts plain = new NumenToasts();
+        NumenToasts slow = new NumenToasts(() -> 2.0);
+        FakeSurface s = new FakeSurface();
+        plain.push(NumenToasts.Severity.INFO, "ok");
+        slow.push(NumenToasts.Severity.INFO, "ok");
+        plain.render(s, SCREEN_W, 0, C, 0);
+        slow.render(s, SCREEN_W, 0, C, 0);
+
+        long stay = NumenToasts.VISIBLE_MIN_MS + NumenToasts.PER_CHAR_MS * 2;
+        long probe = NumenToasts.SLIDE_MS + stay + NumenToasts.SLIDE_MS + 100;
+        for (long t = 100; t <= probe; t += 100) {
+            s.resetFrame();
+            plain.render(s, SCREEN_W, 0, C, t);
+            slow.render(s, SCREEN_W, 0, C, t);
+        }
+        assertTrue(plain.isIdle(), "不缩放的那条已经走完");
+        s.resetFrame();
+        slow.render(s, SCREEN_W, 0, C, probe);
+        assertEquals(1, s.texts.size(), "倍数 2 的那条还在停留——原版'通知显示时间'调长,我们的也跟着长");
+    }
+
+    @Test
     void pushIsSafeBeforeAnyRenderAndQueueDrainsToIdle() {
         NumenToasts toasts = new NumenToasts();
         toasts.push(NumenToasts.Severity.WARN, "w");
