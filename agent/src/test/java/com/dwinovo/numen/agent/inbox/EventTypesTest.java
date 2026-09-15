@@ -51,6 +51,7 @@ class EventTypesTest {
         assertRow(EventTypes.DIMENSION_CHANGE, EventTypes.Delivery.STEER, false, false, false, false);
         assertRow(EventTypes.REFLEX, EventTypes.Delivery.STEER, false, false, false, false);
         assertRow(EventTypes.DROPPED, EventTypes.Delivery.STEER, false, false, false, false);
+        assertRow(EventTypes.CONSENT_NOTE, EventTypes.Delivery.STEER, true, false, false, false);
     }
 
     @Test

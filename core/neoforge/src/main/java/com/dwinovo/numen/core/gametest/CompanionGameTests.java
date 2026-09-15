@@ -4480,7 +4480,8 @@ public class CompanionGameTests {
             String reply = record.getResult() == null ? null : record.getResult().message();
             helper.assertTrue(reply != null && record.getResult().success(), "drop_items did not finish: " + reply);
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0, "nothing was dropped");
-            helper.assertTrue(reply.contains("给我吧"), "the reply does not carry the owner's note: " + reply);
+            helper.assertTrue(reply.contains("the owner allowed") && !reply.contains("给我吧"),
+                    "the reply does not say the owner allowed, or the note waited for it: " + reply);
             CompanionFactory.despawn(level.getServer(), companion);
             CompanionFactory.despawn(level.getServer(), owner);
         });
@@ -4780,7 +4781,8 @@ public class CompanionGameTests {
 
     /**
      * {@code /numen consent} 与卡片是同一个入口:第一次丢钻石由卡片的网络载荷答复,第二次丢绿宝石由主人敲命令
-     * "允许并记住"答复——两次都丢了、回执都带着主人的附言;记住之后第三次丢绿宝石不再问。别人敲命令答不了;
+     * "允许并记住"答复——两次都丢了、回执都交代主人允许了(记住的那次还交代记下了哪一行);记住之后第三次丢绿宝石
+     * 不再问。别人敲命令答不了;
      * 答一个没挂着的号说清楚没有。
      */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
@@ -4815,7 +4817,7 @@ public class CompanionGameTests {
                 case 1 -> {
                     if (calls[0].getResult() != null) {
                         helper.assertTrue(calls[0].getResult().success()
-                                        && calls[0].getResult().message().contains("卡片答的"),
+                                        && calls[0].getResult().message().contains("the owner allowed"),
                                 "the card answer did not go through: " + calls[0].getResult().message());
                         calls[1] = inventory.dropItems("minecraft:emerald", 2,
                                 TaskDispatch.ctx("gametest-almoner-2", companion));
@@ -4834,7 +4836,7 @@ public class CompanionGameTests {
                 case 3 -> {
                     if (calls[1].getResult() != null) {
                         helper.assertTrue(calls[1].getResult().success()
-                                        && calls[1].getResult().message().contains("命令答的"),
+                                        && calls[1].getResult().message().contains("remembered it"),
                                 "the command answer did not go through: " + calls[1].getResult().message());
                         calls[2] = inventory.dropItems("minecraft:emerald", 2,
                                 TaskDispatch.ctx("gametest-almoner-3", companion));
