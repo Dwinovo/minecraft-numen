@@ -130,6 +130,8 @@ public interface NumenApi {
      *
      * <p>服务端发出口靠它挡住没登记的种类,主人客户端的队列靠它决定怎么投递,所以<b>两侧都要登记</b>:
      * 在 {@code NumenPlugins.register} 的块里直接调,别放进 {@link #onClient}。
+     *
+     * @throws IllegalArgumentException 这个 id 已经登记过(引擎自带的种类也算)——改不了别人的行
      */
     void registerEventType(String type, boolean alwaysUrgent);
 

@@ -156,11 +156,20 @@ public final class EventTypes {
 
     private EventTypes() {}
 
-    /** 登记一种类型(mod init 期调用)。同 id 重复登记以后来的为准。 */
+    /**
+     * 登记一种类型(mod init 期调用)。一个 id 只能登记一次:内置的行是引擎语义的一部分(主人的话恒为急件、
+     * 控制命令只在闲时执行),插件拿同一个 id 再登记一行就会悄悄改掉它们,所以直接拒绝。
+     *
+     * @throws IllegalArgumentException id 为空,或者这个 id 已经登记过
+     */
     public static synchronized void register(Type type) {
-        if (type != null && type.id() != null && !type.id().isBlank()) {
-            TYPES.put(type.id(), type);
+        if (type == null || type.id() == null || type.id().isBlank()) {
+            throw new IllegalArgumentException("类型没有 id");
         }
+        if (TYPES.containsKey(type.id())) {
+            throw new IllegalArgumentException("事件类型 " + type.id() + " 已经登记过,换一个 id");
+        }
+        TYPES.put(type.id(), type);
     }
 
     /** 查表;没登记过返回 {@link #UNKNOWN}。 */
