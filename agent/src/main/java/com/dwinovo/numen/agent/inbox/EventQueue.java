@@ -18,7 +18,7 @@ import java.util.List;
  * <p>没有第三条。她当时在干嘛、消费者此刻方不方便——一律不看;急不急在入队那一刻就定了
  * (类型表说恒急的就急,否则听发送方的),之后只认条目上的标记。
  * 消费者能不能来取(她死了?驾驶席在外接大脑手里?)是<b>消费者自己的停牌</b>,
- * 不在这里:队列没有锁,取件口({@link #takeWhile}/{@link #takeIf}/{@link #takeEntries})
+ * 不在这里:队列没有锁,取件口({@link #takeWhile}/{@link #takeAhead}/{@link #takeIf}/{@link #takeEntries})
  * 永远敞着,谁来取、什么时候取,由持有队列的人决定。
  *
  * <h2>急件叫醒:脉冲可以丢,电平不会骗</h2>
@@ -249,6 +249,36 @@ public final class EventQueue {
         List<Entry> taken = new ArrayList<>();
         for (java.util.Iterator<Entry> it = entries.iterator(); it.hasNext(); ) {
             Entry e = it.next();
+            if (take.test(e)) {
+                taken.add(e);
+                it.remove();
+            }
+        }
+        if (taken.isEmpty()) {
+            return List.of();
+        }
+        flushDropped(taken, now);
+        journal.save(entries);
+        return taken;
+    }
+
+    /**
+     * 取走排在第一条 {@code barrier} <b>之前</b>、满足 {@code take} 的条目;{@code barrier} 那条和它之后的原样留着,
+     * 前段里不满足 {@code take} 的也留着,先后不变。
+     *
+     * <p>循环在一次 run 的边界上这样取件:排在控制条目(整理/清空)前面的插话照取,接续条目按需要留着;
+     * 控制条目后面的等它在闲时执行完再说。不插队,也不被同一段里另一种投递方式挡住。
+     *
+     * @return 取走的条目,按入队顺序;一条都没取则空列表
+     */
+    public List<Entry> takeAhead(java.util.function.Predicate<Entry> barrier,
+                                 java.util.function.Predicate<Entry> take, long now) {
+        List<Entry> taken = new ArrayList<>();
+        for (java.util.Iterator<Entry> it = entries.iterator(); it.hasNext(); ) {
+            Entry e = it.next();
+            if (barrier.test(e)) {
+                break;
+            }
             if (take.test(e)) {
                 taken.add(e);
                 it.remove();
