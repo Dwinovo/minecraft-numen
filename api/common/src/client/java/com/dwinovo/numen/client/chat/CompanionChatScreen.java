@@ -90,7 +90,7 @@ public class CompanionChatScreen extends Screen {
         int y = this.height - 44;
         inputBar = new ChatInputBar(new BarHost(), EnumSet.of(ChatInputBar.Key.SEND, ChatInputBar.Key.STOP));
         int lead = tagW() + 6;
-        inputBar.build(x + lead, y, INPUT_W - lead, INPUT_H);
+        inputBar.build(x, y, INPUT_W, INPUT_H, lead);
         if (!kept.isEmpty()) inputBar.setText(kept);
     }
 
@@ -150,15 +150,18 @@ public class CompanionChatScreen extends Screen {
         int x = (this.width - INPUT_W) / 2;
         int y = this.height - 44;
 
-        // 输入卡:与 G 面板同方言的浅底粗边卡片;输入行(含弹层/面板)画在它上面
-        RoundRect.card(g, x - 8, y - 6, x + INPUT_W + 8, y + INPUT_H + 4, 4,
-                th.aiFill(), th.border());
-        // 名字牌:与输入行同排、占卡片最左一截,标明这句话说给谁。不放输入框上方——
-        // 斜杠补全弹层和 /skills 面板都贴着输入框往上长,上面那块地是它们的
-        int tagW = tagW();
-        RoundRect.card(g, x - 4, y + 1, x - 4 + tagW, y + INPUT_H - 1, 3, th.band(), th.border());
-        Nb.text(g, this.font, companionName, x + 2, y + (INPUT_H - this.font.lineHeight) / 2 + 1,
-                th.onBand());
+        // 答复框在场时整行归它(它自己写着谁在问),输入卡与名字牌都不画
+        if (!inputBar.asking()) {
+            // 输入卡:与 G 面板同方言的浅底粗边卡片;输入行(含弹层/面板)画在它上面
+            RoundRect.card(g, x - 8, y - 6, x + INPUT_W + 8, y + INPUT_H + 4, 4,
+                    th.aiFill(), th.border());
+            // 名字牌:与输入行同排、占卡片最左一截,标明这句话说给谁。不放输入框上方——
+            // 斜杠补全弹层和 /skills 面板都贴着输入框往上长,上面那块地是它们的
+            int tagW = tagW();
+            RoundRect.card(g, x - 4, y + 1, x - 4 + tagW, y + INPUT_H - 1, 3, th.band(), th.border());
+            Nb.text(g, this.font, companionName, x + 2, y + (INPUT_H - this.font.lineHeight) / 2 + 1,
+                    th.onBand());
+        }
         inputBar.render(g, mouseX, mouseY, net.minecraft.Util.getMillis(), HostThemeColors.current());
 
         String tip = inputBar.tooltipAt(mouseX, mouseY);

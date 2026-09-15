@@ -578,7 +578,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_TITLE,          "%s asks for your consent");
         adder.add(Keys.CONSENT_MORE,           "+%s more");
         adder.add(Keys.CONSENT_EXPIRES,        "%ss left");
-        adder.add(Keys.CONSENT_NOTE,           "Tell %s what to do instead · Enter sends it as a deny");
+        adder.add(Keys.CONSENT_NOTE,           "Enter sends it (as a deny) · ↑ back to the options · Esc later");
         adder.add(Keys.CONSENT_ALLOW,          "Allow");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Always allow");
         adder.add(Keys.CONSENT_DENY,           "Deny");
@@ -590,7 +590,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_ANSWERED,       "Answered %s: %s");
         adder.add(Keys.CONSENT_REMEMBERED,     "remembered %s (undo with /numen permission rules)");
         adder.add(Keys.CONSENT_WITHDRAWN,      "%s's request went away: %s");
-        adder.add(Keys.CONSENT_NOTE_ROW,       "No, and tell %s what to do");
+        adder.add(Keys.CONSENT_NOTE_ROW,       "No, tell %s what to do instead…");
         adder.add(Keys.CONSENT_COUNT,          "%s ×%s");
         adder.add(Keys.CONSENT_LINE_PREFIX + "break",      "break %s · %s");
         adder.add(Keys.CONSENT_LINE_PREFIX + "place",      "place %s · %s");
@@ -942,7 +942,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_TITLE,          "%s 想征得你的同意");
         adder.add(Keys.CONSENT_MORE,           "还有 %s 项");
         adder.add(Keys.CONSENT_EXPIRES,        "%s 秒");
-        adder.add(Keys.CONSENT_NOTE,           "告诉 %s 该怎么做 · Enter 发送(算拒绝)");
+        adder.add(Keys.CONSENT_NOTE,           "Enter 发送(算拒绝) · ↑ 回到选项 · Esc 稍后");
         adder.add(Keys.CONSENT_ALLOW,          "允许");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "以后都允许");
         adder.add(Keys.CONSENT_DENY,           "拒绝");
@@ -954,7 +954,7 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_ANSWERED,       "已答复 %s:%s");
         adder.add(Keys.CONSENT_REMEMBERED,     "记住了 %s(/numen permission rules 可撤)");
         adder.add(Keys.CONSENT_WITHDRAWN,      "%s 的请求撤回了:%s");
-        adder.add(Keys.CONSENT_NOTE_ROW,       "不行,告诉 %s 该怎么做");
+        adder.add(Keys.CONSENT_NOTE_ROW,       "不行,告诉 %s 该怎么做…");
         adder.add(Keys.CONSENT_COUNT,          "%s ×%s");
         adder.add(Keys.CONSENT_LINE_PREFIX + "break",      "挖掉 %s · %s");
         adder.add(Keys.CONSENT_LINE_PREFIX + "place",      "放下 %s · %s");

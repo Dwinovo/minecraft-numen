@@ -23,34 +23,4 @@ public abstract class Popup extends Widget {
     public boolean alive() {
         return true;
     }
-
-    /**
-     * Esc 是不是收起这一层。{@code false} = 这一层不由 Esc 收起(它在等一个答复,收起了下一刻还会回来),
-     * Esc 照常落到宿主的界面上。
-     */
-    public boolean closesOnEscape() {
-        return true;
-    }
-
-    /**
-     * 这一层此刻要不要借输入框收一行字(比如选中了"写一句"那一项);{@code null} = 不借,输入框让位给这一层。
-     * 借着的时候输入框回到原位、这一层退到它上面;按键先给这一层(回车、上下由它定),它不要的落到输入框里。
-     * 宿主按身份认同一次借用,所以一次借用从头到尾返回同一个对象。
-     */
-    public LineRequest lineRequest() {
-        return null;
-    }
-
-    /** 借输入框收的一行字。 */
-    public interface LineRequest {
-
-        /** 输入框的占位文案。 */
-        String hint();
-
-        /** 借到那一刻放进输入框的字。 */
-        String text();
-
-        /** 字变了(每次按键)。 */
-        void changed(String text);
-    }
 }

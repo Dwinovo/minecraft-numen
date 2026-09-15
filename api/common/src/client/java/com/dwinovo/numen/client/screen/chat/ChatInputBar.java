@@ -30,8 +30,9 @@ import java.util.Set;
  * 宿主和带哪几颗键({@link Key}):快捷对话不带麦克风——快捷语音有自己的按住说话键,
  * 不搞两条语音路。
  *
- * <p>她在等主人点头的时候,这条输入行被答复框({@link com.dwinovo.numen.client.consent.ConsentPrompt})取代,
- * 答完才回来——和主流智能体的权限提示一样,问答挡住对话框。挂没挂着只看
+ * <p>她在等主人点头的时候,整条输入行换成答复框({@link com.dwinovo.numen.client.consent.ConsentPrompt}):
+ * 占满这一行的宽度,键都不画——和 pi 把编辑器整个换成选择框一样,问答挡住对话框,答完才回来。答复框的第四项
+ * 就是这条输入行自己的输入框(写一句再拒绝),屏幕上始终只有一个真输入框。挂没挂着只看
  * {@link com.dwinovo.numen.client.consent.ConsentCards},宿主每刻调 {@link #tick} 对齐,不各自判断。
  */
 public final class ChatInputBar {
@@ -94,12 +95,15 @@ public final class ChatInputBar {
 
     /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
     private int fieldX, fieldY, fieldW, fieldH;
-    /** 贴着输入框弹出来的那一层;非 null 时它<b>取代</b>输入框,键盘整个归它。装什么见 Popup。 */
+    /** 整条输入行的几何:含左边让给宿主的那一截与右边的键——答复框占的就是这一整行。 */
+    private int barX, barY, barW, barH;
+    /** 她在等主人点头时取代整条输入行的答复框;null = 没在等。 */
+    private com.dwinovo.numen.client.consent.ConsentPrompt consent;
+    /** 答复框出来前输入框里的字,答复框收起时放回去——主人打到一半的话不因为她插进来一问就没了。 */
+    private String draftBeforeConsent = "";
+    /** 开着的选择面板;非 null 时它<b>取代</b>输入框,键盘整个归它。 */
+    /** 贴着输入框弹出来的那一层。装什么由命令决定(名单、读数卡…),见 Popup。 */
     private com.dwinovo.numen.client.ui.widget.Popup panel;
-    /** 面板打开前输入框里的字,关面板时放回去——主人打到一半的话不因为她插进来一问就没了。 */
-    private String draftBeforePanel = "";
-    /** 输入框此刻借给面板收一行字(见 {@link com.dwinovo.numen.client.ui.widget.Popup#lineRequest});null = 没借。 */
-    private com.dwinovo.numen.client.ui.widget.Popup.LineRequest lent;
     /** 当前补全候选。空 = 不弹层。 */
     private List<Completion> candidates = List.of();
     private int selected;
@@ -117,16 +121,33 @@ public final class ChatInputBar {
         ui.setInputFactory(com.dwinovo.numen.client.ui.mc.McTextInput.factory());
     }
 
-    /** 输入框内容(切换同伴时宿主取走暂存,回来再 setText 放回)。面板开着时是面板打开前的那段。 */
+    /** 输入框内容(切换同伴时宿主取走暂存,回来再 setText 放回)。答复框在场时是它出来前的那段。 */
     public String text() {
-        if (panel != null) return draftBeforePanel;
+        if (consent != null) return draftBeforeConsent;
         return field != null ? field.value() : draft;
     }
 
     public void setText(String text) {
+        if (consent != null) {
+            draftBeforeConsent = text == null ? "" : text;
+            return;
+        }
         draft = text == null ? "" : text;
         if (field != null) field.setValue(draft);
         refreshCandidates();
+    }
+
+    /** 答复框此刻是不是占着这一行(宿主据此不画自己围着输入行的那些东西)。 */
+    public boolean asking() {
+        return consent != null;
+    }
+
+    /**
+     * 这一行此刻占多高:平时是 {@link #build} 给的那一行;答复框在场时是答复框的高度,底边不动、往上长。
+     * 宿主按它排上面的东西——答复框与输入框同级,占位置,不叠在别人身上。
+     */
+    public int height() {
+        return consent != null ? consent.preferredHeight() : barH;
     }
 
     /** 录音中:麦克风图标换成停止方块——同一颗键,两种含义都一眼可读。 */
@@ -134,10 +155,18 @@ public final class ChatInputBar {
         micIcon = recording ? ICON_STOP : ICON_MIC;
     }
 
-    public void build(int x, int y, int w, int h) {
-        if (field != null && panel == null) draft = field.value();   // 重建不丢已输入的文字
+    /**
+     * @param lead 左边让给宿主画的那一截(快捷对话的名字牌);输入框从它右边开始,答复框不让,占满整行
+     */
+    public void build(int x, int y, int w, int h, int lead) {
+        if (field != null && consent == null) draft = field.value();   // 重建不丢已输入的文字
         ui.clear();
-        lent = null;   // 新的输入框下一次对齐时重新借出
+        barX = x;
+        barY = y;
+        barW = w;
+        barH = h;
+        x += lead;
+        w -= lead;
 
         micBtn = wanted.contains(Key.MIC) ? ui.add(iconButton(null, "numen.chat.tip.mic",
                 Button.Style.NORMAL, host::onMicToggle)) : null;
@@ -154,10 +183,6 @@ public final class ChatInputBar {
         // 编辑交给一个真 EditBox(只收事件、不自绘),画面仍归 NumenUI。
         // 这是输入法辅助模组能认出这个框的前提——见 McTextInput。
         field = ui.add(new TextField(draft, v -> {
-            if (lent != null) {
-                lent.changed(v);
-                return;
-            }
             draft = v;
             refreshCandidates();
         }).placeholder(host.hint())
@@ -183,48 +208,56 @@ public final class ChatInputBar {
     }
 
     /**
-     * 她挂着征询就用答复框取代输入行,换了一条就换一张框(正在写的那句带过去),没了就收起并告诉宿主。
+     * 她挂着征询就用答复框取代整条输入行,换了一条就换一张框(正在写的那句留着),没了就放回原来的字并告诉宿主。
      */
     private void syncConsent() {
         var loop = host.loop();
         var asking = loop == null ? null
                 : com.dwinovo.numen.client.consent.ConsentCards.pending(loop.entityUuid());
-        var shown = panel instanceof com.dwinovo.numen.client.consent.ConsentPrompt prompt ? prompt : null;
-        if (shown != null && shown.request() == asking) return;
+        if (consent != null && consent.request() == asking) return;
         if (asking == null) {
-            if (shown != null) {
-                closePage();
+            if (consent != null) {
+                consent = null;
+                setText(draftBeforeConsent);
+                draftBeforeConsent = "";
+                ui.requestFocus(field);
+                refreshEnablement();
                 host.onConsentSettled();
             }
             return;
         }
-        openPopup(new com.dwinovo.numen.client.consent.ConsentPrompt(asking, shown));
+        if (consent == null) {
+            // 开着的面板(/skills 之类)收起;那串命令已经用过了,不算没打完的话
+            draftBeforeConsent = panel != null ? "" : field.value();
+            panel = null;
+            field.setValue("");
+        }
+        consent = new com.dwinovo.numen.client.consent.ConsentPrompt(asking, consent, field::value);
+        refreshEnablement();
     }
 
-    /** 每帧同步可按性、占位文案与面板位置:叫停的可用性是活的,面板的高度随内容变。 */
+    /** 每帧同步可按性、占位文案与几何:叫停的可用性是活的,答复框的高度随内容变。 */
     public void refreshEnablement() {
         if (field == null) return;
-        var line = panel == null ? null : panel.lineRequest();
-        boolean lending = line != lent;
-        lent = line;
-        boolean paged = panel != null && lent == null;
+        boolean paged = panel != null;
         // 面板在场时输入框让位(它就摆在输入框那格),旁边几颗键跟着停手——
-        // 叫停除外:那是主人的急刹车,任何时候都得能按。面板借输入框收字时输入框回到原位。
+        // 叫停除外:那是主人的急刹车,任何时候都得能按。
         field.setVisible(!paged);
         field.setEnabled(!paged);
-        if (lending && line != null) {
-            field.setValue(line.text());
-            field.cursorToEnd();
-            ui.requestFocus(field);
-        }
-        field.placeholder(lent != null ? lent.hint() : host.hint());
-        if (micBtn != null) micBtn.setEnabled(panel == null);
-        if (sendBtn != null) sendBtn.setEnabled(panel == null);
+        field.placeholder(consent != null ? consent.noteHint() : host.hint());
+        if (micBtn != null) micBtn.setEnabled(!paged);
+        if (sendBtn != null) sendBtn.setEnabled(!paged);
         if (stopBtn != null) stopBtn.setEnabled(host.canAbort());
-        if (panel != null) {
-            int ph = Math.max(fieldH, panel.preferredHeight());
-            int bottom = lent != null ? fieldY - 2 : fieldY + fieldH;
-            panel.setBounds(fieldX, bottom - ph, fieldW, ph);
+        // 答复框在场:键一颗不画,输入框挪进它的第四项,选中那一项才接字
+        for (Button key : keys) key.setVisible(consent == null);
+        if (consent != null) {
+            int ph = height();
+            consent.setBounds(barX, barY + barH - ph, barW, ph);
+            var box = consent.noteBox();
+            field.setBounds(box.x(), box.y(), box.w(), box.h());
+            ui.requestFocus(consent.writing() ? field : null);
+        } else {
+            field.setBounds(fieldX, fieldY, fieldW, fieldH);
         }
     }
 
@@ -236,8 +269,9 @@ public final class ChatInputBar {
      */
     public void openPopup(com.dwinovo.numen.client.ui.widget.Popup popup) {
         if (popup == null || field == null) return;
-        if (panel == null) draftBeforePanel = field.value();
         panel = popup;
+        int ph = Math.max(fieldH, panel.preferredHeight());
+        panel.setBounds(fieldX, fieldY + fieldH - ph, fieldW, ph);
         candidates = List.of();   // 补全弹层让位:一次只有一个东西吃键盘
         refreshEnablement();
     }
@@ -246,12 +280,10 @@ public final class ChatInputBar {
         return panel != null;
     }
 
-    /** 关面板回到输入框,放回面板打开前的字。 */
+    /** 关面板回到输入框。文字清空——刚才那串 {@code /skills} 已经用过了。 */
     private void closePage() {
         panel = null;
-        lent = null;
-        setText(draftBeforePanel);
-        draftBeforePanel = "";
+        setText("");
         refreshEnablement();
     }
 
@@ -260,6 +292,11 @@ public final class ChatInputBar {
     public void render(GuiGraphics g, int mouseX, int mouseY, long nowMs, NumenTheme.Colors c) {
         refreshEnablement();
         IDrawSurface s = new McDrawSurface(g, Minecraft.getInstance().font);
+        if (consent != null) {
+            consent.render(s, c, mouseX, mouseY, nowMs);
+            ui.render(s, c, mouseX, mouseY, nowMs);   // 只剩第四项里的输入框
+            return;
+        }
         ui.render(s, c, mouseX, mouseY, nowMs);
         // 面板与弹层都最后画:它俩要压在对话流上面。同时只会有一个。
         if (panel != null) {
@@ -271,6 +308,7 @@ public final class ChatInputBar {
 
     /** 悬停的按钮提示文案(宿主自行绘制 tooltip:定位与样式是宿主的事)。 */
     public String tooltipAt(double mx, double my) {
+        if (consent != null) return null;
         for (Button b : keys) {
             if (b != null && b.enabled() && b.contains(mx, my)) return b.tooltip();
         }
@@ -278,24 +316,23 @@ public final class ChatInputBar {
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
-        if (panel != null && lent == null && panel.contains(mx, my)) {
-            panel.mouseClicked(mx, my, button);
-            return true;
+        if (consent != null) {
+            return consent.contains(mx, my) && consent.mouseClicked(mx, my, button);
         }
         return ui.mouseClicked(mx, my, button);
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
-        // 面板在场:键盘整个归它,一个都不往下漏。Esc 是回输入框,不是关整个界面——
-        // 除非这一层不由 Esc 收起(答复框),那 Esc 照常关界面。
+        // 答复框在场:上下、回车归它。在写第四项那一句时,编辑键照常落到真输入框——它的字与编辑键靠"这里不接、
+        // 屏幕往下传"才到得了宿主控件;没在写时除了 Esc(关界面,请求留着)一个都不往下漏。
+        if (consent != null) {
+            if (consent.keyPressed(keyCode, modifiers)) return true;
+            if (consent.writing()) return ui.keyPressed(keyCode, modifiers);
+            return keyCode != KeyCodes.ESCAPE;
+        }
+        // 面板在场:键盘整个归它,一个都不往下漏。Esc 是回输入框,不是关整个界面。
         if (panel != null) {
-            if (lent != null) {
-                // 借着输入框:键先给面板(回车、上下),它不要的照常落到真输入框——输入框的字与编辑键
-                // 靠"这里不接、屏幕往下传"才到得了宿主控件,这里接了就打不进字
-                return panel.keyPressed(keyCode, modifiers) || ui.keyPressed(keyCode, modifiers);
-            }
             if (keyCode == KeyCodes.ESCAPE) {
-                if (!panel.closesOnEscape()) return false;
                 closePage();
                 return true;
             }
@@ -346,7 +383,7 @@ public final class ChatInputBar {
 
     /** 弹层此刻该不该在。 */
     private boolean popupOpen() {
-        return !dismissed && !candidates.isEmpty()
+        return consent == null && !dismissed && !candidates.isEmpty()
                 && field != null && field.isFocused();
     }
 
@@ -393,12 +430,14 @@ public final class ChatInputBar {
     }
 
     public boolean charTyped(char ch) {
-        // 面板在场时字归面板(答复框用数字键选),不往下漏;输入框借给面板时字照常落到真输入框。
-        if (panel != null && lent == null) {
-            panel.charTyped(ch);
+        // 答复框在场:在写第四项那一句时字落到真输入框,否则字归它(数字键选),不往下漏。
+        if (consent != null) {
+            if (consent.writing()) return ui.charTyped(ch);
+            consent.charTyped(ch);
             return true;
         }
-        return ui.charTyped(ch);
+        // 面板在场时输入框是隐着的,打进去的字看不见也用不上——直接吞掉。
+        return panel != null || ui.charTyped(ch);
     }
 
     public boolean isFieldFocused() {
@@ -408,7 +447,7 @@ public final class ChatInputBar {
     // ---- 内部 ----
 
     private void send() {
-        if (field == null || panel != null) return;
+        if (field == null || panel != null || consent != null) return;
         String text = field.value() == null ? "" : field.value().trim();
         if (text.isEmpty()) return;
         // 斜杠命令是主人对客户端说的话:在本地跑完就结束,不往下走。所以它不过宿主的
@@ -418,7 +457,6 @@ public final class ChatInputBar {
             // 面板类命令:多余的参数不理会——它要的不是参数,是一个能上下选的界面。
             var page = com.dwinovo.numen.client.command.ChatCommands.popupFor(loop, text);
             if (page != null) {
-                setText("");   // 那串命令用过了,关面板时不放回来
                 openPopup(page);
                 host.onCommandReply(null);
                 return;

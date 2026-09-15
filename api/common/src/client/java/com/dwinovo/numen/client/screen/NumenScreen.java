@@ -587,7 +587,7 @@ public final class NumenScreen extends Screen {
         int inputY = top + panelH - INPUT_H - PAD;
         inputBar = new com.dwinovo.numen.client.screen.chat.ChatInputBar(new ChatBarHost(),
                 java.util.EnumSet.allOf(com.dwinovo.numen.client.screen.chat.ChatInputBar.Key.class));
-        inputBar.build(left + PAD, inputY, panelW - PAD * 2, INPUT_H);
+        inputBar.build(left + PAD, inputY, panelW - PAD * 2, INPUT_H, 0);
         if (!savedInput.isEmpty()) {
             inputBar.setText(savedInput);
             savedInput = "";
@@ -1006,7 +1006,7 @@ public final class NumenScreen extends Screen {
             // endpoint-problem hint above the input
             txt(g, warnText != null ? Component.literal(warnText)
                             : Component.translatable("numen.chat.no_key"),
-                    left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
+                    left + PAD, top + panelH - inputH() - PAD - 11, FAIL);
         }
         if (summoning) {
             // 召唤模态:暗幕 + 居中卡(与确认卡同族),卡内由 SummonPanel 自绘。
@@ -1338,9 +1338,16 @@ public final class NumenScreen extends Screen {
         return bodyY + 11;
     }
 
+    /**
+     * 输入行此刻占多高:平时一行;她在等主人点头时是答复框的高度——答复框和输入框同级,正文往上让,不压在对话流上。
+     */
+    private int inputH() {
+        return inputBar == null ? INPUT_H : inputBar.height();
+    }
+
     private void renderChat(GuiGraphics g, int mouseX, int mouseY) {
         int bodyY = top + HEADER_H + 4;
-        int bodyBottom = top + panelH - INPUT_H - PAD - 6;
+        int bodyBottom = top + panelH - inputH() - PAD - 6;
         int transX = left + PAD;
         int transW = panelW - PAD * 2 - PLAN_W - 8;
 
@@ -1367,7 +1374,7 @@ public final class NumenScreen extends Screen {
         }
         // 框里已有文字时占位不显示,这条兜底行接管(用醒目的 FAIL 色)
         if (noticeLive && inputBar != null && !inputBar.text().isEmpty()) {
-            txt(g, Component.literal(micNotice), left + PAD, top + panelH - INPUT_H - PAD - 11, FAIL);
+            txt(g, Component.literal(micNotice), left + PAD, top + panelH - inputH() - PAD - 11, FAIL);
         }
 
         // 整理记忆:一条随摘要流回来的字数逼近满格的进度条。摘要多长事先不知道,所以它
@@ -1375,13 +1382,13 @@ public final class NumenScreen extends Screen {
         if (loop().isCompacting()) {
             double p = loop().compactProgress();
             int bw = panelW - PAD * 2;
-            int by = top + panelH - INPUT_H - PAD - 8;
+            int by = top + panelH - inputH() - PAD - 8;
             txt(g, Component.literal("整理记忆… " + Math.round(p * 100) + "%"),
                     left + PAD, by - 11, TXT_MUTED);
             g.fill(left + PAD, by, left + PAD + bw, by + 3, FIELD);
             g.fill(left + PAD, by, left + PAD + (int) Math.round(bw * p), by + 3, ACCENT);
         } else if (cmdReplyUntil > System.currentTimeMillis() && !cmdReply.isEmpty()) {
-            int ly = top + panelH - INPUT_H - PAD - 11;
+            int ly = top + panelH - inputH() - PAD - 11;
             for (int i = cmdReply.size() - 1; i >= 0 && ly > bodyY; i--, ly -= 10) {
                 txt(g, Component.literal(cmdReply.get(i)), left + PAD, ly, TXT_MUTED);
             }
