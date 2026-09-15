@@ -2,9 +2,10 @@ package com.dwinovo.numen.core.task.mine;
 
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.task.TaskRecord;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Block;
 
-import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -16,7 +17,8 @@ import java.util.Set;
  *       remains;</li>
  *   <li><b>groups</b> — "dig exactly these groups from the latest {@code scan_blocks}": the targets are
  *       only those cells, each still holding the block the scan recorded; nothing beyond them. The ids
- *       are resolved against the body's group book when the task starts.</li>
+ *       are resolved against the body's group book when the call is dispatched, so a stale id is refused
+ *       in the tool result itself and the record carries the cells.</li>
  * </ul>
  * Drops/tool-tier follow from whatever the entity holds, as in vanilla.
  */
@@ -37,13 +39,13 @@ public final class MineBlockTaskRecord extends TaskRecord {
     private static final long TICKS_PER_BLOCK = 30 * 20;   // 30s each
     private static final long MIN_TIMEOUT_TICKS = 60 * 20; // 1 min floor
 
-    /** Block types to gather (block_ids form; include variants, e.g. iron_ore + deepslate_iron_ore); empty for groups. */
+    /** Block types to gather: the block_ids given, or the kinds the named cells held when scanned. */
     public final Set<Block> targets;
-    /** Group ids from the latest scan (groups form); empty for block_ids. */
-    public final List<String> groups;
+    /** groups 用法点名的格子和扫描时记下的方块(派发时从团簿取好);block_ids 用法为空。 */
+    public final Map<BlockPos, Block> named;
     /** How many ITEMS to gather before reporting success, or {@link #UNTIL_GONE}. */
     public final int count;
-    /** Human-readable target label for messages / debug overlay (e.g. "iron_ore", "g3,g4"). */
+    /** Human-readable target label (block names, e.g. "iron_ore", "oak_log+1") — the owner reads it too. */
     public final String label;
     /** How the body may move and dig: {@link #DEFAULT_SPEC} with the model's fields laid over it. */
     public final RouteSpec spec;
@@ -53,14 +55,12 @@ public final class MineBlockTaskRecord extends TaskRecord {
      *  dug for {@link #UNTIL_GONE}. Set each tick by the task; drives the stop condition + the debug
      *  overlay text. */
     private int mined = 0;
-    /** groups 用法开工时点名的格数;describe 与回执用。 */
-    private int cells;
 
-    public MineBlockTaskRecord(String toolCallId, long deadlineGameTime, Set<Block> targets, List<String> groups,
-                               int count, String label, RouteSpec spec) {
+    public MineBlockTaskRecord(String toolCallId, long deadlineGameTime, Set<Block> targets,
+                               Map<BlockPos, Block> named, int count, String label, RouteSpec spec) {
         super(TOOL_NAME, toolCallId, deadlineGameTime);
         this.targets = Set.copyOf(targets);
-        this.groups = List.copyOf(groups);
+        this.named = Map.copyOf(named);
         this.count = count;
         this.label = label;
         this.spec = spec;
@@ -80,13 +80,9 @@ public final class MineBlockTaskRecord extends TaskRecord {
         this.mined = gathered;
     }
 
+    /** groups 用法点名的格数。 */
     public int cells() {
-        return cells;
-    }
-
-    /** groups 用法开工时记下点名的格数。 */
-    public void setCells(int cells) {
-        this.cells = cells;
+        return named.size();
     }
 
     @Override
@@ -96,7 +92,7 @@ public final class MineBlockTaskRecord extends TaskRecord {
      */
     public String describe() {
         return count == UNTIL_GONE
-                ? "挖 " + label + " " + mined + "/" + cells + " 格"
+                ? "挖 " + label + " " + mined + "/" + cells() + " 格"
                 : "挖 " + label + " " + mined + "/" + count;
     }
 }

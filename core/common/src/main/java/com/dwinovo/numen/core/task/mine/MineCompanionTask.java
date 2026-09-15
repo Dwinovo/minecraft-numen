@@ -17,7 +17,6 @@ import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.NavProfiler;
 import com.dwinovo.numen.core.scan.BlockScanner;
 import com.dwinovo.numen.core.scan.BlockSearch;
-import com.dwinovo.numen.core.scan.GroupBook;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
@@ -57,7 +56,7 @@ import java.util.Set;
  *
  * <h2>两种用法,一个循环</h2>
  * {@code block_ids} 用法的候选来自搜索({@link BlockSearch});{@code groups} 用法的候选只是点名的团里的格子
- * ({@link GroupBook},开工时按编号取),每格还得是扫描时记下的那种方块,不往外扩。除了候选从哪来,走、挖、
+ * (派发时从团簿取好、记在任务记录里),每格还得是扫描时记下的那种方块,不往外扩。除了候选从哪来,走、挖、
  * 捡、问权限、收场都是同一条路。点名的格子途中被别人挖掉或变了,照常挖剩下的,回执如实交代;全都没了就
  * 如实收场。
  *
@@ -169,10 +168,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  这种画像下恒为 0,数拾取物会让任务铲平半径 32 chunk 后报败。 */
     private int brokenTargets;
 
-    /** groups 用法点名的格子和扫描时记下的方块;block_ids 用法为 null。 */
-    private Map<BlockPos, Block> named;
-    /** groups 用法里出现的方块种类。 */
-    private Set<Block> namedKinds = Set.of();
     /** groups 用法里还没收进名单的点名格。挖不动的格也回到这里,地形一变还能再收。 */
     private final Set<BlockPos> remaining = new HashSet<>();
     /** groups 用法里轮到时已经不是扫描时那种方块、而旅程账上也没有她挖过的格(别人挖掉、换掉的)。 */
@@ -224,11 +219,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // would destroy the block for no drop. Same gate as the cost model
         // (BlockHelper.canHarvest, whole-inventory). prune() then drops any individual unharvestable
         // cell, so a mixed request (e.g. coal we can mine + diamond we can't) still works.
-        return List.of(this::resolveGroups, () -> {
+        return List.of(() -> {
             if (WorkProfile.of(player).instaBreak()) {
                 return null;   // 瞬破画像无视工具等级,工具门不适用
             }
-            boolean anyHarvestable = kinds().stream().anyMatch(
+            boolean anyHarvestable = r.targets.stream().anyMatch(
                     b -> BlockHelper.canHarvest(player.getInventory(), b.defaultBlockState()));
             if (!anyHarvestable) {
                 return new Precondition.Failure(
@@ -242,27 +237,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         });
     }
 
-    /**
-     * groups 用法:按编号取身体上团簿里最新一次扫描的团。有编号不在里面(更早的扫描、重启前的扫描、
-     * 从没扫过)就明说过期,让模型重新扫描——旧编号不会被悄悄当成别的团。
-     */
-    private Precondition.Failure resolveGroups() {
-        if (r.groups.isEmpty()) {
-            return null;
-        }
-        GroupBook book = GroupBook.of(player);
-        String stale = book.staleMessage(r.groups);
-        if (stale != null) {
-            return new Precondition.Failure(stale, FailureType.TARGET_LOST);
-        }
-        named = book.cells(r.groups);
-        namedKinds = Set.copyOf(named.values());
-        return null;
-    }
-
-    /** 这件活要的方块种类:block_ids 用法点名的,或 groups 用法团里扫描时记下的。 */
-    private Set<Block> kinds() {
-        return named == null ? r.targets : namedKinds;
+    /** 这件活是 groups 用法:只挖点名的格子。 */
+    private boolean byGroups() {
+        return !r.named.isEmpty();
     }
 
     @Override
@@ -271,14 +248,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // blocks drop, and snapshot how many we already hold so the tally is the delta above it.
         dropItems = computeDropItems();
         baseline = inventoryMatch();
-        if (named != null) {
-            // 候选就是点名的格子,不用搜;没给 count 的话期限按格数给
-            remaining.addAll(named.keySet());
-            r.setCells(named.size());
+        if (byGroups()) {
+            // 候选就是点名的格子,不用搜
+            remaining.addAll(r.named.keySet());
             lastQueryComplete = true;
-            if (r.count == MineBlockTaskRecord.UNTIL_GONE) {
-                r.extendDeadlineTo(player.level().getGameTime() + MineBlockTaskRecord.timeoutTicks(named.size()));
-            }
         } else {
             // 持有目标的登记,让共享索引在任务期间保持新鲜,并立即起首次搜索;冷区域的读地形由
             // 每刻的读节配额分摊,首批结果回来前 onTick 的终局判定会等着(lastQueryComplete)。
@@ -293,7 +266,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // 与 goto 的 start 日志对称:一任务一条,让日志里能看到任务确实启动了
         com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] mine start targets={} count={} cells={} feet={}",
-                r.label, r.count, named == null ? "-" : named.size(), player.blockPosition().toShortString());
+                r.label, r.count, byGroups() ? r.named.size() : "-", player.blockPosition().toShortString());
     }
 
     @Override
@@ -460,7 +433,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         //    range still succeeds") — the body does not wander off across the world looking
         //    for more; widening the search is the model's call.
         if (r.getMined() > 0) {
-            progressNote = (named == null ? "no more " + r.label + " in range" : "nothing left to dig in " + r.label)
+            progressNote = (byGroups() ? "nothing left to dig in " + r.label : "no more " + r.label + " in range")
                     + leftovers(null);
             return TaskState.SUCCESS;
         }
@@ -707,7 +680,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     if (++noShotTicks >= MAX_NO_SHOT_TICKS) {
                         unworkable.add(pos.immutable());
                         knownOres.remove(pos);
-                        if (named != null) {
+                        if (byGroups()) {
                             remaining.add(pos.immutable());   // 地形一变(挖掉任何一格)还能再收
                         }
                         digger.cancel();   // release the in-progress-dig latch on this ore
@@ -754,11 +727,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private Set<Item> computeDropItems() {
         Set<Item> items = new HashSet<>();
         if (!(player.level() instanceof ServerLevel level)) {
-            for (Block b : kinds()) items.add(b.asItem());
+            for (Block b : r.targets) items.add(b.asItem());
             return items;
         }
         BlockPos origin = player.blockPosition();
-        for (Block b : kinds()) {
+        for (Block b : r.targets) {
             BlockState state = b.defaultBlockState();
             List<ItemStack> drops;
             try {
@@ -801,7 +774,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private void maybeQuery() {
         --queryCooldown;
         --heartbeatTimer;
-        if (named != null) {
+        if (byGroups()) {
             if (knownOres.isEmpty() || (knownOres.size() < QUERY_LOW_WATER && queryCooldown <= 0)) {
                 queryCooldown = QUERY_MIN_GAP_TICKS;
                 admitNamed();
@@ -914,11 +887,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      */
     private boolean stillCandidate(Level level, CalculationContext ctx, BlockPos p) {
         var state = level.getBlockState(p);
-        boolean wanted = named != null ? named.get(p) == state.getBlock() : r.targets.contains(state.getBlock());
+        boolean wanted = byGroups() ? r.named.get(p) == state.getBlock() : r.targets.contains(state.getBlock());
         if (state.isAir() || !wanted) {
             // 点名的格不在了:旅程账上有,就是她顺路挖的(导航穿过它、为拉射线挖掉的遮挡物),算她挖掉的一格;
             // 账上没有,才记成别人动过。点名的格只会从名单或待收里各验出一次"不在了",不会重复计数
-            if (named != null) {
+            if (byGroups()) {
                 if (brokeOnTheWay(p)) {
                     brokenTargets++;
                 } else {
@@ -954,7 +927,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         knownOres.sort(Comparator.comparingDouble(feet::distSqr));
         if (knownOres.size() > MAX_ORES) {
             List<BlockPos> farther = knownOres.subList(MAX_ORES, knownOres.size());
-            if (named != null) {
+            if (byGroups()) {
                 remaining.addAll(farther);   // 点名的格只是暂时排不上,不是没了
             }
             farther.clear();
@@ -1039,9 +1012,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private static final String RULED_OUT_WHY = "unbreakable, excluded by the spec, or fluid or loose falling"
             + " blocks beside them";
 
-    /** 回执里怎么称呼要挖的东西:方块名,或"g3 的格子"。 */
+    /** 回执里怎么称呼要挖的东西:方块名,groups 用法说"这些方块的格子"。 */
     private String noun() {
-        return named == null ? r.label : "cells of " + r.label;
+        return byGroups() ? "cells of " + r.label : r.label;
     }
 
     /** 到目前为止的收获,一句话。 */
@@ -1095,8 +1068,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             fail("found " + ruledOut.size() + " " + noun() + " but none of them can be broken here ("
                     + RULED_OUT_WHY + "); gathered 0"
                     + leftovers(ruledOut), FailureType.MINED_OUT);
-        } else if (named != null) {
-            fail("all " + named.size() + " cells of " + r.label + " were gone or had changed since the scan;"
+        } else if (byGroups()) {
+            fail("all " + r.named.size() + " cells of " + r.label + " were gone or had changed since the scan;"
                     + " gathered 0. scan_blocks again to see what is there now.", FailureType.TARGET_LOST);
         } else {
             fail("no reachable " + r.label + " found in the loaded area around me",
@@ -1136,7 +1109,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return data;
     }
 
-    /** {@code gathered 3/8 oak_log} 或 {@code dug 3/12 cells of g3,g4}。 */
+    /** {@code gathered 3/8 oak_log} 或 {@code dug 3/12 cells of oak_log}。 */
     private String tally() {
         return r.count == MineBlockTaskRecord.UNTIL_GONE
                 ? "dug " + r.getMined() + "/" + r.cells() + " cells of " + r.label

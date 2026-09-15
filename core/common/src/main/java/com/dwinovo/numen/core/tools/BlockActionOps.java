@@ -8,6 +8,8 @@ import com.dwinovo.numen.core.task.interact.InteractEntityTaskRecord;
 import com.dwinovo.numen.core.task.mine.MineBlockTaskRecord;
 import com.dwinovo.numen.core.task.MouseButton;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
+import com.dwinovo.numen.core.scan.GroupBook;
+import com.dwinovo.numen.entity.NumenPlayer;
 import com.google.gson.JsonObject;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -15,6 +17,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.level.block.Block;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -35,11 +38,12 @@ public final class BlockActionOps {
 
     /**
      * {@code mine} 的两种用法二选一:{@code block_ids}(她自己挑最近的,{@code count} 必给)或 {@code groups}
-     * (最新一次 scan_blocks 的团编号,{@code count} 可选、不给就挖完)。团编号在任务开工时对着身体上的团簿
-     * 取,那时才知道它还在不在最新一次扫描里。{@code spec} 叠在 mine 自己的默认规格上。
+     * (最新一次 scan_blocks 的团编号,{@code count} 可选、不给就挖完)。团编号在派发这一刻对着身体上的团簿取:
+     * 不在最新一次扫描里就当场拒收,工具结果直接说明——不先回"已受理"再在后台失败,模型也就不会拿着受理回执
+     * 告诉主人"去了"。{@code spec} 叠在 mine 自己的默认规格上。
      */
-    public TaskRecord autoMine(List<String> block_ids, List<String> groups, Integer count, JsonObject spec,
-                               ToolContext ctx) {
+    public TaskRecord autoMine(NumenPlayer companion, List<String> block_ids, List<String> groups, Integer count,
+                               JsonObject spec, ToolContext ctx) {
         boolean byIds = block_ids != null && !block_ids.isEmpty();
         boolean byGroups = groups != null && !groups.isEmpty();
         if (byIds == byGroups) {
@@ -52,11 +56,18 @@ public final class BlockActionOps {
         RouteSpec parsed = RouteSpecJson.parse(spec, MineBlockTaskRecord.DEFAULT_SPEC);
         if (byGroups) {
             List<String> ids = groups.stream().map(String::strip).distinct().toList();
+            GroupBook book = GroupBook.of(companion);
+            String stale = book.staleMessage(ids);
+            if (stale != null) {
+                throw new IllegalArgumentException(stale);
+            }
+            Map<BlockPos, Block> cells = book.cells(ids);
+            Set<Block> kinds = Set.copyOf(cells.values());
             int until = count == null ? MineBlockTaskRecord.UNTIL_GONE : Math.clamp(count, 1, MAX_COUNT);
-            // 格数要到开工取团时才知道;那时任务按格数续上期限
-            long timeout = MineBlockTaskRecord.timeoutTicks(until);
-            return new MineBlockTaskRecord(ctx.toolCallId(), ctx.deadline(timeout), Set.of(), ids, until,
-                    String.join(",", ids), parsed);
+            long timeout = MineBlockTaskRecord.timeoutTicks(until == MineBlockTaskRecord.UNTIL_GONE
+                    ? cells.size() : until);
+            return new MineBlockTaskRecord(ctx.toolCallId(), ctx.deadline(timeout), kinds, cells, until,
+                    labelFor(kinds), parsed);
         }
         Set<Block> targets = ToolParse.parseBlocks(block_ids);
         if (targets.isEmpty()) {
@@ -67,7 +78,7 @@ public final class BlockActionOps {
         }
         int clampedCount = Math.clamp(count, 1, MAX_COUNT);
         long deadline = ctx.deadline(MineBlockTaskRecord.timeoutTicks(clampedCount));
-        return new MineBlockTaskRecord(ctx.toolCallId(), deadline, targets, List.of(), clampedCount,
+        return new MineBlockTaskRecord(ctx.toolCallId(), deadline, targets, Map.of(), clampedCount,
                 labelFor(targets), parsed);
     }
 
