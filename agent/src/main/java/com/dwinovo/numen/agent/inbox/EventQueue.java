@@ -15,10 +15,11 @@ import java.util.List;
  * 没急件  → 看条数、看时长
  * </pre>
  *
- * <p>没有第三条。谁发的、什么类型、她当时在干嘛、消费者此刻方不方便——一律不看。
+ * <p>没有第三条。她当时在干嘛、消费者此刻方不方便——一律不看;急不急在入队那一刻就定了
+ * (类型表说恒急的就急,否则听发送方的),之后只认条目上的标记。
  * 消费者能不能来取(她死了?驾驶席在外接大脑手里?)是<b>消费者自己的停牌</b>,
- * 不在这里:队列没有锁,取件口({@link #takeWhile}/{@link #takeEntries})永远敞着,
- * 谁来取、什么时候取,由持有队列的人决定。
+ * 不在这里:队列没有锁,取件口({@link #takeWhile}/{@link #takeIf}/{@link #takeEntries})
+ * 永远敞着,谁来取、什么时候取,由持有队列的人决定。
  *
  * <h2>急件叫醒:脉冲可以丢,电平不会骗</h2>
  * 急件落地时同步通知{@link #addUrgentListener 登记过的等待者}——叫的内容只是
@@ -82,24 +83,33 @@ public final class EventQueue {
 
     // ---- 进 ----
 
-    /** 收一条。满了丢最老的并记账。 */
-    public void push(String type, String text, long now, boolean urgent) {
+    /**
+     * 收一条。满了丢最老的并记账。
+     *
+     * <p>急不急:类型表说这类恒为急件({@link EventTypes.Type#alwaysUrgent})就是急件,否则听发送方的
+     * {@code urgent}。条目记下的是生效后的结果,落盘、转发、熟度判断都只认它。
+     *
+     * @return 这条是否作为急件入队;空白输入不入队,返回 {@code false}
+     */
+    public boolean push(String type, String text, long now, boolean urgent) {
         if (text == null || text.isBlank()) {
-            return;
+            return false;
         }
-        entries.add(new Entry(type, text, now, urgent));
+        boolean effective = EventTypes.get(type).alwaysUrgent() || urgent;
+        entries.add(new Entry(type, text, now, effective));
         while (entries.size() > cap) {
             entries.remove(0);
             dropped++;
         }
         journal.save(entries);
-        if (urgent) {
+        if (effective) {
             // 叫醒在入队落盘之后:等待者被叫起来一问,货一定已经在。
             // 拷贝一份再遍历,回调里摘自己是安全的。
             for (Runnable listener : List.copyOf(urgentListeners)) {
                 listener.run();
             }
         }
+        return effective;
     }
 
     // ---- 急件叫醒 ----
@@ -222,6 +232,31 @@ public final class EventQueue {
         }
         List<Entry> taken = new ArrayList<>(entries.subList(0, n));
         entries.subList(0, n).clear();
+        flushDropped(taken, now);
+        journal.save(entries);
+        return taken;
+    }
+
+    /**
+     * 取走<b>所有</b>满足 {@code take} 的条目;不满足的原样留在队里,先后不变。
+     *
+     * <p>与 {@link #takeWhile} 的区别就在"跳过":取件人只要其中一类、又不该被别的类挡住时用它
+     * ——外接模型取文本,整理/清空这类控制条目是对内脑说的,留着等内脑,但不能挡住排在它后面的话。
+     *
+     * @return 取走的条目,按入队顺序;一条都不满足则空列表
+     */
+    public List<Entry> takeIf(java.util.function.Predicate<Entry> take, long now) {
+        List<Entry> taken = new ArrayList<>();
+        for (java.util.Iterator<Entry> it = entries.iterator(); it.hasNext(); ) {
+            Entry e = it.next();
+            if (take.test(e)) {
+                taken.add(e);
+                it.remove();
+            }
+        }
+        if (taken.isEmpty()) {
+            return List.of();
+        }
         flushDropped(taken, now);
         journal.save(entries);
         return taken;

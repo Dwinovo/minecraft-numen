@@ -148,7 +148,7 @@ public final class EntityAgentLoop {
      * 底层原因——{@code assistant(tool_calls)} 后面必须直接跟 {@code tool}
      * 结果,user 消息不能插队,所以输入一律进箱,在 {@link #drainInbox} 的
      * 协议安全点一次倒空。三态路由(什么输入什么状态下配开轮)在
-     * {@link #pushEvent};条目、落盘、年龄标注、排空规则全在 {@link EventQueue}。
+     * {@link #pushEvents};条目、落盘、年龄标注、排空规则全在 {@link EventQueue}。
      *
      * <p>什么时候<b>熟</b>是队列自己的规则(急件 / 攒够条数 / 攒够时长),它不认识
      * "死亡""外接大脑"这些概念——内脑此刻能不能来取件是 {@link #paused()} 的事,
@@ -445,8 +445,8 @@ public final class EntityAgentLoop {
         boolean deferred = awaitingLlmResponse || dispatcher.busy();
         // Wrap the owner's words in <query> so the model can always tell real user input apart from
         // anything else numen injects into the same user turn (events, and future world-state/reminders).
-        // 主人的话恒为急件:人说话了就该有回应。队列不区分类型,只看这个标记。
-        queue.push(EventTypes.QUERY, wire, System.currentTimeMillis(), true);
+        // 急不急不在这里说:query 在类型表里恒为急件,发送方不另标。
+        queue.push(EventTypes.QUERY, wire, System.currentTimeMillis(), false);
         // 外脑驱动期间面板画的是现场缓冲——主人的话得当场可见,不能等谁取走才出现。
         // 这里是所有主人话的单一咽喉(面板/快捷对话/语音/桥接),挂点只此一处。
         if (McpMode.instance().driving()) {
@@ -705,9 +705,10 @@ public final class EntityAgentLoop {
         long now = System.currentTimeMillis();
         goal.countTurn();
         CompanionHome.setGoal(entityUuid, goal);
+        // goal 在类型表里恒为急件,发送方不另标。
         queue.push(EventTypes.GOAL,
                 com.dwinovo.numen.agent.goal.GoalPrompts.progress(verdict.reason(), goal, now),
-                now, true);
+                now, false);
         maybeDrain();
     }
 
@@ -746,6 +747,8 @@ public final class EntityAgentLoop {
 
     public String compactProblem() {
         if (dead) return "她已经不在了";
+        // 整理是对内脑说的:驾驶席在外接模型手里时内脑不开工,排上了也只会一直躺着。
+        if (isExternallyDriven()) return "外接模型正在驾驶她,整理记忆要等交还给内置大脑之后";
         if (compacting) return "已经在整理了";
         if (queue.count(EventTypes.COMPACT) > 0) return "整理已经排上了";
         // 不看忙不忙:整理进队列排着,到安全点自己执行。按了就一定会发生,
@@ -758,6 +761,8 @@ public final class EntityAgentLoop {
     /** {@code /clear} 现在按不按得下。同 {@link #compactProblem} 的形状,但不查端点:清空不发请求。 */
     public String clearProblem() {
         if (dead) return "她已经不在了";
+        // 同整理:清空的是内脑的上下文,外接模型驾驶时内脑不开工,排上了也执行不了。
+        if (isExternallyDriven()) return "外接模型正在驾驶她,清空上下文要等交还给内置大脑之后";
         if (queue.count(EventTypes.CLEAR) > 0) return "清空已经排上了";
         return null;
     }
@@ -774,7 +779,8 @@ public final class EntityAgentLoop {
             Constants.LOG.info("[numen-entity#{}] manual clear refused: {}", entityUuid, problem);
             return problem;
         }
-        queue.push(EventTypes.CLEAR, "清空上下文", System.currentTimeMillis(), true);
+        // clear 在类型表里恒为急件,发送方不另标。
+        queue.push(EventTypes.CLEAR, "清空上下文", System.currentTimeMillis(), false);
         maybeDrain();
         return null;
     }
@@ -823,9 +829,10 @@ public final class EntityAgentLoop {
      *       prompts are <em>preserved</em> — they flush on the next submit,
      *       exactly like Claude Code keeps its message queue across an
      *       interrupt.</li>
-     *   <li><b>Idle but prompts are queued</b> (e.g. typed during a turn that was
-     *       just interrupted and is now held) → drop the queue. Mirrors
-     *       {@code popCommandFromQueue} when there's no running task to cancel.</li>
+     *   <li><b>Idle but instructions are queued</b> (e.g. typed during a turn that was
+     *       just interrupted and is now held) → drop the entries the type table marks
+     *       {@code clearedByInterrupt}. Mirrors {@code popCommandFromQueue} when there's
+     *       no running task to cancel.</li>
      * </ol>
      *
      * No-op when nothing is running and nothing is queued.
@@ -874,13 +881,15 @@ public final class EntityAgentLoop {
             turnPause = AgentTurnPause.OWNER_INTERRUPT;
             Constants.LOG.info("[numen-entity#{}] {} (awaitingLlm={}, backgroundTask={}, cancelledTools={}, queued={})",
                     entityUuid, why, wasAwaitingLlm, wasBackgroundTask, cancelled.size(),
-                    queue.count(EventTypes.QUERY));
-        } else if (queue.count(EventTypes.QUERY) > 0) {
+                    queue.size());
+        } else {
             // 空闲时打断:清掉被取代的指令,事实留着。清哪些不在这里判断——
             // 由类型表的 clearedByInterrupt 决定,加一种新类型不用回来改这儿。
             int dropped = queue.clearInterrupted();
-            Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued prompt(s) ({} left)",
-                    entityUuid, dropped, queue.size());
+            if (dropped > 0) {
+                Constants.LOG.info("[numen-entity#{}] interrupt cleared {} queued item(s) ({} left)",
+                        entityUuid, dropped, queue.size());
+            }
         }
     }
 
@@ -896,18 +905,21 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * 外接大脑收件(get_events 的取货口):{@code urgentOnly} 时只在队里有急件才取,
+     * 外接大脑收件(get_events 的取货口):{@code urgentOnly} 时只在队里有给它的急件才取,
      * 长轮询靠它省着等;到点了不管急不急有什么给什么。渲染与内脑
      * {@code drainInbox} 同一份 {@link EventQueue#render}——外脑看到的事件文本
-     * 和内脑一字不差。控制条目(整理/清空)是对内脑说的,留在队里等模式关闭,
-     * 与 drainInbox 同一条 takeWhile 规则。
+     * 和内脑一字不差。
+     *
+     * <p>控制条目(整理/清空)是对内脑说的:跳过它们、留在队里等交还,文本照取。不像
+     * drainInbox 那样停在队首——外接模型不会去执行控制条目,停下来就是后面的话永远取不到。
      *
      * @return 取走的事件拼段;这次没取到返回 null(继续等或如实说没有)
      */
     public String takeEventsForExternal(boolean urgentOnly) {
-        if (urgentOnly && !queue.hasUrgent()) return null;
+        java.util.function.Predicate<EventQueue.Entry> text = e -> !isControlEntry(e);
+        if (urgentOnly && queue.entries().stream().noneMatch(e -> e.urgent() && text.test(e))) return null;
         long now = System.currentTimeMillis();
-        List<EventQueue.Entry> taken = queue.takeWhile(e -> !isControlEntry(e.type()), now);
+        List<EventQueue.Entry> taken = queue.takeIf(text, now);
         if (taken.isEmpty()) return null;
         List<String> parts = EventQueue.render(taken, now);
         return parts.isEmpty() ? null : String.join("\n\n", parts);
@@ -985,11 +997,11 @@ public final class EntityAgentLoop {
         // 还是"空闲死",所以这里没有任何判据。
         AbstractClientPlayer body = resolveEntity();
         long dayTime = body != null ? body.level().getDayTime() : 0L;
-        pushEvent(EventTypes.EVENT, com.dwinovo.numen.event.NumenEvents.compose(
+        pushEvents(List.of(new EventQueue.Entry(EventTypes.EVENT, com.dwinovo.numen.event.NumenEvents.compose(
                 dayTime, com.dwinovo.numen.event.NumenEvents.Kind.DEATH, null,
                 "你刚才死了(" + cause + "),背包里的东西全掉在死亡地点了;"
                         + "现已在主人身边复活。先看看状况再决定下一步。"),
-                System.currentTimeMillis(), true);
+                System.currentTimeMillis(), true)));
         // dead 在开头已复位,停牌自动解除:下个 tick 一问熟度就发现急件,连同死亡
         // 期间攒下的一切(事件、主人说的话)一起走。
     }
@@ -1012,17 +1024,25 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * 收一条进队列的输入(事件侧)。什么时候倒出去<b>由队列自己说了算</b>——
+     * 收一批进队列的输入(事件侧)。什么时候倒出去<b>由队列自己说了算</b>——
      * 急件、攒够条数、攒够时长,锁着就等。这里不做任何"这条该不该立刻开轮"的判断:
      * 那种判据正是会漏的东西(它漏掉过"死亡打断了后台任务")。
      *
+     * <p><b>一批先全部入队,再问一次队列。</b>主人登录时离线补发的整批条目一次到达:逐条入队逐条问
+     * 的话,第一条急件就开了轮,只带走已经到的那几条,后面的要等下一轮。
+     *
      * <p>死着也照收:每条都盖着真实时间戳,复活后模型看得出哪些发生在死亡之前。
      */
-    public void pushEvent(String type, String text, long ts, boolean urgent) {
-        queue.push(type, text, ts > 0 ? ts : System.currentTimeMillis(), urgent);
-        Constants.LOG.info("[numen-entity#{}] queued {}{}: {}",
-                entityUuid, type, urgent ? " URGENT" : "", truncate(text, 120));
-        if (urgent) {
+    public void pushEvents(List<EventQueue.Entry> entries) {
+        boolean anyUrgent = false;
+        for (EventQueue.Entry e : entries) {
+            boolean urgent = queue.push(e.type(), e.text(),
+                    e.ts() > 0 ? e.ts() : System.currentTimeMillis(), e.urgent());
+            Constants.LOG.info("[numen-entity#{}] queued {}{}: {}",
+                    entityUuid, e.type(), urgent ? " URGENT" : "", truncate(e.text(), 120));
+            anyUrgent |= urgent;
+        }
+        if (anyUrgent) {
             AgentTurnPause previousPause = turnPause;
             turnPause = turnPause.afterWakeEvent(true);
             if (previousPause != turnPause) {
@@ -1157,7 +1177,7 @@ public final class EntityAgentLoop {
      * joined with newlines into one message to avoid back-to-back {@code user}
      * messages that some backends reject.
      */
-    /** 本轮是否由主人夺话触发——drainInbox 取件时按队列的 QUERY 标记判定,
+    /** 本轮是否由主人夺话触发——drainInbox 取件时按类型表的 fromOwner 判定,
      *  空排空的接续轮为 false;beginVoiceTurn 据此选硬停或句界衔接。 */
     private boolean ownerSpokeThisTurn;
 
@@ -1170,7 +1190,7 @@ public final class EntityAgentLoop {
         // 先到先得。遇到一条不该当文本处理的(整理/清空)就停下:前面排着的先走完,它留在
         // 队首等下一个安全点。不插队——插队一旦开了口子,以后每加一种条目都要重新回答
         // "它插不插队"。
-        List<EventQueue.Entry> text = queue.takeWhile(e -> !isControlEntry(e.type()), now);
+        List<EventQueue.Entry> text = queue.takeWhile(e -> !isControlEntry(e), now);
         if (text.isEmpty()) {
             // 队首是控制条目,轮到它了。连着按的几次算一次;批里混着清空就清空说了算
             // ——整理要的是腾地方,清空把地方全腾出来了。
@@ -1178,7 +1198,8 @@ public final class EntityAgentLoop {
             // 返回 true 是<b>必须的</b>:调用方那道 compacting 闸在这句之前,这里再置位已经
             // 拦不住它了——只从本方法 return 的话,整理会和一次普通请求并排跑起来。
             // 清空虽是同步的也返回 true:排在它后面的话该进崭新的上下文,留给下一次排空。
-            List<EventQueue.Entry> control = queue.takeWhile(e -> isControlEntry(e.type()), now);
+            List<EventQueue.Entry> control = queue.takeWhile(EntityAgentLoop::isControlEntry, now);
+            // 这里要分清是哪一条控制命令(清空还是整理),只能认 id——类型表只说"它是控制命令"。
             if (control.stream().anyMatch(e -> EventTypes.CLEAR.equals(e.type()))) {
                 performClear();
                 return true;
@@ -1187,7 +1208,7 @@ public final class EntityAgentLoop {
             startCompaction(false);
             return true;
         }
-        ownerSpokeThisTurn = text.stream().anyMatch(e -> EventTypes.QUERY.equals(e.type()));
+        ownerSpokeThisTurn = text.stream().anyMatch(e -> EventTypes.get(e.type()).fromOwner());
         List<String> parts = new ArrayList<>();
         // current_task is live runtime state. It is attached request-locally by
         // modelContextSnapshot(), never written into conversation history or JSONL.
@@ -1208,9 +1229,9 @@ public final class EntityAgentLoop {
         return false;
     }
 
-    /** 队列里不当文本、要在安全点单独处理的条目(整理/清空)。 */
-    private static boolean isControlEntry(String type) {
-        return EventTypes.COMPACT.equals(type) || EventTypes.CLEAR.equals(type);
+    /** 队列里不当文本、要在安全点单独处理的条目——类型表里投递方式是 CONTROL 的那些。 */
+    private static boolean isControlEntry(EventQueue.Entry entry) {
+        return EventTypes.get(entry.type()).delivery() == EventTypes.Delivery.CONTROL;
     }
 
     /**
@@ -1333,8 +1354,8 @@ public final class EntityAgentLoop {
             Constants.LOG.info("[numen-entity#{}] manual compact refused: {}", entityUuid, problem);
             return problem;
         }
-        // 恒为急件:主人明确要求的事不该跟世界事件一起攒着等阈值。
-        queue.push(EventTypes.COMPACT, "整理记忆", System.currentTimeMillis(), true);
+        // compact 在类型表里恒为急件,发送方不另标。
+        queue.push(EventTypes.COMPACT, "整理记忆", System.currentTimeMillis(), false);
         maybeDrain();
         return null;
     }

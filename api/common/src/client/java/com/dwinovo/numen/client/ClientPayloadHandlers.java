@@ -51,8 +51,7 @@ public final class ClientPayloadHandlers {
         // getOrCreate:主人登录时补发的离线事件可能先于任何交互到达,
         // 那时 loop 还没造出来——用 get 会把补发的事件整批丢掉。
         ClientPayloadSink.event = p ->
-                AgentLoopRegistry.getOrCreate(p.entityUuid())
-                        .pushEvent(p.entryType(), p.text(), p.ts(), p.urgent());
+                AgentLoopRegistry.getOrCreate(p.entityUuid()).pushEvents(p.entries());
         ClientPayloadSink.state = p ->
                 ClientNumenState.update(p.uuid(), new ClientNumenState.Snapshot(
                         p.loaded(), p.items(), p.craft(), p.foodLevel(), p.saturation(),

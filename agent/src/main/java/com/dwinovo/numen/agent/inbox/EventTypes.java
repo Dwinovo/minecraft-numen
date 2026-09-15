@@ -9,9 +9,10 @@ import java.util.function.Function;
  *
  * <h2>为什么是表而不是 if</h2>
  * 队列本身不认识 {@code query} 和 {@code event},更不该认识第三方内容包将来注册的
- * 类型。它只做三件事:拼给模型的字符串、给聊天流的字符串、主人打断时清不清——
- * 三件都<b>查表</b>。于是"主人打断清指令、留事实"这条规矩从代码里的判断变成了
- * 表里的一行,加一种新类型也不用回来改队列。
+ * 类型。拼给模型的字符串、给聊天流的字符串、主人打断时清不清、是不是恒为急件——
+ * 全都<b>查表</b>;持有队列的循环要知道"这条什么时候交给大脑""是不是主人说的",
+ * 也查表。于是"主人打断清指令、留事实"这条规矩从代码里的判断变成了
+ * 表里的一行,加一种新类型也不用回来改队列和循环。
  *
  * <h2>注册时机</h2>
  * 内置的两种在本类静态块里自注册(保证永远在);第三方在自己的 mod init 注册,
@@ -51,6 +52,16 @@ public final class EventTypes {
      */
     public static final String GOAL = "goal";
 
+    /** 一类条目什么时候交给大脑。 */
+    public enum Delivery {
+        /** 插话:回合进行中在下一个边界(这批工具结算后、下次调模型前)注入;闲时参与熟度判断。 */
+        STEER,
+        /** 接续:回合进行中只在本来要停时接上;闲时同样参与熟度判断。 */
+        FOLLOW_UP,
+        /** 控制命令:不是给模型的文本,闲时由循环自己执行(整理记忆、清空上下文)。 */
+        CONTROL
+    }
+
     /**
      * 一种条目的处理方式。
      *
@@ -62,12 +73,17 @@ public final class EventTypes {
      * @param fromOwner          是主人说的话,还是世界发生的事。决定排版:世界的事
      *                           归进 {@code <events>} 按时间排,主人的话一律垫底 ——
      *                           模型读到的顺序是"先看清发生了什么,再看主人要什么"
+     * @param delivery           什么时候交给大脑,见 {@link Delivery}
+     * @param alwaysUrgent       {@code true} = 这类恒为急件,发送方怎么标都一样;{@code false} =
+     *                           急不急由发送方在 push 时定。生效规则只在 {@link EventQueue#push} 一处
      */
     public record Type(String id,
                        Function<String, String> toModel,
                        Function<String, String> chatPreview,
                        boolean clearedByInterrupt,
-                       boolean fromOwner) {}
+                       boolean fromOwner,
+                       Delivery delivery,
+                       boolean alwaysUrgent) {}
 
     private static final Map<String, Type> TYPES = new HashMap<>();
 
@@ -77,16 +93,20 @@ public final class EventTypes {
      * <p>不是为了防模组卸载(类型跟着模组走),是防"注册漏了"这种自己人的失误——
      * 没有兜底的话表现是静默丢数据,那比多一行日志难查得多。
      */
-    static final Type UNKNOWN = new Type("?", s -> s, s -> null, false, false);
+    static final Type UNKNOWN = new Type("?", s -> s, s -> null, false, false, Delivery.STEER, false);
 
     static {
         // chatPreview 只回答"这类进不进聊天流",长什么样归渲染那一层——沙漏是 ChatView 加的。
-        register(new Type(QUERY, s -> s, s -> s, true, true));
-        register(new Type(EVENT, s -> s, s -> null, false, false));
+        // 主人的话恒为急件:人说话了就该有回应。
+        register(new Type(QUERY, s -> s, s -> s, true, true, Delivery.STEER, true));
+        // 世界的事没有资格自定紧急度,急不急由发事件的那一方按事情本身定。
+        register(new Type(EVENT, s -> s, s -> null, false, false, Delivery.STEER, false));
         // 不进模型文本(toModel 回 null),但进聊天流——主人得看见自己按的整理排着。
-        register(new Type(COMPACT, s -> null, s -> s, true, true));
-        register(new Type(CLEAR, s -> null, s -> s, true, true));
-        register(new Type(GOAL, s -> s, s -> null, true, true));
+        // 主人明确要求的事恒为急件,不跟世界事件一起攒着等阈值。
+        register(new Type(COMPACT, s -> null, s -> s, true, true, Delivery.CONTROL, true));
+        register(new Type(CLEAR, s -> null, s -> s, true, true, Delivery.CONTROL, true));
+        // 续跑是评估器判过"还没做完"之后推的,这一推本身就是要她接着干。
+        register(new Type(GOAL, s -> s, s -> null, true, true, Delivery.FOLLOW_UP, true));
     }
 
     private EventTypes() {}

@@ -14,7 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>这层决定的是主人对这个模组的第一印象:开口太勤是聒噪,该说的时候不说是死气沉沉,
  * 而两者都会被当成 BUG。规则只有一条——<b>急件、攒够条数、攒够时长,锁着就等</b>——
- * 所以这套测试的重点是<b>它真的没有第四条</b>:不看类型、不看谁发的、不看她在干嘛。
+ * 所以这套测试的重点是<b>它真的没有第四条</b>:不看谁发的、不看她在干嘛;急不急在入队那一刻
+ * 由类型表和发送方定下,之后只认条目上的标记。
  */
 class EventQueueTest {
 
@@ -217,11 +218,11 @@ class EventQueueTest {
     @Test
     void thirdPartyTypesJustWork() {
         EventTypes.register(new EventTypes.Type("raid_alert",
-                s -> "[袭击] " + s, s -> "⚔ " + s, false, false));
+                s -> "[袭击] " + s, s -> "⚔ " + s, false, false, EventTypes.Delivery.STEER, false));
         EventQueue q = fresh();
         q.push("raid_alert", "村庄被围了", T0, true);
 
-        assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), "急不急看条目,不看类型");
+        assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), "这类不恒急,发送方标了急就是急件");
         assertEquals(List.of("⚔ 村庄被围了"), q.chatPreview());
         assertEquals(List.of("<events>\n[袭击] 村庄被围了\n</events>"), EventQueue.render(q.takeEntries(T0), T0));
     }

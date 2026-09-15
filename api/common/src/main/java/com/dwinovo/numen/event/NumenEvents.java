@@ -2,6 +2,7 @@ package com.dwinovo.numen.event;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.EventOutbox;
+import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
@@ -10,6 +11,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -138,8 +140,8 @@ public final class NumenEvents {
         long now = System.currentTimeMillis();
         ServerPlayer owner = companion.resolveOwnerPlayer();
         if (owner != null) {
-            Services.NETWORK.sendToPlayer(owner, new NumenEventPayload(
-                    companion.getUUID(), EventTypes.EVENT, xml, now, urgent));
+            Services.NETWORK.sendToPlayer(owner, new NumenEventPayload(companion.getUUID(),
+                    List.of(new EventQueue.Entry(EventTypes.EVENT, xml, now, urgent))));
             Constants.LOG.info("[numen-event] {} kind={}{} → 客户端", companion.getUUID(),
                     kind.kind, urgent ? " URGENT" : "");
             return;
