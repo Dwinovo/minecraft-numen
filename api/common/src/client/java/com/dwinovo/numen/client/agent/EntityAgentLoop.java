@@ -1738,12 +1738,11 @@ public final class EntityAgentLoop {
     }
 
     private String composeSystemPrompt() {
-        // Per-companion persona wins; fall back to the global default; with neither,
-        // the persona slot says so EXPLICITLY — an unconfigured persona is a valid
-        // state (自由发挥), not a missing one.
+        // 人设层:同伴绑的人设 → 全局配置的人设 → 内置默认人设。空着的槽会让她退回通用助手的腔调,
+        // 所以最后一档是一个具体的性格,不是"自由发挥"。
         String base = (personaText() != null && !personaText().isBlank())
                 ? personaText() : Services.CONFIG.getSystemPrompt();
-        if (base == null || base.isBlank()) base = "未配置人设,可以自由发挥。";
+        if (base == null || base.isBlank()) base = com.dwinovo.numen.agent.prompt.NumenPrompts.DEFAULT_PERSONA;
         String skillsXml = SkillRegistry.instance().formatXml();
 
         // 系统提示只放会话内稳定的层——人设/操作核心/技能表/情绪词表。
@@ -1771,6 +1770,8 @@ public final class EntityAgentLoop {
         if (!catalogue.isEmpty()) {
             sb.append("\n\n").append(catalogue);
         }
+        // 怎么说话压在最末尾:长度与语气离生成位置越近,越不容易在长对话里被冲淡(见 NumenPrompts)
+        sb.append(com.dwinovo.numen.agent.prompt.NumenPrompts.SPEAKING);
         return sb.toString();
     }
 

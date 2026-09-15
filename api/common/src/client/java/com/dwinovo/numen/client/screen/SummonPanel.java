@@ -108,7 +108,7 @@ public final class SummonPanel {
         nameField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
         ry += NumenStyle.ROW_PITCH;
 
-        // 人设可空:首项"不配置"(人设槽会告诉模型"未配置人设,可以自由发挥")。
+        // 人设可空:首项"不配置"(没配的同伴用全局人设,全局也没配就用内置默认人设)。
         ry = label(x, ry, ModLanguageData.Keys.SUMMON_PERSONA_LABEL);
         List<String> personaNames = new ArrayList<>();
         List<String> pIds = new ArrayList<>();
