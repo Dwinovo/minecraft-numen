@@ -384,7 +384,7 @@ public final class AgentLoop {
             AiLog.LOG.info("[numen-entity#{}] 清空上下文:排到了", name);
             memory.clear();
             emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.CLEAR));
-            pump();   // 排在清空后面的话进崭新的上下文
+            pump();   // 排在清空后面的话进全新的上下文
             return;
         }
         AiLog.LOG.info("[numen-entity#{}] 整理记忆:排到了,开始", name);

@@ -1,10 +1,11 @@
 package com.dwinovo.numen.client.agent;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.loop.ToolPort;
+import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.agent.tool.ClientToolContext;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolCall;
-import com.dwinovo.numen.agent.tool.ToolInvocation;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.api.CompanionEvent;
 import com.dwinovo.numen.entity.CompanionEvents;
@@ -17,12 +18,13 @@ import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
- * Executes one agent turn's tool calls and hands the results back — the entire
- * "run a tool call, get a result" concern, lifted out of {@link EntityAgentLoop}
- * so the loop stays pure conversation/turn management.
+ * The loop kernel's {@link ToolPort} for one companion: executes one model reply's tool calls and
+ * hands the results back — the entire "run a tool call, get a result" concern.
  *
  * <h2>One synchronous serial queue</h2>
  * Calls run strictly one at a time: the next is dispatched only when the current
@@ -30,21 +32,11 @@ import java.util.UUID;
  * concurrency). A tool reports its result through {@link ToolCall#complete},
  * synchronously or much later from any thread; the dispatcher is blind to how.
  *
- * <p>It reports back to its owner through the {@link Sink}: each landed result
- * via {@link Sink#onResult}, and {@link Sink#onAllSettled} once the turn's calls
- * are all done.
+ * <p>It reports back through the batch's {@link ToolPort.Sink}: each dispatched call via
+ * {@link ToolPort.Sink#started}, each landed result via {@link ToolPort.Sink#finished}, and
+ * {@link ToolPort.Sink#settled} once the batch's calls are all done.
  */
-public final class ToolDispatcher {
-
-    /** The dispatcher's only line back to the agent loop. */
-    public interface Sink {
-        /** A result landed for {@code inv} — record it into the conversation. */
-        void onResult(ToolInvocation inv, String resultJson);
-        /** Every call this turn has settled — the loop may start the next LLM turn. */
-        void onAllSettled();
-        /** The live client-side body (for client-run tools); may be null when out of view. */
-        AbstractClientPlayer entity();
-    }
+public final class ToolDispatcher implements ToolPort {
 
     /**
      * Wall-clock backstop (epoch millis) for the single in-flight call, 0 when idle.
@@ -54,22 +46,25 @@ public final class ToolDispatcher {
     private static final long TOOL_BACKSTOP_MILLIS = 15 * 60 * 1000L;
 
     private final UUID entityUuid;
-    private final Sink sink;
+    /** The live client-side body (for client-run tools); may resolve to null when out of view. */
+    private final Supplier<AbstractClientPlayer> entity;
 
-    /** This turn's remaining calls, drained one at a time. */
-    private final Deque<ToolInvocation> queue = new ArrayDeque<>();
-    /** The single in-flight call (id → invocation); ≤1 under the serial model. */
-    private final Map<String, ToolInvocation> inFlight = new HashMap<>();
+    /** This batch's remaining calls, drained one at a time. */
+    private final Deque<LlmToolCall> queue = new ArrayDeque<>();
+    /** The single in-flight call (id → call); ≤1 under the serial model. */
+    private final Map<String, LlmToolCall> inFlight = new HashMap<>();
+    /** 本批允许调用的工具名(见 {@link #run})。 */
+    private Set<String> callable = Set.of();
+    /** 本批的回报口;放弃这批时摘掉,迟到的结果无处可报。 */
+    private Sink sink;
+
     /** Reentrancy guard so a synchronously-completing tool keeps the drain iterative. */
-    /** 本批允许调用的工具名(见 {@link #dispatch})。 */
-    private java.util.Set<String> callable = java.util.Set.of();
-
     private boolean advancing = false;
     private long deadlineMillis = 0;
 
-    public ToolDispatcher(UUID entityUuid, Sink sink) {
+    public ToolDispatcher(UUID entityUuid, Supplier<AbstractClientPlayer> entity) {
         this.entityUuid = entityUuid;
-        this.sink = sink;
+        this.entity = entity;
     }
 
     /** Anything outstanding (in flight or still queued)? */
@@ -80,29 +75,30 @@ public final class ToolDispatcher {
     /** Is this call still outstanding (in flight or still queued), i.e. can its result still arrive? */
     public boolean holds(String callId) {
         if (inFlight.containsKey(callId)) return true;
-        for (ToolInvocation inv : queue) {
-            if (inv.id().equals(callId)) return true;
+        for (LlmToolCall call : queue) {
+            if (call.id().equals(callId)) return true;
         }
         return false;
     }
 
     /** 在飞那一件的工具名(串行模型下 ≤1),空闲返回 null——头顶气泡的副文本取它。 */
     public String currentToolName() {
-        for (ToolInvocation inv : inFlight.values()) {
-            return inv.name();
+        for (LlmToolCall call : inFlight.values()) {
+            return call.name();
         }
-        ToolInvocation next = queue.peek();
+        LlmToolCall next = queue.peek();
         return next == null ? null : next.name();
     }
 
-    /** Run this turn's tool calls, serially. */
     /**
      * 收下这一批调用。{@code callable} 是<b>这一批发出时模型能看见定义的工具</b>——
      * 常驻的加上对话里还留着展开块的那些(见 {@code ToolDisclosure})。随批次传进来
-     * 而不是存成字段:它描述的是一个瞬间,存起来下一批就是陈账。
+     * 而不是存成全局状态:它描述的是一个瞬间,留到下一批就是陈账。
      */
-    public void dispatch(List<ToolInvocation> calls, java.util.Set<String> callable) {
-        this.callable = callable == null ? java.util.Set.of() : callable;
+    @Override
+    public void run(List<LlmToolCall> calls, Set<String> callable, Sink sink) {
+        this.callable = callable == null ? Set.of() : callable;
+        this.sink = sink;
         queue.addAll(calls);
         drainNext();
     }
@@ -121,33 +117,26 @@ public final class ToolDispatcher {
             return;
         }
         if (System.currentTimeMillis() < deadlineMillis) return;
-        ToolInvocation inv = inFlight.values().iterator().next();
+        LlmToolCall call = inFlight.values().iterator().next();
         Constants.LOG.warn("[numen-dispatch#{}] tool {} id={} hit backstop timeout — failing it",
-                entityUuid, inv.name(), inv.id());
-        complete(inv, TaskResult.fail("tool timed out (no result returned)").toJson());
+                entityUuid, call.name(), call.id());
+        complete(call, TaskResult.fail("tool timed out (no result returned)").toJson());
     }
 
     /**
-     * Abandon everything outstanding (in flight + queued) and return their ids — the
-     * caller records a cut-off point when any were abandoned. Used on owner-interrupt and on death.
-     */
-    public List<String> cancelAndDrain() {
-        return cancelAndDrain(true);
-    }
-
-    /**
-     * 收掉所有未决调用,返回它们的 id(有被放弃的,调用方就在历史里记一条切断点)。
+     * 收掉这批所有未决调用(在飞 + 排着),返回它们的 id。
      *
-     * @param stopBody 要不要连身体一起叫停。<b>主人按停止</b>要({@code true}——他要她
-     *                 立刻住手);<b>断线登出</b>不要({@code false})——她的身体还在
-     *                 服务器里,任务照样该跑完,收尾走离线出箱。而且此刻连接已经没了,
-     *                 那个包根本发不出去——硬发会抛 NPE,把登出清理的后半段整个打断。
+     * @param stopBody 要不要连身体一起叫停。<b>主人按停止</b>要——他要她立刻住手;死亡、断线登出、
+     *                 外接接管、遣散不要——死了不必叫,登出时她的身体还在服务器里、任务照样该跑完,
+     *                 而且那一刻连接已经没了,叫停包根本发不出去
      */
-    public List<String> cancelAndDrain(boolean stopBody) {
+    @Override
+    public List<String> cancel(boolean stopBody) {
         List<String> ids = new ArrayList<>(inFlight.keySet());
-        for (ToolInvocation inv : queue) ids.add(inv.id());
+        for (LlmToolCall call : queue) ids.add(call.id());
         inFlight.clear();
         queue.clear();
+        sink = null;
         deadlineMillis = 0;
         advancing = false;
         // 停在传输层的这几个调用按 id 忘掉:结果回来也没人要了。只清自己派的,
@@ -161,7 +150,7 @@ public final class ToolDispatcher {
 
     /**
      * Drain the serial queue: dispatch the next call, or — when the queue is empty
-     * and nothing is in flight — signal the turn is settled. Exactly one call
+     * and nothing is in flight — signal the batch is settled. Exactly one call
      * occupies the in-flight slot at a time; {@link #complete} re-enters here to
      * advance. The {@link #advancing} guard keeps a synchronously-completing tool
      * draining iteratively instead of recursing.
@@ -171,42 +160,43 @@ public final class ToolDispatcher {
         advancing = true;
         try {
             while (inFlight.isEmpty()) {
-                ToolInvocation inv = queue.poll();
-                if (inv == null) {
-                    sink.onAllSettled();
+                LlmToolCall call = queue.poll();
+                if (call == null) {
+                    sink.settled();
                     return;
                 }
-                NumenTool tool = ToolRegistry.resolve(inv.name());
+                NumenTool tool = ToolRegistry.resolve(call.name());
                 if (tool != null && !callable.contains(tool.name())) {
                     // 定义没在她眼前,参数只能是猜的——挡下来并告诉她怎么补,
                     // 比让一次瞎填的调用真的动身体便宜。
                     Constants.LOG.info("[numen-dispatch#{}] tool '{}' not expanded yet (id={})",
-                            entityUuid, inv.name(), inv.id());
-                    sink.onResult(inv, TaskResult.fail(
+                            entityUuid, call.name(), call.id());
+                    sink.finished(call, TaskResult.fail(
                             com.dwinovo.numen.agent.tool.ToolDisclosure.notExpanded(tool.name())).toJson());
                     continue;
                 }
                 if (tool == null) {
                     Constants.LOG.warn("[numen-dispatch#{}] LLM called unknown tool '{}' (id={})",
-                            entityUuid, inv.name(), inv.id());
-                    sink.onResult(inv, TaskResult.fail("unknown tool: " + inv.name()).toJson());
+                            entityUuid, call.name(), call.id());
+                    sink.finished(call, TaskResult.fail("unknown tool: " + call.name()).toJson());
                     continue;   // nothing in flight — drain the next queued call
                 }
-                inFlight.put(inv.id(), inv);
+                inFlight.put(call.id(), call);
                 deadlineMillis = System.currentTimeMillis() + TOOL_BACKSTOP_MILLIS;
+                sink.started(call);
                 // 带规范名(tool.name())而不是 LLM 写的那个:大小写宽松只在 resolve 这一步,
                 // 服务端工具经 ServerToolTransport 原样带名字过去,那边按注册名严格查。
-                ToolCall call = new ToolCall(inv.id(), tool.name(), inv.argsJson(),
-                        new ClientToolContext(sink.entity(), entityUuid),
-                        json -> complete(inv, json));
+                ToolCall handle = new ToolCall(call.id(), tool.name(), call.arguments(),
+                        new ClientToolContext(entity.get(), entityUuid),
+                        json -> complete(call, json));
                 Constants.LOG.info("[numen-dispatch#{}] dispatch tool={} id={} args={}",
-                        entityUuid, inv.name(), inv.id(), truncate(inv.argsJson()));
+                        entityUuid, call.name(), call.id(), truncate(call.arguments()));
                 try {
-                    tool.invoke(call);
+                    tool.invoke(handle);
                 } catch (RuntimeException ex) {
                     Constants.LOG.warn("[numen-dispatch#{}] tool {} threw (id={}): {}",
-                            entityUuid, inv.name(), inv.id(), ex.getMessage());
-                    complete(inv, TaskResult.fail(ex.getMessage()).toJson());
+                            entityUuid, call.name(), call.id(), ex.getMessage());
+                    complete(call, TaskResult.fail(ex.getMessage()).toJson());
                 }
                 // Client tool: complete() cleared the slot → loop drains the next.
                 // Server tool: slot occupied → exit and wait for deliver().
@@ -216,14 +206,14 @@ public final class ToolDispatcher {
         }
     }
 
-    private void complete(ToolInvocation inv, String resultJson) {
-        if (inFlight.remove(inv.id()) == null) {
+    private void complete(LlmToolCall call, String resultJson) {
+        if (inFlight.remove(call.id()) == null) {
             return;   // already settled by cancel/timeout, or a duplicate/late reply
         }
         deadlineMillis = 0;
         Constants.LOG.info("[numen-dispatch#{}] tool_result id={} tool={} (queued={}) → {}",
-                entityUuid, inv.id(), inv.name(), queue.size(), truncate(resultJson));
-        sink.onResult(inv, resultJson);
+                entityUuid, call.id(), call.name(), queue.size(), truncate(resultJson));
+        sink.finished(call, resultJson);
         // Advance unless drainNext is already looping (it picks up the next itself).
         if (!advancing) drainNext();
     }

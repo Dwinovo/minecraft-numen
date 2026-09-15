@@ -494,7 +494,7 @@ class AgentLoopTest {
             assertEquals(1, memory.clears, "run 结束后先执行清空");
             assertEquals(2, model.calls.size());
             List<ConvoState.Msg> sent = model.last().request().messages();
-            assertEquals(1, sent.size(), "排在清空后面的话进崭新的上下文");
+            assertEquals(1, sent.size(), "排在清空后面的话进全新的上下文");
             assertTrue(model.last().lastUser().contains("清完再说这句"));
         }
     }

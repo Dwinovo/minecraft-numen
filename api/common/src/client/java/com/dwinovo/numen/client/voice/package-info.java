@@ -4,8 +4,8 @@
  *
  * <h2>数据流</h2>
  * <pre>
- * EntityAgentLoop.chatStreaming(onChunk)
- *   → {@link com.dwinovo.numen.client.voice.VoicePipeline#chunkSink}   （content delta 提取,蹦回主线程）
+ * 循环内核的 ModelDelta 事件(正文增量,主线程)
+ *   → {@link com.dwinovo.numen.client.voice.VoicePipeline#deltaSink}   （按轮次代际过滤）
  *   → {@link com.dwinovo.numen.client.voice.SentenceDivider}           （增量分句:首段逗号级,后续句末级）
  *   → {@link com.dwinovo.numen.client.voice.VoiceTextSanitizer}        （剥 markdown/动作描写/URL/标签）
  *   → {@link com.dwinovo.numen.client.voice.TtsBackend}                （并发预取合成,WAV 字节）
@@ -19,7 +19,7 @@
  * 有完整样例）,设置面板"语音"tab 是它的编辑界面。未绑定的同伴静音且零开销。
  *
  * <h2>生命周期</h2>
- * 管线归 {@code EntityAgentLoop} 所有:每次 LLM 分发 beginTurn,主人打断 /
- * 同伴死亡 interrupt,与代理循环的 turnGeneration 语义对齐。
+ * 管线归 {@code EntityAgentLoop} 的表现层所有:每次调模型 beginTurn,主人打断 /
+ * 同伴死亡 interrupt。
  */
 package com.dwinovo.numen.client.voice;
