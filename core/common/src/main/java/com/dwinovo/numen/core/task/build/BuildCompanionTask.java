@@ -1477,8 +1477,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     /**
      * 成果格登记进放置记录,记在主人名下:她盖的墙从此是主人的东西,下一次寻路、挖矿要动它得先问。
      * 收工时登记,任务怎么结束都登记——半栋房子也是主人的半栋房子。双格方块的另一半
-     * (门上半、床头)由主半带出来,一并登记。她自己放置时经过的 {@code BlockItem.place}
-     * 把这些格当成"同伴自己的"抹掉了记号,这里是把成果交回主人的那一步。
+     * (门上半、床头)由主半带出来,一并登记。她放置时经过的 {@code BlockItem.place}
+     * 把这些格记在她自己名下,这里是把成果交回主人的那一步。
      */
     private void registerBuiltCells() {
         if (!(player.level() instanceof net.minecraft.server.level.ServerLevel level)) {

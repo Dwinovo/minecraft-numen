@@ -27,8 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * 每维度一份:玩家放过方块的格子,和是谁放的。{@code placed} 信号的来源,也是"这东西是谁的"这个概念在
  * 全仓唯一的落点。
  *
- * <p>记:{@code BlockItem.place} 返回处的 mixin,放的人是真玩家就记下这一格和他,是同伴就把这一格的旧记号
- * 抹掉(她垫的路、她盖的墙是她的,不是别人留下的)。
+ * <p>记:{@code BlockItem.place} 返回处的 mixin,谁放的就记谁——真玩家、同伴都一样;建造任务收工把成果格
+ * 改记到主人名下。这里只记事实,"算不算别人的东西"由 {@code placed} 信号对着要动手的同伴判。
  * 查:格子已是空气视为无记号并顺手清掉——不另挂方块变化钩子,谁挖的都一样。
  *
  * <p>线程:按区块存"格子 → 放的人",每份发布后不再改,改就整个换一份(写时复制,经
@@ -151,16 +151,23 @@ public final class PlacedBlocks extends SavedData {
         return placer;
     }
 
-    /** {@code center} 周围 {@code radius} 格(切比雪夫)内有没有玩家放的方块(含自身)。 */
-    public boolean anyPlacedWithin(BlockPos center, int radius, BlockGetter view) {
+    /**
+     * {@code center} 周围 {@code radius} 格(切比雪夫)内有没有别人放的方块(含自身)。
+     *
+     * @param notBy 这个人放的不算(要动手的同伴自己);null = 谁放的都算
+     */
+    public boolean anyPlacedWithin(BlockPos center, int radius, BlockGetter view, UUID notBy) {
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dy = -radius; dy <= radius; dy++) {
                 for (int dz = -radius; dz <= radius; dz++) {
                     cursor.set(center.getX() + dx, center.getY() + dy, center.getZ() + dz);
                     Long2ObjectMap<Placer> cells = byChunk.get(ChunkPos.asLong(cursor));
-                    if (cells != null && cells.containsKey(cursor.asLong())
-                            && isPlaced(cursor.immutable(), view.getBlockState(cursor))) {
+                    if (cells == null || !cells.containsKey(cursor.asLong())) {
+                        continue;
+                    }
+                    Placer placer = placerAt(cursor.immutable(), view.getBlockState(cursor));
+                    if (placer != null && !placer.id().equals(notBy)) {
                         return true;
                     }
                 }

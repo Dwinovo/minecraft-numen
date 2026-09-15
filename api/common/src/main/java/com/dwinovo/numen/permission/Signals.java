@@ -27,18 +27,20 @@ import java.util.Set;
  */
 public enum Signals {
 
+    /**
+     * 别人放的:这一格有放置记号,而且放的不是要动手的这只同伴自己——她自己垫的路、搭的桥是她的,
+     * 主人、别的玩家、别人家同伴放的都算。
+     */
     PLACED("placed", "placed by a player", false) {
         @Override
         boolean test(Action a, Facts f) {
-            return a.pos() != null && f.placed() != null
-                    && f.placed().isPlaced(a.pos(), f.view().getBlockState(a.pos()));
+            return placedByOther(a, f) != null;
         }
 
         /** 主人看到的是谁放的:"dwinovo 放的";不知道是谁放的(旧存档)照说"玩家放的"。 */
         @Override
         Component shown(Action a, Facts f) {
-            PlacedBlocks.Placer placer = a.pos() == null || f.placed() == null ? null
-                    : f.placed().placerAt(a.pos(), f.view().getBlockState(a.pos()));
+            PlacedBlocks.Placer placer = placedByOther(a, f);
             return placer != null && placer.known()
                     ? Component.translatable(ModLanguageData.Keys.PERMISSION_PLACED_BY, placer.name())
                     : super.shown(a, f);
@@ -104,7 +106,7 @@ public enum Signals {
         @Override
         boolean test(Action a, Facts f) {
             return a.pos() != null && f.placed() != null
-                    && f.placed().anyPlacedWithin(a.pos(), NEAR_PLACED_RADIUS, f.view());
+                    && f.placed().anyPlacedWithin(a.pos(), NEAR_PLACED_RADIUS, f.view(), actorId(f));
         }
     };
 
@@ -152,6 +154,19 @@ public enum Signals {
     }
 
     abstract boolean test(Action action, Facts facts);
+
+    /** 这一格别人放的那一位;没有记号、或者就是要动手的同伴自己放的,为 null。 */
+    private static PlacedBlocks.Placer placedByOther(Action a, Facts f) {
+        if (a.pos() == null || f.placed() == null) {
+            return null;
+        }
+        PlacedBlocks.Placer placer = f.placed().placerAt(a.pos(), f.view().getBlockState(a.pos()));
+        return placer == null || placer.id().equals(actorId(f)) ? null : placer;
+    }
+
+    private static java.util.UUID actorId(Facts f) {
+        return f.actor() == null ? null : f.actor().getUUID();
+    }
 
     /** 按规则文本里的名字取信号;没有这个名字返回 null(规则解析据此报错)。 */
     public static Signals byName(String name) {
