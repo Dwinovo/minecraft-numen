@@ -71,8 +71,8 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.SpeakingStatePayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.SpeakingStatePayload::handle);
 
-        // S→C: an Numen body died; suspend the owner's agent loop (resolves the in-flight
-        // tool call with the death cause). Recoverable — see NumenRespawnPayload.
+        // S→C: an Numen body died; suspend the owner's agent loop (records the cut-off turn
+        // with the death cause). Recoverable — see NumenRespawnPayload.
         Services.NETWORK.registerServerToClient(
                 NumenDeathPayload.TYPE, NumenDeathPayload.STREAM_CODEC,
                 NumenDeathPayload::handle);

@@ -24,9 +24,9 @@ import java.util.UUID;
  *
  * <h2>Death is recoverable (not disposed)</h2>
  * The companion respawns at its owner after a delay (see {@link NumenRespawnPayload}), so the loop
- * is SUSPENDED, not disposed: {@code onEntityDied} resolves any in-flight tool calls with the death
- * cause (so the conversation stays valid and the brain learns WHY it stopped) and latches it idle.
- * {@code cause} is the vanilla death message ("X was slain by a zombie") for that tool result.
+ * is SUSPENDED, not disposed: {@code onEntityDied} abandons any in-flight tool calls, records the
+ * cut-off turn as a Halt carrying the death cause (so the brain learns WHY it stopped) and latches it
+ * idle. {@code cause} is the vanilla death message ("X was slain by a zombie") for that Halt.
  */
 public record NumenDeathPayload(UUID entityUuid, String cause)
         implements CustomPacketPayload {

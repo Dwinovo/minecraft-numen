@@ -19,7 +19,6 @@ import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.mcp.server.McpMode;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.platform.services.INumenConfig;
-import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
@@ -227,8 +226,6 @@ public final class EntityAgentLoop {
 
     /** Death cause recorded at death, replayed in the respawn event (null while alive). */
     private String deathCause;
-    /** Tool calls that were in flight when the body died — resolved on respawn, not before. */
-    private List<String> deathInterruptedCalls = List.of();
 
     /**
      * Bumped every time the owner interrupts a turn ({@link #abort}). Each LLM
@@ -291,20 +288,6 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * Replay the persisted conversation tail into memory and heal whatever a
-     * dead session left dangling, so the first request after a relaunch is
-     * protocol-valid:
-     * <ul>
-     *   <li>assistant tool_calls whose results never arrived (the game closed
-     *       mid-task) get synthetic "interrupted" results — the same trick as
-     *       the owner's Stop button; the synthetic results also append to the
-     *       file, healing it on disk;</li>
-     *   <li>a trailing user message (closed while waiting on the LLM) is
-     *       capped with a short assistant note, mirroring {@link #abort}, so
-     *       the next prompt doesn't create back-to-back user messages.</li>
-     * </ul>
-     */
-    /**
      * 与自动压缩闸门同一口径的模型上下文窗口。真源是<b>这只同伴绑定的档案</b>
      * ({@link com.dwinovo.numen.agent.llm.ProviderLibrary.Entry#contextWindow()}),
      * 请求走哪份档案窗口就按哪份算;没有档案(遗留同伴)才回落旧的全局配置。
@@ -326,9 +309,14 @@ public final class EntityAgentLoop {
         return Math.min(100, Math.round(lastPromptTokens * 100f / Math.max(1, modelWindow())));
     }
 
+    /**
+     * Replay the persisted conversation tail into memory exactly as it was recorded. A session that died
+     * mid-turn leaves tool calls without results or a user message without a reply; both stay as they are —
+     * {@link com.dwinovo.numen.agent.llm.ProtocolView} answers the dangling calls when the next request is built.
+     */
     private void restoreFromDisk() {
         tokens.load();
-        log.migrateIfNeeded();   // upgrade a pre-v2 file in place before reading it (crash-safe, keeps a .v1.bak)
+        log.migrateIfNeeded();   // upgrade an older-format file in place before reading it (crash-safe, keeps a .v<N>.bak)
         personaId = CompanionHome.binding(entityUuid).personaId();
         // 重进后 loop 是全新的,死亡停牌按状态恢复:她死着的时候主人退出游戏,
         // 队列里可能躺着急件——不补这一下她会在还没复活的时候就开口。
@@ -341,21 +329,9 @@ public final class EntityAgentLoop {
         if (history.isEmpty()) return;
         convo.preload(history);
         // The visible transcript replays the raw file order (dividers included),
-        // NOT the compacted view — preload before healing so the synthetic
-        // messages below land after it via the sink.
+        // NOT the compacted view.
         display.addAll(log.loadDisplay(ConvoLog.DEFAULT_LOAD_LIMIT));
-
-        List<String> dangling = ConvoLog.unansweredToolCallIds(history);
-        for (String id : dangling) {
-            convo.addToolResult(id,
-                    "{\"success\":false,\"message\":\"interrupted: the game was closed before this finished\"}");
-        }
-        if (convo.lastMessage() instanceof ConvoState.Msg.User) {
-            convo.addAssistant(new AssistantTurn("(已中断)", List.of(), null));
-        }
-        Constants.LOG.info("[numen-entity#{}] restored {} msg(s) from disk{}",
-                entityUuid, history.size(),
-                dangling.isEmpty() ? "" : " (healed " + dangling.size() + " dangling tool call(s))");
+        Constants.LOG.info("[numen-entity#{}] restored {} msg(s) from disk", entityUuid, history.size());
     }
 
     public UUID entityUuid() { return entityUuid; }
@@ -390,6 +366,14 @@ public final class EntityAgentLoop {
         return tokens.waste();
     }
     public ConvoState convo() { return convo; }
+
+    /**
+     * 这次工具调用的结果还会不会来——派发器还攥着它(在跑或排着)。历史里没结果、这里又答 false
+     * 的调用是被切断的,聊天面板据此把它画成失败而不是一直转圈。
+     */
+    public boolean isToolCallOutstanding(String callId) {
+        return dispatcher.holds(callId);
+    }
 
     /** Read-only physical transcript for the GUI (see {@link #display}). */
     public List<ConvoState.Msg> display() {
@@ -478,7 +462,7 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * 断线静默:只收拾<b>客户端</b>——作废在飞的回应、给未决调用补取消结果、
+     * 断线静默:只收拾<b>客户端</b>——作废在飞的回应、放弃未决调用并在历史里记下切断点、
      * 清半截打字和语音。<b>不叫停身体</b>。
      *
      * <p>她的身体还在服务器里 tick,任务照样跑完,收尾进离线出箱等主人回来
@@ -747,6 +731,8 @@ public final class EntityAgentLoop {
                 case ConvoState.Msg.User u -> "owner/system: " + u.content();
                 case ConvoState.Msg.Assistant a -> "companion: " + a.turn().content();
                 case ConvoState.Msg.Tool t -> "tool result: " + t.content();
+                // 切断也是证据:一轮没做完是被打断/死亡掐掉的,不是她放弃了
+                case ConvoState.Msg.Halt h -> "interrupted: " + h.reason();
             };
             line = truncate(line, JUDGE_LINE_CHARS);
             lines.addFirst(line);
@@ -826,10 +812,11 @@ public final class EntityAgentLoop {
      * <ol>
      *   <li><b>A turn or background body task is active</b> → stop it. An in-flight
      *       LLM response is invalidated via {@link #turnGeneration} (discarded when
-     *       it lands, so it can't dispatch tools after the fact); any world-action tool calls
-     *       still awaiting a server result get a synthetic "interrupted" result
-     *       so every {@code assistant(tool_calls)} keeps matching {@code tool}
-     *       results and the next request stays protocol-valid. A
+     *       it lands, so it can't dispatch tools after the fact); outstanding tool calls
+     *       are abandoned and, when a model reply or tool round-trip was cut off, the
+     *       history records a {@link ConvoState.Msg.Halt} with the reason — the next
+     *       request's {@link com.dwinovo.numen.agent.llm.ProtocolView} answers the
+     *       abandoned calls with it. A
      *       {@code CancelTasksPayload} also ships to the server so the
      *       <em>body</em> stops too — without it the entity keeps walking/mining
      *       to its task deadline while only the conversation halts. Queued
@@ -870,25 +857,17 @@ public final class EntityAgentLoop {
             presenter.clearPartial();   // 半截打字随打断作废
             presenter.finishStreamLine();
 
-            // Synthesize cancelled results for EVERY outstanding call (in flight AND
-            // still-queued) so the assistant(tool_calls) message keeps matching tool
-            // results — otherwise the next request is protocol-invalid (HTTP 400). Real
-            // results arriving later are dropped as "late" by the dispatcher.
+            // Abandon EVERY outstanding call (in flight AND still queued); real results
+            // arriving later are dropped as "late" by the dispatcher.
             // stopBody=true(主人按停止):cancelAndDrain 顺手触发 ABORT 事件,
             // 内容包据此停掉身体那边的活。断线登出不走这条 —— 见 quiesce。
             List<String> cancelled = dispatcher.cancelAndDrain(stopBody);
-            String why = stopBody ? "interrupted by owner" : "owner disconnected";
-            for (String id : cancelled) {
-                convo.addToolResult(id, "{\"success\":false,\"message\":\"" + why + "\"}");
-            }
-
-            // If we cut off an in-flight LLM call before its assistant turn was
-            // recorded, the conversation now ends on a user message. Cap it with a
-            // short assistant note so the next prompt doesn't create back-to-back
-            // user messages (some backends reject those — see drainInbox).
-            if (wasAwaitingLlm && cancelled.isEmpty()
-                    && convo.lastMessage() instanceof ConvoState.Msg.User) {
-                convo.addAssistant(new AssistantTurn("(已中断)", List.of(), null));
+            String why = stopBody ? "被主人打断" : "主人断线了";
+            // 切断的是一次模型回复或一批工具往返,就在历史里记下切断点和原因。历史照实记,
+            // 不补结果也不封口:悬空调用的失败结果、给模型的切断说明都由下一次请求的
+            // ProtocolView 按这条 Halt 现算。只剩后台任务或压缩在跑时对话没被切断,不记。
+            if (wasAwaitingLlm || !cancelled.isEmpty()) {
+                convo.addHalt(why);
             }
 
             convo.resetTurnCount();
@@ -961,52 +940,40 @@ public final class EntityAgentLoop {
     /**
      * The body died — the server tells us via {@code NumenDeathPayload} with the death cause. SUSPEND
      * (not dispose): the companion respawns at its owner shortly and {@link #onRespawned} resumes us.
-     * Discard any in-flight LLM turn (bump {@link #turnGeneration}), then heal the conversation so it
-     * stays protocol-valid AND the brain learns why it stopped — resolve every in-flight tool call with
-     * the death cause, and cap a trailing user message (mirrors {@link #restoreFromDisk}). Latch
-     * {@link #dead} so no turn starts until respawn.
+     * Discard any in-flight LLM turn (bump {@link #turnGeneration}) and abandon every outstanding tool
+     * call; when that cut a model reply or tool round-trip short, record a {@link ConvoState.Msg.Halt}
+     * carrying the death cause, so the next request's ProtocolView tells the brain why it stopped.
+     * Latch {@link #dead} so no turn starts until respawn.
      */
     public void onEntityDied(String cause) {
-        // FREEZE hard: stop all LLM output/work and feed the model NOTHING now (adding a tool result
-        // here would let the loop continue). Just record what was in flight + the cause; everything is
-        // restored on respawn. The body is gone, so its tool results will never arrive — we'll synth
-        // them at respawn instead.
+        // FREEZE hard: stop all LLM output/work and start nothing now. The Halt below only records
+        // where the turn was cut — it starts no turn; the respawn event is what wakes her.
         deathCause = cause;
         presenter.interruptVoice();   // 尸体不说话:停播 + 清队列
-        // Resolve at respawn: every outstanding call (in flight + still queued) — all
-        // are listed in the assistant message, so all need results.
-        deathInterruptedCalls = dispatcher.cancelAndDrain();
+        // The body is gone, so results for these calls will never arrive.
+        List<String> abandoned = dispatcher.cancelAndDrain();
+        boolean cutTurn = awaitingLlmResponse || !abandoned.isEmpty();
         turnGeneration++;          // discard any in-flight LLM response (halt output)
         awaitingLlmResponse = false;
         compacting = false;
         presenter.clearPartial();
+        if (cutTurn) {
+            convo.addHalt("你死了(" + cause + ")");
+        }
         // 箱子一样不清:每条都盖着时间戳,模型自己看得出哪些是死之前的。
         // 我们替它判断"哪些信息过期了",反而会删掉有用的叙事("我死前刚吃了东西")。
         dead = true;   // 停牌:开轮/排空/目标推进全过 paused(),死着一轮不开
         Constants.LOG.info("[numen-entity#{}] body died ({}) — 停牌 ({} call(s) in flight)",
-                entityUuid, cause, deathInterruptedCalls.size());
+                entityUuid, cause, abandoned.size());
     }
 
     /**
-     * The body respawned at its owner after dying — thaw the frozen loop and ONLY NOW restore context:
-     * resolve any tool call that was interrupted by the death (so the conversation is valid and the
-     * brain learns its task was cut short), then inject a {@code <event>} detailing the death cause.
-     * Nothing was fed to the model while dead, so it stayed fully stopped for the whole timer.
+     * The body respawned at its owner after dying — thaw the frozen loop and inject a {@code <event>}
+     * detailing the death cause. Nothing was fed to the model while dead, so it stayed fully stopped for
+     * the whole timer; the turn the death cut short was already recorded as a Halt at death.
      */
     public void onRespawned(String payloadCause) {
-        boolean wasFrozen = dead;                 // same-session death (mid-task) vs a fresh loop after relog
         dead = false;
-        boolean hadSuspendedTurn = false;         // a turn was mid-flight when the body died
-        if (wasFrozen) {
-            hadSuspendedTurn = !deathInterruptedCalls.isEmpty();
-            for (String id : deathInterruptedCalls) {
-                convo.addToolResult(id, TaskResult.fail("任务因你死亡而中断").toJson());
-            }
-            deathInterruptedCalls = List.of();
-            if (convo.lastMessage() instanceof ConvoState.Msg.User) {
-                convo.addAssistant(new AssistantTurn("(已中断)", List.of(), null));
-            }
-        }
         // Prefer the cause carried by the respawn payload (survives a logout that cleared deathCause).
         String raw = (payloadCause != null && !payloadCause.isBlank()) ? payloadCause
                 : (deathCause != null ? deathCause : "未知原因");
@@ -1808,12 +1775,9 @@ public final class EntityAgentLoop {
             turnPause = AgentTurnPause.RECOVERABLE_FAILURE;
             return;
         }
-        // The failed turn may have left the conversation ending on a user message
-        // (its prompts were flushed before dispatch). Cap it so the fresh turn's
-        // flush doesn't create back-to-back user messages (some backends 400 those).
-        if (convo.lastMessage() instanceof ConvoState.Msg.User) {
-            convo.addAssistant(new AssistantTurn("(连接中断)", List.of(), null));
-        }
+        // The failed turn may have left the conversation ending on a user message (its prompts were
+        // flushed before dispatch); the fresh turn's flush lands right after it, and ProtocolView merges
+        // the two when the request is built.
         Constants.LOG.info("[numen-entity#{}] turn failed with {} queued item(s) — starting a fresh turn with them",
                 entityUuid, queue.size());
         tryStartTurn();

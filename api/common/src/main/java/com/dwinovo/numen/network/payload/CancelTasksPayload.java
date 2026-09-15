@@ -24,8 +24,8 @@ import java.util.UUID;
  *
  * <p>The server-side {@code CANCELLED} results this produces are shipped back
  * via {@link TaskResultPayload} as usual; the client agent loop has already
- * synthesized "interrupted by owner" results for those tool-call ids and drops
- * the real ones as late arrivals. This payload's job is purely the body stop.
+ * abandoned those tool-call ids (recording the cut as a Halt) and drops the real
+ * ones as late arrivals. This payload's job is purely the body stop.
  */
 public record CancelTasksPayload(UUID entityUuid) implements CustomPacketPayload {
 

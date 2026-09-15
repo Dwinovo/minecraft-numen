@@ -363,6 +363,18 @@ public final class ChatView {
                 }
             }
         }
+        // 没有结果、派发器也不再攥着的调用永远等不到结果了(被打断、死了、游戏关掉时还在跑):
+        // 按失败画,不能一直转圈。"还在跑"只问派发器,不从历史长什么样去猜。
+        for (ConvoState.Msg m : source) {
+            if (m instanceof ConvoState.Msg.Assistant a) {
+                for (LlmToolCall tc : a.turn().toolCalls()) {
+                    if (!done.contains(tc.id()) && !lp.isToolCallOutstanding(tc.id())) {
+                        done.add(tc.id());
+                        failed.add(tc.id());
+                    }
+                }
+            }
+        }
         int innerW = bubbleMaxW - PAD_H * 2;
         List<LlmToolCall> group = new ArrayList<>();
         // Consecutive same-side messages group like a chat app: avatar + name only on
@@ -414,6 +426,11 @@ public final class ChatView {
                     group.addAll(turn.toolCalls());
                 }
                 case ConvoState.Msg.Tool ignored -> { /* result drives done/fail, not a block */ }
+                case ConvoState.Msg.Halt h -> {
+                    flushTools(out, group, done, failed, bubbleMaxW);
+                    notice(out, I18n.get("numen.chat.halted", h.reason()));
+                    lastSide = null;
+                }
             }
         }
         flushTools(out, group, done, failed, bubbleMaxW);

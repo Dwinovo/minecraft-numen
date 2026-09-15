@@ -218,8 +218,8 @@ public final class Companions {
     /**
      * A companion just DIED (detected in {@link NumenPlayer#tick}). The death itself is left fully
      * vanilla — drops / a grave mod / keepInventory all run because it's a real ServerPlayer death.
-     * We only: stop the brain (the owner's loop suspends on {@link NumenDeathPayload}, resolving the
-     * in-flight tool call with the death cause), heal the body so its saved {@code .dat} is whole, and
+     * We only: stop the brain (the owner's loop suspends on {@link NumenDeathPayload}, recording the
+     * cut-off turn with the death cause), heal the body so its saved {@code .dat} is whole, and
      * queue a timed respawn at the owner. The corpse is removed AFTER this tick (a fake player isn't
      * auto-removed on death — it would sit at 0 HP forever waiting for a respawn packet that never comes).
      */

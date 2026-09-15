@@ -16,9 +16,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -27,34 +25,36 @@ import java.util.UUID;
  * per line. The entity UUID is globally unique and dimension-stable, so the same
  * file follows the companion for its whole life.
  *
- * <h2>Record model (v2)</h2>
+ * <h2>Record model (v3)</h2>
  * Every line is one JSON <em>record</em>, discriminated like Claude Code's transcript:
  * <ul>
- *   <li><b>Header</b> — {@code {"type":"header","v":2,...}} — always line 1 of a v2 file.</li>
+ *   <li><b>Header</b> — {@code {"type":"header","v":3,...}} — always line 1 of a v2+ file.</li>
  *   <li><b>Messages</b> — the v1 shape, keyed by {@code role} = {@code user}/{@code assistant}/{@code tool},
  *       plus optional additive metadata ({@code ts}, and reserved {@code model}/{@code usage}).</li>
  *   <li><b>Events</b> — keyed by {@code type}, no {@code role}: {@code compact}, {@code clear},
- *       {@code persona-change}, and the reserved {@code goal}. Events record <em>what happened, and
- *       when</em> — never a copy of configuration (bindings live in the companion's
- *       {@code binding.json}, persona text in the library).</li>
+ *       {@code persona-change}, {@code halt} (a turn cut off here, with its {@code reason}), and the reserved
+ *       {@code goal}. Events record <em>what happened, and when</em> — never a copy of configuration
+ *       (bindings live in the companion's {@code binding.json}, persona text in the library).</li>
  * </ul>
  * <b>Discriminator rule:</b> a record with a {@code type} field is an event; otherwise it's a message
  * dispatched on {@code role}. The legacy v1 {@code role:"compact"} line is read as a {@code compact} event.
  *
  * <h2>Two derived views</h2>
  * {@link #load} is the LLM context (compaction restarts the replay from its summary); {@link #loadDisplay}
- * is the physical transcript the GUI renders (compaction/persona-change become sentinel divider lines, no
- * history is lost). Events are absent from the LLM view and appear only as dividers in the display view.
+ * is the physical transcript the GUI renders (compaction/clear/persona-change become sentinel divider lines, no
+ * history is lost). A {@code halt} is part of what happened in both views: it replays as a
+ * {@link ConvoState.Msg.Halt} — the LLM view leaves it to {@link ProtocolView}, the display view draws it as
+ * an interruption divider. The other events are absent from the LLM view and appear only as dividers.
  *
  * <h2>Forward compatibility</h2>
  * A valid-JSON record with an unknown {@code type}/{@code role} is <em>skipped from both in-memory views
  * but kept on disk</em> (append-only) — a newer numen can add record kinds without an older one losing them.
  *
- * <h2>Migration (v1 → v2)</h2>
- * {@link #migrateIfNeeded} rewrites a headerless v1 file to v2 atomically (temp → {@code ATOMIC_MOVE}),
- * keeping a {@code .v1.bak}. The reader permanently understands the v1 shape too, so migration is an
- * optimization — never a correctness dependency, and never able to lose records (the original file is
- * only ever replaced by a fully-written temp; on any failure it is left untouched).
+ * <h2>Migration (v1 → v2 → v3)</h2>
+ * {@link #migrateIfNeeded} rewrites an older file to the current version atomically (temp →
+ * {@code ATOMIC_MOVE}), keeping a {@code .v<N>.bak}. The reader still understands the v1 shape, and the
+ * rewrite can never lose records (the original file is only ever replaced by a fully-written temp; on any
+ * failure it is left untouched and the migration retries next launch).
  *
  * <h2>Best-effort by design</h2>
  * IO failures log a warning and the chat carries on in memory — persistence must never take the
@@ -63,7 +63,7 @@ import java.util.UUID;
 public final class ConvoLog {
 
     /** On-disk format version stamped in the header record; bumped when the record model changes. */
-    public static final int FORMAT_VERSION = 2;
+    public static final int FORMAT_VERSION = 3;
 
     /** Soft cap on messages replayed into context (the file itself is unbounded). */
     public static final int DEFAULT_LOAD_LIMIT = 200;
@@ -80,7 +80,12 @@ public final class ConvoLog {
     private static final String EV_COMPACT = "compact";
     private static final String EV_CLEAR = "clear";
     private static final String EV_PERSONA = "persona-change";
+    private static final String EV_HALT = "halt";
     private static final String EV_GOAL = "goal";   // reserved (recognized, no behavior yet)
+
+    /** The runtime-state block older builds persisted at the head of user messages (stripped by the v3 migration). */
+    private static final String LEGACY_TASK_OPEN = "<current_task>";
+    private static final String LEGACY_TASK_CLOSE = "</current_task>";
 
     private final Path file;
 
@@ -100,7 +105,10 @@ public final class ConvoLog {
 
     // ---- write ----
 
-    /** Append one message as a single JSONL line (with a {@code ts}). Best-effort: failures only warn. */
+    /**
+     * Append one message as a single JSONL line (with a {@code ts}); a {@link ConvoState.Msg.Halt} is written as
+     * a {@code halt} event. Best-effort: failures only warn.
+     */
     public void append(ConvoState.Msg msg) {
         JsonObject o = encode(msg);
         o.addProperty("ts", System.currentTimeMillis());
@@ -191,9 +199,20 @@ public final class ConvoLog {
     // ---- migration ----
 
     /**
-     * Rewrite a headerless v1 file to v2 (idempotent, crash-safe). Does nothing to an already-v2 file, a
-     * missing file, or (on failure) the original — which the reader still understands as v1. Never deletes
-     * or half-writes the original: it is only ever replaced by a fully-written temp via an atomic move.
+     * Bring an older file up to {@link #FORMAT_VERSION} (idempotent, crash-safe). Does nothing to a current (or
+     * newer) file, a missing or empty file, or (on failure) the original. Never deletes or half-writes the
+     * original: after a one-time {@code .v<N>.bak} copy it is only ever replaced by a fully-written temp via an
+     * atomic move.
+     * <ul>
+     *   <li><b>v1 → v2</b>: add the header; the legacy {@code role:"compact"} line becomes a {@code compact}
+     *       event; records without {@code ts} get one.</li>
+     *   <li><b>v2 → v3</b>: strip the {@code <current_task>} block older builds persisted at the head of user
+     *       messages — top-level ones, compact summaries (they replay as the first user message) and the user
+     *       messages preserved inside them. Runtime state is attached per request now; a stale copy left in
+     *       history would contradict the live one on every request.</li>
+     * </ul>
+     * Runs once because the new header version lands in the same atomic swap as the rewritten records: a crash
+     * before the swap leaves the old version in place and the whole rewrite simply runs again next launch.
      */
     public void migrateIfNeeded() {
         if (!Files.isRegularFile(file)) return;
@@ -203,38 +222,50 @@ public final class ConvoLog {
             String first = firstNonBlank(lines);
             if (first == null) return;                          // empty file — leave it
             JsonObject head = tryParse(first);
-            if (head != null && EV_HEADER.equals(str(head.get("type")))) return;   // already v2
+            boolean hasHeader = head != null && EV_HEADER.equals(str(head.get("type")));
+            int from = hasHeader ? head.get("v").getAsInt() : 1;   // every header ever written carries v
+            if (from >= FORMAT_VERSION) return;
 
-            // v1 → v2: keep a one-time backup, then rebuild into a temp and atomically swap in.
-            Path bak = file.resolveSibling(file.getFileName() + ".v1.bak");
+            // Keep a one-time backup, then rebuild into a temp and atomically swap in.
+            Path bak = file.resolveSibling(file.getFileName() + ".v" + from + ".bak");
             if (!Files.exists(bak)) Files.copy(file, bak);
 
             long ts = fileAnchorMillis();
             StringBuilder sb = new StringBuilder(lines.size() * 64 + 64);
-            JsonObject h = new JsonObject();
-            h.addProperty("type", EV_HEADER);
+            JsonObject h = hasHeader ? head.deepCopy() : new JsonObject();
+            if (!hasHeader) {
+                h.addProperty("type", EV_HEADER);
+                h.addProperty("created", ts);
+            }
             h.addProperty("v", FORMAT_VERSION);
-            h.addProperty("created", ts);
             h.addProperty("migrated", true);
             sb.append(h).append('\n');
+            boolean oldHeaderSkipped = !hasHeader;
             for (String line : lines) {
                 if (line.isBlank()) continue;
                 JsonObject rec = tryParse(line);
-                if (rec == null) continue;                      // torn/damaged v1 line — drop (was unloadable anyway)
-                if (EV_COMPACT.equals(str(rec.get("role")))) {  // legacy role:"compact" → type:"compact"
-                    rec.remove("role");
-                    rec.addProperty("type", EV_COMPACT);
+                if (rec == null) continue;                      // torn/damaged line — drop (was unloadable anyway)
+                if (!oldHeaderSkipped && EV_HEADER.equals(str(rec.get("type")))) {
+                    oldHeaderSkipped = true;                    // replaced by the rewritten header above
+                    continue;
                 }
-                if (!rec.has("ts")) rec.addProperty("ts", ts++);
+                if (from < 2) {
+                    if (EV_COMPACT.equals(str(rec.get("role")))) {  // legacy role:"compact" → type:"compact"
+                        rec.remove("role");
+                        rec.addProperty("type", EV_COMPACT);
+                    }
+                    if (!rec.has("ts")) rec.addProperty("ts", ts++);
+                }
+                stripLegacyCurrentTask(rec);
                 sb.append(rec).append('\n');
             }
             Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.TRUNCATE_EXISTING);
             moveInPlace(tmp, file);
-            AiLog.LOG.info("[numen-convo] migrated {} to format v{}", file.getFileName(), FORMAT_VERSION);
+            AiLog.LOG.info("[numen-convo] migrated {} from format v{} to v{}", file.getFileName(), from, FORMAT_VERSION);
         } catch (Exception ex) {
-            // Leave the original v1 file untouched — the reader still loads it. Retry next launch.
-            AiLog.LOG.warn("[numen-convo] migration of {} failed, keeping v1 as-is: {}",
+            // Leave the original file untouched — the reader still loads it. Retry next launch.
+            AiLog.LOG.warn("[numen-convo] migration of {} failed, keeping it as-is: {}",
                     file.getFileName(), ex.toString());
             try {
                 Files.deleteIfExists(tmp);
@@ -242,6 +273,46 @@ public final class ConvoLog {
                 // best effort
             }
         }
+    }
+
+    /** v2 → v3: strip the persisted {@code <current_task>} block from every user-message text in {@code rec}. */
+    private static void stripLegacyCurrentTask(JsonObject rec) {
+        if ("user".equals(str(rec.get("role")))) {
+            stripContent(rec);
+        } else if (EV_COMPACT.equals(str(rec.get("type")))) {
+            stripContent(rec);
+            if (rec.has("preserved") && rec.get("preserved").isJsonArray()) {
+                for (JsonElement el : rec.getAsJsonArray("preserved")) {
+                    if (el.isJsonObject() && "user".equals(str(el.getAsJsonObject().get("role")))) {
+                        stripContent(el.getAsJsonObject());
+                    }
+                }
+            }
+        }
+    }
+
+    private static void stripContent(JsonObject o) {
+        String content = str(o.get("content"));
+        String stripped = withoutLegacyCurrentTask(content);
+        if (!stripped.equals(content)) {
+            o.addProperty("content", stripped);
+        }
+    }
+
+    /**
+     * The text without the generated {@code <current_task>} block older builds put in front of the owner's
+     * words. A block that starts inside {@code <query>} is the owner's own text and is left alone.
+     */
+    private static String withoutLegacyCurrentTask(String content) {
+        int open = content.indexOf(LEGACY_TASK_OPEN);
+        int query = content.indexOf("<query>");
+        if (open < 0 || (query >= 0 && open > query)) return content;
+        int close = content.indexOf(LEGACY_TASK_CLOSE, open + LEGACY_TASK_OPEN.length());
+        if (close < 0) return content;
+        int end = close + LEGACY_TASK_CLOSE.length();
+        if (end < content.length() && content.charAt(end) == '\r') end++;
+        if (end < content.length() && content.charAt(end) == '\n') end++;
+        return (content.substring(0, open) + content.substring(end)).strip();
     }
 
     private static void moveInPlace(Path tmp, Path dest) throws IOException {
@@ -263,10 +334,11 @@ public final class ConvoLog {
     // ---- read ----
 
     /**
-     * Load the protocol-valid tail of the conversation for the LLM: messages only (events skipped), the
+     * Load the tail of the conversation for the LLM: messages and cut-off points (other events skipped), the
      * last {@code limit} extended backwards to the nearest {@code user} message so the slice starts at a
      * turn boundary. A {@code compact} event restarts the replay from its summary + preserved tail;
-     * a {@code clear} event restarts it from nothing.
+     * a {@code clear} event restarts it from nothing; a {@code halt} event replays as a
+     * {@link ConvoState.Msg.Halt} where the turn was cut off.
      */
     public List<ConvoState.Msg> load(int limit) {
         if (!Files.isRegularFile(file)) return List.of();
@@ -287,12 +359,14 @@ public final class ConvoLog {
                         all.add(new ConvoState.Msg.User(str(o.get("content"))));
                         if (o.has("preserved") && o.get("preserved").isJsonArray()) {
                             for (JsonElement el : o.getAsJsonArray("preserved")) {
-                                ConvoState.Msg m = decodeMessage(el.getAsJsonObject());
+                                ConvoState.Msg m = decode(el.getAsJsonObject());
                                 if (m != null) all.add(m);
                             }
                         }
                     } else if (EV_CLEAR.equals(type)) {
                         all.clear();   // 白纸重来:无摘要、无保留
+                    } else if (EV_HALT.equals(type)) {
+                        all.add(decodeHalt(o));
                     }
                     // header / persona-change / goal / unknown → not part of the LLM context
                     continue;
@@ -321,8 +395,9 @@ public final class ConvoLog {
     /**
      * Load the PHYSICAL tail for the chat GUI: messages in file order; {@code compact}, {@code clear}
      * and {@code persona-change} events become sentinel divider messages instead of restarting or
-     * vanishing. This is the "what actually happened" view — history is never lost to compaction
-     * or clearing.
+     * vanishing, and a {@code halt} event stays the {@link ConvoState.Msg.Halt} it was appended as —
+     * the GUI draws it as an interruption divider carrying its reason. This is the "what actually
+     * happened" view — history is never lost to compaction or clearing.
      */
     public List<ConvoState.Msg> loadDisplay(int limit) {
         if (!Files.isRegularFile(file)) return List.of();
@@ -341,6 +416,7 @@ public final class ConvoLog {
                     if (EV_COMPACT.equals(type)) all.add(new ConvoState.Msg.User(COMPACT_DIVIDER));
                     else if (EV_CLEAR.equals(type)) all.add(new ConvoState.Msg.User(CLEAR_DIVIDER));
                     else if (EV_PERSONA.equals(type)) all.add(new ConvoState.Msg.User(PERSONA_DIVIDER));
+                    else if (EV_HALT.equals(type)) all.add(decodeHalt(o));
                     // header / goal / unknown → not shown
                     continue;
                 }
@@ -376,26 +452,6 @@ public final class ConvoLog {
             AiLog.LOG.warn("[numen-convo] failed to read persona from {}: {}", file, ex.toString());
         }
         return current;
-    }
-
-    /**
-     * Tool-call ids in {@code history} that have no matching tool result — the signature of a session
-     * killed mid-task. The caller synthesizes "interrupted" results for these or the next request 400s.
-     */
-    public static List<String> unansweredToolCallIds(List<ConvoState.Msg> history) {
-        Set<String> answered = new HashSet<>();
-        for (ConvoState.Msg msg : history) {
-            if (msg instanceof ConvoState.Msg.Tool t) answered.add(t.toolCallId());
-        }
-        List<String> unanswered = new ArrayList<>();
-        for (ConvoState.Msg msg : history) {
-            if (msg instanceof ConvoState.Msg.Assistant a) {
-                for (LlmToolCall tc : a.turn().toolCalls()) {
-                    if (!answered.contains(tc.id())) unanswered.add(tc.id());
-                }
-            }
-        }
-        return unanswered;
     }
 
     // ---- codec ----
@@ -441,8 +497,25 @@ public final class ConvoLog {
                 o.addProperty("tool_call_id", t.toolCallId());
                 o.addProperty("content", t.content());
             }
+            case ConvoState.Msg.Halt h -> {
+                o.addProperty("type", EV_HALT);
+                o.addProperty("reason", h.reason());
+            }
         }
         return o;
+    }
+
+    /**
+     * Decode a record {@link #encode} produces — a message, or a {@code halt} event — or {@code null} for
+     * anything else (forward-compat: skip, don't crash). Used where encoded records are nested: the
+     * {@code preserved} list of a compact event.
+     */
+    private static ConvoState.Msg decode(JsonObject o) {
+        return EV_HALT.equals(eventType(o)) ? decodeHalt(o) : decodeMessage(o);
+    }
+
+    private static ConvoState.Msg.Halt decodeHalt(JsonObject o) {
+        return new ConvoState.Msg.Halt(str(o.get("reason")));
     }
 
     /** Decode a message record, or {@code null} for an unknown role (forward-compat: skip, don't crash). */

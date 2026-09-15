@@ -77,6 +77,15 @@ public final class ToolDispatcher {
         return !inFlight.isEmpty() || !queue.isEmpty();
     }
 
+    /** Is this call still outstanding (in flight or still queued), i.e. can its result still arrive? */
+    public boolean holds(String callId) {
+        if (inFlight.containsKey(callId)) return true;
+        for (ToolInvocation inv : queue) {
+            if (inv.id().equals(callId)) return true;
+        }
+        return false;
+    }
+
     /** 在飞那一件的工具名(串行模型下 ≤1),空闲返回 null——头顶气泡的副文本取它。 */
     public String currentToolName() {
         for (ToolInvocation inv : inFlight.values()) {
@@ -119,15 +128,15 @@ public final class ToolDispatcher {
     }
 
     /**
-     * Abandon everything outstanding (in flight + queued) and return their ids so the
-     * caller can heal the conversation. Used on owner-interrupt and on death.
+     * Abandon everything outstanding (in flight + queued) and return their ids — the
+     * caller records a cut-off point when any were abandoned. Used on owner-interrupt and on death.
      */
     public List<String> cancelAndDrain() {
         return cancelAndDrain(true);
     }
 
     /**
-     * 收掉所有未决调用,返回它们的 id(调用方据此合成取消结果,保住协议)。
+     * 收掉所有未决调用,返回它们的 id(有被放弃的,调用方就在历史里记一条切断点)。
      *
      * @param stopBody 要不要连身体一起叫停。<b>主人按停止</b>要({@code true}——他要她
      *                 立刻住手);<b>断线登出</b>不要({@code false})——她的身体还在

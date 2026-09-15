@@ -153,7 +153,9 @@ public final class NumenLlmClient {
      * {@link ChatResult} — the {@link AssistantTurn} built up from all SSE
      * chunks via the provider's accumulator, plus reported token usage.
      *
-     * @param messages       conversation history (provider translates to wire)
+     * @param messages       conversation history as recorded (Halts, dangling tool calls and
+     *                       adjacent user messages included); {@link ProtocolView#forWire}
+     *                       makes it provider-valid, then the provider translates it to wire
      * @param tools          tool list (provider serialises to wire shape;
      *                       empty = no tools field, e.g. for summarization calls)
      * @param systemPrompt   prepended automatically — pass empty / null to skip
@@ -164,13 +166,18 @@ public final class NumenLlmClient {
                                                        Collection<? extends IToolSpec> tools,
                                                        String systemPrompt,
                                                        Consumer<JsonObject> onChunk) {
-        // -- 1. Build wire-format messages and tool list via provider.
-        List<JsonObject> wire = new ArrayList<>(messages.size());
-        for (ConvoState.Msg m : messages) {
+        // -- 1. Build wire-format messages and tool list via provider. The recorded history goes
+        //        through ProtocolView first — this is the only place a history becomes a request,
+        //        so tool-call pairing, cut-off turns and adjacent user messages are settled here once.
+        List<ConvoState.Msg> sendable = ProtocolView.forWire(messages);
+        List<JsonObject> wire = new ArrayList<>(sendable.size());
+        for (ConvoState.Msg m : sendable) {
             switch (m) {
                 case ConvoState.Msg.User u -> wire.add(provider.buildUserMessage(u.content()));
                 case ConvoState.Msg.Assistant a -> wire.add(provider.assistantToRequestMessage(a.turn()));
                 case ConvoState.Msg.Tool t -> wire.add(provider.buildToolResultMessage(t.toolCallId(), t.content()));
+                case ConvoState.Msg.Halt h -> throw new IllegalStateException(
+                        "ProtocolView.forWire never emits Halt: " + h.reason());
             }
         }
         JsonArray toolList = provider.buildToolList(tools);

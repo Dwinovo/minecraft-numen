@@ -27,10 +27,17 @@ import java.util.function.Consumer;
 public final class ConvoState {
 
     /** Tagged union for conversation history. */
-    public sealed interface Msg permits Msg.User, Msg.Assistant, Msg.Tool {
+    public sealed interface Msg permits Msg.User, Msg.Assistant, Msg.Tool, Msg.Halt {
         record User(String content) implements Msg {}
         record Assistant(AssistantTurn turn) implements Msg {}
         record Tool(String toolCallId, String content) implements Msg {}
+        /**
+         * The turn was cut off here (owner stop, disconnect, death); {@code reason} is shown to
+         * the model. History records only where the cut happened — dangling tool calls are not
+         * answered and nothing is capped at the time; {@link ProtocolView} turns the record into a
+         * provider-valid sequence right before each request.
+         */
+        record Halt(String reason) implements Msg {}
     }
 
     private final List<Msg> messages = new ArrayList<>();
@@ -82,6 +89,10 @@ public final class ConvoState {
         push(new Msg.Tool(toolCallId, content));
     }
 
+    public void addHalt(String reason) {
+        push(new Msg.Halt(reason));
+    }
+
     private void push(Msg msg) {
         messages.add(msg);
         sink.accept(msg);
@@ -91,9 +102,7 @@ public final class ConvoState {
         return List.copyOf(messages);
     }
 
-    /** Most recent message, or {@code null} when the history is empty. Used by
-     *  the agent loop's interrupt path to keep the conversation protocol-valid
-     *  (avoid leaving a trailing {@code user} message after an aborted turn). */
+    /** Most recent message, or {@code null} when the history is empty. */
     public Msg lastMessage() {
         return messages.isEmpty() ? null : messages.get(messages.size() - 1);
     }

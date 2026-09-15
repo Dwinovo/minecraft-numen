@@ -49,23 +49,26 @@ public final class CompactSplit {
                 List.copyOf(history.subList(cut, history.size())));
     }
 
-    /** 一条消息的粗略 token 数(含 8 token 的角色/结构开销)。 */
+    /**
+     * 一条消息的粗略 token 数(含 8 token 的角色/结构开销)。
+     *
+     * <p>{@link ConvoState.Msg.Halt} 本身不发,但它的原因会被 {@link ProtocolView} 写进补的工具结果
+     * 或下一条 user 的说明行,所以按原因的字数算。
+     */
     public static int estimateTokens(ConvoState.Msg msg) {
-        String text;
-        if (msg instanceof ConvoState.Msg.User u) {
-            text = u.content();
-        } else if (msg instanceof ConvoState.Msg.Tool t) {
-            text = t.content();
-        } else if (msg instanceof ConvoState.Msg.Assistant a) {
-            StringBuilder sb = new StringBuilder(
-                    a.turn().content() == null ? "" : a.turn().content());
-            for (LlmToolCall tc : a.turn().toolCalls()) {
-                sb.append(tc.name()).append(tc.arguments());
+        String text = switch (msg) {
+            case ConvoState.Msg.User u -> u.content();
+            case ConvoState.Msg.Tool t -> t.content();
+            case ConvoState.Msg.Halt h -> h.reason();
+            case ConvoState.Msg.Assistant a -> {
+                StringBuilder sb = new StringBuilder(
+                        a.turn().content() == null ? "" : a.turn().content());
+                for (LlmToolCall tc : a.turn().toolCalls()) {
+                    sb.append(tc.name()).append(tc.arguments());
+                }
+                yield sb.toString();
             }
-            text = sb.toString();
-        } else {
-            text = "";
-        }
+        };
         long cjk = 0, ascii = 0;
         if (text != null) {
             for (int i = 0; i < text.length(); i++) {

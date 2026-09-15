@@ -1,6 +1,7 @@
 package com.dwinovo.numen.client.agent;
 
 import com.dwinovo.numen.agent.llm.ConvoState;
+import com.dwinovo.numen.agent.llm.ProtocolView;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.LlmToolCall;
 import org.junit.jupiter.api.Test;
@@ -40,25 +41,6 @@ class AgentRequestContextTest {
 
         assertEquals(3, request.size());
         assertEquals("<runtime_state/>", ((ConvoState.Msg.User) request.get(2)).content());
-    }
-
-    @Test
-    void stripsLegacyPersistedTaskStateButKeepsOwnerText() {
-        List<ConvoState.Msg> source = List.of(new ConvoState.Msg.User(
-                "<current_task>t1 goto 后台进行中</current_task>\n<query>繼續任務</query>"));
-
-        List<ConvoState.Msg> request = AgentRequestContext.attach(source, "");
-
-        assertEquals("<query>繼續任務</query>", ((ConvoState.Msg.User) request.get(0)).content());
-        assertTrue(((ConvoState.Msg.User) source.get(0)).content().contains("current_task"));
-    }
-
-    @Test
-    void neverStripsOwnerSuppliedTagInsideQuery() {
-        String owner = "<query>explain <current_task>literal</current_task></query>";
-        List<ConvoState.Msg> request = AgentRequestContext.attach(
-                List.of(new ConvoState.Msg.User(owner)), "");
-        assertEquals(owner, ((ConvoState.Msg.User) request.get(0)).content());
     }
 
     @Test
@@ -116,16 +98,31 @@ class AgentRequestContextTest {
     }
 
     @Test
-    void aTurnStuckMidToolCallCarriesNoRuntimeStateOnPurpose() {
-        // assistant 的 tool_calls 与它的结果之间插不进任何消息(上游会 400),
-        // 所以这一刻宁可不带,不找地方硬塞。
+    void stateAfterAUserMessageIsItsOwnMessageAndMergedOnTheWire() {
+        // 挂载只管追加;跟前一条 user 合成一条是发请求前 ProtocolView 的事,这里不判尾巴
+        List<ConvoState.Msg> source = List.of(new ConvoState.Msg.User("<query>跟着我</query>"));
+
+        List<ConvoState.Msg> request = AgentRequestContext.attach(source, "<runtime_state/>");
+
+        assertEquals(List.of(source.get(0), new ConvoState.Msg.User("<runtime_state/>")), request);
+        assertEquals(List.of(new ConvoState.Msg.User("<query>跟着我</query>\n\n<runtime_state/>")),
+                ProtocolView.forWire(request));
+    }
+
+    @Test
+    void aTurnCutMidToolCallStillCarriesStateAndGoesOutValid() {
+        // 调用没等到结果就被切断时状态照样挂上;悬空调用的结果由 ProtocolView 补在它前面
         List<ConvoState.Msg> source = List.of(
                 new ConvoState.Msg.User("go"),
                 new ConvoState.Msg.Assistant(new AssistantTurn("",
                         List.of(new LlmToolCall("c1", "goto", "{}")), null)));
 
         List<ConvoState.Msg> request = AgentRequestContext.attach(source, "<runtime_state/>");
+        List<ConvoState.Msg> wire = ProtocolView.forWire(request);
 
-        assertEquals(source, request);
+        assertEquals(new ConvoState.Msg.User("<runtime_state/>"), request.get(request.size() - 1));
+        assertEquals(4, wire.size());
+        assertEquals("c1", ((ConvoState.Msg.Tool) wire.get(2)).toolCallId());
+        assertEquals("<runtime_state/>", ((ConvoState.Msg.User) wire.get(3)).content());
     }
 }

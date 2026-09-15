@@ -274,7 +274,7 @@ final class CompanionBrain {
      *
      * <p>主人离线时<b>异步任务的收尾照发</b>——它走 {@link com.dwinovo.numen.event.NumenEvents},
      * 自己会进出箱等主人回来。只有同步 tool_call 的结果没处送(那条调用属于一个
-     * 随客户端一起消失的回合),重登时由 {@code unansweredToolCallIds} 收口。
+     * 随客户端一起消失的回合),重登后发请求时由 {@code ProtocolView} 给它补上失败结果。
      */
     private void shipResults(NumenPlayer companion) {
         if (outbox.isEmpty()) {
