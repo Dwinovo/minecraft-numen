@@ -4363,6 +4363,38 @@ public class CompanionGameTests {
         });
     }
 
+    /**
+     * 卡片挂着时主人按停止:drop_items 悬着等答复,主人没点卡片而是按了停止(与 CancelTasksPayload 同一个入口)。
+     * 这件活按主人停止收场、消息写明是主人停的,挂着的征询随之撤掉,东西一件没丢。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void an_owner_stop_while_a_card_is_up_withdraws_the_card(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_hesitant", new BlockPos(4, 2, 4), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_changed_mind");
+        companion.getInventory().add(new ItemStack(Items.GOLD_INGOT, 4));
+        TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().dropItems(
+                "minecraft:gold_ingot", 4, TaskDispatch.ctx("gametest-hesitant", companion));
+        TaskDispatch.runSync(companion, record, reply -> {});
+        boolean[] stopped = new boolean[1];
+
+        helper.succeedWhen(() -> {
+            if (!stopped[0]) {
+                helper.assertTrue(desk(companion).pending() != null, "drop_items did not ask");
+                com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion);
+                stopped[0] = true;
+            }
+            String reply = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(reply != null, "the stopped drop has not settled");
+            helper.assertTrue(!record.getResult().success() && reply.startsWith("the owner pressed Stop"),
+                    "the result does not say the owner stopped it: " + reply);
+            helper.assertTrue(desk(companion).pending() == null, "the card is still up after the stop");
+            helper.assertTrue(companion.getInventory().countItem(Items.GOLD_INGOT) == 4, "dropped after the stop");
+            CompanionFactory.despawn(level.getServer(), companion);
+            CompanionFactory.despawn(level.getServer(), owner);
+        });
+    }
+
     /** 没人答复:到点按拒绝,理由是"主人不在场,无法征得同意";东西还在身上。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void unanswered_consent_times_out_as_denied(GameTestHelper helper) {
