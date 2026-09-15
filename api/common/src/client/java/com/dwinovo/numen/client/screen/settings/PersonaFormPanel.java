@@ -74,13 +74,13 @@ public final class PersonaFormPanel {
                 .placeholder(t("numen.persona.text_placeholder"))
                 .maxLength(4096)
                 .withLabel(textLabel));
-        textArea.setBounds(x, ry, w, (y + h - 20) - ry);
+        textArea.setBounds(x, ry, w, NumenStyle.footerTop(y, h) - NumenStyle.HEADER_GAP - ry);
 
         Button close = ui.add(new Button("✕", Button.Style.GHOST, onCancel));
         close.setBounds(x + w - 8, y - 14, 14, 14);
         Button save = ui.add(new Button(t("numen.gui.settings.save"),
                 Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, y + h - 16, 54, 15);
+        save.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
     }
 
     // ---- 宿主转发面 ----

@@ -303,26 +303,33 @@ public final class SettingsView {
     private int panelH() { return host.panelH(); }
     private Font font() { return host.font(); }
 
-    /** 内容底板(导航 + 正文)的外框:面板左右各内缩这么多,顶边在页签带下方。 */
+    /*
+     * 设置页的格子:一块内容底板(1 像素描边),里面一条竖分隔线分出导航与正文,分隔线上下贴底板描边。
+     * 导航与正文离底板描边、离分隔线都是同一个内边距 INNER——导航的选中底、分区的抬头标题与按钮、
+     * 列表的边沿都落在这一圈上,不各算各的。
+     */
+    /** 内容底板(导航 + 正文)的外框:面板左右与底边各内缩这么多,顶边在页签带下方。 */
     private static final int SURFACE_INSET = 5;
+    /** 底板描边、分隔线到里面东西的距离。 */
+    private static final int INNER = com.dwinovo.numen.client.ui.NumenStyle.PAD;
     private int surfaceY() { return top() + HEADER_H + 2; }
+    private int innerLeft() { return left() + SURFACE_INSET + 1; }
+    private int innerRight() { return left() + panelW() - SURFACE_INSET - 1; }
+    private int innerTop() { return surfaceY() + 1; }
+    private int innerBottom() { return top() + panelH() - SURFACE_INSET - 1; }
     /** 导航与正文的竖分隔线。 */
     private int dividerX() { return left() + PAD + NAV_W + 3; }
-    /**
-     * 导航列:从底板描边内侧到分隔线,选中底铺满整列——左贴底板描边、右贴分隔线,顶边与分隔线齐,
-     * 方角下没有哪条边悬空。
-     */
-    private int navX() { return left() + SURFACE_INSET + 1; }
-    private int navTop() { return secY0() - 2; }
+    private int navX() { return innerLeft() + INNER; }
 
     /** Left x of the section content area (right of the sub-nav column + divider). */
-    private int secX() { return dividerX() + 5; }
+    private int secX() { return dividerX() + 1 + INNER; }
     /** Width of the section content area. */
-    private int secW() { return left() + panelW() - PAD - secX(); }
-    /** Top y of section content (below the header). */
-    private int secY0() { return top() + HEADER_H + 8; }
+    private int secW() { return innerRight() - INNER - secX(); }
+    /** Top y of section content;导航第一行与分区抬头行同一条顶边。 */
+    private int secY0() { return innerTop() + INNER; }
     /** Bottom y a list row may reach. */
-    private int secBottom() { return top() + panelH() - PAD; }
+    private int secBottom() { return innerBottom() - INNER; }
+    private int secH() { return secBottom() - secY0(); }
 
     // ---- form modal (add/edit forms float on a card over the dimmed list) ----
 
@@ -427,49 +434,48 @@ public final class SettingsView {
     /** Dispatch widget building by the active section (skill/MCP lists render manually). */
     public void buildWidgets() {
         loadPalette();
-        navPanel().build(navX(), navTop(), dividerX() - navX(), secBottom() - navTop(),
+        navPanel().build(navX(), secY0(), dividerX() - INNER - navX(), secH(),
                 navLabels(), section.ordinal());
         switch (section) {
-            case SKILLS -> skillsListPanel().build(secX(), secY0() - 2, secW(),
-                    secBottom() - secY0() + 2, left(), top(), panelW(), panelH());
+            case SKILLS -> skillsListPanel().build(secX(), secY0(), secW(), secH(),
+                    left(), top(), panelW(), panelH());
             case MCP -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                mcpListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                mcpListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingMcp) buildMcpForm();
             }
             case PERSONA -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                personaListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                personaListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingPersona) buildPersonaForm();
             }
             case PROVIDER -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                profileList().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                profileList().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingProvider) buildProviderFormNew();
             }
             case VOICE -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                voiceListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                voiceListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingVoice) buildVoiceForm();
             }
             case SKIN -> {
                 // 列表面板始终在场(表单模态时作背景);删除确认是面板自己的浮层。
-                skinListPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2,
+                skinListPanel().build(secX(), secY0(), secW(), secH(),
                         left(), top(), panelW(), panelH());
                 if (addingSkin) buildSkinForm();
             }
             case BRAIN -> {
                 // 换令牌的确认卡要盖住整个设置面板,不是只盖这个分区
                 brainPanel().setDimBounds(left(), top(), panelW(), panelH());
-                brainPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2);
+                brainPanel().build(secX(), secY0(), secW(), secH());
             }
-            case STT -> sttPanel().build(secX(), secY0() - 2, secW(), secBottom() - secY0() + 2);
-            case THEME -> themePanel().build(secX(), secY0() - 2, secW(),
-                    secBottom() - secY0() + 2);
+            case STT -> sttPanel().build(secX(), secY0(), secW(), secH());
+            case THEME -> themePanel().build(secX(), secY0(), secW(), secH());
         }
     }
 
@@ -1002,11 +1008,11 @@ public final class SettingsView {
         UiTheme th = UiTheme.current();
         com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                 left() + SURFACE_INSET, surfaceY(), panelW() - SURFACE_INSET * 2,
-                top() + panelH() - SURFACE_INSET - surfaceY(),
+                innerBottom() + 1 - surfaceY(),
                 th.surface(), th.surfaceBorder());
         navPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                 HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
-        g.fill(dividerX(), navTop(), dividerX() + 1, secBottom(), BORDER);   // 导航与正文的竖分隔线
+        g.fill(dividerX(), innerTop(), dividerX() + 1, innerBottom(), BORDER);   // 导航与正文的竖分隔线,上下贴底板描边
         switch (section) {
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> {

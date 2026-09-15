@@ -183,11 +183,11 @@ public final class LibraryListPanel<T> {
         ui.clear();
 
         Label title = ui.add(new Label(t(titleKey), Label.Role.PRIMARY));
-        title.setBounds(x, y, w - 70, 9);
+        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w - 70, 9);
         int actionRight = x + w;   // 标题行按钮从右往左排
         if (addKey != null) {
             Button add = ui.add(new Button(t(addKey), Button.Style.ACCENT, onAdd));
-            add.setBounds(x + w - 56, y - 2, 56, NumenStyle.CONTROL_H);
+            add.setBounds(x + w - 56, y, 56, NumenStyle.HEADER_H);
             actionRight = x + w - 56 - 6;
         }
         if (titleAction != null) {
@@ -197,27 +197,28 @@ public final class LibraryListPanel<T> {
                 titleAction.run();
                 refresh();   // 动作(重扫等)可能改变条目集,当场刷新
             }));
-            act.setBounds(actionRight - aw, y - 2, aw, NumenStyle.CONTROL_H);
+            act.setBounds(actionRight - aw, y, aw, NumenStyle.HEADER_H);
         }
 
         if (toggleGet != null) {
             Toggle tog = ui.add(new Toggle(toggleGet.get(), toggleSet));
             int togX = x + w - 56 - 8 - 22;
-            tog.setBounds(togX, y - 1, 22, 11);
+            tog.setBounds(togX, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 11), 22, 11);
             String label = t(toggleLabelKey);
             int lw = Minecraft.getInstance().font.width(label);
             Label togLabel = ui.add(new Label(label, Label.Role.MUTED));
             // 宽度=实测文本宽:标签后加在按钮之上,虚宽会盖住右侧新建钮吞掉点击。
-            togLabel.setBounds(togX - lw - 4, y, lw, 9);
+            togLabel.setBounds(togX - lw - 4, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), lw, 9);
         }
 
+        int body = NumenStyle.bodyTop(y);
         emptyLabel = ui.add(new Label(t(emptyKey), Label.Role.MUTED));
-        emptyLabel.setBounds(x, y + 18, w, 9);
+        emptyLabel.setBounds(x, body + 2, w, 9);
 
         list = ui.add(new ListView<T>(entries, ROW_H, this::renderRow, null)
                 .rowClick(this::rowClicked));
-        list.setBounds(x, y + 16, w, h - 16);
-        ui.add(notice).setBounds(x, y + 18, w, 24);   // 列表顶部悬浮,永不参与命中
+        list.setBounds(x, body, w, y + h - body);
+        ui.add(notice).setBounds(x, body + 2, w, 24);   // 列表顶部悬浮,永不参与命中
         refresh();
         list.scrollBy(keepScroll);   // 重建(换主题/改窗口)不丢滚动位
     }

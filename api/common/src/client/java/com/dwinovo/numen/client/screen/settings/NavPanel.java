@@ -15,7 +15,8 @@ import java.util.function.IntConsumer;
  */
 public final class NavPanel {
 
-    private static final int ROW_H = 20;
+    /** 行高与控件同高:导航第一行和右边分区的抬头行上下齐。 */
+    private static final int ROW_H = com.dwinovo.numen.client.ui.NumenStyle.CONTROL_H;
 
     private final UiRoot ui = new UiRoot();
     private final IntConsumer onSelect;

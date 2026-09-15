@@ -167,7 +167,7 @@ public final class ProfileFormPanel {
 
         // ---- 滚动记账:内容高、视口高(按钮行之上),各行基线快照 ----
         contentH = (ry + NumenStyle.CONTROL_H) - y;
-        viewH = h - 20;
+        viewH = NumenStyle.footerTop(y, h) - NumenStyle.HEADER_GAP - y;   // 滚动区到收尾行上方
         scrollY = Math.min(scrollY, maxScroll());
         for (com.dwinovo.numen.client.ui.widget.Widget rw : ui.widgetsView()) {
             baseYs.put(rw, rw.y());
@@ -178,16 +178,16 @@ public final class ProfileFormPanel {
         Button close = fixedUi.add(new Button("✕", Button.Style.GHOST, onCancel));
         close.setBounds(x + w - 8, y - 14, 14, 14);
 
-        int by = y + h - 16;
+        int by = NumenStyle.footerTop(y, h);
         // 页面级 Alert:表单区左右居中、垂直偏上悬浮——操作结果的家(字段错误才内联)。
         resultAlert = fixedUi.add(new InlineAlert());
         resultAlert.setBounds(x, y + 2, w, 24);
         checkButton = fixedUi.add(new Button(t(ModLanguageData.Keys.GUI_PROVIDERS_CHECK),
                 Button.Style.NORMAL, this::runConnectivityCheck));
-        checkButton.setBounds(x + w - 54 - 58, by, 54, 15);
+        checkButton.setBounds(x + w - 54 - 58, by, 54, NumenStyle.CONTROL_H);
         Button save = fixedUi.add(new Button(t("numen.gui.settings.save"),
                 Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, by, 54, 15);
+        save.setBounds(x + w - 54, by, 54, NumenStyle.CONTROL_H);
 
         refreshSiteDependent();
     }

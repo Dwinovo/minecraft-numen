@@ -79,7 +79,7 @@ public final class BrainPanel {
         } else {
             buildOverview();
         }
-        ui.add(notice).setBounds(x, y + 14, w, 24);
+        ui.add(notice).setBounds(x, NumenStyle.bodyTop(y), w, 24);
     }
 
     /** 遮罩范围由宿主给——确认卡要盖住整个设置面板,不是只盖这个分区。 */
@@ -96,14 +96,15 @@ public final class BrainPanel {
         McpMode mcp = McpMode.instance();
 
         Label title = ui.add(new Label(t("numen.brain.title"), Label.Role.PRIMARY));
-        title.setBounds(x, y, w - 60, 9);
+        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w - 60, 9);
 
         // 开关回调只写配置,绝不在此重建——重建会 new 出滑块已在终点的新 Toggle,
         // 滑动动画连起步都来不及(真机教训:大脑区开关瞬时切换的病根)。
         Toggle tog = ui.add(new Toggle(mcp.enabled(), McpMode.instance()::setEnabled));
-        tog.setBounds(x + w - 24, y - 1, 22, 11);
+        tog.setBounds(x + w - 24, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 11), 22, 11);
 
-        int ry = y + 33;
+        int body = NumenStyle.bodyTop(y);
+        int ry = body + 18;
         ui.add(new ValueRow(t("numen.brain.endpoint"), () -> McpMode.instance().endpoint()))
                 .setBounds(x, ry, w - 52, ValueRow.HEIGHT);
         copyButton(x + w - 50, ry - 3, () -> McpMode.instance().endpoint());
@@ -133,11 +134,11 @@ public final class BrainPanel {
         int pw = Minecraft.getInstance().font.width(promptLabel) + 14;
         Button prompt = ui.add(new Button(promptLabel, Button.Style.ACCENT,
                 () -> copy(mcp.accessPrompt())));
-        prompt.setBounds(x, y + 104, pw, 16);
+        prompt.setBounds(x, body + 89, pw, 16);
 
         Button settings = ui.add(new Button(t("numen.brain.settings"), Button.Style.NORMAL,
                 () -> switchTo(true)));
-        settings.setBounds(x + w - 54, y + h - 16, 54, 15);
+        settings.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
     }
 
     // ---- 设置 ----
@@ -146,10 +147,11 @@ public final class BrainPanel {
         McpConfig cfg = McpMode.instance().config();
 
         Label title = ui.add(new Label(t("numen.brain.settings_title"), Label.Role.PRIMARY));
-        title.setBounds(x, y, w - 60, 9);
+        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w - 60, 9);
         Button back = ui.add(new Button(t("numen.brain.back"), Button.Style.NORMAL,
                 () -> switchTo(false)));
-        back.setBounds(x + w - 44, y - 2, 44, 14);
+        back.setBounds(x + w - 44, y, 44, NumenStyle.HEADER_H);
+        int body = NumenStyle.bodyTop(y);
 
         // 「允许局域网」是 host 的人话面:关=127.0.0.1,开=0.0.0.0。玩家不必知道那五个字符,
         // 想绑具体网卡的高级用户改 config/numen/mcp_server.json —— 配置文件就是逃生舱。
@@ -158,9 +160,9 @@ public final class BrainPanel {
             lanDraft = on;
             refreshSaveState();
         }));
-        lan.setBounds(x + w - 24, y + 17, 22, 11);
+        lan.setBounds(x + w - 24, body + 2, 22, 11);
 
-        int ry = y + 46;
+        int ry = body + 31;
         int half = (w - 12) / 2;
         Label portLabel = ui.add(new Label(t("numen.brain.port"), Label.Role.MUTED));
         portLabel.setBounds(x, ry, half, 9);
@@ -184,7 +186,7 @@ public final class BrainPanel {
         hiddenField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
 
         saveButton = ui.add(new Button(saveLabel(), Button.Style.ACCENT, this::save));
-        saveButton.setBounds(x + w - 96, y + h - 16, 96, 15);
+        saveButton.setBounds(x + w - 96, NumenStyle.footerTop(y, h), 96, NumenStyle.CONTROL_H);
         refreshSaveState();
     }
 
@@ -283,30 +285,33 @@ public final class BrainPanel {
         // 状态词做成标题行的徽章:永远在最显眼处,而且不占额外行
         String badge = t(on ? "numen.brain.running" : "numen.brain.stopped");
         int bw = Minecraft.getInstance().font.width(badge) + 8;
-        Badge.draw(s, badge, x + w - 30 - bw, y - 1, on ? c.success() : c.textMuted(), 0xFFFFFFFF);
+        int body = NumenStyle.bodyTop(y);
+        Badge.draw(s, badge, x + w - 30 - bw, NumenStyle.centerIn(y, NumenStyle.HEADER_H, s.lineHeight()),
+                on ? c.success() : c.textMuted(), 0xFFFFFFFF);
 
         s.drawText(t(on ? "numen.brain.hint_on" : "numen.brain.hint_off"),
-                x, y + 15, c.textMuted(), false);
+                x, body, c.textMuted(), false);
 
         // 错误紧跟只读块、在动作之前
         String err = mcp.lastError();
         if (err != null) {
-            s.drawText(I18n.get("numen.brain.start_failed", err), x, y + 81, c.danger(), false);
+            s.drawText(I18n.get("numen.brain.start_failed", err), x, body + 66, c.danger(), false);
         }
         if (tokenCopy != null) tokenCopy.setVisible(!mcp.token().isBlank());
         if (tokenRegen != null) tokenRegen.setVisible(true);
 
-        s.drawText(t("numen.brain.prompt_warn"), x, y + 124, c.textMuted(), false);
+        s.drawText(t("numen.brain.prompt_warn"), x, body + 109, c.textMuted(), false);
     }
 
     private void renderSettings(IDrawSurface s, NumenTheme.Colors c) {
-        s.drawText(t("numen.brain.lan"), x, y + 18, c.textPrimary(), false);
+        int body = NumenStyle.bodyTop(y);
+        s.drawText(t("numen.brain.lan"), x, body + 3, c.textPrimary(), false);
         if (lanDraft) {
             // 绑到所有网卡这件事本身会成功,只是降级——按自家判据是 warning 不是 danger。
             // 但令牌为空时它就变成"这次保存不该发生",那才是 danger。
             boolean noToken = McpMode.instance().token().isBlank();
             s.drawText(t(noToken ? "numen.brain.lan_needs_token" : "numen.brain.lan_warn"),
-                    x, y + 32, noToken ? c.danger() : c.warning(), false);
+                    x, body + 17, noToken ? c.danger() : c.warning(), false);
         }
     }
 

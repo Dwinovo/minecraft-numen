@@ -48,6 +48,30 @@ public final class NumenStyle {
     /** 下拉弹层行数上限(视口再小也另有保底)。 */
     public static final int POPUP_MAX_ROWS = 8;
 
+    // ---- 分区版式 ----
+    /**
+     * 分区的抬头行与收尾行都与控件同高:标题、开关在行内垂直居中,按钮与行等高、贴行的边。
+     * 各分区只按这几个口子排,不各自手写偏移——方角下差一两个像素都看得出来。
+     */
+    public static final int HEADER_H = CONTROL_H;
+    /** 抬头行到正文的间距。 */
+    public static final int HEADER_GAP = 4;
+
+    /** 高 {@code itemH} 的东西放进从 {@code rowY} 起、高 {@code rowH} 的一行,垂直居中时的顶边。 */
+    public static int centerIn(int rowY, int rowH, int itemH) {
+        return rowY + (rowH - itemH) / 2;
+    }
+
+    /** 分区正文的顶边:抬头行下面。 */
+    public static int bodyTop(int sectionY) {
+        return sectionY + HEADER_H + HEADER_GAP;
+    }
+
+    /** 分区收尾行(保存之类的按钮)的顶边:贴分区底边。 */
+    public static int footerTop(int sectionY, int sectionH) {
+        return sectionY + sectionH - CONTROL_H;
+    }
+
     // ---- 机器行(工具调用 / 思考过程)----
     /**
      * 过程不是对话:工具调用与思考过程要一眼能和"她说的话"分开,否则读者会

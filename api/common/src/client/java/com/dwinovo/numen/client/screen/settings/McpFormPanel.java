@@ -92,7 +92,7 @@ public final class McpFormPanel {
         close.setBounds(x + w - 8, y - 14, 14, 14);
         Button save = ui.add(new Button(t("numen.gui.settings.save"),
                 Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, y + h - 16, 54, 15);
+        save.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
     }
 
     // ---- 宿主转发面 ----

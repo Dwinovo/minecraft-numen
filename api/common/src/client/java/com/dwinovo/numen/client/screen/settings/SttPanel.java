@@ -82,9 +82,9 @@ public final class SttPanel {
         provider = opt.id();
 
         Label title = ui.add(new Label(t(ModLanguageData.Keys.STT_TITLE), Label.Role.PRIMARY));
-        title.setBounds(x, y, w, 9);
+        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w, 9);
 
-        int ry = y + 16;
+        int ry = NumenStyle.bodyTop(y);
         ry = label(x, ry, ModLanguageData.Keys.GUI_SETTINGS_PROVIDER);
         providerIds = new ArrayList<>();
         List<String> providerNames = new ArrayList<>();
@@ -149,10 +149,10 @@ public final class SttPanel {
         micPick.setBounds(x, ry, w, NumenStyle.CONTROL_H);
 
         saved = ui.add(new InlineAlert());
-        saved.setBounds(x, y + 16, w, 24);
+        saved.setBounds(x, NumenStyle.bodyTop(y), w, 24);
         Button save = ui.add(new Button(t("numen.gui.settings.save"),
                 Button.Style.ACCENT, this::save));
-        save.setBounds(x + w - 54, y + h - 16, 54, 15);
+        save.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
     }
 
     // ---- 宿主转发面 ----

@@ -32,7 +32,7 @@ public final class ThemePanel {
     public void build(int x, int y, int w, int h) {
         ui.clear();
         Label title = ui.add(new Label(t("numen.settings.theme.title"), Label.Role.PRIMARY));
-        title.setBounds(x, y, w, 9);
+        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w, 9);
 
         list = ui.add(new ListView<UiTheme>(UiTheme.ALL, ROW_H, this::renderRow, null)
                 .rowClick((index, xInRow) -> {
@@ -40,11 +40,12 @@ public final class ThemePanel {
                     onThemeChanged.run();   // 屏幕的调色板常量重读新主题
                     return true;
                 }));
-        int listH = UiTheme.ALL.size() * ROW_H;
-        list.setBounds(x, y + 16, w, Math.min(listH, h - 16 - 30));
+        int body = NumenStyle.bodyTop(y);
+        int listH = Math.min(UiTheme.ALL.size() * ROW_H, y + h - body - 30);
+        list.setBounds(x, body, w, listH);
 
         // 快捷对话提醒开关行(默认开:准星指着同伴时浮「按 [键] 对话」)。
-        int hy = y + 16 + Math.min(listH, h - 16 - 30) + 8;
+        int hy = body + listH + 8;
         Toggle hint = ui.add(new Toggle(com.dwinovo.numen.client.data.ClientPrefs.talkHint(),
                 com.dwinovo.numen.client.data.ClientPrefs::setTalkHint));
         hint.setBounds(x, hy, 22, 11);

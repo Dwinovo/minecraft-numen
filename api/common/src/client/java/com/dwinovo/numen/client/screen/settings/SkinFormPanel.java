@@ -114,7 +114,7 @@ public final class SkinFormPanel {
         resultAlert.setBounds(x, y + 2, w, 24);
         saveButton = ui.add(new Button(t("numen.gui.settings.save"),
                 Button.Style.ACCENT, this::save));
-        saveButton.setBounds(x + w - 54, y + h - 16, 54, 15);
+        saveButton.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
         saveButton.setEnabled(!signing);
     }
 
