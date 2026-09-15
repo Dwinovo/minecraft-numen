@@ -296,6 +296,39 @@ record Type(String id,
 
 `EventQueue` 本身不变:仍然只是台账,只答熟度,不认识 run 和停牌。
 
+### 事件的种类就是类型表里的一行
+
+所有输入都走这一个队列,主人的话只是其中一种类型。现在却有**两套类型**:队列的 `EventTypes`
+(`query`/`event`/`goal`/`compact`/`clear`),和服务端写死的 `NumenEvents.Kind` 枚举(`task_finished`、
+`death`、`hungry`、`owner_hurt`、`timer`、`woke`、`dimension_change`、`body_log`)——后者全挤在 `event`
+这一行里,"是哪种事"只写在文本的 XML 属性上。`body_log` 更是个兜底桶:本能自救、防御收场都往里塞。
+
+收成一张表:
+
+- **每种事件是 `EventTypes` 的一行**:`task_finished`、`death`、`hungry`、`owner_hurt`、`timer`、`woke`、
+  `dimension_change` 各自登记投递方式、是否恒为急件、打断时清不清、进不进聊天流;急件属性照现在各发送点的
+  实际取值登记,由发送方决定的保留发送方决定。条目的 `type` 就是事件种类,拼给模型的
+  `<event kind="…">` 里的 kind 取自同一个 id。`NumenEvents.Kind` 删掉,`event` 这个笼统类型也不再需要。
+- **`body_log` 退役**:本能做的事登记成 `reflex` 一种,带上是哪个本能(溺水自救、下落放水、防御……)。
+  不再有"身体日志"这个桶。
+- **一个发出口**:服务端发事件只有一个方法(现在的 `NumenEvents.emit` 收成它),按类型查表,主人在线直送
+  客户端、离线进出箱——内置事件和插件事件同一条路。
+- **插件同一扇门**:`NumenApi` 提供"登记事件类型"与"发出一条事件"。`enqueue`(现在只在客户端、语义是
+  "主人说了一句话")收进同一扇门——发的就是 `query` 类型;在客户端调时仍如实返回 `Delivery`。
+  插件不需要任何旁路。第一个用户是 Curios 插件的 `accessory_changed`(戴上、摘下、坏了、死亡掉落)。
+
+### 状态不是事件:身体状态片段
+
+"她这一轮身上是什么样"是**状态**:每轮都要在、不能进历史(压缩之后就丢了),和背包、状态效果同一类。
+它不走队列,走运行期状态。现在插件只有 `contributeState`:在**客户端**发请求时现算,只读得到客户端手里的
+数据——同伴走远、换了维度,客户端里没有她的实体,读不到;而核心的背包块由服务端推送,没有这个问题。
+
+- **新增服务端身体状态片段**:插件在服务端给一个"身体 → 一段描述"的函数;引擎在 `CompanionStateWatch`
+  检测变化时一并算、有变化随状态包推给主人的客户端;这段描述出现在运行期状态里,也出现在
+  `get_self_status` 里("你的全部"不再漏掉插件管的部位)。
+- **两个来源按事实住在哪里分工**:身体上的事实(饰品栏、模组给的装备位)用服务端片段;只有主人客户端知道
+  的事(东方小女仆的外观是客户端渲染的)仍用 `contributeState`。一个事实只有一个来源。
+
 ---
 
 ## 八、中断、死亡、登出、外接接管:一个 `halt(reason)`
@@ -502,6 +535,10 @@ sealed interface LoopEvent {
 | 展开闸用重算的快照 | 用发出去的同一份(§六) |
 | 请求期剥旧 `current_task` 块 | 迁移一次(§九) |
 | UI 调用散在循环 20 余处 | 订阅事件(§十二) |
+| 事件种类两套:队列 `EventTypes` 与服务端 `NumenEvents.Kind` | 种类就是类型表的一行(§七) |
+| `body_log` 兜底桶收本能叙事 | `reflex` 类型带本能名(§七) |
+| 插件报身体上的事没有正门,只有冒充主人的 `enqueue` | 插件登记类型、发出事件,与内置同一条路(§七) |
+| 插件状态只能在客户端现算,远处/跨维度的同伴读不到 | 服务端身体状态片段随状态包推送,也进 `get_self_status`(§七) |
 
 ---
 
@@ -513,7 +550,7 @@ sealed interface LoopEvent {
 - §三输入全景:补上请求期运行期状态、目标续跑、技能表/本能名册/延迟工具目录(已实现);
   删去不存在的 `emitEvent`;"核心永远传 false"改为类型表 `alwaysUrgent` + 发送方决定。
 - §四"三态路由":改为 §七 的三种投递方式与熟度规则;删去"队列锁"、`BodyLog` 类名等已经不存在的概念;
-  死亡事件恒为急件。
+  死亡事件恒为急件;事件种类即类型表的行,本能叙事是 `reflex` 类型。
 - 顺带清掉普查列出的陈旧与错位注释("队列锁"残留、`WorkBlockMemory` 头注释、`EventTypes` 引用
   不存在的 `EventQueue#drain` 等)。
 
@@ -561,10 +598,15 @@ sealed interface LoopEvent {
 3. **循环内核**:`AgentLoop`、`Run`、`Hold`、`pump`、`halt`、两层步进、重试;`ModelPort`(含传输层取消)
    与 `ToolPort`(按 id 取消);`EntityAgentLoop` 改为委托内核,删除 `tryStartTurn`/`maybeDrain`/
    `handleResponse`/`abort`/`onEntityDied` 中的旧逻辑。内核单元测试在这一步落地。
-4. **事件与 LoopStatus**:表现层、记账、显示记录、MCP 记录改为订阅;UI 的"忙不忙"改读 `LoopStatus`;
+4. **事件种类统一与插件的门**(§七):种类登记进类型表,删 `NumenEvents.Kind`,`body_log` 退役为 `reflex`;
+   服务端一个发出口;`NumenApi` 加登记类型、发出事件,`enqueue` 收进去;服务端身体状态片段(随状态包推送、
+   进运行期状态与 `get_self_status`)。
+5. **事件与 LoopStatus**:表现层、记账、显示记录、MCP 记录改为订阅;UI 的"忙不忙"改读 `LoopStatus`;
    主人的话统一走 `NumenGateway`;端点口径统一。
-5. **拆组件**:`SystemPromptComposer`、`RuntimeState`、`Compactor`、`GoalSteward`;收窄 public、删死代码。
-6. **文档与注释**:§十五。
+6. **拆组件**:`SystemPromptComposer`、`RuntimeState`、`Compactor`、`GoalSteward`;收窄 public、删死代码。
+7. **文档与注释**:§十五。
+
+第 4 步之后,Curios 联动插件(另有设计稿)直接用第 4 步的事件门与身体状态片段落地,不开旁路。
 
 ---
 
