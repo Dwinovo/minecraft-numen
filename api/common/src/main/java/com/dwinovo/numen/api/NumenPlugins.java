@@ -182,6 +182,7 @@ public final class NumenPlugins {
 
         @Override
         public Delivery emit(UUID companion, String type, String text) {
+            NumenEvents.requireClientInput(type);
             ClientInput input = clientInput;
             return input == null ? Delivery.REJECTED : input.emit(companion, type, text);
         }

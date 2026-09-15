@@ -153,14 +153,15 @@ public interface NumenApi {
     /**
      * 主人的客户端:把一条输入交给同伴的内置大脑,返回实际发生了什么。
      *
-     * <p>这一侧收的是主人的话:{@code type} 给 {@code query},效果和主人亲手打字一样。
-     * 身体上发生的事住在服务端,从上面那个带身体的 {@code emit} 发。专用服务器上没有
+     * <p>{@code type} 给 {@code query} 是主人的话,效果和主人亲手打字一样;给一种 {@link #registerEventType}
+     * 登记过的世界事件,是客户端这边的来源发来的事(桥接转发别人在群里说的话、直播弹幕),和服务端的事件同形,
+     * 急不急看你登记时定的。身体上发生的事住在服务端,从上面那个带身体的 {@code emit} 发。专用服务器上没有
      * 主人的客户端,返回 {@link Delivery#REJECTED}。
      *
      * <p>这是<b>进</b>的方向。出的方向不在这里:同伴要说什么、要做什么,是它自己
      * 调用工具的结果——注册一个工具,它有话说的时候会调你。
      *
-     * @throws IllegalArgumentException {@code type} 不是 {@code query}
+     * @throws IllegalArgumentException {@code type} 既不是 {@code query},也不是登记过的世界事件
      */
     Delivery emit(UUID companion, String type, String text);
 

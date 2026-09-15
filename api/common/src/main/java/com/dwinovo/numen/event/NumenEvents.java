@@ -161,13 +161,35 @@ public final class NumenEvents {
      */
     public static EventQueue.Entry entry(long dayTime, String type, Map<String, String> attrs,
                                          String text, long now, boolean urgent) {
+        requireWorldEvent(type);
+        return new EventQueue.Entry(type, compose(dayTime, type, attrs, text), now, urgent);
+    }
+
+    /**
+     * 这个种类能不能当一件世界上发生的事发出去:登记过,且不是主人那几行(主人的话、目标续跑、清空、整理)。
+     * 发事件的每个入口都问这一处——服务端的发出口、主人客户端的门。
+     *
+     * @throws IllegalArgumentException 种类没登记,或者登记的不是世界的事
+     */
+    public static void requireWorldEvent(String type) {
         if (!EventTypes.isRegistered(type)) {
             throw new IllegalArgumentException("事件种类没登记过:" + type);
         }
         if (EventTypes.get(type).fromOwner()) {
             throw new IllegalArgumentException(type + " 不是世界上发生的事,不能当事件发");
         }
-        return new EventQueue.Entry(type, compose(dayTime, type, attrs, text), now, urgent);
+    }
+
+    /**
+     * 主人客户端那扇门收不收这个种类:主人的话({@code query}),或者一件登记过的世界事件。
+     * 插件的门和客户端的入口都问这一处,有没有主人客户端都一样地拒。
+     *
+     * @throws IllegalArgumentException 两样都不是
+     */
+    public static void requireClientInput(String type) {
+        if (!EventTypes.QUERY.equals(type)) {
+            requireWorldEvent(type);
+        }
     }
 
     /** 拼 {@code <event>}:kind 就是条目的类型,盖上游戏内时间戳。 */

@@ -402,14 +402,30 @@ public final class EntityAgentLoop {
      * 急不急不在这里说:query 在类型表里恒为急件;解开哪些停牌、什么时候注入,都是内核按类型表定。
      */
     private boolean enqueueOwnerWords(String wire, String logged) {
-        // Wrap the owner's words in <query> so the model can always tell real user input apart from
-        // anything else numen injects into the same user turn (events, and future world-state/reminders).
-        loop.push(List.of(new EventQueue.Entry(EventTypes.QUERY, wire, System.currentTimeMillis(), false)));
         // 外脑驱动期间面板画的是现场缓冲——主人的话得当场可见,不能等谁取走才出现。
         // 这里是所有主人话的单一咽喉(面板/快捷对话/语音/桥接),挂点只此一处。
         if (McpMode.instance().driving()) {
             com.dwinovo.numen.mcp.server.McpTranscript.owner(entityUuid, logged);
         }
+        // Wrap the owner's words in <query> so the model can always tell real user input apart from
+        // anything else numen injects into the same user turn (events, and future world-state/reminders).
+        return deliver(new EventQueue.Entry(EventTypes.QUERY, wire, System.currentTimeMillis(), false));
+    }
+
+    /**
+     * 主人客户端上的来源(桥接转发的群消息、直播弹幕)发来的一件世界上发生的事。和服务端的事件同一个构造口:
+     * {@code <event kind="type">},盖上游戏内时间戳;急不急看类型表的那一行。种类必须登记过且不是主人那几行。
+     *
+     * @return 同 {@link #submitPrompt}:这条输入有没有被压着
+     */
+    public boolean submitEvent(String type, String text) {
+        return deliver(com.dwinovo.numen.event.NumenEvents.entry(gameDayTime(), type, null, text,
+                System.currentTimeMillis(), false));
+    }
+
+    /** 交给内核并观察:推进之后内核是不是正在等模型回话(见 {@link #submitPrompt} 的返回值说明)。 */
+    private boolean deliver(EventQueue.Entry entry) {
+        loop.push(List.of(entry));
         return loop.status().phase() != Phase.MODEL;
     }
 
@@ -832,9 +848,7 @@ public final class EntityAgentLoop {
         // 死亡是急件——她关于自己处境的认知几乎每一条都作废了:物品掉在死亡地点、
         // 位置从矿洞变成了主人身边、手上的任务没了、血量装备全变了。这不分"任务中死"
         // 还是"空闲死",所以这里没有任何判据。
-        AbstractClientPlayer body = resolveEntity();
-        long dayTime = body != null ? body.level().getDayTime() : 0L;
-        loop.push(List.of(com.dwinovo.numen.event.NumenEvents.entry(dayTime, EventTypes.DEATH, null,
+        loop.push(List.of(com.dwinovo.numen.event.NumenEvents.entry(gameDayTime(), EventTypes.DEATH, null,
                 "你刚才死了(" + cause + "),背包里的东西全掉在死亡地点了;"
                         + "现已在主人身边复活。先看看状况再决定下一步。",
                 System.currentTimeMillis(), true)));
@@ -1283,6 +1297,12 @@ public final class EntityAgentLoop {
         // 怎么说话压在最末尾:长度与语气离生成位置越近,越不容易在长对话里被冲淡(见 NumenPrompts)
         sb.append(com.dwinovo.numen.agent.prompt.NumenPrompts.SPEAKING);
         return sb.toString();
+    }
+
+    /** 事件时间戳用的游戏内时刻;身体不在客户端视野里时记 0。 */
+    private long gameDayTime() {
+        AbstractClientPlayer body = resolveEntity();
+        return body != null ? body.level().getDayTime() : 0L;
     }
 
     private AbstractClientPlayer resolveEntity() {
