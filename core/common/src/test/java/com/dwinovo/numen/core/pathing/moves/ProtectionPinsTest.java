@@ -11,7 +11,6 @@ import com.dwinovo.numen.permission.Gate;
 import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.permission.PlacedBlocks;
 import com.dwinovo.numen.permission.RuleSet;
-import com.dwinovo.numen.permission.TerritoryClaims;
 
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
@@ -203,7 +202,7 @@ class ProtectionPinsTest {
     private static CalculationContext context(FakeView view, LongSet sacred, RouteSpec spec, PlacedBlocks placed) {
         return new CalculationContext(player, view, ChunkLoadedTest.ALWAYS, false,
                 spec.withPositions(PositionCosts.protect(sacred)),
-                new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), placed, TerritoryClaims.NONE, java.util.List.of()));
+                new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), placed, java.util.List.of()));
     }
 
     private static LongSet sacredOf(BlockPos pos) {
@@ -348,7 +347,7 @@ class ProtectionPinsTest {
         FakeView v = floored();
         v.set(dirt, Blocks.DIRT.defaultBlockState());
         CalculationContext preserve = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
-                false, RouteSpec.defaults(), new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE, java.util.List.of()));
+                false, RouteSpec.defaults(), new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(), java.util.List.of()));
         // 同一块泥土,NATURAL 有限价(见上),NONE 无限价——翻成 INF 的只是规格的 alter
         assertTrue(MovementHelper.getMiningDurationTicks(preserve,
                 dirt.getX(), dirt.getY(), dirt.getZ(), false) >= COST_INF);
@@ -373,7 +372,7 @@ class ProtectionPinsTest {
         CalculationContext deniedCtx = new CalculationContext(player, v, ChunkLoadedTest.ALWAYS,
                 false, NATURAL.withPositions(PositionCosts.builder()
                         .place(cell.asLong(), COST_INF).build()),
-                new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE, java.util.List.of()));
+                new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(), java.util.List.of()));
         assertEquals(COST_INF, deniedCtx.costOfPlacingAt(
                 cell.getX(), cell.getY(), cell.getZ(), v.getBlockState(cell)));
     }

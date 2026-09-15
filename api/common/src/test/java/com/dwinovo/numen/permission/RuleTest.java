@@ -41,7 +41,7 @@ class RuleTest {
     }
 
     private static Facts facts(FakeWorld world, PlacedBlocks placed) {
-        return new Facts(world, placed, null, TerritoryClaims.NONE, null);
+        return new Facts(world, placed, null, null);
     }
 
     // ==================== 解析 ====================

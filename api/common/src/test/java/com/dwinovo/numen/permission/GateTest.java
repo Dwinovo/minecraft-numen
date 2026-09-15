@@ -44,7 +44,7 @@ class GateTest {
     }
 
     private static Gate layered(Mode mode, RuleSet owner, RuleSet factory, PlacedBlocks placed) {
-        return new Gate(null, mode, owner, factory, placed, TerritoryClaims.NONE, List.of());
+        return new Gate(null, mode, owner, factory, placed, List.of());
     }
 
     private static RuleSet rules(List<String> deny, List<String> ask, List<String> allow) {
@@ -218,7 +218,7 @@ class GateTest {
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
         ConsentItem item = gate.consentItem(dig, gate.judge(dig, world), world);
         assertEquals("break(placed & minecraft:cobblestone)", item.remember().toString());
-        assertTrue(item.remember().matches(dig, new Facts(world, placed, null, TerritoryClaims.NONE, null)),
+        assertTrue(item.remember().matches(dig, new Facts(world, placed, null, null)),
                 "记下的规则盖得住这次问的动作");
 
         // 主人自己写的 ask 行带取反项:原样留着
@@ -264,20 +264,6 @@ class GateTest {
                 "记住之后同一种东西不再问,也不靠任务期授权");
     }
 
-    // ==================== 外部强制 ====================
-
-    @Test
-    void searchThreadsCannotAskAClaimSoTheyDoNotDenyOnIt() {
-        FakeWorld world = new FakeWorld();
-        world.set(POS, Blocks.OAK_LOG.defaultBlockState());
-        TerritoryClaims everywhere = (action, facts) -> true;
-        Gate gate = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(), everywhere,
-                List.of());
-        // 主线程上的拒绝(带着"a land claim forbids it")由 GameTest 在活世界里钉
-        assertTrue(gate.judge(Action.breakBlock(POS, world.getBlockState(POS)), world).allowed(),
-                "搜索线程问不到领地:按不知道放行,执行时再拦");
-    }
-
     // ==================== 模式 ====================
 
     @Test
@@ -318,14 +304,13 @@ class GateTest {
         Action digFirst = Action.breakBlock(first, world.getBlockState(first));
         ConsentItem grant = ungranted.consentItem(digFirst, ungranted.judge(digFirst, world), world);
 
-        Gate granted = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), placed, TerritoryClaims.NONE,
+        Gate granted = new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), placed,
                 List.of(grant));
         assertTrue(granted.judge(digFirst, world).allowed());
         assertTrue(granted.judge(Action.breakBlock(second, world.getBlockState(second)), world).allowed(),
                 "同一行规则问出来的同一种方块:挖一堆只问一次");
         assertTrue(granted.judge(Action.breakBlock(stone, world.getBlockState(stone)), world).asks(),
                 "换一种方块另问");
-        assertEquals(Verdict.Kind.DENY, new Gate(null, Mode.OBSERVE, RuleSet.EMPTY, RuleSet.factory(), placed,
-                TerritoryClaims.NONE, List.of(grant)).judge(digFirst, world).kind(), "授权只把问变成放行,解不开拒绝");
+        assertEquals(Verdict.Kind.DENY, new Gate(null, Mode.OBSERVE, RuleSet.EMPTY, RuleSet.factory(), placed, List.of(grant)).judge(digFirst, world).kind(), "授权只把问变成放行,解不开拒绝");
     }
 }

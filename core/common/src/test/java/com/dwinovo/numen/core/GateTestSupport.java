@@ -4,7 +4,6 @@ import com.dwinovo.numen.permission.Gate;
 import com.dwinovo.numen.permission.Mode;
 import com.dwinovo.numen.permission.PlacedBlocks;
 import com.dwinovo.numen.permission.RuleSet;
-import com.dwinovo.numen.permission.TerritoryClaims;
 
 /**
  * 无头测试用的裁决快照:出厂规则、ask 模式、没有任何玩家放置记录——和一个新世界里
@@ -15,6 +14,6 @@ public final class GateTestSupport {
     private GateTestSupport() {}
 
     public static Gate open() {
-        return new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(), TerritoryClaims.NONE, java.util.List.of());
+        return new Gate(null, Mode.ASK, RuleSet.EMPTY, RuleSet.factory(), new PlacedBlocks(), java.util.List.of());
     }
 }

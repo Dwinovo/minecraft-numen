@@ -4003,48 +4003,6 @@ public class CompanionGameTests {
         });
     }
 
-    /**
-     * 外部强制不问主人:领地口说不,主线程上的裁决是拒绝(不是问),理由写明是领地拦的——任务只对
-     * "问"发起征询,拒绝原样进回执。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void a_land_claim_denies_without_asking(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos logRel = new BlockPos(6, 2, 6);
-        playerPlaces(helper, logRel, Items.DARK_OAK_LOG);
-        NumenPlayer companion = spawnAt(helper, "gametest_claimed", new BlockPos(3, 2, 6), false);
-        var gate = new com.dwinovo.numen.permission.Gate(companion, com.dwinovo.numen.permission.Mode.ASK,
-                com.dwinovo.numen.permission.RuleSet.EMPTY, com.dwinovo.numen.permission.RuleSet.factory(),
-                com.dwinovo.numen.permission.PlacedBlocks.of(level), (action, facts) -> true,
-                java.util.List.of());
-        BlockPos log = helper.absolutePos(logRel);
-        var verdict = gate.judgeLive(com.dwinovo.numen.permission.Action.breakBlock(log, level.getBlockState(log)),
-                level);
-        helper.assertTrue(verdict.kind() == com.dwinovo.numen.permission.Verdict.Kind.DENY,
-                "a land claim must deny, not ask: " + verdict);
-        helper.assertTrue(verdict.reason().equals("a land claim forbids it"), "the reason does not say who: " + verdict);
-        helper.assertTrue(desk(companion).pending() == null, "a claim verdict raised a card");
-        CompanionFactory.despawn(level.getServer(), companion);
-        helper.succeed();
-    }
-
-    /**
-     * 同一具身体上,领地口没装(本测试服没有领地 mod,{@link com.dwinovo.numen.permission.Permission#gateFor} 里是
-     * {@code TerritoryClaims.NONE})时,自然方块照出厂 allow 行放行,不因为"没有领地 mod"而拒绝。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_permission")
-    public static void no_claims_mod_means_no_claims(GameTestHelper helper) {
-        ServerLevel level = helper.getLevel();
-        BlockPos dirt = helper.absolutePos(new BlockPos(6, 2, 6));
-        level.setBlockAndUpdate(dirt, Blocks.DIRT.defaultBlockState());
-        NumenPlayer companion = spawnAt(helper, "gametest_unclaimed", new BlockPos(3, 2, 6), false);
-        var verdict = com.dwinovo.numen.permission.Permission.judge(companion,
-                com.dwinovo.numen.permission.Action.breakBlock(dirt, level.getBlockState(dirt)));
-        helper.assertTrue(verdict.allowed(), "a natural block with no claims mod must be allowed: " + verdict);
-        CompanionFactory.despawn(level.getServer(), companion);
-        helper.succeed();
-    }
-
     // ==================== 权限:记住、分层、命令 ====================
 
     /** 以 {@code who} 的身份跑一条命令,和在聊天栏里敲的一样;回话(成功与失败的)收进返回的列表。 */
@@ -4501,13 +4459,13 @@ public class CompanionGameTests {
         });
     }
 
-    // ==================== 权限:原生通道上的领地 ====================
+    // ==================== 权限:原生通道上的退回 ====================
 
     /**
-     * 模拟一个不接 Common Protection API 的领地 mod:把登记在这里的身体的破坏事件全部取消。监听器第一次用到时
+     * 模拟一个在原生通道里取消破坏事件的模组:把登记在这里的身体的破坏事件全部取消。监听器第一次用到时
      * 挂一次。
      */
-    private static final class ClaimLock {
+    private static final class BreakVeto {
         static final java.util.Set<UUID> LOCKED = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
         static {
@@ -4521,12 +4479,12 @@ public class CompanionGameTests {
     }
 
     /**
-     * 领地 mod 在原生通道里取消了破坏事件:权限层放行了(自然泥土),挖掘落点照真客户端挖下去,服务端退回来——
-     * interact_at 以 refused 收场,理由写明"被领地或服务器保护拦下",泥土一块不少。生存(STOP 那一下被退)
-     * 与创造(START 那一下被退)各一具身体。
+     * 别的模组在原生通道里取消了破坏事件:权限层放行了(自然泥土),挖掘落点照真客户端挖下去,服务端退回来——
+     * interact_at 以 refused 收场,理由写明服务器没让挖掉,泥土一块不少。生存(STOP 那一下被退)与创造
+     * (START 那一下被退)各一具身体。
      */
     @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_permission")
-    public static void a_claim_cancelling_the_break_event_refuses_the_dig(GameTestHelper helper) {
+    public static void a_cancelled_break_event_refuses_the_dig(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         BlockPos survivalRel = new BlockPos(5, 2, 3);
         BlockPos creativeRel = new BlockPos(5, 2, 11);
@@ -4534,8 +4492,8 @@ public class CompanionGameTests {
         level.setBlockAndUpdate(helper.absolutePos(creativeRel), Blocks.DIRT.defaultBlockState());
         NumenPlayer digger = spawnAt(helper, "gametest_trespasser", new BlockPos(3, 2, 3), false);
         NumenPlayer builder = spawnAt(helper, "gametest_intruder", new BlockPos(3, 2, 11), true);
-        ClaimLock.LOCKED.add(digger.getUUID());
-        ClaimLock.LOCKED.add(builder.getUUID());
+        BreakVeto.LOCKED.add(digger.getUUID());
+        BreakVeto.LOCKED.add(builder.getUUID());
         TaskRecord[] calls = new TaskRecord[2];
         helper.runAfterDelay(5, () -> {
             calls[0] = click(helper, digger, "left", survivalRel, "gametest-trespasser");
@@ -4547,12 +4505,12 @@ public class CompanionGameTests {
                 helper.assertTrue(call != null && call.getResult() != null, "a dig has not finished");
                 helper.assertTrue(!call.getResult().success()
                                 && call.getResult().message().contains(com.dwinovo.numen.core.act.BlockDigger.SERVER_REFUSED),
-                        "the bounced break is not reported as refused by protection: " + call.getResult().message());
+                        "the bounced break is not reported as refused by the server: " + call.getResult().message());
             }
             helper.assertTrue(level.getBlockState(helper.absolutePos(survivalRel)).is(Blocks.DIRT)
-                    && level.getBlockState(helper.absolutePos(creativeRel)).is(Blocks.DIRT), "the claimed dirt is gone");
-            ClaimLock.LOCKED.remove(digger.getUUID());
-            ClaimLock.LOCKED.remove(builder.getUUID());
+                    && level.getBlockState(helper.absolutePos(creativeRel)).is(Blocks.DIRT), "the protected dirt is gone");
+            BreakVeto.LOCKED.remove(digger.getUUID());
+            BreakVeto.LOCKED.remove(builder.getUUID());
             CompanionFactory.despawn(level.getServer(), digger);
             CompanionFactory.despawn(level.getServer(), builder);
         });
