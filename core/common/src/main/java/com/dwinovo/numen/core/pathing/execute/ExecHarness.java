@@ -176,10 +176,14 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
     /** 挖掘落点最近一次被权限层拒绝的说法;没有是 null。 */
     private String refusal;
 
-    /** 一刻挖掘的结果进账:挖穿了记实际账;被权限层拒绝记下说法,由执行器当场收场这一段。 */
-    private void noteDig(BlockDigger.DigResult result, BlockPos pos, BlockState was) {
+    /**
+     * 一刻挖掘的结果进账:挖穿了记实际账——记挖掘器说真挖掉的那一格(挡在前面的遮挡物也是她挖的,不是瞄准的
+     * 那格);被权限层拒绝记下说法,由执行器当场收场这一段。
+     */
+    private void noteDig(BlockDigger.DigResult result, BlockPos pos) {
         if (result.broke()) {
-            ledger.addBreak(pos, was);
+            BlockDigger.Broken broken = digger.lastBroken();
+            ledger.addBreak(broken.pos(), broken.was());
         } else if (result == BlockDigger.DigResult.REFUSED) {
             BlockState state = player.level().getBlockState(pos);
             refusal = "breaking " + net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock())
@@ -255,16 +259,14 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
                     // 重挖——任由它抖,两格谁都永远挖不穿。已在挖的格子还实心、准星
                     // 只是滑到紧邻格(仍看着原目标方向)时,继续挖原目标不换靶;挖穿
                     // 或目标失效后自然跟随准星。
-                    BlockState was = player.level().getBlockState(cur);
-                    noteDig(digger.digStep(cur), cur, was);
+                    noteDig(digger.digStep(cur), cur);
                 } else {
                     if (!hit.getBlockPos().equals(cur)) {
                         com.dwinovo.numen.core.Constants.LOG.debug("[numen-path] exec dig {} ({})",
                                 hit.getBlockPos().toShortString(),
                                 player.level().getBlockState(hit.getBlockPos()).getBlock());
                     }
-                    BlockState was = player.level().getBlockState(hit.getBlockPos());
-                    noteDig(digger.digStep(hit), hit.getBlockPos(), was);
+                    noteDig(digger.digStep(hit), hit.getBlockPos());
                 }
                 digTicked = true;
             } else if (digger.current() != null) {

@@ -175,7 +175,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private Set<Block> namedKinds = Set.of();
     /** groups 用法里还没收进名单的点名格。挖不动的格也回到这里,地形一变还能再收。 */
     private final Set<BlockPos> remaining = new HashSet<>();
-    /** groups 用法里轮到时已经不是扫描时那种方块的格(被挖掉、被换掉)。 */
+    /** groups 用法里轮到时已经不是扫描时那种方块、而旅程账上也没有她挖过的格(别人挖掉、换掉的)。 */
     private final Set<BlockPos> gone = new HashSet<>();
     /** 挖不成的候选:挖不动的方块、规格禁挖的、贴着流体或悬空落沙的——{@link #plausibleToBreak} 说不的。 */
     private final Set<BlockPos> ruledOut = new HashSet<>();
@@ -730,7 +730,12 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     noShotTicks = 1;
                 }
             }
-            // PROGRESSING / BROKE_OCCLUDER — real progress; reset the stall counter.
+            case BROKE_OCCLUDER -> {
+                // 为了拉出射线挖掉的是挡在前面的那一格,不是目标:进旅程账,回执交代,它若也是要挖的格就算她挖的
+                recordBreak(digger.lastBroken());
+                clearNoShot();
+            }
+            // PROGRESSING — real progress; reset the stall counter.
             default -> clearNoShot();
         }
         return TaskState.RUNNING;
@@ -923,8 +928,14 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         var state = level.getBlockState(p);
         boolean wanted = named != null ? named.get(p) == state.getBlock() : r.targets.contains(state.getBlock());
         if (state.isAir() || !wanted) {
+            // 点名的格不在了:旅程账上有,就是她顺路挖的(导航穿过它、为拉射线挖掉的遮挡物),算她挖掉的一格;
+            // 账上没有,才记成别人动过。点名的格只会从名单或待收里各验出一次"不在了",不会重复计数
             if (named != null) {
-                gone.add(p.immutable());
+                if (brokeOnTheWay(p)) {
+                    brokenTargets++;
+                } else {
+                    gone.add(p.immutable());
+                }
             }
             return false;
         }

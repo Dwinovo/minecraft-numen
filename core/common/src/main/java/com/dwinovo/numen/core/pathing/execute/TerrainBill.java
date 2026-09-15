@@ -112,6 +112,16 @@ public final class TerrainBill {
         return breaks.isEmpty() && places.isEmpty();
     }
 
+    /** 账上挖过这一格吗。 */
+    public boolean broke(BlockPos pos) {
+        for (Break b : breaks) {
+            if (b.pos().equals(pos)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public List<Break> breaks() {
         return List.copyOf(breaks);
     }

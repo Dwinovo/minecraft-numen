@@ -86,6 +86,19 @@ public final class BlockDigger {
         return pos;
     }
 
+    /**
+     * 最近一次真挖掉的那一格和它挖掉前的方块。{@link DigResult#BROKE_OCCLUDER} 挖掉的是挡在前面的那格,
+     * 不是调用方给的目标,记账要记这里说的这一格。
+     */
+    public record Broken(BlockPos pos, BlockState was) {}
+
+    private Broken lastBroken;
+
+    /** 最近一次 {@link DigResult#broke()} 挖掉的是哪一格;还没挖掉过是 null。 */
+    public Broken lastBroken() {
+        return lastBroken;
+    }
+
     /** Why the last {@link DigResult#REFUSED} happened; {@code null} if nothing was refused yet. */
     public Verdict refusal() {
         return refusal;
@@ -268,8 +281,7 @@ public final class BlockDigger {
                 if (!landed(state)) {
                     return refusedByServer();
                 }
-                reset();
-                return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
+                return broke(state, targetBreak);
             }
             if (!state.isAir()) {
                 // START 通道内服务端已自带 attack 与 insta-mine 判定,这里
@@ -279,8 +291,7 @@ public final class BlockDigger {
                     if (!landed(state)) {
                         return refusedByServer();
                     }
-                    reset();                         // instamine: START broke it (no STOP is sent)
-                    return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
+                    return broke(state, targetBreak);   // instamine: START broke it (no STOP is sent)
                 }
             }
             ServerPlayerGameModeAccessor server = (ServerPlayerGameModeAccessor) player.gameMode;
@@ -306,10 +317,16 @@ public final class BlockDigger {
                 return refusedByServer();
             }
             blockHitDelay = postBreakDelay();
-            reset();
-            return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
+            return broke(state, targetBreak);
         }
         return DigResult.PROGRESSING;
+    }
+
+    /** 这一格的破坏落地了:记下挖掉的是哪一格,清掉挖掘状态。 */
+    private DigResult broke(BlockState was, boolean targetBreak) {
+        lastBroken = new Broken(pos.immutable(), was);
+        reset();
+        return targetBreak ? DigResult.BROKE_TARGET : DigResult.BROKE_OCCLUDER;
     }
 
     /**

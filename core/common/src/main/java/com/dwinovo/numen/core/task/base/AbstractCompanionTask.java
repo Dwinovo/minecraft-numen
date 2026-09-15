@@ -15,6 +15,7 @@ import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.Permission;
 import com.dwinovo.numen.permission.Verdict;
 import com.dwinovo.numen.task.TaskResult;
+import net.minecraft.core.BlockPos;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -410,6 +411,22 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
     // ---------------------------------------------------------------------
     // Nav ownership
     // ---------------------------------------------------------------------
+
+    /**
+     * 这件活替目标之外挖掉的一格记进旅程账(比如为了拉出射线挖掉的遮挡物)。回执末尾和导航挖的一起交代,
+     * {@link #brokeOnTheWay} 也认它。
+     */
+    protected final void recordBreak(com.dwinovo.numen.core.act.BlockDigger.Broken broken) {
+        journey.addBreak(broken.pos(), broken.was());
+    }
+
+    /**
+     * 这一格是她这件活里顺路挖掉的吗:历次导航与 {@link #recordBreak} 记下的旅程账,加上还在跑的这条导航的账。
+     * 账本是"她挖了什么"的唯一出处,任务要分清"她挖的"和"别人动的"时问这里。
+     */
+    protected final boolean brokeOnTheWay(BlockPos pos) {
+        return journey.broke(pos) || (nav != null && nav.ledger().broke(pos));
+    }
 
     /** Stop and forget the active nav (idempotent); its terrain ledger joins the task's journey. */
     protected void stopNav() {
