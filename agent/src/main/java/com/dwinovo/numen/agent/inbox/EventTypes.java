@@ -1,4 +1,4 @@
-package com.dwinovo.numen.event;
+package com.dwinovo.numen.agent.inbox;
 
 import java.util.HashMap;
 import java.util.Map;

@@ -41,13 +41,14 @@ tasks.register('datagenAll') {
     }
 }
 
-/** 发布制品的统一入口:api 与 core 两家、本分支两个 loader,外加 ai/ui。 */
+/** 发布制品的统一入口:api 与 core 两家、本分支两个 loader,外加 ai/agent/ui。 */
 tasks.register('publishAll') {
     group = 'publishing'
     description = '把 api 与 core 两家、本分支两个 loader 的制品发到 local_maven_url'
-    // ai/ui 也带分支后缀:代码与 MC 版本无关,但各分支上的这份源码目前不同,
+    // ai/agent/ui 也带分支后缀:代码与 MC 版本无关,但各分支上的这份源码目前不同,
     // 共用坐标会变成十三条分支互相覆盖(详见 ai/build.gradle 的 artifactId)。
     dependsOn ':ai:publish'
+    dependsOn ':agent:publish'
     dependsOn ':ui:publish'
     ['api', 'core'].each { family ->
         ['common', 'fabric', secondLoader].each { dependsOn ":${family}:${it}:publish" }

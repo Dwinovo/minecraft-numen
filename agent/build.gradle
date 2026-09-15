@@ -1,0 +1,79 @@
+// numen-agent:同伴的大脑本身,纯 JVM 库——零 Minecraft 依赖、零 numen-api 回引,
+// 只往下依赖 numen-ai(ai → agent → api 单向三层)。循环要的零件放这里而不是 api:
+// api 的类路径上有 Minecraft,"不引用 Minecraft"只能靠自觉;放这里由编译器保证。
+// 代码本身与 Minecraft 版本无关,但各版本分支上的这份源码目前并不相同(功能先落
+// 1.21.1),所以发布坐标带分支后缀,见下方 artifactId。
+//
+// 现住户:agent.inbox(输入队列 EventQueue、类型表 EventTypes、落盘 JsonlJournal)、
+// agent.goal(长期目标 GoalState 与三段提示词 GoalPrompts)。
+plugins {
+    id 'java-library'
+    id 'maven-publish'
+}
+
+// 版本号不在这里出现:全树锁步,唯一出处是 gradle.properties 的 version。
+group = 'com.dwinovo.numen'
+
+// 可复现构建:同一份源码重复构建应得到同样的字节,这样重新发布是空提交,
+// 不会在制品仓里堆出一串"只有时间戳不同"的版本。去掉时间戳、固定条目顺序即可。
+tasks.withType(AbstractArchiveTask).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+}
+
+base {
+    archivesName = 'numen-agent'
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(java_version)
+    withSourcesJar()
+    withJavadocJar()
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.addStringOption('Xdoclint:none', '-quiet')
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs.add('-parameters')
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // 下一层:传输、会话状态与日志句柄都在 ai。api 配置让本模块的消费方透视得到 ai 的类型。
+    api project(':ai')
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            // 带 MC 版本后缀,理由同 ai/build.gradle:本模块零 MC 依赖,但各版本分支上的
+            // 这份源码并不相同,不带后缀就是十三条分支抢同一个坐标、谁最后发谁赢。
+            artifactId = "numen-agent-${minecraft_version}"
+            from components.java
+        }
+    }
+    repositories {
+        maven {
+            name = 'localNumen'
+            // 发布目标的唯一出处是 gradle.properties 的 local_maven_url;
+            // CI 用 -Plocal_maven_url= 指到 checkout 出来的 numen-maven。
+            // 这里不写兜底默认值:属性缺了就当场报错,好过静默发到别处。
+            url = rootProject.uri(providers.gradleProperty('local_maven_url').get())
+        }
+    }
+}

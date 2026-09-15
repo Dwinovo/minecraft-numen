@@ -2,7 +2,7 @@ package com.dwinovo.numen.event;
 
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.EventOutbox;
-import com.dwinovo.numen.event.EventTypes;
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.network.payload.NumenEventPayload;
 import com.dwinovo.numen.platform.Services;

@@ -1,6 +1,6 @@
-package com.dwinovo.numen.event;
+package com.dwinovo.numen.agent.inbox;
 
-import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.ai.AiLog;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
@@ -54,11 +54,11 @@ public final class JsonlJournal implements EventQueue.Journal {
                             o.has("ts") ? o.get("ts").getAsLong() : 0L,
                             o.has("urgent") && o.get("urgent").getAsBoolean()));
                 } catch (RuntimeException bad) {
-                    Constants.LOG.warn("[numen-queue] 跳过坏行 {}", file.getFileName());
+                    AiLog.LOG.warn("[numen-queue] 跳过坏行 {}", file.getFileName());
                 }
             }
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-queue] 读不了 {}: {}", file.getFileName(), ex.getMessage());
+            AiLog.LOG.warn("[numen-queue] 读不了 {}: {}", file.getFileName(), ex.getMessage());
         }
         return out;
     }
@@ -84,7 +84,7 @@ public final class JsonlJournal implements EventQueue.Journal {
             }
             Files.writeString(file, sb.toString(), StandardCharsets.UTF_8);
         } catch (IOException ex) {
-            Constants.LOG.warn("[numen-queue] 写不了 {}: {}", file.getFileName(), ex.getMessage());
+            AiLog.LOG.warn("[numen-queue] 写不了 {}: {}", file.getFileName(), ex.getMessage());
         }
     }
 }

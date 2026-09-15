@@ -1,6 +1,6 @@
 package com.dwinovo.numen.entity;
 
-import com.dwinovo.numen.event.EventQueue;
+import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.HolderLookup;

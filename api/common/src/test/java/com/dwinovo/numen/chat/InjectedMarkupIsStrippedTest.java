@@ -1,8 +1,8 @@
 package com.dwinovo.numen.chat;
 
 import com.dwinovo.numen.client.chat.OwnerWordsMode;
-import com.dwinovo.numen.event.EventQueue;
-import com.dwinovo.numen.event.EventTypes;
+import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;

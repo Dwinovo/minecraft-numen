@@ -33,9 +33,10 @@ base { archivesName = "numen-plugin-${project.name}-${minecraft_version}" }
 java { toolchain.languageVersion = JavaLanguageVersion.of(java_version) }
 
 dependencies {
-    // 复现第三方插件的类路径:ai / ui 是他们经 POM 传递依赖拿到的两个模块
+    // 复现第三方插件的类路径:ai / agent / ui 是他们经 POM 传递依赖拿到的模块
     // (NumenTool 继承的 IToolSpec 在 ai 里)。瘦 api jar 由联动按平台自己挑,见上。
     // 别图省事换成 project(':api:<loader>'):那样整个引擎的内部类都进类路径,这个模块就白设了。
     compileOnly project(':ai')
+    compileOnly project(':agent')
     compileOnly project(':ui')
 }

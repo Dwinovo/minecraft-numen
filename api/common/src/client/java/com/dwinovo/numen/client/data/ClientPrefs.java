@@ -1,7 +1,7 @@
 package com.dwinovo.numen.client.data;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.event.EventQueue;
+import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 

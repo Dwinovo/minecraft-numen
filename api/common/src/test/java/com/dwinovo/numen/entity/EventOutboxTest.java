@@ -1,7 +1,7 @@
 package com.dwinovo.numen.entity;
 
-import com.dwinovo.numen.event.EventQueue;
-import com.dwinovo.numen.event.EventTypes;
+import com.dwinovo.numen.agent.inbox.EventQueue;
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import net.minecraft.nbt.CompoundTag;
 import org.junit.jupiter.api.Test;
 

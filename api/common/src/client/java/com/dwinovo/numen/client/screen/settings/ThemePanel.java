@@ -8,7 +8,7 @@ import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.ListView;
 import com.dwinovo.numen.client.ui.widget.Slider;
 import com.dwinovo.numen.client.ui.widget.Toggle;
-import com.dwinovo.numen.event.EventQueue;
+import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.resources.language.I18n;

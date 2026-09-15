@@ -18,7 +18,7 @@ On `1.20.1`, `1.20.2` and `1.20.4`, replace `neoforge` with `forge`.
 
 ```bash
 ./gradlew :core:fabric:build :core:neoforge:build
-./gradlew :api:common:test :core:common:test
+./gradlew :ai:test :agent:test :api:common:test :core:common:test
 ./gradlew :core:neoforge:runGameTestServer
 ```
 

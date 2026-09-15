@@ -27,6 +27,8 @@ dependencies {
     // LLM 连接层(纯 JVM)住 ai 模块;api 配置让 llm/model 等仍在本模块的
     // 消费方以及下游 loader 都能透视到 ai 的类型。
     api project(':ai')
+    // 大脑本身(纯 JVM):输入队列、长期目标。api 配置同理,下游 loader 透视得到。
+    api project(':agent')
     // UI 组件库(纯 JVM,零 MC 依赖):client 源码集的屏幕组装层消费它;
     // api 配置让下游 loader 也透视得到 widget/令牌类型。
     api project(':ui')

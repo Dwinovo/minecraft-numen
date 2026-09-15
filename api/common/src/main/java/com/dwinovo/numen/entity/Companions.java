@@ -201,11 +201,11 @@ public final class Companions {
         EventOutbox outbox = EventOutbox.get(server);
         long now = System.currentTimeMillis();
         for (Map.Entry<UUID, CompanionRegistry.Entry> e : CompanionRegistry.get(server).ownedBy(ownerUuid)) {
-            List<com.dwinovo.numen.event.EventQueue.Entry> pending = outbox.take(e.getKey(), now);
+            List<com.dwinovo.numen.agent.inbox.EventQueue.Entry> pending = outbox.take(e.getKey(), now);
             if (pending.isEmpty()) {
                 continue;
             }
-            for (com.dwinovo.numen.event.EventQueue.Entry p : pending) {
+            for (com.dwinovo.numen.agent.inbox.EventQueue.Entry p : pending) {
                 Services.NETWORK.sendToPlayer(owner,
                         new com.dwinovo.numen.network.payload.NumenEventPayload(
                                 e.getKey(), p.type(), p.text(), p.ts(), p.urgent()));
