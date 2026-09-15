@@ -36,13 +36,13 @@ class JsonlJournalTest {
     void everyFieldSurvivesTheRoundTrip() {
         JsonlJournal journal = JsonlJournal.atFile(file());
         journal.save(List.of(
-                new EventQueue.Entry(EventTypes.EVENT, "<event>任务失败了</event>", T0, true),
+                new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>任务失败了</event>", T0, true),
                 new EventQueue.Entry(EventTypes.QUERY, "<query>在吗</query>", T0 + 5, false)));
 
         List<EventQueue.Entry> back = journal.load();
 
         assertEquals(2, back.size());
-        assertEquals(EventTypes.EVENT, back.get(0).type());
+        assertEquals(EventTypes.TASK_FINISHED, back.get(0).type());
         assertEquals("<event>任务失败了</event>", back.get(0).text());
         assertEquals(T0, back.get(0).ts(), "事发时刻丢了,年龄标注就全错");
         assertTrue(back.get(0).urgent(), "急件丢了,重进游戏她就不会主动开口");
@@ -54,9 +54,9 @@ class JsonlJournalTest {
     void orderIsPreserved() {
         JsonlJournal journal = JsonlJournal.atFile(file());
         journal.save(List.of(
-                new EventQueue.Entry(EventTypes.EVENT, "一", T0, false),
-                new EventQueue.Entry(EventTypes.EVENT, "二", T0, false),
-                new EventQueue.Entry(EventTypes.EVENT, "三", T0, false)));
+                new EventQueue.Entry(EventTypes.TASK_FINISHED, "一", T0, false),
+                new EventQueue.Entry(EventTypes.TASK_FINISHED, "二", T0, false),
+                new EventQueue.Entry(EventTypes.TASK_FINISHED, "三", T0, false)));
 
         assertEquals(List.of("一", "二", "三"),
                 journal.load().stream().map(EventQueue.Entry::text).toList());
@@ -83,7 +83,7 @@ class JsonlJournalTest {
     void aCorruptLineIsSkippedAndTheRestSurvives() {
         // 输入队列出问题不该让对话停摆:坏一行就丢一行,别的照读
         JsonlJournal journal = JsonlJournal.atFile(file());
-        journal.save(List.of(new EventQueue.Entry(EventTypes.EVENT, "占位", T0, false)));
+        journal.save(List.of(new EventQueue.Entry(EventTypes.TASK_FINISHED, "占位", T0, false)));
         writeRaw("{ 这行坏了\n"
                 + "{\"type\":\"query\",\"text\":\"这行好的\",\"ts\":" + T0 + "}\n"
                 + "\n"
@@ -99,7 +99,7 @@ class JsonlJournalTest {
     @Test
     void missingOptionalFieldsFallBackInsteadOfThrowing() {
         JsonlJournal journal = JsonlJournal.atFile(file());
-        journal.save(List.of(new EventQueue.Entry(EventTypes.EVENT, "占位", T0, false)));
+        journal.save(List.of(new EventQueue.Entry(EventTypes.TASK_FINISHED, "占位", T0, false)));
         writeRaw("{\"type\":\"event\",\"text\":\"没有 ts 也没有 urgent\"}\n");
 
         List<EventQueue.Entry> back = journal.load();
@@ -114,7 +114,7 @@ class JsonlJournalTest {
         // 端到端:队列 → 磁盘 → 新队列,急件与年龄都还在
         JsonlJournal journal = JsonlJournal.atFile(file());
         EventQueue q = new EventQueue(journal);
-        q.push(EventTypes.EVENT, "<event>矿挖完了</event>", T0, true);
+        q.push(EventTypes.TASK_FINISHED, "<event>矿挖完了</event>", T0, true);
         q.push(EventTypes.QUERY, "<query>辛苦了</query>", T0, true);
 
         EventQueue reopened = new EventQueue(journal);

@@ -205,9 +205,9 @@ public final class EventQueue {
         return out;
     }
 
-    /** 溢出丢弃的说明文本——服务端暂存与客户端收件共用一句话。 */
+    /** 溢出丢弃的说明文本——服务端暂存与客户端收件共用一句话。kind 就是这条条目的类型 {@link EventTypes#DROPPED}。 */
     public static String droppedNote(int n) {
-        return "<event kind=\"body_log\">期间还发生了约 " + n + " 件事,没能记下来</event>";
+        return "<event kind=\"" + EventTypes.DROPPED + "\">期间还发生了约 " + n + " 件事,没能记下来</event>";
     }
 
     /**
@@ -295,7 +295,7 @@ public final class EventQueue {
     /** 因为满了丢掉、还没报告过的条数变成一条普通事件——丢弃可以,无声消失不行。 */
     private void flushDropped(List<Entry> out, long now) {
         if (dropped > 0) {
-            out.add(new Entry(EventTypes.EVENT, droppedNote(dropped), now, false));
+            out.add(new Entry(EventTypes.DROPPED, droppedNote(dropped), now, false));
             dropped = 0;
         }
     }

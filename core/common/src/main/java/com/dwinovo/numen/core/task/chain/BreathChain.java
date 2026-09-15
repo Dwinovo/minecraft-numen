@@ -185,7 +185,7 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
     private void noteTrapped(NumenPlayer companion) {
         if (trappedNoted) return;
         trappedNoted = true;
-        com.dwinovo.numen.event.NumenEvents.body(companion, "drowning under a sealed ceiling with " + Math.max(0, companion.getAirSupply() / 20)
+        com.dwinovo.numen.event.NumenEvents.reflex(companion, this, "drowning under a sealed ceiling with " + Math.max(0, companion.getAirSupply() / 20)
                 + "s of air — no opening within " + AIR_SEARCH_RADIUS
                 + " blocks of connected water; I need an air hole dug or a way out");
     }
@@ -198,7 +198,7 @@ public final class BreathChain implements Task, com.dwinovo.numen.task.reflex.Re
         airColumn = null;
         retargetCooldown = 0;
         trappedNoted = false;
-        com.dwinovo.numen.event.NumenEvents.body(companion, "nearly drowned (" + Math.max(0, worst / 20) + "s of air left) — swam up for a breath");
+        com.dwinovo.numen.event.NumenEvents.reflex(companion, this, "nearly drowned (" + Math.max(0, worst / 20) + "s of air left) — swam up for a breath");
     }
 
     @Override

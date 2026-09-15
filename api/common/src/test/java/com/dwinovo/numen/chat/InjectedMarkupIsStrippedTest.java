@@ -67,8 +67,8 @@ class InjectedMarkupIsStrippedTest {
     void aPureEventBatchShowsNothingToTheOwner() {
         // 全是世界发生的事,主人一个字都没说 —— 面板上不该出现任何东西
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
-        q.push(EventTypes.EVENT, "<event kind=\"death\" day=\"0\" t=\"06:43\">你刚才死了</event>", T0, true);
-        q.push(EventTypes.EVENT, "<event kind=\"body_log\" day=\"0\" t=\"06:44\">吃了个面包</event>", T0, false);
+        q.push(EventTypes.DEATH, "<event kind=\"death\" day=\"0\" t=\"06:43\">你刚才死了</event>", T0, true);
+        q.push(EventTypes.REFLEX, "<event kind=\"reflex\" day=\"0\" t=\"06:44\" reflex=\"mlg\">broke a fall with a water bucket</event>", T0, false);
 
         String shown = new OwnerWordsMode().userText(render(q));
 
@@ -78,7 +78,7 @@ class InjectedMarkupIsStrippedTest {
     @Test
     void ownerWordsSurviveEventsAroundThem() {
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
-        q.push(EventTypes.EVENT, "<event kind=\"body_log\" day=\"0\" t=\"06:44\">吃了个面包</event>", T0, false);
+        q.push(EventTypes.REFLEX, "<event kind=\"reflex\" day=\"0\" t=\"06:44\" reflex=\"mlg\">broke a fall with a water bucket</event>", T0, false);
         q.push(EventTypes.QUERY, "<query>你在干嘛</query>", T0, true);
 
         assertEquals("你在干嘛", new OwnerWordsMode().userText(render(q)));
@@ -88,8 +88,8 @@ class InjectedMarkupIsStrippedTest {
     void noStrayAngleBracketsSurviveAnything() {
         // 兜底:不论队列里装的是什么组合,剥完都不该剩下尖括号
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
-        q.push(EventTypes.EVENT, "<event kind=\"task_finished\" id=\"t1\">挖完了</event>", T0, false);
-        q.push(EventTypes.EVENT, "<event kind=\"dimension_change\"/>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event kind=\"task_finished\" id=\"t1\">挖完了</event>", T0, false);
+        q.push(EventTypes.DIMENSION_CHANGE, "<event kind=\"dimension_change\"/>", T0, false);
         q.push(EventTypes.QUERY, "<query>好</query>", T0, true);
 
         String shown = new OwnerWordsMode().userText(render(q));

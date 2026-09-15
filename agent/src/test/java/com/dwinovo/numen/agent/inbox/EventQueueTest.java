@@ -28,7 +28,7 @@ class EventQueueTest {
     private static EventQueue withEvents(int n, long now) {
         EventQueue q = fresh();
         for (int i = 0; i < n; i++) {
-            q.push(EventTypes.EVENT, "<event>第" + i + "件</event>", now, false);
+            q.push(EventTypes.TASK_FINISHED, "<event>第" + i + "件</event>", now, false);
         }
         return q;
     }
@@ -38,7 +38,7 @@ class EventQueueTest {
     @Test
     void urgentDrainsAtAnyLevel() {
         EventQueue q = fresh();
-        q.push(EventTypes.EVENT, "<event>任务失败了</event>", T0, true);
+        q.push(EventTypes.TASK_FINISHED, "<event>任务失败了</event>", T0, true);
         assertTrue(q.shouldDrain(T0, EventQueue.MAX_LEVEL), "档位拉到最沉默也拦不住急件");
     }
 
@@ -92,7 +92,7 @@ class EventQueueTest {
         java.util.concurrent.atomic.AtomicInteger woken = new java.util.concurrent.atomic.AtomicInteger();
         q.addUrgentListener(woken::incrementAndGet);
 
-        q.push(EventTypes.EVENT, "<event>下雨了</event>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>下雨了</event>", T0, false);
         assertEquals(0, woken.get(), "普通件不叫");
 
         q.push(EventTypes.QUERY, "<query>救命</query>", T0, true);
@@ -134,11 +134,11 @@ class EventQueueTest {
     void interruptClearsByTheTableNotByAnIf() {
         EventQueue q = fresh();
         q.push(EventTypes.QUERY, "<query>去挖铁矿</query>", T0, true);
-        q.push(EventTypes.EVENT, "<event kind=\"death\">你死了</event>", T0, false);
+        q.push(EventTypes.DEATH, "<event kind=\"death\">你死了</event>", T0, false);
 
         assertEquals(1, q.clearInterrupted(), "清掉被取代的指令");
         assertEquals(0, q.count(EventTypes.QUERY));
-        assertEquals(1, q.count(EventTypes.EVENT), "事实不因为按了停止就没发生");
+        assertEquals(1, q.count(EventTypes.DEATH), "事实不因为按了停止就没发生");
     }
 
     // ---- 先到先得 ----
@@ -148,7 +148,7 @@ class EventQueueTest {
         // 有些条目到了安全点要做的不是"往 user 消息里添一段话"——整理记忆就是。
         // 排空按顺序走到它就停下:前面的先走完,它留在队首等下一次。
         EventQueue q = fresh();
-        q.push(EventTypes.EVENT, "<event>她挨打了</event>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>她挨打了</event>", T0, false);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
         q.push(EventTypes.COMPACT, "整理记忆", T0, true);
         q.push(EventTypes.QUERY, "<query>整理完再说这句</query>", T0, true);
@@ -180,16 +180,16 @@ class EventQueueTest {
         q.push(EventTypes.COMPACT, "整理记忆", T0, false);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, false);
         q.push(EventTypes.CLEAR, "清空上下文", T0, false);
-        q.push(EventTypes.EVENT, "<event>她挨打了</event>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>她挨打了</event>", T0, false);
 
         List<EventQueue.Entry> text = q.takeIf(
                 e -> EventTypes.get(e.type()).delivery() != EventTypes.Delivery.CONTROL, T0);
 
-        assertEquals(List.of(EventTypes.QUERY, EventTypes.EVENT),
+        assertEquals(List.of(EventTypes.QUERY, EventTypes.TASK_FINISHED),
                 text.stream().map(EventQueue.Entry::type).toList(), "文本全取走,按入队顺序");
         assertEquals(List.of(EventTypes.COMPACT, EventTypes.CLEAR),
                 q.entries().stream().map(EventQueue.Entry::type).toList(), "控制条目原样留着,先后不变");
-        assertTrue(q.takeIf(e -> EventTypes.EVENT.equals(e.type()), T0).isEmpty(), "一条都不要就什么都不动");
+        assertTrue(q.takeIf(e -> EventTypes.TASK_FINISHED.equals(e.type()), T0).isEmpty(), "一条都不要就什么都不动");
         assertEquals(2, q.size());
     }
 
@@ -197,7 +197,7 @@ class EventQueueTest {
     void takeAheadTakesOnlyBeforeTheBarrierAndSkipsWhatItDoesNotWant() {
         // 循环在 run 的边界取插话:接续留着不挡路,控制条目之后的等它执行完
         EventQueue q = fresh();
-        q.push(EventTypes.EVENT, "<event>挖到铁了</event>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>挖到铁了</event>", T0, false);
         q.push(EventTypes.GOAL, "<goal-progress>还差</goal-progress>", T0, false);
         q.push(EventTypes.QUERY, "<query>先回来</query>", T0, false);
         q.push(EventTypes.CLEAR, "清空上下文", T0, false);
@@ -212,7 +212,7 @@ class EventQueueTest {
         assertEquals(List.of(EventTypes.GOAL, EventTypes.CLEAR, EventTypes.QUERY),
                 q.entries().stream().map(EventQueue.Entry::type).toList(), "接续、屏障和屏障之后的原样留着");
         assertTrue(q.takeAhead(e -> EventTypes.CLEAR.equals(e.type()),
-                e -> EventTypes.EVENT.equals(e.type()), T0).isEmpty(), "一条都没取就什么都不动");
+                e -> EventTypes.TASK_FINISHED.equals(e.type()), T0).isEmpty(), "一条都没取就什么都不动");
         assertEquals(3, q.size());
     }
 
@@ -241,7 +241,7 @@ class EventQueueTest {
     @Test
     void chatPreviewShowsOnlyWhatTheTableSaysToShow() {
         EventQueue q = fresh();
-        q.push(EventTypes.EVENT, "<event>她挨打了</event>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>她挨打了</event>", T0, false);
         q.push(EventTypes.QUERY, "<query>回来</query>", T0, true);
 
         assertEquals(List.of("<query>回来</query>"), q.chatPreview(),
@@ -278,7 +278,7 @@ class EventQueueTest {
         // 按入队顺序平铺的话，事件和 query 混着，得它自己从一串杂物里理时间线。
         EventQueue q = fresh();
         q.push(EventTypes.QUERY, "<query>先说的</query>", T0, true);
-        q.push(EventTypes.EVENT, "<event>后到的</event>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>后到的</event>", T0, false);
 
         assertEquals(List.of("<events>\n<event>后到的</event>\n</events>",
                 "<query>先说的</query>"), EventQueue.render(q.takeEntries(T0), T0));
@@ -290,8 +290,8 @@ class EventQueueTest {
         // 入队顺序≠发生顺序：服务端离线出箱里攒的、死亡期间锁着攒下的，
         // 都是后来才进队的。模型要拿它们理因果，时间必须是对的。
         EventQueue q = fresh();
-        q.push(EventTypes.EVENT, "<event>后发生的</event>", T0 + 5_000L, false);
-        q.push(EventTypes.EVENT, "<event>先发生的</event>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>后发生的</event>", T0 + 5_000L, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>先发生的</event>", T0, false);
 
         assertEquals(List.of("<events>\n<event>先发生的</event>\n"
                 + "<event>后发生的</event>\n</events>"), EventQueue.render(q.takeEntries(T0 + 5_000L), T0 + 5_000L));
@@ -325,7 +325,7 @@ class EventQueueTest {
         // 但丢弃不能无声无息——主人得知道自己看到的是全部还是残片
         EventQueue q = new EventQueue(EventQueue.Journal.NONE, 3);
         for (int i = 0; i < 5; i++) {
-            q.push(EventTypes.EVENT, "<event>第" + i + "件</event>", T0, false);
+            q.push(EventTypes.TASK_FINISHED, "<event>第" + i + "件</event>", T0, false);
         }
 
         List<String> out = EventQueue.render(q.takeEntries(T0), T0);
@@ -340,8 +340,8 @@ class EventQueueTest {
     @Test
     void dropNoteIsReportedOnceThenReset() {
         EventQueue q = new EventQueue(EventQueue.Journal.NONE, 1);
-        q.push(EventTypes.EVENT, "<event>一</event>", T0, false);
-        q.push(EventTypes.EVENT, "<event>二</event>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>一</event>", T0, false);
+        q.push(EventTypes.TASK_FINISHED, "<event>二</event>", T0, false);
         assertEquals(1, q.droppedCount());
 
         EventQueue.render(q.takeEntries(T0), T0);
@@ -365,7 +365,7 @@ class EventQueueTest {
         };
 
         EventQueue q = new EventQueue(journal);
-        q.push(EventTypes.EVENT, "<event>任务失败了</event>", T0, true);
+        q.push(EventTypes.TASK_FINISHED, "<event>任务失败了</event>", T0, true);
         q.push(EventTypes.QUERY, "<query>在吗</query>", T0, true);
 
         EventQueue reopened = new EventQueue(journal);

@@ -180,7 +180,7 @@ public final class TimerRegistry extends SavedData {
                 }
                 continue;
             }
-            NumenEvents.emit(body, NumenEvents.Kind.TIMER, Map.of("id", t.id()),
+            NumenEvents.emit(body, com.dwinovo.numen.agent.inbox.EventTypes.TIMER, Map.of("id", t.id()),
                     "你定的表到点了:" + t.reason()
                             + "。表只负责提醒,不代表那件事已经完成——先看清现在的状况再决定下一步。",
                     true);

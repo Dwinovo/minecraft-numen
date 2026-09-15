@@ -31,8 +31,8 @@ class NumenEventPayloadTest {
     @Test
     void aWholeBatchRoundTripsInOrderWithEveryField() {
         NumenEventPayload sent = new NumenEventPayload(A, List.of(
-                new EventQueue.Entry(EventTypes.EVENT, "<event kind=\"task_finished\">矿挖完了</event>", 1_000L, true),
-                new EventQueue.Entry(EventTypes.EVENT, "<event kind=\"body_log\">吃了个面包</event>", 2_000L, false),
+                new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event kind=\"task_finished\">矿挖完了</event>", 1_000L, true),
+                new EventQueue.Entry(EventTypes.REFLEX, "<event kind=\"reflex\" reflex=\"mlg\">broke a fall with a water bucket</event>", 2_000L, false),
                 new EventQueue.Entry("第三方模组的类型", "外面来的一条", 3_000L, false)));
 
         assertEquals(sent, roundTrip(sent));
@@ -41,7 +41,7 @@ class NumenEventPayloadTest {
     @Test
     void aLiveEventIsTheSamePacketWithOneEntry() {
         NumenEventPayload sent = new NumenEventPayload(A, List.of(
-                new EventQueue.Entry(EventTypes.EVENT, "<event kind=\"owner_hurt\"/>", 42L, true)));
+                new EventQueue.Entry(EventTypes.OWNER_HURT, "<event kind=\"owner_hurt\"/>", 42L, true)));
 
         assertEquals(sent, roundTrip(sent));
     }

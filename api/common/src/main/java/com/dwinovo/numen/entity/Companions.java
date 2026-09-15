@@ -361,7 +361,7 @@ public final class Companions {
     public static void onDimensionChanged(NumenPlayer body) {
         String dim = body.level().dimension().location().toString();
         com.dwinovo.numen.event.NumenEvents.emit(body,
-                com.dwinovo.numen.event.NumenEvents.Kind.DIMENSION_CHANGE,
+                com.dwinovo.numen.agent.inbox.EventTypes.DIMENSION_CHANGE,
                 java.util.Map.of("to", dim),
                 "你进入了 " + dim + "。留意这个维度的环境和危险。", false);
     }
@@ -386,7 +386,7 @@ public final class Companions {
         }
         boolean day = body.level().isDay();
         com.dwinovo.numen.event.NumenEvents.emit(body,
-                com.dwinovo.numen.event.NumenEvents.Kind.WOKE,
+                com.dwinovo.numen.agent.inbox.EventTypes.WOKE,
                 java.util.Map.of("cause", attacker != null ? "hurt" : day ? "daybreak" : "other"),
                 wokeText(day, attacker), true);
     }

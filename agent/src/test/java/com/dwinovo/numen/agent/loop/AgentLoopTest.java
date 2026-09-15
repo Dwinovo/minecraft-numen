@@ -251,7 +251,7 @@ class AgentLoopTest {
     }
 
     private void worldEvent(String text, boolean urgent) {
-        loop.push(List.of(new EventQueue.Entry(EventTypes.EVENT, "<event>" + text + "</event>", 0, urgent)));
+        loop.push(List.of(new EventQueue.Entry(EventTypes.TASK_FINISHED, "<event>" + text + "</event>", 0, urgent)));
     }
 
     private void goalContinues(String text) {
@@ -578,7 +578,7 @@ class AgentLoopTest {
             loop.halt(HaltReason.OWNER_STOP);
 
             assertEquals(0, inbox.count(EventTypes.GOAL), "排着的续跑是被取代的指令");
-            assertEquals(1, inbox.count(EventTypes.EVENT), "事实留着");
+            assertEquals(1, inbox.count(EventTypes.TASK_FINISHED), "事实留着");
             assertTrue(eventsOf(LoopEvent.Halted.class).get(0).reason().endsGoal());
         }
 
@@ -698,7 +698,7 @@ class AgentLoopTest {
             assertEquals(List.of(false), tools.cancels, "身体还在服务器里跑,不叫停");
             assertNull(loop.hold(), "登出不置停牌");
             assertEquals(1, inbox.count(EventTypes.GOAL), "不清队列");
-            assertEquals(1, inbox.count(EventTypes.EVENT));
+            assertEquals(1, inbox.count(EventTypes.TASK_FINISHED));
             assertFalse(eventsOf(LoopEvent.Halted.class).get(0).reason().endsGoal(), "目标保留");
             assertEquals("主人断线了", ((ConvoState.Msg.Halt) lastMessage()).reason());
 
@@ -763,7 +763,7 @@ class AgentLoopTest {
 
             assertEquals(historySize, transcript.snapshot().size(), "清表之后旧循环不再往历史里写");
             assertEquals(List.of(false), tools.cancels, "不叫停身体");
-            assertEquals(1, inbox.count(EventTypes.EVENT), "不清队列");
+            assertEquals(1, inbox.count(EventTypes.TASK_FINISHED), "不清队列");
         }
     }
 

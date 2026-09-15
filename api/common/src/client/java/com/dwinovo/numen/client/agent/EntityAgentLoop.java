@@ -834,10 +834,9 @@ public final class EntityAgentLoop {
         // 还是"空闲死",所以这里没有任何判据。
         AbstractClientPlayer body = resolveEntity();
         long dayTime = body != null ? body.level().getDayTime() : 0L;
-        loop.push(List.of(new EventQueue.Entry(EventTypes.EVENT, com.dwinovo.numen.event.NumenEvents.compose(
-                dayTime, com.dwinovo.numen.event.NumenEvents.Kind.DEATH, null,
+        loop.push(List.of(com.dwinovo.numen.event.NumenEvents.entry(dayTime, EventTypes.DEATH, null,
                 "你刚才死了(" + cause + "),背包里的东西全掉在死亡地点了;"
-                        + "现已在主人身边复活。先看看状况再决定下一步。"),
+                        + "现已在主人身边复活。先看看状况再决定下一步。",
                 System.currentTimeMillis(), true)));
         loop.respawned();
     }

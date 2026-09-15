@@ -32,8 +32,8 @@ class EventOutboxTest {
     void pendingInputSurvivesAServerRestart() {
         // 多人服务器重启是常事;纯内存的话最有价值的长时段叙事恰好最容易丢
         EventOutbox box = new EventOutbox();
-        box.put(A, EventTypes.EVENT, "<event kind=\"body_log\" day=\"3\">吃了个面包</event>", T0, false);
-        box.put(A, EventTypes.EVENT, "<event kind=\"task_finished\">矿挖完了</event>", T0 + 5, true);
+        box.put(A, EventTypes.REFLEX, "<event kind=\"reflex\" day=\"3\" reflex=\"breath\">nearly drowned</event>", T0, false);
+        box.put(A, EventTypes.TASK_FINISHED, "<event kind=\"task_finished\">矿挖完了</event>", T0 + 5, true);
 
         EventOutbox back = roundTrip(box);
 
@@ -45,12 +45,12 @@ class EventOutboxTest {
     void takeHandsOverRawEntriesNotRenderedText() {
         // 渲染会把类型和时间戳压成一个字符串,客户端就没法知道"这是三小时前的事"了
         EventOutbox box = new EventOutbox();
-        box.put(A, EventTypes.EVENT, "<event>一</event>", T0, true);
+        box.put(A, EventTypes.TASK_FINISHED, "<event>一</event>", T0, true);
 
         List<EventQueue.Entry> taken = box.take(A, T0);
 
         assertEquals(1, taken.size());
-        assertEquals(EventTypes.EVENT, taken.get(0).type());
+        assertEquals(EventTypes.TASK_FINISHED, taken.get(0).type());
         assertEquals(T0, taken.get(0).ts(), "事发时刻必须原样送到客户端");
         assertTrue(taken.get(0).urgent());
         assertTrue(box.peek(A).isEmpty(), "补发过就不能再发一次");
@@ -64,8 +64,8 @@ class EventOutboxTest {
     @Test
     void boxesAreIsolatedPerCompanion() {
         EventOutbox box = new EventOutbox();
-        box.put(A, EventTypes.EVENT, "<event>甲的</event>", T0, false);
-        box.put(B, EventTypes.EVENT, "<event>乙的</event>", T0, false);
+        box.put(A, EventTypes.TASK_FINISHED, "<event>甲的</event>", T0, false);
+        box.put(B, EventTypes.TASK_FINISHED, "<event>乙的</event>", T0, false);
 
         box.take(A, T0);
 
@@ -78,7 +78,7 @@ class EventOutboxTest {
         EventOutbox box = new EventOutbox();
         int over = 7;
         for (int i = 0; i < EventQueue.DEFAULT_CAP + over; i++) {
-            box.put(A, EventTypes.EVENT, "<event>第" + i + "件</event>", T0, false);
+            box.put(A, EventTypes.TASK_FINISHED, "<event>第" + i + "件</event>", T0, false);
         }
 
         List<EventQueue.Entry> taken = box.take(A, T0);
@@ -92,7 +92,7 @@ class EventOutboxTest {
     @Test
     void dismissedCompanionTakesHerBoxWithHer() {
         EventOutbox box = new EventOutbox();
-        box.put(A, EventTypes.EVENT, "<event>没人会再收</event>", T0, false);
+        box.put(A, EventTypes.TASK_FINISHED, "<event>没人会再收</event>", T0, false);
 
         box.forget(A);
 

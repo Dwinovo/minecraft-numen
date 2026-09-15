@@ -27,10 +27,10 @@ class OutboxReplayTest {
     @Test
     void eachCompanionGetsOnePacketWithEverythingSheSaved() {
         EventOutbox box = new EventOutbox();
-        box.put(A, EventTypes.EVENT, "<event>任务完成</event>", T0, true);
-        box.put(A, EventTypes.EVENT, "<event>吃了个面包</event>", T0 + 5, false);
-        box.put(A, EventTypes.EVENT, "<event>跨了维度</event>", T0 + 9, false);
-        box.put(B, EventTypes.EVENT, "<event>被怪打了</event>", T0 + 1, true);
+        box.put(A, EventTypes.TASK_FINISHED, "<event>任务完成</event>", T0, true);
+        box.put(A, EventTypes.TASK_FINISHED, "<event>吃了个面包</event>", T0 + 5, false);
+        box.put(A, EventTypes.TASK_FINISHED, "<event>跨了维度</event>", T0 + 9, false);
+        box.put(B, EventTypes.TASK_FINISHED, "<event>被怪打了</event>", T0 + 1, true);
 
         List<NumenEventPayload> packets = Companions.outboxPayloads(box, List.of(A, B, C), T0 + 10);
 
@@ -48,7 +48,7 @@ class OutboxReplayTest {
     void droppedEntriesAreReportedInsideThePacket() {
         EventOutbox box = new EventOutbox();
         for (int i = 0; i < EventQueue.DEFAULT_CAP + 3; i++) {
-            box.put(A, EventTypes.EVENT, "<event>第" + i + "件</event>", T0 + i, false);
+            box.put(A, EventTypes.TASK_FINISHED, "<event>第" + i + "件</event>", T0 + i, false);
         }
 
         List<EventQueue.Entry> entries = Companions.outboxPayloads(box, List.of(A), T0 + 1_000).get(0).entries();

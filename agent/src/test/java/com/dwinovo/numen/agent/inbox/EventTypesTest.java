@@ -27,7 +27,7 @@ class EventTypesTest {
     @Test
     void builtInTypesAreRegisteredAsTheTableSays() {
         assertRow(EventTypes.QUERY, EventTypes.Delivery.STEER, true, true, true);
-        assertRow(EventTypes.EVENT, EventTypes.Delivery.STEER, false, false, false);
+        assertRow(EventTypes.TASK_FINISHED, EventTypes.Delivery.STEER, false, false, false);
         assertRow(EventTypes.GOAL, EventTypes.Delivery.FOLLOW_UP, true, true, true);
         assertRow(EventTypes.COMPACT, EventTypes.Delivery.CONTROL, true, true, true);
         assertRow(EventTypes.CLEAR, EventTypes.Delivery.CONTROL, true, true, true);
@@ -59,9 +59,9 @@ class EventTypesTest {
     void otherTypesFollowTheSender() {
         EventQueue q = new EventQueue(EventQueue.Journal.NONE);
 
-        assertFalse(q.push(EventTypes.EVENT, "<event>下雨了</event>", T0, false));
+        assertFalse(q.push(EventTypes.TASK_FINISHED, "<event>下雨了</event>", T0, false));
         assertFalse(q.hasUrgent(), "世界的事发送方没说急就不急");
-        assertTrue(q.push(EventTypes.EVENT, "<event>任务失败了</event>", T0, true));
+        assertTrue(q.push(EventTypes.TASK_FINISHED, "<event>任务失败了</event>", T0, true));
         assertTrue(q.hasUrgent());
         assertFalse(q.push(EventTypes.QUERY, " ", T0, true), "空白不入队,也就谈不上急");
     }
