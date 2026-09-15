@@ -461,7 +461,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         //    for more; widening the search is the model's call.
         if (r.getMined() > 0) {
             progressNote = (named == null ? "no more " + r.label + " in range" : "nothing left to dig in " + r.label)
-                    + leftovers();
+                    + leftovers(null);
             return TaskState.SUCCESS;
         }
         return noOreFailure();
@@ -1027,7 +1027,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         String where = player.blockPosition().toShortString();
         if (r.getMined() > 0) {
             progressNote = "then got stuck at " + where + " — could not reach the remaining "
-                    + knownOres.size() + " " + noun() + leftovers();
+                    + knownOres.size() + " " + noun() + leftovers(null);
             return TaskState.SUCCESS;
         }
         fail("found " + knownOres.size() + " " + noun() + " but could not reach any of them from "
@@ -1036,9 +1036,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return TaskState.FAILED;
     }
 
-    /** 挖不成的候选在回执里的说法。 */
-    private static final String RULED_OUT = "can't be broken here (unbreakable, excluded by the spec, or fluid or"
-            + " loose falling blocks beside them)";
+    /** 挖不成的候选为什么挖不成,回执里的说法。 */
+    private static final String RULED_OUT_WHY = "unbreakable, excluded by the spec, or fluid or loose falling"
+            + " blocks beside them";
 
     /** 回执里怎么称呼要挖的东西:方块名,或"g3 的格子"。 */
     private String noun() {
@@ -1052,20 +1052,24 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 : "gathered " + r.getMined();
     }
 
-    /** 找到了或点名了、却没挖成的各因为什么;都没有是空串。 */
-    private String leftovers() {
+    /**
+     * 找到了或点名了、却没挖成的各因为什么;都没有是空串。
+     *
+     * @param told 回执正文已经说过的那一类(失败的主因),不再重复;没有为 null
+     */
+    private String leftovers(Set<BlockPos> told) {
         List<String> parts = new ArrayList<>(4);
-        if (!gone.isEmpty()) {
+        if (!gone.isEmpty() && told != gone) {
             parts.add(gone.size() + " were gone or had changed before I got to them");
         }
-        if (!unharvestable.isEmpty()) {
+        if (!unharvestable.isEmpty() && told != unharvestable) {
             parts.add(unharvestable.size() + " can't be harvested with the current tools");
         }
-        if (!unworkable.isEmpty()) {
+        if (!unworkable.isEmpty() && told != unworkable) {
             parts.add(unworkable.size() + " gave no clear shot from any stance");
         }
-        if (!ruledOut.isEmpty()) {
-            parts.add(ruledOut.size() + " " + RULED_OUT);
+        if (!ruledOut.isEmpty() && told != ruledOut) {
+            parts.add(ruledOut.size() + " can't be broken here (" + RULED_OUT_WHY + ")");
         }
         return parts.isEmpty() ? "" : "; not mined: " + String.join(", ", parts);
     }
@@ -1083,14 +1087,15 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     + " the current tools (mining would destroy them without any drop); gathered "
                     + r.getMined() + ". Equip a better tool (equip_item) and retry; to just destroy"
                     + " blocks regardless of drops, goto beside them and use interact_at with button left."
-                    + leftovers(), FailureType.WRONG_TOOL);
+                    + leftovers(unharvestable), FailureType.WRONG_TOOL);
         } else if (!unworkable.isEmpty()) {
             fail("found " + unworkable.size() + " " + noun() + " nearby but no clear shot at any"
-                    + " of them from any stance I could take; gathered 0" + leftovers(),
+                    + " of them from any stance I could take; gathered 0" + leftovers(unworkable),
                     FailureType.NO_PATH);
         } else if (!ruledOut.isEmpty()) {
-            fail("found " + ruledOut.size() + " " + noun() + " but none " + RULED_OUT + "; gathered 0"
-                    + leftovers(), FailureType.MINED_OUT);
+            fail("found " + ruledOut.size() + " " + noun() + " but none of them can be broken here ("
+                    + RULED_OUT_WHY + "); gathered 0"
+                    + leftovers(ruledOut), FailureType.MINED_OUT);
         } else if (named != null) {
             fail("all " + named.size() + " cells of " + r.label + " were gone or had changed since the scan;"
                     + " gathered 0. scan_blocks again to see what is there now.", FailureType.TARGET_LOST);
