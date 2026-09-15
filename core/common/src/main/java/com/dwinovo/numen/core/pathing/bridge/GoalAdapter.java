@@ -1,8 +1,5 @@
 package com.dwinovo.numen.core.pathing.bridge;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.goals.GoalBlock;
@@ -11,8 +8,6 @@ import com.dwinovo.numen.core.pathing.goals.GoalComposite;
 import com.dwinovo.numen.core.pathing.goals.GoalGetToBlock;
 import com.dwinovo.numen.core.pathing.goals.GoalNear;
 import com.dwinovo.numen.core.pathing.goals.GoalRing;
-import com.dwinovo.numen.core.pathing.goals.GoalRunAway;
-import com.dwinovo.numen.core.pathing.goals.GoalTwoBlocks;
 import com.dwinovo.numen.core.pathing.goals.GoalXZ;
 import com.dwinovo.numen.core.pathing.goals.GoalYLevel;
 
@@ -40,12 +35,6 @@ import net.minecraft.core.BlockPos;
  *       形状不同——旧词表减"一步+一跳"松量,内核按修正 y 差估价)</li>
  *   <li>composite → {@link GoalComposite}(成员递归映射)</li>
  *   <li>priced → {@link #wrap} 通用包装(估价、到达价逐点透传)</li>
- *   <li>mineColumn → GoalTwoBlocks 族:maxBelow=0 → {@link GoalBlock},
- *       =1 → {@link GoalTwoBlocks},≥2 → {@link GoalComposite}(双格 +
- *       逐格补 {@link GoalBlock}),成员集与站位带逐格一致</li>
- *   <li>runAway → {@link GoalRunAway}(永不到达,用 {@link #NEVER_ARRIVE_DISTANCE} 表达。
- *       调用方只剩分支挖矿——它要的就是"一直往外挖";战斗的后撤走
- *       {@code avoid},那个有终点)</li>
  *   <li>avoid → 门面持有的 {@code GoalAvoidEntities} 本体(不另建,势场公式只此一份)</li>
  *   <li>approachAvoiding → {@link GoalApproachAvoiding}(吸引项递归映射,势场直接沿用)</li>
  * </ul>
@@ -53,13 +42,6 @@ import net.minecraft.core.BlockPos;
 public final class GoalAdapter {
 
     private GoalAdapter() {}
-
-    /**
-     * 旧 runAway 语义是"永不到达、只管外走";{@link GoalRunAway} 需要
-     * 一个到达距离,取 int 距离平方不溢出的最大值(≈46340 格)——单段
-     * 导航实际不可能走出这个距离,等效永不到达。
-     */
-    static final double NEVER_ARRIVE_DISTANCE = 46_340;
 
     /** 把任务层目标映射/包装为内核目标。 */
     public static Goal toEngineGoal(NavGoal goal) {
@@ -100,33 +82,7 @@ public final class GoalAdapter {
             }
             return new GoalComposite(members);
         }
-        if (goal instanceof NavGoal.MineColumn g) {
-            return mineColumnGoal(g.ore, g.maxBelow);
-        }
-        if (goal instanceof NavGoal.RunAway g) {
-            return new GoalRunAway(NEVER_ARRIVE_DISTANCE, g.maintainY, g.from);
-        }
         return wrap(goal);
-    }
-
-    /**
-     * 矿柱站位带 → GoalTwoBlocks 族:成员集与
-     * {@code NavGoal.mineColumn(ore, maxBelow)} 逐格一致
-     * (脚位在 {@code ore.y .. ore.y - maxBelow})。
-     */
-    private static Goal mineColumnGoal(BlockPos ore, int maxBelow) {
-        if (maxBelow <= 0) {
-            return new GoalBlock(ore);
-        }
-        if (maxBelow == 1) {
-            return new GoalTwoBlocks(ore);
-        }
-        List<Goal> members = new ArrayList<>(maxBelow);
-        members.add(new GoalTwoBlocks(ore));
-        for (int below = 2; below <= maxBelow; below++) {
-            members.add(new GoalBlock(ore.getX(), ore.getY() - below, ore.getZ()));
-        }
-        return new GoalComposite(members.toArray(Goal[]::new));
     }
 
     /**

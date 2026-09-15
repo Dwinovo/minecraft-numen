@@ -71,21 +71,4 @@ class NavGoalMembershipTest {
         NavGoal sphere = NavGoal.near(T, 2.0);
         assertTrue(sphere.isAt(T.above(2)), "3D sphere admits the pillar-top cell");
     }
-
-    // ---- mineColumn: stance band edges ----
-
-    @Test
-    void mineColumnBandEdges() {
-        NavGoal g = NavGoal.mineColumn(T, 2);
-        assertTrue(g.isAt(T), "feet at the ore");
-        assertTrue(g.isAt(T.below()), "one below");
-        assertTrue(g.isAt(T.below(2)), "two below — band floor");
-        assertFalse(g.isAt(T.below(3)), "three below — outside the band");
-        assertFalse(g.isAt(T.above()), "above the ore is never a mining stance");
-        assertFalse(g.isAt(T.north()), "wrong column");
-
-        NavGoal exact = NavGoal.mineColumn(T, 0);
-        assertTrue(exact.isAt(T), "exact stance: feet at the ore");
-        assertFalse(exact.isAt(T.below()), "exact stance: one below rejected");
-    }
 }

@@ -214,37 +214,8 @@ public interface NavGoal {
     }
 
     /**
-     * Stand in the ore's own column to mine it — a family of mining stance
-     * goals, parameterised by how far BELOW the ore the feet may be:
-     * <ul>
-     *   <li>{@code maxBelow == 0} → feet exactly at the ore;</li>
-     *   <li>{@code maxBelow == 1} → feet at the ore or one below;</li>
-     *   <li>{@code maxBelow == 2} → feet at the ore, one, or two below.</li>
-     * </ul>
-     * The vertical term in the heuristic folds the whole accepted band to zero cost.
-     */
-    static NavGoal mineColumn(BlockPos ore, int maxBelow) {
-        return new MineColumn(ore, maxBelow);
-    }
-
-    /** Loosest-stance shorthand (feet at the ore, one, or two below). */
-    static NavGoal mine(BlockPos ore) {
-        return mineColumn(ore, 2);
-    }
-
-    /**
-     * Get as FAR as possible from {@code from} while holding a y-level. Never
-     * "arrived" (isAt always false) so the search returns a best-effort partial that
-     * walks outward; the next replan continues.
-     */
-    static NavGoal runAway(BlockPos from, int maintainY) {
-        return new RunAway(from, maintainY);
-    }
-
-    /**
-     * 躲开一组威胁,站到每一只的危险半径之外。与 {@link #runAway} 的两点差别:
-     * <b>它认得完所有威胁</b>(runAway 的估价只看最近那一个,两只怪一左一右时会直穿其中一只),
-     * 而且<b>它有终点</b>——出了半径就停,不必在上层每 tick 手动喊停。
+     * 躲开一组威胁,站到每一只的危险半径之外:<b>它认得完所有威胁</b>(估价是每只贡献相加的势场,
+     * 两只怪一左一右时不会直穿其中一只),而且<b>它有终点</b>——出了半径就停,不必在上层每 tick 手动喊停。
      *
      * <p>威胁坐标是<b>快照</b>。实体走动由重规划跟上({@code PlayerNav} 比对 {@link #center()}
      * 的位移),不由估价函数实时跟随——搜索途中变化的估价会让 A* 失去最优性保证。
@@ -618,44 +589,6 @@ public interface NavGoal {
         }
     }
 
-    /** {@link #mineColumn} 的产物:矿柱站位带(脚位在矿至矿下 maxBelow 格)。 */
-    final class MineColumn implements NavGoal {
-        public final BlockPos ore;
-        public final int maxBelow;
-
-        MineColumn(BlockPos ore, int maxBelow) {
-            this.ore = ore.immutable();
-            this.maxBelow = maxBelow;
-        }
-
-        @Override public boolean isAt(BlockPos feet) {
-            return feet.getX() == ore.getX() && feet.getZ() == ore.getZ()
-                    && feet.getY() <= ore.getY() && feet.getY() >= ore.getY() - maxBelow;
-        }
-
-        @Override public double heuristic(BlockPos from) {
-            double dx = Math.abs(ore.getX() - from.getX());
-            double dz = Math.abs(ore.getZ() - from.getZ());
-            double horizontal = (Math.min(dx, dz) * SQRT_2 + Math.abs(dx - dz))
-                    * COST_HEURISTIC;
-            // Feet anywhere in {o.y .. o.y-maxBelow} count as arrived: fold that
-            // band to zero.
-            int yDiff = from.getY() - ore.getY();
-            int adj = yDiff >= 0 ? yDiff : Math.min(0, yDiff + maxBelow);
-            // Above the goal (adj>0) we DESCEND to it,
-            // below it (adj<0) we ASCEND. (The old mine() had these two swapped,
-            // overestimating descents — an inadmissible heuristic.)
-            double vertical = adj > 0
-                    ? adj * DESCEND_ONE_BLOCK
-                    : -adj * JUMP_ONE_BLOCK;
-            return horizontal + vertical;
-        }
-
-        @Override public BlockPos center() {
-            return ore;
-        }
-    }
-
     /**
      * {@link #avoid} 的产物。判定与估价<b>都转交给内核目标</b>,不在这里再写一份公式——
      * 同一片势场若两处各算各的,调参时必然只改到一处。
@@ -724,40 +657,6 @@ public interface NavGoal {
         /** 跟着要去的那个目标走:它一挪动就触发重规划。 */
         @Override public BlockPos center() {
             return approach.center();
-        }
-    }
-
-    /** {@link #runAway} 的产物:持高度外逃,永不"到达"。 */
-    final class RunAway implements NavGoal {
-        public final BlockPos from;
-        public final int maintainY;
-
-        RunAway(BlockPos from, int maintainY) {
-            this.from = from.immutable();
-            this.maintainY = maintainY;
-        }
-
-        @Override public boolean isAt(BlockPos feet) {
-            return false;   // never done — keep exploring outward
-        }
-
-        @Override public double heuristic(BlockPos fromPos) {
-            // Run-away heuristic: −(octile×weight) — negated so farther = lower h
-            // = preferred — then blended with the y-hold term:
-            // min*0.6 + yLevelTerm*1.5.
-            double dx = Math.abs(from.getX() - fromPos.getX());
-            double dz = Math.abs(from.getZ() - fromPos.getZ());
-            double xz = (Math.min(dx, dz) * SQRT_2 + Math.abs(dx - dz))
-                    * COST_HEURISTIC;
-            double min = -xz;
-            int cy = fromPos.getY();
-            double yLevel = cy > maintainY ? (cy - maintainY) * DESCEND_ONE_BLOCK
-                    : cy < maintainY ? (maintainY - cy) * JUMP_ONE_BLOCK : 0.0;
-            return min * 0.6 + yLevel * 1.5;
-        }
-
-        @Override public BlockPos center() {
-            return from;
         }
     }
 }

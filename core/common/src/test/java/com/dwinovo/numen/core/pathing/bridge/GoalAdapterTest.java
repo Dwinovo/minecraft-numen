@@ -7,8 +7,6 @@ import com.dwinovo.numen.core.pathing.goals.GoalBlock;
 import com.dwinovo.numen.core.pathing.goals.GoalComposite;
 import com.dwinovo.numen.core.pathing.goals.GoalGetToBlock;
 import com.dwinovo.numen.core.pathing.goals.GoalNear;
-import com.dwinovo.numen.core.pathing.goals.GoalRunAway;
-import com.dwinovo.numen.core.pathing.goals.GoalTwoBlocks;
 import com.dwinovo.numen.core.pathing.goals.GoalXZ;
 import com.dwinovo.numen.core.pathing.goals.GoalYLevel;
 
@@ -151,37 +149,6 @@ class GoalAdapterTest {
         assertInstanceOf(GoalNear.class, members[1]);
         assertSameMembership(source, mapped);
         assertSameHeuristic(source, mapped);
-    }
-
-    @Test
-    void mineColumnFamilyKeepsStanceBand() {
-        // maxBelow=0 → 单格;=1 → 双格;=2 → 双格 + 补格,成员集逐格一致
-        NavGoal band0 = NavGoal.mineColumn(T, 0);
-        Goal mapped0 = GoalAdapter.toEngineGoal(band0);
-        assertInstanceOf(GoalBlock.class, mapped0);
-        assertSameMembership(band0, mapped0);
-
-        NavGoal band1 = NavGoal.mineColumn(T, 1);
-        Goal mapped1 = GoalAdapter.toEngineGoal(band1);
-        assertInstanceOf(GoalTwoBlocks.class, mapped1);
-        assertSameMembership(band1, mapped1);
-
-        NavGoal band2 = NavGoal.mineColumn(T, 2);
-        Goal mapped2 = GoalAdapter.toEngineGoal(band2);
-        assertInstanceOf(GoalComposite.class, mapped2);
-        assertSameMembership(band2, mapped2);
-        assertSameHeuristic(band2, mapped2);
-    }
-
-    @Test
-    void runAwayMapsToGoalRunAway() {
-        NavGoal source = NavGoal.runAway(T, T.getY());
-        Goal mapped = GoalAdapter.toEngineGoal(source);
-        assertInstanceOf(GoalRunAway.class, mapped);
-        assertSameHeuristic(source, mapped);
-        // 旧语义永不到达;新目标在常规距离上同样不到达
-        assertFalse(mapped.isInGoal(T.getX() + 500, T.getY(), T.getZ() + 500));
-        assertFalse(mapped.isInGoal(T.getX(), T.getY(), T.getZ()));
     }
 
     @Test

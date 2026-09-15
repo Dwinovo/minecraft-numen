@@ -208,7 +208,7 @@ public final class PlayerNav {
         return new PlayerNav(player, speed, reached, compiled, true);
     }
 
-    /** 裸自定义目标(runAway、column 等)。不带 sacred——有方块目标的意图
+    /** 裸自定义目标(avoid、column 等)。不带 sacred——有方块目标的意图
      *  应走 {@link #to} / {@link GoalCompiler},让目标受保护。 */
     public static PlayerNav toGoal(NumenPlayer player, Supplier<NavGoal> goalSupplier,
                                    double speed, BooleanSupplier reached) {
@@ -544,8 +544,7 @@ public final class PlayerNav {
 
     /**
      * 一次失败重规划的记账。进度按目标自己的启发函数在脚下的取值度量
-     * (yLevel 只看竖直、column 只看水平、composite 看最近成员、runAway
-     * 负值随逃离下降,各自天然正确);有真实改善清零连击,否则连击到
+     * (yLevel 只看竖直、column 只看水平、composite 看最近成员,各自天然正确);有真实改善清零连击,否则连击到
      * {@link #MAX_STALLED_REPLANS} 判 BOXED_IN。返回 null 表示继续跑。
      */
     private Status accountReplan(NavGoal liveGoal) {

@@ -17,7 +17,7 @@
  *
  * <p>Package contract: pathing's public front door is
  * {@code PlayerNav} + {@code GoalCompiler} (+ the {@code NavGoal} vocabulary
- * for custom goals like {@code runAway}). Task code should not assemble
+ * for custom goals like {@code avoid}). Task code should not assemble
  * goal/sacred pairs by hand.
  */
 package com.dwinovo.numen.core.pathing.goal;

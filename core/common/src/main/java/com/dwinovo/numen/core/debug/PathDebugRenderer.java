@@ -11,7 +11,6 @@ import com.dwinovo.numen.core.pathing.goals.GoalBlock;
 import com.dwinovo.numen.core.pathing.goals.GoalComposite;
 import com.dwinovo.numen.core.pathing.goals.GoalGetToBlock;
 import com.dwinovo.numen.core.pathing.goals.GoalInverted;
-import com.dwinovo.numen.core.pathing.goals.GoalTwoBlocks;
 import com.dwinovo.numen.core.pathing.goals.GoalXZ;
 import com.dwinovo.numen.network.payload.PathDebugPayload;
 import com.dwinovo.numen.platform.Services;
@@ -108,10 +107,6 @@ public final class PathDebugRenderer {
         switch (goal) {
             case null -> { }
             case GoalBlock g -> boxes.add(g.getGoalPos().asLong());
-            case GoalTwoBlocks g -> {
-                boxes.add(g.getGoalPos().asLong());
-                boxes.add(g.getGoalPos().above().asLong());
-            }
             case GoalGetToBlock g -> boxes.add(g.getGoalPos().asLong());
             case GoalXZ g -> columns.add(BlockPos.asLong(g.x, 0, g.z));
             case GoalComposite g -> {
