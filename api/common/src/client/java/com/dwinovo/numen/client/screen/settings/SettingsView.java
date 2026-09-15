@@ -303,10 +303,22 @@ public final class SettingsView {
     private int panelH() { return host.panelH(); }
     private Font font() { return host.font(); }
 
+    /** 内容底板(导航 + 正文)的外框:面板左右各内缩这么多,顶边在页签带下方。 */
+    private static final int SURFACE_INSET = 5;
+    private int surfaceY() { return top() + HEADER_H + 2; }
+    /** 导航与正文的竖分隔线。 */
+    private int dividerX() { return left() + PAD + NAV_W + 3; }
+    /**
+     * 导航列:从底板描边内侧到分隔线,选中底铺满整列——左贴底板描边、右贴分隔线,顶边与分隔线齐,
+     * 方角下没有哪条边悬空。
+     */
+    private int navX() { return left() + SURFACE_INSET + 1; }
+    private int navTop() { return secY0() - 2; }
+
     /** Left x of the section content area (right of the sub-nav column + divider). */
-    private int secX() { return left() + PAD + NAV_W + 8; }
+    private int secX() { return dividerX() + 5; }
     /** Width of the section content area. */
-    private int secW() { return panelW() - PAD - NAV_W - 8 - PAD; }
+    private int secW() { return left() + panelW() - PAD - secX(); }
     /** Top y of section content (below the header). */
     private int secY0() { return top() + HEADER_H + 8; }
     /** Bottom y a list row may reach. */
@@ -415,7 +427,7 @@ public final class SettingsView {
     /** Dispatch widget building by the active section (skill/MCP lists render manually). */
     public void buildWidgets() {
         loadPalette();
-        navPanel().build(left() + PAD - 4, secY0() - 3, NAV_W, secBottom() - secY0() + 3,
+        navPanel().build(navX(), navTop(), dividerX() - navX(), secBottom() - navTop(),
                 navLabels(), section.ordinal());
         switch (section) {
             case SKILLS -> skillsListPanel().build(secX(), secY0() - 2, secW(),
@@ -989,12 +1001,12 @@ public final class SettingsView {
         // 铺在点纹地面上——点纹退成底板四周的氛围纹理,层级和对比度都立起来。
         UiTheme th = UiTheme.current();
         com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                left() + 5, top() + HEADER_H + 2, panelW() - 10, panelH() - HEADER_H - 7,
+                left() + SURFACE_INSET, surfaceY(), panelW() - SURFACE_INSET * 2,
+                top() + panelH() - SURFACE_INSET - surfaceY(),
                 th.surface(), th.surfaceBorder());
         navPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                 HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
-        int dx = left() + PAD + NAV_W + 3;
-        g.fill(dx, secY0() - 2, dx + 1, secBottom(), BORDER);   // 导航与正文的竖分隔线
+        g.fill(dividerX(), navTop(), dividerX() + 1, secBottom(), BORDER);   // 导航与正文的竖分隔线
         switch (section) {
             case MCP -> renderMcpSection(g, mouseX, mouseY);
             case SKILLS -> {

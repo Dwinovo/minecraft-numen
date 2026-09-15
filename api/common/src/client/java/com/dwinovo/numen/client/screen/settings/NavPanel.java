@@ -9,8 +9,8 @@ import java.util.List;
 import java.util.function.IntConsumer;
 
 /**
- * 设置页左侧子导航——NumenUI 版的壳:分区标签一行一个,选中态胶囊底 +
- * 左缘 accent 竖条,悬停淡入(动效由 ListView 统一给)。分区列表与选中
+ * 设置页左侧子导航——NumenUI 版的壳:分区标签一行一个,选中底铺满整行 +
+ * 左缘 accent 竖条(与选中底同高),悬停淡入(动效由 ListView 统一给)。分区列表与选中
  * 下标由宿主传入,面板只管画与命中。
  */
 public final class NavPanel {
@@ -43,7 +43,7 @@ public final class NavPanel {
                            int rx, int ry, int rw, int rh, boolean active, boolean hovered) {
         // 行底(选中/悬停)由 ListView 画,这里只画竖条与文字。
         if (active) {
-            s.fillRect(rx, ry + 3, 2, rh - 6, c.accent());   // 左缘竖条:当前分区
+            s.fillRect(rx, ry, 2, rh, c.accent());   // 左缘竖条:当前分区,与选中底上下齐
         }
         s.drawText(label, rx + 6, ry + (rh - s.lineHeight()) / 2,
                 active ? c.textPrimary() : c.textSecondary(), false);
