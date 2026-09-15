@@ -99,7 +99,6 @@ public class NumenFabricClient implements ClientModInitializer {
                 (g, delta) -> {
                     com.dwinovo.numen.client.hud.TalkHint.render(g);
                     com.dwinovo.numen.client.hud.NumenHudToasts.render(g);
-                    com.dwinovo.numen.client.consent.ConsentHud.render(g);
                 });
         net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.END_CLIENT_TICK
                 .register(client -> {

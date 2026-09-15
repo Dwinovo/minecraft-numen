@@ -70,7 +70,7 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_THINKING_ON        = "numen.gui.providers.thinking.on";
         public static final String RESPAWN_BLOCKED                  = "numen.respawn.blocked";
 
-        // 征询:同伴等主人点头时取代输入行的答复框(ConsentPrompt)与 HUD 上的提示条(ConsentHud)。
+        // 征询:同伴等主人点头时取代输入行的答复框(ConsentPrompt)与右上角的原版 toast(ConsentToasts)。
         public static final String CONSENT_TITLE          = "numen.consent.title";
         public static final String CONSENT_MORE           = "numen.consent.more";
         public static final String CONSENT_EXPIRES        = "numen.consent.expires";
@@ -79,7 +79,7 @@ public final class ModLanguageData {
         public static final String CONSENT_ALLOW_REMEMBER = "numen.consent.allow_remember";
         public static final String CONSENT_DENY           = "numen.consent.deny";
         public static final String CONSENT_IRREVERSIBLE   = "numen.consent.irreversible";
-        public static final String CONSENT_HUD_HINT       = "numen.consent.hud_hint";
+        public static final String CONSENT_TOAST_HINT     = "numen.consent.toast_hint";
         public static final String CONSENT_ALLOW_SCOPE    = "numen.consent.allow_scope";
         public static final String CONSENT_KEYS           = "numen.consent.keys";
         public static final String CONSENT_QUEUE          = "numen.consent.queue";
@@ -583,13 +583,13 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Always allow");
         adder.add(Keys.CONSENT_DENY,           "Deny");
         adder.add(Keys.CONSENT_IRREVERSIBLE,   "can't undo");
-        adder.add(Keys.CONSENT_HUD_HINT,       "[%s] answer");
+        adder.add(Keys.CONSENT_TOAST_HINT,     "Press %s to answer");
         adder.add(Keys.CONSENT_ALLOW_SCOPE,    "the same kind, for this job");
         adder.add(Keys.CONSENT_KEYS,           "↑↓ or 1-4 pick · Enter confirms · Esc later");
         adder.add(Keys.CONSENT_QUEUE,          "%s more waiting");
-        adder.add(Keys.CONSENT_ANSWERED,       "Answered %s: %s");
+        adder.add(Keys.CONSENT_ANSWERED,       "Answered %s");
         adder.add(Keys.CONSENT_REMEMBERED,     "remembered %s (undo with /numen permission rules)");
-        adder.add(Keys.CONSENT_WITHDRAWN,      "%s's request went away: %s");
+        adder.add(Keys.CONSENT_WITHDRAWN,      "%s's request went away");
         adder.add(Keys.CONSENT_NOTE_ROW,       "No, tell %s what to do instead…");
         adder.add(Keys.CONSENT_COUNT,          "%s ×%s");
         adder.add(Keys.CONSENT_LINE_PREFIX + "break",      "break %s · %s");
@@ -947,13 +947,13 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "以后都允许");
         adder.add(Keys.CONSENT_DENY,           "拒绝");
         adder.add(Keys.CONSENT_IRREVERSIBLE,   "撤不回");
-        adder.add(Keys.CONSENT_HUD_HINT,       "[%s] 答复");
+        adder.add(Keys.CONSENT_TOAST_HINT,     "按 %s 答复");
         adder.add(Keys.CONSENT_ALLOW_SCOPE,    "这次活里同样的都行");
         adder.add(Keys.CONSENT_KEYS,           "↑↓ 或 1-4 选 · Enter 确定 · Esc 稍后");
         adder.add(Keys.CONSENT_QUEUE,          "还有 %s 条在等");
-        adder.add(Keys.CONSENT_ANSWERED,       "已答复 %s:%s");
+        adder.add(Keys.CONSENT_ANSWERED,       "已答复 %s");
         adder.add(Keys.CONSENT_REMEMBERED,     "记住了 %s(/numen permission rules 可撤)");
-        adder.add(Keys.CONSENT_WITHDRAWN,      "%s 的请求撤回了:%s");
+        adder.add(Keys.CONSENT_WITHDRAWN,      "%s 的请求撤回了");
         adder.add(Keys.CONSENT_NOTE_ROW,       "不行,告诉 %s 该怎么做…");
         adder.add(Keys.CONSENT_COUNT,          "%s ×%s");
         adder.add(Keys.CONSENT_LINE_PREFIX + "break",      "挖掉 %s · %s");

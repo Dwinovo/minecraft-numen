@@ -1,12 +1,10 @@
 package com.dwinovo.numen.client.consent;
 
 import com.dwinovo.numen.client.agent.NumenRoster;
-import com.dwinovo.numen.client.hud.NumenHudToasts;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.KeyCodes;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
-import com.dwinovo.numen.client.ui.NumenToasts;
 import com.dwinovo.numen.client.ui.TextClip;
 import com.dwinovo.numen.client.ui.widget.Badge;
 import com.dwinovo.numen.client.ui.widget.Widget;
@@ -30,7 +28,7 @@ import java.util.function.Supplier;
  * 照原样做)。↑↓ 选、回车确定,或者直接按 1-4。清单里有撤不回的事时不给默认选中,必须主人自己挑。
  *
  * <p>第四项的输入框是输入行自己那一个(屏幕上始终只有一个真输入框),摆在 {@link #noteBox} 那一格、只画下划线,
- * 选中第四项时才接字。Esc 照常关界面,请求留着,提示条接着提醒。
+ * 选中第四项时才接字。Esc 照常关界面,请求留着,右上角的提醒接着挂着。
  */
 public final class ConsentPrompt extends Widget {
 
@@ -172,21 +170,21 @@ public final class ConsentPrompt extends Widget {
         return true;
     }
 
-    /** 交出去:答复发回服务端,再用一条 toast 说清答了什么、记下了哪几行规则。框由输入行在撤回之后收起。 */
+    /** 交出去:答复发回服务端,再用一条原版 toast 说清答了什么、记下了哪几行规则。框由输入行在撤回之后收起。 */
     private void answer(ConsentAnswer.Decision decision, String said) {
         if (answered) {
             return;
         }
         answered = true;
         ConsentCards.reply(request, decision, said);
-        String receipt = I18n.get(ModLanguageData.Keys.CONSENT_ANSWERED, name, label(decision));
+        String what = label(decision);
         if (!said.isEmpty()) {
-            receipt += " · " + said;
+            what += " · " + said;
         }
         if (decision == ConsentAnswer.Decision.ALLOW_REMEMBER) {
-            receipt += " · " + I18n.get(ModLanguageData.Keys.CONSENT_REMEMBERED, String.join("; ", request.remember()));
+            what += " · " + I18n.get(ModLanguageData.Keys.CONSENT_REMEMBERED, String.join("; ", request.remember()));
         }
-        NumenHudToasts.push(NumenToasts.Severity.INFO, receipt);
+        ConsentToasts.answered(request.companion(), net.minecraft.network.chat.Component.literal(what));
     }
 
     @Override

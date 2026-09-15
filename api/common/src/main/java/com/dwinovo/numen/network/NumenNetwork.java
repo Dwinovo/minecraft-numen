@@ -47,7 +47,7 @@ public final class NumenNetwork {
                 com.dwinovo.numen.network.payload.CurrentTaskPayload.STREAM_CODEC,
                 com.dwinovo.numen.network.payload.CurrentTaskPayload::handle);
 
-        // S→C: 同伴在等主人点头的那条征询(或撤回)——答复框、提示条与轮廓只照它画(见 ConsentDesk)。
+        // S→C: 同伴在等主人点头的那条征询(或撤回)——答复框、提醒与轮廓只照它画(见 ConsentDesk)。
         Services.NETWORK.registerServerToClient(
                 com.dwinovo.numen.network.payload.ConsentRequestPayload.TYPE,
                 com.dwinovo.numen.network.payload.ConsentRequestPayload.STREAM_CODEC,
