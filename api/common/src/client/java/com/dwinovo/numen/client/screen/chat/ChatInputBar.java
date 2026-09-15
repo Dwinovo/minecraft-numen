@@ -245,6 +245,7 @@ public final class ChatInputBar {
         field.setVisible(!paged);
         field.setEnabled(!paged);
         field.placeholder(consent != null ? consent.noteHint() : host.hint());
+        field.underlined(consent != null);   // 在答复框里是第四项那一行的一部分,只画下划线
         if (micBtn != null) micBtn.setEnabled(!paged);
         if (sendBtn != null) sendBtn.setEnabled(!paged);
         if (stopBtn != null) stopBtn.setEnabled(host.canAbort());

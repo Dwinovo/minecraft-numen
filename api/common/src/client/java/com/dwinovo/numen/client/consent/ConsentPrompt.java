@@ -29,7 +29,7 @@ import java.util.function.Supplier;
  * (和 pi 的"Type something"、Claude Code 的"否,并告诉它换个做法"同一个意思:主人要说点什么,就是不让她
  * 照原样做)。↑↓ 选、回车确定,或者直接按 1-4。清单里有撤不回的事时不给默认选中,必须主人自己挑。
  *
- * <p>第四项的输入框是输入行自己那一个(屏幕上始终只有一个真输入框),摆在 {@link #noteBox} 那一格,
+ * <p>第四项的输入框是输入行自己那一个(屏幕上始终只有一个真输入框),摆在 {@link #noteBox} 那一格、只画下划线,
  * 选中第四项时才接字。Esc 照常关界面,请求留着,提示条接着提醒。
  */
 public final class ConsentPrompt extends Widget {

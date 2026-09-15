@@ -18,6 +18,8 @@ public final class TextField extends Widget {
     private final Consumer<String> onChange;
     private String placeholder = "";
     private boolean masked;
+    /** 只画一道下划线、不画卡壳。见 {@link #underlined}。 */
+    private boolean underlined;
     private boolean numericOnly;
     private int cursor;
     /** 内联校验错误:字段红边 + 标签行右侧红字,驻留到用户开始修改。 */
@@ -50,6 +52,15 @@ public final class TextField extends Widget {
 
     public TextField masked(boolean masked) {
         this.masked = masked;
+        return this;
+    }
+
+    /**
+     * 嵌在一行里的输入框:只画底边一道线(聚焦、出错照样换色),不画圆角卡壳——它是那一行的一部分,
+     * 不是另一个框。
+     */
+    public TextField underlined(boolean underlined) {
+        this.underlined = underlined;
         return this;
     }
 
@@ -133,7 +144,11 @@ public final class TextField extends Widget {
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         // 统一卡壳:圆角描边+内衬底;聚焦/错误只换描边色(STT 参考样式定标)。
         int border = error != null ? c.danger() : isFocused() ? c.accent() : c.inputBorder();
-        NumenStyle.fieldCard(s, x, y, w, h, c.inputBg(), border);
+        if (underlined) {
+            s.fillRect(x, y + h - 1, w, 1, border);
+        } else {
+            NumenStyle.fieldCard(s, x, y, w, h, c.inputBg(), border);
+        }
         if (labelWidget != null) labelWidget.setVisible(error == null);   // 出错时标签让位
         if (error != null) {
             // 错误文案画在标签行(字段正上方)——错误出现在错误发生的地方;
