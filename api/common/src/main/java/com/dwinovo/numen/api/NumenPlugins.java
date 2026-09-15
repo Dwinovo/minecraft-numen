@@ -11,7 +11,9 @@ import com.dwinovo.numen.event.NumenEvents;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -99,10 +101,14 @@ public final class NumenPlugins {
         return joinFragments(BODY_STATE, body);
     }
 
+    /** 正算不出来的片段。身体片段每次状态检查都要算,一个坏插件不能每秒把日志刷二十条。 */
+    private static final Set<Function<?, String>> FAILING = ConcurrentHashMap.newKeySet();
+
     /**
      * 按登记顺序拼起来,空的不占位。
      *
-     * <p>某个插件算炸了不能连累整条请求或整个身体检查——它自己那段丢掉,别人的照常挂上。
+     * <p>某个插件算炸了不能连累整条请求或整个身体检查——它自己那段丢掉,别人的照常挂上。同一个片段连着出错
+     * 只在第一次记日志,算出来一次就重新计。
      */
     private static <T> String joinFragments(List<Function<T, String>> fragments, T subject) {
         if (fragments.isEmpty()) return "";
@@ -110,9 +116,14 @@ public final class NumenPlugins {
         for (Function<T, String> f : fragments) {
             try {
                 String x = f.apply(subject);
+                if (FAILING.remove(f)) {
+                    Constants.LOG.info("[numen] 插件的运行期状态又算得出来了");
+                }
                 if (x != null && !x.isBlank()) sb.append(x);
             } catch (RuntimeException e) {
-                Constants.LOG.error("[numen] 插件的运行期状态算不出来,这一段跳过", e);
+                if (FAILING.add(f)) {
+                    Constants.LOG.error("[numen] 插件的运行期状态算不出来,这一段跳过(接着出错不再重复记)", e);
+                }
             }
         }
         return sb.toString();
