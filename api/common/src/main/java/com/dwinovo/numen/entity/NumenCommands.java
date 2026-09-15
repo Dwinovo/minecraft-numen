@@ -44,7 +44,7 @@ import java.util.Locale;
  *   /numen permission rules add &lt;deny|ask|allow&gt; &lt;rule&gt;  append a row, e.g. ask take(*)
  *   /numen permission rules remove &lt;deny|ask|allow&gt; &lt;n&gt;   remove row n (1-based, as listed)
  *   /numen permission rules reset                         clear the caller's three tables
- *   /numen consent &lt;allow|remember|deny&gt; &lt;id&gt; [note]      answer a pending consent request
+ *   /numen consent &lt;allow|remember&gt; &lt;id&gt; | deny &lt;id&gt; [note]   answer a pending consent request
  * </pre>
  *
  * <h2>权限命令是底层接口</h2>
@@ -254,20 +254,19 @@ public final class NumenCommands {
     // ==================== 征询答复 ====================
 
     private static LiteralArgumentBuilder<CommandSourceStack> consentCommand() {
-        var root = Commands.literal("consent");
-        consentBranch(root, "allow", ConsentAnswer.Decision.ALLOW_ONCE);
-        consentBranch(root, "remember", ConsentAnswer.Decision.ALLOW_REMEMBER);
-        consentBranch(root, "deny", ConsentAnswer.Decision.DENY);
-        return root;
+        // 附言只随拒绝:主人要她换个做法才会说
+        return Commands.literal("consent")
+                .then(Commands.literal("allow").then(consentId(ConsentAnswer.Decision.ALLOW_ONCE)))
+                .then(Commands.literal("remember").then(consentId(ConsentAnswer.Decision.ALLOW_REMEMBER)))
+                .then(Commands.literal("deny").then(consentId(ConsentAnswer.Decision.DENY)
+                        .then(Commands.argument("note", StringArgumentType.greedyString())
+                                .executes(ctx -> consent(ctx, ConsentAnswer.Decision.DENY,
+                                        StringArgumentType.getString(ctx, "note"))))));
     }
 
-    private static void consentBranch(LiteralArgumentBuilder<CommandSourceStack> root, String word,
-                                      ConsentAnswer.Decision decision) {
-        root.then(Commands.literal(word)
-                .then(Commands.argument("id", LongArgumentType.longArg(1))
-                        .executes(ctx -> consent(ctx, decision, ""))
-                        .then(Commands.argument("note", StringArgumentType.greedyString())
-                                .executes(ctx -> consent(ctx, decision, StringArgumentType.getString(ctx, "note"))))));
+    private static com.mojang.brigadier.builder.RequiredArgumentBuilder<CommandSourceStack, Long> consentId(
+            ConsentAnswer.Decision decision) {
+        return Commands.argument("id", LongArgumentType.longArg(1)).executes(ctx -> consent(ctx, decision, ""));
     }
 
     private static int consent(CommandContext<CommandSourceStack> ctx, ConsentAnswer.Decision decision, String note)

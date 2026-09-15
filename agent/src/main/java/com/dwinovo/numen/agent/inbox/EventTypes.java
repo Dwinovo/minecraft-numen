@@ -76,11 +76,6 @@ public final class EventTypes {
     public static final String REFLEX = "reflex";
     /** 队列满了丢掉了几条——丢弃可以,无声消失不行。 */
     public static final String DROPPED = "dropped";
-    /**
-     * 主人答应她的征询时附了一句话(拒绝的附言随任务收场送达,不走这里)。恒为急件:主人说话了,
-     * 而她手上的活正照着那句答应接着干。
-     */
-    public static final String CONSENT_NOTE = "consent_note";
 
     /** 一类条目什么时候交给大脑。 */
     public enum Delivery {
@@ -157,7 +152,6 @@ public final class EventTypes {
         register(event(DIMENSION_CHANGE, false));
         register(event(REFLEX, false));
         register(event(DROPPED, false));
-        register(event(CONSENT_NOTE, true));
     }
 
     private EventTypes() {}

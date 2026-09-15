@@ -5,6 +5,8 @@ import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.ConsentRequest;
 
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
@@ -18,23 +20,26 @@ import java.util.UUID;
  * 登记处({@code ConsentDesk})发起时推一次,答复、超时、任务结束时推一条撤回(顶替直接推新的那条)——
  * 答复框、提示条与世界里的轮廓只照这份画,客户端不推断。
  *
- * <p>清单正文与"允许并记住"要写的规则行在服务端组好再发({@link ConsentItem#listing}、
- * {@link ConsentItem#rememberedRows}),主人看到的与回执里交代给模型的同一份措辞;
+ * <p>清单在服务端按 {@link ConsentItem#listing} 归好堆再发,每堆带给主人看的那一版(可翻译,主人的客户端按自己的
+ * 语言显示),和回执里交代给模型的是同一堆;"允许并记住"要写的规则行({@link ConsentItem#rememberedRows})同理;
  * 轮廓只带格子与实体 id,各有上限——一张图纸可能要问几千格,清单说得清,轮廓画不完。
  *
  * @param companion         哪只同伴
  * @param id                请求号;{@code 0} = 没有挂着的请求
- * @param lines             清单正文,一堆一行(撤不回的那几行带着标记)
+ * @param lines             清单,一堆一行(撤不回的那几行带着标记)
  * @param remember          选"允许并记住"会写进主人 allow 表的规则行
  * @param blocks            要描轮廓的格子({@code BlockPos#asLong})
  * @param entities          要描轮廓的实体 id
  * @param expiresAtGameTime 到这一刻按拒绝(倒计时)
  * @param withdrawnBecause  撤回的原因(超时、任务结束……);主人自己答复的撤回和挂着的请求为空串
  */
-public record ConsentRequestPayload(UUID companion, long id, List<ConsentItem.Line> lines, List<String> remember,
+public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequestPayload.Line> lines, List<String> remember,
                                     List<Long> blocks, List<Integer> entities, long expiresAtGameTime,
                                     String withdrawnBecause)
         implements CustomPacketPayload {
+
+    /** 给主人看的一堆:"挖掉 橡木原木 ×6 · 玩家放的";{@code irreversible} 让答复框在前面标出"撤不回"。 */
+    public record Line(Component text, boolean irreversible) {}
 
     /** 一次最多描多少格、多少只实体的轮廓。 */
     public static final int MAX_OUTLINED_BLOCKS = 256;
@@ -58,7 +63,11 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentItem.Li
                 blocks.add(item.pos().asLong());
             }
         }
-        return new ConsentRequestPayload(request.companion(), request.id(), ConsentItem.listing(request.items()),
+        List<Line> lines = new ArrayList<>();
+        for (ConsentItem.Group group : ConsentItem.listing(request.items())) {
+            lines.add(new Line(group.shown(), group.irreversible()));
+        }
+        return new ConsentRequestPayload(request.companion(), request.id(), lines,
                 ConsentItem.rememberedRows(request.items()), blocks, entities, request.expiresAtGameTime(), "");
     }
 
@@ -76,8 +85,8 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentItem.Li
         buf.writeUUID(p.companion);
         buf.writeVarLong(p.id);
         buf.writeVarInt(p.lines.size());
-        for (ConsentItem.Line line : p.lines) {
-            buf.writeUtf(line.text());
+        for (Line line : p.lines) {
+            ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, line.text());
             buf.writeBoolean(line.irreversible());
         }
         buf.writeCollection(p.remember, net.minecraft.network.FriendlyByteBuf::writeUtf);
@@ -97,9 +106,9 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentItem.Li
         UUID companion = buf.readUUID();
         long id = buf.readVarLong();
         int n = buf.readVarInt();
-        List<ConsentItem.Line> lines = new ArrayList<>(n);
+        List<Line> lines = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            lines.add(new ConsentItem.Line(buf.readUtf(), buf.readBoolean()));
+            lines.add(new Line(ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf), buf.readBoolean()));
         }
         List<String> remember = buf.readList(net.minecraft.network.FriendlyByteBuf::readUtf);
         n = buf.readVarInt();

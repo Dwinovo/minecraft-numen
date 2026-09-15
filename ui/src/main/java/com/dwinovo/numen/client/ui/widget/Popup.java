@@ -33,9 +33,9 @@ public abstract class Popup extends Widget {
     }
 
     /**
-     * 这一层此刻要不要借输入框收一行字(比如给选中的那一项附一句话);{@code null} = 不借,输入框让位给这一层。
-     * 借着的时候输入框回到原位、这一层退到它上面,回车与 Esc 归 {@link LineRequest}。宿主按身份认同一次借用,
-     * 所以一次借用从头到尾返回同一个对象。
+     * 这一层此刻要不要借输入框收一行字(比如选中了"写一句"那一项);{@code null} = 不借,输入框让位给这一层。
+     * 借着的时候输入框回到原位、这一层退到它上面;按键先给这一层(回车、上下由它定),它不要的落到输入框里。
+     * 宿主按身份认同一次借用,所以一次借用从头到尾返回同一个对象。
      */
     public LineRequest lineRequest() {
         return null;
@@ -52,11 +52,5 @@ public abstract class Popup extends Widget {
 
         /** 字变了(每次按键)。 */
         void changed(String text);
-
-        /** 回车。 */
-        void submit(String text);
-
-        /** Esc:不借了,回到这一层。 */
-        void cancel();
     }
 }

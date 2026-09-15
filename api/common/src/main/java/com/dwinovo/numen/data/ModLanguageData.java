@@ -86,6 +86,15 @@ public final class ModLanguageData {
         public static final String CONSENT_ANSWERED       = "numen.consent.answered";
         public static final String CONSENT_REMEMBERED     = "numen.consent.remembered";
         public static final String CONSENT_WITHDRAWN      = "numen.consent.withdrawn";
+        public static final String CONSENT_NOTE_ROW       = "numen.consent.note_row";
+        public static final String CONSENT_COUNT          = "numen.consent.count";
+        /** 清单一堆的说法,后接动词({@code break}、{@code attack}……):参数是对象与理由。 */
+        public static final String CONSENT_LINE_PREFIX    = "numen.consent.line.";
+        /** 信号给主人看的自述,后接规则里的信号名({@code placed}……)。 */
+        public static final String PERMISSION_SIGNAL_PREFIX = "numen.permission.signal.";
+        public static final String PERMISSION_UNCOVERED   = "numen.permission.uncovered";
+        public static final String PERMISSION_SEPARATOR   = "numen.permission.separator";
+        public static final String PERMISSION_A_BLOCK     = "numen.permission.a_block";
 
         /** Hotkey: open the companion roster panel (shown in Controls settings). */
         public static final String KEY_OPEN_ROSTER = "key.numen.open_roster";
@@ -569,18 +578,38 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_TITLE,          "%s asks for your consent");
         adder.add(Keys.CONSENT_MORE,           "+%s more");
         adder.add(Keys.CONSENT_EXPIRES,        "%ss left");
-        adder.add(Keys.CONSENT_NOTE,           "A note for %s, sent with \"%s\" · Enter sends · Esc goes back");
+        adder.add(Keys.CONSENT_NOTE,           "Tell %s what to do instead · Enter sends it as a deny");
         adder.add(Keys.CONSENT_ALLOW,          "Allow");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Always allow");
         adder.add(Keys.CONSENT_DENY,           "Deny");
         adder.add(Keys.CONSENT_IRREVERSIBLE,   "can't undo");
         adder.add(Keys.CONSENT_HUD_HINT,       "[%s] answer");
         adder.add(Keys.CONSENT_ALLOW_SCOPE,    "the same kind, for this job");
-        adder.add(Keys.CONSENT_KEYS,           "↑↓ or 1-3 pick · Tab adds a note · Enter confirms · Esc later");
+        adder.add(Keys.CONSENT_KEYS,           "↑↓ or 1-4 pick · Enter confirms · Esc later");
         adder.add(Keys.CONSENT_QUEUE,          "%s more waiting");
         adder.add(Keys.CONSENT_ANSWERED,       "Answered %s: %s");
         adder.add(Keys.CONSENT_REMEMBERED,     "remembered %s (undo with /numen permission rules)");
         adder.add(Keys.CONSENT_WITHDRAWN,      "%s's request went away: %s");
+        adder.add(Keys.CONSENT_NOTE_ROW,       "No, and tell %s what to do");
+        adder.add(Keys.CONSENT_COUNT,          "%s ×%s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "break",      "break %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "place",      "place %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "attack",     "attack %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "use_block",  "use %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "use_entity", "interact with %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "take",       "take from %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "drop",       "drop %s · %s");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "placed",       "placed by a player");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "a block that holds or does something");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "contents",     "has things inside");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "owned",        "has an owner");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "named",        "has a name");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "villager",     "a villager");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "hostile");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hazard_item",  "dangerous to place");
+        adder.add(Keys.PERMISSION_UNCOVERED,   "no rule says");
+        adder.add(Keys.PERMISSION_SEPARATOR,   ", ");
+        adder.add(Keys.PERMISSION_A_BLOCK,     "a block");
     }
 
     private static void addZh(Adder adder) {
@@ -913,17 +942,37 @@ public final class ModLanguageData {
         adder.add(Keys.CONSENT_TITLE,          "%s 想征得你的同意");
         adder.add(Keys.CONSENT_MORE,           "还有 %s 项");
         adder.add(Keys.CONSENT_EXPIRES,        "%s 秒");
-        adder.add(Keys.CONSENT_NOTE,           "给 %s 的附言,随「%s」一起送出 · Enter 提交 · Esc 返回");
+        adder.add(Keys.CONSENT_NOTE,           "告诉 %s 该怎么做 · Enter 发送(算拒绝)");
         adder.add(Keys.CONSENT_ALLOW,          "允许");
         adder.add(Keys.CONSENT_ALLOW_REMEMBER, "以后都允许");
         adder.add(Keys.CONSENT_DENY,           "拒绝");
         adder.add(Keys.CONSENT_IRREVERSIBLE,   "撤不回");
         adder.add(Keys.CONSENT_HUD_HINT,       "[%s] 答复");
         adder.add(Keys.CONSENT_ALLOW_SCOPE,    "这次活里同样的都行");
-        adder.add(Keys.CONSENT_KEYS,           "↑↓ 或 1-3 选 · Tab 附言 · Enter 确定 · Esc 稍后");
+        adder.add(Keys.CONSENT_KEYS,           "↑↓ 或 1-4 选 · Enter 确定 · Esc 稍后");
         adder.add(Keys.CONSENT_QUEUE,          "还有 %s 条在等");
         adder.add(Keys.CONSENT_ANSWERED,       "已答复 %s:%s");
         adder.add(Keys.CONSENT_REMEMBERED,     "记住了 %s(/numen permission rules 可撤)");
         adder.add(Keys.CONSENT_WITHDRAWN,      "%s 的请求撤回了:%s");
+        adder.add(Keys.CONSENT_NOTE_ROW,       "不行,告诉 %s 该怎么做");
+        adder.add(Keys.CONSENT_COUNT,          "%s ×%s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "break",      "挖掉 %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "place",      "放下 %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "attack",     "攻击 %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "use_block",  "使用 %s · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "use_entity", "和 %s 互动 · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "take",       "从 %s 里拿东西 · %s");
+        adder.add(Keys.CONSENT_LINE_PREFIX + "drop",       "丢出 %s · %s");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "placed",       "玩家放的");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "block_entity", "箱子、熔炉这类功能方块");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "contents",     "里面装着东西");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "owned",        "有主人");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "named",        "起了名字");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "villager",     "是村民");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hostile",      "敌对生物");
+        adder.add(Keys.PERMISSION_SIGNAL_PREFIX + "hazard_item",  "放下去危险");
+        adder.add(Keys.PERMISSION_UNCOVERED,   "没有规则说到这件事");
+        adder.add(Keys.PERMISSION_SEPARATOR,   "、");
+        adder.add(Keys.PERMISSION_A_BLOCK,     "方块");
     }
 }

@@ -5,13 +5,9 @@ import java.util.List;
 /**
  * 一次征询的结论。
  *
- * <p>主人答复时带的附言当场到她那里:拒绝的附言就是这里的 {@code words},随发起的任务收场一起送达;
- * 允许了任务还在接着干,附言等不到收场,由登记处当场作为 {@code consent_note} 事件转过去
- * ({@link ConsentDesk#answer}),不进这里。
- *
  * @param decision 主人按的哪个键;超时、主人不在、被顶替、任务先结束都按 {@link Decision#DENY}
- * @param words    拒绝的理由:主人的附言原话,没有附言时是登记处替这次结局说的那句
- *                 ({@link ConsentDesk#OWNER_SAID_NO} 等);允许时为空串
+ * @param words    拒绝的理由:主人的附言原话(附言只随拒绝——主人要她换个做法才会说),没有附言时是登记处替
+ *                 这次结局说的那句({@link ConsentDesk#OWNER_SAID_NO} 等);允许时为空串
  */
 public record ConsentAnswer(Decision decision, String words) {
 

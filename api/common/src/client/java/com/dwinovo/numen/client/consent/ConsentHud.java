@@ -12,7 +12,6 @@ import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.client.ui.widget.Badge;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
-import com.dwinovo.numen.permission.ConsentItem;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -49,8 +48,8 @@ public final class ConsentHud {
         McDrawSurface s = new McDrawSurface(g, mc.font);
         NumenTheme.Colors c = HostThemeColors.current();
         String name = NumenRoster.instance().name(request.companion());
-        String what = request.lines().isEmpty() ? "" : request.lines().get(0).text();
-        boolean irreversible = request.lines().stream().anyMatch(ConsentItem.Line::irreversible);
+        String what = request.lines().isEmpty() ? "" : request.lines().get(0).text().getString();
+        boolean irreversible = request.lines().stream().anyMatch(ConsentRequestPayload.Line::irreversible);
         long left = mc.level == null ? 0 : Math.max(0, request.expiresAtGameTime() - mc.level.getGameTime());
         String tail = I18n.get(ModLanguageData.Keys.CONSENT_HUD_HINT,
                 NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString())

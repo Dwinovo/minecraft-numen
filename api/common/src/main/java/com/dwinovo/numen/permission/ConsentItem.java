@@ -1,7 +1,10 @@
 package com.dwinovo.numen.permission;
 
+import com.dwinovo.numen.data.ModLanguageData;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -15,18 +18,24 @@ import java.util.Map;
  * ({@link #covers}),裁决把被它覆盖的 ask 放行;主人选"允许并记住"时,{@link #remember} 那一行写进
  * 主人的 allow 表。
  *
+ * <p>同一件事两种说法:给模型的是英文短语({@code subject}、{@code cause}),给主人看的是可翻译的
+ * {@link Component}({@code name}、{@code shownCause}),由主人的客户端按自己的语言显示——方块叫"橡木原木",
+ * 起了名字的动物叫它的名字。两种说法在建这一条时从同一个动作、同一行规则一起得出。
+ *
  * @param kind         动词
  * @param pos          方块动作的格子;实体动作与丢弃为 null——实体认的是那一只({@code entityId}),不是它脚下的格:
  *                     它走一步清单就不该变,否则同一件事会被当成新的征询重发
  * @param entityId     实体动作的实体 id;其余为 {@link #NO_ENTITY}
  * @param subject      方块、实体种类或物品的 id 路径({@code oak_log}、{@code wolf}、{@code diamond})
+ * @param name         给主人看的名字:方块、物品的名字,实体的名字(起了名的就是那个名字)
  * @param rule         问的是哪一行规则的原文;没有任何一行覆盖时为空串
  * @param cause        为什么要问:那一行规则的自述({@code placed by a player})
+ * @param shownCause   给主人看的为什么要问({@link Verdict#shownCause})
  * @param irreversible 这件事撤不回(那一行规则的正项里有撤不回的信号)
  * @param remember     主人说"允许并记住"时存下的那一行 allow(推法见 {@link Rule#remembering})
  */
-public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String subject, String rule, String cause,
-                          boolean irreversible, Rule remember) {
+public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String subject, Component name, String rule,
+                          String cause, Component shownCause, boolean irreversible, Rule remember) {
 
     public static final int NO_ENTITY = -1;
 
@@ -34,8 +43,33 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         pos = pos == null ? null : pos.immutable();
     }
 
-    /** 清单正文的一行;{@code irreversible} 让答复框在这一行前面标出"撤不回"。 */
-    public record Line(String text, boolean irreversible) {}
+    /**
+     * 清单里的一堆:同一个动词、同一种东西、同一个理由。给模型的说法与给主人看的说法都从这一堆出。
+     *
+     * @param head  这一堆的第一条
+     * @param count 这一堆有几条
+     * @param cells 这一堆点得出的格子(实体与丢弃没有)
+     */
+    public record Group(ConsentItem head, int count, List<BlockPos> cells) {
+
+        public boolean irreversible() {
+            return head.irreversible;
+        }
+
+        /** 给模型:{@code break 6 oak_log (1,64,2; …; +2 more): placed by a player}。 */
+        public String text() {
+            return head.kind.verb() + ' ' + Listing.part(head.subject, count, cells) + ": " + head.cause;
+        }
+
+        /** 给主人:"挖掉 橡木原木 ×6 · 玩家放的"。格子不写——世界里描着轮廓。 */
+        public Component shown() {
+            Component what = count > 1
+                    ? Component.translatable(ModLanguageData.Keys.CONSENT_COUNT, head.name, String.valueOf(count))
+                    : head.name;
+            return Component.translatable(ModLanguageData.Keys.CONSENT_LINE_PREFIX + head.kind.verb(), what,
+                    head.shownCause);
+        }
+    }
 
     /**
      * 从一个被裁成 ask 的动作建一条({@link Gate#consentItem} / {@link Gate#consentItemLive})。
@@ -48,12 +82,18 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         Rule remember = Rule.remembering(action, verdict.rule(), facts);
         return switch (action.kind()) {
             case ATTACK, USE_ENTITY -> new ConsentItem(action.kind(), null, action.entity().getId(),
-                    EntityType.getKey(action.entity().getType()).getPath(), rule, verdict.cause(), irreversible,
-                    remember);
-            case DROP -> new ConsentItem(action.kind(), null, NO_ENTITY, subjectOf(action), rule, verdict.cause(),
-                    irreversible, remember);
-            default -> new ConsentItem(action.kind(), action.pos(), NO_ENTITY, subjectOf(action), rule,
-                    verdict.cause(), irreversible, remember);
+                    EntityType.getKey(action.entity().getType()).getPath(), action.entity().getName(), rule,
+                    verdict.cause(), verdict.shownCause(), irreversible, remember);
+            case DROP -> {
+                Subject subject = Subject.of(action);
+                yield new ConsentItem(action.kind(), null, NO_ENTITY, subject.id, subject.name, rule, verdict.cause(),
+                        verdict.shownCause(), irreversible, remember);
+            }
+            default -> {
+                Subject subject = Subject.of(action);
+                yield new ConsentItem(action.kind(), action.pos(), NO_ENTITY, subject.id, subject.name, rule,
+                        verdict.cause(), verdict.shownCause(), irreversible, remember);
+            }
         };
     }
 
@@ -93,52 +133,57 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         }
         return switch (kind) {
             case ATTACK, USE_ENTITY -> action.entity() != null && action.entity().getId() == entityId;
-            default -> subject.equals(subjectOf(action));
+            default -> subject.equals(Subject.of(action).id);
         };
     }
 
     /**
-     * 清单正文,一堆一行:{@code break 6 oak_log (1,64,2; …; +2 more): placed by a player}。
-     * 按"动词 + 对象 + 理由"归堆,保持先出现的先列。答复框与回执都用这一份。
+     * 清单,一堆一条:按"动词 + 对象 + 理由"归堆(实体再按名字分开),保持先出现的先列。
+     * 答复框与回执都用这一份。
      */
-    public static List<Line> listing(List<ConsentItem> items) {
+    public static List<Group> listing(List<ConsentItem> items) {
         Map<String, List<ConsentItem>> groups = new LinkedHashMap<>();
         for (ConsentItem item : items) {
-            groups.computeIfAbsent(item.kind.verb() + ' ' + item.subject + ' ' + item.rule + ' ' + item.cause,
-                    k -> new ArrayList<>()).add(item);
+            String key = item.kind.verb() + ' ' + item.subject + ' ' + item.name.getString() + ' ' + item.rule
+                    + ' ' + item.cause;
+            groups.computeIfAbsent(key, k -> new ArrayList<>()).add(item);
         }
-        List<Line> lines = new ArrayList<>();
+        List<Group> out = new ArrayList<>();
         for (List<ConsentItem> group : groups.values()) {
-            ConsentItem head = group.get(0);
             List<BlockPos> cells = new ArrayList<>();
             for (ConsentItem item : group) {
                 if (item.pos != null) {
                     cells.add(item.pos);
                 }
             }
-            lines.add(new Line(head.kind.verb() + ' ' + Listing.part(head.subject, group.size(), cells)
-                    + ": " + head.cause, head.irreversible));
+            out.add(new Group(group.get(0), group.size(), cells));
         }
-        return lines;
+        return out;
     }
 
-    /** 清单正文拼成一句(回执用)。 */
+    /** 清单拼成一句给模型(回执用)。 */
     public static String listingText(List<ConsentItem> items) {
         List<String> texts = new ArrayList<>();
-        for (Line line : listing(items)) {
-            texts.add(line.text());
+        for (Group group : listing(items)) {
+            texts.add(group.text());
         }
         return String.join("; ", texts);
     }
 
-    private static String subjectOf(Action action) {
-        BlockState state = action.state();
-        if (state != null && action.kind() != Action.Kind.PLACE) {
-            return BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath();
+    /** 方块与物品动作的对象:挖、右键、拿看格子上的方块,放、丢看物品。 */
+    private record Subject(String id, Component name) {
+
+        static Subject of(Action action) {
+            BlockState state = action.state();
+            if (state != null && action.kind() != Action.Kind.PLACE) {
+                return new Subject(BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath(),
+                        state.getBlock().getName());
+            }
+            if (action.item() != null) {
+                return new Subject(BuiltInRegistries.ITEM.getKey(action.item()).getPath(),
+                        action.item().getDescription());
+            }
+            return new Subject("block", Component.translatable(ModLanguageData.Keys.PERMISSION_A_BLOCK));
         }
-        if (action.item() != null) {
-            return BuiltInRegistries.ITEM.getKey(action.item()).getPath();
-        }
-        return "block";
     }
 }

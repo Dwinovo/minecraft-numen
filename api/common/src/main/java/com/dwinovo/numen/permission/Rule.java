@@ -1,9 +1,12 @@
 package com.dwinovo.numen.permission;
 
+import com.dwinovo.numen.data.ModLanguageData;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.EntityType;
@@ -112,6 +115,19 @@ public final class Rule {
             }
         }
         return parts.isEmpty() ? text : String.join(", ", parts);
+    }
+
+    /** {@link #describe} 给主人看的那一版:信号按主人的语言显示,种类、标签与实体照原文。 */
+    public Component shown() {
+        MutableComponent out = null;
+        for (Term t : terms) {
+            if (t.negated || t.type == Term.Type.ANY) {
+                continue;
+            }
+            out = out == null ? Component.empty().append(t.shown())
+                    : out.append(Component.translatable(ModLanguageData.Keys.PERMISSION_SEPARATOR)).append(t.shown());
+        }
+        return out == null ? Component.literal(text) : out;
     }
 
     /**
@@ -255,6 +271,11 @@ public final class Rule {
                 case ID -> "is " + id;
                 case ENTITY -> "is entity " + uuid;
             };
+        }
+
+        /** 给主人看的这一项;只对正项、非 {@code *} 调。 */
+        Component shown() {
+            return type == Type.SIGNAL ? signal.shown() : Component.literal(text);
         }
 
         /** 挖/右键看格子上的方块,放看要放的方块,实体动作看实体种类,拿/丢看物品。 */

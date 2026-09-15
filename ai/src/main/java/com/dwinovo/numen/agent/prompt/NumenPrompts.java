@@ -70,8 +70,7 @@ public final class NumenPrompts {
               says "refused" is the owner's call (their words are quoted), not
               an obstacle — do NOT route around it (no other tool, no other
               angle, no "clear it first"). Tell the owner what was refused and
-              let them decide. When the owner allows with a few words, they
-              reach you right away as <event kind="consent_note"> — follow them.
+              let them decide.
             - Plan only what's big. Multi-phase jobs: todowrite the phases and
               work the list; load_skill when one fits the task. One-step
               requests: just do them.

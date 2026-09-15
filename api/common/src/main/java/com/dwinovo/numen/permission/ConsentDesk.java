@@ -1,9 +1,7 @@
 package com.dwinovo.numen.permission;
 
 import com.dwinovo.numen.Constants;
-import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.event.NumenEvents;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.task.TaskRecord;
@@ -13,9 +11,7 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -32,8 +28,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * 发起者每刻读自己那张 {@link Ticket},模型不参与。
  *
  * <h2>附言</h2>
- * 主人答复时说的那句当场到她那里。拒绝的附言是拒绝的理由,随发起的任务收场送达;允许了任务接着干,
- * 附言等不到收场,当场作为 {@link EventTypes#CONSENT_NOTE} 事件转过去。每句附言只走其中一条路。
+ * 附言只随拒绝:主人要她换个做法才会说,那句话就是拒绝的理由,随发起的任务收场送达。允许不带附言。
  *
  * <h2>任务期授权</h2>
  * 主人允许的清单记在发起它的任务记录名下,{@link #granted} 是全部在册授权的快照,作为
@@ -70,7 +65,7 @@ public final class ConsentDesk {
         NOT_PENDING
     }
 
-    /** 登记处与外界的接线:时钟、主人在不在、把请求推给主人或撤回、把记住的规则写进主人的表、转交附言。 */
+    /** 登记处与外界的接线:时钟、主人在不在、把请求推给主人或撤回、把记住的规则写进主人的表。 */
     interface Line {
         long gameTime();
 
@@ -82,9 +77,6 @@ public final class ConsentDesk {
         void clear(String why);
 
         void remember(List<Rule> allow);
-
-        /** 主人允许时说的那句,当场转给她。 */
-        void relayNote(ConsentAnswer.Decision decision, List<ConsentItem> asked, String note);
     }
 
     private static final AtomicLong IDS = new AtomicLong();
@@ -163,17 +155,21 @@ public final class ConsentDesk {
 
     /**
      * 这只同伴的主人的答复(经 {@link #reply} 进来;测试直接调)。允许就把清单记进发起任务的授权,允许并
-     * 记住再把记住的规则写进主人的 allow 表,附言当场转给她;拒绝的附言就是理由,没有附言时理由是
-     * {@link #OWNER_SAID_NO}。
+     * 记住再把记住的规则写进主人的 allow 表;拒绝的附言就是理由,没有附言时理由是 {@link #OWNER_SAID_NO}。
      *
+     * @param note 附言;只有拒绝带
      * @return 答的是不是挂着的那一条(过期、被顶替的号一律忽略)
+     * @throws IllegalArgumentException 允许的答复带了附言
      */
     public boolean answer(long requestId, ConsentAnswer.Decision decision, String note) {
+        String said = note == null ? "" : note.strip();
+        if (decision != ConsentAnswer.Decision.DENY && !said.isEmpty()) {
+            throw new IllegalArgumentException("a note only goes with a deny");
+        }
         if (pending == null || pending.request.id() != requestId) {
             return false;
         }
         Ticket ticket = pending;
-        String said = note == null ? "" : note.strip();
         ConsentAnswer answer;
         if (decision == ConsentAnswer.Decision.DENY) {
             answer = new ConsentAnswer(decision, said.isEmpty() ? OWNER_SAID_NO : said);
@@ -182,9 +178,6 @@ public final class ConsentDesk {
             rebuildGranted();
             if (decision == ConsentAnswer.Decision.ALLOW_REMEMBER) {
                 line.remember(ConsentItem.remembered(ticket.request.items()));
-            }
-            if (!said.isEmpty()) {
-                line.relayNote(decision, ticket.request.items(), said);
             }
             answer = new ConsentAnswer(decision, "");
         }
@@ -270,7 +263,7 @@ public final class ConsentDesk {
         }
     }
 
-    /** 真身体的接线:游戏刻、主人在线与否、载荷推给主人、记住的规则进主人的存档、附言经事件发出口转给她。 */
+    /** 真身体的接线:游戏刻、主人在线与否、载荷推给主人、记住的规则进主人的存档。 */
     private record BodyLine(NumenPlayer body) implements Line {
         @Override
         public long gameTime() {
@@ -303,12 +296,5 @@ public final class ConsentDesk {
             PermissionStore.of(body.getServer(), body.getOwnerUuid()).remember(allow);
         }
 
-        @Override
-        public void relayNote(ConsentAnswer.Decision decision, List<ConsentItem> asked, String note) {
-            Map<String, String> attrs = new LinkedHashMap<>();
-            attrs.put("decision", decision.name().toLowerCase(Locale.ROOT));
-            attrs.put("asked", ConsentItem.listingText(asked));
-            NumenEvents.emit(body, EventTypes.CONSENT_NOTE, attrs, note, true);
-        }
     }
 }

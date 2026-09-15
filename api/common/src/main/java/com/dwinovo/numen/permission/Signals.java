@@ -1,5 +1,8 @@
 package com.dwinovo.numen.permission;
 
+import com.dwinovo.numen.data.ModLanguageData;
+
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.monster.Enemy;
@@ -120,6 +123,11 @@ public enum Signals {
     /** 命中时给回执用的自述("placed by a player")。 */
     public String description() {
         return description;
+    }
+
+    /** 同一句自述给主人看的那一版,主人的客户端按自己的语言显示("玩家放的")。 */
+    public Component shown() {
+        return Component.translatable(ModLanguageData.Keys.PERMISSION_SIGNAL_PREFIX + ruleName);
     }
 
     /**

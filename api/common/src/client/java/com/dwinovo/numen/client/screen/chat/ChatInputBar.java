@@ -183,7 +183,7 @@ public final class ChatInputBar {
     }
 
     /**
-     * 她挂着征询就用答复框取代输入行,换了一条就换一张框(没提交的附言带过去),没了就收起并告诉宿主。
+     * 她挂着征询就用答复框取代输入行,换了一条就换一张框(正在写的那句带过去),没了就收起并告诉宿主。
      */
     private void syncConsent() {
         var loop = host.loop();
@@ -198,26 +198,25 @@ public final class ChatInputBar {
             }
             return;
         }
-        openPopup(new com.dwinovo.numen.client.consent.ConsentPrompt(asking, shown == null ? "" : shown.note()));
+        openPopup(new com.dwinovo.numen.client.consent.ConsentPrompt(asking, shown));
     }
 
     /** 每帧同步可按性、占位文案与面板位置:叫停的可用性是活的,面板的高度随内容变。 */
     public void refreshEnablement() {
         if (field == null) return;
         var line = panel == null ? null : panel.lineRequest();
-        if (line != lent) {
-            lent = line;
-            if (line != null) {
-                field.setValue(line.text());
-                field.cursorToEnd();
-                ui.requestFocus(field);
-            }
-        }
+        boolean lending = line != lent;
+        lent = line;
         boolean paged = panel != null && lent == null;
         // 面板在场时输入框让位(它就摆在输入框那格),旁边几颗键跟着停手——
         // 叫停除外:那是主人的急刹车,任何时候都得能按。面板借输入框收字时输入框回到原位。
         field.setVisible(!paged);
         field.setEnabled(!paged);
+        if (lending && line != null) {
+            field.setValue(line.text());
+            field.cursorToEnd();
+            ui.requestFocus(field);
+        }
         field.placeholder(lent != null ? lent.hint() : host.hint());
         if (micBtn != null) micBtn.setEnabled(panel == null);
         if (sendBtn != null) sendBtn.setEnabled(panel == null);
@@ -291,12 +290,9 @@ public final class ChatInputBar {
         // 除非这一层不由 Esc 收起(答复框),那 Esc 照常关界面。
         if (panel != null) {
             if (lent != null) {
-                switch (keyCode) {
-                    case KeyCodes.ESCAPE -> lent.cancel();
-                    case KeyCodes.ENTER -> lent.submit(field.value());
-                    default -> ui.keyPressed(keyCode, modifiers);
-                }
-                return true;
+                // 借着输入框:键先给面板(回车、上下),它不要的照常落到真输入框——输入框的字与编辑键
+                // 靠"这里不接、屏幕往下传"才到得了宿主控件,这里接了就打不进字
+                return panel.keyPressed(keyCode, modifiers) || ui.keyPressed(keyCode, modifiers);
             }
             if (keyCode == KeyCodes.ESCAPE) {
                 if (!panel.closesOnEscape()) return false;
@@ -397,9 +393,9 @@ public final class ChatInputBar {
     }
 
     public boolean charTyped(char ch) {
-        // 面板在场时字归面板(答复框用数字键选);输入框借给面板时字进输入框。都不往下漏。
-        if (panel != null) {
-            if (lent != null) ui.charTyped(ch); else panel.charTyped(ch);
+        // 面板在场时字归面板(答复框用数字键选),不往下漏;输入框借给面板时字照常落到真输入框。
+        if (panel != null && lent == null) {
+            panel.charTyped(ch);
             return true;
         }
         return ui.charTyped(ch);
