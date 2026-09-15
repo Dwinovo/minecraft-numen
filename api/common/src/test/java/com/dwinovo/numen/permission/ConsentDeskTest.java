@@ -197,14 +197,14 @@ class ConsentDeskTest {
         for (int x = 0; x < 8; x++) {
             items.add(log(x));
         }
-        items.add(new ConsentItem(Action.Kind.ATTACK, new BlockPos(5, 64, 5), 42, "wolf", "attack(owned)",
+        items.add(new ConsentItem(Action.Kind.ATTACK, null, 42, "wolf", "attack(owned)",
                 "has an owner", true, Rule.parse("attack(entity:00000000-0000-0000-0000-00000000002a)")));
         List<ConsentItem.Line> lines = ConsentItem.listing(items);
         assertEquals(2, lines.size());
         assertEquals("break 8 oak_log (0,64,0; 1,64,0; 2,64,0; 3,64,0; 4,64,0; 5,64,0; +2 more): placed by a player",
                 lines.get(0).text());
         assertFalse(lines.get(0).irreversible());
-        assertEquals("attack 1 wolf (5,64,5): has an owner", lines.get(1).text());
+        assertEquals("attack 1 wolf: has an owner", lines.get(1).text(), "实体只点名是哪一种,不报它此刻站在哪");
         assertTrue(lines.get(1).irreversible(), "撤不回的那一行带着标记给卡片");
     }
 }

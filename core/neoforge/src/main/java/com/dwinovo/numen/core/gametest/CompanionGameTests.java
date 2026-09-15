@@ -4403,6 +4403,59 @@ public class CompanionGameTests {
         });
     }
 
+    /**
+     * 等主人点头的时候那只动物挪了窝,征询还是原来那一张:点名打一头起了名字的猪,征询挂上后每隔几刻把它挪一格,
+     * 号始终不变——实体认的是那一只,不是它脚下的格,挪一步不是新的请求。主人拒绝后猪还活着。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void a_target_that_moves_keeps_its_consent_request(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = armedCompanion(helper, new BlockPos(4, 2, 4));
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_swineherd");
+        var pig = EntityType.PIG.create(level);
+        helper.assertTrue(pig != null, "pig did not spawn");
+        BlockPos at = helper.absolutePos(new BlockPos(6, 2, 4));
+        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.setNoAi(true);
+        pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
+        level.addFreshEntity(pig);
+        TaskRecord record = new com.dwinovo.numen.core.tools.CombatOps().attack(
+                List.of(pig.getId()), TaskDispatch.ctx("gametest-swineherd", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+        long[] asked = {0L};
+        int[] waited = {0};
+        boolean[] denied = {false};
+        helper.onEachTick(() -> {
+            if (denied[0]) {
+                return;
+            }
+            var pending = desk(companion).pending();
+            if (asked[0] == 0L) {
+                if (pending != null) {
+                    asked[0] = pending.id();
+                }
+                return;
+            }
+            helper.assertTrue(pending != null && pending.id() == asked[0],
+                    "the pig moved and the request was raised again: " + pending);
+            waited[0]++;
+            if (waited[0] % 5 == 0) {
+                pig.teleportTo(pig.getX() + (waited[0] % 10 == 0 ? -1 : 1), pig.getY(), pig.getZ());
+            }
+            if (waited[0] >= 40) {
+                denied[0] = desk(companion).answer(asked[0],
+                        com.dwinovo.numen.permission.ConsentAnswer.Decision.DENY, "");
+            }
+        });
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(denied[0] && record.getResult() != null, "attack has not finished after the no");
+            helper.assertTrue(pig.isAlive(), "the pig was hit after the owner said no");
+            CompanionFactory.despawn(level.getServer(), companion);
+            CompanionFactory.despawn(level.getServer(), owner);
+        });
+    }
+
     /** drop_items 每次问:调用悬着等主人;允许后东西丢出来。 */
     @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
     public static void drop_items_waits_for_the_owner(GameTestHelper helper) {
