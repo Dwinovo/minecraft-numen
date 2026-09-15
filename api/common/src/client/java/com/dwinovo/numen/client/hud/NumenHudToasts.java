@@ -15,7 +15,9 @@ import net.minecraft.client.gui.GuiGraphics;
  */
 public final class NumenHudToasts {
 
-    private static final NumenToasts TOASTS = new NumenToasts();
+    /** 停留多久跟原版"通知显示时间"(辅助功能设置)走,和原版 toast 一起调。 */
+    private static final NumenToasts TOASTS = new NumenToasts(
+            () -> Minecraft.getInstance().options.notificationDisplayTime().get());
 
     private NumenHudToasts() {}
 
