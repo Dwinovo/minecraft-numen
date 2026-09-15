@@ -14,7 +14,9 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.net.http.HttpResponse.BodySubscribers;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.Flow;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -47,6 +49,9 @@ import java.util.function.Consumer;
  *   <li>non-2xx → future fails with {@link LlmHttpException} carrying the
  *       status code and full response body</li>
  *   <li>network / DNS / timeout → future fails with the wrapped IOException</li>
+ *   <li>the caller's {@link CancelToken} cancelled → the SSE subscription is closed, no further
+ *       chunk reaches the handler, no retry or pending backoff goes ahead, and the future fails
+ *       with {@link CancellationException}</li>
  * </ul>
  */
 public final class HttpLlmTransport {
@@ -143,11 +148,14 @@ public final class HttpLlmTransport {
      * {@code chunkHandler}. The returned future completes when the stream
      * terminates normally; it fails with {@link LlmHttpException} if the
      * server replied non-2xx (in which case the chunk handler is never
-     * invoked).
+     * invoked), and with {@link CancellationException} once {@code cancel} is cancelled.
+     *
+     * @param cancel cancelling it closes the stream: the handler is not called again and no
+     *               retry (or backoff already waiting) goes ahead
      */
     public CompletableFuture<Void> postSse(String url, String apiKey, JsonObject body,
-                                            Consumer<JsonObject> chunkHandler) {
-        return postSseAttempt(url, apiKey, body, chunkHandler, 0);
+                                            Consumer<JsonObject> chunkHandler, CancelToken cancel) {
+        return postSseAttempt(url, apiKey, body, chunkHandler, cancel, 0);
     }
 
     /**
@@ -161,9 +169,17 @@ public final class HttpLlmTransport {
      * ({@value #SSE_IDLE_TIMEOUT_MS}ms) kills a wedged stream — the JDK request
      * timeout only covers up to response HEADERS, so without this a half-dead
      * connection hangs the agent loop forever.
+     *
+     * <p>Cancellation reaches every stage of an attempt: before sending nothing goes out; while
+     * waiting or streaming the exchange is cancelled and the subscriber stops reading; once the
+     * exchange settles a cancelled token wins over retrying (and over the watchdog's idle verdict).
      */
     private CompletableFuture<Void> postSseAttempt(String url, String apiKey, JsonObject body,
-                                                   Consumer<JsonObject> chunkHandler, int attempt) {
+                                                   Consumer<JsonObject> chunkHandler, CancelToken cancel,
+                                                   int attempt) {
+        if (cancel.isCancelled()) {
+            return CompletableFuture.failedFuture(new CancellationException("request cancelled before sending"));
+        }
         String requestId = nextRequestId() + (attempt > 0 ? "r" + attempt : "");
         String bodyStr = body.toString();
         long t0 = System.nanoTime();
@@ -179,13 +195,16 @@ public final class HttpLlmTransport {
         // we can surface the (typically JSON) error body in LlmHttpException.
         BodyHandler<String> handler = ri -> {
             if (ri.statusCode() / 100 == 2) {
-                SseSubscriber sub = new SseSubscriber(requestId, chunkHandler, chunkCount, lastActivityNanos);
+                SseSubscriber sub = new SseSubscriber(requestId, chunkHandler, chunkCount, lastActivityNanos, cancel);
                 return BodySubscribers.fromLineSubscriber(sub, s -> "", StandardCharsets.UTF_8, "\n");
             }
             return BodySubscribers.ofString(StandardCharsets.UTF_8);
         };
 
         CompletableFuture<HttpResponse<String>> sendFuture = client.sendAsync(request, handler);
+        // Cancelling the future returned by sendAsync aborts the exchange and closes the connection;
+        // the handle below then sees the token and gives up instead of retrying.
+        Runnable forgetCancel = cancel.onCancel(() -> sendFuture.cancel(true));
         // Idle watchdog: ANY received line (data, keepalive comment, blank) counts as
         // activity. A stream silent past the threshold is a half-dead connection —
         // cancel the exchange; the failure surfaces below tagged as idle.
@@ -198,7 +217,13 @@ public final class HttpLlmTransport {
 
         return sendFuture.handle((resp, ex) -> {
             watchdog.cancel(false);
+            forgetCancel.run();
             long elapsedMs = (System.nanoTime() - t0) / 1_000_000;
+            if (cancel.isCancelled()) {
+                AiLog.LOG.info("[numen-http][{}] cancelled by caller in {}ms ({} chunks)",
+                        requestId, elapsedMs, chunkCount.get());
+                return CompletableFuture.<Void>failedFuture(new CancellationException("request cancelled"));
+            }
             if (ex != null) {
                 Throwable cause = ex instanceof java.util.concurrent.CompletionException && ex.getCause() != null
                         ? ex.getCause() : ex;
@@ -211,7 +236,7 @@ public final class HttpLlmTransport {
                 // Pre-stream connection failures retry; anything after the first
                 // delivered chunk is the turn layer's decision.
                 if (attempt < MAX_RETRIES && chunkCount.get() == 0) {
-                    return retryAfterDelay(url, apiKey, body, chunkHandler, attempt,
+                    return retryAfterDelay(url, apiKey, body, chunkHandler, cancel, attempt,
                             computeBackoffMs(attempt), requestId, String.valueOf(cause));
                 }
                 AiLog.LOG.warn("[numen-http][{}] ✗ {} in {}ms ({} chunks)",
@@ -234,22 +259,40 @@ public final class HttpLlmTransport {
                 long delay = retryAfterMs(resp.headers())
                         .filter(v -> v > 0 && v <= 60_000)
                         .orElse(computeBackoffMs(attempt));
-                return retryAfterDelay(url, apiKey, body, chunkHandler, attempt,
+                return retryAfterDelay(url, apiKey, body, chunkHandler, cancel, attempt,
                         delay, requestId, "HTTP " + status);
             }
             return CompletableFuture.<Void>failedFuture(new LlmHttpException(status, body2));
         }).thenCompose(f -> f);
     }
 
+    /**
+     * Wait out the backoff, then run the next attempt. A cancel during the wait fails the returned
+     * future at once; the delayed task still fires later but finds the future settled and sends nothing.
+     */
     private CompletableFuture<Void> retryAfterDelay(String url, String apiKey, JsonObject body,
-                                                    Consumer<JsonObject> chunkHandler, int attempt,
-                                                    long delayMs, String requestId, String reason) {
+                                                    Consumer<JsonObject> chunkHandler, CancelToken cancel,
+                                                    int attempt, long delayMs, String requestId, String reason) {
         AiLog.LOG.warn("[numen-http][{}] retrying in {}ms (attempt {}/{}) — {}",
                 requestId, delayMs, attempt + 1, MAX_RETRIES, reason);
-        return CompletableFuture.supplyAsync(
-                        () -> postSseAttempt(url, apiKey, body, chunkHandler, attempt + 1),
-                        CompletableFuture.delayedExecutor(delayMs, java.util.concurrent.TimeUnit.MILLISECONDS))
-                .thenCompose(f -> f);
+        CompletableFuture<Void> next = new CompletableFuture<>();
+        Runnable forgetCancel = cancel.onCancel(() ->
+                next.completeExceptionally(new CancellationException("request cancelled during retry backoff")));
+        CompletableFuture.delayedExecutor(delayMs, java.util.concurrent.TimeUnit.MILLISECONDS).execute(() -> {
+            forgetCancel.run();
+            if (next.isDone()) {
+                return;
+            }
+            postSseAttempt(url, apiKey, body, chunkHandler, cancel, attempt + 1).whenComplete((v, err) -> {
+                if (err == null) {
+                    next.complete(v);
+                } else {
+                    next.completeExceptionally(err instanceof CompletionException && err.getCause() != null
+                            ? err.getCause() : err);
+                }
+            });
+        });
+        return next;
     }
 
     /** SDK-consensus retryable statuses: {@code x-should-retry} override first, then
@@ -371,6 +414,11 @@ public final class HttpLlmTransport {
      * <h2>{@code [DONE]} sentinel</h2>
      * OpenAI's stream terminates with {@code data: [DONE]\n\n}; we
      * specifically skip parsing that as JSON.
+     *
+     * <h2>Cancellation</h2>
+     * The caller's {@link CancelToken} cancels the subscription (the stream stops being read and the
+     * connection is closed), and every line or event that still arrives after the cancel is dropped
+     * — the handler never sees a chunk once the caller gave the request up.
      */
     private static final class SseSubscriber implements Flow.Subscriber<String> {
 
@@ -380,25 +428,33 @@ public final class HttpLlmTransport {
         /** Stamped on EVERY received line (data, keepalive comment, blank) — the idle
          *  watchdog's liveness signal. */
         private final AtomicLong lastActivityNanos;
+        private final CancelToken cancel;
         private final StringBuilder buffer = new StringBuilder();
         private Flow.Subscription subscription;
+        private Runnable forgetCancel = () -> { };
 
         SseSubscriber(String requestId, Consumer<JsonObject> handler, AtomicLong chunkCount,
-                      AtomicLong lastActivityNanos) {
+                      AtomicLong lastActivityNanos, CancelToken cancel) {
             this.requestId = requestId;
             this.handler = handler;
             this.chunkCount = chunkCount;
             this.lastActivityNanos = lastActivityNanos;
+            this.cancel = cancel;
         }
 
         @Override
         public void onSubscribe(Flow.Subscription s) {
             this.subscription = s;
+            forgetCancel = cancel.onCancel(s::cancel);
             s.request(Long.MAX_VALUE);
         }
 
         @Override
         public void onNext(String rawLine) {
+            if (cancel.isCancelled()) {
+                subscription.cancel();
+                return;
+            }
             lastActivityNanos.set(System.nanoTime());
             String line = rawLine.replace("\r", "");
             if (line.isEmpty()) {
@@ -416,6 +472,10 @@ public final class HttpLlmTransport {
 
         @Override
         public void onError(Throwable t) {
+            forgetCancel.run();
+            if (cancel.isCancelled()) {
+                return;   // the caller closed it; the transport logs the cancel once
+            }
             AiLog.LOG.warn("[numen-http][{}] SSE stream error: {}",
                     requestId, t.getClass().getSimpleName() + ": " + t.getMessage());
             // Future will fail via the wrapping CompletableFuture.
@@ -423,6 +483,7 @@ public final class HttpLlmTransport {
 
         @Override
         public void onComplete() {
+            forgetCancel.run();
             flushEvent();
         }
 
@@ -430,7 +491,7 @@ public final class HttpLlmTransport {
             if (buffer.length() == 0) return;
             String data = buffer.toString();
             buffer.setLength(0);
-            if ("[DONE]".equals(data)) return;
+            if ("[DONE]".equals(data) || cancel.isCancelled()) return;
             try {
                 JsonObject obj = JsonParser.parseString(data).getAsJsonObject();
                 chunkCount.incrementAndGet();

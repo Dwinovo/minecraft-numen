@@ -1,6 +1,7 @@
 package com.dwinovo.numen.agent.llm;
 
 import com.dwinovo.numen.ai.AiLog;
+import com.dwinovo.numen.agent.http.CancelToken;
 import com.dwinovo.numen.agent.http.HttpLlmTransport;
 import com.dwinovo.numen.agent.provider.Usage;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
@@ -159,12 +160,16 @@ public final class NumenLlmClient {
      * @param tools          tool list (provider serialises to wire shape;
      *                       empty = no tools field, e.g. for summarization calls)
      * @param systemPrompt   prepended automatically — pass empty / null to skip
+     * @param cancel         cancelling it closes the stream: {@code onChunk} is not called again,
+     *                       nothing is retried, and the future fails with
+     *                       {@link java.util.concurrent.CancellationException}
      * @param onChunk        optional per-chunk callback (e.g. for live UI).
      *                       Receives the raw provider chunk JSON. May be null.
      */
     public CompletableFuture<ChatResult> chatStreaming(List<ConvoState.Msg> messages,
                                                        Collection<? extends IToolSpec> tools,
                                                        String systemPrompt,
+                                                       CancelToken cancel,
                                                        Consumer<JsonObject> onChunk) {
         // -- 1. Build wire-format messages and tool list via provider. The recorded history goes
         //        through ProtocolView first — this is the only place a history becomes a request,
@@ -212,7 +217,7 @@ public final class NumenLlmClient {
             } catch (RuntimeException ex) {
                 AiLog.LOG.warn("[numen-llm] accumulator failed on chunk: {}", ex.getMessage());
             }
-        }).thenApply(v -> {
+        }, cancel).thenApply(v -> {
             AssistantTurn turn = provider.finalizeStream(acc);
             logCallSummary(t0, acc, turn);
             return new ChatResult(turn, provider.usage(acc.usage));

@@ -297,7 +297,8 @@ public final class ProviderPanel {
         LlmEndpoint ep = new LlmEndpoint(cfg.getProvider(), cfg.getModel(), cfg.getApiKey(),
                 cfg.getBaseUrl(), cfg.getProxy(), "auto");
         NumenLlmClient.forEndpoint(ep)
-                .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "", null)
+                .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "",
+                        new com.dwinovo.numen.agent.http.CancelToken(), null)
                 .whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
                     checking = false;
                     checkButton.setEnabled(true);

@@ -660,6 +660,7 @@ public final class EntityAgentLoop {
                                         target, facts, since))),
                         List.of(),
                         com.dwinovo.numen.agent.goal.GoalPrompts.evaluatorSystem(),
+                        new com.dwinovo.numen.agent.http.CancelToken(),
                         null)
                 .whenComplete((res, err) -> Minecraft.getInstance().execute(
                         () -> finishJudging(gen, target, res, err)));
@@ -1331,7 +1332,7 @@ public final class EntityAgentLoop {
         presenter.clearPartial();
         // 头顶挂思考气泡:从发出请求到回应落地的整个空窗都有反馈
         NumenLlmClient llm = client();
-        llm.chatStreaming(snapshot, tools, systemPrompt,
+        llm.chatStreaming(snapshot, tools, systemPrompt, new com.dwinovo.numen.agent.http.CancelToken(),
                         presenter.tapForUi(gen, vt.sink(), llm.provider()::extractReasoningDelta))
                 .whenComplete((res, err) -> {
                     vt.finish().run();
@@ -1390,7 +1391,8 @@ public final class EntityAgentLoop {
                 entityUuid, auto ? "auto" : "manual", toSummarize.size(), kept.size());
         final int gen = turnGeneration;
         final long startMs = System.currentTimeMillis();
-        client().chatStreaming(request, List.of(), COMPACT_SYSTEM_PROMPT, chunk -> {
+        client().chatStreaming(request, List.of(), COMPACT_SYSTEM_PROMPT,
+                new com.dwinovo.numen.agent.http.CancelToken(), chunk -> {
             String delta = com.dwinovo.numen.client.voice.VoicePipeline.extractContentDelta(chunk);
             if (delta != null && !delta.isEmpty()) compactChars.addAndGet(delta.length());
         }).whenComplete((res, err) -> Minecraft.getInstance().execute(
@@ -1852,7 +1854,7 @@ public final class EntityAgentLoop {
                 presenter.clearPartial();                 // 失败那次的半截文字同理作废
                 NumenLlmClient llm2 = client();
                 llm2.chatStreaming(modelContextSnapshot(), ToolRegistry.resident(),
-                                composeSystemPrompt(),
+                                composeSystemPrompt(), new com.dwinovo.numen.agent.http.CancelToken(),
                                 presenter.tapForUi(gen2, vt2.sink(), llm2.provider()::extractReasoningDelta))
                         .whenComplete((r2, e2) -> {
                             vt2.finish().run();

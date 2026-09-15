@@ -423,7 +423,8 @@ public final class ProfileFormPanel {
         LlmEndpoint ep = new LlmEndpoint(draft.provider, draft.model, draft.apiKey,
                 draft.baseUrl, proxy, "auto");
         NumenLlmClient.forEndpoint(ep)
-                .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "", null)
+                .chatStreaming(List.of(new ConvoState.Msg.User("ping")), List.of(), "",
+                        new com.dwinovo.numen.agent.http.CancelToken(), null)
                 .whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
                     checking = false;
                     checkButton.setEnabled(true);
