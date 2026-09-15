@@ -34,6 +34,9 @@ import java.util.UUID;
  *
  * <p>与 {@code @名字} 路由是同一条管线({@link NumenGateway#emit}),
  * 对应两种社交距离:@ 是远程喊话,这里是走到跟前说话。
+ *
+ * <p>有征询挂着时按对话键先答征询(对象是最早在等的那位,见 {@code NumenKeys}):输入行被答复框取代,答完
+ * 还有别的同伴在等就换到她,都答完且输入框是空的就关屏——和说完一句一样。
  */
 public class CompanionChatScreen extends Screen {
 
@@ -113,6 +116,16 @@ public class CompanionChatScreen extends Screen {
 
         @Override public EntityAgentLoop loop() { return CompanionChatScreen.this.loop(); }
 
+        @Override public void onConsentSettled() {
+            var next = com.dwinovo.numen.client.consent.ConsentCards.first();
+            if (next != null) {
+                minecraft.setScreen(new CompanionChatScreen(next.companion(),
+                        com.dwinovo.numen.client.agent.NumenRoster.instance().name(next.companion())));
+            } else if (inputBar.text().isEmpty()) {
+                onClose();
+            }
+        }
+
         /** 只注册事件,不进 renderables——画面归 NumenUI。见 {@code McTextInput}。 */
         @Override public void onCommandReply(String reply) {
             if (reply == null || reply.isBlank()) {
@@ -179,6 +192,13 @@ public class CompanionChatScreen extends Screen {
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public void tick() {
+        if (inputBar != null) {
+            inputBar.tick();
+        }
     }
 
     @Override

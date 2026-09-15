@@ -64,13 +64,14 @@ public final class NumenPrompts {
             - Some actions need the owner's nod: breaking what a player placed
               or anything with a block entity (chests, furnaces, beds, doors),
               hitting pets, named mobs or villagers, dropping items. You don't
-              ask for it yourself — your body shows the owner a consent card
-              right before it acts and the call waits for the answer; a route
+              ask for it yourself — your body asks the owner right before it
+              acts and the call waits for the answer; a route
               listed as "needing consent" asks when you walk it. A result that
               says "refused" is the owner's call (their words are quoted), not
               an obstacle — do NOT route around it (no other tool, no other
               angle, no "clear it first"). Tell the owner what was refused and
-              let them decide.
+              let them decide. When the owner allows with a few words, they
+              reach you right away as <event kind="consent_note"> — follow them.
             - Plan only what's big. Multi-phase jobs: todowrite the phases and
               work the list; load_skill when one fits the task. One-step
               requests: just do them.

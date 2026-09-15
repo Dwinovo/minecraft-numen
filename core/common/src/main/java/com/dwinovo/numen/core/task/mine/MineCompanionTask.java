@@ -327,7 +327,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 nav.pause();
             }
             // 动手之前:这一格交给权限层。要问就站着等主人,不许就带着理由收场
-            Permit permit = permit(Action.breakBlock(reachable, level.getBlockState(reachable)), r.describe());
+            Permit permit = permit(Action.breakBlock(reachable, level.getBlockState(reachable)));
             if (permit.state() == PermitState.WAITING) {
                 InputDriver.halt(player);
                 return TaskState.RUNNING;

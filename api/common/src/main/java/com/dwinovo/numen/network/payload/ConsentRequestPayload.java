@@ -15,22 +15,25 @@ import java.util.UUID;
 
 /**
  * Server → Client:同伴在等主人点头的那一条征询,或者"没有了"({@link #none})。
- * 登记处({@code ConsentDesk})发起时推一次,答复、超时、顶替、任务结束时推一条撤回——卡片与
- * 世界里的轮廓只照这份画,客户端不推断。
+ * 登记处({@code ConsentDesk})发起时推一次,答复、超时、任务结束时推一条撤回(顶替直接推新的那条)——
+ * 答复框、提示条与世界里的轮廓只照这份画,客户端不推断。
  *
- * <p>清单正文在服务端按 {@link ConsentItem#listing} 组好再发,卡片与回执同一份措辞;
- * 轮廓只带格子与实体 id,各有上限——一张图纸可能要问几千格,卡片说得清,轮廓画不完。
+ * <p>清单正文与"允许并记住"要写的规则行在服务端组好再发({@link ConsentItem#listing}、
+ * {@link ConsentItem#rememberedRows}),主人看到的与回执里交代给模型的同一份措辞;
+ * 轮廓只带格子与实体 id,各有上限——一张图纸可能要问几千格,清单说得清,轮廓画不完。
  *
  * @param companion         哪只同伴
  * @param id                请求号;{@code 0} = 没有挂着的请求
- * @param reason            发起者写的原因
  * @param lines             清单正文,一堆一行(撤不回的那几行带着标记)
+ * @param remember          选"允许并记住"会写进主人 allow 表的规则行
  * @param blocks            要描轮廓的格子({@code BlockPos#asLong})
  * @param entities          要描轮廓的实体 id
- * @param expiresAtGameTime 到这一刻按拒绝(卡片倒计时)
+ * @param expiresAtGameTime 到这一刻按拒绝(倒计时)
+ * @param withdrawnBecause  撤回的原因(超时、任务结束……);主人自己答复的撤回和挂着的请求为空串
  */
-public record ConsentRequestPayload(UUID companion, long id, String reason, List<ConsentItem.Line> lines,
-                                    List<Long> blocks, List<Integer> entities, long expiresAtGameTime)
+public record ConsentRequestPayload(UUID companion, long id, List<ConsentItem.Line> lines, List<String> remember,
+                                    List<Long> blocks, List<Integer> entities, long expiresAtGameTime,
+                                    String withdrawnBecause)
         implements CustomPacketPayload {
 
     /** 一次最多描多少格、多少只实体的轮廓。 */
@@ -55,13 +58,14 @@ public record ConsentRequestPayload(UUID companion, long id, String reason, List
                 blocks.add(item.pos().asLong());
             }
         }
-        return new ConsentRequestPayload(request.companion(), request.id(), request.reason(),
-                ConsentItem.listing(request.items()), blocks, entities, request.expiresAtGameTime());
+        return new ConsentRequestPayload(request.companion(), request.id(), ConsentItem.listing(request.items()),
+                ConsentItem.rememberedRows(request.items()), blocks, entities, request.expiresAtGameTime(), "");
     }
 
-    /** 这只同伴没有挂着的请求了。 */
-    public static ConsentRequestPayload none(UUID companion) {
-        return new ConsentRequestPayload(companion, 0L, "", List.of(), List.of(), List.of(), 0L);
+    /** 这只同伴没有挂着的请求了;{@code why} 为什么撤,主人自己答复的为空串。 */
+    public static ConsentRequestPayload none(UUID companion, String why) {
+        return new ConsentRequestPayload(companion, 0L, List.of(), List.of(), List.of(), List.of(), 0L,
+                why == null ? "" : why);
     }
 
     public boolean withdrawn() {
@@ -71,12 +75,12 @@ public record ConsentRequestPayload(UUID companion, long id, String reason, List
     private static void write(RegistryFriendlyByteBuf buf, ConsentRequestPayload p) {
         buf.writeUUID(p.companion);
         buf.writeVarLong(p.id);
-        buf.writeUtf(p.reason);
         buf.writeVarInt(p.lines.size());
         for (ConsentItem.Line line : p.lines) {
             buf.writeUtf(line.text());
             buf.writeBoolean(line.irreversible());
         }
+        buf.writeCollection(p.remember, net.minecraft.network.FriendlyByteBuf::writeUtf);
         buf.writeVarInt(p.blocks.size());
         for (long b : p.blocks) {
             buf.writeLong(b);
@@ -86,17 +90,18 @@ public record ConsentRequestPayload(UUID companion, long id, String reason, List
             buf.writeVarInt(e);
         }
         buf.writeVarLong(p.expiresAtGameTime);
+        buf.writeUtf(p.withdrawnBecause);
     }
 
     private static ConsentRequestPayload read(RegistryFriendlyByteBuf buf) {
         UUID companion = buf.readUUID();
         long id = buf.readVarLong();
-        String reason = buf.readUtf();
         int n = buf.readVarInt();
         List<ConsentItem.Line> lines = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
             lines.add(new ConsentItem.Line(buf.readUtf(), buf.readBoolean()));
         }
+        List<String> remember = buf.readList(net.minecraft.network.FriendlyByteBuf::readUtf);
         n = buf.readVarInt();
         List<Long> blocks = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
@@ -107,7 +112,9 @@ public record ConsentRequestPayload(UUID companion, long id, String reason, List
         for (int i = 0; i < n; i++) {
             entities.add(buf.readVarInt());
         }
-        return new ConsentRequestPayload(companion, id, reason, lines, blocks, entities, buf.readVarLong());
+        long expiresAtGameTime = buf.readVarLong();
+        return new ConsentRequestPayload(companion, id, lines, remember, blocks, entities, expiresAtGameTime,
+                buf.readUtf());
     }
 
     @Override

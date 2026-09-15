@@ -1,9 +1,15 @@
 package com.dwinovo.numen.client.consent;
 
+import com.dwinovo.numen.client.agent.NumenRoster;
+import com.dwinovo.numen.client.hud.NumenHudToasts;
+import com.dwinovo.numen.client.ui.NumenToasts;
+import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.network.payload.ConsentReplyPayload;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.permission.ConsentAnswer;
 import com.dwinovo.numen.platform.Services;
+
+import net.minecraft.client.resources.language.I18n;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -12,7 +18,7 @@ import java.util.UUID;
 
 /**
  * 客户端这边挂着的征询:每只同伴最多一条,照服务端推来的抄({@link ConsentRequestPayload}),
- * 撤回就删。卡片、HUD、世界轮廓与派发器的兜底豁免都只读这里。客户端主线程读写。
+ * 撤回就删。答复框、提示条、世界轮廓、面板侧栏的标记与派发器的兜底豁免都只读这里。客户端主线程读写。
  */
 public final class ConsentCards {
 
@@ -20,12 +26,19 @@ public final class ConsentCards {
 
     private ConsentCards() {}
 
-    /** 网络处理体:一条请求顶掉这只同伴原来那条;撤回就删。 */
+    /**
+     * 网络处理体:一条请求顶掉这只同伴原来那条;撤回就删。主人没答就撤掉的(超时、任务结束……)用一条 toast
+     * 说清为什么——框和提示条是悄悄消失的,主人得知道那一问怎么了。
+     */
     public static void accept(ConsentRequestPayload p) {
-        if (p.withdrawn()) {
-            PENDING.remove(p.companion());
-        } else {
+        if (!p.withdrawn()) {
             PENDING.put(p.companion(), p);
+            return;
+        }
+        if (PENDING.remove(p.companion()) != null && !p.withdrawnBecause().isEmpty()) {
+            String name = NumenRoster.instance().name(p.companion());
+            NumenHudToasts.push(NumenToasts.Severity.WARN, I18n.get(ModLanguageData.Keys.CONSENT_WITHDRAWN,
+                    name == null ? "?" : name, p.withdrawnBecause()));
         }
     }
 
@@ -44,7 +57,7 @@ public final class ConsentCards {
     }
 
     /**
-     * 主人按了键:答复发回服务端,卡片先收起——服务端收到后会推撤回,那条到了也是删同一条。
+     * 主人答了:答复发回服务端,这条先删——服务端收到后推来的撤回找不到它,也就不再报原因。
      */
     public static void reply(ConsentRequestPayload p, ConsentAnswer.Decision decision, String note) {
         String trimmed = note == null ? "" : note.strip();

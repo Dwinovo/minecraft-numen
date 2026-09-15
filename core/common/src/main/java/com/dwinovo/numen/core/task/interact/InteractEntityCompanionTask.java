@@ -146,7 +146,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
             // 要问就站着等主人,不许就带着理由收场
             boolean left = r.button == MouseButton.LEFT;
             Permit permit = permit(left ? com.dwinovo.numen.permission.Action.attack(entity)
-                    : com.dwinovo.numen.permission.Action.useEntity(entity), r.describe());
+                    : com.dwinovo.numen.permission.Action.useEntity(entity));
             if (permit.state() == PermitState.WAITING) {
                 InputDriver.halt(player);
                 return TaskState.RUNNING;

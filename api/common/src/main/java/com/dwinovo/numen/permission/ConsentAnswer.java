@@ -1,14 +1,17 @@
 package com.dwinovo.numen.permission;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * 一次征询的结论。
  *
+ * <p>主人答复时带的附言当场到她那里:拒绝的附言就是这里的 {@code words},随发起的任务收场一起送达;
+ * 允许了任务还在接着干,附言等不到收场,由登记处当场作为 {@code consent_note} 事件转过去
+ * ({@link ConsentDesk#answer}),不进这里。
+ *
  * @param decision 主人按的哪个键;超时、主人不在、被顶替、任务先结束都按 {@link Decision#DENY}
- * @param words    主人的附言原话;拒绝时没有附言,是登记处替这次结局说的那句
- *                 ({@link ConsentDesk#OWNER_SAID_NO} 等)
+ * @param words    拒绝的理由:主人的附言原话,没有附言时是登记处替这次结局说的那句
+ *                 ({@link ConsentDesk#OWNER_SAID_NO} 等);允许时为空串
  */
 public record ConsentAnswer(Decision decision, String words) {
 
@@ -35,20 +38,13 @@ public record ConsentAnswer(Decision decision, String words) {
     }
 
     /**
-     * 允许之后回执里交代的那一句:主人点了头、说了什么;选的是"允许并记住"时再交代记下了哪几行规则,
-     * 往后同类的事不再问。
+     * 允许之后回执里交代的那一句:主人点了头;选的是"允许并记住"时再交代记下了哪几行规则,往后同类的事不再问。
      */
     public String allowance(List<ConsentItem> asked) {
         StringBuilder sb = new StringBuilder("the owner allowed: ").append(ConsentItem.listingText(asked));
-        if (!words.isEmpty()) {
-            sb.append(" (owner's note: ").append(words).append(')');
-        }
         if (decision == Decision.ALLOW_REMEMBER) {
-            List<String> rules = new ArrayList<>();
-            for (Rule rule : ConsentItem.remembered(asked)) {
-                rules.add("allow " + rule);
-            }
-            sb.append("; and remembered it, so these will not be asked again: ").append(String.join("; ", rules));
+            sb.append("; and remembered it, so these will not be asked again: ")
+                    .append(String.join("; ", ConsentItem.rememberedRows(asked)));
         }
         return sb.toString();
     }

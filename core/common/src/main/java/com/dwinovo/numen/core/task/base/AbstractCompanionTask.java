@@ -177,7 +177,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
             return null;
         }
         InputDriver.halt(player);
-        ConsentAnswer answer = consult(needed, r.describe());
+        ConsentAnswer answer = consult(needed);
         if (answer == null) {
             return TaskState.RUNNING;
         }
@@ -213,18 +213,16 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      * 执行开始:把要做的一个动作交给权限层。放行就做;拒绝就带着理由收场;要问就发起征询,
      * 等待期间返回 WAITING(调用方让身体站住,每刻再调),主人答应后返回 ALLOWED——同一行规则
      * 问出来的同一种东西从此在本任务内放行,不再问。任务自己不判能不能,只提出动作。
-     *
-     * @param reason 给主人看的原因
      */
-    protected final Permit permit(Action action, String reason) {
-        return permitAll(List.of(action), reason).get(0);
+    protected final Permit permit(Action action) {
+        return permitAll(List.of(action)).get(0);
     }
 
     /**
-     * 同 {@link #permit},一批动作一起:各自裁决,要问的合成一张征询卡,主人的答复对这一批里要问的
+     * 同 {@link #permit},一批动作一起:各自裁决,要问的合成一次征询,主人的答复对这一批里要问的
      * 全部生效。结果与 {@code actions} 一一对应。
      */
-    protected final List<Permit> permitAll(List<Action> actions, String reason) {
+    protected final List<Permit> permitAll(List<Action> actions) {
         var gate = Permission.gateFor(player);
         List<Permit> out = new ArrayList<>(actions.size());
         List<ConsentItem> asks = new ArrayList<>();
@@ -245,7 +243,7 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
             settleConsult();
             return out;
         }
-        ConsentAnswer answer = consult(asks, reason);
+        ConsentAnswer answer = consult(asks);
         if (answer != null) {
             Permit settled = answer.allowed() ? Permit.ALLOWED : Permit.refused(answer.refusal(asks));
             for (int i : askedAt) {
@@ -261,12 +259,12 @@ public abstract class AbstractCompanionTask<R extends TaskRecord>
      *
      * @return 结论;还在等是 null
      */
-    protected final ConsentAnswer consult(List<ConsentItem> items, String reason) {
+    protected final ConsentAnswer consult(List<ConsentItem> items) {
         if (consent != null && !consent.request().items().equals(items)) {
             consent = null;
         }
         if (consent == null) {
-            consent = ConsentDesk.of(player).ask(r, items, reason);
+            consent = ConsentDesk.of(player).ask(r, items);
         }
         ConsentAnswer answer = consent.poll();
         if (answer == null) {

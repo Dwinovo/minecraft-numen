@@ -16,7 +16,7 @@ import net.minecraft.server.level.ServerPlayer;
 import java.util.UUID;
 
 /**
- * Client → Server:主人在征询卡片上按的键,和可选的一句附言。
+ * Client → Server:主人在答复框上选的那一项,和可选的一句附言。
  *
  * <h2>信任模型</h2>
  * 与 {@link ExecuteToolPayload} 同一条:目标必须是同伴(跨维度查找),发送者必须是它的主人。

@@ -1,7 +1,9 @@
 package com.dwinovo.numen.permission;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.event.NumenEvents;
 import com.dwinovo.numen.network.payload.ConsentRequestPayload;
 import com.dwinovo.numen.platform.Services;
 import com.dwinovo.numen.task.TaskRecord;
@@ -11,7 +13,9 @@ import net.minecraft.server.level.ServerPlayer;
 
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
@@ -24,8 +28,12 @@ import java.util.concurrent.atomic.AtomicLong;
  * <h2>征询</h2>
  * 同一只同伴同时只挂一条;新的顶掉旧的,旧的按拒绝收尾({@link #SUPERSEDED})。发起那一刻主人
  * 不在线,或者挂着的时候主人下线、到了 {@link #TIMEOUT_TICKS},都按拒绝收尾({@link #OWNER_ABSENT})。
- * 请求与撤回都推给主人的客户端({@link ConsentRequestPayload}),答复经 {@link #answer} 回来。
+ * 请求与撤回都推给主人的客户端({@link ConsentRequestPayload}),撤回带着为什么撤;答复经 {@link #answer} 回来。
  * 发起者每刻读自己那张 {@link Ticket},模型不参与。
+ *
+ * <h2>附言</h2>
+ * 主人答复时说的那句当场到她那里。拒绝的附言是拒绝的理由,随发起的任务收场送达;允许了任务接着干,
+ * 附言等不到收场,当场作为 {@link EventTypes#CONSENT_NOTE} 事件转过去。每句附言只走其中一条路。
  *
  * <h2>任务期授权</h2>
  * 主人允许的清单记在发起它的任务记录名下,{@link #granted} 是全部在册授权的快照,作为
@@ -62,7 +70,7 @@ public final class ConsentDesk {
         NOT_PENDING
     }
 
-    /** 登记处与外界的接线:时钟、主人在不在、把请求推给主人或撤回、把记住的规则写进主人的表。 */
+    /** 登记处与外界的接线:时钟、主人在不在、把请求推给主人或撤回、把记住的规则写进主人的表、转交附言。 */
     interface Line {
         long gameTime();
 
@@ -70,9 +78,13 @@ public final class ConsentDesk {
 
         void show(ConsentRequest request);
 
-        void clear();
+        /** 撤掉主人那边挂着的请求。{@code why} 是撤回的原因;主人自己答复的撤回为空串。 */
+        void clear(String why);
 
         void remember(List<Rule> allow);
+
+        /** 主人允许时说的那句,当场转给她。 */
+        void relayNote(ConsentAnswer.Decision decision, List<ConsentItem> asked, String note);
     }
 
     private static final AtomicLong IDS = new AtomicLong();
@@ -96,37 +108,36 @@ public final class ConsentDesk {
     }
 
     /**
-     * 发起一次征询。挂着的那条被顶替;主人此刻不在线则当场按拒绝收尾,不推卡片。
+     * 发起一次征询。挂着的那条被顶替;主人此刻不在线则当场按拒绝收尾,不推给主人。
      *
-     * @param scope  发起它的任务记录——授权记在它名下,它收尾时一并清掉
-     * @param items  清单,不能为空
-     * @param reason 给主人看的原因
+     * @param scope 发起它的任务记录——授权记在它名下,它收尾时一并清掉
+     * @param items 清单,不能为空
      */
-    public Ticket ask(TaskRecord scope, List<ConsentItem> items, String reason) {
+    public Ticket ask(TaskRecord scope, List<ConsentItem> items) {
         if (items.isEmpty()) {
             throw new IllegalArgumentException("a consent request needs at least one item");
         }
-        Ticket ticket = new Ticket(scope, new ConsentRequest(IDS.incrementAndGet(), companion, items, reason,
+        Ticket ticket = new Ticket(scope, new ConsentRequest(IDS.incrementAndGet(), companion, items,
                 line.gameTime() + TIMEOUT_TICKS));
         if (pending != null) {
             settle(pending, new ConsentAnswer(ConsentAnswer.Decision.DENY, SUPERSEDED));
         }
         if (!line.ownerPresent()) {
             ticket.answer = new ConsentAnswer(ConsentAnswer.Decision.DENY, OWNER_ABSENT);
-            line.clear();
+            line.clear(OWNER_ABSENT);
             Constants.LOG.info("[numen-consent] {} ask #{} refused at once: owner offline", companion,
                     ticket.request.id());
             return ticket;
         }
         pending = ticket;
         line.show(ticket.request);
-        Constants.LOG.info("[numen-consent] {} ask #{} ({} item(s)): {}", companion, ticket.request.id(),
-                items.size(), reason);
+        Constants.LOG.info("[numen-consent] {} ask #{}: {}", companion, ticket.request.id(),
+                ConsentItem.listingText(items));
         return ticket;
     }
 
     /**
-     * 答复从外面进来的唯一入口:卡片的网络载荷与 {@code /numen consent} 命令都落这里。只认主人;认下的交给
+     * 答复从外面进来的唯一入口:答复框的网络载荷与 {@code /numen consent} 命令都落这里。只认主人;认下的交给
      * 这只同伴的登记处 {@link #answer}。
      */
     public static Reply reply(ServerPlayer from, NumenPlayer companion, long requestId,
@@ -152,7 +163,8 @@ public final class ConsentDesk {
 
     /**
      * 这只同伴的主人的答复(经 {@link #reply} 进来;测试直接调)。允许就把清单记进发起任务的授权,允许并
-     * 记住再把记住的规则写进主人的 allow 表;拒绝没有附言时理由是 {@link #OWNER_SAID_NO}。
+     * 记住再把记住的规则写进主人的 allow 表,附言当场转给她;拒绝的附言就是理由,没有附言时理由是
+     * {@link #OWNER_SAID_NO}。
      *
      * @return 答的是不是挂着的那一条(过期、被顶替的号一律忽略)
      */
@@ -161,21 +173,25 @@ public final class ConsentDesk {
             return false;
         }
         Ticket ticket = pending;
-        String words = note == null ? "" : note.strip();
-        if (decision == ConsentAnswer.Decision.DENY && words.isEmpty()) {
-            words = OWNER_SAID_NO;
-        }
-        if (decision != ConsentAnswer.Decision.DENY) {
+        String said = note == null ? "" : note.strip();
+        ConsentAnswer answer;
+        if (decision == ConsentAnswer.Decision.DENY) {
+            answer = new ConsentAnswer(decision, said.isEmpty() ? OWNER_SAID_NO : said);
+        } else {
             grants.computeIfAbsent(ticket.scope, k -> new ArrayList<>()).addAll(ticket.request.items());
             rebuildGranted();
+            if (decision == ConsentAnswer.Decision.ALLOW_REMEMBER) {
+                line.remember(ConsentItem.remembered(ticket.request.items()));
+            }
+            if (!said.isEmpty()) {
+                line.relayNote(decision, ticket.request.items(), said);
+            }
+            answer = new ConsentAnswer(decision, "");
         }
-        if (decision == ConsentAnswer.Decision.ALLOW_REMEMBER) {
-            line.remember(ConsentItem.remembered(ticket.request.items()));
-        }
-        settle(ticket, new ConsentAnswer(decision, words));
-        line.clear();
+        settle(ticket, answer);
+        line.clear("");
         Constants.LOG.info("[numen-consent] {} #{} answered {}{}", companion, requestId, decision,
-                words.isEmpty() ? "" : ": " + words);
+                said.isEmpty() ? "" : ": " + said);
         return true;
     }
 
@@ -187,7 +203,7 @@ public final class ConsentDesk {
         if (!line.ownerPresent() || line.gameTime() >= pending.request.expiresAtGameTime()) {
             Constants.LOG.info("[numen-consent] {} #{} expired: {}", companion, pending.request.id(), OWNER_ABSENT);
             settle(pending, new ConsentAnswer(ConsentAnswer.Decision.DENY, OWNER_ABSENT));
-            line.clear();
+            line.clear(OWNER_ABSENT);
         }
     }
 
@@ -195,7 +211,7 @@ public final class ConsentDesk {
     public void withdraw(Ticket ticket) {
         if (pending == ticket) {
             settle(ticket, new ConsentAnswer(ConsentAnswer.Decision.DENY, WITHDRAWN));
-            line.clear();
+            line.clear(WITHDRAWN);
         }
     }
 
@@ -206,7 +222,7 @@ public final class ConsentDesk {
         }
         if (pending != null && pending.scope == scope) {
             settle(pending, new ConsentAnswer(ConsentAnswer.Decision.DENY, TASK_ENDED));
-            line.clear();
+            line.clear(TASK_ENDED);
         }
     }
 
@@ -254,7 +270,7 @@ public final class ConsentDesk {
         }
     }
 
-    /** 真身体的接线:游戏刻、主人在线与否、载荷推给主人、记住的规则进主人的存档。 */
+    /** 真身体的接线:游戏刻、主人在线与否、载荷推给主人、记住的规则进主人的存档、附言经事件发出口转给她。 */
     private record BodyLine(NumenPlayer body) implements Line {
         @Override
         public long gameTime() {
@@ -275,16 +291,24 @@ public final class ConsentDesk {
         }
 
         @Override
-        public void clear() {
+        public void clear(String why) {
             ServerPlayer owner = body.resolveOwnerPlayer();
             if (owner != null) {
-                Services.NETWORK.sendToPlayer(owner, ConsentRequestPayload.none(body.getUUID()));
+                Services.NETWORK.sendToPlayer(owner, ConsentRequestPayload.none(body.getUUID(), why));
             }
         }
 
         @Override
         public void remember(List<Rule> allow) {
             PermissionStore.of(body.getServer(), body.getOwnerUuid()).remember(allow);
+        }
+
+        @Override
+        public void relayNote(ConsentAnswer.Decision decision, List<ConsentItem> asked, String note) {
+            Map<String, String> attrs = new LinkedHashMap<>();
+            attrs.put("decision", decision.name().toLowerCase(Locale.ROOT));
+            attrs.put("asked", ConsentItem.listingText(asked));
+            NumenEvents.emit(body, EventTypes.CONSENT_NOTE, attrs, note, true);
         }
     }
 }

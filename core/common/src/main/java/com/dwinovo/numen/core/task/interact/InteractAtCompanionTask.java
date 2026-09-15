@@ -132,7 +132,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             // 要问就站着等主人,不许就带着理由收场
             com.dwinovo.numen.permission.Action proposed = proposedAction(hit);
             if (proposed != null) {
-                Permit permit = permit(proposed, r.describe());
+                Permit permit = permit(proposed);
                 if (permit.state() == PermitState.WAITING) {
                     InputDriver.halt(player);
                     return TaskState.RUNNING;

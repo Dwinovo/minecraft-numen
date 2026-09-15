@@ -47,7 +47,7 @@ public final class TransferCompanionTask extends AbstractCompanionTask<TransferT
             if (take == null) {
                 line = ops.step(move, player);
             } else {
-                Permit permit = permit(take, r.describe());
+                Permit permit = permit(take);
                 if (permit.state() == PermitState.WAITING) {
                     InputDriver.halt(player);
                     return TaskState.RUNNING;

@@ -70,7 +70,7 @@ public final class ModLanguageData {
         public static final String GUI_PROVIDERS_THINKING_ON        = "numen.gui.providers.thinking.on";
         public static final String RESPAWN_BLOCKED                  = "numen.respawn.blocked";
 
-        // 征询卡片(ConsentCard):同伴等主人点头时聊天面板顶部与 HUD 上那张卡。
+        // 征询:同伴等主人点头时取代输入行的答复框(ConsentPrompt)与 HUD 上的提示条(ConsentHud)。
         public static final String CONSENT_TITLE          = "numen.consent.title";
         public static final String CONSENT_MORE           = "numen.consent.more";
         public static final String CONSENT_EXPIRES        = "numen.consent.expires";
@@ -80,6 +80,12 @@ public final class ModLanguageData {
         public static final String CONSENT_DENY           = "numen.consent.deny";
         public static final String CONSENT_IRREVERSIBLE   = "numen.consent.irreversible";
         public static final String CONSENT_HUD_HINT       = "numen.consent.hud_hint";
+        public static final String CONSENT_ALLOW_SCOPE    = "numen.consent.allow_scope";
+        public static final String CONSENT_KEYS           = "numen.consent.keys";
+        public static final String CONSENT_QUEUE          = "numen.consent.queue";
+        public static final String CONSENT_ANSWERED       = "numen.consent.answered";
+        public static final String CONSENT_REMEMBERED     = "numen.consent.remembered";
+        public static final String CONSENT_WITHDRAWN      = "numen.consent.withdrawn";
 
         /** Hotkey: open the companion roster panel (shown in Controls settings). */
         public static final String KEY_OPEN_ROSTER = "key.numen.open_roster";
@@ -562,13 +568,19 @@ public final class ModLanguageData {
         adder.add(Keys.RESPAWN_BLOCKED,                 "· waiting for room to land");
         adder.add(Keys.CONSENT_TITLE,          "%s asks for your consent");
         adder.add(Keys.CONSENT_MORE,           "+%s more");
-        adder.add(Keys.CONSENT_EXPIRES,        "counts as denied in %ss if unanswered");
-        adder.add(Keys.CONSENT_NOTE,           "Note (optional; passed on word for word)");
+        adder.add(Keys.CONSENT_EXPIRES,        "%ss left");
+        adder.add(Keys.CONSENT_NOTE,           "A note for %s, sent with \"%s\" · Enter sends · Esc goes back");
         adder.add(Keys.CONSENT_ALLOW,          "Allow");
-        adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Allow & remember");
+        adder.add(Keys.CONSENT_ALLOW_REMEMBER, "Always allow");
         adder.add(Keys.CONSENT_DENY,           "Deny");
         adder.add(Keys.CONSENT_IRREVERSIBLE,   "can't undo");
-        adder.add(Keys.CONSENT_HUD_HINT,       "Press [%s] to answer in the panel");
+        adder.add(Keys.CONSENT_HUD_HINT,       "[%s] answer");
+        adder.add(Keys.CONSENT_ALLOW_SCOPE,    "the same kind, for this job");
+        adder.add(Keys.CONSENT_KEYS,           "↑↓ or 1-3 pick · Tab adds a note · Enter confirms · Esc later");
+        adder.add(Keys.CONSENT_QUEUE,          "%s more waiting");
+        adder.add(Keys.CONSENT_ANSWERED,       "Answered %s: %s");
+        adder.add(Keys.CONSENT_REMEMBERED,     "remembered %s (undo with /numen permission rules)");
+        adder.add(Keys.CONSENT_WITHDRAWN,      "%s's request went away: %s");
     }
 
     private static void addZh(Adder adder) {
@@ -900,12 +912,18 @@ public final class ModLanguageData {
         adder.add(Keys.RESPAWN_BLOCKED,                 "· 周围太挤,等一个落脚点");
         adder.add(Keys.CONSENT_TITLE,          "%s 想征得你的同意");
         adder.add(Keys.CONSENT_MORE,           "还有 %s 项");
-        adder.add(Keys.CONSENT_EXPIRES,        "%s 秒内不答复按拒绝处理");
-        adder.add(Keys.CONSENT_NOTE,           "附言(可选,原话转给她)");
+        adder.add(Keys.CONSENT_EXPIRES,        "%s 秒");
+        adder.add(Keys.CONSENT_NOTE,           "给 %s 的附言,随「%s」一起送出 · Enter 提交 · Esc 返回");
         adder.add(Keys.CONSENT_ALLOW,          "允许");
-        adder.add(Keys.CONSENT_ALLOW_REMEMBER, "允许并记住");
+        adder.add(Keys.CONSENT_ALLOW_REMEMBER, "以后都允许");
         adder.add(Keys.CONSENT_DENY,           "拒绝");
         adder.add(Keys.CONSENT_IRREVERSIBLE,   "撤不回");
-        adder.add(Keys.CONSENT_HUD_HINT,       "按 [%s] 打开面板答复");
+        adder.add(Keys.CONSENT_HUD_HINT,       "[%s] 答复");
+        adder.add(Keys.CONSENT_ALLOW_SCOPE,    "这次活里同样的都行");
+        adder.add(Keys.CONSENT_KEYS,           "↑↓ 或 1-3 选 · Tab 附言 · Enter 确定 · Esc 稍后");
+        adder.add(Keys.CONSENT_QUEUE,          "还有 %s 条在等");
+        adder.add(Keys.CONSENT_ANSWERED,       "已答复 %s:%s");
+        adder.add(Keys.CONSENT_REMEMBERED,     "记住了 %s(/numen permission rules 可撤)");
+        adder.add(Keys.CONSENT_WITHDRAWN,      "%s 的请求撤回了:%s");
     }
 }

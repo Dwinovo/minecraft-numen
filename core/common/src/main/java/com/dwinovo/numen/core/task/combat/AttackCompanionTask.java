@@ -317,7 +317,7 @@ public final class AttackCompanionTask extends AbstractCompanionTask<AttackTaskR
         for (Entity e : candidates) {
             attacks.add(Action.attack(e));
         }
-        List<Permit> permits = permitAll(attacks, r.describe());
+        List<Permit> permits = permitAll(attacks);
         java.util.Set<Integer> cleared = new java.util.HashSet<>();
         awaitingOwner = false;
         for (int i = 0; i < candidates.size(); i++) {

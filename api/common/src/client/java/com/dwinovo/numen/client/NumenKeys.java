@@ -75,6 +75,13 @@ public final class NumenKeys {
             if (mc.player == null || mc.screen != null) {
                 continue;
             }
+            // 有征询挂着先答征询:对象是最早在等的那位,不看准星——提示条上写着按这个键答的就是她
+            var asking = com.dwinovo.numen.client.consent.ConsentCards.first();
+            if (asking != null) {
+                mc.setScreen(new CompanionChatScreen(asking.companion(),
+                        NumenRoster.instance().name(asking.companion())));
+                continue;
+            }
             NumenRoster.Entry target = SelectedCompanion.resolveTarget();
             if (target == null) {
                 com.dwinovo.numen.client.hud.TalkHint.flash(

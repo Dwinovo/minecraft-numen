@@ -310,7 +310,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      */
     private TaskState tickConsent() {
         InputDriver.halt(player);
-        var answer = consult(consentItems, r.describe());
+        var answer = consult(consentItems);
         if (answer == null) {
             return TaskState.RUNNING;
         }

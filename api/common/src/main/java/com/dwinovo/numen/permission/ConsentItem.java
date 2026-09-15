@@ -34,7 +34,7 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         pos = pos == null ? null : pos.immutable();
     }
 
-    /** 清单正文的一行;{@code irreversible} 让卡片在这一行前面标出"撤不回"。 */
+    /** 清单正文的一行;{@code irreversible} 让答复框在这一行前面标出"撤不回"。 */
     public record Line(String text, boolean irreversible) {}
 
     /**
@@ -69,6 +69,18 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
     }
 
     /**
+     * 选"允许并记住"会写进主人 allow 表的那几行,写成表里的样子({@code allow break(placed & oak_log)})。
+     * 主人在选项上看到的、回执里交代给模型的,都是这一份。
+     */
+    public static List<String> rememberedRows(List<ConsentItem> items) {
+        List<String> rows = new ArrayList<>();
+        for (Rule rule : remembered(items)) {
+            rows.add("allow " + rule);
+        }
+        return rows;
+    }
+
+    /**
      * 主人对这一条的同意覆盖不覆盖这个动作:同一个动词、同一行规则问出来的,而且是同一种东西——
      * 方块与物品认种类,实体认那一只。于是挖一堆主人放的原木只问一次,换成主人放的箱子另问;
      * 点头打的是这只狼,别的狼另问。
@@ -87,7 +99,7 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
 
     /**
      * 清单正文,一堆一行:{@code break 6 oak_log (1,64,2; …; +2 more): placed by a player}。
-     * 按"动词 + 对象 + 理由"归堆,保持先出现的先列。卡片与回执都用这一份。
+     * 按"动词 + 对象 + 理由"归堆,保持先出现的先列。答复框与回执都用这一份。
      */
     public static List<Line> listing(List<ConsentItem> items) {
         Map<String, List<ConsentItem>> groups = new LinkedHashMap<>();
