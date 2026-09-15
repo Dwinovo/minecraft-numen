@@ -1,15 +1,19 @@
 package com.dwinovo.numen.network.payload;
 
 import com.dwinovo.numen.Constants;
+import com.dwinovo.numen.permission.Action;
 import com.dwinovo.numen.permission.ConsentItem;
 import com.dwinovo.numen.permission.ConsentRequest;
 
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,10 +22,11 @@ import java.util.UUID;
 /**
  * Server → Client:同伴在等主人点头的那一条征询,或者"没有了"({@link #none})。
  * 登记处({@code ConsentDesk})发起时推一次,答复、超时、任务结束时推一条撤回(顶替直接推新的那条)——
- * 答复框、右上角的提醒与世界里的轮廓只照这份画,客户端不推断。
+ * 答复框与世界里的轮廓只照这份画,客户端不推断。
  *
- * <p>清单在服务端按 {@link ConsentItem#listing} 归好堆再发,每堆带给主人看的那一版(可翻译,主人的客户端按自己的
- * 语言显示),和回执里交代给模型的是同一堆;"允许并记住"要写的规则行({@link ConsentItem#rememberedRows})同理;
+ * <p>清单在服务端按 {@link ConsentItem#listing} 归好堆再发,每堆拆成给主人看的几样(动词、图标或名字、数量、理由;
+ * 名字与理由可翻译,主人的客户端按自己的语言显示),和回执里交代给模型的是同一堆;"允许并记住"要写的规则行
+ * ({@link ConsentItem#rememberedRows})同理;
  * 轮廓只带格子与实体 id,各有上限——一张图纸可能要问几千格,清单说得清,轮廓画不完。
  *
  * @param companion         哪只同伴
@@ -38,8 +43,15 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
                                     String withdrawnBecause)
         implements CustomPacketPayload {
 
-    /** 给主人看的一堆:"挖掉 橡木原木 ×6 · 玩家放的";{@code irreversible} 让答复框在前面标出"撤不回"。 */
-    public record Line(Component text, boolean irreversible) {}
+    /**
+     * 给主人看的一堆:答复框画成"挖 [原木图标]×6 · 玩家放的"。
+     *
+     * @param icon         物品图标;没有(实体、没有物品形态的方块)为 null,这时画名字
+     * @param irreversible 撤不回:答复框把这一堆画成警示色
+     */
+    public record Line(Action.Kind kind, Item icon, Component name, int count, Component cause, boolean irreversible) {}
+
+    private static final StreamCodec<RegistryFriendlyByteBuf, Item> ITEM = ByteBufCodecs.registry(Registries.ITEM);
 
     /** 一次最多描多少格、多少只实体的轮廓。 */
     public static final int MAX_OUTLINED_BLOCKS = 256;
@@ -65,7 +77,9 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
         }
         List<Line> lines = new ArrayList<>();
         for (ConsentItem.Group group : ConsentItem.listing(request.items())) {
-            lines.add(new Line(group.shown(), group.irreversible()));
+            ConsentItem head = group.head();
+            lines.add(new Line(head.kind(), head.icon(), head.name(), group.count(), head.shownCause(),
+                    group.irreversible()));
         }
         return new ConsentRequestPayload(request.companion(), request.id(), lines,
                 ConsentItem.rememberedRows(request.items()), blocks, entities, request.expiresAtGameTime(), "");
@@ -86,7 +100,14 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
         buf.writeVarLong(p.id);
         buf.writeVarInt(p.lines.size());
         for (Line line : p.lines) {
-            ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, line.text());
+            buf.writeEnum(line.kind());
+            buf.writeBoolean(line.icon() != null);
+            if (line.icon() != null) {
+                ITEM.encode(buf, line.icon());
+            }
+            ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, line.name());
+            buf.writeVarInt(line.count());
+            ComponentSerialization.TRUSTED_STREAM_CODEC.encode(buf, line.cause());
             buf.writeBoolean(line.irreversible());
         }
         buf.writeCollection(p.remember, net.minecraft.network.FriendlyByteBuf::writeUtf);
@@ -108,7 +129,12 @@ public record ConsentRequestPayload(UUID companion, long id, List<ConsentRequest
         int n = buf.readVarInt();
         List<Line> lines = new ArrayList<>(n);
         for (int i = 0; i < n; i++) {
-            lines.add(new Line(ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf), buf.readBoolean()));
+            Action.Kind kind = buf.readEnum(Action.Kind.class);
+            Item icon = buf.readBoolean() ? ITEM.decode(buf) : null;
+            Component name = ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf);
+            int count = buf.readVarInt();
+            lines.add(new Line(kind, icon, name, count, ComponentSerialization.TRUSTED_STREAM_CODEC.decode(buf),
+                    buf.readBoolean()));
         }
         List<String> remember = buf.readList(net.minecraft.network.FriendlyByteBuf::readUtf);
         n = buf.readVarInt();

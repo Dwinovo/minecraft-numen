@@ -6,6 +6,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
@@ -18,24 +20,25 @@ import java.util.Map;
  * ({@link #covers}),裁决把被它覆盖的 ask 放行;主人选"允许并记住"时,{@link #remember} 那一行写进
  * 主人的 allow 表。
  *
- * <p>同一件事两种说法:给模型的是英文短语({@code subject}、{@code cause}),给主人看的是可翻译的
- * {@link Component}({@code name}、{@code shownCause}),由主人的客户端按自己的语言显示——方块叫"橡木原木",
- * 起了名字的动物叫它的名字。两种说法在建这一条时从同一个动作、同一行规则一起得出。
+ * <p>同一件事两种说法:给模型的是英文短语({@code subject}、{@code cause}),给主人看的是物品图标与可翻译的
+ * {@link Component}({@code icon}、{@code name}、{@code shownCause}),由主人的客户端按自己的语言显示——方块画成
+ * 它的物品图标,起了名字的动物叫它的名字。两种说法在建这一条时从同一个动作、同一行规则一起得出。
  *
  * @param kind         动词
  * @param pos          方块动作的格子;实体动作与丢弃为 null——实体认的是那一只({@code entityId}),不是它脚下的格:
  *                     它走一步清单就不该变,否则同一件事会被当成新的征询重发
  * @param entityId     实体动作的实体 id;其余为 {@link #NO_ENTITY}
  * @param subject      方块、实体种类或物品的 id 路径({@code oak_log}、{@code wolf}、{@code diamond})
- * @param name         给主人看的名字:方块、物品的名字,实体的名字(起了名的就是那个名字)
+ * @param icon         给主人看的图标:方块的物品形态、物品本身;实体与没有物品形态的方块为 null
+ * @param name         给主人看的名字(没有图标时显示):方块、物品的名字,实体的名字(起了名的就是那个名字)
  * @param rule         问的是哪一行规则的原文;没有任何一行覆盖时为空串
  * @param cause        为什么要问:那一行规则的自述({@code placed by a player})
  * @param shownCause   给主人看的为什么要问({@link Verdict#shownCause})
  * @param irreversible 这件事撤不回(那一行规则的正项里有撤不回的信号)
  * @param remember     主人说"允许并记住"时存下的那一行 allow(推法见 {@link Rule#remembering})
  */
-public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String subject, Component name, String rule,
-                          String cause, Component shownCause, boolean irreversible, Rule remember) {
+public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String subject, Item icon, Component name,
+                          String rule, String cause, Component shownCause, boolean irreversible, Rule remember) {
 
     public static final int NO_ENTITY = -1;
 
@@ -44,7 +47,8 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
     }
 
     /**
-     * 清单里的一堆:同一个动词、同一种东西、同一个理由。给模型的说法与给主人看的说法都从这一堆出。
+     * 清单里的一堆:同一个动词、同一种东西、同一个理由。给模型的说法({@link #text})与给主人看的那一版
+     * (动词、{@code head} 的图标或名字、数量、{@code head} 的 {@code shownCause})都从这一堆出。
      *
      * @param head  这一堆的第一条
      * @param count 这一堆有几条
@@ -60,15 +64,6 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         public String text() {
             return head.kind.verb() + ' ' + Listing.part(head.subject, count, cells) + ": " + head.cause;
         }
-
-        /** 给主人:"挖掉 橡木原木 ×6 · 玩家放的"。格子不写——世界里描着轮廓。 */
-        public Component shown() {
-            Component what = count > 1
-                    ? Component.translatable(ModLanguageData.Keys.CONSENT_COUNT, head.name, String.valueOf(count))
-                    : head.name;
-            return Component.translatable(ModLanguageData.Keys.CONSENT_LINE_PREFIX + head.kind.verb(), what,
-                    head.shownCause);
-        }
     }
 
     /**
@@ -82,17 +77,17 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         Rule remember = Rule.remembering(action, verdict.rule(), facts);
         return switch (action.kind()) {
             case ATTACK, USE_ENTITY -> new ConsentItem(action.kind(), null, action.entity().getId(),
-                    EntityType.getKey(action.entity().getType()).getPath(), action.entity().getName(), rule,
+                    EntityType.getKey(action.entity().getType()).getPath(), null, action.entity().getName(), rule,
                     verdict.cause(), verdict.shownCause(), irreversible, remember);
             case DROP -> {
                 Subject subject = Subject.of(action);
-                yield new ConsentItem(action.kind(), null, NO_ENTITY, subject.id, subject.name, rule, verdict.cause(),
-                        verdict.shownCause(), irreversible, remember);
+                yield new ConsentItem(action.kind(), null, NO_ENTITY, subject.id, subject.icon, subject.name, rule,
+                        verdict.cause(), verdict.shownCause(), irreversible, remember);
             }
             default -> {
                 Subject subject = Subject.of(action);
-                yield new ConsentItem(action.kind(), action.pos(), NO_ENTITY, subject.id, subject.name, rule,
-                        verdict.cause(), verdict.shownCause(), irreversible, remember);
+                yield new ConsentItem(action.kind(), action.pos(), NO_ENTITY, subject.id, subject.icon, subject.name,
+                        rule, verdict.cause(), verdict.shownCause(), irreversible, remember);
             }
         };
     }
@@ -171,19 +166,20 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
     }
 
     /** 方块与物品动作的对象:挖、右键、拿看格子上的方块,放、丢看物品。 */
-    private record Subject(String id, Component name) {
+    private record Subject(String id, Item icon, Component name) {
 
         static Subject of(Action action) {
             BlockState state = action.state();
             if (state != null && action.kind() != Action.Kind.PLACE) {
+                Item form = state.getBlock().asItem();
                 return new Subject(BuiltInRegistries.BLOCK.getKey(state.getBlock()).getPath(),
-                        state.getBlock().getName());
+                        form == Items.AIR ? null : form, state.getBlock().getName());
             }
             if (action.item() != null) {
-                return new Subject(BuiltInRegistries.ITEM.getKey(action.item()).getPath(),
+                return new Subject(BuiltInRegistries.ITEM.getKey(action.item()).getPath(), action.item(),
                         action.item().getDescription());
             }
-            return new Subject("block", Component.translatable(ModLanguageData.Keys.PERMISSION_A_BLOCK));
+            return new Subject("block", null, Component.translatable(ModLanguageData.Keys.PERMISSION_A_BLOCK));
         }
     }
 }

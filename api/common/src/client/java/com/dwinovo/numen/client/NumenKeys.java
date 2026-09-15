@@ -75,7 +75,7 @@ public final class NumenKeys {
             if (mc.player == null || mc.screen != null) {
                 continue;
             }
-            // 有征询挂着先答征询:对象是最早在等的那位,不看准星——右上角提醒按这个键答的就是她
+            // 有征询挂着先答征询:对象是最早在等的那位,不看准星——右上角弹出来说按这个键答的就是她
             var asking = com.dwinovo.numen.client.consent.ConsentCards.first();
             if (asking != null) {
                 mc.setScreen(new CompanionChatScreen(asking.companion(),
