@@ -31,18 +31,20 @@ import java.util.UUID;
  * 历史就永远不会过期</b>,只能每次现挂。同一条通道、同一份快照,不必为每样状态另开一路。
  * 骑乘同理:她坐没坐在船上决定了"再点一次船"是不是废话、goto 会驾船还是走路,
  * 模型必须实时看见。{@code vehicleType} 空串 = 没骑任何东西,{@code vehicleId} 相应为 -1。
+ * 插件从身体上读的状态片段({@code bodyState},见 {@code NumenApi.contributeBodyState})同理:
+ * 身体上的事实,同一份快照带过去;空串 = 没有插件要说什么。
  */
 public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items,
                                 List<ItemStack> craft, int foodLevel, float saturation,
                                 int selectedSlot, ItemStack offhand,
                                 List<MobEffectInstance> effects,
-                                String vehicleType, int vehicleId)
+                                String vehicleType, int vehicleId, String bodyState)
         implements CustomPacketPayload {
 
     public static final Type<NumenStatePayload> TYPE = new Type<>(
             ResourceLocation.fromNamespaceAndPath(Constants.MOD_ID, "numen_state"));
 
-    /** 手写而不是 {@code composite}:后者最多拼 6 个分量,这里有九个。 */
+    /** 手写而不是 {@code composite}:后者最多拼 6 个分量,这里有十二个。 */
     public static final StreamCodec<RegistryFriendlyByteBuf, NumenStatePayload> STREAM_CODEC =
             StreamCodec.of(NumenStatePayload::write, NumenStatePayload::read);
 
@@ -58,6 +60,7 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
         MobEffectInstance.STREAM_CODEC.apply(ByteBufCodecs.list()).encode(buf, p.effects());
         ByteBufCodecs.STRING_UTF8.encode(buf, p.vehicleType());
         ByteBufCodecs.VAR_INT.encode(buf, p.vehicleId());
+        ByteBufCodecs.STRING_UTF8.encode(buf, p.bodyState());
     }
 
     private static NumenStatePayload read(RegistryFriendlyByteBuf buf) {
@@ -73,8 +76,9 @@ public record NumenStatePayload(UUID uuid, boolean loaded, List<ItemStack> items
                 MobEffectInstance.STREAM_CODEC.apply(ByteBufCodecs.list()).decode(buf);
         String vehicleType = ByteBufCodecs.STRING_UTF8.decode(buf);
         int vehicleId = ByteBufCodecs.VAR_INT.decode(buf);
+        String bodyState = ByteBufCodecs.STRING_UTF8.decode(buf);
         return new NumenStatePayload(uuid, loaded, items, craft, foodLevel, saturation,
-                selectedSlot, offhand, effects, vehicleType, vehicleId);
+                selectedSlot, offhand, effects, vehicleType, vehicleId, bodyState);
     }
 
     @Override

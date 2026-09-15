@@ -82,11 +82,16 @@ public interface NumenApi {
     Path configDir();
 
     /**
-     * 每次发请求时现算一段,挂进这只同伴的 {@code <runtime_state>}。
+     * 主人客户端每次发请求时现算一段,挂进这只同伴的 {@code <runtime_state>}。
      *
      * <p>解决的是这么个事:你的工具把同伴改了(换了外观、接了什么设备),她只在
      * <b>调用工具那一轮</b>知道,下一轮、下一次进游戏就忘了。挂在这儿的东西每轮都在,
      * 她随时知道自己现在是什么状态。
+     *
+     * <p><b>只放只有主人客户端才知道的事</b>——比如客户端渲染的外观。算的时候读得到的只是
+     * 客户端手里的数据:她走远了、换了维度,客户端里就没有她的实体。身体上的事实(饰品栏、
+     * 模组给的装备位)住在服务端,用 {@link #contributeBodyState};一个事实只从一边来,
+     * 两边都报就是两个会对不上的答案。
      *
      * <pre>{@code
      * numen.contributeState(companion -> wearing(companion) == null ? ""
@@ -98,6 +103,22 @@ public interface NumenApi {
      * 抛异常不会打断别的贡献者,但会记进日志。
      */
     void contributeState(Function<UUID, String> fragment);
+
+    /**
+     * 服务端:从身体上读一段她此刻的状态,挂进 {@code <runtime_state>},也写进 {@code get_self_status}。
+     *
+     * <p>给身体上的事实用——饰品栏里戴着什么、模组给的装备位上有什么。它和背包、状态效果同一条路:
+     * 引擎在检查身体有没有变化时一并算,和上次不同就随状态包推给主人的客户端,于是她走远了、
+     * 换了维度也照样在请求里。只有主人客户端才知道的事(客户端渲染的外观)用 {@link #contributeState};
+     * 一个事实只从一边来。
+     *
+     * <p><b>别放每 tick 都在变的值</b>(剩余秒数、坐标、耐久):变化检测按字符串比,
+     * 每 tick 都不一样就每次都推一个包。要精确到那种程度的东西让她调工具去查。
+     *
+     * <p>自己带一个标签;没什么好说的就返回空串。和 {@link #contributeState} 一样一个字都不入
+     * 会话历史。抛异常不会打断别的贡献者,但会记进日志。
+     */
+    void contributeBodyState(Function<NumenPlayer, String> fragment);
 
     /**
      * 登记一种事件——同伴身上会发生、她该知道的一种事(比如饰品插件的 {@code accessory_changed})。

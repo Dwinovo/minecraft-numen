@@ -44,7 +44,8 @@ public final class GetSelfStatusTool implements NumenTool {
         // turn. Dynamic on purpose — switched-off reflexes drop out of the text.
         String base = "Read your body's condition in one call: name, game mode, HP / max HP, "
                 + "hunger / saturation, position, dimension, biome, the structures you are "
-                + "standing in, what you are wearing, and movement state. ALWAYS call this before "
+                + "standing in, what you are wearing, what mods report about your body, and movement "
+                + "state. ALWAYS call this before "
                 + "combat or planning decisions. It does NOT list your backpack — what you carry "
                 + "is already in front of you every turn; use inspect_gui when exact slots matter. "
                 + "No arguments.";
@@ -120,6 +121,12 @@ public final class GetSelfStatusTool implements NumenTool {
         // mind calmly planned an 870-block trip (frozen-ocean death, 2026-07-15).
         root.addProperty("air", self.getAirSupply() + "/" + self.getMaxAirSupply() + " ticks");
         root.addProperty("in_lava", self.isInLava());
+        // 插件从身体上读的状态片段(饰品栏、模组的装备位):"你的全部"里不能漏掉插件管的部位。
+        // 与挂进 runtime_state 的是同一个汇总,没有插件要说什么就不出这个字段。
+        String bodyState = com.dwinovo.numen.api.NumenPlugins.bodyStateFragments(self);
+        if (!bodyState.isEmpty()) {
+            root.addProperty("body_state", bodyState);
+        }
 
         reply.accept(root.toString());
     }

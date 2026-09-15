@@ -1041,9 +1041,10 @@ public final class EntityAgentLoop {
      * {@code <runtime_state>} 里,模型只需认一个信封。
      */
     private String runtimeStateXml() {
-        // 插件的现算片段也挂这一层:它们和背包、状态效果一样是"此刻的她",
-        // 会变,所以不能进字节级稳定的系统提示。
-        String body = currentTaskXml() + inventoryXml() + effectsXml() + ridingXml()
+        // 插件的片段也挂这一层:它们和背包、状态效果一样是"此刻的她",
+        // 会变,所以不能进字节级稳定的系统提示。身体上的那段随状态包从服务端来,
+        // 只有这个客户端才知道的那段在这里现算。
+        String body = currentTaskXml() + inventoryXml() + effectsXml() + ridingXml() + bodyStateXml()
                 + com.dwinovo.numen.api.NumenPlugins.stateFragments(entityUuid);
         String xml = body.isEmpty() ? "" : "<runtime_state>" + body + "</runtime_state>";
         // 原样打出来。"她看到的世界"平时完全不可见,于是"她怎么会这么说"只能靠猜——
@@ -1148,6 +1149,18 @@ public final class EntityAgentLoop {
         return "<riding>" + xml(snapshot.vehicleType()) + " (entity id " + snapshot.vehicleId()
                 + "). goto pilots a boat over water toward the target; any action that needs "
                 + "walking steps off by itself — no need to click the vehicle again.</riding>";
+    }
+
+    /**
+     * 插件从身体上读的状态片段——服务端在身体变化检查时拼好、随状态包推来的整段,这里原样挂上。
+     * 和背包同一条路,所以她走远了、换了维度也在。
+     */
+    private String bodyStateXml() {
+        var snapshot = ClientNumenState.get(entityUuid).orElse(null);
+        if (snapshot == null || !snapshot.loaded()) {
+            return "";
+        }
+        return snapshot.bodyState();
     }
 
     static String renderEffects(ClientNumenState.Snapshot snapshot, long nowMs) {

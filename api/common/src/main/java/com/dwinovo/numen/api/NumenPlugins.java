@@ -86,17 +86,30 @@ public final class NumenPlugins {
      */
     private static final List<Function<UUID, String>> STATE = new CopyOnWriteArrayList<>();
 
-    /**
-     * 汇总所有插件对这只同伴的现算片段。<b>引擎内部调用</b>。
-     *
-     * <p>某个插件算炸了不能连累整条请求——它自己那段丢掉,别人的照常挂上。
-     */
+    /** 插件从身体上读的状态片段。见 {@link NumenApi#contributeBodyState}。 */
+    private static final List<Function<NumenPlayer, String>> BODY_STATE = new CopyOnWriteArrayList<>();
+
+    /** 汇总所有插件对这只同伴的客户端现算片段。<b>引擎内部调用</b>。 */
     public static String stateFragments(UUID companion) {
-        if (STATE.isEmpty()) return "";
+        return joinFragments(STATE, companion);
+    }
+
+    /** 汇总所有插件从这具身体上读的状态片段。<b>引擎内部调用</b>(服务端)。 */
+    public static String bodyStateFragments(NumenPlayer body) {
+        return joinFragments(BODY_STATE, body);
+    }
+
+    /**
+     * 按登记顺序拼起来,空的不占位。
+     *
+     * <p>某个插件算炸了不能连累整条请求或整个身体检查——它自己那段丢掉,别人的照常挂上。
+     */
+    private static <T> String joinFragments(List<Function<T, String>> fragments, T subject) {
+        if (fragments.isEmpty()) return "";
         StringBuilder sb = new StringBuilder();
-        for (Function<UUID, String> f : STATE) {
+        for (Function<T, String> f : fragments) {
             try {
-                String x = f.apply(companion);
+                String x = f.apply(subject);
                 if (x != null && !x.isBlank()) sb.append(x);
             } catch (RuntimeException e) {
                 Constants.LOG.error("[numen] 插件的运行期状态算不出来,这一段跳过", e);
@@ -144,6 +157,11 @@ public final class NumenPlugins {
         @Override
         public void contributeState(Function<UUID, String> fragment) {
             if (fragment != null) STATE.add(fragment);
+        }
+
+        @Override
+        public void contributeBodyState(Function<NumenPlayer, String> fragment) {
+            if (fragment != null) BODY_STATE.add(fragment);
         }
 
         @Override

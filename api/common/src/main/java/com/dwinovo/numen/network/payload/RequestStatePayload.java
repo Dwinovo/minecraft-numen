@@ -54,7 +54,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
     /** 身体不在(睡在未加载区块 / 不是你的):没有内容可给。 */
     public static NumenStatePayload absent(java.util.UUID uuid) {
         return new NumenStatePayload(uuid, false, List.of(), List.of(), 0, 0f,
-                0, ItemStack.EMPTY, List.of(), "", -1);
+                0, ItemStack.EMPTY, List.of(), "", -1, "");
     }
 
     /**
@@ -86,6 +86,7 @@ public record RequestStatePayload(UUID uuid) implements CustomPacketPayload {
         return new NumenStatePayload(numen.getUUID(), true, items, craft,
                 numen.getFoodData().getFoodLevel(), numen.getFoodData().getSaturationLevel(),
                 inv.selected, numen.getOffhandItem().copy(), effects,
-                vehicleType, vehicle == null ? -1 : vehicle.getId());
+                vehicleType, vehicle == null ? -1 : vehicle.getId(),
+                com.dwinovo.numen.api.NumenPlugins.bodyStateFragments(numen));
     }
 }
