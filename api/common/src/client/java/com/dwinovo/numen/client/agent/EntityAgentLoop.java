@@ -1177,8 +1177,9 @@ public final class EntityAgentLoop {
      * joined with newlines into one message to avoid back-to-back {@code user}
      * messages that some backends reject.
      */
-    /** 本轮是否由主人夺话触发——drainInbox 取件时按类型表的 fromOwner 判定,
-     *  空排空的接续轮为 false;beginVoiceTurn 据此选硬停或句界衔接。 */
+    /** 本轮是否由主人夺话触发——drainInbox 取件时按类型表判定:来自主人、且是插话(STEER)的条目才算
+     *  主人刚开口;目标续跑(FOLLOW_UP)是她自己接着干,不算。空排空的接续轮同样为 false。
+     *  beginVoiceTurn 据此选硬停或句界衔接。 */
     private boolean ownerSpokeThisTurn;
 
     private boolean drainInbox() {
@@ -1208,7 +1209,8 @@ public final class EntityAgentLoop {
             startCompaction(false);
             return true;
         }
-        ownerSpokeThisTurn = text.stream().anyMatch(e -> EventTypes.get(e.type()).fromOwner());
+        ownerSpokeThisTurn = text.stream().map(e -> EventTypes.get(e.type()))
+                .anyMatch(t -> t.fromOwner() && t.delivery() == EventTypes.Delivery.STEER);
         List<String> parts = new ArrayList<>();
         // current_task is live runtime state. It is attached request-locally by
         // modelContextSnapshot(), never written into conversation history or JSONL.
