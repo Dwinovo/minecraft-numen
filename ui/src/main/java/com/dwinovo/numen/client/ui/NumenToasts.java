@@ -73,9 +73,10 @@ public final class NumenToasts {
      * 顶锚定渲染(HUD 场景:右上角滑入)。时间由调用方注入,本类不读钟。
      *
      * @param screenW GUI 缩放后的屏幕宽
+     * @param top     从这一行往下排——右上角已经有别人的通知(原版的成就、配方提示)时,宿主给出它们的下沿
      */
-    public void render(IDrawSurface s, int screenW, NumenTheme.Colors c, long nowMs) {
-        renderAnchored(s, screenW - MARGIN, MARGIN, false, c, nowMs);
+    public void render(IDrawSurface s, int screenW, int top, NumenTheme.Colors c, long nowMs) {
+        renderAnchored(s, screenW - MARGIN, top + MARGIN, false, c, nowMs);
     }
 
     /**
