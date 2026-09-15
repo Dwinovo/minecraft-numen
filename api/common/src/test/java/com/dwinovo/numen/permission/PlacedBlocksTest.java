@@ -67,12 +67,14 @@ class PlacedBlocksTest {
         placed.record(b, STEVE);
         assertTrue(placed.isPlaced(a, world.getBlockState(a)));
         assertTrue(placed.isPlaced(b, world.getBlockState(b)));
-        assertTrue(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world));
-        assertFalse(placed.anyPlacedWithin(new BlockPos(30, 64, 30), 3, world));
+        assertTrue(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world, null));
+        assertFalse(placed.anyPlacedWithin(new BlockPos(30, 64, 30), 3, world, null));
+        assertFalse(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world, STEVE.id()),
+                "放的人自己不算:邻域里只有他放的");
         // 邻域查询也按视图清空气
         world.set(a, Blocks.AIR.defaultBlockState());
         world.set(b, Blocks.AIR.defaultBlockState());
-        assertFalse(placed.anyPlacedWithin(new BlockPos(15, 64, 15), 1, world));
+        assertFalse(placed.anyPlacedWithin(new BlockPos(15, 64, 15), 1, world, null));
         assertEquals(0, placed.size());
     }
 

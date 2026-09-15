@@ -4877,6 +4877,39 @@ public class CompanionGameTests {
     }
 
     /**
+     * 放的人照实记,"玩家放的"是"不是她自己放的":同伴 A 放下一块木板,记在 A 名下;A 自己拆是放行(她垫的、
+     * 搭的是她的),同伴 B 要拆就得问——别人家同伴搭的东西不是自然方块。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100, batch = "numen_permission")
+    public static void her_own_blocks_are_hers_but_another_companion_asks(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer bridger = spawnAt(helper, "gametest_bridger", new BlockPos(3, 2, 3), false);
+        NumenPlayer neighbour = spawnAt(helper, "gametest_neighbour", new BlockPos(11, 2, 11), false);
+        BlockPos rel = new BlockPos(6, 2, 6);
+        BlockPos floor = helper.absolutePos(rel.below());
+        var ctx = new net.minecraft.world.item.context.BlockPlaceContext(bridger,
+                net.minecraft.world.InteractionHand.MAIN_HAND, new ItemStack(Items.OAK_PLANKS),
+                new net.minecraft.world.phys.BlockHitResult(Vec3.atCenterOf(floor),
+                        net.minecraft.core.Direction.UP, floor, false));
+        var result = ((net.minecraft.world.item.BlockItem) Items.OAK_PLANKS).place(ctx);
+        BlockPos pos = helper.absolutePos(rel);
+        helper.assertTrue(result.consumesAction() && level.getBlockState(pos).is(Blocks.OAK_PLANKS),
+                "the companion failed to place the plank");
+
+        var placer = com.dwinovo.numen.permission.PlacedBlocks.of(level).placerAt(pos, level.getBlockState(pos));
+        helper.assertTrue(placer != null && placer.id().equals(bridger.getUUID()),
+                "her plank was not recorded as hers: " + placer);
+        var dig = com.dwinovo.numen.permission.Action.breakBlock(pos, level.getBlockState(pos));
+        helper.assertTrue(com.dwinovo.numen.permission.Permission.gateFor(bridger).judgeLive(dig, level).allowed(),
+                "she has to ask to take back her own plank");
+        helper.assertTrue(com.dwinovo.numen.permission.Permission.gateFor(neighbour).judgeLive(dig, level).asks(),
+                "another companion would break her plank without asking");
+        CompanionFactory.despawn(level.getServer(), bridger);
+        CompanionFactory.despawn(level.getServer(), neighbour);
+        helper.succeed();
+    }
+
+    /**
      * 记住的规则按活世界推:空箱子问的是 {@code break(block_entity)},记下的是
      * {@code break(block_entity & minecraft:chest & !contents)};装着东西的问的是撤不回的那一行,记下的带着
      * {@code contents};有名字的狼问的是 {@code attack(named)},记下的只认这一只。
