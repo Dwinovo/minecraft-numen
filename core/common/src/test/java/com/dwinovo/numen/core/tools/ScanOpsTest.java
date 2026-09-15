@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ScanOpsTest {
 
     private static BlockSearch.ScanResult result(int scanned, int unloaded, int total, boolean deadlineHit) {
-        return new BlockSearch.ScanResult(List.of(), scanned, unloaded, total, deadlineHit, false);
+        return new BlockSearch.ScanResult(List.of(), scanned, unloaded, total, deadlineHit, false, false);
     }
 
     @Test
@@ -48,14 +48,14 @@ class ScanOpsTest {
     @Test
     void stoppingEarlyOnTheRingBoundWarnsAboutNothing() {
         assertNull(ScanOps.coverageNote(
-                new BlockSearch.ScanResult(List.of(), 41, 0, 625, false, true)));
+                new BlockSearch.ScanResult(List.of(), 41, 0, 625, false, true, false)));
     }
 
     /** Unloaded ground is still unloaded even when the quota was met early. */
     @Test
     void stoppingEarlyStillReportsGroundNobodyLookedAt() {
         String note = ScanOps.coverageNote(
-                new BlockSearch.ScanResult(List.of(), 41, 12, 625, false, true));
+                new BlockSearch.ScanResult(List.of(), 41, 12, 625, false, true, false));
         assertTrue(note.contains("12 of 625"), note);
     }
 }

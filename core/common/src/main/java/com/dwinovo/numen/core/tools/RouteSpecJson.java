@@ -40,8 +40,8 @@ public final class RouteSpecJson {
 
     private RouteSpecJson() {}
 
-    /** 坐标盒两角之间的分隔。 */
-    private static final String BOX_SEPARATOR = "..";
+    /** 坐标盒两角之间的分隔。scan_blocks 的包围盒也这么写,模型能原样填进 avoid_break。 */
+    static final String BOX_SEPARATOR = "..";
     private static final double MAX_PENALTY = 1000.0;
 
     /** {@code spec} 对象的字段(挂在调用方的 {@code optionalObject} 里)。 */

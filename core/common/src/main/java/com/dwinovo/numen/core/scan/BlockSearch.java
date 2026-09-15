@@ -37,7 +37,8 @@ import java.util.function.Consumer;
  * <h2>每刻的预算</h2>
  * 真读一节(构建条目,或现场读一节铺天盖地的目标)花一个 {@link SearchBudget#trySectionRead} 配额;
  * 索引已有新鲜条目、palette 就能排除、整节在球外的,不花配额,只受同一份 4ms 墙钟约束
- * ({@link SearchBudget#withinTime})。
+ * ({@link SearchBudget#withinTime})。调用方要逐格处理命中(scan_blocks 逐格问权限层再分团)的,把处理
+ * 交给搜索({@code eachHit}):走完之后由近及远逐格调用,同样受墙钟约束、跨 tick 续,处理完才回执。
  *
  * <h2>已加载地形就是边界</h2>
  * 没加载的列跳过并计数,绝不去加载它:读它会把服务端线程按在区块 IO 或地形生成上,而一次查询没有理由
@@ -60,8 +61,12 @@ public final class BlockSearch {
 
     /** Hard stop: convert a crawling scan into a partial answer (30s). */
     private static final int DEADLINE_TICKS = 600;
-    /** Collect cap — bounds memory and sort; ring order means what is kept is the nearest area. */
-    private static final int MAX_COLLECT = 8_192;
+    /**
+     * Collect cap — bounds memory and sort; ring order means what is kept is the nearest area.
+     * Passing it as {@code want} asks for every hit in the radius: the cap ends the walk before
+     * the stop rule could.
+     */
+    public static final int MAX_COLLECT = 8_192;
     /** 索引驱逐清扫周期(tick)。 */
     private static final int EVICT_SWEEP_TICKS = 200;
 
@@ -79,6 +84,10 @@ public final class BlockSearch {
     private final int radius;
     private final double radiusSq;
     private final Set<Block> targets;
+    /** Per-hit stage run after the walk, before the reply; null = none. */
+    private final Consumer<BlockScanner.Hit> eachHit;
+    /** Watermark into the result's hits already handed to {@link #eachHit}. */
+    private int staged;
     private final Consumer<ScanResult> onDone;
 
     private final int centerChunkX, centerChunkZ, maxRing;
@@ -104,28 +113,29 @@ public final class BlockSearch {
     /**
      * One scan's answer plus its coverage ledger: how many of {@code columnsTotal}
      * chunk columns were actually read, how many were skipped for not being
-     * loaded, and whether the deadline cut the walk short. The caller words the
-     * reply from these — a hit list alone can't tell the model whether "nothing
-     * found" means "nothing there".
+     * loaded, and whether the deadline or the collect cap cut the walk short. The
+     * caller words the reply from these — a hit list alone can't tell the model
+     * whether "nothing found" means "nothing there".
      */
     public record ScanResult(List<BlockScanner.Hit> matches, int columnsScanned,
                              int columnsUnloaded, int columnsTotal,
-                             boolean deadlineHit, boolean stoppedEarly) {
+                             boolean deadlineHit, boolean stoppedEarly, boolean collectCapHit) {
 
         /** Did the walk actually cover the whole requested sphere? */
         public boolean coveredEverything() {
-            return !deadlineHit && !stoppedEarly && columnsUnloaded == 0;
+            return !deadlineHit && !stoppedEarly && !collectCapHit && columnsUnloaded == 0;
         }
     }
 
     private BlockSearch(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
-                        Set<Block> targets, Consumer<ScanResult> onDone) {
+                        Set<Block> targets, Consumer<BlockScanner.Hit> eachHit, Consumer<ScanResult> onDone) {
         this.entityUuid = entityUuid;
         this.dimension = level.dimension();
         this.center = center;
         this.radius = radius;
         this.radiusSq = (double) radius * radius;
         this.targets = Set.copyOf(targets);
+        this.eachHit = eachHit;
         this.onDone = onDone;
         this.label = describe(targets);
         this.centerChunkX = SectionPos.blockToSectionCoord(center.getX());
@@ -153,7 +163,18 @@ public final class BlockSearch {
      */
     public static int start(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
                             Set<Block> targets, Consumer<ScanResult> onDone) {
-        BlockSearch job = new BlockSearch(entityUuid, level, center, radius, want, targets, onDone);
+        return start(entityUuid, level, center, radius, want, targets, null, onDone);
+    }
+
+    /**
+     * Same, with a per-hit stage: once the walk is done, {@code eachHit} sees every hit nearest
+     * first on the server thread, under the same per-tick wall clock, and the callback fires
+     * after the last one.
+     */
+    public static int start(UUID entityUuid, ServerLevel level, BlockPos center, int radius, int want,
+                            Set<Block> targets, Consumer<BlockScanner.Hit> eachHit,
+                            Consumer<ScanResult> onDone) {
+        BlockSearch job = new BlockSearch(entityUuid, level, center, radius, want, targets, eachHit, onDone);
         TargetIndex.register(job.dimension, job.targets);
         JOBS.add(job);
         return job.id;
@@ -211,8 +232,26 @@ public final class BlockSearch {
     /** The answer, set by {@link #finish}. */
     private ScanResult result;
 
-    /** @return true when finished ({@link #result} is set). */
+    /** @return true when finished: the walk is done and every hit went through {@link #eachHit}. */
     private boolean tickOne(MinecraftServer server) {
+        if (result == null && !walk(server)) {
+            return false;
+        }
+        if (eachHit == null) {
+            return true;
+        }
+        List<BlockScanner.Hit> hits = result.matches();
+        while (staged < hits.size()) {
+            if (!SearchBudget.withinTime()) {
+                return false;
+            }
+            eachHit.accept(hits.get(staged++));
+        }
+        return true;
+    }
+
+    /** @return true when the walk is over ({@link #result} is set). */
+    private boolean walk(MinecraftServer server) {
         ServerLevel level = server.getLevel(dimension);
         if (level == null) {
             finish(server, false);
@@ -343,7 +382,7 @@ public final class BlockSearch {
                 stopReason(deadlineHit), columnsScanned, columnsTotal, columnsUnloaded, sectionsRead,
                 startTick < 0 ? 0 : server.getTickCount() - startTick);
         result = new ScanResult(matches, columnsScanned, columnsUnloaded, columnsTotal,
-                deadlineHit, stoppedEarly);
+                deadlineHit, stoppedEarly, matches.size() >= MAX_COLLECT);
     }
 
     private String stopReason(boolean deadlineHit) {
