@@ -69,19 +69,32 @@ pi 默认"插话一次取一条"、工具并行;这两点我们不照搬(§七�
 │          McpTranscript、显示记录                                            │
 └──────────────────────────────┬──────────────────────────────────────────────┘
                                │ 端口
-┌─ 循环内核 AgentLoop(api main,com.dwinovo.numen.agent.loop,纯 Java)────────┐
+┌─ 循环内核 AgentLoop(agent 模块,com.dwinovo.numen.agent.loop,纯 Java)──────┐
 │  Run(阶段 + 取消令牌)、Hold(停牌)、pump()、halt()、两层循环、重试决定、       │
 │  LoopEvent 事件、LoopStatus 只读快照                                         │
 └───────┬──────────────┬───────────────┬───────────────┬──────────────────────┘
         │ ModelPort    │ ToolPort      │ Transcript    │ Inbox
    NumenLlmClient   ToolDispatcher   ConvoState       EventQueue + EventTypes
-   (ai,请求前过      (串行、兜底超时)  + ConvoLog       (熟度、类型表)
-    ProtocolView)
+   (ai,请求前过      (api client,     + ConvoLog       (agent,熟度、类型表)
+    ProtocolView)     串行、兜底超时)   (ai)
 ```
 
-- **内核放 api 的 main 源集**,只用纯 Java,不 import `net.minecraft` 与 `client` 包,
-  测试在 `api/common/src/test`。不放 `ai` 模块:`EventQueue`/`EventTypes` 在 api,
-  类型表是第三方注册的公开接口,挪包会破坏插件。
+照 pi-mono 的 `ai → agent → coding-agent` 分三层,模块依赖单向:
+
+| 模块 | 内容 |
+|---|---|
+| `ai`(现有,纯 Java) | 传输、服务商、`NumenLlmClient`、`ConvoState`/`ConvoLog`/`CompactSplit`;新增 `ProtocolView` |
+| `agent`(新建,纯 Java,依赖 ai) | 循环内核(`Run`、`Hold`、`pump`、`halt`、`LoopEvent`、`LoopStatus`、端口接口);队列 `EventQueue`/`EventTypes`/`JsonlJournal`(从 api 的 `event` 包搬来,包名 `com.dwinovo.numen.agent.inbox`);长期目标 `GoalState`/`GoalPrompts`(从 api 搬来)与 `GoalSteward`;`Compactor` |
+| `api`(依赖 agent) | 同伴门面 `EntityAgentLoop`、`ToolDispatcher`、`TurnPresenter`、`SystemPromptComposer`、`RuntimeState`;`NumenEvents` 与服务端 `EventOutbox`(用到 Minecraft,留下) |
+
+- **内核单独成模块**:不放 api——api 依赖 Minecraft,"不引用 Minecraft"只能靠自觉,编译器拦不住;
+  不放 ai——ai 是"大脑与服务商之间的连接层",循环是大脑本身。`agent` 模块零 Minecraft 依赖,
+  由构建保证;测试在 `agent/src/test`,不带 Minecraft 类路径。
+- **搬家不破坏插件**:`EventQueue`/`EventTypes`/`JsonlJournal`/`GoalState`/`GoalPrompts` 都不引用 Minecraft;
+  队列与类型表只在 api 内部使用(`core`、`plugins` 与仓外桥接均未引用),改包名没有外部调用方。
+- **接入构建照 `ai` 的样子**:`settings.gradle` include;`agent/build.gradle`(`java-library` + 发布坐标
+  `numen-agent-<minecraft_version>`);`api:common` 以 `api project(':agent')` 依赖;加载器发行 jar 平铺它的
+  类与源码;NeoForge 开发运行带上它的源码集;插件编译路径 `compileOnly`;根构建发布依赖它。
 - **ProtocolView 放 ai**:`NumenLlmClient.chatStreaming` 把消息转成服务商格式是全仓唯一的出口,
   正常一轮、压缩、目标评估都经过它。
 - **线程**:内核的一切状态只在客户端主线程读写。异步回调(模型流、工具结果)由门面注入的
@@ -508,7 +521,7 @@ sealed interface LoopEvent {
 
 ## 十六、测试
 
-**内核单元测试**(`api/common/src/test`,假的 ModelPort/ToolPort/Transcript,同步执行器):
+**内核单元测试**(`agent/src/test`,假的 ModelPort/ToolPort/Transcript,同步执行器):
 - 闲时急件开 run;非急件攒够条数/时长才开;每 tick pump 不产生任何输出。
 - 停牌(停止/失败/配置)时来急件不开 run、不打日志;主人说话解开。
 - 停止后清空立即执行;死亡与外接驾驶时控制命令被拒。
@@ -523,7 +536,7 @@ sealed interface LoopEvent {
 **ProtocolView 测试**(`ai/src/test`):悬空调用补结果(有/无 Halt)、Halt 切断回复的说明、
 相邻 user 合并、正常序列原样通过、压缩请求与评估请求同样合法。
 
-**类型表测试**:五种内置类型的投递方式与急件属性;外接取件跳过控制条目。
+**类型表测试**(`agent/src/test`,现有 `EventQueueTest`/`JsonlJournalTest`/`GoalStateTest` 随类搬过去):五种内置类型的投递方式与急件属性;外接取件跳过控制条目。
 
 **GameTest** 照跑(服务端不受影响;离线补发打包的服务端改动加一条)。
 
@@ -534,11 +547,15 @@ sealed interface LoopEvent {
 
 ## 十七、分步落地
 
-每一步单独提交、单独跑通 `:ai:test :api:common:test :core:common:test :ui:test`、两个加载器构建、
-GameTest;客户端行为变化的步骤部署后真机过一遍。
+每一步单独提交、单独跑通 `:ai:test :agent:test :api:common:test :core:common:test :ui:test`(第 0 步之前
+没有 `:agent:test`)、两个加载器构建、GameTest;客户端行为变化的步骤部署后真机过一遍。
+`CONTRIBUTING.md` 的测试命令同步补上 `:ai:test :agent:test`。
 
+0. **建 `agent` 模块并搬家**:接入构建;`EventQueue`/`EventTypes`/`JsonlJournal`/`GoalState`/`GoalPrompts`
+   与它们的测试搬进去,改包名,调用方跟着改 import。只搬不改行为。
 1. **ProtocolView + `Msg.Halt` + ConvoLog 编解码**(ai):删掉四处修补、`unansweredToolCallIds`、
-   `AgentRequestContext` 的两处特判(旧块迁移进 `migrateIfNeeded`)。循环暂时照旧,只是不再补。
+   `AgentRequestContext` 的两处特判(旧块迁移进 `migrateIfNeeded`)。旧循环在打断、死亡、失败处改为写
+   `Halt`,其余照旧。
 2. **类型表加 `delivery`/`alwaysUrgent`**,删掉硬写急件与按类型字符串的判断;外接取件跳过控制条目;
    离线补发打包。
 3. **循环内核**:`AgentLoop`、`Run`、`Hold`、`pump`、`halt`、两层步进、重试;`ModelPort`(含传输层取消)
