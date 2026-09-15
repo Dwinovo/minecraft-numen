@@ -275,7 +275,7 @@ class ProtectionPinsTest {
         FakeView v = floored();
         v.set(wall, Blocks.DIRT.defaultBlockState());
         PlacedBlocks placed = new PlacedBlocks();
-        placed.record(wall);
+        placed.record(wall, new PlacedBlocks.Placer(java.util.UUID.randomUUID(), "Steve"));
         // 同一块泥土:没记号有限价,记了"玩家放的"就 INF——翻成 INF 的只是记号
         assertTrue(MovementHelper.getMiningDurationTicks(
                 context(v, LongSets.emptySet(), NATURAL, new PlacedBlocks()),

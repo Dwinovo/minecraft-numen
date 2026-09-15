@@ -27,6 +27,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Tag("mc")
 class RuleTest {
 
+    private static final PlacedBlocks.Placer STEVE =
+            new PlacedBlocks.Placer(java.util.UUID.fromString("00000000-0000-0000-0000-0000000000aa"), "Steve");
+
     private static boolean booted;
     private static final BlockPos POS = new BlockPos(1, 64, 1);
 
@@ -89,7 +92,7 @@ class RuleTest {
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
         Rule rule = Rule.parse("break(placed)");
         assertFalse(rule.matches(dig, facts(world, placed)));
-        placed.record(POS);
+        placed.record(POS, STEVE);
         assertTrue(rule.matches(dig, facts(world, placed)));
         assertFalse(Rule.parse("break(!placed)").matches(dig, facts(world, placed)), "取反");
         assertTrue(Rule.parse("break(placed & !block_entity)").matches(dig, facts(world, placed)), "与");

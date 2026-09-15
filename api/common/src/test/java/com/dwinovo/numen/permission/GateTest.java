@@ -25,6 +25,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Tag("mc")
 class GateTest {
 
+    private static final PlacedBlocks.Placer STEVE =
+            new PlacedBlocks.Placer(java.util.UUID.fromString("00000000-0000-0000-0000-0000000000aa"), "Steve");
+
     private static boolean booted;
     private static final BlockPos POS = new BlockPos(3, 64, 3);
 
@@ -65,11 +68,15 @@ class GateTest {
         assertTrue(gate.judge(Action.breakBlock(POS, world.getBlockState(POS)), world).allowed(),
                 "野树由出厂 allow 行放行");
 
-        placed.record(POS);
+        placed.record(POS, STEVE);
         Verdict v = gate.judge(Action.breakBlock(POS, world.getBlockState(POS)), world);
         assertTrue(v.asks(), "玩家放的要问");
         assertFalse(v.allowed(), "问 ≠ 放行");
         assertEquals("break(placed)", v.rule().toString());
+        assertEquals(net.minecraft.network.chat.Component.empty().append(
+                        net.minecraft.network.chat.Component.translatable("numen.permission.placed_by", "Steve")),
+                gate.consentItem(Action.breakBlock(POS, world.getBlockState(POS)), v, world).shownCause(),
+                "主人看到的理由说出是谁放的");
         assertTrue(v.reason().contains("placed by a player"));
 
         BlockPos chest = POS.east();
@@ -115,7 +122,7 @@ class GateTest {
         FakeWorld world = new FakeWorld();
         world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
         PlacedBlocks placed = new PlacedBlocks();
-        placed.record(POS);
+        placed.record(POS, STEVE);
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
 
         // "允许并记住"存下的那条更细的 allow 行,盖过出厂的 ask 行
@@ -178,8 +185,8 @@ class GateTest {
         BlockPos log = POS.offset(3, 0, 0);
         world.set(cobble, Blocks.COBBLESTONE.defaultBlockState());
         world.set(log, Blocks.OAK_LOG.defaultBlockState());
-        placed.record(cobble);
-        placed.record(log);
+        placed.record(cobble, STEVE);
+        placed.record(log, STEVE);
         Gate gate = layered(Mode.ASK, rules(List.of(), List.of(), List.of("break(placed & minecraft:cobblestone)")),
                 RuleSet.factory(), placed);
 
@@ -200,7 +207,7 @@ class GateTest {
                 RuleSet.factory(), placed);
         assertEquals(Verdict.Kind.DENY, denied.judge(dig, world).kind(), "主人的 deny 行压过出厂 allow 行");
 
-        placed.record(POS);
+        placed.record(POS, STEVE);
         Gate allowed = layered(Mode.ASK, rules(List.of(), List.of(), List.of("break(placed)")),
                 RuleSet.factory(), placed);
         assertTrue(allowed.judge(dig, world).allowed(), "主人的 allow 行压过出厂 ask 行");
@@ -213,7 +220,7 @@ class GateTest {
         FakeWorld world = new FakeWorld();
         PlacedBlocks placed = new PlacedBlocks();
         world.set(POS, Blocks.COBBLESTONE.defaultBlockState());
-        placed.record(POS);
+        placed.record(POS, STEVE);
         Gate gate = gate(Mode.ASK, RuleSet.factory(), placed);
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
         ConsentItem item = gate.consentItem(dig, gate.judge(dig, world), world);
@@ -251,7 +258,7 @@ class GateTest {
         BlockPos second = POS.offset(5, 0, 0);
         for (BlockPos p : List.of(first, second)) {
             world.set(p, Blocks.COBBLESTONE.defaultBlockState());
-            placed.record(p);
+            placed.record(p, STEVE);
         }
         Gate before = gate(Mode.ASK, RuleSet.factory(), placed);
         Action digFirst = Action.breakBlock(first, world.getBlockState(first));
@@ -271,7 +278,7 @@ class GateTest {
         FakeWorld world = new FakeWorld();
         world.set(POS, Blocks.CHEST.defaultBlockState());
         PlacedBlocks placed = new PlacedBlocks();
-        placed.record(POS);
+        placed.record(POS, STEVE);
         Action dig = Action.breakBlock(POS, world.getBlockState(POS));
 
         assertTrue(gate(Mode.BYPASS, RuleSet.factory(), placed).judge(dig, world).allowed(), "bypass 全放");
@@ -295,10 +302,10 @@ class GateTest {
         BlockPos stone = POS.offset(8, 0, 0);
         for (BlockPos p : List.of(first, second)) {
             world.set(p, Blocks.OAK_LOG.defaultBlockState());
-            placed.record(p);
+            placed.record(p, STEVE);
         }
         world.set(stone, Blocks.STONE.defaultBlockState());
-        placed.record(stone);
+        placed.record(stone, STEVE);
 
         Gate ungranted = gate(Mode.ASK, RuleSet.factory(), placed);
         Action digFirst = Action.breakBlock(first, world.getBlockState(first));

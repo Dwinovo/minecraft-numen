@@ -23,6 +23,9 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 @Tag("mc")
 class PlacedBlocksTest {
 
+    private static final PlacedBlocks.Placer STEVE =
+            new PlacedBlocks.Placer(java.util.UUID.fromString("00000000-0000-0000-0000-0000000000aa"), "Steve");
+
     private static boolean booted;
 
     @BeforeAll
@@ -40,14 +43,14 @@ class PlacedBlocksTest {
         PlacedBlocks placed = new PlacedBlocks();
         BlockPos a = new BlockPos(5, 64, 5);
         assertFalse(placed.isPlaced(a, Blocks.STONE.defaultBlockState()));
-        placed.record(a);
+        placed.record(a, STEVE);
         assertTrue(placed.isPlaced(a, Blocks.STONE.defaultBlockState()));
         assertEquals(1, placed.size());
         // 格子已是空气:视为无记号,并顺手清掉
         assertFalse(placed.isPlaced(a, Blocks.AIR.defaultBlockState()));
         assertEquals(0, placed.size());
         assertFalse(placed.isPlaced(a, Blocks.STONE.defaultBlockState()), "清掉后再放的东西不是玩家放的");
-        placed.record(a);
+        placed.record(a, STEVE);
         placed.forget(a);
         assertEquals(0, placed.size());
     }
@@ -60,8 +63,8 @@ class PlacedBlocksTest {
         BlockPos b = new BlockPos(16, 64, 16);   // 隔壁区块
         world.set(a, Blocks.STONE.defaultBlockState());
         world.set(b, Blocks.STONE.defaultBlockState());
-        placed.record(a);
-        placed.record(b);
+        placed.record(a, STEVE);
+        placed.record(b, STEVE);
         assertTrue(placed.isPlaced(a, world.getBlockState(a)));
         assertTrue(placed.isPlaced(b, world.getBlockState(b)));
         assertTrue(placed.anyPlacedWithin(new BlockPos(13, 64, 13), 3, world));
@@ -77,11 +80,25 @@ class PlacedBlocksTest {
     void survivesASaveLoadCycle() {
         PlacedBlocks placed = new PlacedBlocks();
         BlockPos a = new BlockPos(-7, 12, 99);
-        placed.record(a);
+        placed.record(a, STEVE);
         PlacedBlocks back = PlacedBlocks.load(placed.save(new CompoundTag(), null), null);
         assertTrue(back.isPlaced(a, Blocks.STONE.defaultBlockState()));
+        assertEquals(STEVE, back.placerAt(a, Blocks.STONE.defaultBlockState()), "是谁放的跟着存档来回");
         assertEquals(1, back.size());
         assertEquals(0, PlacedBlocks.load(new CompoundTag(), null).size(), "坏档退回空记录,不炸");
+    }
+
+    @Test
+    void cellsFromBeforePlacersWereKeptAreStillPlacedBySomeoneUnknown() {
+        BlockPos a = new BlockPos(1, 70, 1);
+        CompoundTag old = new CompoundTag();
+        net.minecraft.nbt.ListTag cells = new net.minecraft.nbt.ListTag();
+        cells.add(net.minecraft.nbt.LongTag.valueOf(a.asLong()));
+        old.put("cells", cells);
+
+        PlacedBlocks back = PlacedBlocks.load(old, null);
+        assertTrue(back.isPlaced(a, Blocks.STONE.defaultBlockState()), "旧存档记下的格子照样算玩家放的");
+        assertFalse(back.placerAt(a, Blocks.STONE.defaultBlockState()).known(), "只是不知道是谁放的");
     }
 
     @Test

@@ -3712,12 +3712,13 @@ public class CompanionGameTests {
         plankRoomAround(helper, cx, cz);
         ServerLevel level = helper.getLevel();
         var placed = com.dwinovo.numen.permission.PlacedBlocks.of(level);
+        var owner = new com.dwinovo.numen.permission.PlacedBlocks.Placer(UUID.randomUUID(), "gametest_owner");
         for (int x = cx - 2; x <= cx + 2; x++) {
             for (int z = cz - 2; z <= cz + 2; z++) {
                 for (int y = 1; y <= 4; y++) {
                     BlockPos pos = helper.absolutePos(new BlockPos(x, y, z));
                     if (!level.getBlockState(pos).isAir()) {
-                        placed.record(pos);
+                        placed.record(pos, owner);
                     }
                 }
             }
