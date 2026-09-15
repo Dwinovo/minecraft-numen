@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -87,6 +88,26 @@ class EventTypesTest {
         assertTrue(q.hasUrgent());
         assertEquals(0, q.clearInterrupted(), "一条都不清");
         assertEquals(2, q.size());
+    }
+
+    @Test
+    void aTypeIdIsRegisteredOnlyOnce() {
+        EventTypes.Type query = EventTypes.get(EventTypes.QUERY);
+        assertThrows(IllegalArgumentException.class,
+                () -> EventTypes.register(EventTypes.event(EventTypes.QUERY, false)), "内置的行改不了");
+        assertEquals(query, EventTypes.get(EventTypes.QUERY), "主人的话那一行原样留着");
+
+        EventTypes.register(EventTypes.event("pet_whistled", false));
+        IllegalArgumentException again = assertThrows(IllegalArgumentException.class,
+                () -> EventTypes.register(EventTypes.event("pet_whistled", true)));
+        assertTrue(again.getMessage().contains("pet_whistled"), again.getMessage());
+        assertFalse(EventTypes.get("pet_whistled").alwaysUrgent(), "先登记的那一行为准,后来的没改掉它");
+    }
+
+    @Test
+    void aTypeWithoutAnIdIsRefused() {
+        assertThrows(IllegalArgumentException.class, () -> EventTypes.register(EventTypes.event(" ", false)));
+        assertThrows(IllegalArgumentException.class, () -> EventTypes.register(null));
     }
 
     @Test
