@@ -16,7 +16,8 @@ import java.util.Map;
  * 主人的 allow 表。
  *
  * @param kind         动词
- * @param pos          方块动作的格子;实体动作是实体此刻站的格(卡片描轮廓用);丢弃为 null
+ * @param pos          方块动作的格子;实体动作与丢弃为 null——实体认的是那一只({@code entityId}),不是它脚下的格:
+ *                     它走一步清单就不该变,否则同一件事会被当成新的征询重发
  * @param entityId     实体动作的实体 id;其余为 {@link #NO_ENTITY}
  * @param subject      方块、实体种类或物品的 id 路径({@code oak_log}、{@code wolf}、{@code diamond})
  * @param rule         问的是哪一行规则的原文;没有任何一行覆盖时为空串
@@ -46,9 +47,9 @@ public record ConsentItem(Action.Kind kind, BlockPos pos, int entityId, String s
         boolean irreversible = verdict.rule() != null && verdict.rule().irreversible();
         Rule remember = Rule.remembering(action, verdict.rule(), facts);
         return switch (action.kind()) {
-            case ATTACK, USE_ENTITY -> new ConsentItem(action.kind(), action.entity().blockPosition(),
-                    action.entity().getId(), EntityType.getKey(action.entity().getType()).getPath(),
-                    rule, verdict.cause(), irreversible, remember);
+            case ATTACK, USE_ENTITY -> new ConsentItem(action.kind(), null, action.entity().getId(),
+                    EntityType.getKey(action.entity().getType()).getPath(), rule, verdict.cause(), irreversible,
+                    remember);
             case DROP -> new ConsentItem(action.kind(), null, NO_ENTITY, subjectOf(action), rule, verdict.cause(),
                     irreversible, remember);
             default -> new ConsentItem(action.kind(), action.pos(), NO_ENTITY, subjectOf(action), rule,
