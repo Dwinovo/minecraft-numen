@@ -174,6 +174,26 @@ class EventQueueTest {
     }
 
     @Test
+    void takeIfSkipsWhatItDoesNotWantAndLeavesItQueued() {
+        // 外接模型取件:队首的整理是对内脑说的,留着;排在它后面的话照取,不能被它挡住
+        EventQueue q = fresh();
+        q.push(EventTypes.COMPACT, "整理记忆", T0, false);
+        q.push(EventTypes.QUERY, "<query>回来</query>", T0, false);
+        q.push(EventTypes.CLEAR, "清空上下文", T0, false);
+        q.push(EventTypes.EVENT, "<event>她挨打了</event>", T0, false);
+
+        List<EventQueue.Entry> text = q.takeIf(
+                e -> EventTypes.get(e.type()).delivery() != EventTypes.Delivery.CONTROL, T0);
+
+        assertEquals(List.of(EventTypes.QUERY, EventTypes.EVENT),
+                text.stream().map(EventQueue.Entry::type).toList(), "文本全取走,按入队顺序");
+        assertEquals(List.of(EventTypes.COMPACT, EventTypes.CLEAR),
+                q.entries().stream().map(EventQueue.Entry::type).toList(), "控制条目原样留着,先后不变");
+        assertTrue(q.takeIf(e -> EventTypes.EVENT.equals(e.type()), T0).isEmpty(), "一条都不要就什么都不动");
+        assertEquals(2, q.size());
+    }
+
+    @Test
     void backToBackCompactsCollapseIntoOne() {
         // 连着按了三次:它们是相邻的,合成一次不改变任何可观察的行为
         EventQueue q = fresh();
