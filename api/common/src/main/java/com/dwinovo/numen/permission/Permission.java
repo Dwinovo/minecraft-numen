@@ -1,6 +1,5 @@
 package com.dwinovo.numen.permission;
 
-import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.entity.NumenPlayer;
 
 import net.minecraft.server.level.ServerLevel;
@@ -19,26 +18,14 @@ public final class Permission {
 
     private Permission() {}
 
-    /** 领地 mod 的裁决口;加载器模块在模组初始化时装上,没装是 {@link TerritoryClaims#NONE}。 */
-    private static volatile TerritoryClaims claims = TerritoryClaims.NONE;
-
     /**
-     * 装上领地 mod 的裁决口。加载器模块或联动在模组初始化时调(Fabric 在 Common Protection API 在场时装它的
-     * 实现);common 代码不认识任何具体的领地 mod,也不分加载器。
-     */
-    public static void useTerritoryClaims(TerritoryClaims territoryClaims) {
-        claims = territoryClaims;
-        Constants.LOG.info("[numen-permission] 领地裁决口已装上: {}", territoryClaims.getClass().getName());
-    }
-
-    /**
-     * 主线程:取这只同伴此刻的裁决快照——模式、主人层与出厂层规则、所在维度的放置记录、领地口、主人答应
+     * 主线程:取这只同伴此刻的裁决快照——模式、主人层与出厂层规则、所在维度的放置记录、主人答应
      * 下来的任务期授权。快照不可变,任何线程可读。
      */
     public static Gate gateFor(NumenPlayer companion) {
         ServerLevel level = (ServerLevel) companion.level();
         return new Gate(companion, modeOf(companion), ownerRules(companion), RuleSet.factory(),
-                PlacedBlocks.of(level), claims, ConsentDesk.of(companion).granted());
+                PlacedBlocks.of(level), ConsentDesk.of(companion).granted());
     }
 
     /** 主线程:对活世界裁决一个动作。 */

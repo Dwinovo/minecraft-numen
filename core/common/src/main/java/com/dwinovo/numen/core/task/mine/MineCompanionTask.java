@@ -81,7 +81,7 @@ import java.util.Set;
  * 需要主人同意的格在成本模型里乘 {@code CONSENT_COST_MULTIPLIER}——挑目标按"走过去 + 挖它"的
  * 同一套定价({@link #targetCost}),附近有野树时自然先挖野树。轮到一格,动手之前把这次挖掘交给
  * 权限层({@link #permit}):要问就等主人点头,同一行规则问出来的同一种方块从此本任务内不再问;
- * 不许(主人拒绝、观察模式、领地)就按 {@link FailureType#REFUSED} 带着理由收场。路上要穿过需要
+ * 不许(主人拒绝、观察模式、服务器退回)就按 {@link FailureType#REFUSED} 带着理由收场。路上要穿过需要
  * 同意的格,由导航在开走前问。mine 自己不判、不跳、不问,只提出动作。
  *
  * <p>A custom reactive task: it owns its own phase machine, so it grows on

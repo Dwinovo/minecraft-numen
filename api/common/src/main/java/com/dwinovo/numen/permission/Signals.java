@@ -14,15 +14,13 @@ import java.util.Set;
  * 给动作贴事实的函数,每个只回答一个通用问题、各自独立、无状态。规则文本里的信号名在
  * {@link #byName} 解析;一个封闭的集合,没有运行期登记。
  *
- * <p>不按方块或生物种类枚举:玩家放置、带方块实体、有主人、有名字、是村民、领地裁决,这几个
- * 信号覆盖原版和任何模组——高级工作台有方块实体,模组宠物继承原版驯服,都不用适配。
+ * <p>不按方块或生物种类枚举:玩家放置、带方块实体、有主人、有名字、是村民,这几个信号覆盖原版和
+ * 任何模组——高级工作台有方块实体,模组宠物继承原版驯服,都不用适配。
  *
- * <p>信号只陈述事实,不裁决。{@link #CLAIMED} 与 {@link #SPAWN_PROTECTED} 是外部强制,由
- * {@link Gate} 直接当拒绝用;其余只在规则行里起作用。
+ * <p>信号只陈述事实,不裁决,只在规则行里起作用。
  *
  * <p>线程:每个信号只读 {@link Facts#view} 与 {@link Facts#placed}(任何线程可读);要活读世界
- * 的({@link #CONTENTS}、{@link #CLAIMED}、{@link #SPAWN_PROTECTED})只在 {@link Facts#live} 非空时读,
- * 否则按各自说明的保守值回答。
+ * 的({@link #CONTENTS})只在 {@link Facts#live} 非空时读,否则按它说明的保守值回答。
  */
 public enum Signals {
 
@@ -94,29 +92,6 @@ public enum Signals {
         boolean test(Action a, Facts f) {
             return a.pos() != null && f.placed() != null
                     && f.placed().anyPlacedWithin(a.pos(), NEAR_PLACED_RADIUS, f.view());
-        }
-    },
-
-    /**
-     * 领地 mod 说不。外部强制:命中即 deny,不进规则表、不问主人;主线程才问得到,搜索线程按
-     * "不知道"放行。
-     */
-    CLAIMED("claimed", "a land claim forbids it", false) {
-        @Override
-        boolean test(Action a, Facts f) {
-            return f.live() != null && f.claims().forbids(a, f);
-        }
-    },
-
-    /**
-     * 服务器的出生点保护说不(服主设的半径,非管理员不许动)。外部强制,与 {@link #CLAIMED} 同一档;
-     * 主线程才问得到,测试里没有同伴身体时不成立。
-     */
-    SPAWN_PROTECTED("spawn_protected", "spawn protection forbids it", false) {
-        @Override
-        boolean test(Action a, Facts f) {
-            return f.live() != null && f.actor() != null && a.pos() != null
-                    && f.live().getServer().isUnderSpawnProtection(f.live(), a.pos(), f.actor());
         }
     };
 

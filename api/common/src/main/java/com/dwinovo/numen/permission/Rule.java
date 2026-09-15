@@ -151,7 +151,7 @@ public final class Rule {
         if (id != null && !terms.contains(id.toString())) {
             terms.add(id.toString());
         }
-        Facts blind = new Facts(facts.view(), facts.placed(), null, facts.claims(), facts.actor());
+        Facts blind = new Facts(facts.view(), facts.placed(), null, facts.actor());
         for (Signals s : Signals.values()) {
             if (s.irreversible() && !mentioned.contains(s) && !s.test(action, facts) && s.test(action, blind)) {
                 terms.add("!" + s.ruleName());

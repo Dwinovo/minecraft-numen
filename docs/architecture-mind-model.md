@@ -173,13 +173,11 @@ interface Reflex {
 | hostile | 是不是敌对 | 实体分类 |
 | hazard_item | 放的是不是岩浆、火、TNT、水 | 物品 |
 | near_placed | 放置点附近有没有玩家放的方块 | placed 的邻域查询 |
-| claimed | 领地 mod 说不说不 | `TerritoryClaims` 接口,loader 模块各装一个实现 |
-| spawn_protected | 出生点保护说不说不 | 服务器 |
-
-`claimed`、`spawn_protected` 是外部强制:命中即拒,不问主人,回执写明是谁拦的。
+权限层只做原版,领地模组之后以联动插件做。原生通道里服务器退回的挖掘,由挖掘落点如实报成被拒,
+那是身体汇报,不是权限裁决。
 
 **代码里不写死能,也不写死不能。** 放行只来自 allow 行与主人选的 bypass;拒绝只来自主人写的
-deny 行、主人选的 observe 与外部强制;其余一律问。身体的物理与安全判断(岩浆、摔落上限、
+deny 行与主人选的 observe;其余一律问。身体的物理与安全判断(岩浆、摔落上限、
 挖不动)不属权限,不经裁决。
 
 **规则(Rule)。** deny、allow、ask 三张表。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,

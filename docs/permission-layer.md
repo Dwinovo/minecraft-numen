@@ -43,15 +43,15 @@
 ## 三、原则
 
 1. **权限是动作的属性,不是工具的属性。** 哪个工具走到受门控的动作,哪个工具在那里停下来等。
-2. **信号通用,不按种类枚举。** 玩家放置、带方块实体、有主人、有名字、是村民、领地裁决,
-   六个信号覆盖原版和任何模组。高级工作台有方块实体,模组宠物继承原版驯服,都不用适配。
+2. **信号通用,不按种类枚举。** 玩家放置、带方块实体、有主人、有名字、是村民,这几个信号
+   覆盖原版和任何模组。高级工作台有方块实体,模组宠物继承原版驯服,都不用适配。
 3. **主人定义环境,引擎不猜。** 同伴的沙盒是自然世界加她自己的背包;出了沙盒是主人的和别人
    的。哪些东西"随便动"由主人写规则,不由启发式判"像不像建筑"(Baritone 七年没做成的事)。
 4. **模型永远不是权限的执行者。** 它没有任何写入口;它看到的只是普通的工具结果和回执。
 5. **一个入口。** 全仓凡会改世界的地方只问一个裁决函数;判据只有一个出处。
 6. **代码里不写死能,也不写死不能。** 不是说不能,而是要问,不替主人做决定。放行只来自主人
-   看得见、改得了的 allow 行与他选的 bypass;拒绝只有三个来源——主人写的 deny 行、主人选的
-   observe、外部强制(领地、出生点保护);没有一行规则说过的事就问。内容(mine、build……)
+   看得见、改得了的 allow 行与他选的 bypass;拒绝只有两个来源——主人写的 deny 行、主人选的
+   observe;没有一行规则说过的事就问。内容(mine、build……)
    不判、不跳、不问,只提出动作。身体的物理与安全判断(岩浆与危险格、摔落上限、挖不动)
    回答的是"做不做得到、会不会死",不属权限,不经裁决、不弹卡。
 
@@ -77,22 +77,16 @@
 | hostile | 是不是敌对 | 实体分类 |
 | hazard_item | 放的是不是岩浆、火、TNT、水 | 物品 |
 | near_placed | 放置点附近有没有玩家放的方块 | placed 的邻域查询 |
-| claimed | 领地 mod 说不说不 | 加载器模块在模组初始化时经 `Permission.useTerritoryClaims` 装实现,没装是 `TerritoryClaims.NONE`:Fabric 在 Common Protection API(`common-protection-api` 1.0.0,领地 mod 内嵌)在场时接它,同伴以自己的身份问;NeoForge 不接具体领地 mod |
-| spawn_protected | 服务器出生点保护说不说不 | `MinecraftServer.isUnderSpawnProtection` |
+权限层只做原版:领地模组与服务器保护不接进裁决,领地之后以联动插件做。
 
-`claimed` 与 `spawn_protected` 是外部强制:命中即拒,不进规则表、不问主人,回执写明是谁拦的
-("a land claim forbids it")。它们只在主线程问得到,搜索线程按不知道放行,执行时再拦。
-插件可登记新信号,出厂这几个已够。
-
-领地口之外还有原生通道:挖掘照真客户端发 START/STOP,领地 mod(NeoForge 上的,和不接 CPA 的)在那里取消
-左键或破坏事件。`BlockDigger` 在 START 与收尾那一下之后读服务端的挖掘状态对账,被退回来的按 `REFUSED`
-收场,理由"被领地或服务器保护拦下",不空挥到超时,也不把没挖掉的报成挖掉了。
+原生通道照旧生效:挖掘照真客户端发 START/STOP,原版的出生点保护、冒险模式,以及取消左键或破坏事件的模组
+都在那里拦。`BlockDigger` 在 START 与收尾那一下之后读服务端的挖掘状态对账,被退回来的按 `REFUSED`
+收场,理由"服务器没让挖掉这一格",不空挥到超时,也不把没挖掉的报成挖掉了。这是身体如实汇报,不是权限。
 
 **规则(Rule)。** 两层,每层 deny、allow、ask 三张表:主人层是主人自己写的(命令、"允许并记住",
 存档见 §七),出厂层是下面这张默认表。查的顺序第一个命中即定:
 
-模式 → 外部强制(领地、出生点保护)→ 主人层(deny → allow → ask)→ 出厂层(allow → ask;出厂 deny 表
-是空的)→ 都不中也问。
+模式 → 主人层(deny → allow → ask)→ 出厂层(allow → ask;出厂 deny 表是空的)→ 都不中也问。
 
 - 主人层整体先于出厂层:主人手写的 `ask break(!placed & !block_entity)` 压过出厂的自然方块 allow 行,
   挖自然方块也问;主人写的 allow 行也压过出厂的 ask 行。
@@ -101,7 +95,7 @@
   放的橡木仍问。于是出厂 allow 行也必须写得比出厂 ask 行窄。
 - 任务期授权(§六)只覆盖问出来的动作,解不开拒绝。
 
-裁决快照(`Gate`)由 `Permission.gateFor` 在主线程取:模式、主人层与出厂层、放置记录、领地口、任务期
+裁决快照(`Gate`)由 `Permission.gateFor` 在主线程取:模式、主人层与出厂层、放置记录、任务期
 授权,不可变,任何线程可读。一条规则一行字符串 `动作(信号 & 信号 & !信号)`,与 Claude Code 的
 `Tool(specifier)` 同形,全仓只在 `Rule.parse` 解析,写错了回教学式的错误(列出认得的动词与信号):
 
@@ -116,7 +110,7 @@ break(#minecraft:beds) 也接受方块标签与 id,给主人写细规则用
 
 | 表 | 规则 |
 |---|---|
-| deny | 空(领地与出生点保护不是规则,是命中即拒的外部强制) |
+| deny | 空 |
 | allow | `break(!placed & !block_entity & !#minecraft:beds & !#minecraft:doors & !#minecraft:trapdoors & !#minecraft:fence_gates)`、`place(!hazard_item)`、`place(hazard_item & !near_placed)`、`attack(!owned & !named & !villager)`、`use_block(*)`、`use_entity(!owned)`、`take(*)` |
 | ask | `break(block_entity & contents)`、`break(placed)`、`break(block_entity)`、`break(#minecraft:beds)`、`break(#minecraft:doors)`、`break(#minecraft:trapdoors)`、`break(#minecraft:fence_gates)`、`attack(owned)`、`attack(named)`、`attack(villager)`、`drop(*)`、`place(hazard_item & near_placed)` |
 
@@ -145,7 +139,7 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 | 从不问 | scan、look_around、inspect、status、lookup_recipe、plan_route | Read、Grep、Glob |
 | 出厂 allow 行 | 挖自然方块、砍野树、用自己的方块搭路盖房、打敌对生物、宰野生动物、开关门与栅栏门、开容器、拿东西 | 工作目录内的编辑 |
 | 问 | 挖玩家放的、挖带方块实体的、打有主人或有名字的、打村民、丢物品、在别人的东西旁放危险物,以及没有任何一行规则说到的动作 | `rm -rf`、`git push`、网络 |
-| 拒 | 主人写的 deny 行、observe 模式、领地 mod 拒绝的、出生点保护 | deny 规则、受保护路径 |
+| 拒 | 主人写的 deny 行、observe 模式 | deny 规则 |
 
 合成烧炼、吃、装备、换工具不改世界,不是权限层的动作;挖不动(基岩)是物理,不是拒绝。
 
@@ -167,7 +161,7 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 
 | 内容 | 什么时候送动作 |
 |---|---|
-| mine | 选目标不看权限:主人放的方块和野树一样是候选。规格 `alter=any`,挑目标按"走过去 + 挖它"的同一套定价(需要同意的格贵十倍,A* 按到达价挑终点),附近有野树时自然先挖野树;轮到需要同意的目标、或为了够到目标要穿过需要同意的格,动手前或开走前征询;允许就挖,拒绝与拒绝类裁决(observe、领地)按 REFUSED 附理由收场 |
+| mine | 选目标不看权限:主人放的方块和野树一样是候选。规格 `alter=any`,挑目标按"走过去 + 挖它"的同一套定价(需要同意的格贵十倍,A* 按到达价挑终点),附近有野树时自然先挖野树;轮到需要同意的目标、或为了够到目标要穿过需要同意的格,动手前或开走前征询;允许就挖,拒绝(主人写的 deny、observe)与服务器退回的挖掘按 REFUSED 附理由收场 |
 | goto、follow | 规划出路以后、开走以前(导航采纳每一段路之前,含路线簿里的路与预算内整路),`alter=any` 的路把账单里要问的格打包送一次;重规划再查,授权覆盖的不重复问。无路时探针放宽一档(只走不改的先查自然改动,自然改动的查 `any`),候选行标 needing consent |
 | build | 施工前把要清的格与要放的格整批裁决,要问的一张卡;允许就建,拒绝的格按"主人不让动"跳过并写进回执 |
 | attack | 开打前送目标,要问的合成一张卡,等答复期间不打它;自卫换目标时新冒出来的再送 |
@@ -273,10 +267,10 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
 5. 记住的规则与面板页。后端已落地:主人层三张表与分层查询、"允许并记住"推规则写进主人层、
    `/numen permission`、`/numen consent` 命令入口;右键方块、右键实体、从容器拿东西在动手前过裁决。
    面板页与卡片、HUD 待交互统一重做。
-6. 领地 mod 信号(Fabric CPA);GameTest:不砍玩家放的原木、不拆有东西的箱子、允许后能拆、
-   拒绝附言回到模型、observe 模式拒绝一切改动。后端已落地:Fabric 在 CPA 在场时装领地口;挖掘落点被原生
-   通道退回按 REFUSED"被领地或服务器保护拦下"收场;GameTest 覆盖记住、分层、命令答复、observe 拦开箱与
-   拿东西、主人写 `ask take(*)`、破坏事件被取消。
+6. GameTest:不砍玩家放的原木、不拆有东西的箱子、允许后能拆、拒绝附言回到模型、observe 模式拒绝一切
+   改动。已落地:挖掘落点被原生通道退回按 REFUSED"服务器没让挖掉这一格"收场;GameTest 覆盖记住、分层、
+   命令答复、observe 拦开箱与拿东西、主人写 `ask take(*)`、破坏事件被取消。领地模组不在本层做,之后以
+   联动插件做。
 
 ## 十一、宪法修订
 
@@ -294,7 +288,5 @@ allow 行把日常动作一行一行写明:自然方块、不危险的放置、�
   `docs/rpc.md` Extension UI Protocol(本机 `D:\01_Projects\pi-mono`)。
 - #10 GlariaLuminous 的 Protection API 提案:`ProtectedAction`、`ProtectionRule`、服务端
   权威、在真实动作前检查。
-- Common Protection API(Patbox):`canBreakBlock/canPlaceBlock/canInteractBlock/
-  canDamageEntity(Level, pos/entity, NameAndId, @Nullable Player)`。
 - Baritone `isPossiblyProtected()` 返回 false 的桩与 issue #4643:按启发式识别玩家建筑这条路
   七年没走通。

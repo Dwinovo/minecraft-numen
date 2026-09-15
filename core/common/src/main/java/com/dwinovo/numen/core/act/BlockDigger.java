@@ -46,15 +46,15 @@ import net.minecraft.world.phys.shapes.VoxelShape;
  * where the permission layer is enforced: every new target is judged before the first swing
  * ({@link #permit}); a refused block is reported as {@link DigResult#REFUSED} and never touched.
  *
- * <p>服务端也可能把这一下退回来:领地 mod 取消了左键或破坏事件、出生点保护、冒险模式限制——它们都在原生
- * 通道里生效,不经权限层。挖掘器在 START 与收尾那一下之后读服务端的挖掘状态({@link ServerPlayerGameModeAccessor})
+ * <p>服务端也可能把这一下退回来:别的模组取消了左键或破坏事件、原版的出生点保护与冒险模式限制——它们都在
+ * 原生通道里生效,不经权限层。挖掘器在 START 与收尾那一下之后读服务端的挖掘状态({@link ServerPlayerGameModeAccessor})
  * 对账,退回来的同样按 {@link DigResult#REFUSED} 收场,理由是 {@link #SERVER_REFUSED}——不空挥到超时,也不把
  * 没挖掉的方块报成挖掉了。
  */
 public final class BlockDigger {
 
     /** 服务端把挖掘退回来时回执里的理由。 */
-    public static final String SERVER_REFUSED = "被领地或服务器保护拦下";
+    public static final String SERVER_REFUSED = "服务器没让挖掉这一格";
 
     /** The crack is broadcast under breaker id -1 (not the player's entity id),
      *  so the server's own per-player crack clearing on STOP can't wipe it early. */
@@ -105,7 +105,7 @@ public final class BlockDigger {
 
     /**
      * 施工清障:一次到位的原生破坏({@code ServerPlayerGameMode.destroyBlock}——掉落按手持结算、
-     * 创造不掉、领地 mod 的破坏事件照常触发),不走逐刻进度,也不要求视线。同样先过权限层。
+     * 创造不掉、别的模组的破坏事件照常触发),不走逐刻进度,也不要求视线。同样先过权限层。
      *
      * @return 方块真的没了
      */
@@ -133,7 +133,7 @@ public final class BlockDigger {
         NO_SHOT,
         /**
          * The permission layer refused this block before the first swing, or the server bounced the break
-         * back (a land claim, spawn protection); {@link #refusal()} says why. The block is untouched.
+         * back (another mod cancelled it, vanilla spawn protection); {@link #refusal()} says why. The block is untouched.
          */
         REFUSED;
 
