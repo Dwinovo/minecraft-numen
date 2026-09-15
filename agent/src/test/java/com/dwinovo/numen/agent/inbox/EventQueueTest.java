@@ -194,6 +194,29 @@ class EventQueueTest {
     }
 
     @Test
+    void takeAheadTakesOnlyBeforeTheBarrierAndSkipsWhatItDoesNotWant() {
+        // 循环在 run 的边界取插话:接续留着不挡路,控制条目之后的等它执行完
+        EventQueue q = fresh();
+        q.push(EventTypes.EVENT, "<event>挖到铁了</event>", T0, false);
+        q.push(EventTypes.GOAL, "<goal-progress>还差</goal-progress>", T0, false);
+        q.push(EventTypes.QUERY, "<query>先回来</query>", T0, false);
+        q.push(EventTypes.CLEAR, "清空上下文", T0, false);
+        q.push(EventTypes.QUERY, "<query>清完再说这句</query>", T0, false);
+
+        List<EventQueue.Entry> steer = q.takeAhead(
+                e -> EventTypes.get(e.type()).delivery() == EventTypes.Delivery.CONTROL,
+                e -> EventTypes.get(e.type()).delivery() == EventTypes.Delivery.STEER, T0);
+
+        assertEquals(List.of("<event>挖到铁了</event>", "<query>先回来</query>"),
+                steer.stream().map(EventQueue.Entry::text).toList(), "屏障之前的插话按入队顺序取走");
+        assertEquals(List.of(EventTypes.GOAL, EventTypes.CLEAR, EventTypes.QUERY),
+                q.entries().stream().map(EventQueue.Entry::type).toList(), "接续、屏障和屏障之后的原样留着");
+        assertTrue(q.takeAhead(e -> EventTypes.CLEAR.equals(e.type()),
+                e -> EventTypes.EVENT.equals(e.type()), T0).isEmpty(), "一条都没取就什么都不动");
+        assertEquals(3, q.size());
+    }
+
+    @Test
     void backToBackCompactsCollapseIntoOne() {
         // 连着按了三次:它们是相邻的,合成一次不改变任何可观察的行为
         EventQueue q = fresh();
