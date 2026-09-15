@@ -350,6 +350,39 @@ public class CompanionGameTests {
     }
 
     /**
+     * 主人按停止,结果里说清是主人停的:派一段后台 goto,跑起来后走主人停止那条路(与 CancelTasksPayload
+     * 同一个入口),收尾的消息以"the owner pressed Stop"开头——模型不用猜是谁、为什么停的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_smoke")
+    public static void an_owner_stop_says_the_owner_stopped_it(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
+        BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
+        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+                "gametest_stopped", UUID.randomUUID(), level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
+                (double) target.getX(), null, (double) target.getZ(), null, null, null,
+                TaskDispatch.ctx("gametest-stopped", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+        boolean[] stopped = {false};
+
+        helper.succeedWhen(() -> {
+            if (!stopped[0]) {
+                helper.assertTrue(record.getState() == com.dwinovo.numen.task.TaskState.RUNNING,
+                        "goto is not running yet");
+                com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion);
+                stopped[0] = true;
+            }
+            String message = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(message != null, "the stopped goto has not settled");
+            helper.assertTrue(message.startsWith("the owner pressed Stop"),
+                    "the result does not say the owner stopped it: " + message);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
      * 开门出屋:同伴被关在四面石墙(3 高、无顶但空背包无从垫高、徒手拆墙
      * 代价高昂)的屋里,唯一出口是一扇关着的橡木门——goto 屋外目标必须
      * 走"规划穿门 + 执行层右键开门"这条链。守的是 MovementTraverse 的
@@ -3985,8 +4018,8 @@ public class CompanionGameTests {
     }
 
     /**
-     * 旧编号明确报错:扫两次,第二次的编号接着往上数;拿第一次的编号去 mine,任务以失败收场,回执点名
-     * 那个编号、说出最新一次列了哪些、让她重新扫描;原木一根不少。
+     * 旧编号明确报错:扫两次,第二次的编号接着往上数;拿第一次的编号去 mine,派发当场拒收(不先受理),
+     * 拒收的说法点名那个编号、说出最新一次列了哪些、让她重新扫描;原木一根不少。
      */
     @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_permission")
     public static void mine_groups_with_an_old_id_is_told_to_scan_again(GameTestHelper helper) {
@@ -3997,7 +4030,7 @@ public class CompanionGameTests {
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         String[][] replies = {scan(companion, 5, "minecraft:mangrove_log"), null};
         String[] ids = new String[2];
-        TaskRecord[] mine = new TaskRecord[1];
+        String[] refusal = new String[1];
 
         helper.succeedWhen(() -> {
             for (int i = 0; i < 2; i++) {
@@ -4013,13 +4046,16 @@ public class CompanionGameTests {
                 } else {
                     helper.assertTrue(Integer.parseInt(ids[1].substring(1)) > Integer.parseInt(ids[0].substring(1)),
                             "a new scan reused an old id: " + ids[0] + " then " + ids[1]);
-                    mine[0] = mineGroups(companion, "gametest-archivist", List.of(ids[0]));
+                    try {
+                        mineGroups(companion, "gametest-archivist", List.of(ids[0]));
+                        refusal[0] = "(accepted)";
+                    } catch (IllegalArgumentException stale) {
+                        refusal[0] = stale.getMessage();
+                    }
                 }
             }
-            String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
-            helper.assertTrue(result != null, "mine has not finished");
-            helper.assertTrue(!mine[0].getResult().success() && result.contains(ids[0]) && result.contains(ids[1])
-                    && result.contains("scan_blocks again"), "the old id was not reported as stale: " + result);
+            helper.assertTrue(refusal[0] != null && refusal[0].contains(ids[0]) && refusal[0].contains(ids[1])
+                    && refusal[0].contains("scan_blocks again"), "the old id was not refused as stale: " + refusal[0]);
             helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.MANGROVE_LOG),
                     "the log was cut under a stale id");
             CompanionFactory.despawn(level.getServer(), companion);

@@ -84,4 +84,34 @@ class TaskRecordTest {
         bounded.extendDeadlineTo(1500L);
         org.junit.jupiter.api.Assertions.assertEquals(2000L, bounded.getDeadlineGameTime());
     }
+
+    @Test
+    void aStopRemembersWhoStoppedIt() {
+        // 任务不知道谁叫停的它;记录记下来,结算时写进模型读到的那句话
+        Fake running = new Fake(1000L);
+        running.setState(TaskState.RUNNING);
+        running.stop(TaskRecord.StopCause.OWNER);
+        org.junit.jupiter.api.Assertions.assertEquals(TaskState.CANCELLED, running.getState());
+        org.junit.jupiter.api.Assertions.assertEquals(TaskRecord.StopCause.OWNER, running.getStopCause());
+    }
+
+    @Test
+    void aFinishedTaskIsNotReStoppedByALateStop() {
+        // 已经干完的活,晚到一步的停止不改它的结局,也不冒充是谁停的
+        Fake done = new Fake(1000L);
+        done.setState(TaskState.SUCCESS);
+        done.stop(TaskRecord.StopCause.OWNER);
+        org.junit.jupiter.api.Assertions.assertEquals(TaskState.SUCCESS, done.getState());
+        org.junit.jupiter.api.Assertions.assertNull(done.getStopCause());
+    }
+
+    @Test
+    void theStopCauseHeadsTheMessageAndKeepsTheRest() {
+        TaskResult stopped = TaskResult.cancelled("interrupted after I dug 1/5 named cells of oak_log")
+                .stoppedBy(TaskRecord.StopCause.OWNER);
+        org.junit.jupiter.api.Assertions.assertEquals(
+                "the owner pressed Stop — interrupted after I dug 1/5 named cells of oak_log", stopped.message());
+        assertTrue(stopped.interrupted());
+        assertFalse(stopped.success());
+    }
 }
