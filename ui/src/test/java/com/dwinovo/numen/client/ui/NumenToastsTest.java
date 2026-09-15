@@ -46,19 +46,19 @@ class NumenToastsTest {
 
         // 状态从进入时刻起算满时长(跳表不快进)——按级联时刻逐帧推进。
         // 入场首帧 alpha=0 不画文字(渐显),文字断言放在停留期。
-        toasts.render(s, SCREEN_W, C, 0);                       // 滑入首帧
+        toasts.render(s, SCREEN_W, 0, C, 0);                       // 滑入首帧
         long tVisible = NumenToasts.SLIDE_MS + 1;
         s.resetFrame();
-        toasts.render(s, SCREEN_W, C, tVisible);                 // 进入停留(计时起点 tVisible)
+        toasts.render(s, SCREEN_W, 0, C, tVisible);                 // 进入停留(计时起点 tVisible)
         assertEquals("first", s.texts.get(0));
 
         long tSlideOut = tVisible + NumenToasts.VISIBLE_MAX_MS + 1;
-        toasts.render(s, SCREEN_W, C, tSlideOut);                // 进入滑出(计时起点 tSlideOut)
-        toasts.render(s, SCREEN_W, C, tSlideOut + NumenToasts.SLIDE_MS + 1); // 滑出完成,current 清空
+        toasts.render(s, SCREEN_W, 0, C, tSlideOut);                // 进入滑出(计时起点 tSlideOut)
+        toasts.render(s, SCREEN_W, 0, C, tSlideOut + NumenToasts.SLIDE_MS + 1); // 滑出完成,current 清空
         long tSecond = tSlideOut + NumenToasts.SLIDE_MS + 2;
-        toasts.render(s, SCREEN_W, C, tSecond);                  // 下一条滑入首帧
+        toasts.render(s, SCREEN_W, 0, C, tSecond);                  // 下一条滑入首帧
         s.resetFrame();
-        toasts.render(s, SCREEN_W, C, tSecond + NumenToasts.SLIDE_MS + 1);   // 下一条停留
+        toasts.render(s, SCREEN_W, 0, C, tSecond + NumenToasts.SLIDE_MS + 1);   // 下一条停留
         assertEquals("second", s.texts.get(0));
     }
 
@@ -67,11 +67,11 @@ class NumenToastsTest {
         NumenToasts toasts = new NumenToasts();
         FakeSurface s = new FakeSurface();
         toasts.push(NumenToasts.Severity.INFO, "一条会折行的比较长的通知文本内容");
-        toasts.render(s, SCREEN_W, C, 0);
+        toasts.render(s, SCREEN_W, 0, C, 0);
         int callsAfterFirstFrame = s.widthCalls;
         assertTrue(callsAfterFirstFrame > 0);
         for (int frame = 1; frame <= 50; frame++) {
-            toasts.render(s, SCREEN_W, C, frame * 16L);
+            toasts.render(s, SCREEN_W, 0, C, frame * 16L);
         }
         assertEquals(callsAfterFirstFrame, s.widthCalls, "渲染帧内发生了重新排版");
     }
@@ -82,14 +82,24 @@ class NumenToastsTest {
         FakeSurface s = new FakeSurface();
         toasts.push(NumenToasts.Severity.INFO, "hi");
 
-        toasts.render(s, SCREEN_W, C, 0);                        // t=0 完全收起
+        toasts.render(s, SCREEN_W, 0, C, 0);                        // t=0 完全收起
         int[] first = s.rects.get(0);
         assertTrue(first[0] >= SCREEN_W - NumenToasts.MARGIN, "滑入起点应在屏幕右缘外");
 
         s.resetFrame();
-        toasts.render(s, SCREEN_W, C, NumenToasts.SLIDE_MS + 10); // 停留期
+        toasts.render(s, SCREEN_W, 0, C, NumenToasts.SLIDE_MS + 10); // 停留期
         int[] settled = s.rects.get(0);
         assertEquals(SCREEN_W - NumenToasts.MARGIN - settled[2], settled[0], "停留期应贴右缘且全部在屏内");
+    }
+
+    @Test
+    void aToastLinesUpBelowTheGivenTop() {
+        NumenToasts toasts = new NumenToasts();
+        FakeSurface s = new FakeSurface();
+        toasts.push(NumenToasts.Severity.INFO, "hi");
+
+        toasts.render(s, SCREEN_W, 64, C, NumenToasts.SLIDE_MS + 10);
+        assertEquals(64 + NumenToasts.MARGIN, s.rects.get(0)[1], "右上角已有别人的通知时,排到它们下面");
     }
 
     @Test
@@ -99,18 +109,18 @@ class NumenToastsTest {
         FakeSurface s = new FakeSurface();
         info.push(NumenToasts.Severity.INFO, "ok");
         error.push(NumenToasts.Severity.ERROR, "ok");
-        info.render(s, SCREEN_W, C, 0);
-        error.render(s, SCREEN_W, C, 0);
+        info.render(s, SCREEN_W, 0, C, 0);
+        error.render(s, SCREEN_W, 0, C, 0);
 
         long probe = NumenToasts.SLIDE_MS + NumenToasts.VISIBLE_MIN_MS + NumenToasts.PER_CHAR_MS * 2 + 100;
         // INFO 在 probe 时刻已进入滑出乃至结束;ERROR 因停留下限仍在停留期。
         for (long t = 100; t <= probe; t += 100) {
             s.resetFrame();
-            info.render(s, SCREEN_W, C, t);
-            error.render(s, SCREEN_W, C, t);
+            info.render(s, SCREEN_W, 0, C, t);
+            error.render(s, SCREEN_W, 0, C, t);
         }
         s.resetFrame();
-        error.render(s, SCREEN_W, C, probe);
+        error.render(s, SCREEN_W, 0, C, probe);
         assertEquals(1, s.texts.size(), "ERROR 应仍在展示");
     }
 
@@ -122,7 +132,7 @@ class NumenToastsTest {
         FakeSurface s = new FakeSurface();
         long t = 0;
         for (int i = 0; i < 500 && !toasts.isIdle(); i++) {
-            toasts.render(s, SCREEN_W, C, t += 100);
+            toasts.render(s, SCREEN_W, 0, C, t += 100);
         }
         assertTrue(toasts.isIdle(), "队列应最终排空");
     }

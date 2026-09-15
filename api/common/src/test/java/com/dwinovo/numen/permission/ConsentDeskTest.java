@@ -55,7 +55,7 @@ class ConsentDeskTest {
     private static final Component PLACED = Component.translatable("numen.permission.signal.placed");
 
     private static ConsentItem log(int x) {
-        return new ConsentItem(Action.Kind.BREAK, new BlockPos(x, 64, 0), ConsentItem.NO_ENTITY, "oak_log", LOG_NAME,
+        return new ConsentItem(Action.Kind.BREAK, new BlockPos(x, 64, 0), ConsentItem.NO_ENTITY, "oak_log", null, LOG_NAME,
                 "break(placed)", "placed by a player", PLACED, false, REMEMBER_LOGS);
     }
 
@@ -236,21 +236,20 @@ class ConsentDeskTest {
         Component rex = Component.literal("Rex");
         Component owned = Component.translatable("numen.permission.signal.owned");
         Rule rememberRex = Rule.parse("attack(entity:00000000-0000-0000-0000-00000000002a)");
-        items.add(new ConsentItem(Action.Kind.ATTACK, null, 42, "wolf", rex, "attack(owned)", "has an owner", owned,
+        items.add(new ConsentItem(Action.Kind.ATTACK, null, 42, "wolf", null, rex, "attack(owned)", "has an owner", owned,
                 true, rememberRex));
-        items.add(new ConsentItem(Action.Kind.ATTACK, null, 43, "wolf", Component.literal("Fang"), "attack(owned)",
+        items.add(new ConsentItem(Action.Kind.ATTACK, null, 43, "wolf", null, Component.literal("Fang"), "attack(owned)",
                 "has an owner", owned, true, rememberRex));
         List<ConsentItem.Group> groups = ConsentItem.listing(items);
         assertEquals(3, groups.size(), "两只起了不同名字的狼各是一堆");
         assertEquals("break 8 oak_log (0,64,0; 1,64,0; 2,64,0; 3,64,0; 4,64,0; 5,64,0; +2 more): placed by a player",
                 groups.get(0).text());
-        assertEquals(Component.translatable("numen.consent.line.break",
-                        Component.translatable("numen.consent.count", LOG_NAME, "8"), PLACED), groups.get(0).shown(),
-                "给主人看的是可翻译的名字、数量与理由,不带坐标");
+        assertEquals(8, groups.get(0).count(), "给主人看的数量是这一堆有几条");
+        assertEquals(PLACED, groups.get(0).head().shownCause(), "给主人看的理由是可翻译的,不带坐标");
         assertFalse(groups.get(0).irreversible());
         assertEquals("attack 1 wolf: has an owner", groups.get(1).text(), "实体只点名是哪一种,不报它此刻站在哪");
-        assertEquals(Component.translatable("numen.consent.line.attack", rex, owned), groups.get(1).shown(),
-                "一只就不写数量;起了名字的叫它的名字");
+        assertEquals(1, groups.get(1).count());
+        assertEquals(rex, groups.get(1).head().name(), "起了名字的叫它的名字");
         assertTrue(groups.get(1).irreversible(), "撤不回的那一堆带着标记给答复框");
     }
 }
