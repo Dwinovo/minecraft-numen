@@ -69,6 +69,14 @@ class GroupBookTest {
         assertTrue(mixed != null && mixed.contains("g2") && !mixed.contains("group g4"), mixed);
     }
 
+    /** 新身体(重启后重放的活也是)还没扫描过:照实说没有扫描结果,不说"最近一次什么都没找到"。 */
+    @Test
+    void aBodyThatNeverScannedSaysThereIsNoScan() {
+        String stale = new GroupBook().staleMessage(List.of("g3"));
+        assertTrue(stale != null && stale.contains("no scan_blocks result") && stale.contains("g3")
+                && !stale.contains("found no groups"), stale);
+    }
+
     @Test
     void aScanThatFoundNothingMakesEveryOldIdStale() {
         GroupBook book = new GroupBook();
