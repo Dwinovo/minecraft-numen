@@ -4103,6 +4103,132 @@ public class CompanionGameTests {
         });
     }
 
+    /** plan_route 到 {@code rel} 那一格,回执落进返回数组的第一格。 */
+    private static String[] planTo(GameTestHelper helper, NumenPlayer companion, BlockPos rel) {
+        BlockPos target = helper.absolutePos(rel);
+        com.google.gson.JsonObject args = new com.google.gson.JsonObject();
+        args.addProperty("x", target.getX());
+        args.addProperty("y", target.getY());
+        args.addProperty("z", target.getZ());
+        String[] reply = new String[1];
+        new com.dwinovo.numen.core.tools.work.PlanRouteTool().onServerCall("gametest-plan", args, companion,
+                r -> reply[0] = r);
+        return reply;
+    }
+
+    /** {@code r12}、{@code g7} 里的数字。 */
+    private static long idNumber(String id) {
+        return Long.parseLong(id.substring(1));
+    }
+
+    /**
+     * 编号跨身体重建接着往上数:扫一次、规划一次,拿到 g 与 r 两个编号;她休眠(身体落盘离场)再回来,是一具新身体、
+     * 簿子是空的——旧的团编号说清楚没有扫描结果;再扫一次、再规划一次,新编号的数字都比休眠前的大,旧编号不会
+     * 指到新团、新路上。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 4000, batch = "numen_terrain")
+    public static void ids_keep_counting_after_the_body_is_rebuilt(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var server = level.getServer();
+        BlockPos markRel = new BlockPos(6, 2, 6);
+        level.setBlockAndUpdate(helper.absolutePos(markRel), Blocks.HONEYCOMB_BLOCK.defaultBlockState());
+        BlockPos spawn = helper.absolutePos(new BlockPos(3, 2, 6));
+        NumenPlayer first = com.dwinovo.numen.entity.Companions.summon(server, UUID.randomUUID(),
+                "gametest_numberer", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        UUID uuid = first.getUUID();
+        // 召唤会替她挑一个站得住的落点,不一定正好在 spawn 那格:半径给宽一点
+        String[] firstScan = scan(first, 10, "minecraft:honeycomb_block");
+        String[][] firstPlan = new String[1][];
+        NumenPlayer[] second = new NumenPlayer[1];
+        String[][] secondScan = new String[1][];
+        String[][] secondPlan = new String[1][];
+        String[] before = new String[2];   // 休眠前的 g 与 r
+
+        helper.succeedWhen(() -> {
+            if (before[0] == null) {
+                helper.assertTrue(firstScan[0] != null, "the first scan has not replied");
+                var group = groupHolding(groupsIn(firstScan[0]), helper.absolutePos(markRel));
+                helper.assertTrue(group != null, "the first scan did not list the block: " + firstScan[0]);
+                before[0] = group.get("id").getAsString();
+                firstPlan[0] = planTo(helper, first, new BlockPos(3, 2, 11));
+            }
+            if (before[1] == null) {
+                helper.assertTrue(firstPlan[0][0] != null, "the first plan_route has not replied");
+                before[1] = firstRouteId(firstPlan[0][0]);
+                helper.assertTrue(before[1] != null, "the first plan lists no route id: " + firstPlan[0][0]);
+                com.dwinovo.numen.entity.Companions.dormant(server, first);
+                second[0] = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
+                helper.assertTrue(second[0] != null && second[0] != first, "the body was not rebuilt");
+                String stale = com.dwinovo.numen.core.scan.GroupBook.of(second[0])
+                        .staleMessage(List.of(before[0]));
+                helper.assertTrue(stale != null && stale.contains("no scan_blocks result"),
+                        "the rebuilt body still claims the old scan: " + stale);
+                secondScan[0] = scan(second[0], 10, "minecraft:honeycomb_block");
+            }
+            if (secondPlan[0] == null) {
+                helper.assertTrue(secondScan[0][0] != null, "the second scan has not replied");
+                secondPlan[0] = planTo(helper, second[0], new BlockPos(3, 2, 11));
+            }
+            helper.assertTrue(secondPlan[0][0] != null, "the second plan_route has not replied");
+            var group = groupHolding(groupsIn(secondScan[0][0]), helper.absolutePos(markRel));
+            helper.assertTrue(group != null, "the second scan did not list the block: " + secondScan[0][0]);
+            String g = group.get("id").getAsString();
+            String r = firstRouteId(secondPlan[0][0]);
+            long highest = Math.max(idNumber(before[0]), idNumber(before[1]));
+            helper.assertTrue(r != null && idNumber(g) > highest && idNumber(r) > idNumber(g),
+                    "ids started over after the rebuild: before " + before[0] + "/" + before[1]
+                            + ", after " + g + "/" + r);
+            com.dwinovo.numen.entity.Companions.dismiss(server, second[0]);
+        });
+    }
+
+    /**
+     * 她顺路挖掉的点名格算她挖的:四根原木叠成一柱,四面黑曜石围成竖井,她站在柱顶。点名这一团,她只能一路往下
+     * 挖着走——每一根都是导航顺路挖掉的,不是站定了挖的。回执说四格都是她挖的,没有一格记成"别人动过"。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void mine_groups_counts_cells_she_broke_on_the_way(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        List<BlockPos> column = List.of(new BlockPos(7, 2, 7), new BlockPos(7, 3, 7), new BlockPos(7, 4, 7),
+                new BlockPos(7, 5, 7));
+        for (int y = 2; y <= 9; y++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    if (dx != 0 || dz != 0) {
+                        level.setBlockAndUpdate(helper.absolutePos(new BlockPos(7 + dx, y, 7 + dz)),
+                                Blocks.OBSIDIAN.defaultBlockState());
+                    }
+                }
+            }
+        }
+        for (BlockPos rel : column) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.STRIPPED_SPRUCE_LOG.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_sinker", new BlockPos(7, 6, 7), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        String[] reply = scan(companion, 6, "minecraft:stripped_spruce_log");
+        TaskRecord[] mine = new TaskRecord[1];
+
+        helper.succeedWhen(() -> {
+            if (mine[0] == null) {
+                helper.assertTrue(reply[0] != null, "scan_blocks has not replied");
+                var group = groupHolding(groupsIn(reply[0]), helper.absolutePos(column.get(0)));
+                helper.assertTrue(group != null && group.get("cells").getAsInt() == 4,
+                        "the column is not one group of four: " + reply[0]);
+                mine[0] = mineGroups(companion, "gametest-sinker", List.of(group.get("id").getAsString()));
+            }
+            String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
+            helper.assertTrue(result != null, "mine has not finished");
+            for (BlockPos rel : column) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
+                        "a log of the column is still standing at " + rel.toShortString());
+            }
+            helper.assertTrue(mine[0].getResult().success() && result.contains("dug 4/4 cells")
+                    && !result.contains("gone"), "the cells she broke on the way were not counted as hers: " + result);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /**
      * interact_at 左键打主人的箱子:动手之前挂一条征询,这次调用悬着;主人允许后箱子没了。
      */
