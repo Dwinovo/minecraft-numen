@@ -75,7 +75,7 @@ public final class NumenScreen extends Screen {
     private static final int RAIL_BOT_GAP = 6;   // gap kept above the pinned "+" tile
     private static final int HEADER_H = 22;
     private static final int INPUT_H = 18;
-    /** Text fields are inset inside their rounded card: the EditBox is shrunk by this much
+    /** Text fields are inset inside their field box: the EditBox is shrunk by this much
      *  (so vanilla's top-left unbordered text lands padded + centred) and the card is
      *  inflated back out to the full frame. */
     private static final int FIELD_INSET_X = 5;
@@ -1012,8 +1012,8 @@ public final class NumenScreen extends Screen {
             // 召唤模态:暗幕 + 居中卡(与确认卡同族),卡内由 SummonPanel 自绘。
             g.fill(railX, top, railX + RAIL_W + panelW, top + panelH,
                     (UiTheme.current().border() & 0xFFFFFF) | 0x99000000);
-            com.dwinovo.numen.client.ui.RoundRect.card(g, modalCardX(), modalCardY(),
-                    modalCardX() + modalCardW(), modalCardBottom(), 6,
+            com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), modalCardX(), modalCardY(),
+                    modalCardW(), modalCardBottom() - modalCardY(),
                     UiTheme.current().aiFill(), UiTheme.current().aiBorder());
             summonPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
@@ -1029,8 +1029,8 @@ public final class NumenScreen extends Screen {
             // 编辑模态:同款暗幕 + 居中卡;标题左侧的头像由屏幕补画(面板不碰 GuiGraphics)。
             g.fill(railX, top, railX + RAIL_W + panelW, top + panelH,
                     (UiTheme.current().border() & 0xFFFFFF) | 0x99000000);
-            com.dwinovo.numen.client.ui.RoundRect.card(g, modalCardX(), modalCardY(),
-                    modalCardX() + modalCardW(), modalCardBottom(), 6,
+            com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), modalCardX(), modalCardY(),
+                    modalCardW(), modalCardBottom() - modalCardY(),
                     UiTheme.current().aiFill(), UiTheme.current().aiBorder());
             if (uuid != null) {
                 CompanionFace.draw(g, uuid, skinFor(uuid), modalX(), modalY0() + 6, 18);
@@ -1049,16 +1049,15 @@ public final class NumenScreen extends Screen {
 
         // Widgets render LAST, on top of the panel background (fixes the "dim fields" — the panel fill
         // used to paint over the auto-rendered widgets). Text fields are borderless EditBoxes, so draw
-        // the shared rounded field card behind each before it renders its text.
+        // the shared field box behind each before it renders its text.
         for (AbstractWidget w : overlay) {
             // visible 检查:声线表单滚出视口的 EditBox 隐藏了自己,框也必须跟着消失
             // (否则空框越过面板边缘悬在世界上)。
             if (w instanceof EditBox eb && eb.visible) {
-                // 所有文本字段与气泡同款的圆角奶油卡;聚焦的字段边框亮 CTA。
-                com.dwinovo.numen.client.ui.RoundRect.card(g,
+                // 所有文本字段与气泡同款的框;聚焦的字段边框亮 CTA。
+                com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                         eb.getX() - FIELD_INSET_X, eb.getY() - FIELD_INSET_Y,
-                        eb.getX() + eb.getWidth() + FIELD_INSET_X,
-                        eb.getY() + eb.getHeight() + FIELD_INSET_Y, 5,
+                        eb.getWidth() + FIELD_INSET_X * 2, eb.getHeight() + FIELD_INSET_Y * 2,
                         UiTheme.current().aiFill(),
                         eb.isFocused() ? UiTheme.current().cta() : UiTheme.current().aiBorder());
             }
@@ -1109,8 +1108,7 @@ public final class NumenScreen extends Screen {
             boolean railQuiet = !dismissOpen() && !modalOpen();
             // 选中关系用左缘指示条说话(Discord 服务器栏同语法):长条 = 当前,
             // 悬停未选中出短条 = 可切换。悬停的容器反应与"+"号同语法:边框亮 CTA。
-            com.dwinovo.numen.client.ui.RoundRect.card(g, ax - 2, ay - 2,
-                    ax + RAIL_AV + 2, ay + RAIL_AV + 2, 3,
+            com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4,
                     FIELD, !active && hovered && railQuiet ? CTA : BORDER);
             CompanionFace.draw(g, e.uuid(), skinFor(e.uuid()), ax, ay, RAIL_AV);
             int pillH = active ? RAIL_AV - 6 : (hovered && railQuiet ? 8 : 0);
@@ -1142,7 +1140,7 @@ public final class NumenScreen extends Screen {
                 txt(g, Component.literal("!"), bx + (8 - font.width("!")) / 2 + 1, by + 1, ON_CTA);
             }
         }
-        // "+" 召唤格:纯代码绘制(圆角卡 + 双矩形十字),跟主题走色——十字是几何,烘焙成
+        // "+" 召唤格:纯代码绘制(框 + 双矩形十字),跟主题走色——十字是几何,烘焙成
         // 贴图换主题就变色盲。像素画类贴图(头像框/箭头/心饼)不在此列,那是刻意的像素风。
         // 召唤流程开着或悬停时边框与十字亮 CTA。
         int py = top + panelH - PAD - RAIL_AV;
@@ -1152,7 +1150,7 @@ public final class NumenScreen extends Screen {
         if (railScroll < maxRailScroll()) chevron(g, cx, py - 9, false);
         boolean plusHot = summoning || (mouseX >= ax && mouseX < ax + RAIL_AV
                 && mouseY >= py && mouseY < py + RAIL_AV);
-        com.dwinovo.numen.client.ui.RoundRect.card(g, ax, py, ax + RAIL_AV, py + RAIL_AV, 3,
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), ax, py, RAIL_AV, RAIL_AV,
                 FIELD, plusHot ? CTA : BORDER);
         int pcx = ax + RAIL_AV / 2;
         int pcy = py + RAIL_AV / 2;

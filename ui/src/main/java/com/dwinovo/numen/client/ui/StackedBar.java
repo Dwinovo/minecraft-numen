@@ -47,7 +47,7 @@ public final class StackedBar {
     public static void draw(IDrawSurface s, int x, int y, int w, int h,
                             int trackArgb, long total, List<Segment> segments) {
         if (w <= 0 || h <= 0) return;
-        s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, trackArgb);
+        s.fillRect(x, y, w, h, trackArgb);
         if (segments == null || segments.isEmpty() || total <= 0) return;
 
         long acc = 0;
@@ -61,7 +61,7 @@ public final class StackedBar {
                 segW = Math.min(MIN_VISIBLE_PX, w - drawnTo);
             }
             if (segW <= 0) break;   // 条已经画满,后面的段没地方了
-            s.fillRoundRect(x + drawnTo, y, segW, h, NumenStyle.RADIUS_CONTROL, seg.argb());
+            s.fillRect(x + drawnTo, y, segW, h, seg.argb());
             drawnTo += segW;
         }
     }

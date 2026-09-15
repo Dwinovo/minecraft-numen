@@ -77,7 +77,7 @@ public final class ConfirmDialog implements UiRoot.Overlay {
         cardH = NumenStyle.PAD * 2 + lines.size() * s.lineHeight() + detailH + 8 + BTN_H;
         cardX = dimX + (dimW - cardW) / 2;
         cardY = dimY + (dimH - cardH) / 2;
-        s.fillRoundRect(cardX, cardY, cardW, cardH, NumenStyle.RADIUS_PANEL, c.panelBg());
+        s.fillRect(cardX, cardY, cardW, cardH, c.panelBg());
 
         int ty = cardY + NumenStyle.PAD;
         for (String line : lines) {
@@ -106,7 +106,7 @@ public final class ConfirmDialog implements UiRoot.Overlay {
                             boolean danger, boolean hovered) {
         int bg = danger ? c.danger() : hovered ? c.hover() : c.sectionBg();
         if (danger && hovered) bg = NumenStyle.hoverBrighten(bg);
-        s.fillRoundRect(bx, buttonY, BTN_W, BTN_H, NumenStyle.RADIUS_CONTROL, bg);
+        s.fillRect(bx, buttonY, BTN_W, BTN_H, bg);
         int color = danger ? 0xFFFFFFFF : c.textPrimary();
         s.drawText(label, bx + (BTN_W - s.textWidth(label)) / 2,
                 buttonY + (BTN_H - s.lineHeight()) / 2 + 1, color, false);

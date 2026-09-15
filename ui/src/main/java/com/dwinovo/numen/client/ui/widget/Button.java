@@ -63,7 +63,7 @@ public final class Button extends Widget {
         if (style == Style.GHOST) {
             if (t > 0.01f) {   // 浮现的浅底:半透明 hover 色按进度收放透明度
                 int bg = ((int) (((c.hover() >>> 24) & 0xFF) * t) << 24) | (c.hover() & 0xFFFFFF);
-                s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, bg);
+                s.fillRect(x, y, w, h, bg);
             }
             int ghostColor = !enabled ? c.textMuted()
                     : NumenStyle.mixColor(c.textSecondary(), c.textPrimary(), t);
@@ -73,16 +73,16 @@ public final class Button extends Widget {
             return;
         }
         if (style == Style.NORMAL) {
-            s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, c.sectionBg());
+            s.fillRect(x, y, w, h, c.sectionBg());
             if (t > 0.01f) {   // hover 是叠加色:铺在底上,透明度随进度
                 int overlay = ((int) (((c.hover() >>> 24) & 0xFF) * t) << 24) | (c.hover() & 0xFFFFFF);
-                s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, overlay);
+                s.fillRect(x, y, w, h, overlay);
             }
         } else {
             int base = style == Style.ACCENT ? c.accent() : c.danger();
             int bg = !enabled ? c.sectionBg()
                     : NumenStyle.mixColor(base, NumenStyle.hoverBrighten(base), t);
-            s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_CONTROL, bg);
+            s.fillRect(x, y, w, h, bg);
         }
         int textColor = !enabled ? c.textMuted()
                 : style == Style.NORMAL ? c.textPrimary() : 0xFFFFFFFF;

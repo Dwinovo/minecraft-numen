@@ -214,8 +214,7 @@ public final class ProfileFormPanel {
         if (maxScroll() > 0) {   // 滚动拇指:内容装不下时提示"下面还有"
             int thumbH = Math.max(10, viewH * viewH / contentH);
             int thumbY = formY + (viewH - thumbH) * scrollY / maxScroll();
-            s.fillRoundRect(formX + formW, thumbY, NumenStyle.SCROLLBAR_W, thumbH,
-                    NumenStyle.RADIUS_SMALL, c.divider());
+            s.fillRect(formX + formW, thumbY, NumenStyle.SCROLLBAR_W, thumbH, c.divider());
         }
         fixedUi.render(s, c, mouseX, mouseY, nowMs);
         ui.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);

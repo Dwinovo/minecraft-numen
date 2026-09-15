@@ -9,7 +9,6 @@ import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.screen.chat.ChatInputBar;
 import com.dwinovo.numen.client.screen.settings.HostThemeColors;
-import com.dwinovo.numen.client.ui.RoundRect;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -152,13 +151,14 @@ public class CompanionChatScreen extends Screen {
 
         // 答复框在场时整行归它(它自己写着谁在问),输入卡与名字牌都不画
         if (!inputBar.asking()) {
+            var surface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, this.font);
             // 输入卡:与 G 面板同方言的浅底粗边卡片;输入行(含弹层/面板)画在它上面
-            RoundRect.card(g, x - 8, y - 6, x + INPUT_W + 8, y + INPUT_H + 4, 4,
+            com.dwinovo.numen.client.ui.NumenStyle.box(surface, x - 8, y - 6, INPUT_W + 16, INPUT_H + 10,
                     th.aiFill(), th.border());
             // 名字牌:与输入行同排、占卡片最左一截,标明这句话说给谁。不放输入框上方——
             // 斜杠补全弹层和 /skills 面板都贴着输入框往上长,上面那块地是它们的
             int tagW = tagW();
-            RoundRect.card(g, x - 4, y + 1, x - 4 + tagW, y + INPUT_H - 1, 3, th.band(), th.border());
+            com.dwinovo.numen.client.ui.NumenStyle.box(surface, x - 4, y + 1, tagW, INPUT_H - 2, th.band(), th.border());
             Nb.text(g, this.font, companionName, x + 2, y + (INPUT_H - this.font.lineHeight) / 2 + 1,
                     th.onBand());
         }

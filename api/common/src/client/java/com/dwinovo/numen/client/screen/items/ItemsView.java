@@ -5,7 +5,6 @@ import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
-import com.dwinovo.numen.client.ui.RoundRect;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -79,7 +78,7 @@ public final class ItemsView {
         if (e != null) collect(g, font, e.getItemBySlot(EquipmentSlot.OFFHAND),
                 startX + 1, armorTop + 4 * SLOT + 1, mouseX, mouseY, hover);
 
-        RoundRect.card(g, startX + 22, cTop, startX + LEFT_W, cTop + TOP_H, 4,
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), startX + 22, cTop, LEFT_W - 22, TOP_H,
                 th.surface(), th.surfaceBorder());
         if (e != null) {
             net.minecraft.client.gui.screens.inventory.InventoryScreen
@@ -129,7 +128,7 @@ public final class ItemsView {
 
         // ---- 底部:Agent 状态带(两栏信息 + 右上角模式芯片) ----
         int aY = cTop + TOP_H + 6;
-        RoundRect.card(g, startX, aY, startX + COMP_W, aY + AGENT_H, 4,
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), startX, aY, COMP_W, AGENT_H,
                 th.surface(), th.surfaceBorder());
         var loop = AgentLoopRegistry.get(uuid).orElse(null);
         int c1 = startX + 8;

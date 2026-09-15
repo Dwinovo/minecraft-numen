@@ -72,8 +72,8 @@ public final class ThemePanel {
     private void renderRow(IDrawSurface s, NumenTheme.Colors c, UiTheme t, int index,
                            int rx, int ry, int rw, int rh, boolean selected, boolean hovered) {
         boolean cur = t == UiTheme.current();   // 行悬停底由 ListView 统一画
-        // 圆角描边环:整块圆角底当"框",三色小样叠在内缩区上。
-        s.fillRoundRect(rx, ry + 3, 34, 18, 4, cur ? c.accent() : c.divider());
+        // 描边环:整块底当"框",三色小样叠在内缩区上。
+        s.fillRect(rx, ry + 3, 34, 18, cur ? c.accent() : c.divider());
         s.fillRect(rx + 2, ry + 5, 10, 14, t.ground());
         s.fillRect(rx + 12, ry + 5, 10, 14, t.band());
         s.fillRect(rx + 22, ry + 5, 10, 14, t.cta());

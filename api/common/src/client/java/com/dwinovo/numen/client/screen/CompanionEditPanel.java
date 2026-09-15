@@ -268,7 +268,7 @@ public final class CompanionEditPanel {
         s.fillRect(trashX, trashY + 1, 11, 2, tc);       // 盖
         s.fillRect(trashX + 1, trashY + 4, 9, 8, tc);    // 桶身
         if (modeLocked) {   // 置灰的当前档(不是控件:点不了才是本意)
-            NumenStyle.fieldCard(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
+            NumenStyle.box(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
                     c.sectionBg(), c.inputBorder());
             s.drawText(t(draft.creative ? ModLanguageData.Keys.SUMMON_MODE_CREATIVE
                             : ModLanguageData.Keys.SUMMON_MODE_SURVIVAL),

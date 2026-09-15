@@ -334,7 +334,7 @@ public final class SettingsView {
     }
 
     // 表单卡:面板区域内缩 10px 的近全幅卡——小面板下可用面积本就紧张,弹层感
-    // 靠四周暗边 + 圆角传达。卡内表单坐标系(f*)只在表单态使用,列表照旧走 sec*。
+    // 靠四周暗边 + 描边传达。卡内表单坐标系(f*)只在表单态使用,列表照旧走 sec*。
     private int cardX0() { return left() + 10; }
     private int cardY0() { return top() + 10; }
     private int cardX1() { return left() + panelW() - 10; }
@@ -350,13 +350,13 @@ public final class SettingsView {
     /** Bottom edge the form's save row sits above. */
     private int fBottom() { return cardY1() - 10; }
 
-    /** 表单模态的暗幕 + 近全幅圆角卡 + 卡顶标题。 */
+    /** 表单模态的暗幕 + 近全幅的框 + 卡顶标题。 */
     private void formModal(GuiGraphics g, Component title) {
         UiTheme t = UiTheme.current();
         g.fill(host.railX(), top(), left() + panelW(), top() + panelH(),
                 (t.border() & 0xFFFFFF) | 0x99000000);
-        com.dwinovo.numen.client.ui.RoundRect.card(g, cardX0(), cardY0(), cardX1(), cardY1(),
-                6, t.aiFill(), t.aiBorder());
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()), cardX0(), cardY0(),
+                cardX1() - cardX0(), cardY1() - cardY0(), t.aiFill(), t.aiBorder());
         txt(g, title, fx(), cardY0() + 6, TXT);
     }
 
@@ -704,7 +704,7 @@ public final class SettingsView {
                     },
                     h -> beginEditMcp(h.name()))
                     .withRowIcon(8, (s, h, ix, iy, size) ->
-                            s.fillRoundRect(ix + 1, iy + 1, 6, 6, 3, mcpDotColor(h.status())))
+                            s.fillRect(ix + 1, iy + 1, 6, 6, mcpDotColor(h.status())))
                     .withRowToggle(
                             h -> h.toggledOn(),
                             h -> {
@@ -988,9 +988,9 @@ public final class SettingsView {
         // 内容底板:比地面亮一档的"纸面"垫住整个设置区(导航+正文),文字不再直接
         // 铺在点纹地面上——点纹退成底板四周的氛围纹理,层级和对比度都立起来。
         UiTheme th = UiTheme.current();
-        com.dwinovo.numen.client.ui.RoundRect.card(g,
-                left() + 5, top() + HEADER_H + 2, left() + panelW() - 5, top() + panelH() - 5,
-                6, th.surface(), th.surfaceBorder());
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                left() + 5, top() + HEADER_H + 2, panelW() - 10, panelH() - HEADER_H - 7,
+                th.surface(), th.surfaceBorder());
         navPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                 HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
         int dx = left() + PAD + NAV_W + 3;

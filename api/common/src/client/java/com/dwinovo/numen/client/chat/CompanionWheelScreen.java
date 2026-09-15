@@ -7,7 +7,6 @@ import com.dwinovo.numen.client.hud.TalkHint;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
-import com.dwinovo.numen.client.ui.RoundRect;
 
 import com.mojang.blaze3d.platform.InputConstants;
 
@@ -176,8 +175,7 @@ public class CompanionWheelScreen extends Screen {
         int topX = cx;
         int topY = cy - Math.round(rNow);
         int ringHalf = AVATAR / 2 + 5;
-        RoundRect.fill(g, topX - ringHalf, topY - ringHalf, topX + ringHalf, topY + ringHalf, 5,
-                th.cta());
+        g.fill(topX - ringHalf, topY - ringHalf, topX + ringHalf, topY + ringHalf, th.cta());
         Nb.text(g, this.font, "▼", topX - this.font.width("▼") / 2,
                 topY - ringHalf - 12, th.cta());
 
@@ -205,7 +203,7 @@ public class CompanionWheelScreen extends Screen {
             g.pose().scale(scale, scale, 1f);
             int half = AVATAR / 2;
             if (!atTop) {
-                RoundRect.fill(g, -half - 2, -half - 2, half + 2, half + 2, 4, th.border());
+                g.fill(-half - 2, -half - 2, half + 2, half + 2, th.border());
             }
             CompanionFace.draw(g, entries.get(i).uuid(), KnownSkins.of(entries.get(i).uuid()),
                     -half, -half, AVATAR);
@@ -218,7 +216,8 @@ public class CompanionWheelScreen extends Screen {
             int tw = this.font.width(label);
             int nx = cx - tw / 2;
             int ny = cy - r - 46;
-            RoundRect.card(g, nx - 10, ny - 6, nx + tw + 10, ny + 14, 4, th.aiFill(), th.border());
+            com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, this.font), nx - 10, ny - 6, tw + 20, 20,
+                    th.aiFill(), th.border());
             Nb.text(g, this.font, label, nx, ny, th.text());
 
             String hint = "滚轮转盘 · 点击送到顶槽 · 点顶槽或松开确认 · Esc 取消";

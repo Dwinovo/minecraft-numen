@@ -5,7 +5,6 @@ import com.dwinovo.numen.agent.provider.LlmToolCall;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
-import com.dwinovo.numen.client.ui.RoundRect;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -18,14 +17,13 @@ import java.util.List;
 
 /**
  * The right-side PLAN card: the companion's latest {@code todowrite}, drawn on a
- * translucent rounded wash so it reads as a sidebar, not more chat. Reads the
+ * translucent wash so it reads as a sidebar, not more chat. Reads the
  * physical transcript so the plan survives a context compaction.
  */
 public final class PlanCard {
 
     private static final int LINE_H = 10;
     private static final int PAD = 7;
-    private static final int RADIUS = 6;
 
     private PlanCard() {}
 
@@ -52,7 +50,7 @@ public final class PlanCard {
             }
         }
         int cardBottom = Math.min(bottom, y + contentH + PAD - 2);
-        RoundRect.fill(g, x, y, x + w, cardBottom, RADIUS, CARD_FILL);
+        g.fill(x, y, x + w, cardBottom, CARD_FILL);
         Nb.text(g, font, I18n.get("numen.chat.plan"), ix, y + PAD, MUTED);
         int ly = y + PAD + 13;
         if (todos == null || todos.isEmpty()) {

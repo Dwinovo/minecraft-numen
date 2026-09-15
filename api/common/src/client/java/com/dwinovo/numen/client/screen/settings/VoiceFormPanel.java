@@ -275,8 +275,7 @@ public final class VoiceFormPanel {
         if (maxScroll() > 0) {
             int thumbH = Math.max(10, viewH * viewH / contentH);
             int thumbY = formY + (viewH - thumbH) * scrollY / maxScroll();
-            s.fillRoundRect(formX + formW, thumbY, NumenStyle.SCROLLBAR_W, thumbH,
-                    NumenStyle.RADIUS_SMALL, c.divider());
+            s.fillRect(formX + formW, thumbY, NumenStyle.SCROLLBAR_W, thumbH, c.divider());
         }
         fixedUi.render(s, c, mouseX, mouseY, nowMs);
         ui.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);

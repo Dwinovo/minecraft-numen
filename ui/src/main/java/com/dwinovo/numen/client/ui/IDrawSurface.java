@@ -15,15 +15,8 @@ package com.dwinovo.numen.client.ui;
  */
 public interface IDrawSurface {
 
+    /** 方角填充。NumenUI 不画圆角(见 {@code docs/ui-design-rules.md}):形状只有矩形,层级靠颜色、描边与间距。 */
     void fillRect(int x, int y, int w, int h, int argb);
-
-    /**
-     * 圆角矩形。缺省降级为方块角——圆角是增强不是承诺:某版本的适配器
-     * 没实现(或 shader 加载失败)时,界面照常成立,只是没那么圆。
-     */
-    default void fillRoundRect(int x, int y, int w, int h, int radius, int argb) {
-        fillRect(x, y, w, h, argb);
-    }
 
     void drawText(String text, int x, int y, int argb, boolean shadow);
 

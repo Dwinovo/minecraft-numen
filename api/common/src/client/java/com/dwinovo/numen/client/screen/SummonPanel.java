@@ -222,7 +222,7 @@ public final class SummonPanel {
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
         if (modeInherited) {   // 置灰的继承档(不是控件:点不了才是本意)
-            NumenStyle.fieldCard(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
+            NumenStyle.box(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
                     c.sectionBg(), c.inputBorder());
             s.drawText(I18n.get(ModLanguageData.Keys.SUMMON_MODE_INHERITED,
                             t(draft.creative ? ModLanguageData.Keys.SUMMON_MODE_CREATIVE

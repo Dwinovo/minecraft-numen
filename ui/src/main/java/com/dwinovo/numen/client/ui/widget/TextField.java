@@ -56,7 +56,7 @@ public final class TextField extends Widget {
     }
 
     /**
-     * 嵌在一行里的输入框:只画底边一道线(聚焦、出错照样换色),不画圆角卡壳——它是那一行的一部分,
+     * 嵌在一行里的输入框:只画底边一道线(聚焦、出错照样换色),不画框——它是那一行的一部分,
      * 不是另一个框。
      */
     public TextField underlined(boolean underlined) {
@@ -142,12 +142,12 @@ public final class TextField extends Widget {
 
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        // 统一卡壳:圆角描边+内衬底;聚焦/错误只换描边色(STT 参考样式定标)。
+        // 统一的框:描边+内衬底;聚焦/错误只换描边色(STT 参考样式定标)。
         int border = error != null ? c.danger() : isFocused() ? c.accent() : c.inputBorder();
         if (underlined) {
             s.fillRect(x, y + h - 1, w, 1, border);
         } else {
-            NumenStyle.fieldCard(s, x, y, w, h, c.inputBg(), border);
+            NumenStyle.box(s, x, y, w, h, c.inputBg(), border);
         }
         if (labelWidget != null) labelWidget.setVisible(error == null);   // 出错时标签让位
         if (error != null) {

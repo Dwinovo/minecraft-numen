@@ -2,7 +2,7 @@ package com.dwinovo.numen.client.ui;
 
 /**
  * NumenUI 几何与效果令牌——设计令牌的另一半:色彩住 {@link NumenTheme},
- * 圆角/边距/控件高/行距/悬停效果住这里。改样式细节只动这一个文件。
+ * 框/边距/控件高/行距/悬停效果住这里。改样式细节只动这一个文件。
  *
  * <h2>收录纪律</h2>
  * 只收"跨控件复用且承载设计意图"的值;单个组件自己的布局参数(列宽、
@@ -30,16 +30,6 @@ public final class NumenStyle {
 
     private NumenStyle() {}
 
-    // ---- 圆角 ----
-    /** 面板/卡片级容器。 */
-    public static final int RADIUS_PANEL = 4;
-    /** 控件级(按钮/下拉/弹层)。 */
-    public static final int RADIUS_CONTROL = 3;
-    /** 徽章/滚动拇指等微件。 */
-    public static final int RADIUS_SMALL = 2;
-    /** 输入类控件卡壳(STT 字段定标:比按钮更圆润的 5px)。 */
-    public static final int RADIUS_FIELD = 5;
-
     // ---- 尺寸与间距 ----
     /** 标准控件高(输入框/下拉——STT 字段同高)。 */
     public static final int CONTROL_H = 18;
@@ -62,19 +52,20 @@ public final class NumenStyle {
     /**
      * 过程不是对话:工具调用与思考过程要一眼能和"她说的话"分开,否则读者会
      * 把机器旁白当成模型的输出。视觉语言取"引用块"那一套——左缘一条竖线 +
-     * 极淡底,不用气泡的实底与圆角。
+     * 极淡底,不用气泡的实底与描边。
      */
     public static final int TRACE_BAR_W = 2;
     /** 竖线到内容的呼吸;内容整体比气泡再缩进一点,层级更靠后。 */
     public static final int TRACE_INDENT = 7;
-    /** 机器行的圆角:比控件更方,越方越"不像话泡"。 */
-    public static final int TRACE_RADIUS = 1;
 
-    /** 输入类控件(输入框/下拉收起态)的统一卡壳:圆角描边 + 内衬底。
-     *  全部输入控件走同一形制,聚焦/错误只换描边色——框样式的单一真源。 */
-    public static void fieldCard(IDrawSurface s, int x, int y, int w, int h, int fill, int border) {
-        s.fillRoundRect(x, y, w, h, RADIUS_FIELD, border);
-        s.fillRoundRect(x + 1, y + 1, w - 2, h - 2, RADIUS_FIELD - 1, fill);
+    /**
+     * 框:一圈 1 像素描边 + 内衬底,方角——照原版 MC 与模组圈的通行做法(原版悬停提示、Jade、JEI 都是方的)。
+     * 输入框、下拉、卡片、对话气泡、弹层都是它;聚焦/错误/悬停只换描边色。框样式的单一真源,屏幕层也经
+     * {@code McDrawSurface} 画它,不自己拼。
+     */
+    public static void box(IDrawSurface s, int x, int y, int w, int h, int fill, int border) {
+        s.fillRect(x, y, w, h, border);
+        s.fillRect(x + 1, y + 1, w - 2, h - 2, fill);
     }
 
     // ---- 动效 ----

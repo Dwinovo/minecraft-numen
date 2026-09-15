@@ -92,7 +92,7 @@ public final class Readout extends Popup {
 
     @Override
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        NumenStyle.fieldCard(s, x, y, w, h, c.panelBg(), c.accent());
+        NumenStyle.box(s, x, y, w, h, c.panelBg(), c.accent());
         int iy = y + PAD;
         int inner = w - PAD * 2;
 
@@ -126,7 +126,7 @@ public final class Readout extends Popup {
         String alert = content.alert();
         if (alert != null) {
             iy += 2;
-            s.fillRoundRect(x + PAD, iy, inner, ALERT_H, NumenStyle.RADIUS_SMALL, c.toastWarnBg());
+            s.fillRect(x + PAD, iy, inner, ALERT_H, c.toastWarnBg());
             s.drawText(alert, x + PAD + 5, iy + (ALERT_H - s.lineHeight()) / 2, c.warning(), false);
         }
     }

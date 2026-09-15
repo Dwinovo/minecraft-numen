@@ -280,9 +280,9 @@ public final class LibraryListPanel<T> {
             boolean overBind = hovered && mouseX >= rx && mouseX < rx + BIND_ZONE;
             int dy = ry + (rh - 6) / 2;
             int color = bound || overBind ? c.accent() : c.textMuted();
-            s.fillRoundRect(rx + 4, dy, 6, 6, 3, color);
+            s.fillRect(rx + 4, dy, 6, 6, color);
             if (!bound) {
-                s.fillRoundRect(rx + 5, dy + 1, 4, 4, 2, c.panelBg());   // 空心 = 未绑定
+                s.fillRect(rx + 5, dy + 1, 4, 4, c.panelBg());   // 空心 = 未绑定
             }
             tx = rx + BIND_ZONE;
         } else if (Boolean.TRUE.equals(row.marked())) {
@@ -311,16 +311,16 @@ public final class LibraryListPanel<T> {
             float knob = index == animRow ? animKnob : (on ? 1f : 0f);
             int tx0 = rx + rw - (deleteMessage != null ? TOGGLE_ZONE : 24);
             int ty = ry + (rh - 10) / 2;
-            s.fillRoundRect(tx0, ty, 20, 10, 5,
+            s.fillRect(tx0, ty, 20, 10,
                     NumenStyle.mixColor(c.textMuted(), c.accent(), knob));
             if (knob < 0.99f) {   // 关闭侧的浅底+灰纹随进度淡出
                 int fade = (int) (255 * (1f - knob));
-                s.fillRoundRect(tx0 + 1, ty + 1, 18, 8, 4,
+                s.fillRect(tx0 + 1, ty + 1, 18, 8,
                         (fade << 24) | (c.inputBg() & 0xFFFFFF));
-                s.fillRoundRect(tx0 + 1, ty + 1, 18, 8, 4,
+                s.fillRect(tx0 + 1, ty + 1, 18, 8,
                         ((int) (0x40 * (1f - knob)) << 24) | (c.textMuted() & 0xFFFFFF));
             }
-            s.fillRoundRect(tx0 + 2 + Math.round(9 * knob), ty + 2, 7, 6, 3, 0xFFFFFFFF);
+            s.fillRect(tx0 + 2 + Math.round(9 * knob), ty + 2, 7, 6, 0xFFFFFFFF);
         } else if (deleteMessage != null) {
             boolean overEdit = hovered && inZone(rx, rw, EDIT_ZONE, DEL_ZONE);
             s.drawText("✎", rx + rw - EDIT_ZONE + 2, iconY,

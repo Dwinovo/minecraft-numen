@@ -105,9 +105,9 @@ public final class MultilineTextField extends Widget {
         }
         reflowIfNeeded();
 
-        // 统一卡壳:圆角描边+内衬底;聚焦/错误只换描边色(与单行 TextField 同制)。
+        // 统一的框:描边+内衬底;聚焦/错误只换描边色(与单行 TextField 同制)。
         int border = error != null ? c.danger() : isFocused() ? c.accent() : c.inputBorder();
-        NumenStyle.fieldCard(s, x, y, w, h, c.inputBg(), border);
+        NumenStyle.box(s, x, y, w, h, c.inputBg(), border);
         if (labelWidget != null) labelWidget.setVisible(error == null);   // 出错时标签让位
         if (error != null) {
             s.drawText(error, x + w - s.textWidth(error), y - 10, c.danger(), false);

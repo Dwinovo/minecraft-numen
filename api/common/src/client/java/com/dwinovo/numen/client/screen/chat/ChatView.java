@@ -12,7 +12,6 @@ import com.dwinovo.numen.client.screen.Nb;
 import com.dwinovo.numen.client.screen.UiTheme;
 import com.dwinovo.numen.client.ui.Anim;
 import com.dwinovo.numen.client.ui.NumenStyle;
-import com.dwinovo.numen.client.ui.RoundRect;
 import com.dwinovo.numen.mcp.server.McpMode;
 import com.dwinovo.numen.mcp.server.McpTranscript;
 import net.minecraft.client.Minecraft;
@@ -37,7 +36,7 @@ import java.util.function.Supplier;
 /**
  * The chat transcript as a conversation: the owner's messages are right-aligned
  * bubbles, the companion's replies left-aligned bubbles — both with their real
- * skin avatar — and a run of consecutive tool calls folds into one rounded chip
+ * skin avatar — and a run of consecutive tool calls folds into one chip
  * (click to expand once done). System notes (persona change / compaction / empty
  * hint) sit centred and faint. Scrolling is eased ({@link Anim#approach}) and
  * pins to the bottom while the owner hasn't scrolled away.
@@ -62,7 +61,6 @@ public final class ChatView {
     private static final int SB_W = 4;          // scrollbar width
     private static final int EDGE = 2;          // left inset so the avatar FRAME (-2px) clears the scissor
     private static final int OPP_MARGIN = 24;   // kept clear on the far side of a bubble
-    private static final int RADIUS = 4;
     private static final int ICON_W = 11;       // chip status-icon column
     private static final int TOOL_ARG_CHARS = 44;
     private static final float SCROLL_RATE = 14f;
@@ -596,8 +594,8 @@ public final class ChatView {
         }
         if (b.showAvatar()) {
             // 头像框纯代码绘制,继承所在气泡的配色——AI/主人两侧色调天然分明,且跟主题走。
-            RoundRect.card(g, avX - 2, bubTop - 2, avX + AV + 2, bubTop + AV + 2, 3,
-                    b.fill(), b.border());
+            NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), avX - 2, bubTop - 2,
+                    AV + 4, AV + 4, b.fill(), b.border());
             // 主人自己那侧画的是玩家本人,不是同伴——改外观的插件不该接管它
             if (b.own()) {
                 PlayerFaceRenderer.draw(g, skin(true), avX, bubTop, AV);
@@ -605,7 +603,8 @@ public final class ChatView {
                 CompanionFace.draw(g, uuid.get(), skin(false), avX, bubTop, AV);
             }
         }
-        RoundRect.card(g, bx, bubTop, bx + bw, bubTop + bh, RADIUS, b.fill(), b.border());
+        NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), bx, bubTop, bw, bh,
+                b.fill(), b.border());
         int ty = bubTop + PAD_V + 1;
         for (FormattedCharSequence l : b.lines()) {
             draw(g, l, bx + PAD_H, ty);
@@ -615,7 +614,7 @@ public final class ChatView {
 
     /**
      * 机器行(工具调用 / 思考过程)——刻意长得<b>不像对话</b>:左缘一条竖线 +
-     * 极淡底,没有气泡的实底、圆角与头像。过程与话分得开,读者才不会把旁白
+     * 极淡底,没有气泡的实底、描边与头像。过程与话分得开,读者才不会把旁白
      * 当成模型的输出。几何取自 {@link NumenStyle} 的 TRACE_* 令牌。
      */
     private void drawChip(GuiGraphics g, Chip c, int x, int y) {
@@ -626,7 +625,7 @@ public final class ChatView {
         int ch = c.rows().size() * LINE_H + PAD_V * 2;
         // 极淡底衬出块的范围(半透明再减半),左缘竖线是"这是过程"的记号
         int faintFill = (CHIP_FILL & 0xFFFFFF) | (((CHIP_FILL >>> 24) / 2) << 24);
-        RoundRect.fill(g, cx, y, cx + cw, y + ch, NumenStyle.TRACE_RADIUS, faintFill);
+        g.fill(cx, y, cx + cw, y + ch, faintFill);
         g.fill(cx, y, cx + NumenStyle.TRACE_BAR_W, y + ch, TRACE_BAR);
         int ty = y + PAD_V + 1;
         for (ChipRow r : c.rows()) {

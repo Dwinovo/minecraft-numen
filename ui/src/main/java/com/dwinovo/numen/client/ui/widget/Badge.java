@@ -21,7 +21,7 @@ public final class Badge {
     public static int draw(IDrawSurface s, String text, int x, int y, int bg, int fg) {
         int w = s.textWidth(text) + PAD_X * 2;
         int h = s.lineHeight() + PAD_Y * 2 - 2;
-        s.fillRoundRect(x, y, w, h, NumenStyle.RADIUS_SMALL, bg);
+        s.fillRect(x, y, w, h, bg);
         s.drawText(text, x + PAD_X, y + PAD_Y, fg, false);
         return w;
     }

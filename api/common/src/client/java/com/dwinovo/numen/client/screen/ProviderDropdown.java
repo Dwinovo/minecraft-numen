@@ -78,8 +78,8 @@ public final class ProviderDropdown {
 
     public void render(GuiGraphics g, Font font, int mouseX, int mouseY) {
         UiTheme th = UiTheme.current();
-        // 收起框与字段同款圆角卡;展开时边框亮 CTA 提示"正处于选择中"。
-        com.dwinovo.numen.client.ui.RoundRect.card(g, x, y, x + w, y + h, 5,
+        // 收起框与字段同款框;展开时边框亮 CTA 提示"正处于选择中"。
+        com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), x, y, w, h,
                 th.aiFill(), open ? th.cta() : th.aiBorder());
         int ty = y + (h - 8) / 2;
         Nb.text(g, font, selectedLabel(), x + 6, ty, th.text());
@@ -89,14 +89,13 @@ public final class ProviderDropdown {
             int rows = rowsShown();
             scrollOff = Math.clamp(scrollOff, 0, rowCount() - rows);
             int oy = listTop();
-            com.dwinovo.numen.client.ui.RoundRect.card(g, x, oy, x + w, oy + rows * ROW + 4, 5,
+            com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), x, oy, w, rows * ROW + 4,
                     th.aiFill(), th.aiBorder());
             for (int i = 0; i < rows; i++) {
                 int idx = scrollOff + i;
                 int ry = oy + 2 + i * ROW;
                 if (mouseX >= x && mouseX < x + w && mouseY >= ry && mouseY < ry + ROW) {
-                    com.dwinovo.numen.client.ui.RoundRect.fill(g, x + 2, ry, x + w - 2, ry + ROW,
-                            4, th.chipFill());
+                    g.fill(x + 2, ry, x + w - 2, ry + ROW, th.chipFill());
                 }
                 boolean add = idx >= options.size();
                 // 选中行最深、其余退为次级;"＋新增站点"行保持 run 蓝区分动作行。

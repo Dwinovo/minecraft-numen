@@ -169,9 +169,8 @@ public final class NumenToasts {
             case WARN -> c.toastWarnBg();
             case ERROR -> c.toastErrorBg();
         };
-        s.fillRoundRect(x, y, current.w, current.h, NumenStyle.RADIUS_PANEL, applyAlpha(border, alpha));
-        s.fillRoundRect(x + 1, y + 1, current.w - 2, current.h - 2,
-                NumenStyle.RADIUS_PANEL - 1, applyAlpha(bg, alpha));
+        s.fillRect(x, y, current.w, current.h, applyAlpha(border, alpha));
+        s.fillRect(x + 1, y + 1, current.w - 2, current.h - 2, applyAlpha(bg, alpha));
         if (alpha > 0.05f) {   // MC 字体渲染对极低 alpha 有怪癖,干脆不画
             int textColor = applyAlpha(c.toastText(), alpha);
             int ty = y + PAD;
