@@ -34,8 +34,8 @@ public final class AutoMineTool implements NumenTool {
                 + "are gained or none remain nearby. No coordinates or goto needed. count is items, not "
                 + "blocks (redstone_ore drops ~4). Include all variants in block_ids (iron_ore AND "
                 + "deepslate_iron_ore). Only mines what its tools actually harvest, and stops naming the "
-                + "needed tier if nothing qualifies (to destroy blocks regardless of drops, use "
-                + "break_block). BACKGROUND: a successful call is already running; do not call mine/goto "
+                + "needed tier if nothing qualifies (to destroy a block regardless of drops, goto beside it "
+                + "and use interact_at with button left). BACKGROUND: a successful call is already running; do not call mine/goto "
                 + "again while <current_task> exists and do not poll. task_finished status=done means the "
                 + "requested count is complete; only timeout permits resending the same arguments.";
     }

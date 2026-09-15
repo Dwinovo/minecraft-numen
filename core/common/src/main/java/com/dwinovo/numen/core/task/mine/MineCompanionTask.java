@@ -194,7 +194,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     @Override
     protected List<Precondition> preconditions() {
         // Fail fast if NO requested target is harvestable with the current inventory — mining it
-        // would destroy the block for no drop. Same gate as break_block / the cost model
+        // would destroy the block for no drop. Same gate as the cost model
         // (BlockHelper.canHarvest, whole-inventory). prune() then drops any individual unharvestable
         // cell, so a mixed request (e.g. coal we can mine + diamond we can't) still works.
         return List.of(() -> {
@@ -207,7 +207,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 return new Precondition.Failure(
                         "can't harvest " + r.label + " with the current tools — mining it would"
                         + " destroy it without any drop. Equip a suitable tool (e.g. a pickaxe)"
-                        + " first; to just destroy a block regardless of drops, use break_block.",
+                        + " first; to just destroy a block regardless of drops, goto beside it and use interact_at"
+                        + " with button left.",
                         FailureType.WRONG_TOOL);
             }
             return null;
@@ -908,7 +909,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             fail("found " + unharvestable.size() + " " + r.label + " but none can be harvested with"
                     + " the current tools (mining would destroy them without any drop); gathered "
                     + r.getMined() + ". Equip a better tool (equip_item) and retry; to just destroy"
-                    + " blocks regardless of drops, use break_block.",
+                    + " blocks regardless of drops, goto beside them and use interact_at with button left.",
                     FailureType.WRONG_TOOL);
             return TaskState.FAILED;
         }
