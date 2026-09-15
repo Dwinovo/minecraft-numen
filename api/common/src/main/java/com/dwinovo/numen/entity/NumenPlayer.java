@@ -35,6 +35,7 @@ import java.util.UUID;
 public final class NumenPlayer extends ServerPlayer {
 
     private static final String NBT_KEY_OWNER = "NumenOwner";
+    private static final String NBT_KEY_ID_NUMBER = "NumenIdNumber";
 
     /** Owner's player UUID. Null only transiently before the first assignment. */
     private UUID ownerUuid;
@@ -206,6 +207,20 @@ public final class NumenPlayer extends ServerPlayer {
     /** 取(首次取时建)这具身体上的一份同伴级状态。 */
     public <T> T state(Class<T> type, java.util.function.Supplier<T> init) {
         return type.cast(bodyState.computeIfAbsent(type, k -> init.get()));
+    }
+
+    /** 这只同伴发给模型的编号已经用到第几号;跟着 {@code .dat} 落盘。 */
+    private long idNumber;
+
+    /**
+     * 给模型看的编号取下一个数字(路线 r7、团 g8 里的那个数)。一只同伴一条,单调递增,各种编号共用,
+     * 存在身体自己的 {@code .dat} 里:休眠、死亡复活、服务器重启之后接着往上数。
+     *
+     * <p>编号挂在 {@link #state} 那些簿子上的内容会随身体重建清空,数字却不能重来——模型的对话历史跨过
+     * 这些都还在,旧编号要是从 1 重数,就会悄悄指向新的一条路线、新的一团方块。
+     */
+    public long nextIdNumber() {
+        return ++idNumber;
     }
 
     /** The loaded companion body with this UUID, or {@code null} if not spawned. */
@@ -399,11 +414,13 @@ public final class NumenPlayer extends ServerPlayer {
         if (ownerUuid != null) {
             output.putUUID(NBT_KEY_OWNER, ownerUuid);   // 1.21.4: no CompoundTag.store(Codec)
         }
+        output.putLong(NBT_KEY_ID_NUMBER, idNumber);
     }
 
     @Override
     public void readAdditionalSaveData(CompoundTag input) {
         super.readAdditionalSaveData(input);
         if (input.hasUUID(NBT_KEY_OWNER)) this.ownerUuid = input.getUUID(NBT_KEY_OWNER);
+        this.idNumber = input.getLong(NBT_KEY_ID_NUMBER);
     }
 }
