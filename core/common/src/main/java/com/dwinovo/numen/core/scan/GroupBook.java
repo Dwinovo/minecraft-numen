@@ -58,6 +58,10 @@ public final class GroupBook {
             return null;
         }
         String named = String.join(", ", stale);
+        if (nextId == 1) {
+            return "there is no scan_blocks result on me to take group " + named + " from (ids do not survive"
+                    + " a restart or a new body) — scan_blocks first and mine the groups it lists.";
+        }
         if (latest.isEmpty()) {
             return "group " + named + " is not from your latest scan_blocks, which found no groups — ids only"
                     + " stay good until the next scan; scan_blocks again and mine the groups it lists.";

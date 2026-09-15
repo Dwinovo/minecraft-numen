@@ -205,8 +205,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private int searchId;
     /** 回来了还没并进名单的搜索结果。 */
     private BlockSearch.ScanResult arrived;
-    /** 开工时在 {@link BlockSearch} 持有了目标登记;收尾只放下自己持有的。 */
-    private boolean holding;
+    /** 开工时在哪个世界向 {@link BlockSearch} 持有了目标登记;收尾在同一个世界放下(途中换了维度也不放错)。没持有为 null。 */
+    private ServerLevel heldIn;
 
     // Progressive dig (blocks break tick-by-tick at legitimate player speed, not
     // instabreak) — shared with the path executor so all breaking reads the same.
@@ -284,7 +284,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             // 每刻的读节配额分摊,首批结果回来前 onTick 的终局判定会等着(lastQueryComplete)。
             if (player.level() instanceof ServerLevel sl) {
                 BlockSearch.hold(sl, r.targets);
-                holding = true;
+                heldIn = sl;
             }
             runQuery();
         }
@@ -1117,8 +1117,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             BlockSearch.cancel(searchId);
             searchId = 0;
         }
-        if (holding && player.level() instanceof ServerLevel sl) {
-            BlockSearch.release(sl, r.targets);
+        if (heldIn != null) {
+            BlockSearch.release(heldIn, r.targets);
+            heldIn = null;
         }
     }
 
