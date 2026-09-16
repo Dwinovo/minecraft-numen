@@ -1,6 +1,5 @@
 package com.dwinovo.numen.client.screen;
 
-import com.dwinovo.numen.client.ui.NumenIcons;
 import com.dwinovo.numen.client.ui.TokenFormat;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 
@@ -113,7 +112,7 @@ public final class NumenScreen extends Screen {
         return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, n);
     }
     /** 图标格边长:与名字那一行的字齐高。 */
-    private static final int ICON_N = NumenIcons.size(NumenIcons.PENCIL);
+    private static final int ICON_N = com.dwinovo.numen.client.ui.mc.Sprites.SIZE;
     /** 两枚图标的步进。 */
     private static final int ICON_PITCH = ICON_N + 3;
 
@@ -955,15 +954,16 @@ public final class NumenScreen extends Screen {
         int afterName = left + PAD + font.width(nm) + 6;
         editPencilX = editTrashX = -1;
         if (nameIcons && afterName + ICON_PITCH * 2 <= headerLimit) {
-            var iconSurface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font);
             editPencilX = afterName;
             boolean hotPencil = overEditPencil(mouseX, mouseY);
-            NumenIcons.draw(iconSurface, NumenIcons.PENCIL, editPencilX, iconTop(),
+            com.dwinovo.numen.client.ui.mc.Sprites.draw(g,
+                    com.dwinovo.numen.client.ui.mc.Sprites.EDIT, editPencilX, iconTop(), ICON_N,
                     hotPencil ? CTA : 0xFFFFFFFF);
             // 垃圾桶常态就是危险色:红的那个是删,不用点开才知道。
             editTrashX = afterName + ICON_PITCH;
             boolean hotTrash = overEditTrash(mouseX, mouseY);
-            NumenIcons.draw(iconSurface, NumenIcons.TRASH, editTrashX, iconTop(),
+            com.dwinovo.numen.client.ui.mc.Sprites.draw(g,
+                    com.dwinovo.numen.client.ui.mc.Sprites.DELETE, editTrashX, iconTop(), ICON_N,
                     hotTrash ? UiTheme.mix(FAIL, 0xFFFFFFFF, 0.35f) : FAIL);
             // 图标不写字,就得能问出来——两枚都报自己是干嘛的。
             if (hotPencil || hotTrash) {

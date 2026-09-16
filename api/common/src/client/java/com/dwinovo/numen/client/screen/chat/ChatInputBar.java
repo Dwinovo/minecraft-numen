@@ -40,13 +40,6 @@ public final class ChatInputBar {
     /** 输入框右侧可选的几颗键;顺序即布局。 */
     public enum Key { MIC, SEND, STOP }
 
-    private static final ResourceLocation ICON_MIC = icon("icon_mic");
-    private static final ResourceLocation ICON_SEND = icon("icon_send");
-    private static final ResourceLocation ICON_STOP = icon("icon_stop");
-
-    private static ResourceLocation icon(String name) {
-        return ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, name);
-    }
 
     /** 宿主回调面:说话/麦克风/叫停,以及"这几颗键此刻可不可按"。 */
     public interface Host {
@@ -91,7 +84,7 @@ public final class ChatInputBar {
     /** 右侧那一串键,顺序即布局。 */
     private Button[] keys = new Button[0];
     private String draft = "";
-    private ResourceLocation micIcon = ICON_MIC;
+    private ResourceLocation micIcon = com.dwinovo.numen.client.ui.mc.Sprites.MIC;
 
     /** 输入框自己的几何(弹层贴它上边长,面板占它的位)。 */
     private int fieldX, fieldY, fieldW, fieldH;
@@ -152,7 +145,7 @@ public final class ChatInputBar {
 
     /** 录音中:麦克风图标换成停止方块——同一颗键,两种含义都一眼可读。 */
     public void setRecording(boolean recording) {
-        micIcon = recording ? ICON_STOP : ICON_MIC;
+        micIcon = recording ? com.dwinovo.numen.client.ui.mc.Sprites.STOP : com.dwinovo.numen.client.ui.mc.Sprites.MIC;
     }
 
     /**
@@ -170,9 +163,9 @@ public final class ChatInputBar {
 
         micBtn = wanted.contains(Key.MIC) ? ui.add(iconButton(null, "numen.chat.tip.mic",
                 Button.Style.NORMAL, host::onMicToggle)) : null;
-        sendBtn = wanted.contains(Key.SEND) ? ui.add(iconButton(ICON_SEND, "numen.chat.send",
+        sendBtn = wanted.contains(Key.SEND) ? ui.add(iconButton(com.dwinovo.numen.client.ui.mc.Sprites.SEND, "numen.chat.send",
                 Button.Style.ACCENT, this::send)) : null;
-        stopBtn = wanted.contains(Key.STOP) ? ui.add(iconButton(ICON_STOP, "numen.chat.tip.stop",
+        stopBtn = wanted.contains(Key.STOP) ? ui.add(iconButton(com.dwinovo.numen.client.ui.mc.Sprites.STOP, "numen.chat.tip.stop",
                 Button.Style.NORMAL, host::onAbort)) : null;
         // 顺序即布局:输入框吃掉左边剩下的,这一串靠右排。加减一颗键只改这个数组,
         // 不用回来重算"左几右几"那两个常数。
@@ -475,12 +468,9 @@ public final class ChatInputBar {
     private Button iconButton(ResourceLocation sprite, String tipKey,
                               Button.Style style, Runnable action) {
         return new Button(t(tipKey), style, action)
-                .icon(12, (s, ix, iy, size, argb) -> {
-                    ResourceLocation icon = sprite != null ? sprite : micIcon;
-                    if (s instanceof McDrawSurface mc) {
-                        mc.graphics().blitSprite(icon, ix, iy, size, size);
-                    }
-                })
+                .icon(com.dwinovo.numen.client.ui.mc.Sprites.SIZE,
+                        com.dwinovo.numen.client.ui.mc.Sprites.painter(
+                                () -> sprite != null ? sprite : micIcon))
                 .tooltip(t(tipKey));
     }
 

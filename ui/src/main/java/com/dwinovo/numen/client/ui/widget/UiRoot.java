@@ -26,7 +26,6 @@ public final class UiRoot {
 
     private final List<Widget> widgets = new ArrayList<>();
     private Widget focused;
-    private String tooltip;
     private Overlay overlay;
 
     private java.util.function.BiFunction<String, Consumer<String>, TextInput> inputFactory;
@@ -108,26 +107,9 @@ public final class UiRoot {
 
     /** 只画控件不画浮层——滚动容器场景:内容进裁剪区,浮层(下拉弹层)在裁剪区外画。 */
     public void renderContent(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        tooltip = null;   // 悬停说的那句话每帧重收:鼠标移开了就该没了
         for (Widget w : widgets) {
             if (w.visible) w.render(s, c, mouseX, mouseY, nowMs);
         }
-    }
-
-    /**
-     * 悬停在谁身上要说的一句话。
-     *
-     * <p>控件在自己 render 里报上来,宿主画完控件再取——tooltip 要画在最上面,
-     * 而控件自己不知道自己是不是最上面那一层;在 {@code ui} 模块里也画不了
-     * MC 的 tooltip。所以这里只传话,怎么画是宿主的事。
-     */
-    public void requestTooltip(String text) {
-        if (text != null && !text.isEmpty()) tooltip = text;
-    }
-
-    /** 本帧该说的那句;没人悬停就是 null。 */
-    public String tooltip() {
-        return tooltip;
     }
 
     public void renderOverlayLayer(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
