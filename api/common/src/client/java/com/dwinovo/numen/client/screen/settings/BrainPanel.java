@@ -123,14 +123,6 @@ public final class BrainPanel {
         tokenRegen.setBounds(x + w - REGEN_W, ry, REGEN_W, NumenStyle.CONTROL_H);
         ry += ROW_PITCH + NumenStyle.HEADER_GAP;
 
-        // 失联回退:外脑安静超时后内脑是否接管。即时写配置,与主开关同一个"拨了就算"风格。
-        Label fallbackLabel = ui.add(new Label(t("numen.brain.fallback_toggle"), Label.Role.MUTED));
-        fallbackLabel.setBounds(x, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 9), w - 28, 9);
-        Toggle fallback = ui.add(new Toggle(mcp.config().quietFallback(),
-                McpMode.instance()::setQuietFallback));
-        fallback.setBounds(x + w - 24, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 11), 22, 11);
-        ry += ROW_PITCH + NumenStyle.HEADER_GAP;
-
         // 接上外部 AI 就这一步:提示词里已经含着地址与令牌。说明跟在按钮下面,小一号的灰字。
         String promptLabel = t("numen.brain.copy_prompt");
         int pw = Minecraft.getInstance().font.width(promptLabel) + 14;
@@ -148,6 +140,12 @@ public final class BrainPanel {
 
     /** 地址那一行的顶边:框与地址在 render 里画(值随端口、局域网开关变)。 */
     private int endpointRow;
+    /** 设置页两个开关行的顶边:说明画在行下面(见 {@link #noteBelow}）。 */
+    private int lanRow;
+    private int quietRow;
+
+    /** 开关行下面那行说明的顶边。 */
+    private static int noteBelow(int row) { return row + NumenStyle.CONTROL_H + 1; }
     /** 复制提示词那一行的顶边:启动失败的红字画在说明下面(平时没有这一行)。 */
     private int promptRow;
 
@@ -166,13 +164,17 @@ public final class BrainPanel {
         // 「允许局域网」是 host 的人话面:关=127.0.0.1,开=0.0.0.0。玩家不必知道那五个字符,
         // 想绑具体网卡的高级用户改 config/numen/mcp_server.json —— 配置文件就是逃生舱。
         lanDraft = cfg.lanExposed();
+        lanRow = body;
+        Label lanLabel = ui.add(new Label(t("numen.brain.lan"), Label.Role.MUTED));
+        lanLabel.setBounds(x, NumenStyle.centerIn(lanRow, NumenStyle.CONTROL_H, 9), w - 28, 9);
         Toggle lan = ui.add(new Toggle(lanDraft, on -> {
             lanDraft = on;
             refreshSaveState();
         }));
-        lan.setBounds(x + w - 24, body + 2, 22, 11);
+        lan.setBounds(x + w - 24, NumenStyle.centerIn(lanRow, NumenStyle.CONTROL_H, 11), 22, 11);
 
-        int ry = body + 31;
+        // 开着时下面那行说明只在开着时出现,位置照样留着,免得下面的行跟着跳。
+        int ry = noteBelow(lanRow) + 9 + 5;
         int half = (w - 12) / 2;
         Label portLabel = ui.add(new Label(t("numen.brain.port"), Label.Role.MUTED));
         portLabel.setBounds(x, ry, half, 9);
@@ -194,6 +196,15 @@ public final class BrainPanel {
         hiddenField = ui.add(new TextField(String.join(", ", cfg.hiddenTools()), v -> { })
                 .placeholder(t("numen.brain.hidden_hint")));
         hiddenField.setBounds(x, ry, w, NumenStyle.CONTROL_H);
+        ry += NumenStyle.ROW_PITCH + 6;
+
+        // 外部 AI 久不动手时她怎么办:接着自己想,还是停下等。即时写配置,与主开关同一个"拨了就算"风格。
+        Label quietLabel = ui.add(new Label(
+                I18n.get("numen.brain.quiet_toggle", McpMode.QUIET_AFTER_MS / 60_000L), Label.Role.MUTED));
+        quietLabel.setBounds(x, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 9), w - 28, 9);
+        Toggle quiet = ui.add(new Toggle(cfg.quietFallback(), McpMode.instance()::setQuietFallback));
+        quiet.setBounds(x + w - 24, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 11), 22, 11);
+        quietRow = ry;
 
         saveButton = ui.add(new Button(saveLabel(), Button.Style.ACCENT, this::save));
         saveButton.setBounds(x + w - 96, NumenStyle.footerTop(y, h), 96, NumenStyle.CONTROL_H);
@@ -319,15 +330,17 @@ public final class BrainPanel {
     }
 
     private void renderSettings(IDrawSurface s, NumenTheme.Colors c) {
-        int body = NumenStyle.bodyTop(y);
-        s.drawText(t("numen.brain.lan"), x, body + 3, c.textPrimary(), false);
         if (lanDraft) {
             // 绑到所有网卡这件事本身会成功,只是降级——按自家判据是 warning 不是 danger。
             // 但令牌为空时它就变成"这次保存不该发生",那才是 danger。
             boolean noToken = McpMode.instance().token().isBlank();
             s.drawText(t(noToken ? "numen.brain.lan_needs_token" : "numen.brain.lan_warn"),
-                    x, body + 17, noToken ? c.danger() : c.warning(), false);
+                    x, noteBelow(lanRow), noToken ? c.danger() : c.warning(), false);
         }
+        // 开着关着各是什么结果,当场写在开关下面——这一句比开关名更要紧
+        s.drawText(t(McpMode.instance().config().quietFallback()
+                        ? "numen.brain.quiet_on" : "numen.brain.quiet_off"),
+                x, noteBelow(quietRow), c.textMuted(), false);
     }
 
     public boolean mouseClicked(double mx, double my, int button) {

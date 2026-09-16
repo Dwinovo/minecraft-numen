@@ -280,7 +280,9 @@ public final class ModLanguageData {
         adder.add("numen.brain.quiet_standby", "The external brain has gone quiet — your companion is standing by.");
         adder.add("numen.brain.quiet_fallback", "The external brain has gone quiet — the built-in brain is taking over until it returns.");
         adder.add("numen.brain.back_active", "The external brain is back.");
-        adder.add("numen.brain.fallback_toggle", "Built-in brain takes over when quiet");
+        adder.add("numen.brain.quiet_toggle", "If the outside AI does nothing for %s minutes");
+        adder.add("numen.brain.quiet_on", "She keeps going on her own brain until it comes back.");
+        adder.add("numen.brain.quiet_off", "She waits, doing nothing, until it comes back.");
         adder.add("numen.brain.guide_title", "Connect an external AI");
         adder.add("numen.brain.guide_step",
                 "Copy the setup prompt in Settings → MCP Brain, paste it to your AI, and it configures the rest.");
@@ -631,7 +633,9 @@ public final class ModLanguageData {
         adder.add("numen.brain.quiet_standby", "外接大脑没动静了——她先安静待命。");
         adder.add("numen.brain.quiet_fallback", "外接大脑没动静了——内置大脑先接管,它回来就交还。");
         adder.add("numen.brain.back_active", "外接大脑回来了。");
-        adder.add("numen.brain.fallback_toggle", "失联后内置大脑接管");
+        adder.add("numen.brain.quiet_toggle", "外部 AI 超过 %s 分钟没动作时");
+        adder.add("numen.brain.quiet_on", "她用自己的大脑接着想,直到外部 AI 回来。");
+        adder.add("numen.brain.quiet_off", "她停下等着,什么都不做,直到外部 AI 回来。");
         adder.add("numen.brain.guide_title", "接入外部 AI");
         adder.add("numen.brain.guide_step",
                 "到「设置 → 外接大脑」复制接入提示词,粘贴给你的 AI,剩下的它会自己配好。");
