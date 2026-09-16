@@ -286,21 +286,18 @@ public final class ModLanguageData {
         adder.add("numen.brain.guide_title", "Connect an external AI");
         adder.add("numen.brain.guide_step",
                 "Copy the setup prompt in Settings → MCP Brain, paste it to your AI, and it configures the rest.");
-        adder.add("numen.brain.settings", "Settings");
-        adder.add("numen.brain.settings_title", "External Brain · Settings");
-        adder.add("numen.brain.back", "Back");
         adder.add("numen.brain.regenerate", "New token");
         adder.add("numen.brain.regen_confirm_title", "Issue a new token?");
         adder.add("numen.brain.regen_confirm_body",
                 "Any AI already connected is disconnected at once and needs the new setup prompt.");
-        adder.add("numen.brain.lan", "Allow connections from your local network");
+        adder.add("numen.brain.lan", "Allow LAN connections");
         adder.add("numen.brain.lan_warn",
                 "Anyone on your network can drive your companions — keep the token set.");
         adder.add("numen.brain.lan_needs_token",
                 "A token is required once the network can reach it.");
         adder.add("numen.brain.port", "Port");
-        adder.add("numen.brain.timeout", "Call timeout (s)");
-        adder.add("numen.brain.hidden_tools", "Tools kept from the outside AI");
+        adder.add("numen.brain.timeout", "Timeout (s)");
+        adder.add("numen.brain.hidden_tools", "Hidden tools");
         adder.add("numen.brain.hidden_hint", "comma separated");
         adder.add("numen.brain.save", "Save");
         adder.add("numen.brain.save_restart", "Save & restart");
@@ -639,9 +636,6 @@ public final class ModLanguageData {
         adder.add("numen.brain.guide_title", "接入外部 AI");
         adder.add("numen.brain.guide_step",
                 "到「设置 → 外接大脑」复制接入提示词,粘贴给你的 AI,剩下的它会自己配好。");
-        adder.add("numen.brain.settings", "设置");
-        adder.add("numen.brain.settings_title", "外接大脑 · 设置");
-        adder.add("numen.brain.back", "返回");
         adder.add("numen.brain.regenerate", "重新生成");
         adder.add("numen.brain.regen_confirm_title", "换一个新令牌?");
         adder.add("numen.brain.regen_confirm_body",
@@ -651,7 +645,7 @@ public final class ModLanguageData {
         adder.add("numen.brain.lan_needs_token", "对局域网开放时必须有令牌。");
         adder.add("numen.brain.port", "端口");
         adder.add("numen.brain.timeout", "调用超时(秒)");
-        adder.add("numen.brain.hidden_tools", "不暴露给外部的工具");
+        adder.add("numen.brain.hidden_tools", "不暴露的工具");
         adder.add("numen.brain.hidden_hint", "逗号分隔");
         adder.add("numen.brain.save", "保存");
         adder.add("numen.brain.save_restart", "保存并重启服务");

@@ -411,7 +411,6 @@ public final class SettingsView {
         if (s == section) return;
         section = s;
         if (sttPanel != null) sttPanel.reseed();   // 进分区从已存配置重播种
-        if (brainPanel != null) brainPanel.reseed();   // 回概览页,丢掉没保存的草稿
         if (s == Section.PERSONA) {
             // 人设是目录里的 .md 文件:进页先重扫,外部编辑器的修改即时可见。
             PersonaLibrary.instance().reload();
