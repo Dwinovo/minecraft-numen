@@ -26,7 +26,7 @@ import java.util.Objects;
  * 皮肤五个选择。草稿制:下拉只改草稿,点保存才统一落地,且只发真正变过的
  * 项(换肤要原地重建身体,误触代价高);取消丢弃草稿。草稿基线在开卡时从各自的
  * 真源取一次({@link #reset()});皮肤的当前选择记在绑定里(与档案/声线同模)。
- * 遣散收成右上角垃圾桶图标(悬停危险色),底部只留取消/保存一对主动作。
+ * 卡里只有"改",底部一对取消/保存;"删"在头部名字旁的垃圾桶上,不在这张卡里。
  */
 public final class CompanionEditPanel {
 
@@ -35,9 +35,6 @@ public final class CompanionEditPanel {
         java.util.UUID uuid();
 
         String name();
-
-        /** 关卡并弹遣散确认(危险操作的闸在屏幕层)。 */
-        void onDismiss();
 
         void onClose();
 
@@ -73,7 +70,6 @@ public final class CompanionEditPanel {
     private Draft draft = new Draft();
     private String origPersona, origProvider, origVoice, origSkin;
     private boolean origCreative;
-    private int trashX, trashY;
 
     private List<String> personaIds = List.of();
     private List<String> providerIds = List.of();
@@ -120,8 +116,6 @@ public final class CompanionEditPanel {
         Label title = ui.add(new Label(
                 t(ModLanguageData.Keys.EDIT_TITLE) + " · " + host.name(), Label.Role.PRIMARY));
         title.setBounds(x + 24, ry + 5, w - 24, 9);
-        trashX = x + w - 12;
-        trashY = ry + 3;
         ry += 24;
 
         // 人设 | 模式
@@ -262,11 +256,6 @@ public final class CompanionEditPanel {
     // ---- 宿主转发面 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        // 右上角垃圾桶(遣散):平时低调,悬停亮危险色;点击仍过确认卡,误触有闸。
-        int tc = overTrash(mouseX, mouseY) ? c.danger() : c.textMuted();
-        s.fillRect(trashX + 3, trashY, 5, 1, tc);        // 提手
-        s.fillRect(trashX, trashY + 1, 11, 2, tc);       // 盖
-        s.fillRect(trashX + 1, trashY + 4, 9, 8, tc);    // 桶身
         if (modeLocked) {   // 置灰的当前档(不是控件:点不了才是本意)
             NumenStyle.box(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
                     c.sectionBg(), c.inputBorder());
@@ -278,26 +267,15 @@ public final class CompanionEditPanel {
         ui.render(s, c, mouseX, mouseY, nowMs);
     }
 
-    /** 悬停提示(宿主画 tooltip):垃圾桶报遣散,置灰模式格报锁因。 */
+    /** 悬停提示(宿主画 tooltip):置灰的模式格报锁因。 */
     public String tooltipAt(double mx, double my) {
-        if (overTrash(mx, my)) {
-            return t(ModLanguageData.Keys.EDIT_DISMISS);
-        }
         if (!modeLocked) return null;
         boolean over = mx >= modeBoxX && mx < modeBoxX + modeBoxW
                 && my >= modeBoxY && my < modeBoxY + NumenStyle.CONTROL_H;
         return over ? t(ModLanguageData.Keys.EDIT_MODE_LOCKED) : null;
     }
 
-    private boolean overTrash(double mx, double my) {
-        return mx >= trashX - 1 && mx < trashX + 12 && my >= trashY - 1 && my < trashY + 13;
-    }
-
     public boolean mouseClicked(double mx, double my, int button) {
-        if (overTrash(mx, my)) {
-            host.onDismiss();
-            return true;
-        }
         return ui.mouseClicked(mx, my, button);
     }
 

@@ -129,35 +129,72 @@ public final class NumenScreen extends Screen {
         return m;
     }
 
+    /** 垃圾桶(遣散)的位图:提手、盖、桶身三块实心,桶身上挖两道竖纹——挖掉的格子挨着桶身,
+     *  描边那一遍会把它们填成暗色,于是成了纹路;盖与桶身之间空出的那一行同理成了分界线。 */
+    private static final boolean[][] TRASH_MASK = buildTrashMask();
+
+    private static boolean[][] buildTrashMask() {
+        boolean[][] m = new boolean[16][16];
+        for (int x = 0; x < 16; x++) {
+            for (int y = 0; y < 16; y++) {
+                boolean handle = y == 3 && x >= 6 && x <= 9;
+                boolean lid = (y == 4 || y == 5) && x >= 3 && x <= 12;
+                boolean body = y >= 7 && y <= 14 && x >= 4 && x <= 11;
+                boolean rib = body && (x == 6 || x == 9) && y >= 8 && y <= 13;
+                m[x][y] = (handle || lid || body) && !rib;
+            }
+        }
+        return m;
+    }
+
     /** 头部编辑铅笔的横座标;-1 = 本帧没画(无同伴/模态中),点不中。 */
     private int editPencilX = -1;
+    /** 头部遣散垃圾桶的横座标;与铅笔同生同灭。 */
+    private int editTrashX = -1;
 
     private boolean overEditPencil(double mx, double my) {
-        return editPencilX >= 0 && mx >= editPencilX - 1 && mx < editPencilX + 16
+        return overIcon(editPencilX, mx, my);
+    }
+
+    private boolean overEditTrash(double mx, double my) {
+        return overIcon(editTrashX, mx, my);
+    }
+
+    private boolean overIcon(int iconX, double mx, double my) {
+        return iconX >= 0 && mx >= iconX - 1 && mx < iconX + 16
                 && my >= top + 3 && my < top + 19;
     }
 
-    /** 画一支 Lucide 形铅笔(16 格位图):笔体单色可指定,深色一像素外描边。 */
-    private void drawPencil(GuiGraphics g, int ox, int oy, int bodyColor) {
+    /** 画一枚 16 格位图图标:图形单色可指定,深色一像素外描边。 */
+    private void drawIcon(GuiGraphics g, boolean[][] mask, int ox, int oy, int bodyColor) {
         for (int gx = 0; gx < 16; gx++) {
             for (int gy = 0; gy < 16; gy++) {
-                if (PENCIL_MASK[gx][gy]) {
-                    boolean capLine = gy - gx == -6;   // 笔帽分割线(横跨杆宽的一道)
-                    g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1,
-                            capLine ? 0xFF1F1F1F : bodyColor);
-                } else if (nearPencil(gx, gy)) {
+                if (mask[gx][gy]) {
+                    g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1, bodyColor);
+                } else if (nearMask(mask, gx, gy)) {
                     g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1, 0xFF1F1F1F);
                 }
             }
         }
     }
 
-    /** (gx,gy) 不在笔体上但与笔体八邻接——描边像素。 */
-    private static boolean nearPencil(int gx, int gy) {
+    /** 画一支 Lucide 形铅笔:图标本体之上再压一道笔帽分割线。 */
+    private void drawPencil(GuiGraphics g, int ox, int oy, int bodyColor) {
+        drawIcon(g, PENCIL_MASK, ox, oy, bodyColor);
+        for (int gx = 0; gx < 16; gx++) {
+            int gy = gx - 6;
+            if (gy >= 0 && gy < 16 && PENCIL_MASK[gx][gy]) {
+                g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1, 0xFF1F1F1F);
+            }
+        }
+    }
+
+    /** (gx,gy) 不在图形上但与图形八邻接——描边像素。 */
+    private static boolean nearMask(boolean[][] mask, int gx, int gy) {
         for (int dx = -1; dx <= 1; dx++) {
             for (int dy = -1; dy <= 1; dy++) {
                 int nx = gx + dx, ny = gy + dy;
-                if (nx >= 0 && nx < 16 && ny >= 0 && ny < 16 && PENCIL_MASK[nx][ny]) {
+                if (nx >= 0 && nx < 16 && ny >= 0 && ny < 16 && mask[nx][ny]) {
                     return true;
                 }
             }
@@ -444,11 +481,6 @@ public final class NumenScreen extends Screen {
         @Override public UUID uuid() { return uuid; }
 
         @Override public String name() { return name == null ? "?" : name; }
-
-        @Override public void onDismiss() {
-            editing = false;   // 遣散确认卡顶上来,编辑卡先收——取消确认后回到面板本身
-            openDismissConfirm(uuid);
-        }
 
         @Override public void onClose() {
             editing = false;
@@ -866,6 +898,10 @@ public final class NumenScreen extends Screen {
                 return super.mouseClicked(mouseX, mouseY, button);
             }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
+            if (uuid != null && !dismissOpen() && overEditTrash(mouseX, mouseY)) {
+                openDismissConfirm(uuid);   // 危险操作的闸是确认卡,不是把入口藏起来
+                return true;
+            }
             if (uuid != null && !dismissOpen() && overEditPencil(mouseX, mouseY)) {
                 editing = true;
                 editPanel().reset();   // 开卡:草稿从当下真相取基线
@@ -960,16 +996,29 @@ public final class NumenScreen extends Screen {
         if (!modalOpen() && !dismissOpen() && tab == Tab.CHAT && uuid != null) {
             headerLimit = renderUsage(g, mouseX, mouseY) - 8;
         }
-        String nm = clip(name == null ? "Numen" : name, Math.max(24, headerLimit - (left + PAD)));
+        // 名字旁的两枚图标 = 改与删("名字在哪,编辑就在哪"的资料页定式;改与删并排、分开点,
+        // 是列表/资料页的通行习惯)。它们是入口,名字先给它们让出这 36px,免得名字一长就没处点。
+        boolean nameIcons = uuid != null && !modalOpen() && !dismissOpen();
+        int nameRoom = headerLimit - (left + PAD) - (nameIcons ? 36 : 0);
+        String nm = clip(name == null ? "Numen" : name, Math.max(24, nameRoom));
         txt(g, Component.literal(nm), left + PAD, top + 7, ON_BAND);
         int afterName = left + PAD + font.width(nm) + 6;
-        // 名字旁的铅笔 = 编辑入口("名字在哪,编辑就在哪"的资料页定式);悬停亮 CTA。
-        editPencilX = -1;
-        if (uuid != null && !modalOpen() && !dismissOpen() && afterName + 18 <= headerLimit) {
+        editPencilX = editTrashX = -1;
+        if (nameIcons && afterName + 36 <= headerLimit) {
             editPencilX = afterName;
-            boolean hot = overEditPencil(mouseX, mouseY);
-            drawPencil(g, editPencilX, top + 3, hot ? CTA : 0xFFFFFFFF);
-            afterName += 18;
+            drawPencil(g, editPencilX, top + 3, overEditPencil(mouseX, mouseY) ? CTA : 0xFFFFFFFF);
+            // 垃圾桶常态就是危险色:红的那个是删,不用点开才知道。
+            editTrashX = afterName + 18;
+            boolean hotTrash = overEditTrash(mouseX, mouseY);
+            drawIcon(g, TRASH_MASK, editTrashX, top + 3,
+                    hotTrash ? UiTheme.mix(FAIL, 0xFFFFFFFF, 0.35f) : FAIL);
+            if (hotTrash) {
+                pendingTip = java.util.List.of(
+                        Component.translatable(ModLanguageData.Keys.EDIT_DISMISS));
+                pendingTipX = mouseX;
+                pendingTipY = mouseY;
+            }
+            afterName += 36;
         }
         if (uuid != null && NumenRoster.instance().isDead(uuid)) {   // active companion dead — respawn countdown
             // 倒计时归零还没回来 = 周围没有能站的地方,复活在重试。继续显示"0"就是
