@@ -7,6 +7,7 @@ import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.Dropdown;
 import com.dwinovo.numen.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.client.ui.widget.Label;
+import com.dwinovo.numen.client.ui.widget.ScrollBox;
 import com.dwinovo.numen.client.ui.widget.Slider;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
@@ -84,11 +85,8 @@ public final class VoiceFormPanel {
     private final Consumer<Draft> onSave;
     private final Runnable onCancel;
 
-    private final java.util.Map<com.dwinovo.numen.client.ui.widget.Widget, Integer> baseYs =
-            new java.util.HashMap<>();
-    private int scrollY;
-    private int contentH;
-    private int viewH;
+    /** 表单行装不下卡片时整体上下位移(记账在 {@link ScrollBox})。 */
+    private final ScrollBox scroll = new ScrollBox();
     private int formX, formY, formW, formH, viewportBottom;
 
     private Draft draft = new Draft();
@@ -128,7 +126,6 @@ public final class VoiceFormPanel {
         this.viewportBottom = viewportBottom;
         ui.clear();
         fixedUi.clear();
-        baseYs.clear();
         ui.setViewportHeight(viewportBottom);
 
         int ry = y;
@@ -230,14 +227,10 @@ public final class VoiceFormPanel {
                 v -> String.valueOf(Math.round(v))));
         volume.setBounds(x, ry, w - 24, NumenStyle.CONTROL_H);
 
-        // ---- 滚动记账:内容高、视口高(按钮行之上),各行基线快照 ----
-        contentH = (ry + NumenStyle.CONTROL_H) - y;
-        viewH = NumenStyle.footerTop(y, h) - NumenStyle.HEADER_GAP - y;   // 滚动区到收尾行上方
-        scrollY = Math.min(scrollY, maxScroll());
-        for (com.dwinovo.numen.client.ui.widget.Widget rw : ui.widgetsView()) {
-            baseYs.put(rw, rw.y());
-        }
-        reposition();
+        // ---- 滚动记账:视口到收尾行上方为止,内容高按最后一行的底边算 ----
+        scroll.measure(ui, x, y, w,
+                NumenStyle.footerTop(y, h) - NumenStyle.HEADER_GAP - y,
+                (ry + NumenStyle.CONTROL_H) - y);
 
         // ---- 固定层:✕(卡片右上角落)/结果胶囊/按钮行——不随滚动 ----
         Button close = fixedUi.add(new Button("✕", Button.Style.GHOST, onCancel));
@@ -254,29 +247,13 @@ public final class VoiceFormPanel {
         save.setBounds(x + w - 54, by, 54, NumenStyle.CONTROL_H);
     }
 
-    private int maxScroll() {
-        return Math.max(0, contentH - viewH);
-    }
-
-    /** 滚动=全部行控件按基线整体位移(布局账只算一次,滚动只挪 y)。 */
-    private void reposition() {
-        for (var e : baseYs.entrySet()) {
-            var rw = e.getKey();
-            rw.setBounds(rw.x(), e.getValue() - scrollY, rw.w(), rw.h());
-        }
-    }
-
     // ---- 宿主转发面 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
-        s.pushScissor(formX, formY, formW + 2, viewH);
+        scroll.beginClip(s);
         ui.renderContent(s, c, mouseX, mouseY, nowMs);
-        s.popScissor();
-        if (maxScroll() > 0) {
-            int thumbH = Math.max(10, viewH * viewH / contentH);
-            int thumbY = formY + (viewH - thumbH) * scrollY / maxScroll();
-            s.fillRect(formX + formW, thumbY, NumenStyle.SCROLLBAR_W, thumbH, c.divider());
-        }
+        scroll.endClip(s);
+        scroll.renderThumb(s, c);
         fixedUi.render(s, c, mouseX, mouseY, nowMs);
         ui.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);
     }
@@ -284,10 +261,7 @@ public final class VoiceFormPanel {
     public boolean mouseClicked(double mx, double my, int button) {
         if (ui.hasOverlay()) return ui.mouseClicked(mx, my, button);   // 弹层优先(可越出视口)
         if (fixedUi.mouseClicked(mx, my, button)) return true;
-        if (my >= formY && my < formY + viewH) {
-            return ui.mouseClicked(mx, my, button);
-        }
-        return false;
+        return scroll.inside(my) && ui.mouseClicked(mx, my, button);
     }
 
     public boolean mouseDragged(double mx, double my, double dx, double dy) {
@@ -300,12 +274,7 @@ public final class VoiceFormPanel {
 
     public boolean mouseScrolled(double mx, double my, double delta) {
         if (ui.mouseScrolled(mx, my, delta)) return true;
-        if (maxScroll() > 0 && my >= formY && my < formY + viewH) {
-            scrollY = Math.max(0, Math.min(maxScroll(), scrollY - (int) (delta * 14)));
-            reposition();
-            return true;
-        }
-        return false;
+        return scroll.scrolled(my, delta);
     }
 
     public boolean keyPressed(int keyCode, int modifiers) {
@@ -352,7 +321,7 @@ public final class VoiceFormPanel {
             draft.url = defaultUrl(sel);
         }
         draft.backend = sel;
-        scrollY = 0;
+        scroll.toTop();
         build(formX, formY, formW, formH, viewportBottom);
     }
 
