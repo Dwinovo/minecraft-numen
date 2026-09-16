@@ -3,6 +3,7 @@ package com.dwinovo.numen.client.screen.settings;
 import com.dwinovo.numen.client.ui.IDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
+import com.dwinovo.numen.client.ui.TextClip;
 import com.dwinovo.numen.client.ui.widget.Badge;
 import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.ConfirmDialog;
@@ -30,13 +31,16 @@ import java.util.List;
  * 有九次是来复制端点的,改端口是偶尔一次的事,把它们摆在一起两边都局促。
  *
  * <h2>只读行也是控件</h2>
- * 端点/令牌/状态走 {@link ValueRow},和表单行共用一个 {@code ry} 游标。只读文本用固定 Y 手绘
+ * 令牌走 {@link ValueRow},和表单行共用一个 {@code ry} 游标。只读文本用固定 Y 手绘
  * 的话,中间插一行就得把后面所有常量重排一遍。
  */
 public final class BrainPanel {
 
     /** 概览页只读行的行距(比表单行矮:没有控件要放)。 */
-    private static final int VALUE_PITCH = ValueRow.HEIGHT;
+    /** 行与行之间的步进:一行的高 + 一个小间距。 */
+    private static final int ROW_PITCH = NumenStyle.CONTROL_H + NumenStyle.HEADER_GAP;
+    private static final int COPY_W = 46;
+    private static final int REGEN_W = 52;
 
     private final UiRoot ui = new UiRoot();
     /** 复制/保存回执:跨 build 持久(重建不吞在途消息)。 */
@@ -104,38 +108,37 @@ public final class BrainPanel {
         Toggle tog = ui.add(new Toggle(mcp.enabled(), McpMode.instance()::setEnabled));
         tog.setBounds(x + w - 24, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 11), 22, 11);
 
+        // 地址是这一页的主角:一条带框的只读地址 + 复制,和 LM Studio 那类本地服务页同形。
         int ry = NumenStyle.bodyTop(y);
-        ui.add(new ValueRow(t("numen.brain.endpoint"), () -> McpMode.instance().endpoint()))
-                .setBounds(x, ry, w - 52, ValueRow.HEIGHT);
-        copyButton(x + w - 46, ry, () -> McpMode.instance().endpoint());
-        ry += VALUE_PITCH;
+        endpointRow = ry;
+        copyButton(x + w - COPY_W, ry, () -> McpMode.instance().endpoint());
+        ry += ROW_PITCH;
 
         ui.add(new ValueRow(t("numen.brain.token"), this::tokenText)
                 .dimWhen(() -> McpMode.instance().token().isBlank()))
-                .setBounds(x, ry, w - 104, ValueRow.HEIGHT);
-        tokenCopy = copyButton(x + w - 46 - 56, ry, () -> McpMode.instance().token());
+                .setBounds(x, ry, w - REGEN_W - COPY_W - 8, NumenStyle.CONTROL_H);
+        tokenCopy = copyButton(x + w - REGEN_W - 4 - COPY_W, ry, () -> McpMode.instance().token());
         tokenRegen = ui.add(new Button(t("numen.brain.regenerate"), Button.Style.NORMAL,
                 this::askRegenerate));
-        tokenRegen.setBounds(x + w - 52, NumenStyle.centerIn(ry, ValueRow.HEIGHT, NumenStyle.CONTROL_H),
-                52, NumenStyle.CONTROL_H);
-        ry += VALUE_PITCH;
+        tokenRegen.setBounds(x + w - REGEN_W, ry, REGEN_W, NumenStyle.CONTROL_H);
+        ry += ROW_PITCH + NumenStyle.HEADER_GAP;
 
         // 失联回退:外脑安静超时后内脑是否接管。即时写配置,与主开关同一个"拨了就算"风格。
         Label fallbackLabel = ui.add(new Label(t("numen.brain.fallback_toggle"), Label.Role.MUTED));
-        fallbackLabel.setBounds(x, NumenStyle.centerIn(ry, ValueRow.HEIGHT, 9), w - 28, 9);
+        fallbackLabel.setBounds(x, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 9), w - 28, 9);
         Toggle fallback = ui.add(new Toggle(mcp.config().quietFallback(),
                 McpMode.instance()::setQuietFallback));
-        fallback.setBounds(x + w - 24, NumenStyle.centerIn(ry, ValueRow.HEIGHT, 11), 22, 11);
-        ry += VALUE_PITCH + NumenStyle.HEADER_GAP;
+        fallback.setBounds(x + w - 24, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 11), 22, 11);
+        ry += ROW_PITCH + NumenStyle.HEADER_GAP;
 
-        // 接上外部 AI 就这一步:提示词里已经含着端点与令牌。警示与按钮同一行,不另占一行。
+        // 接上外部 AI 就这一步:提示词里已经含着地址与令牌。说明跟在按钮下面,小一号的灰字。
         String promptLabel = t("numen.brain.copy_prompt");
         int pw = Minecraft.getInstance().font.width(promptLabel) + 14;
         Button prompt = ui.add(new Button(promptLabel, Button.Style.ACCENT,
                 () -> copy(mcp.accessPrompt())));
         prompt.setBounds(x, ry, pw, NumenStyle.CONTROL_H);
         Label warn = ui.add(new Label(t("numen.brain.prompt_warn"), Label.Role.MUTED));
-        warn.setBounds(x + pw + 8, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 9), w - pw - 8, 9);
+        warn.setBounds(x, ry + NumenStyle.CONTROL_H + 4, w, 9);
         promptRow = ry;
 
         Button settings = ui.add(new Button(t("numen.brain.settings"), Button.Style.NORMAL,
@@ -143,7 +146,9 @@ public final class BrainPanel {
         settings.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
     }
 
-    /** 复制提示词那一行的顶边:启动失败的红字画在它下面(平时没有这一行)。 */
+    /** 地址那一行的顶边:框与地址在 render 里画(值随端口、局域网开关变)。 */
+    private int endpointRow;
+    /** 复制提示词那一行的顶边:启动失败的红字画在说明下面(平时没有这一行)。 */
     private int promptRow;
 
     // ---- 设置 ----
@@ -287,6 +292,13 @@ public final class BrainPanel {
         McpMode mcp = McpMode.instance();
         boolean on = mcp.enabled();
 
+        // 地址框:只读,像输入框一样有个框,右边就是复制——一眼看出"这条是拿去填给 AI 的"。
+        int fieldW = w - COPY_W - 4;
+        NumenStyle.box(s, x, endpointRow, fieldW, NumenStyle.CONTROL_H, c.inputBg(), c.inputBorder());
+        s.drawText(TextClip.fit(s, mcp.endpoint(), fieldW - NumenStyle.FIELD_PAD * 2),
+                x + NumenStyle.FIELD_PAD, NumenStyle.centerIn(endpointRow, NumenStyle.CONTROL_H, s.lineHeight()),
+                c.textPrimary(), false);
+
         // 开着时抬头右边报一句接上没接上(等待接入 / 谁在用 · 多久前);关着时开关自己就说明了,不写字。
         if (on) {
             String badge = statusLine(mcp);
@@ -300,7 +312,7 @@ public final class BrainPanel {
         String err = mcp.lastError();
         if (err != null) {
             s.drawText(I18n.get("numen.brain.start_failed", err), x,
-                    promptRow + NumenStyle.CONTROL_H + NumenStyle.HEADER_GAP, c.danger(), false);
+                    promptRow + NumenStyle.CONTROL_H + 4 + 13, c.danger(), false);
         }
         if (tokenCopy != null) tokenCopy.setVisible(!mcp.token().isBlank());
         if (tokenRegen != null) tokenRegen.setVisible(true);
@@ -341,7 +353,7 @@ public final class BrainPanel {
     private Button copyButton(int bx, int by, java.util.function.Supplier<String> text) {
         Button b = ui.add(new Button(t("numen.brain.copy"), Button.Style.NORMAL,
                 () -> copy(text.get())));
-        b.setBounds(bx, NumenStyle.centerIn(by, ValueRow.HEIGHT, NumenStyle.CONTROL_H), 46, NumenStyle.CONTROL_H);
+        b.setBounds(bx, by, COPY_W, NumenStyle.CONTROL_H);
         return b;
     }
 

@@ -16,12 +16,10 @@ import java.util.function.Supplier;
  * <p>值走 {@link Supplier} 惰性取:这些东西随时在变(服务起停、客户端接入),build 时捕获
  * 会把过期值钉死在屏幕上。
  *
- * <p>高 {@value #HEIGHT}px——比表单行矮,因为没有控件要放。
+ * <p>它填满宿主给的那一行:文字在行内垂直居中,行高由宿主按 {@code NumenStyle.CONTROL_H} 给,
+ * 和同一行里的按钮、开关对得齐。
  */
 public final class ValueRow extends Widget {
-
-    /** 行高。标签一行、值一行,紧凑排布。 */
-    public static final int HEIGHT = 16;
 
     private final String label;
     private final Supplier<String> value;
@@ -46,11 +44,12 @@ public final class ValueRow extends Widget {
         if (!visible) {
             return;
         }
-        s.drawText(TextClip.fit(s, label, LABEL_W - 2), x, y, c.textMuted(), false);
+        int ty = y + (h - s.lineHeight()) / 2;
+        s.drawText(TextClip.fit(s, label, LABEL_W - 2), x, ty, c.textMuted(), false);
         String text = value == null ? "" : value.get();
         boolean grey = dimmed != null && Boolean.TRUE.equals(dimmed.get());
         // 值列按剩余宽收口:端点地址、令牌这类长串曾直接画穿行尾压到邻居身上
-        s.drawText(TextClip.fit(s, text == null ? "" : text, w - LABEL_W), x + LABEL_W, y,
+        s.drawText(TextClip.fit(s, text == null ? "" : text, w - LABEL_W), x + LABEL_W, ty,
                 grey ? c.textMuted() : c.textPrimary(), false);
     }
 
