@@ -1025,7 +1025,7 @@ public final class SettingsView {
                 brainPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                         HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
                 // 图标按钮悬停说的那句:tooltip 要画在最上面,所以交给屏幕,不在这儿画。
-                String tip = brainPanel().tooltip();
+                String tip = brainPanel().tooltipAt(mouseX, mouseY);
                 if (tip != null) {
                     host.tip(List.of(Component.literal(tip)), mouseX, mouseY);
                 }

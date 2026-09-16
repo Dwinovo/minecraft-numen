@@ -8,18 +8,18 @@ import com.dwinovo.numen.client.ui.widget.Badge;
 import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.ConfirmDialog;
 import com.dwinovo.numen.client.ui.widget.Disclosure;
-import com.dwinovo.numen.client.ui.widget.IconButton;
 import com.dwinovo.numen.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.ScrollBox;
 import com.dwinovo.numen.client.ui.widget.TextField;
 import com.dwinovo.numen.client.ui.widget.Toggle;
 import com.dwinovo.numen.client.ui.widget.UiRoot;
-import com.dwinovo.numen.client.ui.widget.ValueRow;
 import com.dwinovo.numen.mcp.server.McpConfig;
 import com.dwinovo.numen.mcp.server.McpMode;
 import net.minecraft.client.Minecraft;
+import com.dwinovo.numen.client.ui.mc.Sprites;
 import net.minecraft.client.gui.Font;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.resources.language.I18n;
 
 import java.util.ArrayList;
@@ -43,9 +43,10 @@ import java.util.List;
  */
 public final class BrainPanel {
 
-    /** 图标按钮的方块热区:图标居中,四周留一圈可点的余量。 */
-    private static final int ICON_BTN = 18;
-    private static final int REGEN_W = 52;
+    /** 图标钮的方块热区:图标 12 格,四周各留一格好点。 */
+    private static final int ICON_BTN = Sprites.SIZE + 2;
+    /** 两枚图标并排时的步进。 */
+    private static final int ICON_PITCH = ICON_BTN + 1;
     private static final int SAVE_W = 96;
     /** 高级设置里数值框的宽;所有行的右边沿都对齐在 {@code x + w - RIGHT_INSET}。 */
     private static final int NUM_FIELD_W = 60;
@@ -69,7 +70,8 @@ public final class BrainPanel {
     private Boolean lanOn;
     private TextField portField;
     private Button saveButton;
-    private IconButton tokenCopy;
+    /** 本页所有图标钮:图标不写字,悬停得说得出自己是干嘛的(宿主按命中取 tooltip)。 */
+    private final List<Button> iconButtons = new ArrayList<>();
     private int x, y, w, h;
     private int dimX, dimY, dimW, dimH;
 
@@ -100,7 +102,7 @@ public final class BrainPanel {
         fixedUi.clear();
         portField = null;
         saveButton = null;
-        tokenCopy = null;
+        iconButtons.clear();
         McpMode mcp = McpMode.instance();
         McpConfig cfg = mcp.config();
         Font font = Minecraft.getInstance().font;
@@ -129,17 +131,28 @@ public final class BrainPanel {
         int ry = top;
         // 地址是这一页的主角:带框的只读地址 + 复制,和 LM Studio 那类本地服务页同形。
         endpointRow = ry;
-        copyButton(x + w - ICON_BTN, ry, () -> McpMode.instance().endpoint());
+        iconButton(Sprites.COPY, t("numen.brain.copy"), x + w - ICON_BTN, ry,
+                () -> copy(McpMode.instance().endpoint()));
         ry += NumenStyle.ROW_PITCH;
 
-        ui.add(new ValueRow(t("numen.brain.token"), this::tokenText)
-                .dimWhen(() -> McpMode.instance().token().isBlank()))
-                .setBounds(x, ry, w - REGEN_W - ICON_BTN - 8, NumenStyle.CONTROL_H);
-        tokenCopy = copyButton(x + w - REGEN_W - 4 - ICON_BTN, ry,
-                () -> McpMode.instance().token());
-        Button tokenRegen = ui.add(new Button(t("numen.brain.regenerate"), Button.Style.NORMAL,
-                this::askRegenerate));
-        tokenRegen.setBounds(x + w - REGEN_W, ry, REGEN_W, NumenStyle.CONTROL_H);
+        // 令牌这一行:标签、令牌、两枚图标依次挨着排——动作贴着它作用的那个东西;
+        // 钉在行尾的话,眼睛得在中间那段空白上来回找。
+        int textY = NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 9);
+        String tokenLabel = t("numen.brain.token");
+        int tokenLabelW = font.width(tokenLabel);
+        ui.add(new Label(tokenLabel, Label.Role.MUTED)).setBounds(x, textY, tokenLabelW, 9);
+        boolean noToken = mcp.token().isBlank();
+        String token = tokenText();
+        int tokenX = x + tokenLabelW + 8;
+        int tokenW = Math.min(font.width(token), w - (tokenX - x) - ICON_PITCH * 2 - 6);
+        ui.add(new Label(token, noToken ? Label.Role.MUTED : Label.Role.PRIMARY))
+                .setBounds(tokenX, textY, tokenW, 9);
+        int iconX = tokenX + tokenW + 6;
+        // 没令牌时复制没得复制:留在原地置灰,这一行的排布不跟着跳。
+        iconButton(Sprites.COPY, t("numen.brain.copy"), iconX, ry,
+                () -> copy(McpMode.instance().token())).setEnabled(!noToken);
+        iconButton(Sprites.REFRESH, t("numen.brain.regenerate"), iconX + ICON_PITCH, ry,
+                this::askRegenerate);
         ry += NumenStyle.ROW_PITCH + 4;
 
         Disclosure adv = ui.add(new Disclosure(t("numen.brain.advanced"), advanced, () -> {
@@ -320,6 +333,7 @@ public final class BrainPanel {
                     McpMode.instance().applySettings(cfg.host(), cfg.port(),
                             cfg.callTimeoutSeconds(), cfg.hiddenTools(), McpConfig.mintToken());
                     notice.show(InlineAlert.Severity.SUCCESS, t("numen.brain.saved"), 2_000);
+                    build(x, y, w, h);   // 新令牌长短不同,两枚图标得跟着挪
                 });
     }
 
@@ -377,14 +391,19 @@ public final class BrainPanel {
                     x, msgRow, c.danger(), false);
         }
 
-        if (tokenCopy != null) tokenCopy.setVisible(!mcp.token().isBlank());
         ui.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);
         fixedUi.render(s, c, mouseX, mouseY, nowMs);
     }
 
-    /** 本帧悬停在哪个图标上要说的一句;宿主画完这一分区再画它。 */
-    public String tooltip() {
-        return ui.tooltip() != null ? ui.tooltip() : fixedUi.tooltip();
+    /** 悬停在哪枚图标上要说的一句;宿主画完这一分区再把它画在最上面。 */
+    public String tooltipAt(double mx, double my) {
+        if (!scroll.inside(my)) {
+            return null;   // 滚出视口的行被裁掉了,坐标上却还在
+        }
+        for (Button b : iconButtons) {
+            if (b.enabled() && b.contains(mx, my)) return b.tooltip();
+        }
+        return null;
     }
 
     public boolean mouseClicked(double mx, double my, int button) {
@@ -410,15 +429,16 @@ public final class BrainPanel {
     // ---- 内部 ----
 
     /**
-     * 复制按钮:图标 + 悬停说一句。复制是天天做又没有后果的动作,不值当占一个词的位置;
-     * 旁边的「重新生成」照旧写字——它少做、且会把已经接上的 AI 当场踢下线。
+     * 一枚图标钮:GHOST 按钮(没有底也没有边)+ 一枚贴图 + 悬停说一句,在行内垂直居中。
      *
-     * <p>文本惰性取:配置随时可变,build 时捕获会复制到过期值。
+     * <p>动作写成 lambda 而不是 build 时就把值取出来:配置随时可变,捕获到的会是过期值。
      */
-    private IconButton copyButton(int bx, int by, java.util.function.Supplier<String> text) {
-        IconButton b = ui.add(new IconButton(com.dwinovo.numen.client.ui.NumenIcons.COPY,
-                t("numen.brain.copy"), () -> copy(text.get())));
-        b.setBounds(bx, by, ICON_BTN, NumenStyle.CONTROL_H);
+    private Button iconButton(ResourceLocation sprite, String tip, int bx, int by, Runnable action) {
+        Button b = ui.add(new Button(tip, Button.Style.GHOST, action)
+                .icon(Sprites.SIZE, Sprites.painter(sprite))
+                .tooltip(tip));
+        b.setBounds(bx, NumenStyle.centerIn(by, NumenStyle.CONTROL_H, ICON_BTN), ICON_BTN, ICON_BTN);
+        iconButtons.add(b);
         return b;
     }
 
