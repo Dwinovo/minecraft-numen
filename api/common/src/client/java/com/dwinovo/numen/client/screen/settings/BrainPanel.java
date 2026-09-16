@@ -96,50 +96,55 @@ public final class BrainPanel {
         McpMode mcp = McpMode.instance();
 
         Label title = ui.add(new Label(t("numen.brain.title"), Label.Role.PRIMARY));
-        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w - 60, 9);
+        title.setBounds(x, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 9), w - 140, 9);
 
         // 开关回调只写配置,绝不在此重建——重建会 new 出滑块已在终点的新 Toggle,
         // 滑动动画连起步都来不及(真机教训:大脑区开关瞬时切换的病根)。
+        // 开关本身就是"开着还是关着",抬头不再另写一句;开着时抬头右边只报接上没接上(见 renderOverview)。
         Toggle tog = ui.add(new Toggle(mcp.enabled(), McpMode.instance()::setEnabled));
         tog.setBounds(x + w - 24, NumenStyle.centerIn(y, NumenStyle.HEADER_H, 11), 22, 11);
 
-        int body = NumenStyle.bodyTop(y);
-        int ry = body + 18;
+        int ry = NumenStyle.bodyTop(y);
         ui.add(new ValueRow(t("numen.brain.endpoint"), () -> McpMode.instance().endpoint()))
                 .setBounds(x, ry, w - 52, ValueRow.HEIGHT);
-        copyButton(x + w - 50, ry - 3, () -> McpMode.instance().endpoint());
+        copyButton(x + w - 46, ry, () -> McpMode.instance().endpoint());
         ry += VALUE_PITCH;
 
         ui.add(new ValueRow(t("numen.brain.token"), this::tokenText)
                 .dimWhen(() -> McpMode.instance().token().isBlank()))
                 .setBounds(x, ry, w - 104, ValueRow.HEIGHT);
-        tokenCopy = copyButton(x + w - 102, ry - 3, () -> McpMode.instance().token());
+        tokenCopy = copyButton(x + w - 46 - 56, ry, () -> McpMode.instance().token());
         tokenRegen = ui.add(new Button(t("numen.brain.regenerate"), Button.Style.NORMAL,
                 this::askRegenerate));
-        tokenRegen.setBounds(x + w - 52, ry - 3, 52, 14);
-        ry += VALUE_PITCH;
-
-        ui.add(new ValueRow(t("numen.brain.status"), () -> statusLine(McpMode.instance())))
-                .setBounds(x, ry, w, ValueRow.HEIGHT);
+        tokenRegen.setBounds(x + w - 52, NumenStyle.centerIn(ry, ValueRow.HEIGHT, NumenStyle.CONTROL_H),
+                52, NumenStyle.CONTROL_H);
         ry += VALUE_PITCH;
 
         // 失联回退:外脑安静超时后内脑是否接管。即时写配置,与主开关同一个"拨了就算"风格。
         Label fallbackLabel = ui.add(new Label(t("numen.brain.fallback_toggle"), Label.Role.MUTED));
-        fallbackLabel.setBounds(x, ry + 2, w - 28, 9);
+        fallbackLabel.setBounds(x, NumenStyle.centerIn(ry, ValueRow.HEIGHT, 9), w - 28, 9);
         Toggle fallback = ui.add(new Toggle(mcp.config().quietFallback(),
                 McpMode.instance()::setQuietFallback));
-        fallback.setBounds(x + w - 24, ry, 22, 11);
+        fallback.setBounds(x + w - 24, NumenStyle.centerIn(ry, ValueRow.HEIGHT, 11), 22, 11);
+        ry += VALUE_PITCH + NumenStyle.HEADER_GAP;
 
+        // 接上外部 AI 就这一步:提示词里已经含着端点与令牌。警示与按钮同一行,不另占一行。
         String promptLabel = t("numen.brain.copy_prompt");
         int pw = Minecraft.getInstance().font.width(promptLabel) + 14;
         Button prompt = ui.add(new Button(promptLabel, Button.Style.ACCENT,
                 () -> copy(mcp.accessPrompt())));
-        prompt.setBounds(x, body + 89, pw, 16);
+        prompt.setBounds(x, ry, pw, NumenStyle.CONTROL_H);
+        Label warn = ui.add(new Label(t("numen.brain.prompt_warn"), Label.Role.MUTED));
+        warn.setBounds(x + pw + 8, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 9), w - pw - 8, 9);
+        promptRow = ry;
 
         Button settings = ui.add(new Button(t("numen.brain.settings"), Button.Style.NORMAL,
                 () -> switchTo(true)));
         settings.setBounds(x + w - 54, NumenStyle.footerTop(y, h), 54, NumenStyle.CONTROL_H);
     }
+
+    /** 复制提示词那一行的顶边:启动失败的红字画在它下面(平时没有这一行)。 */
+    private int promptRow;
 
     // ---- 设置 ----
 
@@ -282,25 +287,23 @@ public final class BrainPanel {
         McpMode mcp = McpMode.instance();
         boolean on = mcp.enabled();
 
-        // 状态词做成标题行的徽章:永远在最显眼处,而且不占额外行
-        String badge = t(on ? "numen.brain.running" : "numen.brain.stopped");
-        int bw = Minecraft.getInstance().font.width(badge) + 8;
-        int body = NumenStyle.bodyTop(y);
-        Badge.draw(s, badge, x + w - 30 - bw, NumenStyle.centerIn(y, NumenStyle.HEADER_H, s.lineHeight()),
-                on ? c.success() : c.textMuted(), 0xFFFFFFFF);
+        // 开着时抬头右边报一句接上没接上(等待接入 / 谁在用 · 多久前);关着时开关自己就说明了,不写字。
+        if (on) {
+            String badge = statusLine(mcp);
+            int bw = Minecraft.getInstance().font.width(badge) + 8;
+            Badge.draw(s, badge, x + w - 30 - bw,
+                    NumenStyle.centerIn(y, NumenStyle.HEADER_H, s.lineHeight()),
+                    mcp.clientName() == null ? c.warning() : c.success(), 0xFFFFFFFF);
+        }
 
-        s.drawText(t(on ? "numen.brain.hint_on" : "numen.brain.hint_off"),
-                x, body, c.textMuted(), false);
-
-        // 错误紧跟只读块、在动作之前
+        // 启动失败是唯一要另占一行的事,画在动作那一行下面
         String err = mcp.lastError();
         if (err != null) {
-            s.drawText(I18n.get("numen.brain.start_failed", err), x, body + 66, c.danger(), false);
+            s.drawText(I18n.get("numen.brain.start_failed", err), x,
+                    promptRow + NumenStyle.CONTROL_H + NumenStyle.HEADER_GAP, c.danger(), false);
         }
         if (tokenCopy != null) tokenCopy.setVisible(!mcp.token().isBlank());
         if (tokenRegen != null) tokenRegen.setVisible(true);
-
-        s.drawText(t("numen.brain.prompt_warn"), x, body + 109, c.textMuted(), false);
     }
 
     private void renderSettings(IDrawSurface s, NumenTheme.Colors c) {
@@ -338,7 +341,7 @@ public final class BrainPanel {
     private Button copyButton(int bx, int by, java.util.function.Supplier<String> text) {
         Button b = ui.add(new Button(t("numen.brain.copy"), Button.Style.NORMAL,
                 () -> copy(text.get())));
-        b.setBounds(bx, by, 46, 14);
+        b.setBounds(bx, NumenStyle.centerIn(by, ValueRow.HEIGHT, NumenStyle.CONTROL_H), 46, NumenStyle.CONTROL_H);
         return b;
     }
 
@@ -348,8 +351,8 @@ public final class BrainPanel {
     }
 
     /** 连接状态一行:没开 → 关闭;开着没人连 → 等待接入;连过 → 谁 + 多久前活跃。 */
+    /** 开着时的一句:等谁来接,或者谁在用、多久前活跃过。关着不说——开关自己就说明了。 */
     private static String statusLine(McpMode mcp) {
-        if (!mcp.enabled()) return t("numen.brain.status_off");
         String who = mcp.clientName();
         if (who == null) return t("numen.brain.status_waiting");
         return I18n.get("numen.brain.status_connected", who, sinceLabel(mcp.lastActivityMs()));
