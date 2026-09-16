@@ -1021,8 +1021,15 @@ public final class SettingsView {
             case PROVIDER -> renderProviderSection(g, mouseX, mouseY);
             case VOICE -> renderVoiceSection(g, mouseX, mouseY);
             case SKIN -> renderSkinSection(g, mouseX, mouseY);
-            case BRAIN -> brainPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
-                    HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+            case BRAIN -> {
+                brainPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
+                        HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
+                // 图标按钮悬停说的那句:tooltip 要画在最上面,所以交给屏幕,不在这儿画。
+                String tip = brainPanel().tooltip();
+                if (tip != null) {
+                    host.tip(List.of(Component.literal(tip)), mouseX, mouseY);
+                }
+            }
             case STT -> sttPanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),
                     HostThemeColors.current(), mouseX, mouseY, net.minecraft.Util.getMillis());
             case THEME -> themePanel().render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font()),

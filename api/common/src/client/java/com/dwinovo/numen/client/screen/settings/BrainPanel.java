@@ -8,6 +8,7 @@ import com.dwinovo.numen.client.ui.widget.Badge;
 import com.dwinovo.numen.client.ui.widget.Button;
 import com.dwinovo.numen.client.ui.widget.ConfirmDialog;
 import com.dwinovo.numen.client.ui.widget.Disclosure;
+import com.dwinovo.numen.client.ui.widget.IconButton;
 import com.dwinovo.numen.client.ui.widget.InlineAlert;
 import com.dwinovo.numen.client.ui.widget.Label;
 import com.dwinovo.numen.client.ui.widget.ScrollBox;
@@ -42,7 +43,8 @@ import java.util.List;
  */
 public final class BrainPanel {
 
-    private static final int COPY_W = 46;
+    /** 图标按钮的方块热区:图标居中,四周留一圈可点的余量。 */
+    private static final int ICON_BTN = 18;
     private static final int REGEN_W = 52;
     private static final int SAVE_W = 96;
     /** 高级设置里数值框的宽;所有行的右边沿都对齐在 {@code x + w - RIGHT_INSET}。 */
@@ -67,7 +69,7 @@ public final class BrainPanel {
     private Boolean lanOn;
     private TextField portField;
     private Button saveButton;
-    private Button tokenCopy;
+    private IconButton tokenCopy;
     private int x, y, w, h;
     private int dimX, dimY, dimW, dimH;
 
@@ -127,13 +129,14 @@ public final class BrainPanel {
         int ry = top;
         // 地址是这一页的主角:带框的只读地址 + 复制,和 LM Studio 那类本地服务页同形。
         endpointRow = ry;
-        copyButton(x + w - COPY_W, ry, () -> McpMode.instance().endpoint());
+        copyButton(x + w - ICON_BTN, ry, () -> McpMode.instance().endpoint());
         ry += NumenStyle.ROW_PITCH;
 
         ui.add(new ValueRow(t("numen.brain.token"), this::tokenText)
                 .dimWhen(() -> McpMode.instance().token().isBlank()))
-                .setBounds(x, ry, w - REGEN_W - COPY_W - 8, NumenStyle.CONTROL_H);
-        tokenCopy = copyButton(x + w - REGEN_W - 4 - COPY_W, ry, () -> McpMode.instance().token());
+                .setBounds(x, ry, w - REGEN_W - ICON_BTN - 8, NumenStyle.CONTROL_H);
+        tokenCopy = copyButton(x + w - REGEN_W - 4 - ICON_BTN, ry,
+                () -> McpMode.instance().token());
         Button tokenRegen = ui.add(new Button(t("numen.brain.regenerate"), Button.Style.NORMAL,
                 this::askRegenerate));
         tokenRegen.setBounds(x + w - REGEN_W, ry, REGEN_W, NumenStyle.CONTROL_H);
@@ -333,7 +336,7 @@ public final class BrainPanel {
         scroll.beginClip(s);
         int dy = -scroll.offset();
         // 地址框:只读,像输入框一样有个框,右边就是复制——一眼看出"这条是拿去填给 AI 的"。
-        int fieldW = w - COPY_W - 4;
+        int fieldW = w - ICON_BTN - 4;
         NumenStyle.box(s, x, endpointRow + dy, fieldW, NumenStyle.CONTROL_H,
                 c.inputBg(), c.inputBorder());
         s.drawText(TextClip.fit(s, mcp.endpoint(), fieldW - NumenStyle.FIELD_PAD * 2),
@@ -379,6 +382,11 @@ public final class BrainPanel {
         fixedUi.render(s, c, mouseX, mouseY, nowMs);
     }
 
+    /** 本帧悬停在哪个图标上要说的一句;宿主画完这一分区再画它。 */
+    public String tooltip() {
+        return ui.tooltip() != null ? ui.tooltip() : fixedUi.tooltip();
+    }
+
     public boolean mouseClicked(double mx, double my, int button) {
         if (fixedUi.hasOverlay()) return fixedUi.mouseClicked(mx, my, button);
         if (ui.hasOverlay()) return ui.mouseClicked(mx, my, button);
@@ -401,11 +409,16 @@ public final class BrainPanel {
 
     // ---- 内部 ----
 
-    /** 复制按钮:文本惰性取(配置随时可变,build 时捕获会复制到过期值)。 */
-    private Button copyButton(int bx, int by, java.util.function.Supplier<String> text) {
-        Button b = ui.add(new Button(t("numen.brain.copy"), Button.Style.NORMAL,
-                () -> copy(text.get())));
-        b.setBounds(bx, by, COPY_W, NumenStyle.CONTROL_H);
+    /**
+     * 复制按钮:图标 + 悬停说一句。复制是天天做又没有后果的动作,不值当占一个词的位置;
+     * 旁边的「重新生成」照旧写字——它少做、且会把已经接上的 AI 当场踢下线。
+     *
+     * <p>文本惰性取:配置随时可变,build 时捕获会复制到过期值。
+     */
+    private IconButton copyButton(int bx, int by, java.util.function.Supplier<String> text) {
+        IconButton b = ui.add(new IconButton(com.dwinovo.numen.client.ui.NumenIcons.COPY,
+                t("numen.brain.copy"), () -> copy(text.get())));
+        b.setBounds(bx, by, ICON_BTN, NumenStyle.CONTROL_H);
         return b;
     }
 
