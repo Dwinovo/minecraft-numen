@@ -72,9 +72,11 @@ public final class BrainPanel {
     private int dimX, dimY, dimW, dimH;
 
     /** 手绘几条的基线(滚动层坐标,画的时候减 {@link ScrollBox#offset()})。 */
-    private int endpointRow, lanRow, quietRow, ruleRow;
-    /** 话筒那一行的顶边(固定层):起服失败 / 提示词提醒 / 回执胶囊都落在这儿。 */
+    private int endpointRow, lanRow, ruleRow;
+    /** 话筒那一行的顶边(固定层):起服失败与回执胶囊落在这儿,平时空着。 */
     private int msgRow;
+    /** 收尾行的顶边与复制提示词按钮的宽:那句令牌提醒紧挨着它画。 */
+    private int footerRow, promptW;
 
     public BrainPanel() {
         Minecraft mc = Minecraft.getInstance();
@@ -113,9 +115,11 @@ public final class BrainPanel {
         int footer = NumenStyle.footerTop(y, h);
         msgRow = footer - 5 - 9;
         String promptLabel = t("numen.brain.copy_prompt");
+        footerRow = footer;
+        promptW = font.width(promptLabel) + 14;
         Button prompt = fixedUi.add(new Button(promptLabel, Button.Style.ACCENT,
                 () -> copy(McpMode.instance().accessPrompt())));
-        prompt.setBounds(x, footer, font.width(promptLabel) + 14, NumenStyle.CONTROL_H);
+        prompt.setBounds(x, footer, promptW, NumenStyle.CONTROL_H);
         fixedUi.add(notice).setBounds(x, msgRow - 3, w, 15);
 
         // ---- 滚动层 ----
@@ -193,13 +197,12 @@ public final class BrainPanel {
             ruleRow = ry;
             ry += 7;
 
-            quietRow = ry;
             rowLabel(I18n.get("numen.brain.quiet_toggle", McpMode.QUIET_AFTER_MS / 60_000L),
                     ry, w - 28);
             Toggle quiet = ui.add(new Toggle(cfg.quietFallback(),
                     McpMode.instance()::setQuietFallback));
             quiet.setBounds(x + w - 24, NumenStyle.centerIn(ry, NumenStyle.CONTROL_H, 11), 22, 11);
-            bottom = noteBelow(quietRow) + 9;
+            bottom = ry + NumenStyle.CONTROL_H;
         }
 
         // 视口到话筒那一行为止;内容装不下就滚,装得下连拇指都不画。
@@ -346,10 +349,6 @@ public final class BrainPanel {
                         x, noteBelow(lanRow) + dy, noToken ? c.danger() : c.warning(), false);
             }
             s.fillRect(x, ruleRow + dy, w, 1, c.divider());
-            // 开着关着各是什么结果,当场写在开关下面——这一句比开关名更要紧。
-            s.drawText(t(mcp.config().quietFallback()
-                            ? "numen.brain.quiet_on" : "numen.brain.quiet_off"),
-                    x, noteBelow(quietRow) + dy, c.textMuted(), false);
         }
         ui.renderContent(s, c, mouseX, mouseY, nowMs);
         scroll.endClip(s);
@@ -363,11 +362,17 @@ public final class BrainPanel {
                     NumenStyle.centerIn(y, NumenStyle.HEADER_H, s.lineHeight()),
                     mcp.clientName() == null ? c.warning() : c.success(), 0xFFFFFFFF);
         }
-        // 话筒那一行:起服失败最要紧,没有失败就说提示词那句提醒。
+        // 令牌就在提示词里,这句提醒紧挨着那个按钮——它是按钮的注脚,不是另起一行的公告。
+        s.drawText(TextClip.fit(s, t("numen.brain.prompt_warn"), w - promptW - 8),
+                x + promptW + 8,
+                NumenStyle.centerIn(footerRow, NumenStyle.CONTROL_H, s.lineHeight()),
+                c.textMuted(), false);
+        // 话筒那一行平时空着,只有起服失败时说话(回执胶囊也落在这儿)。
         String err = mcp.lastError();
-        s.drawText(TextClip.fit(s, err == null ? t("numen.brain.prompt_warn")
-                        : I18n.get("numen.brain.start_failed", err), w),
-                x, msgRow, err == null ? c.textMuted() : c.danger(), false);
+        if (err != null) {
+            s.drawText(TextClip.fit(s, I18n.get("numen.brain.start_failed", err), w),
+                    x, msgRow, c.danger(), false);
+        }
 
         if (tokenCopy != null) tokenCopy.setVisible(!mcp.token().isBlank());
         ui.renderOverlayLayer(s, c, mouseX, mouseY, nowMs);
