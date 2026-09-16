@@ -279,6 +279,7 @@ public final class ModLanguageData {
         adder.add("numen.brain.console_empty", "Say something below, or wait for the AI to act — the conversation shows up here.");
         adder.add("numen.brain.quiet_standby", "The external brain has gone quiet — your companion is standing by.");
         adder.add("numen.brain.quiet_fallback", "The external brain has gone quiet — the built-in brain is taking over until it returns.");
+        adder.add("numen.brain.advanced", "Advanced");
         adder.add("numen.brain.back_active", "The external brain is back.");
         adder.add("numen.brain.quiet_toggle", "If the outside AI does nothing for %s minutes");
         adder.add("numen.brain.quiet_on", "She keeps going on her own brain until it comes back.");
@@ -629,6 +630,7 @@ public final class ModLanguageData {
         adder.add("numen.brain.console_empty", "在下面开口说话,或等外部 AI 动手——对话现场会出现在这里。");
         adder.add("numen.brain.quiet_standby", "外接大脑没动静了——她先安静待命。");
         adder.add("numen.brain.quiet_fallback", "外接大脑没动静了——内置大脑先接管,它回来就交还。");
+        adder.add("numen.brain.advanced", "高级设置");
         adder.add("numen.brain.back_active", "外接大脑回来了。");
         adder.add("numen.brain.quiet_toggle", "外部 AI 超过 %s 分钟没动作时");
         adder.add("numen.brain.quiet_on", "她用自己的大脑接着想,直到外部 AI 回来。");

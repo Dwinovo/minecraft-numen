@@ -1297,6 +1297,9 @@ public final class SettingsView {
                 && skinListPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
+        if (section == Section.BRAIN && brainPanel().mouseScrolled(mx, my, sy)) {
+            return true;
+        }
         if (section == Section.STT && sttPanel().mouseScrolled(mx, my, sy)) {
             return true;
         }
