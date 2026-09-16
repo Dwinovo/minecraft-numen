@@ -1,5 +1,6 @@
 package com.dwinovo.numen.client.screen;
 
+import com.dwinovo.numen.client.ui.NumenIcons;
 import com.dwinovo.numen.client.ui.TokenFormat;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 
@@ -111,65 +112,10 @@ public final class NumenScreen extends Screen {
     private static net.minecraft.resources.ResourceLocation railSpr(String n) {
         return net.minecraft.resources.ResourceLocation.fromNamespaceAndPath(com.dwinovo.numen.Constants.MOD_ID, n);
     }
-    /** 悬停编辑铅笔的位图(16×16,[x][y]):照 Lucide pencil 的形。45° 杆用轴向/横向
-     *  坐标解析光栅化——u=y-x 沿杆推进(右上端 -10 → 左下笔尖 +10),v=x+y 横跨杆宽,
-     *  |v-16|≤宽 即笔体;尾端收圆一像素,u≥8 收成笔尖。描边由渲染时对掩码外扩一像素得到。 */
-    /** 图标格边长:与名字那一行的字齐高(字 9px,图标连一圈描边 11px 看着一样大)。 */
-    private static final int ICON_N = 11;
+    /** 图标格边长:与名字那一行的字齐高。 */
+    private static final int ICON_N = NumenIcons.size(NumenIcons.PENCIL);
     /** 两枚图标的步进。 */
     private static final int ICON_PITCH = ICON_N + 3;
-
-    private static final boolean[][] PENCIL_16 = buildPencilMask();
-    private static final boolean[][] PENCIL_MASK = shrink(PENCIL_16, ICON_N);
-    private static final boolean[][] PENCIL_CAP = shrink(capOf(PENCIL_16), ICON_N);
-
-    private static boolean[][] buildPencilMask() {
-        boolean[][] m = new boolean[16][16];
-        for (int x = 0; x < 16; x++) {
-            for (int y = 0; y < 16; y++) {
-                int u = y - x, v = x + y;
-                if (u < -10 || u > 10) continue;
-                int w = u == -10 ? 1 : u <= 7 ? 2 : u <= 9 ? 1 : 0;
-                m[x][y] = Math.abs(v - 16) <= w;
-            }
-        }
-        return m;
-    }
-
-    /** 垃圾桶(遣散)的位图:提手、盖、桶身三块实心,桶身上挖两道竖纹——挖掉的格子挨着桶身,
-     *  描边那一遍会把它们填成暗色,于是成了纹路;盖与桶身之间空出的那一行同理成了分界线。 */
-    private static final boolean[][] TRASH_MASK = shrink(buildTrashMask(), ICON_N);
-
-    /** 笔帽分割线:横跨笔杆的那一道。 */
-    private static boolean[][] capOf(boolean[][] pencil) {
-        boolean[][] m = new boolean[16][16];
-        for (int x = 0; x < 16; x++) {
-            for (int y = 0; y < 16; y++) {
-                m[x][y] = pencil[x][y] && y - x == -6;
-            }
-        }
-        return m;
-    }
-
-    /** 16 格原图缩到 n 格:目标格罩住的原格里只要有一格是实的就算实的——
-     *  笔杆这类一像素细的形状缩下来不会断成虚线。 */
-    private static boolean[][] shrink(boolean[][] src, int n) {
-        boolean[][] out = new boolean[n][n];
-        for (int gx = 0; gx < n; gx++) {
-            for (int gy = 0; gy < n; gy++) {
-                int x0 = gx * 16 / n, x1 = Math.max(x0 + 1, (gx + 1) * 16 / n);
-                int y0 = gy * 16 / n, y1 = Math.max(y0 + 1, (gy + 1) * 16 / n);
-                boolean any = false;
-                for (int sx = x0; sx < x1 && !any; sx++) {
-                    for (int sy = y0; sy < y1 && !any; sy++) {
-                        any = src[sx][sy];
-                    }
-                }
-                out[gx][gy] = any;
-            }
-        }
-        return out;
-    }
 
     private static boolean[][] buildTrashMask() {
         boolean[][] m = new boolean[16][16];
@@ -205,44 +151,6 @@ public final class NumenScreen extends Screen {
 
     /** 图标顶边:与名字共一条中线(名字画在 top+7,行高 9)。 */
     private int iconTop() { return top + 7 + (font.lineHeight - ICON_N) / 2; }
-
-    /** 画一枚位图图标:图形单色可指定,深色一像素外描边。 */
-    private void drawIcon(GuiGraphics g, boolean[][] mask, int ox, int oy, int bodyColor) {
-        for (int gx = 0; gx < mask.length; gx++) {
-            for (int gy = 0; gy < mask.length; gy++) {
-                if (mask[gx][gy]) {
-                    g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1, bodyColor);
-                } else if (nearMask(mask, gx, gy)) {
-                    g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1, 0xFF1F1F1F);
-                }
-            }
-        }
-    }
-
-    /** 画一支 Lucide 形铅笔:图标本体之上再压一道笔帽分割线。 */
-    private void drawPencil(GuiGraphics g, int ox, int oy, int bodyColor) {
-        drawIcon(g, PENCIL_MASK, ox, oy, bodyColor);
-        for (int gx = 0; gx < PENCIL_CAP.length; gx++) {
-            for (int gy = 0; gy < PENCIL_CAP.length; gy++) {
-                if (PENCIL_CAP[gx][gy]) {
-                    g.fill(ox + gx, oy + gy, ox + gx + 1, oy + gy + 1, 0xFF1F1F1F);
-                }
-            }
-        }
-    }
-
-    /** (gx,gy) 不在图形上但与图形八邻接——描边像素。 */
-    private static boolean nearMask(boolean[][] mask, int gx, int gy) {
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                int nx = gx + dx, ny = gy + dy;
-                if (nx >= 0 && nx < mask.length && ny >= 0 && ny < mask.length && mask[nx][ny]) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
 
     private static final net.minecraft.resources.ResourceLocation CHEVRON_UP = railSpr("chevron_up");
     private static final net.minecraft.resources.ResourceLocation CHEVRON_DOWN = railSpr("chevron_down");
@@ -1047,13 +955,15 @@ public final class NumenScreen extends Screen {
         int afterName = left + PAD + font.width(nm) + 6;
         editPencilX = editTrashX = -1;
         if (nameIcons && afterName + ICON_PITCH * 2 <= headerLimit) {
+            var iconSurface = new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font);
             editPencilX = afterName;
             boolean hotPencil = overEditPencil(mouseX, mouseY);
-            drawPencil(g, editPencilX, iconTop(), hotPencil ? CTA : 0xFFFFFFFF);
+            NumenIcons.draw(iconSurface, NumenIcons.PENCIL, editPencilX, iconTop(),
+                    hotPencil ? CTA : 0xFFFFFFFF);
             // 垃圾桶常态就是危险色:红的那个是删,不用点开才知道。
             editTrashX = afterName + ICON_PITCH;
             boolean hotTrash = overEditTrash(mouseX, mouseY);
-            drawIcon(g, TRASH_MASK, editTrashX, iconTop(),
+            NumenIcons.draw(iconSurface, NumenIcons.TRASH, editTrashX, iconTop(),
                     hotTrash ? UiTheme.mix(FAIL, 0xFFFFFFFF, 0.35f) : FAIL);
             // 图标不写字,就得能问出来——两枚都报自己是干嘛的。
             if (hotPencil || hotTrash) {
