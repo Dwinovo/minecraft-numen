@@ -196,7 +196,6 @@ public final class NumenScreen extends Screen {
                         @Override public int panelH() { return panelH; }
                         @Override public int railX() { return railX; }
                         @Override public UUID uuid() { return uuid; }
-                        @Override public void warnPulse() { warnUntil = System.currentTimeMillis() + 4000; }
                         @Override public void tip(List<Component> lines, int x, int y) {
                             pendingTip = lines;
                             pendingTipX = x;
@@ -207,10 +206,6 @@ public final class NumenScreen extends Screen {
 
     private String micNotice;
     private long micNoticeUntil;
-    private long warnUntil;        // transient "no API key" hint on the chat tab
-    /** The current warn hint's text (endpoint problems vary: unbound provider vs keyless
-     *  entry); null falls back to the generic no-key translation. */
-    private String warnText;
 
     // A hovered-row tooltip (MCP / skill list) collected during section render, drawn last so
     // it sits above every later draw. Cleared each frame.
@@ -713,24 +708,14 @@ public final class NumenScreen extends Screen {
         }
     }
 
-    /** 说出去。外脑驱动时话进同一个收件箱、由外脑经 get_events 取走并 say 回话
-     *  ——所以那条路不查 provider(外脑不需要):endpoint 检查只拦内脑要开轮的情形。
-     *  斜杠命令到不了这儿——输入行在本地跑完了。 */
+    /**
+     * 说出去——和快捷对话、桥接同一个入口({@link com.dwinovo.numen.api.NumenGateway#emit})。
+     * 这里不查端点:话一律进收件箱,内核要开 run 时发现没绑模型就停在 BLOCKED,原因画在输入行上面,
+     * 绑好了排着的话自己接着走。外脑驱动时话由外脑经 get_events 取走。斜杠命令到不了这儿——输入行在本地跑完了。
+     */
     private void submitChat(String text) {
         if (text == null || text.isBlank()) return;
-        if (!com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
-            // Endpoint check for THIS companion (its provider entry, not the legacy global
-            // key): unbound / keyless surfaces as a visible hint, never a crash or a
-            // silent no-op — the no-provider safety net.
-            String problem = loop().endpointProblem();
-            if (problem != null) {
-                com.dwinovo.numen.Constants.LOG.warn("[numen-chat] {}", problem);
-                warnText = problem;
-                warnUntil = System.currentTimeMillis() + 4000;
-                return;
-            }
-        }
-        loop().submitPrompt(text);
+        com.dwinovo.numen.api.NumenGateway.emit(uuid, com.dwinovo.numen.agent.inbox.EventTypes.QUERY, text);
         if (inputBar != null) inputBar.setText("");
         chatView.pinToBottom();
     }
@@ -1005,11 +990,13 @@ public final class NumenScreen extends Screen {
                 }
             }
         }
-        if (!modalOpen() && tab == Tab.CHAT && warnUntil > System.currentTimeMillis()) {
-            // endpoint-problem hint above the input
-            txt(g, warnText != null ? Component.literal(warnText)
-                            : Component.translatable("numen.chat.no_key"),
-                    left + PAD, top + panelH - inputH() - PAD - 11, FAIL);
+        if (!modalOpen() && tab == Tab.CHAT && uuid != null) {
+            // 没绑模型/没填 key:她停在 BLOCKED,原因一直挂在输入行上面,绑好了自己消失
+            var status = loop().status();
+            if (status.hold() == com.dwinovo.numen.agent.loop.Hold.BLOCKED && status.holdReason() != null) {
+                txt(g, Component.literal(status.holdReason()),
+                        left + PAD, top + panelH - inputH() - PAD - 11, FAIL);
+            }
         }
         if (summoning) {
             // 召唤模态:暗幕 + 居中卡(与确认卡同族),卡内由 SummonPanel 自绘。
@@ -1076,9 +1063,6 @@ public final class NumenScreen extends Screen {
         }
         // Summon warn — shown only when 创建 was clicked and something is missing
         // (error at the action, never ambient text). Takes the hint line's spot.
-        if (summoning && warnUntil > System.currentTimeMillis() && warnText != null) {
-            g.drawString(font, warnText, modalX(), modalY0() + 186, 0xFFCC6666, false);
-        }
 
         // 屏幕级浮层(遣散确认卡):暗幕+卡压在一切之上,tooltip 之前。
         overlayUi.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),

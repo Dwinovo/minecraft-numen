@@ -55,8 +55,6 @@ public final class SettingsView {
         /** Left edge of the companion rail — the delete-confirm scrim covers rail + panel. */
         int railX();
         UUID uuid();
-        /** Bump the transient warn timer (text untouched — matches the old {@code warnUntil} pokes). */
-        void warnPulse();
         /** Collect a hovered-row tooltip; the screen draws it last, above everything. */
         void tip(List<Component> lines, int x, int y);
         /** Re-read the screen's palette statics after a theme switch. */

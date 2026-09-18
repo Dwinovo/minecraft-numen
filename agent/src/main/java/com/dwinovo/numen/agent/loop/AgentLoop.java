@@ -63,6 +63,8 @@ public final class AgentLoop {
     private boolean dead;
     /** 后三种停牌:OWNER_STOP / BLOCKED / FAILED;{@code null} = 没有。 */
     private Hold stopped;
+    /** 进入 {@link #stopped} 时带的那句话(端点不可用、失败的原因);解开时一起清。 */
+    private String stoppedReason;
     /** 最近一次对外报过的停牌。只用来找变化沿发 {@link LoopEvent.HoldChanged},不参与任何判断。 */
     private Hold announced;
     /** 这次整理记忆已经流回来的摘要字数。 */
@@ -185,9 +187,7 @@ public final class AgentLoop {
     private void startRun(boolean retried, boolean ownerSpoke) {
         String problem = model.unavailable();
         if (problem != null) {
-            AiLog.LOG.warn("[numen-entity#{}] can't start turn: {}", name, problem);
-            stopped = Hold.BLOCKED;
-            announceHold(problem);
+            block(problem);
             return;
         }
         run = new Run(++lastRunId, false, retried, ownerSpoke);
@@ -370,6 +370,7 @@ public final class AgentLoop {
         }
         emit(new LoopEvent.TurnFailed(end.words()));
         stopped = Hold.FAILED;
+        stoppedReason = end.words();
         if (inbox.hasUrgent()) {
             release(Hold.Release.URGENT);
         }
@@ -378,10 +379,19 @@ public final class AgentLoop {
     // ---- 控制条目与整理记忆 ----
 
     private void runControl() {
-        List<EventQueue.Entry> control = inbox.takeWhile(AgentLoop::isControl, host.now());
         // 连着按的几次算一次;批里混着清空就清空说了算——整理要的是腾地方,清空把地方全腾出来了。
         // 分清是哪一条控制命令只能认 id:类型表只说"它是控制命令"。
-        if (control.stream().anyMatch(e -> EventTypes.CLEAR.equals(e.type()))) {
+        boolean clears = leadingControl().stream().anyMatch(e -> EventTypes.CLEAR.equals(e.type()));
+        if (!clears) {
+            // 整理要发一次请求。端点不可用就进 BLOCKED,条目留在队首——绑定改好了自己接着走,按了就一定会发生。
+            String problem = model.unavailable();
+            if (problem != null) {
+                block(problem);
+                return;
+            }
+        }
+        inbox.takeWhile(AgentLoop::isControl, host.now());
+        if (clears) {
             AiLog.LOG.info("[numen-entity#{}] 清空上下文:排到了", name);
             memory.clear();
             emit(new LoopEvent.TranscriptBoundary(LoopEvent.Boundary.CLEAR));
@@ -491,6 +501,7 @@ public final class AgentLoop {
             dead = true;
         } else if (reason.enters() != null) {
             stopped = reason.enters();
+            stoppedReason = null;
         }
         AiLog.LOG.info("[numen-entity#{}] halt {}{} (phase={}, abandoned calls={}, cleared queued={}, left={})",
                 name, reason, detail == null ? "" : " (" + detail + ")",
@@ -520,8 +531,9 @@ public final class AgentLoop {
     public LoopStatus status() {
         Phase phase = run == null ? null : run.phase;
         double progress = phase == Phase.COMPACT ? 1.0 - Math.exp(-(compactChars / 4.0) / 1200.0) : 0.0;
-        return new LoopStatus(phase, hold(), host.bodyTaskRunning(), inbox.chatPreview(), progress,
-                host.activity());
+        Hold hold = hold();
+        return new LoopStatus(phase, hold, hold != null && hold == stopped ? stoppedReason : null,
+                host.bodyTaskRunning(), inbox.chatPreview(), progress, host.activity());
     }
 
     // ---- 内部 ----
@@ -537,7 +549,18 @@ public final class AgentLoop {
         if (stopped != null && stopped.releasedBy(release)) {
             AiLog.LOG.info("[numen-entity#{}] {} 解开停牌 {}", name, release, stopped);
             stopped = null;
+            stoppedReason = null;
         }
+    }
+
+    /** 模型端点不可用:进 BLOCKED,把原因随事件交出去。只在刚进去的那一下打日志——停牌期间每 tick 推进也不刷屏。 */
+    private void block(String problem) {
+        if (stopped != Hold.BLOCKED) {
+            AiLog.LOG.warn("[numen-entity#{}] can't reach the model: {}", name, problem);
+        }
+        stopped = Hold.BLOCKED;
+        stoppedReason = problem;
+        announceHold(problem);
     }
 
     private void announceHold(String reason) {
@@ -558,6 +581,18 @@ public final class AgentLoop {
     private boolean headIsControl() {
         List<EventQueue.Entry> entries = inbox.entries();
         return !entries.isEmpty() && isControl(entries.get(0));
+    }
+
+    /** 队首连着的那几条控制条目(只看不取)。 */
+    private List<EventQueue.Entry> leadingControl() {
+        List<EventQueue.Entry> out = new ArrayList<>();
+        for (EventQueue.Entry e : inbox.entries()) {
+            if (!isControl(e)) {
+                break;
+            }
+            out.add(e);
+        }
+        return out;
     }
 
     /** 排在第一条控制条目之前,有没有这种投递方式的条目。 */

@@ -249,25 +249,20 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * 与自动压缩闸门同一口径的模型上下文窗口。真源是<b>这只同伴绑定的档案</b>
-     * ({@link com.dwinovo.numen.agent.llm.ProviderLibrary.Entry#contextWindow()}),
-     * 请求走哪份档案窗口就按哪份算;没有档案(遗留同伴)才回落旧的全局配置。
+     * 与自动压缩闸门同一口径的模型上下文窗口,真源是<b>这只同伴绑定的档案</b>
+     * ({@link com.dwinovo.numen.agent.llm.ProviderLibrary.Entry#contextWindow()})。没绑档案就是不可用
+     * (见 {@link #endpointProblem}),没有窗口可言,返回 0。
      */
     public int modelWindow() {
         var entry = com.dwinovo.numen.agent.llm.ProviderLibrary.instance().get(providerEntryId);
-        if (entry != null) {
-            return entry.contextWindow();
-        }
-        return com.dwinovo.numen.agent.provider.ProviderRegistry.contextWindow(
-                com.dwinovo.numen.client.screen.LlmProviders.normalize(
-                        com.dwinovo.numen.platform.Services.CONFIG.getProvider()),
-                com.dwinovo.numen.platform.Services.CONFIG.getModel());
+        return entry == null ? 0 : entry.contextWindow();
     }
 
-    /** 上下文水位百分比(基于上次请求的实测 prompt tokens);usage 未知时返回 0。 */
+    /** 上下文水位百分比(基于上次请求的实测 prompt tokens);用量或窗口未知时返回 0。 */
     public int contextPercent() {
-        if (lastPromptTokens <= 0) return 0;
-        return Math.min(100, Math.round(lastPromptTokens * 100f / Math.max(1, modelWindow())));
+        int window = modelWindow();
+        if (lastPromptTokens <= 0 || window <= 0) return 0;
+        return Math.min(100, Math.round(lastPromptTokens * 100f / window));
     }
 
     /**
@@ -676,11 +671,11 @@ public final class EntityAgentLoop {
         if (hold == Hold.EXTERNAL) return "外接模型正在驾驶她,整理记忆要等交还给内置大脑之后";
         if (loop.status().phase() == Phase.COMPACT) return "已经在整理了";
         if (queue.count(EventTypes.COMPACT) > 0) return "整理已经排上了";
-        // 不看忙不忙:整理进队列排着,闲下来自己执行。按了就一定会发生,
-        // 主人不必盯着什么时候能按。
+        // 不看忙不忙:整理进队列排着,闲下来自己执行。按了就一定会发生,主人不必盯着什么时候能按。
         // 也不看记录长短:整理多少、什么时候整理是主人的事。条数门槛只属于自动整理
         // ——那是替他省一次没意义的请求,不是替他做决定。
-        return endpointProblem();   // 整理要发一次请求,没绑模型/没填 key 一样做不了
+        // 也不查端点:没绑模型时内核会停在 BLOCKED 并说明原因,绑好了排着的整理自己接着走。
+        return null;
     }
 
     /** {@code /clear} 现在按不按得下。同 {@link #compactProblem} 的形状,但不查端点:清空不发请求。 */
@@ -857,12 +852,11 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * Why this companion CAN'T talk right now, in player-facing words — or null when
-     * its endpoint is usable. The no-crash safety net for a companion that somehow
-     * exists without a provider binding (legacy, bugs): sending a message surfaces
-     * this instead of a silent stall.
+     * 这只同伴现在发不了请求的理由(没绑档案、档案没填 key),给主人看的话;{@code null} = 能发。
+     * 只有内核在要发请求时问它({@link ModelPort#unavailable}):不可用就停在 BLOCKED,原因进
+     * {@link LoopStatus#holdReason},界面从那里读。
      */
-    public String endpointProblem() {
+    private String endpointProblem() {
         var lib = com.dwinovo.numen.agent.llm.ProviderLibrary.instance();
         if (providerEntryId == null || lib.get(providerEntryId) == null) {
             return I18n.get(ModLanguageData.Keys.ENDPOINT_UNBOUND);

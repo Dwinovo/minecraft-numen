@@ -857,6 +857,56 @@ class AgentLoopTest {
     // ---- 压缩 ----
 
     @Nested
+    class EndpointGate {
+
+        @Test
+        void blockedCarriesItsReasonUntilTheBindingIsFixed() {
+            model.unavailable = "没绑模型";
+            ownerSays("在吗");
+
+            assertEquals(Hold.BLOCKED, loop.hold());
+            assertEquals("没绑模型", loop.status().holdReason(), "界面从快照里读得到为什么不动");
+            assertTrue(model.calls.isEmpty());
+
+            model.unavailable = null;
+            loop.bindingChanged();
+
+            assertNull(loop.status().holdReason());
+            assertEquals(1, model.calls.size(), "排着的那句话接着走");
+        }
+
+        @Test
+        void aQueuedCompactionWaitsForTheEndpointInsteadOfFailing() {
+            model.unavailable = "没绑模型";
+            control(EventTypes.COMPACT);
+
+            assertTrue(model.calls.isEmpty(), "整理要发请求,端点不可用就不发");
+            assertEquals(Hold.BLOCKED, loop.hold());
+            assertEquals(1, inbox.size(), "条目留在队首");
+            int announced = eventsOf(LoopEvent.HoldChanged.class).size();
+            loop.tick();
+            loop.tick();
+            assertEquals(announced, eventsOf(LoopEvent.HoldChanged.class).size(), "停牌期间每 tick 推进也不重复报");
+
+            model.unavailable = null;
+            loop.bindingChanged();
+
+            assertEquals(1, model.calls.size(), "绑定改好了,按过的整理自己接着走");
+            assertEquals(Phase.COMPACT, loop.status().phase());
+        }
+
+        @Test
+        void clearingNeedsNoModelSoItHappensEvenWhenBlocked() {
+            model.unavailable = "没绑模型";
+            transcript.addUser("旧话");
+            control(EventTypes.CLEAR);
+
+            assertEquals(1, memory.clears);
+            assertTrue(inbox.isEmpty());
+        }
+    }
+
+    @Nested
     class Consult {
 
         @Test

@@ -340,7 +340,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.tip.mic_stop", "Stop recording");
         adder.add("numen.chat.tip.stop", "Stop the turn");
         adder.add("numen.chat.hint", "Talk to %s…");
-        adder.add("numen.chat.no_key", "⚠ No API key — open Settings to add one");
         adder.add("numen.chat.empty", "Say something to %s.");
         adder.add("numen.chat.compacting", "compacting history…");
         adder.add("numen.chat.compacted", "─── earlier conversation compacted to a summary (originals kept on disk) ───");
@@ -687,7 +686,6 @@ public final class ModLanguageData {
         adder.add("numen.chat.tip.mic_stop", "停止录音");
         adder.add("numen.chat.tip.stop", "停止当前回合");
         adder.add("numen.chat.hint", "对 %s 说…");
-        adder.add("numen.chat.no_key", "⚠ 未配置 API Key —— 打开设置添加");
         adder.add("numen.chat.empty", "对 %s 说点什么。");
         adder.add("numen.chat.compacting", "正在压缩历史…");
         adder.add("numen.chat.compacted", "─── 更早的对话已压缩为摘要（原文保留在磁盘） ───");

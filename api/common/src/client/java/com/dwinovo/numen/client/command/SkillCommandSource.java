@@ -61,17 +61,6 @@ final class SkillCommandSource implements CommandSource {
         }
 
         /**
-         * 这条命令是要发给模型的,所以没绑模型/没填 key 时它就是用不了的。
-         *
-         * <p>放在这儿而不是执行时再报:补全列表里当场灰掉并写出理由,主人打之前就知道,
-         * 不会按下回车之后什么都没发生。
-         */
-        @Override
-        public String unavailable(EntityAgentLoop loop) {
-            return loop == null ? null : loop.endpointProblem();
-        }
-
-        /**
          * 把技能正文交给她,顺带捎上主人的要求。
          *
          * <p>正文进的是 {@code <query>} <b>外面</b>——模型看得到,聊天流只显示主人打的
