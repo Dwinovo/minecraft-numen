@@ -285,6 +285,9 @@ public final class Compactor implements MemoryPort {
      * compaction reclaims. Tolerant of models that skip or mangle the tags:
      * an unclosed {@code <summary>} reads to the end, no tags at all falls
      * back to the whole text minus any analysis block.
+     *
+     * <p>有摘要标签就只认标签里的:空着就是没压成({@code null}),不能退回"全文去掉草稿"——那样剩下的
+     * 正是空标签本身,会被当成摘要换掉整段更早的历史。
      */
     static String extractSummary(String raw) {
         if (raw == null) return null;
@@ -292,8 +295,8 @@ public final class Compactor implements MemoryPort {
         if (open >= 0) {
             int bodyStart = open + "<summary>".length();
             int close = raw.indexOf("</summary>", bodyStart);
-            String body = close >= 0 ? raw.substring(bodyStart, close) : raw.substring(bodyStart);
-            if (!body.isBlank()) return body.strip();
+            String body = (close >= 0 ? raw.substring(bodyStart, close) : raw.substring(bodyStart)).strip();
+            return body.isEmpty() ? null : body;
         }
         return raw.replaceFirst("(?s)<analysis>.*?(</analysis>|$)", "").strip();
     }

@@ -14,6 +14,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** 整理记忆:什么时候该自己动手、摘要怎么落地、连着失败就停手、清空不删记录。 */
@@ -87,6 +88,16 @@ class CompactorTest {
     }
 
     @Test
+    void anEmptySummaryLeavesTheHistoryAlone(@TempDir Path dir) {
+        ConvoState convo = historyOf(10);
+        List<ConvoState.Msg> before = convo.snapshot();
+        MemoryPort.Compaction cut = compactor(convo, dir).compaction(true);
+
+        assertFalse(cut.apply(new AssistantTurn("<summary>  </summary>", List.of(), null), Usage.ZERO));
+        assertEquals(before, convo.snapshot());
+    }
+
+    @Test
     void threeFailuresInARowStopTheAutoPathUntilTheHistoryChanges(@TempDir Path dir) {
         Compactor c = compactor(historyOf(10), dir);
         c.on(turnUsed(WINDOW));
@@ -120,5 +131,7 @@ class CompactorTest {
         assertEquals("要点", Compactor.extractSummary("<analysis>想想</analysis><summary>要点</summary>"));
         assertEquals("没收尾也读到底", Compactor.extractSummary("<summary>没收尾也读到底"));
         assertEquals("没有标签就去掉草稿", Compactor.extractSummary("<analysis>草稿</analysis>没有标签就去掉草稿"));
+        assertNull(Compactor.extractSummary("<analysis>想了很多</analysis><summary></summary>"),
+                "摘要标签空着就是没压成——不能把空标签本身当摘要,换掉整段历史");
     }
 }
