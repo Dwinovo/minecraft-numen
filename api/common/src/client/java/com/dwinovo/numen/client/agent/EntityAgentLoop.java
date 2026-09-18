@@ -244,11 +244,12 @@ public final class EntityAgentLoop {
         this.goal = CompanionHome.goal(entityUuid);
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity);
-        this.presenter = new TurnPresenter(entityUuid, this::streaming, this::speaking, this::personaName);
+        this.presenter = new TurnPresenter(entityUuid, this::status, this::personaName);
         this.tokens = new TokenLedger(entityUuid);
         this.model = new Model();
         this.loop = new AgentLoop(entityUuid.toString(), model, dispatcher, convo, queue, new Memory(), new Host());
         this.wasDriving = McpMode.instance().driving();
+        loop.subscribe(presenter::on);
         loop.subscribe(this::onLoopEvent);
         restoreFromDisk();
     }
@@ -807,17 +808,8 @@ public final class EntityAgentLoop {
         queue.removeUrgentListener(listener);
     }
 
-    /**
-     * 外接大脑替她说话(say 工具):头顶气泡 + 聊天栏定格行 + 现场缓冲 + 语音,
-     * 走的全是内脑说话的同一套表现层。语音整段排队尾——连续的 say 连着播,
-     * 不互相掐;主人的打断键照样一刀切停。
-     */
+    /** 外接大脑替她说话(say 工具)——画法与内脑说话同一套表现层,见 {@link TurnPresenter#sayExternal}。 */
     public void externalSay(String text) {
-        String shown = com.dwinovo.numen.client.chat.ChatDisplayModes.current().assistantText(text);
-        if (shown.isBlank()) shown = text;   // 全是动作记号也别无声吞掉——原样示人
-        com.dwinovo.numen.mcp.server.McpTranscript.say(entityUuid, shown);
-        com.dwinovo.numen.client.chat.ChatLines.companion(presenter.speakerName(), shown);
-        com.dwinovo.numen.client.hud.SpeechBubbles.say(entityUuid, shown);
         presenter.sayExternal(text);
     }
 
@@ -1309,94 +1301,31 @@ public final class EntityAgentLoop {
         return ClientNumenLookup.resolve(entityUuid);
     }
 
-    /** 回复正在流式长出来——聊天框打字机的开关。 */
-    private boolean streaming() {
-        return loop.status().phase() == Phase.MODEL;
-    }
-
-    /** 大脑在输出(思考、生成、跑工具)——说话状态上报取它。整理记忆不算说话。 */
-    private boolean speaking() {
-        Phase phase = loop.status().phase();
-        return phase == Phase.MODEL || phase == Phase.TOOLS;
-    }
-
     // ---- kernel events: what the owner sees and what gets accounted ----
 
     /**
-     * 内核的事件在这里变成表现层、记账与目标推进。这里不回头同步推进内核的步子——目标评估落地后
-     * 推一条续跑,那已经是另一次主线程回调。
+     * 内核的事件里同伴这一侧要接的:工作站坐标、长期目标、用量、历史边界。界面由 {@link TurnPresenter}
+     * 自己订阅。这里不回头同步推进内核的步子——目标评估落地后推一条续跑,那已经是另一次主线程回调。
      */
     private void onLoopEvent(LoopEvent event) {
         switch (event) {
             case LoopEvent.RunStarted started -> cancelGoalJudging();
-            case LoopEvent.TurnStarted turn -> presenter.beginTurn(turn.ownerSpoke());
-            case LoopEvent.ModelDelta delta -> presenter.delta(delta.content(), delta.reasoning());
-            case LoopEvent.AssistantMessage message -> showReply(message.turn());
-            case LoopEvent.ToolStarted started -> { }
             case LoopEvent.ToolFinished finished -> harvestWorkBlocks(finished.call().name(), finished.resultJson());
             case LoopEvent.RunEnded ended -> {
-                switch (ended.end()) {
-                    // 链条收尾了——这正是长期目标该接上的时刻:"还没做完就接着做"要等这一轮真的说完才判断得了。
-                    case RunEnd.Done done -> steerToGoal();
-                    case RunEnd.Failed failed -> presenter.endTurn();
-                    case RunEnd.Halted halted -> presenter.endTurn();
+                // 链条收尾了——这正是长期目标该接上的时刻:"还没做完就接着做"要等这一轮真的说完才判断得了。
+                if (ended.end() instanceof RunEnd.Done) {
+                    steerToGoal();
                 }
             }
-            case LoopEvent.TurnFailed failed -> showFailure(failed.words());
             case LoopEvent.Halted halted -> onHalted(halted.reason());
-            case LoopEvent.HoldChanged changed -> {
-                if (changed.hold() == Hold.BLOCKED) {
-                    showBlocked(changed.reason());
-                }
-            }
             case LoopEvent.ModelUsed used -> account(used.usage(), used.purpose());
             case LoopEvent.TranscriptBoundary boundary -> onBoundary(boundary.kind());
+            default -> { }
         }
     }
 
-    /** 模型的一条回复落地:头顶气泡是回复的主显示(附近玩家都看得见),聊天框回显一份当日志。 */
-    private void showReply(AssistantTurn turn) {
-        presenter.endTurn();   // committed 消息接管显示,半截打字与在飞行摘掉
-        String shown = com.dwinovo.numen.client.chat.ChatDisplayModes.current()
-                .assistantText(turn.content());
-        if (!turn.hasToolCalls()) {
-            Constants.LOG.info("[numen-entity#{}] assistant (final): {}", entityUuid, turn.content());
-        }
-        // 最终回复和开工前的顺嘴一句(tool_calls 旁附的 content)同一个画法:是话就上气泡 + 字幕行,
-        // 超长折叠,悬停看全文,完整记录在 G 面板。开工前没话说就不动气泡——上一句正文泡留着走完
-        // 生命周期,身体动起来本身就是反馈;最终回复滤完为空(全是动作记号)时收起思考泡。
-        if (!shown.isBlank()) {
-            com.dwinovo.numen.client.hud.SpeechBubbles.say(entityUuid, shown);
-            com.dwinovo.numen.client.chat.ChatLines.companion(presenter.speakerName(), shown);
-        } else if (!turn.hasToolCalls()) {
-            com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
-        }
-    }
-
-    /** 调用失败而且不再重试:必须让主人看见——沉进日志就是"已读不回"。 */
-    private void showFailure(String words) {
-        com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
-        com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(),
-                "这次没连上(" + truncate(words, 90) + ")——稍后再试一句,详情见日志");
-        // HUD toast:玩家多半没开面板(Y/V 快捷对话),这是唯一接得住他的通道。
-        com.dwinovo.numen.client.hud.NumenHudToasts.push(
-                com.dwinovo.numen.client.ui.NumenToasts.Severity.ERROR,
-                presenter.speakerName() + ": " + truncate(words, 90));
-    }
-
-    /** 端点不可用:配置问题不能静默——快捷键用户不开面板,聊天栏警示行是唯一出口。 */
-    private void showBlocked(String problem) {
-        com.dwinovo.numen.client.chat.ChatLines.notice(presenter.speakerName(), truncate(problem, 160));
-        com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
-    }
-
-    /**
-     * 执行了一次切断(不管当时有没有 run):语音闭嘴、头顶的思考/残句气泡收起、在飞的目标评估作废,
-     * 表里说要收工的目标收工。
-     */
+    /** 执行了一次切断(不管当时有没有 run):在飞的目标评估作废,表里说要收工的目标收工。 */
     private void onHalted(HaltReason reason) {
-        presenter.interruptVoice();
-        com.dwinovo.numen.client.hud.SpeechBubbles.clear(entityUuid);
         cancelGoalJudging();
         if (reason.endsGoal() && goal != null) {
             // 主人按停止 = 不要她接着跑了。目标跟着收工,否则这一轮刚断下一轮又自己续上,
