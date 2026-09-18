@@ -1328,12 +1328,39 @@ public final class EntityAgentLoop {
             return new ModelRequest(messages, tools, composeSystemPrompt(), callable);
         }
 
+        /**
+         * 发出去,结果恰好一次交回(没被取消的话)。连请求都没组装出来就出的错——服务商配置对不上、
+         * 历史转不成线格式——也是一次失败的调用,走同一个出口:同步抛出去的话,内核会永远等在 MODEL。
+         */
         @Override
         public void call(ModelRequest request, CancelToken cancel, Consumer<Delta> onDelta,
                          Consumer<ModelOutcome> onDone) {
-            NumenLlmClient llm = client();
             Minecraft mc = Minecraft.getInstance();
-            llm.chatStreaming(request.messages(), request.tools(), request.systemPrompt(), cancel, chunk -> {
+            java.util.concurrent.CompletableFuture<NumenLlmClient.ChatResult> result;
+            try {
+                result = stream(request, cancel, onDelta, mc);
+            } catch (RuntimeException ex) {
+                result = java.util.concurrent.CompletableFuture.failedFuture(ex);
+            }
+            result.whenComplete((res, err) -> mc.execute(() -> {
+                if (cancel.isCancelled()) {
+                    return;   // 取消之后不再回调:发起这次调用的一方已经不要它了
+                }
+                if (err != null) {
+                    // 面向主人的是分类人话;技术细节进日志(传输层还有全量)。
+                    String words = LlmErrorWords.classify(err);
+                    Constants.LOG.warn("[numen-entity#{}] LLM call failed: {} ({})", entityUuid, words, unwrap(err));
+                    onDone.accept(new ModelOutcome.Failed(words));
+                    return;
+                }
+                onDone.accept(new ModelOutcome.Answered(res.turn(), res.usage()));
+            }));
+        }
+
+        private java.util.concurrent.CompletableFuture<NumenLlmClient.ChatResult> stream(
+                ModelRequest request, CancelToken cancel, Consumer<Delta> onDelta, Minecraft mc) {
+            NumenLlmClient llm = client();
+            return llm.chatStreaming(request.messages(), request.tools(), request.systemPrompt(), cancel, chunk -> {
                 // 增量在 HTTP 线程上按这次调用的服务商方言解开,再按顺序切回主线程
                 String content = com.dwinovo.numen.client.voice.VoicePipeline.extractContentDelta(chunk);
                 String reasoning = llm.provider().extractReasoningDelta(chunk);
@@ -1348,19 +1375,7 @@ public final class EntityAgentLoop {
                         onDelta.accept(delta);
                     }
                 });
-            }).whenComplete((res, err) -> mc.execute(() -> {
-                if (cancel.isCancelled()) {
-                    return;   // 取消之后不再回调:发起这次调用的一方已经不要它了
-                }
-                if (err != null) {
-                    // 面向主人的是分类人话;技术细节进日志(传输层还有全量)。
-                    String words = LlmErrorWords.classify(err);
-                    Constants.LOG.warn("[numen-entity#{}] LLM call failed: {} ({})", entityUuid, words, unwrap(err));
-                    onDone.accept(new ModelOutcome.Failed(words));
-                    return;
-                }
-                onDone.accept(new ModelOutcome.Answered(res.turn(), res.usage()));
-            }));
+            });
         }
     }
 
