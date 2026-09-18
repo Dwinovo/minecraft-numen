@@ -14,7 +14,7 @@ import java.nio.file.Path;
  *
  * <h2>谁在驱动这具身体:{@link #driving()}</h2>
  * "两个大脑抢一具身体"的总闸口径:外脑驱动期间内置大脑一轮都不开
- * ({@code EntityAgentLoop} 每刻按它同步队列锁)。主人在游戏里照样说话——话进
+ * (循环内核每次推进都现问它,在它手里时停牌 {@code EXTERNAL})。主人在游戏里照样说话——话进
  * 事件队列,由外脑经 {@code get_events} 取走并用 {@code say} 回话;弹幕/QQ 桥接
  * 送进来的消息也走同一条线。身体层面的互斥另有 {@code TaskDispatch} 的
  * "一具身体一件活"闸门兜底,两者各管一层。

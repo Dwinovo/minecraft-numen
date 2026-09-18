@@ -264,7 +264,7 @@ public final class EntityAgentLoop {
      * 只会觉得这模组有时候吞消息。
      *
      * @return 这句话有没有被压着(true = 内脑没能当场把请求发出去)。这是<b>观察</b>不是预测:
-     *         看的是入队并推进之后内核是不是正在等模型回话。调用方拿 {@code isBusy()} 之类的东西
+     *         看的是入队并推进之后内核是不是正在等模型回话。调用方拿 {@code status().busy()} 之类的东西
      *         自己猜是猜不准的——身体有后台任务不挡开 run,她在跟随时你说的话当场就发得出去。
      *
      *         <p>它只喂 {@link com.dwinovo.numen.api.Delivery} 那份给桥接看的汇报,
@@ -598,7 +598,7 @@ public final class EntityAgentLoop {
     }
 
     /**
-     * 运行时换人设。只做两件事:改绑定(下一轮 {@link #composeSystemPrompt} 现取正文,
+     * 运行时换人设。只做两件事:改绑定(下一轮 {@link SystemPromptComposer} 现取正文,
      * 不打断在飞的请求),再往聊天流插一条分隔记号。
      *
      * <p>不给模型注入"从现在起你是…"的和解消息——新系统提示本身就是最强的指令,

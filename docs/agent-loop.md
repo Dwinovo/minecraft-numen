@@ -608,6 +608,32 @@ sealed interface LoopEvent {
 
 第 4 步之后,Curios 联动插件(另有设计稿)直接用第 4 步的事件门与身体状态片段落地,不开旁路。
 
+第 0–7 步都已落地;落地时与本稿的出入记在 §十八。
+
+---
+
+## 十八、落地时与本稿的出入
+
+- **事件**:`RunStarted` 之外另有 `TurnStarted(ownerSpoke)`(每次调模型一条,语音据此选硬停还是衔接)和
+  `Halted`(闲时按停止也要让语音闭嘴);`ModelDelta` 带的是已按服务商方言解开的文本。
+- **用量只有一条路**:`Purpose` 有 `TURN`/`COMPACT`/`GOAL` 三种。目标评估经 `AgentLoop.consult` 发出——
+  不是 run、不占内核、不看停牌,但用量照样发 `ModelUsed`。台账、整理、目标各自订阅。
+- **显示记录不靠 `TranscriptBoundary`**:`ConvoLog.onDisplay` 把日志写下的每一条经读盘同一个换法
+  (`displayOf`)交给显示记录,分隔(整理、清空、换人设)与切断点都从日志来,不需要 `PERSONA` 边界。
+  思考文本随日志落盘——面板重启后照样画得出思考块,Anthropic 回传思考块也要它原文。
+- **停牌带原因**:`LoopStatus.holdReason` 是进入 `BLOCKED`/`FAILED` 时那句话,界面从快照读,不另存。
+- **端点只在内核判**:开 run、闲时执行整理记忆、旁路调用三处问 `ModelPort.unavailable()`。整理记忆遇到
+  端点不可用不丢条目,留在队首进 `BLOCKED`,改好绑定自己接着走。面板、技能命令、`/compact` 不再各自查端点。
+- **"谁在驾驶"与"为什么不动"分开**:`LoopStatus.hold` 里 `DEAD` 压过 `EXTERNAL`,回答的是内脑为什么不开 run;
+  界面要问"驾驶席在谁手里"(画外接现场、报 `TO_EXTERNAL_BRAIN`)就直接问 `McpMode.driving()` 这一处真源,
+  门面不再转述。
+- **目标的评估窗口按消息认起点**:往回扫到设定目标的那条(`GoalPrompts.isDirective`),不记"设定时的历史位置"——
+  目标跨重进游戏活着,重进后历史按条数上限读回,位置早就对不上了。
+- **组件**:`Compactor` 在 `agent.memory`,`GoalSteward` 在 `agent.goal`(都有单测);`SystemPromptComposer`、
+  `RuntimeState`(含当前任务的镜像)在 api 客户端。工作站坐标与任务镜像也各自订阅内核,门面自己不订阅任何事件。
+- **模型端口的失败只有一个出口**:请求还没组装出来就出的错(服务商配置对不上、历史转不成线格式)同样作为
+  失败交回,不会同步抛出去让内核永远等在 `MODEL`。
+
 ---
 
 ## 附:已定的取舍

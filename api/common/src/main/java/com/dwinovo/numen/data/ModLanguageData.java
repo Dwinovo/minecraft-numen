@@ -162,7 +162,7 @@ public final class ModLanguageData {
         public static final String SUMMON_WARN_NAME        = "numen.summon.warn_name";
         public static final String SUMMON_WARN_PROVIDER    = "numen.summon.warn_provider";
 
-        // Endpoint problems surfaced in chat (EntityAgentLoop#endpointProblem).
+        // Endpoint problems: the kernel holds BLOCKED with this text as the reason (EntityAgentLoop#endpointProblem).
         public static final String ENDPOINT_UNBOUND = "numen.endpoint.unbound";
         public static final String ENDPOINT_NO_KEY  = "numen.endpoint.no_key";
 

@@ -34,8 +34,8 @@ public final class EventTypes {
     /**
      * 主人要求整理记忆。
      *
-     * <p>它<b>不是拼给模型的文本</b>——{@code toModel} 返回 null,{@link EventQueue#drain}
-     * 因此跳过它。队列只负责把它攒着、到点交出来;真去整理是取件那一方的事。
+     * <p>它<b>不是拼给模型的文本</b>——{@code toModel} 返回 null,{@link EventQueue#render}
+     * 因此跳过它。队列只负责把它攒着、到点交出来;真去整理是循环内核在闲时做的事。
      *
      * <p>进队列而不是当场执行,是因为她忙的时候也该按得下:按了就一定会发生,
      * 主人不必盯着什么时候能按。

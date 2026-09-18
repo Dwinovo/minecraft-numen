@@ -151,7 +151,7 @@ dependencies {
 
 按你的目标替换加载器（`fabric` / `forge` / `neoforge`）和 Minecraft 版本。`<version>` 填顶上徽章显示的最新版本。本分支基于 Java 21 构建 `1.21.1`。
 
-`numen-ai`（模型接入与用量核算）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。它们的坐标同样带 MC 版本后缀：代码本身与 Minecraft 无关，但各版本分支上的这份源码目前并不相同。
+`numen-ai`（模型接入与用量核算）、`numen-agent`（同伴大脑的循环内核、收件箱与长期目标）和 `numen-ui`（控件）会随依赖自动带进来——`NumenTool` 继承的 `IToolSpec` 就住在 `numen-ai` 里，少了它编译不过。它们的坐标同样带 MC 版本后缀：代码本身与 Minecraft 无关，但各版本分支上的这份源码目前并不相同。
 
 **要改引擎本身的机制**，就依赖 core：
 

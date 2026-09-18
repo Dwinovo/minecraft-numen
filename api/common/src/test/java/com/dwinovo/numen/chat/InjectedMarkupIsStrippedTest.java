@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 队列<b>发</b>什么记号,面板就得<b>剥</b>掉什么记号。
  *
  * <h2>为什么把这两边绑在一条测试里</h2>
- * 它们住在两个模块、各写各的:{@link EventQueue#drain} 拼协议记号,
+ * 它们住在两个模块、各写各的:{@link EventQueue#render} 拼协议记号,
  * {@link OwnerWordsMode} 用一串正则把记号剥掉只留主人的原话。
  * 加一个新标签只改一边,另一边不会报错——只会在面板上漏出半截尖括号。
  *

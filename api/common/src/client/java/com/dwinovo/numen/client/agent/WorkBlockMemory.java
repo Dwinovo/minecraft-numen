@@ -23,8 +23,8 @@ import java.util.UUID;
 
 /**
  * Per-entity memory of functional blocks the Numen has used or placed —
- * crafting tables, furnaces, chests, … Injected into the system prompt every
- * turn as a {@code <known_blocks>} XML section so the model walks back to
+ * crafting tables, furnaces, chests, … Injected at the front of every new user
+ * message as a {@code <known_blocks>} XML section so the model walks back to
  * infrastructure it already owns instead of crafting and placing duplicates
  * (placed tables/furnaces deliberately stay in the world for exactly this).
  *

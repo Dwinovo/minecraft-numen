@@ -250,10 +250,10 @@ public final class Companions {
         }
         if (cause == null || cause.isBlank()) cause = "未知原因";
         // 先把死亡消息发出去,再触发生命周期钩子——<b>顺序要紧</b>:死亡消息一到,
-        // 客户端就把输入队列锁上;此后钩子里产生的收尾事件(异步任务的
-        // task_finished status="interrupted")落进的是一个锁着的队列,安静躺到复活。
+        // 客户端的循环就停牌 DEAD;此后钩子里产生的收尾事件(异步任务的
+        // task_finished status="interrupted")照样进队列,但不开 run,安静躺到复活。
         //
-        // 反过来的话,那条 urgent 收尾事件会在锁上之前到达、当场开一轮,而紧接着的
+        // 反过来的话,那条 urgent 收尾事件会在停牌之前到达、当场开一轮,而紧接着的
         // 死亡消息又把那一轮整个作废——白烧一次请求,还多一条没人看的对话。
         ServerPlayer owner = body.resolveOwnerPlayer();
         if (owner != null) {   // immediate, same-session
