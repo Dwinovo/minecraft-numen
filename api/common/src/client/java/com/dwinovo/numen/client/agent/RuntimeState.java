@@ -34,7 +34,7 @@ final class RuntimeState {
     /**
      * 服务端说她在做什么——直接照抄,不判断、不合并、不推断。
      *
-     * <p>这是 {@code currentTask} 的写入点(按停止与断线时清掉本地镜像除外,见 {@link #clearCurrentTask})。
+     * <p>这是 {@code currentTask} 的写入点(按停止与断线时清掉本地镜像除外,见 {@link #on})。
      * 客户端不靠"我派出去过什么"自己记账:那样服务器重启重放、死亡复活重放起来的活它一概不知道,
      * 头顶没气泡、模型也看不见。
      */
@@ -48,9 +48,16 @@ final class RuntimeState {
                 System.currentTimeMillis() - p.elapsedMs(), p.standing());
     }
 
-    /** 按停止、断线时清掉本地镜像:停止时服务端随后会推 idle,这里先清让停止键当场灭;断线后不会有推送来纠正它。 */
-    void clearCurrentTask() {
-        currentTask = null;
+    /**
+     * 内核的事件里这边要接的:主人按停止、断线时清掉本地镜像。停止时服务端随后会推 idle,这里先清,停止键当场灭;
+     * 断线时下一个存档跟这件活无关,而那时不会有服务端推送来纠正它。
+     */
+    void on(com.dwinovo.numen.agent.loop.LoopEvent event) {
+        if (event instanceof com.dwinovo.numen.agent.loop.LoopEvent.Halted halted
+                && (halted.reason() == com.dwinovo.numen.agent.loop.HaltReason.OWNER_STOP
+                || halted.reason() == com.dwinovo.numen.agent.loop.HaltReason.DISCONNECT)) {
+            currentTask = null;
+        }
     }
 
     /** 身体手上有没有后台活。 */

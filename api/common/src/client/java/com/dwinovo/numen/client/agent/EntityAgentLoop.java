@@ -4,6 +4,7 @@ import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.goal.GoalPrompts;
 import com.dwinovo.numen.agent.goal.GoalState;
+import com.dwinovo.numen.agent.goal.GoalSteward;
 import com.dwinovo.numen.agent.http.CancelToken;
 import com.dwinovo.numen.agent.llm.NumenLlmClient;
 import com.dwinovo.numen.agent.llm.ConvoLog;
@@ -76,10 +77,6 @@ public final class EntityAgentLoop {
 
 
 
-    /** 给目标评估器看的对话上限。够装下整个目标期间,又不至于把整段会话都发一遍。 */
-    private static final int JUDGE_WINDOW_CHARS = 8000;
-    /** 每条截到这个长度:工具结果可能上千字,评估器不需要读完。 */
-    private static final int JUDGE_LINE_CHARS = 400;
 
     private final UUID entityUuid;
     /** JSONL persistence under {@code config/numen/conversations/<uuid>.jsonl}. */
@@ -87,8 +84,6 @@ public final class EntityAgentLoop {
     private final ConvoState convo;
     /** Functional-block coordinate memory, injected as {@code <known_blocks>}. */
     private final WorkBlockMemory workBlocks;
-    /** 长期目标;null = 没有。每次 run 做完时评估一次、没做完就推一条续跑,见 {@link #steerToGoal}。 */
-    private GoalState goal;
     /**
      * 收件箱(宪法 §4):主人的话与世界事件的统一进箱口,内核按类型表的投递方式取件。
      * 条目、落盘、年龄标注、熟度规则全在 {@link EventQueue};这里直接用它的只有外接模型取件口
@@ -142,12 +137,12 @@ public final class EntityAgentLoop {
     private final Model model;
     /** 上下文整理:自动压缩的判据、切分、摘要落地、清空。 */
     private final Compactor compactor;
+    /** 长期目标:设定、评估、续跑、收工。 */
+    private final GoalSteward goals;
     /** 循环内核:run、停牌、推进、切断都在它那里。 */
     private final AgentLoop loop;
     /** 上一个 tick 驾驶席在不在外接模型手里——只用来找"翻转成外接"的那一下。 */
     private boolean wasDriving;
-    /** 在飞的目标评估;{@code null} = 没在判。开了新 run、被切断、换了目标都作废它。 */
-    private CancelToken goalJudge;
 
     EntityAgentLoop(UUID entityUuid) {
         this.entityUuid = entityUuid;
@@ -156,8 +151,6 @@ public final class EntityAgentLoop {
         this.workBlocks = WorkBlockMemory.forEntity(entityUuid);
         this.runtime = new RuntimeState(entityUuid);
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
-        // 目标跨重进游戏活着 —— 长期目标就该是长期的,重启不该把它弄丢。
-        this.goal = CompanionHome.goal(entityUuid);
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
         this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity);
         this.presenter = new TurnPresenter(entityUuid, this::status, this::personaName);
@@ -165,11 +158,17 @@ public final class EntityAgentLoop {
         this.model = new Model();
         this.compactor = new Compactor(entityUuid.toString(), convo, log, this::modelWindow);
         this.loop = new AgentLoop(entityUuid.toString(), model, dispatcher, convo, queue, compactor, new Host());
+        // 目标跨重进游戏活着 —— 长期目标就该是长期的,重启不该把它弄丢。
+        this.goals = new GoalSteward(entityUuid.toString(), loop, convo, queue, runtime::xml,
+                runtime::bodyOnFiniteTask, g -> CompanionHome.setGoal(entityUuid, g), CompanionHome.goal(entityUuid));
         this.wasDriving = McpMode.instance().driving();
+        // 内核只发事件,各管一摊的各自订阅:界面、台账、整理、目标、工作站坐标、她手上那件活的镜像
         loop.subscribe(presenter::on);
         loop.subscribe(tokens::on);
         loop.subscribe(compactor::on);
-        loop.subscribe(this::onLoopEvent);
+        loop.subscribe(goals::on);
+        loop.subscribe(workBlocks::on);
+        loop.subscribe(runtime::on);
         restoreFromDisk();
     }
 
@@ -372,45 +371,12 @@ public final class EntityAgentLoop {
         loop.tick();
     }
 
-    /**
-     * Pull functional-block coordinates out of successful tool results into
-     * {@link WorkBlockMemory}. The result already carries them — interact_at
-     * reports the station it activated (a chest/furnace/table it opened) as
-     * {@code block} + {@code x/y/z} — this just stops the loop from forgetting
-     * them once the result scrolls out of context. {@code workBlocks.record}
-     * filters to tracked station types, so non-station interactions fall away.
-     */
-    private void harvestWorkBlocks(String toolName, String resultJson) {
-        try {
-            JsonObject root = JsonParser.parseString(resultJson).getAsJsonObject();
-            if (!root.has("success") || !root.get("success").getAsBoolean()) return;
-            JsonObject data = root.has("data") && root.get("data").isJsonObject()
-                    ? root.getAsJsonObject("data") : null;
-            if (data == null) return;
-
-            switch (toolName) {
-                case "interact_at" -> {
-                    if (data.has("block") && data.has("x")) {
-                        // id 的归一化(去命名空间、模组包一层的路径)全在 record 里做
-                        workBlocks.record(data.get("block").getAsString(), new net.minecraft.core.BlockPos(
-                                data.get("x").getAsInt(),
-                                data.get("y").getAsInt(),
-                                data.get("z").getAsInt()));
-                    }
-                }
-                default -> { /* nothing to harvest */ }
-            }
-        } catch (RuntimeException ex) {
-            Constants.LOG.debug("[numen-entity#{}] work-block harvest skipped: {}",
-                    entityUuid, ex.toString());
-        }
-    }
 
     // ---- 长期目标 ----
 
     /** 当前的长期目标;{@code null} = 没有。 */
     public GoalState goal() {
-        return goal;
+        return goals.goal();
     }
 
     /**
@@ -420,164 +386,14 @@ public final class EntityAgentLoop {
      *             聊天里有个气泡——他打了字就该看见自己打了什么,跟 {@code /build} 一个待遇
      */
     public void setGoal(GoalState next, String echo) {
-        this.goal = next;
-        CompanionHome.setGoal(entityUuid, next);
-        Hold hold = loop.hold();
-        if (next == null || hold == Hold.DEAD || hold == Hold.EXTERNAL) {
-            return;
+        if (goals.set(next)) {
+            submitCommand(echo, GoalPrompts.initialDirective(next));
         }
-        next.countTurn();
-        CompanionHome.setGoal(entityUuid, next);
-        submitCommand(echo, GoalPrompts.initialDirective(next));
     }
 
-    /**
-     * 收工。目标只有"在"和"不在"两种,所以做完、放弃、跑够轮次、主人喊停——<b>结果都是这里</b>,
-     * 区别只在 {@code why} 那句话。
-     *
-     * @param why 收工的原因,只进日志。<b>不往聊天栏说</b>——目标是后台跑着的东西,
-     *            结束时不该弹一句打断主人;面板顶上那行消失本身就是信号,想追问 {@code /goal}
-     */
+    /** 收工(见 {@link GoalSteward#clear})。 */
     public void clearGoal(String why) {
-        if (goal == null) {
-            return;
-        }
-        Constants.LOG.info("[numen-entity#{}] 目标收工({} 轮,{}):{}",
-                entityUuid, goal.turnsExecuted(), why == null ? "主人清掉" : why, goal.objective());
-        goal = null;
-        CompanionHome.setGoal(entityUuid, null);
-    }
-
-    /**
-     * 一次 run 做完了:判一次目标达没达成。
-     *
-     * <p>判定<b>不由她自己做</b>——另开一次干净的调用(不带对话历史、不带人设、不带工具),
-     * 只看条件、身体事实和最近几句。执行的人和判定的人分开,她才骗不了自己。
-     *
-     * <p>队列里还有别的排着就先不判——那些本来就会开起一次 run,那次做完时再说。
-     */
-    private void steerToGoal() {
-        if (goal == null || loop.hold() != null || !queue.isEmpty() || goalJudge != null) {
-            return;
-        }
-        // 身体还在干活就别催。
-        //
-        // 我们的工具是异步的:派发回执立刻回来,链条当场收尾,而她其实动都还没动完。不拦
-        // 的话就是每隔一个 API 往返问一次"挖完了吗"——什么也没推进,纯烧 token。
-        //
-        // 醒来不用另写:任务干完会推 task_finished 进队列,那本来就会开起一次 run;那次
-        // 做完时再走到这里,currentTask 已经空了,续跑自然接上。
-        //
-        // 常驻任务(跟随这种)要放行:它永远不报完成,等它等于永远不续。
-        if (runtime.bodyOnFiniteTask()) {
-            Constants.LOG.debug("[numen-entity#{}] 目标续跑让位:身体在做 {}", entityUuid, runtime.activity());
-            return;
-        }
-        // 额度不在这儿拦:每一轮的成果都要判过再说。拦在判定前面的话,最后一轮白干——
-        // 而那恰恰是最可能已经做完的一轮。额度只管"还要不要再推下一轮",见 finishJudging。
-        judgeGoal();
-    }
-
-    /**
-     * 跑一次评估。用同伴自己绑的那个模型,但是<b>另一次调用</b>——"新鲜"指的是这个,
-     * 不是换个更小的模型。它不是一次 run:不带历史与工具,不占内核。
-     */
-    private void judgeGoal() {
-        GoalState target = goal;
-        ModelRequest request = new ModelRequest(
-                List.of(new ConvoState.Msg.User(
-                        GoalPrompts.evaluatorQuery(target, runtime.xml(), sinceGoalForJudge()))),
-                List.of(), GoalPrompts.evaluatorSystem(), Set.of());
-        CancelToken cancel = new CancelToken();
-        goalJudge = cancel;
-        loop.consult(LoopEvent.Purpose.GOAL, request, cancel, outcome -> {
-            goalJudge = null;
-            finishJudging(target, outcome);
-        });
-    }
-
-    /** 作废在飞的评估:评估期间开了新 run 或被切断,它判的已经不是眼前的局面。 */
-    private void cancelGoalJudging() {
-        if (goalJudge != null) {
-            goalJudge.cancel();
-            goalJudge = null;
-        }
-    }
-
-    private void finishJudging(GoalState judged, ModelOutcome outcome) {
-        // 判的是上一个目标 —— 这次结果作废。
-        if (goal == null || goal != judged) {
-            return;
-        }
-        if (outcome instanceof ModelOutcome.Failed failed) {
-            // 判不出来不等于做完了。歇一轮,下次做完再判。
-            Constants.LOG.warn("[numen-entity#{}] 目标评估失败,这一轮先不续:{}", entityUuid, failed.words());
-            return;
-        }
-        ModelOutcome.Answered answered = (ModelOutcome.Answered) outcome;
-        goal.addTokens(answered.usage().fresh());
-        var verdict = GoalPrompts.readVerdict(answered.turn().content());
-        goal.setLastReason(verdict.reason());
-        boolean giveUp = goal.noteStuck(verdict.stuck());
-        Constants.LOG.info("[numen-entity#{}] 目标评估 第{}轮 {}:{}", entityUuid, goal.turnsExecuted(),
-                verdict.met() ? "达成" : verdict.stuck() ? "打转 x" + goal.stuckStreak() : "还差",
-                verdict.reason());
-        if (verdict.met()) {
-            clearGoal("目标达成:" + verdict.reason());
-            return;
-        }
-        if (giveUp) {
-            // 连着几轮同一堵墙:告诉主人卡在哪,别再转了。判"没进展"的是评估器,不是她自报
-            // ——她报不准,前面验过。
-            clearGoal("过不去,先收工了:" + verdict.reason() + " —— 换个说法或者搭把手再 /goal");
-            return;
-        }
-        if (!goal.hasTurnsLeft()) {
-            // 还没做完,但额度到顶了:停下来告诉主人,不是闷头继续——她"以为没做完"是
-            // 会一直转的,而每轮主请求两万 token 起。
-            clearGoal("跑够 " + GoalState.MAX_GOAL_TURNS
-                    + " 轮还没完,先收工了(还差:" + verdict.reason() + ")—— 想接着做再说一次 /goal");
-            return;
-        }
-        long now = System.currentTimeMillis();
-        goal.countTurn();
-        CompanionHome.setGoal(entityUuid, goal);
-        // goal 在类型表里恒为急件、投递方式是接续,发送方不另标。
-        loop.push(List.of(new EventQueue.Entry(EventTypes.GOAL,
-                GoalPrompts.progress(verdict.reason(), goal, now), now, false)));
-    }
-
-    /**
-     * 给评估器看的:<b>目标设定以来</b>发生的一切。
-     *
-     * <p>不是"最近几句"。她可能分三次才凑够数,只看末尾就永远拼不出累计的证据——实测过
-     * 一次:第一轮挖到 64/128 那条早滚出窗口,后面几轮评估器咬定"没有挖矿证据",把她赶去
-     * 满世界找矿四分钟。
-     *
-     * <p>从末尾往回扫到目标设定那条({@code <goal>} 就在里面),字数封顶兜底——整理记忆
-     * 会把那条冲掉,不封顶就一路扫到会话开头。
-     */
-    private String sinceGoalForJudge() {
-        List<ConvoState.Msg> all = convo.snapshot();
-        java.util.ArrayDeque<String> lines = new java.util.ArrayDeque<>();
-        int budget = JUDGE_WINDOW_CHARS;
-        for (int i = all.size() - 1; i >= 0 && budget > 0; i--) {
-            ConvoState.Msg msg = all.get(i);
-            String line = switch (msg) {
-                case ConvoState.Msg.User u -> "owner/system: " + u.content();
-                case ConvoState.Msg.Assistant a -> "companion: " + a.turn().content();
-                case ConvoState.Msg.Tool t -> "tool result: " + t.content();
-                // 切断也是证据:一轮没做完是被打断/死亡掐掉的,不是她放弃了
-                case ConvoState.Msg.Halt h -> "interrupted: " + h.reason();
-            };
-            line = truncate(line, JUDGE_LINE_CHARS);
-            lines.addFirst(line);
-            budget -= line.length();
-            if (msg instanceof ConvoState.Msg.User u && u.content().contains("<goal>")) {
-                break;   // 扫到目标设定那条了,再往前跟这个目标无关
-            }
-        }
-        return String.join("\n", lines).strip();
+        goals.clear(why);
     }
 
     /**
@@ -845,48 +661,6 @@ public final class EntityAgentLoop {
 
     private AbstractClientPlayer resolveEntity() {
         return ClientNumenLookup.resolve(entityUuid);
-    }
-
-    // ---- kernel events: what the owner sees and what gets accounted ----
-
-    /**
-     * 内核的事件里同伴这一侧要接的:工作站坐标、长期目标、用量、历史边界。界面由 {@link TurnPresenter}
-     * 自己订阅。这里不回头同步推进内核的步子——目标评估落地后推一条续跑,那已经是另一次主线程回调。
-     */
-    private void onLoopEvent(LoopEvent event) {
-        switch (event) {
-            case LoopEvent.RunStarted started -> cancelGoalJudging();
-            case LoopEvent.ToolFinished finished -> harvestWorkBlocks(finished.call().name(), finished.resultJson());
-            case LoopEvent.RunEnded ended -> {
-                // 链条收尾了——这正是长期目标该接上的时刻:"还没做完就接着做"要等这一轮真的说完才判断得了。
-                if (ended.end() instanceof RunEnd.Done) {
-                    steerToGoal();
-                }
-            }
-            case LoopEvent.Halted halted -> onHalted(halted.reason());
-            case LoopEvent.ModelUsed used -> account(used.usage(), used.purpose());
-            default -> { }
-        }
-    }
-
-    /** 执行了一次切断(不管当时有没有 run):在飞的目标评估作废,表里说要收工的目标收工。 */
-    private void onHalted(HaltReason reason) {
-        cancelGoalJudging();
-        if (reason.endsGoal() && goal != null) {
-            // 主人按停止 = 不要她接着跑了。目标跟着收工,否则这一轮刚断下一轮又自己续上,
-            // 停止键就成了摆设。想接着做再说一次 /goal,成本就是一句话。
-            clearGoal("按停止收工了:" + goal.objective());
-        }
-        if (reason == HaltReason.OWNER_STOP || reason == HaltReason.DISCONNECT) {
-            runtime.clearCurrentTask();
-        }
-    }
-
-    /** 目标的账单:主人得看得见这个目标到现在烧了多少(台账、整理各自订阅,不在这里记)。 */
-    private void account(Usage usage, LoopEvent.Purpose purpose) {
-        if (purpose == LoopEvent.Purpose.TURN && goal != null) {
-            goal.addTokens(usage.fresh());
-        }
     }
 
     // ---- kernel ports ----

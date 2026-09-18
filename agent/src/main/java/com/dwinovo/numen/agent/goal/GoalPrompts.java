@@ -47,6 +47,11 @@ public final class GoalPrompts {
                 </goal>""".formatted(objectiveBlock(goal.objective()));
     }
 
+    /** 这条 user 消息是不是设定目标那一刻交给她的那条({@link #initialDirective})——评估器往回扫对话扫到它为止。 */
+    public static boolean isDirective(String userContent) {
+        return userContent.contains("<goal>");
+    }
+
     /** 判定没过的时候塞回去的一句。这是续跑期间<b>唯一</b>重复出现的东西。 */
     public static String progress(String reason, GoalState goal, long nowMs) {
         return """

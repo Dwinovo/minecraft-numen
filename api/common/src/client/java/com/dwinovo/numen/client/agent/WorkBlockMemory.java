@@ -29,7 +29,7 @@ import java.util.UUID;
  * (placed tables/furnaces deliberately stay in the world for exactly this).
  *
  * <h2>How entries get here</h2>
- * Harvested by {@link EntityAgentLoop} from successful tool results: an
+ * Harvested from successful tool results ({@link #on}): an
  * interact_at that opens a station reports the block it activated. No new
  * tooling — the results already carried the data; this just stops forgetting it.
  *
@@ -87,6 +87,46 @@ public final class WorkBlockMemory {
     /** Is this block id a type we remember at all? Any id form works — see {@link #stationType}. */
     public static boolean isTracked(String blockId) {
         return TRACKED_TYPES.contains(stationType(blockId));
+    }
+
+    /** 内核的事件里工作站要接的:一个工具调用结算了,结果里带着它打开的那个方块就记下来。 */
+    public void on(com.dwinovo.numen.agent.loop.LoopEvent event) {
+        if (event instanceof com.dwinovo.numen.agent.loop.LoopEvent.ToolFinished finished) {
+            harvest(finished.call().name(), finished.resultJson());
+        }
+    }
+
+    /**
+     * Pull functional-block coordinates out of successful tool results into
+     * {@link WorkBlockMemory}. The result already carries them — interact_at
+     * reports the station it activated (a chest/furnace/table it opened) as
+     * {@code block} + {@code x/y/z} — this just stops the loop from forgetting
+     * them once the result scrolls out of context. {@link #record}
+     * filters to tracked station types, so non-station interactions fall away.
+     */
+    private void harvest(String toolName, String resultJson) {
+        try {
+            JsonObject root = JsonParser.parseString(resultJson).getAsJsonObject();
+            if (!root.has("success") || !root.get("success").getAsBoolean()) return;
+            JsonObject data = root.has("data") && root.get("data").isJsonObject()
+                    ? root.getAsJsonObject("data") : null;
+            if (data == null) return;
+
+            switch (toolName) {
+                case "interact_at" -> {
+                    if (data.has("block") && data.has("x")) {
+                        // id 的归一化(去命名空间、模组包一层的路径)全在 record 里做
+                        record(data.get("block").getAsString(), new net.minecraft.core.BlockPos(
+                                data.get("x").getAsInt(),
+                                data.get("y").getAsInt(),
+                                data.get("z").getAsInt()));
+                    }
+                }
+                default -> { /* nothing to harvest */ }
+            }
+        } catch (RuntimeException ex) {
+            Constants.LOG.debug("[numen-blocks] work-block harvest skipped: {}", ex.toString());
+        }
     }
 
     /** Remember (or refresh the recency of) a tracked block. Untracked types are ignored. */
