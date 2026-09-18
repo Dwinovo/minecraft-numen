@@ -107,7 +107,7 @@ public class CompanionChatScreen extends Screen {
 
         @Override public void onAbort() { loop().abort(); }
 
-        @Override public boolean canAbort() { return loop().canInterrupt(); }
+        @Override public boolean canAbort() { return loop().status().canInterrupt(); }
 
         @Override public String hint() {
             return "想说什么…(回车说出去,Esc 算了)";

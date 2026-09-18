@@ -347,11 +347,6 @@ public final class EntityAgentLoop {
         return loop.status();
     }
 
-    /** Snapshot of prompts (GUI or {@code NumenGateway}) still waiting in the queue — the GUI renders these as pending. */
-    public List<String> queuedPrompts() {
-        return loop.status().queuedPreview();
-    }
-
     /**
      * 主人在聊天框里说话。
      *
@@ -491,32 +486,6 @@ public final class EntityAgentLoop {
             Constants.LOG.debug("[numen-entity#{}] work-block harvest skipped: {}",
                     entityUuid, ex.toString());
         }
-    }
-
-    // ---- status read by the GUI (from LoopStatus) ----
-
-    /** The brain or body is actively working: LLM, tool round-trip, compaction, or background task. */
-    public boolean isBusy() {
-        return loop.status().busy();
-    }
-
-    /**
-     * 此刻在干的那件事(工具名/长活任务名),没有具体动作时返回 null——
-     * 头顶「正在回复中」气泡拿它当副文本:长任务跑几十秒时,主人得看见
-     * 她在挖矿而不是卡死了。
-     */
-    public String currentActivity() {
-        return loop.status().activity();
-    }
-
-    /** A summarization call is currently in flight (drives the GUI status line). */
-    public boolean isCompacting() {
-        return loop.status().phase() == Phase.COMPACT;
-    }
-
-    /** 整理记忆的进度 0~1(见 {@link LoopStatus#compactProgress})。 */
-    public double compactProgress() {
-        return loop.status().compactProgress();
     }
 
     // ---- 长期目标 ----
@@ -705,7 +674,7 @@ public final class EntityAgentLoop {
         if (hold == Hold.DEAD) return "她已经不在了";
         // 整理是对内脑说的:驾驶席在外接模型手里时内脑不开工,排上了也只会一直躺着。
         if (hold == Hold.EXTERNAL) return "外接模型正在驾驶她,整理记忆要等交还给内置大脑之后";
-        if (isCompacting()) return "已经在整理了";
+        if (loop.status().phase() == Phase.COMPACT) return "已经在整理了";
         if (queue.count(EventTypes.COMPACT) > 0) return "整理已经排上了";
         // 不看忙不忙:整理进队列排着,闲下来自己执行。按了就一定会发生,
         // 主人不必盯着什么时候能按。
@@ -741,16 +710,6 @@ public final class EntityAgentLoop {
         return null;
     }
 
-    /** Owner prompts or commands are queued, waiting for the kernel to take them. */
-    public boolean hasQueuedPrompts() {
-        return !loop.status().queuedPreview().isEmpty();
-    }
-
-    /** There is something an interrupt would act on — drives the Stop button's enabled state. */
-    public boolean canInterrupt() {
-        return loop.status().canInterrupt();
-    }
-
     /**
      * Owner-triggered interrupt — the chat GUI's "Stop" button: {@code halt(OWNER_STOP)}. The in-flight
      * model call is cancelled, outstanding tool calls are abandoned and the body is told to stop, the
@@ -763,15 +722,6 @@ public final class EntityAgentLoop {
     }
 
     // ---- external control (an MCP client / Claude drives the body directly) ----
-
-    /**
-     * 外接大脑此刻是不是驾驶席上的那个脑——现算自 {@code McpMode.driving()},
-     * <b>不存副本、不做同步</b>:存一份就有两个答案,而两个答案迟早不一致。
-     * 失联回退的接管与交还也在同一口径里(driving 翻转即生效,零滞后)。
-     */
-    public boolean isExternallyDriven() {
-        return McpMode.instance().driving();
-    }
 
     /**
      * 外接大脑收件(get_events 的取货口):{@code urgentOnly} 时只在队里有给它的急件才取,

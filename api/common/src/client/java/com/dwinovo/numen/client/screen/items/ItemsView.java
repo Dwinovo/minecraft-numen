@@ -183,11 +183,15 @@ public final class ItemsView {
             String state;
             int stateColor;
             boolean alive;
-            if (loop.isExternallyDriven()) { state = "外接大脑驱动中"; stateColor = th.run(); alive = true; }
-            else if (loop.isCompacting())  { state = "整理记忆中"; stateColor = th.run(); alive = true; }
-            else if (loop.isBusy())        { state = "忙碌中"; stateColor = th.run(); alive = true; }
-            else if (loop.hasQueuedPrompts()) {
-                state = "积压 " + loop.queuedPrompts().size() + " 条"; stateColor = th.run(); alive = true;
+            var status = loop.status();
+            if (com.dwinovo.numen.mcp.server.McpMode.instance().driving()) {
+                state = "外接大脑驱动中"; stateColor = th.run(); alive = true;
+            } else if (status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) {
+                state = "整理记忆中"; stateColor = th.run(); alive = true;
+            } else if (status.busy()) {
+                state = "忙碌中"; stateColor = th.run(); alive = true;
+            } else if (!status.queuedPreview().isEmpty()) {
+                state = "积压 " + status.queuedPreview().size() + " 条"; stateColor = th.run(); alive = true;
             } else { state = "空闲"; stateColor = th.ok(); alive = false; }
             String dot = alive ? (System.currentTimeMillis() / 500 % 2 == 0 ? "●" : "○") : "●";
             String stateText = dot + " " + state;

@@ -115,8 +115,9 @@ public final class SpeechBubbles {
         boolean waiting = false;
         var loop = AgentLoopRegistry.get(entityUuid).orElse(null);
         if (loop != null) {
-            activity = loop.currentActivity();
-            waiting = activity == null && loop.isBusy();
+            var status = loop.status();
+            activity = status.activity();
+            waiting = activity == null && status.busy();
         }
 
         if (text == null && !asking && activity == null && !waiting) {

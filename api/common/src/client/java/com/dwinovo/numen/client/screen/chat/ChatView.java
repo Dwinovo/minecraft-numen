@@ -447,14 +447,15 @@ public final class ChatView {
         }
         // Prompts still waiting for a protocol-valid splice point — visible immediately
         // so a queued message never feels swallowed.
-        for (String queued : lp.queuedPrompts()) {
+        var status = lp.status();
+        for (String queued : status.queuedPreview()) {
             String shown = ownerText(queued);
             if (shown.isEmpty()) continue;
             boolean first = lastSide == null || !lastSide;
             out.add(bubble(true, null, "⌛ " + shown, FAINT, QUEUED_FILL, QUEUED_BORDER, innerW, first));
             lastSide = true;
         }
-        if (lp.isCompacting()) notice(out, I18n.get("numen.chat.compacting"));
+        if (status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) notice(out, I18n.get("numen.chat.compacting"));
         if (out.isEmpty()) notice(out, I18n.get("numen.chat.empty", name.get()));
         return out;
     }

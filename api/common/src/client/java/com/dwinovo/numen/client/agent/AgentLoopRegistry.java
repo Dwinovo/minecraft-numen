@@ -51,23 +51,8 @@ public final class AgentLoopRegistry {
     }
 
     /**
-     * UUIDs of companions with interruptible work ({@link EntityAgentLoop#canInterrupt()} —
-     * thinking, awaiting tool results, running a background body task, or holding queued input).
-     * These are the heartbeat targets: a server-side chunk-ticket lease should be held for each
-     * so the body stays loaded through both model think-time and long-running work.
-     */
-    public static List<UUID> activeEntityUuids() {
-        List<UUID> out = new ArrayList<>();
-        for (Map.Entry<UUID, EntityAgentLoop> e : ENTITY_LOOPS.entrySet()) {
-            if (e.getValue().canInterrupt()) out.add(e.getKey());
-        }
-        return out;
-    }
-
-    /**
-     * UUIDs of EVERY loaded loop, regardless of turn state (idle included). A live persona-library
-     * edit propagates to companions currently sitting idle, so this — not the mid-turn-only
-     * {@link #activeEntityUuids()} — is what {@code onSavePersona} must iterate.
+     * UUIDs of EVERY loaded loop, regardless of turn state (idle included) — a live persona-library edit
+     * propagates to companions currently sitting idle too.
      */
     public static List<UUID> loadedEntityUuids() {
         return new ArrayList<>(ENTITY_LOOPS.keySet());

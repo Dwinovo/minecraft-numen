@@ -583,7 +583,7 @@ public final class NumenScreen extends Screen {
 
         @Override public void onAbort() { loop().abort(); }
 
-        @Override public boolean canAbort() { return loop().canInterrupt(); }
+        @Override public boolean canAbort() { return loop().status().canInterrupt(); }
 
         @Override public String hint() {
             if (micNotice != null && micNoticeUntil > System.currentTimeMillis()) return micNotice;
@@ -1204,8 +1204,9 @@ public final class NumenScreen extends Screen {
     /** idle = green, working/compacting = amber, queued = gold; faint if no loop yet. */
     private int statusColor(UUID u) {
         return AgentLoopRegistry.get(u).map(loop -> {
-            if (loop.isCompacting() || loop.isBusy()) return RUN;
-            if (loop.hasQueuedPrompts()) return CTA;
+            var status = loop.status();
+            if (status.busy()) return RUN;   // 等模型、跑工具、整理记忆、身体有后台任务
+            if (!status.queuedPreview().isEmpty()) return CTA;
             return OK;
         }).orElse(TXT_FAINT);
     }
@@ -1380,8 +1381,9 @@ public final class NumenScreen extends Screen {
 
         // 整理记忆:一条随摘要流回来的字数逼近满格的进度条。摘要多长事先不知道,所以它
         // 报的是"还在动",不是"完成了百分之几"——永远差一点,收尾时整条消失。
-        if (loop().isCompacting()) {
-            double p = loop().compactProgress();
+        var status = loop().status();
+        if (status.phase() == com.dwinovo.numen.agent.loop.Phase.COMPACT) {
+            double p = status.compactProgress();
             int bw = panelW - PAD * 2;
             int by = top + panelH - inputH() - PAD - 8;
             txt(g, Component.literal("整理记忆… " + Math.round(p * 100) + "%"),

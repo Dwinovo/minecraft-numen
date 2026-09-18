@@ -85,8 +85,8 @@ public final class NumenGateway {
         EntityAgentLoop loop = AgentLoopRegistry.getOrCreate(companion);
         boolean pressed = submit(loop, ownerWords, type, text);
         // 外脑驾驶期间内脑恒为停牌,那个 boolean 恒真却什么也不说明——报驾驶席,
-        // 判据取自 isExternallyDriven() 这一处真源,不另猜。
-        if (loop.isExternallyDriven()) return Delivery.TO_EXTERNAL_BRAIN;
+        // 判据取自驾驶席本身这一处真源,不另猜。
+        if (com.dwinovo.numen.mcp.server.McpMode.instance().driving()) return Delivery.TO_EXTERNAL_BRAIN;
         return pressed ? Delivery.QUEUED : Delivery.SEEN;
     }
 
