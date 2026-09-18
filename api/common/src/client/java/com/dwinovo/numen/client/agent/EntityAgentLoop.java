@@ -1,6 +1,5 @@
 package com.dwinovo.numen.client.agent;
 
-import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.Constants;
 import com.dwinovo.numen.agent.goal.GoalPrompts;
 import com.dwinovo.numen.agent.goal.GoalState;
@@ -11,31 +10,22 @@ import com.dwinovo.numen.agent.llm.ConvoLog;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.inbox.JsonlJournal;
-import com.dwinovo.numen.agent.llm.CompactSplit;
 import com.dwinovo.numen.agent.llm.ConvoState;
 import com.dwinovo.numen.agent.loop.AgentLoop;
 import com.dwinovo.numen.agent.memory.Compactor;
 import com.dwinovo.numen.agent.loop.HaltReason;
 import com.dwinovo.numen.agent.loop.Hold;
 import com.dwinovo.numen.agent.loop.HostPort;
-import com.dwinovo.numen.agent.loop.LoopEvent;
 import com.dwinovo.numen.agent.loop.LoopStatus;
-import com.dwinovo.numen.agent.loop.MemoryPort;
 import com.dwinovo.numen.agent.loop.ModelOutcome;
 import com.dwinovo.numen.agent.loop.ModelPort;
 import com.dwinovo.numen.agent.loop.ModelRequest;
 import com.dwinovo.numen.agent.loop.Phase;
-import com.dwinovo.numen.agent.loop.RunEnd;
-import com.dwinovo.numen.agent.provider.AssistantTurn;
 import com.dwinovo.numen.agent.provider.Usage;
-import com.dwinovo.numen.agent.skill.SkillRegistry;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.mcp.server.McpMode;
-import com.dwinovo.numen.platform.Services;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.resources.language.I18n;
@@ -57,15 +47,17 @@ import java.util.function.Consumer;
  *
  * <h2>What lives here and what doesn't</h2>
  * When to call the model, when to run tools, what a stop / death / logout / takeover does, retries and
- * holds — all of that is the kernel's. This facade holds what needs Minecraft:
+ * holds — all of that is the kernel's. The kernel only emits events, and each concern subscribes itself:
+ * {@link TurnPresenter} (what the owner sees and hears), {@link TokenLedger}, {@link Compactor}
+ * (compaction and clearing), {@link GoalSteward} (the long-term goal), {@link WorkBlockMemory} and
+ * {@link RuntimeState} (the per-turn runtime state, including the mirror of her current task).
+ * This facade wires them together and keeps what needs Minecraft:
  * <ul>
- *   <li>the kernel's ports: assembling a request (system prompt, runtime state, resident tools, the
- *       callable set from the same snapshot), hopping model callbacks back to the main thread, the
- *       endpoint check, compaction and clearing, the body's live facts;</li>
- *   <li>the subscriber to the kernel's {@link LoopEvent}s that draws what happened (typewriter, voice,
- *       bubbles, chat lines, toasts), keeps the token ledger, harvests work-station coordinates and
- *       drives the long-term goal;</li>
- *   <li>persona / model binding, the external-driver intake, and the registry lifecycle.</li>
+ *   <li>the kernel's model port (a request from {@link SystemPromptComposer} and {@link RuntimeState},
+ *       the endpoint check, hopping callbacks back to the main thread) and host port;</li>
+ *   <li>the inputs: the owner's words and commands, world events from the owner's client, death and
+ *       respawn, the external driver's intake;</li>
+ *   <li>persona / model binding and the registry lifecycle.</li>
  * </ul>
  *
  * <h2>Threading rules</h2>
@@ -244,7 +236,6 @@ public final class EntityAgentLoop {
     public com.dwinovo.numen.agent.provider.CacheWaste cacheWaste() {
         return tokens.waste();
     }
-    public ConvoState convo() { return convo; }
 
     /**
      * 这次工具调用的结果还会不会来——派发器还攥着它(在跑或排着)。历史里没结果、这里又答 false
@@ -345,7 +336,7 @@ public final class EntityAgentLoop {
      * ——"我帮你把矿挖完了"这条链正是为此做的。登出时叫停她,恰好把它废掉;置了停牌的话,
      * 离线补发回来的 {@code task_finished} 也唤不醒她。
      */
-    public void quiesce() {
+    void quiesce() {
         loop.halt(HaltReason.DISCONNECT);
     }
 
@@ -358,7 +349,7 @@ public final class EntityAgentLoop {
      * Driven once per client tick (see {@code AgentLoopRegistry.tickAll}): tool backstop timeout,
      * presentation, the external-driver flip, and the kernel's tick ("waited long enough" ripeness).
      */
-    public void clientTick() {
+    void clientTick() {
         dispatcher.tick();
         presenter.tick();
         // 驾驶席翻转成外接的那一下作废在飞的回合:接管之后内脑的回复不该再派工具、压缩不该再换历史。

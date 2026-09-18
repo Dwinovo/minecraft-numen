@@ -202,15 +202,6 @@ public final class ConvoLog {
                 StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
     }
 
-    /** Remove the file (conversation reset). */
-    public void delete() {
-        try {
-            Files.deleteIfExists(file);
-        } catch (IOException ex) {
-            AiLog.LOG.warn("[numen-convo] failed to delete {}: {}", file, ex.toString());
-        }
-    }
-
     // ---- migration ----
 
     /**

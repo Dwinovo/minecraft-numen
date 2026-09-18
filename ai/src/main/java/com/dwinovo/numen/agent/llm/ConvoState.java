@@ -117,12 +117,4 @@ public final class ConvoState {
     public void resetTurnCount() {
         turnCount = 0;
     }
-
-    /** Wipe in-memory history. NOTE: does not touch the sink's storage — a caller
-     *  owning a {@link ConvoLog} must also {@code delete()} it, or the next launch
-     *  resurrects everything just cleared. */
-    public void clear() {
-        messages.clear();
-        resetTurnCount();
-    }
 }
