@@ -12,12 +12,8 @@ import java.util.Map;
  * <ul>
  *   <li><b>self-description into the prompt</b> — {@link #overview()} joins the
  *       registered reflexes' one-liners into the "你的身体有这些本能:…你的显式动作
- *       永远优先" paragraph. numen-api exposes no system-prompt extension point
- *       (scouted: {@code EntityAgentLoop.composeSystemPrompt} appends only
- *       persona/env/known_blocks/skills), so the overview rides the
- *       {@code get_self_status} tool DESCRIPTION instead — descriptions are
- *       re-read on every request build ({@code OpenAIProvider}), so the model
- *       sees the current roster each turn;</li>
+ *       永远优先" paragraph, which the client puts in the system prompt's
+ *       {@code <instincts>} block — the one place the model reads it;</li>
  *   <li>—— 就这一件。<b>名册即全部</b>:登记了就是开着的,没有"每条本能的开关"。
  *       要做开关,先做主人能按的面板入口,再让这里长出开关——只有开关没有入口的话,
  *       每次启动读一个文件、写一个文件,里面的值永远全是 true。看着有、实际没有,

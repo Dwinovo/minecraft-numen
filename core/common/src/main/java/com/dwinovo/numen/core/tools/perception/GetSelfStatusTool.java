@@ -38,19 +38,14 @@ public final class GetSelfStatusTool implements NumenTool {
 
     @Override
     public String description() {
-        // The reflex overview rides THIS description (constitution §6): numen-api
-        // exposes no system-prompt injection channel to core, but every request
-        // re-reads tool descriptions, so the model sees the current roster each
-        // turn. Dynamic on purpose — switched-off reflexes drop out of the text.
-        String base = "Read your body's condition in one call: name, game mode, HP / max HP, "
+        // 本能名册不在这里:它在系统提示的 <instincts> 里,每次请求都在,不必再随这条描述发一遍。
+        return "Read your body's condition in one call: name, game mode, HP / max HP, "
                 + "hunger / saturation, position, dimension, biome, the structures you are "
                 + "standing in, what you are wearing, what mods report about your body, and movement "
                 + "state. ALWAYS call this before "
                 + "combat or planning decisions. It does NOT list your backpack — what you carry "
                 + "is already in front of you every turn; use inspect_gui when exact slots matter. "
                 + "No arguments.";
-        String overview = com.dwinovo.numen.task.reflex.ReflexRegistry.overview();
-        return overview.isEmpty() ? base : base + "\n\n" + overview;
     }
 
     @Override
