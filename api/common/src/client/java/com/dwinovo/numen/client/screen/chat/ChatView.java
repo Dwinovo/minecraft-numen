@@ -314,7 +314,8 @@ public final class ChatView {
     private record ChipRow(String icon, int iconColor, FormattedCharSequence text) {}
 
     /** A centred, faint system note. */
-    private record Notice(FormattedCharSequence text) implements Block {}
+    /** 居中的一行提示(分隔、中断、整理中);画的时候按这一刻的宽度收口,长的切断原因不会画穿面板。 */
+    private record Notice(String text) implements Block {}
 
     private int bubbleMaxW(int w) {
         return w - EDGE - AV - AV_GAP - OPP_MARGIN - SB_W - 3;
@@ -491,7 +492,7 @@ public final class ChatView {
     }
 
     private void notice(List<Block> out, String text) {
-        out.add(new Notice(Nb.colored(text, FAINT).getVisualOrderText()));
+        out.add(new Notice(text));
     }
 
     /** Emit the chip for a run of consecutive tool calls. A single call is one unfoldable chip;
@@ -570,8 +571,9 @@ public final class ChatView {
     private void drawBlock(GuiGraphics g, Block b, int x, int y, int w) {
         switch (b) {
             case Notice n -> {
-                int tw = font.width(n.text());
-                draw(g, n.text(), x + (w - SB_W - tw) / 2, y);
+                FormattedCharSequence line = Nb.colored(fitOneLine(n.text(), w - SB_W), FAINT).getVisualOrderText();
+                int tw = font.width(line);
+                draw(g, line, x + (w - SB_W - tw) / 2, y);
             }
             case Bubble bb -> drawBubble(g, bb, x, y, w);
             case Chip c -> drawChip(g, c, x, y);
