@@ -1,5 +1,6 @@
 package com.dwinovo.numen.agent.loop;
 
+import com.dwinovo.numen.agent.http.CancelToken;
 import com.dwinovo.numen.agent.inbox.EventQueue;
 import com.dwinovo.numen.agent.inbox.EventTypes;
 import com.dwinovo.numen.agent.llm.ConvoState;
@@ -428,6 +429,30 @@ public final class AgentLoop {
                     }
                     then.run();
                 });
+    }
+
+    // ---- 旁路调用 ----
+
+    /**
+     * 发一次不属于任何 run 的模型调用(目标评估这类旁路判断):不占内核、不看停牌、不进历史,但用量照样
+     * 经 {@link LoopEvent.ModelUsed} 报出去——账只有这一条路。端点不可用时不发,直接交回失败。
+     *
+     * @param purpose 用量记在哪一项名下
+     * @param cancel  调用方自己管的取消令牌;取消之后 {@code onDone} 不再来
+     */
+    public void consult(LoopEvent.Purpose purpose, ModelRequest request, CancelToken cancel,
+                        Consumer<ModelOutcome> onDone) {
+        String problem = model.unavailable();
+        if (problem != null) {
+            onDone.accept(new ModelOutcome.Failed(problem));
+            return;
+        }
+        model.call(request, cancel, delta -> { }, outcome -> {
+            if (outcome instanceof ModelOutcome.Answered answered) {
+                emit(new LoopEvent.ModelUsed(answered.usage(), purpose));
+            }
+            onDone.accept(outcome);
+        });
     }
 
     // ---- 切断 ----

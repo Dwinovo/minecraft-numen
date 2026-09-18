@@ -857,6 +857,41 @@ class AgentLoopTest {
     // ---- 压缩 ----
 
     @Nested
+    class Consult {
+
+        @Test
+        void aSideCallReportsItsUsageButStartsNoRun() {
+            List<ModelOutcome> outcomes = new ArrayList<>();
+            loop.consult(LoopEvent.Purpose.GOAL, new ModelRequest(List.of(), List.of(), "judge", Set.of()),
+                    new CancelToken(), outcomes::add);
+
+            assertNull(loop.status().phase(), "旁路调用不占内核");
+            assertTrue(eventsOf(LoopEvent.RunStarted.class).isEmpty());
+            Usage used = new Usage(10, 2, 0, 0);
+            model.last().onDone().accept(new ModelOutcome.Answered(new AssistantTurn("met", List.of(), null), used));
+
+            List<LoopEvent.ModelUsed> usage = eventsOf(LoopEvent.ModelUsed.class);
+            assertEquals(1, usage.size(), "用量照样进账");
+            assertEquals(LoopEvent.Purpose.GOAL, usage.get(0).purpose());
+            assertEquals(used, usage.get(0).usage());
+            assertInstanceOf(ModelOutcome.Answered.class, outcomes.get(0));
+            assertTrue(transcript.snapshot().isEmpty(), "不进历史");
+        }
+
+        @Test
+        void anUnusableEndpointFailsWithoutCallingTheModel() {
+            model.unavailable = "没绑模型";
+            List<ModelOutcome> outcomes = new ArrayList<>();
+            loop.consult(LoopEvent.Purpose.GOAL, new ModelRequest(List.of(), List.of(), "judge", Set.of()),
+                    new CancelToken(), outcomes::add);
+
+            assertTrue(model.calls.isEmpty());
+            assertEquals("没绑模型", assertInstanceOf(ModelOutcome.Failed.class, outcomes.get(0)).words());
+            assertNull(loop.hold(), "旁路调用不进停牌");
+        }
+    }
+
+    @Nested
     class Compaction {
 
         @Test

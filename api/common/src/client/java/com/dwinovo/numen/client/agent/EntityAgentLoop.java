@@ -250,6 +250,7 @@ public final class EntityAgentLoop {
         this.loop = new AgentLoop(entityUuid.toString(), model, dispatcher, convo, queue, new Memory(), new Host());
         this.wasDriving = McpMode.instance().driving();
         loop.subscribe(presenter::on);
+        loop.subscribe(tokens::on);
         loop.subscribe(this::onLoopEvent);
         restoreFromDisk();
     }
@@ -609,7 +610,7 @@ public final class EntityAgentLoop {
                 List.of(), GoalPrompts.evaluatorSystem(), Set.of());
         CancelToken cancel = new CancelToken();
         goalJudge = cancel;
-        model.call(request, cancel, delta -> { }, outcome -> {
+        loop.consult(LoopEvent.Purpose.GOAL, request, cancel, outcome -> {
             goalJudge = null;
             finishJudging(target, outcome);
         });
@@ -1339,9 +1340,8 @@ public final class EntityAgentLoop {
         }
     }
 
-    /** 一次模型调用的用量进台账;对话调用的实测体量是自动压缩的判据,也记进目标的账单。 */
+    /** 对话调用的实测体量是自动压缩的判据,也记进目标的账单(台账自己订阅,不在这里记)。 */
     private void account(Usage usage, LoopEvent.Purpose purpose) {
-        tokens.add(usage);
         if (purpose == LoopEvent.Purpose.TURN) {
             // True context size of the request we just made — the auto-compaction signal.
             // 0 when the backend sent no usage frame (then the gate falls back to an estimate).
@@ -1367,7 +1367,6 @@ public final class EntityAgentLoop {
         }
         display.add(new ConvoState.Msg.User(divider));
         lastPromptTokens = 0;       // unknown until the next request reports usage
-        tokens.waste().reset();     // 前缀本来就换了,下一轮的未命中不算"白付"
         compactFailures = 0;
     }
 

@@ -58,8 +58,12 @@ public sealed interface LoopEvent {
 
     /** 用量是替什么花的。 */
     enum Purpose {
+        /** 一次 run 里的对话调用。 */
         TURN,
-        COMPACT
+        /** 整理记忆。 */
+        COMPACT,
+        /** 长期目标的评估:不是 run,经 {@link AgentLoop#consult} 发出。 */
+        GOAL
     }
 
     enum Boundary {
