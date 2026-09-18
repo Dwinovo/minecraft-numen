@@ -209,12 +209,8 @@ public final class EntityAgentLoop {
     private String deathCause;
 
     /**
-     * The PHYSICAL transcript for the chat GUI: every message ever exchanged
-     * this session (plus the persisted tail), in order, with compaction
-     * boundaries as {@link ConvoLog#COMPACT_DIVIDER} sentinels. Compaction
-     * rewires {@link #convo} (what the LLM sees) but only appends a divider
-     * here — the owner's visible history never vanishes. Same split as the
-     * append-only session log vs. the logical context in Claude Code.
+     * 面板的对话记录:读盘那一截,加上之后日志写下的每一条(经 {@link ConvoLog#onDisplay},与读盘同一个换法)。
+     * 整理记忆换的是 {@link #convo}(模型看到的),这里只多一条分隔——主人看得见的记录不会消失。
      */
     private final List<ConvoState.Msg> display = new ArrayList<>();
 
@@ -234,10 +230,7 @@ public final class EntityAgentLoop {
     EntityAgentLoop(UUID entityUuid) {
         this.entityUuid = entityUuid;
         this.log = ConvoLog.atFile(CompanionHome.chat(entityUuid));
-        this.convo = new ConvoState(msg -> {
-            log.append(msg);
-            display.add(msg);
-        });
+        this.convo = new ConvoState(log::append);
         this.workBlocks = WorkBlockMemory.forEntity(entityUuid);
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
         // 目标跨重进游戏活着 —— 长期目标就该是长期的,重启不该把它弄丢。
@@ -293,12 +286,13 @@ public final class EntityAgentLoop {
             loop.halt(HaltReason.DEATH);
             Constants.LOG.info("[numen-entity#{}] 恢复时她还死着 — 停牌等复活", entityUuid);
         }
+        // 面板的对话记录:读盘那一截在前,之后日志写下的每一条经同一个换法接上(分隔、切断点都在里面)。
+        // 读的是原始文件顺序,不是整理后的模型视图——主人的聊天记录不会因为整理记忆而消失。
+        display.addAll(log.loadDisplay(ConvoLog.DEFAULT_LOAD_LIMIT));
+        log.onDisplay(display::add);
         List<ConvoState.Msg> history = log.load(ConvoLog.DEFAULT_LOAD_LIMIT);
         if (history.isEmpty()) return;
         convo.preload(history);
-        // The visible transcript replays the raw file order (dividers included),
-        // NOT the compacted view.
-        display.addAll(log.loadDisplay(ConvoLog.DEFAULT_LOAD_LIMIT));
         Constants.LOG.info("[numen-entity#{}] restored {} msg(s) from disk", entityUuid, history.size());
     }
 
@@ -951,8 +945,7 @@ public final class EntityAgentLoop {
     public void setPersona(String id) {
         this.personaId = id;
         CompanionHome.bind(entityUuid, CompanionHome.binding(entityUuid).withPersona(id));
-        log.appendPersonaDivider();   // 落盘的记号:重启后回看也知道这儿换过
-        display.add(new ConvoState.Msg.User(ConvoLog.PERSONA_DIVIDER));
+        log.appendPersonaDivider();   // 落盘的记号,也经日志进面板的对话记录:重启后回看也知道这儿换过
     }
 
     /**
@@ -1355,17 +1348,11 @@ public final class EntityAgentLoop {
         }
     }
 
-    /** 历史换了(压缩、清空):聊天流插一条分隔,上一次请求的体量与缓存诊断不再作数。 */
+    /** 历史换了(压缩、清空):上一次请求的体量不再作数,整理的熔断从头计。分隔线由日志自己交给显示记录。 */
     private void onBoundary(LoopEvent.Boundary kind) {
-        String divider = switch (kind) {
-            case COMPACT -> ConvoLog.COMPACT_DIVIDER;
-            case CLEAR -> ConvoLog.CLEAR_DIVIDER;
-            case HALT -> null;   // 切断点经会话的 sink 已经进了显示记录
-        };
-        if (divider == null) {
+        if (kind == LoopEvent.Boundary.HALT) {
             return;
         }
-        display.add(new ConvoState.Msg.User(divider));
         lastPromptTokens = 0;       // unknown until the next request reports usage
         compactFailures = 0;
     }

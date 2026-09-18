@@ -21,10 +21,9 @@ import java.util.List;
  * in the thinking mode must be passed back to the API} case.
  *
  * <h2>reasoning 与 extras 是两条独立命脉</h2>
- * {@link #reasoning} 是<b>展示面</b>:方言字段(reasoning_content/reasoning/
- * reasoning_text)解码后的思考文本,给 UI 呈现用,不参与请求重建。回传保命
- * 走 {@link #extras} 原样回注——即使某家要求思考字段必须回传,那也是 extras
- * 的职责,与展示面互不干扰。
+ * {@link #reasoning} 是方言字段(reasoning_content/reasoning/reasoning_text/thinking)解码后的
+ * 思考文本:面板拿它画思考块;Anthropic 回传思考块时连同 extras 里的签名一起要它原文。
+ * {@link #extras} 是别家要求原样回注的字段。两样都随会话日志落盘,重启后与这一局一字不差。
  *
  * @param content      assistant message body text (may be empty when the
  *                     turn is pure tool calls)

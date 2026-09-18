@@ -88,6 +88,8 @@ public final class ConvoLog {
     private static final String LEGACY_TASK_CLOSE = "</current_task>";
 
     private final Path file;
+    /** 面板对话记录的去处(见 {@link #onDisplay});没接就不显示。 */
+    private java.util.function.Consumer<ConvoState.Msg> displaySink = msg -> { };
 
     private ConvoLog(Path file) {
         this.file = file;
@@ -101,6 +103,15 @@ public final class ConvoLog {
 
     public Path file() {
         return file;
+    }
+
+    /**
+     * 这份日志写下的每一条,换成面板对话记录里的样子交给 {@code sink}——换法与读盘的 {@link #loadDisplay}
+     * 是同一个({@link #displayOf}),所以这一局边写边看到的,和下次进游戏读回来的一条不差。
+     * 写盘失败也照样交:这一局得看得见刚发生的事。
+     */
+    public void onDisplay(java.util.function.Consumer<ConvoState.Msg> sink) {
+        this.displaySink = sink;
     }
 
     // ---- write ----
@@ -164,7 +175,7 @@ public final class ConvoLog {
         writeLine(o);
     }
 
-    /** Write one record line, prefixing a header on a brand-new file. Best-effort. */
+    /** Write one record line, prefixing a header on a brand-new file, then show it. Best-effort. */
     private void writeLine(JsonObject record) {
         try {
             ensureHeader();
@@ -172,6 +183,10 @@ public final class ConvoLog {
                     StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND);
         } catch (IOException ex) {
             AiLog.LOG.warn("[numen-convo] failed to append to {}: {}", file, ex.toString());
+        }
+        ConvoState.Msg shown = displayOf(record);
+        if (shown != null) {
+            displaySink.accept(shown);
         }
     }
 
@@ -411,17 +426,8 @@ public final class ConvoLog {
                     AiLog.LOG.warn("[numen-convo] skipping unparsable line in {}", file.getFileName());
                     continue;
                 }
-                String type = eventType(o);
-                if (type != null) {                              // event record
-                    if (EV_COMPACT.equals(type)) all.add(new ConvoState.Msg.User(COMPACT_DIVIDER));
-                    else if (EV_CLEAR.equals(type)) all.add(new ConvoState.Msg.User(CLEAR_DIVIDER));
-                    else if (EV_PERSONA.equals(type)) all.add(new ConvoState.Msg.User(PERSONA_DIVIDER));
-                    else if (EV_HALT.equals(type)) all.add(decodeHalt(o));
-                    // header / goal / unknown → not shown
-                    continue;
-                }
-                ConvoState.Msg m = decodeMessage(o);
-                if (m != null) all.add(m);
+                ConvoState.Msg shown = displayOf(o);
+                if (shown != null) all.add(shown);
             }
         } catch (IOException ex) {
             AiLog.LOG.warn("[numen-convo] failed to read {}: {}", file, ex.toString());
@@ -429,6 +435,24 @@ public final class ConvoLog {
         }
         if (all.size() <= limit) return all;
         return new ArrayList<>(all.subList(all.size() - limit, all.size()));
+    }
+
+    /**
+     * 一条日志记录在面板对话记录里的样子:消息原样;整理、清空、换人设画成分隔记号;切断点照原样。
+     * 文件头、目标之类不显示的记录返回 {@code null}。边写边看与读盘共用这一个换法。
+     */
+    private static ConvoState.Msg displayOf(JsonObject record) {
+        String type = eventType(record);
+        if (type == null) {
+            return decodeMessage(record);
+        }
+        return switch (type) {
+            case EV_COMPACT -> new ConvoState.Msg.User(COMPACT_DIVIDER);
+            case EV_CLEAR -> new ConvoState.Msg.User(CLEAR_DIVIDER);
+            case EV_PERSONA -> new ConvoState.Msg.User(PERSONA_DIVIDER);
+            case EV_HALT -> decodeHalt(record);
+            default -> null;
+        };
     }
 
     /**
@@ -491,6 +515,10 @@ public final class ConvoLog {
                 if (!a.turn().extras().entrySet().isEmpty()) {
                     o.add("extras", a.turn().extras());
                 }
+                // 思考文本同样得跟着落盘:面板读回来要画思考块;Anthropic 回传思考块时连签名一起要它原文。
+                if (a.turn().hasReasoning()) {
+                    o.addProperty("reasoning", a.turn().reasoning());
+                }
             }
             case ConvoState.Msg.Tool t -> {
                 o.addProperty("role", "tool");
@@ -535,7 +563,8 @@ public final class ConvoLog {
                 }
                 JsonObject extras = o.has("extras") && o.get("extras").isJsonObject()
                         ? o.getAsJsonObject("extras") : null;
-                yield new ConvoState.Msg.Assistant(new AssistantTurn(str(o.get("content")), calls, extras));
+                yield new ConvoState.Msg.Assistant(
+                        new AssistantTurn(str(o.get("content")), calls, extras, str(o.get("reasoning"))));
             }
             default -> null;   // unknown role → forward-compat skip
         };
