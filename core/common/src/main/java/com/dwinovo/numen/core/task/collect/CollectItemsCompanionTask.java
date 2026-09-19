@@ -34,6 +34,9 @@ import java.util.Map;
  *              anything else that stays on the ground is skipped.
  * </pre>
  *
+ * <p>SCAN ends only once every matching drop in range has been tried, so whatever
+ * still lies there at the end is what she couldn't pick up — the reply names it.
+ *
  * <p>回执里捡了多少,数的是到手的件数:背包里要捡的那几种比开工时多出来的,不是消失了几堆掉落物
  * ——一堆可能是好几个,消失的也可能是被别人捡走、到时候没了。
  */
@@ -143,6 +146,11 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
     }
 
     private ItemEntity nearestItem() {
+        return skipped.pick(matchingItems(), Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
+    }
+
+    /** Every drop in range that this sweep is after, tried or not. */
+    private List<ItemEntity> matchingItems() {
         AABB box = player.getBoundingBox().inflate(r.radius);
         List<ItemEntity> candidates = new ArrayList<>();
         for (Entity e : player.level().getEntities(player, box)) {
@@ -150,7 +158,7 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
             if (!r.filter.isEmpty() && !r.filter.contains(ie.getItem().getItem())) continue;
             candidates.add(ie);
         }
-        return skipped.pick(candidates, Comparator.comparingDouble(player::distanceToSqr)).orElse(null);
+        return candidates;
     }
 
     @Override
@@ -164,7 +172,16 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
 
     @Override
     protected String successMessage() {
-        return "collected " + r.getCollected() + " " + r.label;
+        String collected = "collected " + r.getCollected() + " " + r.label;
+        List<ItemEntity> left = matchingItems();
+        if (left.isEmpty()) {
+            return collected;
+        }
+        int count = left.stream().mapToInt(e -> e.getItem().getCount()).sum();
+        BlockPos at = left.stream().min(Comparator.comparingDouble(player::distanceToSqr)).orElseThrow()
+                .blockPosition();
+        return collected + "; " + count + " more lie where I couldn't pick them up (nearest at "
+                + at.getX() + "," + at.getY() + "," + at.getZ() + ")";
     }
 
     @Override
