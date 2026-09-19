@@ -1,11 +1,8 @@
 package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.tools.BlockActionOps;
-import com.dwinovo.numen.core.tools.MovementOps;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
 import java.util.ArrayList;
 import java.util.List;
@@ -105,10 +102,11 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_lodger", new BlockPos(7, 2, 7), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_landlord");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, naturalSpec(), null,
-                TaskDispatch.ctx("gametest-lodger", companion));
-        TaskDispatch.runSync(companion, record, r -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ(),
+                "spec", naturalSpec())).task();
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
@@ -140,10 +138,11 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_host");
         BlockPos start = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, anySpec(), null,
-                TaskDispatch.ctx("gametest-tenant", companion));
-        TaskDispatch.runSync(companion, record, r -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ(),
+                "spec", anySpec())).task();
         boolean[] answered = new boolean[1];
 
         helper.succeedWhen(() -> {
@@ -177,10 +176,11 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_squatter", new BlockPos(7, 2, 7), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_strict");
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, anySpec(), null,
-                TaskDispatch.ctx("gametest-squatter", companion));
-        TaskDispatch.runSync(companion, record, r -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ(),
+                "spec", anySpec())).task();
         boolean[] answered = new boolean[1];
 
         helper.succeedWhen(() -> {
@@ -215,9 +215,9 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_lumberjack", new BlockPos(2, 2, 5), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_forester");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:oak_log"), null, 2, null, TaskDispatch.ctx("gametest-lumber", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:oak_log"),
+                "count", 2)).task();
         java.util.Set<Long> requests = new java.util.HashSet<>();
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
@@ -249,9 +249,9 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_hewer", new BlockPos(2, 2, 5), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_keeper");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:jungle_log"), null, 2, null, TaskDispatch.ctx("gametest-hewer", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:jungle_log"),
+                "count", 2)).task();
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
             if (pending != null) {
@@ -291,9 +291,9 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_ranger", new BlockPos(2, 2, 5), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_warden");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:acacia_log"), null, 2, null, TaskDispatch.ctx("gametest-ranger", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:acacia_log"),
+                "count", 2)).task();
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
@@ -314,9 +314,7 @@ public class PermissionGameTests {
 
     /** mine 点名这些团(不给 count,挖完为止),后台派出。 */
     private static TaskRecord mineGroups(NumenPlayer companion, String callId, List<String> groups) {
-        TaskRecord record = new BlockActionOps().autoMine(companion, null, groups, null, null,
-                TaskDispatch.ctx(callId, companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args("groups", groups)).task();
         return record;
     }
 
@@ -337,18 +335,18 @@ public class PermissionGameTests {
             level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.CHERRY_LOG.defaultBlockState());
         }
         NumenPlayer companion = spawnAt(helper, "gametest_surveyor", new BlockPos(4, 2, 7), false);
-        String[] reply = scan(companion, 6, "minecraft:cherry_log");
+        ToolRun reply = scan(companion, 6, "minecraft:cherry_log");
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(reply[0] != null, "scan_blocks has not replied");
-            var root = com.google.gson.JsonParser.parseString(reply[0]).getAsJsonObject();
+            helper.assertTrue(reply.reply() != null, "scan_blocks has not replied");
+            var root = com.google.gson.JsonParser.parseString(reply.reply()).getAsJsonObject();
             var groups = root.getAsJsonArray("groups");
             helper.assertTrue(groups.size() == 2 && root.has("groups_total") && root.get("groups_total").getAsInt() == 2,
-                    "expected exactly two groups: " + reply[0]);
+                    "expected exactly two groups: " + reply.reply());
             var owners = groupHolding(groups, helper.absolutePos(pillar.get(0)));
             var wild = groupHolding(groups, helper.absolutePos(tree.get(0)));
             helper.assertTrue(owners != null && wild != null && owners != wild,
-                    "the pillar and the tree are not two groups: " + reply[0]);
+                    "the pillar and the tree are not two groups: " + reply.reply());
             for (BlockPos rel : pillar) {
                 helper.assertTrue(groupHolding(groups, helper.absolutePos(rel)) == owners,
                         "a pillar log is not in the pillar's group: " + rel.toShortString());
@@ -383,17 +381,17 @@ public class PermissionGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_feller", new BlockPos(7, 2, 7), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        String[] reply = scan(companion, 6, "minecraft:dark_oak_log");
+        ToolRun reply = scan(companion, 6, "minecraft:dark_oak_log");
         TaskRecord[] mine = new TaskRecord[1];
 
         helper.succeedWhen(() -> {
             if (mine[0] == null) {
-                helper.assertTrue(reply[0] != null, "scan_blocks has not replied");
-                var groups = groupsIn(reply[0]);
+                helper.assertTrue(reply.reply() != null, "scan_blocks has not replied");
+                var groups = groupsIn(reply.reply());
                 var target = groupHolding(groups, helper.absolutePos(named.get(0)));
                 var spared = groupHolding(groups, helper.absolutePos(other.get(0)));
                 helper.assertTrue(target != null && spared != null && target != spared,
-                        "the two trees are not two groups: " + reply[0]);
+                        "the two trees are not two groups: " + reply.reply());
                 mine[0] = mineGroups(companion, "gametest-feller", List.of(target.get("id").getAsString()));
             }
             String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
@@ -423,7 +421,7 @@ public class PermissionGameTests {
         level.setBlockAndUpdate(helper.absolutePos(logRel), Blocks.MANGROVE_LOG.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_archivist", new BlockPos(3, 2, 6), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        String[][] replies = {scan(companion, 5, "minecraft:mangrove_log"), null};
+        ToolRun[] replies = {scan(companion, 5, "minecraft:mangrove_log"), null};
         String[] ids = new String[2];
         String[] refusal = new String[1];
 
@@ -432,9 +430,9 @@ public class PermissionGameTests {
                 if (ids[i] != null) {
                     continue;
                 }
-                helper.assertTrue(replies[i] != null && replies[i][0] != null, "scan " + (i + 1) + " has not replied");
-                var group = groupHolding(groupsIn(replies[i][0]), helper.absolutePos(logRel));
-                helper.assertTrue(group != null, "scan " + (i + 1) + " did not list the log: " + replies[i][0]);
+                helper.assertTrue(replies[i] != null && replies[i].reply() != null, "scan " + (i + 1) + " has not replied");
+                var group = groupHolding(groupsIn(replies[i].reply()), helper.absolutePos(logRel));
+                helper.assertTrue(group != null, "scan " + (i + 1) + " did not list the log: " + replies[i].reply());
                 ids[i] = group.get("id").getAsString();
                 if (i == 0) {
                     replies[1] = scan(companion, 5, "minecraft:mangrove_log");
@@ -475,9 +473,10 @@ public class PermissionGameTests {
         com.google.gson.JsonArray avoid = new com.google.gson.JsonArray();
         avoid.add(kept.getX() + "," + kept.getY() + "," + kept.getZ());
         spec.add("avoid_break", avoid);
-        TaskRecord record = new BlockActionOps().autoMine(companion, List.of("minecraft:warped_stem"), null, 2, spec,
-                TaskDispatch.ctx("gametest-forager", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:warped_stem"),
+                "count", 2,
+                "spec", spec)).task();
 
         helper.succeedWhen(() -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
@@ -506,18 +505,18 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_botanist");
         storeOf(owner).add(com.dwinovo.numen.permission.Verdict.Kind.DENY,
                 com.dwinovo.numen.permission.Rule.parse("break(minecraft:crimson_stem)"));
-        String[] reply = scan(companion, 5, "minecraft:crimson_stem");
+        ToolRun reply = scan(companion, 5, "minecraft:crimson_stem");
         TaskRecord[] mine = new TaskRecord[1];
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
         helper.succeedWhen(() -> {
             if (mine[0] == null) {
-                helper.assertTrue(reply[0] != null, "scan_blocks has not replied");
-                var group = groupHolding(groupsIn(reply[0]), helper.absolutePos(stems.get(0)));
+                helper.assertTrue(reply.reply() != null, "scan_blocks has not replied");
+                var group = groupHolding(groupsIn(reply.reply()), helper.absolutePos(stems.get(0)));
                 helper.assertTrue(group != null && "deny".equals(group.get("permission").getAsString())
                                 && group.get("reason").getAsString().contains("denied by rule"),
-                        "the scan does not mark the denied group: " + reply[0]);
+                        "the scan does not mark the denied group: " + reply.reply());
                 mine[0] = mineGroups(companion, "gametest-objector", List.of(group.get("id").getAsString()));
             }
             String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
@@ -558,15 +557,15 @@ public class PermissionGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_sinker", new BlockPos(7, 6, 7), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        String[] reply = scan(companion, 6, "minecraft:stripped_spruce_log");
+        ToolRun reply = scan(companion, 6, "minecraft:stripped_spruce_log");
         TaskRecord[] mine = new TaskRecord[1];
 
         helper.succeedWhen(() -> {
             if (mine[0] == null) {
-                helper.assertTrue(reply[0] != null, "scan_blocks has not replied");
-                var group = groupHolding(groupsIn(reply[0]), helper.absolutePos(column.get(0)));
+                helper.assertTrue(reply.reply() != null, "scan_blocks has not replied");
+                var group = groupHolding(groupsIn(reply.reply()), helper.absolutePos(column.get(0)));
                 helper.assertTrue(group != null && group.get("cells").getAsInt() == 4,
-                        "the column is not one group of four: " + reply[0]);
+                        "the column is not one group of four: " + reply.reply());
                 mine[0] = mineGroups(companion, "gametest-sinker", List.of(group.get("id").getAsString()));
             }
             String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
@@ -595,9 +594,11 @@ public class PermissionGameTests {
         TaskRecord[] dig = new TaskRecord[1];
         boolean[] answered = new boolean[1];
         helper.runAfterDelay(5, () -> {
-            dig[0] = new BlockActionOps().interactAt("left", chest.getX(), chest.getY(), chest.getZ(), null, null,
-                    TaskDispatch.ctx("gametest-poker", companion));
-            TaskDispatch.runSync(companion, dig[0], reply -> {});
+            dig[0] = call(companion, "interact_at", args(
+                    "button", "left",
+                    "x", chest.getX(),
+                    "y", chest.getY(),
+                    "z", chest.getZ())).task();
         });
 
         helper.succeedWhen(() -> {
@@ -634,9 +635,7 @@ public class PermissionGameTests {
         pig.setNoAi(true);
         pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
         level.addFreshEntity(pig);
-        TaskRecord record = new com.dwinovo.numen.core.tools.CombatOps().attack(
-                List.of(pig.getId()), TaskDispatch.ctx("gametest-swineherd", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "attack", args("entity_ids", List.of(pig.getId()))).task();
         long[] asked = {0L};
         int[] waited = {0};
         boolean[] denied = {false};
@@ -678,9 +677,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_giver", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_receiver");
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 3));
-        TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().dropItems(
-                "minecraft:diamond", 3, TaskDispatch.ctx("gametest-giver", companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
+        TaskRecord record = call(companion, "drop_items", args("item_id", "minecraft:diamond", "count", 3)).task();
         boolean[] answered = new boolean[1];
 
         helper.succeedWhen(() -> {
@@ -711,9 +708,9 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_hesitant", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_changed_mind");
         companion.getInventory().add(new ItemStack(Items.GOLD_INGOT, 4));
-        TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().dropItems(
-                "minecraft:gold_ingot", 4, TaskDispatch.ctx("gametest-hesitant", companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
+        TaskRecord record = call(companion, "drop_items", args(
+                "item_id", "minecraft:gold_ingot",
+                "count", 4)).task();
         boolean[] stopped = new boolean[1];
 
         helper.succeedWhen(() -> {
@@ -740,9 +737,7 @@ public class PermissionGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_waiter", new BlockPos(4, 2, 4), false);
         NumenPlayer owner = presentOwner(helper, companion, "gametest_absent");
         companion.getInventory().add(new ItemStack(Items.EMERALD, 2));
-        TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().dropItems(
-                "minecraft:emerald", 2, TaskDispatch.ctx("gametest-waiter", companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
+        TaskRecord record = call(companion, "drop_items", args("item_id", "minecraft:emerald", "count", 2)).task();
 
         helper.succeedWhen(() -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
@@ -769,9 +764,9 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_viewer");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.OBSERVE);
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:birch_log"), null, 2, null, TaskDispatch.ctx("gametest-watch", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:birch_log"),
+                "count", 2)).task();
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
@@ -802,9 +797,9 @@ public class PermissionGameTests {
         NumenPlayer owner = presentOwner(helper, companion, "gametest_trusting");
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:spruce_log"), null, 2, null, TaskDispatch.ctx("gametest-trusted", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:spruce_log"),
+                "count", 2)).task();
         boolean[] asked = new boolean[1];
         helper.onEachTick(() -> asked[0] |= desk(companion).pending() != null);
 
@@ -873,7 +868,7 @@ public class PermissionGameTests {
         TaskRecord[] calls = new TaskRecord[3];
         int[] step = {0};
         helper.runAfterDelay(5, () -> {
-            calls[0] = click(helper, companion, "left", firstRel, "gametest-mason-1");
+            calls[0] = click(helper, companion, "left", firstRel);
             step[0] = 1;
         });
         helper.onEachTick(() -> {
@@ -889,7 +884,7 @@ public class PermissionGameTests {
                     if (calls[0].getResult() != null) {
                         helper.assertTrue(calls[0].getResult().success(),
                                 "the first dig failed after allow-and-remember: " + calls[0].getResult().message());
-                        calls[1] = click(helper, companion, "left", secondRel, "gametest-mason-2");
+                        calls[1] = click(helper, companion, "left", secondRel);
                         step[0] = 2;
                     }
                 }
@@ -898,7 +893,7 @@ public class PermissionGameTests {
                     if (calls[1].getResult() != null) {
                         helper.assertTrue(calls[1].getResult().success(),
                                 "the second cobblestone was not dug: " + calls[1].getResult().message());
-                        calls[2] = click(helper, companion, "left", plankRel, "gametest-mason-3");
+                        calls[2] = click(helper, companion, "left", plankRel);
                         step[0] = 3;
                     }
                 }
@@ -956,7 +951,7 @@ public class PermissionGameTests {
 
         TaskRecord[] call = new TaskRecord[1];
         boolean[] answered = new boolean[1];
-        helper.runAfterDelay(5, () -> call[0] = click(helper, companion, "left", stoneRel, "gametest-sculptor"));
+        helper.runAfterDelay(5, () -> call[0] = click(helper, companion, "left", stoneRel));
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
             if (pending != null && !answered[0]) {
@@ -995,11 +990,9 @@ public class PermissionGameTests {
         NumenPlayer stranger = spawnAt(helper, "gametest_passerby", new BlockPos(12, 2, 12), false);
         companion.getInventory().add(new ItemStack(Items.DIAMOND, 2));
         companion.getInventory().add(new ItemStack(Items.EMERALD, 4));
-        var inventory = new com.dwinovo.numen.core.tools.InventoryOps();
         TaskRecord[] calls = new TaskRecord[3];
         int[] step = {0};
-        calls[0] = inventory.dropItems("minecraft:diamond", 1, TaskDispatch.ctx("gametest-almoner-1", companion));
-        TaskDispatch.runSync(companion, calls[0], reply -> {});
+        calls[0] = call(companion, "drop_items", args("item_id", "minecraft:diamond", "count", 1)).task();
         helper.onEachTick(() -> {
             var pending = desk(companion).pending();
             switch (step[0]) {
@@ -1027,9 +1020,8 @@ public class PermissionGameTests {
                         helper.assertTrue(calls[0].getResult().success()
                                         && calls[0].getResult().message().contains("the owner allowed"),
                                 "the card answer did not go through: " + calls[0].getResult().message());
-                        calls[1] = inventory.dropItems("minecraft:emerald", 2,
-                                TaskDispatch.ctx("gametest-almoner-2", companion));
-                        TaskDispatch.runSync(companion, calls[1], reply -> {});
+                        calls[1] = call(companion, "drop_items", args("item_id", "minecraft:emerald", "count", 2))
+                                .task();
                         step[0] = 2;
                     }
                 }
@@ -1046,9 +1038,8 @@ public class PermissionGameTests {
                         helper.assertTrue(calls[1].getResult().success()
                                         && calls[1].getResult().message().contains("remembered it"),
                                 "the command answer did not go through: " + calls[1].getResult().message());
-                        calls[2] = inventory.dropItems("minecraft:emerald", 2,
-                                TaskDispatch.ctx("gametest-almoner-3", companion));
-                        TaskDispatch.runSync(companion, calls[2], reply -> {});
+                        calls[2] = call(companion, "drop_items", args("item_id", "minecraft:emerald", "count", 2))
+                                .task();
                         step[0] = 4;
                     }
                 }
@@ -1157,12 +1148,9 @@ public class PermissionGameTests {
         helper.succeed();
     }
 
-    private static TaskRecord takeFirstSlot(NumenPlayer companion, String id) {
-        TaskRecord record = new com.dwinovo.numen.core.tools.ContainerOps().transfer(
-                List.of(new com.dwinovo.numen.core.tools.ContainerOps.Move(0, null, null)),
-                TaskDispatch.ctx(id, companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
-        return record;
+    /** 把打开的界面里第 0 格整叠拿进背包。 */
+    private static TaskRecord takeFirstSlot(NumenPlayer companion) {
+        return call(companion, "transfer", args("moves", List.of(args("from", 0)))).task();
     }
 
     /**
@@ -1183,7 +1171,7 @@ public class PermissionGameTests {
             List<String> said = runAs(owner, "numen permission mode gametest_peeker observe");
             helper.assertTrue(com.dwinovo.numen.permission.Permission.modeOf(companion)
                     == com.dwinovo.numen.permission.Mode.OBSERVE, "the mode command did not set observe: " + said);
-            calls[0] = click(helper, companion, "right", chestRel, "gametest-peeker-1");
+            calls[0] = click(helper, companion, "right", chestRel);
             step[0] = 1;
         });
         helper.onEachTick(() -> {
@@ -1196,7 +1184,7 @@ public class PermissionGameTests {
                                 "observe mode let her open the chest: " + calls[0].getResult().message());
                         helper.assertTrue(companion.containerMenu == companion.inventoryMenu, "a GUI opened anyway");
                         runAs(owner, "numen permission mode gametest_peeker ask");
-                        calls[1] = click(helper, companion, "right", chestRel, "gametest-peeker-2");
+                        calls[1] = click(helper, companion, "right", chestRel);
                         step[0] = 2;
                     }
                 }
@@ -1206,7 +1194,7 @@ public class PermissionGameTests {
                                         && companion.containerMenu != companion.inventoryMenu,
                                 "the chest did not open in ask mode: " + calls[1].getResult().message());
                         runAs(owner, "numen permission mode gametest_peeker observe");
-                        calls[2] = takeFirstSlot(companion, "gametest-peeker-3");
+                        calls[2] = takeFirstSlot(companion);
                         step[0] = 3;
                     }
                 }
@@ -1248,7 +1236,7 @@ public class PermissionGameTests {
         TaskRecord[] calls = new TaskRecord[2];
         int[] step = {0};
         helper.runAfterDelay(5, () -> {
-            calls[0] = click(helper, companion, "right", chestRel, "gametest-borrower-1");
+            calls[0] = click(helper, companion, "right", chestRel);
             step[0] = 1;
         });
         helper.onEachTick(() -> {
@@ -1260,7 +1248,7 @@ public class PermissionGameTests {
                         helper.assertTrue(calls[0].getResult().success()
                                         && companion.containerMenu != companion.inventoryMenu,
                                 "the chest did not open: " + calls[0].getResult().message());
-                        calls[1] = takeFirstSlot(companion, "gametest-borrower-2");
+                        calls[1] = takeFirstSlot(companion);
                         step[0] = 2;
                     }
                 }
@@ -1328,8 +1316,8 @@ public class PermissionGameTests {
         BreakVeto.LOCKED.add(builder.getUUID());
         TaskRecord[] calls = new TaskRecord[2];
         helper.runAfterDelay(5, () -> {
-            calls[0] = click(helper, digger, "left", survivalRel, "gametest-trespasser");
-            calls[1] = click(helper, builder, "left", creativeRel, "gametest-intruder");
+            calls[0] = click(helper, digger, "left", survivalRel);
+            calls[1] = click(helper, builder, "left", creativeRel);
         });
 
         helper.succeedWhen(() -> {

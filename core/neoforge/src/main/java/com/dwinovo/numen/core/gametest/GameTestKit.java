@@ -3,11 +3,9 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.tools.BlockActionOps;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.CompanionTickDispatcher;
-import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -186,17 +184,9 @@ public final class GameTestKit {
         return m.find() ? m.group() : null;
     }
 
-    /** scan_blocks 在半径 {@code radius} 内找 {@code blockId},回执落进返回数组的第一格。 */
-    static String[] scan(NumenPlayer companion, int radius, String blockId) {
-        com.google.gson.JsonObject args = new com.google.gson.JsonObject();
-        args.addProperty("radius", radius);
-        com.google.gson.JsonArray ids = new com.google.gson.JsonArray();
-        ids.add(blockId);
-        args.add("block_ids", ids);
-        String[] reply = new String[1];
-        new com.dwinovo.numen.core.tools.perception.ScanBlocksTool().onServerCall("gametest-scan", args, companion,
-                r -> reply[0] = r);
-        return reply;
+    /** scan_blocks 在半径 {@code radius} 内找 {@code blockId}(回执稍后才到)。 */
+    static ToolRun scan(NumenPlayer companion, int radius, String blockId) {
+        return call(companion, "scan_blocks", args("radius", radius, "block_ids", List.of(blockId)));
     }
 
     static com.google.gson.JsonArray groupsIn(String reply) {
@@ -221,13 +211,10 @@ public final class GameTestKit {
     }
 
     /** interact_at 对着 {@code rel} 那一格按一下,同步调用。 */
-    static TaskRecord click(GameTestHelper helper, NumenPlayer companion, String button, BlockPos rel,
-                                    String id) {
+    static TaskRecord click(GameTestHelper helper, NumenPlayer companion, String button, BlockPos rel) {
         BlockPos at = helper.absolutePos(rel);
-        TaskRecord record = new BlockActionOps().interactAt(button, at.getX(), at.getY(), at.getZ(), null, null,
-                TaskDispatch.ctx(id, companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
-        return record;
+        return call(companion, "interact_at", args("button", button, "x", at.getX(), "y", at.getY(), "z", at.getZ()))
+                .task();
     }
 
 

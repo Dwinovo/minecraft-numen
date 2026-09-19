@@ -2,8 +2,6 @@ package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.task.build.BuildTaskRecord;
-import com.dwinovo.numen.core.tools.BlockActionOps;
-import com.dwinovo.numen.core.tools.MovementOps;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskDispatch;
@@ -43,10 +41,10 @@ public class ModeGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_cghost", new BlockPos(2, 2, 2), true);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, null, null,
-                TaskDispatch.ctx("gametest-cgoto", companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ())).task();
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "creative companion has not reached the goto target");
@@ -70,9 +68,9 @@ public class ModeGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_cminer", new BlockPos(2, 2, 2), true);
 
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:gold_ore"), null, 4, null, TaskDispatch.ctx("gametest-cmine", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:gold_ore"),
+                "count", 4)).task();
 
         helper.succeedWhen(() -> {
             for (BlockPos ore : ores) {
@@ -160,10 +158,11 @@ public class ModeGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 3), true);
         BlockPos target = helper.absolutePos(new BlockPos(12, 2, 12));
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, naturalSpec(), null,
-                TaskDispatch.ctx("gametest-climb", companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ(),
+                "spec", naturalSpec())).task();
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "empty-handed creative companion has not pillared out");
@@ -279,16 +278,10 @@ public class ModeGameTests {
     public static void creative_take_items(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_conjure", new BlockPos(2, 2, 2), true);
-        var args = new com.google.gson.JsonObject();
-        args.addProperty("item_id", "minecraft:diamond");
-        args.addProperty("count", 100);
-        java.util.concurrent.atomic.AtomicReference<String> reply =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        new com.dwinovo.numen.core.tools.inventory.TakeItemsTool()
-                .onServerCall("gametest-take", args, companion, reply::set);
+        ToolRun reply = call(companion, "take_items", args("item_id", "minecraft:diamond", "count", 100));
         helper.succeedWhen(() -> {
-            helper.assertTrue(reply.get() != null && reply.get().contains("\"success\":true"),
-                    "take_items should succeed in creative, got: " + reply.get());
+            helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":true"),
+                    "take_items should succeed in creative, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 100,
                     "expected 100 diamonds in inventory");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -300,16 +293,10 @@ public class ModeGameTests {
     public static void survival_take_items_refused(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_honest", new BlockPos(2, 2, 2), false);
-        var args = new com.google.gson.JsonObject();
-        args.addProperty("item_id", "minecraft:diamond");
-        args.addProperty("count", 10);
-        java.util.concurrent.atomic.AtomicReference<String> reply =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        new com.dwinovo.numen.core.tools.inventory.TakeItemsTool()
-                .onServerCall("gametest-take2", args, companion, reply::set);
+        ToolRun reply = call(companion, "take_items", args("item_id", "minecraft:diamond", "count", 10));
         helper.succeedWhen(() -> {
-            helper.assertTrue(reply.get() != null && reply.get().contains("\"success\":false"),
-                    "take_items must refuse in survival, got: " + reply.get());
+            helper.assertTrue(reply.reply() != null && reply.reply().contains("\"success\":false"),
+                    "take_items must refuse in survival, got: " + reply.reply());
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 0,
                     "survival refusal must not add items");
             CompanionFactory.despawn(level.getServer(), companion);

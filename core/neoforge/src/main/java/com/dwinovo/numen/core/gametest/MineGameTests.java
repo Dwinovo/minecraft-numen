@@ -1,10 +1,8 @@
 package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.tools.BlockActionOps;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
 import java.util.List;
 import java.util.UUID;
@@ -66,9 +64,9 @@ public class MineGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_tunneler", new BlockPos(3, 2, 3), false);
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:gold_ore"), null, 2, null, TaskDispatch.ctx("gametest-doormine", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:gold_ore"),
+                "count", 2)).task();
 
         BlockPos wallProbe = helper.absolutePos(new BlockPos(1, 3, 3));
         helper.succeedWhen(() -> {
@@ -106,9 +104,9 @@ public class MineGameTests {
         }
         NumenPlayer companion = spawnAt(helper, "gametest_canopy", new BlockPos(4, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:acacia_log"), null, 2, null, TaskDispatch.ctx("gametest-canopy", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:acacia_log"),
+                "count", 2)).task();
 
         helper.succeedWhen(() -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
@@ -134,9 +132,9 @@ public class MineGameTests {
         level.setBlockAndUpdate(helper.absolutePos(logRel), Blocks.ACACIA_LOG.defaultBlockState());
         NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(7, 2, 8), false);
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:acacia_log"), null, 1, null, TaskDispatch.ctx("gametest-skyward", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:acacia_log"),
+                "count", 1)).task();
 
         helper.succeedWhen(() -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
@@ -178,9 +176,9 @@ public class MineGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_AXE));
 
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:spruce_log"), null, 8, null, TaskDispatch.ctx("gametest-mine", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:spruce_log"),
+                "count", 8)).task();
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.getInventory().countItem(Items.SPRUCE_LOG) >= 8,
@@ -214,9 +212,9 @@ public class MineGameTests {
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
 
-        TaskRecord record = new BlockActionOps().autoMine(companion,
-                List.of("minecraft:deepslate_diamond_ore"), null, 2, null, TaskDispatch.ctx("gametest-mine", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "mine", args(
+                "block_ids", List.of("minecraft:deepslate_diamond_ore"),
+                "count", 2)).task();
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) >= 2,

@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -48,9 +47,7 @@ public class InventoryGameTests {
         ServerLevel level = helper.getLevel();
         NumenPlayer companion = spawnAt(helper, "gametest_dresser", new BlockPos(4, 2, 4), false);
         companion.getInventory().add(new ItemStack(Items.DIAMOND_HELMET));
-        TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().equipItem(
-                null, "minecraft:diamond_helmet", null, TaskDispatch.ctx("gametest-dress", companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
+        TaskRecord record = call(companion, "equip_item", args("item_id", "minecraft:diamond_helmet")).task();
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
@@ -78,9 +75,9 @@ public class InventoryGameTests {
         companion.getInventory().add(pick);
         // 这条测的是丢出去的是不是原物;丢东西要不要问主人另有用例,这里让主人选"全放行"
         com.dwinovo.numen.permission.Permission.setMode(companion, com.dwinovo.numen.permission.Mode.BYPASS);
-        TaskRecord record = new com.dwinovo.numen.core.tools.InventoryOps().dropItems(
-                "minecraft:diamond_pickaxe", 1, TaskDispatch.ctx("gametest-courier", companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
+        TaskRecord record = call(companion, "drop_items", args(
+                "item_id", "minecraft:diamond_pickaxe",
+                "count", 1)).task();
 
         helper.succeedWhen(() -> {
             var drops = level.getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,

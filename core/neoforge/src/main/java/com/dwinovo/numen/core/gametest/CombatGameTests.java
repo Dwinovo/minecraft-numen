@@ -5,7 +5,6 @@ import com.dwinovo.numen.core.combat.Menace;
 import com.dwinovo.numen.core.combat.Swing;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -86,9 +85,7 @@ public class CombatGameTests {
         pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
         pig.setNoAi(true);   // 站着别跑,这条测的是她走不走过去,不是追逐
         level.addFreshEntity(pig);
-        TaskRecord record = new com.dwinovo.numen.core.tools.CombatOps().attack(
-                List.of(pig.getId()), TaskDispatch.ctx("gametest-hunt", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "attack", args("entity_ids", List.of(pig.getId()))).task();
 
         helper.succeedWhen(() -> {
             helper.assertTrue(pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,

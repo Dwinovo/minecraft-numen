@@ -1,8 +1,6 @@
 package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.tools.BlockActionOps;
-import com.dwinovo.numen.core.tools.MovementOps;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
 import com.dwinovo.numen.task.TaskDispatch;
@@ -59,10 +57,10 @@ public class MovementGameTests {
                 "gametest_scout", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
 
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, null, null,
-                TaskDispatch.ctx("gametest-goto", companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ())).task();
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
@@ -83,10 +81,9 @@ public class MovementGameTests {
         NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_stopped", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), null, (double) target.getZ(), null, null, null,
-                TaskDispatch.ctx("gametest-stopped", companion));
-        TaskDispatch.setTask(companion, record, null, reply -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "z", (double) target.getZ())).task();
         boolean[] stopped = {false};
 
         helper.succeedWhen(() -> {
@@ -136,10 +133,10 @@ public class MovementGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_shutin", new BlockPos(3, 2, 3), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 13));
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, null, null,
-                TaskDispatch.ctx("gametest-door", companion));
-        TaskDispatch.runSync(companion, record, reply -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ())).task();
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not escaped through the door");
@@ -173,10 +170,10 @@ public class MovementGameTests {
         double boatStartDist = boat.position().distanceTo(Vec3.atCenterOf(target));
         helper.runAfterDelay(2, () -> {
             companion.startRiding(boat, true);
-            TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                    (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, null, null,
-                    TaskDispatch.ctx("gametest-pilot", companion));
-            TaskDispatch.setTask(companion, record, null, reply -> {});
+            TaskRecord record = call(companion, "goto", args(
+                    "x", (double) target.getX(),
+                    "y", (double) target.getY(),
+                    "z", (double) target.getZ())).task();
         });
 
         helper.succeedWhen(() -> {
@@ -216,15 +213,16 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_seated", new BlockPos(7, 2, 4), true);
         helper.runAfterDelay(2, () -> {
             companion.startRiding(boat, true);
-            TaskRecord press = new BlockActionOps().interactEntity("right", boat.getId(), null,
-                    null, TaskDispatch.ctx("gametest-selfclick", companion));
-            TaskDispatch.runSync(companion, press, reply -> {});
+            TaskRecord press = call(companion, "interact_entity", args(
+                    "button", "right",
+                    "entity_id", boat.getId())).task();
         });
         helper.runAfterDelay(30, () -> {
-            TaskRecord dig = new BlockActionOps().interactAt("left",
-                    stone.getX(), stone.getY(), stone.getZ(), null, null,
-                    TaskDispatch.ctx("gametest-afterclick", companion));
-            TaskDispatch.runSync(companion, dig, reply -> {});
+            TaskRecord dig = call(companion, "interact_at", args(
+                    "button", "left",
+                    "x", stone.getX(),
+                    "y", stone.getY(),
+                    "z", stone.getZ())).task();
         });
 
         helper.succeedWhen(() -> {
@@ -255,9 +253,9 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_rider", new BlockPos(3, 2, 6), true);
         helper.runAfterDelay(2, () -> {
             companion.startRiding(cart, true);
-            TaskRecord hit = new BlockActionOps().interactEntity("left", stand.getId(), null,
-                    null, TaskDispatch.ctx("gametest-rider", companion));
-            TaskDispatch.runSync(companion, hit, reply -> {});
+            TaskRecord hit = call(companion, "interact_entity", args(
+                    "button", "left",
+                    "entity_id", stand.getId())).task();
         });
 
         helper.succeedWhen(() -> {
@@ -280,10 +278,10 @@ public class MovementGameTests {
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_guest", new BlockPos(7, 2, 7), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, null, null,
-                TaskDispatch.ctx("gametest-guest", companion));
-        TaskDispatch.runSync(companion, record, r -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ())).task();
 
         helper.succeedWhen(() -> {
             String reply = record.getResult() == null ? null : record.getResult().message();
@@ -313,10 +311,11 @@ public class MovementGameTests {
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_digger", new BlockPos(7, 2, 7), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord record = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, naturalSpec(), null,
-                TaskDispatch.ctx("gametest-digger", companion));
-        TaskDispatch.runSync(companion, record, r -> {});
+        TaskRecord record = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ(),
+                "spec", naturalSpec())).task();
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
@@ -340,10 +339,10 @@ public class MovementGameTests {
         int planksBefore = plankCount(helper, 7, 7);
         NumenPlayer companion = spawnAt(helper, "gametest_chooser", new BlockPos(7, 2, 7), false);
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        TaskRecord refused = (TaskRecord) new MovementOps().moveTo(
-                (double) target.getX(), (double) target.getY(), (double) target.getZ(), null, null, null,
-                TaskDispatch.ctx("gametest-chooser-1", companion));
-        TaskDispatch.runSync(companion, refused, r -> {});
+        TaskRecord refused = call(companion, "goto", args(
+                "x", (double) target.getX(),
+                "y", (double) target.getY(),
+                "z", (double) target.getZ())).task();
         TaskRecord[] walk = new TaskRecord[1];
         String[] chosen = new String[1];
 
@@ -353,9 +352,7 @@ public class MovementGameTests {
                 helper.assertTrue(reply != null, "the first goto has not finished");
                 chosen[0] = firstRouteId(reply);
                 helper.assertTrue(chosen[0] != null, "the refusal lists no route id: " + reply);
-                walk[0] = (TaskRecord) new MovementOps().moveTo(null, null, null, null, null, chosen[0],
-                        TaskDispatch.ctx("gametest-chooser-2", companion));
-                TaskDispatch.runSync(companion, walk[0], r -> {});
+                walk[0] = call(companion, "goto", args("route", chosen[0])).task();
             }
             helper.assertTrue(companion.blockPosition().distSqr(target) <= 2 * 2,
                     "companion has not reached the target along route " + chosen[0]);
@@ -381,23 +378,16 @@ public class MovementGameTests {
         NumenPlayer companion = spawnAt(helper, "gametest_planner", new BlockPos(7, 2, 7), false);
         BlockPos spawnPos = companion.blockPosition();
         BlockPos target = helper.absolutePos(new BlockPos(13, 2, 7));
-        com.google.gson.JsonObject args = new com.google.gson.JsonObject();
-        args.addProperty("x", target.getX());
-        args.addProperty("y", target.getY());
-        args.addProperty("z", target.getZ());
-        args.add("spec", naturalSpec());
-        args.addProperty("alternatives", 2);
-        String[] reply = new String[1];
-        new com.dwinovo.numen.core.tools.work.PlanRouteTool().onServerCall("gametest-plan", args, companion,
-                r -> reply[0] = r);
+        ToolRun reply = call(companion, "plan_route", args("x", target.getX(), "y", target.getY(), "z", target.getZ(),
+                "spec", naturalSpec(), "alternatives", 2));
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(reply[0] != null, "plan_route has not replied");
-            helper.assertTrue(reply[0].contains("oak_planks"),
-                    "the plan does not name the blocks a route would break: " + reply[0]);
-            String id = firstRouteId(reply[0]);
-            helper.assertTrue(id != null && reply[0].contains("goto route:"),
-                    "the plan lists no route id: " + reply[0]);
+            helper.assertTrue(reply.reply() != null, "plan_route has not replied");
+            helper.assertTrue(reply.reply().contains("oak_planks"),
+                    "the plan does not name the blocks a route would break: " + reply.reply());
+            String id = firstRouteId(reply.reply());
+            helper.assertTrue(id != null && reply.reply().contains("goto route:"),
+                    "the plan lists no route id: " + reply.reply());
             helper.assertTrue(com.dwinovo.numen.core.pathing.plan.RouteBook.of(companion).get(id) != null,
                     "the planned route is not in the route book");
             helper.assertTrue(plankCount(helper, 7, 7) == planksBefore, "planning altered the wall");
@@ -429,9 +419,9 @@ public class MovementGameTests {
             }
         }
         NumenPlayer companion = spawnAt(helper, "gametest_knocker", new BlockPos(3, 2, 3), true);
-        TaskRecord hit = new BlockActionOps().interactEntity("left", stand.getId(), null,
-                null, TaskDispatch.ctx("gametest-knocker", companion));
-        TaskDispatch.runSync(companion, hit, r -> {});
+        TaskRecord hit = call(companion, "interact_entity", args(
+                "button", "left",
+                "entity_id", stand.getId())).task();
 
         helper.succeedWhen(() -> {
             String reply = hit.getResult() == null ? null : hit.getResult().message();
@@ -492,17 +482,10 @@ public class MovementGameTests {
         });
     }
 
-    /** plan_route 到 {@code rel} 那一格,回执落进返回数组的第一格。 */
-    private static String[] planTo(GameTestHelper helper, NumenPlayer companion, BlockPos rel) {
+    /** plan_route 到 {@code rel} 那一格(回执稍后才到)。 */
+    private static ToolRun planTo(GameTestHelper helper, NumenPlayer companion, BlockPos rel) {
         BlockPos target = helper.absolutePos(rel);
-        com.google.gson.JsonObject args = new com.google.gson.JsonObject();
-        args.addProperty("x", target.getX());
-        args.addProperty("y", target.getY());
-        args.addProperty("z", target.getZ());
-        String[] reply = new String[1];
-        new com.dwinovo.numen.core.tools.work.PlanRouteTool().onServerCall("gametest-plan", args, companion,
-                r -> reply[0] = r);
-        return reply;
+        return call(companion, "plan_route", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
     }
 
     /** {@code r12}、{@code g7} 里的数字。 */
@@ -526,25 +509,25 @@ public class MovementGameTests {
                 "gametest_numberer", level, new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
         UUID uuid = first.getUUID();
         // 召唤会替她挑一个站得住的落点,不一定正好在 spawn 那格:半径给宽一点
-        String[] firstScan = scan(first, 10, "minecraft:honeycomb_block");
-        String[][] firstPlan = new String[1][];
+        ToolRun firstScan = scan(first, 10, "minecraft:honeycomb_block");
+        ToolRun[] firstPlan = new ToolRun[1];
         NumenPlayer[] second = new NumenPlayer[1];
-        String[][] secondScan = new String[1][];
-        String[][] secondPlan = new String[1][];
+        ToolRun[] secondScan = new ToolRun[1];
+        ToolRun[] secondPlan = new ToolRun[1];
         String[] before = new String[2];   // 休眠前的 g 与 r
 
         helper.succeedWhen(() -> {
             if (before[0] == null) {
-                helper.assertTrue(firstScan[0] != null, "the first scan has not replied");
-                var group = groupHolding(groupsIn(firstScan[0]), helper.absolutePos(markRel));
-                helper.assertTrue(group != null, "the first scan did not list the block: " + firstScan[0]);
+                helper.assertTrue(firstScan.reply() != null, "the first scan has not replied");
+                var group = groupHolding(groupsIn(firstScan.reply()), helper.absolutePos(markRel));
+                helper.assertTrue(group != null, "the first scan did not list the block: " + firstScan.reply());
                 before[0] = group.get("id").getAsString();
                 firstPlan[0] = planTo(helper, first, new BlockPos(3, 2, 11));
             }
             if (before[1] == null) {
-                helper.assertTrue(firstPlan[0][0] != null, "the first plan_route has not replied");
-                before[1] = firstRouteId(firstPlan[0][0]);
-                helper.assertTrue(before[1] != null, "the first plan lists no route id: " + firstPlan[0][0]);
+                helper.assertTrue(firstPlan[0].reply() != null, "the first plan_route has not replied");
+                before[1] = firstRouteId(firstPlan[0].reply());
+                helper.assertTrue(before[1] != null, "the first plan lists no route id: " + firstPlan[0].reply());
                 com.dwinovo.numen.entity.Companions.dormant(server, first);
                 second[0] = com.dwinovo.numen.entity.Companions.respawn(server, uuid);
                 helper.assertTrue(second[0] != null && second[0] != first, "the body was not rebuilt");
@@ -555,14 +538,14 @@ public class MovementGameTests {
                 secondScan[0] = scan(second[0], 10, "minecraft:honeycomb_block");
             }
             if (secondPlan[0] == null) {
-                helper.assertTrue(secondScan[0][0] != null, "the second scan has not replied");
+                helper.assertTrue(secondScan[0].reply() != null, "the second scan has not replied");
                 secondPlan[0] = planTo(helper, second[0], new BlockPos(3, 2, 11));
             }
-            helper.assertTrue(secondPlan[0][0] != null, "the second plan_route has not replied");
-            var group = groupHolding(groupsIn(secondScan[0][0]), helper.absolutePos(markRel));
-            helper.assertTrue(group != null, "the second scan did not list the block: " + secondScan[0][0]);
+            helper.assertTrue(secondPlan[0].reply() != null, "the second plan_route has not replied");
+            var group = groupHolding(groupsIn(secondScan[0].reply()), helper.absolutePos(markRel));
+            helper.assertTrue(group != null, "the second scan did not list the block: " + secondScan[0].reply());
             String g = group.get("id").getAsString();
-            String r = firstRouteId(secondPlan[0][0]);
+            String r = firstRouteId(secondPlan[0].reply());
             long highest = Math.max(idNumber(before[0]), idNumber(before[1]));
             helper.assertTrue(r != null && idNumber(g) > highest && idNumber(r) > idNumber(g),
                     "ids started over after the rebuild: before " + before[0] + "/" + before[1]

@@ -43,18 +43,15 @@ public class PluginGameTests {
             numen.emit(companion, "gametest_charm_changed", java.util.Map.of("slot", "neck"),
                     "put on a gametest charm", false);
         });
-        java.util.concurrent.atomic.AtomicReference<String> reply =
-                new java.util.concurrent.atomic.AtomicReference<>();
-        new com.dwinovo.numen.core.tools.perception.GetSelfStatusTool()
-                .onServerCall("gametest-status", new com.google.gson.JsonObject(), companion, reply::set);
+        ToolRun reply = call(companion, "get_self_status", args());
         var outbox = com.dwinovo.numen.entity.EventOutbox.get(level.getServer());
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(reply.get() != null, "get_self_status has not replied");
-            var status = com.google.gson.JsonParser.parseString(reply.get()).getAsJsonObject();
+            helper.assertTrue(reply.reply() != null, "get_self_status has not replied");
+            var status = com.google.gson.JsonParser.parseString(reply.reply()).getAsJsonObject();
             helper.assertTrue(status.has("body_state") && status.get("body_state").getAsString()
                             .equals("<gametest_charm>wearing a gametest charm</gametest_charm>"),
-                    "get_self_status leaves out what the plugin reads off her body: " + reply.get());
+                    "get_self_status leaves out what the plugin reads off her body: " + reply.reply());
             var kept = outbox.peek(self).entries().stream()
                     .filter(e -> e.type().equals("gametest_charm_changed")).toList();
             helper.assertTrue(kept.size() == 1

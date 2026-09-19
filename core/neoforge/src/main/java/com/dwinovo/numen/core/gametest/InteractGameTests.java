@@ -1,11 +1,8 @@
 package com.dwinovo.numen.core.gametest;
 
 import com.dwinovo.numen.core.Constants;
-import com.dwinovo.numen.core.tools.BlockActionOps;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskDispatch;
-import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -47,18 +44,12 @@ public class InteractGameTests {
 
         NumenPlayer companion = spawnAt(helper, "gametest_scooper", new BlockPos(3, 2, 5), false);
         companion.getInventory().add(new ItemStack(Items.BUCKET));
-        // 等两刻让身体落稳(生成那一刻还没过物理,onGround 为假)再派活
-        String[] receipt = {"(no reply yet)"};
-        helper.runAfterDelay(2, () -> {
-            TaskRecord record = new BlockActionOps().interactAt("right",
-                    water.getX(), water.getY(), water.getZ(), null, "minecraft:bucket",
-                    TaskDispatch.ctx("gametest-scoop", companion));
-            TaskDispatch.runSync(companion, record, reply -> receipt[0] = reply);
-        });
+        ToolRun scoop = call(companion, "interact_at", args("button", "right",
+                "x", water.getX(), "y", water.getY(), "z", water.getZ(), "item_id", "minecraft:bucket"));
 
         helper.succeedWhen(() -> {
             helper.assertTrue(companion.getInventory().countItem(Items.WATER_BUCKET) == 1,
-                    "the bucket did not scoop the aimed water — tool reply: " + receipt[0]);
+                    "the bucket did not scoop the aimed water — tool reply: " + scoop.outcome());
             helper.assertTrue(!level.getBlockState(water).getFluidState().isSource(),
                     "the aimed water source is still there");
             CompanionFactory.despawn(level.getServer(), companion);
@@ -87,14 +78,8 @@ public class InteractGameTests {
         // 瞄池心时船的碰撞箱(宽 1.375)会搭在石堤上被 noCollision 拒绝——
         // 真玩家放船也是往远处的水面看,不盯着脚边的岸沿。
         BlockPos aim = helper.absolutePos(new BlockPos(9, 2, 8));
-        // 等两刻让身体落稳(生成那一刻还没过物理,onGround 为假)再派活
-        String[] receipt = {"(no reply yet)"};
-        helper.runAfterDelay(2, () -> {
-            TaskRecord record = new BlockActionOps().interactAt("right",
-                    aim.getX(), aim.getY(), aim.getZ(), null, "minecraft:oak_boat",
-                    TaskDispatch.ctx("gametest-boat", companion));
-            TaskDispatch.runSync(companion, record, reply -> receipt[0] = reply);
-        });
+        ToolRun place = call(companion, "interact_at", args("button", "right",
+                "x", aim.getX(), "y", aim.getY(), "z", aim.getZ(), "item_id", "minecraft:oak_boat"));
 
         helper.succeedWhen(() -> {
             var boats = level.getEntitiesOfClass(net.minecraft.world.entity.vehicle.Boat.class,
@@ -102,7 +87,7 @@ public class InteractGameTests {
                             helper.absolutePos(new BlockPos(6, 1, 6)).getCenter(),
                             helper.absolutePos(new BlockPos(10, 4, 10)).getCenter()));
             helper.assertTrue(!boats.isEmpty(),
-                    "no boat appeared on the aimed water — tool reply: " + receipt[0]);
+                    "no boat appeared on the aimed water — tool reply: " + place.outcome());
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
