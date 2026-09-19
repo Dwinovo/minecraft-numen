@@ -140,9 +140,7 @@ public final class BlockSearch {
         this.label = describe(targets);
         this.centerChunkX = SectionPos.blockToSectionCoord(center.getX());
         this.centerChunkZ = SectionPos.blockToSectionCoord(center.getZ());
-        this.maxRing = Math.max(
-                SectionPos.blockToSectionCoord(center.getX() + radius) - centerChunkX,
-                centerChunkX - SectionPos.blockToSectionCoord(center.getX() - radius));
+        this.maxRing = SearchGeometry.maxRing(center.getX(), center.getZ(), radius);
         this.sectionOrder = SearchGeometry.sectionOrder(
                 SectionPos.blockToSectionCoord(Math.max(center.getY() - radius, level.getMinBuildHeight())),
                 SectionPos.blockToSectionCoord(Math.min(center.getY() + radius, level.getMaxBuildHeight())),

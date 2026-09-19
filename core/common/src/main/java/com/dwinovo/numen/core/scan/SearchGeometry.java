@@ -50,6 +50,18 @@ public final class SearchGeometry {
     }
 
     /**
+     * 以 {@code (centerX, centerZ)} 为中心、半径 {@code radius} 的范围要走到第几个 chunk 环(切比雪夫环号)。
+     * X 与 Z 两个方向都要算:中心贴着哪条 chunk 边,哪一边的邻居就在范围里。
+     */
+    public static int maxRing(int centerX, int centerZ, int radius) {
+        int cx = Math.floorDiv(centerX, CHUNK);
+        int cz = Math.floorDiv(centerZ, CHUNK);
+        return Math.max(
+                Math.max(Math.floorDiv(centerX + radius, CHUNK) - cx, cx - Math.floorDiv(centerX - radius, CHUNK)),
+                Math.max(Math.floorDiv(centerZ + radius, CHUNK) - cz, cz - Math.floorDiv(centerZ - radius, CHUNK)));
+    }
+
+    /**
      * 切比雪夫第 {@code ring} 个 chunk 环上,任何方块离中心的<b>最小可能</b>距离。
      *
      * <p>中心在自己 chunk 内的偏移最多 15 格,所以第 m 环最近也有
