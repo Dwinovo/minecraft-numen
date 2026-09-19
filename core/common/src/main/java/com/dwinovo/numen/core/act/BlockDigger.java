@@ -19,8 +19,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 /**
  * Progressive block breaking that drives the SAME native server entry point a
@@ -392,7 +390,7 @@ public final class BlockDigger {
 
     /**
      * The first point ON {@code pos} the eye can
-     * actually raycast to — the block's shape centre first, then its six face centres. The
+     * actually raycast to, tried in {@link AimGeometry#aimPoints} order. The
      * returned {@link BlockHitResult} carries the exact aim point ({@code getLocation}) AND
      * the face the ray hits ({@code getDirection}), so the dig looks at the real interaction
      * face like a player would. {@code null} if nothing on the block is in line of sight.
@@ -401,23 +399,7 @@ public final class BlockDigger {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
         double reach = player.blockInteractionRange();
-        BlockState state = level.getBlockState(pos);
-        VoxelShape shape = state.getShape(level, pos);
-        if (shape.isEmpty()) {
-            shape = Shapes.block();
-        }
-        // Collision-shape centre first (empty collision → whole-cell centre),
-        // then the six face centres on the outline shape.
-        Vec3[] aims = {
-                com.dwinovo.numen.core.pathing.moves.AimGeometry.collisionCenter(level, pos, state),
-                offsetOn(pos, shape, 0.5, 0.0, 0.5),
-                offsetOn(pos, shape, 0.5, 1.0, 0.5),
-                offsetOn(pos, shape, 0.5, 0.5, 0.0),
-                offsetOn(pos, shape, 0.5, 0.5, 1.0),
-                offsetOn(pos, shape, 0.0, 0.5, 0.5),
-                offsetOn(pos, shape, 1.0, 0.5, 0.5),
-        };
-        for (Vec3 aim : aims) {
+        for (Vec3 aim : AimGeometry.aimPoints(level, pos, level.getBlockState(pos))) {
             Vec3 dir = aim.subtract(eye);
             if (dir.lengthSqr() < 1.0e-8) continue;
             Vec3 end = eye.add(dir.normalize().scale(reach));
@@ -450,15 +432,6 @@ public final class BlockDigger {
         BlockHitResult res = level.clip(new ClipContext(
                 eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
         return res.getType() == HitResult.Type.BLOCK ? res : null;
-    }
-
-    /** A point on the block's shape:
-     *  {@code min*m + max*(1-m)} on each axis. */
-    private static Vec3 offsetOn(BlockPos pos, VoxelShape shape, double mx, double my, double mz) {
-        double x = shape.min(Direction.Axis.X) * mx + shape.max(Direction.Axis.X) * (1 - mx);
-        double y = shape.min(Direction.Axis.Y) * my + shape.max(Direction.Axis.Y) * (1 - my);
-        double z = shape.min(Direction.Axis.Z) * mz + shape.max(Direction.Axis.Z) * (1 - mz);
-        return new Vec3(pos.getX() + x, pos.getY() + y, pos.getZ() + z);
     }
 
 }

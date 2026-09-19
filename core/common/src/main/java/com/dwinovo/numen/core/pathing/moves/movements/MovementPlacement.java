@@ -70,17 +70,6 @@ final class MovementPlacement {
     private static final com.dwinovo.numen.core.pathing.execute.AimProcessor AIM =
             new com.dwinovo.numen.core.pathing.execute.AimProcessor();
 
-    /** 放置可行性回退的六个面中心系数(先方块中心,再六面心)。 */
-    private static final double[][] FACE_OFFSETS = {
-            {0.5, 0.5, 0.5}, // 中心
-            {0.5, 0.0, 0.5}, // 下
-            {0.5, 1.0, 0.5}, // 上
-            {0.5, 0.5, 0.0}, // 北
-            {0.5, 0.5, 1.0}, // 南
-            {0.0, 0.5, 0.5}, // 西
-            {1.0, 0.5, 0.5}  // 东
-    };
-
     /** 以玩家当前视角作为"当前转角"的便捷入口。 */
     static PlaceResult attemptToPlaceABlock(MovementState state, ServerPlayer player,
                                             BlockPos placeAt, boolean preferDown, boolean wouldSneak) {
@@ -122,10 +111,9 @@ final class MovementPlacement {
         float foundYaw = currentYaw;
         float foundPitch = currentPitch;
 
-        // 直视 placeAt 本体(走到这一步说明该格必是可替换的)。中心不可视
-        // 时回退到方块碰撞形状的六面心,用 peek 后的实际转角做 raytrace。
-        for (double[] off : FACE_OFFSETS) {
-            Vec3 aim = shapePoint(level, placeAt, off[0], off[1], off[2]);
+        // 直视 placeAt 本体(走到这一步说明该格必是可替换的):按瞄点次序逐一试,
+        // 用 peek 后的实际转角做 raytrace。
+        for (Vec3 aim : AimGeometry.aimPoints(level, placeAt, level.getBlockState(placeAt))) {
             float yaw = AimGeometry.yawTo(eye, aim);
             float pitch = AimGeometry.pitchTo(eye, aim);
             com.dwinovo.numen.core.pathing.execute.AimProcessor.Rotation peek =
@@ -241,18 +229,6 @@ final class MovementPlacement {
         }
         ItemStack off = player.getOffhandItem();
         return !off.isEmpty() && acceptable.contains(off.getItem());
-    }
-
-    /** 方块碰撞形状上按 (mx,my,mz) 比例取点;空形状退回满格方块。 */
-    private static Vec3 shapePoint(Level level, BlockPos pos, double mx, double my, double mz) {
-        net.minecraft.world.phys.shapes.VoxelShape shape = level.getBlockState(pos).getShape(level, pos);
-        if (shape.isEmpty()) {
-            shape = net.minecraft.world.phys.shapes.Shapes.block();
-        }
-        double x = shape.min(Direction.Axis.X) * mx + shape.max(Direction.Axis.X) * (1 - mx);
-        double y = shape.min(Direction.Axis.Y) * my + shape.max(Direction.Axis.Y) * (1 - my);
-        double z = shape.min(Direction.Axis.Z) * mz + shape.max(Direction.Axis.Z) * (1 - mz);
-        return new Vec3(pos.getX() + x, pos.getY() + y, pos.getZ() + z);
     }
 
     /**

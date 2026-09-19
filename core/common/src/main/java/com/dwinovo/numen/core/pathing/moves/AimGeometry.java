@@ -50,24 +50,8 @@ public final class AimGeometry {
         if (looking.getType() == HitResult.Type.BLOCK && looking.getBlockPos().equals(pos)) {
             return looking.getLocation();
         }
-        // 首选取心:碰撞形状中点(无碰撞体退整格心);火取底面高度
-        // (灭火看火的根部)。六面心按轮廓形状取(射线判定也是轮廓)。
-        Vec3 center = collisionCenter(level, pos, state);
-        VoxelShape outline = state.getShape(level, pos);
-        if (outline.isEmpty()) {
-            outline = Shapes.block();
-        }
-        Vec3[] aims = {
-                center,
-                shapePoint(pos, outline, 0.5, 0.0, 0.5),
-                shapePoint(pos, outline, 0.5, 1.0, 0.5),
-                shapePoint(pos, outline, 0.5, 0.5, 0.0),
-                shapePoint(pos, outline, 0.5, 0.5, 1.0),
-                shapePoint(pos, outline, 0.0, 0.5, 0.5),
-                shapePoint(pos, outline, 1.0, 0.5, 0.5),
-        };
         var aim = new AimProcessor();
-        for (Vec3 aimPoint : aims) {
+        for (Vec3 aimPoint : aimPoints(level, pos, state)) {
             Vec3 dir = aimPoint.subtract(eye);
             if (dir.lengthSqr() < 1.0e-8) {
                 continue;
@@ -90,6 +74,29 @@ public final class AimGeometry {
             return false;
         }
         return res.getBlockPos().equals(pos) || (fire && res.getBlockPos().equals(pos.below()));
+    }
+
+    /** 六个面心在形状各轴上的插值系数(见 {@link #shapePoint})。 */
+    private static final double[][] FACE_CENTERS = {
+            {0.5, 0.0, 0.5}, {0.5, 1.0, 0.5}, {0.5, 0.5, 0.0}, {0.5, 0.5, 1.0}, {0.0, 0.5, 0.5}, {1.0, 0.5, 0.5},
+    };
+
+    /**
+     * 瞄一格时依次试的点:先取心(碰撞形状中点,见 {@link #collisionCenter}),再轮廓形状的六个面心——射线判定
+     * 用的也是轮廓。挖掘、放置与执行层找瞄点都按这一份。
+     */
+    public static Vec3[] aimPoints(net.minecraft.world.level.Level level, BlockPos pos, BlockState state) {
+        VoxelShape outline = state.getShape(level, pos);
+        if (outline.isEmpty()) {
+            outline = Shapes.block();
+        }
+        Vec3[] points = new Vec3[1 + FACE_CENTERS.length];
+        points[0] = collisionCenter(level, pos, state);
+        for (int i = 0; i < FACE_CENTERS.length; i++) {
+            double[] m = FACE_CENTERS[i];
+            points[i + 1] = shapePoint(pos, outline, m[0], m[1], m[2]);
+        }
+        return points;
     }
 
     /** 碰撞形状中点;无碰撞体取整格心;火把 y 压到格底(看火的根部)。 */
@@ -125,7 +132,7 @@ public final class AimGeometry {
     }
 
     /** 方块碰撞形状上按比例取点(m 为各轴的 min↔max 插值系数)。 */
-    static Vec3 shapePoint(BlockPos pos, VoxelShape shape, double mx, double my, double mz) {
+    private static Vec3 shapePoint(BlockPos pos, VoxelShape shape, double mx, double my, double mz) {
         double x = shape.min(net.minecraft.core.Direction.Axis.X) * mx
                 + shape.max(net.minecraft.core.Direction.Axis.X) * (1 - mx);
         double y = shape.min(net.minecraft.core.Direction.Axis.Y) * my
