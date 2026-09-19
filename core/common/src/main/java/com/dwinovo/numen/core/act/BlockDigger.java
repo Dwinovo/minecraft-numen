@@ -220,7 +220,7 @@ public final class BlockDigger {
         // crosshair actually hits, opening the way, instead of holding forever for a clear angle.
         // The occluder goes through the same permission gate as any target: a player's chest in
         // the way is never ground down just to reach something behind it.
-        BlockHitResult hit = reachableHit(target);
+        BlockHitResult hit = AimGeometry.visibleHit(player, target, digReach());
         BlockPos effective = target;
         if (hit == null) {
             BlockHitResult center = centerRaycast(target);
@@ -256,7 +256,7 @@ public final class BlockDigger {
             InputDriver.halt(player);
             return DigResult.PROGRESSING;
         }
-        BlockHitResult hit = reachableHit(target);
+        BlockHitResult hit = AimGeometry.visibleHit(player, target, digReach());
         InputDriver.halt(player);
         if (hit == null) {
             return DigResult.NO_SHOT;
@@ -404,41 +404,22 @@ public final class BlockDigger {
         started = false;
     }
 
-    /**
-     * The first point ON {@code pos} the eye can
-     * actually raycast to, tried in {@link AimGeometry#aimPoints} order. The
-     * returned {@link BlockHitResult} carries the exact aim point ({@code getLocation}) AND
-     * the face the ray hits ({@code getDirection}), so the dig looks at the real interaction
-     * face like a player would. {@code null} if nothing on the block is in line of sight.
-     */
-    private BlockHitResult reachableHit(BlockPos pos) {
-        Level level = player.level();
-        Vec3 eye = player.getEyePosition();
-        double reach = player.blockInteractionRange() + SERVER_REACH_SLACK;
-        for (Vec3 aim : AimGeometry.aimPoints(level, pos, level.getBlockState(pos))) {
-            Vec3 dir = aim.subtract(eye);
-            if (dir.lengthSqr() < 1.0e-8) continue;
-            Vec3 end = eye.add(dir.normalize().scale(reach));
-            BlockHitResult res = level.clip(new ClipContext(
-                    eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
-            if (res.getType() == HitResult.Type.BLOCK && res.getBlockPos().equals(pos)) {
-                return res;
-            }
-        }
-        return null;
+    /** How far a dig swing reaches: the vanilla interaction range plus the server's slack. */
+    private double digReach() {
+        return player.blockInteractionRange() + SERVER_REACH_SLACK;
     }
 
     /**
      * A single ray from the eye to {@code target}'s shape centre — the break-the-occluder
-     * fallback when {@link #reachableHit} finds no clear face: the ray lands on the
+     * fallback when {@link AimGeometry#visibleHit} finds no clear face: the ray lands on the
      * occluder (a leaf / a tight overhead), and we break THAT to open the way. Null on a miss / out
-     * of reach. ({@link #reachableHit} already tries the centre first, so if that hit the target it
-     * would have returned it; reaching here means the centre ray hits something else.)
+     * of reach. ({@link AimGeometry#visibleHit} already tries the centre first, so if that hit the
+     * target it would have returned it; reaching here means the centre ray hits something else.)
      */
     private BlockHitResult centerRaycast(BlockPos target) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = player.blockInteractionRange() + SERVER_REACH_SLACK;
+        double reach = digReach();
         Vec3 center = Vec3.atCenterOf(target);
         Vec3 dir = center.subtract(eye);
         if (dir.lengthSqr() < 1.0e-8) {

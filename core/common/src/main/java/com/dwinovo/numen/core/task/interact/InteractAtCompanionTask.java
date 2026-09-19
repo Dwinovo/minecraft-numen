@@ -10,6 +10,7 @@ import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.act.PressReceipt;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
+import com.dwinovo.numen.core.pathing.moves.AimGeometry;
 import com.dwinovo.numen.core.task.base.GoToThenDoTask;
 import com.dwinovo.numen.core.task.base.Precondition;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -78,8 +79,11 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             if (r.item != null) {
                 player.holdInHand(PlayerInv.findSlot(player.getInventory(), r.item));
             }
+            // 看向目标上真能射到的那一点(拉杆、开着的门只占格子的一角,格心可能是空的);一点都看不见
+            // 时看格心,下面的准星就点名挡着的那一块。空气与流体本来就没有可射中的轮廓,也看格心
             if (r.aim != null) {
-                InputDriver.lookAt(player, Vec3.atCenterOf(r.aim));
+                var visible = AimGeometry.visibleHit(player, r.aim, player.blockInteractionRange());
+                InputDriver.lookAt(player, visible != null ? visible.getLocation() : Vec3.atCenterOf(r.aim));
             }
             HitResult hit = Interaction.nativeRaytrace(player, player.blockInteractionRange());
             // 目标格本身是实心方块、而准星实际落在别的方块上 = 被遮挡:

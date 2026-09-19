@@ -68,6 +68,30 @@ public final class AimGeometry {
         return null;
     }
 
+    /**
+     * 眼睛沿直线真能射到 {@code pos} 上的第一个瞄点,按 {@link #aimPoints} 次序试(转过去即可,不按
+     * 每刻转角步进)。命中结果带着瞄点({@code getLocation})与射中的那一面({@code getDirection}),
+     * 像玩家一样看着真正要交互的那一面。{@code reach} 是调用方的触及距离;这一格上一点都看不见时为 null。
+     */
+    public static BlockHitResult visibleHit(Player player, BlockPos pos, double reach) {
+        var level = player.level();
+        Vec3 eye = player.getEyePosition();
+        for (Vec3 aim : aimPoints(level, pos, level.getBlockState(pos))) {
+            Vec3 dir = aim.subtract(eye);
+            if (dir.lengthSqr() < 1.0e-8) {
+                continue;
+            }
+            Vec3 end = eye.add(dir.normalize().scale(reach));
+            BlockHitResult res = level.clip(new net.minecraft.world.level.ClipContext(
+                    eye, end, net.minecraft.world.level.ClipContext.Block.OUTLINE,
+                    net.minecraft.world.level.ClipContext.Fluid.NONE, player));
+            if (res.getType() == HitResult.Type.BLOCK && res.getBlockPos().equals(pos)) {
+                return res;
+            }
+        }
+        return null;
+    }
+
     /** 命中判定:命中该格;目标是火时命中其下方支撑格也算(火焰轮廓极薄)。 */
     private static boolean hitsTarget(BlockHitResult res, BlockPos pos, boolean fire) {
         if (res.getType() != HitResult.Type.BLOCK) {
