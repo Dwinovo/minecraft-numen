@@ -79,6 +79,10 @@ public abstract class GoToThenDoTask<R extends TaskRecord> extends AbstractCompa
     protected final TaskState onTick() {
         if (reached()) return act();
         if (nav == null) {
+            // 身体还没站稳(刚落地、跳在半空)时判不了够不够得着:等它站稳,不拿半空里的一刻下"够不着"的结论
+            if (!bodySettled()) {
+                return TaskState.RUNNING;
+            }
             // 无到场导航的动作任务:不在工作距离内 = 教学失败,旅行归 goto
             net.minecraft.core.BlockPos t = gotoFirstTarget();
             if (t != null) {
