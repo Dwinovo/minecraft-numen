@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.task.collect;
 import com.dwinovo.numen.task.TaskState;
 
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.core.mixin.ItemEntityAccessor;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import com.dwinovo.numen.core.task.base.TargetSet;
@@ -28,7 +29,9 @@ import java.util.Map;
  * <pre>
  *   SCAN     → nearest matching ItemEntity within the radius; none → DONE.
  *   APPROACH → Navigator toward it until it's absorbed or we
- *              reach the spot without picking it up (skip), then re-SCAN.
+ *              reach the spot without picking it up, then re-SCAN. At the spot a
+ *              fresh drop still counting down its pickup delay is waited out;
+ *              anything else that stays on the ground is skipped.
  * </pre>
  *
  * <p>回执里捡了多少,数的是到手的件数:背包里要捡的那几种比开工时多出来的,不是消失了几堆掉落物
@@ -96,8 +99,10 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
             case RUNNING -> { /* walking to it */ }
             case ARRIVED -> {
                 // Reached the spot. If it's now absorbed, the removed-branch above
-                // counts it next tick; otherwise we can't pick it up — skip it.
-                if (!target.isRemoved()) {
+                // counts it next tick. A drop still in its pickup delay is absorbed by
+                // standing here once the delay runs out; otherwise we can't pick it up
+                // — skip it.
+                if (!target.isRemoved() && !pickupPending(target)) {
                     skipped.skip(target);
                     target = null;
                     stopNav();
@@ -116,6 +121,13 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
 
     private BlockPos targetCell() {
         return (target != null && !target.isRemoved()) ? target.blockPosition() : null;
+    }
+
+    /** Still counting down its pickup delay (vanilla gives fresh drops a few ticks) — not
+     *  the "never" marker, which no amount of waiting clears. */
+    private static boolean pickupPending(ItemEntity item) {
+        int delay = ((ItemEntityAccessor) item).numen$getPickupDelay();
+        return delay > 0 && delay != ItemEntityAccessor.numen$infinitePickupDelay();
     }
 
     /** Reached = absorbed, or close enough that auto-pickup should have fired. */
