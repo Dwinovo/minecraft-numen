@@ -6,7 +6,6 @@ import com.dwinovo.numen.task.TaskState;
 import com.dwinovo.numen.entity.InputDriver;
 
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.FailureType;
 import com.dwinovo.numen.core.act.Interaction;
 import com.dwinovo.numen.core.act.PressReceipt;
@@ -31,17 +30,10 @@ import java.util.Map;
  */
 public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTaskRecord> {
 
-    private static final double WALK_SPEED = 1.0;
-    /** Reposition-rung stance radius: any feet cell this close to the aim (< {@link #REACH},
-     *  so an accepted stance is still within interact reach). Never wider than the goal. */
-
     private Interaction interaction;
     /** 按键前的世界快照,收尾时对账出"真发生了什么"(见 {@link PressReceipt})。 */
     private PressReceipt receipt;
     private java.util.List<String> changes = List.of();
-    // ---- bounded recovery state (fields, so a Suspendable mid-rung suspend/resume
-    //      picks straight back up: the counter and the rebuilt nav both survive) ----
-    /** The FIRST nav failure's reason, preserved so the final give-up keeps the original wording. */
     private long holdUntil = -1;       // game tick to release a fixed-duration hold (holdTicks > 0)
     private String successMsg = "done";
     // A right-click that activated a real block (a station's GUI): captured so the
@@ -202,13 +194,6 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
         return null;
     }
 
-
-    /** In-ladder nav causes the reposition rung handles; anything else kicks straight back to the LLM. */
-    private static boolean repositionable(FailureType type) {
-        return type == FailureType.NO_PATH || type == FailureType.TERRAIN_BLOCKED
-                || type == FailureType.BOXED_IN
-                || type == FailureType.OUT_OF_REACH || type == FailureType.STANCE_DUD;
-    }
 
     private Interaction.Button button() {
         return r.button == MouseButton.LEFT
