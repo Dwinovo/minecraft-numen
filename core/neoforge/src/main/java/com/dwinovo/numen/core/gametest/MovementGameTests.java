@@ -13,6 +13,8 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -582,6 +584,99 @@ public class MovementGameTests {
             helper.assertTrue(told.toString().contains("task_finished") && told.toString().contains("没能接回来"),
                     "she was not told the task could not be restored: " + told);
             com.dwinovo.numen.entity.Companions.dismiss(server, second);
+        });
+    }
+
+    // ---- 地形边界:高台、水沟 ----
+
+    /** 一座三格高、3×3 的黑曜石台,台顶是 (11,5,7)。空手挖不动它,想上去只能垫方块。 */
+    private static BlockPos obsidianTower(GameTestHelper helper) {
+        for (int x = 10; x <= 12; x++) {
+            for (int z = 6; z <= 8; z++) {
+                for (int y = 2; y <= 4; y++) {
+                    helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
+                            Blocks.OBSIDIAN.defaultBlockState());
+                }
+            }
+        }
+        return helper.absolutePos(new BlockPos(11, 5, 7));
+    }
+
+    /** 默认不改地形:上高台要垫方块,她只列出候选路线让模型选,不动手,泥土一块没用。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_up_a_tower_by_default_only_lists_routes(GameTestHelper helper) {
+        BlockPos top = obsidianTower(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_asker", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.DIRT, 16));
+        ToolRun walk = call(companion, "goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(walk.done(), "goto has not finished");
+            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("goto route:"),
+                    "the reply does not offer routes to choose from: " + walk.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.DIRT) == 16
+                            && companion.blockPosition().getY() < top.getY(),
+                    "she built her way up without being allowed to");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 规格允许改地形、身上带着泥土:垫着爬上高台,泥土用掉了几块。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_up_a_tower_with_natural_spec_pillars_up(GameTestHelper helper) {
+        BlockPos top = obsidianTower(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_climber", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.DIRT, 16));
+        ToolRun walk = call(companion, "goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
+                "spec", naturalSpec()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(walk.done(), "goto has not finished");
+            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(top) <= 2,
+                    "she did not get onto the tower: " + walk.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.DIRT) < 16, "no dirt was spent climbing");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 允许改地形,但身上没有能垫的方块:上不去,回执说清楚缺的是垫脚的方块。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_up_a_tower_without_scaffold_says_so(GameTestHelper helper) {
+        BlockPos top = obsidianTower(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_grounded", new BlockPos(3, 2, 7), false);
+        ToolRun walk = call(companion, "goto", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
+                "spec", naturalSpec()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(walk.done(), "goto has not finished");
+            helper.assertTrue(!walk.succeeded() && walk.outcome().contains("scaffolding"),
+                    "the failure does not say she has nothing to pillar with: " + walk.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 场地垫高两层,正中一道两格宽、两格深的水沟横着切开:她游过去,爬上对岸,到达目标。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_swims_across_a_water_channel(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                boolean channel = x == 8 || x == 9;
+                for (int y = 2; y <= 3; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
+                            channel ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState());
+                }
+            }
+        }
+        BlockPos target = helper.absolutePos(new BlockPos(13, 4, 7));
+        NumenPlayer companion = spawnAt(helper, "gametest_swimmer", new BlockPos(3, 4, 7), false);
+        ToolRun walk = call(companion, "goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(walk.done(), "goto has not finished");
+            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
+                    "she did not get across the channel: " + walk.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
         });
     }
 }

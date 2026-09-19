@@ -223,6 +223,36 @@ public class MineGameTests {
         });
     }
 
+    /**
+     * 矿紧挨着岩浆:挖开它岩浆就会淌出来,所以这一格不挖。回执交代它挖不成的原因(贴着流体),矿与岩浆都原样。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_leaves_ore_that_borders_lava(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos ore = helper.absolutePos(new BlockPos(6, 2, 4));
+        BlockPos lava = helper.absolutePos(new BlockPos(7, 2, 4));
+        // 岩浆关在一个石头兜里,只有挨着矿的那一面敞着
+        for (BlockPos wall : List.of(new BlockPos(8, 2, 4), new BlockPos(7, 2, 3), new BlockPos(7, 2, 5),
+                new BlockPos(7, 3, 4))) {
+            level.setBlockAndUpdate(helper.absolutePos(wall), Blocks.STONE.defaultBlockState());
+        }
+        level.setBlockAndUpdate(ore, Blocks.IRON_ORE.defaultBlockState());
+        level.setBlockAndUpdate(lava, Blocks.LAVA.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_careful", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:iron_ore"), "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("none of them can be broken here"),
+                    "the reply does not say the ore by the lava cannot be broken: " + mine.outcome());
+            helper.assertTrue(level.getBlockState(ore).is(Blocks.IRON_ORE)
+                            && level.getBlockState(lava).is(Blocks.LAVA),
+                    "the ore was broken or the lava got out");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 服务端这一刻认不认为她正在挖一格方块。 */
     private static boolean digging(NumenPlayer companion) {
         return ((com.dwinovo.numen.core.mixin.ServerPlayerGameModeAccessor) companion.gameMode).numen$isDestroyingBlock();

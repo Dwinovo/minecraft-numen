@@ -1331,4 +1331,48 @@ public class PermissionGameTests {
             CompanionFactory.despawn(level.getServer(), builder);
         });
     }
+
+    /**
+     * 在主人放的木板旁边放 TNT:危险品挨着玩家的东西要问;主人不在,问不到就不放。建造按格交代,
+     * 这一格留着没动、回执说是主人没答应,TNT 还在身上。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void build_tnt_next_to_the_owners_planks_needs_the_owner(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        playerPlaces(helper, new BlockPos(6, 2, 4), Items.OAK_PLANKS);
+        BlockPos spot = helper.absolutePos(new BlockPos(7, 2, 4));
+        NumenPlayer companion = spawnAt(helper, "gametest_demolisher", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.TNT));
+        ToolRun build = call(companion, "build", args("ops", List.of(args("op", "set",
+                "block_id", "minecraft:tnt", "x", spot.getX(), "y", spot.getY(), "z", spot.getZ()))));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(build.done(), "build has not finished");
+            helper.assertTrue(build.outcome().contains("because the owner said no"),
+                    "the reply does not say the owner refused that cell: " + build.outcome());
+            helper.assertTrue(!level.getBlockState(spot).is(Blocks.TNT)
+                            && companion.getInventory().countItem(Items.TNT) == 1,
+                    "the TNT was placed next to the owner's planks");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 同一块 TNT 放在远离玩家东西的空地上:不用问,放下去就是。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void build_tnt_away_from_player_blocks_goes_ahead(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spot = helper.absolutePos(new BlockPos(10, 2, 10));
+        NumenPlayer companion = spawnAt(helper, "gametest_quarryman", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.TNT));
+        ToolRun build = call(companion, "build", args("ops", List.of(args("op", "set",
+                "block_id", "minecraft:tnt", "x", spot.getX(), "y", spot.getY(), "z", spot.getZ()))));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(build.done(), "build has not finished");
+            helper.assertTrue(build.succeeded() && level.getBlockState(spot).is(Blocks.TNT),
+                    "the TNT in the open was not placed: " + build.outcome());
+            helper.assertTrue(desk(companion).pending() == null, "she asked for a placement nobody needs to allow");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }
