@@ -6,6 +6,7 @@ import com.dwinovo.numen.agent.tool.NumenTool;
 import com.dwinovo.numen.agent.tool.Schema;
 import com.dwinovo.numen.core.task.move.FollowTaskRecord;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.task.TaskResult;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
 
@@ -79,8 +80,8 @@ public final class FollowTool implements NumenTool {
             var target = ((net.minecraft.server.level.ServerLevel) companion.level())
                     .getEntity(entityId);
             if (target == null || target.isRemoved() || target == companion) {
-                reply.accept("no entity with id " + entityId
-                        + " is here — scan_nearby_entities first, ids do not survive restarts");
+                reply.accept(TaskResult.fail("no entity with id " + entityId
+                        + " is here — scan_nearby_entities first, ids do not survive restarts").toJson());
                 return;
             }
             // 把身份钉进 args:常驻任务跨重启是<b>重放这次调用</b>,而 id 每次开服重发。
