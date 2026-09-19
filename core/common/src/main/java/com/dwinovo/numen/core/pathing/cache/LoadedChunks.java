@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.pathing.cache;
 
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.LevelChunk;
 
@@ -21,9 +22,21 @@ import net.minecraft.world.level.chunk.LevelChunk;
 public final class LoadedChunks {
 
     private final Long2ObjectMap<LevelChunk> chunks;
+    /** The chunks this snapshot was gathered around (each companion's, as chunk keys). */
+    private final LongSet centers;
 
-    LoadedChunks(Long2ObjectMap<LevelChunk> chunks) {
+    LoadedChunks(Long2ObjectMap<LevelChunk> chunks, LongSet centers) {
         this.chunks = chunks;
+        this.centers = centers;
+    }
+
+    /** Was this snapshot gathered around the chunk {@code chunkKey} ({@link ChunkPos#asLong})? */
+    boolean centeredOn(long chunkKey) {
+        return centers.contains(chunkKey);
+    }
+
+    LongSet centers() {
+        return centers;
     }
 
     /** The loaded chunk at the given chunk coordinates, or {@code null} if it wasn't loaded when this

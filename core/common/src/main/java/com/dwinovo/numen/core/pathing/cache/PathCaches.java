@@ -2,6 +2,8 @@ package com.dwinovo.numen.core.pathing.cache;
 
 import com.dwinovo.numen.entity.NumenPlayer;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceKey;
@@ -14,7 +16,6 @@ import net.minecraft.world.level.chunk.LevelChunk;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.HashSet;
@@ -28,7 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * planner then reads those refs LIVE; because the snapshot is
  * rebuilt fresh each tick and never mutated after, there is no cache to invalidate, no block-change
  * tracking, and no staleness beyond a single tick of drift — the server's own chunk
- * loading/unloading bounds it for free.
+ * loading/unloading bounds it for free. A search starting away from where the companions stood at the
+ * last rebuild gets the snapshot rebuilt around it on the spot ({@link #ensureSnapshot}).
  */
 public final class PathCaches {
 
@@ -56,19 +58,30 @@ public final class PathCaches {
     }
 
     /**
-     * The snapshot for {@code level}, building one around {@code around} on the spot if none exists yet.
-     * Called on the main thread right before a search so the planner always gets a thread-safe view —
-     * without this, a level's very first search (dispatched before {@link #serverTick} has run) would
-     * fall back to a LIVE read-through, which is unsafe once the search runs off-thread.
+     * The snapshot for {@code level}, gathered around {@code around}'s chunk. Called on the main thread
+     * right before a search so the planner always gets a thread-safe view. The per-tick rebuild
+     * ({@link #serverTick}) only knows where the companions stood at the end of the last tick, so a
+     * search from anywhere else — a companion summoned or teleported this tick, or a level's very
+     * first search — rebuilds it on the spot with {@code around}'s chunk added to the centres; otherwise
+     * the chunks around her would read as unloaded AIR and the search could only return a stub.
      */
     public static LoadedChunks ensureSnapshot(ServerLevel level, BlockPos around) {
         LoadedChunks existing = SNAPSHOTS.get(level.dimension());
-        if (existing != null) {
+        long center = chunkOf(around);
+        if (existing != null && existing.centeredOn(center)) {
             return existing;
         }
-        LoadedChunks built = snapshot(level, List.of(around));
+        LongSet centers = existing == null ? new LongOpenHashSet() : new LongOpenHashSet(existing.centers());
+        centers.add(center);
+        LoadedChunks built = snapshot(level, centers);
         SNAPSHOTS.put(level.dimension(), built);
         return built;
+    }
+
+    /** The chunk {@code pos} stands in, as a {@link ChunkPos#asLong} key. */
+    private static long chunkOf(BlockPos pos) {
+        return ChunkPos.asLong(SectionPos.blockToSectionCoord(pos.getX()),
+                SectionPos.blockToSectionCoord(pos.getZ()));
     }
 
     public static void dropAll() {
@@ -85,10 +98,10 @@ public final class PathCaches {
         // Tick-interval pulse for the profiler: this hook runs EVERY server tick on every loader,
         // so gap measurements never mistake a task-idle stretch for a slow tick.
         com.dwinovo.numen.core.pathing.util.NavProfiler.serverTickPulse();
-        Map<ServerLevel, List<BlockPos>> byLevel = new HashMap<>();
+        Map<ServerLevel, LongSet> byLevel = new HashMap<>();
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p instanceof NumenPlayer && p.level() instanceof ServerLevel sl) {
-                byLevel.computeIfAbsent(sl, k -> new ArrayList<>()).add(p.blockPosition());
+                byLevel.computeIfAbsent(sl, k -> new LongOpenHashSet()).add(chunkOf(p.blockPosition()));
             }
         }
 
@@ -105,18 +118,18 @@ public final class PathCaches {
             }
         }
 
-        for (Map.Entry<ServerLevel, List<BlockPos>> e : byLevel.entrySet()) {
+        for (Map.Entry<ServerLevel, LongSet> e : byLevel.entrySet()) {
             SNAPSHOTS.put(e.getKey().dimension(), snapshot(e.getKey(), e.getValue()));
         }
     }
 
-    /** Gather references to the chunks loaded within {@link #RADIUS_CHUNKS} of any companion in this
-     *  level (non-blocking — unloaded chunks are simply absent → the reader sees AIR). */
-    private static LoadedChunks snapshot(ServerLevel level, List<BlockPos> feet) {
+    /** Gather references to the chunks loaded within {@link #RADIUS_CHUNKS} of any of the {@code centers}
+     *  chunks (non-blocking — unloaded chunks are simply absent → the reader sees AIR). */
+    private static LoadedChunks snapshot(ServerLevel level, LongSet centers) {
         Long2ObjectOpenHashMap<LevelChunk> map = new Long2ObjectOpenHashMap<>();
-        for (BlockPos f : feet) {
-            int ccx = SectionPos.blockToSectionCoord(f.getX());
-            int ccz = SectionPos.blockToSectionCoord(f.getZ());
+        for (long c : centers) {
+            int ccx = ChunkPos.getX(c);
+            int ccz = ChunkPos.getZ(c);
             for (int dx = -RADIUS_CHUNKS; dx <= RADIUS_CHUNKS; dx++) {
                 for (int dz = -RADIUS_CHUNKS; dz <= RADIUS_CHUNKS; dz++) {
                     int cx = ccx + dx;
@@ -131,6 +144,6 @@ public final class PathCaches {
                 }
             }
         }
-        return new LoadedChunks(map);
+        return new LoadedChunks(map, centers);
     }
 }
