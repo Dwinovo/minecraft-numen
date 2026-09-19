@@ -71,10 +71,10 @@ import java.util.Set;
  *       the CLOSEST reachable ore (not greedy-nearest, which is often the walled-in one).
  *       Arrival and the in-place pick are one criterion, so wherever the search ends, the
  *       dig side agrees.</li>
- *   <li><b>够不着是一批的属性,不是某一格的罪</b> — 复合目标搜不出路,意思是
- *       <b>这一刻这一批都到不了</b>,不是"最近那颗有问题"。所以这里不记账到任何一格:
- *       重新规划就是了。既没挖掉一格、也没挪窝超过 {@link #STALL_TICKS} 刻,才收工,
- *       并如实报告"剩下的走不到"。</li>
+ *   <li><b>够不着是一批的属性,不是某一格的罪</b> — 复合目标在完整的图上搜不出路,意思是
+ *       <b>这一刻这一批都到不了</b>,不是"最近那颗有问题"。所以不记账到任何一格,也不原样
+ *       再搜(同一个起点、同一批目标、同一片地形,结论不会变),如实收工、报告剩下的走不到
+ *       ({@link #unreachable})。站着既没挖掉一格、也没挪窝超过 {@link #STALL_TICKS} 刻,同样收工。</li>
  * </ol>
  *
  * <h2>主人的东西</h2>
@@ -384,14 +384,14 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     //
                     // 世界刚加载时共用索引是冷的，第一次查询烧完预算也扫不完请求半径
                     // ({@code complete=false})，名单里可能只有几十格外的一簇，而脚边那片还没进图。
-                    // 拿这种半张图上的无路去永久拉黑一个好方块，是把“我还不知道”当成了“不可能”。
+                    // 拿这种半张图上的无路去收工，是把“我还不知道”当成了“不可能”。
                     //
-                    // 跟上面 ARRIVED-dud 是同一条纪律：拉黑只该给真正失败的路。
+                    // 跟上面 ARRIVED-dud 是同一条纪律：收工只该给真正失败的路。
                     if (NoPathVerdict.of(lastQueryComplete, coldMapFails)
                             == NoPathVerdict.Verdict.REQUERY) {
                         if (++coldMapFails == 1) {
                             com.dwinovo.numen.core.Constants.LOG.info(
-                                    "[numen-task] mine nav failed ({}) 但目标图还没查完 —— 不拉黑，重查 | nearestOre={}",
+                                    "[numen-task] mine nav failed ({}) 但目标图还没查完 —— 不收工，重查 | nearestOre={}",
                                     nav.failType(), nearestOreInfo());
                         }
                         stopNav();
@@ -401,15 +401,14 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     // [ANCHOR nav-failed] 完整图上真的没路。
                     //
                     // <b>这句话的主语是"这一批",不是"最近那颗"。</b>复合目标撒在全部目标上,
-                    // 搜不出路的意思是一个都到不了 —— 拿"离脚最近的"顶罪只是猜,而猜错了不会
-                    // 报错(日志只会写"记下 X",而 X 看着完全合理)。所以这里什么都不记,
-                    // 重新规划;真的一直出不去,由 STALL_TICKS 收工。
+                    // 搜不出路的意思是一个都到不了 —— 拿"离脚最近的"顶罪只是猜,所以什么都不记。
+                    // 也不原样再搜:同一个起点、同一批目标、同一片地形,再搜一遍还是这个结论,
+                    // 她只会站着不动、每次烧满搜索预算、永远不收工。如实收工,剩下的交给模型。
                     com.dwinovo.numen.core.Constants.LOG.info(
                             "[numen-task] mine nav failed ({}): {} | 复合目标 {} 个,nearestOre={}",
                             nav.failType(), nav.failReason(), knownOres.size(), nearestOreInfo());
-                    coldMapFails = 0;
-                    stopNav();
-                    return TaskState.RUNNING;
+                    return unreachable(nav.failReason()
+                            + (knownOres.isEmpty() ? "" : "; the nearest is " + nearestOreInfo()));
                 }
             }
         }
@@ -934,15 +933,25 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         com.dwinovo.numen.core.Constants.LOG.info(
                 "[numen-task] mine 卡住 {} 刻:没挖掉任何一格、也没挪窝 | feet={} 名单 {} 个",
                 now - lastProgressTick, player.blockPosition().toShortString(), knownOres.size());
+        return unreachable("stuck there with nothing minable in place for " + STALL_TICKS / 20 + " seconds");
+    }
+
+    /**
+     * 剩下的一个都到不了,收工:挖到过就算成功,如实交代剩下多少没够着;一个没挖到就按 {@code NO_PATH} 失败。
+     *
+     * @param why 为什么到不了,原话进回执
+     */
+    private TaskState unreachable(String why) {
         String where = player.blockPosition().toShortString();
+        String what = knownOres.isEmpty() ? "the drops left on the ground"
+                : "the remaining " + knownOres.size() + " " + noun();
         if (r.getMined() > 0) {
-            progressNote = "then got stuck at " + where + " — could not reach the remaining "
-                    + knownOres.size() + " " + noun() + leftovers(null);
+            progressNote = "then could not reach " + what + " from " + where + " (" + why + ")" + leftovers(null);
             return TaskState.SUCCESS;
         }
-        fail("found " + knownOres.size() + " " + noun() + " but could not reach any of them from "
-                + where + " — no path out, and nothing minable in place; gathered 0."
-                + " Move me somewhere else, or clear a way first.", FailureType.NO_PATH);
+        fail("found " + knownOres.size() + " " + noun() + " but could not reach any of them from " + where
+                + " (" + why + "); gathered 0. Move me somewhere else, or clear a way first."
+                + leftovers(null), FailureType.NO_PATH);
         return TaskState.FAILED;
     }
 
@@ -988,7 +997,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  genuinely empty field ({@code MINED_OUT} — widening the search or stopping is the
      *  LLM's call) from a field that WAS found but every target turned out unworkable
      *  ({@code NO_PATH} — 没有任何站位能对它拉出射线), with the counts.
-     *  「走不到」那一档不在这里 —— 它由 {@link #stalledOut} 收工。 */
+     *  「走不到」那一档不在这里 —— 它由 {@link #unreachable} 收工。 */
     private TaskState noOreFailure() {
         if (!unharvestable.isEmpty()) {
             // Targets exist but the carried tools can't make them drop — the actionable
