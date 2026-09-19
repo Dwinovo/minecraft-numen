@@ -9,9 +9,11 @@ import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.bridge.ContextFactory;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.moves.ActionCosts;
+import com.dwinovo.numen.core.pathing.moves.BlockReach;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
 import com.dwinovo.numen.core.pathing.moves.MovementHelper;
 import com.dwinovo.numen.core.act.BlockDigger;
+import com.dwinovo.numen.core.pathing.execute.PathExecutor;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.pathing.util.BlockHelper;
 import com.dwinovo.numen.core.pathing.util.NavProfiler;
@@ -23,23 +25,16 @@ import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.entity.InputDriver;
 import com.dwinovo.numen.permission.Action;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.BlockHitResult;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -67,14 +62,15 @@ import java.util.Set;
  *       through the block-change hook and repeated searches read a warm cache), and
  *       {@link #prune} every tick (drop ones mined / no longer matching / unworkable /
  *       hazardous), sorted by distance, capped at {@link #MAX_ORES}.</li>
- *   <li><b>in place</b> — any target the eyes can actually hit from where the body
- *       stands (centre or an exposed face, within block reach, unobstructed) is
- *       broken on the spot, nearest first, auto-switching to the best tool — no
- *       pathing, and never the block the body stands on.</li>
+ *   <li><b>in place</b> — a target whose {@link NavGoal#mineStance} the body is standing in
+ *       (within block reach, feet not above it) is broken on the spot, cheapest first,
+ *       auto-switching to the best tool — no pathing. The digger clears what stands in the
+ *       line of sight first, if it is safe to break ({@link #plausibleToBreak}).</li>
  *   <li><b>composite goal</b> — otherwise head for the whole ore field at once:
- *       one A* search over {@link NavGoal#composite} of {@link NavGoal#mineStance}
- *       stances, so it walks to the CLOSEST reachable ore (not greedy-nearest,
- *       which is often the walled-in one).</li>
+ *       one A* search over {@link NavGoal#composite} of the same stances, so it walks to
+ *       the CLOSEST reachable ore (not greedy-nearest, which is often the walled-in one).
+ *       Arrival and the in-place pick are one criterion, so wherever the search ends, the
+ *       dig side agrees.</li>
  *   <li><b>够不着是一批的属性,不是某一格的罪</b> — 复合目标搜不出路,意思是
  *       <b>这一刻这一批都到不了</b>,不是"最近那颗有问题"。所以这里不记账到任何一格:
  *       重新规划就是了。既没挖掉一格、也没挪窝超过 {@link #STALL_TICKS} 刻,才收工,
@@ -106,10 +102,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private static final int QUERY_MIN_GAP_TICKS = 20;
     /** 无条件刷新的慢心跳(tick):兜底外部世界变化(别人放/挖了方块)。 */
     private static final int QUERY_HEARTBEAT_TICKS = 100;
-    private static final double REACH_SQR = 4.5 * 4.5;
     private static final double MINE_SPEED = 1.0;
-    /** 同一格连续这么多刻拉不出射线,就记进 {@link #unworkable} —— 够到测试说它能挖,
-     *  可射线始终成不了(瞄准量化、站位上方有个檐口)。没有这条,挖掘会永远等一个
+    /** 同一格连续这么多刻拉不出射线,就记进 {@link #unworkable} —— 站位说够得着,
+     *  可射线始终成不了(挡在中间的挖不得、瞄准量化)。没有这条,挖掘会永远等一个
      *  不会来的射线。 */
     private static final int MAX_NO_SHOT_TICKS = 20;
     /**
@@ -130,8 +125,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     private final List<BlockPos> knownOres = new ArrayList<>();
     /**
-     * 当前地形下挖不动的格子 —— <b>只有 {@code NO_SHOT} 进得来</b>:够到测试过了,却连续
-     * 二十刻拉不出射线(瞄准量化、站位上方有个檐口)。这是关于<b>这一格</b>的、可复现的事实。
+     * 当前地形下挖不动的格子 —— <b>只有 {@code NO_SHOT} 进得来</b>:站位说够得着,却连续
+     * 二十刻拉不出射线(挡在中间的挖不得、瞄准量化)。这是关于<b>这一格</b>的、可复现的事实。
      *
      * <p>"走不到"不进这里:那是一批的属性,不是某一格的罪。掉落物更不进 —— 够不着的掉落物
      * 在复合目标下根本不会被选中。
@@ -206,6 +201,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     // Progressive dig (blocks break tick-by-tick at legitimate player speed, not
     // instabreak) — shared with the path executor so all breaking reads the same.
     private final BlockDigger digger;
+    /** 正在挖的目标;挖掘器这一刻可能在挖挡在它前面的那一格,锁的是目标,不是挖掘器手里那一格。没有为 null。 */
+    private BlockPos digTarget;
 
     public MineCompanionTask(NumenPlayer player, MineBlockTaskRecord record) {
         super(player, record);
@@ -296,17 +293,17 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         maybeQuery();
         NavProfiler.end("mine.upkeep", tUpkeep);
 
-        // 0) Continue an in-progress dig, locked onto its block (no re-selection)
-        //    until it breaks or drifts out of reach.
-        BlockPos digging = digger.current();
-        if (digging != null) {
-            if (level.getBlockState(digging).isAir() || !reachable(digging)) {
+        // 0) Continue an in-progress dig, locked onto its target (no re-selection)
+        //    until it breaks or the body no longer stands where it can work it.
+        if (digTarget != null) {
+            if (level.getBlockState(digTarget).isAir() || !canWork(digTarget)) {
                 digger.cancel();
+                digTarget = null;
             } else {
                 if (nav != null) {
                     nav.pause();   // stand still for the dig; goal/path/in-flight search stay warm
                 }
-                return mineProgress(digging);
+                return mineProgress(digTarget);
             }
         }
 
@@ -314,8 +311,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         drops = droppedItems();
         NavProfiler.end("mine.drops", tDrops);
 
-        // 1) Mine any target we can already reach + see from here (no pathing) —
-        //    a tree gets mined from beside, never by digging under it.
+        // 1) Mine any target whose stance we already stand in (no pathing).
         BlockPos reachable = reachableTarget();
         if (reachable != null) {
             // Mine in place with the nav merely PAUSED (inputs cleared each tick), never torn down:
@@ -369,12 +365,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     // teardown would throw away the goal + any in-flight search and force a cold restart.
                     nav.pause();
                     // 搜索按总价挑中的就是这儿:手边够得着的就挖,别再为别处的估价让路
-                    settledAt = player.blockPosition();
-                    // [ANCHOR arrived-dud] 到了站位,却什么都够不到。<b>这不构成关于任何一颗矿的
-                    // 证据</b>:最常见的两种成因根本不是故障 —— 她到的是复合目标里的<b>掉落物</b>
-                    // 成员(刚捡完东西,附近本来就没矿),或者这一刻人在空中(reachableTarget 第一行
-                    // 就要求 onGround)。剩下的"被别的矿包住、射线打不到"也只是<b>还没轮到它</b>,
-                    // 外层挖掉自己就露出来了。
+                    settledAt = PathExecutor.playerFeet(player);
+                    // [ANCHOR arrived-dud] 到了,却没有可挖的。站位与原地就挖是同一个判据,所以这
+                    // <b>不构成关于任何一颗矿的证据</b>:她到的是复合目标里的<b>掉落物</b>成员(刚捡完
+                    // 东西,附近本来就没矿),或者这一刻人在空中(reachableTarget 第一行就要求 onGround)。
                     //
                     // 所以这里只重新规划。真卡住了由 STALL_TICKS 那把尺子收工,不记账到某一格。
                     if (reachableTarget() == null && !knownOres.isEmpty()) {
@@ -451,7 +445,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             return GoalCompiler.standOn(player.blockPosition());
         }
         return GoalCompiler.mineField(
-                new ArrayList<>(knownOres), this::digCost, new ArrayList<>(drops));
+                new ArrayList<>(knownOres), this::digCost, new ArrayList<>(drops), BlockReach.of(player));
     }
 
     /** 到了之后挖它的价钱;这一刻没算过的按不许挖的价。 */
@@ -460,18 +454,17 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     }
 
     /**
-     * 挑目标用的总价:走过去(目标函数的估价,与复合目标给 A* 的同一把尺)加上挖它的价钱。
-     * 站在原地就够得着的不算路程。
+     * 挑目标用的总价:走到它的站位(站位的估价,与复合目标给 A* 的同一把尺;已经站在站位里是 0)
+     * 加上挖它的价钱。
      */
-    private double targetCost(BlockPos ore, boolean inPlace) {
-        double walk = inPlace ? 0 : NavGoal.pointBound(ore, player.blockPosition());
-        return walk + digCost(ore);
+    private double targetCost(BlockPos ore, BlockPos feet, BlockReach reach) {
+        return NavGoal.mineStance(ore, reach).heuristic(feet) + digCost(ore);
     }
 
-
-    /** 脚位到目标的最大垂直距离:站在目标正下方仰头,眼高 1.62 + 触及 4.5 ≈ 6.1,
-     *  即目标底面在脚上 6 格内仍可命中——波段最多下探到此,再深就算站得住也打不到了。 */
-    private static final int MAX_STANCE_DEPTH = 6;
+    /** 身体此刻站着的这一格是不是 {@code ore} 的站位——原地就挖与导航到位是这同一个判据。 */
+    private boolean canWork(BlockPos ore) {
+        return NavGoal.mineStance(ore, BlockReach.of(player)).isAt(PathExecutor.playerFeet(player));
+    }
 
 
     /** 该目标格是否真挖得成:挖穿成本无穷(挖不动/规格禁挖)、禁挖判定命中
@@ -528,20 +521,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     }
 
     /**
-     * Pre-filter for the in-place pick, squared: candidates farther than this from the feet can't be
-     * within block reach of the eyes (4.5 eye reach + 1.62 eye height + aim-point slack), so they are
-     * skipped without spending rays. {@link #knownOres} is kept sorted nearest-first by {@link #prune},
-     * so iteration simply stops at the first candidate beyond the filter.
-     */
-    private static final double IN_PLACE_FILTER_SQR = 7.0 * 7.0;
-
-    /**
-     * The in-place mining pick: the cheapest known target the eyes can ACTUALLY hit from where the body
-     * stands right now ({@link #reachable}: centre + exposed face points, within block reach, nothing
-     * solid in the way) — mined on the spot, no pathing; equal prices go to the nearest. Column and
-     * height don't matter; hittability does. The one hard exception is the support cell directly under
-     * the feet — never dig out our own floor. Anything the eyes can't hit from here is left to the
-     * navigator (walk to a stance, pillar up, etc.).
+     * The in-place mining pick: the cheapest known target whose {@link NavGoal#mineStance} the body is
+     * standing in right now — mined on the spot, no pathing; equal prices go to the nearest. It is the
+     * very criterion the navigator arrives by, so an arrival always has something to dig here, and
+     * whatever blocks the line of sight is the digger's to clear. Anything not workable from here is
+     * left to the navigator.
      *
      * <p>够得着的也可能不是该挖的:别处有按乐观估价就更便宜的({@link #targetCost}:走过去 + 挖它),
      * 就先让导航按总价去挑。导航挑完仍停在这儿({@link #settledAt}),说明别处的便宜只是估价上的,
@@ -550,21 +534,18 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private BlockPos reachableTarget() {
         if (!player.onGround()) return null;
         Level level = player.level();
-        BlockPos feet = player.blockPosition();
-        BlockPos support = feet.below();
+        BlockPos feet = PathExecutor.playerFeet(player);
+        BlockReach reach = BlockReach.of(player);
         BlockPos best = null;
         double bestCost = Double.MAX_VALUE;
         double bestD = Double.MAX_VALUE;
         for (BlockPos ore : knownOres) {
-            if (ore.distSqr(feet) > IN_PLACE_FILTER_SQR) {
-                break;   // sorted nearest-first — everything after this is farther still
-            }
-            if (ore.equals(support) || level.getBlockState(ore).isAir()) {
+            if (level.getBlockState(ore).isAir() || !NavGoal.mineStance(ore, reach).isAt(feet)) {
                 continue;
             }
-            double cost = targetCost(ore, true);
+            double cost = digCost(ore);
             double d = ore.distSqr(feet.above());
-            if (cost > bestCost || (cost == bestCost && d >= bestD) || !reachable(ore)) {
+            if (cost > bestCost || (cost == bestCost && d >= bestD)) {
                 continue;
             }
             bestCost = cost;
@@ -575,7 +556,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             return best;
         }
         for (BlockPos ore : knownOres) {
-            if (!ore.equals(best) && targetCost(ore, false) < bestCost) {
+            if (!ore.equals(best) && targetCost(ore, feet, reach) < bestCost) {
                 return null;
             }
         }
@@ -588,72 +569,26 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         return best;
     }
 
-    /** Face points of a block (each face centre, from its collision shape), tried when the block's own
-     *  centre is occluded — so a block whose centre is blocked but whose face is exposed still counts,
-     *  the way a real click can catch it at an angle. */
-    private static final Vec3[] BLOCK_FACE_POINTS = {
-            new Vec3(0.5, 0, 0.5), new Vec3(0.5, 1, 0.5),
-            new Vec3(0.5, 0.5, 0), new Vec3(0.5, 0.5, 1),
-            new Vec3(0, 0.5, 0.5), new Vec3(1, 0.5, 0.5),
-    };
-
-    /**
-     * Can the body reach {@code target} to break it from where it stands right now — an eye-line to the
-     * block (its centre first, then each exposed face point) within block-interaction range
-     * ({@link #REACH_SQR}) that nothing solid obstructs but the target itself. Reach is measured from the
-     * EYE, so an upward target is reachable as high as a standing body's eyes allow — not merely what its
-     * feet are next to — and a face-occluded block is still reachable via an exposed side.
-     */
-    private boolean reachable(BlockPos target) {
-        Vec3 eyes = player.getEyePosition();
-        if (reachableAt(eyes, target, Vec3.atCenterOf(target))) {
-            return true;
-        }
-        VoxelShape shape = player.level().getBlockState(target).getShape(player.level(), target);
-        if (shape.isEmpty()) {
-            shape = Shapes.block();
-        }
-        for (Vec3 m : BLOCK_FACE_POINTS) {
-            double xDiff = shape.min(Direction.Axis.X) * m.x + shape.max(Direction.Axis.X) * (1 - m.x);
-            double yDiff = shape.min(Direction.Axis.Y) * m.y + shape.max(Direction.Axis.Y) * (1 - m.y);
-            double zDiff = shape.min(Direction.Axis.Z) * m.z + shape.max(Direction.Axis.Z) * (1 - m.z);
-            if (reachableAt(eyes, target,
-                    new Vec3(target.getX() + xDiff, target.getY() + yDiff, target.getZ() + zDiff))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Is {@code point} within reach of {@code eyes}, and does an eye→point ray hit {@code target} first
-     *  (nothing solid in the way)? */
-    private boolean reachableAt(Vec3 eyes, BlockPos target, Vec3 point) {
-        if (eyes.distanceToSqr(point) > REACH_SQR) {
-            return false;
-        }
-        // OUTLINE (the selection shape), matching how a real click picks a block and what BlockDigger's
-        // own reach ray uses — so this gate and the actual dig never disagree about whether a block is
-        // hittable (a COLLIDER gate could green-light an ore the digger then can't draw a shot at).
-        BlockHitResult hit = player.level().clip(new ClipContext(
-                eyes, point, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
-        return hit.getType() == HitResult.Type.MISS || hit.getBlockPos().equals(target);
-    }
-
     // ---- mining (progressive, tick-by-tick like a real player) ----
 
     /** Advance the shared dig one tick (it switches to the best tool itself); on the tick the TARGET
      *  breaks, drop it from the ore list. A {@link BlockDigger.DigResult#BROKE_OCCLUDER} (a leaf cleared
-     *  to open the line of sight) is NOT the target, so the ore stays. The progress count is read from
-     *  the inventory each tick, not here — one block can yield several items, and the drops take a
-     *  moment to be picked up.
+     *  to open the line of sight) is NOT the target, so the ore stays. The digger clears only occluders
+     *  that pass the same cut as the targets themselves ({@link #plausibleToBreak}). The progress count
+     *  is read from the inventory each tick, not here — one block can yield several items, and the drops
+     *  take a moment to be picked up.
      *
-     *  <p>Recovery: 连续的 {@code NO_SHOT}(够到测试过了,可挖掘始终成不了射线)记数,满
+     *  <p>Recovery: 连续的 {@code NO_SHOT}(站位说够得着,可挖掘始终成不了射线)记数,满
      *  {@link #MAX_NO_SHOT_TICKS} 就把<b>那一格</b>记进 {@link #unworkable} 继续往下走,
      *  而不是永远等一个不会来的射线。<b>记的是这一格,不是猜一格</b> —— 这是唯一一处
      *  按格记账的地方,因为它是唯一一件关于那一格的可复现事实。 */
     private TaskState mineProgress(BlockPos pos) {
-        switch (digger.digStep(pos)) {
+        digTarget = pos.immutable();
+        switch (digger.digStep(pos, occluder -> plausibleToBreak(
+                ContextFactory.forExecution(player, terrain.spec()), occluder,
+                player.level().getBlockState(occluder)))) {
             case BROKE_TARGET -> {
+                digTarget = null;
                 knownOres.remove(pos);
                 brokenTargets++;
                 noteProgress();
@@ -684,6 +619,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                             remaining.add(pos.immutable());   // 地形一变(挖掉任何一格)还能再收
                         }
                         digger.cancel();   // release the in-progress-dig latch on this ore
+                        digTarget = null;
                         clearNoShot();
                     }
                 } else {
@@ -692,8 +628,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 }
             }
             case BROKE_OCCLUDER -> {
-                // 为了拉出射线挖掉的是挡在前面的那一格,不是目标:进旅程账,回执交代,它若也是要挖的格就算她挖的
+                // 为了拉出射线挖掉的是挡在前面的那一格,不是目标:进旅程账,回执交代,它若也是要挖的格就算她挖的。
+                // 挖掉一格就是进展,一路挖开几片树叶不算卡住
                 recordBreak(digger.lastBroken());
+                noteProgress();
                 clearNoShot();
             }
             // PROGRESSING — real progress; reset the stall counter.

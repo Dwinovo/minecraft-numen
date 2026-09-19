@@ -54,6 +54,13 @@ public final class BlockDigger {
     /** 服务端把挖掘退回来时回执里的理由。 */
     public static final String SERVER_REFUSED = "服务器没让挖掉这一格";
 
+    /**
+     * 服务端收下这一下挖掘时,比交互距离多给的那一格:{@code ServerPlayerGameMode#handleBlockBreakAction}
+     * 验的是 {@code canInteractWithBlock(pos, 1.0)}。射线按"交互距离 + 这一格"打,打得到的就是服务端认的。
+     * 调用方判"够不够得着"按的是站立格的眼位({@code BlockReach}),身体在格里偏开的那一截落在这一格里。
+     */
+    private static final double SERVER_REACH_SLACK = 1.0;
+
     /** The crack is broadcast under breaker id -1 (not the player's entity id),
      *  so the server's own per-player crack clearing on STOP can't wipe it early. */
     private static final int CRACK_ID = -1;
@@ -192,6 +199,14 @@ public final class BlockDigger {
     }
 
     public DigResult digStep(BlockPos target) {
+        return digStep(target, occluder -> true);
+    }
+
+    /**
+     * 同 {@link #digStep(BlockPos)},只是挡在前面的那一格还要 {@code mayClear} 点头才挖:权限层管许不许,
+     * 调用方管这一格挖了会不会出事(比如挖矿按自己挑目标的那道剪枝,不挖贴着流体、顶着落沙的)。
+     */
+    public DigResult digStep(BlockPos target, java.util.function.Predicate<BlockPos> mayClear) {
         Level level = player.level();
         if (blockHitDelay > 0) {                    // let the previous break land first
             blockHitDelay--;
@@ -210,6 +225,7 @@ public final class BlockDigger {
         if (hit == null) {
             BlockHitResult center = centerRaycast(target);
             if (center != null && !center.getBlockPos().equals(target)
+                    && mayClear.test(center.getBlockPos())
                     && Permission.judge(player, Action.breakBlock(center.getBlockPos(),
                             level.getBlockState(center.getBlockPos()))).allowed()) {
                 hit = center;
@@ -398,7 +414,7 @@ public final class BlockDigger {
     private BlockHitResult reachableHit(BlockPos pos) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = player.blockInteractionRange();
+        double reach = player.blockInteractionRange() + SERVER_REACH_SLACK;
         for (Vec3 aim : AimGeometry.aimPoints(level, pos, level.getBlockState(pos))) {
             Vec3 dir = aim.subtract(eye);
             if (dir.lengthSqr() < 1.0e-8) continue;
@@ -422,7 +438,7 @@ public final class BlockDigger {
     private BlockHitResult centerRaycast(BlockPos target) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = player.blockInteractionRange();
+        double reach = player.blockInteractionRange() + SERVER_REACH_SLACK;
         Vec3 center = Vec3.atCenterOf(target);
         Vec3 dir = center.subtract(eye);
         if (dir.lengthSqr() < 1.0e-8) {

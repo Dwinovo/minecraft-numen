@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.pathing.goal;
 import com.dwinovo.numen.core.pathing.bridge.GoalAdapter;
 import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.goals.Goal;
+import com.dwinovo.numen.core.pathing.moves.BlockReach;
 import com.dwinovo.numen.core.pathing.spec.CellClass;
 import com.dwinovo.numen.core.pathing.spec.PositionCosts;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
@@ -126,13 +127,14 @@ public final class GoalCompiler {
      * events.
      *
      * <p>每个目标的站位带着挖它的价钱({@code digCost},成本模型的定价:需要主人同意的格贵十倍),
-     * 搜索按"走过去 + 挖它"的总价挑先去哪一块,不是谁近挑谁。
+     * 搜索按"走过去 + 挖它"的总价挑先去哪一块,不是谁近挑谁。站位按身体的 {@code reach} 算
+     * ({@link NavGoal#mineStance})。
      */
     public static Compiled mineField(List<BlockPos> ores, java.util.function.ToDoubleFunction<BlockPos> digCost,
-                                     List<BlockPos> drops) {
+                                     List<BlockPos> drops, BlockReach reach) {
         List<NavGoal> members = new ArrayList<>(ores.size() + drops.size());
         for (BlockPos ore : ores) {
-            members.add(NavGoal.priced(NavGoal.mineStance(ore), digCost.applyAsDouble(ore)));
+            members.add(NavGoal.priced(NavGoal.mineStance(ore, reach), digCost.applyAsDouble(ore)));
         }
         for (BlockPos drop : drops) {
             members.add(NavGoal.exact(drop));     // items, not blocks

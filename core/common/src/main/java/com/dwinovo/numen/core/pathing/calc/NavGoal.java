@@ -1,6 +1,7 @@
 package com.dwinovo.numen.core.pathing.calc;
 
 import com.dwinovo.numen.core.pathing.goals.GoalAvoidEntities;
+import com.dwinovo.numen.core.pathing.moves.BlockReach;
 import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import net.minecraft.core.BlockPos;
@@ -187,19 +188,20 @@ public interface NavGoal {
     }
 
     /**
-     * 挖它的站位:<b>身体贴着它,但不踩在它头上</b>。
+     * 挖它的站位:<b>站在这一格上按 {@link BlockReach} 够得着它,而且脚不高于它</b>。
      *
-     * <p>贴着 = 它是脚那格或头那格的邻格,所以中间<b>按定义没有东西</b> —— 不必射线也知道
-     * 打得到。这正是挖掘那一侧"眼睛拉得出一条不被挡的射线"的下界近似,而射线太贵、不能
-     * 塞进 {@code isAt}(每展开一个节点跑一次)。
+     * <p>挖矿任务判"站在这儿能不能原地挖"问的也是这个站位({@code MineCompanionTask.reachableTarget}),
+     * 所以导航说到位了,挖掘那一侧一定认——两边是同一个判据,不是一个近似另一个。树冠上的原木因此站在
+     * 地上就能挖到,不必爬上去贴着它。
      *
-     * <p><b>踩在它头上必须排除</b>:脚下那一格是她自己的地板,挖掘层永远不碰
-     * ({@code MineCompanionTask.reachableTarget} 里的 {@code ore.equals(support)}
-     * 那一条)。收进来就是死循环 —— 导航说"你已经站到位了",挖掘说"这格不能挖",
-     * 于是拆导航、重规划、脚下还是那格,实测能一直转下去。
+     * <p><b>脚高于它的格不收</b>:比脚低的方块从上往下看,视线要穿过脚下的地板,而自己的地板挖掘层永远
+     * 不碰。脚下更低处的目标由路线往下走过去(路上本来就能挖穿目标格)。
+     *
+     * <p>挡在视线上的东西不在这里判:射线太贵、塞不进 {@code isAt}(每展开一个节点跑一次)。树叶这类
+     * 挡路的由挖掘器先挖开;挖不开的,挖掘那一侧按那一格拉不出射线记账。
      */
-    static NavGoal mineStance(BlockPos ore) {
-        return new MineStance(ore);
+    static NavGoal mineStance(BlockPos ore, BlockReach reach) {
+        return new MineStance(ore, reach);
     }
 
     /**
@@ -435,28 +437,29 @@ public interface NavGoal {
     }
 
     /** {@link #getToBlock} 的产物:身高修正的 Manhattan 贴脸邻域。 */
-    /** {@link #mineStance} 的产物:贴着,且脚不高于它。 */
+    /** {@link #mineStance} 的产物:够得着,且脚不高于它。 */
     final class MineStance implements NavGoal {
         public final BlockPos ore;
+        public final BlockReach reach;
 
-        MineStance(BlockPos ore) {
+        MineStance(BlockPos ore, BlockReach reach) {
             this.ore = ore.immutable();
+            this.reach = reach;
         }
 
         @Override public boolean isAt(BlockPos feet) {
-            int dy = feet.getY() - ore.getY();
-            if (dy > 0) {
-                return false;   // 踩在它头上:那是自己的地板
-            }
-            int dx = Math.abs(feet.getX() - ore.getX());
-            int dz = Math.abs(feet.getZ() - ore.getZ());
-            // 两格高的身体:脚在下方时头那格也算贴着,所以负的 dy 折一格
-            int bodyDy = dy + 1 <= 0 ? dy + 1 : 0;
-            return dx + dz + Math.abs(bodyDy) <= 1;
+            return feet.getY() <= ore.getY() && reach.from(feet, ore);
         }
 
+        /**
+         * 到"够得着它的那片站位"还差的路:眼睛超出交互距离的那一截,水平按走、竖直按跳或落计价;脚高于它时
+         * 至少还要落到它那一层。
+         */
         @Override public double heuristic(BlockPos from) {
-            return Math.max(0.0, pointBound(ore, from) - COST_HEURISTIC - JUMP_ONE_BLOCK);
+            BlockReach.Gap gap = reach.gap(from, ore);
+            double climb = Math.max(0, gap.vertical());
+            double drop = Math.max(Math.max(0, from.getY() - ore.getY()), Math.max(0, -gap.vertical()));
+            return gap.horizontal() * COST_HEURISTIC + climb * JUMP_ONE_BLOCK + drop * DESCEND_ONE_BLOCK;
         }
 
         @Override public BlockPos center() {
