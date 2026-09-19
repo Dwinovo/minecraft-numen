@@ -149,4 +149,54 @@ public class CollectGameTests {
                 .mapToInt(e -> e.getItem().getCount()).sum();
     }
 
+
+    /**
+     * 三块铁锭搁在一根三格高的石柱顶上,捡东西从不改地形,她够不着。照样收场,但回执得交代还有三块留在那儿、
+     * 在哪——不能只说"捡了 0 块",让模型以为这一片已经干净了。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
+    public static void collect_items_says_what_it_could_not_reach(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int y = 2; y <= 4; y++) {
+            level.setBlockAndUpdate(helper.absolutePos(new BlockPos(10, y, 10)), Blocks.STONE.defaultBlockState());
+        }
+        dropOnFloor(helper, new BlockPos(10, 5, 10), Items.IRON_INGOT, 3);
+        NumenPlayer companion = spawnAt(helper, "gametest_shortarm", new BlockPos(3, 2, 3), false);
+        ToolRun collect = call(companion, "collect_items", args("item_ids", List.of("minecraft:iron_ingot")));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 0
+                            && onFloor(helper, Items.IRON_INGOT) == 3,
+                    "the ingots on the pillar were somehow taken");
+            BlockPos top = helper.absolutePos(new BlockPos(10, 5, 10));
+            helper.assertTrue(collect.outcome().contains("3 ")
+                            && collect.outcome().contains(top.getX() + "," + top.getY() + "," + top.getZ()),
+                    "the reply does not say three ingots were left on the pillar: " + collect.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 刚掉下来的东西有一小段拾取冷却(原版方块掉落是 10 刻):三块铁锭就落在她脚边,冷却还没过。她得等冷却过了
+     * 捡起来,不能因为"走到了却没进背包"就当它捡不了。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_collect")
+    public static void collect_items_waits_out_a_fresh_drops_pickup_delay(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_patient", new BlockPos(5, 2, 5), false);
+        Vec3 at = Vec3.atBottomCenterOf(helper.absolutePos(new BlockPos(6, 2, 5)));
+        ItemEntity drop = new ItemEntity(helper.getLevel(), at.x, at.y, at.z, new ItemStack(Items.IRON_INGOT, 3));
+        drop.setDeltaMovement(Vec3.ZERO);
+        drop.setDefaultPickUpDelay();
+        helper.getLevel().addFreshEntity(drop);
+        ToolRun collect = call(companion, "collect_items", args("item_ids", List.of("minecraft:iron_ingot")));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 3
+                            && collect.outcome().startsWith("collected 3 "),
+                    "the fresh drop at her feet was not picked up: " + collect.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }

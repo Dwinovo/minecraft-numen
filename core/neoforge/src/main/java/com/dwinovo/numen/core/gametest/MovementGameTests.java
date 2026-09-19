@@ -3,7 +3,6 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
-import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
 import java.util.List;
 import java.util.UUID;
@@ -467,14 +466,12 @@ public class MovementGameTests {
         ServerLevel level = helper.getLevel();
         var stand = standOnPillar(helper);
         NumenPlayer companion = spawnAt(helper, "gametest_tail", new BlockPos(3, 2, 8), true);
-        var rec = new com.dwinovo.numen.core.task.move.FollowTaskRecord("gametest-tail", 3.0,
-                stand.getId(), stand.getUUID());
-        TaskDispatch.setTask(companion, rec, null, reply -> {});
+        ToolRun follow = call(companion, "follow", args("entity_id", stand.getId(), "distance", 3));
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(rec.getState() == com.dwinovo.numen.task.TaskState.FAILED,
-                    "follow should end with a result, state=" + rec.getState());
-            String said = rec.getResult() == null ? "" : rec.getResult().message();
+            helper.assertTrue(follow.done() && !follow.succeeded(),
+                    "follow should end with a failure, got: " + follow.outcome());
+            String said = follow.outcome();
             helper.assertTrue(said.contains("altering terrain") && said.contains("goto route:")
                             && firstRouteId(said) != null,
                     "the reason must name the terrain and list candidate routes, got: " + said);
@@ -776,5 +773,87 @@ public class MovementGameTests {
             helper.assertTrue(!burned[0], "she was burned on the way");
             CompanionFactory.despawn(level.getServer(), companion);
         });
+    }
+
+    // ---- follow:跟主人、跟的东西没了、编号不对、叫停 ----
+
+    /** 跟着主人:主人挪到场地另一头,她跟过去停在身边;跟随是常驻的活,跟上了也不收场。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void follow_the_owner_keeps_up_when_they_move(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_shadow", new BlockPos(4, 2, 4), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_wanderer");
+        ToolRun follow = call(companion, "follow", args());
+        BlockPos far = helper.absolutePos(new BlockPos(13, 2, 13));
+
+        helper.startSequence()
+                .thenIdle(20)
+                .thenExecute(() -> owner.moveTo(far.getX() + 0.5, far.getY(), far.getZ() + 0.5))
+                .thenWaitUntil(() -> helper.assertTrue(companion.distanceTo(owner) <= 4.5,
+                        "she did not catch up with the owner: " + companion.distanceTo(owner)))
+                .thenExecute(() -> helper.assertTrue(!follow.done(),
+                        "follow ended although it is a standing job: " + follow.outcome()))
+                .thenExecute(() -> {
+                    CompanionFactory.despawn(level.getServer(), companion);
+                    CompanionFactory.despawn(level.getServer(), owner);
+                })
+                .thenSucceed();
+    }
+
+    /** 跟着一头猪:跟到了身边,猪没了,跟随自己收场,回执说跟的东西不在了。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void follow_an_entity_ends_when_it_is_gone(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var pig = net.minecraft.world.entity.EntityType.PIG.create(level);
+        BlockPos at = helper.absolutePos(new BlockPos(11, 2, 11));
+        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.setNoAi(true);
+        level.addFreshEntity(pig);
+        NumenPlayer companion = spawnAt(helper, "gametest_swinefollower", new BlockPos(3, 2, 3), false);
+        ToolRun follow = call(companion, "follow", args("entity_id", pig.getId()));
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(companion.distanceTo(pig) <= 4.5,
+                        "she did not catch up with the pig: " + companion.distanceTo(pig)))
+                .thenExecute(pig::discard)
+                .thenWaitUntil(() -> helper.assertTrue(follow.done() && !follow.succeeded()
+                                && follow.outcome().contains("is gone"),
+                        "follow did not end when the pig was gone: " + follow.outcome()))
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
+
+    /** 给了一个这里没有的实体编号:当场失败,叫她先扫一眼附近的实体。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_terrain")
+    public static void follow_an_unknown_entity_id_says_so(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_lost_tail", new BlockPos(3, 2, 3), false);
+        ToolRun follow = call(companion, "follow", args("entity_id", 999999));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(follow.done(), "follow has not replied");
+            helper.assertTrue(!follow.succeeded() && follow.outcome().contains("no entity with id 999999"),
+                    "the failure does not name the missing id: " + follow.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 跟着主人的时候主人按停止:跟随按主人停止收场。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void owner_stop_while_following_ends_it(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_dismissed", new BlockPos(4, 2, 4), false);
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_releaser");
+        ToolRun follow = call(companion, "follow", args());
+
+        helper.startSequence()
+                .thenIdle(20)
+                .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion))
+                .thenWaitUntil(() -> helper.assertTrue(follow.done() && follow.outcome().startsWith("the owner pressed Stop"),
+                        "following did not end as stopped by the owner: " + follow.outcome()))
+                .thenExecute(() -> {
+                    CompanionFactory.despawn(level.getServer(), companion);
+                    CompanionFactory.despawn(level.getServer(), owner);
+                })
+                .thenSucceed();
     }
 }

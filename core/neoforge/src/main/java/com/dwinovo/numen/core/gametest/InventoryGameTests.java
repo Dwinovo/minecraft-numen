@@ -476,4 +476,25 @@ public class InventoryGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /** 箱子的配方认"任意木板":四块橡木加四块白桦木板,在手边的工作台合出一口箱子,两种木板都用光。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_a_chest_from_mixed_planks(GameTestHelper helper) {
+        helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(5, 2, 3)),
+                Blocks.CRAFTING_TABLE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_patchworker", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 4));
+        companion.getInventory().add(new ItemStack(Items.BIRCH_PLANKS, 4));
+        ToolRun craft = call(companion, "craft", args("item_id", "minecraft:chest", "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(craft.done(), "craft has not replied");
+            helper.assertTrue(craft.succeeded(), "craft from mixed planks failed: " + craft.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
+                            && companion.getInventory().countItem(Items.OAK_PLANKS) == 0
+                            && companion.getInventory().countItem(Items.BIRCH_PLANKS) == 0,
+                    "the chest was not made from both kinds of planks");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }

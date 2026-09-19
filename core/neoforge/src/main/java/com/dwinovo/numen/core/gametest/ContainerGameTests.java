@@ -93,4 +93,81 @@ public class ContainerGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /**
+     * 往塞满圆石的箱子里存钻石:打开箱子,把背包里那叠钻石往箱子那一段送。箱子一格都放不下,这一步的回执说没搬动、
+     * 那边满了;钻石还在她身上,箱子原样。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_container")
+    public static void transfer_into_a_full_chest_says_nothing_moved(GameTestHelper helper) {
+        BlockPos chest = helper.absolutePos(new BlockPos(5, 2, 4));
+        helper.getLevel().setBlockAndUpdate(chest, net.minecraft.world.level.block.Blocks.CHEST.defaultBlockState());
+        ChestBlockEntity box = (ChestBlockEntity) helper.getLevel().getBlockEntity(chest);
+        for (int i = 0; i < box.getContainerSize(); i++) {
+            box.setItem(i, new net.minecraft.world.item.ItemStack(Items.COBBLESTONE, 64));
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_depositor", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new net.minecraft.world.item.ItemStack(Items.DIAMOND, 5));
+        AtomicReference<ToolRun> step = new AtomicReference<>();
+
+        helper.startSequence()
+                .thenExecute(() -> step.set(call(companion, "interact_at",
+                        args("button", "right", "x", chest.getX(), "y", chest.getY(), "z", chest.getZ()))))
+                .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
+                                && companion.containerMenu instanceof ChestMenu,
+                        "the chest did not open: " + step.get().outcome()))
+                .thenExecute(() -> step.set(call(companion, "transfer",
+                        args("moves", List.of(args("from", menuSlotOf(companion, Items.DIAMOND)))))))
+                .thenWaitUntil(() -> helper.assertTrue(step.get().done()
+                                && step.get().outcome().contains("didn't move"),
+                        "the reply does not say the diamonds stayed: " + step.get().outcome()))
+                .thenWaitUntil(() -> helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 5
+                                && box.countItem(Items.COBBLESTONE) == box.getContainerSize() * 64
+                                && box.countItem(Items.DIAMOND) == 0,
+                        "something moved between her and the full chest"))
+                .thenExecute(() -> step.set(call(companion, "close_gui", args())))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
+    }
+
+    /** 从箱子里按数量拿:五颗钻石里拿两颗放进她背包的一个空格,正好两颗过来,箱子里剩三颗。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_container")
+    public static void transfer_an_exact_count_into_a_slot(GameTestHelper helper) {
+        BlockPos chest = chestWithDiamonds(helper, new BlockPos(5, 2, 4), 5);
+        ChestBlockEntity box = (ChestBlockEntity) helper.getLevel().getBlockEntity(chest);
+        NumenPlayer companion = spawnAt(helper, "gametest_counter", new BlockPos(3, 2, 4), false);
+        AtomicReference<ToolRun> step = new AtomicReference<>();
+
+        helper.startSequence()
+                .thenExecute(() -> step.set(call(companion, "interact_at",
+                        args("button", "right", "x", chest.getX(), "y", chest.getY(), "z", chest.getZ()))))
+                .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
+                                && companion.containerMenu instanceof ChestMenu,
+                        "the chest did not open: " + step.get().outcome()))
+                .thenExecute(() -> step.set(call(companion, "transfer", args("moves", List.of(
+                        args("from", 0, "to", menuSlotOf(companion, Items.AIR), "count", 2))))))
+                .thenWaitUntil(() -> helper.assertTrue(step.get().done() && step.get().succeeded()
+                                && step.get().outcome().contains("moved 2 diamond"),
+                        "the reply does not say two diamonds moved: " + step.get().outcome()))
+                .thenWaitUntil(() -> helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) == 2
+                                && box.countItem(Items.DIAMOND) == 3,
+                        "she has " + companion.getInventory().countItem(Items.DIAMOND) + " and the chest "
+                                + box.countItem(Items.DIAMOND)))
+                .thenExecute(() -> step.set(call(companion, "close_gui", args())))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
+    }
+
+    /** 她打开的界面里,她自己背包那一段第一个装着 {@code item} 的格子号(AIR = 第一个空格)——模型从 inspect_gui 读到的就是它。 */
+    private static int menuSlotOf(NumenPlayer companion, net.minecraft.world.item.Item item) {
+        var slots = companion.containerMenu.slots;
+        for (int i = 0; i < slots.size(); i++) {
+            var slot = slots.get(i);
+            if (slot.container == companion.getInventory()
+                    && (item == Items.AIR ? slot.getItem().isEmpty() : slot.getItem().is(item))) {
+                return i;
+            }
+        }
+        throw new IllegalStateException("no slot of hers holds " + item);
+    }
 }
