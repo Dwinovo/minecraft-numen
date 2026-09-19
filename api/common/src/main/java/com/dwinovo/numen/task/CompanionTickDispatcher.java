@@ -165,6 +165,16 @@ public final class CompanionTickDispatcher {
     }
 
     /**
+     * 这次工具调用派下去的那件活(同步动作或后台任务),按调用 id 认,不按"槽里现在是谁"认:还在跑的,和已经
+     * 结算、结果还没送出去的,都认得出(一步就干完的活受理那一刻就结算离槽了)。查询类工具不派活、派的时候
+     * 被拒、或者结果已经送走,都是 null。
+     */
+    public static TaskRecord taskOf(UUID companionUuid, String toolCallId) {
+        CompanionBrain brain = BRAINS.get(companionUuid);
+        return brain == null ? null : brain.recordOf(toolCallId);
+    }
+
+    /**
      * 槽里那个刚受理、一刻都还没跑过。
      *
      * <p>用来分开两种"再派一个活":同一批工具调用里的第二个(模型在做计划,该拒绝

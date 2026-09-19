@@ -269,6 +269,21 @@ final class CompanionBrain {
         }
     }
 
+    /** 这次调用派下来的那件活:两个槽里在跑的,或者已经结算、还排着没送出去的;都没有是 null。 */
+    TaskRecord recordOf(String toolCallId) {
+        for (TaskRecord r : new TaskRecord[] {sync.record(), current.record()}) {
+            if (r != null && toolCallId.equals(r.getToolCallId())) {
+                return r;
+            }
+        }
+        for (TaskRecord r : outbox) {
+            if (toolCallId.equals(r.getToolCallId())) {
+                return r;
+            }
+        }
+        return null;
+    }
+
     /**
      * 把结算好的记录送回主人。
      *
