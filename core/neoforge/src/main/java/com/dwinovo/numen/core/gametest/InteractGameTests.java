@@ -3,6 +3,7 @@ package com.dwinovo.numen.core.gametest;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.task.TaskRecord;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
@@ -168,6 +169,116 @@ public class InteractGameTests {
             helper.assertTrue(!hit.succeeded() && hit.outcome().contains("owner"),
                     "the refusal does not come from asking the owner: " + hit.outcome());
             helper.assertTrue(pig.getHealth() == pig.getMaxHealth(), "the named pig was hit");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    // ---- interact_entity:挤奶、喂食;interact_at:门、拉杆、放方块 ----
+
+    /** 拿空桶右键一头牛:她走过去挤了奶,空桶换成了一桶牛奶。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    public static void interact_entity_milks_a_cow(GameTestHelper helper) {
+        var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(10, 2, 7));
+        cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        cow.setNoAi(true);
+        helper.getLevel().addFreshEntity(cow);
+        NumenPlayer companion = spawnAt(helper, "gametest_milkmaid", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.BUCKET));
+        ToolRun milk = call(companion, "interact_entity",
+                args("button", "right", "entity_id", cow.getId(), "item_id", "minecraft:bucket"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(milk.done(), "interact_entity has not finished");
+            helper.assertTrue(milk.succeeded() && companion.getInventory().countItem(Items.MILK_BUCKET) == 1
+                            && companion.getInventory().countItem(Items.BUCKET) == 0,
+                    "the bucket was not filled with milk: " + milk.outcome());
+            cow.discard();
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 拿小麦右键一头成年牛:喂下去一根,牛进了求偶状态。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    public static void interact_entity_feeds_a_cow_wheat(GameTestHelper helper) {
+        var cow = net.minecraft.world.entity.EntityType.COW.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(10, 2, 11));
+        cow.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        cow.setNoAi(true);
+        helper.getLevel().addFreshEntity(cow);
+        NumenPlayer companion = spawnAt(helper, "gametest_cowherd", new BlockPos(3, 2, 11), false);
+        companion.getInventory().add(new ItemStack(Items.WHEAT, 2));
+        ToolRun feed = call(companion, "interact_entity",
+                args("button", "right", "entity_id", cow.getId(), "item_id", "minecraft:wheat"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(feed.done(), "interact_entity has not finished");
+            helper.assertTrue(feed.succeeded() && cow.isInLove() && companion.getInventory().countItem(Items.WHEAT) == 1,
+                    "the cow was not fed: " + feed.outcome());
+            cow.discard();
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 右键一扇关着的木门:门开了;再右键一次:门又关上。两次回执都说出了门的变化。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_interact")
+    public static void interact_at_opens_then_closes_a_door(GameTestHelper helper) {
+        BlockPos lower = helper.absolutePos(new BlockPos(6, 2, 4));
+        var door = Blocks.OAK_DOOR.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.DoorBlock.FACING, net.minecraft.core.Direction.WEST);
+        helper.getLevel().setBlock(lower, door.setValue(net.minecraft.world.level.block.DoorBlock.HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.LOWER), 3);
+        helper.getLevel().setBlock(lower.above(), door.setValue(net.minecraft.world.level.block.DoorBlock.HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER), 3);
+        NumenPlayer companion = spawnAt(helper, "gametest_porter", new BlockPos(4, 2, 4), false);
+        java.util.function.BooleanSupplier open = () -> helper.getLevel().getBlockState(lower)
+                .getValue(net.minecraft.world.level.block.DoorBlock.OPEN);
+        java.util.concurrent.atomic.AtomicReference<TaskRecord> click = new java.util.concurrent.atomic.AtomicReference<>();
+
+        helper.startSequence()
+                .thenExecute(() -> click.set(click(helper, companion, "right", new BlockPos(6, 2, 4))))
+                .thenWaitUntil(() -> helper.assertTrue(click.get().getResult() != null && open.getAsBoolean(),
+                        "the door did not open: " + click.get().getResult()))
+                .thenExecute(() -> click.set(click(helper, companion, "right", new BlockPos(6, 2, 4))))
+                .thenWaitUntil(() -> helper.assertTrue(click.get().getResult() != null && !open.getAsBoolean(),
+                        "the door did not close again: " + click.get().getResult()))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
+    }
+
+    /** 右键地上的拉杆:拉杆扳下去了(通电),回执说那一格变了。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
+    public static void interact_at_flips_a_lever(GameTestHelper helper) {
+        BlockPos lever = helper.absolutePos(new BlockPos(6, 2, 8));
+        helper.getLevel().setBlockAndUpdate(lever, Blocks.LEVER.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.LeverBlock.FACE,
+                        net.minecraft.world.level.block.state.properties.AttachFace.FLOOR));
+        NumenPlayer companion = spawnAt(helper, "gametest_switcher", new BlockPos(4, 2, 8), false);
+        TaskRecord flip = click(helper, companion, "right", new BlockPos(6, 2, 8));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(flip.getResult() != null, "interact_at has not finished");
+            helper.assertTrue(flip.getResult().success() && helper.getLevel().getBlockState(lever)
+                            .getValue(net.minecraft.world.level.block.LeverBlock.POWERED),
+                    "the lever was not flipped: " + flip.getResult().message());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 拿着圆石右键脚边的地面:圆石放在了那块地面上面一格,手里少了一块。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
+    public static void interact_at_places_a_block_on_the_floor(GameTestHelper helper) {
+        BlockPos floor = helper.absolutePos(new BlockPos(6, 1, 12));
+        NumenPlayer companion = spawnAt(helper, "gametest_paver", new BlockPos(4, 2, 12), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 4));
+        ToolRun place = call(companion, "interact_at", args("button", "right",
+                "x", floor.getX(), "y", floor.getY(), "z", floor.getZ(), "item_id", "minecraft:cobblestone"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(place.done(), "interact_at has not finished");
+            helper.assertTrue(place.succeeded() && helper.getLevel().getBlockState(floor.above()).is(Blocks.COBBLESTONE)
+                            && companion.getInventory().countItem(Items.COBBLESTONE) == 3,
+                    "the cobblestone was not placed on the floor: " + place.outcome());
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

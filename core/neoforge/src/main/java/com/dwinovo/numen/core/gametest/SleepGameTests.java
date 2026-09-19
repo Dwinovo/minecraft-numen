@@ -32,6 +32,12 @@ public class SleepGameTests {
         settleWorld(level, Difficulty.PEACEFUL, MIDNIGHT);
     }
 
+    /** 有怪的夜里:普通难度 + 半夜,怪由用例自己摆。 */
+    @BeforeBatch(batch = "numen_sleep_danger")
+    public static void prepareDangerBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.NORMAL, MIDNIGHT);
+    }
+
     /** 白天的批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_sleep_day")
     public static void prepareDayBatch(ServerLevel level) {
@@ -107,6 +113,47 @@ public class SleepGameTests {
             helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("no bed at those coordinates")
                             && sleep.outcome().contains("scan_blocks"),
                     "the reply does not say there is no bed there: " + sleep.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 半夜、床在手边,但三格外站着一只僵尸:原版不让睡,回执用原版的话说附近有怪,她没躺下。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_danger")
+    public static void sleep_with_a_monster_nearby_hands_back_the_reason(GameTestHelper helper) {
+        placeBed(helper, new BlockPos(5, 2, 5));
+        var zombie = net.minecraft.world.entity.EntityType.ZOMBIE.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(9, 2, 5));
+        zombie.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        zombie.setNoAi(true);
+        helper.getLevel().addFreshEntity(zombie);
+        NumenPlayer companion = spawnAt(helper, "gametest_wary", new BlockPos(4, 2, 5), false);
+        ToolRun sleep = call(companion, "sleep", args());
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(sleep.done(), "sleep has not replied");
+            helper.assertTrue(!sleep.succeeded() && !companion.isSleeping()
+                            && sleep.outcome().contains("monsters nearby"),
+                    "the reply does not say monsters are nearby: " + sleep.outcome());
+            zombie.discard();
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 给了一张远处床的坐标:原版嫌床太远,回执照原话说,她没躺下,也没自己走过去。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_night")
+    public static void sleep_in_a_bed_too_far_away_says_so(GameTestHelper helper) {
+        placeBed(helper, new BlockPos(12, 2, 12));
+        BlockPos head = helper.absolutePos(new BlockPos(13, 2, 12));
+        NumenPlayer companion = spawnAt(helper, "gametest_faraway", new BlockPos(3, 2, 3), false);
+        BlockPos start = companion.blockPosition();
+        ToolRun sleep = call(companion, "sleep", args("x", head.getX(), "y", head.getY(), "z", head.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(sleep.done(), "sleep has not replied");
+            helper.assertTrue(!sleep.succeeded() && !companion.isSleeping()
+                            && sleep.outcome().contains("too far away"),
+                    "the reply does not say the bed is too far away: " + sleep.outcome());
+            helper.assertTrue(companion.blockPosition().equals(start), "she walked off toward the bed");
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }

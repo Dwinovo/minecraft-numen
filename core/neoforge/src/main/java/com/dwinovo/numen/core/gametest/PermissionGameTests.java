@@ -1501,4 +1501,29 @@ public class PermissionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /**
+     * 拿水桶对着主人木板旁边的地面右键:倒水是危险品挨着玩家的东西,要问;主人不在,问不到就不倒——
+     * 走的是 interact_at 的放置路径,和 build 一样由权限层裁决。水没倒出来,桶还是满的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void interact_at_water_next_to_the_owners_planks_needs_the_owner(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        playerPlaces(helper, new BlockPos(6, 2, 4), Items.OAK_PLANKS);
+        BlockPos floor = helper.absolutePos(new BlockPos(6, 1, 5));
+        NumenPlayer companion = spawnAt(helper, "gametest_waterer", new BlockPos(4, 2, 5), false);
+        companion.getInventory().add(new ItemStack(Items.WATER_BUCKET));
+        ToolRun pour = call(companion, "interact_at", args("button", "right",
+                "x", floor.getX(), "y", floor.getY(), "z", floor.getZ(), "item_id", "minecraft:water_bucket"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(pour.done(), "interact_at has not finished");
+            helper.assertTrue(!pour.succeeded() && pour.outcome().contains("refused by the owner"),
+                    "the refusal does not come from asking the owner: " + pour.outcome());
+            helper.assertTrue(!level.getBlockState(floor.above()).is(Blocks.WATER)
+                            && companion.getInventory().countItem(Items.WATER_BUCKET) == 1,
+                    "the water was poured next to the owner's planks");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }

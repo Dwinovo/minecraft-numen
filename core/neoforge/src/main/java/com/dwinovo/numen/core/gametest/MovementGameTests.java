@@ -856,4 +856,43 @@ public class MovementGameTests {
                 })
                 .thenSucceed();
     }
+
+    // ---- plan_route:默认规格没路、超预算 ----
+
+    /** 默认规格(不改地形)规划上高台:没有路,回执失败,并提示换 alter:'natural' 再规划看看;身体不动。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void plan_route_with_no_clean_way_says_what_to_try(GameTestHelper helper) {
+        BlockPos top = obsidianTower(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_surveyor", new BlockPos(3, 2, 7), false);
+        BlockPos start = companion.blockPosition();
+        ToolRun plan = call(companion, "plan_route", args("x", top.getX(), "y", top.getY(), "z", top.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(plan.done(), "plan_route has not replied");
+            helper.assertTrue(!plan.succeeded() && plan.reply().contains("alter:'natural'"),
+                    "the reply does not point at the natural spec: " + plan.reply());
+            helper.assertTrue(companion.blockPosition().equals(start), "planning moved the body");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 允许改地形但改动预算只有 1 格,上高台至少要垫 3 格:没有预算内的路,回执说出最便宜的那条要改几格。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void plan_route_over_the_alter_budget_names_the_cheapest(GameTestHelper helper) {
+        BlockPos top = obsidianTower(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_frugal", new BlockPos(3, 2, 7), false);
+        companion.getInventory().add(new ItemStack(Items.DIRT, 16));
+        com.google.gson.JsonObject spec = naturalSpec();
+        spec.addProperty("alter_budget", 1);
+        ToolRun plan = call(companion, "plan_route", args("x", top.getX(), "y", top.getY(), "z", top.getZ(),
+                "spec", spec));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(plan.done(), "plan_route has not replied");
+            helper.assertTrue(!plan.succeeded() && plan.reply().contains("alter_budget of 1"),
+                    "the reply does not say the budget ruled the routes out: " + plan.reply());
+            helper.assertTrue(companion.getInventory().countItem(Items.DIRT) == 16, "planning spent dirt");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }
