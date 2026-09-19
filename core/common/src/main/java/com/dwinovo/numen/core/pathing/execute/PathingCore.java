@@ -159,14 +159,14 @@ public final class PathingCore {
         return current != null && leadsOutOf(current, newGoal);
     }
 
-    /** 这段路的终点原本在旧目标内、而不在新目标内。 */
+    /** 这段路的终点原本在旧目标内,按新目标停在那儿不再算数(见 {@link Goal#keepsStop})。 */
     private boolean leadsOutOf(PathExecutor segment, Goal newGoal) {
         if (goal == null || newGoal == null) {
             return false;
         }
         BlockPos dest = segment.getPath().getDest();
         return goal.isInGoal(dest.getX(), dest.getY(), dest.getZ())
-                && !newGoal.isInGoal(dest.getX(), dest.getY(), dest.getZ());
+                && !Goal.keepsStop(goal, newGoal, dest.getX(), dest.getY(), dest.getZ());
     }
 
     /** 扣着没放行的那一段的路径;没有是 null。 */

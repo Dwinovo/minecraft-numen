@@ -20,4 +20,13 @@ public interface Goal {
     default double arrivalCost(int x, int y, int z) {
         return 0;
     }
+
+    /**
+     * 按 {@code before} 定下的"停在 (x,y,z)",换成 {@code after} 之后还算不算数:还在目标里,而且停在这儿
+     * 没有变贵。变贵了说明当初让这一格便宜的成员没了(那棵野树已经挖完,脚下只剩主人原木的站位),
+     * 该按新目标重新挑终点。走在半路的段与已经停下的结论都按这一条作废。
+     */
+    static boolean keepsStop(Goal before, Goal after, int x, int y, int z) {
+        return after.isInGoal(x, y, z) && after.arrivalCost(x, y, z) <= before.arrivalCost(x, y, z);
+    }
 }

@@ -125,6 +125,8 @@ public final class PlayerNav {
      * 的一跳 target lost。目标真移动时照常重根清位。
      */
     private boolean searchSatisfied;
+    /** 钉稳时的目标。活目标每刻重取,按它定下的"停在脚下"不再算数({@link Goal#keepsStop})就作废、重新搜。 */
+    private Goal settledGoal;
     /** 最近一次下发给状态机的目标中心(重根判定的基准)。 */
     private BlockPos plannedCenter;
 
@@ -467,7 +469,7 @@ public final class PlayerNav {
                 return Status.ARRIVED;
             }
             BlockPos feet = PathExecutor.playerFeet(player);
-            if (compiled.engineGoal().isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
+            if (Goal.keepsStop(settledGoal, compiled.engineGoal(), feet.getX(), feet.getY(), feet.getZ())) {
                 return Status.ARRIVED;
             }
             searchSatisfied = false;
@@ -527,6 +529,7 @@ public final class PlayerNav {
             BlockPos feet = PathExecutor.playerFeet(player);
             if (engineGoal.isInGoal(feet.getX(), feet.getY(), feet.getZ())) {
                 searchSatisfied = true;
+                settledGoal = engineGoal;
                 if (!arrivedInPlaceLogged) {
                     // 只在进入边沿打一次:任务层反复重建导航时,同一驻留会逐 tick 重进
                     // 这个分支,连续打点是日志洪水
