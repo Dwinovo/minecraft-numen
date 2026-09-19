@@ -141,11 +141,7 @@ public record ExecuteToolPayload(UUID entityUuid,
         java.util.function.Consumer<String> reply = json ->
                 com.dwinovo.numen.platform.Services.NETWORK.sendToPlayer(player,
                         new TaskResultPayload(p.entityUuid(), p.toolCallId(), json));
-        try {
-            tool.onServerCall(p.toolCallId(), args, companion, reply);
-        } catch (RuntimeException ex) {
-            replyError(player, p, "invalid arguments: " + ex.getMessage());
-        }
+        tool.serve(p.toolCallId(), args, companion, reply);
     }
 
     /**

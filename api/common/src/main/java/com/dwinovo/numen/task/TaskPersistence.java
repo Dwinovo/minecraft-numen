@@ -95,20 +95,15 @@ public final class TaskPersistence {
         }
         Constants.LOG.info("[numen-task] {} 接回重启前的活:{} {}",
                 companion.getUUID(), toolName, e.taskArgs());
-        // 重放。受理的回执丢掉:它本来是给某一次 tool_call 的,那次调用早就随上一个会话结束了——真正会送到
-        // 模型手里的是这件活干完时的 task_finished。被拒的回执,和调用直接抛出的参数错误(与
-        // ExecuteToolPayload 对真实调用的处理同一种),就是这件活没接回来。
-        try {
-            tool.onServerCall(REPLAY_CALL_ID + "-" + toolName, args, companion, reply -> {
-                JsonObject result = JsonParser.parseString(reply).getAsJsonObject();
-                if (!result.get("success").getAsBoolean()) {
-                    abandon(companion, toolName, result.get("message").getAsString());
-                }
-            });
-        } catch (RuntimeException invalid) {
-            abandon(companion, toolName, "按重启前的参数重放不成立了:" + invalid.getMessage()
-                    + "。需要的话重新派一次。");
-        }
+        // 重放,和真实调用走同一个入口(NumenTool#serve)。受理的回执丢掉:它本来是给某一次 tool_call 的,那次
+        // 调用早就随上一个会话结束了——真正会送到模型手里的是这件活干完时的 task_finished。被拒的回执(含参数
+        // 已经不成立),就是这件活没接回来。
+        tool.serve(REPLAY_CALL_ID + "-" + toolName, args, companion, reply -> {
+            JsonObject result = JsonParser.parseString(reply).getAsJsonObject();
+            if (!result.get("success").getAsBoolean()) {
+                abandon(companion, toolName, result.get("message").getAsString() + "。需要的话重新派一次。");
+            }
+        });
     }
 
     /** 这件活接不回来:记一笔,告诉她为什么,清掉记录。 */
