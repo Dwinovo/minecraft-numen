@@ -94,14 +94,16 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
             if (goal.isInGoal(currentNode.x, currentNode.y, currentNode.z)) {
                 // 到达价:停在这一格还要再付的价钱。出堆时的键只是乐观下界,把到达价补上放回堆里,
                 // 等它按总价再次出堆才收——更便宜的终点(近处野树之于远处主人的原木)先出堆就先收。
+                // 放回去的同时照常往外展开:终点格也是过路格,起点落在一块贵的站位里时,
+                // 不展开就一步也走不出去,只能收下起点。
                 double total = currentNode.cost
                         + goal.arrivalCost(currentNode.x, currentNode.y, currentNode.z);
                 if (total > currentNode.combinedCost) {
                     currentNode.combinedCost = total;
                     openSet.insert(currentNode);
-                    continue;
+                } else {
+                    return Optional.of(new Path(realStart, startNode, currentNode, numNodes, goal, calcContext));
                 }
-                return Optional.of(new Path(realStart, startNode, currentNode, numNodes, goal, calcContext));
             }
             for (Moves moves : allMoves) {
                 int newX = currentNode.x + moves.xOffset;
