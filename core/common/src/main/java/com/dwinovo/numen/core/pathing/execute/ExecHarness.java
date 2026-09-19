@@ -422,11 +422,11 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         return hit != null ? hit.getBlockPos() : null;
     }
 
-    /** 沿实体当前视角的轮廓射线(不穿流体);触及距离创造 5.0/生存按设置。 */
+    /** 沿实体当前视角的轮廓射线(不穿流体),长度是原版交互距离。 */
     private BlockHitResult clipAlongView() {
         Vec3 eye = player.getEyePosition();
         Vec3 end = eye.add(player.getViewVector(1.0f)
-                .scale(AimGeometry.blockReachDistance(player)));
+                .scale(player.blockInteractionRange()));
         return player.level().clip(new ClipContext(
                 eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
     }

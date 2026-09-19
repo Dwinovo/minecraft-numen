@@ -53,8 +53,6 @@ import java.util.TreeSet;
  */
 public final class CraftOps {
 
-    /** Eye-to-block-center reach for using a crafting table without walking. */
-    private static final double REACH = 4.5;
     /** "Where IS one" hint scan when no table is in reach (horizontal / vertical). */
     private static final int HINT_H = 16, HINT_V = 6;
     /** Rounds of fill-grid + shift-take; each round crafts up to a full stack per cell. */
@@ -160,15 +158,18 @@ public final class CraftOps {
                         + "interact_at that station and use inspect_gui + transfer instead.").toJson();
             }
             CraftingRecipe recipe = chosen.recipe();
-            BlockPos table = BlockScanner.nearestBlock(level, self.blockPosition(),
-                    self.getEyePosition(), (int) Math.ceil(REACH), 3, REACH,
-                    (pos, state) -> state.getBlock() instanceof CraftingTableBlock);
+            // 够得着的工作台:原版交互的判据(眼睛到那一格外框在交互距离内),搜索盒以眼睛为中心罩住它
+            BlockPos eyeCell = BlockPos.containing(self.getEyePosition());
+            int reachBox = (int) Math.ceil(self.blockInteractionRange());
+            BlockPos table = BlockScanner.nearestBlock(level, eyeCell, self.getEyePosition(), reachBox, reachBox,
+                    Double.MAX_VALUE, (pos, state) -> state.getBlock() instanceof CraftingTableBlock
+                            && self.canInteractWithBlock(pos, 0.0));
             if (table == null) {
                 // 类型认不出 ≠ 没有:有模组在放置时把工作台原地换成自家方块实体实现,
                 // 注册名、方块类、标签全变了,只有行为没变——所以第二遍问行为。
-                table = BlockScanner.nearestBlock(level, self.blockPosition(),
-                        self.getEyePosition(), (int) Math.ceil(REACH), 3, REACH,
-                        (pos, state) -> opensFittingGrid(level, pos, state, self, recipe));
+                table = BlockScanner.nearestBlock(level, eyeCell, self.getEyePosition(), reachBox, reachBox,
+                        Double.MAX_VALUE, (pos, state) -> self.canInteractWithBlock(pos, 0.0)
+                                && opensFittingGrid(level, pos, state, self, recipe));
             }
             if (table == null) {
                 BlockPos hintPos = BlockScanner.nearestBlock(level, self.blockPosition(),

@@ -25,9 +25,6 @@ import net.minecraft.world.phys.Vec3;
  */
 public final class PerceptionOps {
 
-    /** Vanilla {@code block_interaction_range} for players is 4.5. */
-    private static final double REACH_SQR = 4.5 * 4.5;
-
     @SuppressWarnings("deprecation")  // BlockBehaviour.isSolid() carries Mojang's
                                      // "deprecated for override" marker, not phased out.
     public String inspectBlock(int x,
@@ -82,7 +79,7 @@ int z,
         Vec3 center = Vec3.atCenterOf(pos);
         double distSqr = self.distanceToSqr(center);
         root.addProperty("distance_to_me", Math.sqrt(distSqr));
-        root.addProperty("in_reach", distSqr <= REACH_SQR);
+        root.addProperty("in_reach", self.canInteractWithBlock(pos, 0.0));
 
         return root.toString();
     }

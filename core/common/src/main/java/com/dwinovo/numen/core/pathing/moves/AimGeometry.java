@@ -1,7 +1,6 @@
 package com.dwinovo.numen.core.pathing.moves;
 
 import com.dwinovo.numen.core.pathing.execute.AimProcessor;
-import com.dwinovo.numen.core.pathing.settings.NavSettings;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.block.BaseFireBlock;
@@ -38,12 +37,12 @@ public final class AimGeometry {
      *       视角步进量化出"本 tick 实际能转到的转角",沿该转角射线——
      *       命中该格才算可达(没转到位的 tick 不误判可视)。</li>
      * </ol>
-     * 触及距离取 {@link NavSettings#blockReachDistance}。
+     * 触及距离取原版交互距离 {@link Player#blockInteractionRange}。
      */
     public static Vec3 reachableAimPoint(net.minecraft.server.level.ServerPlayer player, BlockPos pos) {
         var level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = blockReachDistance(player);
+        double reach = player.blockInteractionRange();
         var state = level.getBlockState(pos);
         boolean fire = state.getBlock() instanceof BaseFireBlock;
         // 已注视捷径:沿当前视角的射线恰好命中该格才保持(严格等格)
@@ -106,11 +105,6 @@ public final class AimGeometry {
             y = 0;
         }
         return new Vec3(pos.getX() + x, pos.getY() + y, pos.getZ() + z);
-    }
-
-    /** 方块触及距离:创造 5.0,生存按设置(默认 4.5)。 */
-    public static double blockReachDistance(net.minecraft.server.level.ServerPlayer player) {
-        return player.isCreative() ? 5.0 : NavSettings.get().blockReachDistance;
     }
 
     /** 从眼位沿给定 yaw/pitch 的轮廓射线(不穿流体);方向向量按原版 float 三角。 */

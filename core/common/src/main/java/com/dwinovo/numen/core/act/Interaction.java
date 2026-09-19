@@ -52,8 +52,6 @@ public final class Interaction {
     public enum Status { RUNNING, DONE, FAILED }
     public enum Button { ATTACK, USE }
 
-    /** Vanilla block-interaction reach (survival); creative is 5. */
-    private static final double REACH = 4.5;
     /** The two hands USE tries, main first (vanilla interaction tries both). */
     private static final InteractionHand[] HANDS = {InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND};
 
@@ -177,7 +175,8 @@ public final class Interaction {
     /**
      * The vanilla crosshair pick: one ray from the eyes along the CURRENT
      * look, resolving the CLOSER of a block or an entity (else MISS). A wall occludes a mob behind
-     * it (entities are searched only as near as the block hit). {@code reach} 4.5 = survival.
+     * it (entities are searched only as near as the block hit). {@code reach} is the caller's vanilla
+     * interaction range ({@code blockInteractionRange} / {@code entityInteractionRange}).
      */
     public static HitResult nativeRaytrace(NumenPlayer player, double reach) {
         Level level = player.level();
@@ -446,8 +445,7 @@ public final class Interaction {
     private BlockHitResult raycastBlock() {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        Vec3 look = player.getViewVector(1.0f);
-        Vec3 end = eye.add(look.x * REACH, look.y * REACH, look.z * REACH);
+        Vec3 end = eye.add(player.getViewVector(1.0f).scale(player.blockInteractionRange()));
         BlockHitResult hit = level.clip(new ClipContext(
                 eye, end, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, player));
         if (hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(block)) {

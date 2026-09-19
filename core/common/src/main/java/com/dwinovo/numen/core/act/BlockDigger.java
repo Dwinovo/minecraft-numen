@@ -400,7 +400,7 @@ public final class BlockDigger {
     private BlockHitResult reachableHit(BlockPos pos) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = com.dwinovo.numen.core.pathing.moves.AimGeometry.blockReachDistance(player);
+        double reach = player.blockInteractionRange();
         BlockState state = level.getBlockState(pos);
         VoxelShape shape = state.getShape(level, pos);
         if (shape.isEmpty()) {
@@ -440,7 +440,7 @@ public final class BlockDigger {
     private BlockHitResult centerRaycast(BlockPos target) {
         Level level = player.level();
         Vec3 eye = player.getEyePosition();
-        double reach = com.dwinovo.numen.core.pathing.moves.AimGeometry.blockReachDistance(player);
+        double reach = player.blockInteractionRange();
         Vec3 center = Vec3.atCenterOf(target);
         Vec3 dir = center.subtract(eye);
         if (dir.lengthSqr() < 1.0e-8) {

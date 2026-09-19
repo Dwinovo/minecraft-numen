@@ -13,7 +13,6 @@ import com.dwinovo.numen.core.pathing.moves.MovementStatus;
 import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
 import com.dwinovo.numen.core.pathing.spec.CellClass;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
-import com.dwinovo.numen.core.pathing.settings.NavSettings;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -91,7 +90,7 @@ public class MovementFall extends Movement {
             if (bucketSlot == -1 || level.dimension() == Level.NETHER) {
                 return state.setStatus(MovementStatus.UNREACHABLE);
             }
-            if (player.getY() - dest.getY() < NavSettings.get().blockReachDistance
+            if (player.getY() - dest.getY() < player.blockInteractionRange()
                     && !player.onGround()) {
                 // 够得着落点了:切水桶、竖直向下瞄,命中落点即放水
                 player.getInventory().selected = bucketSlot;

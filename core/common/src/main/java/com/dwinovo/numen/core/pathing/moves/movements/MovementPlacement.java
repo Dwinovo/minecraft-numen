@@ -115,7 +115,7 @@ final class MovementPlacement {
             return PlaceResult.NO_OPTION;
         }
         BuildPlacementRegistry.recordScaffold(player, placeAt);
-        double reach = NavSettings.get().blockReachDistance;
+        double reach = player.blockInteractionRange();
         Vec3 eye = eyePosition(player, wouldSneak);
         boolean found = false;
         BlockHitResult foundHit = null;
@@ -330,7 +330,7 @@ final class MovementPlacement {
     /** 玩家当前视线是否命中该方块(轮廓射线,不穿流体)。 */
     static boolean isLookingAt(ServerPlayer player, BlockPos pos) {
         BlockHitResult hit = rayTrace(player, player.getEyePosition(),
-                player.getYRot(), player.getXRot(), NavSettings.get().blockReachDistance);
+                player.getYRot(), player.getXRot(), player.blockInteractionRange());
         return hit.getType() == HitResult.Type.BLOCK && hit.getBlockPos().equals(pos);
     }
 

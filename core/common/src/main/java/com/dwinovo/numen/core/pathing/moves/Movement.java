@@ -248,8 +248,7 @@ public abstract class Movement {
 
     /** 玩家准星当前命中的方块状态;未命中返回 null。 */
     private BlockState crosshairBlockState() {
-        double reach = NavSettings.get().blockReachDistance;
-        HitResult hit = player.pick(reach, 1.0f, false);
+        HitResult hit = player.pick(player.blockInteractionRange(), 1.0f, false);
         if (hit.getType() == HitResult.Type.BLOCK) {
             return player.level().getBlockState(((BlockHitResult) hit).getBlockPos());
         }

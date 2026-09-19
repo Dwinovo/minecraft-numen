@@ -32,11 +32,9 @@ import java.util.Map;
  */
 public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEntityTaskRecord> {
 
-    private static final double REACH = 3.0;            // vanilla entity interaction range
-    private static final double REACH_SQR = REACH * REACH;
     private static final double WALK_SPEED = 1.0;
-    /** Reposition-rung stance radius: any feet cell this close to the entity's cell
-     *  (< {@link #REACH}, so an accepted stance is still within interact reach). */
+    /** Reposition-rung stance radius: any feet cell this close to the entity's cell (inside the vanilla
+     *  entity interaction range, 3 by default, so an accepted stance is still within interact reach). */
     private static final double REPOSITION_RADIUS = 2.5;
     /** The reposition rung runs at most once. */
     private static final int MAX_REPOSITIONS = 1;
@@ -134,7 +132,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
         // In reach + LOS: aim at the entity and confirm the crosshair actually resolves to IT
         // (e.g. not another entity wandered into the exact line) before pressing.
         InputDriver.lookAt(player, entity.getEyePosition());
-        HitResult hit = Interaction.nativeRaytrace(player, REACH);
+        HitResult hit = Interaction.nativeRaytrace(player, player.entityInteractionRange());
         boolean onTarget = hit.getType() == HitResult.Type.ENTITY
                 && ((EntityHitResult) hit).getEntity() == entity;
         if (!onTarget) {
@@ -192,7 +190,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
      * rung doesn't warrant {@code RecoveryLadder}'s child-task plumbing). On an
      * in-ladder nav cause ({@code NO_PATH} / {@code BOXED_IN} / {@code OUT_OF_REACH})
      * retry the SAME bounded goal once with a looser stance goal — {@link NavGoal#near}
-     * within {@link #REPOSITION_RADIUS} (&lt; {@link #REACH}) of the entity's LIVE cell,
+     * within {@link #REPOSITION_RADIUS} (inside the entity interaction range) of the entity's LIVE cell,
      * so "can't stand exactly next to it" becomes "stand anywhere within interact reach".
      * The goal supplier re-reads the entity each tick, so a target that merely MOVED
      * while we repositioned is tracked (the nav replans), not failed; a genuinely gone
@@ -237,7 +235,7 @@ public final class InteractEntityCompanionTask extends GoToThenDoTask<InteractEn
 
     private boolean withinReach() {
         return bodySettled() && entity != null
-                && player.distanceToSqr(entity.position()) <= REACH_SQR;
+                && player.canInteractWithEntity(entity, 0.0);
     }
 
     /** In arm's reach AND no block between our eyes and the entity (vanilla hasLineOfSight) —

@@ -31,8 +31,6 @@ import java.util.Map;
  */
 public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTaskRecord> {
 
-    private static final double REACH = 4.5;
-    private static final double REACH_SQR = REACH * REACH;
     private static final double WALK_SPEED = 1.0;
     /** Reposition-rung stance radius: any feet cell this close to the aim (< {@link #REACH},
      *  so an accepted stance is still within interact reach). Never wider than the goal. */
@@ -91,7 +89,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             if (r.aim != null) {
                 InputDriver.lookAt(player, Vec3.atCenterOf(r.aim));
             }
-            HitResult hit = Interaction.nativeRaytrace(player, REACH);
+            HitResult hit = Interaction.nativeRaytrace(player, player.blockInteractionRange());
             // 目标格本身是实心方块、而准星实际落在别的方块上 = 被遮挡:
             // 拒绝并点名遮挡物(点下去只会交互到错误对象还谎报成功)。
             // 目标格是空气或流体的瞄点保持准星穿透语义——流体本来就不该被准星
@@ -218,7 +216,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     }
 
     private boolean withinReach() {
-        return bodySettled() && player.distanceToSqr(Vec3.atCenterOf(r.aim)) <= REACH_SQR;
+        return bodySettled() && player.canInteractWithBlock(r.aim, 0.0);
     }
 
     private String aimLabel() {

@@ -185,8 +185,6 @@ public final class NavSettings {
     public boolean walkWhileBreaking = true;
     /** 头顶有下坠方块实体时暂停挖掘等待落定。 */
     public boolean pauseMiningForFallingBlocks = true;
-    /** 方块交互距离。 */
-    public double blockReachDistance = 4.5;
     /** 连续挖掘的破块间隔(tick)。 */
     public int blockBreakSpeed = 6;
     /** 连续右键的间隔(tick)。 */
