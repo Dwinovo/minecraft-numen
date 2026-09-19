@@ -546,6 +546,77 @@ public class CompanionGameTests {
         });
     }
 
+    /**
+     * 树冠上的原木站在地上挖:两根金合欢原木悬在她脚上五格、六格,四周一圈树叶,她身上只有一把斧头,
+     * 没有垫脚的方块。爬上去贴着它们是做不到的;站在底下仰头,眼睛离它们 3.38 格、4.38 格,在交互距离里——
+     * 斜着看过去挡着的树叶先挖开,再挖原木。原木正下方留空,掉落物落回地面。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_canopy_logs_from_the_ground(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockState leaves = Blocks.ACACIA_LEAVES.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT, true);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                for (int y = 6; y <= 8; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8 + dx, y, 8 + dz)), leaves);
+                }
+            }
+        }
+        List<BlockPos> logs = List.of(new BlockPos(8, 7, 8), new BlockPos(8, 8, 8));
+        for (BlockPos rel : logs) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.ACACIA_LOG.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_canopy", new BlockPos(4, 2, 8), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        TaskRecord record = new BlockActionOps().autoMine(companion,
+                List.of("minecraft:acacia_log"), null, 2, null, TaskDispatch.ctx("gametest-canopy", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            String reply = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(reply != null, "mine has not finished");
+            helper.assertTrue(record.getResult().success() && companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
+                    "the canopy logs were not gathered from the ground: " + reply);
+            for (BlockPos rel : logs) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
+                        "a canopy log is still up at " + rel.toShortString());
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 够不着就如实收工:一根原木悬在她脚上八格,站在底下眼睛离它 5.38 格,出了交互距离;她没有垫脚的方块,
+     * 爬不上去。任务不该站着一遍遍重搜同一条走不通的路,而是按 NO_PATH 收场、说清楚够不着。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_out_of_reach_ends_instead_of_hanging(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos logRel = new BlockPos(8, 10, 8);
+        level.setBlockAndUpdate(helper.absolutePos(logRel), Blocks.ACACIA_LOG.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(7, 2, 8), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        TaskRecord record = new BlockActionOps().autoMine(companion,
+                List.of("minecraft:acacia_log"), null, 1, null, TaskDispatch.ctx("gametest-skyward", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            String reply = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(reply != null, "mine has not finished");
+            helper.assertTrue(!record.getResult().success() && reply.contains("could not reach"),
+                    "an out-of-reach log did not end as unreachable: " + reply);
+            helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.ACACIA_LOG),
+                    "the out-of-reach log is gone");
+            // 悬在模板外的原木不收走,后面批次的大半径找方块会把它当目标
+            level.removeBlock(helper.absolutePos(logRel), false);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     // ==================== 真实地形挖掘用例(模板取自实际存档地形)====================
 
     /** 挖掘批次前置:和平难度 + 正午,排除怪物袭扰与昼夜随机性。 */
