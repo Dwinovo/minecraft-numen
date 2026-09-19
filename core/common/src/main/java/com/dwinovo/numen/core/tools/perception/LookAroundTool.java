@@ -152,12 +152,20 @@ public final class LookAroundTool implements NumenTool {
             return WATER;
         }
 
-        // Highest surface you could stand on within a jump-up / short-drop band.
+        // Highest surface you could stand on within a jump-up / short-drop band. Going down the column, the
+        // first liquid you would step onto is the surface: a lake level with the shore is water, not a pit.
         Integer standY = null;
         for (int y = feetY + 1; y >= feetY - DROP_DEPTH; y--) {
             if (canStandAt(view, x, y, z)) {
                 standY = y;
                 break;
+            }
+            BlockState floor = view.getBlockState(new BlockPos(x, y - 1, z));
+            if (y <= feetY && CellClass.isLava(floor)) {
+                return HAZARD;
+            }
+            if (y <= feetY && floor.getBlock() instanceof LiquidBlock) {
+                return WATER;
             }
         }
         if (standY == null) {
