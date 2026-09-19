@@ -20,7 +20,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** {@code interact_at} 对着水面:舀水、放船。 */
+/** 交互:{@code interact_at} 对着水面舀水、放船;{@code interact_entity} 走到活物跟前右键、左键。 */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class InteractGameTests {
@@ -104,6 +104,46 @@ public class InteractGameTests {
             helper.assertTrue(!boats.isEmpty(),
                     "no boat appeared on the aimed water — tool reply: " + receipt[0]);
             CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 拿剪刀右键一头羊:她走过去剪了毛,羊身上的毛没了。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    public static void interact_entity_shears_a_sheep(GameTestHelper helper) {
+        net.minecraft.world.entity.animal.Sheep sheep = net.minecraft.world.entity.EntityType.SHEEP.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(10, 2, 4));
+        sheep.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        sheep.setNoAi(true);
+        helper.getLevel().addFreshEntity(sheep);
+        NumenPlayer companion = spawnAt(helper, "gametest_shearer", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.SHEARS));
+        ToolRun shear = call(companion, "interact_entity",
+                args("button", "right", "entity_id", sheep.getId(), "item_id", "minecraft:shears"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(shear.done(), "interact_entity has not finished");
+            helper.assertTrue(shear.succeeded() && sheep.isSheared(), "the sheep was not sheared: " + shear.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 左键一头猪:她走过去打了一下,猪掉了血。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    public static void interact_entity_left_click_hits_a_pig(GameTestHelper helper) {
+        net.minecraft.world.entity.animal.Pig pig = net.minecraft.world.entity.EntityType.PIG.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(10, 2, 11));
+        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.setNoAi(true);
+        helper.getLevel().addFreshEntity(pig);
+        NumenPlayer companion = spawnAt(helper, "gametest_poker_entity", new BlockPos(3, 2, 11), false);
+        ToolRun hit = call(companion, "interact_entity", args("button", "left", "entity_id", pig.getId()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(hit.done(), "interact_entity has not finished");
+            helper.assertTrue(hit.succeeded() && pig.getHealth() < pig.getMaxHealth()
+                            && pig.getLastHurtByMob() == companion,
+                    "the pig was not hit by her: " + hit.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 }

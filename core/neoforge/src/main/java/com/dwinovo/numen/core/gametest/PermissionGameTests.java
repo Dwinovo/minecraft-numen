@@ -63,19 +63,6 @@ public class PermissionGameTests {
                 "BlockItem.place by a real player was not recorded");
     }
 
-    /**
-     * 让主人"在场":另起一具身体进玩家列表当主人。登记处只认主人在不在线——不在就当场按拒绝,
-     * 答不答复就无从测起。答复由用例直接调登记处,等于主人在卡片上按了键。
-     */
-    private static NumenPlayer presentOwner(GameTestHelper helper, NumenPlayer companion, String name) {
-        ServerLevel level = helper.getLevel();
-        BlockPos at = helper.absolutePos(new BlockPos(0, 2, 0));
-        NumenPlayer owner = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(), name, UUID.randomUUID(),
-                level, new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
-        companion.setOwnerUuid(owner.getUUID());
-        return owner;
-    }
-
     private static com.dwinovo.numen.permission.ConsentDesk desk(NumenPlayer companion) {
         return com.dwinovo.numen.permission.ConsentDesk.of(companion);
     }

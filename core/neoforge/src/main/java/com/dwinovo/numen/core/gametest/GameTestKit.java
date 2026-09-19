@@ -55,15 +55,18 @@ public final class GameTestKit {
     static final long NOON = 6000;
     /** 半夜:僵尸不会被太阳晒死,床睡得着。 */
     static final long MIDNIGHT = 18000;
+    /** 批次开场定下的晴天维持多久(刻):一整天,够一批跑完。 */
+    private static final int CLEAR_WEATHER_TICKS = 24000;
 
     /**
-     * 批次开场把世界定下来:难度、时刻,并关掉自然刷怪。每个批次都自己定,不继承上一批留下的——批次按名字的
+     * 批次开场把世界定下来:难度、时刻、晴天,并关掉自然刷怪。每个批次都自己定,不继承上一批留下的——批次按名字的
      * 哈希排序,谁在谁前面跑说不准;和平难度会把战斗用例里的僵尸当场收走,那条用例就成了空转。
      */
     static void settleWorld(ServerLevel level, Difficulty difficulty, long dayTime) {
         level.getServer().setDifficulty(difficulty, true);
         level.setDayTime(dayTime);
         level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
+        level.setWeatherParameters(CLEAR_WEATHER_TICKS, 0, false, false);
     }
 
     static {
@@ -236,6 +239,19 @@ public final class GameTestKit {
         ((net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(chest))
                 .setItem(0, new ItemStack(Items.DIAMOND, count));
         return chest;
+    }
+
+    /**
+     * 让主人"在场":另起一具身体进玩家列表当主人。登记处只认主人在不在线——不在就当场按拒绝,
+     * 答不答复就无从测起。答复由用例直接调登记处,等于主人在卡片上按了键。
+     */
+    static NumenPlayer presentOwner(GameTestHelper helper, NumenPlayer companion, String name) {
+        ServerLevel level = helper.getLevel();
+        BlockPos at = helper.absolutePos(new BlockPos(0, 2, 0));
+        NumenPlayer owner = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(), name, UUID.randomUUID(),
+                level, new Vec3(at.getX() + 0.5, at.getY(), at.getZ() + 0.5));
+        companion.setOwnerUuid(owner.getUUID());
+        return owner;
     }
     /**
      * 按模型的样子调一次工具:按名字从工具表里取(和网络入口是同一张表),交同一份 JSON 参数,走同一个
