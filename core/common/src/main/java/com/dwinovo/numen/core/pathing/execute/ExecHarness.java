@@ -352,10 +352,10 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
         boolean emptyBefore = before.canBeReplaced();
         for (InteractionHand hand : HANDS) {
             ItemStack stack = player.getItemInHand(hand);
-            // 手里的东西会往世界里放东西(方块、桶里的液体)就是要放:放置落点先过权限层。被拒的手
+            // 手里的东西会往世界里放东西就是要放:放置落点先过权限层。被拒的手
             // 不按下去——不是换一只手绕开,是这一格不许放;另一只手若也要放同样被拒。
-            if (places(stack, emptyBefore) && !com.dwinovo.numen.permission.Permission.judge(player,
-                    com.dwinovo.numen.permission.Action.place(placeAt, before, stack.getItem())).allowed()) {
+            var placing = com.dwinovo.numen.core.act.Interaction.placementOf(level, hit, stack);
+            if (placing != null && !com.dwinovo.numen.permission.Permission.judge(player, placing).allowed()) {
                 continue;
             }
             if (player.gameMode.useItemOn(player, level, stack, hand, hit).consumesAction()) {
@@ -371,15 +371,6 @@ public final class ExecHarness implements Movement.ExecutionDelegate {
                 return;
             }
         }
-    }
-
-    /**
-     * 这一下右键会不会往世界里放东西:方块物品贴着可替换的格放下去;桶走 {@code useItem},
-     * 倒出或舀起液体都改世界。
-     */
-    private static boolean places(ItemStack stack, boolean emptyBefore) {
-        return (emptyBefore && stack.getItem() instanceof net.minecraft.world.item.BlockItem)
-                || stack.getItem() instanceof net.minecraft.world.item.BucketItem;
     }
 
     // ==================== 视线判定 ====================

@@ -122,18 +122,21 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                     return TaskState.FAILED;
                 }
             }
-            // 按下去之前:准星落到的方块或实体交给权限层——左键是挖、打,右键是右键方块、右键实体。
-            // 要问就站着等主人,不许就带着理由收场
-            com.dwinovo.numen.permission.Action proposed = proposedAction(hit);
-            if (proposed != null) {
-                Permit permit = permit(proposed);
-                if (permit.state() == PermitState.WAITING) {
+            // 按下去之前:这一下要做的事交给权限层(见 proposedActions)。不许就带着理由收场,
+            // 要问就站着等主人
+            List<com.dwinovo.numen.permission.Action> proposed = proposedActions(hit);
+            if (!proposed.isEmpty()) {
+                List<Permit> permits = permitAll(proposed);
+                for (int i = 0; i < permits.size(); i++) {
+                    if (permits.get(i).state() == PermitState.REFUSED) {
+                        fail("cannot " + proposed.get(i).describe() + ": " + permits.get(i).refusal(),
+                                FailureType.REFUSED);
+                        return TaskState.FAILED;
+                    }
+                }
+                if (permits.stream().anyMatch(p -> p.state() == PermitState.WAITING)) {
                     InputDriver.halt(player);
                     return TaskState.RUNNING;
-                }
-                if (permit.state() == PermitState.REFUSED) {
-                    fail("cannot " + proposed.describe() + ": " + permit.refusal(), FailureType.REFUSED);
-                    return TaskState.FAILED;
                 }
             }
             // A right-click landing on a block activates it (opens a station's GUI,
@@ -184,18 +187,32 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
      * 这一下按在哪儿就是要做什么:左键方块是挖、左键实体是打;右键方块是 {@code use_block}、右键实体是
      * {@code use_entity}。落在空气里的不对着世界里的谁,不是权限层的动作。
      */
-    private com.dwinovo.numen.permission.Action proposedAction(HitResult hit) {
+    /**
+     * 准星落点上这一下要做的事:左键是挖、打;右键是右键方块、右键实体。右键方块时方块不吃这一下就轮到
+     * 手里的东西,两只手里会往世界里放东西的({@link Interaction#placementOf})也一并算上。
+     */
+    private List<com.dwinovo.numen.permission.Action> proposedActions(HitResult hit) {
         boolean left = button() == Interaction.Button.ATTACK;
         if (hit instanceof net.minecraft.world.phys.BlockHitResult bh && hit.getType() == HitResult.Type.BLOCK) {
             var state = player.level().getBlockState(bh.getBlockPos());
-            return left ? com.dwinovo.numen.permission.Action.breakBlock(bh.getBlockPos(), state)
-                    : com.dwinovo.numen.permission.Action.useBlock(bh.getBlockPos(), state);
+            if (left) {
+                return List.of(com.dwinovo.numen.permission.Action.breakBlock(bh.getBlockPos(), state));
+            }
+            List<com.dwinovo.numen.permission.Action> out = new java.util.ArrayList<>();
+            out.add(com.dwinovo.numen.permission.Action.useBlock(bh.getBlockPos(), state));
+            for (var hand : net.minecraft.world.InteractionHand.values()) {
+                var placing = Interaction.placementOf(player.level(), bh, player.getItemInHand(hand));
+                if (placing != null) {
+                    out.add(placing);
+                }
+            }
+            return out;
         }
         if (hit instanceof net.minecraft.world.phys.EntityHitResult eh) {
-            return left ? com.dwinovo.numen.permission.Action.attack(eh.getEntity())
-                    : com.dwinovo.numen.permission.Action.useEntity(eh.getEntity());
+            return List.of(left ? com.dwinovo.numen.permission.Action.attack(eh.getEntity())
+                    : com.dwinovo.numen.permission.Action.useEntity(eh.getEntity()));
         }
-        return null;
+        return List.of();
     }
 
 
