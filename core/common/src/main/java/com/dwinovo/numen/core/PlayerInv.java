@@ -43,10 +43,15 @@ public final class PlayerInv {
      * "它离开了背包"这类判断要用这一个——{@link #count} 含盔甲槽,头盔从手里挪到头上数量不变。
      */
     public static int carriedCount(Inventory inv, Item item) {
+        return carriedCount(inv, s -> s.is(item));
+    }
+
+    /** 背着的、{@code which} 认的物品一共多少个;口径同 {@link #carriedCount(Inventory, Item)}。 */
+    public static int carriedCount(Inventory inv, java.util.function.Predicate<ItemStack> which) {
         int n = 0;
         for (int i = 0; i < Math.min(BUILDABLE_SLOTS, inv.items.size()); i++) {
             ItemStack s = inv.items.get(i);
-            if (!s.isEmpty() && s.is(item)) n += s.getCount();
+            if (!s.isEmpty() && which.test(s)) n += s.getCount();
         }
         return n;
     }

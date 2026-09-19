@@ -27,9 +27,12 @@ import java.util.Map;
  * <h2>State machine (per tick)</h2>
  * <pre>
  *   SCAN     → nearest matching ItemEntity within the radius; none → DONE.
- *   APPROACH → Navigator toward it until it's absorbed (collected++) or we
+ *   APPROACH → Navigator toward it until it's absorbed or we
  *              reach the spot without picking it up (skip), then re-SCAN.
  * </pre>
+ *
+ * <p>回执里捡了多少,数的是到手的件数:背包里要捡的那几种比开工时多出来的,不是消失了几堆掉落物
+ * ——一堆可能是好几个,消失的也可能是被别人捡走、到时候没了。
  */
 public final class CollectItemsCompanionTask extends AbstractCompanionTask<CollectItemsTaskRecord> {
 
@@ -44,6 +47,8 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
 
     /** Item-entity ids we reached but couldn't absorb, so SCAN won't loop on them. */
     private final TargetSet<ItemEntity> skipped = new TargetSet<>(ItemEntity::getId);
+    /** 开工时背包里已经有多少要捡的东西;到手的件数从这里往上数。 */
+    private int baseline;
 
     public CollectItemsCompanionTask(NumenPlayer player, CollectItemsTaskRecord record) {
         super(player, record);
@@ -52,6 +57,7 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
     @Override
     protected void onStart() {
         this.phase = Phase.SCAN;
+        baseline = carried();
     }
 
     @Override
@@ -59,6 +65,7 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
         if (player.isDeadOrDying()) {
             return TaskState.CANCELLED;
         }
+        r.setCollected(Math.max(0, carried() - baseline));
         return switch (phase) {
             case SCAN -> tickScan();
             case APPROACH -> tickApproach();
@@ -80,10 +87,7 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
 
     private TaskState tickApproach() {
         if (target == null || target.isRemoved()) {
-            // Absorbed (by us or otherwise) — count it if it was ours to get.
-            if (target != null) {
-                r.incrementCollected();
-            }
+            // Absorbed (by us or otherwise); what she actually got is counted off the inventory
             stopNav();
             phase = Phase.SCAN;
             return TaskState.RUNNING;
@@ -118,6 +122,12 @@ public final class CollectItemsCompanionTask extends AbstractCompanionTask<Colle
     private boolean picked() {
         return target == null || target.isRemoved()
                 || player.distanceToSqr(target) <= PICKUP_REACH_SQR;
+    }
+
+    /** 背着的、要捡的那几种一共多少个(没点名就是全部)。 */
+    private int carried() {
+        return com.dwinovo.numen.core.PlayerInv.carriedCount(player.getInventory(),
+                s -> r.filter.isEmpty() || r.filter.contains(s.getItem()));
     }
 
     private ItemEntity nearestItem() {

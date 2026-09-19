@@ -24,7 +24,7 @@ public final class CollectItemsTaskRecord extends TaskRecord {
     /** Human-readable label for messages (e.g. "all items" or "diamond"). */
     public final String label;
 
-    /** Live progress, updated by the goal as items are absorbed. */
+    /** 到手的件数:背包里要捡的那几种比开工时多出来的数目,任务每刻更新。 */
     private int collected = 0;
 
     public CollectItemsTaskRecord(String toolCallId, long deadlineGameTime,
@@ -39,8 +39,8 @@ public final class CollectItemsTaskRecord extends TaskRecord {
         return collected;
     }
 
-    public void incrementCollected() {
-        this.collected++;
+    public void setCollected(int collected) {
+        this.collected = collected;
     }
 
     @Override
@@ -49,6 +49,6 @@ public final class CollectItemsTaskRecord extends TaskRecord {
      * 工具 id 不写进来,需要它的地方(运行时状态的 tool 属性、派发回执)本来就有。
      */
     public String describe() {
-        return "捣东西 " + label + " x" + collected;
+        return "捡东西 " + label + " x" + collected;
     }
 }

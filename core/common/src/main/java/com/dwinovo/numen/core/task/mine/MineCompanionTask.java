@@ -665,16 +665,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     // ---- item counting (progress = matching items held in the inventory) ----
 
-    /** Matching items currently in the inventory (sum of stack counts whose item the targets drop). */
+    /** Matching items currently carried (sum of stack counts whose item the targets drop). 盔甲/副手不算采集所得。 */
     private int inventoryMatch() {
         if (dropItems.isEmpty()) return baseline;   // before start() resolved the set — no progress yet
-        Inventory inv = player.getInventory();
-        int sum = 0;
-        // 只数主背包 36 格:盔甲/副手不算采集所得。
-        for (ItemStack s : inv.items) {
-            if (!s.isEmpty() && dropItems.contains(s.getItem())) sum += s.getCount();
-        }
-        return sum;
+        return com.dwinovo.numen.core.PlayerInv.carriedCount(player.getInventory(),
+                s -> dropItems.contains(s.getItem()));
     }
 
     /** The item set the target blocks drop — the server loot table rolled once per
