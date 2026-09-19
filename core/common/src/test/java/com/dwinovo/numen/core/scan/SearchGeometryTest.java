@@ -126,4 +126,23 @@ class SearchGeometryTest {
         assertFalse(bound.full());
         assertEquals(Double.POSITIVE_INFINITY, bound.worst());
     }
+
+    @Test
+    void aSmallRadiusInTheMiddleOfAChunkStaysInIt() {
+        assertEquals(0, SearchGeometry.maxRing(8, 8, 6));
+    }
+
+    @Test
+    void aCentreByAZBorderReachesTheNextChunkAlongZ() {
+        // 中心在 chunk 里的偏移是 x=9、z=15:x 方向不出界,z 方向往外 6 格进了隔壁 chunk。
+        // 只按 x 算环数,隔壁那棵树就不在扫描范围里
+        assertEquals(1, SearchGeometry.maxRing(9, 15, 6));
+        assertEquals(1, SearchGeometry.maxRing(-7, -17, 6));
+    }
+
+    @Test
+    void theRingCountCoversTheRadiusOnBothSides() {
+        assertEquals(1, SearchGeometry.maxRing(0, 8, 6), "往负方向 6 格进了前一个 chunk");
+        assertEquals(2, SearchGeometry.maxRing(8, 8, 24));
+    }
 }
