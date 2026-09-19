@@ -156,8 +156,7 @@ public class MineGameTests {
     /** 挖掘批次前置:和平难度 + 正午,排除怪物袭扰与昼夜随机性。 */
     @BeforeBatch(batch = "numen_mine")
     public static void prepareMineBatch(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        level.setDayTime(6000);
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
     /**

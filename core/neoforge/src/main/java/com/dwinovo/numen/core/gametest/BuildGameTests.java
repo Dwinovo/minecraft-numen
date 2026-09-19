@@ -32,15 +32,13 @@ public class BuildGameTests {
     /** 小屋独立批次前置(薄墙环几何对并发搜索池最敏感,单独跑)。 */
     @BeforeBatch(batch = "numen_build_cottage")
     public static void prepareCottageBatch(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        level.setDayTime(6000);
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
     /** 建造批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_build")
     public static void prepareBuildBatch(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        level.setDayTime(6000);
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
     /**
@@ -2122,16 +2120,14 @@ public class BuildGameTests {
     /** 蓝图批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_blueprint")
     public static void prepareBlueprintBatch(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        level.setDayTime(6000);
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
     /** 重型建造批次前置(与轻型批分开,别让六个建造者同时抢搜索池——
      *  生产环境是 20tps 一两个同伴,测试没必要用数量级更苛的并发打自己)。 */
     @BeforeBatch(batch = "numen_build_heavy")
     public static void prepareHeavyBuildBatch(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        level.setDayTime(6000);
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
     /**
@@ -2218,8 +2214,7 @@ public class BuildGameTests {
     /** 建造批次(重):创造同伴照真实社区图纸把整栋日式小屋盖出来。 */
     @BeforeBatch(batch = "numen_cottage_jp")
     public static void prepareJpCottageBatch(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        level.setDayTime(6000);
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
     /**

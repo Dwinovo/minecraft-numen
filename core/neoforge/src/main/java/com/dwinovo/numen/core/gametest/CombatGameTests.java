@@ -9,9 +9,11 @@ import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.monster.Zombie;
@@ -24,6 +26,12 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class CombatGameTests {
+
+    /** 战斗批次前置:普通难度(和平会把僵尸当场收走)+ 半夜(白天僵尸会被晒死)。 */
+    @BeforeBatch(batch = "numen_combat")
+    public static void prepareCombatBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.NORMAL, MIDNIGHT);
+    }
 
     /**
      * 走位带:她该稳在「它够不着我」与「我够得着它」之间,而且真的能砍到。
@@ -57,7 +65,9 @@ public class CombatGameTests {
                     "companion never landed a hit: distance " + String.format("%.2f", d)
                             + " band [" + String.format("%.2f", inner) + ", "
                             + String.format("%.2f", outer) + "]");
-            helper.assertTrue(!zombie.isAlive(), "zombie still up");
+            // 倒下、而且最后伤它的是她:被收走或被别的东西弄死的僵尸也"不在了",那不算她打赢
+            helper.assertTrue(zombie.isDeadOrDying() && zombie.getLastHurtByMob() == companion,
+                    "zombie still up, or it did not fall to her");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -81,7 +91,8 @@ public class CombatGameTests {
         TaskDispatch.setTask(companion, record, null, reply -> {});
 
         helper.succeedWhen(() -> {
-            helper.assertTrue(!pig.isAlive(), "the pig is still alive — she never walked over to hit it");
+            helper.assertTrue(pig.isDeadOrDying() && pig.getLastHurtByMob() == companion,
+                    "the pig is still alive — she never walked over to hit it");
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }

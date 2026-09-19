@@ -34,8 +34,7 @@ public class ModeGameTests {
     /** 画像批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_mode")
     public static void prepareModeBatch(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        level.setDayTime(6000);
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
     /** 创造 goto:无畏/无饥饿画像下移动与疾跑门照常工作。 */

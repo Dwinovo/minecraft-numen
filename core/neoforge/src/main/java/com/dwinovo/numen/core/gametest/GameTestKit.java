@@ -13,6 +13,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.gametest.framework.StructureUtils;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -39,6 +41,21 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 public final class GameTestKit {
 
     private GameTestKit() {}
+
+    /** 正午:白天的活都在这时候跑。 */
+    static final long NOON = 6000;
+    /** 半夜:僵尸不会被太阳晒死,床睡得着。 */
+    static final long MIDNIGHT = 18000;
+
+    /**
+     * 批次开场把世界定下来:难度、时刻,并关掉自然刷怪。每个批次都自己定,不继承上一批留下的——批次按名字的
+     * 哈希排序,谁在谁前面跑说不准;和平难度会把战斗用例里的僵尸当场收走,那条用例就成了空转。
+     */
+    static void settleWorld(ServerLevel level, Difficulty difficulty, long dayTime) {
+        level.getServer().setDifficulty(difficulty, true);
+        level.setDayTime(dayTime);
+        level.getGameRules().getRule(GameRules.RULE_DOMOBSPAWNING).set(false, level.getServer());
+    }
 
     static {
         String dir = System.getProperty("numen.gametest.structures");
@@ -200,4 +217,5 @@ public final class GameTestKit {
         TaskDispatch.runSync(companion, record, reply -> {});
         return record;
     }
+
 }

@@ -5,9 +5,11 @@ import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
@@ -20,6 +22,12 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class SurvivalGameTests {
+
+    /** 生存反射批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_survival")
+    public static void prepareSurvivalBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
 
     /**
      * 出生无敌的刻数。原版 {@code ServerPlayer.spawnInvulnerableTime = 60} 会把这段时间里

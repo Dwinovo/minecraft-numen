@@ -34,8 +34,7 @@ public class PermissionGameTests {
     /** 权限批次前置:和平难度 + 正午。 */
     @BeforeBatch(batch = "numen_permission")
     public static void preparePermissionBatch(ServerLevel level) {
-        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
-        level.setDayTime(6000);
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
     }
 
     /**

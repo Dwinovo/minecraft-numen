@@ -10,9 +10,11 @@ import com.dwinovo.numen.task.TaskRecord;
 import java.util.List;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.BeforeBatch;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -24,6 +26,24 @@ import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class MovementGameTests {
+
+    /** 冒烟批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_smoke")
+    public static void prepareSmokeBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
+
+    /** 地形许可批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_terrain")
+    public static void prepareTerrainBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
+
+    /** 载具批次前置:和平难度 + 正午。 */
+    @BeforeBatch(batch = "numen_vehicle")
+    public static void prepareVehicleBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
 
     /**
      * 冒烟:同伴能在测试世界里存活并走完一段路。验证的是整条链路——假玩家生成
