@@ -9,6 +9,7 @@ import com.dwinovo.numen.core.pathing.goals.GoalGetToBlock;
 import com.dwinovo.numen.core.pathing.goals.GoalNear;
 import com.dwinovo.numen.core.pathing.goals.GoalXZ;
 import com.dwinovo.numen.core.pathing.goals.GoalYLevel;
+import com.dwinovo.numen.core.pathing.moves.BlockReach;
 
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
@@ -191,11 +192,11 @@ class GoalAdapterTest {
         assertInstanceOf(GoalNear.class, near.engineGoal());
 
         GoalCompiler.Compiled mine = GoalCompiler.mineField(
-                List.of(T), p -> 0, List.of(T.offset(2, 0, 2)));
+                List.of(T), p -> 0, List.of(T.offset(2, 0, 2)), new BlockReach(1.62, 4.5));
         assertInstanceOf(GoalComposite.class, mine.engineGoal());
         // 挖矿目标不设神圣：站位本身常在目标柱子里，禁止路过砸掉会让站位不可达
         assertTrue(mine.sacred().isEmpty());
-        // 成员判定与旧词表目标一致(矿柱带 + 掉落物邻域)
+        // 成员判定与旧词表目标一致(够得着的站位 + 掉落物)
         assertSameMembership(mine.goal(), mine.engineGoal());
     }
 }

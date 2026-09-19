@@ -1,8 +1,10 @@
 package com.dwinovo.numen.core.pathing.calc;
 
+import com.dwinovo.numen.core.pathing.moves.BlockReach;
 import net.minecraft.core.BlockPos;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -70,5 +72,38 @@ class NavGoalMembershipTest {
         // Contrast pin: this is WHY near() must never be the block-goal fallback.
         NavGoal sphere = NavGoal.near(T, 2.0);
         assertTrue(sphere.isAt(T.above(2)), "3D sphere admits the pillar-top cell");
+    }
+
+    // ---- mineStance: within block reach, feet not above ----
+
+    private static final BlockReach SURVIVAL = new BlockReach(1.62, 4.5);
+
+    @Test
+    void mineStanceReachesACanopyLogFromTheGround() {
+        // 地面在 T.y - 6,原木挂在脚上五格:站在地上仰头就够得着,不必爬上去贴着它
+        BlockPos log = T.above(5);
+        NavGoal g = NavGoal.mineStance(log, SURVIVAL);
+        assertTrue(g.isAt(T), "脚上五格,眼睛离它底面 3.38 格");
+        assertTrue(g.isAt(T.east(2)), "偏开两格也够得着(3.70 格)");
+        assertFalse(g.isAt(T.east(4)), "偏开四格就够不着了");
+        assertEquals(0.0, g.heuristic(T), "站在站位里估价为 0");
+    }
+
+    @Test
+    void mineStanceHeuristicShrinksTowardTheStanceBand() {
+        NavGoal g = NavGoal.mineStance(T, SURVIVAL);
+        double far = g.heuristic(T.north(12));
+        double nearer = g.heuristic(T.north(8));
+        assertTrue(far > nearer && nearer > 0, "越走近估价越小:" + far + " > " + nearer);
+        assertEquals(0.0, g.heuristic(T.north(4)), "同一层隔三格已在站位带里");
+    }
+
+    @Test
+    void mineStanceAsksToClimbOnlyForWhatTheEyesCannotReach() {
+        NavGoal g = NavGoal.mineStance(T, SURVIVAL);
+        // 脚下七格:眼睛离它 5.38 格,差的 0.88 格全在竖直方向,要往上
+        assertEquals(0.88 * NavGoal.JUMP_ONE_BLOCK, g.heuristic(T.below(7)), 1e-9);
+        // 脚高于它:至少要落到它那一层
+        assertEquals(2 * NavGoal.DESCEND_ONE_BLOCK, g.heuristic(T.above(2)), 1e-9);
     }
 }
