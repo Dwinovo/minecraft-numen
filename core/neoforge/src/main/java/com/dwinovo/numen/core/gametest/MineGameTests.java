@@ -24,7 +24,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 import static com.dwinovo.numen.core.gametest.GameTestKit.*;
 
-/** 挖掘:{@code mine} 的站位、够得着、开门出屋、够不着时如实收工。 */
+/** 挖掘:{@code mine} 的站位、够得着、开门出屋、树林与埋矿、够不着时如实收工。 */
 @GameTestHolder(Constants.MOD_ID)
 @PrefixGameTestTemplate(false)
 public class MineGameTests {
@@ -161,16 +161,19 @@ public class MineGameTests {
     }
 
     /**
-     * 真实云杉林(高树场景):手持铁斧砍 8 根原木。
+     * 云杉林:三棵云杉,树干六七格高,上半截一圈圈裹着树叶;手持铁斧砍 8 根原木。
      *
      * <p>超时按游戏刻给得很宽:无头测试服不限速(数百 tps),而寻路搜索预算是墙钟毫秒——
      * 一次 200ms 的真实搜索在这里折合上百游戏刻,超时必须覆盖"搜索墙钟 × tps"的放大。走完整生产链路——目标索引注册与
-     * 查询、复合站位、眼及就地挖掘、探底波段、掉落拾取、背包计数。
+     * 查询、复合站位、就地挖掘与挖开挡在视线上的树叶、掉落拾取、背包计数。
      */
-    @GameTest(template = "real_spruce_forest", timeoutTicks = 100000, batch = "numen_mine")
-    public static void mine_spruce_forest(GameTestHelper helper) {
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_spruce_grove(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos spawn = helper.absolutePos(new BlockPos(1, 15, 1));
+        spruceTree(helper, new BlockPos(5, 2, 5), 6);
+        spruceTree(helper, new BlockPos(13, 2, 6), 6);
+        spruceTree(helper, new BlockPos(8, 2, 14), 7);
+        BlockPos spawn = helper.absolutePos(new BlockPos(2, 2, 2));
         NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_logger", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
@@ -188,13 +191,25 @@ public class MineGameTests {
     }
 
     /**
-     * 真实深板岩矿袋(袋内 26 颗钻石矿):站在顶面,手持铁镐向下挖入,采得 2 颗钻石。
-     * 覆盖埋矿的挖入站位语义与索引查询。
+     * 埋在石头里的钻石:一块九乘九、六层高的深板岩,中间埋着四颗深板岩钻石矿;她站在顶上,手持铁镐
+     * 往下挖进去,采得 2 颗钻石。盯的是埋矿的站位:脚不能高于矿,得一路挖着往下走,再就地挖矿。
      */
-    @GameTest(template = "real_diamond_pocket", timeoutTicks = 100000, batch = "numen_mine")
-    public static void mine_diamond_pocket(GameTestHelper helper) {
+    @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_buried_diamonds(GameTestHelper helper) {
         ServerLevel level = helper.getLevel();
-        BlockPos spawn = helper.absolutePos(new BlockPos(8, 17, 8));
+        for (int x = 5; x <= 13; x++) {
+            for (int z = 5; z <= 13; z++) {
+                for (int y = 2; y <= 7; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
+                            Blocks.DEEPSLATE.defaultBlockState());
+                }
+            }
+        }
+        for (BlockPos rel : List.of(new BlockPos(9, 3, 9), new BlockPos(10, 3, 9), new BlockPos(9, 3, 10),
+                new BlockPos(9, 4, 9))) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.DEEPSLATE_DIAMOND_ORE.defaultBlockState());
+        }
+        BlockPos spawn = helper.absolutePos(new BlockPos(9, 8, 9));
         NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_miner", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
@@ -209,5 +224,29 @@ public class MineGameTests {
                     "companion has not gathered 2 diamonds");
             CompanionFactory.despawn(level.getServer(), companion);
         });
+    }
+
+    /**
+     * 一棵云杉:{@code base} 起往上 {@code trunk} 格树干;树干上半截每层裹一圈树叶(下面两层两格宽、
+     * 再往上一格宽),树顶再压一片。树叶是不会凋落的那种。
+     */
+    private static void spruceTree(GameTestHelper helper, BlockPos base, int trunk) {
+        ServerLevel level = helper.getLevel();
+        BlockState leaves = Blocks.SPRUCE_LEAVES.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT, true);
+        int top = base.getY() + trunk - 1;
+        for (int y = base.getY() + 2; y <= top + 1; y++) {
+            int r = y <= base.getY() + 3 ? 2 : y <= top ? 1 : 0;
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(base.getX() + dx, y, base.getZ() + dz)),
+                            leaves);
+                }
+            }
+        }
+        for (int y = base.getY(); y <= top; y++) {
+            level.setBlockAndUpdate(helper.absolutePos(new BlockPos(base.getX(), y, base.getZ())),
+                    Blocks.SPRUCE_LOG.defaultBlockState());
+        }
     }
 }
