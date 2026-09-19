@@ -242,7 +242,7 @@ public final class GameTestKit {
     }
     /**
      * 按模型的样子调一次工具:按名字从工具表里取(和网络入口是同一张表),交同一份 JSON 参数,走同一个
-     * {@link NumenTool#onServerCall}。查询当场回执;身体动作派下去的那件活按调用 id 从调度器里取出来,
+     * {@link NumenTool#serve}。查询当场回执;身体动作派下去的那件活按调用 id 从调度器里取出来,
      * 收尾后读它交给模型的那句话。测的是工具本身,不经过模型。
      */
     static ToolRun call(NumenPlayer body, String toolName, JsonObject args) {
@@ -252,7 +252,7 @@ public final class GameTestKit {
         }
         String id = "gametest-" + toolName + "-" + UUID.randomUUID();
         AtomicReference<String> replied = new AtomicReference<>();
-        tool.onServerCall(id, args, body, replied::set);
+        tool.serve(id, args, body, replied::set);
         return new ToolRun(toolName, replied, CompanionTickDispatcher.taskOf(body.getUUID(), id));
     }
 

@@ -2245,4 +2245,94 @@ public class BuildGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    // ---- 从工具入口:build 的指令流与 blueprint 的文件 ----
+
+    /** 空的指令流不是一件活:当参数错误回来,说清楚至少要一条,不派任何活。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
+    public static void build_tool_rejects_an_empty_op_list(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_idle_builder", new BlockPos(2, 2, 2), false);
+        ToolRun build = call(companion, "build", args("ops", List.of()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(build.done() && build.task() == null, "an empty build was dispatched");
+            helper.assertTrue(!build.succeeded() && build.outcome().contains("invalid arguments")
+                            && build.outcome().contains("at least one"),
+                    "the reply does not reject the empty op list: " + build.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /**
+     * 生存模式,按模型的写法下一串指令:一圈两格高的圆石墙,再在南墙正中装一扇门(后面的指令盖掉前面的格子)。
+     * 墙一格不缺,门的上下两半都在,圆石按格扣。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void build_tool_walls_with_a_door(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_waller", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 32));
+        companion.getInventory().add(new ItemStack(Items.OAK_DOOR));
+        BlockPos min = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos max = helper.absolutePos(new BlockPos(7, 3, 7));
+        BlockPos door = helper.absolutePos(new BlockPos(6, 2, 7));
+        ToolRun build = call(companion, "build", args("ops", List.of(
+                args("op", "walls", "block_id", "minecraft:cobblestone",
+                        "x1", min.getX(), "y1", min.getY(), "z1", min.getZ(),
+                        "x2", max.getX(), "y2", max.getY(), "z2", max.getZ()),
+                args("op", "set_door", "block_id", "minecraft:oak_door",
+                        "x", door.getX(), "y", door.getY(), "z", door.getZ(), "facing", "south"))));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(build.done(), "build has not finished");
+            helper.assertTrue(build.succeeded(), "build failed: " + build.outcome());
+            for (int x = min.getX(); x <= max.getX(); x++) {
+                for (int z = min.getZ(); z <= max.getZ(); z++) {
+                    boolean ring = x == min.getX() || x == max.getX() || z == min.getZ() || z == max.getZ();
+                    for (int y = min.getY(); y <= max.getY(); y++) {
+                        BlockPos p = new BlockPos(x, y, z);
+                        if (p.getX() == door.getX() && p.getZ() == door.getZ()) {
+                            helper.assertTrue(level.getBlockState(p).is(Blocks.OAK_DOOR),
+                                    "the door is not at " + p.toShortString());
+                        } else if (ring) {
+                            helper.assertTrue(level.getBlockState(p).is(Blocks.COBBLESTONE),
+                                    "the wall is missing at " + p.toShortString());
+                        } else {
+                            helper.assertTrue(level.getBlockState(p).isAir(), "the inside is not clear at "
+                                    + p.toShortString());
+                        }
+                    }
+                }
+            }
+            helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 32 - 14
+                            && companion.getInventory().countItem(Items.OAK_DOOR) == 0,
+                    "the materials spent do not match the cells built");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 蓝图:list 里看得到放进 schematics/ 的那份文件,build 照文件把它建出来,每一格都对上。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void blueprint_tool_lists_and_builds_a_file(GameTestHelper helper) throws Exception {
+        ServerLevel level = helper.getLevel();
+        writeSmallHouse(level, "fixture_tool");
+        NumenPlayer companion = spawnAt(helper, "gametest_architect", new BlockPos(2, 2, 2), true);
+        BlockPos anchor = helper.absolutePos(new BlockPos(6, 2, 6));
+        ToolRun list = call(companion, "blueprint", args("action", "list"));
+        ToolRun build = call(companion, "blueprint", args("action", "build", "file", "fixture_tool",
+                "x", anchor.getX(), "y", anchor.getY(), "z", anchor.getZ()));
+        var targets = com.dwinovo.numen.core.blueprint.BlueprintStore.load(level, "fixture_tool", anchor, 0).targets();
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(list.succeeded() && list.reply().contains("fixture_tool"),
+                    "the blueprint is not listed: " + list.reply());
+            helper.assertTrue(build.done(), "blueprint build has not finished");
+            helper.assertTrue(build.succeeded(), "blueprint build failed: " + build.outcome());
+            for (BuildTaskRecord.Target t : targets) {
+                helper.assertTrue(t.matches(level.getBlockState(t.pos())),
+                        "the cell at " + t.pos().toShortString() + " does not match the blueprint");
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }

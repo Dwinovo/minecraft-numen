@@ -313,9 +313,8 @@ public class PermissionGameTests {
     }
 
     /** mine 点名这些团(不给 count,挖完为止),后台派出。 */
-    private static TaskRecord mineGroups(NumenPlayer companion, String callId, List<String> groups) {
-        TaskRecord record = call(companion, "mine", args("groups", groups)).task();
-        return record;
+    private static TaskRecord mineGroups(NumenPlayer companion, List<String> groups) {
+        return call(companion, "mine", args("groups", groups)).task();
     }
 
     /**
@@ -392,7 +391,7 @@ public class PermissionGameTests {
                 var spared = groupHolding(groups, helper.absolutePos(other.get(0)));
                 helper.assertTrue(target != null && spared != null && target != spared,
                         "the two trees are not two groups: " + reply.reply());
-                mine[0] = mineGroups(companion, "gametest-feller", List.of(target.get("id").getAsString()));
+                mine[0] = mineGroups(companion, List.of(target.get("id").getAsString()));
             }
             String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
             helper.assertTrue(result != null, "mine has not finished");
@@ -439,12 +438,9 @@ public class PermissionGameTests {
                 } else {
                     helper.assertTrue(Integer.parseInt(ids[1].substring(1)) > Integer.parseInt(ids[0].substring(1)),
                             "a new scan reused an old id: " + ids[0] + " then " + ids[1]);
-                    try {
-                        mineGroups(companion, "gametest-archivist", List.of(ids[0]));
-                        refusal[0] = "(accepted)";
-                    } catch (IllegalArgumentException stale) {
-                        refusal[0] = stale.getMessage();
-                    }
+                    // 派发当场拒收:不派活,拒收的话就是这次调用的回执
+                    ToolRun stale = call(companion, "mine", args("groups", List.of(ids[0])));
+                    refusal[0] = stale.task() == null ? stale.reply() : "(accepted)";
                 }
             }
             helper.assertTrue(refusal[0] != null && refusal[0].contains(ids[0]) && refusal[0].contains(ids[1])
@@ -517,7 +513,7 @@ public class PermissionGameTests {
                 helper.assertTrue(group != null && "deny".equals(group.get("permission").getAsString())
                                 && group.get("reason").getAsString().contains("denied by rule"),
                         "the scan does not mark the denied group: " + reply.reply());
-                mine[0] = mineGroups(companion, "gametest-objector", List.of(group.get("id").getAsString()));
+                mine[0] = mineGroups(companion, List.of(group.get("id").getAsString()));
             }
             String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
             helper.assertTrue(result != null, "mine has not finished");
@@ -566,7 +562,7 @@ public class PermissionGameTests {
                 var group = groupHolding(groupsIn(reply.reply()), helper.absolutePos(column.get(0)));
                 helper.assertTrue(group != null && group.get("cells").getAsInt() == 4,
                         "the column is not one group of four: " + reply.reply());
-                mine[0] = mineGroups(companion, "gametest-sinker", List.of(group.get("id").getAsString()));
+                mine[0] = mineGroups(companion, List.of(group.get("id").getAsString()));
             }
             String result = mine[0].getResult() == null ? null : mine[0].getResult().message();
             helper.assertTrue(result != null, "mine has not finished");
