@@ -49,14 +49,13 @@ public final class RoutePlanner {
     public static final int MAX_ALTERNATIVES = 3;
 
     /**
-     * 一条候选路线。
+     * 一条候选路线:直达目标的整条路。
      *
-     * @param spec        走这条路该用的规格(调用方给的那份)
-     * @param path        搜出来的路径(已装配移动原语)
-     * @param bill        预算账
-     * @param reachesGoal 直达目标,还是只搜到朝目标推进的半程
+     * @param spec 走这条路该用的规格(调用方给的那份)
+     * @param path 搜出来的路径(已装配移动原语)
+     * @param bill 预算账
      */
-    public record Candidate(RouteSpec spec, NavPath path, TerrainBill bill, boolean reachesGoal) {}
+    public record Candidate(RouteSpec spec, NavPath path, TerrainBill bill) {}
 
     private final SearchDispatcher dispatcher;
     /** 主线程建冻结搜索上下文:每次搜索一份,规格随惩罚项变。 */
@@ -129,7 +128,7 @@ public final class RoutePlanner {
 
         /**
          * 未完成返回 null;完成后返回候选(按找到的先后;可能为空),此后每次返回同一个列表。
-         * 一次搜索无路即收工——再加惩罚也搜不出来。
+         * 一次搜索到不了目标即收工——朝目标推进的半截路不是路线,再加惩罚也搜不出来。
          */
         public List<Candidate> poll() {
             if (result != null) {
@@ -140,7 +139,8 @@ public final class RoutePlanner {
                 return null;
             }
             inFlight = null;
-            NavPath path = calc.getPath().orElse(null);
+            NavPath path = calc.getType() == PathCalcResult.Type.SUCCESS_TO_GOAL
+                    ? calc.getPath().orElse(null) : null;
             if (path != null && !overlapsTooMuch(path)) {
                 TerrainBill bill = TerrainBill.planned(path, level, gates.get());
                 int changed = bill.breakCount() + bill.placeCount();
@@ -150,8 +150,7 @@ public final class RoutePlanner {
                     overBudget++;
                     cheapestChange = Math.min(cheapestChange, changed);
                 } else {
-                    found.add(new Candidate(spec, path, bill,
-                            calc.getType() == PathCalcResult.Type.SUCCESS_TO_GOAL));
+                    found.add(new Candidate(spec, path, bill));
                 }
                 searched.add(path);
                 covered.addAll(path.positions());

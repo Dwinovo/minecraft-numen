@@ -3,8 +3,10 @@ package com.dwinovo.numen.core.pathing.plan;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import com.dwinovo.numen.core.pathing.astar.Favoring;
 import com.dwinovo.numen.core.pathing.astar.NavPath;
@@ -70,9 +72,10 @@ class RoutePlannerTest {
         @Override public int getMinBuildHeight() { return -64; }
     }
 
-    /** 按队列交路径的假派发器;记下每次提交时的规格。 */
+    /** 按队列交路径的假派发器;记下每次提交时的规格。{@code stopsShort} 里的路按"只推进到半路"交。 */
     private static final class ScriptedDispatcher implements SearchDispatcher {
         final Deque<NavPath> script = new ArrayDeque<>();
+        final Set<NavPath> stopsShort = new HashSet<>();
         final List<RouteSpec> specsSeen = new ArrayList<>();
         int submissions;
 
@@ -83,7 +86,8 @@ class RoutePlannerTest {
             NavPath path = script.pollFirst();
             PathCalcResult result = path == null
                     ? new PathCalcResult(PathCalcResult.Type.FAILURE)
-                    : new PathCalcResult(PathCalcResult.Type.SUCCESS_TO_GOAL, path);
+                    : new PathCalcResult(stopsShort.contains(path)
+                            ? PathCalcResult.Type.SUCCESS_SEGMENT : PathCalcResult.Type.SUCCESS_TO_GOAL, path);
             return new SearchHandle() {
                 @Override public PathCalcResult poll() {
                     return result;
@@ -164,7 +168,6 @@ class RoutePlannerTest {
         assertEquals(1, out.size());
         assertEquals(1, d.submissions);
         assertSame(spec, out.get(0).spec());
-        assertTrue(out.get(0).reachesGoal());
         assertEquals(10, out.get(0).bill().blocks());
         assertTrue(out.get(0).bill().isEmpty());
         assertTrue(q.isDone());
@@ -244,6 +247,20 @@ class RoutePlannerTest {
         }
         assertEquals(RoutePlanner.MAX_ALTERNATIVES, out.size());
         assertEquals(RoutePlanner.MAX_ALTERNATIVES, d.submissions);
+    }
+
+    @Test
+    void aSearchThatOnlyGetsPartWayIsNotARoute() {
+        ScriptedDispatcher d = new ScriptedDispatcher();
+        NavPath partWay = line(0, 10, 0);
+        d.script.add(partWay);
+        d.stopsShort.add(partWay);
+        d.script.add(line(0, 10, 5));
+        RoutePlanner.Query q = planner(d).plan(START, START, neverGoal(), RouteSpec.defaults(), 2);
+        List<RoutePlanner.Candidate> out = q.poll();
+        assertNotNull(out);
+        assertTrue(out.isEmpty());
+        assertEquals(1, d.submissions);
     }
 
     @Test
