@@ -240,4 +240,34 @@ public class InventoryGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /** 没有这个物品的合成配方:回执叫她去查配方,背包不动。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_something_without_a_recipe_says_so(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_dreamer", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        ToolRun craft = call(companion, "craft", args("item_id", "minecraft:bedrock", "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(craft.done(), "craft has not replied");
+            helper.assertTrue(!craft.succeeded() && craft.outcome().contains("no crafting recipe makes"),
+                    "the reply does not say there is no recipe: " + craft.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 8, "the planks were touched");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 要穿的东西背包里没有:当场失败,说出缺的是什么。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_something_not_carried_says_so(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_unarmed", new BlockPos(3, 2, 3), false);
+        ToolRun equip = call(companion, "equip_item", args("action", "equip", "item_id", "minecraft:iron_helmet"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(!equip.succeeded() && equip.outcome().contains("in inventory to equip"),
+                    "the failure does not say the item is not carried: " + equip.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }

@@ -94,4 +94,20 @@ public class SleepGameTests {
         helper.getLevel().setBlock(helper.absolutePos(footRel), foot, 3);
         helper.getLevel().setBlock(helper.absolutePos(footRel.east()), foot.setValue(BedBlock.PART, BedPart.HEAD), 3);
     }
+
+    /** 给的坐标上不是床:如实说那儿没床,并指路怎么找床。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_sleep_night")
+    public static void sleep_at_coordinates_without_a_bed_says_so(GameTestHelper helper) {
+        BlockPos floor = helper.absolutePos(new BlockPos(5, 1, 5));
+        NumenPlayer companion = spawnAt(helper, "gametest_misled", new BlockPos(4, 2, 5), false);
+        ToolRun sleep = call(companion, "sleep", args("x", floor.getX(), "y", floor.getY(), "z", floor.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(sleep.done(), "sleep has not replied");
+            helper.assertTrue(!sleep.succeeded() && sleep.outcome().contains("no bed at those coordinates")
+                            && sleep.outcome().contains("scan_blocks"),
+                    "the reply does not say there is no bed there: " + sleep.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }

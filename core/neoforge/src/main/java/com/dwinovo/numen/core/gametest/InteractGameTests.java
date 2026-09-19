@@ -131,4 +131,44 @@ public class InteractGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /** 目标在工作距离外:interact_at 不自己走过去,当场失败并叫她先 goto,那一格原样。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_interact")
+    public static void interact_at_out_of_reach_says_goto_first(GameTestHelper helper) {
+        BlockPos stone = helper.absolutePos(new BlockPos(13, 2, 13));
+        helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_shortarmed", new BlockPos(2, 2, 2), false);
+        ToolRun click = call(companion, "interact_at",
+                args("button", "left", "x", stone.getX(), "y", stone.getY(), "z", stone.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(click.done(), "interact_at has not finished");
+            helper.assertTrue(!click.succeeded() && click.outcome().contains("out of working reach")
+                            && click.outcome().contains("goto"),
+                    "the failure does not send her to goto first: " + click.outcome());
+            helper.assertTrue(helper.getLevel().getBlockState(stone).is(Blocks.STONE), "the stone was touched");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 有名字的猪要问主人才能打;主人不在,问不到就不打,猪一滴血没掉。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_interact")
+    public static void interact_entity_on_a_named_animal_needs_the_owner(GameTestHelper helper) {
+        net.minecraft.world.entity.animal.Pig pig = net.minecraft.world.entity.EntityType.PIG.create(helper.getLevel());
+        BlockPos at = helper.absolutePos(new BlockPos(8, 2, 8));
+        pig.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        pig.setNoAi(true);
+        pig.setCustomName(net.minecraft.network.chat.Component.literal("Wilbur"));
+        helper.getLevel().addFreshEntity(pig);
+        NumenPlayer companion = spawnAt(helper, "gametest_restrained", new BlockPos(3, 2, 8), false);
+        ToolRun hit = call(companion, "interact_entity", args("button", "left", "entity_id", pig.getId()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(hit.done(), "interact_entity has not finished");
+            helper.assertTrue(!hit.succeeded() && hit.outcome().contains("owner"),
+                    "the refusal does not come from asking the owner: " + hit.outcome());
+            helper.assertTrue(pig.getHealth() == pig.getMaxHealth(), "the named pig was hit");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }

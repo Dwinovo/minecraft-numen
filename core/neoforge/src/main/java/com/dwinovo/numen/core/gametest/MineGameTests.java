@@ -223,6 +223,11 @@ public class MineGameTests {
         });
     }
 
+    /** 服务端这一刻认不认为她正在挖一格方块。 */
+    private static boolean digging(NumenPlayer companion) {
+        return ((com.dwinovo.numen.core.mixin.ServerPlayerGameModeAccessor) companion.gameMode).numen$isDestroyingBlock();
+    }
+
     /**
      * 一棵云杉:{@code base} 起往上 {@code trunk} 格树干;树干上半截每层裹一圈树叶(下面两层两格宽、
      * 再往上一格宽),树顶再压一片。树叶是不会凋落的那种。
@@ -245,5 +250,64 @@ public class MineGameTests {
             level.setBlockAndUpdate(helper.absolutePos(new BlockPos(base.getX(), y, base.getZ())),
                     Blocks.SPRUCE_LOG.defaultBlockState());
         }
+    }
+
+    /** 手里的镐挖不下这种矿(木镐对钻石矿):当场失败,说清楚是工具不够,矿原样留着。 */
+    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_mine")
+    public static void mine_without_a_harvesting_tool_says_the_tool_is_short(GameTestHelper helper) {
+        BlockPos ore = helper.absolutePos(new BlockPos(6, 2, 4));
+        helper.getLevel().setBlockAndUpdate(ore, Blocks.DIAMOND_ORE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_underequipped", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.WOODEN_PICKAXE));
+        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:diamond_ore"), "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("current tools"),
+                    "the failure does not say the tool is short: " + mine.outcome());
+            helper.assertTrue(helper.getLevel().getBlockState(ore).is(Blocks.DIAMOND_ORE), "the ore was broken");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 附近根本没有要挖的东西:不满世界乱走,如实说找不到。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_with_nothing_in_range_says_none_found(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_prospector", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        BlockPos start = helper.absolutePos(new BlockPos(3, 2, 4));
+        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:emerald_ore"), "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("no reachable"),
+                    "the failure does not say nothing was found: " + mine.outcome());
+            helper.assertTrue(companion.blockPosition().distSqr(start) <= 4, "she wandered off looking for it");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 挖到一半主人按停止:活按主人停止收场,那块黑曜石还在,挖掘的裂纹也收掉了。 */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_mine")
+    public static void owner_stop_mid_dig_leaves_the_block(GameTestHelper helper) {
+        BlockPos block = helper.absolutePos(new BlockPos(5, 2, 4));
+        helper.getLevel().setBlockAndUpdate(block, Blocks.OBSIDIAN.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_interrupted", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.DIAMOND_PICKAXE));
+        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:obsidian"), "count", 1));
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(digging(companion),
+                        "she has not started digging the obsidian"))
+                .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion))
+                .thenWaitUntil(() -> helper.assertTrue(mine.done() && mine.outcome().startsWith("the owner pressed Stop"),
+                        "the dig did not end as stopped by the owner: " + mine.outcome()))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(helper.getLevel().getBlockState(block).is(Blocks.OBSIDIAN),
+                            "the obsidian was broken after the stop");
+                    helper.assertTrue(!digging(companion), "she is still digging after the stop");
+                })
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
     }
 }

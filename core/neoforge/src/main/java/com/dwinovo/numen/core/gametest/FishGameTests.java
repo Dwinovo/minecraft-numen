@@ -73,4 +73,27 @@ public class FishGameTests {
             }
         }
     }
+
+    /** 钓到一半叫停:活按叫停收场,抛出去的鱼钩收回来了,水里不留浮漂。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_fish")
+    public static void task_stop_while_fishing_reels_the_line_in(GameTestHelper helper) {
+        pool(helper);
+        NumenPlayer companion = spawnAt(helper, "gametest_recalled", new BlockPos(4, 3, 7), false);
+        companion.getInventory().add(new ItemStack(Items.FISHING_ROD));
+        ToolRun fish = call(companion, "fish", args("count", 5));
+        java.util.concurrent.atomic.AtomicReference<ToolRun> stop = new java.util.concurrent.atomic.AtomicReference<>();
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(companion.fishing != null, "she has not cast yet"))
+                .thenExecute(() -> stop.set(call(companion, "task_stop", args())))
+                .thenWaitUntil(() -> helper.assertTrue(stop.get().succeeded() && fish.done()
+                                && fish.task().getState() == com.dwinovo.numen.task.TaskState.CANCELLED,
+                        "fishing was not stopped: " + stop.get().reply() + " / " + fish.outcome()))
+                .thenWaitUntil(() -> helper.assertTrue(companion.fishing == null
+                                && helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.projectile.FishingHook.class,
+                                        new net.minecraft.world.phys.AABB(companion.blockPosition()).inflate(16)).isEmpty(),
+                        "the bobber is still out after the stop"))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
+    }
 }
