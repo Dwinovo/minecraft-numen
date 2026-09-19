@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
@@ -29,6 +30,12 @@ public class InventoryGameTests {
     @BeforeBatch(batch = "numen_inventory")
     public static void prepareInventoryBatch(ServerLevel level) {
         settleWorld(level, Difficulty.PEACEFUL, NOON);
+    }
+
+    /** 进食批次前置:普通难度(和平难度下饥饿值自己会回满,测不出吃下去补了多少)+ 正午。 */
+    @BeforeBatch(batch = "numen_food")
+    public static void prepareFoodBatch(ServerLevel level) {
+        settleWorld(level, Difficulty.NORMAL, NOON);
     }
 
     /**
@@ -116,6 +123,124 @@ public class InventoryGameTests {
             helper.assertTrue(live.getInventory().hasAnyMatching(s -> s.is(Items.DIAMOND)),
                     "her inventory did not survive the recycle");
             com.dwinovo.numen.entity.Companions.dismiss(server, live);
+        });
+    }
+
+    // ---- craft ----
+
+    /** 手上的 2×2 就够:两根橡木原木合出 8 块木板,原木用光,回执说合了多少。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_planks_from_logs_in_hand(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_joiner", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_LOG, 2));
+        ToolRun craft = call(companion, "craft", args("item_id", "minecraft:oak_planks", "count", 8));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(craft.done(), "craft has not replied");
+            helper.assertTrue(craft.succeeded() && craft.outcome().contains("crafted 8x oak_planks"),
+                    "craft did not report 8 planks: " + craft.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 8
+                            && companion.getInventory().countItem(Items.OAK_LOG) == 0,
+                    "the inventory does not hold 8 planks and no logs");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 3×3 的配方要工作台:够得着的地方没有,回执点出最近那张在哪,材料一样不动。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_3x3_without_a_table_in_reach_names_the_nearest(GameTestHelper helper) {
+        BlockPos table = helper.absolutePos(new BlockPos(13, 2, 13));
+        helper.getLevel().setBlockAndUpdate(table, Blocks.CRAFTING_TABLE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_seeker", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        ToolRun craft = call(companion, "craft", args("item_id", "minecraft:chest", "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(craft.done(), "craft has not replied");
+            helper.assertTrue(!craft.succeeded() && craft.outcome().contains(
+                            "Nearest one is at " + table.getX() + "," + table.getY() + "," + table.getZ()),
+                    "the reply does not point at the table: " + craft.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 8,
+                    "the planks were touched although nothing could be crafted");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 工作台就在手边:右键打开、摆好、取出一口箱子,木板用光,界面合上。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_3x3_at_a_table_within_reach(GameTestHelper helper) {
+        helper.getLevel().setBlockAndUpdate(helper.absolutePos(new BlockPos(5, 2, 3)),
+                Blocks.CRAFTING_TABLE.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_carpenter", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 8));
+        ToolRun craft = call(companion, "craft", args("item_id", "minecraft:chest", "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(craft.done(), "craft has not replied");
+            helper.assertTrue(craft.succeeded(), "craft at the table failed: " + craft.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.CHEST) == 1
+                            && companion.getInventory().countItem(Items.OAK_PLANKS) == 0,
+                    "the inventory does not hold the chest with the planks spent");
+            helper.assertTrue(companion.containerMenu == companion.inventoryMenu,
+                    "the crafting table was left open");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 材料不够:回执写明缺什么,手里的一块不动。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void craft_short_of_materials_names_the_shortfall(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_skimper", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.OAK_PLANKS, 3));
+        ToolRun craft = call(companion, "craft", args("item_id", "minecraft:chest", "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(craft.done(), "craft has not replied");
+            helper.assertTrue(!craft.succeeded() && craft.outcome().contains("not enough materials")
+                            && craft.outcome().contains("missing"),
+                    "the reply does not name the shortfall: " + craft.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.OAK_PLANKS) == 3,
+                    "the planks were touched although nothing could be crafted");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    // ---- eat ----
+
+    /** 饿了吃面包:吃完才生效,饥饿值涨上去、面包少一个,回执报现在的饥饿值。 */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_food")
+    public static void eat_restores_hunger(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_eater", new BlockPos(3, 2, 3), false);
+        companion.getFoodData().setFoodLevel(10);
+        companion.getInventory().add(new ItemStack(Items.BREAD, 2));
+        ToolRun eat = call(companion, "eat", args("item_id", "minecraft:bread"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(eat.done(), "eat has not finished");
+            helper.assertTrue(eat.succeeded() && eat.outcome().startsWith("ate bread"),
+                    "eat did not report the meal: " + eat.outcome());
+            helper.assertTrue(companion.getFoodData().getFoodLevel() >= 15
+                            && companion.getInventory().countItem(Items.BREAD) == 1,
+                    "hunger is " + companion.getFoodData().getFoodLevel() + " with "
+                            + companion.getInventory().countItem(Items.BREAD) + " bread left");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 吃饱了还要吃:原版不让,回执如实说吃不下,面包还在。 */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_food")
+    public static void eat_on_a_full_stomach_keeps_the_food(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_sated", new BlockPos(3, 2, 3), false);
+        companion.getFoodData().setFoodLevel(20);
+        companion.getInventory().add(new ItemStack(Items.BREAD, 2));
+        ToolRun eat = call(companion, "eat", args("item_id", "minecraft:bread"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(eat.done(), "eat has not finished");
+            helper.assertTrue(!eat.succeeded() && eat.outcome().contains("already full"),
+                    "eating on a full stomach was not refused: " + eat.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.BREAD) == 2, "the bread was eaten");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
 }

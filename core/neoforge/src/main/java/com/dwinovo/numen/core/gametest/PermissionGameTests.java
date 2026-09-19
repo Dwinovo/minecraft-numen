@@ -1170,16 +1170,6 @@ public class PermissionGameTests {
         helper.succeed();
     }
 
-    /** 一口自然箱子(不是玩家放的),第一格装着 {@code count} 颗钻石。 */
-    private static BlockPos chestWithDiamonds(GameTestHelper helper, BlockPos rel, int count) {
-        ServerLevel level = helper.getLevel();
-        BlockPos chest = helper.absolutePos(rel);
-        level.setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
-        ((net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(chest))
-                .setItem(0, new ItemStack(Items.DIAMOND, count));
-        return chest;
-    }
-
     private static TaskRecord takeFirstSlot(NumenPlayer companion, String id) {
         TaskRecord record = new com.dwinovo.numen.core.tools.ContainerOps().transfer(
                 List.of(new com.dwinovo.numen.core.tools.ContainerOps.Move(0, null, null)),

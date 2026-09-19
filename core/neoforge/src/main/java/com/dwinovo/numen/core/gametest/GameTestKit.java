@@ -1,14 +1,23 @@
 package com.dwinovo.numen.core.gametest;
 
+import com.dwinovo.numen.agent.tool.NumenTool;
+import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.tools.BlockActionOps;
 import com.dwinovo.numen.entity.CompanionFactory;
 import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.task.CompanionTickDispatcher;
 import com.dwinovo.numen.task.TaskDispatch;
 import com.dwinovo.numen.task.TaskRecord;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.gametest.framework.StructureUtils;
@@ -218,4 +227,90 @@ public final class GameTestKit {
         return record;
     }
 
+
+    /** 一口自然箱子(不是玩家放的),第一格装着 {@code count} 颗钻石。 */
+    static BlockPos chestWithDiamonds(GameTestHelper helper, BlockPos rel, int count) {
+        ServerLevel level = helper.getLevel();
+        BlockPos chest = helper.absolutePos(rel);
+        level.setBlockAndUpdate(chest, Blocks.CHEST.defaultBlockState());
+        ((net.minecraft.world.level.block.entity.ChestBlockEntity) level.getBlockEntity(chest))
+                .setItem(0, new ItemStack(Items.DIAMOND, count));
+        return chest;
+    }
+    /**
+     * 按模型的样子调一次工具:按名字从工具表里取(和网络入口是同一张表),交同一份 JSON 参数,走同一个
+     * {@link NumenTool#onServerCall}。查询当场回执;身体动作派下去的那件活按调用 id 从调度器里取出来,
+     * 收尾后读它交给模型的那句话。测的是工具本身,不经过模型。
+     */
+    static ToolRun call(NumenPlayer body, String toolName, JsonObject args) {
+        NumenTool tool = ToolRegistry.get(toolName);
+        if (tool == null) {
+            throw new IllegalArgumentException("no tool named " + toolName);
+        }
+        String id = "gametest-" + toolName + "-" + UUID.randomUUID();
+        AtomicReference<String> replied = new AtomicReference<>();
+        tool.onServerCall(id, args, body, replied::set);
+        return new ToolRun(toolName, replied, CompanionTickDispatcher.taskOf(body.getUUID(), id));
+    }
+
+    /** 拼工具参数:键、值交替;值是字符串、数字、布尔、列表(成 JSON 数组)或现成的 JSON。 */
+    static JsonObject args(Object... keyValues) {
+        JsonObject out = new JsonObject();
+        for (int i = 0; i < keyValues.length; i += 2) {
+            out.add((String) keyValues[i], json(keyValues[i + 1]));
+        }
+        return out;
+    }
+
+    private static JsonElement json(Object value) {
+        if (value instanceof JsonElement e) return e;
+        if (value instanceof String s) return new JsonPrimitive(s);
+        if (value instanceof Number n) return new JsonPrimitive(n);
+        if (value instanceof Boolean b) return new JsonPrimitive(b);
+        if (value instanceof List<?> list) {
+            JsonArray array = new JsonArray();
+            list.forEach(v -> array.add(json(v)));
+            return array;
+        }
+        throw new IllegalArgumentException("not a tool argument value: " + value);
+    }
+
+    /**
+     * 一次工具调用:当场的回执,以及它派下去的那件活(查询类没有)。
+     *
+     * @param replied 当场的回执:查询的结果、后台任务的"已受理"、派发被拒的原因;同步动作不当场回执
+     * @param task    派下去的那件活;没派活是 null
+     */
+    record ToolRun(String tool, AtomicReference<String> replied, TaskRecord task) {
+
+        String reply() {
+            return replied.get();
+        }
+
+        /** 有结论了:派了活的看那件活收没收尾,没派活的看回没回执。 */
+        boolean done() {
+            return task != null ? task.getResult() != null : replied.get() != null;
+        }
+
+        /** 结论的原话:派了活的是收尾时交给模型的那句话,没派活的是回执。还没有结论是 null。 */
+        String outcome() {
+            if (task != null) {
+                return task.getResult() == null ? null : task.getResult().message();
+            }
+            return replied.get();
+        }
+
+        /** 结论是成功。回执不带 success 的查询(直接回一份数据)回了就算成功。 */
+        boolean succeeded() {
+            if (task != null) {
+                return task.getResult() != null && task.getResult().success();
+            }
+            String r = replied.get();
+            if (r == null) {
+                return false;
+            }
+            JsonObject o = JsonParser.parseString(r).getAsJsonObject();
+            return !o.has("success") || o.get("success").getAsBoolean();
+        }
+    }
 }
