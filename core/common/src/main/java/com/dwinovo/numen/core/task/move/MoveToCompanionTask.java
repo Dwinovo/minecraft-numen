@@ -9,6 +9,7 @@ import com.dwinovo.numen.core.pathing.calc.NavGoal;
 import com.dwinovo.numen.core.pathing.execute.PlayerNav;
 import com.dwinovo.numen.core.pathing.goal.GoalCompiler;
 import com.dwinovo.numen.core.pathing.plan.RouteBook;
+import com.dwinovo.numen.core.pathing.spec.CellClass;
 import com.dwinovo.numen.core.pathing.spec.RouteSpec;
 import com.dwinovo.numen.core.task.base.AbstractCompanionTask;
 import net.minecraft.core.BlockPos;
@@ -206,6 +207,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 .getCollisionShape(player.level(), blockTarget).isEmpty();
     }
 
+    /** Could she stand in the target cell — open, with footing under it by this walk's spec? */
+    private boolean targetIsStandingPlace() {
+        return !targetCellSolid() && CellClass.canWalkOn(player.level(), blockTarget.below(), spec);
+    }
+
     /** Slab-aware feet cell — the pathing node, not raw blockPosition (standing on a
      *  bottom slab counts as the cell above it, like the planner sees it). */
     private BlockPos feet() {
@@ -312,8 +318,11 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
                 // geometry failure: its verdict already carries the priced candidates to
                 // the exact destination, and a looser goal behind the same wall would only
                 // spend another probe and list routes that stop short of where she was sent.
+                // An exact cell she could stand in has no near-arrival (closeEnoughToSucceed),
+                // so there is nothing looser for the retry to aim at.
                 if (!nearRetried && !player.isInWater()
                         && nav.failType() != FailureType.TERRAIN_BLOCKED
+                        && !(r.kind == MoveToTaskRecord.Kind.BLOCK && targetIsStandingPlace())
                         && r.kind != MoveToTaskRecord.Kind.YLEVEL
                         && r.kind != MoveToTaskRecord.Kind.FIND
                         && r.kind != MoveToTaskRecord.Kind.ROUTE) {
@@ -394,13 +403,18 @@ public final class MoveToCompanionTask extends AbstractCompanionTask<MoveToTaskR
     /** Did we get close enough to the destination to call it done (teaching success)?
      *  Requires solid footing (or water — the settle path): as a live arrival
      *  predicate on the near-retry nav this must not fire during a mid-air jump
-     *  or a sneak-hover over the edge, for the same reason as {@link #reached}. */
+     *  or a sneak-hover over the edge, for the same reason as {@link #reached}.
+     *  BLOCK only when the exact cell is no place to stand (the y was a guess — mid-air or
+     *  inside a block): a cell she could stand in is a real destination, and not getting
+     *  there is the planner's verdict to report (routes to choose, or why there is no path). */
     private boolean closeEnoughToSucceed() {
         if (!player.onGround() && !player.isInWater()) {
             return false;
         }
         return switch (r.kind) {
-            case BLOCK, COLUMN -> horizontalDistSqr(bx, bz) <= NEAR_SUCCESS_RADIUS * NEAR_SUCCESS_RADIUS;
+            case BLOCK -> !targetIsStandingPlace()
+                    && horizontalDistSqr(bx, bz) <= NEAR_SUCCESS_RADIUS * NEAR_SUCCESS_RADIUS;
+            case COLUMN -> horizontalDistSqr(bx, bz) <= NEAR_SUCCESS_RADIUS * NEAR_SUCCESS_RADIUS;
             case YLEVEL -> Math.abs(feet().getY() - by) <= 1;
             // FIND 候选众多,失败梯已在候选间轮换过,不设贴近成功档;ROUTE 的失败回执本身
             // 就是候选清单,模型另选一条比"差不多到了"有用
