@@ -73,7 +73,7 @@ import java.util.Set;
  *       dig side agrees.</li>
  *   <li><b>够不着是一批的属性,不是某一格的罪</b> — 复合目标在完整的图上搜不出路,意思是
  *       <b>这一刻这一批都到不了</b>,不是"最近那颗有问题"。所以不记账到任何一格,也不原样
- *       再搜(同一个起点、同一批目标、同一片地形,结论不会变),如实收工、报告剩下的走不到
+ *       再搜:同一个局面(起点、目标、掉落物)第二次撞上无路,如实收工、报告剩下的走不到
  *       ({@link #unreachable})。站着既没挖掉一格、也没挪窝超过 {@link #STALL_TICKS} 刻,同样收工。</li>
  * </ol>
  *
@@ -188,6 +188,10 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
     /** 地图不完整时连续无路的次数（见 {@link NoPathVerdict}）。 */
     private int coldMapFails;
+    /** 完整的图上搜不出路时的局面:从哪儿搜、要挖的格、地上的掉落物。同一个局面再撞上一次就收工。 */
+    private record NoPathScene(BlockPos feet, Set<BlockPos> ores, Set<BlockPos> drops) {}
+    /** 上一次搜不出路时的局面;还没有为 null。 */
+    private NoPathScene lastNoPath;
     /** 上一次搜索是否走完了(没被期限截断)。还没有搜索回来、或被截断时为 false——
      *  终局判定("附近没有目标")必须等它为 true 才能下。 */
     private boolean lastQueryComplete;
@@ -402,13 +406,22 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     //
                     // <b>这句话的主语是"这一批",不是"最近那颗"。</b>复合目标撒在全部目标上,
                     // 搜不出路的意思是一个都到不了 —— 拿"离脚最近的"顶罪只是猜,所以什么都不记。
-                    // 也不原样再搜:同一个起点、同一批目标、同一片地形,再搜一遍还是这个结论,
-                    // 她只会站着不动、每次烧满搜索预算、永远不收工。如实收工,剩下的交给模型。
+                    // 也不原样再搜:同一个局面(同一个起点、同一批目标、同一批掉落物)再搜一遍还是这个
+                    // 结论,她只会站着不动、每次烧满搜索预算、永远不收工。所以同一个局面第二次撞上无路
+                    // 就如实收工,剩下的交给模型;局面变了(掉落物落了地、刚挖掉的格不再当掉落物等着、
+                    // 名单变了)才值得再搜。
                     com.dwinovo.numen.core.Constants.LOG.info(
                             "[numen-task] mine nav failed ({}): {} | 复合目标 {} 个,nearestOre={}",
                             nav.failType(), nav.failReason(), knownOres.size(), nearestOreInfo());
-                    return unreachable(nav.failReason()
-                            + (knownOres.isEmpty() ? "" : "; the nearest is " + nearestOreInfo()));
+                    NoPathScene scene = new NoPathScene(PathExecutor.playerFeet(player), Set.copyOf(knownOres),
+                            Set.copyOf(drops));
+                    if (scene.equals(lastNoPath)) {
+                        return unreachable(nav.failReason()
+                                + (knownOres.isEmpty() ? "" : "; the nearest is " + nearestOreInfo()));
+                    }
+                    lastNoPath = scene;
+                    stopNav();
+                    return TaskState.RUNNING;
                 }
             }
         }
