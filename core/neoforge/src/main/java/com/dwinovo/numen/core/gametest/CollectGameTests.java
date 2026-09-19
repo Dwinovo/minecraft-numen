@@ -72,6 +72,38 @@ public class CollectGameTests {
         });
     }
 
+    /** 回执报的是到手的件数,不是捡了几堆:一堆三块、一堆两块铁锭,说的是五块。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
+    public static void collect_items_reports_items_not_stacks(GameTestHelper helper) {
+        dropOnFloor(helper, new BlockPos(9, 2, 4), Items.IRON_INGOT, 3);
+        dropOnFloor(helper, new BlockPos(9, 2, 10), Items.IRON_INGOT, 2);
+        NumenPlayer companion = spawnAt(helper, "gametest_tallier", new BlockPos(2, 2, 7), false);
+        ToolRun collect = call(companion, "collect_items", args("item_ids", List.of("minecraft:iron_ingot")));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(companion.getInventory().countItem(Items.IRON_INGOT) == 5,
+                    "not all five ingots were picked up");
+            helper.assertTrue(collect.succeeded() && collect.outcome().startsWith("collected 5 "),
+                    "the reply does not count five items: " + collect.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 地上什么都没有:照样收场,回执如实说一件没捡到。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
+    public static void collect_items_with_nothing_on_the_ground_says_none(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_empty_handed", new BlockPos(2, 2, 7), false);
+        ToolRun collect = call(companion, "collect_items", args());
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(collect.outcome().startsWith("collected 0 "),
+                    "the reply does not say nothing was picked up: " + collect.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
     /** 在 rel 那一格的地面上放一堆 {@code count} 个 {@code item},不带初速。 */
     private static void dropOnFloor(GameTestHelper helper, BlockPos rel, Item item, int count) {
         Vec3 at = Vec3.atBottomCenterOf(helper.absolutePos(rel));
