@@ -144,10 +144,15 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      */
     private final Map<BlockPos, Double> digCosts = new HashMap<>();
     /**
-     * 按总价挑目标的导航在这一格落定了(搜索挑中的就是脚下):手边够得着的就是该挖的,不再因为
-     * 别处估价更低而让路。挖掉一格或挪了窝就作废。
+     * 按总价挑目标的导航在这一格落定了(搜索挑中的就是脚下):手边够得着、价钱不超过 {@link #settledPrice}
+     * 的就是该挖的,不再因为别处估价更低而让路。挖掉一格或挪了窝就作废。
      */
     private BlockPos settledAt;
+    /**
+     * 落定那一刻停在这一格的到达价——搜索按总价挑中这儿时认下的价钱。停下来是为了捡脚边的掉落物(到达价 0),
+     * 就不能拿它当挖一格贵东西(主人的原木)的理由。
+     */
+    private double settledPrice;
     /** Items the target blocks drop (simulated via the server loot tables). The
      *  count is over THESE in the inventory, not blocks broken — redstone_ore yields ~4 redstone. */
     private Set<Item> dropItems = Set.of();
@@ -370,6 +375,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                     nav.pause();
                     // 搜索按总价挑中的就是这儿:手边够得着的就挖,别再为别处的估价让路
                     settledAt = PathExecutor.playerFeet(player);
+                    settledPrice = oreFieldCompiled().goal().arrivalCost(settledAt);
                     // [ANCHOR arrived-dud] 到了,却没有可挖的。站位与原地就挖是同一个判据,所以这
                     // <b>不构成关于任何一颗矿的证据</b>:她到的是复合目标里的<b>掉落物</b>成员(刚捡完
                     // 东西,附近本来就没矿),或者这一刻人在空中(reachableTarget 第一行就要求 onGround)。
@@ -540,8 +546,8 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      * left to the navigator.
      *
      * <p>够得着的也可能不是该挖的:别处有按乐观估价就更便宜的({@link #targetCost}:走过去 + 挖它),
-     * 就先让导航按总价去挑。导航挑完仍停在这儿({@link #settledAt}),说明别处的便宜只是估价上的,
-     * 那就挖手边的。
+     * 就先让导航按总价去挑。导航挑完仍停在这儿({@link #settledAt}),而且认下的价钱够挖它
+     * ({@link #settledPrice}),说明别处的便宜只是估价上的,那就挖手边的。
      */
     private BlockPos reachableTarget() {
         if (!player.onGround()) return null;
@@ -564,7 +570,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
             bestD = d;
             best = ore;
         }
-        if (best == null || feet.equals(settledAt)) {
+        if (best == null || (feet.equals(settledAt) && bestCost <= settledPrice)) {
             return best;
         }
         for (BlockPos ore : knownOres) {
