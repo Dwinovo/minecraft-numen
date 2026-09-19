@@ -14,6 +14,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -104,6 +105,35 @@ public class CollectGameTests {
         });
     }
 
+    /**
+     * 掉落物掉进了坑里:场地垫高两层,正中留一个两格深的坑,三块铁锭躺在坑底。她自己下到坑里捡上来,
+     * 不因为站在坑沿够不着就放弃。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_collect")
+    public static void collect_items_goes_down_into_a_pit(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                if (x == 8 && z == 8) {
+                    continue;
+                }
+                for (int y = 2; y <= 3; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)), Blocks.STONE.defaultBlockState());
+                }
+            }
+        }
+        dropOnFloor(helper, new BlockPos(8, 2, 8), Items.IRON_INGOT, 3);
+        NumenPlayer companion = spawnAt(helper, "gametest_spelunker", new BlockPos(3, 4, 3), false);
+        ToolRun collect = call(companion, "collect_items", args("item_ids", List.of("minecraft:iron_ingot")));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(collect.done(), "collect_items has not finished");
+            helper.assertTrue(collect.succeeded() && companion.getInventory().countItem(Items.IRON_INGOT) == 3,
+                    "the ingots at the bottom of the pit were not picked up: " + collect.outcome());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
     /** 在 rel 那一格的地面上放一堆 {@code count} 个 {@code item},不带初速。 */
     private static void dropOnFloor(GameTestHelper helper, BlockPos rel, Item item, int count) {
         Vec3 at = Vec3.atBottomCenterOf(helper.absolutePos(rel));
@@ -118,4 +148,5 @@ public class CollectGameTests {
         return helper.getLevel().getEntitiesOfClass(ItemEntity.class, site, e -> e.getItem().is(item)).stream()
                 .mapToInt(e -> e.getItem().getCount()).sum();
     }
+
 }

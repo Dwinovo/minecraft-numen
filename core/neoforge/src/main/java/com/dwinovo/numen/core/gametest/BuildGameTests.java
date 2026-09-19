@@ -2335,4 +2335,39 @@ public class BuildGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /**
+     * 生存模式砌一块 5×5 的圆石平台,砌到第三格主人按停止:活按主人停止收场;停下之后不再多砌一格,
+     * 背包里少掉的圆石正好是砌上去的格数。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void owner_stop_mid_build_keeps_what_is_built(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_paused_mason", new BlockPos(2, 2, 2), false);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
+        BlockPos min = helper.absolutePos(new BlockPos(6, 2, 6));
+        BlockPos max = helper.absolutePos(new BlockPos(10, 2, 10));
+        ToolRun build = call(companion, "build", args("ops", List.of(args("op", "box",
+                "block_id", "minecraft:cobblestone", "x1", min.getX(), "y1", min.getY(), "z1", min.getZ(),
+                "x2", max.getX(), "y2", max.getY(), "z2", max.getZ()))));
+        java.util.function.IntSupplier placed = () -> (int) BlockPos.betweenClosedStream(min, max)
+                .filter(p -> level.getBlockState(p).is(Blocks.COBBLESTONE)).count();
+        int[] atStop = new int[1];
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(placed.getAsInt() >= 3, "she has not laid three cells yet"))
+                .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion))
+                .thenWaitUntil(() -> helper.assertTrue(build.done() && build.outcome().startsWith("the owner pressed Stop"),
+                        "the build did not end as stopped by the owner: " + build.outcome()))
+                .thenExecute(() -> atStop[0] = placed.getAsInt())
+                .thenIdle(20)
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(placed.getAsInt() == atStop[0] && atStop[0] < 25,
+                            "cells kept appearing after the stop: " + atStop[0] + " then " + placed.getAsInt());
+                    helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 64 - atStop[0],
+                            "the cobblestone spent does not match the " + atStop[0] + " cells laid");
+                })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
 }
