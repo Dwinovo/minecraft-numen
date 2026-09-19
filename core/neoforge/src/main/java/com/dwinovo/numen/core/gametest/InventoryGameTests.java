@@ -270,4 +270,210 @@ public class InventoryGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    // ---- equip_item:换下、卸甲、没地方放 ----
+
+    /** 头上已经戴着铁头盔,再戴钻石头盔:钻石的上了头,铁的回到背包里,不掉在地上。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_a_second_helmet_stows_the_first(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_milliner", new BlockPos(4, 2, 4), false);
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        companion.getInventory().add(new ItemStack(Items.DIAMOND_HELMET));
+        ToolRun equip = call(companion, "equip_item", args("item_id", "minecraft:diamond_helmet"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(equip.succeeded() && equip.outcome().contains("in head"),
+                    "the reply does not say the helmet went on her head: " + equip.outcome());
+            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.DIAMOND_HELMET), "the diamond helmet is not on her head");
+            helper.assertTrue(companion.getInventory().countItem(Items.IRON_HELMET) == 1,
+                    "the iron helmet did not go back into her inventory");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 雕刻南瓜没有右键穿戴,但原版认它是头部装备:照样戴上头,回执说在头上。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void equip_a_carved_pumpkin_goes_on_the_head(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_scarecrow", new BlockPos(4, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.CARVED_PUMPKIN));
+        ToolRun equip = call(companion, "equip_item", args("item_id", "minecraft:carved_pumpkin"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(equip.done(), "equip_item has not finished");
+            helper.assertTrue(equip.succeeded() && equip.outcome().contains("in head"),
+                    "the reply does not say the pumpkin went on her head: " + equip.outcome());
+            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.CARVED_PUMPKIN), "the pumpkin is not on her head");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 卸甲:头盔和靴子一起脱下来收进背包,两个槽都空了,回执点名脱了哪两件。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void unequip_armor_takes_every_piece_off(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_undresser", new BlockPos(4, 2, 4), false);
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.FEET, new ItemStack(Items.IRON_BOOTS));
+        ToolRun unequip = call(companion, "equip_item", args("action", "unequip", "slot", "armor"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(unequip.done(), "unequip has not finished");
+            helper.assertTrue(unequip.succeeded() && unequip.outcome().startsWith("took off")
+                            && unequip.outcome().contains("iron_helmet") && unequip.outcome().contains("iron_boots"),
+                    "the reply does not name both pieces: " + unequip.outcome());
+            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD).isEmpty()
+                            && companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET).isEmpty(),
+                    "some armor is still worn");
+            helper.assertTrue(companion.getInventory().countItem(Items.IRON_HELMET) == 1
+                            && companion.getInventory().countItem(Items.IRON_BOOTS) == 1,
+                    "the armor did not go into her inventory");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 背包三十六格全满时卸头盔:没地方放就不脱,头盔还戴着,也不扔在地上;回执说背包满了。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void unequip_with_a_full_inventory_keeps_the_armor_on(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_overpacked", new BlockPos(4, 2, 4), false);
+        for (int i = 0; i < 36; i++) {
+            companion.getInventory().setItem(i, new ItemStack(Items.COBBLESTONE, 64));
+        }
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        ToolRun unequip = call(companion, "equip_item", args("action", "unequip", "slot", "head"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(unequip.done(), "unequip has not finished");
+            helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("inventory is full"),
+                    "the failure does not say the inventory is full: " + unequip.outcome());
+            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.IRON_HELMET), "the helmet came off with nowhere to go");
+            helper.assertTrue(helper.getLevel().getEntitiesOfClass(net.minecraft.world.entity.item.ItemEntity.class,
+                            companion.getBoundingBox().inflate(4)).isEmpty(), "something was dropped on the ground");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 头上本来就空着还要卸:不算错,回执说没什么可脱。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void unequip_an_empty_slot_says_there_is_nothing(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_bareheaded", new BlockPos(4, 2, 4), false);
+        ToolRun unequip = call(companion, "equip_item", args("action", "unequip", "slot", "head"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(unequip.done(), "unequip has not finished");
+            helper.assertTrue(unequip.succeeded() && unequip.outcome().startsWith("nothing to take off"),
+                    "the reply does not say there was nothing to take off: " + unequip.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 卸甲不说卸哪个槽:按参数错误退回,告诉她要给 slot。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_inventory")
+    public static void unequip_without_a_slot_is_rejected(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_vague", new BlockPos(4, 2, 4), false);
+        companion.setItemSlot(net.minecraft.world.entity.EquipmentSlot.HEAD, new ItemStack(Items.IRON_HELMET));
+        ToolRun unequip = call(companion, "equip_item", args("action", "unequip"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(unequip.done(), "unequip has not replied");
+            helper.assertTrue(!unequip.succeeded() && unequip.outcome().contains("slot is required"),
+                    "the rejection does not ask for a slot: " + unequip.outcome());
+            helper.assertTrue(companion.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD)
+                    .is(Items.IRON_HELMET), "the helmet came off anyway");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    // ---- eat:没有、不能吃、金苹果、叫停、创造 ----
+
+    /** 背包里没有面包还要吃:当场失败,说缺的是面包。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
+    public static void eat_something_not_carried_says_so(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_hungry", new BlockPos(3, 2, 3), false);
+        companion.getFoodData().setFoodLevel(10);
+        ToolRun eat = call(companion, "eat", args("item_id", "minecraft:bread"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(eat.done(), "eat has not finished");
+            helper.assertTrue(!eat.succeeded() && eat.outcome().contains("no bread in inventory"),
+                    "the failure does not say there is no bread: " + eat.outcome());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 要吃圆石:不是能吃能喝的东西,当场失败,圆石还在。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
+    public static void eat_something_inedible_says_so(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_gnawer", new BlockPos(3, 2, 3), false);
+        companion.getFoodData().setFoodLevel(10);
+        companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 3));
+        ToolRun eat = call(companion, "eat", args("item_id", "minecraft:cobblestone"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(eat.done(), "eat has not finished");
+            helper.assertTrue(!eat.succeeded() && eat.outcome().contains("can't be eaten or drunk"),
+                    "the failure does not say cobblestone is not food: " + eat.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.COBBLESTONE) == 3, "the cobblestone was used up");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 金苹果饱着也能吃(原版允许):吃掉了,身上有了伤害吸收,回执说吃了。 */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_food")
+    public static void eat_a_golden_apple_on_a_full_stomach(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_gourmet", new BlockPos(3, 2, 3), false);
+        companion.getFoodData().setFoodLevel(20);
+        companion.getInventory().add(new ItemStack(Items.GOLDEN_APPLE));
+        ToolRun eat = call(companion, "eat", args("item_id", "minecraft:golden_apple"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(eat.done(), "eat has not finished");
+            helper.assertTrue(eat.succeeded() && eat.outcome().startsWith("ate golden_apple"),
+                    "the golden apple was not eaten on a full stomach: " + eat.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.GOLDEN_APPLE) == 0
+                            && companion.hasEffect(net.minecraft.world.effect.MobEffects.ABSORPTION),
+                    "the apple is still there or its effect is missing");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 嚼到一半主人按停止:按主人停止收场;面包一个没少,饥饿值没变,过了整段咀嚼时长也不再生效。 */
+    @GameTest(template = "floor16", timeoutTicks = 2000, batch = "numen_food")
+    public static void owner_stop_mid_meal_keeps_the_food(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_interrupted", new BlockPos(3, 2, 3), false);
+        companion.getFoodData().setFoodLevel(10);
+        companion.getInventory().add(new ItemStack(Items.BREAD, 2));
+        ToolRun eat = call(companion, "eat", args("item_id", "minecraft:bread"));
+
+        helper.startSequence()
+                .thenIdle(10)
+                .thenExecute(() -> com.dwinovo.numen.task.CompanionTickDispatcher.cancelFor(companion))
+                .thenWaitUntil(() -> helper.assertTrue(eat.done() && eat.outcome().startsWith("the owner pressed Stop"),
+                        "the meal did not end as stopped by the owner: " + eat.outcome()))
+                .thenIdle(40)
+                .thenWaitUntil(() -> helper.assertTrue(companion.getInventory().countItem(Items.BREAD) == 2
+                                && companion.getFoodData().getFoodLevel() == 10,
+                        "the stopped meal still took effect: " + companion.getInventory().countItem(Items.BREAD)
+                                + " bread, hunger " + companion.getFoodData().getFoodLevel()))
+                .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
+                .thenSucceed();
+    }
+
+    /** 创造模式没有饥饿:不去吃,回执如实说用不着,面包留着。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_food")
+    public static void eat_in_creative_says_there_is_no_hunger(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_immortal", new BlockPos(3, 2, 3), true);
+        companion.getInventory().add(new ItemStack(Items.BREAD, 2));
+        ToolRun eat = call(companion, "eat", args("item_id", "minecraft:bread"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(eat.done(), "eat has not finished");
+            helper.assertTrue(!eat.succeeded() && eat.outcome().contains("creative mode has no hunger"),
+                    "the reply does not say creative has no hunger: " + eat.outcome());
+            helper.assertTrue(companion.getInventory().countItem(Items.BREAD) == 2, "the bread was eaten");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }

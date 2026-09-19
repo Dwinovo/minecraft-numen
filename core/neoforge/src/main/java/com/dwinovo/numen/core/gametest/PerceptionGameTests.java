@@ -242,4 +242,50 @@ public class PerceptionGameTests {
         }
         return rows.get(row + dz).charAt(col + 2 * dx);
     }
+
+    /** 读一块石头和一格空气的存储:石头如实说没有存储;空气直接失败,说那儿什么都没有。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void inspect_block_storage_on_stone_and_on_air(GameTestHelper helper) {
+        BlockPos stone = helper.absolutePos(new BlockPos(5, 2, 3));
+        helper.getLevel().setBlockAndUpdate(stone, Blocks.STONE.defaultBlockState());
+        BlockPos air = helper.absolutePos(new BlockPos(5, 3, 3));
+        NumenPlayer companion = spawnAt(helper, "gametest_prober", new BlockPos(3, 2, 3), false);
+        ToolRun onStone = call(companion, "inspect_block_storage", args("x", stone.getX(), "y", stone.getY(), "z", stone.getZ()));
+        ToolRun onAir = call(companion, "inspect_block_storage", args("x", air.getX(), "y", air.getY(), "z", air.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(onStone.succeeded() && onStone.reply().contains("exposes no item/fluid/energy storage"),
+                    "stone was not reported as holding nothing: " + onStone.reply());
+            helper.assertTrue(!onAir.succeeded() && onAir.reply().contains("is air"),
+                    "air was not reported as nothing to read: " + onAir.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 查一样合成、烧炼都做不出来的东西(末影珍珠):回执说没有配方,要靠别的途径得到。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void lookup_recipe_for_something_not_made_says_so(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_curious", new BlockPos(3, 2, 3), false);
+        ToolRun recipe = call(companion, "lookup_recipe", args("item_id", "minecraft:ender_pearl"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(recipe.succeeded() && recipe.reply().contains("no recipe for ender_pearl"),
+                    "the reply does not say ender pearls have no recipe: " + recipe.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 查一个不存在的物品 id:按参数错误退回,说出是哪个 id。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_perception")
+    public static void lookup_recipe_for_an_unknown_item_is_rejected(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_misspeller", new BlockPos(3, 2, 3), false);
+        ToolRun recipe = call(companion, "lookup_recipe", args("item_id", "minecraft:no_such_item"));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(!recipe.succeeded() && recipe.reply().contains("invalid arguments")
+                            && recipe.reply().contains("no_such_item"),
+                    "the unknown id was not rejected by name: " + recipe.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }

@@ -679,4 +679,102 @@ public class MovementGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    // ---- y 给得不对:半空、地里;水底、岩浆 ----
+
+    /** y 猜到了半空(离地三格):那一格没法站,她走到那一列的地面上,算到达,回执教她下次省掉 y。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_with_y_in_the_air_lands_on_the_ground_below(GameTestHelper helper) {
+        BlockPos target = helper.absolutePos(new BlockPos(11, 5, 7));
+        NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(3, 2, 7), false);
+        ToolRun walk = call(companion, "goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(walk.done(), "goto has not finished");
+            helper.assertTrue(walk.succeeded() && walk.outcome().contains("omit y"),
+                    "the mid-air y did not end on the ground with the hint: " + walk.outcome());
+            BlockPos at = companion.blockPosition();
+            int dx = at.getX() - target.getX();
+            int dz = at.getZ() - target.getZ();
+            helper.assertTrue(at.getY() == target.getY() - 3 && dx * dx + dz * dz <= 9,
+                    "she is not on the ground beneath the target: " + at.toShortString());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** y 给成了地面那一块本身:那一格是实心的,她站到它上面,算到达,回执同样教她省掉 y。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_with_y_inside_the_floor_lands_on_top_of_it(GameTestHelper helper) {
+        BlockPos target = helper.absolutePos(new BlockPos(11, 1, 7));
+        NumenPlayer companion = spawnAt(helper, "gametest_grounded_y", new BlockPos(3, 2, 7), false);
+        ToolRun walk = call(companion, "goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(walk.done(), "goto has not finished");
+            helper.assertTrue(walk.succeeded() && walk.outcome().contains("omit y"),
+                    "the y inside the floor did not end on top of it with the hint: " + walk.outcome());
+            BlockPos at = companion.blockPosition();
+            int dx = at.getX() - target.getX();
+            int dz = at.getZ() - target.getZ();
+            helper.assertTrue(at.getY() == target.getY() + 1 && dx * dx + dz * dz <= 9,
+                    "she is not standing on the floor by the target: " + at.toShortString());
+            helper.assertTrue(helper.getLevel().getBlockState(target).isSolid(), "the floor block was dug out");
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
+
+    /** 场地垫高三层,中间一个 3×3、三格深的水池;目标是池底正中那一格:她下水沉到池底,就站在那一格。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_to_the_bottom_of_a_pool(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                boolean pool = x >= 9 && x <= 11 && z >= 6 && z <= 8;
+                for (int y = 2; y <= 4; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
+                            pool ? Blocks.WATER.defaultBlockState() : Blocks.STONE.defaultBlockState());
+                }
+            }
+        }
+        BlockPos target = helper.absolutePos(new BlockPos(10, 2, 7));
+        NumenPlayer companion = spawnAt(helper, "gametest_diver", new BlockPos(3, 5, 7), false);
+        ToolRun walk = call(companion, "goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(walk.done(), "goto has not finished");
+            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 1,
+                    "she did not reach the bottom of the pool: " + walk.outcome()
+                            + " at " + companion.blockPosition().toShortString());
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 场地垫高一层,中间一道一格宽的岩浆沟横着拦住大半边,只在一头留出通路:她绕过去到达目标,
+     * 一路上没着过火、没掉过血。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_terrain")
+    public static void goto_goes_around_a_lava_channel(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                boolean lava = x == 8 && z >= 1 && z <= 12;
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 2, z)),
+                        lava ? Blocks.LAVA.defaultBlockState() : Blocks.STONE.defaultBlockState());
+            }
+        }
+        BlockPos target = helper.absolutePos(new BlockPos(13, 3, 7));
+        NumenPlayer companion = spawnAt(helper, "gametest_firewalker", new BlockPos(3, 3, 7), false);
+        ToolRun walk = call(companion, "goto", args("x", target.getX(), "y", target.getY(), "z", target.getZ()));
+        boolean[] burned = new boolean[1];
+        helper.onEachTick(() -> burned[0] |= companion.isOnFire() || companion.getHealth() < companion.getMaxHealth());
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(walk.done(), "goto has not finished");
+            helper.assertTrue(walk.succeeded() && companion.blockPosition().distSqr(target) <= 2,
+                    "she did not get past the lava: " + walk.outcome());
+            helper.assertTrue(!burned[0], "she was burned on the way");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }

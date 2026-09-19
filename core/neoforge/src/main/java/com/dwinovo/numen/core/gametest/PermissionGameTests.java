@@ -1375,4 +1375,130 @@ public class PermissionGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    // ---- 打村民、打别人的狼、拆装着东西的箱子、拆活板门 ----
+
+    /** 村民在出厂 ask 表里:主人不在,问不到就不打;attack 以主人拒绝收场,村民一滴血没掉。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void attack_a_villager_with_the_owner_away_is_refused(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var villager = EntityType.VILLAGER.create(level);
+        BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
+        villager.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        villager.setNoAi(true);
+        level.addFreshEntity(villager);
+        NumenPlayer companion = spawnAt(helper, "gametest_peacekeeper", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        ToolRun attack = call(companion, "attack", args("entity_ids", List.of(villager.getId())));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(attack.done(), "attack has not finished");
+            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("refused by the owner"),
+                    "the refusal does not come from asking the owner: " + attack.outcome());
+            helper.assertTrue(villager.getHealth() == villager.getMaxHealth(), "the villager was hit");
+            villager.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 同样打村民,主人在场点了允许:征询只挂一次,允许之后才动手,村民挨了打。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void attack_a_villager_asks_then_hits_after_yes(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var villager = EntityType.VILLAGER.create(level);
+        BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
+        villager.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        villager.setNoAi(true);
+        level.addFreshEntity(villager);
+        NumenPlayer companion = spawnAt(helper, "gametest_enforcer", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        NumenPlayer owner = presentOwner(helper, companion, "gametest_magistrate");
+        ToolRun attack = call(companion, "attack", args("entity_ids", List.of(villager.getId())));
+        java.util.Set<Long> requests = new java.util.HashSet<>();
+        boolean[] hitBeforeYes = new boolean[1];
+        helper.onEachTick(() -> {
+            var pending = desk(companion).pending();
+            if (requests.isEmpty()) {
+                hitBeforeYes[0] |= villager.getHealth() < villager.getMaxHealth();
+            }
+            if (pending != null && requests.add(pending.id())) {
+                desk(companion).answer(pending.id(), com.dwinovo.numen.permission.ConsentAnswer.Decision.ALLOW_ONCE, "");
+            }
+        });
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(requests.size() == 1, "asked " + requests.size() + " times about the villager");
+            helper.assertTrue(!hitBeforeYes[0], "the villager was hit before the owner said yes");
+            helper.assertTrue(!villager.isAlive() || villager.getHealth() < villager.getMaxHealth(),
+                    "the villager was not hit after the owner said yes: " + attack.outcome());
+            villager.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+            CompanionFactory.despawn(level.getServer(), owner);
+        });
+    }
+
+    /** 别人养的狼(有主人):打死了就是人家的宠物没了,要问;主人不在就不打,狼一滴血没掉。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void attack_someones_tamed_wolf_is_refused_without_the_owner(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        var wolf = EntityType.WOLF.create(level);
+        BlockPos at = helper.absolutePos(new BlockPos(7, 2, 4));
+        wolf.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0f, 0.0f);
+        wolf.setTame(true, false);
+        wolf.setOwnerUUID(UUID.randomUUID());
+        wolf.setNoAi(true);
+        level.addFreshEntity(wolf);
+        NumenPlayer companion = spawnAt(helper, "gametest_dogcatcher", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_SWORD));
+        ToolRun attack = call(companion, "attack", args("entity_ids", List.of(wolf.getId())));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(attack.done(), "attack has not finished");
+            helper.assertTrue(!attack.succeeded() && attack.outcome().contains("refused by the owner"),
+                    "the refusal does not come from asking the owner: " + attack.outcome());
+            helper.assertTrue(wolf.getHealth() == wolf.getMaxHealth(), "the tamed wolf was hit");
+            wolf.discard();
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 装着钻石的箱子不是玩家放的也一样:拆了东西会洒,要问;主人不在就不挖,箱子和五颗钻石都在。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void mine_a_chest_with_things_in_it_needs_the_owner(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos chest = chestWithDiamonds(helper, new BlockPos(6, 2, 4), 5);
+        NumenPlayer companion = spawnAt(helper, "gametest_looter", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:chest"), "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("refused by the owner"),
+                    "the refusal does not come from asking the owner: " + mine.outcome());
+            helper.assertTrue(level.getBlockState(chest).is(Blocks.CHEST)
+                            && level.getBlockEntity(chest) instanceof net.minecraft.world.Container box
+                            && box.countItem(Items.DIAMOND) == 5,
+                    "the chest or its diamonds are gone");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /** 活板门出厂就在 ask 表里(门、床、栅栏门同理):主人不在就不挖,活板门还在。 */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_permission")
+    public static void mine_a_trapdoor_needs_the_owner(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos trapdoor = helper.absolutePos(new BlockPos(6, 2, 4));
+        level.setBlockAndUpdate(trapdoor, Blocks.OAK_TRAPDOOR.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_doorman", new BlockPos(3, 2, 4), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:oak_trapdoor"), "count", 1));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(mine.done(), "mine has not finished");
+            helper.assertTrue(!mine.succeeded() && mine.outcome().contains("refused by the owner"),
+                    "the refusal does not come from asking the owner: " + mine.outcome());
+            helper.assertTrue(level.getBlockState(trapdoor).is(Blocks.OAK_TRAPDOOR), "the trapdoor was broken");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
 }

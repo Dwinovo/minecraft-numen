@@ -80,4 +80,17 @@ public class ContainerGameTests {
             CompanionFactory.despawn(helper.getLevel().getServer(), companion);
         });
     }
+
+    /** 没开着任何方块界面时关界面:不算错,回执如实说没有开着的方块界面。 */
+    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_container")
+    public static void close_gui_with_nothing_open_says_so(GameTestHelper helper) {
+        NumenPlayer companion = spawnAt(helper, "gametest_tidy", new BlockPos(3, 2, 3), false);
+        ToolRun close = call(companion, "close_gui", args());
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(close.succeeded() && close.reply().contains("no block GUI was open"),
+                    "the reply does not say nothing was open: " + close.reply());
+            CompanionFactory.despawn(helper.getLevel().getServer(), companion);
+        });
+    }
 }
