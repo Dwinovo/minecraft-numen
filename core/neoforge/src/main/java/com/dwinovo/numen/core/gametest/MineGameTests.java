@@ -1,0 +1,213 @@
+package com.dwinovo.numen.core.gametest;
+
+import com.dwinovo.numen.core.Constants;
+import com.dwinovo.numen.core.tools.BlockActionOps;
+import com.dwinovo.numen.entity.CompanionFactory;
+import com.dwinovo.numen.entity.NumenPlayer;
+import com.dwinovo.numen.task.TaskDispatch;
+import com.dwinovo.numen.task.TaskRecord;
+import java.util.List;
+import java.util.UUID;
+import net.minecraft.core.BlockPos;
+import net.minecraft.gametest.framework.BeforeBatch;
+import net.minecraft.gametest.framework.GameTest;
+import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Difficulty;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.gametest.GameTestHolder;
+import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+
+import static com.dwinovo.numen.core.gametest.GameTestKit.*;
+
+/** 挖掘:{@code mine} 的站位、够得着、开门出屋、够不着时如实收工。 */
+@GameTestHolder(Constants.MOD_ID)
+@PrefixGameTestTemplate(false)
+public class MineGameTests {
+
+    /**
+     * mine 也走门:黑曜石屋(铁镐非正确工具,成本模型按不可破对待——拆墙
+     * 不再是廉价选项)关住矿工,矿在屋外,唯一通路是关着的橡木门。验证
+     * 挖掘任务的站位寻路复用同一条开门链;收工后墙体完好(确实没打洞)。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_through_closed_door(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        for (int x = 1; x <= 5; x++) {
+            for (int z = 1; z <= 5; z++) {
+                boolean perimeter = x == 1 || x == 5 || z == 1 || z == 5;
+                if (!perimeter) continue;
+                for (int y = 2; y <= 4; y++) {
+                    if (x == 3 && z == 5 && y <= 3) continue;   // 门占的两格
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, y, z)),
+                            Blocks.OBSIDIAN.defaultBlockState());
+                }
+            }
+        }
+        BlockPos doorLow = helper.absolutePos(new BlockPos(3, 2, 5));
+        var lower = Blocks.OAK_DOOR.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.DoorBlock.FACING,
+                        net.minecraft.core.Direction.SOUTH);
+        level.setBlockAndUpdate(doorLow, lower);
+        level.setBlockAndUpdate(doorLow.above(), lower.setValue(
+                net.minecraft.world.level.block.DoorBlock.HALF,
+                net.minecraft.world.level.block.state.properties.DoubleBlockHalf.UPPER));
+
+        List<BlockPos> ores = List.of(
+                helper.absolutePos(new BlockPos(12, 2, 12)),
+                helper.absolutePos(new BlockPos(13, 2, 12)));
+        for (BlockPos ore : ores) {
+            level.setBlockAndUpdate(ore, Blocks.GOLD_ORE.defaultBlockState());
+        }
+
+        NumenPlayer companion = spawnAt(helper, "gametest_tunneler", new BlockPos(3, 2, 3), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        TaskRecord record = new BlockActionOps().autoMine(companion,
+                List.of("minecraft:gold_ore"), null, 2, null, TaskDispatch.ctx("gametest-doormine", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+
+        BlockPos wallProbe = helper.absolutePos(new BlockPos(1, 3, 3));
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.getInventory().countItem(Items.RAW_GOLD) >= 2,
+                    "companion has not mined the gold outside the door");
+            helper.assertTrue(level.getBlockState(wallProbe).is(Blocks.OBSIDIAN),
+                    "wall breached — expected the door route");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 树冠上的原木站在地上挖:两根金合欢原木悬在她脚上五格、六格,四周一圈树叶,她身上只有一把斧头,
+     * 没有垫脚的方块。爬上去贴着它们是做不到的;站在底下仰头,眼睛离它们 3.38 格、4.38 格,在交互距离里——
+     * 斜着看过去挡着的树叶先挖开,再挖原木。原木正下方留空,掉落物落回地面。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_canopy_logs_from_the_ground(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockState leaves = Blocks.ACACIA_LEAVES.defaultBlockState().setValue(
+                net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT, true);
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dz = -1; dz <= 1; dz++) {
+                if (dx == 0 && dz == 0) {
+                    continue;
+                }
+                for (int y = 6; y <= 8; y++) {
+                    level.setBlockAndUpdate(helper.absolutePos(new BlockPos(8 + dx, y, 8 + dz)), leaves);
+                }
+            }
+        }
+        List<BlockPos> logs = List.of(new BlockPos(8, 7, 8), new BlockPos(8, 8, 8));
+        for (BlockPos rel : logs) {
+            level.setBlockAndUpdate(helper.absolutePos(rel), Blocks.ACACIA_LOG.defaultBlockState());
+        }
+        NumenPlayer companion = spawnAt(helper, "gametest_canopy", new BlockPos(4, 2, 8), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        TaskRecord record = new BlockActionOps().autoMine(companion,
+                List.of("minecraft:acacia_log"), null, 2, null, TaskDispatch.ctx("gametest-canopy", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            String reply = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(reply != null, "mine has not finished");
+            helper.assertTrue(record.getResult().success() && companion.getInventory().countItem(Items.ACACIA_LOG) >= 2,
+                    "the canopy logs were not gathered from the ground: " + reply);
+            for (BlockPos rel : logs) {
+                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
+                        "a canopy log is still up at " + rel.toShortString());
+            }
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 够不着就如实收工:一根原木悬在她脚上八格,站在底下眼睛离它 5.38 格,出了交互距离;她没有垫脚的方块,
+     * 爬不上去。任务不该站着一遍遍重搜同一条走不通的路,而是按 NO_PATH 收场、说清楚够不着。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_out_of_reach_ends_instead_of_hanging(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos logRel = new BlockPos(8, 10, 8);
+        level.setBlockAndUpdate(helper.absolutePos(logRel), Blocks.ACACIA_LOG.defaultBlockState());
+        NumenPlayer companion = spawnAt(helper, "gametest_skyward", new BlockPos(7, 2, 8), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+        TaskRecord record = new BlockActionOps().autoMine(companion,
+                List.of("minecraft:acacia_log"), null, 1, null, TaskDispatch.ctx("gametest-skyward", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            String reply = record.getResult() == null ? null : record.getResult().message();
+            helper.assertTrue(reply != null, "mine has not finished");
+            helper.assertTrue(!record.getResult().success() && reply.contains("could not reach"),
+                    "an out-of-reach log did not end as unreachable: " + reply);
+            helper.assertTrue(level.getBlockState(helper.absolutePos(logRel)).is(Blocks.ACACIA_LOG),
+                    "the out-of-reach log is gone");
+            // 悬在模板外的原木不收走,后面批次的大半径找方块会把它当目标
+            level.removeBlock(helper.absolutePos(logRel), false);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    // ==================== 真实地形挖掘用例(模板取自实际存档地形)====================
+
+    /** 挖掘批次前置:和平难度 + 正午,排除怪物袭扰与昼夜随机性。 */
+    @BeforeBatch(batch = "numen_mine")
+    public static void prepareMineBatch(ServerLevel level) {
+        level.getServer().setDifficulty(Difficulty.PEACEFUL, true);
+        level.setDayTime(6000);
+    }
+
+    /**
+     * 真实云杉林(高树场景):手持铁斧砍 8 根原木。
+     *
+     * <p>超时按游戏刻给得很宽:无头测试服不限速(数百 tps),而寻路搜索预算是墙钟毫秒——
+     * 一次 200ms 的真实搜索在这里折合上百游戏刻,超时必须覆盖"搜索墙钟 × tps"的放大。走完整生产链路——目标索引注册与
+     * 查询、复合站位、眼及就地挖掘、探底波段、掉落拾取、背包计数。
+     */
+    @GameTest(template = "real_spruce_forest", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_spruce_forest(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spawn = helper.absolutePos(new BlockPos(1, 15, 1));
+        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+                "gametest_logger", UUID.randomUUID(), level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        companion.getInventory().add(new ItemStack(Items.IRON_AXE));
+
+        TaskRecord record = new BlockActionOps().autoMine(companion,
+                List.of("minecraft:spruce_log"), null, 8, null, TaskDispatch.ctx("gametest-mine", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.getInventory().countItem(Items.SPRUCE_LOG) >= 8,
+                    "companion has not gathered 8 spruce logs");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 真实深板岩矿袋(袋内 26 颗钻石矿):站在顶面,手持铁镐向下挖入,采得 2 颗钻石。
+     * 覆盖埋矿的挖入站位语义与索引查询。
+     */
+    @GameTest(template = "real_diamond_pocket", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_diamond_pocket(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        BlockPos spawn = helper.absolutePos(new BlockPos(8, 17, 8));
+        NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
+                "gametest_miner", UUID.randomUUID(), level,
+                new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+
+        TaskRecord record = new BlockActionOps().autoMine(companion,
+                List.of("minecraft:deepslate_diamond_ore"), null, 2, null, TaskDispatch.ctx("gametest-mine", companion));
+        TaskDispatch.setTask(companion, record, null, reply -> {});
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(companion.getInventory().countItem(Items.DIAMOND) >= 2,
+                    "companion has not gathered 2 diamonds");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+}
