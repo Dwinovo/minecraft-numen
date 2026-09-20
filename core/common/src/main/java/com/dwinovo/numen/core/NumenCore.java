@@ -136,6 +136,9 @@ public final class NumenCore {
         ToolRegistry.register(new com.dwinovo.numen.core.tools.perception.GetWorldInfoTool());
         ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.TodoWriteTool());   // raw NumenTool
         ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.LoadSkillTool());   // raw NumenTool
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.RememberTool());    // raw NumenTool
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.RecallTool());      // raw NumenTool
+        ToolRegistry.register(new com.dwinovo.numen.core.tools.agent.ForgetTool());      // raw NumenTool
         ToolRegistry.register(new com.dwinovo.numen.core.tools.work.PlanRouteTool());
     }
 

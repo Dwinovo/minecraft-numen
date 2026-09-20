@@ -77,11 +77,11 @@ class AgentLoopTest extends LoopHarness {
 
         @Test
         void preambleRidesInFrontOfTheInjectedMessage() {
-            host.preamble = "<known_blocks>chest 1 2 3</known_blocks>";
+            host.preamble = "<memory count=\"1/50\">base | D12 world | 家在东边</memory>";
             ownerSays("箱子在哪");
 
             String injected = model.last().lastUser();
-            assertTrue(injected.startsWith("<known_blocks>"), "现场块垫在最前");
+            assertTrue(injected.startsWith("<memory"), "札记索引垫在最前");
             assertTrue(injected.endsWith("<query>箱子在哪</query>"), "主人的话垫底");
         }
     }

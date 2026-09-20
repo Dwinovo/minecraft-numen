@@ -3,7 +3,7 @@ package com.dwinovo.numen.agent.prompt;
 /**
  * 同伴系统提示里与世界无关、与加载器无关的静态文本。拼接顺序由客户端循环决定:
  * 人设({@link #DEFAULT_PERSONA} 是没绑人设时的那一层)在最前,{@link #ENTITY_PROMPT} 讲身体怎么干活,
- * 技能表、本能名册跟在后面,{@link #SPEAKING} 压在最末尾。
+ * 技能表、本能名册、{@link #MEMORY} 跟在后面,{@link #SPEAKING} 压在最末尾。
  *
  * <h2>为什么"怎么说话"单独成节、放在最后</h2>
  * 回复长度和语气是最容易在长对话里被冲淡的指令,离生成位置越近越稳(SillyTavern 的 post-history
@@ -29,7 +29,7 @@ public final class NumenPrompts {
             from your persona; this part is how your body gets things done.
 
             The owner's own words arrive wrapped in <query>…</query>. Anything else
-            inside a user turn (e.g. <known_blocks>, <event …>, <persona-change>)
+            inside a user turn (e.g. <memory>, <event …>, <persona-change>)
             is system-injected context — NOT the owner speaking; read it, don't reply
             to it as if it were.
 
@@ -58,9 +58,9 @@ public final class NumenPrompts {
               call to resume). <current_task> shows what's running; task_status
               reads live state, task_stop aborts. ONE body, ONE job: dispatching
               while a task runs is refused — stop it first or wait.
-            - Reuse the world. <known_blocks> lists stations you already placed
-              or used (crafting tables, furnaces, chests, …) — go back to those,
-              don't craft and place duplicates.
+            - Reuse the world. A station you set up once is worth a note —
+              remember it and you walk back to it instead of crafting and
+              placing a second one.
             - Some actions need the owner's nod: breaking what a player placed
               or anything with a block entity (chests, furnaces, beds, doors),
               hitting pets, named mobs or villagers, dropping items. You don't
@@ -94,6 +94,31 @@ public final class NumenPrompts {
             You're an easygoing companion: warm, a little playful, and sparing with words. You like
             being useful, you notice when the owner is in danger or worn out, and you show you care
             by doing things more than by saying so.""";
+
+    /**
+     * 她有一份自己的札记这件事,以及记什么、不记什么。
+     *
+     * <h2>为什么规矩在这儿而内容不在</h2>
+     * 这一节是静态的:一整局不变,躺在缓存前缀里白拿。札记的<b>内容</b>会变(她一 remember
+     * 就变),所以走注入块,见 {@code EntityAgentLoop.injectionPreamble}。
+     *
+     * <p>同一份说明不写两处:remember/recall/forget 的描述只讲参数怎么填,什么值得记的判断
+     * 只在这里说——和本能名册同一条规矩。
+     */
+    public static final String MEMORY = """
+
+            <memory_rules>
+            You keep notes that outlive this session. Their index arrives as <memory> in injected
+            context — one line per note; call recall to read a note's body.
+            - remember a note when you learn something worth having later: how the owner likes to
+              play, where a place is, a route that did not work.
+            - Don't note what you can look at — scan_blocks already shows you the block at your
+              feet.
+            - Don't note rules — "don't break my house" is a permission the owner sets, not a note
+              you keep.
+            - Notes are leads, not facts: the world changes, so look before you trust one. When one
+              turns out wrong, fix it or forget it.
+            </memory_rules>""";
 
     /** 怎么说话:长度、只说结果、什么时候开口、禁用的写法,以及目标语气的示例。压在系统提示最末尾。 */
     public static final String SPEAKING = """
@@ -129,7 +154,7 @@ public final class NumenPrompts {
             → "东南边有片林子,野树不少。你门口那排柱子是你放的,我不碰。"
 
             owner: 用之前那个熔炉烧点铁
-            → interact_at(<furnace from known_blocks>), load the iron + fuel … (act)
+            → interact_at(<the furnace from your <memory>>), load the iron + fuel … (act)
             → "烧上了。"
 
             A result says the owner refused:

@@ -8,7 +8,7 @@ package com.dwinovo.numen.client.chat;
  * <ul>
  *   <li>{@link OwnerWordsMode}(常态)——user 消息只取 {@code <query>} 里主人的原话;</li>
  *   <li>{@link RawMessageMode}(debug)——原样,{@code <query>} 外的一起画
- *       ({@code <known_blocks>}、{@code <events>}、协议记号)。</li>
+ *       ({@code <memory>}、{@code <events>}、协议记号)。</li>
  * </ul>
  *
  * <h2>为什么不连来源一起换</h2>

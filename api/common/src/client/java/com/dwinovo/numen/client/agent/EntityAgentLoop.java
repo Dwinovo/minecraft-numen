@@ -49,7 +49,7 @@ import java.util.function.Consumer;
  * When to call the model, when to run tools, what a stop / death / logout / takeover does, retries and
  * holds — all of that is the kernel's. The kernel only emits events, and each concern subscribes itself:
  * {@link TurnPresenter} (what the owner sees and hears), {@link TokenLedger}, {@link Compactor}
- * (compaction and clearing), {@link GoalSteward} (the long-term goal), {@link WorkBlockMemory} and
+ * (compaction and clearing), {@link GoalSteward} (the long-term goal) and
  * {@link RuntimeState} (the per-turn runtime state, including the mirror of her current task).
  * This facade wires them together and keeps what needs Minecraft:
  * <ul>
@@ -74,8 +74,12 @@ public final class EntityAgentLoop {
     /** JSONL persistence under {@code config/numen/conversations/<uuid>.jsonl}. */
     private final ConvoLog log;
     private final ConvoState convo;
-    /** Functional-block coordinate memory, injected as {@code <known_blocks>}. */
-    private final WorkBlockMemory workBlocks;
+    /** 她自己写的札记;索引作为 {@code <memory>} 注入。 */
+    private final com.dwinovo.numen.agent.memory.NoteBook notes;
+    /** 札记索引上次贴进历史时的版本。 */
+    private int memoryRevisionInHistory = -1;
+    /** 历史里那份还在不在:开一局时不在,压缩/清空把它吃掉之后也不在。 */
+    private boolean memoryInHistory;
     /**
      * 收件箱(宪法 §4):主人的话与世界事件的统一进箱口,内核按类型表的投递方式取件。
      * 条目、落盘、年龄标注、熟度规则全在 {@link EventQueue};这里直接用它的只有外接模型取件口
@@ -141,7 +145,7 @@ public final class EntityAgentLoop {
         this.entityUuid = entityUuid;
         this.log = ConvoLog.atFile(CompanionHome.chat(entityUuid));
         this.convo = new ConvoState(log::append);
-        this.workBlocks = WorkBlockMemory.forEntity(entityUuid);
+        this.notes = com.dwinovo.numen.agent.memory.NoteBook.of(entityUuid);
         this.runtime = new RuntimeState(entityUuid);
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
@@ -155,14 +159,25 @@ public final class EntityAgentLoop {
         this.goals = new GoalSteward(entityUuid.toString(), loop, convo, queue, runtime::xml,
                 runtime::bodyOnFiniteTask, g -> CompanionHome.setGoal(entityUuid, g), CompanionHome.goal(entityUuid));
         this.wasDriving = McpMode.instance().driving();
-        // 内核只发事件,各管一摊的各自订阅:界面、台账、整理、目标、工作站坐标、她手上那件活的镜像
+        // 内核只发事件,各管一摊的各自订阅:界面、台账、整理、目标、札记的重贴、她手上那件活的镜像
         loop.subscribe(presenter::on);
         loop.subscribe(tokens::on);
         loop.subscribe(compactor::on);
         loop.subscribe(goals::on);
-        loop.subscribe(workBlocks::on);
+        loop.subscribe(this::onTranscriptBoundary);
         loop.subscribe(runtime::on);
         restoreFromDisk();
+    }
+
+    /**
+     * 整理或清空之后,历史里那份札记索引没了(摘要把它嚼掉了),下一次注入得重贴一份完整的。
+     *
+     * <p>真源在磁盘上,历史里的只是复述——所以复述丢了不要紧,照着真源再念一遍就行。
+     */
+    private void onTranscriptBoundary(com.dwinovo.numen.agent.loop.LoopEvent event) {
+        if (event instanceof com.dwinovo.numen.agent.loop.LoopEvent.TranscriptBoundary) {
+            memoryInHistory = false;
+        }
     }
 
     /**
@@ -751,13 +766,21 @@ public final class EntityAgentLoop {
         }
 
         /**
-         * {@code <known_blocks>} 随注入的 user 消息进历史,不放系统提示:它随放置/使用工作站而变,
+         * {@code <memory>} 索引随注入的 user 消息进历史,不放系统提示:她一 remember 它就变了,
          * 放系统提示会打碎请求前缀的 prompt cache。
+         *
+         * <p>贴的是<b>全份</b>,但只在"历史里那份没了或者过时了"的时候贴:开一局、压缩/清空
+         * 之后、她刚写过。没变就不重贴——历史里已经躺着一份,再贴一份是白花的 token。
          */
         @Override
         public String injectionPreamble() {
-            AbstractClientPlayer body = resolveEntity();
-            return workBlocks.formatXml(body != null ? body.level() : null);
+            int revision = notes.revision();
+            if (memoryInHistory && revision == memoryRevisionInHistory) {
+                return "";
+            }
+            memoryInHistory = true;
+            memoryRevisionInHistory = revision;
+            return notes.formatXml();
         }
 
         @Override

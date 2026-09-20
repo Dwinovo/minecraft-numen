@@ -6,9 +6,9 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.platform.Services;
 
 /**
- * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、本能名册、说话规则——
+ * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、本能名册、札记的规矩、说话规则——
  * 好让它成为字节级稳定的缓存前缀。会变的东西不在这里:背包、效果、当前任务挂在每一轮的
- * {@link RuntimeState} 里,随放置而变的工作站坐标随注入的 user 消息进历史。
+ * {@link RuntimeState} 里,她一写就变的札记索引随注入的 user 消息进历史。
  */
 final class SystemPromptComposer {
 
@@ -26,7 +26,7 @@ final class SystemPromptComposer {
         String skillsXml = SkillRegistry.instance().formatXml();
 
         // 系统提示只放会话内稳定的层——人设/操作核心/技能表/情绪词表。
-        // 会变化的 <known_blocks> 随注入的 user 消息进历史(见 EntityAgentLoop 的 injectionPreamble),
+        // 会变化的札记索引随注入的 user 消息进历史(见 EntityAgentLoop 的 injectionPreamble),
         // 让这里成为字节级稳定的缓存前缀。
         StringBuilder sb = new StringBuilder();
         // Persona = the mutable "who you are" layer, wrapped so it's clearly delimited from the
@@ -43,6 +43,8 @@ final class SystemPromptComposer {
         if (!reflexes.isEmpty()) {
             sb.append("\n\n<instincts>\n").append(reflexes).append("\n</instincts>");
         }
+        // 札记的规矩:她有记忆这件事、什么值得记。规矩不变所以在前缀里,内容会变所以在注入块里。
+        sb.append(NumenPrompts.MEMORY);
         // 怎么说话压在最末尾:长度与语气离生成位置越近,越不容易在长对话里被冲淡(见 NumenPrompts)
         sb.append(NumenPrompts.SPEAKING);
         return sb.toString();

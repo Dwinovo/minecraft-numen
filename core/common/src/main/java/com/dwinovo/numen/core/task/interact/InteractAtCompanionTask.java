@@ -38,7 +38,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
     private long holdUntil = -1;       // game tick to release a fixed-duration hold (holdTicks > 0)
     private String successMsg = "done";
     // A right-click that activated a real block (a station's GUI): captured so the
-    // result can report it and the agent loop can remember it in <known_blocks>.
+    // result names it — whether that station is worth a note is hers to decide.
     private net.minecraft.core.BlockPos activatedBlock;
     private String activatedBlockId;
 
@@ -140,9 +140,8 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
                 }
             }
             // A right-click landing on a block activates it (opens a station's GUI,
-            // flips a switch, …). Remember the block we touched so <known_blocks> can
-            // walk us back to stations we've used, not just ones we placed. The harvest
-            // filters to tracked station types; doors/buttons fall away there.
+            // flips a switch, …). Capture what we touched so the receipt can name it:
+            // she reads it and decides for herself whether to remember the place.
             if (button() == Interaction.Button.USE && hit instanceof net.minecraft.world.phys.BlockHitResult bhr) {
                 activatedBlock = bhr.getBlockPos();
                 activatedBlockId = BuiltInRegistries.BLOCK
@@ -265,7 +264,7 @@ public final class InteractAtCompanionTask extends GoToThenDoTask<InteractAtTask
             data.put("z", r.aim.getZ());
         }
         // Report the activated station (and its exact position, authoritative over the
-        // raw aim) so the agent loop can harvest it into <known_blocks>.
+        // raw aim): she can only note a place we told her about.
         if (activatedBlock != null) {
             data.put("block", activatedBlockId);
             data.put("x", activatedBlock.getX());

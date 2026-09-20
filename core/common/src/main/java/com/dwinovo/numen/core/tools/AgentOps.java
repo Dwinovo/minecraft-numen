@@ -1,5 +1,6 @@
 package com.dwinovo.numen.core.tools;
 
+import com.dwinovo.numen.agent.memory.NoteBook;
 import com.dwinovo.numen.agent.skill.SkillInfo;
 import com.dwinovo.numen.agent.skill.SkillInjection;
 import com.dwinovo.numen.agent.skill.SkillRegistry;
@@ -8,12 +9,13 @@ import com.google.gson.JsonObject;
 
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
  * Agent-side (client-local) tool implementations — the business half of
- * {@code LoadSkillTool} and {@code TodoWriteTool}. These run on the agent thread
- * with no server body and return their result directly.
+ * {@code LoadSkillTool}, {@code TodoWriteTool} and the memory tools. These run on
+ * the agent thread with no server body and return their result directly.
  */
 public final class AgentOps {
 
@@ -100,5 +102,52 @@ List<Todo> todos) {
         }
         return "{\"success\":true,\"message\":\"plan snapshot replaced; continue only the in_progress item\",\"todos\":"
                 + echoed + "}";
+    }
+
+    // ---- 札记 ----
+
+    /** 记一条。天数由札记本盖,回执只在条数到顶时多说一句——删哪条是她的事。 */
+    public String remember(UUID companion, String name, String description, String type,
+                           String content) {
+        NoteBook book = NoteBook.of(companion);
+        NoteBook.Note note = book.write(name, description, type, content);
+        int count = book.index().size();
+        JsonObject o = new JsonObject();
+        o.addProperty("success", true);
+        o.addProperty("name", note.name());
+        o.addProperty("count", count);
+        o.addProperty("message", count >= NoteBook.SOFT_MAX
+                ? "remembered — you now keep " + count + " notes; look for ones to merge or forget"
+                : "remembered");
+        return o.toString();
+    }
+
+    /** 读一条的正文。没有这条就把有的名字列出来——她记的名字自己最清楚,别让她瞎猜。 */
+    public String recall(UUID companion, String name) {
+        NoteBook book = NoteBook.of(companion);
+        NoteBook.Note note = book.read(name);
+        if (note == null) {
+            String known = book.index().stream()
+                    .map(NoteBook.Note::name)
+                    .map(AgentOps::quote)
+                    .collect(Collectors.joining(","));
+            return "{\"success\":false,\"error\":\"no note named " + escapeJson(name)
+                    + "\",\"notes\":[" + known + "]}";
+        }
+        JsonObject o = new JsonObject();
+        o.addProperty("success", true);
+        o.addProperty("name", note.name());
+        o.addProperty("day", note.day());
+        o.addProperty("content", note.content());
+        return o.toString();
+    }
+
+    /** 忘掉一条。整理是她自己的事,我们不替她删,也不替她留。 */
+    public String forget(UUID companion, String name) {
+        boolean gone = NoteBook.of(companion).forget(name);
+        JsonObject o = new JsonObject();
+        o.addProperty("success", gone);
+        o.addProperty("message", gone ? "forgotten" : "no note named " + name);
+        return o.toString();
     }
 }
