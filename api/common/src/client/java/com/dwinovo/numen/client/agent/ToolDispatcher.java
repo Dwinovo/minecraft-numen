@@ -53,8 +53,6 @@ public final class ToolDispatcher implements ToolPort {
     private final Deque<LlmToolCall> queue = new ArrayDeque<>();
     /** The single in-flight call (id → call); ≤1 under the serial model. */
     private final Map<String, LlmToolCall> inFlight = new HashMap<>();
-    /** 本批允许调用的工具名(见 {@link #run})。 */
-    private Set<String> callable = Set.of();
     /** 本批的回报口;放弃这批时摘掉,迟到的结果无处可报。 */
     private Sink sink;
 
@@ -62,14 +60,10 @@ public final class ToolDispatcher implements ToolPort {
     private boolean advancing = false;
     private long deadlineMillis = 0;
 
-    /** 一个工具第一次真的被调用时叫一声——调过的工具此后常驻工具表,见 {@code EntityAgentLoop#usedTools}。 */
-    private final java.util.function.Consumer<String> onUsed;
 
-    public ToolDispatcher(UUID entityUuid, Supplier<AbstractClientPlayer> entity,
-                          java.util.function.Consumer<String> onUsed) {
+    public ToolDispatcher(UUID entityUuid, Supplier<AbstractClientPlayer> entity) {
         this.entityUuid = entityUuid;
         this.entity = entity;
-        this.onUsed = onUsed;
     }
 
     /** Anything outstanding (in flight or still queued)? */
@@ -95,14 +89,9 @@ public final class ToolDispatcher implements ToolPort {
         return next == null ? null : next.name();
     }
 
-    /**
-     * 收下这一批调用。{@code callable} 是<b>这一批发出时模型能看见定义的工具</b>——
-     * 常驻的加上对话里还留着展开块的那些(见 {@code ToolDisclosure})。随批次传进来
-     * 而不是存成全局状态:它描述的是一个瞬间,留到下一批就是陈账。
-     */
+    /** 收下这一批调用,逐个排空。 */
     @Override
-    public void run(List<LlmToolCall> calls, Set<String> callable, Sink sink) {
-        this.callable = callable == null ? Set.of() : callable;
+    public void run(List<LlmToolCall> calls, Sink sink) {
         this.sink = sink;
         queue.addAll(calls);
         drainNext();
@@ -171,22 +160,12 @@ public final class ToolDispatcher implements ToolPort {
                     return;
                 }
                 NumenTool tool = ToolRegistry.resolve(call.name());
-                if (tool != null && !callable.contains(tool.name())) {
-                    // 定义没在她眼前,参数只能是猜的——挡下来并告诉她怎么补,
-                    // 比让一次瞎填的调用真的动身体便宜。
-                    Constants.LOG.info("[numen-dispatch#{}] tool '{}' not expanded yet (id={})",
-                            entityUuid, call.name(), call.id());
-                    sink.finished(call, TaskResult.fail(
-                            com.dwinovo.numen.agent.tool.ToolDisclosure.notExpanded(tool.name())).toJson());
-                    continue;
-                }
                 if (tool == null) {
                     Constants.LOG.warn("[numen-dispatch#{}] LLM called unknown tool '{}' (id={})",
                             entityUuid, call.name(), call.id());
                     sink.finished(call, TaskResult.fail("unknown tool: " + call.name()).toJson());
                     continue;   // nothing in flight — drain the next queued call
                 }
-                onUsed.accept(tool.name());
                 inFlight.put(call.id(), call);
                 deadlineMillis = System.currentTimeMillis() + TOOL_BACKSTOP_MILLIS;
                 sink.started(call);

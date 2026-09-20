@@ -293,7 +293,7 @@ public final class AgentLoop {
                 emit(new LoopEvent.AssistantMessage(id, reply));
                 if (reply.hasToolCalls()) {
                     run.phase = Phase.TOOLS;
-                    tools.run(reply.toolCalls(), request.callable(), toolSink(id));
+                    tools.run(reply.toolCalls(), toolSink(id));
                 } else {
                     transcript.resetTurnCount();
                     afterFinal();

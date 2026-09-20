@@ -21,9 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * connects to every enabled server on a background thread, and registers the
  * tools it exposes into the global {@link ToolRegistry} — after which the
  * built-in brain sees those tools automatically ({@code EntityAgentLoop} feeds
- * the registry to every LLM turn (resident tools in full, the rest as one catalogue
- * line each — see {@code ToolDisclosure}), so late registration/removal is
- * fine).
+ * the whole registry to every LLM turn, so late registration/removal is fine).
  *
  * <h2>Live toggles</h2>
  * The companion panel calls {@link #enableServer}/{@link #disableServer} at

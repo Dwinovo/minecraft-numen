@@ -3,7 +3,7 @@ package com.dwinovo.numen.agent.prompt;
 /**
  * 同伴系统提示里与世界无关、与加载器无关的静态文本。拼接顺序由客户端循环决定:
  * 人设({@link #DEFAULT_PERSONA} 是没绑人设时的那一层)在最前,{@link #ENTITY_PROMPT} 讲身体怎么干活,
- * 技能表、本能名册、延迟工具目录跟在后面,{@link #SPEAKING} 压在最末尾。
+ * 技能表、本能名册跟在后面,{@link #SPEAKING} 压在最末尾。
  *
  * <h2>为什么"怎么说话"单独成节、放在最后</h2>
  * 回复长度和语气是最容易在长对话里被冲淡的指令,离生成位置越近越稳(SillyTavern 的 post-history

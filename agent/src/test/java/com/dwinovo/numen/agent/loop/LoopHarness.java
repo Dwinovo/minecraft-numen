@@ -87,7 +87,7 @@ public abstract class LoopHarness {
         @Override
         public ModelRequest turnRequest() {
             turnRequests++;
-            return new ModelRequest(transcript.snapshot(), List.of(), "system", Set.of("mine", "look"));
+            return new ModelRequest(transcript.snapshot(), List.of(), "system");
         }
 
         @Override
@@ -110,12 +110,10 @@ public abstract class LoopHarness {
         public final Set<String> parked = new LinkedHashSet<>(Set.of(EXTERNAL_CALL));
         public final List<LlmToolCall> batch = new ArrayList<>();
         public final List<Boolean> cancels = new ArrayList<>();
-        public Set<String> callable;
         public Sink sink;
 
         @Override
-        public void run(List<LlmToolCall> calls, Set<String> callable, Sink sink) {
-            this.callable = callable;
+        public void run(List<LlmToolCall> calls, Sink sink) {
             this.sink = sink;
             batch.addAll(calls);
             for (LlmToolCall call : calls) {
@@ -170,7 +168,7 @@ public abstract class LoopHarness {
             return new Compaction() {
                 @Override
                 public ModelRequest request() {
-                    return new ModelRequest(List.of(new ConvoState.Msg.User("请总结")), List.of(), "compact", Set.of());
+                    return new ModelRequest(List.of(new ConvoState.Msg.User("请总结")), List.of(), "compact");
                 }
 
                 @Override

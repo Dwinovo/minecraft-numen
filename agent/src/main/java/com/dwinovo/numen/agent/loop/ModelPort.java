@@ -13,8 +13,7 @@ public interface ModelPort {
     String unavailable();
 
     /**
-     * 组装这一轮要发的请求:当前历史、这一刻的运行期状态、系统提示、常驻工具表;
-     * {@link ModelRequest#callable} 用同一份快照算。
+     * 组装这一轮要发的请求:当前历史、这一刻的运行期状态、系统提示、工具表。
      */
     ModelRequest turnRequest();
 

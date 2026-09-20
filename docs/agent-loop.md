@@ -254,7 +254,7 @@ interface ToolPort {
   `CancelToken`:取消即关闭 SSE 订阅,不再计费、不再回调(pi 的 AbortController)。
 - **一份发请求代码**:正常一轮、重试、压缩、目标评估都走 `ModelPort`;回主线程、用量上报
   (`ModelUsed` 事件,§十二)只在门面的实现里写一次。评估器的用量从此也进 TokenLedger。
-- **ModelRequest** 由门面组装:历史快照 + 运行期状态 + 系统提示 + 常驻工具表。
+- **ModelRequest** 由门面组装:历史快照 + 运行期状态 + 系统提示 + 工具表(全份)。
   "可调工具集"(展开闸)用**同一份**发出去的快照计算,不再另算一份。
 
 ---
@@ -482,7 +482,7 @@ sealed interface LoopEvent {
 | 组件 | 职责 | 来源 |
 |---|---|---|
 | `EntityAgentLoop` | 构造内核并接端口;人设/模型绑定;外接模型取件与 `externalSay`;注册表生命周期 | 现类 |
-| `SystemPromptComposer` | 人设 + 操作核心 + 技能表 + 本能名册 + 延迟工具目录 | `composeSystemPrompt` |
+| `SystemPromptComposer` | 人设 + 操作核心 + 技能表 + 本能名册 | `composeSystemPrompt` |
 | `RuntimeState` | `<runtime_state>`:当前任务、背包、效果、骑乘、插件片段 | `runtimeStateXml` 等 |
 | `Compactor` | 压缩提示、切分、摘要提取、熔断 | 压缩相关方法 |
 | `GoalSteward` | 目标设定、评估、续跑、收工 | 目标相关方法 |
@@ -547,7 +547,7 @@ sealed interface LoopEvent {
 `docs/architecture-mind-model.md` 第二至四节与实现早已对不上,随这次重写:
 
 - §二"只在三种时刻运转":改为 pump 的触发条件(入队、run 结束、停牌解开、时长熟度)。
-- §三输入全景:补上请求期运行期状态、目标续跑、技能表/本能名册/延迟工具目录(已实现);
+- §三输入全景:补上请求期运行期状态、目标续跑、技能表/本能名册(已实现);
   删去不存在的 `emitEvent`;"核心永远传 false"改为类型表 `alwaysUrgent` + 发送方决定。
 - §四"三态路由":改为 §七 的三种投递方式与熟度规则;删去"队列锁"、`BodyLog` 类名等已经不存在的概念;
   死亡事件恒为急件;事件种类即类型表的行,本能叙事是 `reflex` 类型。

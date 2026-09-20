@@ -6,7 +6,7 @@ import com.dwinovo.numen.agent.tool.ToolRegistry;
 import com.dwinovo.numen.platform.Services;
 
 /**
- * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、本能名册、延迟工具目录、说话规则——
+ * 系统提示:只放会话内稳定的那几层——人设、操作核心、技能表、本能名册、说话规则——
  * 好让它成为字节级稳定的缓存前缀。会变的东西不在这里:背包、效果、当前任务挂在每一轮的
  * {@link RuntimeState} 里,随放置而变的工作站坐标随注入的 user 消息进历史。
  */
@@ -42,13 +42,6 @@ final class SystemPromptComposer {
         String reflexes = com.dwinovo.numen.task.reflex.ReflexRegistry.overview();
         if (!reflexes.isEmpty()) {
             sb.append("\n\n<instincts>\n").append(reflexes).append("\n</instincts>");
-        }
-        // 延迟工具目录。它随注册表变(接了 MCP server 会多出几行),但不随回合变,
-        // 所以仍然待得住这个稳定层——与技能表、本能名册同一档。
-        String catalogue = com.dwinovo.numen.agent.tool.ToolDisclosure
-                .catalog(ToolRegistry.deferred());
-        if (!catalogue.isEmpty()) {
-            sb.append("\n\n").append(catalogue);
         }
         // 怎么说话压在最末尾:长度与语气离生成位置越近,越不容易在长对话里被冲淡(见 NumenPrompts)
         sb.append(NumenPrompts.SPEAKING);

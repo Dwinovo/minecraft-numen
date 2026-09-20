@@ -180,7 +180,7 @@ public final class GoalSteward {
         ModelRequest request = new ModelRequest(
                 List.of(new ConvoState.Msg.User(
                         GoalPrompts.evaluatorQuery(target, runtimeState.get(), sinceGoalForJudge()))),
-                List.of(), GoalPrompts.evaluatorSystem(), Set.of());
+                List.of(), GoalPrompts.evaluatorSystem());
         CancelToken cancel = new CancelToken();
         judging = cancel;
         loop.consult(LoopEvent.Purpose.GOAL, request, cancel, outcome -> {

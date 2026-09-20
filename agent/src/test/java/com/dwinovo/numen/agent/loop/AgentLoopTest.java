@@ -258,7 +258,6 @@ class AgentLoopTest extends LoopHarness {
         void ownerWordsDuringToolsWaitForTheBatchThenMergeIntoOneMessage() {
             ownerSays("去挖矿");
             model.last().callTools(tool("c1"), tool("c2"));
-            assertEquals(Set.of("mine", "look"), tools.callable, "放行集合用发出这批调用的那份请求");
 
             ownerSays("第一句");
             ownerSays("第二句");
@@ -662,7 +661,7 @@ class AgentLoopTest extends LoopHarness {
         @Test
         void aSideCallReportsItsUsageButStartsNoRun() {
             List<ModelOutcome> outcomes = new ArrayList<>();
-            loop.consult(LoopEvent.Purpose.GOAL, new ModelRequest(List.of(), List.of(), "judge", Set.of()),
+            loop.consult(LoopEvent.Purpose.GOAL, new ModelRequest(List.of(), List.of(), "judge"),
                     new CancelToken(), outcomes::add);
 
             assertNull(loop.status().phase(), "旁路调用不占内核");
@@ -682,7 +681,7 @@ class AgentLoopTest extends LoopHarness {
         void anUnusableEndpointFailsWithoutCallingTheModel() {
             model.unavailable = "没绑模型";
             List<ModelOutcome> outcomes = new ArrayList<>();
-            loop.consult(LoopEvent.Purpose.GOAL, new ModelRequest(List.of(), List.of(), "judge", Set.of()),
+            loop.consult(LoopEvent.Purpose.GOAL, new ModelRequest(List.of(), List.of(), "judge"),
                     new CancelToken(), outcomes::add);
 
             assertTrue(model.calls.isEmpty());

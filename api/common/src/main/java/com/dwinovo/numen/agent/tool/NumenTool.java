@@ -21,30 +21,7 @@ import java.util.function.Consumer;
  */
 public interface NumenTool extends IToolSpec {
 
-    /**
-     * 工具在请求里的<b>驻留方式</b>。判据是<b>这批工具有没有边</b>:装在这个模组里的
-     * (含联动插件带的)是有界的、一眼能数完,每轮全发;从外面借来的(接上 MCP server 的
-     * 那批)无界、描述长度不可控,只在目录里留一行摘要。
-     *
-     * <p>缺省 {@link Residency#RESIDENT}。<b>不是为了省 token</b>:工具表落在请求的
-     * 前缀里,服务商的前缀缓存一命中,它基本不花钱;真正按轮次涨的是越来越长的对话。
-     * 延迟真正要换的是<b>前缀的稳定</b>——中途往工具表里塞东西会把缓存打穿,所以
-     * 借来的工具先待在目录与对话里,等她真用上了再进工具表(见 {@link ToolDisclosure})。
-     *
-     * <p>默认延迟的代价大得多:她想干的大多数事都得先搜一次,而压缩每吃掉一次搜索结果
-     * 就要重搜一遍(issue #109)。
-     */
-    default Residency residency() {
-        return Residency.RESIDENT;
-    }
 
-    /** 见 {@link #residency()}。 */
-    enum Residency {
-        /** 完整定义每轮随请求发出。 */
-        RESIDENT,
-        /** 只在目录里留一行摘要,模型调 {@code find_tools} 才取回完整定义。 */
-        DEFERRED
-    }
 
     /**
      * Run this tool for one call — the engine's ONLY entry point. 默认实现是

@@ -182,7 +182,7 @@ public final class Compactor implements MemoryPort {
         return new Compaction() {
             @Override
             public ModelRequest request() {
-                return new ModelRequest(request, List.of(), COMPACT_SYSTEM_PROMPT, Set.of());
+                return new ModelRequest(request, List.of(), COMPACT_SYSTEM_PROMPT);
             }
 
             @Override
