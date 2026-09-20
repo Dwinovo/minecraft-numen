@@ -139,6 +139,20 @@ public final class BuildTaskRecord extends TaskRecord {
      * 图纸掉了二百格,若这二百格连目标集都没进,任务会理直气壮地报"八百格全部达标",
      * 而设计缺了五分之一,没有一个字提到过。加载期的掉格也是掉格。
      */
+    /**
+     * 建完让世界落定之后,与图纸不同的格数——站不住掉了的,和形状按真实邻居重算了的。
+     * 允许不同,但不许无声不同:这个数进回执。
+     */
+    private int settledAway;
+
+    public int settledAway() {
+        return settledAway;
+    }
+
+    public void settledAway(int count) {
+        this.settledAway = count;
+    }
+
     public int droppedAtLoad() {
         return droppedAtLoad;
     }

@@ -2019,13 +2019,23 @@ public class BuildGameTests {
         var loaded = com.dwinovo.numen.core.blueprint.BlueprintStore.load(
                 level, "japanese_cottage", anchor, 0);
         var ctx = TaskDispatch.ctx("gametest-jp-cottage", companion);
-        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(95000L), loaded.targets(), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, false), null, reply -> {});
+        BuildTaskRecord record = new BuildTaskRecord(ctx.toolCallId(),
+                ctx.deadline(95000L), loaded.targets(),
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, false);
+        TaskDispatch.setTask(companion, record, null, reply -> {});
         helper.succeedWhen(() -> {
+            // 契约不是"一格不差",是"一格不差,或者说清楚差在哪":建完世界要落定一次
+            // (站不住的掉、形状由邻居定的重算),对不上的格数必须<b>正好等于</b>回执报的那个数。
+            List<BlockPos> off = new ArrayList<>();
             for (BuildTaskRecord.Target t : loaded.targets()) {
-                helper.assertTrue(t.matches(level.getBlockState(t.pos())),
-                        "cottage cell mismatch at " + t.pos().toShortString());
+                if (!t.matches(level.getBlockState(t.pos()))) {
+                    off.add(t.pos());
+                }
             }
+            helper.assertTrue(off.size() == record.settledAway(),
+                    off.size() + " cell(s) do not match the blueprint but the receipt admits to "
+                            + record.settledAway() + " — first at "
+                            + (off.isEmpty() ? "-" : off.get(0).toShortString()));
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
@@ -2261,4 +2271,46 @@ public class BuildGameTests {
             CompanionFactory.despawn(level.getServer(), companion);
         });
     }
+
+    /**
+     * 建完的红石要能用。施工期刻意不通知邻居(半成品世界会把贴附方块整批弹掉),
+     * 代价曾经是红石线全是孤立的点、通不了电;收尾那趟"让世界自己反应一次"补的就是它。
+     *
+     * <p><b>整条电路都走一条 {@code layer}</b>——也就是照图直写那条车道。单格 {@code set}
+     * 走的是原生车道(像真右键那样放),放置本身就会通知邻居,测不出这个毛病。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void a_built_redstone_line_actually_powers_the_lamp(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_sparky", new BlockPos(2, 2, 2), true);
+        BlockPos o = helper.absolutePos(new BlockPos(5, 2, 8));
+        ToolRun build = call(companion, "build", args("ops", List.of(
+                args("op", "layer", "x1", o.getX(), "y1", o.getY(), "z1", o.getZ(),
+                        "rows", List.of("B####L"),
+                        "legend", args("B", "minecraft:redstone_block",
+                                "#", "minecraft:redstone_wire",
+                                "L", "minecraft:redstone_lamp")))));
+
+        // 只在"她报完工"那一刻判一次。用 succeedWhen 每刻重试的话,量到的是"最终有没有
+        // 连上"——收尾补水、摆设生成、旁边的动静都可能事后把线碰连,断言迟早会过。
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(build.done(), "build has not finished"))
+                .thenExecute(() -> {
+                    helper.assertTrue(build.succeeded(), "build failed: " + build.outcome());
+                    var wire = level.getBlockState(o.offset(2, 0, 0));
+                    helper.assertTrue(wire.is(Blocks.REDSTONE_WIRE), "the wire is not there: " + wire);
+                    var east = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.EAST);
+                    var west = wire.getValue(net.minecraft.world.level.block.RedStoneWireBlock.WEST);
+                    helper.assertTrue(
+                            east == net.minecraft.world.level.block.state.properties.RedstoneSide.SIDE
+                                    && west == net.minecraft.world.level.block.state.properties.RedstoneSide.SIDE,
+                            "the wire stayed a dot: east=" + east + " west=" + west);
+                    helper.assertTrue(level.getBlockState(o.offset(5, 0, 0))
+                                    .getValue(net.minecraft.world.level.block.RedstoneLampBlock.LIT),
+                            "the lamp did not light: the built circuit is dead");
+                    CompanionFactory.despawn(level.getServer(), companion);
+                })
+                .thenSucceed();
+    }
+
 }

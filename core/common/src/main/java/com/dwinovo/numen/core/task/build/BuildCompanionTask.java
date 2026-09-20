@@ -82,8 +82,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
 
     /**
      * 写入标志:{@code UPDATE_CLIENTS}(同步给客户端)+ {@code UPDATE_KNOWN_SHAPE}
-     * (跳过形状重算),<b>不含</b> {@code UPDATE_NEIGHBORS}。连接形状的账不欠着:
-     * 收尾 {@link #fixConnections()} 统一按真实邻居补算。
+     * (跳过形状重算),<b>不含</b> {@code UPDATE_NEIGHBORS}。这笔账不欠着:
+     * 收尾 {@link #settleWithWorld()} 让世界统一落定一次。
      *
      * <p>这是整个施工能不能照图落地的分水岭。默认的 {@code 3} 会通知邻块并触发
      * 形状重算,于是原版立刻拿它自己的规则复核我们刚写下的每一格:靠在非泥土
@@ -94,8 +94,8 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
      * <p>所以这里不走通知链路:<b>图纸怎么画就怎么落</b>,不让世界中途改我们的
      * 稿。光照仍由区块自己维护,不会盖出一栋黑房子。
      *
-     * <p>代价是建成后邻块不联动(红石不自动初始化)。对一栋房子来说这是划算的:
-     * 少了它房子盖不完整,有了它只是红石要玩家碰一下。
+     * <p>压着不通知只管施工期——那一刻世界是半成品,火把写下去时它靠的墙可能还没砌。
+     * 建完就该放手,见 {@link #settleWithWorld()}。
      */
     private static final int PLACE_FLAGS =
             net.minecraft.world.level.block.Block.UPDATE_CLIENTS
@@ -926,37 +926,55 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     /** 收工:撤掉自己垫的脚手架、生成摆设、外围补水,放一把庆祝的粒子。 */
+
     /**
-     * 连接形状收尾:直写落位刻意不惊动邻居(保图纸原样),代价是体积生成的栅栏/玻璃板
-     * 各自孤立、蓝图边界不贴世界里既有的旧墙。建筑完整后统一按真实邻居重算连接形状:
-     * updateShape 只算"要不要伸手去贴",不触发重力/流体那条物理链;目标格与其六邻
-     * 都算(旧墙那一侧也要伸回来),已连接的算了不变,幂等。对失依附件 updateShape
-     * 会给出空气——建筑完整时不该出现,真出现宁可保留原样也不无声抹掉方块。
+     * 建完之后让世界落定一次:逐格告诉六邻"我在这儿",再通知一圈邻居。
+     *
+     * <h2>为什么施工期不能做、收尾可以</h2>
+     * 施工期世界是<b>半成品</b>——火把写下去时它靠的那面墙可能还没砌,这时候通知邻居
+     * 等于拿半成品复核每一格,贴附方块整批弹掉。建完复核的是成品:掉下来的只有在
+     * <b>完整世界里也确实站不住</b>的格,而它们本来也只是暂时活着(旁边任何一次方块
+     * 更新都会让它们掉)。
+     *
+     * <h2>两句话各管一件事</h2>
+     * {@code updateNeighbourShapes} 让邻居各自重算<b>自己的形状</b>(栅栏伸手、墙连上、
+     * 红石线不再是孤点);{@code updateNeighborsAt} 让世界<b>反应</b>(红石通电、站不住的
+     * 掉落)。两句都是原版自己的话,所以不必维护"哪些方块要补形状"的清单——列清单一定会漏。
+     *
+     * @return 落定之后与图纸不同的格数(掉了的 + 形状被重算的);如实进回执,不无声改动
      */
-    private void fixConnections() {
+    private int settleWithWorld() {
         var level = player.level();
-        java.util.Set<BlockPos> touched = new java.util.LinkedHashSet<>();
+        List<BlockPos> built = new ArrayList<>();
         for (BuildTaskRecord.Target t : r.targets) {
             if (BuildCellRules.isAirTarget(t)) continue;
-            touched.add(t.pos());
-            for (net.minecraft.core.Direction d : net.minecraft.core.Direction.values()) {
-                touched.add(t.pos().relative(d));
+            if (level.getBlockState(t.pos()).is(t.desiredState().getBlock())) {
+                built.add(t.pos());
             }
         }
-        for (BlockPos pos : touched) {
+        for (BlockPos pos : built) {
             BlockState current = level.getBlockState(pos);
-            // 只重算十字连接系(栅栏/玻璃板/铁栏杆)与墙——孤立病只长在它们身上。
-            // 楼梯转角/箱子合体这类形状语义不碰:蓝图边缘格的形状依赖源世界
-            // 截取范围外的邻居,重算会把分毫不差的图纸算成另一个样子。
-            boolean connective = current.getBlock() instanceof net.minecraft.world.level.block.CrossCollisionBlock
-                    || current.getBlock() instanceof net.minecraft.world.level.block.WallBlock;
-            if (current.isAir() || !connective) continue;
-            BlockState updated = net.minecraft.world.level.block.Block
-                    .updateFromNeighbourShapes(current, level, pos);
-            if (updated != current && !updated.isAir()) {
-                level.setBlock(pos, updated, PLACE_FLAGS);
+            if (current.isAir()) continue;
+            current.updateNeighbourShapes(level, pos, net.minecraft.world.level.block.Block.UPDATE_CLIENTS);
+            level.updateNeighborsAt(pos, current.getBlock());
+        }
+        // 落定之后还对不对得上图纸:掉了的、形状被邻居改写的,都算"不同"。
+        int settled = 0;
+        for (BuildTaskRecord.Target t : r.targets) {
+            if (BuildCellRules.isAirTarget(t)) continue;
+            if (!built.contains(t.pos())) continue;
+            if (!t.matches(level.getBlockState(t.pos()))) {
+                settled++;
             }
         }
+        r.settledAway(settled);
+        if (settled > 0) {
+            // 落定改了东西就记一笔:排查"我图纸里明明画了"时,第一眼要看的就是它
+            com.dwinovo.numen.core.Constants.LOG.info(
+                    "[numen-task] build 落定后 {}/{} 格与图纸不同(站不住的掉了、形状按邻居重算了)",
+                    settled, built.size());
+        }
+        return settled;
     }
 
     private TaskState finish() {
@@ -968,7 +986,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             }
         }
         scaffold.clear();
-        fixConnections();
+        int popped = settleWithWorld();
         fixtures.spawnAll();
         fixtures.nudgeSurroundingWater(siteMin, siteMax);
         show.celebrate(siteMin, siteMax);
@@ -990,6 +1008,10 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
             if (skippedCells > refusedByOwner) {
                 notes.add("left " + (skippedCells - refusedByOwner) + " cell(s) alone: what is there may not"
                         + " be moved, or the spot cannot be built on");
+            }
+            if (popped > 0) {
+                notes.add(popped + " cell(s) ended up different once the world settled — vanilla would not"
+                        + " hold them there, or their shape is decided by their neighbours");
             }
             if (r.droppedAtLoad() > 0) {
                 notes.add(r.droppedAtLoad() + " cell(s) of the blueprint were dropped on load"
