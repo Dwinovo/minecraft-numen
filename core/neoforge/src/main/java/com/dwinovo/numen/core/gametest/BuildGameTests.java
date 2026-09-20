@@ -59,12 +59,12 @@ public class BuildGameTests {
         List<BuildTaskRecord.Target> targets = new ArrayList<>(relCells.size());
         for (BlockPos rel : relCells) {
             targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
-                    helper.absolutePos(rel), "cobblestone", null, null, null));
+                    helper.absolutePos(rel), "cobblestone"));
         }
         var ctx = TaskDispatch.ctx("gametest-build", companion);
         long deadline = ctx.deadline(Math.max(1200L, targets.size() * 400L));
         TaskDispatch.setTask(companion,
-                new BuildTaskRecord(ctx.toolCallId(), deadline, targets, true), null, reply -> {});
+                new BuildTaskRecord(ctx.toolCallId(), deadline, targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY), null, reply -> {});
 
         List<BlockPos> cells = targets.stream().map(BuildTaskRecord.Target::pos).toList();
         helper.succeedWhen(() -> {
@@ -115,7 +115,8 @@ public class BuildGameTests {
         var ctx = TaskDispatch.ctx("gametest-tallgrass", companion);
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(4000L),
                 List.of(new BuildTaskRecord.Target(Blocks.CRAFTING_TABLE, Items.CRAFTING_TABLE,
-                        lower, "crafting_table", null, null, null)), true, true, true), null, reply -> {});
+                        lower, "crafting_table")), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true),
+                null, reply -> {});
         helper.succeedWhen(() -> {
             helper.assertTrue(level.getBlockState(lower).is(Blocks.CRAFTING_TABLE), "工作台没放上");
             helper.assertTrue(!level.getBlockState(lower.above()).is(Blocks.TALL_GRASS),
@@ -148,12 +149,12 @@ public class BuildGameTests {
         List<BuildTaskRecord.Target> targets = new ArrayList<>();
         for (int x = 6; x <= 8; x++) {
             targets.add(new BuildTaskRecord.Target(Blocks.OAK_FENCE, Items.OAK_FENCE,
-                    helper.absolutePos(new BlockPos(x, 2, 8)), "oak_fence", null, null, null));
+                    helper.absolutePos(new BlockPos(x, 2, 8)), "oak_fence"));
         }
         companion.getInventory().add(new ItemStack(Items.OAK_FENCE, 3));
         var ctx = TaskDispatch.ctx("gametest-fence-row", companion);
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(4000L),
-                targets, true, true, true), null, reply -> {});
+                targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true), null, reply -> {});
         BlockPos mid = helper.absolutePos(new BlockPos(7, 2, 8));
         BlockPos west = helper.absolutePos(new BlockPos(6, 2, 8));
         BlockPos east = helper.absolutePos(new BlockPos(8, 2, 8));
@@ -180,11 +181,11 @@ public class BuildGameTests {
         BlockPos newPos = helper.absolutePos(new BlockPos(7, 2, 6));
         List<BuildTaskRecord.Target> targets = List.of(
                 new BuildTaskRecord.Target(Blocks.OAK_FENCE, Items.OAK_FENCE,
-                        newPos, "oak_fence", null, null, null));
+                        newPos, "oak_fence"));
         companion.getInventory().add(new ItemStack(Items.OAK_FENCE, 1));
         var ctx = TaskDispatch.ctx("gametest-fence-edge", companion);
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(4000L),
-                targets, true, true, true), null, reply -> {});
+                targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true), null, reply -> {});
         helper.succeedWhen(() -> {
             BlockState built = level.getBlockState(newPos);
             BlockState old = level.getBlockState(oldPos);
@@ -212,14 +213,14 @@ public class BuildGameTests {
         BlockPos tablePos = helper.absolutePos(new BlockPos(6, 2, 6));
         List<BuildTaskRecord.Target> targets = List.of(
                 new BuildTaskRecord.Target(Blocks.CRAFTING_TABLE, Items.CRAFTING_TABLE,
-                        tablePos, "crafting_table", null, null, null),
+                        tablePos, "crafting_table"),
                 new BuildTaskRecord.Target(Blocks.OAK_FENCE, Items.OAK_FENCE,
-                        helper.absolutePos(new BlockPos(8, 2, 6)), "oak_fence", null, null, null));
+                        helper.absolutePos(new BlockPos(8, 2, 6)), "oak_fence"));
         companion.getInventory().add(new ItemStack(Items.CRAFTING_TABLE, 1));
         companion.getInventory().add(new ItemStack(Items.OAK_FENCE, 1));
         var ctx = TaskDispatch.ctx("gametest-plain-cell", companion);
         BuildTaskRecord record = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(4000L),
-                targets, true, true, true);
+                targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true);
         helper.assertTrue(record.targets.get(0).itemPlace(), "素面格(工作台)没升格成原生放置");
         helper.assertFalse(record.targets.get(1).itemPlace(), "带属性格(栅栏)不该升格");
         TaskDispatch.setTask(companion, record, null, reply -> {});
@@ -241,7 +242,7 @@ public class BuildGameTests {
         for (int x = 6; x <= 10; x++) {
             for (int z = 6; z <= 10; z++) {
                 targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
-                        helper.absolutePos(new BlockPos(x, 2, z)), "cobblestone", null, null, null));
+                        helper.absolutePos(new BlockPos(x, 2, z)), "cobblestone"));
             }
         }
         final int total = targets.size();          // 25 格
@@ -250,7 +251,7 @@ public class BuildGameTests {
         java.util.function.Consumer<String> go = tag -> {
             var ctx = TaskDispatch.ctx(tag, companion);
             TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
-                    ctx.deadline(4000L), targets, true, true, true), null, reply -> {});
+                    ctx.deadline(4000L), targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true), null, reply -> {});
         };
         go.accept("gametest-resume-1");
 
@@ -306,14 +307,30 @@ public class BuildGameTests {
             helper.assertTrue(msg.contains("liquid"),
                     liquid + " must be refused as a capability boundary, not as a bad name; got \"" + msg + "\"");
         }
+        // 方块状态跟在方块名后面,和 /setblock 同一套语法;调色板里的逗号分项,
+        // 而状态里的逗号属于状态——切分必须认方括号,否则混合料一带状态就被劈开
+        var stairs = com.dwinovo.numen.core.build.BuildPalette
+                .parse("spruce_stairs[facing=south,half=top]").first().state();
+        helper.assertTrue(stairs.is(Blocks.SPRUCE_STAIRS)
+                        && stairs.getValue(net.minecraft.world.level.block.StairBlock.FACING)
+                                == net.minecraft.core.Direction.SOUTH
+                        && stairs.getValue(net.minecraft.world.level.block.StairBlock.HALF)
+                                == net.minecraft.world.level.block.state.properties.Half.TOP,
+                "the block state must come through the block_id, got " + stairs);
+        var statefulMix = com.dwinovo.numen.core.build.BuildPalette
+                .parse("oak_slab[type=top]*3, stone_brick_slab[type=top]");
+        helper.assertTrue(!statefulMix.isSingle() && statefulMix.first().state()
+                        .getValue(net.minecraft.world.level.block.SlabBlock.TYPE)
+                                == net.minecraft.world.level.block.state.properties.SlabType.TOP,
+                "a weighted mix of stateful blocks must survive the split");
         String stateMsg = "";
         try {
-            com.dwinovo.numen.core.build.BuildPalette.parse("spruce_stairs[facing=south]");
+            com.dwinovo.numen.core.build.BuildPalette.parse("stone[facing=north]");
         } catch (IllegalArgumentException e) {
             stateMsg = String.valueOf(e.getMessage());
         }
-        helper.assertTrue(stateMsg.contains("properties"),
-                "inline block states must be rejected with a message pointing at `properties`");
+        helper.assertTrue(stateMsg.contains("facing"),
+                "a property the block does not have must be refused by name; got \"" + stateMsg + "\"");
 
         // 没有自己物品的方块要拿替代料算账,否则文档里教的 dirt_path 根本放不下去
         helper.assertTrue(com.dwinovo.numen.core.build.BuildPalette.parse("dirt_path")
@@ -339,8 +356,7 @@ public class BuildGameTests {
                         "tall grass is one item of its own now"),
                 new Case(Blocks.WATER.defaultBlockState(), 0, "liquids cost nothing"),
                 new Case(Blocks.AIR.defaultBlockState(), 0, "clearing costs nothing"))) {
-            var t = new BuildTaskRecord.Target(c.state(), Items.STONE, BlockPos.ZERO, "x",
-                    null, null, null);
+            var t = new BuildTaskRecord.Target(c.state(), Items.STONE, BlockPos.ZERO, "x");
             helper.assertTrue(t.materialCount() == c.want(),
                     c.why() + " — expected " + c.want() + ", got " + t.materialCount());
         }
@@ -348,11 +364,11 @@ public class BuildGameTests {
         // 贴附件整体推到第二趟:骨架先立完,再回头挂灯摆花
         List<BuildTaskRecord.Target> mixed = new ArrayList<>(List.of(
                 new BuildTaskRecord.Target(Blocks.TORCH.defaultBlockState(), Items.TORCH,
-                        new BlockPos(1, 1, 0), "torch", null, null, null),
+                        new BlockPos(1, 1, 0), "torch"),
                 new BuildTaskRecord.Target(Blocks.RED_CARPET.defaultBlockState(), Items.RED_CARPET,
-                        new BlockPos(2, 1, 0), "carpet", null, null, null),
+                        new BlockPos(2, 1, 0), "carpet"),
                 new BuildTaskRecord.Target(Blocks.STONE, Items.STONE,
-                        new BlockPos(0, 9, 0), "stone", null, null, null)));
+                        new BlockPos(0, 9, 0), "stone")));
         mixed.sort(com.dwinovo.numen.core.task.build.BuildOrder.BUILD_ORDER);
         helper.assertTrue(mixed.get(0).desiredState().getBlock() == Blocks.STONE,
                 "everything that stands on its own goes first, even nine layers up; got "
@@ -443,11 +459,11 @@ public class BuildGameTests {
         bannerData.put("patterns", patterns);
 
         var targets = List.of(new BuildTaskRecord.Target(Blocks.WHITE_BANNER, Items.WHITE_BANNER,
-                at, "banner", null, null, null));
+                at, "banner"));
         var ctx = TaskDispatch.ctx("gametest-be", companion);
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(4000L), targets,
-                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, false, false,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, false, false,
                 java.util.Map.of(at.asLong(), bannerData)), null, reply -> {});
 
         helper.succeedWhen(() -> {
@@ -537,32 +553,29 @@ public class BuildGameTests {
         BlockState full = Blocks.COMPOSTER.defaultBlockState().setValue(
                 net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_COMPOSTER, 5);
 
-        var wheat = new BuildTaskRecord.Target(ripe, Items.WHEAT_SEEDS, BlockPos.ZERO, "wheat",
-                null, null, null);
+        var wheat = new BuildTaskRecord.Target(ripe, Items.WHEAT_SEEDS, BlockPos.ZERO, "wheat");
         helper.assertTrue(wheat.desiredState().getValue(
                         net.minecraft.world.level.block.state.properties.BlockStateProperties.AGE_7) == 0,
                 "a blueprint's ripe wheat must be planted as a seedling, not conjured fully grown");
 
-        var stair = new BuildTaskRecord.Target(wet, Items.OAK_STAIRS, BlockPos.ZERO, "stair",
-                null, null, null);
+        var stair = new BuildTaskRecord.Target(wet, Items.OAK_STAIRS, BlockPos.ZERO, "stair");
         helper.assertTrue(!stair.desiredState().getValue(
                         net.minecraft.world.level.block.state.properties.BlockStateProperties.WATERLOGGED),
                 "waterlogging is derived from the water around a block; copying it conjures water"
                         + " out of nothing, and she does not place water at all");
 
-        var composter = new BuildTaskRecord.Target(full, Items.COMPOSTER, BlockPos.ZERO, "composter",
-                null, null, null);
+        var composter = new BuildTaskRecord.Target(full, Items.COMPOSTER, BlockPos.ZERO, "composter");
         helper.assertTrue(composter.desiredState().getValue(
                         net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_COMPOSTER) == 0,
                 "how full a composter is, is runtime state — it must be placed empty");
 
         var cauldron = new BuildTaskRecord.Target(Blocks.LAVA_CAULDRON.defaultBlockState(),
-                Items.CAULDRON, BlockPos.ZERO, "cauldron", null, null, null);
+                Items.CAULDRON, BlockPos.ZERO, "cauldron");
         helper.assertTrue(cauldron.desiredState().is(Blocks.CAULDRON),
                 "a cauldron's contents are runtime state; a blueprint must not hand out free lava");
 
         var leaves = new BuildTaskRecord.Target(Blocks.OAK_LEAVES.defaultBlockState(),
-                Items.OAK_LEAVES, BlockPos.ZERO, "leaves", null, null, null);
+                Items.OAK_LEAVES, BlockPos.ZERO, "leaves");
         helper.assertTrue(leaves.desiredState().getValue(
                         net.minecraft.world.level.block.state.properties.BlockStateProperties.PERSISTENT),
                 "placed leaves are hand-placed leaves; without this they rot as fast as she builds");
@@ -571,16 +584,14 @@ public class BuildGameTests {
         // 最直接——一格花一颗发光浆果,玩家伸手一摘把那颗原样收回、藤蔓还留着。
         BlockState honeyed = Blocks.BEE_NEST.defaultBlockState().setValue(
                 net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_HONEY, 5);
-        var nest = new BuildTaskRecord.Target(honeyed, Items.BEE_NEST, BlockPos.ZERO, "nest",
-                null, null, null);
+        var nest = new BuildTaskRecord.Target(honeyed, Items.BEE_NEST, BlockPos.ZERO, "nest");
         helper.assertTrue(nest.desiredState().getValue(
                         net.minecraft.world.level.block.state.properties.BlockStateProperties.LEVEL_HONEY) == 0,
                 "stored honey is runtime state; copying it lets the player shear free honeycomb");
 
         BlockState berried = Blocks.CAVE_VINES.defaultBlockState().setValue(
                 net.minecraft.world.level.block.state.properties.BlockStateProperties.BERRIES, true);
-        var vine = new BuildTaskRecord.Target(berried, Items.GLOW_BERRIES, BlockPos.ZERO, "vine",
-                null, null, null);
+        var vine = new BuildTaskRecord.Target(berried, Items.GLOW_BERRIES, BlockPos.ZERO, "vine");
         helper.assertTrue(!vine.desiredState().getValue(
                         net.minecraft.world.level.block.state.properties.BlockStateProperties.BERRIES),
                 "a berried cave vine hands the berry straight back — the whole wall would be free");
@@ -744,7 +755,7 @@ public class BuildGameTests {
         var ctx = TaskDispatch.ctx("gametest-fixtures", companion);
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
                 ctx.deadline(1000L), loaded.targets(),
-                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, false, true,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, false, true,
                 loaded.blockEntityData(), loaded.entities()), null, reply -> {});
 
         Vec3 want = new Vec3(anchor.getX() + 1.5, anchor.getY() + 0.5, anchor.getZ() + 2.5);
@@ -933,7 +944,7 @@ public class BuildGameTests {
                 new Many(Blocks.TALL_GRASS.defaultBlockState(), Items.TALL_GRASS, 1,
                         "tall grass is one item of its own now"))) {
             var target = new BuildTaskRecord.Target(m.state(), m.pay(), BlockPos.ZERO,
-                    "x", null, null, null);
+                    "x");
             helper.assertTrue(target.materialCount() == m.count(),
                     m.what() + " — got " + target.materialCount());
         }
@@ -1124,7 +1135,7 @@ public class BuildGameTests {
 
         var ctx = TaskDispatch.ctx("gametest-twice-1", companion);
         var first = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(3000L), loaded.targets(),
-                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true, true,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true,
                 loaded.blockEntityData(), loaded.entities());
         first.cellNeeds(loaded.cellNeeds());
         TaskDispatch.setTask(companion, first, null, reply -> {});
@@ -1165,7 +1176,7 @@ public class BuildGameTests {
                     var ctx2 = TaskDispatch.ctx("gametest-twice-2", companion);
                     second[0] = new BuildTaskRecord(ctx2.toolCallId(), ctx2.deadline(3000L),
                             loaded.targets(), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY,
-                            true, true, true, loaded.blockEntityData(), loaded.entities());
+                            true, true, loaded.blockEntityData(), loaded.entities());
                     second[0].cellNeeds(loaded.cellNeeds());
                     TaskDispatch.setTask(companion, second[0], null, reply -> {});
                 })
@@ -1241,7 +1252,7 @@ public class BuildGameTests {
 
         var ctx = TaskDispatch.ctx("gametest-restock-1", companion);
         var first = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(6000L), loaded.targets(),
-                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true, true,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true,
                 loaded.blockEntityData(), loaded.entities());
         first.cellNeeds(loaded.cellNeeds());
         // 注:dispatchAsync 的 reply 是<b>派发受理</b>回执("已受理,后台执行中"),不是
@@ -1289,7 +1300,7 @@ public class BuildGameTests {
                     var ctx2 = TaskDispatch.ctx("gametest-restock-2", companion);
                     second[0] = new BuildTaskRecord(ctx2.toolCallId(), ctx2.deadline(6000L),
                             loaded.targets(), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY,
-                            true, true, true, loaded.blockEntityData(), loaded.entities());
+                            true, true, loaded.blockEntityData(), loaded.entities());
                     second[0].cellNeeds(loaded.cellNeeds());
                     TaskDispatch.setTask(companion, second[0], null, reply -> {});
                 })
@@ -1400,7 +1411,7 @@ public class BuildGameTests {
 
         var ctx = TaskDispatch.ctx("gametest-starve", companion);
         var rec = new BuildTaskRecord(ctx.toolCallId(), ctx.deadline(6000L), loaded.targets(),
-                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true, true,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, true,
                 loaded.blockEntityData(), loaded.entities());
         rec.cellNeeds(loaded.cellNeeds());
         TaskDispatch.setTask(companion, rec, null, reply -> {});
@@ -1612,10 +1623,9 @@ public class BuildGameTests {
         // 我们自己的词汇:工具、op、参数、状态键、形制名。它们和方块名共用反引号,
         // 但不该去注册表里找。
         java.util.Set<String> ours = java.util.Set.of(
-                "block_id", "roof_shape", "roof_curve", "corner_lift", "gable_block",
-                "ridge_block", "eave_block", "soffit_block", "ridge_offset", "set_door",
-                "replace_existing", "load_skill", "task_status", "task_finished",
-                "building_design", "blueprint_read", "half_hip", "signal_fire",
+                "block_id", "legend", "rows", "mask", "carve", "overwrite", "solid", "keep",
+                "rotation", "mirror", "include_air", "hollow", "load_skill", "task_status",
+                "task_finished", "building_design", "blueprint_read",
                 "short_grass", "dirt_path", "coarse_dirt", "flower_pot", "decorated_pot",
                 "x1", "y1", "z1", "x2", "y2", "z2");
         java.util.List<String> bad = new java.util.ArrayList<>();
@@ -1648,6 +1658,11 @@ public class BuildGameTests {
                     String body = m.group(1);
                     if (body.indexOf('*') >= 0) {
                         continue;   // 通配写法(stripped_*_log)与调色权重(oak_slab*5)
+                    }
+                    // 方块状态跟在方块名后面(`oak_slab[type=double]`):状态键与值是原版
+                    // 的词汇,由原版解析器把关,这条 lint 只管方块名对不对
+                    if (body.indexOf('[') >= 0) {
+                        body = body.substring(0, body.indexOf('['));
                     }
                     var w = ident.matcher(body);
                     while (w.find()) {
@@ -1695,185 +1710,6 @@ public class BuildGameTests {
                 + " block(s) that do not exist: " + bad);
         helper.assertTrue(checked > 200,
                 "the lint matched only " + checked + " block names — the extractor is broken");
-        helper.succeed();
-    }
-
-    /** 屋顶展开的简写——参数多,测试里只关心形状和料。 */
-    private static java.util.List<BuildTaskRecord.Target> roof(
-            int x1, int y1, int z1, int x2, int z2,
-            String material, String shape, String curve, String ridge, String gable) {
-        return com.dwinovo.numen.core.build.BuildShapes.roofCells(x1, y1, z1, x2, z2,
-                material, shape, curve, 0, 0, gable, ridge, null, null, true);
-    }
-
-    /** 一格屋面的顶面高度,以半砖计(相对 y0)——半砖三态各占多高的唯一算法。 */
-    private static int topHalves(BuildTaskRecord.Target t, int y0) {
-        var state = t.desiredState();
-        int y = t.pos().getY() - y0;
-        if (state.getBlock() instanceof net.minecraft.world.level.block.SlabBlock) {
-            return state.getValue(
-                    net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE)
-                    == net.minecraft.world.level.block.state.properties.SlabType.BOTTOM
-                    ? 2 * y + 1 : 2 * y + 2;
-        }
-        return 2 * y + 2;
-    }
-
-    /**
-     * 屋面砌法:从四栋手工中式建筑(悬山、歇山、庑殿、攒尖)逐格量出来的三条铁律。
-     *
-     * <p>这三条不是推的,是量的,所以值得钉成断言:
-     * <ol>
-     *   <li><b>坡面用半砖,不用楼梯。</b>四栋里半砖比楼梯多 6~43 倍,坡面上一块
-     *       楼梯都没有——楼梯只出现在斗拱和宝顶那种细节上。</li>
-     *   <li><b>顶面每格升半格,而且只用 bottom / double 两态</b>(檐口那一圈例外,
-     *       用 top 收薄边)。此前这里用"bottom + top",顶面轮廓一样,但 top 半砖
-     *       底下那半格是空的——从底下看是一排悬空的砖,山面还能看见缺口。</li>
-     *   <li><b>屋顶高 ≈ 0.6~0.75 × 半跨。</b>举架平均每格抬 1.2 个半砖:檐口五举
-     *       抬一个,脊步十举抬两个。抬太少是个平台,抬太多是金字塔。</li>
-     * </ol>
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void roof_slab_technique(GameTestHelper helper) {
-        int y0 = 100;
-        int halfSpan = 8;
-        var cells = roof(0, y0, 0, 25, 2 * halfSpan, "minecraft:stone_brick_slab",
-                "xuanshan", null, null, null);
-
-        long stairs = cells.stream().filter(t ->
-                t.desiredState().getBlock() instanceof net.minecraft.world.level.block.StairBlock).count();
-        helper.assertTrue(stairs == 0,
-                "the slope must be laid in slabs, not stairs; found " + stairs + " stair cell(s)");
-
-        var TYPE = net.minecraft.world.level.block.state.properties.BlockStateProperties.SLAB_TYPE;
-        for (BuildTaskRecord.Target t : cells) {
-            if (!(t.desiredState().getBlock() instanceof net.minecraft.world.level.block.SlabBlock)) {
-                continue;
-            }
-            boolean atEave = Math.min(t.pos().getZ(), 2 * halfSpan - t.pos().getZ()) == 0;
-            helper.assertTrue(
-                    atEave || t.desiredState().getValue(TYPE)
-                            != net.minecraft.world.level.block.state.properties.SlabType.TOP,
-                    "a TOP slab away from the eave leaves a half-block void underneath, at " + t.pos());
-        }
-
-        // 沿坡向逐格量顶面:必须一路上行,每格抬一到两个半砖,不许平、不许跳。
-        // 只量到脊那一格之前——脊本身是压在屋面之上的实心块,高出来是设计。
-        int[] top = new int[2 * halfSpan + 1];
-        for (BuildTaskRecord.Target t : cells) {
-            if (t.pos().getX() == 12
-                    && t.desiredState().getBlock() instanceof net.minecraft.world.level.block.SlabBlock) {
-                top[t.pos().getZ()] = Math.max(top[t.pos().getZ()], topHalves(t, y0));
-            }
-        }
-        for (int z = 1; z < halfSpan; z++) {
-            int step = top[z] - top[z - 1];
-            helper.assertTrue(step >= 1 && step <= 2,
-                    "the roof surface must climb 1-2 half-blocks per cell; got " + step
-                            + " between z=" + (z - 1) + " and z=" + z);
-        }
-        double blocks = top[halfSpan - 1] / 2.0;
-        helper.assertTrue(blocks >= 0.45 * halfSpan && blocks <= 0.85 * halfSpan,
-                "roof height should be 0.6-0.75 of the half-span (" + halfSpan + "), got " + blocks);
-        helper.succeed();
-    }
-
-    /**
-     * 脊:必须<b>高出屋面</b>,而且庑殿/攒尖的四条垂脊是<b>一格宽的正 45° 对角线</b>。
-     *
-     * <p>存档里量到的垂脊是从檐角一路爬到顶的连续对角线,一格宽,异色。此前这里
-     * 只在角上放一个疙瘩,又把正脊嵌进最后一层里齐平——所以四坡顶怎么调都不像
-     * 中式,而这两处恰恰是最认得出的一笔。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void roof_ridges_stand_proud(GameTestHelper helper) {
-        int y0 = 200;
-        int bx = 20;
-        int bz = 12;
-        int reach = bz / 2;
-        var cells = roof(0, y0, 0, bx, bz, "minecraft:stone_brick_slab",
-                "wudian", null, "minecraft:dark_prismarine", null);
-        java.util.Map<Long, java.util.List<BuildTaskRecord.Target>> byColumn = new java.util.HashMap<>();
-        for (BuildTaskRecord.Target t : cells) {
-            byColumn.computeIfAbsent((long) t.pos().getX() * 1000L + t.pos().getZ(),
-                    k -> new java.util.ArrayList<>()).add(t);
-        }
-        // 四条垂脊:到两边檐口等距的那条对角线,每一格都得是脊料
-        for (int k = 0; k < reach; k++) {
-            for (int[] c : new int[][]{{k, k}, {bx - k, k}, {k, bz - k}, {bx - k, bz - k}}) {
-                var col = byColumn.get((long) c[0] * 1000L + c[1]);
-                helper.assertTrue(col != null && col.stream().anyMatch(t ->
-                                t.desiredState().getBlock() == Blocks.DARK_PRISMARINE),
-                        "wudian: the hip ridge must run the whole diagonal; missing at ("
-                                + c[0] + "," + c[1] + ")");
-            }
-        }
-        // 脊压在瓦面之上:同一列里脊料必须比瓦面高
-        var mid = byColumn.get((long) (bx / 2) * 1000L + reach);
-        helper.assertTrue(mid != null, "wudian: no cells on the ridge line");
-        int crest = mid.stream().filter(t -> t.desiredState().getBlock() == Blocks.DARK_PRISMARINE)
-                .mapToInt(t -> t.pos().getY()).max().orElse(Integer.MIN_VALUE);
-        int tiles = mid.stream()
-                .filter(t -> t.desiredState().getBlock() instanceof net.minecraft.world.level.block.SlabBlock)
-                .mapToInt(t -> t.pos().getY()).max().orElse(Integer.MIN_VALUE);
-        helper.assertTrue(crest > tiles,
-                "the crest must stand proud of the tiles, crest y=" + crest + " tiles y=" + tiles);
-
-        // 悬山没有垂脊,两端换成博风板——同样是异色一条,走在山面边缘
-        var gable = roof(0, 300, 0, bx, bz, "minecraft:stone_brick_slab",
-                "xuanshan", null, "minecraft:dark_prismarine", "minecraft:oak_planks");
-        for (int z = 1; z < bz; z++) {
-            final int zz = z;
-            helper.assertTrue(gable.stream().anyMatch(t -> t.pos().getX() == 0 && t.pos().getZ() == zz
-                            && t.desiredState().getBlock() == Blocks.DARK_PRISMARINE),
-                    "xuanshan: the bargeboard must run the whole raking edge; missing at z=" + z);
-        }
-        helper.assertTrue(gable.stream().anyMatch(t -> t.desiredState().getBlock() == Blocks.OAK_PLANKS),
-                "xuanshan: gable_block must fill the triangular end walls");
-        helper.succeed();
-    }
-
-    /**
-     * 歇山下段四坡、上段双坡;单坡一路倒向一侧。
-     *
-     * <p>歇山的判据是<b>上下两段的收法不同</b>:下段短边也收(四坡),上段短边
-     * 不再收(脊沿长轴跑满)。顺带锁住"上段更陡":上段若把举架曲线重新从五举起算,
-     * 腰以上会比檐口还缓,而真实歇山恰恰相反。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_build")
-    public static void roof_xieshan_and_shed(GameTestHelper helper) {
-        int y0 = 400;
-        int bx = 16;
-        int bz = 12;
-        var xieshan = roof(0, y0, 0, bx, bz, "minecraft:stone_brick_slab",
-                "xieshan", null, "minecraft:dark_prismarine", "minecraft:oak_planks");
-        // 歇山的判据在<b>横着走</b>:沿脊向(x)从端头往里走,下段短边也收,所以
-        // 高度一路上升;走过腰线以后短边不再收,高度就此打住,余下的坡全交给长边。
-        // 檐口那一圈本来就是平的(那是屋檐,不是坡),所以要在中跨取样。
-        int[] alongRidge = new int[bx + 1];
-        for (BuildTaskRecord.Target t : xieshan) {
-            if (t.pos().getZ() == bz / 2
-                    && t.desiredState().getBlock() instanceof net.minecraft.world.level.block.SlabBlock) {
-                alongRidge[t.pos().getX()] = Math.max(alongRidge[t.pos().getX()], topHalves(t, y0));
-            }
-        }
-        helper.assertTrue(alongRidge[1] > alongRidge[0],
-                "xieshan: the lower section must slope on the short sides too, got a flat end");
-        helper.assertTrue(alongRidge[bx / 2] == alongRidge[bx / 2 - 1],
-                "xieshan: above the break the short sides must stop rising — that plateau IS the ridge; got "
-                        + alongRidge[bx / 2 - 1] + " -> " + alongRidge[bx / 2]);
-        helper.assertTrue(xieshan.stream().anyMatch(t ->
-                        t.desiredState().getBlock() == Blocks.OAK_PLANKS),
-                "xieshan: the upper section needs its decorated gable panel");
-
-        // 单坡:一路从低边升到高边,没有第二坡
-        var shed = roof(0, 500, 0, bx, bz, "minecraft:stone_brick_slab", "shed", null, null, null);
-        int lowY = shed.stream().filter(t -> t.pos().getZ() == 0)
-                .mapToInt(t -> t.pos().getY()).max().orElse(0);
-        int highY = shed.stream().filter(t -> t.pos().getZ() == bz)
-                .mapToInt(t -> t.pos().getY()).max().orElse(0);
-        helper.assertTrue(highY > lowY,
-                "shed: the roof must rise from one edge to the other, got " + lowY + " -> " + highY);
         helper.succeed();
     }
 
@@ -1941,65 +1777,6 @@ public class BuildGameTests {
     }
 
     /**
-     * 每一种屋顶都必须<b>盖满自己的底面</b>,而且<b>顶上那格不能是楼梯</b>。
-     *
-     * <p>这两条是逐个剖面看出来的病,留成断言才不会再犯:
-     * <ul>
-     *   <li>坡面一层要横跨两格,而一层只铺一圈坡料——两层之间就夹着一整圈谁都没铺
-     *       的格子,庑殿和歇山的檐口有一条环形通缝,从外面直接看进屋架。"每个底面
-     *       格子的那一竖列里至少有一块料"正好抓这个。</li>
-     *   <li>两坡在脊上对头相撞,那里再铺楼梯就只封住一侧,另一半是竖直缺口。
-     *       "最高那层没有楼梯"正好抓这个。</li>
-     * </ul>
-     *
-     * <p>顺带把别名也跑一遍:{@code gable/hip/half_hip/pyramid} 是四种正名的西式
-     * 叫法,走的必须是同一套引擎,不能有一个名字漏挂。
-     */
-    @GameTest(template = "floor16", timeoutTicks = 400, batch = "numen_build")
-    public static void roof_leaves_no_hole(GameTestHelper helper) {
-        String[][] cases = {
-                {"xuanshan", "straight"}, {"xuanshan", "concave"}, {"gable", "concave"},
-                {"wudian", "straight"}, {"wudian", "concave"}, {"hip", "concave"},
-                {"xieshan", "straight"}, {"xieshan", "concave"}, {"half_hip", "concave"},
-                {"zuanjian", "concave"}, {"pyramid", "concave"},
-                {"shed", "straight"}, {"shed", "concave"},
-        };
-        for (String[] c : cases) {
-            int x2 = 12;
-            boolean square = "zuanjian".equals(c[0]) || "pyramid".equals(c[0]);
-            int z2 = square ? 12 : 8;
-            var cells = com.dwinovo.numen.core.build.BuildShapes.roofCells(
-                    0, 100, 0, x2, z2, "minecraft:stone_brick_slab", c[0], c[1], 0, 0,
-                    "minecraft:oak_planks", "minecraft:dark_prismarine",
-                    "minecraft:waxed_oxidized_cut_copper_slab", "minecraft:spruce_slab", true);
-            String what = c[0] + "/" + c[1];
-            java.util.Set<Long> columns = new java.util.HashSet<>();
-            int maxY = 100;
-            for (BuildTaskRecord.Target t : cells) {
-                columns.add((long) t.pos().getX() * 1000L + t.pos().getZ());
-                maxY = Math.max(maxY, t.pos().getY());
-            }
-            for (int x = 0; x <= x2; x++) {
-                for (int z = 0; z <= z2; z++) {
-                    helper.assertTrue(columns.contains((long) x * 1000L + z),
-                            what + " leaves column (" + x + "," + z + ") uncovered");
-                }
-            }
-            // 单坡没有脊:高边顶着墙,不存在"对面那道坡"可漏,顶上是楼梯正合适
-            boolean hasRidge = !"shed".equals(c[0]);
-            for (BuildTaskRecord.Target t : cells) {
-                if (hasRidge && t.pos().getY() == maxY) {
-                    helper.assertTrue(
-                            !(t.desiredState().getBlock() instanceof net.minecraft.world.level.block.StairBlock),
-                            what + " caps its ridge at (" + t.pos().getX() + "," + t.pos().getZ()
-                                    + ") with a stair, leaving the far half open");
-                }
-            }
-        }
-        helper.succeed();
-    }
-
-    /**
      * 施工时限必须够用完。
      *
      * <p>时限一度是按"每格固定几刻"估的,而生存最慢档实际是每格十刻——差二十倍,
@@ -2027,10 +1804,12 @@ public class BuildGameTests {
     }
 
     /**
-     * 守则驱动的中世纪小屋(12x10x8):形状打底(圆石地基、橡木板空心墙、楼梯
-     * 砌的斜屋顶——出檐一格、山墙填实、脊线压半砖)+ 精确格修饰(原木角柱 axis=y、
-     * 南面 1x2 门洞、玻璃窗、屋内火把),后写覆盖先写——与 build 工具的混排语义
-     * 完全一致,免材料模式。
+     * 一栋小屋,从工具入口按模型的样子下单:地基、墙、双坡屋顶、门窗细节全用通用原语
+     * 写成——一张字符网格是一层,楼梯屋顶是逐课的网格,细节是单格。
+     *
+     * <p>这条用例是新原语集的整活钉桩:网格带图例、网格按层重复、方块状态跟在方块名里
+     * ({@code oak_stairs[facing=south]})、同一次调用里后写覆盖先写,四件事缺一条都盖不出
+     * 这栋屋子。
      */
     @GameTest(template = "floor20", timeoutTicks = 100000, batch = "numen_build_cottage")
     public static void build_medieval_cottage(GameTestHelper helper) {
@@ -2039,79 +1818,84 @@ public class BuildGameTests {
         NumenPlayer companion = CompanionFactory.spawn(level.getServer(), UUID.randomUUID(),
                 "gametest_carpenter", UUID.randomUUID(), level,
                 new Vec3(spawn.getX() + 0.5, spawn.getY(), spawn.getZ() + 0.5));
+        // 这条量的是原语能不能盖出一栋屋子,不是生存备料:免耗材档
+        companion.setGameMode(net.minecraft.world.level.GameType.CREATIVE);
         // 发脚手架:垫柱残料由交付前的清扫遍拆除,门洞可通行断言就是它的回归测试
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
 
-        java.util.function.BiFunction<String, List<BlockPos>, List<BuildTaskRecord.Target>> vol =
-                (id, cells) -> {
-                    var item = net.minecraft.core.registries.BuiltInRegistries.ITEM
-                            .get(net.minecraft.resources.ResourceLocation.parse(id));
-                    var block = item instanceof net.minecraft.world.item.BlockItem bi
-                            ? bi.getBlock() : Blocks.AIR;
-                    List<BuildTaskRecord.Target> out = new ArrayList<>();
-                    for (BlockPos rel : cells) {
-                        out.add(new BuildTaskRecord.Target(block, item, helper.absolutePos(rel),
-                                id, null, null, null));
-                    }
-                    return out;
-                };
-        var shape = com.dwinovo.numen.core.build.BuildShapes.class;   // shapeCells 静态引用可读性别名
-
-        List<BuildTaskRecord.Target> ordered = new ArrayList<>();
-        // 1) 地基:圆石 12x1x10
-        ordered.addAll(vol.apply("minecraft:cobblestone",
-                com.dwinovo.numen.core.build.BuildShapes.shapeCells("box", false, 4, 2, 5, 15, 2, 14, null, null)));
-        // 2) 墙体:walls 周界墙 y3-5(3 高,整墙地面臂展可及)(无顶底面——地板只有地基那一层,守则单层地板铁律)
-        ordered.addAll(vol.apply("minecraft:oak_planks",
-                com.dwinovo.numen.core.build.BuildShapes.shapeCells("walls", false, 4, 3, 5, 15, 5, 14, null, null)));
-        // 3) 屋顶:半砖砌斜面、脊沿长轴、山墙填实、博风板、出檐一格
-        BlockPos roofA = helper.absolutePos(new BlockPos(4, 6, 5));
-        BlockPos roofB = helper.absolutePos(new BlockPos(15, 6, 14));
-        ordered.addAll(com.dwinovo.numen.core.build.BuildShapes.roofCells(
-                roofA.getX(), roofA.getY(), roofA.getZ(), roofB.getX(), roofB.getZ(),
-                "minecraft:oak_slab", "xuanshan", "concave", 1, 0,
-                "minecraft:oak_planks", "minecraft:spruce_slab", null, null, true));
-        // 4) 细节(后写覆盖先写):四角原木柱、南门洞 1x2、四扇玻璃窗、屋内火把
-        for (int[] c : new int[][]{{4, 5}, {15, 5}, {4, 14}, {15, 14}}) {
-            for (int y = 3; y <= 5; y++) {
-                ordered.add(new BuildTaskRecord.Target(Blocks.OAK_LOG, Items.OAK_LOG,
-                        helper.absolutePos(new BlockPos(c[0], y, c[1])), "oak_log",
-                        null, net.minecraft.core.Direction.Axis.Y, null));
-            }
-        }
-        ordered.addAll(vol.apply("minecraft:air",
-                List.of(new BlockPos(9, 3, 5), new BlockPos(9, 4, 5))));
-        // 门槛台阶:室内地板(y2 顶面=脚位 y3)比室外地面高一格,守则要求门外补一级
-        ordered.addAll(vol.apply("minecraft:cobblestone", List.of(new BlockPos(9, 2, 4))));
-        ordered.addAll(vol.apply("minecraft:glass_pane",
-                List.of(new BlockPos(4, 4, 8), new BlockPos(4, 4, 11),
-                        new BlockPos(15, 4, 8), new BlockPos(15, 4, 11))));
-        ordered.addAll(vol.apply("minecraft:torch", List.of(new BlockPos(9, 3, 9))));
-
-        // 与 build 工具同语义:同格后写覆盖先写
-        java.util.LinkedHashMap<Long, BuildTaskRecord.Target> byPos = new java.util.LinkedHashMap<>();
-        for (BuildTaskRecord.Target t : ordered) {
-            byPos.put(t.pos().asLong(), t);
-        }
-        List<BuildTaskRecord.Target> targets = new ArrayList<>(byPos.values());
-
-        var ctx = TaskDispatch.ctx("gametest-cottage", companion);
-        long deadline = ctx.deadline(Math.max(2400L, targets.size() * 400L));
-        TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
-                targets, true, false), null, reply -> {});
+        BlockPos o = helper.absolutePos(new BlockPos(4, 2, 5));   // 地基西北角
+        int x = o.getX();
+        int y = o.getY();
+        int z = o.getZ();
+        // 12 x 10 的占地:地基一层实心,墙圈三层,屋顶四课
+        List<String> solid = List.of(
+                "############", "############", "############", "############", "############",
+                "############", "############", "############", "############", "############");
+        List<String> ring = List.of(
+                "############", "#..........#", "#..........#", "#..........#", "#..........#",
+                "#..........#", "#..........#", "#..........#", "#..........#", "############");
+        ToolRun build = call(companion, "build", args("ops", List.of(
+                args("op", "layer", "x1", x, "y1", y, "z1", z,
+                        "rows", solid, "block_id", "minecraft:cobblestone"),
+                args("op", "layer", "x1", x, "y1", y + 1, "z1", z, "y2", y + 3,
+                        "rows", ring, "block_id", "minecraft:oak_planks"),
+                // 屋顶:每课一张网格,两侧楼梯对着爬,顶上一条半砖压脊
+                args("op", "layer", "x1", x, "y1", y + 4, "z1", z, "rows", List.of(
+                        "<<<<<<<<<<<<", "............", "............", "............",
+                        "............", "............", "............", "............",
+                        "............", ">>>>>>>>>>>>"),
+                        "legend", args("<", "minecraft:oak_stairs[facing=south]",
+                                ">", "minecraft:oak_stairs[facing=north]")),
+                args("op", "layer", "x1", x, "y1", y + 5, "z1", z, "rows", List.of(
+                        "............", "<<<<<<<<<<<<", "............", "............",
+                        "............", "............", "............", "............",
+                        ">>>>>>>>>>>>", "............"),
+                        "legend", args("<", "minecraft:oak_stairs[facing=south]",
+                                ">", "minecraft:oak_stairs[facing=north]")),
+                args("op", "layer", "x1", x, "y1", y + 6, "z1", z, "rows", List.of(
+                        "............", "............", "<<<<<<<<<<<<", "............",
+                        "............", "............", "............", ">>>>>>>>>>>>",
+                        "............", "............"),
+                        "legend", args("<", "minecraft:oak_stairs[facing=south]",
+                                ">", "minecraft:oak_stairs[facing=north]")),
+                args("op", "layer", "x1", x, "y1", y + 7, "z1", z, "rows", List.of(
+                        "............", "............", "............", "============",
+                        "============", "============", "============", "............",
+                        "............", "............"),
+                        "legend", args("=", "minecraft:oak_slab")),
+                // 细节:四角原木柱(状态跟在方块名里)、南面门洞、玻璃窗、屋内火把
+                args("op", "line", "x1", x, "y1", y + 1, "z1", z, "x2", x, "y2", y + 3, "z2", z,
+                        "block_id", "minecraft:oak_log[axis=y]"),
+                args("op", "line", "x1", x + 11, "y1", y + 1, "z1", z, "x2", x + 11, "y2", y + 3, "z2", z,
+                        "block_id", "minecraft:oak_log[axis=y]"),
+                args("op", "line", "x1", x, "y1", y + 1, "z1", z + 9, "x2", x, "y2", y + 3, "z2", z + 9,
+                        "block_id", "minecraft:oak_log[axis=y]"),
+                args("op", "line", "x1", x + 11, "y1", y + 1, "z1", z + 9,
+                        "x2", x + 11, "y2", y + 3, "z2", z + 9, "block_id", "minecraft:oak_log[axis=y]"),
+                args("op", "layer", "x1", x + 5, "y1", y + 1, "z1", z, "y2", y + 2,
+                        "rows", List.of("##"), "block_id", "minecraft:air"),
+                args("op", "set", "x", x + 2, "y", y + 2, "z", z, "block_id", "minecraft:glass_pane"),
+                args("op", "set", "x", x + 9, "y", y + 2, "z", z, "block_id", "minecraft:glass_pane"),
+                args("op", "set", "x", x + 5, "y", y + 1, "z", z + 4, "block_id", "minecraft:torch"))));
 
         helper.succeedWhen(() -> {
-            for (BuildTaskRecord.Target target : targets) {
-                helper.assertTrue(target.matches(level.getBlockState(target.pos())),
-                        "cottage cell mismatch at " + target.pos().toShortString()
-                                + " want " + target.desiredState());
-            }
-            // 可通行断言:门洞两格为空、门内落脚两格为空——守则"门是走进去的"
-            for (BlockPos rel : List.of(new BlockPos(9, 3, 5), new BlockPos(9, 4, 5),
-                    new BlockPos(9, 3, 6), new BlockPos(9, 4, 6))) {
-                helper.assertTrue(level.getBlockState(helper.absolutePos(rel)).isAir(),
-                        "doorway blocked at rel " + rel.toShortString());
+            helper.assertTrue(build.done(), "build has not finished");
+            helper.assertTrue(build.succeeded(), "the cottage was not finished: " + build.outcome());
+            helper.assertTrue(level.getBlockState(o).is(Blocks.COBBLESTONE), "no foundation");
+            helper.assertTrue(level.getBlockState(o.offset(0, 1, 0)).is(Blocks.OAK_LOG), "no corner post");
+            helper.assertTrue(level.getBlockState(o.offset(3, 1, 0)).is(Blocks.OAK_PLANKS), "no wall");
+            var eave = level.getBlockState(o.offset(3, 4, 0));
+            helper.assertTrue(eave.is(Blocks.OAK_STAIRS)
+                            && eave.getValue(net.minecraft.world.level.block.StairBlock.FACING)
+                            == net.minecraft.core.Direction.SOUTH,
+                    "the eave course is not south-facing stairs: " + eave);
+            helper.assertTrue(level.getBlockState(o.offset(3, 7, 3)).is(Blocks.OAK_SLAB), "no ridge");
+            // 可通行断言:门洞两格为空——守则"门是走进去的"
+            for (BlockPos at : List.of(o.offset(5, 1, 0), o.offset(5, 2, 0),
+                    o.offset(6, 1, 0), o.offset(6, 2, 0))) {
+                helper.assertTrue(level.getBlockState(at).isAir(),
+                        "doorway blocked at " + at.toShortString());
             }
             CompanionFactory.despawn(level.getServer(), companion);
         });
@@ -2163,7 +1947,7 @@ public class BuildGameTests {
         var ctx = TaskDispatch.ctx("gametest-blueprint", companion);
         long deadline = ctx.deadline(Math.max(2400L, loaded.targets().size() * 400L));
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(), deadline,
-                loaded.targets(), true, false), null, reply -> {});
+                loaded.targets(), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, false), null, reply -> {});
 
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target target : loaded.targets()) {
@@ -2236,7 +2020,7 @@ public class BuildGameTests {
                 level, "japanese_cottage", anchor, 0);
         var ctx = TaskDispatch.ctx("gametest-jp-cottage", companion);
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(95000L), loaded.targets(), true, false), null, reply -> {});
+                ctx.deadline(95000L), loaded.targets(), com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, false), null, reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : loaded.targets()) {
                 helper.assertTrue(t.matches(level.getBlockState(t.pos())),
@@ -2277,11 +2061,12 @@ public class BuildGameTests {
         BlockPos max = helper.absolutePos(new BlockPos(7, 3, 7));
         BlockPos door = helper.absolutePos(new BlockPos(6, 2, 7));
         ToolRun build = call(companion, "build", args("ops", List.of(
-                args("op", "walls", "block_id", "minecraft:cobblestone",
-                        "x1", min.getX(), "y1", min.getY(), "z1", min.getZ(),
-                        "x2", max.getX(), "y2", max.getY(), "z2", max.getZ()),
-                args("op", "set_door", "block_id", "minecraft:oak_door",
-                        "x", door.getX(), "y", door.getY(), "z", door.getZ(), "facing", "south"))));
+                args("op", "layer", "block_id", "minecraft:cobblestone",
+                        "x1", min.getX(), "y1", min.getY(), "z1", min.getZ(), "y2", max.getY(),
+                        "rows", List.of("###", "#.#", "###")),
+                // 门只写下半格:另一半由原版的放置回调自己补,和图纸那条入口同一条纪律
+                args("op", "set", "block_id", "minecraft:oak_door[facing=south]",
+                        "x", door.getX(), "y", door.getY(), "z", door.getZ()))));
 
         helper.succeedWhen(() -> {
             helper.assertTrue(build.done(), "build has not finished");
@@ -2347,9 +2132,9 @@ public class BuildGameTests {
         companion.getInventory().add(new ItemStack(Items.COBBLESTONE, 64));
         BlockPos min = helper.absolutePos(new BlockPos(6, 2, 6));
         BlockPos max = helper.absolutePos(new BlockPos(10, 2, 10));
-        ToolRun build = call(companion, "build", args("ops", List.of(args("op", "box",
+        ToolRun build = call(companion, "build", args("ops", List.of(args("op", "layer",
                 "block_id", "minecraft:cobblestone", "x1", min.getX(), "y1", min.getY(), "z1", min.getZ(),
-                "x2", max.getX(), "y2", max.getY(), "z2", max.getZ()))));
+                "rows", List.of("#####", "#####", "#####", "#####", "#####")))));
         java.util.function.IntSupplier placed = () -> (int) BlockPos.betweenClosedStream(min, max)
                 .filter(p -> level.getBlockState(p).is(Blocks.COBBLESTONE)).count();
         int[] atStop = new int[1];
@@ -2369,5 +2154,111 @@ public class BuildGameTests {
                 })
                 .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
                 .thenSucceed();
+    }
+
+    // ---- 通用原语:网格、复制、掩码 ----
+
+    /**
+     * 一张网格盖出一圈三层高的墙:{@code '.'} 是"这一格不管",所以屋里一格没碰;
+     * 图例里每个字符自带方块状态,所以一条指令就能把朝向不同的楼梯铺在同一课上。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void layer_repeats_a_grid_and_leaves_dots_alone(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_grid_mason", new BlockPos(2, 2, 2), true);
+        BlockPos o = helper.absolutePos(new BlockPos(6, 2, 6));
+        level.setBlockAndUpdate(o.offset(1, 0, 1), Blocks.GOLD_BLOCK.defaultBlockState());   // 屋里的记号
+        ToolRun build = call(companion, "build", args("ops", List.of(
+                args("op", "layer", "x1", o.getX(), "y1", o.getY(), "z1", o.getZ(), "y2", o.getY() + 2,
+                        "rows", List.of("###", "#.#", "###"), "block_id", "minecraft:stone_bricks"),
+                args("op", "layer", "x1", o.getX(), "y1", o.getY() + 3, "z1", o.getZ(),
+                        "rows", List.of("<<<", "...", ">>>"),
+                        "legend", args("<", "minecraft:stone_brick_stairs[facing=south]",
+                                ">", "minecraft:stone_brick_stairs[facing=north]")))));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(build.done() && build.succeeded(), "build failed: " + build.outcome());
+            for (int y = 0; y <= 2; y++) {
+                helper.assertTrue(level.getBlockState(o.offset(0, y, 0)).is(Blocks.STONE_BRICKS),
+                        "the grid did not repeat onto level " + y);
+            }
+            helper.assertTrue(level.getBlockState(o.offset(1, 0, 1)).is(Blocks.GOLD_BLOCK),
+                    "'.' must leave a cell alone, but the marker inside the ring was overwritten");
+            var north = level.getBlockState(o.offset(1, 3, 0));
+            var south = level.getBlockState(o.offset(1, 3, 2));
+            helper.assertTrue(north.is(Blocks.STONE_BRICK_STAIRS)
+                            && north.getValue(net.minecraft.world.level.block.StairBlock.FACING)
+                                    == net.minecraft.core.Direction.SOUTH
+                            && south.getValue(net.minecraft.world.level.block.StairBlock.FACING)
+                                    == net.minecraft.core.Direction.NORTH,
+                    "the legend must carry each character's own block state");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 复制一段带楼梯的墙,镜像过去:方块跟着镜像走,楼梯的朝向由原版翻,不是原样照抄。
+     * 源那一段一格不动——复制是"再盖一份",不是"搬走"。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void copy_mirrors_a_wing_and_flips_its_stairs(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_copyist", new BlockPos(2, 2, 2), true);
+        BlockPos src = helper.absolutePos(new BlockPos(5, 2, 5));
+        BlockPos dst = helper.absolutePos(new BlockPos(10, 2, 5));
+        level.setBlockAndUpdate(src, Blocks.STONE_BRICKS.defaultBlockState());
+        level.setBlockAndUpdate(src.offset(1, 0, 0), Blocks.STONE_BRICK_STAIRS.defaultBlockState()
+                .setValue(net.minecraft.world.level.block.StairBlock.FACING,
+                        net.minecraft.core.Direction.EAST));
+        ToolRun build = call(companion, "build", args("ops", List.of(
+                args("op", "copy",
+                        "x1", src.getX(), "y1", src.getY(), "z1", src.getZ(),
+                        "x2", src.getX() + 1, "y2", src.getY(), "z2", src.getZ(),
+                        "x", dst.getX(), "y", dst.getY(), "z", dst.getZ(),
+                        "mirror", "front_back"))));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(build.done() && build.succeeded(), "copy failed: " + build.outcome());
+            helper.assertTrue(level.getBlockState(src.offset(1, 0, 0))
+                            .is(Blocks.STONE_BRICK_STAIRS), "the source wing was moved instead of copied");
+            var copied = level.getBlockState(dst);
+            var other = level.getBlockState(dst.offset(1, 0, 0));
+            helper.assertTrue(copied.is(Blocks.STONE_BRICK_STAIRS) || other.is(Blocks.STONE_BRICK_STAIRS),
+                    "nothing was copied to the destination");
+            var stair = copied.is(Blocks.STONE_BRICK_STAIRS) ? copied : other;
+            helper.assertTrue(stair.getValue(net.minecraft.world.level.block.StairBlock.FACING)
+                            == net.minecraft.core.Direction.WEST,
+                    "mirroring must flip the stair, got " + stair);
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
+    }
+
+    /**
+     * 掩码分档:{@code keep} 只往空地上补,既有的墙一格不碰;{@code carve} 的空气格是
+     * "把这里挖空"的指令。两档写在同一次调用的两条指令上,各管各的。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_build")
+    public static void mask_keep_adds_without_touching_what_stands(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        NumenPlayer companion = spawnAt(helper, "gametest_masker", new BlockPos(2, 2, 2), true);
+        BlockPos o = helper.absolutePos(new BlockPos(6, 2, 10));
+        level.setBlockAndUpdate(o, Blocks.GOLD_BLOCK.defaultBlockState());          // 已经立着的
+        level.setBlockAndUpdate(o.offset(2, 0, 0), Blocks.GOLD_BLOCK.defaultBlockState());   // 要挖掉的
+        ToolRun build = call(companion, "build", args("ops", List.of(
+                args("op", "layer", "x1", o.getX(), "y1", o.getY(), "z1", o.getZ(),
+                        "rows", List.of("##"), "block_id", "minecraft:stone_bricks", "mask", "keep"),
+                args("op", "set", "x", o.getX() + 2, "y", o.getY(), "z", o.getZ(),
+                        "block_id", "minecraft:air", "mask", "carve"))));
+
+        helper.succeedWhen(() -> {
+            helper.assertTrue(build.done() && build.succeeded(), "build failed: " + build.outcome());
+            helper.assertTrue(level.getBlockState(o).is(Blocks.GOLD_BLOCK),
+                    "mask=keep must not overwrite what already stands");
+            helper.assertTrue(level.getBlockState(o.offset(1, 0, 0)).is(Blocks.STONE_BRICKS),
+                    "mask=keep must still fill the empty cell beside it");
+            helper.assertTrue(level.getBlockState(o.offset(2, 0, 0)).isAir(),
+                    "mask=carve with an air cell must dig that cell out");
+            CompanionFactory.despawn(level.getServer(), companion);
+        });
     }
 }

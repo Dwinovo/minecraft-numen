@@ -92,11 +92,11 @@ public class ModeGameTests {
         List<BuildTaskRecord.Target> targets = new ArrayList<>();
         for (BlockPos rel : boxCells(new BlockPos(8, 2, 8), 3, 1, 3, false)) {
             targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
-                    helper.absolutePos(rel), "cobblestone", null, null, null));
+                    helper.absolutePos(rel), "cobblestone"));
         }
         var ctx = TaskDispatch.ctx("gametest-cbuild", companion);
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, true, false), null, reply -> {});
+                ctx.deadline(3600L), targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, false), null, reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
@@ -116,12 +116,12 @@ public class ModeGameTests {
         List<BuildTaskRecord.Target> targets = new ArrayList<>();
         for (BlockPos rel : boxCells(new BlockPos(8, 2, 8), 3, 1, 3, false)) {
             targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
-                    helper.absolutePos(rel), "cobblestone", null, null, null));
+                    helper.absolutePos(rel), "cobblestone"));
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild-broke", companion);
         // dispatchAsync 的回调只回"已受理"收条;预检失败落在任务记录的终态上
         BuildTaskRecord record = new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, true, true);
+                ctx.deadline(3600L), targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true);
         TaskDispatch.setTask(companion, record, null, reply -> {});
         helper.succeedWhen(() -> {
             var result = record.getResult();
@@ -312,11 +312,11 @@ public class ModeGameTests {
         List<BuildTaskRecord.Target> targets = new ArrayList<>();
         for (BlockPos rel : boxCells(new BlockPos(8, 2, 8), 3, 1, 3, false)) {
             targets.add(new BuildTaskRecord.Target(Blocks.COBBLESTONE, Items.COBBLESTONE,
-                    helper.absolutePos(rel), "cobblestone", null, null, null));
+                    helper.absolutePos(rel), "cobblestone"));
         }
         var ctx = TaskDispatch.ctx("gametest-sbuild", companion);
         TaskDispatch.setTask(companion, new BuildTaskRecord(ctx.toolCallId(),
-                ctx.deadline(3600L), targets, true, true), null, reply -> {});
+                ctx.deadline(3600L), targets, com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true), null, reply -> {});
         helper.succeedWhen(() -> {
             for (BuildTaskRecord.Target t : targets) {
                 helper.assertTrue(level.getBlockState(t.pos()).is(Blocks.COBBLESTONE),
