@@ -5,6 +5,7 @@ import com.dwinovo.numen.agent.http.CancelToken;
 import com.dwinovo.numen.agent.http.HttpLlmTransport;
 import com.dwinovo.numen.agent.provider.Usage;
 import com.dwinovo.numen.agent.provider.AssistantTurn;
+import com.dwinovo.numen.agent.provider.OpenAIResponsesProvider;
 import com.dwinovo.numen.agent.provider.ProviderRegistry;
 
 import com.dwinovo.numen.agent.provider.AnthropicProvider;
@@ -186,7 +187,7 @@ public final class NumenLlmClient {
                 case ConvoState.Msg.User u -> wire.add(provider.buildUserMessage(u.content()));
                 // 上一家的私货(思考签名、reasoning_content)只有产它的那家认:换过模型就脱掉再发。
                 // 原样递过去轻则浪费,重则被 400 拒,而换绑模型是面板上一个按钮的事。
-                case ConvoState.Msg.Assistant a -> wire.add(provider.assistantToRequestMessage(
+                case ConvoState.Msg.Assistant a -> wire.addAll(provider.assistantToRequestItems(
                         a.turn().sameOrigin(origin()) ? a.turn() : a.turn().withoutProviderPrivateFields()));
                 case ConvoState.Msg.Tool t -> wire.add(provider.buildToolResultMessage(t.toolCallId(), t.content()));
                 case ConvoState.Msg.Halt h -> throw new IllegalStateException(
@@ -301,8 +302,14 @@ public final class NumenLlmClient {
         if (id.equals(DeepSeekProvider.NAME)) return new DeepSeekProvider();
         if (id.equals(MoonshotProvider.NAME)) return new MoonshotProvider();
         if (id.equals(OpenAIProvider.NAME)) return new OpenAIProvider();
+        if (id.equals(OpenAIResponsesProvider.NAME)) return new OpenAIResponsesProvider();
         if (ProviderRegistry.has(id)) {
             String baseUrl = ProviderRegistry.baseUrl(id);
+            // 线格式由站点的 protocol 决定,不按型号猜:responses 是条目流,anthropic 是块,其余走 OpenAI 兼容
+            if ("responses".equals(ProviderRegistry.protocol(id))) {
+                return new OpenAIResponsesProvider(id,
+                        baseUrl == null || baseUrl.isBlank() ? OpenAIResponsesProvider.DEFAULT_BASE_URL : baseUrl);
+            }
             if ("anthropic".equals(ProviderRegistry.protocol(id))) {
                 return new AnthropicProvider(id,
                         baseUrl == null || baseUrl.isBlank() ? AnthropicProvider.DEFAULT_BASE_URL : baseUrl,

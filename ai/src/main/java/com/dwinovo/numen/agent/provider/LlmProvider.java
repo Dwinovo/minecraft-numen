@@ -89,7 +89,7 @@ public interface LlmProvider {
      * assistant message for the next request. Must re-inject {@code extras}
      * so backends with proprietary required-echo fields stay happy.
      */
-    JsonObject assistantToRequestMessage(AssistantTurn turn);
+    List<JsonObject> assistantToRequestItems(AssistantTurn turn);
 
     /** Build the {@code tools} array from the registered {@link IToolSpec}s. */
     JsonArray buildToolList(Collection<? extends IToolSpec> tools);

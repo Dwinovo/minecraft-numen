@@ -50,7 +50,7 @@ class ReasoningStreamTest {
         AssistantTurn turn = stream(new OpenAIProvider(),
                 "{\"reasoning_content\":\"a\"}", "{\"reasoning_content\":\"b\"}");
         assertEquals("ab", turn.extras().get("reasoning_content").getAsString());
-        JsonObject wire = new OpenAIProvider().assistantToRequestMessage(turn);
+        JsonObject wire = new OpenAIProvider().assistantToRequestItems(turn).get(0);
         assertEquals("ab", wire.get("reasoning_content").getAsString());
         // 展示字段 reasoning 不是线格式的一部分,不得出现在请求消息里。
         assertFalse(wire.has("reasoning") && !turn.extras().has("reasoning"));
