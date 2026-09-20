@@ -87,6 +87,36 @@ class CompactorTest {
                 "面板上的记录只多一条分隔,之前的话一句不少");
     }
 
+    /**
+     * 第二次整理不许把上一份摘要再嚼一遍:它被单独摘出来当 <previous_summary> 给出去,
+     * 请求里不再有那条 user 消息,提示词也换成"在它之上更新"。
+     *
+     * <p>不这么做的话,上一份摘要会随"较早的部分"被重新总结,每整理一轮,早先记下的坐标
+     * 和教训就少一点,而且没人会发现。
+     */
+    @Test
+    void theSecondPassUpdatesTheLastSummaryInsteadOfChewingItAgain(@TempDir Path dir) {
+        ConvoState convo = historyOf(10);
+        Compactor c = compactor(convo, dir);
+        c.compaction(false).apply(new AssistantTurn(
+                "<summary>主人要铁;基地在 0,64,0</summary>", List.of(), null),
+                new Usage(9_000, 300, 0, 0));
+        for (int i = 0; i < 10; i++) {
+            convo.addUser("后来第" + i + "句");
+        }
+
+        List<ConvoState.Msg> request = c.compaction(false).request().messages();
+        String all = request.stream()
+                .map(m -> m instanceof ConvoState.Msg.User u ? u.content() : "")
+                .reduce("", (a, b) -> a + System.lineSeparator() + b);
+        assertTrue(all.contains("<previous_summary>"), "上一份摘要要单独给:" + all);
+        assertTrue(all.contains("基地在 0,64,0"), "旧摘要的内容必须还在");
+        assertTrue(request.stream().noneMatch(m -> m instanceof ConvoState.Msg.User u
+                        && u.content() != null && u.content().startsWith("[对话历史已压缩]")),
+                "它不该再作为一条普通消息混在待整理的历史里");
+        assertTrue(all.contains("在那份摘要之上做更新"), "提示词要换成更新那一份");
+    }
+
     @Test
     void anEmptySummaryLeavesTheHistoryAlone(@TempDir Path dir) {
         ConvoState convo = historyOf(10);

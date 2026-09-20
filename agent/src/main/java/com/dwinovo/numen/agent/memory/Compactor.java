@@ -76,6 +76,26 @@ public final class Compactor implements MemoryPort {
 
             不要调用工具，不要在两个标签之外输出任何内容。""";
 
+    /**
+     * 第二次起用的提示词:上一份摘要<b>不再当成待压缩的消息</b>,而是单独给出来,要求在它之上更新。
+     *
+     * <p>不这么做的话,上一份摘要会随着"较早的部分"被再总结一遍——每压缩一轮,三轮前记下的
+     * 坐标与教训就少一点,而且没人会发现。摘要是累积的账,只能增补与推进,不能反复转述。
+     */
+    private static final String UPDATE_PROMPT = """
+            <previous_summary> 里是此前全部对话的摘要,它之后的消息是新发生的。
+            请在那份摘要之上做更新,输出一份新的完整摘要——它将完全替代旧摘要与这些新消息。
+
+            规矩:
+            - 旧摘要里的信息一条都不许丢,尤其是坐标数字、物品数量、失败教训;
+            - 已经做完的,从"待办任务"挪到"已完成的事项";
+            - 按新消息推进"当前工作与下一步";
+            - 确实不再成立的(那处矿挖空了、那条路通了)可以改写,但要留下结论。
+
+            仍然分两步:先在 <analysis> 里核对哪些必须保留、哪些该挪位,
+            再在 <summary> 里按原来的七节结构输出正式摘要。
+            不要调用工具,不要在两个标签之外输出任何内容。""";
+
     /** Wrapper that turns the raw summary into the new history's first user message. */
     private static final String SUMMARY_HEADER =
             "[对话历史已压缩] 以下是此前全部对话的摘要，请将其作为既成事实继续工作：\n\n";
@@ -174,10 +194,28 @@ public final class Compactor implements MemoryPort {
             toSummarize = new ArrayList<>(split.toSummarize());
             kept = split.kept();
         }
-        List<ConvoState.Msg> request = new ArrayList<>(toSummarize);
-        request.add(new ConvoState.Msg.User(COMPACT_PROMPT));
-        AiLog.LOG.info("[numen-entity#{}] compaction started ({}, summarizing {} msgs, keeping {} verbatim)",
-                name, auto ? "auto" : "manual", toSummarize.size(), kept.size());
+        // 上一份摘要摘出来单独给:它是累积的账,要在它之上更新,不是再被总结一遍
+        String previous = null;
+        for (java.util.Iterator<ConvoState.Msg> it = toSummarize.iterator(); it.hasNext(); ) {
+            ConvoState.Msg msg = it.next();
+            if (msg instanceof ConvoState.Msg.User u && u.content() != null
+                    && u.content().startsWith(SUMMARY_HEADER)) {
+                previous = u.content().substring(SUMMARY_HEADER.length());
+                it.remove();
+            }
+        }
+        List<ConvoState.Msg> request = new ArrayList<>();
+        if (previous != null) {
+            request.add(new ConvoState.Msg.User("""
+                    <previous_summary>
+                    %s
+                    </previous_summary>""".formatted(previous.strip())));
+        }
+        request.addAll(toSummarize);
+        request.add(new ConvoState.Msg.User(previous == null ? COMPACT_PROMPT : UPDATE_PROMPT));
+        AiLog.LOG.info("[numen-entity#{}] compaction started ({}, {} {} msgs, keeping {} verbatim)",
+                name, auto ? "auto" : "manual", previous == null ? "summarizing" : "updating over last summary,",
+                toSummarize.size(), kept.size());
         final long startMs = System.currentTimeMillis();
         return new Compaction() {
             @Override
