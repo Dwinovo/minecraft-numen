@@ -340,4 +340,62 @@ public class MineGameTests {
                 .thenExecute(() -> CompanionFactory.despawn(helper.getLevel().getServer(), companion))
                 .thenSucceed();
     }
+
+    /**
+     * 要 12 就是 12。够挖 20 块的石头,只要 12 个。
+     *
+     * <p>用金块而不是石头:测试世界的地下本来就是石头,拿石头当目标她会挖到天然地形里去,
+     * 场地就不封闭了,数出来的也不是这条用例想量的东西。金块摆成两排、当中留出走道:
+     * 她够得着每一块,也够得着每一件掉落物,<b>不必挖穿目标才能走过去</b>——路上顺手挖开
+     * 挡道的目标本来就算进度(工具的契约如此),那是另一回事。
+     *
+     * <p>进度的口径是<b>背包里的物品</b>,而背包是个滞后指标:敲掉一块,掉落物要过一阵才进包
+     * (原版的拾取延迟是 10 tick)。只拿"已到手"判断还敲不敲下一块,她会在那段空窗里接着敲,
+     * 账面追上时已经多敲了两三块——这正是 #69。所以"还敲不敲"要算上<b>已经敲掉、还没进包的</b>,
+     * 而"完了没"仍然只看到手。这条量的就是这两件事分开了没有。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 100000, batch = "numen_mine")
+    public static void mine_stops_at_the_requested_count(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        int field = 0;
+        for (int x = 4; x <= 13; x++) {
+            for (int z : new int[]{6, 10}) {
+                level.setBlockAndUpdate(helper.absolutePos(new BlockPos(x, 2, z)),
+                        Blocks.GOLD_BLOCK.defaultBlockState());
+                field++;
+            }
+        }
+        final int stones = field;
+        NumenPlayer companion = spawnAt(helper, "gametest_counter", new BlockPos(2, 2, 8), false);
+        companion.getInventory().add(new ItemStack(Items.IRON_PICKAXE));
+        ToolRun mine = call(companion, "mine", args("block_ids", List.of("minecraft:gold_block"), "count", 12));
+
+        helper.startSequence()
+                .thenWaitUntil(() -> helper.assertTrue(mine.done(), "mine has not finished"))
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(mine.succeeded(), "mine failed: " + mine.outcome());
+                    int held = companion.getInventory().countItem(Items.GOLD_BLOCK);
+                    helper.assertTrue(held == 12, "asked for 12, came back with " + held);
+                    int left = 0;
+                    for (int x = 4; x <= 13; x++) {
+                        for (int z : new int[]{6, 10}) {
+                            if (level.getBlockState(helper.absolutePos(new BlockPos(x, 2, z)))
+                                    .is(Blocks.GOLD_BLOCK)) {
+                                left++;
+                            }
+                        }
+                    }
+                    helper.assertTrue(stones - left == 12,
+                            "asked for 12 blocks, broke " + (stones - left));
+                    long onTheGround = level.getEntitiesOfClass(
+                            net.minecraft.world.entity.item.ItemEntity.class,
+                            new net.minecraft.world.phys.AABB(helper.absolutePos(new BlockPos(8, 2, 8)))
+                                    .inflate(24.0),
+                            ie -> ie.getItem().is(Items.GOLD_BLOCK)).size();
+                    helper.assertTrue(onTheGround == 0,
+                            onTheGround + " gold blocks left lying around — she walked off without them");
+                })
+                .thenExecute(() -> CompanionFactory.despawn(level.getServer(), companion))
+                .thenSucceed();
+    }
 }
