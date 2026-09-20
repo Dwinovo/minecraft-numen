@@ -3,6 +3,13 @@
 > 2026-07-17。计划全文见 `~/.claude/plans/ok-sota-curried-catmull.md`（用户已批准）。
 > 本文件是执行侧的真实记录：改了什么、为什么、怎么验证的。
 
+> **⚠️ 本文提到的 `core/pathing/hier/`（`CellSampler` / `SectionSummary` /
+> `SectionSummarizer` / `CoarseField` / `CoarseVerdict`，即粗层 Dijkstra 与 SEALED_IN 判定）
+> 已于次日 `f91c58a8`（2026-07-18，"旧内核退役——engine/hier/movement/drive 整包删除,单内核收束"）
+> 连同旧内核一起删除，代码里不存在，也没有替代实现。** 读本文时请把 B 期那部分当历史记录，
+> 不要据此认为本仓具备分层/粗层寻路能力——已经有人照着它写错了 issue 的前提。
+> Phase A 的语义契约层（`goal/`、`GoalCompiler`、`ArrivalSpec`、sacred）仍然在用。
+
 ## Phase A：语义契约层（已完成，全测试绿）
 
 ### 改动清单
