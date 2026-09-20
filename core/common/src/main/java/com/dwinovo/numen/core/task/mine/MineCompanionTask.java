@@ -118,11 +118,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     /** 挪出这么远就算"她在动",进度计时重新起算。 */
     private static final double STALL_MOVE = 2.0;
 
-    /** How long a just-broken target's cell stays a walk-over goal (ticks) — the drop
-     *  takes a moment to spawn, and without this window the body sprints for the next
-     *  ore before the item pops and leaves it behind. */
-    private static final int DROP_LOITER_TICKS = 5;
-
     private final List<BlockPos> knownOres = new ArrayList<>();
     /**
      * 当前地形下挖不动的格子 —— <b>只有 {@code NO_SHOT} 进得来</b>:站位说够得着,却连续
@@ -161,9 +156,26 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     private int baseline;
     /** Nearby dropped items to collect (walked over for native pickup), refreshed per tick. */
     private List<BlockPos> drops = List.of();
-    /** Cells of just-broken targets, each held as a walk-over goal until the mapped
-     *  game time so the spawned drop gets picked up before moving on. */
-    private final Map<BlockPos, Long> anticipatedDrops = new HashMap<>();
+    /**
+     * 她自己敲出来、还没进包的那几件掉落物(实体 id)。
+     *
+     * <p><b>为什么认 id 而不是数附近的掉落物</b>:主人扔在旁边的、开工前就躺在那儿的、
+     * 别人挖的,物品类型全都对得上。把它们算进来会让她少挖。认 id 才框得住"我这一单造出来的"。
+     *
+     * <p><b>为什么不会重复计</b>:原版拾取是同一刻里先进背包、再 {@code discard()} 实体,
+     * 所以那一刻它从这本账消失、在背包增量里出现,两头不重叠;背包满了只捡走一半时实体还活着、
+     * {@code getCount()} 变小,账也跟着对。
+     *
+     * <p>实体没了(烧了、被主人捡了、自然消失)就自动出账,她自己再补一块——不需要超时或重试。
+     */
+    private final it.unimi.dsi.fastutil.ints.IntOpenHashSet ourDrops =
+            new it.unimi.dsi.fastutil.ints.IntOpenHashSet();
+
+    /** 已经记过账的格:每一格只在挖开它之后认一次。 */
+    private final Set<BlockPos> claimedCells = new HashSet<>();
+
+    /** 这一刻"够了,别再敲新的了"——到手加上还没进包的已经够数。见 {@link #inFlight()}。 */
+    private boolean quotaMet;
     /** 无掉落画像(创造)下的进度计数:破坏的目标方块数——背包增量在
      *  这种画像下恒为 0,数拾取物会让任务铲平半径 32 chunk 后报败。 */
     private int brokenTargets;
@@ -280,14 +292,21 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // 进度口径随画像:有掉落 = 数拾取到的物品(一块矿可能出多个);
         // 无掉落(创造) = 数破坏的目标方块——否则永远数不满。挖完点名的团为止的,数挖掉的格。
         boolean untilGone = r.count == MineBlockTaskRecord.UNTIL_GONE;
+        // 导航顺路挖开的格也是她挖的,先入账再算够没够——漏了它们,账就会一时多一时少
+        sweepNavBreaks();
         int gathered = WorkProfile.of(player).dropsLoot() && !untilGone
                 ? Math.max(0, inventoryMatch() - baseline)
                 : brokenTargets;
         r.setMined(gathered);
+        // 完工只认到手的:回执里那句 "gathered 12/12" 得是真的
         if (!untilGone && gathered >= r.count) {
             progressNote = "gathered all requested";
             return TaskState.SUCCESS;
         }
+        // 还敲不敲下一块,是另一个问题:背包是滞后指标(掉落物有 10 tick 拾取延迟),
+        // 只看到手会在那段空窗里多敲两三块。算上已经敲掉、还躺在地上的,够了就只去捡。
+        quotaMet = !untilGone && gathered + inFlight() >= r.count;
+
 
         Level level = player.level();
 
@@ -305,7 +324,11 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         // 0) Continue an in-progress dig, locked onto its target (no re-selection)
         //    until it breaks or the body no longer stands where it can work it.
         if (digTarget != null) {
-            if (level.getBlockState(digTarget).isAir() || !canWork(digTarget)) {
+            if (quotaMet) {
+                // 够数了,手上这块也不敲完:敲完就是多一块
+                digger.cancel();
+                digTarget = null;
+            } else if (level.getBlockState(digTarget).isAir() || !canWork(digTarget)) {
                 digger.cancel();
                 digTarget = null;
             } else {
@@ -321,7 +344,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         NavProfiler.end("mine.drops", tDrops);
 
         // 1) Mine any target whose stance we already stand in (no pathing).
-        BlockPos reachable = reachableTarget();
+        BlockPos reachable = quotaMet ? null : reachableTarget();
         if (reachable != null) {
             // Mine in place with the nav merely PAUSED (inputs cleared each tick), never torn down:
             // the goal, current path segment, and any in-flight search stay warm, so when this dig
@@ -346,7 +369,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
 
         // 2) Head for the ore field + nearby drops (GoalComposite), arriving when a
         //    shaft opens up; drops are collected by walking over them (native pickup).
-        if (!knownOres.isEmpty() || !drops.isEmpty()) {
+        if ((!quotaMet && !knownOres.isEmpty()) || !drops.isEmpty()) {
             TaskState stalled = stalledOut();
             if (stalled != null) {
                 return stalled;
@@ -458,12 +481,13 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  per nearby drop — one A* search heads for the closest of either. The route
      *  may chop targets en route; see {@link GoalCompiler#mineField}. */
     private GoalCompiler.Compiled oreFieldCompiled() {
-        if (knownOres.isEmpty() && drops.isEmpty()) {
+        if ((quotaMet || knownOres.isEmpty()) && drops.isEmpty()) {
             // Degenerate frame (targets vanished between ticks): stand where we are.
             return GoalCompiler.standOn(player.blockPosition());
         }
         return GoalCompiler.mineField(
-                new ArrayList<>(knownOres), this::digCost, new ArrayList<>(drops), BlockReach.of(player));
+                quotaMet ? List.of() : new ArrayList<>(knownOres),
+                this::digCost, new ArrayList<>(drops), BlockReach.of(player));
     }
 
     /** 到了之后挖它的价钱;这一刻没算过的按不许挖的价。 */
@@ -510,8 +534,6 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
      *  {@link #DROP_LOITER_TICKS} so the spawning drop isn't left behind. */
     private List<BlockPos> droppedItems() {
         Level level = player.level();
-        long now = level.getGameTime();
-        anticipatedDrops.values().removeIf(expiry -> expiry < now);
         // 搜集范围 = 服务端视距(身体周围的加载邻域),与目标扫描的事实边界同源。
         // 视距下限取原版 server.properties 的 3:PlayerList 的视距是发给客户端的同步值,
         // 只有专用/集成服启动时会配置——GameTestServer 这类开发服上它是 0,不设下限的话
@@ -523,11 +545,9 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
         for (ItemEntity ie : level.getEntitiesOfClass(ItemEntity.class, box)) {
             if (!dropItems.contains(ie.getItem().getItem())) continue;
             BlockPos p = ie.blockPosition();
-            if (nearKnownOre(p)) continue;
-            out.add(p);
-        }
-        for (BlockPos p : anticipatedDrops.keySet()) {
-            if (nearKnownOre(p)) continue;
+            // 贴着某颗已知矿的掉落物不单独设目标——挖那颗矿自然会带身体过去。够数之后
+            // 不再去挖任何矿,这条捷径就不成立了,那时每一件都得自己走过去捡。
+            if (!quotaMet && nearKnownOre(p)) continue;
             out.add(p);
         }
         return out;
@@ -613,11 +633,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 // 地形变了 —— 挡住射线的那个檐口可能正好就是这一格。旧的"挖不动"结论全部作废。
                 unworkable.clear();
                 settledAt = null;
-                if (WorkProfile.of(player).dropsLoot()) {
-                    // 无掉落画像不登记逗留格:等一个永不出现的掉落物只会来回绕路
-                    anticipatedDrops.put(pos.immutable(),
-                            player.level().getGameTime() + DROP_LOITER_TICKS);
-                }
+                claimDrops(pos);
                 clearNoShot();
             }
             case REFUSED -> {
@@ -649,6 +665,7 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
                 // 为了拉出射线挖掉的是挡在前面的那一格,不是目标:进旅程账,回执交代,它若也是要挖的格就算她挖的。
                 // 挖掉一格就是进展,一路挖开几片树叶不算卡住
                 recordBreak(digger.lastBroken());
+                claimDrops(digger.lastBroken() == null ? null : digger.lastBroken().pos());
                 noteProgress();
                 clearNoShot();
             }
@@ -664,6 +681,65 @@ public final class MineCompanionTask extends AbstractCompanionTask<MineBlockTask
     }
 
     // ---- item counting (progress = matching items held in the inventory) ----
+
+    /**
+     * 她挖开的这一格掉出来的东西记进 {@link #ourDrops}。每一格只认一次,就在挖开它之后那一刻。
+     *
+     * <p>不卡实体年龄:那一刻躺在这一格里的东西,她走过去照样会捡进包、照样会被
+     * {@link #inventoryMatch()} 数到。既然到手时算,承诺时就得一起算,两边才对得上。
+     *
+     * <p>无掉落画像(创造)下这本账永远是空的,进度改数敲掉的格数。
+     */
+    private void claimDrops(BlockPos cell) {
+        if (cell == null || !WorkProfile.of(player).dropsLoot() || !claimedCells.add(cell.immutable())) {
+            return;
+        }
+        AABB box = new AABB(cell).inflate(1.5);
+        for (ItemEntity ie : player.level().getEntitiesOfClass(ItemEntity.class, box)) {
+            if (dropItems.contains(ie.getItem().getItem())) {
+                ourDrops.add(ie.getId());
+            }
+        }
+    }
+
+    /**
+     * 把导航这条路上挖开的格也入账。
+     *
+     * <p>为了走过去而挖开的格和她照着目标敲掉的格一样,掉的东西都会进她的包。旅程账
+     * ({@code nav.ledger()} / {@link #brokeOnTheWay})是"她挖了什么"的唯一出处,所以这里问它,
+     * 而不是另设一套记录。导航拆掉时账会并进旅程账,所以 {@link #stopNav()} 之前再扫一次。
+     */
+    private void sweepNavBreaks() {
+        if (nav == null) {
+            return;
+        }
+        for (var broken : nav.ledger().breaks()) {
+            claimDrops(broken.pos());
+        }
+    }
+
+    @Override
+    protected void stopNav() {
+        sweepNavBreaks();
+        super.stopNav();
+    }
+
+    /** 已经敲出来、还没进包的件数;顺手把没了的出账。 */
+    private int inFlight() {
+        int sum = 0;
+        var it = ourDrops.iterator();
+        while (it.hasNext()) {
+            net.minecraft.world.entity.Entity e = player.level() instanceof ServerLevel sl
+                    ? sl.getEntity(it.nextInt()) : null;
+            if (!(e instanceof ItemEntity ie) || ie.isRemoved()
+                    || !dropItems.contains(ie.getItem().getItem())) {
+                it.remove();
+                continue;
+            }
+            sum += ie.getItem().getCount();
+        }
+        return sum;
+    }
 
     /** Matching items currently carried (sum of stack counts whose item the targets drop). 盔甲/副手不算采集所得。 */
     private int inventoryMatch() {
