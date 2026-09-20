@@ -130,4 +130,51 @@ public class SurvivalGameTests {
         companion.getFoodData().setFoodLevel(20);
         return companion;
     }
+
+    /**
+     * 换了一次维度之后,身体要<b>认下这次传送</b>。
+     *
+     * <p>换维度时服务端发一个带编号的传送包等客户端报数,而清"正在换维度"这个标记的<b>唯一</b>
+     * 一处就是收到回执时({@code ServerGamePacketListenerImpl.handleAcceptTeleportPacket}),
+     * 没有超时兜底。她没有客户端,回执不来,标记就恒为真,而它卡着两件事——
+     * {@code ServerPlayer.processPortalCooldown} 只在标记为假时才递减冷却(过一次传送门
+     * 冷却卡在 10,她再也进不去第二次),{@code ServerPlayer.isInvulnerableTo} 在标记为真时
+     * 恒真(她从此无敌)。回执由 {@code FakeClient} 代答。
+     */
+    @GameTest(template = "floor16", timeoutTicks = 600, batch = "numen_survival")
+    public static void a_dimension_change_is_acknowledged(GameTestHelper helper) {
+        ServerLevel level = helper.getLevel();
+        ServerLevel nether = level.getServer().getLevel(net.minecraft.world.level.Level.NETHER);
+        helper.assertTrue(nether != null, "this server has no nether to travel to");
+        // 落脚那片区块得真的在跑实体刻,否则她到了下界一刻都不 tick,冷却也就无从递减。
+        // 真实游戏里这是主人在线时她自己那块加载垫干的事(见 CompanionChunkLoader);
+        // GameTest 里没有在线的主人,所以这里直接把目的地钉住。
+        nether.setChunkForced(0, 0, true);
+        NumenPlayer companion = plainCompanion(helper, new BlockPos(6, 2, 6));
+        companion.setPortalCooldown();
+        int cooldown = companion.getPortalCooldown();
+        helper.assertTrue(cooldown > 0, "portal cooldown did not start");
+
+        helper.startSequence()
+                .thenExecute(() -> companion.changeDimension(
+                        new net.minecraft.world.level.portal.DimensionTransition(
+                                nether, new Vec3(0.5, 70.0, 0.5), Vec3.ZERO, 0.0f, 0.0f,
+                                net.minecraft.world.level.portal.DimensionTransition.DO_NOTHING)))
+                .thenIdle(25)
+                .thenWaitUntil(() -> {
+                    helper.assertTrue(!companion.isChangingDimension(),
+                            "she is still 'changing dimension' long after arriving — the portal cooldown "
+                                    + "will never tick down and she cannot be hurt");
+                    helper.assertTrue(companion.getPortalCooldown() < cooldown,
+                            "the portal cooldown is stuck at " + companion.getPortalCooldown()
+                                    + "; she can never use a portal again");
+                    helper.assertTrue(!companion.isInvulnerableTo(level.damageSources().generic()),
+                            "she is still invulnerable after the dimension change");
+                })
+                .thenExecute(() -> {
+                    CompanionFactory.despawn(level.getServer(), companion);
+                    nether.setChunkForced(0, 0, false);
+                })
+                .thenSucceed();
+    }
 }
