@@ -62,9 +62,14 @@ public final class ToolDispatcher implements ToolPort {
     private boolean advancing = false;
     private long deadlineMillis = 0;
 
-    public ToolDispatcher(UUID entityUuid, Supplier<AbstractClientPlayer> entity) {
+    /** 一个工具第一次真的被调用时叫一声——调过的工具此后常驻工具表,见 {@code EntityAgentLoop#usedTools}。 */
+    private final java.util.function.Consumer<String> onUsed;
+
+    public ToolDispatcher(UUID entityUuid, Supplier<AbstractClientPlayer> entity,
+                          java.util.function.Consumer<String> onUsed) {
         this.entityUuid = entityUuid;
         this.entity = entity;
+        this.onUsed = onUsed;
     }
 
     /** Anything outstanding (in flight or still queued)? */
@@ -181,6 +186,7 @@ public final class ToolDispatcher implements ToolPort {
                     sink.finished(call, TaskResult.fail("unknown tool: " + call.name()).toJson());
                     continue;   // nothing in flight — drain the next queued call
                 }
+                onUsed.accept(tool.name());
                 inFlight.put(call.id(), call);
                 deadlineMillis = System.currentTimeMillis() + TOOL_BACKSTOP_MILLIS;
                 sink.started(call);

@@ -109,6 +109,21 @@ public final class EntityAgentLoop {
      * kernel's {@link com.dwinovo.numen.agent.loop.ToolPort}. All the tool-execution plumbing (serial
      * queue, ship-to-server, completion, timeout) lives in there, not here.
      */
+    /**
+     * 她这一局已经调用过的工具名——此后它们的完整定义每轮都随请求发出,不再需要重新
+     * {@code find_tools}。
+     *
+     * <h2>为什么这份状态可以留在边上</h2>
+     * "展开过没有"必须从对话里推(压缩把那条 find_tools 结果总结掉,模型手里就真没有参数
+     * 定义了,副本集合会骗人)。而这里相反:名字一进这个集合,工具的完整定义就<b>回到了
+     * 每一轮的工具表里</b>——定义是随请求发出去的,压缩拿不走它,所以它不可能骗人。
+     *
+     * <p>不这么做就会绕死循环:find_tools → 调用 → 压缩吃掉那条结果 → 同一个工具被判"没展开"
+     * 而挡下 → 再 find_tools……每压缩一次重来一遍(issue #109)。pi 的做法同义:被调用过的
+     * 工具不再算 deferred。
+     */
+    private final Set<String> usedTools = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private final ToolDispatcher dispatcher;
 
 
@@ -144,7 +159,7 @@ public final class EntityAgentLoop {
         this.runtime = new RuntimeState(entityUuid);
         this.queue = new EventQueue(JsonlJournal.atFile(CompanionHome.inbox(entityUuid)));
         this.providerEntryId = CompanionHome.binding(entityUuid).providerId();
-        this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity);
+        this.dispatcher = new ToolDispatcher(entityUuid, this::resolveEntity, usedTools::add);
         this.presenter = new TurnPresenter(entityUuid, this::status, this::personaName);
         this.tokens = new TokenLedger(entityUuid);
         this.model = new Model();
@@ -672,12 +687,11 @@ public final class EntityAgentLoop {
         @Override
         public ModelRequest turnRequest() {
             List<ConvoState.Msg> messages = AgentRequestContext.attach(convo.snapshot(), runtime.xml());
-            // 只发常驻工具:其余的在系统提示的 <deferred_tools> 目录里留一行摘要,
-            // 模型调 find_tools 才取回完整定义(见 ToolDisclosure)。
-            List<NumenTool> tools = ToolRegistry.resident();
-            Set<String> callable = new LinkedHashSet<>();
-            for (NumenTool t : tools) callable.add(t.name());
-            callable.addAll(com.dwinovo.numen.agent.tool.ToolDisclosure.expandedIn(messages));
+            // 常驻工具 + 她这一局用过的那些:其余的在系统提示的 <deferred_tools> 目录里
+            // 留一行摘要,模型调 find_tools 才取回完整定义(见 ToolDisclosure)。
+            List<NumenTool> tools = com.dwinovo.numen.agent.tool.ToolDisclosure.sendable(
+                    ToolRegistry.resident(), ToolRegistry.deferred(), usedTools);
+            Set<String> callable = com.dwinovo.numen.agent.tool.ToolDisclosure.callable(tools, messages);
             return new ModelRequest(messages, tools, SystemPromptComposer.compose(personaText()), callable);
         }
 

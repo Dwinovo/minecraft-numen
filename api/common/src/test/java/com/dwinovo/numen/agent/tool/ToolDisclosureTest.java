@@ -151,4 +151,38 @@ class ToolDisclosureTest {
         assertTrue(msg.contains("craft"), msg);
         assertTrue(msg.contains("find_tools"), msg);
     }
+    // ---- 这一轮发哪些工具:常驻 + 用过的 ----
+
+    @Test
+    void aToolStaysSendableOnceSheHasUsedIt() {
+        List<Spec> resident = List.of(new Spec("find_tools", "Find tools."));
+        List<Spec> deferred = List.of(new Spec("craft", "Craft an item."),
+                new Spec("fish", "Go fishing."));
+
+        assertEquals(List.of("find_tools"),
+                ToolDisclosure.sendable(resident, deferred, Set.of()).stream().map(Spec::name).toList());
+        assertEquals(List.of("find_tools", "craft"),
+                ToolDisclosure.sendable(resident, deferred, Set.of("craft")).stream().map(Spec::name).toList());
+    }
+
+    /**
+     * 压缩把那条 find_tools 结果总结掉之后,她调过的工具照样能调——定义在工具表里,
+     * 不在对话里。这条守的就是 #109 那个死循环:挡下来的话她只能再搜一次,每压缩一次重来一遍。
+     */
+    @Test
+    void compactionCannotTakeBackAToolSheAlreadyUsed() {
+        List<Spec> resident = List.of(new Spec("find_tools", "Find tools."));
+        List<Spec> deferred = List.of(new Spec("craft", "Craft an item."));
+
+        // 对话里已经没有任何展开块了(压缩过)
+        List<ConvoState.Msg> compacted = List.of(toolMsg("{\"success\":true}"));
+
+        List<Spec> sent = ToolDisclosure.sendable(resident, deferred, Set.of("craft"));
+        assertTrue(ToolDisclosure.callable(sent, compacted).contains("craft"));
+
+        // 没用过的那一个仍然要先搜
+        assertFalse(ToolDisclosure.callable(
+                ToolDisclosure.sendable(resident, deferred, Set.of()), compacted).contains("craft"));
+    }
+
 }

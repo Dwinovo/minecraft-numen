@@ -62,6 +62,43 @@ public final class ToolDisclosure {
     }
 
     /**
+     * 这一轮该把哪些工具的完整定义发出去:<b>常驻的,加上她这一局已经调用过的</b>。
+     *
+     * <h2>为什么"用过就一直带上"</h2>
+     * "展开过没有"只能从对话里推——压缩把那条 {@code find_tools} 结果总结掉,模型手里就
+     * 真的没有参数定义了。但"用过没有"相反:名字一旦进来,这个工具的定义<b>每轮都随请求
+     * 发出</b>,压缩拿不走它,所以它不会骗人。
+     *
+     * <p>少了这一条会绕死循环:find_tools → 调用 → 压缩吃掉那条结果 → 同一个工具被判
+     * "没展开"而挡下 → 再 find_tools……每压缩一次重来一遍。
+     */
+    public static <T extends IToolSpec> List<T> sendable(List<T> resident, List<T> deferred,
+                                                         Set<String> used) {
+        List<T> out = new ArrayList<>(resident);
+        for (T t : deferred) {
+            if (used.contains(t.name())) {
+                out.add(t);
+            }
+        }
+        return out;
+    }
+
+    /**
+     * 这一批允许调用的工具名:定义发出去了的,加上对话里还留着展开块的。
+     *
+     * @param conversation 本次请求实际发出去的消息——闸按<b>模型看见了什么</b>判
+     */
+    public static Set<String> callable(Collection<? extends IToolSpec> sent,
+                                       Collection<ConvoState.Msg> conversation) {
+        Set<String> out = new LinkedHashSet<>();
+        for (IToolSpec t : sent) {
+            out.add(t.name());
+        }
+        out.addAll(expandedIn(conversation));
+        return out;
+    }
+
+    /**
      * 从对话记录里推导已展开的工具名。扫 {@code role=tool} 的消息内容,认首行标记。
      *
      * @param conversation 本次请求实际发出去的消息(不是当下的对话)——闸该按
