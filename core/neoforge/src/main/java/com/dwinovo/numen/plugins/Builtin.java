@@ -34,6 +34,8 @@ public final class Builtin {
         gate.open("yes_steve_model", "ysm", skills -> () -> YsmOnNeoForge.install(skills));
         gate.open("touhou_little_maid", "tlm",
                 skills -> () -> com.dwinovo.numen.plugins.tlm.NumenTlm.install(modBus, skills));
+        gate.open("kaleidoscope_cookery", "kaleidoscope",
+                skills -> () -> com.dwinovo.numen.plugins.kaleidoscope.NumenKaleidoscope.install(skills));
     }
 
     /** YSM 联动只写原版;它要的加载器专属的两件事,NeoForge 的答案在这里。 */

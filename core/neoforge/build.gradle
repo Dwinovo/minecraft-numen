@@ -19,6 +19,7 @@ dependencies {
     // (它们不发布——没人需要依赖我们的联动代码)。
     compileOnly project(':plugins:ysm')
     compileOnly project(':plugins:tlm')
+    compileOnly project(':plugins:kaleidoscope')
     // Bundle it into core's jar (Jar-in-Jar) so players install one file and get both mods.
     jarJar(project(':api:neoforge'))
 }
@@ -92,4 +93,5 @@ sourceSets.configureEach {
 tasks.named('jar', Jar) {
     from({ project(':plugins:ysm').sourceSets.main.output })
     from({ project(':plugins:tlm').sourceSets.main.output })
+    from({ project(':plugins:kaleidoscope').sourceSets.main.output })
 }
