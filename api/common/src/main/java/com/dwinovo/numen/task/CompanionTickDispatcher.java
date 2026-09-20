@@ -83,6 +83,10 @@ public final class CompanionTickDispatcher {
         TimerRegistry.tick(server);        // 她自己定的表,到点发事件
         for (ServerPlayer p : server.getPlayerList().getPlayers()) {
             if (p instanceof NumenPlayer ap) {
+                // 她没有客户端,服务端等的那几个回执由假客户端代答。和下面的加载垫同一个理由
+                // 挂在这儿:实体 tick 只在她所在区块已经进入实体刻时才跑,而换维度刚落地的
+                // 那片区块还没进,回执与区块会互相等。真客户端答话不看服务端在不在 tick 她。
+                ap.fakeClient().answer();
                 // Re-stamp the companion's loading pad from the SERVER tick (this runs every tick over
                 // the player list, unconditionally) — NOT from NumenPlayer.tick(), which the entity
                 // system only calls while the companion's chunk is already entity-ticking. Doing it here

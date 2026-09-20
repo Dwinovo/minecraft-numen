@@ -1,9 +1,11 @@
 package com.dwinovo.numen.mixin;
 
 import com.dwinovo.numen.entity.FakeConnection;
+import com.dwinovo.numen.entity.NumenPlayer;
 import net.minecraft.network.Connection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.network.ServerCommonPacketListenerImpl;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -13,7 +15,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Drop every outbound packet aimed at a companion {@link FakeConnection}, at the
- * <em>packet-listener</em> level — one layer above {@link FakeConnection#send}.
+ * <em>packet-listener</em> level — one layer above {@link FakeConnection#send} — after
+ * offering it to the body's {@link com.dwinovo.numen.entity.FakeClient}, which answers the
+ * handshakes the server would otherwise wait on forever.
  *
  * <h2>Why this is needed on top of {@code FakeConnection.send} being a no-op</h2>
  * NeoForge inserts its custom-payload channel validation
@@ -47,8 +51,15 @@ public abstract class MixinServerCommonPacketListener {
 
     @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;)V", at = @At("HEAD"), cancellable = true)
     private void numen$dropOutboundForFakeConnection(Packet<?> packet, CallbackInfo ci) {
-        if (this.connection instanceof FakeConnection) {
-            ci.cancel();
+        if (!(this.connection instanceof FakeConnection)) {
+            return;
         }
+        // 丢之前先给"客户端"看一眼:原版有几处是发完就等对面回话的(传送编号),
+        // 回执不来那边就永远悬着。这里是玩家连接唯一的下行出口,所以也是唯一该问这句话的地方。
+        if ((Object) this instanceof ServerGamePacketListenerImpl game
+                && game.getPlayer() instanceof NumenPlayer companion) {
+            companion.fakeClient().onOutbound(packet);
+        }
+        ci.cancel();
     }
 }

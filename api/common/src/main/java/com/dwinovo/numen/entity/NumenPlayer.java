@@ -43,6 +43,9 @@ public final class NumenPlayer extends ServerPlayer {
     /** Latched once we've handled this body's death, so the post-death routine runs exactly once. */
     private boolean deathHandled;
 
+    /** 她没有客户端,服务端等的那几个回执由它代答。见 {@link FakeClient}。 */
+    private final FakeClient fakeClient = new FakeClient(this);
+
     /**
      * 死因,在 {@link #die} 里趁早抄下来。
      *
@@ -342,6 +345,12 @@ public final class NumenPlayer extends ServerPlayer {
     /** 上一次的死因(原版死亡消息原文);还没死过则 null。 */
     public String deathMessage() {
         return deathMessage;
+    }
+
+    /** 代她答话的那一半(她没有客户端);下行包由 {@code MixinServerCommonPacketListener} 交到这里。 */
+    @com.dwinovo.numen.api.Internal
+    public FakeClient fakeClient() {
+        return fakeClient;
     }
 
     @Override
