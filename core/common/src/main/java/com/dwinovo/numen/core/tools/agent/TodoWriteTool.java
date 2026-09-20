@@ -23,12 +23,6 @@ public final class TodoWriteTool implements NumenTool {
         return "todowrite";
     }
 
-    /** 常驻:规划入口,长任务里每轮都在改。 */
-    @Override
-    public Residency residency() {
-        return Residency.RESIDENT;
-    }
-
     @Override
     public String description() {
         return """

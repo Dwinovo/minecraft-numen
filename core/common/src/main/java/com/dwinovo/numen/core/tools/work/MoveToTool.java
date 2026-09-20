@@ -26,12 +26,6 @@ public final class MoveToTool implements NumenTool {
         return "goto";
     }
 
-    /** 常驻:移动是几乎每个任务的第一步。 */
-    @Override
-    public Residency residency() {
-        return Residency.RESIDENT;
-    }
-
     @Override
     public String description() {
         return """
@@ -46,7 +40,6 @@ public final class MoveToTool implements NumenTool {
                 VEHICLES: start a goto while sitting in a boat (see <riding>) and she pilots it over the water toward the target — a destination on the water keeps her aboard, a destination ashore has her step off at the shore and finish on foot. Any other vehicle is stepped off the moment walking begins. Boarding is interact_entity right on the boat.
                 BACKGROUND: a successful call means movement is already running. Do not call goto again or launch another body action while <current_task> exists; wait for matching task_finished. status=done means that destination is complete, so advance the plan and never resend identical coordinates. Only status=timeout permits the same call to resume.""";
     }
-
 
     @Override
     public Map<String, Object> parameterSchema() {

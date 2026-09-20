@@ -22,12 +22,6 @@ public final class LoadSkillTool implements NumenTool {
         return "load_skill";
     }
 
-    /** 常驻:技能入口,它本身就是渐进披露的另一半。 */
-    @Override
-    public Residency residency() {
-        return Residency.RESIDENT;
-    }
-
     @Override
     public String description() {
         return """

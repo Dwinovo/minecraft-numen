@@ -22,15 +22,20 @@ import java.util.function.Consumer;
 public interface NumenTool extends IToolSpec {
 
     /**
-     * 工具在请求里的<b>驻留方式</b>。判据是"每轮都用不用",不是"重不重要":
-     * 动作动词({@code mine}/{@code build}/{@code craft})是一次性派发,派完靠
-     * {@code task_status} 轮询,调用频次其实很低;真正每轮都要的是感知与轮询。
+     * 工具在请求里的<b>驻留方式</b>。判据是<b>这批工具有没有边</b>:装在这个模组里的
+     * (含联动插件带的)是有界的、一眼能数完,每轮全发;从外面借来的(接上 MCP server 的
+     * 那批)无界、描述长度不可控,只在目录里留一行摘要。
      *
-     * <p>缺省 {@link Residency#DEFERRED} —— 新工具默认不占每轮的位置,要常驻得自己
-     * 表态。反过来(默认常驻)的话,忘了表态的工具会悄悄挤进每一轮请求。
+     * <p>缺省 {@link Residency#RESIDENT}。<b>不是为了省 token</b>:工具表落在请求的
+     * 前缀里,服务商的前缀缓存一命中,它基本不花钱;真正按轮次涨的是越来越长的对话。
+     * 延迟真正要换的是<b>前缀的稳定</b>——中途往工具表里塞东西会把缓存打穿,所以
+     * 借来的工具先待在目录与对话里,等她真用上了再进工具表(见 {@link ToolDisclosure})。
+     *
+     * <p>默认延迟的代价大得多:她想干的大多数事都得先搜一次,而压缩每吃掉一次搜索结果
+     * 就要重搜一遍(issue #109)。
      */
     default Residency residency() {
-        return Residency.DEFERRED;
+        return Residency.RESIDENT;
     }
 
     /** 见 {@link #residency()}。 */

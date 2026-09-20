@@ -31,12 +31,6 @@ public final class TaskStopTool implements NumenTool {
         return "task_stop";
     }
 
-    /** 常驻:叫停要随时按得下,不能先去取定义。 */
-    @Override
-    public Residency residency() {
-        return Residency.RESIDENT;
-    }
-
     @Override
     public String description() {
         return "Cancel something you dispatched. With no id: aborts the background task (the one "

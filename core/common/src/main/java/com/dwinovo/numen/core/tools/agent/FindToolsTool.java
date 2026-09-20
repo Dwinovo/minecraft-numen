@@ -42,12 +42,6 @@ public final class FindToolsTool implements NumenTool {
         return "find_tools";
     }
 
-    /** 常驻:它是取回其他工具的唯一入口,自己不能也躲在目录里。 */
-    @Override
-    public Residency residency() {
-        return Residency.RESIDENT;
-    }
-
     @Override
     public String description() {
         return """

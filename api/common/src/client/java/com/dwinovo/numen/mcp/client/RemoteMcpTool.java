@@ -49,6 +49,15 @@ public final class RemoteMcpTool implements NumenTool {
         this.callTimeoutMs = callTimeoutMs;
     }
 
+    /**
+     * 借来的工具一律延迟:接几个 server、每个带多少工具、描述多长,都不在我们手里。
+     * 目录里留一行摘要,她要用时 {@code find_tools} 取回完整定义;用过一次之后就一直带上。
+     */
+    @Override
+    public Residency residency() {
+        return Residency.DEFERRED;
+    }
+
     @Override
     public String name() {
         return qualifiedName;

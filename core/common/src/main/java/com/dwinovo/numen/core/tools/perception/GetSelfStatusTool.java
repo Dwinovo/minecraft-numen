@@ -30,12 +30,6 @@ public final class GetSelfStatusTool implements NumenTool {
         return "get_self_status";
     }
 
-    /** 常驻:每轮都可能要看自己的状态。 */
-    @Override
-    public Residency residency() {
-        return Residency.RESIDENT;
-    }
-
     @Override
     public String description() {
         // 本能名册不在这里:它在系统提示的 <instincts> 里,每次请求都在,不必再随这条描述发一遍。
