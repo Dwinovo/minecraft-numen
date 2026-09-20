@@ -136,6 +136,7 @@ tasks.register('apiJar', Jar) {
     include 'com/dwinovo/numen/agent/tool/api/**'  // per-call tool context
     include 'com/dwinovo/numen/agent/tool/**'      // tool contract + registration + Schema/ToolArgs
     include 'com/dwinovo/numen/task/**'            // task contract + the registration points a pack drives
+    include 'com/dwinovo/numen/permission/**'      // 唯一判定"身体可不可以动世界"的地方 —— 插件自己的任务同样得过它
     include 'com/dwinovo/numen/entity/NumenPlayer*.class'   // the body a tool acts on
     include 'com/dwinovo/numen/entity/InputDriver*.class'   // ...and its input surface (look/press keys)
     include 'com/dwinovo/numen/entity/package-info.class'

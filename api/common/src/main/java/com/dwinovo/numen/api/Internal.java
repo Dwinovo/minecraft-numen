@@ -17,7 +17,8 @@ import java.lang.annotation.Target;
  * declares them so — the {@code @NumenAction} authoring surface
  * ({@code com.dwinovo.numen.agent.tool.api}), the tool contract / registration
  * ({@code com.dwinovo.numen.agent.tool}), the world-action task contract
- * ({@code com.dwinovo.numen.task}), and {@code NumenPlayer} in
+ * ({@code com.dwinovo.numen.task}), the permission layer
+ * ({@code com.dwinovo.numen.permission}), and {@code NumenPlayer} in
  * {@code com.dwinovo.numen.entity}. Anything outside those packages — or marked
  * with this annotation inside them — is internal.
  */
