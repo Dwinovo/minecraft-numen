@@ -21,7 +21,11 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.Container;
+import net.minecraft.world.inventory.ResultContainer;
 import net.minecraft.world.item.crafting.RecipeHolder;
+
+import com.dwinovo.numen.core.mixin.CraftingMenuAccessor;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.level.block.CraftingTableBlock;
@@ -59,7 +63,8 @@ public final class CraftOps {
     private static final int MAX_ROUNDS = 16;
 
     /** A crafting recipe candidate with its (input-independent) output count. */
-    private record Cand(CraftingRecipe recipe, int outCount) {}
+    /** @param holder 配方本体的持有者——铺完格子交还给菜单当 hint,省掉全表线性扫。 */
+    private record Cand(RecipeHolder<CraftingRecipe> holder, CraftingRecipe recipe, int outCount) {}
 
     /** One grid cell to fill: row-major position in the target grid + what goes there. */
     private record Placement(int gridPos, Ingredient ing) {}
@@ -245,6 +250,10 @@ public final class CraftOps {
                 }
                 sim.merge(pick, -batch, Integer::sum);
             }
+            // 摆完就自己要一次重算,不等 slotsChanged。那是个可被覆写的触发器:把重算推迟到
+            // 之后 server tick 的模组覆写的正是它,于是这一刻读到的结果槽还是空的(#110)。
+            // 结果槽只有原版那一趟写,这里直接要它算,对原版和那类模组都成立。
+            recompute(menu, grid, self, chosen.holder());
             if (!laidOut) {
                 sweepGrid(menu, self, grid);
                 stopped = "couldn't lay out the grid (materials changed mid-craft?)";
@@ -252,7 +261,7 @@ public final class CraftOps {
             }
             if (menu.slots.get(grid.result()).getItem().isEmpty()) {
                 sweepGrid(menu, self, grid);
-                stopped = "the laid-out grid doesn't form this recipe (unexpected — mod interference?)";
+                stopped = "the laid-out grid doesn't form this recipe";
                 break;
             }
             int have0 = PlayerInv.count(self.getInventory(), target);
@@ -302,6 +311,23 @@ public final class CraftOps {
         return TaskResult.ok(msg.toString(), Map.of("crafted", crafted, "carrying", carrying)).toJson();
     }
 
+    /**
+     * 按当前格局重算结果槽。容器从菜单自己的槽位上取({@code Slot.container}),所以
+     * 工作台和她自己的 2×2 走同一条;拿不到原版那两种容器的(模组自定义合成台)就不动,
+     * 行为与从前一致。
+     */
+    private static void recompute(AbstractContainerMenu menu, Grid grid, NumenPlayer self,
+                                  RecipeHolder<CraftingRecipe> hint) {
+        if (!(self.level() instanceof ServerLevel level)) {
+            return;
+        }
+        Container cells = menu.slots.get(grid.cells()[0]).container;
+        Container out = menu.slots.get(grid.result()).container;
+        if (cells instanceof CraftingContainer craft && out instanceof ResultContainer result) {
+            CraftingMenuAccessor.numen$recompute(menu, level, self, craft, result, hint);
+        }
+    }
+
     private static TreeSet<Item> union(Map<Item, Integer> a, Map<Item, Integer> b) {
         TreeSet<Item> keys = new TreeSet<>((x, y) -> BuiltInRegistries.ITEM.getKey(x).compareTo(
                 BuiltInRegistries.ITEM.getKey(y)));
@@ -333,7 +359,7 @@ public final class CraftOps {
                 if (ingredientsOf(cr).isEmpty()) {
                     continue;   // 没有实际输入的配方摆不进格子
                 }
-                out.add(new Cand(cr, result.getCount()));
+                out.add(new Cand(holder, cr, result.getCount()));
             } catch (RuntimeException broken) {
                 // 坏一条丢一条,记下 id 方便去上游反馈;绝不让它杀掉整个调用
                 com.dwinovo.numen.core.Constants.LOG.debug(
