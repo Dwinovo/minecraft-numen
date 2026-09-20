@@ -1,13 +1,13 @@
 package com.dwinovo.numen.core.build;
 
-import com.dwinovo.numen.agent.tool.ToolArgs;
-
+import net.minecraft.commands.arguments.blocks.BlockStateParser;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -22,14 +22,24 @@ import java.util.List;
  * <p>写法:{@code "stone_bricks*8, mossy_stone_bricks, cracked_stone_bricks"}。
  * 省略权重即为 1;只写一种就是单方块。
  *
+ * <p>每一项都可以带方块状态,语法与原版 {@code /setblock} 一字不差:
+ * {@code "oak_stairs[facing=east,half=top]"}。状态由原版的
+ * {@link BlockStateParser} 解析——朝向、上下半、台阶三态、栅栏连接全都是它的事,
+ * 我们不另立一套键名。所以"文本 → 方块状态"全仓只有这一处。
+ *
  * <p>取样按<b>位置哈希</b>,不用随机数发生器:同一格永远取到同一个方块。于是
  * 预览与施工一致、重跑一致、断点续建也一致——这三件事任缺其一,玩家看到的房子
  * 就会和确认过的那张不是同一栋。
  */
 public final class BuildPalette {
 
-    /** 单项:方块 + 对应物品 + 权重。 */
-    public record Entry(Block block, Item item, String label, int weight) {}
+    /** 单项:方块状态 + 记账用的物品 + 权重。 */
+    public record Entry(BlockState state, Item item, String label, int weight) {
+
+        public Block block() {
+            return state.getBlock();
+        }
+    }
 
     private final List<Entry> entries;
     private final int totalWeight;
@@ -53,7 +63,7 @@ public final class BuildPalette {
             throw new IllegalArgumentException("block_id must not be empty");
         }
         List<Entry> entries = new ArrayList<>();
-        for (String part : spec.split(",")) {
+        for (String part : splitItems(spec)) {
             String token = part.trim();
             if (token.isEmpty()) {
                 continue;
@@ -82,6 +92,29 @@ public final class BuildPalette {
     }
 
     /**
+     * 按逗号切出每一项,<b>方括号里的逗号不算分隔符</b>——方块状态本来就写成
+     * {@code oak_stairs[facing=east,half=top]},一刀切下去会把它从中间劈开。
+     */
+    private static List<String> splitItems(String spec) {
+        List<String> out = new ArrayList<>();
+        int depth = 0;
+        int start = 0;
+        for (int i = 0; i < spec.length(); i++) {
+            char c = spec.charAt(i);
+            if (c == '[') {
+                depth++;
+            } else if (c == ']') {
+                depth = Math.max(0, depth - 1);
+            } else if (c == ',' && depth == 0) {
+                out.add(spec.substring(start, i));
+                start = i + 1;
+            }
+        }
+        out.add(spec.substring(start));
+        return out;
+    }
+
+    /**
      * 把一个 block_id 解析成方块 + 计费用的物品。<b>按方块注册表查,不按物品。</b>
      *
      * <p>此前这里走 {@code ToolArgs.parseItem}——那是背包工具的入口,它把 AIR 当
@@ -98,22 +131,19 @@ public final class BuildPalette {
      */
     public static Entry resolve(String id, int weight) {
         String trimmed = id.trim();
-        if (trimmed.indexOf('[') >= 0) {
-            throw new IllegalArgumentException(trimmed
-                    + " — block_id takes a plain block id; put the state in `properties`"
-                    + " (e.g. block_id \"spruce_stairs\" with properties {facing: south})");
+        BlockState state;
+        try {
+            state = BlockStateParser.parseForBlock(
+                    net.minecraft.core.registries.BuiltInRegistries.BLOCK.asLookup(),
+                    trimmed, false).blockState();
+        } catch (com.mojang.brigadier.exceptions.CommandSyntaxException bad) {
+            // 原版解析器的话已经足够具体("Unknown block type"、"does not have property"),
+            // 原样转述给模型,不再翻译一遍
+            throw new IllegalArgumentException(trimmed + " — " + bad.getMessage());
         }
-        var rl = net.minecraft.resources.ResourceLocation.tryParse(trimmed);
-        if (rl == null) {
-            throw new IllegalArgumentException("not a valid block id: " + trimmed);
-        }
-        if (!net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(rl)) {
-            throw new IllegalArgumentException("unknown block: " + trimmed);
-        }
-        Block block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(rl);
+        Block block = state.getBlock();
         // 能不能建走同一个判据(图纸入口那边拿它当跳过条件,这边拿它当拒绝理由)
-        String no = com.dwinovo.numen.core.build.BuildStates
-                .unbuildableReason(block.defaultBlockState());
+        String no = com.dwinovo.numen.core.build.BuildStates.unbuildableReason(state);
         if (no != null) {
             throw new IllegalArgumentException(trimmed + " — " + no);
         }
@@ -121,8 +151,9 @@ public final class BuildPalette {
         if (item == Items.AIR && block != Blocks.AIR) {
             throw new IllegalArgumentException(trimmed + " is not a placeable block");
         }
-        String label = trimmed.contains(":") ? trimmed.split(":", 2)[1] : trimmed;
-        return new Entry(block, item, label, weight);
+        String name = trimmed.contains("[") ? trimmed.substring(0, trimmed.indexOf('[')).trim() : trimmed;
+        String label = name.contains(":") ? name.split(":", 2)[1] : name;
+        return new Entry(state, item, label, weight);
     }
 
     /** 只有一种方块吗——单色时可以跳过逐格取样。 */
@@ -156,10 +187,8 @@ public final class BuildPalette {
     }
 
     /**
-     * 建造域共用的确定性位置哈希(murmur 尾混合)。调色板选料与 scatter
-     * 撒点都以"确定性"为卖点(预览与施工一致、重跑一致、断点续建一致),
-     * 此前两处共享魔数却各写一套混合步骤——将来一处改了另一处没改,
-     * 表现就是预览和成品不一致。混合器只此一份。
+     * 确定性位置哈希(murmur 尾混合)。取料要的是"看起来自然",不是"每次都不同"——
+     * 每次都不同意味着预览与施工、重跑、断点续建三处各盖出一栋房子。
      */
     public static long positionHash(int x, int y, int z) {
         long h = x * 341873128712L

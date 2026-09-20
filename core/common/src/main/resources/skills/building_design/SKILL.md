@@ -21,8 +21,8 @@ finished build looks wrong.
    ground level (costs materials in survival like any build). Stilt houses are a
    valid choice too — just make it a choice, not an accident.
 3. Build big-to-small in ONE build call where possible: a single ordered `ops`
-   stream — volumes first, stateful details (`set`, `set_door`) last; later ops
-   overwrite earlier cells.
+   stream — `layer` grids first, single `set` details last; later ops overwrite
+   earlier cells.
 4. After task_finished, LOOK at the result, run the checklist below, patch gaps
    with a small follow-up build call.
 
@@ -35,14 +35,18 @@ Interior walls at least 3 tall so rooms don't feel cramped.
 
 ## THE SINGLE-FLOOR RULE (most common mistake)
 
-A building has EXACTLY ONE floor slab. Pick one of:
-- a 1-thick `box` foundation, then `walls` on top of it; or
-- a hollow `box` whose bottom face IS the floor (then do NOT add a foundation).
+A building has EXACTLY ONE floor slab: one solid `layer` at the floor level, and
+the wall ring stacked on top of it.
 
-NEVER stack a foundation box under a hollow box — the hollow box's bottom face
-adds a second floor, the doorway ends up half-buried, and the door jams against
-the raised interior. Use the `walls` shape (vertical perimeter only, no top or
-bottom face) for wall rings; reserve hollow `box` for fully sealed shells.
+```
+floor   x1,y1,z1 rows all '#'          <- this IS the interior floor
+walls   x1,y1+1,z1  y2=y1+3  rows '#' on the perimeter, '.' inside
+```
+
+NEVER put a second solid grid under the walls or over the floor — the doorway
+ends up half-buried and the door jams against the raised interior. The wall grid
+has '.' everywhere inside: `.` means "leave this cell alone", which is what you
+want for a room.
 
 ## Door & floor alignment
 
@@ -54,19 +58,48 @@ bottom face) for wall rings; reserve hollow `box` for fully sealed shells.
 - walk the doorway in your head: outside ground -> (step?) -> door lower cell
   -> interior floor. Any solid block in that line means the door is jammed.
 
+## The primitives
+
+Six ops, all geometry, no style. What you build with them is yours.
+
+- `layer` — a character grid with a `legend`, stamped at one level, or repeated
+  from `y1` to `y2`. The first row sits at `z1` and runs +x, so the grid reads
+  like a map: north at the top, east to the right. `' '` and `'.'` leave a cell
+  alone. One grid is a floor, a wall ring, an L-shaped footprint, a course of
+  roof tiles, a window pattern, scattered flowers. **This is the op you will use
+  for almost everything.**
+- `set` — one cell, when a grid would be overkill.
+- `line` — two points, diagonals included: beams, posts, ridges, hip lines.
+- `cylinder` / `sphere` — round geometry, `hollow` for a shell. A dome is the
+  top half of a hollow sphere.
+- `copy` — take a region you already built and stamp it elsewhere, with
+  `rotation` and `mirror`. Build one wing, mirror it. Build one window bay,
+  repeat it down the wall. Cheaper than writing it twice, and the two halves
+  actually match.
+
+Block states ride along with the block name, exactly as in `/setblock`:
+`oak_stairs[facing=north,half=top]`, `oak_slab[type=double]`, `oak_log[axis=x]`,
+`trapdoor[open=true,facing=north]`. A door, bed or tall flower is placed from its
+LOWER half alone — the other half appears with it.
+
+`mask` decides what happens where something already stands: `carve` (default)
+builds through anything and an `air` cell digs that cell out; `overwrite` leaves
+air cells alone; `solid` only overwrites with full blocks; `keep` only builds
+into air and grass. Adding to a building someone else made? `keep`.
+
 ## Composition order (matches the bottom-up layered builder)
 
-1. foundation slab (`box`, 1 thick — this IS the interior floor)
-2. `walls` perimeter on top of it
-3. `roof` over the wall rect — see the roof section below. For a dome use the
-   top half of a hollow `sphere` instead.
-4. openings: `set` air cells for windows (1-2 above floor); `set_door` cuts and
-   fits the whole door in one op
+1. foundation: one solid `layer`, 1 thick — this IS the interior floor
+2. wall ring: one `layer` repeated from floor+1 to floor+3
+3. roof — see the roof section below. For a dome use the top half of a hollow
+   `sphere` instead.
+4. openings: a `layer` of `air` for the doorway (two cells tall) and windows
+   1-2 above the floor; the door itself is one `set` of its lower half
 5. **interior fittings** — see the Interiors section. This is not a garnish: on
    an inhabited floor it is 35-50% of the cells, so plan the room purposes and
    the wall lines before you start writing ops, not after.
-6. exterior details: `set` stairs facing the right way, glass panes, lanterns;
-   `scatter` for flowers and grass around the yard
+6. exterior details: stairs facing the right way, glass panes, lanterns, and a
+   sparse `layer` of flowers and grass around the yard
 
 **Two passes.** She lays everything that stands on its own first, one layer at a
 time from the ground up, and then walks the building again to fit the things that
@@ -84,68 +117,116 @@ it.
 
 ## Roofs (the part most builds get wrong)
 
-Give `roof` a **slab** block as `block_id` — `stone_brick_slab`,
-`deepslate_tile_slab`, `spruce_slab`, `waxed_oxidized_cut_copper_slab`. Slabs are
-what a good roof is actually made of, because a slab has three states and the
-generator uses all three: a bottom slab is a tread, a double slab is the riser
-next to it, and the two alternating make a surface that climbs **half a block per
-cell**. Not one full-block step anywhere. Ask for stairs or full blocks and you
-get a staircase — recognisably worse, and the bigger the roof the worse it looks.
+There is no roof op. You draw a roof course by course with `layer`, one grid per
+level, and that is the point: any shape you can draw, you can build — including
+the L-shaped and cross-shaped roofs no generator would have given you.
 
-The generator also gives the roof its **profile**: shallow at the eaves,
-steepening toward the ridge, ending about 0.6-0.75 of the half-span tall. You do
-not compute any of this. What you choose is the shape, the four material bands,
-and how far the eaves reach.
+### The one rule that keeps a roof watertight
 
-**Shape** — `roof_shape`. The four Chinese ranks, plus the lean-to:
+A cell can hold a slab in three states, and that is how a roof climbs:
 
-- `xuanshan` (alias `gable`) — two slopes, ridge along the longer axis, the two
-  ends closed by a bargeboard. The everyday roof, East and West alike.
-- `wudian` (alias `hip`) — four slopes, four diagonal hip ridges, no gable ends.
-  The highest rank; reserve it for the grandest hall on a site.
-- `xieshan` (alias `half_hip`) — four slopes below, a gable with two decorated
-  end panels above. Second in rank and the richest silhouette of the set; the
-  natural choice for a main hall that is not the very grandest. Western builders
-  know the same shape as a Dutch gable.
-- `zuanjian` (alias `pyramid`) — four slopes meeting at a point, for a square
-  footprint. Towers, gazebos, pavilions. Stack one per storey for a pagoda.
-- `shed` — a single slope one way. Lean-tos, porches, factory wings, and anything
-  that was added onto something else.
+- `oak_slab` — the lower half of the cell
+- `oak_slab[type=top]` — the upper half
+- `oak_slab[type=double]` — the whole cell
 
-**Curve** — `roof_curve` is `concave` by default and that default is almost
-always right: real tiled roofs are shallow at the eave and steepen toward the
-ridge, and it is the single reason an East Asian roof reads as curved rather than
-as a stepped pyramid. Ask for `straight` only when you specifically want a hard,
-steep, Gothic or Alpine silhouette.
+**Neighbouring courses must touch.** A course may climb at most half a block over
+the course beside it; climb a whole block between two bottom slabs and the two
+never meet — you get a visible slit and a row of slabs hanging in the air. Two
+ways to climb that always meet:
 
-**The four bands.** These are the whole game. The structure is fixed; what makes
-one roof Chinese, another Gothic and another Mediterranean is which block goes in
-which band:
+- **Slabs, half a block per cell**: alternate `[type=double]` and a plain bottom
+  slab as you go up. This is what a tiled roof is actually made of, it is the
+  shallowest pitch, and it is what East Asian roofs need.
+- **Stairs, one block per cell**: one course of stairs per level, `facing` the
+  way the roof RISES (a south slope's stairs face south). Steeper, western, and
+  the cheapest roof to write. Under a deep overhang put the lowest course as
+  `[half=top]` stairs so the eave reads thin.
 
-- `ridge_block` — the ridges, which stand **proud of the tiles**: the crest along
-  the top, the four diagonals of a `wudian`/`zuanjian`, the bargeboards of a
-  `xuanshan`. Pick something that clearly contrasts with the roof. This one line
-  is most of what makes a roof read as designed rather than extruded, and every
-  shape wants it.
-- `eave_block` — the outermost course only, a drip band running right around the
-  edge. One block of width; enormous effect. Copper, dark prismarine, a different
-  wood.
-- `gable_block` — the end walls: the triangle under a `xuanshan` slope, the
-  decorated panel of a `xieshan`. Leave it out and you can see into the attic.
-- `soffit_block` — a second skin one block under the tiles, following the same
-  slope. This is what the roof looks like **from below** and through an open
-  gable. It roughly doubles the cell count, so spend it on roofs people stand
-  under — a porch, a temple, a deep-eaved hall — and skip it on a shed nobody
-  will look up at.
+Never mix the two on one plane — the join is exactly where the gap appears.
 
-**Eaves** — `overhang`. 0 reads as unfinished almost everywhere. 1-2 suits most
-Western work; East Asian roofs live on their overhang and want 2-4. A deep eave
-buys more character than a taller wall, so when the budget is tight, spend it
-here.
+### Pitch and height
 
-**Corners** — `corner_lift` 1-3 flicks the four eave corners upward. The upturned
-corner is the most recognisable feature of an East Asian roof. Leave it 0 for
-Western buildings.
+Roof height ≈ 0.5-0.75 × half-span. Below that it reads as a lid, above it as a
+tower. With stairs (one block per cell) you get 1.0 automatically, which is why
+a stair roof suits a narrow building and looks absurd on a wide hall.
+
+East Asian roofs are **concave**: shallow at the eave, steeper near the ridge.
+Measured off hand-built halls, the surface rises one half-block per cell for the
+first two thirds and two half-blocks per cell near the ridge, averaging 1.2 —
+i.e. a 13-cell half-span ends about 8 blocks up. Write that as slab courses that
+start `double`/`bottom` alternating and switch to one course per level near the
+top.
+
+### The shapes, as grids
+
+A 12-wide, 10-deep building, ridge along x, eave level `y`. Course k sits at
+`y+k` and is drawn twice — one row from the north edge, one from the south:
+
+```
+k=0   ############        <- both eave rows
+      ............
+      ............
+      ############
+k=1   ............
+      ############
+      ############
+      ............
+```
+
+- **Gable (two slopes)** — as above: two rows per course marching inward,
+  the gable ends filled in as a triangle with the wall material.
+- **Hip (four slopes)** — each course is a RING inset by k on all four sides.
+  The four diagonals fall out of the ring corners; run a `line` of the ridge
+  material along each of them.
+- **Pyramid** — a hip roof on a square footprint; the rings shrink to a point.
+- **Half-hip** — rings for the lower third, then switch to two rows and finish
+  as a gable, with a decorated panel filling the small end wall.
+- **Shed** — one row per course, marching from the low edge to the high one.
+- **Dome** — the top half of a hollow `sphere`, not a roof at all.
+
+For a cross-shaped or L-shaped building, draw the courses of both wings in the
+same grid and keep the inner corner filled — the valley is a diagonal of cells
+that belong to both slopes. One grid per level; the wings cannot fight each other
+because they are the same drawing.
+
+### The four bands (this is what makes a style)
+
+The structure above is the same everywhere. What makes one roof Chinese, another
+Gothic and another Mediterranean is which block goes in which band:
+
+- **Ridge** — stands PROUD of the tiles: a `line` of a contrasting solid block
+  along the crest, one cell higher than the top course, plus the four diagonals
+  of a hip roof and the bargeboards of a gable. This single line is most of what
+  makes a roof read as designed rather than extruded, and every shape wants it.
+- **Eave** — the outermost course only: `[type=top]` slabs, or inverted stairs,
+  in a contrasting material. One cell of width, enormous effect.
+- **Gable ends** — the triangle under a gable slope. Fill it with the wall
+  material or a contrasting panel; leave it out and you can see into the attic.
+- **Soffit** — a second skin one cell under the tiles, following the same slope.
+  This is what the roof looks like from below and through an open gable. It
+  roughly doubles the cell count: spend it on a porch, a temple, a deep-eaved
+  hall; skip it on a shed nobody looks up at.
+
+### Eaves and corners
+
+Extend the roof grid 1-4 cells beyond the walls. 0 reads as unfinished almost
+everywhere; 1-2 suits most western work; East Asian roofs live on their overhang
+and want 2-4. A deep eave buys more character than a taller wall.
+
+Lift the four eave corners 1-3 cells with the ridge material for an East Asian
+roof — the upturned corner is the most recognisable feature of the style, and
+one `set` per corner buys it. Leave it flat for western buildings.
+
+### Under the eave
+
+A deep overhang leaves a visible underside, and leaving it blank wastes the most
+characterful part of an East Asian building. Two cheap details:
+
+- **Rafter ends** — a full block poking out under the eave every two cells along
+  the eave line. Two is the spacing the slope itself uses, so they line up.
+- **Bracket clusters** — a band of `[half=top]` stairs flanking a full block,
+  repeated along the eave, facing ALONG the wall rather than outward. This is the
+  detail people recognise the style by.
 
 ### What roofs are made of
 
@@ -159,42 +240,30 @@ Mix the roof palette like any other large surface. The roof is usually the
 biggest single plane on the building, which makes it the last place to accept one
 flat colour.
 
-### Under the eave
-
-A deep overhang leaves a visible underside, and leaving it blank wastes the most
-characterful part of an East Asian building. Two details, both cheap `set` ops:
-
-- **Rafter ends** — a full block poking out under the eave every two cells along
-  the eave line. Two is the spacing the roof itself uses, so they line up with
-  the slope.
-- **Bracket clusters** — a band of upside-down stairs (`half=top`) flanking a
-  full block, repeated along the eave. Face the stairs *along* the wall, not
-  outward. This is the detail people recognise the style by.
-
 ### Choosing, rather than copying
 
 The style reference tells you what the roof should *feel* like — "low and wide",
 "steep, for snow", "four-sided", "corners lifted", "the roof is the building".
-Turning that into parameters is your call, and two buildings in one style should
-not land on the same numbers.
+Turning that into courses is your call, and two buildings in one style should not
+land on the same numbers.
 
 Decision rules that hold across styles:
 
-- Long thin building → `xuanshan` (the ridge wants a direction). Squat or square
-  → `wudian` or `zuanjian` read better than a gable on a near-square plan.
-- Something added onto something else → `shed`. It is worth reaching for far more
-  often than it gets used; one main roof plus a lean-to instantly looks lived-in
-  rather than designed.
-- Rank matters in Chinese work: **wudian > xieshan > xuanshan**. The roof
-  announces the status of what stands under it, so do not put a `wudian` on an
-  outhouse and a `xuanshan` on the temple beside it.
-- Anything Chinese, Japanese or Korean → keep `concave`, add `corner_lift`, and
-  spend on `overhang`. Without those it will read as a Western house wearing
+- Long thin building → a gable (the ridge wants a direction). Squat or square →
+  hip or pyramid read better than a gable on a near-square plan.
+- Something added onto something else → a shed roof. It is worth reaching for far
+  more often than it gets used; one main roof plus a lean-to instantly looks
+  lived-in rather than designed.
+- Rank matters in Chinese work: hip > half-hip > gable. The roof announces the
+  status of what stands under it, so do not put the grandest roof on an outhouse
+  and a plain gable on the temple beside it.
+- Anything Chinese, Japanese or Korean → slabs, a concave pitch, lifted corners,
+  and a deep overhang. Without those it will read as a western house wearing
   Asian materials.
 - Steeper suits snow, thatch and Gothic; shallower suits sun, tile and anything
   meant to look calm. Let the climate and the material argue for the pitch.
 
-A pagoda is not one roof — it is `zuanjian` repeated once per storey, each a
+A pagoda is not one roof — it is a pyramid roof repeated once per storey, each a
 little smaller. Multi-winged buildings likewise get one roof per wing at
 different heights, not a single roof stretched over everything.
 
@@ -293,17 +362,16 @@ you vary the blocks.
 ### Writing it in ops
 
 Interior detail is the **last** pass — later ops overwrite earlier cells, so the
-shell goes first and the fittings go on top. Almost all of it is `set` with
-`properties`, because the state is the whole point:
+shell goes first and the fittings go on top. Almost all of it is one cell with a
+state, because the state is the whole point:
 
-- vertical panel: `set` a trapdoor with `properties {half: bottom, open: true,
-  facing: north}`
-- hanging shelf: `set` a trapdoor with `properties {half: top, open: false}`
-- lit hearth: `set` a campfire with `properties {signal_fire: false, lit: true}`
-- hanging lantern: `set` a lantern with `properties {hanging: true}` under a beam
+- vertical panel: `oak_trapdoor[half=bottom,open=true,facing=north]`
+- hanging shelf: `oak_trapdoor[half=top,open=false]`
+- lit hearth: `campfire[signal_fire=false,lit=true]`
+- hanging lantern: `lantern[hanging=true]` under a beam
 
-Carpets, barrels and bookshelves need no properties, so those go in bulk via
-`scatter` on a floor plane or a `line` along a wall.
+A row of barrels along a wall is a `line`; a floor of carpet and the odd pot is
+one `layer` grid — draw where each piece goes instead of sprinkling at random.
 
 ## Mix your materials
 
@@ -319,8 +387,8 @@ reads it as texture rather than as a pattern.
 
 - exactly one floor layer; doorway passable per the alignment rule above
 - large surfaces are mixes, not one flat colour
-- roofs have eaves (`overhang`), a ridge that stands proud (`ridge_block`), and
-  closed end walls (`gable_block`)
+- roofs overhang the walls, have a ridge that stands proud of the tiles, closed
+  gable ends, and no gap between neighbouring courses
 - windows 1-2 above the floor; panes or glass in the openings
 - **every inhabited level furnished, not just the ground floor** — if an upper
   room is a bare box, the build is not finished
@@ -331,10 +399,10 @@ reads it as texture rather than as a pattern.
 
 ## Tool mapping
 
-- everything goes through `build`'s ordered `ops` stream: set / box / walls /
-  line / cylinder / sphere / roof / set_door / scatter; hollow variants;
-  block_id minecraft:air carves; later ops overwrite earlier cells, so details
-  go last
+- everything goes through `build`'s ordered `ops` stream: layer / set / line /
+  cylinder / sphere / copy; block states ride in the block name; `minecraft:air`
+  clears; `mask` decides what may be overwritten; later ops overwrite earlier
+  cells, so details go last
 - whole structure files: `blueprint` tool (action=list first, then action=build
   at a flat anchor); liquids are always skipped
 
@@ -362,9 +430,9 @@ and exact blocks. If yours come out as twins, you are reading the reference as a
 template — go back and re-roll the proportions and the material picks.
 
 A style file deliberately never names tool parameters. It says the roof is "low
-and wide with lifted corners"; translating that into `roof_shape`,
-`roof_curve`, `overhang` and `corner_lift` is yours to do, and doing it
-differently on two buildings of the same style is the point, not a mistake.
+and wide with lifted corners"; translating that into courses, materials, an
+overhang and a corner lift is yours to do, and doing it differently on two
+buildings of the same style is the point, not a mistake.
 
 Load one with `load_skill(building_design, file="references/<style>.md")`.
 

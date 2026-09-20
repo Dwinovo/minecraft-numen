@@ -123,7 +123,7 @@ public final class BlueprintTool implements NumenTool {
         // allowPartial:整幢图纸一趟运不完是常态,分段施工 + 精确续建
         BuildTaskRecord record = new BuildTaskRecord(toolCallId,
                 ctx(toolCallId, companion).deadline(timeout), loaded.targets(),
-                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, true, consume, true,
+                com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, consume, true,
                 loaded.blockEntityData(), loaded.entities());
         // 加载时掉的格随任务一起交代:掉格必须有账,否则回执会拿剩下的格数当全部
         record.droppedAtLoad(loaded.dropped());

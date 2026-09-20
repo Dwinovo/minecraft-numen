@@ -251,7 +251,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     }
 
     private Precondition.Failure checkExistingBlocks() {
-        if (r.replaceExisting) {
+        if (r.replaceMode != ReplaceMode.DONT_REPLACE) {
             return null;
         }
         for (BuildTaskRecord.Target target : r.targets) {
@@ -1453,7 +1453,7 @@ public final class BuildCompanionTask extends AbstractCompanionTask<BuildTaskRec
     private CalculationContext buildContext(ServerPlayer player, BlockGetter view, ChunkLoadedTest loaded,
                                             boolean safeForThreadedUse, RouteSpec spec, Gate gate) {
         return new BuildCalculationContext(player, view, loaded, safeForThreadedUse, spec, gate,
-                targetByPos, inv.availableStates(true), r.replaceExisting);
+                targetByPos, inv.availableStates(true), r.replaceMode.mayReplace());
     }
 
     @Override

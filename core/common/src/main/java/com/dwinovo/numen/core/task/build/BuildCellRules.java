@@ -67,7 +67,8 @@ final class BuildCellRules {
      */
     boolean blockedByMode(BuildTaskRecord.Target target) {
         BlockState current = peek(target.pos());
-        if (!r.replaceMode.allows(current, target.desiredState())) {
+        ReplaceMode mode = target.mask() != null ? target.mask() : r.replaceMode;
+        if (!mode.allows(current, target.desiredState())) {
             return true;
         }
         if (target.matches(current)) {

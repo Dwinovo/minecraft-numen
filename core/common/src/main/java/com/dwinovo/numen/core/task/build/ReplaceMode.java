@@ -27,6 +27,11 @@ public enum ReplaceMode {
     /** 连该空的地方也清掉——图纸里的空气格是"把这里挖空"的指令。 */
     REPLACE_EMPTY;
 
+    /** 挡路的东西能不能顶掉——建造寻路问的就是这一句(拆一块钻出去许不许)。 */
+    public boolean mayReplace() {
+        return this == REPLACE_ANY || this == REPLACE_EMPTY;
+    }
+
     /**
      * 这一格现在该不该动手。
      *
