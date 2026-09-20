@@ -7,8 +7,10 @@ import java.util.List;
 import com.dwinovo.numen.core.Constants;
 import com.dwinovo.numen.core.pathing.goals.Goal;
 import com.dwinovo.numen.core.pathing.moves.CalculationContext;
+import com.dwinovo.numen.core.pathing.moves.ActionCosts;
 import com.dwinovo.numen.core.pathing.moves.Movement;
 import com.dwinovo.numen.core.pathing.moves.Moves;
+import com.dwinovo.numen.core.pathing.moves.MutableMoveResult;
 
 import net.minecraft.core.BlockPos;
 
@@ -93,31 +95,49 @@ public class Path extends PathBase {
             throw new IllegalStateException("路径为空或已装配过");
         }
         for (int i = 0; i < path.size() - 1; i++) {
-            double cost = nodes.get(i + 1).cost - nodes.get(i).cost;
-            Movement move = runBackwards(path.get(i), path.get(i + 1), cost);
-            if (move == null) {
-                return true;
+            BlockPos src = path.get(i);
+            BlockPos dest = path.get(i + 1);
+            PathNode to = nodes.get(i + 1);
+            Moves moves = to.previousMove;
+            double cost = to.previousMoveCost;
+            if (moves == null) {
+                // 只有假起点那条边会走到这儿(真实脚位与 A* 起点不同、路径又退化成单节点时补的),
+                // 搜索从没展开过它。问的仍是搜索自己的成本函数,不是另写一套判据。
+                Movement fromStart = resolveSyntheticStart(src, dest);
+                if (fromStart == null) {
+                    return true;
+                }
+                movements.add(fromStart);
+                continue;
             }
-            movements.add(move);
+            movements.add(price(moves.build(context, src, dest), cost));
         }
         return false;
     }
 
+    /** 钉住搜索算出的原价:执行期比"贵了多少"时,两边都是原价才比得了。 */
+    private static Movement price(Movement move, double cost) {
+        move.override(cost);
+        return move;
+    }
+
     /**
-     * 枚举全部移动原语,找出从 src 出发落点恰为 dest 的那一个。
-     * 成本钉为"装配时重算价"与"节点成本差"的较小者:节点差可能被
-     * favoring 打了折,重算价可能因世界变化涨了价,取较严者做执行期
-     * 涨价判断的基准。
+     * 假起点那条边:找出从真实脚位出发、落点恰为下一格的原语。
+     *
+     * <p>用的是搜索展开邻边时的同一个 {@link Moves#apply},所以"这条边是什么、值多少"
+     * 依然只有一处说法;这里只是替搜索补算它从没展开过的那一条。
      */
-    private Movement runBackwards(BlockPos src, BlockPos dest, double cost) {
+    private Movement resolveSyntheticStart(BlockPos src, BlockPos dest) {
+        MutableMoveResult res = new MutableMoveResult();
         for (Moves moves : Moves.values()) {
-            Movement move = moves.apply0(context, src);
-            if (move != null && move.getDest().equals(dest)) {
-                move.override(Math.min(move.getCost(context), cost));
-                return move;
+            res.reset();
+            moves.apply(context, src.getX(), src.getY(), src.getZ(), res);
+            if (res.cost < ActionCosts.COST_INF
+                    && res.x == dest.getX() && res.y == dest.getY() && res.z == dest.getZ()) {
+                return price(moves.build(context, src, dest), res.cost);
             }
         }
-        Constants.LOG.debug("装配期移动已不可行 {} -> {}", src, dest);
+        Constants.LOG.debug("真实脚位 {} 接不上搜索起点 {}", src, dest);
         return null;
     }
 

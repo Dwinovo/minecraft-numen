@@ -162,6 +162,10 @@ public final class AStarPathFinder extends AbstractNodeCostSearch {
                 double tentativeCost = currentNode.cost + actionCost;
                 if (neighbor.cost - tentativeCost > minimumImprovement) {
                     neighbor.previous = currentNode;
+                    // 这条边是哪个原语走出来的、原价多少,就在这里记下——装配路径时直接取,
+                    // 不必再拿落点去猜(猜就是同一件事的第二处说法)
+                    neighbor.previousMove = moves;
+                    neighbor.previousMoveCost = res.cost;
                     neighbor.cost = tentativeCost;
                     neighbor.combinedCost = tentativeCost + neighbor.estimatedCostToGoal;
                     if (neighbor.isOpen()) {
