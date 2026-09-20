@@ -131,6 +131,11 @@ public final class NumenLlmClient {
      * agent loop's auto-compaction triggers on (no client-side token estimation
      * needed). Zero when the backend sent no usage frame.
      */
+    /** 这一局的出处戳:{@code 服务商类/模型}。回合带着它落盘,换绑之后认得出哪些私货不是自家的。 */
+    private String origin() {
+        return provider.getClass().getSimpleName() + "/" + model;
+    }
+
     public record ChatResult(AssistantTurn turn, Usage usage) {
 
         /** 提示词的完整体量——自动压缩的触发判据(API 数的,不用客户端估)。 */
@@ -179,7 +184,10 @@ public final class NumenLlmClient {
         for (ConvoState.Msg m : sendable) {
             switch (m) {
                 case ConvoState.Msg.User u -> wire.add(provider.buildUserMessage(u.content()));
-                case ConvoState.Msg.Assistant a -> wire.add(provider.assistantToRequestMessage(a.turn()));
+                // 上一家的私货(思考签名、reasoning_content)只有产它的那家认:换过模型就脱掉再发。
+                // 原样递过去轻则浪费,重则被 400 拒,而换绑模型是面板上一个按钮的事。
+                case ConvoState.Msg.Assistant a -> wire.add(provider.assistantToRequestMessage(
+                        a.turn().sameOrigin(origin()) ? a.turn() : a.turn().withoutProviderPrivateFields()));
                 case ConvoState.Msg.Tool t -> wire.add(provider.buildToolResultMessage(t.toolCallId(), t.content()));
                 case ConvoState.Msg.Halt h -> throw new IllegalStateException(
                         "ProtocolView.forWire never emits Halt: " + h.reason());
@@ -218,7 +226,7 @@ public final class NumenLlmClient {
                 AiLog.LOG.warn("[numen-llm] accumulator failed on chunk: {}", ex.getMessage());
             }
         }, cancel).thenApply(v -> {
-            AssistantTurn turn = provider.finalizeStream(acc);
+            AssistantTurn turn = provider.finalizeStream(acc).withOrigin(origin());
             logCallSummary(t0, acc, turn);
             return new ChatResult(turn, provider.usage(acc.usage));
         });

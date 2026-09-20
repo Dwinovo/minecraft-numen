@@ -510,6 +510,10 @@ public final class ConvoLog {
                 if (a.turn().hasReasoning()) {
                     o.addProperty("reasoning", a.turn().reasoning());
                 }
+                // 出处随回合落盘:重进游戏后还得认得出那些私货是哪家的
+                if (a.turn().origin() != null) {
+                    o.addProperty("origin", a.turn().origin());
+                }
             }
             case ConvoState.Msg.Tool t -> {
                 o.addProperty("role", "tool");
@@ -555,7 +559,9 @@ public final class ConvoLog {
                 JsonObject extras = o.has("extras") && o.get("extras").isJsonObject()
                         ? o.getAsJsonObject("extras") : null;
                 yield new ConvoState.Msg.Assistant(
-                        new AssistantTurn(str(o.get("content")), calls, extras, str(o.get("reasoning"))));
+                        new AssistantTurn(str(o.get("content")), calls, extras, str(o.get("reasoning")),
+                                o.has("origin") && !o.get("origin").isJsonNull()
+                                        ? o.get("origin").getAsString() : null));
             }
             default -> null;   // unknown role → forward-compat skip
         };
