@@ -252,6 +252,21 @@ public final class NumenScreen extends Screen {
                     Minecraft.getInstance().font, this::loop, () -> conv);
     private int railScroll;        // index of the first visible rail avatar (wheel-scroll when many companions)
 
+    // ---- 侧栏拖拽:把一格拖到另一格上 = 把前者的人拉进后者那个会话(手机桌面合并成文件夹的手势)。
+    // 按下即记、移过阈值才算拖,点和拖分得开;切换在松手时才做。勾选卡是明路,这是快捷手势,
+    // 两者都只是 pullIn 的入口。 ----
+    private static final int DRAG_THRESHOLD = 4;
+    /** 按下的那一格;-1 = 没按着。 */
+    private int railPressed = -1;
+    private double railPressX, railPressY;
+    private boolean railDragging;
+    private double dragX, dragY;
+    /** 松手后的残影:拖着的那张脸飞向目标并缩小(合并),或飞回原格(弹回)。动完自己消失。 */
+    private Ghost ghost;
+
+    private record Ghost(Conversation faces, int fromX, int fromY, int fromSize,
+                         int toX, int toY, int toSize, long startMs, int durationMs) {}
+
     /** Re-request the backpack every ~1 s while the Items tab is open. */
     private static final int INV_REFRESH_TICKS = 20;
     private int tickCounter;
@@ -937,20 +952,12 @@ public final class NumenScreen extends Screen {
             }
             int rail = railIndexAt((int) mouseX, (int) mouseY);
             if (rail >= 0) {
-                List<Conversation> items = rail();
-                if (rail < items.size()) {
-                    boolean wasSummoning = summoning;
-                    summoning = false;
-                    Conversation c = items.get(rail);
-                    if (sameAs(c, conv)) {
-                        // 侧栏是纯切换器(Discord 语法):点当前头像不再有动作,
-                        // 编辑入口在头部名字旁的铅笔;模态开着时当逃生口收卡。
-                        if (editing) { editing = false; rebuild(); }
-                        else if (wasSummoning) rebuild();
-                    } else {
-                        editing = false;
-                        switchTo(c);
-                    }
+                // 按下只记一笔:是点还是拖,松手时才知道(见 mouseReleased)
+                if (rail < rail().size()) {
+                    railPressed = rail;
+                    railPressX = mouseX;
+                    railPressY = mouseY;
+                    railDragging = false;
                 }
                 return true;
             }
@@ -995,6 +1002,16 @@ public final class NumenScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mx, double my, int button, double dx, double dy) {
+        if (button == 0 && railPressed >= 0) {
+            // 模态/浮层在场时侧栏只是逃生口,不拖
+            if (!railDragging && !modalOpen() && !overlayOpen()
+                    && Math.abs(mx - railPressX) + Math.abs(my - railPressY) >= DRAG_THRESHOLD) {
+                railDragging = true;
+            }
+            dragX = mx;
+            dragY = my;
+            return true;
+        }
         // 声线表单的音量滑条拖动(NumenUI 面板)。
         if (tab == Tab.SETTINGS && !modalOpen() && settings.mouseDragged(mx, my, dx, dy)) {
             return true;
@@ -1004,10 +1021,102 @@ public final class NumenScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mx, double my, int button) {
+        if (button == 0 && railPressed >= 0) {
+            int pressed = railPressed;
+            railPressed = -1;
+            List<Conversation> items = rail();
+            if (pressed >= items.size()) return true;
+            if (!railDragging) {
+                railClicked(items.get(pressed));
+                return true;
+            }
+            railDragging = false;
+            int over = railIndexAt((int) mx, (int) my);
+            if (over >= 0 && over != pressed && over < items.size()) {
+                mergeInto(items.get(pressed), items.get(over), pressed);
+            } else {
+                flyBack(items.get(pressed), pressed);
+            }
+            return true;
+        }
         if (tab == Tab.SETTINGS && !modalOpen() && settings.mouseReleased(mx, my, button)) {
             return true;
         }
         return super.mouseReleased(mx, my, button);
+    }
+
+    /** 侧栏一格被点了(按下后没拖):切过去。侧栏是纯切换器(Discord 语法)。 */
+    private void railClicked(Conversation c) {
+        boolean wasSummoning = summoning;
+        summoning = false;
+        if (sameAs(c, conv)) {
+            // 点当前那格不再有动作,编辑入口在头部名字旁的铅笔;模态开着时当逃生口收卡。
+            if (editing) { editing = false; rebuild(); }
+            else if (wasSummoning) rebuild();
+        } else {
+            editing = false;
+            switchTo(c);
+        }
+    }
+
+    /**
+     * 拖着的那格落在另一格上:把前者的人拉进后者那个会话。落在"就他俩"上就是另起一个会话,
+     * 落在落过盘的会话上就是扩它——和「＋ 拉人」同一条路({@link Conversations#pullIn})。
+     * 残影从指针处缩进合并后那格,眼睛跟着到新会话。
+     */
+    private void mergeInto(Conversation dragged, Conversation target, int fromIndex) {
+        Conversations convos = Conversations.instance();
+        Conversation result = target;
+        for (UUID m : convos.membersAlive(dragged)) {
+            result = convos.pullIn(result, m);
+        }
+        switchTo(result);
+        int to = -1;
+        List<Conversation> items = rail();
+        for (int i = 0; i < items.size(); i++) {
+            if (sameAs(items.get(i), result)) { to = i; break; }
+        }
+        int toY = railTileY(to);
+        if (toY < 0) toY = railTileY(fromIndex);   // 合并后那格滚出了视野:缩回原地
+        int ax = railX + (RAIL_W - RAIL_AV) / 2;
+        int small = RAIL_AV / 2;
+        ghost = new Ghost(dragged, (int) dragX - RAIL_AV / 2, (int) dragY - RAIL_AV / 2, RAIL_AV,
+                ax + (RAIL_AV - small) / 2, toY + (RAIL_AV - small) / 2, small,
+                System.currentTimeMillis(), 220);
+    }
+
+    /** 拖到半路松手(空处或自己那格):飞回原位。 */
+    private void flyBack(Conversation dragged, int fromIndex) {
+        int y = railTileY(fromIndex);
+        if (y < 0) return;
+        ghost = new Ghost(dragged, (int) dragX - RAIL_AV / 2, (int) dragY - RAIL_AV / 2, RAIL_AV,
+                railX + (RAIL_W - RAIL_AV) / 2, y, RAIL_AV, System.currentTimeMillis(), 150);
+    }
+
+    /** 第 i 格的顶边;没画出来(滚出视野)是 -1。 */
+    private int railTileY(int i) {
+        if (i < 0) return -1;
+        int y = railStartY() + (i - railScroll) * RAIL_SLOT;
+        return i >= railScroll && y + RAIL_AV <= railBottomEdge() ? y : -1;
+    }
+
+    /** 拖着的那张脸跟着指针;残影按 easeOut 飞向落点,动完清掉。 */
+    private void renderRailDrag(GuiGraphics g) {
+        if (railDragging && railPressed >= 0 && railPressed < rail().size()) {
+            com.dwinovo.numen.client.skin.ConversationFaces.draw(g, rail().get(railPressed),
+                    (int) dragX - RAIL_AV / 2, (int) dragY - RAIL_AV / 2, RAIL_AV);
+        }
+        if (ghost == null) return;
+        float t = (System.currentTimeMillis() - ghost.startMs()) / (float) ghost.durationMs();
+        if (t >= 1f) {
+            ghost = null;
+            return;
+        }
+        float e = com.dwinovo.numen.client.ui.Anim.easeOutCubic(t);
+        int x = Math.round(ghost.fromX() + (ghost.toX() - ghost.fromX()) * e);
+        int y = Math.round(ghost.fromY() + (ghost.toY() - ghost.fromY()) * e);
+        int size = Math.round(ghost.fromSize() + (ghost.toSize() - ghost.fromSize()) * e);
+        com.dwinovo.numen.client.skin.ConversationFaces.draw(g, ghost.faces(), x, y, size);
     }
 
     @Override
@@ -1058,6 +1167,7 @@ public final class NumenScreen extends Screen {
 
         drawWorkspace(g);                // rail column + panel chrome, in the CURRENT theme's colours
         renderRail(g, mouseX, mouseY);   // avatars + status + summon tile on the rail column
+        renderRailDrag(g);               // 拖着的脸与合并/弹回的残影,压在侧栏之上
 
         // 头部一行四个成员从右往左让位:tab(定宽) ← 用量 ← 人设名(可整个消失) ← 名字(最后裁)。
         // 用量、图标、复活倒计时、人设名都是一只同伴的:会话没有单一的主时抬头只有名字
@@ -1252,12 +1362,17 @@ public final class NumenScreen extends Screen {
             boolean active = sameAs(c, conv);
             boolean hovered = mouseX >= ax && mouseX < ax + RAIL_AV
                     && mouseY >= ay && mouseY < ay + RAIL_AV;
-            boolean railQuiet = !overlayOpen() && !modalOpen();
+            // 拖拽中:指针下的另一格是落点,边框亮;原格压暗;悬停的短条与名字都不出
+            boolean dropTarget = railDragging && hovered && i != railPressed;
+            boolean railQuiet = !overlayOpen() && !modalOpen() && !railDragging;
             // 选中关系用左缘指示条说话(Discord 服务器栏同语法):长条 = 当前,
             // 悬停未选中出短条 = 可切换。悬停的容器反应与"+"号同语法:边框亮 CTA。
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4,
-                    FIELD, !active && hovered && railQuiet ? CTA : BORDER);
+                    FIELD, dropTarget || (!active && hovered && railQuiet) ? CTA : BORDER);
             com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, ax, ay, RAIL_AV);
+            if (railDragging && i == railPressed) {
+                g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0x90101010);
+            }
             int pillH = active ? RAIL_AV - 6 : (hovered && railQuiet ? 8 : 0);
             if (pillH > 0) {
                 int py2 = ay + (RAIL_AV - pillH) / 2;
