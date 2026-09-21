@@ -56,8 +56,11 @@ public final class ChatInputBar {
         /** 输入框占位文案(随麦克风状态变)。 */
         String hint();
 
-        /** 这条输入行对着的那位的大脑;null = 没选同伴(不补全、不跑命令)。 */
+        /** 这条输入行对着的那位的大脑;null = 没有单一的主(斜杠命令不补全、不跑)。 */
         com.dwinovo.numen.client.agent.EntityAgentLoop loop();
+
+        /** 这条输入行对着的会话;`@` 补的是它里面的人。null = 没选。 */
+        com.dwinovo.numen.agent.conversation.Conversation conversation();
 
         /** 斜杠命令跑完回给主人的话;null = 这条命令不吭声(或已在原位开了面板)。画在哪、留多久是宿主的事。 */
         void onCommandReply(String reply);
@@ -357,9 +360,10 @@ public final class ChatInputBar {
                     return true;
                 }
                 case KeyCodes.ENTER -> {
-                    // 回车 = 就要选中这条,现在执行。想接着打参数请按 Tab。
-                    // 两颗键分工明确之后,"补全了没有"就不再影响回车干什么了。
-                    fillSelected();
+                    // 命令:回车 = 就要选中这条,现在执行;想接着打参数请按 Tab。
+                    // `@` 名字:回车只把名字填上,话还没说完——发出去的是"@小柚 "没有意义。
+                    boolean filled = fillSelected();
+                    if (filled && !commandMode(field.value())) return true;
                     send();
                     return true;
                 }
@@ -381,14 +385,31 @@ public final class ChatInputBar {
                 && field != null && field.isFocused();
     }
 
-    /** 文字变了就重算候选,并把 Esc 的收起复位。 */
+    /**
+     * 文字变了就重算候选,并把 Esc 的收起复位。两种来源、同一条管线:以 {@code /} 开头是命令
+     * (问她的大脑),否则看光标左边是不是 {@code @} 开头的词(问会话的成员表)。
+     */
     private void refreshCandidates() {
         dismissed = false;
         String text = field != null ? field.value() : draft;
-        var loop = host.loop();
-        candidates = loop == null ? List.of()
-                : com.dwinovo.numen.client.command.ChatCommands.complete(loop, text == null ? "" : text);
+        if (text == null) text = "";
+        if (commandMode(text)) {
+            var loop = host.loop();
+            candidates = loop == null ? List.of()
+                    : com.dwinovo.numen.client.command.ChatCommands.complete(loop, text);
+        } else {
+            var conv = host.conversation();
+            candidates = conv == null ? List.of()
+                    : com.dwinovo.numen.client.command.MentionCompletions.complete(text,
+                            field != null ? field.cursor() : text.length(),
+                            com.dwinovo.numen.client.agent.Conversations.instance().named(conv));
+        }
         selected = firstEnabled();
+    }
+
+    /** 这串输入是命令还是话——候选从哪来、回车干什么,都由它定。 */
+    private static boolean commandMode(String text) {
+        return com.dwinovo.numen.client.command.ChatCommands.isCommand(text);
     }
 
     private int firstEnabled() {

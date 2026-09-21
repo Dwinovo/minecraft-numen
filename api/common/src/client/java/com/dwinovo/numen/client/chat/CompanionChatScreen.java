@@ -118,6 +118,8 @@ public class CompanionChatScreen extends Screen {
 
         @Override public EntityAgentLoop loop() { return CompanionChatScreen.this.loop(); }
 
+        @Override public Conversation conversation() { return conv; }
+
         @Override public void onConsentSettled() {
             var next = com.dwinovo.numen.client.consent.ConsentCards.first();
             if (next != null) {

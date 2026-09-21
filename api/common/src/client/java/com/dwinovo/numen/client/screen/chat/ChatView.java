@@ -503,11 +503,7 @@ public final class ChatView {
      * 正好是会醒的,不是"长得像名字"。名字按此刻名册,改过名之后旧记录里的不亮。
      */
     private Component mentionsLit(String text) {
-        List<Mentions.Member> members = new ArrayList<>();
-        for (UUID m : Conversations.instance().membersAlive(conv.get())) {
-            members.add(new Mentions.Member(m, speaker(m)));
-        }
-        List<Mentions.Span> spans = Mentions.spans(text, members);
+        List<Mentions.Span> spans = Mentions.spans(text, Conversations.instance().named(conv.get()));
         if (spans.isEmpty()) return Nb.colored(text, TXT);
         MutableComponent out = Component.empty();
         int at = 0;

@@ -711,6 +711,10 @@ public final class NumenScreen extends Screen {
             return NumenScreen.this.loop();
         }
 
+        @Override public Conversation conversation() {
+            return conv;
+        }
+
         /** 只注册事件,不进 renderables——画面归 NumenUI。见 {@code McTextInput}。 */
 
 

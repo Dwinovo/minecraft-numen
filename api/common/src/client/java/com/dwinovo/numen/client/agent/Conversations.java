@@ -346,8 +346,8 @@ public final class Conversations extends JsonLibrary<Conversation> {
         return out;
     }
 
-    /** 还在的成员 + 她们的名字,喂给 {@link Mentions}。 */
-    private List<Mentions.Member> named(Conversation conv) {
+    /** 还在的成员 + 她们的名字:路由、`@` 补全、把 `@` 到的名字画亮,用的都是这一份。 */
+    public List<Mentions.Member> named(Conversation conv) {
         List<Mentions.Member> out = new ArrayList<>();
         for (UUID m : membersAlive(conv)) {
             out.add(new Mentions.Member(m, NumenRoster.instance().name(m)));
