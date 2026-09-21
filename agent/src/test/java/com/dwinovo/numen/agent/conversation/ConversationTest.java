@@ -25,10 +25,9 @@ class ConversationTest {
     }
 
     @Test
-    void aNewGroupHasNoNameAndNoFloor() {
+    void aNewGroupHasNoName() {
         Conversation g = Conversation.of(List.of(YOU, LAN));
         assertNull(g.name(), "建群那一步不问名字");
-        assertTrue(g.floor().isEmpty(), "话头空着 = 全体");
         assertEquals("小柚、阿岚", g.displayName(ConversationTest::nameOf));
     }
 
@@ -52,19 +51,6 @@ class ConversationTest {
     }
 
     @Test
-    void theFloorOnlyEverLandsOnMembers() {
-        Conversation g = Conversation.of(List.of(YOU, LAN)).withFloor(List.of(YOU, MEI));
-        assertEquals(List.of(YOU), g.floor(), "小梅不在群里,收不下");
-    }
-
-    /** 移出一个成员,话头跟着掉——否则会剩一个指向群外的话头。 */
-    @Test
-    void removingAMemberDropsHerFromTheFloor() {
-        Conversation g = Conversation.of(List.of(YOU, LAN)).withFloor(List.of(LAN));
-        assertEquals(List.of(), g.withMembers(List.of(YOU)).floor());
-    }
-
-    @Test
     void membersAreDeduplicatedAndKeepTheirOrder() {
         Conversation g = Conversation.of(List.of(LAN, YOU, LAN));
         assertEquals(List.of(LAN, YOU), g.members());
@@ -72,15 +58,13 @@ class ConversationTest {
 
     @Test
     void itSurvivesARoundTripThroughJson() {
-        Conversation g = Conversation.of(List.of(YOU, LAN)).withName("挖矿队").withFloor(List.of(LAN))
-                .spoken().spoken();
+        Conversation g = Conversation.of(List.of(YOU, LAN)).withName("挖矿队").spoken().spoken();
         Conversation back = Conversation.fromJson(
                 JsonParser.parseString(g.toJson().toString()).getAsJsonObject());
 
         assertEquals(g.id(), back.id());
         assertEquals("挖矿队", back.name());
         assertEquals(List.of(YOU, LAN), back.members());
-        assertEquals(List.of(LAN), back.floor());
         assertEquals(2, back.turn(), "发言号跟着落盘");
     }
 
@@ -90,7 +74,6 @@ class ConversationTest {
         Conversation g = Conversation.of(List.of(YOU, LAN));
         assertEquals(0, g.turn());
         assertEquals(1, g.spoken().turn());
-        assertEquals(1, g.spoken().withFloor(List.of(YOU)).turn(), "转话头不动发言号");
         assertEquals(1, g.spoken().withMembers(List.of(YOU, MEI)).turn(), "换成员不动发言号");
         assertEquals(1, g.spoken().withName("挖矿队").turn(), "改名不动发言号");
     }

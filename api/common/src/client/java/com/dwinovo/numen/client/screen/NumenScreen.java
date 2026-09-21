@@ -1666,25 +1666,22 @@ public final class NumenScreen extends Screen {
     }
 
     /**
-     * 成员抬头那一行(会话没有单一的主时):每个还在的成员一张脸,话头上的那些框亮——话头是"谁会醒",
-     * 得看得见;话头空着 = 全体,那就全亮。悬停给名字、右上角出一个 × 移出;只剩一个不给移,
-     * 那一步是解散,在垃圾桶上。
+     * 成员抬头那一行(会话没有单一的主时):每个还在的成员一张脸。悬停给名字、右上角出一个 × 移出;
+     * 只剩一个不给移,那一步是解散,在垃圾桶上。
      */
     private int renderMemberRow(GuiGraphics g, int bodyY, int mouseX, int mouseY) {
         memberRowFaces.addAll(Conversations.instance().membersAlive(conv));
         memberRowX = left + PAD;
         memberRowY = bodyY;
-        List<UUID> floor = conv.floor();
         boolean quiet = !modalOpen() && !overlayOpen();
         boolean droppable = memberRowFaces.size() > 1;
         for (int i = 0; i < memberRowFaces.size(); i++) {
             UUID m = memberRowFaces.get(i);
             int fx = memberFaceX(i);
-            boolean lit = floor.isEmpty() || floor.contains(m);
             boolean hovered = quiet && mouseX >= fx && mouseX < fx + MEMBER_AV
                     && mouseY >= bodyY && mouseY < bodyY + MEMBER_AV;
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
-                    fx - 2, bodyY - 2, MEMBER_AV + 4, MEMBER_AV + 4, FIELD, lit ? CTA : BORDER);
+                    fx - 2, bodyY - 2, MEMBER_AV + 4, MEMBER_AV + 4, FIELD, BORDER);
             CompanionFace.draw(g, m, skinFor(m), fx, bodyY, MEMBER_AV);
             if (!hovered) continue;
             boolean overX = droppable && overMemberX(i, mouseX, mouseY);

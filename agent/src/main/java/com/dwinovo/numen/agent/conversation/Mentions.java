@@ -12,18 +12,18 @@ import java.util.UUID;
 /**
  * 主人在群里说了一句话,谁醒。
  *
- * <h2>{@code @} 是转话头,不是寻址</h2>
- * 点了名就把话头转给她们,转过去就一直是她们,直到下次转。于是 {@code @} 从"每句都要打"
- * 变成"偶尔转向"——快捷对话(Y)那条路才不会废掉一半。
+ * <h2>{@code @} 谁谁回,不 {@code @} 全体回</h2>
+ * 每句话各算各的,没有粘住的状态:上一句点了小柚,这一句没点名就是说给大家的,小柚也在其中。
+ * 这和 {@code @} 在别处的直觉一致——点名只是那一句的事。
  *
  * <pre>
- * @小柚 去挖铁     → 话头给小柚,小柚醒
- * 多挖点            → 还是小柚醒,不必再打 @
- * @阿岚 你去砍树    → 话头转给阿岚
+ * @小柚 去挖铁     → 只有小柚醒
+ * 多挖点            → 没点名 = 说给大家的,全体醒
+ * @阿岚 你去砍树    → 只有阿岚醒
  * </pre>
  *
- * <p>一句话里没有 {@code @},话头又还空着时<b>全体都醒</b>。这不是兜底:没点名的话通常本来
- * 就是说给全体的("我回来了"、"天黑了"),而派活的时候人自己就会打 {@code @}。
+ * <p>没点名就全体醒不是兜底:没点名的话通常本来就是说给全体的("我回来了"、"天黑了"),
+ * 而派活的时候人自己就会打 {@code @}。
  *
  * <h2>为什么不做子串匹配</h2>
  * 名字互为前缀会误判:{@code @Anna} 里含着 {@code Ann}。所以长名字先匹配,吃掉的那一段不再参与,
@@ -40,37 +40,25 @@ public final class Mentions {
      * 这一句话的去向。
      *
      * @param awake 要唤醒的那些(按话里出现的先后;没点名时是全体,按成员顺序)
-     * @param floor 说完之后的话头。点了名就是被点的那些,没点名则原样保留
      */
-    public record Routing(List<UUID> awake, List<UUID> floor) {}
+    public record Routing(List<UUID> awake) {}
 
     private Mentions() {}
 
     /**
      * @param text    主人说的那句话原文
      * @param members 群成员
-     * @param floor   说这句话之前的话头(空 = 还没落到任何人身上)
      */
-    public static Routing route(String text, List<Member> members, List<UUID> floor) {
+    public static Routing route(String text, List<Member> members) {
         List<UUID> mentioned = mentioned(text, members);
         if (!mentioned.isEmpty()) {
-            return new Routing(mentioned, mentioned);
+            return new Routing(mentioned);
         }
-        List<UUID> held = new ArrayList<>();
-        for (UUID u : floor == null ? List.<UUID>of() : floor) {
-            if (contains(members, u)) {
-                held.add(u);
-            }
-        }
-        if (!held.isEmpty()) {
-            return new Routing(List.copyOf(held), List.copyOf(held));
-        }
-        // 话头还空着:全体都醒,而且话头仍然空着——下一句没点名还是全体
         List<UUID> all = new ArrayList<>();
         for (Member m : members) {
             all.add(m.uuid());
         }
-        return new Routing(List.copyOf(all), List.of());
+        return new Routing(List.copyOf(all));
     }
 
     /** 话里被 {@code @} 到的一段:{@code [start, end)} 是原文里的区间,{@code whom} 是这个名字喊到的那些。 */
@@ -149,14 +137,5 @@ public final class Mentions {
     /** 名字后面紧跟着字母或数字 = 没整个对上({@code @Ann} 遇上 {@code @Anna})。 */
     private static boolean glued(String text, int end) {
         return end < text.length() && Character.isLetterOrDigit(text.charAt(end));
-    }
-
-    private static boolean contains(List<Member> members, UUID uuid) {
-        for (Member m : members) {
-            if (m.uuid().equals(uuid)) {
-                return true;
-            }
-        }
-        return false;
     }
 }

@@ -25,60 +25,41 @@ class MentionsTest {
             new Mentions.Member(LAN, "阿岚"),
             new Mentions.Member(MEI, "小梅"));
 
-    // ---- @ 转话头 ----
+    // ---- @ 谁谁回,不 @ 全体回 ----
 
     @Test
-    void mentioningSomeoneWakesHerAndHandsHerTheFloor() {
-        Mentions.Routing r = Mentions.route("@小柚 去挖点铁", GROUP, List.of());
+    void mentioningSomeoneWakesOnlyHer() {
+        Mentions.Routing r = Mentions.route("@小柚 去挖点铁", GROUP);
         assertEquals(List.of(YOU), r.awake());
-        assertEquals(List.of(YOU), r.floor(), "话头跟着转过去");
+    }
+
+    /** 点名只是那一句的事:下一句没点名就是说给大家的,她也在其中。 */
+    @Test
+    void theNextLineWithoutAMentionGoesToEveryoneAgain() {
+        Mentions.route("@小柚 去挖点铁", GROUP);
+        Mentions.Routing second = Mentions.route("多挖点", GROUP);
+        assertEquals(List.of(YOU, LAN, MEI), second.awake(), "上一句点了谁不粘住");
     }
 
     @Test
-    void theFloorHoldsSoTheNextLineNeedsNoMention() {
-        Mentions.Routing first = Mentions.route("@小柚 去挖点铁", GROUP, List.of());
-        Mentions.Routing second = Mentions.route("多挖点", GROUP, first.floor());
-        assertEquals(List.of(YOU), second.awake(), "还是她,不必再打 @");
-        assertEquals(List.of(YOU), second.floor());
-    }
-
-    @Test
-    void mentioningSomeoneElseMovesTheFloor() {
-        Mentions.Routing r = Mentions.route("@阿岚 你去砍树", GROUP, List.of(YOU));
-        assertEquals(List.of(LAN), r.awake());
-        assertEquals(List.of(LAN), r.floor());
-    }
-
-    /** 点了两个,之后那句"小心点"该让两只都听见,不该塌回其中一只。 */
-    @Test
-    void mentioningTwoGivesThemBothTheFloor() {
-        Mentions.Routing r = Mentions.route("@小柚 @阿岚 一起去挖铁", GROUP, List.of());
+    void mentioningTwoWakesBoth() {
+        Mentions.Routing r = Mentions.route("@小柚 @阿岚 一起去挖铁", GROUP);
         assertEquals(List.of(YOU, LAN), r.awake());
-
-        Mentions.Routing next = Mentions.route("小心点", GROUP, r.floor());
-        assertEquals(List.of(YOU, LAN), next.awake());
     }
 
     @Test
     void mentionsComeBackInTheOrderTheyAppear() {
-        Mentions.Routing r = Mentions.route("@小梅 和 @小柚 一起来", GROUP, List.of());
+        Mentions.Routing r = Mentions.route("@小梅 和 @小柚 一起来", GROUP);
         assertEquals(List.of(MEI, YOU), r.awake());
     }
 
     // ---- 没点名 ----
 
-    /** 没点过名的时候说的话,通常本来就是说给全体的。 */
+    /** 没点名的话,通常本来就是说给全体的。 */
     @Test
-    void withNoMentionAndNoFloorEveryoneWakes() {
-        Mentions.Routing r = Mentions.route("我回来了", GROUP, List.of());
+    void withNoMentionEveryoneWakes() {
+        Mentions.Routing r = Mentions.route("我回来了", GROUP);
         assertEquals(List.of(YOU, LAN, MEI), r.awake());
-        assertTrue(r.floor().isEmpty(), "话头仍然空着:下一句没点名还是全体");
-    }
-
-    @Test
-    void aFloorMemberWhoLeftTheGroupDoesNotHoldItAnyMore() {
-        Mentions.Routing r = Mentions.route("接着挖", GROUP, List.of(UUID.randomUUID()));
-        assertEquals(List.of(YOU, LAN, MEI), r.awake(), "话头落空就退回全体");
     }
 
     // ---- 名字怎么认 ----

@@ -136,7 +136,7 @@ public final class Conversations extends JsonLibrary<Conversation> {
                 return c;
             }
         }
-        return new Conversation(companion.toString(), null, List.of(companion), List.of(), 0);
+        return new Conversation(companion.toString(), null, List.of(companion), 0);
     }
 
     /**
@@ -268,16 +268,13 @@ public final class Conversations extends JsonLibrary<Conversation> {
         if (members.isEmpty() || text == null || text.isBlank()) {
             return new Said(conv, false);
         }
-        Mentions.Routing routing = Mentions.route(text, members, conv.floor());
+        Mentions.Routing routing = Mentions.route(text, members);
         boolean persisted = get(conv.id()) != null;
         // 先拨号落盘,再定场面,最后送话:被叫醒的那几只从此在这个场面里——接下来她说的话属于这里,
         // 记录盖这个印;她收到这句话那一刻就得知道还有谁在听、这是第几句
         // (EntityAgentLoop.audienceLine 读的就是落盘后的这份会话)。
         // 没落盘的会话盖 null = "就他俩",于是旧记录天然落在单聊视图里,不需要迁移。
-        Conversation next = conv.withFloor(routing.floor());
-        if (persisted) {
-            next = save(next.spoken());
-        }
+        Conversation next = persisted ? save(conv.spoken()) : conv;
         String tag = tagOf(conv);
         for (UUID m : routing.awake()) {
             AgentLoopRegistry.get(m).ifPresent(l -> l.inConversation(tag));
