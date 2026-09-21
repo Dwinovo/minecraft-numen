@@ -694,13 +694,11 @@ public final class NumenScreen extends Screen {
         @Override public void onMicToggle() { NumenScreen.this.onMicToggle(); }
 
         @Override public void onAbort() {
-            var l = loop();
-            if (l != null) l.abort();
+            if (conv != null) Conversations.instance().abort(conv);   // 停止停全体
         }
 
         @Override public boolean canAbort() {
-            var l = loop();
-            return l != null && l.status().canInterrupt();
+            return conv != null && Conversations.instance().canAbort(conv);
         }
 
         @Override public String hint() {
@@ -1255,7 +1253,7 @@ public final class NumenScreen extends Screen {
             // 悬停未选中出短条 = 可切换。悬停的容器反应与"+"号同语法:边框亮 CTA。
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4,
                     FIELD, !active && hovered && railQuiet ? CTA : BORDER);
-            drawFaces(g, c, her, ax, ay);
+            com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, ax, ay, RAIL_AV);
             int pillH = active ? RAIL_AV - 6 : (hovered && railQuiet ? 8 : 0);
             if (pillH > 0) {
                 int py2 = ay + (RAIL_AV - pillH) / 2;
@@ -1304,21 +1302,6 @@ public final class NumenScreen extends Screen {
         int plusColor = plusHot ? CTA : TXT_MUTED;
         g.fill(pcx - 5, pcy - 1, pcx + 5, pcy + 1, plusColor);
         g.fill(pcx - 1, pcy - 5, pcx + 1, pcy + 5, plusColor);
-    }
-
-    /** 会话格的脸:一个人是她的脸,多个人是叠脸(前两张,右下错开)——同一条规则,没有两种图标。 */
-    private void drawFaces(GuiGraphics g, Conversation c, UUID her, int ax, int ay) {
-        if (her != null) {
-            CompanionFace.draw(g, her, skinFor(her), ax, ay, RAIL_AV);
-            return;
-        }
-        List<UUID> faces = Conversations.instance().membersAlive(c);
-        int size = 18;
-        int step = RAIL_AV - size;
-        for (int k = 0; k < Math.min(2, faces.size()); k++) {
-            UUID m = faces.get(k);
-            CompanionFace.draw(g, m, skinFor(m), ax + k * step, ay + k * step, size);
-        }
     }
 
     /** Scroll-affordance chevron sprite (amber pixel-art triangle, up = more above / down = more below).

@@ -1,5 +1,7 @@
 package com.dwinovo.numen.client;
 
+import com.dwinovo.numen.agent.conversation.Conversation;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.chat.CompanionChatScreen;
 import com.dwinovo.numen.client.chat.CompanionWheelScreen;
@@ -78,18 +80,17 @@ public final class NumenKeys {
             // 有征询挂着先答征询:对象是最早在等的那位,不看准星——右上角弹出来说按这个键答的就是她
             var asking = com.dwinovo.numen.client.consent.ConsentCards.first();
             if (asking != null) {
-                mc.setScreen(new CompanionChatScreen(asking.companion(),
-                        NumenRoster.instance().name(asking.companion())));
+                mc.setScreen(new CompanionChatScreen(Conversations.instance().of(asking.companion())));
                 continue;
             }
-            NumenRoster.Entry target = SelectedCompanion.resolveTarget();
+            Conversation target = SelectedCompanion.resolveTarget();
             if (target == null) {
                 com.dwinovo.numen.client.hud.TalkHint.flash(
                         "先按 [" + COMPANION_WHEEL.getTranslatedKeyMessage().getString()
                                 + "] 选一位同伴,或把准星对准它", 3000);
                 continue;
             }
-            mc.setScreen(new CompanionChatScreen(target.uuid(), target.name()));
+            mc.setScreen(new CompanionChatScreen(target));
         }
         // 快捷语音:按下沿开录,抬起沿(或任何界面弹开)收音发送
         boolean voiceDown = QUICK_VOICE.isDown() && mc.player != null && mc.screen == null;

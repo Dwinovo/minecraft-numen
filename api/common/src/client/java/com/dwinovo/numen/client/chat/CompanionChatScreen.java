@@ -1,8 +1,10 @@
 package com.dwinovo.numen.client.chat;
 
+import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.screen.Nb;
@@ -23,9 +25,9 @@ import java.util.UUID;
 /**
  * 快捷对话:按对话键(默认 Y,入口在 {@code NumenKeys})对「当前交互
  * 对象」弹出这一条极简输入行——就一行,回车说出去立刻关屏,回复会浮
- * 在它头顶的气泡里。收件人由 {@code SelectedCompanion} 解析:准星指着
- * 谁优先谁,否则是轮盘选中的那位。屏只是输入法,不是对话窗口;历史与
- * 长文在 G 面板。准星提示见 {@code TalkHint}。
+ * 在它头顶的气泡里。收件人是一个会话,由 {@code SelectedCompanion} 解析:准星指着
+ * 谁就是跟她一个人说,否则是转盘选中的那个(可能是多人会话)。屏只是输入法,不是对话窗口;
+ * 历史与长文在 G 面板。准星提示见 {@code TalkHint}。
  *
  * <p>输入行与 G 面板是<b>同一条</b>({@link ChatInputBar}):斜杠补全弹层、
  * {@code /skills} 这类面板、回车先补后发,两处一模一样,不另写一套。不带麦克风键
@@ -43,14 +45,14 @@ public class CompanionChatScreen extends Screen {
     /** 与 G 面板输入行同高。 */
     private static final int INPUT_H = 18;
 
-    private final UUID companionUuid;
+    private final Conversation conv;
     private final String companionName;
     private ChatInputBar inputBar;
 
-    public CompanionChatScreen(UUID companionUuid, String companionName) {
+    public CompanionChatScreen(Conversation conv) {
         super(Component.literal("Numen face-to-face chat"));
-        this.companionUuid = companionUuid;
-        this.companionName = companionName == null ? "?" : companionName;
+        this.conv = conv;
+        this.companionName = conv.displayName(NumenRoster.instance()::name);
     }
 
     /**
@@ -70,8 +72,10 @@ public class CompanionChatScreen extends Screen {
         return null;
     }
 
+    /** 就他俩那只的大脑(补全、征询答复框);会话没有单一的主时 null。 */
     private EntityAgentLoop loop() {
-        return AgentLoopRegistry.getOrCreate(companionUuid);
+        UUID her = Conversations.instance().soloOf(conv);
+        return her == null ? null : AgentLoopRegistry.getOrCreate(her);
     }
 
     /** 名字牌(说给谁)的宽度:它和输入行同排,占掉输入卡最左边这一截。 */
@@ -96,8 +100,7 @@ public class CompanionChatScreen extends Screen {
     /** 输入行的宿主:说话走 Gateway 然后关屏;命令的回话闪在准星提示层,屏也关。 */
     private final class BarHost implements ChatInputBar.Host {
         @Override public void onSend(String text) {
-            var convos = com.dwinovo.numen.client.agent.Conversations.instance();
-            if (convos.say(convos.of(companionUuid), text).reached()) {
+            if (Conversations.instance().say(conv, text).reached()) {
                 ChatLines.owner(companionName, text, false);
             } else {
                 com.dwinovo.numen.client.hud.TalkHint.flash(companionName + " 没能收到——它可能不在线", 3000);
@@ -105,9 +108,9 @@ public class CompanionChatScreen extends Screen {
             onClose();
         }
 
-        @Override public void onAbort() { loop().abort(); }
+        @Override public void onAbort() { Conversations.instance().abort(conv); }   // 停止停全体
 
-        @Override public boolean canAbort() { return loop().status().canInterrupt(); }
+        @Override public boolean canAbort() { return Conversations.instance().canAbort(conv); }
 
         @Override public String hint() {
             return "想说什么…(回车说出去,Esc 算了)";
@@ -118,8 +121,7 @@ public class CompanionChatScreen extends Screen {
         @Override public void onConsentSettled() {
             var next = com.dwinovo.numen.client.consent.ConsentCards.first();
             if (next != null) {
-                minecraft.setScreen(new CompanionChatScreen(next.companion(),
-                        com.dwinovo.numen.client.agent.NumenRoster.instance().name(next.companion())));
+                minecraft.setScreen(new CompanionChatScreen(Conversations.instance().of(next.companion())));
             } else if (inputBar.text().isEmpty()) {
                 onClose();
             }

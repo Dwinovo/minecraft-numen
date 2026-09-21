@@ -1,7 +1,9 @@
 package com.dwinovo.numen.client.chat;
 
+import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.api.Delivery;
 import com.dwinovo.numen.api.NumenGateway;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.stt.VoiceInputController;
 import com.dwinovo.numen.platform.Services;
@@ -19,7 +21,7 @@ public final class QuickVoice {
     private static boolean recording;
     /** 松开到转写结果落地之间的等待态(批量后端要跑一趟 HTTP)。 */
     private static boolean transcribing;
-    private static NumenRoster.Entry target;
+    private static Conversation target;
     private static String livePartial = "";
     private static String notice;
     private static long noticeUntilMs;
@@ -32,7 +34,7 @@ public final class QuickVoice {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        NumenRoster.Entry t = SelectedCompanion.resolveTarget();
+        Conversation t = SelectedCompanion.resolveTarget();
         if (t == null) {
             flash("先按轮盘键选一位同伴,或把准星对准它");
             return;
@@ -59,7 +61,7 @@ public final class QuickVoice {
     }
 
     private static void deliver(String text) {
-        NumenRoster.Entry t = target;
+        Conversation t = target;
         target = null;
         livePartial = "";
         recording = false;
@@ -69,11 +71,10 @@ public final class QuickVoice {
             if (said.isEmpty()) flash("没听清,再试一次");
             return;
         }
-        var convos = com.dwinovo.numen.client.agent.Conversations.instance();
-        if (convos.say(convos.of(t.uuid()), said).reached()) {
-            ChatLines.owner(t.name(), said, true);
+        if (Conversations.instance().say(t, said).reached()) {
+            ChatLines.owner(name(t), said, true);
         } else {
-            flash(t.name() + " 没能收到——它可能不在线");
+            flash(name(t) + " 没能收到——它可能不在线");
         }
     }
 
@@ -88,15 +89,19 @@ public final class QuickVoice {
             // 脉冲圆点:让"正在听"看起来活着
             String dot = System.currentTimeMillis() / 500 % 2 == 0 ? "●" : "○";
             String live = livePartial.isBlank() ? "" : ":" + livePartial;
-            return dot + " 正在听" + live + "  (松开发给 " + target.name() + ")";
+            return dot + " 正在听" + live + "  (松开发给 " + name(target) + ")";
         }
         if (transcribing && target != null) {
-            return "◌ 转写中…  (马上发给 " + target.name() + ")";
+            return "◌ 转写中…  (马上发给 " + name(target) + ")";
         }
         if (notice != null && System.currentTimeMillis() < noticeUntilMs) {
             return notice;
         }
         return null;
+    }
+
+    private static String name(Conversation c) {
+        return c.displayName(NumenRoster.instance()::name);
     }
 
     private static void flash(String text) {

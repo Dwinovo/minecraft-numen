@@ -124,6 +124,22 @@ public final class Conversations extends JsonLibrary<Conversation> {
         return out;
     }
 
+    /**
+     * 这个会话此刻的最新一份——快捷键攥着的是转盘关上那一刻的快照,成员表、名字之后可能变了。
+     * 落过盘的从库里取;"就他俩"(id 就是她的 UUID)看她还在不在名册上;落过盘又解散了的是 null。
+     */
+    public Conversation current(Conversation conv) {
+        Conversation saved = get(conv.id());
+        if (saved != null) {
+            return membersAlive(saved).isEmpty() ? null : saved;
+        }
+        if (conv.members().size() == 1 && conv.id().equals(conv.members().get(0).toString())) {
+            UUID her = conv.members().get(0);
+            return NumenRoster.instance().name(her) != null ? of(her) : null;
+        }
+        return null;
+    }
+
     /** 这只同伴在哪些会话里。 */
     public List<Conversation> containing(UUID companion) {
         List<Conversation> out = new ArrayList<>();
@@ -274,6 +290,25 @@ public final class Conversations extends JsonLibrary<Conversation> {
                 NumenGateway.emit(m, EventTypes.TALK, line);
             }
         }
+    }
+
+    // ---- 停 ----
+
+    /** 停止停全体:会话里每个成员的循环都停;单成员时就是她一个——同一条路。 */
+    public void abort(Conversation conv) {
+        for (UUID m : membersAlive(conv)) {
+            AgentLoopRegistry.get(m).ifPresent(EntityAgentLoop::abort);
+        }
+    }
+
+    /** 有谁能停。 */
+    public boolean canAbort(Conversation conv) {
+        for (UUID m : membersAlive(conv)) {
+            if (AgentLoopRegistry.get(m).map(l -> l.status().canInterrupt()).orElse(false)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     // ---- 成员 ----

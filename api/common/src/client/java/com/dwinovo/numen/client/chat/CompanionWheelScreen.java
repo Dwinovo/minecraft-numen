@@ -1,7 +1,8 @@
 package com.dwinovo.numen.client.chat;
 
+import com.dwinovo.numen.agent.conversation.Conversation;
 import com.dwinovo.numen.client.NumenKeys;
-import com.dwinovo.numen.client.agent.KnownSkins;
+import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.NumenRoster;
 import com.dwinovo.numen.client.hud.TalkHint;
 import com.dwinovo.numen.client.screen.Nb;
@@ -13,8 +14,7 @@ import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import com.dwinovo.numen.client.skin.CompanionFace;
-import net.minecraft.client.gui.components.PlayerFaceRenderer;
+import com.dwinovo.numen.client.skin.ConversationFaces;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
@@ -23,7 +23,7 @@ import org.lwjgl.glfw.GLFW;
 import java.util.List;
 
 /**
- * 同伴转盘:抽奖转盘的操作模型——顶槽固定(金环 + 指针 ▼),滚轮转动
+ * 同伴转盘(盘上是会话:一只同伴一张脸,多人会话叠脸):抽奖转盘的操作模型——顶槽固定(金环 + 指针 ▼),滚轮转动
  * 整个轮盘把人送进顶槽,点击别处的头像沿最短路径转过去,点击顶槽头像
  * 确认,松开轮盘键也确认(对讲机手感),Esc 放弃不改选。悬浮任意头像
  * 在光标旁浮名字;确认关盘后准星下方闪一行「按 [键] 对话 · 按住 [键]
@@ -45,7 +45,7 @@ public class CompanionWheelScreen extends Screen {
     private static final float SPRING_DAMP = 0.78f;   // 阻尼比(<1:一丝回弹)
     private static final long FLASH_MS = 3200;        // 关盘教学提示时长
 
-    private final List<NumenRoster.Entry> entries;
+    private final List<Conversation> entries;
     private final float[] sizePx;
     private final long openedAtMs = System.currentTimeMillis();
     private long lastFrameNanos = System.nanoTime();
@@ -58,11 +58,11 @@ public class CompanionWheelScreen extends Screen {
 
     public CompanionWheelScreen() {
         super(Component.literal("Numen companion wheel"));
-        this.entries = NumenRoster.instance().entries();
+        this.entries = Conversations.instance().all();
         this.index = 0;
-        var current = SelectedCompanion.get();
+        Conversation current = SelectedCompanion.get();
         for (int i = 0; i < entries.size(); i++) {
-            if (entries.get(i).uuid().equals(current)) {
+            if (current != null && entries.get(i).id().equals(current.id())) {
                 this.index = i;
                 break;
             }
@@ -205,14 +205,13 @@ public class CompanionWheelScreen extends Screen {
             if (!atTop) {
                 g.fill(-half - 2, -half - 2, half + 2, half + 2, th.border());
             }
-            CompanionFace.draw(g, entries.get(i).uuid(), KnownSkins.of(entries.get(i).uuid()),
-                    -half, -half, AVATAR);
+            ConversationFaces.draw(g, entries.get(i), -half, -half, AVATAR);
             g.pose().popPose();
         }
 
         if (open > 0.4f) {
             // 顶槽名牌:当前选中 xxx
-            String label = "当前选中  " + entries.get(index).name();
+            String label = "当前选中  " + name(index);
             int tw = this.font.width(label);
             int nx = cx - tw / 2;
             int ny = cy - r - 46;
@@ -226,9 +225,13 @@ public class CompanionWheelScreen extends Screen {
 
         // 悬浮名字:光标旁小字(顶槽住客的名字已在名牌上,不重复)
         if (hovered >= 0 && hovered != index) {
-            String name = entries.get(hovered).name();
+            String name = name(hovered);
             Nb.text(g, this.font, name, mouseX + 10, mouseY - 4, 0xE0FFFFFF);
         }
+    }
+
+    private String name(int i) {
+        return entries.get(i).displayName(NumenRoster.instance()::name);
     }
 
     private boolean hitAvatar(double mx, double my, float ax, float ay) {
@@ -289,10 +292,9 @@ public class CompanionWheelScreen extends Screen {
     }
 
     private void confirm() {
-        NumenRoster.Entry chosen = entries.get(index);
-        SelectedCompanion.set(chosen.uuid());
+        SelectedCompanion.set(entries.get(index));
         // 关盘教学:下一步怎么跟它说话
-        TalkHint.flash("已选中 " + chosen.name()
+        TalkHint.flash("已选中 " + name(index)
                 + " · 按 [" + NumenKeys.TALK_COMPANION.getTranslatedKeyMessage().getString()
                 + "] 对话 · 按住 [" + NumenKeys.QUICK_VOICE.getTranslatedKeyMessage().getString()
                 + "] 说话", FLASH_MS);
