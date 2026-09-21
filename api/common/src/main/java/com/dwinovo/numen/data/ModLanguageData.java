@@ -138,7 +138,6 @@ public final class ModLanguageData {
         // Conversation header: invite card, rename card, dissolve confirm.
         public static final String CONVO_INVITE           = "numen.convo.invite";
         public static final String CONVO_INVITE_TITLE     = "numen.convo.invite_title";
-        public static final String CONVO_INVITE_HINT      = "numen.convo.invite_hint";
         public static final String CONVO_INVITE_CONFIRM   = "numen.convo.invite_confirm";
         public static final String CONVO_RENAME           = "numen.convo.rename";
         public static final String CONVO_NAME_LABEL       = "numen.convo.name_label";
@@ -452,7 +451,6 @@ public final class ModLanguageData {
         adder.add(Keys.EDIT_MODE_LOCKED,      "No cheat/OP permission — her mode can't be changed");
         adder.add(Keys.CONVO_INVITE,           "Invite");
         adder.add(Keys.CONVO_INVITE_TITLE,     "Invite companions");
-        adder.add(Keys.CONVO_INVITE_HINT,      "Pick who joins \"%s\"");
         adder.add(Keys.CONVO_INVITE_CONFIRM,   "Invite");
         adder.add(Keys.CONVO_RENAME,           "Rename");
         adder.add(Keys.CONVO_NAME_LABEL,       "Name");
@@ -809,7 +807,6 @@ public final class ModLanguageData {
         adder.add(Keys.EDIT_MODE_LOCKED,      "没有作弊/OP 权限,改不了同伴的模式");
         adder.add(Keys.CONVO_INVITE,           "邀请");
         adder.add(Keys.CONVO_INVITE_TITLE,     "邀请同伴");
-        adder.add(Keys.CONVO_INVITE_HINT,      "选择加入「%s」的同伴");
         adder.add(Keys.CONVO_INVITE_CONFIRM,   "邀请");
         adder.add(Keys.CONVO_RENAME,           "改名");
         adder.add(Keys.CONVO_NAME_LABEL,       "名字");

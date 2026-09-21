@@ -52,6 +52,11 @@ public final class ConversationEditPanel implements ModalCard {
     }
 
     @Override
+    public int width() {
+        return 320;
+    }
+
+    @Override
     public int height() {
         return CARD_H;
     }

@@ -3,8 +3,11 @@ package com.dwinovo.numen.client.screen;
 import com.dwinovo.numen.agent.llm.ProviderLibrary;
 import com.dwinovo.numen.client.agent.AgentLoopRegistry;
 import com.dwinovo.numen.client.agent.CompanionHome;
+import com.dwinovo.numen.client.agent.KnownSkins;
+import com.dwinovo.numen.client.skin.CompanionFace;
 import com.dwinovo.numen.client.skin.SkinLibrary;
 import com.dwinovo.numen.client.ui.IDrawSurface;
+import com.dwinovo.numen.client.ui.mc.McDrawSurface;
 import com.dwinovo.numen.client.ui.NumenStyle;
 import com.dwinovo.numen.client.ui.NumenTheme;
 import com.dwinovo.numen.client.ui.widget.Button;
@@ -77,6 +80,8 @@ public final class CompanionEditPanel implements ModalCard {
     private List<String> skinIds = List.of();
     private int modeBoxX, modeBoxY, modeBoxW;
     private boolean modeLocked;
+    /** 标题左侧那张脸的位置(build 时定)。 */
+    private int faceX, faceY;
 
     public CompanionEditPanel(Host host) {
         this.host = host;
@@ -111,6 +116,11 @@ public final class CompanionEditPanel implements ModalCard {
         return 164;
     }
 
+    @Override
+    public int width() {
+        return 320;
+    }
+
     public void build(int x, int y, int w, int h, int dropBottom) {
         PersonaLibrary.instance().reload();   // 人设目录可能刚被增删,和召唤卡一样重扫
         ui.clear();
@@ -118,7 +128,9 @@ public final class CompanionEditPanel implements ModalCard {
 
         int half = (w - 6) / 2;
         int ry = y;
-        // 头像由屏幕画在标题左侧(面板不碰 GuiGraphics),文字给它让出 24px。
+        // 她的脸画在标题左侧(见 render;脸是 MC 独有的东西,这一层可以画),文字给它让出 24px。
+        faceX = x;
+        faceY = ry + 6;
         Label title = ui.add(new Label(
                 t(ModLanguageData.Keys.EDIT_TITLE) + " · " + host.name(), Label.Role.PRIMARY));
         title.setBounds(x + 24, ry + 5, w - 24, 9);
@@ -262,6 +274,9 @@ public final class CompanionEditPanel implements ModalCard {
     // ---- 宿主转发面 ----
 
     public void render(IDrawSurface s, NumenTheme.Colors c, int mouseX, int mouseY, long nowMs) {
+        if (s instanceof McDrawSurface m) {
+            CompanionFace.draw(m.graphics(), host.uuid(), KnownSkins.of(host.uuid()), faceX, faceY, 18);
+        }
         if (modeLocked) {   // 置灰的当前档(不是控件:点不了才是本意)
             NumenStyle.box(s, modeBoxX, modeBoxY, modeBoxW, NumenStyle.CONTROL_H,
                     c.sectionBg(), c.inputBorder());

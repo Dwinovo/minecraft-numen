@@ -629,7 +629,7 @@ public final class NumenScreen extends Screen {
     // ---- modal cards(召唤/编辑): 居中卡 + 暗幕,当前 tab 内容照常渲染作背景 ----
     private static final int SUMMON_CARD_H = 208;
     private int modalCardH() { return summoning ? SUMMON_CARD_H : modalCard.height(); }
-    private int modalCardW() { return Math.min(320, panelW - 24); }
+    private int modalCardW() { return Math.min(summoning ? 320 : modalCard.width(), panelW - 24); }
     private int modalCardX() { return left + (panelW - modalCardW()) / 2; }
     private int modalCardY() { return top + Math.max(10, (panelH - modalCardH()) / 2); }
     private int modalCardBottom() { return modalCardY() + Math.min(modalCardH(), panelH - 20); }
@@ -1337,15 +1337,12 @@ public final class NumenScreen extends Screen {
             }
         }
         if (cardOpen) {
-            // 编辑模态:同款暗幕 + 居中卡;标题左侧的头像由屏幕补画(面板不碰 GuiGraphics)。
+            // 模态卡:同款暗幕 + 居中卡;卡里的东西(含脸)由卡自己画。
             g.fill(railX, top, railX + RAIL_W + panelW, top + panelH,
                     (UiTheme.current().border() & 0xFFFFFF) | 0x99000000);
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), modalCardX(), modalCardY(),
                     modalCardW(), modalCardBottom() - modalCardY(),
                     UiTheme.current().aiFill(), UiTheme.current().aiBorder());
-            if (her != null) {
-                CompanionFace.draw(g, her, skinFor(her), modalX(), modalY0() + 6, 18);
-            }
             modalCard.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
                     mouseX, mouseY, net.minecraft.Util.getMillis());

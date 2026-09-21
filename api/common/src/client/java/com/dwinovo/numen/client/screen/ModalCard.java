@@ -13,6 +13,9 @@ interface ModalCard {
     /** 每次开卡:草稿从当下真相取一次基线。 */
     void reset();
 
+    /** 卡想要的宽;屏幕按面板宽度封顶后居中。 */
+    int width();
+
     /** 卡的高度;屏幕据此居中。 */
     int height();
 
