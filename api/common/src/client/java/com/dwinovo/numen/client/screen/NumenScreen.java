@@ -263,6 +263,17 @@ public final class NumenScreen extends Screen {
     private double dragX, dragY;
     /** 松手后的残影:拖着的那张脸飞向目标并缩小(合并),或飞回原格(弹回)。动完自己消失。 */
     private Ghost ghost;
+    /**
+     * 悬停预览(手机桌面合并文件夹那一下):拖到一格上,那格里原来的脸缩到左上角、拖着的脸从
+     * 右下角长出来——松手前就看见合并后的叠脸格;拖开就复原。{@code shrinkPx} 是缩进去的像素数,
+     * 按帧率无关的趋近走,{@code shrinkIndex} 是正在预览的那格。
+     */
+    private int shrinkIndex = -1;
+    private float shrinkPx;
+    private long lastRailFrameMs;
+    /** 叠脸格里每张脸的边长与错位,和 {@link com.dwinovo.numen.client.skin.ConversationFaces} 同一比例。 */
+    private static final int RAIL_SMALL = RAIL_AV * 7 / 10;
+    private static final int RAIL_STEP = RAIL_AV - RAIL_SMALL;
 
     private record Ghost(Conversation faces, int fromX, int fromY, int fromSize,
                          int toX, int toY, int toSize, long startMs, int durationMs) {}
@@ -1078,11 +1089,12 @@ public final class NumenScreen extends Screen {
         }
         int toY = railTileY(to);
         if (toY < 0) toY = railTileY(fromIndex);   // 合并后那格滚出了视野:缩回原地
+        // 残影落进叠脸格的右下那一张——和悬停预览里它长出来的位置是同一个,松手不跳
         int ax = railX + (RAIL_W - RAIL_AV) / 2;
-        int small = RAIL_AV / 2;
         ghost = new Ghost(dragged, (int) dragX - RAIL_AV / 2, (int) dragY - RAIL_AV / 2, RAIL_AV,
-                ax + (RAIL_AV - small) / 2, toY + (RAIL_AV - small) / 2, small,
-                System.currentTimeMillis(), 220);
+                ax + RAIL_STEP, toY + RAIL_STEP, RAIL_SMALL, System.currentTimeMillis(), 220);
+        shrinkIndex = -1;
+        shrinkPx = 0f;
     }
 
     /** 拖到半路松手(空处或自己那格):飞回原位。 */
@@ -1091,6 +1103,21 @@ public final class NumenScreen extends Screen {
         if (y < 0) return;
         ghost = new Ghost(dragged, (int) dragX - RAIL_AV / 2, (int) dragY - RAIL_AV / 2, RAIL_AV,
                 railX + (RAIL_W - RAIL_AV) / 2, y, RAIL_AV, System.currentTimeMillis(), 150);
+    }
+
+    /** 每帧推进悬停预览:指针在哪格上就往那格缩;移开或没在拖就退回来。换了格从头缩。 */
+    private void updateShrink(int mouseX, int mouseY) {
+        long now = System.currentTimeMillis();
+        float dt = lastRailFrameMs == 0 ? 0.016f : Math.min(0.1f, (now - lastRailFrameMs) / 1000f);
+        lastRailFrameMs = now;
+        int over = railDragging ? railIndexAt(mouseX, mouseY) : -1;
+        if (over == railPressed || over >= rail().size()) over = -1;
+        if (over >= 0 && over != shrinkIndex) {
+            shrinkIndex = over;
+            shrinkPx = 0f;
+        }
+        shrinkPx = com.dwinovo.numen.client.ui.Anim.approach(shrinkPx, over == shrinkIndex && over >= 0 ? RAIL_STEP : 0f, 18f, dt);
+        if (shrinkPx <= 0f && over < 0) shrinkIndex = -1;
     }
 
     /** 第 i 格的顶边;没画出来(滚出视野)是 -1。 */
@@ -1354,6 +1381,8 @@ public final class NumenScreen extends Screen {
         railScroll = Math.clamp(railScroll, 0, maxRailScroll());     // keep valid as the roster grows/shrinks
         int first = railScroll;
         int startY = railStartY();
+        updateShrink(mouseX, mouseY);
+        Conversation dragged = railDragging && railPressed < items.size() ? items.get(railPressed) : null;
         for (int i = first; i < items.size(); i++) {
             int ay = startY + (i - first) * RAIL_SLOT;
             if (ay + RAIL_AV > railBottomEdge()) break;
@@ -1369,7 +1398,18 @@ public final class NumenScreen extends Screen {
             // 悬停未选中出短条 = 可切换。悬停的容器反应与"+"号同语法:边框亮 CTA。
             com.dwinovo.numen.client.ui.NumenStyle.box(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font), ax - 2, ay - 2, RAIL_AV + 4, RAIL_AV + 4,
                     FIELD, dropTarget || (!active && hovered && railQuiet) ? CTA : BORDER);
-            com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, ax, ay, RAIL_AV);
+            if (i == shrinkIndex && shrinkPx > 0f && dragged != null) {
+                // 合并预览:原来的脸缩向左上角,拖着的那张从右下角长出来,长满就是叠脸格的样子
+                float p = shrinkPx / RAIL_STEP;
+                com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, ax, ay, Math.round(RAIL_AV - shrinkPx));
+                int grow = Math.round(p * RAIL_SMALL);
+                if (grow > 2) {
+                    com.dwinovo.numen.client.skin.ConversationFaces.draw(g, dragged,
+                            ax + RAIL_AV - grow, ay + RAIL_AV - grow, grow);
+                }
+            } else {
+                com.dwinovo.numen.client.skin.ConversationFaces.draw(g, c, ax, ay, RAIL_AV);
+            }
             if (railDragging && i == railPressed) {
                 g.fill(ax, ay, ax + RAIL_AV, ay + RAIL_AV, 0x90101010);
             }
