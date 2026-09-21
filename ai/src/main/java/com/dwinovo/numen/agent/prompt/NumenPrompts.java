@@ -137,6 +137,8 @@ public final class NumenPrompts {
             else unless you say it in front of them.
             - <event kind="talk">[Name] …</event> is something you overheard: what a companion said, or
               what the owner said to her. Nobody is waiting on you for it.
+            - <event kind="left">…</event> means the owner dismissed that companion: she is gone from
+              every conversation for good, not just away for a while.
             - You may talk about the others or to them, but your words never wake them. To get one of
               them to do something, the owner has to say it.
             </conversation_rules>""";

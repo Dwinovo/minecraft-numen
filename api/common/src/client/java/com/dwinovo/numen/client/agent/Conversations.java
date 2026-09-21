@@ -292,6 +292,28 @@ public final class Conversations extends JsonLibrary<Conversation> {
         }
     }
 
+    /**
+     * 她被遣散了:告诉每个和她同过会话、还在的成员。她的日志跟着家目录一起没了,别人日志里旁听到的
+     * 她的话还在——这条事件给那个缺口一个解释。同一个人和她同在几个会话里也只说一次。
+     * 成员表不改:读的时候按名册过滤,见类头。
+     */
+    public void left(UUID gone, String name) {
+        java.util.Set<UUID> tell = new java.util.LinkedHashSet<>();
+        for (Conversation c : containing(gone)) {
+            tell.addAll(membersAlive(c));
+        }
+        if (tell.isEmpty()) {
+            return;
+        }
+        Minecraft mc = Minecraft.getInstance();
+        long dayTime = mc.level == null ? 0L : mc.level.getDayTime();
+        String line = NumenEvents.entry(dayTime, EventTypes.LEFT, Map.of(),
+                name + " was dismissed by the owner and is gone", System.currentTimeMillis(), false).text();
+        for (UUID m : tell) {
+            NumenGateway.emit(m, EventTypes.LEFT, line);
+        }
+    }
+
     // ---- 停 ----
 
     /** 停止停全体:会话里每个成员的循环都停;单成员时就是她一个——同一条路。 */

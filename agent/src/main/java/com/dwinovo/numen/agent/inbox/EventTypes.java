@@ -87,6 +87,12 @@ public final class EventTypes {
      */
     public static final String TALK = "talk";
 
+    /**
+     * 同一个会话里的某只同伴被主人遣散了。她的日志跟着家目录一起没了,别人日志里旁听到的她的话还在——
+     * 这条事件给那个缺口一个解释。和 {@link #TALK} 一样是捎带投递:知道就行,不为此醒来。
+     */
+    public static final String LEFT = "left";
+
     /** 一类条目什么时候交给大脑。 */
     public enum Delivery {
         /** 插话:回合进行中在下一个边界(这批工具结算后、下次调模型前)注入;闲时参与熟度判断。 */
@@ -172,6 +178,7 @@ public final class EventTypes {
         register(event(DROPPED, false));
         // 旁听到的话:捎带投递、不进聊天流,其余与世界的事同一行(原文、打断不清、不是主人说的)。
         register(new Type(TALK, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
+        register(new Type(LEFT, s -> s, s -> null, false, false, Delivery.AMBIENT, false));
     }
 
     private EventTypes() {}
