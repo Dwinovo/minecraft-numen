@@ -13,6 +13,7 @@ import com.dwinovo.numen.client.agent.ClientNumenLookup;
 import com.dwinovo.numen.client.agent.Conversations;
 import com.dwinovo.numen.client.agent.EntityAgentLoop;
 import com.dwinovo.numen.client.agent.NumenRoster;
+import com.dwinovo.numen.client.chat.SelectedCompanion;
 import com.dwinovo.numen.client.data.ClientNumenState;
 import com.dwinovo.numen.data.ModLanguageData;
 import com.dwinovo.numen.network.payload.RequestStatePayload;
@@ -285,6 +286,8 @@ public final class NumenScreen extends Screen {
     private NumenScreen(Conversation conv) {
         super(Component.literal(titleOf(conv)));
         this.conv = conv;
+        // 面板对着谁 = 当前交互对象:开在谁身上、切到谁,R/Y/V 就对着谁——一个"当前",不是两个
+        if (conv != null) SelectedCompanion.set(conv);
     }
 
     private static String titleOf(Conversation c) {
@@ -316,15 +319,20 @@ public final class NumenScreen extends Screen {
                     new NumenScreen(Conversations.instance().of(asking.companion())));
             return;
         }
-        var entries = NumenRoster.instance().entries();
-        Minecraft.getInstance().setScreen(new NumenScreen(
-                entries.isEmpty() ? null : Conversations.instance().of(entries.get(0).uuid())));
+        // 开在当前交互对象上(准星指着的、转盘选的、唯一的那个);多个可选又没选过时落在第一个
+        Conversation target = SelectedCompanion.resolveTarget();
+        if (target == null) {
+            var entries = NumenRoster.instance().entries();
+            target = entries.isEmpty() ? null : Conversations.instance().of(entries.get(0).uuid());
+        }
+        Minecraft.getInstance().setScreen(new NumenScreen(target));
     }
 
     /** Switch the panel to another conversation in place (left-rail click) — no reopen. */
     private void switchTo(Conversation c) {
         boolean same = sameAs(c, conv);
         conv = c;   // 同一个会话也换成最新的那份——成员表、名字可能刚变
+        SelectedCompanion.set(c);
         if (same) return;
         inputBar = null; savedInput = "";       // don't carry typed text across conversations
         chatView.reset();
