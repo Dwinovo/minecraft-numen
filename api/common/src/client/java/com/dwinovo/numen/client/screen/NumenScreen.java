@@ -193,18 +193,17 @@ public final class NumenScreen extends Screen {
     /** 召唤卡(NumenUI):名字 + 人设/模型配置/模式/声线/皮肤,见 SummonPanel。 */
     private SummonPanel summonPanel;
     // 编辑流:再点激活头像打开,同款居中卡;每个选择当场落地,见 CompanionEditPanel。
-    private boolean editing;
+    private boolean cardOpen;
     /** 铅笔开的那张卡:就他俩时是改她,落过盘的会话是改会话——开卡那一刻按选中的那一格定。 */
-    private ModalCard editCard;
+    private ModalCard modalCard;
     private CompanionEditPanel editPanel;
     private ConversationEditPanel convEditPanel;
-    /** 屏幕级浮层根:承载模态卡(遣散/解散的确认卡、拉人的多选卡);浮层在场时背景全屏蔽。 */
+    private InvitePanel invitePanel;
+    /** 屏幕级浮层根:承载遣散/解散的确认卡;浮层在场时背景全屏蔽。 */
     private final com.dwinovo.numen.client.ui.widget.UiRoot overlayUi =
             new com.dwinovo.numen.client.ui.widget.UiRoot();
     private final com.dwinovo.numen.client.ui.widget.ConfirmDialog dismissDialog =
             new com.dwinovo.numen.client.ui.widget.ConfirmDialog();
-    private final com.dwinovo.numen.client.ui.widget.PickDialog pickDialog =
-            new com.dwinovo.numen.client.ui.widget.PickDialog();
 
     /** The Settings tab, extracted whole (state + build + render + input) — see SettingsView. */
     private final com.dwinovo.numen.client.screen.settings.SettingsView settings =
@@ -410,7 +409,7 @@ public final class NumenScreen extends Screen {
         inputBar = null;
         settings.clearWidgets();
         if (summoning) { buildSummonCard(); return; }
-        if (editing) { buildEditCard(); return; }
+        if (cardOpen) { buildEditCard(); return; }
         switch (tab) {
             case CHAT -> { if (conv != null) buildChatWidgets(); }
             case SETTINGS -> settings.buildWidgets();
@@ -505,16 +504,51 @@ public final class NumenScreen extends Screen {
         return convEditPanel;
     }
 
+    private InvitePanel invitePanel() {
+        if (invitePanel == null) {
+            invitePanel = new InvitePanel(new InviteHost());
+        }
+        return invitePanel;
+    }
+
     /** 铅笔:开卡。作用在左栏选中的那一格——就他俩时改她,落过盘的会话改名。 */
     private void openEditCard() {
-        editCard = solo() != null ? editPanel() : convEditPanel();
-        editCard.reset();   // 开卡:草稿从当下真相取基线
-        editing = true;
+        openCard(solo() != null ? editPanel() : convEditPanel());
+    }
+
+    /** 「＋」:邀请卡。勾完就进去——请进来的那个会话成为面板对着的。 */
+    private void openInvite() {
+        openCard(invitePanel());
+    }
+
+    /** 模态卡只有一个槽:开哪张都是同一套暗幕、居中、Esc 收卡。 */
+    private void openCard(ModalCard which) {
+        modalCard = which;
+        modalCard.reset();   // 开卡:草稿从当下真相取基线
+        cardOpen = true;
         rebuild();
     }
 
+    /** 邀请卡的宿主面:请进来的人拉进会话,然后面板对着它。 */
+    private final class InviteHost implements InvitePanel.Host {
+        @Override public Conversation conversation() { return conv; }
+
+        @Override public void onInvite(List<UUID> picked) {
+            Conversation c = conv;
+            for (UUID u : picked) c = Conversations.instance().pullIn(c, u);
+            cardOpen = false;
+            switchTo(c);
+            rebuild();
+        }
+
+        @Override public void onClose() {
+            cardOpen = false;
+            rebuild();
+        }
+    }
+
     private void buildEditCard() {
-        editCard.build(modalX(), modalY0() + 6, modalW(), modalCardBottom() - modalY0(),
+        modalCard.build(modalX(), modalY0() + 6, modalW(), modalCardBottom() - modalY0(),
                 top + panelH - 2);
     }
 
@@ -527,7 +561,7 @@ public final class NumenScreen extends Screen {
         }
 
         @Override public void onClose() {
-            editing = false;
+            cardOpen = false;
             rebuild();
         }
     }
@@ -542,7 +576,7 @@ public final class NumenScreen extends Screen {
         }
 
         @Override public void onClose() {
-            editing = false;
+            cardOpen = false;
             rebuild();
         }
 
@@ -594,7 +628,7 @@ public final class NumenScreen extends Screen {
 
     // ---- modal cards(召唤/编辑): 居中卡 + 暗幕,当前 tab 内容照常渲染作背景 ----
     private static final int SUMMON_CARD_H = 208;
-    private int modalCardH() { return summoning ? SUMMON_CARD_H : editCard.height(); }
+    private int modalCardH() { return summoning ? SUMMON_CARD_H : modalCard.height(); }
     private int modalCardW() { return Math.min(320, panelW - 24); }
     private int modalCardX() { return left + (panelW - modalCardW()) / 2; }
     private int modalCardY() { return top + Math.max(10, (panelH - modalCardH()) / 2); }
@@ -648,30 +682,14 @@ public final class NumenScreen extends Screen {
         rebuild();
     }
 
-    /** 「＋ 拉人」:勾选 + 一个确认按钮。勾完就进去——拉进来的那个会话成为面板对着的。 */
-    private void openPullIn() {
-        List<UUID> candidates = Conversations.instance().pullable(conv);
-        List<String> names = new ArrayList<>();
-        for (UUID u : candidates) names.add(nameFor(u));
-        pickDialog.open(overlayUi, railX, top, RAIL_W + panelW, panelH,
-                I18n.get(ModLanguageData.Keys.CONVO_PULL_TITLE), names,
-                I18n.get("numen.gui.settings.cancel"), I18n.get(ModLanguageData.Keys.CONVO_PULL_CONFIRM),
-                picked -> {
-                    Conversation c = conv;
-                    for (int i : picked) c = Conversations.instance().pullIn(c, candidates.get(i));
-                    switchTo(c);
-                });
-        rebuild();
-    }
-
-    /** 屏幕级浮层(确认卡/多选卡)在场——屏幕据此屏蔽背景交互。 */
+    /** 屏幕级浮层(确认卡)在场——屏幕据此屏蔽背景交互。 */
     private boolean overlayOpen() {
         return overlayUi.hasOverlay();
     }
 
     /** 召唤/编辑模态之一在场——背景(页签/聊天/设置)交互一律屏蔽,侧栏留作逃生口。 */
     private boolean modalOpen() {
-        return summoning || editing;
+        return summoning || cardOpen;
     }
 
     /** First rail conversation that isn't {@code exclude}, or null if none. */
@@ -905,9 +923,9 @@ public final class NumenScreen extends Screen {
             if (summonPanel().keyPressed(keyCode, modifiers)) return true;
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
-        if (editing) {
-            if (k == 256) { editing = false; rebuild(); return true; } // Esc 收卡,不关面板
-            if (editCard.keyPressed(keyCode, modifiers)) return true;
+        if (cardOpen) {
+            if (k == 256) { cardOpen = false; rebuild(); return true; } // Esc 收卡,不关面板
+            if (modalCard.keyPressed(keyCode, modifiers)) return true;
             return super.keyPressed(keyCode, scanCode, modifiers);
         }
         if (tab == Tab.CHAT && inputBar != null && inputBar.keyPressed(keyCode, modifiers)) {
@@ -927,7 +945,7 @@ public final class NumenScreen extends Screen {
         if (summoning && summonPanel().charTyped(ch)) {
             return true;
         }
-        if (editing && editCard.charTyped(ch)) {
+        if (cardOpen && modalCard.charTyped(ch)) {
             return true;
         }
         return super.charTyped(ch, modifiers);
@@ -959,12 +977,12 @@ public final class NumenScreen extends Screen {
             if (summoning && summonPanel().mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
-            if (editing && editCard.mouseClicked(mouseX, mouseY, button)) {
+            if (cardOpen && modalCard.mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
             if (railPlusAt((int) mouseX, (int) mouseY)) {   // + → start the summon name prompt
                 summoning = !summoning;
-                editing = false;
+                cardOpen = false;
                 if (summoning) summonPanel().reset();   // 每次开新召唤:默认/无/生存
                 rebuild();
                 return true;
@@ -986,7 +1004,7 @@ public final class NumenScreen extends Screen {
                 return super.mouseClicked(mouseX, mouseY, button);
             }
             if (tab == Tab.SETTINGS && settings.mouseClicked(mouseX, mouseY)) return true;
-            // 名字旁的三枚图标作用在左栏选中的那一格:就他俩时是她,落过盘的会话是它
+            // 名字旁的三枚图标作用在左栏选中的那一格:就他俩时是她,落过盘的会话是它;「＋」邀请
             if (conv != null && !overlayOpen() && overEditTrash(mouseX, mouseY)) {
                 // 危险操作的闸是确认卡,不是把入口藏起来
                 if (solo() != null) openDismissConfirm(solo()); else openDissolveConfirm(conv);
@@ -997,7 +1015,7 @@ public final class NumenScreen extends Screen {
                 return true;
             }
             if (conv != null && !overlayOpen() && overEditPlus(mouseX, mouseY)) {
-                openPullIn();
+                openInvite();
                 return true;
             }
             int my = (int) mouseY;
@@ -1070,10 +1088,10 @@ public final class NumenScreen extends Screen {
         summoning = false;
         if (sameAs(c, conv)) {
             // 点当前那格不再有动作,编辑入口在头部名字旁的铅笔;模态开着时当逃生口收卡。
-            if (editing) { editing = false; rebuild(); }
+            if (cardOpen) { cardOpen = false; rebuild(); }
             else if (wasSummoning) rebuild();
         } else {
-            editing = false;
+            cardOpen = false;
             switchTo(c);
         }
     }
@@ -1163,7 +1181,7 @@ public final class NumenScreen extends Screen {
         // 打开着的下拉列表优先吃滚轮(列表被面板截断时滚动余下的行)。
         if (sy != 0) {
             if (summoning && summonPanel().mouseScrolled(mx, my, sy)) return true;
-            if (editing && editCard.mouseScrolled(mx, my, sy)) return true;
+            if (cardOpen && modalCard.mouseScrolled(mx, my, sy)) return true;
         }
         if (modalOpen()) return false;   // 召唤/编辑模态:背景(侧栏/聊天/设置)不响应滚轮
         if (tab == Tab.SETTINGS && settings.formActive()) {
@@ -1212,8 +1230,8 @@ public final class NumenScreen extends Screen {
             headerLimit = renderUsage(g, mouseX, mouseY) - 8;
         }
         // 名字旁的图标 = 改与删("名字在哪,编辑就在哪"的资料页定式;改与删并排、分开点,
-        // 是列表/资料页的通行习惯),再加「＋」拉人。它们作用在左栏选中的那一格:铅笔与垃圾桶
-        // 就他俩时改她/遣散,落过盘的会话改名/解散;「＋」有人可拉才画。它们是入口,名字先给
+        // 是列表/资料页的通行习惯),再加「＋」邀请。它们作用在左栏选中的那一格:铅笔与垃圾桶
+        // 就他俩时改她/遣散,落过盘的会话改名/解散;「＋」有人可请才画。它们是入口,名字先给
         // 它们让位,免得名字一长就没处点。
         boolean nameIcons = conv != null && !modalOpen() && !overlayOpen();
         boolean plusIcon = nameIcons && !Conversations.instance().pullable(conv).isEmpty();
@@ -1249,7 +1267,7 @@ public final class NumenScreen extends Screen {
             // 图标不写字,就得能问出来——每枚都报自己是干嘛的。
             if (hotPencil || hotTrash || hotPlus) {
                 boolean she = her != null;
-                String key = hotPlus ? ModLanguageData.Keys.CONVO_PULL_IN
+                String key = hotPlus ? ModLanguageData.Keys.CONVO_INVITE
                         : hotTrash ? (she ? ModLanguageData.Keys.EDIT_DISMISS : ModLanguageData.Keys.CONVO_DISSOLVE)
                         : (she ? ModLanguageData.Keys.EDIT_TITLE : ModLanguageData.Keys.CONVO_RENAME);
                 pendingTip = java.util.List.of(Component.translatable(key));
@@ -1318,7 +1336,7 @@ public final class NumenScreen extends Screen {
                 pendingTipY = mouseY;
             }
         }
-        if (editing) {
+        if (cardOpen) {
             // 编辑模态:同款暗幕 + 居中卡;标题左侧的头像由屏幕补画(面板不碰 GuiGraphics)。
             g.fill(railX, top, railX + RAIL_W + panelW, top + panelH,
                     (UiTheme.current().border() & 0xFFFFFF) | 0x99000000);
@@ -1328,10 +1346,10 @@ public final class NumenScreen extends Screen {
             if (her != null) {
                 CompanionFace.draw(g, her, skinFor(her), modalX(), modalY0() + 6, 18);
             }
-            editCard.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
+            modalCard.render(new com.dwinovo.numen.client.ui.mc.McDrawSurface(g, font),
                     com.dwinovo.numen.client.screen.settings.HostThemeColors.current(),
                     mouseX, mouseY, net.minecraft.Util.getMillis());
-            String modeTip = editCard.tooltipAt(mouseX, mouseY);
+            String modeTip = modalCard.tooltipAt(mouseX, mouseY);
             if (modeTip != null) {
                 pendingTip = java.util.List.of(Component.literal(modeTip));
                 pendingTipX = mouseX;

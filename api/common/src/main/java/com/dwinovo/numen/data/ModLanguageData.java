@@ -135,10 +135,11 @@ public final class ModLanguageData {
         public static final String EDIT_PROVIDER_UNBOUND = "numen.edit.provider_unbound";
         public static final String EDIT_MODE_LOCKED      = "numen.edit.mode_locked";
 
-        // Conversation header: pull-in picker, rename card, dissolve confirm.
-        public static final String CONVO_PULL_IN          = "numen.convo.pull_in";
-        public static final String CONVO_PULL_TITLE       = "numen.convo.pull_title";
-        public static final String CONVO_PULL_CONFIRM     = "numen.convo.pull_confirm";
+        // Conversation header: invite card, rename card, dissolve confirm.
+        public static final String CONVO_INVITE           = "numen.convo.invite";
+        public static final String CONVO_INVITE_TITLE     = "numen.convo.invite_title";
+        public static final String CONVO_INVITE_HINT      = "numen.convo.invite_hint";
+        public static final String CONVO_INVITE_CONFIRM   = "numen.convo.invite_confirm";
         public static final String CONVO_RENAME           = "numen.convo.rename";
         public static final String CONVO_NAME_LABEL       = "numen.convo.name_label";
         public static final String CONVO_DISSOLVE         = "numen.convo.dissolve";
@@ -449,9 +450,10 @@ public final class ModLanguageData {
         adder.add(Keys.EDIT_DISMISS,          "Dismiss");
         adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(unbound)");
         adder.add(Keys.EDIT_MODE_LOCKED,      "No cheat/OP permission — her mode can't be changed");
-        adder.add(Keys.CONVO_PULL_IN,          "Pull in");
-        adder.add(Keys.CONVO_PULL_TITLE,       "Pull into this conversation");
-        adder.add(Keys.CONVO_PULL_CONFIRM,     "Pull in");
+        adder.add(Keys.CONVO_INVITE,           "Invite");
+        adder.add(Keys.CONVO_INVITE_TITLE,     "Invite companions");
+        adder.add(Keys.CONVO_INVITE_HINT,      "Pick who joins \"%s\"");
+        adder.add(Keys.CONVO_INVITE_CONFIRM,   "Invite");
         adder.add(Keys.CONVO_RENAME,           "Rename");
         adder.add(Keys.CONVO_NAME_LABEL,       "Name");
         adder.add(Keys.CONVO_DISSOLVE,         "Dissolve");
@@ -805,9 +807,10 @@ public final class ModLanguageData {
         adder.add(Keys.EDIT_DISMISS,          "遣散");
         adder.add(Keys.EDIT_PROVIDER_UNBOUND, "(未绑定)");
         adder.add(Keys.EDIT_MODE_LOCKED,      "没有作弊/OP 权限,改不了同伴的模式");
-        adder.add(Keys.CONVO_PULL_IN,          "拉人");
-        adder.add(Keys.CONVO_PULL_TITLE,       "拉进这个会话");
-        adder.add(Keys.CONVO_PULL_CONFIRM,     "拉进来");
+        adder.add(Keys.CONVO_INVITE,           "邀请");
+        adder.add(Keys.CONVO_INVITE_TITLE,     "邀请同伴");
+        adder.add(Keys.CONVO_INVITE_HINT,      "选择加入「%s」的同伴");
+        adder.add(Keys.CONVO_INVITE_CONFIRM,   "邀请");
         adder.add(Keys.CONVO_RENAME,           "改名");
         adder.add(Keys.CONVO_NAME_LABEL,       "名字");
         adder.add(Keys.CONVO_DISSOLVE,         "解散");
