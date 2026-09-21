@@ -91,11 +91,18 @@ public class CollectGameTests {
         });
     }
 
-    /** 地上什么都没有:照样收场,回执如实说一件没捡到。 */
+    /**
+     * 地上什么都没有:照样收场,回执如实说一件没捡到。
+     *
+     * <p>半径显式给小。同批七块场地并排摆着,间距 22 格,邻居在相对 (10,2,4) 撒的铁锭离她的
+     * 场地原点只有 12 格;默认半径 16 会把它们扫进来,她走过去撞墙、放弃、再扫下一堆,
+     * 200 刻够不够用取决于当时的摆法。上一批次留在世界里的掉落物同理。
+     * "地上没东西"这个前提在并行世界里得靠半径自己保证,不能靠邻居恰好走不到。
+     */
     @GameTest(template = "floor16", timeoutTicks = 200, batch = "numen_collect")
     public static void collect_items_with_nothing_on_the_ground_says_none(GameTestHelper helper) {
         NumenPlayer companion = spawnAt(helper, "gametest_empty_handed", new BlockPos(2, 2, 7), false);
-        ToolRun collect = call(companion, "collect_items", args());
+        ToolRun collect = call(companion, "collect_items", args("radius", 3));
 
         helper.succeedWhen(() -> {
             helper.assertTrue(collect.done(), "collect_items has not finished");

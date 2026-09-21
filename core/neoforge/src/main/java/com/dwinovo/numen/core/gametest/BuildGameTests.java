@@ -2120,6 +2120,11 @@ public class BuildGameTests {
                 com.dwinovo.numen.core.task.build.ReplaceMode.REPLACE_EMPTY, false);
         TaskDispatch.setTask(companion, record, null, reply -> {});
         helper.succeedWhen(() -> {
+            // 先看建造收没收工、成没成:一次真实的建造失败(比如最后两格被她自己站着)
+            // 不能被翻译成"格数对不上",那会把真正的原因藏起来,还让这条用例空转到超时。
+            var result = record.getResult();
+            helper.assertTrue(result != null, "build has not finished");
+            helper.assertTrue(result.success(), "build failed: " + result.message());
             // 契约不是"一格不差",是"一格不差,或者说清楚差在哪":建完世界要落定一次
             // (站不住的掉、形状由邻居定的重算),对不上的格数必须<b>正好等于</b>回执报的那个数。
             List<BlockPos> off = new ArrayList<>();
